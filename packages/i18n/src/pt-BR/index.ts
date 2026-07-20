@@ -1230,6 +1230,7 @@ const ptBR = {
 			off: "Pré-visualização desativada \u2014 inicie para ver o sinal recebido",
 			unsupported: "A pré-visualização ao vivo não é suportada neste navegador",
 			error: "Pré-visualização indisponível",
+			resume: "Retomar pré-visualização",
 			compatBadge: "Modo de compatibilidade",
 			canvasAria: "Pré-visualização de vídeo ao vivo",
 			audioLabel: "Níveis de áudio",
@@ -1251,6 +1252,42 @@ const ptBR = {
 				noVideo: {
 					title: "Ainda sem vídeo de pré-visualização",
 					body: "O motor aceitou a pré-visualização, mas não está enviando vídeo. A pré-visualização mostra o sinal codificado enquanto a transmissão está em andamento.",
+				},
+				tokenRejected: {
+					title: "Pré-visualização não autorizada",
+					body: "O token de acesso à pré-visualização foi rejeitado. Pare e inicie a pré-visualização para tentar novamente.",
+				},
+				mintFailed: {
+					title: "Não foi possível iniciar a pré-visualização",
+					body: "Não foi possível autorizar a pré-visualização. Verifique a conexão e tente novamente.",
+				},
+				interrupted: {
+					title: "Pré-visualização interrompida",
+					body: "O fluxo de pré-visualização caiu e não pôde ser restabelecido. Inicie-o novamente para tentar de novo.",
+				},
+				backpressure: {
+					title: "A pré-visualização não consegue acompanhar",
+					body: "Este dispositivo ou esta conexão não consegue acompanhar o fluxo de pré-visualização. Tente em uma conexão mais rápida.",
+				},
+				noSourceApplied: {
+					title: "Nenhuma fonte selecionada",
+					body: "Escolha uma fonte de captura para vê-la na pré-visualização enquanto a transmissão está ociosa.",
+				},
+				sourceUnavailable: {
+					title: "Fonte indisponível",
+					body: "A fonte selecionada não está mais disponível. Escolha outra fonte e tente novamente.",
+				},
+				deviceBusy: {
+					title: "Dispositivo ocupado",
+					body: "O dispositivo de captura está em uso em outro lugar. Libere-o e inicie a pré-visualização novamente.",
+				},
+				pipelineFailed: {
+					title: "Falha ao iniciar a pré-visualização",
+					body: "O motor não conseguiu iniciar o pipeline de pré-visualização. Inicie-o novamente para tentar de novo.",
+				},
+				pausedHidden: {
+					title: "Pré-visualização pausada",
+					body: "A pré-visualização parou após ficar sem ser vista para poupar recursos. Retome para vê-la novamente.",
 				},
 			},
 		},

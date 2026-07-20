@@ -1254,6 +1254,7 @@ const fr = {
 			unsupported:
 				"L'aperçu en direct n'est pas pris en charge par ce navigateur",
 			error: "Aperçu indisponible",
+			resume: "Reprendre l'aperçu",
 			compatBadge: "Mode de compatibilité",
 			canvasAria: "Aperçu vidéo en direct",
 			audioLabel: "Niveaux audio",
@@ -1275,6 +1276,42 @@ const fr = {
 				noVideo: {
 					title: "Pas encore de vidéo d'aperçu",
 					body: "Le moteur a accepté l'aperçu mais n'envoie pas de vidéo. L'aperçu affiche le signal encodé pendant que le flux est en cours.",
+				},
+				tokenRejected: {
+					title: "Aperçu non autorisé",
+					body: "Le jeton d'accès à l'aperçu a été rejeté. Arrêtez puis redémarrez l'aperçu pour réessayer.",
+				},
+				mintFailed: {
+					title: "Impossible de démarrer l'aperçu",
+					body: "L'aperçu n'a pas pu être autorisé. Vérifiez la connexion et réessayez.",
+				},
+				interrupted: {
+					title: "Aperçu interrompu",
+					body: "Le flux d'aperçu s'est interrompu et n'a pas pu être rétabli. Redémarrez-le pour réessayer.",
+				},
+				backpressure: {
+					title: "L'aperçu ne suit pas",
+					body: "Cet appareil ou cette connexion ne peut pas suivre le flux d'aperçu. Réessayez sur une connexion plus rapide.",
+				},
+				noSourceApplied: {
+					title: "Aucune source sélectionnée",
+					body: "Choisissez une source de capture pour l'afficher en aperçu pendant que le flux est inactif.",
+				},
+				sourceUnavailable: {
+					title: "Source indisponible",
+					body: "La source sélectionnée n'est plus disponible. Choisissez une autre source et réessayez.",
+				},
+				deviceBusy: {
+					title: "Appareil occupé",
+					body: "L'appareil de capture est utilisé ailleurs. Libérez-le, puis redémarrez l'aperçu.",
+				},
+				pipelineFailed: {
+					title: "Échec du démarrage de l'aperçu",
+					body: "Le moteur n'a pas pu démarrer le pipeline d'aperçu. Redémarrez-le pour réessayer.",
+				},
+				pausedHidden: {
+					title: "Aperçu en pause",
+					body: "L'aperçu s'est arrêté après être resté sans surveillance pour économiser des ressources. Reprenez pour le revoir.",
 				},
 			},
 		},

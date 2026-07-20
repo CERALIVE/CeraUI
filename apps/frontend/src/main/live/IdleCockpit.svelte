@@ -91,6 +91,10 @@ interface Props {
 	activeEncode: ActiveEncode | null;
 }
 
+// Collapsing the preview disclosure counts as "not viewed": bound into
+// PreviewCanvas's viewer-liveness so a closed `<details>` starts the 30s auto-stop.
+let previewOpen = $state(false);
+
 const {
 	config,
 	caps,
@@ -163,14 +167,18 @@ const audioEmbeddedComingSoon = $derived(
 	     Placed directly under the source picker (C4) so it follows the just-picked
 	     source; PreviewCanvas watches the APPLIED config.source and redials on a
 	     confirmed change. -->
-	<details class="bg-card rounded-xl border" data-testid="preview-disclosure">
+	<details
+		bind:open={previewOpen}
+		class="bg-card rounded-xl border"
+		data-testid="preview-disclosure"
+	>
 		<summary
 			class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
 		>
 			{$LL.live.modes.preview()}
 		</summary>
 		<div class="px-4 pb-4">
-			<PreviewCanvas />
+			<PreviewCanvas hostActive={previewOpen} />
 		</div>
 	</details>
 

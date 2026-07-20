@@ -490,6 +490,7 @@ const es = {
 			unsupported:
 				"La vista previa en vivo no es compatible con este navegador",
 			error: "Vista previa no disponible",
+			resume: "Reanudar vista previa",
 			compatBadge: "Modo de compatibilidad",
 			canvasAria: "Vista previa de vídeo en vivo",
 			audioLabel: "Niveles de audio",
@@ -511,6 +512,42 @@ const es = {
 				noVideo: {
 					title: "Aún no hay vídeo de vista previa",
 					body: "El motor aceptó la vista previa pero no envía vídeo. La vista previa muestra la señal codificada mientras la transmisión está activa.",
+				},
+				tokenRejected: {
+					title: "Vista previa no autorizada",
+					body: "Se rechazó el token de acceso a la vista previa. Detén e inicia la vista previa para volver a intentarlo.",
+				},
+				mintFailed: {
+					title: "No se pudo iniciar la vista previa",
+					body: "No se pudo autorizar la vista previa. Comprueba la conexión e inténtalo de nuevo.",
+				},
+				interrupted: {
+					title: "Vista previa interrumpida",
+					body: "La transmisión de vista previa se cortó y no se pudo restablecer. Iníciala de nuevo para reintentar.",
+				},
+				backpressure: {
+					title: "La vista previa no puede seguir el ritmo",
+					body: "Este dispositivo o esta conexión no pueden seguir el ritmo de la vista previa. Inténtalo con una conexión más rápida.",
+				},
+				noSourceApplied: {
+					title: "Ninguna fuente seleccionada",
+					body: "Elige una fuente de captura para verla en vista previa mientras la transmisión está inactiva.",
+				},
+				sourceUnavailable: {
+					title: "Fuente no disponible",
+					body: "La fuente seleccionada ya no está disponible. Elige otra fuente e inténtalo de nuevo.",
+				},
+				deviceBusy: {
+					title: "Dispositivo ocupado",
+					body: "El dispositivo de captura está en uso en otro lugar. Libéralo y vuelve a iniciar la vista previa.",
+				},
+				pipelineFailed: {
+					title: "No se pudo iniciar la vista previa",
+					body: "El motor no pudo iniciar la canalización de vista previa. Iníciala de nuevo para reintentar.",
+				},
+				pausedHidden: {
+					title: "Vista previa en pausa",
+					body: "La vista previa se detuvo tras quedar sin verse para ahorrar recursos. Reanúdala para volver a verla.",
 				},
 			},
 		},

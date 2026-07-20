@@ -23,12 +23,14 @@ import {
 	PREVIEW_CLOSE_UPSTREAM_DOWN,
 	PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE,
 } from '@ceraui/rpc/schemas';
-import { Eye, EyeOff, Loader, LoaderCircle, ServerOff } from '@lucide/svelte';
+import { Eye, EyeOff, Loader, LoaderCircle, Play, ServerOff } from '@lucide/svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {
 	cappedAttemptText,
 	derivePreviewAvailability,
+	engineFailureBand,
+	PREVIEW_CLOSE_REASON_BACKPRESSURE,
 	type PreviewAvailability,
 } from '$lib/components/preview/preview-availability';
 import { Button } from '$lib/components/ui/button';
@@ -45,9 +47,20 @@ interface Props {
 	 * otherwise identical; default keeps the full Live-view card.
 	 */
 	compact?: boolean;
+	/**
+	 * Whether the host considers the preview on-screen. IdleCockpit binds this to
+	 * its preview `<details open>` state so collapsing the disclosure counts as
+	 * "not viewed" and feeds the 30s viewer-liveness auto-stop. Defaults to `true`
+	 * for hosts with no collapse (e.g. the EncoderDialog modal).
+	 */
+	hostActive?: boolean;
 }
 
-const { class: className = undefined, compact = false }: Props = $props();
+const {
+	class: className = undefined,
+	compact = false,
+	hostActive = true,
+}: Props = $props();
 
 type PreviewStatus =
 	| 'idle'
@@ -69,6 +82,17 @@ const RECONNECT_CAP_MS = 15000;
 // its first keyframe (key-int-max 60 → ≤2s at 30fps), so 8s never false-fires on
 // a live signal while still surfacing the idle case promptly.
 const PREVIEW_MEDIA_TIMEOUT_MS = 8000;
+
+// Reconnect budget for a session that had already progressed past `connecting`
+// (reached `waiting`/`live`). Once exhausted the socket is a lost cause: rather
+// than spin the backoff loop forever, surface the terminal `interrupted` band.
+const PREVIEW_MAX_RECONNECT_ATTEMPTS = 5;
+
+// The client OWNS the idle-preview auto-stop: once the preview has gone unwatched
+// (tab hidden, canvas scrolled off-viewport, or the host `<details>` collapsed)
+// continuously for this window, it cleanly closes the socket so the single-owner
+// engine tears the idle leg down. Re-viewing before the window elapses cancels it.
+const VIEWER_IDLE_TIMEOUT_MS = 30000;
 
 const hasWindow = typeof window !== 'undefined';
 const supportsWebCodecs = hasWindow && typeof window.VideoDecoder === 'function';
@@ -99,8 +123,23 @@ let reconnectAttempt = $state(0);
 // snapshot gate and stops the reconnect loop until the operator re-toggles.
 let closeReason = $state<PreviewAvailability | null>(null);
 // The unauthorized (4401) close triggers exactly ONE silent token re-mint before
-// the offline band is surfaced; reset on a successful open.
+// the tokenRejected band is surfaced; reset on a successful open.
 let remintAttempted = false;
+// True once the session progressed past `connecting` (reached waiting/live or any
+// media arrived). Gates `interrupted` (a was-live drop) from a never-connected
+// exhaustion. Reset per start().
+let everProgressed = false;
+// pausedHidden: the viewer-liveness auto-stop cleanly closed the socket after 30s
+// unwatched. NOT an error band — carries a resume affordance and auto-redials on
+// re-view. Kept out of `closeReason` so a stale close code never masks it.
+let paused = $state(false);
+// Viewer-liveness inputs (drive the 30s auto-stop). `documentHidden` tracks the tab
+// visibility; `intersecting` tracks whether the preview card is on-screen (defaults
+// true when IntersectionObserver is unavailable, e.g. jsdom).
+let documentHidden = $state(false);
+let intersecting = $state(true);
+let sectionEl = $state<HTMLElement | null>(null);
+let viewerIdleTimer: ReturnType<typeof setTimeout> | null = null;
 // Latched true once the component is torn down (onDestroy). A reconnect timer
 // that fires after unmount must not touch reactive state or dial a new socket.
 let destroyed = false;
@@ -240,9 +279,20 @@ function handleText(raw: string): void {
 		return;
 	}
 	const type = msg.type;
+	// Engine typed idle-preview failure frame (cerastream Todo 10). Tolerant of both
+	// `{type:'error',reason}` and `{type:'<reason>'}` — see PREVIEW_ENGINE_FAILURE_REASONS.
+	const failureBand =
+		engineFailureBand(typeof type === 'string' ? type : undefined) ??
+		engineFailureBand(typeof msg.reason === 'string' ? msg.reason : undefined);
+	if (failureBand) {
+		clearMediaWatchdog();
+		closeReason = failureBand;
+		return;
+	}
 	if (type === 'codec-config' || type === 'config') {
 		// Media is flowing — the socket is no longer a silent stall.
 		clearMediaWatchdog();
+		everProgressed = true;
 		if ((msg.tier ?? tier) === 'mse') configureMse(msg as Parameters<typeof configureMse>[0]);
 		else configureWebCodecs(msg as Parameters<typeof configureWebCodecs>[0]);
 		return;
@@ -269,6 +319,7 @@ function handleMessage(event: MessageEvent): void {
 		// A binary access unit is unambiguous media progress; stand the watchdog
 		// down even if the codec-config text was missed.
 		clearMediaWatchdog();
+		everProgressed = true;
 		if (tier === 'webcodecs') decodeAccessUnit(event.data);
 		else appendMseSegment(event.data);
 	}
@@ -284,16 +335,27 @@ async function connect(): Promise<void> {
 	// flight bumps the generation, so this now-stale attempt aborts instead of
 	// opening a second socket (double-dial guard).
 	const generation = connectionGeneration;
+	// The engine idle leg needs to know WHICH device to preview. The applied
+	// (broadcast-confirmed) `config.source` is CeraLive's resolved source id — for a
+	// capture device it IS the engine `input_id` (list-devices id). Send it on the
+	// start frame; an absent/coarse source is omitted so the engine falls back to its
+	// own selection (or replies with a typed no-source-applied/source-unavailable frame).
+	// Read it UNTRACKED: the source-change redial is owned by the applied-source
+	// follow effect, so leaking this read into the dial effect would double-dial.
+	const inputId = untrack(() => getConfig()?.source);
 	// Mint a fresh single-use token over the authenticated RPC socket, then dial
 	// the backend-origin `/preview` proxy. The RPC credential never rides the URL.
 	let token: string;
 	try {
 		token = (await rpc.system.mintPreviewToken()).token;
 	} catch {
-		// A superseded attempt must not schedule a reconnect for a session a newer
+		// A superseded attempt must not surface a band for a session a newer
 		// start()/stop() already owns.
 		if (generation !== connectionGeneration) return;
-		scheduleReconnect();
+		// The mint RPC threw: the control session is unauthenticated or the backend
+		// is unreachable. Surface the distinct mintFailed band instead of a silent
+		// reconnect loop.
+		closeReason = 'mintFailed';
 		return;
 	}
 	// The toggle may have flipped, the component torn down, or a newer attempt
@@ -319,7 +381,13 @@ async function connect(): Promise<void> {
 		remintAttempted = false;
 		closeReason = null;
 		status = 'connecting';
-		ws.send(JSON.stringify({ action: 'start', tier }));
+		ws.send(
+			JSON.stringify(
+				inputId !== undefined
+					? { action: 'start', tier, input_id: inputId }
+					: { action: 'start', tier },
+			),
+		);
 		// The socket is open but no media has arrived yet. Guard against an engine
 		// that accepts the socket and stays silent (the idle case) so the UI does
 		// not sit on "Connecting…" indefinitely.
@@ -335,7 +403,7 @@ async function connect(): Promise<void> {
 	};
 	ws.onclose = (event) => {
 		if (generation !== connectionGeneration) return;
-		handleSocketClose(event.code);
+		handleSocketClose(event.code, event.reason);
 	};
 }
 
@@ -363,15 +431,17 @@ function clearMediaWatchdog(): void {
 	}
 }
 
-// Map a proxy close code to the calm availability band (or a bounded reconnect).
-// 4401 re-mints ONCE (the token expired between mint and dial); a second 4401
-// surfaces the offline band rather than looping.
-function handleSocketClose(code: number | undefined): void {
+// Map a proxy close (code + reason) to the calm availability band (or a bounded
+// reconnect). 4401 re-mints ONCE (the token expired between mint and dial); a
+// second 4401 surfaces the tokenRejected band. 4502 carries the reason string so
+// a backpressure teardown renders its own band instead of engineOffline.
+function handleSocketClose(code: number | undefined, reason?: string): void {
 	clearMediaWatchdog();
 	if (destroyed || !enabled) return;
 	switch (code) {
 		case PREVIEW_CLOSE_UPSTREAM_DOWN:
-			closeReason = 'engineOffline';
+			closeReason =
+				reason === PREVIEW_CLOSE_REASON_BACKPRESSURE ? 'backpressure' : 'engineOffline';
 			return;
 		case PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE:
 			closeReason = 'previewUnavailable';
@@ -384,7 +454,7 @@ function handleSocketClose(code: number | undefined): void {
 				void connect();
 				return;
 			}
-			closeReason = 'engineOffline';
+			closeReason = 'tokenRejected';
 			return;
 		default:
 			scheduleReconnect();
@@ -393,6 +463,13 @@ function handleSocketClose(code: number | undefined): void {
 
 function scheduleReconnect(): void {
 	resetMedia();
+	// Reconnect budget exhausted: stop spinning the backoff loop forever. A session
+	// that had gone live/waiting surfaces the terminal `interrupted` band; one that
+	// never connected surfaces `engineOffline` (the engine never answered).
+	if (reconnectAttempt >= PREVIEW_MAX_RECONNECT_ATTEMPTS) {
+		closeReason = everProgressed ? 'interrupted' : 'engineOffline';
+		return;
+	}
 	status = 'reconnecting';
 	const delay = backoffDelay(reconnectAttempt);
 	reconnectAttempt += 1;
@@ -431,6 +508,7 @@ function start(): void {
 	// New attempt generation — supersedes any in-flight connect (double-dial guard).
 	connectionGeneration += 1;
 	reconnectAttempt = 0;
+	everProgressed = false;
 	// Enter the connecting state immediately (before the async mint) so a rapid
 	// source-change restart still observes a live-ish status and chains correctly;
 	// connect() re-affirms it after the socket is created.
@@ -472,28 +550,93 @@ function stop(): void {
 
 function toggle(): void {
 	enabled = !enabled;
-	// A fresh enable clears a prior close-code band so the dial is re-attempted.
+	// A fresh enable clears a prior close-code band (and the paused latch) so the
+	// dial is re-attempted.
 	if (enabled) {
 		closeReason = null;
 		remintAttempted = false;
+		paused = false;
 	}
 }
 
+// Resume from the pausedHidden auto-stop: clear the latch so the availability
+// effect redials. Called by the resume affordance and on re-view.
+function resume(): void {
+	paused = false;
+	closeReason = null;
+}
+
 // Engine-aware availability: the pre-dial snapshot gate decides whether there is
-// anything to dial; a post-dial close code (`closeReason`) overrides it with the
-// state the backend proxy reported (engine offline / preview unbound). The
-// frontend dials only the backend `/preview` proxy, so dev and prod share one
-// path — no mock-dev exception. See `preview-availability.ts`.
-const availability = $derived(closeReason ?? derivePreviewAvailability(getCapabilities()));
+// anything to dial; the client-owned `pausedHidden` latch and a post-dial close
+// code (`closeReason`) override it. `pausedHidden` wins so a stale close code can
+// never mask the calm resume affordance. The frontend dials only the backend
+// `/preview` proxy, so dev and prod share one path. See `preview-availability.ts`.
+const availability = $derived(
+	paused ? 'pausedHidden' : (closeReason ?? derivePreviewAvailability(getCapabilities())),
+);
 const previewUnavailable = $derived(availability !== 'available');
 const reconnectAttemptText = $derived(cappedAttemptText(reconnectAttempt));
 
 $effect(() => {
-	// Never dial while the engine reports the preview unavailable — render the
-	// calm band instead of reconnecting forever.
+	// Never dial while the engine reports the preview unavailable, or while the
+	// viewer-liveness auto-stop has paused it — render the calm band instead of
+	// reconnecting forever. A `pausedHidden` latch flips `previewUnavailable` true,
+	// so this effect's cleanup cleanly closes the socket (single-owner teardown).
 	if (!enabled || previewUnavailable) return;
 	start();
 	return () => stop();
+});
+
+// ── Viewer-liveness: the client OWNS the 30s idle-preview auto-stop ──────────────
+// "Viewed" = the tab is visible AND the preview card is on-screen AND the host
+// (IdleCockpit's `<details>`) is open. Losing any of the three starts the window.
+const viewerActive = $derived(enabled && hostActive && !documentHidden && intersecting);
+
+// Track tab visibility. A single non-reactive setup effect (runs once, browser only).
+$effect(() => {
+	if (!hasWindow) return;
+	const sync = () => {
+		documentHidden = document.visibilityState === 'hidden';
+	};
+	sync();
+	document.addEventListener('visibilitychange', sync);
+	return () => document.removeEventListener('visibilitychange', sync);
+});
+
+// Track whether the preview card is on-screen. Absent IntersectionObserver (jsdom)
+// leaves `intersecting` at its permissive default so the auto-stop is driven by tab
+// visibility + host-open alone.
+$effect(() => {
+	const el = sectionEl;
+	if (!el || typeof IntersectionObserver === 'undefined') return;
+	const observer = new IntersectionObserver((entries) => {
+		const entry = entries[entries.length - 1];
+		if (entry) intersecting = entry.isIntersecting;
+	});
+	observer.observe(el);
+	return () => observer.disconnect();
+});
+
+// Arm the 30s window whenever an active, non-banded session goes unwatched. Re-view
+// (or any teardown) clears the timer via this effect's cleanup — a <30s blip never
+// tears down. On expiry the socket is closed cleanly through the `pausedHidden` latch.
+$effect(() => {
+	if (paused || !enabled || previewUnavailable || viewerActive) return;
+	viewerIdleTimer = setTimeout(() => {
+		viewerIdleTimer = null;
+		if (!destroyed) paused = true;
+	}, VIEWER_IDLE_TIMEOUT_MS);
+	return () => {
+		if (viewerIdleTimer) {
+			clearTimeout(viewerIdleTimer);
+			viewerIdleTimer = null;
+		}
+	};
+});
+
+// Auto-resume: once the operator looks again, redial without a manual click.
+$effect(() => {
+	if (paused && viewerActive) resume();
 });
 
 // The preview is "actively dialing/showing" in these states; an applied-source
@@ -541,27 +684,34 @@ onDestroy(() => {
 });
 
 const unavailableBand = $derived.by(() => {
+	const bands = $LL.live.preview.unavailable;
 	switch (availability) {
 		case 'engineStarting':
-			return {
-				title: $LL.live.preview.unavailable.engineStarting.title(),
-				body: $LL.live.preview.unavailable.engineStarting.body(),
-			};
+			return { title: bands.engineStarting.title(), body: bands.engineStarting.body() };
 		case 'engineOffline':
-			return {
-				title: $LL.live.preview.unavailable.engineOffline.title(),
-				body: $LL.live.preview.unavailable.engineOffline.body(),
-			};
+			return { title: bands.engineOffline.title(), body: bands.engineOffline.body() };
 		case 'noVideo':
-			return {
-				title: $LL.live.preview.unavailable.noVideo.title(),
-				body: $LL.live.preview.unavailable.noVideo.body(),
-			};
+			return { title: bands.noVideo.title(), body: bands.noVideo.body() };
+		case 'tokenRejected':
+			return { title: bands.tokenRejected.title(), body: bands.tokenRejected.body() };
+		case 'mintFailed':
+			return { title: bands.mintFailed.title(), body: bands.mintFailed.body() };
+		case 'interrupted':
+			return { title: bands.interrupted.title(), body: bands.interrupted.body() };
+		case 'backpressure':
+			return { title: bands.backpressure.title(), body: bands.backpressure.body() };
+		case 'noSourceApplied':
+			return { title: bands.noSourceApplied.title(), body: bands.noSourceApplied.body() };
+		case 'sourceUnavailable':
+			return { title: bands.sourceUnavailable.title(), body: bands.sourceUnavailable.body() };
+		case 'deviceBusy':
+			return { title: bands.deviceBusy.title(), body: bands.deviceBusy.body() };
+		case 'pipelineFailed':
+			return { title: bands.pipelineFailed.title(), body: bands.pipelineFailed.body() };
+		case 'pausedHidden':
+			return { title: bands.pausedHidden.title(), body: bands.pausedHidden.body() };
 		default:
-			return {
-				title: $LL.live.preview.unavailable.previewUnavailable.title(),
-				body: $LL.live.preview.unavailable.previewUnavailable.body(),
-			};
+			return { title: bands.previewUnavailable.title(), body: bands.previewUnavailable.body() };
 	}
 });
 
@@ -584,6 +734,7 @@ const overlayText = $derived.by(() => {
 </script>
 
 <section
+	bind:this={sectionEl}
 	data-testid="preview"
 	data-status={status}
 	data-tier={tier}
@@ -626,12 +777,26 @@ const overlayText = $derived.by(() => {
 						aria-hidden="true"
 						class="text-primary mt-0.5 size-5 shrink-0 animate-spin motion-reduce:animate-none"
 					/>
+				{:else if availability === 'pausedHidden'}
+					<Eye aria-hidden="true" class="text-muted-foreground mt-0.5 size-5 shrink-0" />
 				{:else}
 					<ServerOff aria-hidden="true" class="text-muted-foreground mt-0.5 size-5 shrink-0" />
 				{/if}
 				<div class="min-w-0 flex-1 space-y-1">
 					<p class="text-sm font-semibold">{unavailableBand.title}</p>
 					<p class="text-muted-foreground text-sm">{unavailableBand.body}</p>
+					{#if availability === 'pausedHidden'}
+						<Button
+							class="mt-1 gap-1.5"
+							data-testid="preview-resume"
+							onclick={resume}
+							size="sm"
+							variant="secondary"
+						>
+							<Play aria-hidden="true" class="size-3.5" />
+							{$LL.live.preview.resume()}
+						</Button>
+					{/if}
 				</div>
 			</div>
 		{:else}
