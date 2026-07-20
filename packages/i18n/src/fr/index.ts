@@ -407,6 +407,8 @@ const fr = {
 			staticIp: "Adresse IP statique",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Laissez vide pour utiliser DHCP (adressage automatique).",
+			linkLocalNotice:
+				"Cette interface affiche une adresse lien-local 169.254.x.x, que l'appareil conserve toujours pour l'accès local même sans DHCP. Ce n'est pas une IP statique enregistrée. Laissez le champ vide pour conserver l'adressage automatique (DHCP).",
 			ipInvalid: "Saisissez une adresse IPv4 ou IPv6 valide.",
 			confirmPassword: "Confirmer le mot de passe",
 			passwordsMismatch: "Les mots de passe ne correspondent pas.",
@@ -630,6 +632,9 @@ const fr = {
 			nak: "NAK",
 			weight: "Poids",
 			telemetry: "Télémétrie de liaison",
+			linkLocal: "Lien-local",
+			linkLocalHint:
+				"Adresse locale automatique (169.254.x.x). L'appareil la conserve toujours pour l'accès local \u2014 ce n'est pas un paramètre enregistré.",
 		},
 		collision: {
 			sameSubnetTitle: "Sous-réseau partagé entre les liens",

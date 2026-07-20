@@ -251,6 +251,8 @@ const ja = {
 			staticIp: "静的IPアドレス",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP（自動アドレス割り当て）を使用する場合は空欄にします。",
+			linkLocalNotice:
+				"このインターフェースは 169.254.x.x のリンクローカルアドレスを表示しています。デバイスは DHCP がなくてもローカルアクセスのために常に保持します。保存された固定 IP ではありません。自動（DHCP）アドレス割り当てを維持するにはフィールドを空欄にしてください。",
 			ipInvalid: "有効なIPv4またはIPv6アドレスを入力してください。",
 			confirmPassword: "パスワードを確認",
 			passwordsMismatch: "パスワードが一致しません。",
@@ -474,6 +476,9 @@ const ja = {
 			nak: "NAK",
 			weight: "重み",
 			telemetry: "リンクテレメトリ",
+			linkLocal: "リンクローカル",
+			linkLocalHint:
+				"自動的なローカルアドレス（169.254.x.x）。デバイスはローカルアクセスのために常に保持します \u2014 保存された設定ではありません。",
 		},
 		collision: {
 			sameSubnetTitle: "リンク間で共有されたサブネット",

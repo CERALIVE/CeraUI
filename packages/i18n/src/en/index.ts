@@ -895,6 +895,8 @@ const en = {
 			staticIp: "Static IP address",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Leave blank to use DHCP (automatic addressing).",
+			linkLocalNotice:
+				"This interface shows a 169.254.x.x link-local address, which the device always keeps for local access even without DHCP. It is not a saved static IP. Leave the field blank to keep automatic (DHCP) addressing.",
 			ipInvalid: "Enter a valid IPv4 or IPv6 address.",
 			confirmPassword: "Confirm password",
 			passwordsMismatch: "Passwords don't match.",
@@ -1119,6 +1121,9 @@ const en = {
 			nak: "NAK",
 			weight: "Weight",
 			telemetry: "Link telemetry",
+			linkLocal: "Link-local",
+			linkLocalHint:
+				"Automatic local address (169.254.x.x). The device always keeps it for local access \u2014 it is not a saved setting.",
 		},
 		collision: {
 			sameSubnetTitle: "Shared subnet across links",

@@ -905,6 +905,8 @@ const de = {
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint:
 				"Leer lassen, um DHCP (automatische Adressierung) zu verwenden.",
+			linkLocalNotice:
+				"Diese Schnittstelle zeigt eine 169.254.x.x-Link-local-Adresse, die das Gerät auch ohne DHCP stets für den lokalen Zugriff behält. Sie ist keine gespeicherte statische IP. Lassen Sie das Feld leer, um die automatische Adressierung (DHCP) beizubehalten.",
 			ipInvalid: "Geben Sie eine gültige IPv4- oder IPv6-Adresse ein.",
 			confirmPassword: "Passwort bestätigen",
 			passwordsMismatch: "Passwörter stimmen nicht überein.",
@@ -1129,6 +1131,9 @@ const de = {
 			nak: "NAK",
 			weight: "Gewicht",
 			telemetry: "Verbindungstelemetrie",
+			linkLocal: "Link-local",
+			linkLocalHint:
+				"Automatische lokale Adresse (169.254.x.x). Das Gerät behält sie stets für den lokalen Zugriff \u2014 sie ist keine gespeicherte Einstellung.",
 		},
 		collision: {
 			sameSubnetTitle: "Gemeinsames Subnetz über Verbindungen",

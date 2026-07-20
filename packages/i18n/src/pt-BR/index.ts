@@ -403,6 +403,8 @@ const ptBR = {
 			staticIp: "Endereço IP estático",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Deixe em branco para usar DHCP (endereçamento automático).",
+			linkLocalNotice:
+				"Esta interface mostra um endereço link-local 169.254.x.x, que o dispositivo sempre mantém para acesso local mesmo sem DHCP. Não é um IP estático salvo. Deixe o campo em branco para manter o endereçamento automático (DHCP).",
 			ipInvalid: "Insira um endereço IPv4 ou IPv6 válido.",
 			confirmPassword: "Confirmar senha",
 			passwordsMismatch: "As senhas não coincidem.",
@@ -628,6 +630,9 @@ const ptBR = {
 			nak: "NAK",
 			weight: "Peso",
 			telemetry: "Telemetria do link",
+			linkLocal: "Link-local",
+			linkLocalHint:
+				"Endereço local automático (169.254.x.x). O dispositivo sempre o mantém para acesso local \u2014 não é uma configuração salva.",
 		},
 		collision: {
 			sameSubnetTitle: "Sub-rede compartilhada entre links",
