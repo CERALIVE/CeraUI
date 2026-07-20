@@ -236,6 +236,8 @@ const zh = {
 			staticIp: "静态 IP 地址",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "留空以使用 DHCP（自动分配地址）。",
+			linkLocalNotice:
+				"此接口显示 169.254.x.x 链路本地地址，设备即使没有 DHCP 也会始终保留它用于本地访问。它不是已保存的静态 IP。将该字段留空以保持自动（DHCP）地址分配。",
 			ipInvalid: "请输入有效的 IPv4 或 IPv6 地址。",
 			confirmPassword: "确认密码",
 			passwordsMismatch: "密码不匹配。",
@@ -447,6 +449,9 @@ const zh = {
 			nak: "NAK",
 			weight: "权重",
 			telemetry: "链路遥测",
+			linkLocal: "链路本地",
+			linkLocalHint:
+				"自动本地地址（169.254.x.x）。设备会始终保留它用于本地访问 \u2014 它不是已保存的设置。",
 		},
 		collision: {
 			sameSubnetTitle: "链路间共享子网",

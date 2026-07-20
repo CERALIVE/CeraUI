@@ -918,6 +918,8 @@ const es = {
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint:
 				"Déjalo en blanco para usar DHCP (direccionamiento automático).",
+			linkLocalNotice:
+				"Esta interfaz muestra una dirección de enlace local 169.254.x.x, que el dispositivo siempre mantiene para el acceso local incluso sin DHCP. No es una IP estática guardada. Deja el campo en blanco para mantener el direccionamiento automático (DHCP).",
 			ipInvalid: "Ingresa una dirección IPv4 o IPv6 válida.",
 			confirmPassword: "Confirmar contraseña",
 			passwordsMismatch: "Las contraseñas no coinciden.",
@@ -1146,6 +1148,9 @@ const es = {
 			nak: "NAK",
 			weight: "Peso",
 			telemetry: "Telemetría de enlace",
+			linkLocal: "Enlace local",
+			linkLocalHint:
+				"Dirección local automática (169.254.x.x). El dispositivo la mantiene siempre para el acceso local; no es una configuración guardada.",
 		},
 		collision: {
 			sameSubnetTitle: "Subred compartida entre enlaces",

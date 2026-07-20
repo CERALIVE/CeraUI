@@ -13,13 +13,14 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { IP_ADDRESS_REGEX, type NetifEntry } from '@ceraui/rpc/schemas';
-import { Network } from '@lucide/svelte';
+import { Info, Network } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import { AppDialog } from '$lib/components/dialogs';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { rpc } from '$lib/rpc';
 import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
 
@@ -30,6 +31,14 @@ interface Props {
 }
 
 let { open = $bindable(false), name, iface }: Props = $props();
+
+// A link-local (169.254/16) address is an automatic OS-assigned fallback, never a
+// saved static config, so it must NOT seed the "Static IP" field — echoing it there
+// makes it look like a stuck static IP the operator set (and "can't clear"). Treat
+// link-local as blank = DHCP.
+const staticIpSeed = (entry: NetifEntry | undefined): string =>
+	entry?.ip && !isLinkLocalIpv4(entry.ip) ? entry.ip : '';
+const showLinkLocalNotice = $derived(isLinkLocalIpv4(iface?.ip));
 
 // Local, editable copies. Initialised on the open edge so the form always
 // starts from the live interface state.
@@ -46,7 +55,7 @@ $effect(() => {
 	// Open edge → reset the form from the current interface, clear dirty flags.
 	if (open && !wasOpen) {
 		enabled = iface?.enabled ?? false;
-		ip = iface?.ip ?? '';
+		ip = staticIpSeed(iface);
 		dirtyEnabled = false;
 		dirtyIp = false;
 	}
@@ -57,7 +66,7 @@ $effect(() => {
 	// Live sync while open — but only for fields the operator hasn't touched.
 	if (!open) return;
 	const serverEnabled = iface?.enabled;
-	const serverIp = iface?.ip ?? '';
+	const serverIp = staticIpSeed(iface);
 	if (!dirtyEnabled && serverEnabled !== undefined) enabled = serverEnabled;
 	if (!dirtyIp) ip = serverIp;
 });
@@ -136,6 +145,19 @@ async function save() {
 				}}
 			/>
 		</div>
+
+		{#if showLinkLocalNotice}
+			<!-- Calm, informational: the shown 169.254/16 address is an automatic OS
+			     fallback (always kept for local access), NOT a saved static IP. -->
+			<div
+				data-testid="netif-link-local-notice"
+				role="status"
+				class="bg-status-info/10 border-status-info/30 flex items-start gap-3 rounded-lg border p-3"
+			>
+				<Info class="text-status-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
+				<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.linkLocalNotice()}</p>
+			</div>
+		{/if}
 
 		<!-- Static IP -->
 		<div class="space-y-2">

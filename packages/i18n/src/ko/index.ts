@@ -243,6 +243,8 @@ const ko = {
 			staticIp: "고정 IP 주소",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP(자동 주소 할당)를 사용하려면 비워 두세요.",
+			linkLocalNotice:
+				"이 인터페이스는 169.254.x.x 링크 로컬 주소를 표시하며, 장치는 DHCP가 없어도 로컬 접근을 위해 항상 이를 유지합니다. 저장된 고정 IP가 아닙니다. 자동(DHCP) 주소 할당을 유지하려면 필드를 비워 두세요.",
 			ipInvalid: "유효한 IPv4 또는 IPv6 주소를 입력하세요.",
 			confirmPassword: "비밀번호 확인",
 			passwordsMismatch: "비밀번호가 일치하지 않습니다.",
@@ -463,6 +465,9 @@ const ko = {
 			nak: "NAK",
 			weight: "가중치",
 			telemetry: "링크 텔레메트리",
+			linkLocal: "링크 로컬",
+			linkLocalHint:
+				"자동 로컬 주소(169.254.x.x). 장치가 로컬 접근을 위해 항상 유지하며, 저장된 설정이 아닙니다.",
 		},
 		collision: {
 			sameSubnetTitle: "링크 간 공유된 서브넷",
