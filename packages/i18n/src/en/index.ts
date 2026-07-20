@@ -491,6 +491,10 @@ const en = {
 					title: "Preview unavailable",
 					body: "This engine doesn't provide a preview feed on this device.",
 				},
+				noVideo: {
+					title: "No preview video yet",
+					body: "The engine accepted the preview but isn't sending video. The preview shows the encoded signal while the stream is running.",
+				},
 			},
 		},
 		inputPicker: {

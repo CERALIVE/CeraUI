@@ -1243,6 +1243,10 @@ const ptBR = {
 					title: "Pré-visualização indisponível",
 					body: "Este motor não fornece um feed de pré-visualização neste dispositivo.",
 				},
+				noVideo: {
+					title: "Ainda sem vídeo de pré-visualização",
+					body: "O motor aceitou a pré-visualização, mas não está enviando vídeo. A pré-visualização mostra o sinal codificado enquanto a transmissão está em andamento.",
+				},
 			},
 		},
 		inputPicker: {

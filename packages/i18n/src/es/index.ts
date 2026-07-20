@@ -508,6 +508,10 @@ const es = {
 					title: "Vista previa no disponible",
 					body: "Este motor no ofrece una señal de vista previa en este dispositivo.",
 				},
+				noVideo: {
+					title: "Aún no hay vídeo de vista previa",
+					body: "El motor aceptó la vista previa pero no envía vídeo. La vista previa muestra la señal codificada mientras la transmisión está activa.",
+				},
 			},
 		},
 		inputPicker: {

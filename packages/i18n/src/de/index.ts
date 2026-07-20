@@ -506,6 +506,10 @@ const de = {
 					title: "Vorschau nicht verfügbar",
 					body: "Diese Engine stellt auf diesem Gerät keinen Vorschau-Feed bereit.",
 				},
+				noVideo: {
+					title: "Noch kein Vorschauvideo",
+					body: "Die Engine hat die Vorschau angenommen, sendet aber kein Video. Die Vorschau zeigt das codierte Signal, während der Stream läuft.",
+				},
 			},
 		},
 		inputPicker: {
