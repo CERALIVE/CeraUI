@@ -407,6 +407,35 @@ Detection contract (fail-safe, defaults to `false`):
 5. Any probe throws (file absent/unreadable) → false for that probe (never propagates)
 6. Unrecognised or malformed identity → false. Jetson is deliberately unhandled/deferred.
 
+**Hardware-kind detection + `setup.json` drift guard (Todo 59 audit).**
+`device-detection.ts` also exports `detectHardwareKindFromDeviceTree()` —
+positively resolves the board family (`"rk3588" | "jetson" | "n100" | "unknown"`)
+from the SAME reliable probes `isRealDevice()` uses, checking
+`/proc/device-tree/compatible` FIRST (the marker that fixed the Todo 48 bug), then
+`model`, then the x86 DMI product name. Markers are matched conservatively (the
+specific SoC token, never a broad `"rockchip"`) so an unsupported RK3399/RK356x
+resolves `"unknown"` instead of being mis-stamped `rk3588`.
+
+`warnOnHardwareIdentityDrift()` is a boot-time, **warn-only** guard wired into
+`main.ts` (`guardNonCritical("hardware-identity-drift", …)`, fail-soft): on a real
+device it compares `setup.json` `hw` against the detected kind and logs a loud
+`logger.warn` on a POSITIVE mismatch (`"unknown"` defers to config; dev/emulated
+hosts are skipped). WHY: `setup.json` `hw` is a SINGLE hardcoded value packaged
+verbatim into the `ceralive-device` .deb for every board/arch — there is no
+per-board `setup.json`, and the image pipeline does NOT rewrite it (it leaves
+`/etc/ceralive/conf.d/hardware.conf` on `auto`). So an AMD64/N100 or Orange-Pi
+image still ships `hw:"rk3588"`, and `setup.hw` silently drives the wrong board
+profile in `sensors.ts` (sensor selection), `audio.ts` (device-label aliases),
+`pipelines.ts` (the `hardware` broadcast label), and `addons/reconciler.ts`
+(`{board}` artifact targeting). The guard turns that Todo-48-class silent drift
+into a visible boot signal WITHOUT changing any behaviour — every consumer still
+reads `setup.hw`. Converging those consumers onto auto-detection (making
+`setup.hw` a fallback/override) is a tracked follow-up, NOT done here (it touches
+module-load-time sync reads). cerastream's own `detect_hardware_kind` uses the
+same compatible→model→DMI precedence but does NOT echo the detected kind in
+`get-capabilities` (only derived caps), so CeraUI cannot consume it as a label
+today — a second follow-up.
+
 Real platform pairing parses `PLATFORM_URL` before any secret registration or
 claim request. HTTPS is required on production and real devices; plaintext HTTP
 is accepted only for `localhost`, `127.0.0.1`, or `[::1]` while the backend is in

@@ -193,3 +193,99 @@ export async function withDeviceType(
 		}
 	}
 }
+
+// =============================================================================
+// Hardware-kind detection + config-drift guard (Todo 59 audit)
+// =============================================================================
+
+/**
+ * The board family the device-tree / DMI can POSITIVELY identify. `unknown`
+ * means the probes did not name a supported board — the caller must defer to
+ * the configured value rather than assume a mismatch.
+ */
+export type DetectedHardwareKind = "rk3588" | "jetson" | "n100" | "unknown";
+
+/**
+ * Positively derive the board family from the device-tree `compatible` list
+ * (reliable, checked FIRST — always carries the SoC compatible string), then
+ * the device-tree `model`, then the x86 DMI product name. This mirrors
+ * cerastream's `detect_hardware_kind` precedence (compatible → model → DMI) and
+ * reuses the SAME reliable probe surface `isRealDevice()` already uses, so the
+ * two never diverge (the Todo 48 bug was one detector reading `model` only).
+ *
+ * Markers are matched conservatively — the specific SoC token, never a broad
+ * "rockchip" — so an unsupported Rockchip (RK3399 / RK356x) resolves `unknown`
+ * rather than being mis-stamped `rk3588`. Any probe failure is swallowed
+ * (`readOptional`); an unrecognised host resolves `unknown` and never throws.
+ */
+export async function detectHardwareKindFromDeviceTree(
+	deps: DeviceDetectionDeps = defaultDeviceDetectionDeps,
+): Promise<DetectedHardwareKind> {
+	for (const probe of [
+		deps.readDeviceTreeCompatible,
+		deps.readDeviceTreeModel,
+	]) {
+		const identity = (await readOptional(probe)).toLowerCase();
+		if (identity.includes("rk3588")) return "rk3588";
+		if (identity.includes("jetson") || identity.includes("tegra")) {
+			return "jetson";
+		}
+	}
+	const dmi = (await readOptional(deps.readDmiProductName)).toLowerCase();
+	if (dmi.includes("n100")) return "n100";
+	return "unknown";
+}
+
+/** Injected surface for {@link warnOnHardwareIdentityDrift}. */
+export type HardwareIdentityDriftDeps = {
+	/** Positively-detected board family (device-tree / DMI). */
+	detectKind: () => Promise<DetectedHardwareKind>;
+	/** The static `setup.json` `hw` value packaged in the .deb. */
+	configuredHw: () => string;
+	/** Only meaningful on a real device (dev hosts have no device-tree). */
+	isRealDevice: () => Promise<boolean>;
+	/** Loud, journal-visible warning sink. */
+	warn: (message: string) => void;
+};
+
+/**
+ * Boot-time guard that turns the Todo-48 class of bug — a static hardware
+ * identity silently disagreeing with the live board — from SILENT into LOUD.
+ *
+ * `setup.json` `hw` is a single hardcoded value packaged verbatim into the
+ * `ceralive-device` .deb for EVERY board/arch (there is no per-board
+ * `setup.json`), so an image built for a non-rk3588 board still ships
+ * `hw:"rk3588"`. That value drives sensor selection (`sensors.ts`), audio-device
+ * label aliases (`audio.ts`), the pipeline/sources `hardware` label
+ * (`pipelines.ts`), and add-on `{board}` artifact targeting (`reconciler.ts`) —
+ * all of which pick the wrong board profile on a mismatch.
+ *
+ * This guard is WARN-ONLY: it changes NO behaviour (every consumer still reads
+ * `setup.hw`), it just makes a mismatch visible in the journal at boot instead
+ * of failing silently for a whole session. It warns only on a POSITIVE
+ * mismatch — an `unknown` detection defers to the configured value (never cries
+ * wolf), and it is gated on `isRealDevice()` so a dev/emulated host (where
+ * `setup.hw` is only the checked-in default) stays quiet.
+ */
+export async function warnOnHardwareIdentityDrift(
+	deps: HardwareIdentityDriftDeps,
+): Promise<{ checked: boolean; drift: boolean }> {
+	if (!(await deps.isRealDevice())) return { checked: false, drift: false };
+
+	const detected = await deps.detectKind();
+	// `unknown` = probes could not name a supported board; defer to the
+	// configured value rather than assume a mismatch.
+	if (detected === "unknown") return { checked: true, drift: false };
+
+	const configured = deps.configuredHw();
+	if (detected === configured) return { checked: true, drift: false };
+
+	deps.warn(
+		`hardware identity drift: setup.json hw="${configured}" but the device-tree ` +
+			`identifies this board as "${detected}". setup.json.hw is a static, ` +
+			"image-baked value (one value for every board/arch), so a mismatch means " +
+			"sensors, audio-device labels, and add-on board targeting run the wrong " +
+			`board profile. Ship a "${detected}"-correct setup.json for this board.`,
+	);
+	return { checked: true, drift: true };
+}

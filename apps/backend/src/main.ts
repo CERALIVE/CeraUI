@@ -99,6 +99,11 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import {
+	detectHardwareKindFromDeviceTree,
+	isRealDevice,
+	warnOnHardwareIdentityDrift,
+} from "./modules/system/device-detection.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import {
@@ -275,6 +280,15 @@ await guardNonCritical("ssh-password-provision", ensureSshPasswordProvisioned);
 // host-key restore). Fail-soft: a sync failure must never brick boot.
 await guardNonCritical("ssh-password-sync", ensureSshPasswordSynced);
 void getSshStatus();
+
+await guardNonCritical("hardware-identity-drift", async () => {
+	await warnOnHardwareIdentityDrift({
+		detectKind: () => detectHardwareKindFromDeviceTree(),
+		configuredHw: () => setup.hw,
+		isRealDevice: () => isRealDevice(),
+		warn: (message) => logger.warn(message),
+	});
+});
 logger.info(bootTimer.phase("🖥️", "hardware"));
 
 void updateGwWrapper();
