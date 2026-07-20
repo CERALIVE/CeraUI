@@ -69,6 +69,11 @@ export type NetworkInterfaceMessage = {
 	};
 };
 
+/** A chosen interface IPv4; `netmask` is a dotted quad, not a prefix length. */
+export type IpAddrSelection = { ip: string; netmask: string };
+
+type ScopedAddress = { ip: string; prefix: number; scope: string };
+
 export const NETIF_ERR_DUPIPV4 = 0x01;
 export const NETIF_ERR_HOTSPOT = 0x02;
 
@@ -204,15 +209,44 @@ export function updateNetif() {
 		return;
 	}
 
-	run("ifconfig", [])
-		.then(processIfconfigOutput)
-		.catch((error: unknown) => {
-			const message = error instanceof Error ? error.message : String(error);
-			logger.error(`Error getting ifconfig: ${message}`);
-		});
+	void refreshNetifFromOs();
 }
 
-export function processIfconfigOutput(stdout: string) {
+// ifconfig (net-tools) reports only ONE IPv4 per interface, so on a link that
+// carries both an RFC-3927 link-local (169.254/16) and a real DHCP lease it can
+// surface the link-local as THE address. `ip -4 addr show` lists every address
+// with a `scope`, letting us prefer the routable global-scope lease. ifconfig
+// still drives throughput, RUNNING flags, and the WiFi device list; a missing or
+// failing `ip` degrades to ifconfig-only (the prior single-address behavior).
+async function resolveIpAddrOverrides(): Promise<
+	Map<string, IpAddrSelection> | undefined
+> {
+	try {
+		return parseIpAddrShow(await run("ip", ["-4", "addr", "show"]));
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		logger.debug(`ip -4 addr show unavailable, using ifconfig IPs: ${message}`);
+		return undefined;
+	}
+}
+
+async function refreshNetifFromOs(): Promise<void> {
+	try {
+		const [ifconfigOut, ipOverrides] = await Promise.all([
+			run("ifconfig", []),
+			resolveIpAddrOverrides(),
+		]);
+		processIfconfigOutput(ifconfigOut, ipOverrides);
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		logger.error(`Error getting ifconfig: ${message}`);
+	}
+}
+
+export function processIfconfigOutput(
+	stdout: string,
+	ipOverrides?: Map<string, IpAddrSelection>,
+) {
 	let intsChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
 
@@ -227,11 +261,16 @@ export function processIfconfigOutput(stdout: string) {
 			if (name === "lo" || name.match("^docker") || name.match("^l4tbr"))
 				continue;
 
+			// Prefer the scope-annotated `ip -4 addr` address (a routable global
+			// lease over a link-local) when present; fall back to ifconfig's single
+			// inet line otherwise.
+			const ipOverride = ipOverrides?.get(name);
+
 			const inetAddrMatch = int.match(/inet (\d+\.\d+\.\d+\.\d+)/);
-			const inetAddr = inetAddrMatch?.[1];
+			const inetAddr = ipOverride?.ip ?? inetAddrMatch?.[1];
 
 			const netmaskMatch = int.match(/netmask (\d+\.\d+\.\d+\.\d+)/);
-			const netmask = netmaskMatch?.[1];
+			const netmask = ipOverride?.netmask ?? netmaskMatch?.[1];
 
 			const flags = (int.match(/flags=\d+<([A-Z,]+)>/)?.[1] ?? "").split(",");
 			const isRunning = flags.includes("RUNNING");
@@ -357,6 +396,74 @@ function intToIp(int: number): string {
 		(int >>> 8) & 0xff,
 		int & 0xff,
 	].join(".");
+}
+
+// An RFC-3927 link-local (169.254/16, iproute2 `scope link`) is a kernel/NM
+// auto-assigned fallback; it must never outrank a real routable lease on a link
+// that has both.
+function isLinkLocalIpv4(ip: string, scope: string): boolean {
+	return scope === "link" || ip.startsWith("169.254.");
+}
+
+// A global-scope routable lease wins; then any other non-link-local address;
+// only as a last resort the link-local (parity with the old single-address read
+// for a link that carries nothing else).
+function selectPreferredAddress(
+	addrs: ScopedAddress[],
+): ScopedAddress | undefined {
+	return (
+		addrs.find(
+			(a) => a.scope === "global" && !isLinkLocalIpv4(a.ip, a.scope),
+		) ??
+		addrs.find((a) => !isLinkLocalIpv4(a.ip, a.scope)) ??
+		addrs[0]
+	);
+}
+
+function prefixToNetmask(prefix: number): string {
+	if (prefix <= 0) return "0.0.0.0";
+	if (prefix >= 32) return "255.255.255.255";
+	return intToIp((0xffffffff << (32 - prefix)) >>> 0);
+}
+
+/**
+ * Parse `ip -4 addr show` into iface → chosen {ip, netmask}. `ip` lists EVERY
+ * IPv4 per interface with its `scope`, so unlike single-address ifconfig we can
+ * prefer the routable global lease over an RFC-3927 link-local when a link has
+ * both — the fix for a board that would otherwise advertise its link-local.
+ */
+export function parseIpAddrShow(stdout: string): Map<string, IpAddrSelection> {
+	const byIface = new Map<string, ScopedAddress[]>();
+	let current: string | undefined;
+
+	for (const line of stdout.split("\n")) {
+		const header = line.match(/^\d+:\s+([^:@\s]+)/);
+		if (header?.[1]) {
+			current = header[1];
+			continue;
+		}
+		if (current === undefined) continue;
+
+		const addr = line.match(/^\s*inet\s+(\d+\.\d+\.\d+\.\d+)\/(\d+)\b/);
+		if (!addr?.[1] || !addr[2]) continue;
+		const scope = line.match(/\bscope\s+(\S+)/)?.[1] ?? "global";
+
+		const list = byIface.get(current) ?? [];
+		list.push({ ip: addr[1], prefix: Number.parseInt(addr[2], 10), scope });
+		byIface.set(current, list);
+	}
+
+	const selected = new Map<string, IpAddrSelection>();
+	for (const [name, addrs] of byIface) {
+		const chosen = selectPreferredAddress(addrs);
+		if (chosen) {
+			selected.set(name, {
+				ip: chosen.ip,
+				netmask: prefixToNetmask(chosen.prefix),
+			});
+		}
+	}
+	return selected;
 }
 
 function netmaskToPrefix(netmask: string): number {
