@@ -1272,6 +1272,10 @@ const fr = {
 					title: "Aperçu indisponible",
 					body: "Ce moteur ne fournit pas de flux d'aperçu sur cet appareil.",
 				},
+				noVideo: {
+					title: "Pas encore de vidéo d'aperçu",
+					body: "Le moteur a accepté l'aperçu mais n'envoie pas de vidéo. L'aperçu affiche le signal encodé pendant que le flux est en cours.",
+				},
 			},
 		},
 		inputPicker: {
