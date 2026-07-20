@@ -563,6 +563,13 @@ const de = {
 			audioNone: "Keine Audioquelle erkannt",
 			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
 			audioEdit: "Codec & Verzögerung",
+			notConnected: "Nicht verbunden",
+			notConnectedTitle: "Nicht verbunden",
+			notConnectedBody:
+				"Dein Gerät unterstützt diese Art von Quelle, aber momentan ist nichts dafür angeschlossen. Schließe ein passendes Gerät an, um sie zu nutzen, oder wähle eine bereits verbundene Quelle.",
+			mjpegTitle: "Warum MJPEG?",
+			mjpegBody:
+				"Dieses Aufnahmegerät bietet keine Hardware-H.264/H.265-Kodierung über USB, daher erfasst der Encoder sein Motion-JPEG-Video (MJPEG) und kodiert es in den von dir gewählten Codec um. Das ist eine genaue Beschreibung der Hardware, kein Fehler.",
 		},
 		summary: {
 			nowStreaming: "Jetzt live",

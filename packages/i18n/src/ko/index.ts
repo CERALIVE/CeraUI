@@ -1144,6 +1144,13 @@ const ko = {
 			audioNone: "오디오 소스가 감지되지 않음",
 			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
 			audioEdit: "코덱 및 지연",
+			notConnected: "연결 안 됨",
+			notConnectedTitle: "연결 안 됨",
+			notConnectedBody:
+				"장치가 이 종류의 소스를 지원하지만 지금은 연결된 것이 없습니다. 사용하려면 해당 장치를 연결하거나 이미 연결된 소스를 선택하세요.",
+			mjpegTitle: "왜 MJPEG인가요?",
+			mjpegBody:
+				"이 캡처 장치는 USB를 통한 하드웨어 H.264/H.265 인코딩을 제공하지 않으므로, 인코더가 해당 장치의 Motion-JPEG(MJPEG) 영상을 캡처한 뒤 선택한 코덱으로 다시 인코딩합니다. 이는 하드웨어에 대한 정확한 설명이며 결함이 아닙니다.",
 		},
 		summary: {
 			nowStreaming: "스트리밍 중",

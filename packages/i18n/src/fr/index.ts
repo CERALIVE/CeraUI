@@ -1329,6 +1329,13 @@ const fr = {
 			audioNone: "Aucune source audio détectée",
 			audioEmbedded: "Audio intégré (du flux entrant)",
 			audioEdit: "Codec et délai",
+			notConnected: "Non connecté",
+			notConnectedTitle: "Non connecté",
+			notConnectedBody:
+				"Votre appareil prend en charge ce type de source, mais rien n'est branché pour l'instant. Branchez un appareil compatible pour l'utiliser, ou choisissez une source déjà connectée.",
+			mjpegTitle: "Pourquoi MJPEG ?",
+			mjpegBody:
+				"Cet appareil de capture ne propose pas d'encodage matériel H.264/H.265 via USB ; l'encodeur capture donc sa vidéo Motion-JPEG (MJPEG) et la réencode dans le codec que vous choisissez. C'est une description exacte du matériel, pas un défaut.",
 		},
 		summary: {
 			nowStreaming: "En direct",

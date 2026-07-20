@@ -1169,6 +1169,13 @@ const ja = {
 			audioNone: "オーディオソースが検出されません",
 			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
 			audioEdit: "コーデックと遅延",
+			notConnected: "未接続",
+			notConnectedTitle: "未接続",
+			notConnectedBody:
+				"お使いのデバイスはこの種類のソースに対応していますが、現在は何も接続されていません。使用するには対応デバイスを接続するか、すでに接続済みのソースを選んでください。",
+			mjpegTitle: "MJPEG になる理由",
+			mjpegBody:
+				"このキャプチャデバイスは USB 経由のハードウェア H.264/H.265 エンコードに対応していないため、エンコーダーはその Motion-JPEG（MJPEG）映像を取り込み、選択したコーデックに再エンコードします。これはハードウェアの正確な説明であり、不具合ではありません。",
 		},
 		summary: {
 			nowStreaming: "配信中",

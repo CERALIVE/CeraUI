@@ -565,6 +565,13 @@ const es = {
 			audioNone: "No se detectó ninguna fuente de audio",
 			audioEmbedded: "Audio incorporado (del flujo entrante)",
 			audioEdit: "Códec y retardo",
+			notConnected: "No conectado",
+			notConnectedTitle: "No conectado",
+			notConnectedBody:
+				"Tu dispositivo admite este tipo de fuente, pero ahora mismo no hay nada conectado para ella. Conecta un dispositivo compatible para usarla, o elige una fuente que ya esté conectada.",
+			mjpegTitle: "¿Por qué MJPEG?",
+			mjpegBody:
+				"Este dispositivo de captura no ofrece codificación H.264/H.265 por hardware a través de USB, así que el codificador captura su vídeo Motion-JPEG (MJPEG) y lo vuelve a codificar al códec que elijas. Es una descripción precisa del hardware, no un fallo.",
 		},
 		summary: {
 			nowStreaming: "Transmitiendo ahora",

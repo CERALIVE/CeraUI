@@ -546,6 +546,13 @@ const en = {
 			audioNone: "No audio source detected",
 			audioEmbedded: "Embedded audio (from the incoming stream)",
 			audioEdit: "Codec & delay",
+			notConnected: "Not connected",
+			notConnectedTitle: "Not connected",
+			notConnectedBody:
+				"Your device supports this kind of source, but nothing is plugged in for it right now. Connect a matching device to use it, or pick a source that's already connected.",
+			mjpegTitle: "Why MJPEG?",
+			mjpegBody:
+				"This capture device doesn't provide hardware H.264/H.265 over USB, so the encoder captures its Motion-JPEG (MJPEG) video and re-encodes it to your chosen codec. That's an accurate description of the hardware, not a fault.",
 		},
 		summary: {
 			nowStreaming: "Now streaming",

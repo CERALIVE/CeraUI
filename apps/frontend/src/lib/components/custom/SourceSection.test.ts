@@ -239,6 +239,42 @@ describe("SourceSection — unified device-first source list (Task 13)", () => {
 		expect(btn?.disabled).toBe(false);
 	});
 
+	it("marks a coarse (unbound capability) row 'Not connected' with an explainer, and does NOT mark a concrete capture row", () => {
+		const { container } = mount({ sources: sourcesMsg([RODE, COARSE_HDMI]) });
+		// The coarse placeholder gets the muted "Not connected" badge + a "?" info
+		// popover explaining nothing is plugged in for it.
+		expect(
+			container.querySelector('[data-testid="source-not-connected-hdmi"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-not-connected-info-hdmi"]'),
+		).not.toBeNull();
+		// A real connected capture device is NEVER marked "Not connected".
+		expect(
+			container.querySelector('[data-testid="source-not-connected-usb"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-not-connected-info-usb"]'),
+		).toBeNull();
+	});
+
+	it("adds a MJPEG explainer only on a mjpeg capture row, not on a hardware-encoding UVC H.264 row", () => {
+		const rodeMjpeg: CaptureStreamSource = {
+			...RODE,
+			id: "mjpeg-cam",
+			kind: "mjpeg",
+			pipelineId: "mjpeg",
+		};
+		const { container } = mount({ sources: sourcesMsg([rodeMjpeg, RODE]) });
+		expect(
+			container.querySelector('[data-testid="source-mjpeg-info-mjpeg-cam"]'),
+		).not.toBeNull();
+		// The uvc_h264 row (hardware H.264) gets no MJPEG explainer.
+		expect(
+			container.querySelector('[data-testid="source-mjpeg-info-usb"]'),
+		).toBeNull();
+	});
+
 	it("renders the Test-pattern virtual row exactly once", () => {
 		const { container } = mount({
 			sources: sourcesMsg([RODE, COARSE_HDMI, VIRTUAL_TEST, netRtmp(true)]),
