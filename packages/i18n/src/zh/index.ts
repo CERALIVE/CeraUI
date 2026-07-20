@@ -1073,6 +1073,13 @@ const zh = {
 			audioNone: "未检测到音频源",
 			audioEmbedded: "嵌入式音频（来自传入流）",
 			audioEdit: "编解码器和延迟",
+			notConnected: "未连接",
+			notConnectedTitle: "未连接",
+			notConnectedBody:
+				"你的设备支持此类信号源，但目前没有为其连接任何设备。请连接匹配的设备以使用它，或选择已连接的信号源。",
+			mjpegTitle: "为什么是 MJPEG？",
+			mjpegBody:
+				"此采集设备不支持通过 USB 进行硬件 H.264/H.265 编码，因此编码器会采集其 Motion-JPEG（MJPEG）视频，再重新编码为你选择的编码格式。这是对硬件的准确描述，并非故障。",
 		},
 		summary: {
 			nowStreaming: "正在直播",

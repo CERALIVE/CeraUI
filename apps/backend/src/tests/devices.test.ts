@@ -32,6 +32,7 @@ function makeDeps(
 		clearSelectedVideoInput: () => undefined,
 		notify: () => undefined,
 		broadcast: () => undefined,
+		onDevicesChanged: () => undefined,
 		now: () => 0,
 		logger: { debug() {}, warn() {}, error() {} },
 		...overrides,
@@ -109,6 +110,33 @@ describe("device registry", () => {
 		cards = [];
 		await registry.rescan();
 		expect(broadcast).toHaveBeenCalledTimes(2); // device removed → rebroadcast
+	});
+
+	test("fires onDevicesChanged on a hotplug set change, not on the boot seed, an unchanged rescan, or an input switch", async () => {
+		const onDevicesChanged = mock(() => undefined);
+		let cards = ["video63"];
+		const registry = createDeviceRegistry(
+			makeDeps({
+				onDevicesChanged,
+				getAudioSources: () => ({}),
+				listVideoCards: async () => cards,
+				readCardName: async (card) =>
+					card === "video64" ? "Second-Cam" : "QA-Cam",
+			}),
+		);
+		await registry.rescan(); // boot seed — NOT a hotplug
+		expect(onDevicesChanged).toHaveBeenCalledTimes(0);
+		await registry.rescan(); // unchanged
+		expect(onDevicesChanged).toHaveBeenCalledTimes(0);
+		cards = ["video63", "video64"];
+		await registry.rescan(); // device added → hotplug
+		expect(onDevicesChanged).toHaveBeenCalledTimes(1);
+		// A live input switch does not change the SET, so it must not re-probe.
+		await registry.switchInput("/dev/video63");
+		expect(onDevicesChanged).toHaveBeenCalledTimes(1);
+		cards = ["video63"];
+		await registry.rescan(); // device removed → hotplug
+		expect(onDevicesChanged).toHaveBeenCalledTimes(2);
 	});
 
 	test("switchInput returns a sub-frame gap_ms and sets the active input", async () => {

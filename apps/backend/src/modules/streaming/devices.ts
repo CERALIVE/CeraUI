@@ -83,6 +83,11 @@ export interface DeviceRegistryDeps {
 		isDismissable: boolean,
 	) => void;
 	broadcast: (type: string, data: unknown) => void;
+	// Fired on a video-device SET change so the unified `sources` snapshot is
+	// rebuilt from a fresh authoritative engine `list-devices` probe. The default
+	// must NOT feed the local v4l2 scan into sources — its kind heuristic would
+	// re-introduce the USB-as-HDMI mislabel the sources model removed.
+	onDevicesChanged: () => void;
 	watch: typeof fs.watch;
 	now: () => number;
 	debounceMs: number;
@@ -267,6 +272,11 @@ function defaultDeps(): DeviceRegistryDeps {
 				broadcastMsg(type, data),
 			);
 		},
+		onDevicesChanged: () => {
+			void import("./sources.ts").then(({ refreshAndBroadcastSources }) =>
+				refreshAndBroadcastSources(),
+			);
+		},
 		watch: fs.watch,
 		now: () => performance.now(),
 		debounceMs: VIDEO_HOTPLUG_DEBOUNCE_MS,
@@ -283,6 +293,7 @@ export function createDeviceRegistry(
 	let devices: CaptureDevice[] = [];
 	let activeInput: string | undefined;
 	let lastSerialized = "";
+	let lastDeviceSetSerialized = "";
 	let debounceHandle: ReturnType<typeof setTimeout> | undefined;
 	let pollHandle: ReturnType<typeof setInterval> | undefined;
 	let devWatcher: fs.FSWatcher | undefined;
@@ -353,6 +364,16 @@ export function createDeviceRegistry(
 		if (serialized !== lastSerialized) {
 			lastSerialized = serialized;
 			deps.broadcast("devices", message);
+		}
+		// Trigger a unified-sources rebuild ONLY on a genuine device-SET change —
+		// keyed on the device array alone, so a live active_input switch (same set)
+		// never re-probes the engine, and the very first scan (boot seed, already
+		// covered by main.ts) is not treated as a hotplug.
+		const deviceSetSerialized = JSON.stringify(devices);
+		if (deviceSetSerialized !== lastDeviceSetSerialized) {
+			const isInitialScan = lastDeviceSetSerialized === "";
+			lastDeviceSetSerialized = deviceSetSerialized;
+			if (!isInitialScan) deps.onDevicesChanged();
 		}
 		return message;
 	}

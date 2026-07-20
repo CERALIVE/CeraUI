@@ -46,6 +46,7 @@ import {
 	Radio,
 	SquareDashed,
 	TriangleAlert,
+	Unplug,
 	Usb,
 	Video,
 	Volume2,
@@ -532,7 +533,12 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											class="size-4 shrink-0 {selected ? 'text-primary' : 'text-muted-foreground'}"
 										/>
 										<span class="flex min-w-0 flex-col">
-											<span class="truncate text-sm font-medium" data-testid={`source-row-name-${source.id}`}>
+											<span
+												class="truncate text-sm font-medium {source.origin === 'coarse'
+													? 'text-muted-foreground'
+													: ''}"
+												data-testid={`source-row-name-${source.id}`}
+											>
 												{rowLabel(source)}
 											</span>
 											{#if source.origin === 'network'}
@@ -564,6 +570,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													{$LL.live.inputPicker.lost()}
 												</span>
 											{/if}
+										{/if}
+										{#if source.origin === 'coarse'}
+											<span
+												class="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+												data-testid={`source-not-connected-${source.id}`}
+											>
+												<Unplug aria-hidden={true} class="size-3" />
+												{$LL.live.source.notConnected()}
+											</span>
 										{/if}
 										{#if source.origin === 'network' && source.supportsAudio}
 											<span
@@ -615,6 +630,27 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										body={$LL.live.networkIngest.infoBody()}
 										testId={`source-network-ingest-info-${source.requiresGateway}`}
 										title={$LL.live.networkIngest.infoTitle()}
+									/>
+								{/if}
+
+								<!-- Coarse rows are capability placeholders with no concrete device
+								     bound. The "?" explains the "Not connected" state (sits OUTSIDE
+								     the select button — never a nested interactive). -->
+								{#if source.origin === 'coarse'}
+									<InfoPopover
+										body={$LL.live.source.notConnectedBody()}
+										testId={`source-not-connected-info-${source.id}`}
+										title={$LL.live.source.notConnectedTitle()}
+									/>
+								{/if}
+
+								<!-- MJPEG capture: explain WHY a device shows MJPEG instead of
+								     hardware H.264/H.265 (accurate hardware description, not a fault). -->
+								{#if source.origin === 'capture' && source.kind === 'mjpeg'}
+									<InfoPopover
+										body={$LL.live.source.mjpegBody()}
+										testId={`source-mjpeg-info-${source.id}`}
+										title={$LL.live.source.mjpegTitle()}
 									/>
 								{/if}
 							</div>

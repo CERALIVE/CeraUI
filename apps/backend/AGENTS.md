@@ -342,6 +342,25 @@ PID-1 D-Bus request), so the `--no-block` / deadlock caveats that apply to
 `src/tests/udev-rules-sigusr2-scope.test.ts` (static assertion on the shipped rule
 files). Do NOT reintroduce a broad `pkill`, and do NOT drop `--kill-whom=main`.
 
+**SIGUSR2 does NOT rebuild the unified `sources` list — video hotplug does.** The
+handler only re-scans audio + Cam Link USB2 (a generic UVC capture dongle like a
+RØDE is not even covered by the Elgato-scoped `99-ceralive-check-usb-devices.rules`).
+The live video-hotplug → `sources` reactivity is owned by `modules/streaming/
+devices.ts`: its `/dev` `fs.watch` + 2 s `VIDEO_HOTPLUG_POLL_INTERVAL_MS` poll
+already detected the device-set change but previously only rebroadcast the legacy
+`devices` event. It now also fires the injected `onDevicesChanged` (default →
+`sources.ts` `refreshAndBroadcastSources()`) on a genuine device-SET change —
+keyed on the device array alone, so a live `active_input` switch (same set) never
+re-probes and the boot seed (already covered by `main.ts`) is skipped. The rebuild
+re-fetches the AUTHORITATIVE engine `list-devices` (idle-safe short-lived probe),
+NOT the local v4l2 scan, so the correct engine kind labels (e.g. `mjpeg`) are
+preserved. This is why unplug/replug now updates the Live Sources list with no
+page refresh. cerastream's own `GstDeviceMonitor` DOES watch add/remove but the
+production engine wires it to a `NullSink`, so the engine emits no device-change
+IPC push today — CeraUI's `/dev` watch is the live trigger. Coverage:
+`tests/devices.test.ts` (`fires onDevicesChanged on a hotplug set change, not on
+the boot seed, an unchanged rescan, or an input switch`).
+
 ## BROADCAST EVENTS
 
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
