@@ -207,18 +207,21 @@ describe("SourceSection — unified device-first source list (Task 13)", () => {
 		).not.toBeNull();
 	});
 
-	it("renders a capture row with the REAL device name + a USB kind badge, never 'HDMI Capture'", () => {
+	it("renders a capture row with the REAL device name + the SPECIFIC 'UVC H.264' pipeline badge, never 'HDMI Capture' or the coarse 'USB'", () => {
 		const { container } = mount({ sources: sourcesMsg([RODE]) });
 		const row = container.querySelector<HTMLElement>(
 			'[data-testid="source-row-usb"]',
 		);
 		expect(row).not.toBeNull();
 		expect(row?.textContent).toContain("RØDE HDMI to USB-C: RØDE HDMI");
-		// The uvc_h264 dongle reads as a USB device (kind glyph + badge)…
-		expect(row?.textContent).toContain("USB");
-		expect(
-			container.querySelector('[data-source-kind="uvc_h264"]'),
-		).not.toBeNull();
+		// The uvc_h264 dongle's badge names its SPECIFIC capture pipeline
+		// ("UVC H.264"), not the coarse "USB" family collapse — asserted on the
+		// badge element itself so the displayName's own "USB-C" can't mask it.
+		const kindBadge = container.querySelector<HTMLElement>(
+			'[data-source-kind="uvc_h264"]',
+		);
+		expect(kindBadge).not.toBeNull();
+		expect(kindBadge?.textContent?.trim()).toBe("UVC H.264");
 		// …never the coarse "HDMI Capture" mislabel.
 		expect(row?.textContent).not.toContain("HDMI Capture");
 	});
