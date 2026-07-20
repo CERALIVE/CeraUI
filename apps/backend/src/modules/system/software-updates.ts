@@ -437,6 +437,24 @@ export function resetSoftwareUpdateCheckRunner(): void {
 	softwareUpdateCheckRunner = checkForSoftwareUpdates;
 }
 
+// Discovery DI seam wrapping getSoftwareUpdateSize (the SOLE `available_updates`
+// broadcaster). Callers invoke it unconditionally: a noisy-but-nonfatal `apt-get update`
+// (benign apt warnings on stderr, or one repo down) must not suppress the broadcast, and
+// getSoftwareUpdateSize still surfaces a truly-broken apt via reportUpdateCheckFailure.
+type SoftwareUpdateSizeRunner = () => Promise<SoftwareUpdateError>;
+
+let softwareUpdateSizeRunner: SoftwareUpdateSizeRunner = getSoftwareUpdateSize;
+
+export function setSoftwareUpdateSizeRunner(
+	runner: SoftwareUpdateSizeRunner,
+): void {
+	softwareUpdateSizeRunner = runner;
+}
+
+export function resetSoftwareUpdateSizeRunner(): void {
+	softwareUpdateSizeRunner = getSoftwareUpdateSize;
+}
+
 let nextCheckForSoftwareUpdates = getms();
 let nextCheckForSoftwareUpdatesTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -464,7 +482,11 @@ export function periodicCheckForSoftwareUpdates() {
 	}
 
 	const started = softwareUpdateCheckRunner(async (err_, failures) => {
-		const err = err_ === null ? await getSoftwareUpdateSize() : err_;
+		// Discovery runs on every completed check; err_/failures drive ONLY the retry
+		// cadence, so a failed apt-get update refresh retries sooner without ever
+		// suppressing the available_updates broadcast.
+		const discovery = await softwareUpdateSizeRunner();
+		const err = err_ === null ? discovery : err_;
 		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
 	});
 
@@ -484,8 +506,8 @@ export function triggerManualUpdateCheck(): boolean {
 		broadcastMsg("status", { available_updates: availableUpdates });
 		return true;
 	}
-	return checkForSoftwareUpdates(async (err_) => {
-		if (err_ === null) await getSoftwareUpdateSize();
+	return softwareUpdateCheckRunner(async () => {
+		await softwareUpdateSizeRunner();
 	});
 }
 
