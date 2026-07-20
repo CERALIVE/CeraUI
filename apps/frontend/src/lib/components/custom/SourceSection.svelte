@@ -250,8 +250,11 @@ function rowLabel(source: StreamSource): string {
 	return source.origin === 'capture' ? source.displayName : t(source.labelKey);
 }
 
-// Capture kind → coarse device family (drives the icon + the kind badge). A UVC
-// dongle (`uvc_h264`) is USB family, so its badge reads "USB" — never "HDMI".
+// Capture kind → coarse device FAMILY. Drives the ICON only: a UVC dongle
+// (`uvc_h264`) is USB family, so it gets the USB glyph — the grouping is right for
+// iconography. It is NO LONGER the source of the visible label: that collapsed
+// every USB-family kind (`uvc_h264`/`uvc_h265`/`mjpeg`/`camlink`) into one
+// indistinguishable "USB" pill, hiding which capture pipeline the device runs.
 type KindFamily = 'hdmi' | 'usb' | 'network' | 'other';
 function kindFamily(kind: DeviceKind): KindFamily {
 	if (kind === 'hdmi') return 'hdmi';
@@ -268,8 +271,22 @@ function kindFamily(kind: DeviceKind): KindFamily {
 	return 'other';
 }
 const KIND_ICON = { hdmi: Cable, usb: Usb, network: Radio, other: Video } as const;
+// The SPECIFIC pipeline/profile label — resolved straight off the raw `kind`, so
+// `uvc_h264` reads "UVC H.264", `mjpeg` reads "MJPEG", `camlink` reads "Cam Link"
+// (the `live.inputPicker.groups.*` family already carries a key per DeviceKind).
+// This is what lets the operator tell hardware H.264/H.265 UVC from raw MJPEG from
+// HDMI from CamLink at a glance, instead of one coarse "USB" badge.
 function kindLabel(kind: DeviceKind): string {
-	return t(`live.inputPicker.groups.${kindFamily(kind)}`);
+	return t(`live.inputPicker.groups.${kind}`);
+}
+// Hardware-encoding UVC kinds run onboard H.264/H.265 — surface that with the
+// phosphor-lime "live" accent so the hardware-encode path reads distinctly from
+// raw/other capture (which stay neutral). The text differs per kind regardless,
+// so colour is reinforcement, never the sole signal.
+function kindBadgeClass(kind: DeviceKind): string {
+	return kind === 'uvc_h264' || kind === 'uvc_h265'
+		? 'bg-primary/10 text-primary'
+		: 'bg-muted text-muted-foreground';
 }
 function rowIcon(source: StreamSource) {
 	if (source.origin === 'capture') return KIND_ICON[kindFamily(source.kind)];
@@ -533,7 +550,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									<span class="flex shrink-0 items-center gap-1.5">
 										{#if source.origin === 'capture'}
 											<span
-												class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs font-medium"
+												class="{kindBadgeClass(source.kind)} rounded px-1.5 py-0.5 text-xs font-medium"
 												data-source-kind={source.kind}
 												data-testid={`source-kind-${source.id}`}
 											>

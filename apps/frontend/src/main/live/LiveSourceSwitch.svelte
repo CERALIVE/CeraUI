@@ -105,8 +105,17 @@ const t = (key: string): string => {
 	}
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
+// The SPECIFIC pipeline/profile label — mirrors SourceSection so the same device
+// reads identically ("UVC H.264", "MJPEG", "Cam Link") whether idle or streaming,
+// never the coarse "USB" collapse. `kindFamily` above still drives only the icon.
 function kindLabel(kind: DeviceKind): string {
-	return t(`live.inputPicker.groups.${kindFamily(kind)}`);
+	return t(`live.inputPicker.groups.${kind}`);
+}
+// Hardware-encode UVC accent, mirroring SourceSection's kind badge.
+function kindBadgeClass(kind: DeviceKind): string {
+	return kind === 'uvc_h264' || kind === 'uvc_h265'
+		? 'bg-primary/10 text-primary'
+		: 'bg-muted text-muted-foreground';
 }
 </script>
 
@@ -136,7 +145,7 @@ function kindLabel(kind: DeviceKind): string {
 							/>
 							<span class="truncate text-sm font-medium">{source.displayName}</span>
 							<span
-								class="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
+								class="{kindBadgeClass(source.kind)} shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
 								data-source-kind={source.kind}
 							>
 								{kindLabel(source.kind)}

@@ -559,10 +559,12 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.getByTestId("source-row-name-video-usb")).toHaveText(
 			RODE_DISPLAY_NAME,
 		);
-		// …classified by its engine kind (uvc_h264 → USB family), NOT hdmi…
+		// …classified by its SPECIFIC engine kind (uvc_h264 → hardware "UVC H.264"
+		// pipeline badge), NOT the coarse "USB" collapse and NOT hdmi. The raw kind
+		// stays on the data attribute as the stable test/telemetry hook.
 		const kindBadge = page.getByTestId("source-kind-video-usb");
 		await expect(kindBadge).toHaveAttribute("data-source-kind", "uvc_h264");
-		await expect(kindBadge).toHaveText("USB");
+		await expect(kindBadge).toHaveText("UVC H.264");
 		// …and the coarse "HDMI Capture" pipeline label never appears on the row.
 		await expect(row).not.toContainText("HDMI Capture");
 	});

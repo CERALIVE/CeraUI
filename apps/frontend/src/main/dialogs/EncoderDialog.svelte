@@ -254,9 +254,10 @@ const activeSource = $derived(
 	getSources()?.sources.find((source) => source.id === savedConfig?.source),
 );
 
-// Capture kind → coarse device family (drives the context-line icon + kind label).
-// A UVC dongle (`uvc_h264`) is USB family, so its label reads "USB", never "HDMI" —
-// the same rule SourceSection applies to its rows.
+// Capture kind → coarse device family. Drives the context-line ICON only: a UVC
+// dongle (`uvc_h264`) is USB family, so it gets the USB glyph. The visible kind
+// label below is the SPECIFIC pipeline/profile ("UVC H.264", "MJPEG", "Cam Link"),
+// mirroring SourceSection — never the coarse "USB" collapse.
 type SourceKindFamily = 'hdmi' | 'usb' | 'network' | 'other';
 function kindFamily(kind: DeviceKind): SourceKindFamily {
 	if (kind === 'hdmi') return 'hdmi';
@@ -274,7 +275,7 @@ function kindFamily(kind: DeviceKind): SourceKindFamily {
 }
 const SOURCE_KIND_ICON = { hdmi: Cable, usb: Usb, network: Radio, other: Video } as const;
 function sourceKindLabel(source: StreamSource): string {
-	if (source.origin === 'capture') return t(`live.inputPicker.groups.${kindFamily(source.kind)}`);
+	if (source.origin === 'capture') return t(`live.inputPicker.groups.${source.kind}`);
 	if (source.origin === 'network') return t('live.inputPicker.groups.network');
 	if (source.origin === 'virtual') return t('live.inputPicker.groups.test');
 	return t('live.inputPicker.groups.other');
