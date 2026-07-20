@@ -81,6 +81,32 @@ async function turnOn(getByTestId: (id: string) => HTMLElement): Promise<void> {
 	await flush();
 }
 
+// Same microtask/tick drain as `flush`, used from fake-timer tests for symmetry.
+const flushFake = flush;
+
+// Drive a socket to a live-ish session: open + codec-config (→ `waiting`, clears
+// the media watchdog, marks the session as having progressed).
+function goLive(ws: FakeWebSocket | undefined): void {
+	ws?.onopen?.({});
+	ws?.onmessage?.({
+		data: JSON.stringify({
+			type: "codec-config",
+			tier: "webcodecs",
+			codec: "avc1.42001f",
+		}),
+	});
+}
+
+// jsdom leaves the tab permanently visible; override the getter + fire the event
+// so the component's viewer-liveness effect observes the change.
+function setDocumentHidden(hidden: boolean): void {
+	Object.defineProperty(document, "visibilityState", {
+		configurable: true,
+		get: () => (hidden ? "hidden" : "visible"),
+	});
+	document.dispatchEvent(new Event("visibilitychange"));
+}
+
 afterEach(() => {
 	// Unmount first: a leaked component still reacts to the shared harness $state,
 	// so it must be gone before resetHarnessConfig() flips the source back.
@@ -90,6 +116,7 @@ afterEach(() => {
 	mintMock.mockReset();
 	mintMock.mockImplementation(async () => ({ token: "tok-1", ttlMs: 30000 }));
 	resetHarnessConfig();
+	setDocumentHidden(false);
 	vi.unstubAllGlobals();
 });
 
@@ -298,7 +325,7 @@ describe("PreviewCanvas", () => {
 		);
 	});
 
-	it("re-mints once on 4401, then surfaces the offline band on a second 4401", async () => {
+	it("re-mints once on 4401, then surfaces the tokenRejected band on a second 4401", async () => {
 		vi.stubGlobal(
 			"VideoDecoder",
 			class {
@@ -321,13 +348,151 @@ describe("PreviewCanvas", () => {
 		expect(FakeWebSocket.instances).toHaveLength(2);
 		expect(mintMock).toHaveBeenCalledTimes(2);
 
-		// Second 4401 → surface the offline band, no further re-mint.
+		// Second 4401 → surface the DISTINCT tokenRejected band (was engineOffline),
+		// no further re-mint. The engine is reachable; only the authorization failed.
 		FakeWebSocket.instances.at(-1)?.onclose?.({ code: 4401 });
 		await tick();
 		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
-			"engineOffline",
+			"tokenRejected",
 		);
 		expect(FakeWebSocket.instances).toHaveLength(2);
+	});
+
+	it("surfaces the mintFailed band when the token mint RPC throws", async () => {
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+		mintMock.mockRejectedValue(new Error("rpc down"));
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+
+		// The mint threw before any dial: a distinct band, NOT a silent reconnect loop.
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"mintFailed",
+		);
+		expect(FakeWebSocket.instances).toHaveLength(0);
+	});
+
+	it("maps close code 4502 with backpressure_overflow to its own band, not engineOffline", async () => {
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+
+		FakeWebSocket.instances
+			.at(-1)
+			?.onclose?.({ code: 4502, reason: "backpressure_overflow" });
+		await tick();
+
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"backpressure",
+		);
+	});
+
+	for (const [reason, band] of [
+		["no-source-applied", "noSourceApplied"],
+		["source-unavailable", "sourceUnavailable"],
+		["device-busy", "deviceBusy"],
+		["pipeline-failed", "pipelineFailed"],
+	] as const) {
+		it(`renders a distinct band for the engine failure frame '${reason}'`, async () => {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await turnOn(getByTestId);
+
+			FakeWebSocket.instances.at(-1)?.onopen?.({});
+			await tick();
+			FakeWebSocket.instances
+				.at(-1)
+				?.onmessage?.({ data: JSON.stringify({ type: "error", reason }) });
+			await tick();
+
+			expect(
+				getByTestId("preview-unavailable").getAttribute("data-reason"),
+			).toBe(band);
+		});
+	}
+
+	it("accepts the reason-as-type engine failure frame shape too", async () => {
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+		FakeWebSocket.instances.at(-1)?.onopen?.({});
+		await tick();
+		FakeWebSocket.instances
+			.at(-1)
+			?.onmessage?.({ data: JSON.stringify({ type: "device-busy" }) });
+		await tick();
+
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"deviceBusy",
+		);
+	});
+
+	it("sends the applied config.source as input_id on the start frame", async () => {
+		vi.stubGlobal("VideoDecoder", DecoderStub);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+		setHarnessSource("video1");
+
+		const { getByTestId } = render(PreviewCanvas);
+		await turnOn(getByTestId);
+
+		const ws = FakeWebSocket.instances.at(-1);
+		ws?.onopen?.({});
+		expect(ws?.sent).toContain(
+			JSON.stringify({
+				action: "start",
+				tier: "webcodecs",
+				input_id: "video1",
+			}),
+		);
+	});
+
+	it("surfaces the terminal interrupted band once a was-live session exhausts its reconnect budget", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await tick();
+			for (let i = 0; i < 6; i++) await Promise.resolve();
+			await tick();
+
+			// Progress the session past connecting (codec-config → waiting), so an
+			// exhausted reconnect budget is a was-live drop, not a never-connected one.
+			FakeWebSocket.instances.at(-1)?.onopen?.({});
+			await tick();
+			FakeWebSocket.instances.at(-1)?.onmessage?.({
+				data: JSON.stringify({
+					type: "codec-config",
+					tier: "webcodecs",
+					codec: "avc1.42001f",
+				}),
+			});
+			await tick();
+
+			// Drop repeatedly; each backoff redials, until the budget (5) is spent.
+			for (let i = 0; i < 8; i++) {
+				FakeWebSocket.instances.at(-1)?.onclose?.({});
+				await tick();
+				vi.advanceTimersByTime(20000);
+				for (let j = 0; j < 6; j++) await Promise.resolve();
+				await tick();
+			}
+
+			expect(
+				getByTestId("preview-unavailable").getAttribute("data-reason"),
+			).toBe("interrupted");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("surfaces the noVideo band when the socket opens but stays silent past the media watchdog", async () => {
@@ -576,6 +741,189 @@ describe("PreviewCanvas", () => {
 		const open = FakeWebSocket.instances.filter((w) => w.readyState !== 3);
 		expect(open).toHaveLength(1);
 	});
+
+	it("auto-stops after 30s unwatched into pausedHidden and resumes via the affordance", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await flushFake();
+			goLive(FakeWebSocket.instances.at(-1));
+			await tick();
+
+			// Hide the tab → the viewer-liveness window arms. <30s is not enough yet.
+			setDocumentHidden(true);
+			await flushFake();
+			vi.advanceTimersByTime(29000);
+			await flushFake();
+			expect(FakeWebSocket.instances[0]?.readyState).not.toBe(3);
+
+			// The full window elapses → clean socket close + the distinct pausedHidden
+			// band (NOT an error) with a resume affordance.
+			vi.advanceTimersByTime(2000);
+			await flushFake();
+			expect(FakeWebSocket.instances[0]?.readyState).toBe(3);
+			expect(
+				getByTestId("preview-unavailable").getAttribute("data-reason"),
+			).toBe("pausedHidden");
+			expect(getByTestId("preview-resume")).not.toBeNull();
+
+			// Resume redials a fresh socket.
+			setDocumentHidden(false);
+			await fireEvent.click(getByTestId("preview-resume"));
+			await flushFake();
+			expect(
+				FakeWebSocket.instances.filter((w) => w.readyState !== 3).length,
+			).toBeGreaterThanOrEqual(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("does not tear down on a <30s visibility blip", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { container, getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await flushFake();
+			goLive(FakeWebSocket.instances.at(-1));
+			await tick();
+
+			setDocumentHidden(true);
+			await flushFake();
+			vi.advanceTimersByTime(20000);
+			await flushFake();
+			// Re-viewed before the window elapses → timer cancelled.
+			setDocumentHidden(false);
+			await flushFake();
+			vi.advanceTimersByTime(20000);
+			await flushFake();
+
+			expect(FakeWebSocket.instances[0]?.readyState).not.toBe(3);
+			expect(
+				container.querySelector('[data-testid="preview-unavailable"]'),
+			).toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("redials when the tab becomes visible again after a pausedHidden teardown", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await flushFake();
+			goLive(FakeWebSocket.instances.at(-1));
+			await tick();
+
+			setDocumentHidden(true);
+			await flushFake();
+			vi.advanceTimersByTime(30000);
+			await flushFake();
+			expect(FakeWebSocket.instances[0]?.readyState).toBe(3);
+
+			// Re-view → auto-redial, no manual click.
+			setDocumentHidden(false);
+			await flushFake();
+			expect(
+				FakeWebSocket.instances.filter((w) => w.readyState !== 3).length,
+			).toBeGreaterThanOrEqual(1);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("auto-stops when the host <details> collapses (hostActive → false)", async () => {
+		vi.useFakeTimers();
+		try {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId, rerender } = render(PreviewCanvas, {
+				props: { hostActive: true },
+			});
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await flushFake();
+			goLive(FakeWebSocket.instances.at(-1));
+			await tick();
+
+			// Collapse the disclosure → unwatched → the 30s window closes the socket.
+			await rerender({ hostActive: false });
+			await flushFake();
+			vi.advanceTimersByTime(30000);
+			await flushFake();
+
+			expect(FakeWebSocket.instances[0]?.readyState).toBe(3);
+			expect(
+				getByTestId("preview-unavailable").getAttribute("data-reason"),
+			).toBe("pausedHidden");
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	// The connecting-exit invariant: no trigger may leave `connecting` rendered
+	// indefinitely — every path exits within ≤10s (8s watchdog + margin).
+	const connectingExitTriggers: Array<{
+		name: string;
+		apply: (ws: FakeWebSocket | undefined) => void;
+	}> = [
+		{ name: "close 4502", apply: (ws) => ws?.onclose?.({ code: 4502 }) },
+		{ name: "close 4503", apply: (ws) => ws?.onclose?.({ code: 4503 }) },
+		{
+			name: "backpressure",
+			apply: (ws) =>
+				ws?.onclose?.({ code: 4502, reason: "backpressure_overflow" }),
+		},
+		{
+			name: "engine failure frame",
+			apply: (ws) =>
+				ws?.onmessage?.({
+					data: JSON.stringify({ type: "error", reason: "pipeline-failed" }),
+				}),
+		},
+		{ name: "default close", apply: (ws) => ws?.onclose?.({}) },
+		{ name: "media timeout", apply: () => vi.advanceTimersByTime(8000) },
+	];
+
+	for (const trigger of connectingExitTriggers) {
+		it(`exits the connecting presentation within 10s: ${trigger.name}`, async () => {
+			vi.useFakeTimers();
+			try {
+				vi.stubGlobal("VideoDecoder", DecoderStub);
+				vi.stubGlobal("WebSocket", FakeWebSocket);
+
+				const { getByTestId } = render(PreviewCanvas);
+				await fireEvent.click(getByTestId("preview-toggle"));
+				await flushFake();
+				FakeWebSocket.instances.at(-1)?.onopen?.({});
+				await tick();
+				expect(getByTestId("preview").getAttribute("data-status")).toBe(
+					"connecting",
+				);
+
+				trigger.apply(FakeWebSocket.instances.at(-1));
+				vi.advanceTimersByTime(10000);
+				await flushFake();
+
+				expect(getByTestId("preview").getAttribute("data-status")).not.toBe(
+					"connecting",
+				);
+			} finally {
+				vi.useRealTimers();
+			}
+		});
+	}
 });
 
 describe("derivePreviewAvailability", () => {
