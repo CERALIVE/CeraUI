@@ -1285,6 +1285,10 @@ const ptBR = {
 					title: "Falha ao iniciar a pré-visualização",
 					body: "O motor não conseguiu iniciar o pipeline de pré-visualização. Inicie-o novamente para tentar de novo.",
 				},
+				passthroughActive: {
+					title: "Prévia indisponível durante o passthrough",
+					body: "O fluxo da câmera vai direto para a saída, então não há nada para pré-visualizar aqui.",
+				},
 				pausedHidden: {
 					title: "Pré-visualização pausada",
 					body: "A pré-visualização parou após ficar sem ser vista para poupar recursos. Retome para vê-la novamente.",
@@ -1361,6 +1365,11 @@ const ptBR = {
 			chip: "Entrada {input} \u2192 Saída {output}",
 			always:
 				"O motor sempre recodifica o stream recebido para o codec de saída configurado \u2014 não há passthrough.",
+		},
+		passthrough: {
+			activeChip: "Passthrough",
+			activeHint:
+				"O fluxo da câmera vai direto para a saída — o dispositivo não recodifica, então o bitrate adaptativo agregado fica inativo.",
 		},
 		modes: {
 			label: "Modo",
@@ -1440,6 +1449,20 @@ const ptBR = {
 			axisSelected: "Selecionado",
 			axisDeviceMax: "Máximo do dispositivo",
 			fpsAvailableAt: "{fps} fps disponível em {resolution}",
+			passthrough: {
+				title: "Passthrough",
+				auto: "Automático",
+				force: "Forçar",
+				off: "Desativado",
+				disclosurePassthrough:
+					"Passthrough — a câmera controla o bitrate; o bitrate adaptativo agregado fica inativo.",
+				disclosureTranscode:
+					"Recodificando {input}→{output} — bitrate adaptativo ativo.",
+				disclosureForceUnavailable:
+					"Não é possível forçar o passthrough — esta fonte não emite o codec de saída, então a transmissão não vai iniciar. Use Automático ou Desativado.",
+				bitrateFixed: "Bitrate definido pela câmera — passthrough ativo.",
+				inputRaw: "sem compressão",
+			},
 		},
 	},
 	dialogs: {

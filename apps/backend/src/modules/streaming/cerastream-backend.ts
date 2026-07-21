@@ -236,6 +236,9 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 		...(typeof a.input_codec === "string"
 			? { input_codec: a.input_codec }
 			: {}),
+		...(typeof a.passthrough === "boolean"
+			? { passthrough: a.passthrough }
+			: {}),
 	};
 }
 
@@ -271,10 +274,28 @@ export function supportsAudioMode(schemaVersion: string | undefined): boolean {
 	return major > 0 || (major === 0 && (minor ?? 0) >= 6);
 }
 
+/**
+ * Whether the engine understands the additive `video_passthrough` start field
+ * (schema ≥ 0.5.0, cerastream Todo 16). Like `audio.mode`, the published client
+ * strips the unknown field, so a supporting engine is driven through the raw
+ * `start` bridge. Fail-safe `false` on an absent/unparseable version.
+ */
+export function supportsVideoPassthrough(
+	schemaVersion: string | undefined,
+): boolean {
+	if (!schemaVersion) return false;
+	const [major, minor] = schemaVersion.split(".").map(Number);
+	if (major === undefined || Number.isNaN(major) || Number.isNaN(minor))
+		return false;
+	return major > 0 || (major === 0 && (minor ?? 0) >= 5);
+}
+
 // Local schema extension for the raw `start` bridge: the published client's
-// frozen `startParamsSchema` has no `audio.mode`, so a start carrying a mode is
-// validated here and dispatched over the raw JSON-RPC primitive (no npm publish).
+// frozen `startParamsSchema` has no `audio.mode` or `video_passthrough`, so a
+// start carrying either is validated here and dispatched over the raw JSON-RPC
+// primitive (no npm publish).
 const audioModeSchema = z.enum(["none", "default", "device"]);
+const videoPassthroughRawSchema = z.enum(["auto", "force", "off"]);
 export const startParamsWithAudioModeSchema = startParamsSchema.extend({
 	audio: z
 		.object({
@@ -284,6 +305,7 @@ export const startParamsWithAudioModeSchema = startParamsSchema.extend({
 			delay_ms: z.number().int().optional(),
 		})
 		.optional(),
+	video_passthrough: videoPassthroughRawSchema.optional(),
 });
 export type StartParamsWithAudioMode = z.infer<
 	typeof startParamsWithAudioModeSchema
@@ -431,14 +453,16 @@ export class CerastreamBackend implements StreamingBackend {
 		}, "start");
 	}
 
-	// Send `start` so `audio.mode` survives: a ≥0.6.0 engine is driven through the
-	// raw JSON-RPC primitive (the typed client Zod-strips `mode`); an older engine
-	// gets the typed call and its legacy device inference.
+	// Send `start` so `audio.mode` / `video_passthrough` survive: an engine that
+	// understands either is driven through the raw JSON-RPC primitive (the typed
+	// client Zod-strips both unknown fields); an older engine gets the typed call
+	// and its legacy inference.
 	private async dispatchStart(
 		client: CerastreamClient,
 		params: StartParamsWithAudioMode,
 	): Promise<void> {
-		if (supportsAudioMode(client.hello.schema_version)) {
+		const version = client.hello.schema_version;
+		if (supportsAudioMode(version) || supportsVideoPassthrough(version)) {
 			const raw = client as unknown as {
 				rawRequest(method: string, params?: unknown): Promise<unknown>;
 			};
@@ -734,6 +758,7 @@ export class CerastreamBackend implements StreamingBackend {
 		codec?: "h264" | "h265";
 		resolution?: string;
 		framerate?: number;
+		video_passthrough?: "auto" | "force" | "off";
 		audio?: {
 			mode?: AudioMode;
 			device?: string;
@@ -764,6 +789,9 @@ export class CerastreamBackend implements StreamingBackend {
 			...(inputId !== undefined ? { input_id: inputId } : {}),
 			...(config.video_codec !== undefined
 				? { codec: config.video_codec }
+				: {}),
+			...(config.video_passthrough !== undefined
+				? { video_passthrough: config.video_passthrough }
 				: {}),
 			...(config.resolution !== undefined
 				? { resolution: toEngineResolution(config.resolution) }

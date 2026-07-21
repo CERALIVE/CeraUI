@@ -203,6 +203,29 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(withEncode.active_encode?.decoder).toBe("mppvideodec");
 	});
 
+	test("SKEW: the binding statusEventSchema STRIPS active_encode.passthrough", () => {
+		// cerastream reports `active_encode.passthrough` (Todo 16, schema 0.5.0) but
+		// the published binding predates it and Zod-strips the field — which is why
+		// CeraUI reads it over the raw passthrough event bridge, not the typed
+		// subscribeEvents path. If a future binding bump adds the field this
+		// assertion flips and the raw bridge can be retired.
+		const parsed = bindings.statusEventSchema.parse({
+			type: "status",
+			seq: 1,
+			state: "streaming",
+			streaming: true,
+			active_encode: {
+				codec: "h264",
+				resolution: "1920x1080",
+				framerate: 30.0,
+				passthrough: true,
+			},
+		});
+		expect(
+			(parsed.active_encode as { passthrough?: unknown }).passthrough,
+		).toBeUndefined();
+	});
+
 	test("0.4.0 surface: getCapabilitiesResultSchema has additive optional preview field", () => {
 		// Minimal capabilities (backward compat)
 		const minimal = bindings.getCapabilitiesResultSchema.parse({

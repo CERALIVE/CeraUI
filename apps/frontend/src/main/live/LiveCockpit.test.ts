@@ -37,6 +37,7 @@ const SUMMARY: ActiveSummary = {
 	framerate: 60,
 	codec: "H.265",
 	inputCodec: undefined,
+	passthrough: undefined,
 	transport: "SRTLA",
 };
 

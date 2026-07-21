@@ -10,6 +10,7 @@
  *   draft.bitrateOverlay → bitrate_overlay
  *   draft.bitrate        → max_br
  *   draft.codec          → video_codec  (only when explicitly chosen — Auto omits it)
+ *   draft.passthrough    → video_passthrough  (auto/force/off, forwarded verbatim)
  *   draft.resolution     → resolution  (CAPABILITY-GATED)
  *   draft.framerate      → framerate   (CAPABILITY-GATED)
  *
@@ -77,6 +78,11 @@ export function buildEncoderSetConfig(
 	// H.264/H.265. "Auto" leaves `draft.codec` undefined → `video_codec` omitted
 	// → the engine resolves its own platform default.
 	if (draft.codec !== undefined) input.video_codec = draft.codec;
+	// Same-codec passthrough policy (auto/force/off) — persisted verbatim so the
+	// engine receives the operator's policy at start.
+	if (draft.passthrough !== undefined) {
+		input.video_passthrough = draft.passthrough;
+	}
 
 	// Capability-gated overrides: only forward when the pipeline supports them.
 	const gate = getOverrideGate(pipeline);

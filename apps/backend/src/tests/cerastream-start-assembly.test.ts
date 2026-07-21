@@ -14,6 +14,7 @@ import {
 	CerastreamBackend,
 	type CerastreamBackendDeps,
 	supportsSignedReloadDelay,
+	supportsVideoPassthrough,
 } from "../modules/streaming/cerastream-backend.ts";
 import type { StreamRunOptions } from "../modules/streaming/streaming-backend.ts";
 
@@ -56,11 +57,11 @@ function recordingLogger(): RecordingLogger {
 
 interface FakeHarness {
 	client: CerastreamClient;
-	calls: Array<{ op: string; params?: unknown }>;
+	calls: Array<{ op: string; params?: unknown; raw?: boolean }>;
 }
 
 function makeFakeClient(schemaVersion: string): FakeHarness {
-	const calls: Array<{ op: string; params?: unknown }> = [];
+	const calls: Array<{ op: string; params?: unknown; raw?: boolean }> = [];
 	const client = {
 		hello: {
 			protocol: "cerastream-ipc/1",
@@ -68,11 +69,11 @@ function makeFakeClient(schemaVersion: string): FakeHarness {
 			engine_version: "test",
 		},
 		start: async (params: unknown) => {
-			calls.push({ op: "start", params });
+			calls.push({ op: "start", params, raw: false });
 			return { session_id: "s1", state: "streaming" as const };
 		},
 		rawRequest: async (method: string, params: unknown) => {
-			calls.push({ op: method, params });
+			calls.push({ op: method, params, raw: true });
 			if (method === "start")
 				return { session_id: "s1", state: "streaming" as const };
 			return {};
@@ -298,6 +299,64 @@ describe("buildStartParams — pseudo-source → audio.mode wire contract (Todo 
 		expect((started?.params as { audio?: { mode?: string } }).audio?.mode).toBe(
 			"device",
 		);
+	});
+});
+
+describe("buildStartParams — video_passthrough wire contract (Todo 18)", () => {
+	const BASE: RuntimeConfig = {
+		pipeline: "libuvch264",
+		max_br: 8000,
+		srt_latency: 2000,
+		balancer: "adaptive",
+	};
+
+	test("video_passthrough rides the start params verbatim (≥0.5.0)", async () => {
+		const params = await startParamsFor(
+			{ ...BASE, video_passthrough: "force" },
+			{ schemaVersion: "0.6.0" },
+		);
+		expect(params.video_passthrough).toBe("force");
+	});
+
+	test("absent video_passthrough sends no field (legacy compat)", async () => {
+		const params = await startParamsFor(BASE, { schemaVersion: "0.6.0" });
+		expect(params).not.toHaveProperty("video_passthrough");
+	});
+
+	test("a ≥0.5.0 engine receives start over the RAW bridge (field survives)", async () => {
+		const cfg = { ...BASE, video_passthrough: "off" as const };
+		const { backend, fake } = makeBackend(cfg, { schemaVersion: "0.5.0" });
+		backend.start(cfg, RUN_OPTS);
+		await backend.settle();
+		const started = fake.calls.find((c) => c.op === "start");
+		expect(started?.raw).toBe(true);
+		expect(
+			(started?.params as { video_passthrough?: string }).video_passthrough,
+		).toBe("off");
+	});
+
+	test("a <0.5.0 engine gets the TYPED start (no raw video_passthrough path)", async () => {
+		const cfg = { ...BASE, video_passthrough: "force" as const };
+		const { backend, fake } = makeBackend(cfg, { schemaVersion: "0.4.0" });
+		backend.start(cfg, RUN_OPTS);
+		await backend.settle();
+		const started = fake.calls.find((c) => c.op === "start");
+		expect(started?.raw).toBe(false);
+	});
+});
+
+describe("supportsVideoPassthrough — schema_version gate", () => {
+	test("true for >= 0.5.0", () => {
+		expect(supportsVideoPassthrough("0.5.0")).toBe(true);
+		expect(supportsVideoPassthrough("0.6.0")).toBe(true);
+		expect(supportsVideoPassthrough("1.0.0")).toBe(true);
+	});
+
+	test("false for < 0.5.0 and unparseable/absent versions", () => {
+		expect(supportsVideoPassthrough("0.4.0")).toBe(false);
+		expect(supportsVideoPassthrough("0.4.9")).toBe(false);
+		expect(supportsVideoPassthrough("test")).toBe(false);
+		expect(supportsVideoPassthrough(undefined)).toBe(false);
 	});
 });
 

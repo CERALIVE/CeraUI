@@ -34,7 +34,7 @@
     the breakpoint switches Dialog ⇄ Sheet.
 -->
 <script module lang="ts">
-import type { Framerate, Resolution, VideoCodec } from '@ceraui/rpc/schemas';
+import type { Framerate, Resolution, VideoCodec, VideoPassthrough } from '@ceraui/rpc/schemas';
 
 export interface EncoderConfig {
 	// Legacy field: the encoder dialog is pure encoding and no longer selects or
@@ -51,6 +51,9 @@ export interface EncoderConfig {
 	// operator's explicit choice. Optional so callers that don't set it (LiveView
 	// seed) stay valid.
 	codec?: VideoCodec;
+	// Same-codec passthrough policy (auto/force/off). Optional so a seed without
+	// it stays valid; the dialog defaults it to `auto` on open.
+	passthrough?: VideoPassthrough;
 }
 </script>
 
@@ -97,6 +100,7 @@ import {
 	getSources,
 } from '$lib/rpc/subscriptions.svelte';
 import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
+import { resolvePassthroughMode, sourceOffersCodec } from '$lib/streaming/passthrough';
 
 interface Props {
 	open?: boolean;
@@ -183,6 +187,12 @@ const codecIsAuto = $derived(localCodec === undefined);
 const codecIsH264 = $derived(localCodec === 'h264');
 const codecIsH265 = $derived(localCodec === 'h265');
 
+// Same-codec passthrough policy (auto/force/off). Defaults to auto on open.
+let localPassthrough = $state<VideoPassthrough>('auto');
+const passthroughIsAuto = $derived(localPassthrough === 'auto');
+const passthroughIsForce = $derived(localPassthrough === 'force');
+const passthroughIsOff = $derived(localPassthrough === 'off');
+
 // Whether the last bitrate commit was snapped into the board window (drives the
 // inline "adjusted to the supported range" notice).
 let bitrateClamped = $state(false);
@@ -214,6 +224,7 @@ function seedDraft(fromSaved: boolean): void {
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = savedConfig?.bitrate_overlay ?? false;
 		localCodec = savedConfig?.video_codec;
+		localPassthrough = savedConfig?.video_passthrough ?? 'auto';
 	} else {
 		localResolution = config?.resolution ?? '1080p';
 		localFramerate = config?.framerate ?? 30;
@@ -221,6 +232,7 @@ function seedDraft(fromSaved: boolean): void {
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
 		localCodec = config?.codec;
+		localPassthrough = config?.passthrough ?? savedConfig?.video_passthrough ?? 'auto';
 	}
 	seededResolution = localResolution;
 	seededFramerate = localFramerate;
@@ -253,6 +265,36 @@ $effect(() => {
 const activeSource = $derived(
 	getSources()?.sources.find((source) => source.id === savedConfig?.source),
 );
+
+// ── Passthrough resolved-mode disclosure (pre-start) ───────────────────────────
+// The resolved output codec (explicit pick or the Auto-resolved default) drives
+// whether the active source can be passed through. Under the honest todo-16
+// policy adaptive bitrate is always active (there is no operator control to make
+// it fixed), so `auto` always transcodes — passthrough surfaces only for `force`.
+const passthroughOutputCodec = $derived<VideoCodec>(localCodec ?? resolvedAutoCodec);
+const activeSourceKind = $derived(
+	activeSource?.origin === 'capture' ? activeSource.kind : undefined,
+);
+const passthroughSourceEligible = $derived(
+	sourceOffersCodec(activeSourceKind, passthroughOutputCodec),
+);
+const resolvedPassthroughMode = $derived(
+	resolvePassthroughMode({
+		setting: localPassthrough,
+		sourceOffersOutputCodec: passthroughSourceEligible,
+		adaptiveActive: true,
+	}),
+);
+const passthroughActive = $derived(resolvedPassthroughMode === 'passthrough');
+// A human token for the source's incoming codec, used in the transcode line
+// ("Re-encoding <in>→<out>"). Raw/HDMI/network sources have no codec token.
+const inputCodecLabel = $derived.by<string>(() => {
+	if (activeSourceKind === 'mjpeg') return 'MJPEG';
+	if (activeSourceKind === 'uvc_h264') return 'H.264';
+	if (activeSourceKind === 'uvc_h265') return 'H.265';
+	return $LL.live.encoder.passthrough.inputRaw();
+});
+const outputCodecLabel = $derived(passthroughOutputCodec === 'h265' ? 'H.265' : 'H.264');
 
 // Capture kind → coarse device family. Drives the context-line ICON only: a UVC
 // dongle (`uvc_h264`) is USB family, so it gets the USB glyph. The visible kind
@@ -392,6 +434,7 @@ function handleSave() {
 		bitrate: normalized,
 		bitrateOverlay: localOverlay,
 		codec: localCodec,
+		passthrough: localPassthrough,
 	};
 	config = next;
 
@@ -567,9 +610,95 @@ function handleSave() {
 			{/if}
 		</div>
 
+		<!-- Same-codec passthrough policy (advanced): Auto / Force / Off. The resolved
+		     mode is disclosed BEFORE start so `force` is safe — the operator sees the
+		     consequence (camera controls bitrate; adaptive bonded bitrate inactive)
+		     ahead of going live, never only while streaming. -->
+		<div class="space-y-2">
+			<Label class="text-sm font-medium">{$LL.live.encoder.passthrough.title()}</Label>
+			<div
+				class="bg-card/40 grid grid-cols-3 gap-1.5 rounded-lg border p-1"
+				aria-label={$LL.live.encoder.passthrough.title()}
+				data-testid="encoder-passthrough-selector"
+				role="radiogroup"
+			>
+				<button
+					type="button"
+					aria-checked={passthroughIsAuto}
+					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {passthroughIsAuto
+						? 'bg-primary/10 text-primary ring-primary ring-1'
+						: 'text-muted-foreground hover:bg-primary/5'}"
+					data-active={passthroughIsAuto}
+					data-testid="passthrough-auto"
+					onclick={() => (localPassthrough = 'auto')}
+					role="radio"
+				>
+					{$LL.live.encoder.passthrough.auto()}
+				</button>
+				<button
+					type="button"
+					aria-checked={passthroughIsForce}
+					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {passthroughIsForce
+						? 'bg-primary/10 text-primary ring-primary ring-1'
+						: 'text-muted-foreground hover:bg-primary/5'}"
+					data-active={passthroughIsForce}
+					data-testid="passthrough-force"
+					onclick={() => (localPassthrough = 'force')}
+					role="radio"
+				>
+					{$LL.live.encoder.passthrough.force()}
+				</button>
+				<button
+					type="button"
+					aria-checked={passthroughIsOff}
+					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {passthroughIsOff
+						? 'bg-primary/10 text-primary ring-primary ring-1'
+						: 'text-muted-foreground hover:bg-primary/5'}"
+					data-active={passthroughIsOff}
+					data-testid="passthrough-off"
+					onclick={() => (localPassthrough = 'off')}
+					role="radio"
+				>
+					{$LL.live.encoder.passthrough.off()}
+				</button>
+			</div>
+			<!-- Resolved-mode disclosure: derived from setting + source kind + output
+			     codec, shown pre-start so the operator knows the consequence. -->
+			{#if resolvedPassthroughMode === 'passthrough'}
+				<p
+					class="text-primary bg-primary/5 rounded-md p-2 text-xs"
+					data-testid="passthrough-disclosure"
+					data-mode="passthrough"
+				>
+					{$LL.live.encoder.passthrough.disclosurePassthrough()}
+				</p>
+			{:else if resolvedPassthroughMode === 'forceUnavailable'}
+				<p
+					class="text-status-warning bg-status-warning/10 rounded-md p-2 text-xs"
+					data-testid="passthrough-disclosure"
+					data-mode="forceUnavailable"
+				>
+					{$LL.live.encoder.passthrough.disclosureForceUnavailable()}
+				</p>
+			{:else}
+				<p
+					class="text-muted-foreground bg-muted rounded-md p-2 text-xs"
+					data-testid="passthrough-disclosure"
+					data-mode="transcode"
+				>
+					{$LL.live.encoder.passthrough.disclosureTranscode({
+						input: inputCodecLabel,
+						output: outputCodecLabel,
+					})}
+				</p>
+			{/if}
+		</div>
+
 		<!-- Bitrate LEADS (first-class, out of Advanced): slider + number input share
 		     ONE board window (BITRATE.min‥max) and ONE clamp, so the two controls can
-		     never diverge. -->
+		     never diverge. While passthrough is the resolved mode the camera fixes the
+		     bitrate, so both controls disable with a visible reason (never a silent
+		     no-op). -->
 		<div class="bg-muted/40 space-y-3 rounded-lg border p-4" data-testid="encoder-bitrate-control">
 			<div class="flex items-center justify-between gap-2">
 				<Label class="text-sm font-medium" for="encoder-bitrate">{$LL.settings.bitrate()}</Label>
@@ -579,6 +708,7 @@ function handleSave() {
 			</div>
 			<Slider
 				aria-label={$LL.settings.bitrate()}
+				disabled={passthroughActive}
 				max={BITRATE.max}
 				min={BITRATE.min}
 				onValueChange={(value) => commitBitrate(value as number)}
@@ -591,6 +721,7 @@ function handleSave() {
 				aria-describedby={errors.bitrate ? 'encoder-bitrate-error' : undefined}
 				aria-invalid={Boolean(errors.bitrate)}
 				class="text-center font-mono"
+				disabled={passthroughActive}
 				max={BITRATE.max}
 				min={BITRATE.min}
 				oninput={(e) => commitBitrate(parseInt(e.currentTarget.value, 10))}
@@ -598,6 +729,14 @@ function handleSave() {
 				type="number"
 				value={Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
 			/>
+			{#if passthroughActive}
+				<p
+					class="text-muted-foreground bg-muted rounded-md p-2 text-xs"
+					data-testid="bitrate-passthrough-disabled"
+				>
+					{$LL.live.encoder.passthrough.bitrateFixed()}
+				</p>
+			{/if}
 			<p class="text-muted-foreground text-xs" data-testid="bitrate-range-hint">
 				{$LL.live.encoder.bitrateRangeHint()}: {BITRATE.min}–{BITRATE.max}
 				{$LL.units.kbps()}

@@ -30,6 +30,7 @@
 // via the frozen `getStreamingBackend()` seam — never the singleton directly.
 
 import type { ActiveEncode } from "@ceraui/rpc/schemas";
+import { getActivePassthrough } from "./active-passthrough.ts";
 import { getStreamingBackend } from "./streaming-engine.ts";
 
 // Dev/e2e seam: with no real cerastream session the engine telemetry is empty, so
@@ -59,5 +60,12 @@ export function getActiveEncodeStatus(): ActiveEncode | null {
 		| { active_encode?: ActiveEncode }
 		| null
 		| undefined;
-	return telemetry?.active_encode ?? null;
+	const active = telemetry?.active_encode;
+	if (!active) return null;
+	// The typed binding strips `active_encode.passthrough`; overlay the raw-bridge
+	// value so the wire snapshot carries the authoritative live passthrough state.
+	const rawPassthrough = getActivePassthrough();
+	return rawPassthrough === undefined
+		? active
+		: { ...active, passthrough: rawPassthrough };
 }

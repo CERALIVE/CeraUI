@@ -1065,6 +1065,10 @@ const zh = {
 					title: "预览启动失败",
 					body: "引擎无法启动预览管线。请重新开始以重试。",
 				},
+				passthroughActive: {
+					title: "直通期间预览不可用",
+					body: "摄像头的流直接送到输出，因此这里没有可预览的内容。",
+				},
 				pausedHidden: {
 					title: "预览已暂停",
 					body: "预览在长时间无人查看后已停止以节省资源。恢复即可再次查看。",
@@ -1139,6 +1143,11 @@ const zh = {
 			chip: "输入 {input} \u2192 输出 {output}",
 			always:
 				"引擎始终将传入流重新编码为你配置的输出编解码器 \u2014 没有直通。",
+		},
+		passthrough: {
+			activeChip: "直通",
+			activeHint:
+				"摄像头的流直接送到输出 — 设备不会重新编码，因此自适应聚合码率处于非活动状态。",
 		},
 		modes: {
 			label: "模式",
@@ -1217,6 +1226,20 @@ const zh = {
 			axisSelected: "已选",
 			axisDeviceMax: "设备上限",
 			fpsAvailableAt: "{fps} fps 在 {resolution} 可用",
+			passthrough: {
+				title: "直通",
+				auto: "自动",
+				force: "强制",
+				off: "关闭",
+				disclosurePassthrough:
+					"直通 — 由摄像头控制码率；自适应聚合码率处于非活动状态。",
+				disclosureTranscode:
+					"正在重新编码 {input}→{output} — 自适应码率已启用。",
+				disclosureForceUnavailable:
+					"无法强制直通 — 此来源无法输出该输出编解码器，因此推流将无法启动。请使用自动或关闭。",
+				bitrateFixed: "码率由摄像头设定 — 直通已启用。",
+				inputRaw: "未压缩",
+			},
 		},
 	},
 	dialogs: {

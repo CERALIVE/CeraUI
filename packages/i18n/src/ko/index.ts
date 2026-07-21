@@ -1126,6 +1126,10 @@ const ko = {
 					title: "미리보기 시작 실패",
 					body: "엔진이 미리보기 파이프라인을 시작하지 못했습니다. 다시 시작하여 재시도하세요.",
 				},
+				passthroughActive: {
+					title: "패스스루 중에는 미리보기를 사용할 수 없습니다",
+					body: "카메라 스트림이 출력으로 바로 전달되므로 여기에 미리볼 것이 없습니다.",
+				},
 				pausedHidden: {
 					title: "미리보기 일시중지됨",
 					body: "리소스 절약을 위해 보지 않는 동안 미리보기가 중지되었습니다. 다시 보려면 재개하세요.",
@@ -1201,6 +1205,11 @@ const ko = {
 			chip: "입력 {input} \u2192 출력 {output}",
 			always:
 				"엔진은 들어오는 스트림을 항상 구성된 출력 코덱으로 다시 인코딩합니다. 패스스루는 없습니다.",
+		},
+		passthrough: {
+			activeChip: "패스스루",
+			activeHint:
+				"카메라 스트림이 출력으로 바로 전달됩니다 — 장치가 재인코딩하지 않으므로 적응형 본딩 비트레이트가 비활성화됩니다.",
 		},
 		modes: {
 			label: "모드",
@@ -1280,6 +1289,20 @@ const ko = {
 			axisSelected: "선택됨",
 			axisDeviceMax: "장치 최대",
 			fpsAvailableAt: "{fps} fps는 {resolution}에서 사용 가능",
+			passthrough: {
+				title: "패스스루",
+				auto: "자동",
+				force: "강제",
+				off: "끄기",
+				disclosurePassthrough:
+					"패스스루 — 카메라가 비트레이트를 제어합니다. 적응형 본딩 비트레이트가 비활성화됩니다.",
+				disclosureTranscode:
+					"재인코딩 {input}→{output} — 적응형 비트레이트 활성화.",
+				disclosureForceUnavailable:
+					"패스스루를 강제할 수 없습니다 — 이 소스는 출력 코덱을 낼 수 없어 스트림이 시작되지 않습니다. 자동 또는 끄기를 사용하세요.",
+				bitrateFixed: "비트레이트가 카메라로 고정됨 — 패스스루 활성화.",
+				inputRaw: "비압축",
+			},
 		},
 	},
 	dialogs: {

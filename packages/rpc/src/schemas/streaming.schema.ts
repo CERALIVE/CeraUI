@@ -131,6 +131,9 @@ export type Framerate = z.infer<typeof framerateSchema>;
 // `codec` wire enum (h264|h265). Additive/optional everywhere it is used — absent
 // means "let the engine pick the platform default codec".
 export const videoCodecSchema = z.enum(['h264', 'h265']);
+
+export const videoPassthroughSchema = z.enum(['auto', 'force', 'off']);
+export type VideoPassthrough = z.infer<typeof videoPassthroughSchema>;
 export type VideoCodec = z.infer<typeof videoCodecSchema>;
 
 // Resolution token ↔ engine "WxH" pixel-pair map (Todo 19). These dimensions MUST
@@ -206,6 +209,9 @@ export const streamingConfigInputSchema = z.object({
 	// engine default source. `selected_video_input` is a capture-device input_id.
 	video_codec: videoCodecSchema.optional(),
 	selected_video_input: z.string().optional(),
+	// Same-codec passthrough policy (auto/force/off), sent to the engine at start
+	// (cerastream Todo 16). Additive-optional; absent = auto.
+	video_passthrough: videoPassthroughSchema.optional(),
 	// Device-first operator source selection (StreamSource id, see
 	// sources.schema.ts). The backend derives `pipeline` + `selected_video_input`
 	// from it (T3). Additive-optional; absent = the legacy
@@ -711,6 +717,9 @@ export const configMessageSchema = z.object({
 	// back so the Live UI reflects the saved selection on reload.
 	video_codec: videoCodecSchema.optional(),
 	selected_video_input: z.string().optional(),
+	// Same-codec passthrough policy, echoed so the Encoder dialog reflects the
+	// saved auto/force/off on reload. Additive-optional (cerastream Todo 16).
+	video_passthrough: videoPassthroughSchema.optional(),
 	// Device-first operator source selection, echoed back so the UI reflects the
 	// saved source on reload (T3/T13). Additive-optional.
 	source: z.string().optional(),

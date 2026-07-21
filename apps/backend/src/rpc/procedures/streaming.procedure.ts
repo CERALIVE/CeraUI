@@ -385,6 +385,7 @@ export const getConfigProcedure = authedProcedure
 			resolution,
 			framerate,
 			video_codec: config.video_codec,
+			video_passthrough: config.video_passthrough,
 			selected_video_input: config.selected_video_input,
 			source: config.source,
 			source_preference: config.source_preference,
@@ -480,6 +481,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
 		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
+		if (input.video_passthrough !== undefined)
+			config.video_passthrough = input.video_passthrough;
 		if (input.source_preference !== undefined)
 			config.source_preference = input.source_preference;
 		if (input.selected_video_input !== undefined)

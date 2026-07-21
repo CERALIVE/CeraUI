@@ -88,6 +88,7 @@ export type PreviewAvailability =
 	| "sourceUnavailable"
 	| "deviceBusy"
 	| "pipelineFailed"
+	| "passthroughActive"
 	| "pausedHidden";
 
 /**
@@ -152,6 +153,7 @@ export const PREVIEW_ENGINE_FAILURE_REASONS = [
 	"source-unavailable",
 	"device-busy",
 	"pipeline-failed",
+	"passthrough-active",
 ] as const;
 
 export type PreviewEngineFailureReason =
@@ -161,13 +163,18 @@ const ENGINE_FAILURE_BAND: Record<
 	PreviewEngineFailureReason,
 	Extract<
 		PreviewAvailability,
-		"noSourceApplied" | "sourceUnavailable" | "deviceBusy" | "pipelineFailed"
+		| "noSourceApplied"
+		| "sourceUnavailable"
+		| "deviceBusy"
+		| "pipelineFailed"
+		| "passthroughActive"
 	>
 > = {
 	"no-source-applied": "noSourceApplied",
 	"source-unavailable": "sourceUnavailable",
 	"device-busy": "deviceBusy",
 	"pipeline-failed": "pipelineFailed",
+	"passthrough-active": "passthroughActive",
 };
 
 /**
@@ -205,5 +212,6 @@ export const TERMINAL_PREVIEW_BANDS: ReadonlySet<PreviewAvailability> =
 		"sourceUnavailable",
 		"deviceBusy",
 		"pipelineFailed",
+		"passthroughActive",
 		"pausedHidden",
 	]);

@@ -545,6 +545,10 @@ const es = {
 					title: "No se pudo iniciar la vista previa",
 					body: "El motor no pudo iniciar la canalización de vista previa. Iníciala de nuevo para reintentar.",
 				},
+				passthroughActive: {
+					title: "Vista previa no disponible durante el passthrough",
+					body: "El flujo de la cámara va directo a la salida, así que no hay nada que previsualizar aquí.",
+				},
 				pausedHidden: {
 					title: "Vista previa en pausa",
 					body: "La vista previa se detuvo tras quedar sin verse para ahorrar recursos. Reanúdala para volver a verla.",
@@ -622,6 +626,11 @@ const es = {
 			chip: "Entrada {input} \u2192 Salida {output}",
 			always:
 				"El motor siempre vuelve a codificar la señal entrante al códec de salida configurado; no hay paso directo.",
+		},
+		passthrough: {
+			activeChip: "Passthrough",
+			activeHint:
+				"El flujo de la cámara va directo a la salida — el dispositivo no recodifica, así que el bitrate adaptativo por enlace está inactivo.",
 		},
 		modes: {
 			label: "Modo",
@@ -702,6 +711,20 @@ const es = {
 			axisSelected: "Seleccionado",
 			axisDeviceMax: "Máximo del dispositivo",
 			fpsAvailableAt: "{fps} fps disponible en {resolution}",
+			passthrough: {
+				title: "Passthrough",
+				auto: "Automático",
+				force: "Forzar",
+				off: "Desactivado",
+				disclosurePassthrough:
+					"Passthrough — la cámara controla el bitrate; el bitrate adaptativo por enlace está inactivo.",
+				disclosureTranscode:
+					"Recodificando {input}→{output} — bitrate adaptativo activo.",
+				disclosureForceUnavailable:
+					"No se puede forzar el passthrough — esta fuente no puede emitir el códec de salida, así que la transmisión no se iniciará. Usa Automático o Desactivado.",
+				bitrateFixed: "Bitrate fijado por la cámara — passthrough activo.",
+				inputRaw: "sin comprimir",
+			},
 		},
 	},
 	dialogs: {

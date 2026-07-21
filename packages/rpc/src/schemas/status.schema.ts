@@ -118,6 +118,9 @@ export const activeEncodeSchema = z.object({
 	// Codec of the incoming/decoded source before re-encode (e.g. "h264"), when
 	// the engine reports it. Additive + optional — absent on a legacy engine.
 	input_codec: z.string().optional(),
+	// True on a same-codec passthrough graph (no re-encode; camera fixes the
+	// bitrate); absent/false on transcode. Additive + optional (cerastream 0.5.0).
+	passthrough: z.boolean().optional(),
 });
 export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
 
