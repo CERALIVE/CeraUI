@@ -295,9 +295,9 @@ describe("buildStartParams — pseudo-source → audio.mode wire contract (Todo 
 		await backend.settle();
 		const started = fake.calls.find((c) => c.op === "start");
 		expect(started).toBeDefined();
-		expect(
-			(started?.params as { audio?: { mode?: string } }).audio?.mode,
-		).toBe("device");
+		expect((started?.params as { audio?: { mode?: string } }).audio?.mode).toBe(
+			"device",
+		);
 	});
 });
 
