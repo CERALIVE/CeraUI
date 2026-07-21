@@ -302,7 +302,7 @@ const zh = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "UVC H264 相机",
+			libuvch264: "带硬件 H.264 的 USB 摄像头 (UVC)",
 			hdmi: "HDMI 采集",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
@@ -1102,7 +1102,7 @@ const zh = {
 				other: "其他",
 				uvc_h264: "UVC H.264",
 				uvc_h265: "UVC H.265",
-				mjpeg: "MJPEG",
+				mjpeg: "UVC · MJPEG",
 				camlink: "Cam Link",
 			},
 		},
@@ -1125,7 +1125,8 @@ const zh = {
 				"你的设备支持此类信号源，但目前没有为其连接任何设备。请连接匹配的设备以使用它，或选择已连接的信号源。",
 			mjpegTitle: "为什么是 MJPEG？",
 			mjpegBody:
-				"此采集设备不支持通过 USB 进行硬件 H.264/H.265 编码，因此编码器会采集其 Motion-JPEG（MJPEG）视频，再重新编码为你选择的编码格式。这是对硬件的准确描述，并非故障。",
+				"这是一台输出 Motion-JPEG 的标准 USB 视频类（UVC）设备：它自己的 USB 硬件描述只声明未压缩视频和 Motion-JPEG（MJPEG），没有通过 USB 的硬件 H.264/H.265 编码，也没有为此隐藏的厂商通道，因此编码器会采集其 MJPEG 视频，再重新编码为你选择的编码格式。这是对硬件的准确描述，并非故障。",
+			mjpegLearnMore: "我们如何检测 UVC H.264",
 		},
 		summary: {
 			nowStreaming: "正在直播",

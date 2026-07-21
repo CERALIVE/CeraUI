@@ -275,6 +275,45 @@ describe("SourceSection — unified device-first source list (Task 13)", () => {
 		).toBeNull();
 	});
 
+	it("labels a mjpeg capture row badge 'UVC · MJPEG' — conveys the UVC transport, not a bare codec", () => {
+		const rodeMjpeg: CaptureStreamSource = {
+			...RODE,
+			id: "mjpeg-cam",
+			kind: "mjpeg",
+			pipelineId: "mjpeg",
+		};
+		const { container } = mount({ sources: sourcesMsg([rodeMjpeg]) });
+		const kindBadge = container.querySelector<HTMLElement>(
+			'[data-testid="source-kind-mjpeg-cam"]',
+		);
+		expect(kindBadge?.getAttribute("data-source-kind")).toBe("mjpeg");
+		expect(kindBadge?.textContent?.trim()).toBe("UVC · MJPEG");
+	});
+
+	it("cross-links the MJPEG explainer to the durable UVC-H.264 detection note", async () => {
+		const rodeMjpeg: CaptureStreamSource = {
+			...RODE,
+			id: "mjpeg-cam",
+			kind: "mjpeg",
+			pipelineId: "mjpeg",
+		};
+		const { container } = mount({ sources: sourcesMsg([rodeMjpeg]) });
+		const trigger = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-mjpeg-info-mjpeg-cam"]',
+		);
+		await fireEvent.click(trigger as HTMLButtonElement);
+		const link = await waitFor(() => {
+			const el = document.querySelector<HTMLAnchorElement>(
+				'[data-testid="source-mjpeg-info-mjpeg-cam-learn-more"]',
+			);
+			if (!el) throw new Error("learn-more link not rendered yet");
+			return el;
+		});
+		expect(link.getAttribute("href")).toBe(
+			"https://github.com/CERALIVE/gstlibuvch264src/blob/main/docs/notes/uvc-h264-detection.md",
+		);
+	});
+
 	it("renders the Test-pattern virtual row exactly once", () => {
 		const { container } = mount({
 			sources: sourcesMsg([RODE, COARSE_HDMI, VIRTUAL_TEST, netRtmp(true)]),

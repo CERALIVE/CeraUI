@@ -448,7 +448,7 @@ const ar = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "كاميرا UVC H264",
+			libuvch264: "كاميرا USB مع H.264 عتادي (UVC)",
 			hdmi: "التقاط HDMI",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
@@ -1288,7 +1288,7 @@ const ar = {
 				other: "أخرى",
 				uvc_h264: "UVC H.264",
 				uvc_h265: "UVC H.265",
-				mjpeg: "MJPEG",
+				mjpeg: "UVC · MJPEG",
 				camlink: "Cam Link",
 			},
 		},
@@ -1311,7 +1311,8 @@ const ar = {
 				"يدعم جهازك هذا النوع من المصادر، لكن لا يوجد شيء موصول له الآن. صِل جهازًا مناسبًا لاستخدامه، أو اختر مصدرًا متصلًا بالفعل.",
 			mjpegTitle: "لماذا MJPEG؟",
 			mjpegBody:
-				"لا يوفّر جهاز الالتقاط هذا ترميز H.264/H.265 عبر العتاد من خلال USB، لذا يلتقط المُرمِّز فيديو Motion-JPEG‏ (MJPEG) ويعيد ترميزه إلى الترميز الذي تختاره. هذا وصف دقيق للعتاد، وليس عيبًا.",
+				"هذا جهاز USB Video Class‏ (UVC) قياسي يُخرج Motion-JPEG: فوصف عتاده عبر USB لا يعلن سوى فيديو غير مضغوط وMotion-JPEG‏ (MJPEG) — دون ترميز H.264/H.265 عبر العتاد من خلال USB ودون أي قناة مصنّع مخفية لذلك — لذا يلتقط المُرمِّز فيديو MJPEG ويعيد ترميزه إلى الترميز الذي تختاره. هذا وصف دقيق للعتاد، وليس عيبًا.",
+			mjpegLearnMore: "كيف نتحقق من UVC H.264",
 		},
 		summary: {
 			nowStreaming: "يبث الآن",

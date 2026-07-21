@@ -24,7 +24,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { CircleHelp } from '@lucide/svelte';
+import { CircleHelp, ExternalLink } from '@lucide/svelte';
 
 import * as Popover from '$lib/components/ui/popover';
 import { cn } from '$lib/utils';
@@ -47,9 +47,25 @@ interface Props {
 	/** Stable automation hook on the trigger button. */
 	testId?: string;
 	class?: string;
+	/**
+	 * Optional external reference the explainer links out to (e.g. a durable
+	 * engineering note). Rendered as a real anchor under the body when present.
+	 */
+	learnMoreUrl?: string;
+	/** Visible label for the learn-more anchor. Required when `learnMoreUrl` is set. */
+	learnMoreLabel?: string;
 }
 
-let { title, body, reason, ariaLabel, testId, class: className }: Props = $props();
+let {
+	title,
+	body,
+	reason,
+	ariaLabel,
+	testId,
+	class: className,
+	learnMoreUrl,
+	learnMoreLabel,
+}: Props = $props();
 
 const triggerLabel = $derived(ariaLabel ?? $LL.live.education.info({ field: title }));
 </script>
@@ -72,6 +88,18 @@ const triggerLabel = $derived(ariaLabel ?? $LL.live.education.info({ field: titl
 			<Popover.Title>{title}</Popover.Title>
 		</Popover.Header>
 		<Popover.Description class="leading-relaxed">{body}</Popover.Description>
+		{#if learnMoreUrl}
+			<a
+				class="text-primary hover:text-primary/80 focus-visible:ring-ring mt-2 inline-flex items-center gap-1 rounded text-sm font-medium underline underline-offset-2 outline-hidden focus-visible:ring-2"
+				data-testid={testId ? `${testId}-learn-more` : undefined}
+				href={learnMoreUrl}
+				rel="noopener noreferrer"
+				target="_blank"
+			>
+				{learnMoreLabel}
+				<ExternalLink aria-hidden={true} class="size-3.5 shrink-0" />
+			</a>
+		{/if}
 		{#if reason}
 			<!-- Distinct from "coming soon": a runtime constraint, not a future. -->
 			<div

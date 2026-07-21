@@ -314,7 +314,7 @@ const ko = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "UVC H264 카메라",
+			libuvch264: "하드웨어 H.264 지원 USB 카메라 (UVC)",
 			hdmi: "HDMI 캡처",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
@@ -1164,7 +1164,7 @@ const ko = {
 				other: "기타",
 				uvc_h264: "UVC H.264",
 				uvc_h265: "UVC H.265",
-				mjpeg: "MJPEG",
+				mjpeg: "UVC · MJPEG",
 				camlink: "Cam Link",
 			},
 		},
@@ -1187,7 +1187,8 @@ const ko = {
 				"장치가 이 종류의 소스를 지원하지만 지금은 연결된 것이 없습니다. 사용하려면 해당 장치를 연결하거나 이미 연결된 소스를 선택하세요.",
 			mjpegTitle: "왜 MJPEG인가요?",
 			mjpegBody:
-				"이 캡처 장치는 USB를 통한 하드웨어 H.264/H.265 인코딩을 제공하지 않으므로, 인코더가 해당 장치의 Motion-JPEG(MJPEG) 영상을 캡처한 뒤 선택한 코덱으로 다시 인코딩합니다. 이는 하드웨어에 대한 정확한 설명이며 결함이 아닙니다.",
+				"이 장치는 Motion-JPEG를 출력하는 표준 USB Video Class(UVC) 장치입니다. USB 하드웨어 설명자에는 비압축 및 Motion-JPEG(MJPEG) 영상만 표시되어 있으며, USB를 통한 하드웨어 H.264/H.265 인코딩도, 이를 위한 숨겨진 공급업체 채널도 없습니다. 그래서 인코더가 해당 장치의 MJPEG 영상을 캡처한 뒤 선택한 코덱으로 다시 인코딩합니다. 이는 하드웨어에 대한 정확한 설명이며 결함이 아닙니다.",
+			mjpegLearnMore: "UVC H.264 확인 방법",
 		},
 		summary: {
 			nowStreaming: "스트리밍 중",
