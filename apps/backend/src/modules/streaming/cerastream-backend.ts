@@ -67,6 +67,7 @@ import {
 } from "@ceralive/cerastream";
 import type { ActiveEncode, BufferingStatus } from "@ceraui/rpc/schemas";
 import { toEngineResolution } from "@ceraui/rpc/schemas";
+import { z } from "zod";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
@@ -75,7 +76,7 @@ import {
 	notificationBroadcast,
 	notificationExists,
 } from "../ui/notifications.ts";
-import { getAudioSrcId } from "./audio.ts";
+import { type AudioMode, resolveAudioMode } from "./audio.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
@@ -254,6 +255,40 @@ export function supportsSignedReloadDelay(
 	return major > 0 || (major === 0 && (minor ?? 0) >= 4);
 }
 
+/**
+ * Whether the engine understands the additive `audio.mode` discriminator
+ * (schema ≥ 0.6.0). The published `@ceralive/cerastream` client Zod-STRIPS the
+ * unknown `mode` field, so a supporting engine must be driven through the raw
+ * `start` bridge below; an older engine is sent the typed (mode-less) params and
+ * falls back to its legacy device inference. Fail-safe `false` on an
+ * absent/unparseable version.
+ */
+export function supportsAudioMode(schemaVersion: string | undefined): boolean {
+	if (!schemaVersion) return false;
+	const [major, minor] = schemaVersion.split(".").map(Number);
+	if (major === undefined || Number.isNaN(major) || Number.isNaN(minor))
+		return false;
+	return major > 0 || (major === 0 && (minor ?? 0) >= 6);
+}
+
+// Local schema extension for the raw `start` bridge: the published client's
+// frozen `startParamsSchema` has no `audio.mode`, so a start carrying a mode is
+// validated here and dispatched over the raw JSON-RPC primitive (no npm publish).
+const audioModeSchema = z.enum(["none", "default", "device"]);
+export const startParamsWithAudioModeSchema = startParamsSchema.extend({
+	audio: z
+		.object({
+			mode: audioModeSchema.optional(),
+			device: z.string().optional(),
+			codec: z.string().optional(),
+			delay_ms: z.number().int().optional(),
+		})
+		.optional(),
+});
+export type StartParamsWithAudioMode = z.infer<
+	typeof startParamsWithAudioModeSchema
+>;
+
 function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 	return {
 		connect,
@@ -392,8 +427,25 @@ export class CerastreamBackend implements StreamingBackend {
 			this.subscription = await client.subscribeEvents({}, (event) =>
 				this.handleEvent(event),
 			);
-			await client.start(params);
+			await this.dispatchStart(client, params);
 		}, "start");
+	}
+
+	// Send `start` so `audio.mode` survives: a ≥0.6.0 engine is driven through the
+	// raw JSON-RPC primitive (the typed client Zod-strips `mode`); an older engine
+	// gets the typed call and its legacy device inference.
+	private async dispatchStart(
+		client: CerastreamClient,
+		params: StartParamsWithAudioMode,
+	): Promise<void> {
+		if (supportsAudioMode(client.hello.schema_version)) {
+			const raw = client as unknown as {
+				rawRequest(method: string, params?: unknown): Promise<unknown>;
+			};
+			await raw.rawRequest("start", params);
+			return;
+		}
+		await client.start(params as StartParams);
 	}
 
 	stop(onStopped: () => void): boolean {
@@ -682,18 +734,29 @@ export class CerastreamBackend implements StreamingBackend {
 		codec?: "h264" | "h265";
 		resolution?: string;
 		framerate?: number;
-		audio?: { device?: string; codec?: string; delay_ms?: number };
+		audio?: {
+			mode?: AudioMode;
+			device?: string;
+			codec?: string;
+			delay_ms?: number;
+		};
 	} {
 		const inputId = config.selected_video_input ?? this.deps.getActiveInput();
-		// Embedded network-ingest audio: when the engine routes the incoming
-		// stream's muxed audio, no ALSA device is used — omit `audio.device` so the
-		// engine takes the embedded path instead of the (unused) selectable one.
-		const audioDevice =
-			config.asrc !== undefined && !this.deps.isEmbeddedAudioActive(pipelineId)
-				? getAudioSrcId(config.asrc)
+		// The operator's audio pick maps onto the engine's `audio.mode`
+		// discriminator (never a pseudo-source string leaked into `audio.device`):
+		// "No audio" ⇒ none, "Pipeline default" / a network-embedded source ⇒
+		// default, a real device ⇒ device + its ALSA id. An absent `asrc` omits the
+		// section entirely (the engine's legacy inference, compat-preserved).
+		const selection =
+			config.asrc !== undefined
+				? resolveAudioMode(
+						config.asrc,
+						this.deps.isEmbeddedAudioActive(pipelineId),
+					)
 				: undefined;
 		const audio = {
-			...(audioDevice !== undefined ? { device: audioDevice } : {}),
+			...(selection !== undefined ? { mode: selection.mode } : {}),
+			...(selection?.device !== undefined ? { device: selection.device } : {}),
 			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
 			...(config.delay !== undefined ? { delay_ms: config.delay } : {}),
 		};
@@ -715,7 +778,7 @@ export class CerastreamBackend implements StreamingBackend {
 	private buildStartParams(
 		config: RuntimeConfig,
 		opts: StreamRunOptions,
-	): StartParams {
+	): StartParamsWithAudioMode {
 		const srt: {
 			host: string;
 			port: number;
@@ -730,7 +793,7 @@ export class CerastreamBackend implements StreamingBackend {
 		};
 		if (opts.streamid) srt.streamid = opts.streamid;
 
-		return startParamsSchema.parse({
+		return startParamsWithAudioModeSchema.parse({
 			pipeline: config.pipeline ?? opts.pipeline,
 			srt,
 			bitrate: {
