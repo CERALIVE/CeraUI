@@ -44,7 +44,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Wire-envelope Zod schema + contract tests** | `modules/remote-control/protocol.ts` — THIN re-export of `@ceralive/control-protocol` (device-tolerant `FrameSchema`/`CommandSchema`/`StatusSchema`/`IngestSlotsPayloadSchema` + `COMMAND_REGISTRY` incl. `INTERNAL_COMMANDS` + `NEVER_REMOTE` + `tolerantParse*`); `protocol.export-surface.test.ts` / `protocol.contract.test.ts` / `protocol.frame-exchange.test.ts` |
 | **RC-pin merge gate (rejects `-rc.` pins of `@ceralive/{control-protocol,cerastream}`)** | `scripts/check-rc-pins.sh` (root `check:rc-pins`, wired into `.github/workflows/build-check.yml` BE job) |
 | Kiosk loopback token (DC-3, single-use, tmpfs) | `modules/ui/kiosk-token.ts` + `rpc/server.ts` |
-| Preview WebSocket proxy (single-origin `/preview`; forks before oRPC upgrade; backpressure-aware) | `modules/ui/preview-proxy.ts` + `rpc/server.ts` + `rpc/adapter.ts` (`createServerWebSocketHandler`) |
+| Preview WebSocket proxy (single-origin `/preview`; forks before oRPC upgrade; backpressure-aware, bounded drop-oldest queue) | `modules/ui/preview-proxy.ts` + `modules/ui/preview-frame-queue.ts` (`BoundedDropOldestQueue`) + `rpc/server.ts` + `rpc/adapter.ts` (`createServerWebSocketHandler`) |
 | Preview single-use token store (in-memory, TTL 30s) + `system.mintPreviewToken` | `modules/ui/preview-token.ts` + `rpc/procedures/system.procedure.ts` |
 | SIM PIN secrets store (opt-in "remember PIN", chmod-600 tmpfs) | `modules/modems/sim-secrets.ts` |
 | Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
@@ -140,14 +140,27 @@ divergence between dev and prod dial targets.
   identical URL/token flow. `PREVIEW_CLOSE_UPSTREAM_DOWN = 4502` (loopback
   unreachable), `PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE = 4503` (preview
   unbound/disabled). Close-code constants live once in `@ceraui/rpc/schemas`.
-- **Backpressure:** frames are a transparent passthrough BOTH ways (text control
-  frames + binary access units). The downstream (browser) leg is
-  backpressure-aware — when the client's `getBufferedAmount()` exceeds
-  `PREVIEW_BACKPRESSURE_HWM_BYTES` (1 MiB) forwarding pauses and upstream frames
-  are held, resuming on `drain`. Pause/resume only — NEVER drop-oldest.
+- **Backpressure — bounded drop-oldest (Todo 14):** frames are a transparent
+  passthrough BOTH ways (text control frames + binary access units). The
+  downstream (browser) leg is backpressure-aware — when the client's
+  `getBufferedAmount()` exceeds `PREVIEW_BACKPRESSURE_HWM_BYTES` (1 MiB) forwarding
+  pauses and upstream frames are held in a BOUNDED DROP-OLDEST queue
+  (`modules/ui/preview-frame-queue.ts` `BoundedDropOldestQueue`), resuming on
+  `drain`. Above `PREVIEW_MAX_PENDING_FRAMES` (256) or `PREVIEW_MAX_PENDING_BYTES`
+  (1 MiB) the OLDEST media frame is evicted — the queue PLATEAUS, the socket stays
+  OPEN (a live-edge skip-on-lag), and the browser resumes at the freshest media,
+  paired with the frontend live-edge seek policy (`preview-live-edge.ts`). This
+  REPLACES the previous close-on-overflow ("NEVER drop-oldest") contract: a
+  permanently-slow consumer no longer tears the preview down. The newest MSE init
+  segment (codec-config text frame) is PINNED — never dropped, dequeued first — so
+  the latest fragments stay decodable. Socket close frees every buffered frame
+  (`freePreviewProxyState` clears the queue).
 
 Coverage: `tests/preview-token.test.ts` (mint/consume/expire/single-use) +
-`tests/preview-proxy.test.ts` (pipe, 4401/4502/4503, authed mint gate).
+`tests/preview-proxy.test.ts` (pipe, 4401/4502/4503, authed mint gate) +
+`tests/preview-frame-queue.test.ts` (drop-oldest by count/bytes, pinned init) +
+`tests/preview-proxy-bounded.test.ts` (slow-consumer plateau, socket stays open,
+teardown frees buffers).
 
 ## DEV MOCK SEAMS [EXISTS]
 

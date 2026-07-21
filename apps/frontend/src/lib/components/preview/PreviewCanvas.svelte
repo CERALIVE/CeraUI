@@ -33,6 +33,12 @@ import {
 	PREVIEW_CLOSE_REASON_BACKPRESSURE,
 	type PreviewAvailability,
 } from '$lib/components/preview/preview-availability';
+import {
+	DEFAULT_LIVE_EDGE_POLICY,
+	deriveLiveEdgeAction,
+	type PlaybackSample,
+	pushBoundedSegment,
+} from '$lib/components/preview/preview-live-edge';
 import { Button } from '$lib/components/ui/button';
 import { getPreviewSocketUrl } from '$lib/env';
 import { rpc } from '$lib/rpc';
@@ -265,9 +271,60 @@ function decodeAccessUnit(buffer: ArrayBuffer): void {
 	decoder.decode(new EncodedVideoChunk({ type: isKey ? 'key' : 'delta', timestamp, data }));
 }
 
+// Read the current playhead vs. buffered live edge, or `null` when the
+// `<video>` has no buffered range yet.
+function readBufferedSample(): PlaybackSample | null {
+	const v = videoEl;
+	if (!v || v.buffered.length === 0) return null;
+	return {
+		bufferedStart: v.buffered.start(0),
+		bufferedEnd: v.buffered.end(v.buffered.length - 1),
+		currentTime: v.currentTime,
+	};
+}
+
+// Live-edge policy: pin the MSE playhead to live so preview never drifts behind
+// the encoder. A large drift hard-seeks to the edge; a moderate drift applies a
+// modest catch-up playbackRate inside the soft window; the back-buffer is trimmed
+// once it grows past the window. Pure decision in `preview-live-edge.ts`.
+function applyLiveEdge(): void {
+	const v = videoEl;
+	if (!v) return;
+	const sample = readBufferedSample();
+	if (!sample) return;
+	const decision = deriveLiveEdgeAction(sample);
+	if (decision.seekTo !== null) {
+		try {
+			v.currentTime = decision.seekTo;
+		} catch {
+			/* seek rejected mid-load */
+		}
+	}
+	if (v.playbackRate !== decision.playbackRate) v.playbackRate = decision.playbackRate;
+	const sb = sourceBuffer;
+	// Trim only when nothing is queued to append (append keeps priority) and the
+	// SourceBuffer is idle — `remove` would otherwise race a pending `appendBuffer`.
+	if (
+		decision.trimBackBufferTo !== null &&
+		sb &&
+		!sb.updating &&
+		pendingSegments.length === 0 &&
+		decision.trimBackBufferTo > sample.bufferedStart
+	) {
+		try {
+			sb.remove(0, decision.trimBackBufferTo);
+		} catch {
+			/* remove rejected mid-update */
+		}
+	}
+}
+
 function appendMseSegment(buffer: ArrayBuffer): void {
-	pendingSegments.push(buffer);
+	// Drop-oldest bound so a stalled SourceBuffer can never grow the queue without
+	// bound; `applyLiveEdge` seeks over any gap the eviction opens.
+	pushBoundedSegment(pendingSegments, buffer, DEFAULT_LIVE_EDGE_POLICY.maxPendingSegments);
 	flushSegments();
+	applyLiveEdge();
 	if (videoEl && videoEl.readyState >= 2) status = 'live';
 }
 

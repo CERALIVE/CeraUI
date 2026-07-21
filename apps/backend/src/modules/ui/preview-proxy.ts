@@ -30,8 +30,13 @@
  *
  * Frames are a transparent passthrough (text control frames + binary access units)
  * in BOTH directions. The downstream (browser) leg is backpressure-aware: when the
- * client's buffered amount exceeds a bounded high-water mark, upstream frames are
- * held and forwarding pauses, resuming on `drain` — never drop-oldest.
+ * client's buffered amount exceeds a bounded high-water mark forwarding pauses and
+ * upstream frames are held in a BOUNDED drop-oldest queue (`preview-frame-queue.ts`)
+ * — the newest MSE init segment is pinned and the latest fragments are kept, the
+ * oldest media is evicted once the queue exceeds its frame/byte cap. A permanently
+ * slow consumer therefore plateaus the proxy's memory instead of tearing the
+ * preview down, and the browser resumes at the freshest media (a live-edge
+ * skip-on-lag, paired with the frontend's live-edge seek policy).
  */
 
 import {
@@ -46,10 +51,22 @@ import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getMockPreviewPort } from "../../mocks/providers/preview.ts";
 import type { PreviewSocketData, ServerSocketData } from "../../rpc/types.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
+import { BoundedDropOldestQueue } from "./preview-frame-queue.ts";
 import { consumePreviewToken } from "./preview-token.ts";
 
 type PreviewSocket = ServerWebSocket<PreviewSocketData>;
 type Frame = string | ArrayBuffer;
+
+/**
+ * The minimal downstream-socket surface the pause/resume pipe needs. Bun's
+ * `ServerWebSocket` satisfies it structurally; a fake satisfies it in tests so the
+ * drop-oldest + teardown behaviour is drivable without a live socket.
+ */
+export interface PreviewDownSocket {
+	send(data: Frame): number | void;
+	getBufferedAmount(): number;
+	close(code?: number, reason?: string): void;
+}
 
 /** Copy a Bun `message` Buffer into a standalone ArrayBuffer for passthrough. */
 function toFrame(data: string | Buffer): Frame {
@@ -71,22 +88,54 @@ function toFrame(data: string | Buffer): Frame {
 export const PREVIEW_BACKPRESSURE_HWM_BYTES = 1_048_576;
 
 /**
- * Hard cap on frames held while forwarding is paused. Exceeding it means the
- * downstream is not draining at all; the socket is torn down (a controlled close,
- * NOT drop-oldest) so the proxy never buffers without bound.
+ * Frame-count cap on the held (paused) queue. Above it the OLDEST media frame is
+ * evicted (drop-oldest) — the queue plateaus, the socket stays open. 256 slots
+ * absorb a burst of preview access units on a briefly-slow link.
  */
-export const PREVIEW_MAX_PENDING_FRAMES = 512;
+export const PREVIEW_MAX_PENDING_FRAMES = 256;
+
+/** Byte cap on the held (paused) queue — the oldest media is evicted above it. */
+export const PREVIEW_MAX_PENDING_BYTES = 1_048_576;
 
 interface PreviewProxyState {
 	upstream: WebSocket;
 	upstreamOpen: boolean;
 	paused: boolean;
 	downClosed: boolean;
-	pending: Frame[];
+	queue: BoundedDropOldestQueue<Frame>;
 	outbox: Frame[];
 }
 
 const states = new Map<PreviewSocket, PreviewProxyState>();
+
+function frameByteLength(frame: Frame): number {
+	return typeof frame === "string"
+		? Buffer.byteLength(frame)
+		: frame.byteLength;
+}
+
+// The MSE init segment the fragments depend on rides a text codec-config frame;
+// pin it so an eviction never drops it (the latest fragments stay decodable).
+function isInitFrame(frame: Frame): boolean {
+	if (typeof frame !== "string") {
+		return false;
+	}
+	try {
+		const msg = JSON.parse(frame) as { type?: unknown };
+		return msg?.type === "codec-config" || msg?.type === "config";
+	} catch {
+		return false;
+	}
+}
+
+export function createPreviewQueue(): BoundedDropOldestQueue<Frame> {
+	return new BoundedDropOldestQueue<Frame>({
+		maxItems: PREVIEW_MAX_PENDING_FRAMES,
+		maxBytes: PREVIEW_MAX_PENDING_BYTES,
+		sizeOf: frameByteLength,
+		isPinned: isInitFrame,
+	});
+}
 
 /** Injected collaborators so tests drive the pipe against a fake upstream. */
 export interface PreviewProxyDeps {
@@ -131,8 +180,8 @@ export function isPreviewSocket(
 	return (ws.data as Partial<PreviewSocketData>).kind === "preview";
 }
 
-function closeDown(
-	ws: PreviewSocket,
+export function closeDown(
+	ws: PreviewDownSocket,
 	state: PreviewProxyState,
 	code: number,
 	reason: string,
@@ -141,6 +190,7 @@ function closeDown(
 		return;
 	}
 	state.downClosed = true;
+	state.queue.clear();
 	try {
 		state.upstream.close();
 	} catch {
@@ -153,8 +203,8 @@ function closeDown(
 	}
 }
 
-function forward(
-	ws: PreviewSocket,
+export function forward(
+	ws: PreviewDownSocket,
 	state: PreviewProxyState,
 	data: Frame,
 ): void {
@@ -162,15 +212,9 @@ function forward(
 		return;
 	}
 	if (state.paused) {
-		state.pending.push(data);
-		if (state.pending.length > PREVIEW_MAX_PENDING_FRAMES) {
-			closeDown(
-				ws,
-				state,
-				PREVIEW_CLOSE_UPSTREAM_DOWN,
-				"backpressure_overflow",
-			);
-		}
+		// Held while the browser drains: bounded drop-oldest — never close on
+		// overflow. The queue plateaus; the socket stays open.
+		state.queue.enqueue(data);
 		return;
 	}
 	ws.send(data);
@@ -179,18 +223,18 @@ function forward(
 	}
 }
 
-function resume(ws: PreviewSocket, state: PreviewProxyState): void {
+export function resume(ws: PreviewDownSocket, state: PreviewProxyState): void {
 	while (
-		state.pending.length > 0 &&
+		state.queue.length > 0 &&
 		ws.getBufferedAmount() <= PREVIEW_BACKPRESSURE_HWM_BYTES
 	) {
-		const next = state.pending.shift();
+		const next = state.queue.dequeue();
 		if (next !== undefined) {
 			ws.send(next);
 		}
 	}
 	if (
-		state.pending.length === 0 &&
+		state.queue.length === 0 &&
 		ws.getBufferedAmount() <= PREVIEW_BACKPRESSURE_HWM_BYTES
 	) {
 		state.paused = false;
@@ -278,7 +322,7 @@ export function createPreviewWebSocketHandler(
 				upstreamOpen: false,
 				paused: false,
 				downClosed: false,
-				pending: [],
+				queue: createPreviewQueue(),
 				outbox: [],
 			};
 			states.set(ws, state);
@@ -315,13 +359,41 @@ export function createPreviewWebSocketHandler(
 				return;
 			}
 			states.delete(ws);
-			state.downClosed = true;
-			try {
-				state.upstream.close();
-			} catch {
-				// upstream already closing
-			}
+			freePreviewProxyState(state);
 		},
+	};
+}
+
+/**
+ * Release a torn-down pair: mark it closed, free every buffered frame/byte, and
+ * close the upstream. The socket-close handler and every `closeDown` path route
+ * through here so no buffer survives teardown.
+ */
+export function freePreviewProxyState(state: PreviewProxyState): void {
+	state.downClosed = true;
+	state.queue.clear();
+	try {
+		state.upstream.close();
+	} catch {
+		// upstream already closing
+	}
+}
+
+/**
+ * Build a proxy state around a downstream queue + `upstream`. The socket-open
+ * path and tests both use it, so the pause/resume/drop-oldest/teardown behaviour
+ * is drivable without a live upstream socket.
+ */
+export function createPreviewProxyState(
+	upstream: WebSocket,
+): PreviewProxyState {
+	return {
+		upstream,
+		upstreamOpen: false,
+		paused: false,
+		downClosed: false,
+		queue: createPreviewQueue(),
+		outbox: [],
 	};
 }
 
@@ -329,3 +401,5 @@ export function createPreviewWebSocketHandler(
 export function getActivePreviewProxyCount(): number {
 	return states.size;
 }
+
+export type { PreviewProxyState };
