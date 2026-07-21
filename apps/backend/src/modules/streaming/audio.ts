@@ -26,6 +26,7 @@ import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
 import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { isRealDevice } from "../system/device-detection.ts";
+import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { parseAsoundCards, resolveAudioLabels } from "./audio-naming.ts";
@@ -53,22 +54,34 @@ const PSEUDO_AUDIO_SOURCES: ReadonlySet<string> = new Set([
 export function isPseudoAudioSource(asrc: string): boolean {
 	return PSEUDO_AUDIO_SOURCES.has(asrc);
 }
-const audioSrcAliases: Record<string, string> = {
+const BASE_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	C4K: "Cam Link 4K",
 	usbaudio: "USB audio",
 };
-if (setup.hw === "rk3588") {
-	Object.assign(audioSrcAliases, {
-		rockchiphdmiin: "HDMI",
-		rockchipes8388: "Analog in",
-	});
+const RK3588_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
+	rockchiphdmiin: "HDMI",
+	rockchipes8388: "Analog in",
+};
+
+// Resolved at CALL time (not import time): the rk3588 label aliases are added
+// only when the LIVE-resolved kind is rk3588, so a mismatched setup.hw image no
+// longer stamps rk3588 audio labels onto another board. On an actual rk3588 board
+// the table is byte-identical to the previous import-time build.
+function getAudioSrcAliases(): Record<string, string> {
+	if (getHardwareKindCached() === "rk3588") {
+		return { ...BASE_AUDIO_SRC_ALIASES, ...RK3588_AUDIO_SRC_ALIASES };
+	}
+	return { ...BASE_AUDIO_SRC_ALIASES };
 }
 
-// Create reverse lookup for performance
-const audioSrcReverseAliases: Record<string, string> = {};
-for (const id in audioSrcAliases) {
-	const alias = audioSrcAliases[id];
-	if (alias !== undefined) audioSrcReverseAliases[alias] = id;
+function getAudioSrcReverseAliases(): Record<string, string> {
+	const reverse: Record<string, string> = {};
+	const aliases = getAudioSrcAliases();
+	for (const id in aliases) {
+		const alias = aliases[id];
+		if (alias !== undefined) reverse[alias] = id;
+	}
+	return reverse;
 }
 
 let audioDevices: Record<string, string> = {};
@@ -137,13 +150,13 @@ export function deriveAudioSources(
 }
 
 function getAudioSrcName(id: string) {
-	const name = audioSrcAliases[id];
+	const name = getAudioSrcAliases()[id];
 	if (name) return name;
 	return id;
 }
 
 export function getAudioSrcId(name: string) {
-	return audioSrcReverseAliases[name] ?? name;
+	return getAudioSrcReverseAliases()[name] ?? name;
 }
 
 function addAudioCardById(list: Record<string, string>, id: string) {

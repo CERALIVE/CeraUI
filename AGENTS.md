@@ -424,17 +424,34 @@ hosts are skipped). WHY: `setup.json` `hw` is a SINGLE hardcoded value packaged
 verbatim into the `ceralive-device` .deb for every board/arch — there is no
 per-board `setup.json`, and the image pipeline does NOT rewrite it (it leaves
 `/etc/ceralive/conf.d/hardware.conf` on `auto`). So an AMD64/N100 or Orange-Pi
-image still ships `hw:"rk3588"`, and `setup.hw` silently drives the wrong board
-profile in `sensors.ts` (sensor selection), `audio.ts` (device-label aliases),
-`pipelines.ts` (the `hardware` broadcast label), and `addons/reconciler.ts`
-(`{board}` artifact targeting). The guard turns that Todo-48-class silent drift
-into a visible boot signal WITHOUT changing any behaviour — every consumer still
-reads `setup.hw`. Converging those consumers onto auto-detection (making
-`setup.hw` a fallback/override) is a tracked follow-up, NOT done here (it touches
-module-load-time sync reads). cerastream's own `detect_hardware_kind` uses the
-same compatible→model→DMI precedence but does NOT echo the detected kind in
-`get-capabilities` (only derived caps), so CeraUI cannot consume it as a label
-today — a second follow-up.
+image still ships `hw:"rk3588"`. This guard stays as an independent boot-time
+signal and is NOT superseded by the provider below (it fires even when the engine
+is down, comparing setup.hw against the device-tree).
+
+**Resolved hardware-kind provider — `setup.hw` demoted to fallback (Todo 15).**
+`modules/system/hardware-kind.ts` is now the SINGLE runtime authority for "what
+board am I on". The four consumers that previously read `setup.hw` directly
+(`sensors.ts`, `audio.ts`, `pipelines.ts` → `getEffectiveHardware()`,
+`addons/reconciler.ts` `getBoard`) all resolve through it. Resolution order,
+highest-authority first, each tier failing through: (1) **engine** —
+cerastream's `get-capabilities` `platform.hardware_kind` (cerastream Todo 14),
+read via a NARROW RAW IPC PROBE (`probeEngineHardwareKind`) that dials the control
+socket directly and reads the optional `platform` field tolerantly, because the
+published `@ceralive/cerastream` client Zod-STRIPS the nested `platform.hardware_kind`
+field (the binding is not republished); (2) **device-tree** —
+`detectHardwareKindFromDeviceTree()` (`"unknown"` falls through); (3) **setup.hw** —
+the static value (KEPT as fallback + test seam; NOT removed); (4) **generic** floor.
+The resolved value is cached WITH its source tier (`getHardwareKindTier()`) and
+RE-RESOLVED on every engine reconnect/capability refresh (`engine-reconnect.ts`
+heal path re-runs `getHardwareKind()` before re-broadcasting pipelines/sources) —
+so a boot-time device-tree/setup.hw fallback is superseded by the engine value once
+cerastream comes up, and a re-resolution that CHANGES the kind logs a loud drift
+warning. Reads: `getHardwareKind()` (async, full ladder + cache) and
+`getHardwareKindCached()` (sync, hot paths; returns the `setup.hw` fallback before
+the first resolve so a boot-time read is byte-identical to the pre-migration value —
+RK3588 behavior is byte-unchanged, asserted in tests). Coverage:
+`tests/hardware-kind.test.ts` (resolution-order table, drift warning, each consumer
+under mocked kinds).
 
 Real platform pairing parses `PLATFORM_URL` before any secret registration or
 claim request. HTTPS is required on production and real devices; plaintext HTTP

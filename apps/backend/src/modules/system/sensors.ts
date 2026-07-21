@@ -32,13 +32,13 @@ import {
 
 import { getRTMPIngestStats } from "../ingest/rtmp.ts";
 import { getSRTIngestStats } from "../ingest/srt.ts";
-import { setup } from "../setup.ts";
 import {
 	notificationBroadcast,
 	notificationExists,
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { getHardwareKindCached } from "./hardware-kind.ts";
 
 const bootconfigService = "ceralive-firstboot-bootconfig";
 
@@ -187,8 +187,13 @@ export function initHardwareMonitoring() {
 		return;
 	}
 
+	// Resolve the board kind once from the live provider (engine → device-tree →
+	// setup.hw → generic) rather than the static setup.hw, so a mismatched image
+	// still selects the correct sensor impl + dmesg watcher for the real board.
+	const hw = getHardwareKindCached();
+
 	let sensorsFunc: (() => Promise<void>) | undefined;
-	switch (setup.hw) {
+	switch (hw) {
 		case "jetson":
 			sensorsFunc = updateSensorsJetson;
 			break;
@@ -196,7 +201,7 @@ export function initHardwareMonitoring() {
 			sensorsFunc = updateSensorsRk3588;
 			break;
 		default:
-			logger.warn(`Unknown sensors for ${setup.hw}`);
+			logger.warn(`Unknown sensors for ${hw}`);
 	}
 
 	if (sensorsFunc) {
@@ -219,7 +224,7 @@ export function initHardwareMonitoring() {
 	}
 
 	/* Hardware-specific monitoring */
-	switch (setup.hw) {
+	switch (hw) {
 		case "jetson": {
 			/* Monitor the kernel log for undervoltage events */
 			startDmesgWatcher((data) => {

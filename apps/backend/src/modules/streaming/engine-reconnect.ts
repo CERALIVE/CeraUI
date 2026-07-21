@@ -58,6 +58,7 @@
 // `boot-guard.ts`) so the loop is unit-testable without real timers or a socket.
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import { getHardwareKind } from "../system/hardware-kind.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	type CapabilitiesServiceDeps,
@@ -142,6 +143,11 @@ function buildDefaultBroadcastEngineState(
 	sourcesOverride: EngineDeviceCacheDeps | undefined,
 ): () => Promise<void> {
 	return async () => {
+		// Ordering is load-bearing: re-resolve the hardware kind BEFORE the
+		// pipelines/sources broadcasts, which read the freshly-cached kind live via
+		// getEffectiveHardware(). The engine is reachable again, so its
+		// platform.hardware_kind now supersedes any boot-time fallback.
+		await getHardwareKind();
 		broadcastMsg("capabilities", getLastCapabilities());
 		broadcastMsg("pipelines", getPipelinesMessage());
 		await (sourcesOverride
