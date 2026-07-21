@@ -528,6 +528,10 @@ const en = {
 					title: "Preview failed to start",
 					body: "The engine couldn't start the preview pipeline. Start it again to retry.",
 				},
+				passthroughActive: {
+					title: "Preview unavailable during passthrough",
+					body: "The camera's stream goes straight to the output, so there's nothing to preview here.",
+				},
 				pausedHidden: {
 					title: "Preview paused",
 					body: "Preview stopped after going unwatched to save resources. Resume to view it again.",
@@ -603,6 +607,11 @@ const en = {
 			chip: "In {input:string} \u2192 Out {output:string}",
 			always:
 				"The engine always re-encodes the incoming stream to your configured output codec \u2014 there's no passthrough.",
+		},
+		passthrough: {
+			activeChip: "Passthrough",
+			activeHint:
+				"The camera's stream goes straight to the output \u2014 the device isn't re-encoding, so adaptive bonded bitrate is inactive.",
 		},
 		modes: {
 			label: "Mode",
@@ -682,6 +691,20 @@ const en = {
 			axisSelected: "Selected",
 			axisDeviceMax: "Device max",
 			fpsAvailableAt: "{fps:number} fps available at {resolution:string}",
+			passthrough: {
+				title: "Passthrough",
+				auto: "Auto",
+				force: "Force",
+				off: "Off",
+				disclosurePassthrough:
+					"Passthrough \u2014 the camera controls the bitrate; adaptive bonded bitrate is inactive.",
+				disclosureTranscode:
+					"Re-encoding {input:string}\u2192{output:string} \u2014 adaptive bitrate active.",
+				disclosureForceUnavailable:
+					"Force passthrough can't apply \u2014 this source can't emit the output codec, so the stream won't start. Use Auto or Off.",
+				bitrateFixed: "Bitrate set by camera \u2014 passthrough active.",
+				inputRaw: "raw",
+			},
 		},
 	},
 	dialogs: {

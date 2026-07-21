@@ -543,6 +543,10 @@ const de = {
 					title: "Vorschau konnte nicht starten",
 					body: "Die Engine konnte die Vorschau-Pipeline nicht starten. Starte sie erneut.",
 				},
+				passthroughActive: {
+					title: "Vorschau während Passthrough nicht verfügbar",
+					body: "Der Kamerastream geht direkt an den Ausgang, daher gibt es hier nichts zur Vorschau.",
+				},
 				pausedHidden: {
 					title: "Vorschau pausiert",
 					body: "Die Vorschau wurde nach längerer Nichtbeachtung gestoppt, um Ressourcen zu sparen. Fortsetzen, um sie wieder anzuzeigen.",
@@ -620,6 +624,11 @@ const de = {
 			chip: "Eingang {input} \u2192 Ausgang {output}",
 			always:
 				"Die Engine kodiert den eingehenden Stream immer in den konfigurierten Ausgabe-Codec um \u2013 es gibt keine Durchleitung.",
+		},
+		passthrough: {
+			activeChip: "Passthrough",
+			activeHint:
+				"Der Kamerastream geht direkt an den Ausgang — das Gerät kodiert nicht neu, daher ist die adaptive gebündelte Bitrate inaktiv.",
 		},
 		modes: {
 			label: "Modus",
@@ -699,6 +708,20 @@ const de = {
 			axisSelected: "Ausgewählt",
 			axisDeviceMax: "Geräte-Maximum",
 			fpsAvailableAt: "{fps} fps verfügbar bei {resolution}",
+			passthrough: {
+				title: "Passthrough",
+				auto: "Automatisch",
+				force: "Erzwingen",
+				off: "Aus",
+				disclosurePassthrough:
+					"Passthrough — die Kamera steuert die Bitrate; die adaptive gebündelte Bitrate ist inaktiv.",
+				disclosureTranscode:
+					"Neukodierung {input}→{output} — adaptive Bitrate aktiv.",
+				disclosureForceUnavailable:
+					"Passthrough kann nicht erzwungen werden — diese Quelle kann den Ausgabecodec nicht liefern, der Stream startet nicht. Verwende Automatisch oder Aus.",
+				bitrateFixed: "Bitrate von der Kamera festgelegt — Passthrough aktiv.",
+				inputRaw: "unkomprimiert",
+			},
 		},
 	},
 	dialogs: {

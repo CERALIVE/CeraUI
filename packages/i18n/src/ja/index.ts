@@ -1149,6 +1149,10 @@ const ja = {
 					title: "プレビューの開始に失敗しました",
 					body: "エンジンがプレビューパイプラインを開始できませんでした。開始し直して再試行してください。",
 				},
+				passthroughActive: {
+					title: "パススルー中はプレビューを利用できません",
+					body: "カメラのストリームは直接出力へ送られるため、ここにプレビューするものはありません。",
+				},
 				pausedHidden: {
 					title: "プレビューを一時停止しました",
 					body: "リソースを節約するため、閲覧されない状態が続いてプレビューを停止しました。再開すると再び表示できます。",
@@ -1226,6 +1230,11 @@ const ja = {
 			chip: "入力 {input} \u2192 出力 {output}",
 			always:
 				"エンジンは受信ストリームを常に設定した出力コーデックに再エンコードします。パススルーはありません。",
+		},
+		passthrough: {
+			activeChip: "パススルー",
+			activeHint:
+				"カメラのストリームが直接出力へ送られます — デバイスは再エンコードしないため、適応型ボンディングビットレートは無効です。",
 		},
 		modes: {
 			label: "モード",
@@ -1306,6 +1315,20 @@ const ja = {
 			axisSelected: "選択中",
 			axisDeviceMax: "デバイス最大",
 			fpsAvailableAt: "{fps} fps は {resolution} で利用可能",
+			passthrough: {
+				title: "パススルー",
+				auto: "自動",
+				force: "強制",
+				off: "オフ",
+				disclosurePassthrough:
+					"パススルー — カメラがビットレートを制御します。適応型ボンディングビットレートは無効です。",
+				disclosureTranscode:
+					"再エンコード {input}→{output} — 適応型ビットレート有効。",
+				disclosureForceUnavailable:
+					"パススルーを強制できません — このソースは出力コーデックを出力できないため、配信を開始できません。自動またはオフを使用してください。",
+				bitrateFixed: "ビットレートはカメラが設定 — パススルー有効。",
+				inputRaw: "非圧縮",
+			},
 		},
 	},
 	dialogs: {

@@ -357,6 +357,7 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 			framerate: 60,
 			codec: "H.264",
 			inputCodec: undefined,
+			passthrough: undefined,
 			transport: "SRTLA",
 		});
 	});
@@ -382,6 +383,7 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 			framerate: 60,
 			codec: "H.265",
 			inputCodec: undefined,
+			passthrough: undefined,
 			transport: "SRTLA",
 		});
 	});
@@ -409,6 +411,7 @@ describe("deriveActiveSummary — capability vs active-config split (Todo 23)", 
 			framerate: undefined,
 			codec: undefined,
 			inputCodec: undefined,
+			passthrough: undefined,
 			transport: "SRTLA",
 		});
 	});

@@ -708,6 +708,8 @@ const unavailableBand = $derived.by(() => {
 			return { title: bands.deviceBusy.title(), body: bands.deviceBusy.body() };
 		case 'pipelineFailed':
 			return { title: bands.pipelineFailed.title(), body: bands.pipelineFailed.body() };
+		case 'passthroughActive':
+			return { title: bands.passthroughActive.title(), body: bands.passthroughActive.body() };
 		case 'pausedHidden':
 			return { title: bands.pausedHidden.title(), body: bands.pausedHidden.body() };
 		default:

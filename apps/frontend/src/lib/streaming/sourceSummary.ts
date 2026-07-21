@@ -397,6 +397,8 @@ export interface ActiveSummary {
 	codec: string | undefined;
 	/** Incoming-codec label (`H.264`) for the transcode chip; set ONLY for a network source with a reported `input_codec` (else undefined). */
 	inputCodec: string | undefined;
+	/** `true` when the live session is a same-codec passthrough graph (engine `active_encode.passthrough`); undefined idle/legacy. */
+	passthrough: boolean | undefined;
 	/** Relay transport token (`SRTLA`). */
 	transport: string;
 }
@@ -475,6 +477,7 @@ export function deriveActiveSummary(
 			inputCodecToken && isNetworkSource
 				? formatCodec(inputCodecToken)
 				: undefined,
+		passthrough: live ? activeEncode?.passthrough : undefined,
 		transport: resolveTransportToken(config, caps),
 	};
 }

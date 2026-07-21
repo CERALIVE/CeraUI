@@ -139,9 +139,14 @@ export const framerateSchema = z.union([
 // videoCodecSchema so persisted config round-trips cleanly.
 export const videoCodecSchema = z.enum(["h264", "h265"]);
 
+// Same-codec passthrough policy — defined locally to keep this schema free of an
+// engine-binding dependency. Mirrors the @ceraui/rpc videoPassthroughSchema.
+export const videoPassthroughSchema = z.enum(["auto", "force", "off"]);
+
 export type Resolution = z.infer<typeof resolutionSchema>;
 export type Framerate = z.infer<typeof framerateSchema>;
 export type VideoCodec = z.infer<typeof videoCodecSchema>;
+export type VideoPassthrough = z.infer<typeof videoPassthroughSchema>;
 
 // Bitrate balancer algorithm, defined locally — like resolution/framerate above
 // — to keep this schema free of an engine-binding dependency.
@@ -222,6 +227,9 @@ export const runtimeConfigSchema = z.object({
 	// optional, same style as resolution/framerate above; absent = engine default.
 	video_codec: videoCodecSchema.optional(),
 	selected_video_input: z.string().optional(),
+	// Same-codec passthrough policy (auto/force/off). Additive-optional; absent =
+	// auto. Sent to the engine at start; never re-encodes silently under force.
+	video_passthrough: videoPassthroughSchema.optional(),
 	// Device-first operator source selection (StreamSource id). Additive-optional;
 	// `pipeline`/`selected_video_input` stay the engine-wire fields DERIVED from it
 	// at the procedure layer (T3). A legacy config without it back-derives `source`
@@ -298,6 +306,7 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	max_br: 5000,
 	delay: 0,
 	balancer: "adaptive",
+	video_passthrough: "auto",
 	bitrate_overlay: false,
 	autostart: false,
 	kiosk_enabled: false,

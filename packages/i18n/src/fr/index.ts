@@ -1309,6 +1309,10 @@ const fr = {
 					title: "Échec du démarrage de l'aperçu",
 					body: "Le moteur n'a pas pu démarrer le pipeline d'aperçu. Redémarrez-le pour réessayer.",
 				},
+				passthroughActive: {
+					title: "Aperçu indisponible pendant le passthrough",
+					body: "Le flux de la caméra va directement à la sortie, il n'y a donc rien à prévisualiser ici.",
+				},
 				pausedHidden: {
 					title: "Aperçu en pause",
 					body: "L'aperçu s'est arrêté après être resté sans surveillance pour économiser des ressources. Reprenez pour le revoir.",
@@ -1386,6 +1390,11 @@ const fr = {
 			chip: "Entrée {input} \u2192 Sortie {output}",
 			always:
 				"Le moteur ré-encode toujours le flux entrant dans le codec de sortie configuré \u2014 il n'y a pas de passthrough.",
+		},
+		passthrough: {
+			activeChip: "Passthrough",
+			activeHint:
+				"Le flux de la caméra va directement à la sortie — l'appareil ne réencode pas, donc le débit adaptatif agrégé est inactif.",
 		},
 		modes: {
 			label: "Mode",
@@ -1465,6 +1474,20 @@ const fr = {
 			axisSelected: "Sélectionné",
 			axisDeviceMax: "Maximum de l'appareil",
 			fpsAvailableAt: "{fps} fps disponible en {resolution}",
+			passthrough: {
+				title: "Passthrough",
+				auto: "Automatique",
+				force: "Forcer",
+				off: "Désactivé",
+				disclosurePassthrough:
+					"Passthrough — la caméra contrôle le débit ; le débit adaptatif agrégé est inactif.",
+				disclosureTranscode:
+					"Réencodage {input}→{output} — débit adaptatif actif.",
+				disclosureForceUnavailable:
+					"Impossible de forcer le passthrough — cette source ne peut pas émettre le codec de sortie, le flux ne démarrera pas. Utilisez Automatique ou Désactivé.",
+				bitrateFixed: "Débit fixé par la caméra — passthrough actif.",
+				inputRaw: "non compressé",
+			},
 		},
 	},
 	dialogs: {

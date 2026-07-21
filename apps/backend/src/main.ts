@@ -71,6 +71,7 @@ import {
 } from "./modules/remote-control/telemetry-recorder.ts";
 import { setup } from "./modules/setup.ts";
 import { setMockActiveEncodeProvider } from "./modules/streaming/active-encode-status.ts";
+import { startActivePassthroughBridge } from "./modules/streaming/active-passthrough.ts";
 import {
 	setMockAudioDevicesProvider,
 	startAudioDeviceWatcher,
@@ -277,6 +278,12 @@ initHardwareMonitoring();
 initDeviceStats();
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
 await guardNonCritical("srt-ingest", initSRTIngest);
+// Raw passthrough event bridge: the typed cerastream binding strips
+// active_encode.passthrough, so a persistent raw subscription reads it for the
+// live "Passthrough active" surfacing. Fail-soft (bounded-backoff self-heal).
+await guardNonCritical("passthrough-bridge", async () => {
+	startActivePassthroughBridge();
+});
 // Provision an initial SSH password on a device that has never had one BEFORE
 // the sync/probe below run — SSH is enabled-by-default at the OS level but a
 // password was only ever minted on an explicit operator action, leaving a fresh
