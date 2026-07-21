@@ -27,7 +27,7 @@ import {
 	resolutionSchema,
 } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
-import { setup } from "../setup.ts";
+import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import {
 	type CapabilitiesServiceDeps,
 	getCapabilities,
@@ -77,14 +77,17 @@ export type HardwareType = (typeof VALID_HARDWARE_TYPES)[number];
 
 let pipelines: Record<string, Pipeline> = {};
 
-// Dev-only mock hardware override (defaults to null, using setup.hw)
+// Dev-only mock hardware override (defaults to null, using the resolved kind)
 let mockHardwareOverride: HardwareType | null = null;
 
 /**
- * Get the effective hardware type (mock override or setup.hw)
+ * Get the effective hardware type: the dev mock override when set, else the
+ * live-resolved kind from the cached provider (which falls back to `setup.hw`
+ * before the first resolution, so a boot-time read stays unchanged on RK3588).
  */
 export function getEffectiveHardware(): PipelineHardwareType {
-	return (mockHardwareOverride ?? setup.hw) as PipelineHardwareType;
+	return (mockHardwareOverride ??
+		getHardwareKindCached()) as PipelineHardwareType;
 }
 
 /**

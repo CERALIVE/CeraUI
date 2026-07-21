@@ -57,6 +57,7 @@ import {
 	type MockReconcilerHarness,
 } from "../../mocks/providers/addons.ts";
 import { isRealDevice } from "../system/device-detection.ts";
+import { getHardwareKindCached } from "../system/hardware-kind.ts";
 
 /** Persisted on `lastError` when no compatible artifact exists for the live OS. */
 export const ADDON_NOT_AVAILABLE_FOR_OS_VERSION =
@@ -333,17 +334,18 @@ async function buildDefaultDeps(): Promise<ReconcilerDeps> {
 	// Dynamic import keeps the heavy streaming/config graph (and setup.json's
 	// required top-level load) out of the module's static import set, so tests
 	// that inject their own deps never trigger it.
-	const [streaming, config, setupMod] = await Promise.all([
+	const [streaming, config] = await Promise.all([
 		import("../streaming/streaming.ts"),
 		import("../config.ts"),
-		import("../setup.ts"),
 	]);
 
 	return {
 		isRealDevice: () => isRealDevice(),
 		getIsStreaming: () => streaming.getIsStreaming(),
 		getOsVersionId: readOsVersionId,
-		getBoard: () => setupMod.setup.hw,
+		// `{board}` artifact targeting follows the live-resolved kind (not static
+		// setup.hw), so a mismatched image fetches the correct board's sysext.
+		getBoard: () => getHardwareKindCached(),
 		getAddons: () => config.getAddons(),
 		readDescriptor: readBakedDescriptor,
 		rawExists: (id) => Bun.file(`${STAGE_DIR}/${id}.raw`).exists(),

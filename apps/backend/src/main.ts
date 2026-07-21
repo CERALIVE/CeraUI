@@ -105,6 +105,7 @@ import {
 	warnOnHardwareIdentityDrift,
 } from "./modules/system/device-detection.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
+import { getHardwareKind } from "./modules/system/hardware-kind.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import {
 	initHardwareMonitoring,
@@ -235,6 +236,15 @@ await guardNonCritical("pipelines", () =>
 			: {},
 	),
 );
+
+// Resolve the runtime hardware kind (engine → device-tree → setup.hw → generic)
+// and seed the cache BEFORE the sensor/audio/pipeline consumers read it, so
+// getHardwareKindCached() surfaces the live-detected board rather than the static
+// setup.hw. A boot with cerastream not-yet-up resolves the device-tree/setup.hw
+// tier; the engine-reconnect heal re-resolves once cerastream comes up.
+await guardNonCritical("hardware-kind", async () => {
+	await getHardwareKind();
+});
 
 // Migrate persisted config vs the offered set: a `pipeline` the current hardware
 // no longer offers is marked unavailable (blocks stream-start) and warned about —
