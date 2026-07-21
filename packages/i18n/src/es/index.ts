@@ -584,7 +584,7 @@ const es = {
 				other: "Otro",
 				uvc_h264: "UVC H.264",
 				uvc_h265: "UVC H.265",
-				mjpeg: "MJPEG",
+				mjpeg: "UVC · MJPEG",
 				camlink: "Cam Link",
 			},
 		},
@@ -608,7 +608,8 @@ const es = {
 				"Tu dispositivo admite este tipo de fuente, pero ahora mismo no hay nada conectado para ella. Conecta un dispositivo compatible para usarla, o elige una fuente que ya esté conectada.",
 			mjpegTitle: "¿Por qué MJPEG?",
 			mjpegBody:
-				"Este dispositivo de captura no ofrece codificación H.264/H.265 por hardware a través de USB, así que el codificador captura su vídeo Motion-JPEG (MJPEG) y lo vuelve a codificar al códec que elijas. Es una descripción precisa del hardware, no un fallo.",
+				"Se trata de un dispositivo USB Video Class (UVC) estándar que produce Motion-JPEG: su propia descripción de hardware USB solo declara vídeo sin comprimir y Motion-JPEG (MJPEG) — sin codificación H.264/H.265 por hardware a través de USB y sin ningún canal de fabricante oculto para ello —, así que el codificador captura su vídeo MJPEG y lo vuelve a codificar al códec que elijas. Es una descripción precisa del hardware, no un fallo.",
+			mjpegLearnMore: "Cómo comprobamos UVC H.264",
 		},
 		summary: {
 			nowStreaming: "Transmitiendo ahora",
@@ -1043,7 +1044,7 @@ const es = {
 		// Video sources
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "Cámara UVC H264",
+			libuvch264: "Cámara USB con H.264 por hardware (UVC)",
 			hdmi: "Captura HDMI",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
