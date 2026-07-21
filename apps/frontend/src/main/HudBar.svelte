@@ -37,12 +37,15 @@ const HEALTH_ICON: Record<HealthIndicator, typeof CircleCheckIcon> = {
 	healthy: CircleCheckIcon,
 	degraded: TriangleAlertIcon,
 	dead: CircleXIcon,
+	// `idle` is the calm standing-by posture — a filled dot, never the red cross.
+	idle: CircleDotIcon,
 	unknown: CircleHelpIcon,
 };
 const HEALTH_ICON_COLOR: Record<HealthIndicator, string> = {
 	healthy: 'text-status-success',
 	degraded: 'text-status-warning',
 	dead: 'text-status-error',
+	idle: 'text-status-neutral',
 	unknown: 'text-status-neutral',
 };
 
@@ -86,7 +89,9 @@ const healthLabel = $derived(
 			? $LL.hud.healthDegraded()
 			: health === 'dead'
 				? $LL.hud.healthDead()
-				: $LL.hud.healthUnknown(),
+				: health === 'idle'
+					? $LL.hud.healthIdle()
+					: $LL.hud.healthUnknown(),
 );
 
 // Stream-health rollup DETAIL (Task 15): the per-subsystem breakdown
@@ -116,7 +121,9 @@ const rollupLabel = $derived(
 			? $LL.hud.healthDegraded()
 			: rollupState === 'dead'
 				? $LL.hud.healthDead()
-				: $LL.hud.healthUnknown(),
+				: rollupState === 'idle'
+					? $LL.hud.healthIdle()
+					: $LL.hud.healthUnknown(),
 );
 
 // Top reason behind a non-healthy rollup (Task 16): the backend names the
@@ -239,17 +246,20 @@ $effect(() => {
 	</span>
 {/snippet}
 
-{#snippet rollupTile(testid: string, label: string, ok: boolean, okText: string, badText: string, okIcon: typeof CircleCheckIcon | null, badIcon: typeof CircleCheckIcon)}
-	<div class="bg-secondary/40 flex flex-col gap-1 rounded-lg p-2.5" data-testid={testid}>
+{#snippet rollupTile(testid: string, label: string, state: 'ok' | 'bad' | 'unknown', okText: string, badText: string, unknownText: string, okIcon: typeof CircleCheckIcon | null, badIcon: typeof CircleCheckIcon)}
+	<div class="bg-secondary/40 flex flex-col gap-1 rounded-lg p-2.5" data-testid={testid} data-state={state}>
 		<dt class="text-muted-foreground text-[0.7rem] font-medium">{label}</dt>
-		<dd class={cn('inline-flex items-center gap-1 font-medium', ok ? 'text-status-success' : 'text-status-warning')}>
-			{#if ok}
+		<dd class={cn('inline-flex items-center gap-1 font-medium', state === 'ok' ? 'text-status-success' : state === 'bad' ? 'text-status-warning' : 'text-muted-foreground')}>
+			{#if state === 'ok'}
 				{#if okIcon}{@const OkIcon = okIcon}<OkIcon class="size-3.5 shrink-0" aria-hidden="true" />{/if}
 				{okText}
-			{:else}
+			{:else if state === 'bad'}
 				{@const BadIcon = badIcon}
 				<BadIcon class="size-3.5 shrink-0" aria-hidden="true" />
 				{badText}
+			{:else}
+				<CircleHelpIcon class="size-3.5 shrink-0" aria-hidden="true" />
+				{unknownText}
 			{/if}
 		</dd>
 	</div>
@@ -428,6 +438,10 @@ $effect(() => {
 												<CircleXIcon class="text-status-error mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
 												<span><span class="font-semibold">{$LL.hud.healthDead()}:</span> {$LL.hud.healthExplainDead()}</span>
 											</li>
+											<li class="flex items-start gap-1.5">
+												<CircleDotIcon class="text-status-neutral mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+												<span><span class="font-semibold">{$LL.hud.healthIdle()}:</span> {$LL.hud.healthExplainIdle()}</span>
+											</li>
 										</ul>
 									</Tooltip.Content>
 								</Tooltip.Root>
@@ -469,27 +483,30 @@ $effect(() => {
 						{@render rollupTile(
 							'health-process',
 							$LL.hud.healthProcess(),
-							rollup.process.alive,
+							rollup.process.alive === true ? 'ok' : rollup.process.alive === false ? 'bad' : 'unknown',
 							$LL.hud.healthRunning(),
 							$LL.hud.healthNotRunning(),
+							$LL.hud.healthUnknown(),
 							CircleCheckIcon,
 							CircleXIcon,
 						)}
 						{@render rollupTile(
 							'health-srt',
 							$LL.hud.healthSrt(),
-							!rollup.srt.reconnecting,
+							rollup.srt.reconnecting === false ? 'ok' : rollup.srt.reconnecting === true ? 'bad' : 'unknown',
 							$LL.hud.healthStable(),
 							$LL.hud.healthReconnecting(),
+							$LL.hud.healthUnknown(),
 							null,
 							TriangleAlertIcon,
 						)}
 						{@render rollupTile(
 							'health-frames',
 							$LL.hud.healthFrames(),
-							rollup.frames.advancing,
+							rollup.frames.advancing === true ? 'ok' : rollup.frames.advancing === false ? 'bad' : 'unknown',
 							$LL.hud.healthAdvancing(),
 							$LL.hud.healthStalled(),
+							$LL.hud.healthUnknown(),
 							null,
 							TriangleAlertIcon,
 						)}

@@ -1003,6 +1003,7 @@ const ptBR = {
 		healthHealthy: "Saudável",
 		healthDegraded: "Degradado",
 		healthDead: "Inativo",
+		healthIdle: "Ocioso",
 		healthUnknown: "Desconhecido",
 		announceStreamStarted: "Transmissão iniciada",
 		announceStreamStopped: "Transmissão interrompida",
@@ -1024,6 +1025,7 @@ const ptBR = {
 			"Transmitindo, mas os quadros estão travados ou alguns links agregados estão fora do ar.",
 		healthExplainDead:
 			"O processo do codificador não está em execução. A transmissão está fora do ar.",
+		healthExplainIdle: "Sem transmissão. O dispositivo está ocioso e pronto.",
 		buffering: "Armazenando em buffer",
 		bufferingStoreForward: "Armazenar e encaminhar ativo",
 		bufferingHint:

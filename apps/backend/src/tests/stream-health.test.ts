@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { call } from "@orpc/server";
 import {
 	broadcastHealthIfChanged,
+	deriveFramesAdvancing,
 	deriveStreamHealth,
 	HEALTH_EVENT_TYPE,
 	type LivenessSources,
@@ -14,6 +15,7 @@ import { streamHealthProcedure } from "../rpc/procedures/streaming.procedure.ts"
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 const HEALTHY: LivenessSources = {
+	isStreaming: true,
 	processAlive: true,
 	framesAdvancing: true,
 	frameCount: 1500,
@@ -35,12 +37,24 @@ const ONE_LINK_DOWN: LivenessSources = {
 };
 
 const DEAD: LivenessSources = {
+	isStreaming: true,
 	processAlive: false,
 	framesAdvancing: false,
 	frameCount: 0,
 	reconnecting: true,
 	reconnectCount: 4,
 	linkCount: 3,
+	activeLinks: 0,
+};
+
+const IDLE: LivenessSources = {
+	isStreaming: false,
+	processAlive: null,
+	framesAdvancing: null,
+	frameCount: null,
+	reconnecting: null,
+	reconnectCount: 0,
+	linkCount: 0,
 	activeLinks: 0,
 };
 
@@ -110,6 +124,86 @@ describe("deriveStreamHealth — tri-state derivation", () => {
 		expect(h.state).toBe("dead");
 		expect(h.process.alive).toBe(false);
 		expect(h.srt).toEqual({ reconnecting: true, reconnectCount: 4 });
+	});
+});
+
+describe("deriveStreamHealth — idle posture (idle != dead, Todo 19)", () => {
+	test("not streaming renders idle with unknown (null) liveness, not dead", () => {
+		const h = deriveStreamHealth(IDLE);
+		expect(h.state).toBe("idle");
+		expect(h.process.alive).toBeNull();
+		expect(h.frames.advancing).toBeNull();
+		expect(h.frames.count).toBeNull();
+		expect(h.srt.reconnecting).toBeNull();
+		expect(h.reason).toBeUndefined();
+	});
+
+	test("idle nullifies liveness even if the sources carry stale booleans", () => {
+		// A collector that leaves concrete values while not streaming must still
+		// render the honest idle posture — the state gate wins.
+		const h = deriveStreamHealth({
+			...IDLE,
+			processAlive: false,
+			framesAdvancing: false,
+			frameCount: 0,
+			reconnecting: false,
+		});
+		expect(h.state).toBe("idle");
+		expect(h.process.alive).toBeNull();
+		expect(h.frames.advancing).toBeNull();
+		expect(h.srt.reconnecting).toBeNull();
+	});
+
+	test("idle carries the (truthful) bond counts through", () => {
+		const h = deriveStreamHealth({ ...IDLE, linkCount: 2, activeLinks: 0 });
+		expect(h.state).toBe("idle");
+		expect(h.bond).toEqual({ linkCount: 2, activeLinks: 0 });
+	});
+});
+
+describe("deriveStreamHealth — tri-state srt.reconnecting (fixtures only)", () => {
+	// The honesty contract: the LIVE value is always `null`; these fixtures
+	// exercise all three RENDERING states so the HUD + a future producer are
+	// covered — no live true/false assertion exists anywhere.
+	test("false renders as a concrete stable value", () => {
+		expect(deriveStreamHealth(HEALTHY).srt.reconnecting).toBe(false);
+	});
+
+	test("true renders as a concrete reconnecting value", () => {
+		const h = deriveStreamHealth({ ...HEALTHY, reconnecting: true });
+		expect(h.srt.reconnecting).toBe(true);
+		// reconnecting is display-only — it never flips the state away from healthy.
+		expect(h.state).toBe("healthy");
+	});
+
+	test("null renders as unknown while streaming", () => {
+		const h = deriveStreamHealth({ ...HEALTHY, reconnecting: null });
+		expect(h.srt.reconnecting).toBeNull();
+		expect(h.state).toBe("healthy");
+	});
+});
+
+describe("deriveFramesAdvancing — real frame counter, never process liveness", () => {
+	test("stale telemetry is never advancing (degraded)", () => {
+		expect(deriveFramesAdvancing(false, true, true)).toBe(false);
+	});
+
+	test("fresh + counter advanced + pipeline playing => advancing", () => {
+		expect(deriveFramesAdvancing(true, true, true)).toBe(true);
+	});
+
+	test("fresh + counter flat (stalled) => not advancing, even if playing", () => {
+		expect(deriveFramesAdvancing(true, false, true)).toBe(false);
+	});
+
+	test("fresh + advanced but pipeline NOT playing => not advancing", () => {
+		expect(deriveFramesAdvancing(true, true, false)).toBe(false);
+	});
+
+	test("first read (counter unknown): falls back to the real pipeline state", () => {
+		expect(deriveFramesAdvancing(true, undefined, true)).toBe(true);
+		expect(deriveFramesAdvancing(true, undefined, false)).toBe(false);
+		expect(deriveFramesAdvancing(true, undefined, undefined)).toBe(false);
 	});
 });
 

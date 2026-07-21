@@ -35,6 +35,7 @@ const DEGRADED_ROLLUP: StreamHealthOutput = {
 };
 
 const LIVE_SOURCES: LivenessSources = {
+	isStreaming: true,
 	processAlive: true,
 	framesAdvancing: true,
 	frameCount: 1234,
@@ -58,6 +59,7 @@ describe("buildLocalObservabilitySurface — pure projection", () => {
 		);
 
 		expect(surface).toEqual({
+			state: "healthy",
 			process: { alive: true, uptime: 123 },
 			frames: { advancing: true, count: 456 },
 			srt: { reconnecting: false, reconnectCount: 0 },
@@ -97,6 +99,24 @@ describe("getLocalObservability — reuses the Task 13 health source", () => {
 		const surface = getLocalObservability();
 		expect(typeof surface.process.uptime).toBe("number");
 		expect(surface.process.uptime).toBeGreaterThanOrEqual(0);
+	});
+
+	test("idle device: /api/health reads state:idle + alive:null, not a 'dead' alive:false", () => {
+		setLivenessSourcesForTest(() => ({
+			isStreaming: false,
+			processAlive: null,
+			framesAdvancing: null,
+			frameCount: null,
+			reconnecting: null,
+			reconnectCount: 0,
+			linkCount: 0,
+			activeLinks: 0,
+		}));
+		const surface = getLocalObservability();
+		expect(surface.state).toBe("idle");
+		expect(surface.process.alive).toBeNull();
+		expect(surface.frames.advancing).toBeNull();
+		expect(surface.srt.reconnecting).toBeNull();
 	});
 });
 

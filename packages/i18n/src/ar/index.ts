@@ -980,6 +980,7 @@ const ar = {
 		healthHealthy: "سليم",
 		healthDegraded: "متدهور",
 		healthDead: "متوقف",
+		healthIdle: "خامل",
 		healthUnknown: "غير معروف",
 		announceStreamStarted: "بدأ البث",
 		announceStreamStopped: "توقف البث",
@@ -1000,6 +1001,7 @@ const ar = {
 		healthExplainDegraded:
 			"يجري البث، لكن الإطارات متعثرة أو بعض روابط التجميع معطلة.",
 		healthExplainDead: "عملية المُرمِّز لا تعمل. البث متوقف.",
+		healthExplainIdle: "لا يوجد بث. الجهاز خامل وجاهز.",
 		buffering: "التخزين المؤقت",
 		bufferingStoreForward: "التخزين والإرسال نشط",
 		bufferingHint:

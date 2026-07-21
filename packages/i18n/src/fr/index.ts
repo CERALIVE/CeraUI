@@ -1027,6 +1027,7 @@ const fr = {
 		healthHealthy: "Sain",
 		healthDegraded: "Dégradé",
 		healthDead: "Hors service",
+		healthIdle: "Inactif",
 		healthUnknown: "Inconnu",
 		announceStreamStarted: "Diffusion démarrée",
 		announceStreamStopped: "Diffusion arrêtée",
@@ -1048,6 +1049,7 @@ const fr = {
 			"Diffusion en cours, mais images bloquées ou certaines liaisons agrégées hors service.",
 		healthExplainDead:
 			"Le processus d'encodage ne tourne pas. Le flux est hors service.",
+		healthExplainIdle: "Pas de diffusion. L'appareil est inactif et prêt.",
 		buffering: "Mise en mémoire tampon",
 		bufferingStoreForward: "Stockage et transfert actif",
 		bufferingHint:

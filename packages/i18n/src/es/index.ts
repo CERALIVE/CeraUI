@@ -261,6 +261,7 @@ const es = {
 		healthHealthy: "Saludable",
 		healthDegraded: "Degradado",
 		healthDead: "Caído",
+		healthIdle: "Inactivo",
 		healthUnknown: "Desconocido",
 		announceStreamStarted: "Transmisión iniciada",
 		announceStreamStopped: "Transmisión detenida",
@@ -282,6 +283,7 @@ const es = {
 			"Transmitiendo, pero los fotogramas están estancados o algunos enlaces agregados están caídos.",
 		healthExplainDead:
 			"El proceso del codificador no está en ejecución. La transmisión está caída.",
+		healthExplainIdle: "Sin transmisión. El dispositivo está inactivo y listo.",
 		buffering: "Almacenando",
 		bufferingStoreForward: "Almacenar y reenviar activo",
 		bufferingHint:

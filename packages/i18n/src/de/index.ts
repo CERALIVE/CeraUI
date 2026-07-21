@@ -261,6 +261,7 @@ const de = {
 		healthHealthy: "Gesund",
 		healthDegraded: "Beeinträchtigt",
 		healthDead: "Ausgefallen",
+		healthIdle: "Inaktiv",
 		healthUnknown: "Unbekannt",
 		announceStreamStarted: "Streaming gestartet",
 		announceStreamStopped: "Streaming gestoppt",
@@ -282,6 +283,7 @@ const de = {
 			"Streaming läuft, aber Frames stocken oder einige gebündelte Verbindungen sind ausgefallen.",
 		healthExplainDead:
 			"Encoder-Prozess läuft nicht. Der Stream ist ausgefallen.",
+		healthExplainIdle: "Kein Streaming. Das Gerät ist inaktiv und bereit.",
 		buffering: "Pufferung",
 		bufferingStoreForward: "Speichern & Weiterleiten aktiv",
 		bufferingHint:

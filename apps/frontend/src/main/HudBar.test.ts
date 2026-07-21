@@ -290,3 +290,64 @@ describe("HudBar sheet reflow (Task 18) — one-glance order + trimmed compact s
 		expect(strip.querySelector('[title="Temperature"]')).not.toBeNull();
 	});
 });
+
+describe("HudBar health honesty (Todo 19) — idle dot + tri-state tiles", () => {
+	function idleRollup(): HealthRollup {
+		return {
+			state: "idle",
+			process: { alive: null },
+			frames: { advancing: null, count: null },
+			srt: { reconnecting: null, reconnectCount: 0 },
+			bond: { linkCount: 0, activeLinks: 0 },
+		};
+	}
+
+	it("idle renders a calm idle dot (data-state=idle), never the dead cross", () => {
+		state.health = "idle";
+		state.hud = makeHud({ isStreaming: false });
+		render(HudBar);
+		const dot = screen.getByTestId("stream-health");
+		expect(dot.getAttribute("data-state")).toBe("idle");
+		expect(dot.getAttribute("data-state")).not.toBe("dead");
+		expect(dot.textContent).toContain("Idle");
+	});
+
+	it("idle rollup tiles render the unknown tri-state, not 'stalled'/'not running'", async () => {
+		state.health = "idle";
+		state.rollup = idleRollup();
+		state.hud = makeHud({ isStreaming: true });
+		render(HudBar);
+		const dialog = await openSheet();
+		expect(
+			within(dialog).getByTestId("health-process").getAttribute("data-state"),
+		).toBe("unknown");
+		expect(
+			within(dialog).getByTestId("health-frames").getAttribute("data-state"),
+		).toBe("unknown");
+		expect(
+			within(dialog).getByTestId("health-srt").getAttribute("data-state"),
+		).toBe("unknown");
+	});
+
+	it("srt tile renders each tri-state input distinctly (false=ok, true=bad, null=unknown)", async () => {
+		const cases: Array<[boolean | null, string]> = [
+			[false, "ok"],
+			[true, "bad"],
+			[null, "unknown"],
+		];
+		for (const [reconnecting, expected] of cases) {
+			state.health = "healthy";
+			state.rollup = {
+				...healthyRollup(),
+				srt: { reconnecting, reconnectCount: 0 },
+			};
+			state.hud = makeHud({ isStreaming: true, bitrateKbps: 6000 });
+			const view = render(HudBar);
+			const dialog = await openSheet();
+			expect(
+				within(dialog).getByTestId("health-srt").getAttribute("data-state"),
+			).toBe(expected);
+			view.unmount();
+		}
+	});
+});

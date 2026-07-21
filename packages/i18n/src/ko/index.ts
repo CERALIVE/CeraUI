@@ -851,6 +851,7 @@ const ko = {
 		healthHealthy: "정상",
 		healthDegraded: "저하",
 		healthDead: "중단",
+		healthIdle: "대기",
 		healthUnknown: "알 수 없음",
 		announceStreamStarted: "스트리밍이 시작되었습니다",
 		announceStreamStopped: "스트리밍이 중지되었습니다",
@@ -872,6 +873,8 @@ const ko = {
 			"스트리밍 중이지만 프레임이 정체되었거나 일부 본딩 링크가 다운되었습니다.",
 		healthExplainDead:
 			"인코더 프로세스가 실행되고 있지 않습니다. 스트림이 다운되었습니다.",
+		healthExplainIdle:
+			"스트리밍 중이 아닙니다. 장치가 대기 상태이며 준비되었습니다.",
 		buffering: "버퍼링",
 		bufferingStoreForward: "저장 후 전송 활성화",
 		bufferingHint: "링크가 끊겼습니다 — 디스크에 저장하고 복구되면 전송합니다.",

@@ -26,6 +26,7 @@ import {
 	ingestStreamHealth,
 	initialHealthSnapshot,
 	notificationForTransition,
+	parseHealthRollup,
 	parseHealthState,
 	reduceHealth,
 	resetStreamHealth,
@@ -40,6 +41,7 @@ describe("parseHealthState", () => {
 		expect(parseHealthState({ state: "healthy" })).toBe("healthy");
 		expect(parseHealthState({ state: "degraded" })).toBe("degraded");
 		expect(parseHealthState({ state: "dead" })).toBe("dead");
+		expect(parseHealthState({ state: "idle" })).toBe("idle");
 	});
 
 	it("collapses an unrecognised state string to `unknown`", () => {
@@ -142,6 +144,66 @@ describe("notificationForTransition", () => {
 	it("never alarms when settling into unknown", () => {
 		expect(notificationForTransition("healthy", "unknown")).toBeNull();
 		expect(notificationForTransition("dead", "unknown")).toBeNull();
+	});
+
+	it("never alarms on idle — stopping a stream is not a failure", () => {
+		expect(notificationForTransition("healthy", "idle")).toBeNull();
+		expect(notificationForTransition("degraded", "idle")).toBeNull();
+		expect(notificationForTransition("dead", "idle")).toBeNull();
+		expect(notificationForTransition("idle", "healthy")).toBeNull();
+	});
+});
+
+// ============================================
+// parseHealthRollup — tri-state null preservation
+// ============================================
+
+describe("parseHealthRollup", () => {
+	it("preserves an explicit null (idle / unknown) — never coerces to false", () => {
+		const rollup = parseHealthRollup({
+			state: "idle",
+			process: { alive: null },
+			frames: { advancing: null, count: null },
+			srt: { reconnecting: null, reconnectCount: 0 },
+			bond: { linkCount: 0, activeLinks: 0 },
+		});
+		expect(rollup?.state).toBe("idle");
+		expect(rollup?.process.alive).toBeNull();
+		expect(rollup?.frames.advancing).toBeNull();
+		expect(rollup?.frames.count).toBeNull();
+		expect(rollup?.srt.reconnecting).toBeNull();
+	});
+
+	it("renders each of the three tri-state srt.reconnecting inputs", () => {
+		for (const value of [true, false, null]) {
+			const rollup = parseHealthRollup({
+				state: "healthy",
+				process: { alive: true },
+				frames: { advancing: true, count: 10 },
+				srt: { reconnecting: value, reconnectCount: 0 },
+				bond: { linkCount: 1, activeLinks: 1 },
+			});
+			expect(rollup?.srt.reconnecting).toBe(value);
+		}
+	});
+
+	it("collapses a missing / non-boolean flag to false, but keeps a real observation", () => {
+		const rollup = parseHealthRollup({
+			state: "degraded",
+			process: { alive: true },
+			frames: { advancing: false, count: 5 },
+			srt: { reconnectCount: 0 },
+			bond: { linkCount: 2, activeLinks: 1 },
+		});
+		expect(rollup?.process.alive).toBe(true);
+		expect(rollup?.frames.advancing).toBe(false);
+		// Missing (not null) collapses to false, not null.
+		expect(rollup?.srt.reconnecting).toBe(false);
+	});
+
+	it("returns null for an unrecognised state so the consumer keeps its last rollup", () => {
+		expect(parseHealthRollup({ state: "wat" })).toBeNull();
+		expect(parseHealthRollup(null)).toBeNull();
 	});
 });
 

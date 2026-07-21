@@ -779,7 +779,11 @@ export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSc
 // liveness, engine frame production, SRT reconnect status, and srtla bond
 // link count. This is the device's single source of truth for "is the stream
 // actually working". READ-ONLY — never drives restart logic.
-export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead']);
+// `idle` (additive, device-stability Todo 19) is the truthful non-streaming
+// posture: the device is up but no stream is requested, so process/frame
+// liveness is UNKNOWN (rendered as `null`), never "dead". A consumer that
+// predates `idle` still parses the enum by widening; the shipped HUD renders it.
+export const healthStateSchema = z.enum(['healthy', 'degraded', 'dead', 'idle']);
 export type HealthState = z.infer<typeof healthStateSchema>;
 
 // The single most-actionable cause behind a non-healthy state — `component`
@@ -795,15 +799,22 @@ export type StreamHealthReason = z.infer<typeof streamHealthReasonSchema>;
 export const streamHealthOutputSchema = z.object({
 	state: healthStateSchema,
 	reason: streamHealthReasonSchema.optional(),
+	// `null` = unknown (idle posture): the device is up but not streaming, so
+	// process/frame liveness cannot be asserted. A boolean is a real streaming
+	// observation. Nullable is additive — legacy consumers coerced these with
+	// `=== true`, which stays correct for `null`.
 	process: z.object({
-		alive: z.boolean(),
+		alive: z.boolean().nullable(),
 	}),
 	frames: z.object({
-		advancing: z.boolean(),
-		count: z.number().int().nonnegative(),
+		advancing: z.boolean().nullable(),
+		count: z.number().int().nonnegative().nullable(),
 	}),
+	// Tri-state SRT reconnect: `true|false|null`. `null` = unknown — the honesty
+	// contract for the current stats-file source, which carries NO reconnect flag,
+	// so real hardware cannot truthfully produce `true`/`false` today.
 	srt: z.object({
-		reconnecting: z.boolean(),
+		reconnecting: z.boolean().nullable(),
 		reconnectCount: z.number().int().nonnegative(),
 	}),
 	bond: z.object({
