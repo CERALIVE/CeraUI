@@ -5,6 +5,7 @@ import type {
 import { getMockHealth, shouldUseMocks } from "../../mocks/mock-service.ts";
 import { broadcast } from "../../rpc/events.ts";
 import { getActiveEncodeLiveness } from "./active-passthrough.ts";
+import { reportAllLinksDown } from "./lifecycle-indicators.ts";
 import { buildLinkTelemetry } from "./link-telemetry.ts";
 import { genSrtlaIpList } from "./srtla.ts";
 import { getIsStreaming } from "./streaming.ts";
@@ -82,6 +83,12 @@ function deriveReason(s: LivenessSources): StreamHealthReason | undefined {
 	}
 	if (s.linkCount === 0) {
 		return { component: "links", detail: "No bonded links configured" };
+	}
+	if (s.activeLinks === 0) {
+		return {
+			component: "links",
+			detail: `All ${s.linkCount} link${s.linkCount === 1 ? "" : "s"} down \u2014 no data can be sent`,
+		};
 	}
 	if (s.activeLinks < s.linkCount) {
 		const down = s.linkCount - s.activeLinks;
@@ -265,10 +272,19 @@ export function resetHealthBroadcastState(): void {
  * existing 5s heartbeat tick — read-only, never triggers restart logic.
  */
 export function broadcastHealthIfChanged(): StreamHealthOutput {
-	const health = getStreamHealth();
+	const sources = collectLivenessSources();
+	const health = deriveStreamHealth(sources);
 	if (health.state !== lastBroadcastState) {
 		lastBroadcastState = health.state;
 		broadcast(HEALTH_EVENT_TYPE, health);
 	}
+	// Lifecycle indicator: all bonded links down mid-stream (0 active of N>0) is a
+	// distinct notification from the health "degraded" state; evaluated every tick
+	// so a link recovering clears it with a transient "links recovered" toast.
+	reportAllLinksDown({
+		isStreaming: sources.isStreaming,
+		linkCount: sources.linkCount,
+		activeLinks: sources.activeLinks,
+	});
 	return health;
 }

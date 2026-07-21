@@ -1210,6 +1210,16 @@ const ja = {
 			lostTitle: "デバイスが切断されました",
 			lostBody:
 				"デバイスを再接続して、このソースからの配信を再開してください。",
+			lostStreamingTitle: "ライブソースが切断されました",
+			lostStreamingBody:
+				"配信中のソースが失われました。再接続するか、別のソースに切り替えて配信を維持してください。",
+			audioLostStreamingTitle: "ライブ音声デバイスが切断されました",
+			audioLostStreamingBody:
+				"配信は無音で続いています。音声を復元するには音声デバイスを再接続してください。",
+			linksDownStreamingTitle: "すべてのボンディングリンクがダウン",
+			linksDownStreamingBody:
+				"現在データを送信できません。リンクが回復すると配信は自動的に再開します。",
+
 			audioNone: "オーディオソースが検出されません",
 			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
 			audioEdit: "コーデックと遅延",
@@ -1376,6 +1386,17 @@ const ja = {
 		streamHealthDegraded: "ストリーム状態が劣化しました",
 		streamHealthDead: "ストリームが停止しました",
 		streamHealthRecovered: "ストリーム状態が回復しました",
+		activeSourceLost:
+			"配信中の映像ソースが失われました。再接続するか、別のソースに切り替えて配信を維持してください。",
+		activeSourceRecovered: "映像ソースが再接続されました。",
+		activeAudioLost:
+			"配信中の音声デバイスが失われました。再接続されるまで配信は無音で続きます。",
+		activeAudioRecovered: "音声デバイスが再接続されました。音声が戻りました。",
+		allLinksDown:
+			"すべてのボンディングリンクがダウンしています。リンクが回復するまで配信はデータを送信できません。",
+		linksRecovered: "ボンディングリンクが回復しました。",
+		engineCrashed: "配信エンジンが予期せず停止しました。復旧中…",
+		engineRecovered: "配信エンジンが復旧しました。",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {

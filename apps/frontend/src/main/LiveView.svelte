@@ -84,6 +84,7 @@ import {
 	reconcileStreamingOptimism,
 	revertStreamingOptimism,
 } from '$lib/rpc/streaming-optimism.svelte';
+import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
@@ -103,6 +104,11 @@ const sensors = $derived(getSensors());
 // Per-link srtla ingest telemetry (RTT/NAK/weight) — already broadcast via
 // status.linkTelemetry; surfaced here as a read-only panel, no new collector.
 const linkTelemetry = $derived(getLinkTelemetry());
+// Mid-stream audio-device-lost banner: the selected real audio device dropped
+// from the available list (backend also raises a silence-failover notification).
+const audioSourceLost = $derived(
+	isSelectedAudioLost(config?.asrc, getStatus()?.asrcs),
+);
 
 // Streaming optimism state (Task 6): reflects user intent immediately on click.
 const streamingOptimismState = $derived(getStreamingOptimismState());
@@ -885,6 +891,7 @@ const configRows = $derived<ConfigRow[]>([
 			}}
 			telemetry={linkTelemetry}
 			bitrateKbps={config?.max_br}
+			{audioSourceLost}
 			{isStreaming}
 			optimismState={streamingOptimismState}
 			{summaryMode}

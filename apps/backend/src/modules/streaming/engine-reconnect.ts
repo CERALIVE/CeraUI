@@ -64,11 +64,13 @@ import {
 	type CapabilitiesServiceDeps,
 	getLastCapabilities,
 } from "./capabilities.ts";
+import { reportEngineState } from "./lifecycle-indicators.ts";
 import { getPipelinesMessage, initPipelines } from "./pipelines.ts";
 import {
 	type EngineDeviceCacheDeps,
 	refreshAndBroadcastSources,
 } from "./sources.ts";
+import { getIsStreaming } from "./streaming.ts";
 
 /**
  * Reconnect backoff bounds. Mirrors `modules/remote-control/channel.ts`: an
@@ -106,6 +108,12 @@ export interface EngineReconnectDeps {
 	 * unavailable→reachable transition so the offline banner clears live.
 	 */
 	broadcastEngineState: () => Promise<void> | void;
+	/**
+	 * Report the engine reachability edge for the crash/recovered lifecycle
+	 * indicator. Gated on `isStreaming` inside the reporter: only a mid-stream
+	 * unreachable→reachable transition toasts.
+	 */
+	reportEngineState: (reachable: boolean) => void;
 	logger: EngineReconnectLogger;
 	random: () => number;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
@@ -164,6 +172,8 @@ function defaultDeps(
 		refreshCapabilities: () => initPipelines(capsOverride),
 		isEngineReachable: () => getLastCapabilities()?.engineUnavailable === false,
 		broadcastEngineState: buildDefaultBroadcastEngineState(fetchers.sources),
+		reportEngineState: (reachable) =>
+			reportEngineState({ isStreaming: getIsStreaming(), reachable }),
 		logger: defaultLogger,
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -230,7 +240,9 @@ async function runAttempt(broadcastOnHeal: boolean): Promise<boolean> {
 			`engine reconnect: capability refresh threw: ${errMessage(err)}`,
 		);
 	}
-	if (!state || !deps.isEngineReachable()) return false;
+	if (!state) return false;
+	deps.reportEngineState(deps.isEngineReachable());
+	if (!deps.isEngineReachable()) return false;
 	if (!broadcastOnHeal) return true;
 	try {
 		await deps.broadcastEngineState();

@@ -239,10 +239,28 @@ describe("deriveStreamHealth — reason (Task 16)", () => {
 		});
 	});
 
-	test("a single down link is singular-pluralized correctly", () => {
+	test("a partial down link (some still active) is singular-pluralized correctly", () => {
+		expect(
+			deriveStreamHealth({ ...HEALTHY, linkCount: 2, activeLinks: 1 }).reason,
+		).toEqual({ component: "links", detail: "1 of 2 links down" });
+	});
+
+	test("ALL links down reports a distinct all-down reason (not the partial-drop count)", () => {
+		expect(
+			deriveStreamHealth({ ...HEALTHY, linkCount: 3, activeLinks: 0 }).reason,
+		).toEqual({
+			component: "links",
+			detail: "All 3 links down \u2014 no data can be sent",
+		});
+	});
+
+	test("a single link fully down is singular-pluralized in the all-down reason", () => {
 		expect(
 			deriveStreamHealth({ ...HEALTHY, linkCount: 1, activeLinks: 0 }).reason,
-		).toEqual({ component: "links", detail: "1 of 1 link down" });
+		).toEqual({
+			component: "links",
+			detail: "All 1 link down \u2014 no data can be sent",
+		});
 	});
 });
 

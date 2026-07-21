@@ -189,4 +189,24 @@ describe("device registry", () => {
 		await registry.switchInput("/dev/video63");
 		expect(engineSwitch).toHaveBeenCalledTimes(1);
 	});
+
+	test("reports the applied video source to the lifecycle indicator on every scan", async () => {
+		const reportActiveVideoSource = mock(() => undefined);
+		const registry = createDeviceRegistry(
+			makeDeps({
+				reportActiveVideoSource,
+				getAudioSources: () => ({}),
+				isStreaming: () => true,
+				getSelectedVideoInput: () => "/dev/video63",
+				listVideoCards: async () => ["video0"],
+				readCardName: async () => "RØDE HDMI",
+			}),
+		);
+		await registry.rescan();
+		expect(reportActiveVideoSource).toHaveBeenCalledWith({
+			isStreaming: true,
+			activeSourceId: "/dev/video63",
+			presentSourceIds: ["/dev/video0"],
+		});
+	});
 });

@@ -603,6 +603,16 @@ const de = {
 			lostTitle: "Gerät getrennt",
 			lostBody:
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
+			lostStreamingTitle: "Live-Quelle getrennt",
+			lostStreamingBody:
+				"Die gestreamte Quelle ging verloren. Schließe sie wieder an oder wechsle die Quelle, um den Stream aufrechtzuerhalten.",
+			audioLostStreamingTitle: "Live-Audiogerät getrennt",
+			audioLostStreamingBody:
+				"Dein Stream läuft stumm weiter. Verbinde das Audiogerät erneut, um den Ton wiederherzustellen.",
+			linksDownStreamingTitle: "Alle gebündelten Verbindungen ausgefallen",
+			linksDownStreamingBody:
+				"Es können gerade keine Daten gesendet werden. Der Stream wird automatisch fortgesetzt, sobald eine Verbindung zurückkehrt.",
+
 			audioNone: "Keine Audioquelle erkannt",
 			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
 			audioEdit: "Codec & Verzögerung",
@@ -768,6 +778,18 @@ const de = {
 		streamHealthDegraded: "Stream-Zustand beeinträchtigt",
 		streamHealthDead: "Stream ist ausgefallen",
 		streamHealthRecovered: "Stream-Zustand wiederhergestellt",
+		activeSourceLost:
+			"Die gestreamte Videoquelle ging verloren. Schließe sie wieder an oder wechsle die Quelle, um den Stream aufrechtzuerhalten.",
+		activeSourceRecovered: "Videoquelle wieder verbunden.",
+		activeAudioLost:
+			"Das gestreamte Audiogerät ging verloren. Der Stream läuft stumm weiter, bis es wieder verbunden ist.",
+		activeAudioRecovered: "Audiogerät wieder verbunden. Der Ton ist zurück.",
+		allLinksDown:
+			"Alle gebündelten Verbindungen sind ausgefallen. Der Stream kann keine Daten senden, bis eine Verbindung zurückkehrt.",
+		linksRecovered: "Gebündelte Verbindungen wiederhergestellt.",
+		engineCrashed:
+			"Die Streaming-Engine wurde unerwartet beendet. Wiederherstellung…",
+		engineRecovered: "Die Streaming-Engine wurde wiederhergestellt.",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {

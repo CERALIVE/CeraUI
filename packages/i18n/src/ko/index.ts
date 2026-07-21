@@ -1185,6 +1185,16 @@ const ko = {
 			activeConfigured: "구성됨",
 			lostTitle: "장치 연결 끊김",
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
+			lostStreamingTitle: "라이브 소스 연결 끊김",
+			lostStreamingBody:
+				"스트리밍 중인 소스가 끊겼습니다. 다시 연결하거나 다른 소스로 전환하여 스트림을 유지하세요.",
+			audioLostStreamingTitle: "라이브 오디오 장치 연결 끊김",
+			audioLostStreamingBody:
+				"스트림이 무음으로 계속됩니다. 소리를 복원하려면 오디오 장치를 다시 연결하세요.",
+			linksDownStreamingTitle: "모든 본딩 링크 다운",
+			linksDownStreamingBody:
+				"지금은 데이터를 보낼 수 없습니다. 링크가 복구되면 스트림이 자동으로 재개됩니다.",
+
 			audioNone: "오디오 소스가 감지되지 않음",
 			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
 			audioEdit: "코덱 및 지연",
@@ -1350,6 +1360,18 @@ const ko = {
 		streamHealthDegraded: "스트림 상태가 저하되었습니다",
 		streamHealthDead: "스트림이 중단되었습니다",
 		streamHealthRecovered: "스트림 상태가 복구되었습니다",
+		activeSourceLost:
+			"스트리밍 중인 비디오 소스가 끊겼습니다. 다시 연결하거나 다른 소스로 전환하여 스트림을 유지하세요.",
+		activeSourceRecovered: "비디오 소스가 다시 연결되었습니다.",
+		activeAudioLost:
+			"스트리밍 중인 오디오 장치가 끊겼습니다. 다시 연결될 때까지 스트림은 무음으로 계속됩니다.",
+		activeAudioRecovered:
+			"오디오 장치가 다시 연결되었습니다. 소리가 돌아왔습니다.",
+		allLinksDown:
+			"모든 본딩 링크가 다운되었습니다. 링크가 복구될 때까지 스트림이 데이터를 보낼 수 없습니다.",
+		linksRecovered: "본딩 링크가 복구되었습니다.",
+		engineCrashed: "스트리밍 엔진이 예기치 않게 중지되었습니다. 복구 중…",
+		engineRecovered: "스트리밍 엔진이 복구되었습니다.",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {

@@ -605,6 +605,16 @@ const es = {
 			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
+			lostStreamingTitle: "Fuente en directo desconectada",
+			lostStreamingBody:
+				"Se perdió la fuente que estás transmitiendo. Vuelve a conectarla o cambia de fuente para mantener el directo.",
+			audioLostStreamingTitle: "Dispositivo de audio en directo desconectado",
+			audioLostStreamingBody:
+				"Tu directo continúa en silencio. Reconecta el dispositivo de audio para restaurar el sonido.",
+			linksDownStreamingTitle: "Todos los enlaces combinados caídos",
+			linksDownStreamingBody:
+				"Ahora mismo no se pueden enviar datos. El directo se reanuda automáticamente cuando un enlace se recupera.",
+
 			audioNone: "No se detectó ninguna fuente de audio",
 			audioEmbedded: "Audio incorporado (del flujo entrante)",
 			audioEdit: "Códec y retardo",
@@ -771,6 +781,19 @@ const es = {
 		streamHealthDegraded: "Estado del stream degradado",
 		streamHealthDead: "El stream está caído",
 		streamHealthRecovered: "Estado del stream recuperado",
+		activeSourceLost:
+			"Se perdió la fuente de vídeo que estás transmitiendo. Vuelve a conectarla o cambia de fuente para mantener el directo.",
+		activeSourceRecovered: "Fuente de vídeo reconectada.",
+		activeAudioLost:
+			"Se perdió el dispositivo de audio que estás transmitiendo. El directo continúa en silencio hasta que se reconecte.",
+		activeAudioRecovered:
+			"Dispositivo de audio reconectado. El sonido ha vuelto.",
+		allLinksDown:
+			"Todos los enlaces combinados están caídos. El directo no puede enviar datos hasta que un enlace se recupere.",
+		linksRecovered: "Enlaces combinados recuperados.",
+		engineCrashed:
+			"El motor de streaming se detuvo inesperadamente. Recuperando…",
+		engineRecovered: "El motor de streaming se recuperó.",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {

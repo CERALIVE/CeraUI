@@ -42,6 +42,8 @@ import { join } from "node:path";
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { setup } from "../setup.ts";
+import { reportEngineState } from "./lifecycle-indicators.ts";
+import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
 const CERASTREAM_PROTOCOL = "cerastream-ipc/1";
 const DEFAULT_IPC_DIR = "/run/cerastream";
@@ -202,6 +204,13 @@ interface BridgeDeps {
 	socketPath: string;
 	connect: typeof Bun.connect;
 	warn: (message: string) => void;
+	/**
+	 * Report the live engine reachability edge — this bridge holds the one
+	 * persistent engine control connection, so its socket close/reconnect IS the
+	 * real-time mid-stream engine crash/recovery signal. Reachability is gated on
+	 * `isStreaming` inside the reporter (an idle drop never toasts).
+	 */
+	onEngineReachable: (reachable: boolean) => void;
 }
 
 function defaultDeps(): BridgeDeps {
@@ -209,6 +218,11 @@ function defaultDeps(): BridgeDeps {
 		socketPath: resolveControlSocketPath(),
 		connect: Bun.connect,
 		warn: (message) => defaultLogger.warn(message),
+		onEngineReachable: (reachable) =>
+			reportEngineState({
+				isStreaming: getStreamingProcesses().length > 0,
+				reachable,
+			}),
 	};
 }
 
@@ -276,12 +290,14 @@ export function startActivePassthroughBridge(
 						cachedPassthrough = undefined;
 						cachedLiveness = undefined;
 						activeSocket = undefined;
+						if (!stopRequested) deps.onEngineReachable(false);
 						scheduleReconnect();
 					},
 					error: () => {
 						cachedPassthrough = undefined;
 						cachedLiveness = undefined;
 						activeSocket = undefined;
+						if (!stopRequested) deps.onEngineReachable(false);
 					},
 				},
 			});
@@ -291,6 +307,7 @@ export function startActivePassthroughBridge(
 		}
 		// A fresh connection resets the backoff so a later drop retries fast.
 		backoff = RECONNECT_MIN_MS;
+		deps.onEngineReachable(true);
 		const write = (method: string, params: unknown): void => {
 			activeSocket?.write(
 				`${JSON.stringify({ jsonrpc: "2.0", id: nextId++, method, params })}\n`,

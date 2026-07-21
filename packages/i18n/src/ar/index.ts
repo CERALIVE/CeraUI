@@ -1308,6 +1308,16 @@ const ar = {
 			activeConfigured: "مُهيأ",
 			lostTitle: "الجهاز غير متصل",
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
+			lostStreamingTitle: "انقطع اتصال المصدر المباشر",
+			lostStreamingBody:
+				"فُقد المصدر الذي تبثه. أعد توصيله أو بدّل إلى مصدر آخر لإبقاء البث مستمراً.",
+			audioLostStreamingTitle: "انقطع اتصال جهاز الصوت المباشر",
+			audioLostStreamingBody:
+				"يستمر البث في صمت. أعد توصيل جهاز الصوت لاستعادة الصوت.",
+			linksDownStreamingTitle: "جميع الروابط المجمّعة معطّلة",
+			linksDownStreamingBody:
+				"لا يمكن إرسال أي بيانات الآن. يُستأنف البث تلقائياً عند تعافي أحد الروابط.",
+
 			audioNone: "لم يتم اكتشاف مصدر صوت",
 			audioEmbedded: "صوت مضمّن (من البث الوارد)",
 			audioEdit: "الترميز والتأخير",
@@ -1473,6 +1483,17 @@ const ar = {
 		streamHealthDegraded: "تدهورت حالة البث",
 		streamHealthDead: "البث متوقف",
 		streamHealthRecovered: "تمت استعادة حالة البث",
+		activeSourceLost:
+			"فُقد مصدر الفيديو الذي تبثه. أعد توصيله أو بدّل إلى مصدر آخر لإبقاء البث مستمراً.",
+		activeSourceRecovered: "تمت إعادة الاتصال بمصدر الفيديو.",
+		activeAudioLost:
+			"فُقد جهاز الصوت الذي تبثه. يستمر البث في صمت حتى تتم إعادة توصيله.",
+		activeAudioRecovered: "تمت إعادة الاتصال بجهاز الصوت. عاد الصوت.",
+		allLinksDown:
+			"جميع الروابط المجمّعة معطّلة. لا يمكن للبث إرسال البيانات حتى يتعافى رابط.",
+		linksRecovered: "تعافت الروابط المجمّعة.",
+		engineCrashed: "توقّف محرك البث بشكل غير متوقع. جارٍ الاستعادة…",
+		engineRecovered: "تعافى محرك البث.",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {
