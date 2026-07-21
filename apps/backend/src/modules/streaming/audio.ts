@@ -54,6 +54,28 @@ const PSEUDO_AUDIO_SOURCES: ReadonlySet<string> = new Set([
 export function isPseudoAudioSource(asrc: string): boolean {
 	return PSEUDO_AUDIO_SOURCES.has(asrc);
 }
+
+export type AudioMode = "none" | "default" | "device";
+
+export interface AudioModeSelection {
+	mode: AudioMode;
+	device?: string;
+}
+
+// Map an operator audio pick onto the engine's `audio.mode` discriminator so a
+// pseudo-source is never leaked into `audio.device` as a bogus ALSA id: "No
+// audio" is an explicit video-only stream, "Pipeline default" hands sourcing to
+// the engine, a network-embedded source rides the engine default, and any real
+// selection carries the resolved ALSA card id.
+export function resolveAudioMode(
+	asrc: string,
+	embeddedAudioActive: boolean,
+): AudioModeSelection {
+	if (asrc === NO_AUDIO_ID) return { mode: "none" };
+	if (asrc === DEFAULT_AUDIO_ID) return { mode: "default" };
+	if (embeddedAudioActive) return { mode: "default" };
+	return { mode: "device", device: getAudioSrcId(asrc) };
+}
 const BASE_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	C4K: "Cam Link 4K",
 	usbaudio: "USB audio",

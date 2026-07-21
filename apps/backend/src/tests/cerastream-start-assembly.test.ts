@@ -71,6 +71,12 @@ function makeFakeClient(schemaVersion: string): FakeHarness {
 			calls.push({ op: "start", params });
 			return { session_id: "s1", state: "streaming" as const };
 		},
+		rawRequest: async (method: string, params: unknown) => {
+			calls.push({ op: method, params });
+			if (method === "start")
+				return { session_id: "s1", state: "streaming" as const };
+			return {};
+		},
 		stop: async () => ({ state: "idle" as const }),
 		reloadConfig: async (params: unknown) => {
 			calls.push({ op: "reload-config", params });
@@ -166,8 +172,10 @@ describe("buildStartParams — full config forwards every field", () => {
 		expect(params.resolution).toBe("1920x1080");
 		expect(params.framerate).toBe(30);
 		expect(params.audio).toEqual({
+			// A real device selection resolves to mode:"device" + its ALSA id.
 			// getAudioSrcId("HDMI") → "rockchiphdmiin" only on rk3588; on a dev
 			// host the alias table has no HDMI entry, so it passes through as-is.
+			mode: "device",
 			device: (params.audio as { device: string }).device,
 			codec: "opus",
 			delay_ms: -2000,
@@ -215,19 +223,81 @@ describe("buildStartParams — absent fields are omitted (no undefined keys)", (
 });
 
 describe("buildStartParams — embedded network-ingest audio (Task 13)", () => {
-	test("OMITS audio.device when the embedded-audio gate is active", async () => {
+	test("mode:default + NO device when the embedded-audio gate is active", async () => {
 		const params = await startParamsFor(FULL_CONFIG, {
 			isEmbeddedAudioActive: () => true,
 		});
-		expect(params.audio).toEqual({ codec: "opus", delay_ms: -2000 });
+		expect(params.audio).toEqual({
+			mode: "default",
+			codec: "opus",
+			delay_ms: -2000,
+		});
 		expect(params.audio).not.toHaveProperty("device");
 	});
 
-	test("KEEPS audio.device when the gate is inactive (legacy ALSA path)", async () => {
+	test("mode:device + device id when the gate is inactive (ALSA path)", async () => {
 		const params = await startParamsFor(FULL_CONFIG, {
 			isEmbeddedAudioActive: () => false,
 		});
+		expect((params.audio as { mode: string }).mode).toBe("device");
 		expect((params.audio as { device: string }).device).toBeTruthy();
+	});
+});
+
+describe("buildStartParams — pseudo-source → audio.mode wire contract (Todo 17)", () => {
+	const BASE: RuntimeConfig = {
+		pipeline: "hdmi",
+		max_br: 8000,
+		srt_latency: 2000,
+		balancer: "adaptive",
+	};
+
+	test('"No audio" ⇒ mode:"none" with no device (a video-only stream)', async () => {
+		const params = await startParamsFor(
+			{ ...BASE, asrc: "No audio" },
+			{ schemaVersion: "0.6.0" },
+		);
+		expect(params.audio).toEqual({ mode: "none" });
+		expect(params.audio).not.toHaveProperty("device");
+	});
+
+	test('"Pipeline default" ⇒ mode:"default" with no device', async () => {
+		const params = await startParamsFor(
+			{ ...BASE, asrc: "Pipeline default" },
+			{ schemaVersion: "0.6.0" },
+		);
+		expect(params.audio).toEqual({ mode: "default" });
+		expect(params.audio).not.toHaveProperty("device");
+	});
+
+	test('a real device ⇒ mode:"device" + its ALSA id', async () => {
+		const params = await startParamsFor(
+			{ ...BASE, asrc: "usbaudio" },
+			{ schemaVersion: "0.6.0" },
+		);
+		expect(params.audio).toEqual({ mode: "device", device: "usbaudio" });
+	});
+
+	test("a legacy caller that omits asrc sends NO audio section (compat)", async () => {
+		const params = await startParamsFor(BASE, {
+			schemaVersion: "0.6.0",
+			activeInput: undefined,
+		});
+		expect(params).not.toHaveProperty("audio");
+	});
+
+	test("a ≥0.6.0 engine receives start over the RAW bridge (mode survives)", async () => {
+		const { backend, fake } = makeBackend(
+			{ ...BASE, asrc: "usbaudio" },
+			{ schemaVersion: "0.6.0" },
+		);
+		backend.start({ ...BASE, asrc: "usbaudio" }, RUN_OPTS);
+		await backend.settle();
+		const started = fake.calls.find((c) => c.op === "start");
+		expect(started).toBeDefined();
+		expect(
+			(started?.params as { audio?: { mode?: string } }).audio?.mode,
+		).toBe("device");
 	});
 });
 
