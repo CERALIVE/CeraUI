@@ -30,6 +30,7 @@ import type {
 	LinkTelemetryMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
+import { TriangleAlert } from '@lucide/svelte';
 
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import { Button } from '$lib/components/ui/button';
@@ -74,6 +75,11 @@ interface Props {
 	// ── IngestStats ─────────────────────────────────────────────────────────────
 	telemetry: LinkTelemetryMessage | null | undefined;
 	bitrateKbps?: number;
+	// ── Mid-stream lifecycle banners ───────────────────────────────────────────
+	// The selected audio device vanished mid-stream (LiveView derives it from the
+	// available audio sources vs config.asrc). Video-source-lost and all-links-down
+	// are derived inside this component from sources/activeEncode and telemetry.
+	audioSourceLost?: boolean;
 	// ── StreamControlButton (Stop mode) ────────────────────────────────────────
 	isStreaming: boolean;
 	optimismState: StreamingOptimismState;
@@ -115,15 +121,91 @@ const {
 	onSliderCommit,
 	telemetry,
 	bitrateKbps,
+	audioSourceLost = false,
 	isStreaming,
 	optimismState,
 	onStop,
 	summaryMode = false,
 	onCloseSummary = undefined,
 }: Props = $props();
+
+// Mid-stream active-source loss. The idle `source-lost-banner` lives in
+// SourceSection, which never mounts while streaming — so an unplugged running
+// source was previously silent here. Fire ONLY once the `sources` snapshot has
+// arrived (an empty list is the pre-first-broadcast state, not a loss) and only
+// while actually live: either the running id is gone from the list, or it is
+// present but flagged `lost`.
+const runningId = $derived(activeEncode?.active_input ?? config?.source);
+const runningSource = $derived(
+	runningId ? sources?.sources.find((s) => s.id === runningId) : undefined,
+);
+const activeSourceLost = $derived(
+	isStreaming &&
+		!summaryMode &&
+		runningId !== undefined &&
+		(sources?.sources.length ?? 0) > 0 &&
+		(runningSource === undefined || runningSource.lost === true),
+);
+
+// All bonded links down mid-stream: every reported link is stale while ≥1 link
+// exists. Distinct from a partial drop (some links still active).
+const allLinksDown = $derived(
+	isStreaming &&
+		!summaryMode &&
+		(telemetry?.links.length ?? 0) > 0 &&
+		(telemetry?.links.every((link) => link.stale) ?? false),
+);
+
+const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
 </script>
 
 <div class="space-y-6" data-testid="live-cockpit" data-summary-mode={summaryMode ? 'true' : 'false'}>
+	{#if activeSourceLost}
+		<div
+			class="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3"
+			data-testid="active-source-lost-banner"
+			role="alert"
+		>
+			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
+			<div class="min-w-0 space-y-0.5">
+				<p class="text-destructive text-sm font-medium">{$LL.live.source.lostStreamingTitle()}</p>
+				<p class="text-muted-foreground text-xs">{$LL.live.source.lostStreamingBody()}</p>
+			</div>
+		</div>
+	{/if}
+
+	{#if showAudioLost}
+		<div
+			class="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3"
+			data-testid="active-audio-lost-banner"
+			role="alert"
+		>
+			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
+			<div class="min-w-0 space-y-0.5">
+				<p class="text-destructive text-sm font-medium">
+					{$LL.live.source.audioLostStreamingTitle()}
+				</p>
+				<p class="text-muted-foreground text-xs">{$LL.live.source.audioLostStreamingBody()}</p>
+			</div>
+		</div>
+	{/if}
+
+	{#if allLinksDown}
+		<div
+			class="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3"
+			data-testid="all-links-down-banner"
+			role="alert"
+		>
+			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
+			<div class="min-w-0 space-y-0.5">
+				<p class="text-destructive text-sm font-medium">
+					{$LL.live.source.linksDownStreamingTitle()}
+				</p>
+				<p class="text-muted-foreground text-xs">{$LL.live.source.linksDownStreamingBody()}</p>
+			</div>
+		</div>
+	{/if}
+
 	{#if !summaryMode}
 		<!-- "Now streaming" summary strip: what the device is CURRENTLY streaming
 		     (source · mode · codec · transport → destination + audio line). -->

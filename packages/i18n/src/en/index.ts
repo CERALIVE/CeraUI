@@ -586,6 +586,15 @@ const en = {
 			activeConfigured: "Configured",
 			lostTitle: "Device disconnected",
 			lostBody: "Reconnect the device to resume streaming from this source.",
+			lostStreamingTitle: "Live source disconnected",
+			lostStreamingBody:
+				"The source you're streaming was lost. Reconnect it, or switch to another source to keep your stream alive.",
+			audioLostStreamingTitle: "Live audio device disconnected",
+			audioLostStreamingBody:
+				"Your stream is continuing in silence. Reconnect the audio device to restore sound.",
+			linksDownStreamingTitle: "All bonded links down",
+			linksDownStreamingBody:
+				"No data can be sent right now. The stream resumes automatically when a link recovers.",
 			audioNone: "No audio source detected",
 			audioEmbedded: "Embedded audio (from the incoming stream)",
 			audioEdit: "Codec & delay",
@@ -756,6 +765,19 @@ const en = {
 		streamHealthDegraded: "Stream health degraded",
 		streamHealthDead: "Stream is down",
 		streamHealthRecovered: "Stream health recovered",
+		// Mid-stream lifecycle indicators
+		activeSourceLost:
+			"The video source you're streaming was lost. Reconnect it, or switch to another source to keep your stream alive.",
+		activeSourceRecovered: "Video source reconnected.",
+		activeAudioLost:
+			"The audio device you're streaming was lost. Your stream continues in silence until it's reconnected.",
+		activeAudioRecovered: "Audio device reconnected. Sound is back.",
+		allLinksDown:
+			"All bonded links are down. Your stream can't send data until a link recovers.",
+		linksRecovered: "Bonded links recovered.",
+		engineCrashed:
+			"The streaming engine stopped unexpectedly. Recovering\u2026",
+		engineRecovered: "The streaming engine recovered.",
 		// Relay empty-states
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",

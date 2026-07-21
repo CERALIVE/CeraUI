@@ -48,6 +48,7 @@ import {
 	VIDEO_HOTPLUG_DEBOUNCE_MS,
 	VIDEO_HOTPLUG_POLL_INTERVAL_MS,
 } from "./constants.ts";
+import { reportActiveVideoSource } from "./lifecycle-indicators.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
 import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
@@ -88,6 +89,7 @@ export interface DeviceRegistryDeps {
 	// must NOT feed the local v4l2 scan into sources — its kind heuristic would
 	// re-introduce the USB-as-HDMI mislabel the sources model removed.
 	onDevicesChanged: () => void;
+	reportActiveVideoSource: typeof reportActiveVideoSource;
 	watch: typeof fs.watch;
 	now: () => number;
 	debounceMs: number;
@@ -277,6 +279,7 @@ function defaultDeps(): DeviceRegistryDeps {
 				refreshAndBroadcastSources(),
 			);
 		},
+		reportActiveVideoSource,
 		watch: fs.watch,
 		now: () => performance.now(),
 		debounceMs: VIDEO_HOTPLUG_DEBOUNCE_MS,
@@ -375,6 +378,15 @@ export function createDeviceRegistry(
 			lastDeviceSetSerialized = deviceSetSerialized;
 			if (!isInitialScan) deps.onDevicesChanged();
 		}
+		// Lifecycle indicator: the applied video source vanishing from the device
+		// set WHILE streaming raises a persistent notification (the idle
+		// SourceSection banner never mounts live, so this was previously silent).
+		// Evaluated on every apply (not just a set change) so a re-plug clears it.
+		deps.reportActiveVideoSource({
+			isStreaming: deps.isStreaming(),
+			activeSourceId: activeInput ?? deps.getSelectedVideoInput(),
+			presentSourceIds: devices.map((d) => d.input_id),
+		});
 		return message;
 	}
 

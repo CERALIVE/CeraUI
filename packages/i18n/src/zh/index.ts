@@ -1122,6 +1122,16 @@ const zh = {
 			activeConfigured: "已配置",
 			lostTitle: "设备已断开",
 			lostBody: "重新连接设备以从此来源恢复推流。",
+			lostStreamingTitle: "直播源已断开",
+			lostStreamingBody:
+				"您正在推流的源已丢失。请重新连接或切换到其他源以保持直播。",
+			audioLostStreamingTitle: "直播音频设备已断开",
+			audioLostStreamingBody:
+				"您的直播正以静音继续。请重新连接音频设备以恢复声音。",
+			linksDownStreamingTitle: "所有绑定链路已断开",
+			linksDownStreamingBody:
+				"目前无法发送数据。当某个链路恢复时，直播将自动恢复。",
+
 			audioNone: "未检测到音频源",
 			audioEmbedded: "嵌入式音频（来自传入流）",
 			audioEdit: "编解码器和延迟",
@@ -1286,6 +1296,16 @@ const zh = {
 		streamHealthDegraded: "推流状态已降级",
 		streamHealthDead: "推流已中断",
 		streamHealthRecovered: "推流状态已恢复",
+		activeSourceLost:
+			"您正在推流的视频源已丢失。请重新连接或切换到其他源以保持直播。",
+		activeSourceRecovered: "视频源已重新连接。",
+		activeAudioLost:
+			"您正在推流的音频设备已丢失。在重新连接之前，直播将以静音继续。",
+		activeAudioRecovered: "音频设备已重新连接。声音已恢复。",
+		allLinksDown: "所有绑定链路均已断开。在链路恢复之前，直播无法发送数据。",
+		linksRecovered: "绑定链路已恢复。",
+		engineCrashed: "推流引擎意外停止。正在恢复…",
+		engineRecovered: "推流引擎已恢复。",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {

@@ -1344,6 +1344,16 @@ const ptBR = {
 			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
+			lostStreamingTitle: "Fonte ao vivo desconectada",
+			lostStreamingBody:
+				"A fonte que você está transmitindo foi perdida. Reconecte-a ou troque de fonte para manter sua transmissão ativa.",
+			audioLostStreamingTitle: "Dispositivo de áudio ao vivo desconectado",
+			audioLostStreamingBody:
+				"Sua transmissão continua em silêncio. Reconecte o dispositivo de áudio para restaurar o som.",
+			linksDownStreamingTitle: "Todos os links agregados fora do ar",
+			linksDownStreamingBody:
+				"Nenhum dado pode ser enviado agora. A transmissão é retomada automaticamente quando um link se recupera.",
+
 			audioNone: "Nenhuma fonte de áudio detectada",
 			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
 			audioEdit: "Codec e atraso",
@@ -1509,6 +1519,17 @@ const ptBR = {
 		streamHealthDegraded: "Status da transmissão degradado",
 		streamHealthDead: "A transmissão está fora do ar",
 		streamHealthRecovered: "Status da transmissão recuperado",
+		activeSourceLost:
+			"A fonte de vídeo que você está transmitindo foi perdida. Reconecte-a ou troque de fonte para manter sua transmissão ativa.",
+		activeSourceRecovered: "Fonte de vídeo reconectada.",
+		activeAudioLost:
+			"O dispositivo de áudio que você está transmitindo foi perdido. A transmissão continua em silêncio até que ele seja reconectado.",
+		activeAudioRecovered: "Dispositivo de áudio reconectado. O som voltou.",
+		allLinksDown:
+			"Todos os links agregados estão fora do ar. A transmissão não pode enviar dados até que um link se recupere.",
+		linksRecovered: "Links agregados recuperados.",
+		engineCrashed: "O motor de transmissão parou inesperadamente. Recuperando…",
+		engineRecovered: "O motor de transmissão se recuperou.",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {

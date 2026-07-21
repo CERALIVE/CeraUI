@@ -36,7 +36,9 @@ import {
 } from "./audio-watcher.ts";
 import { refreshResolvedAsrcPreview } from "./auto-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
+import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
 import { getEngineAudioDevices } from "./sources.ts";
+import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
 const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
 const PROC_ASOUND_CARDS = "/proc/asound/cards";
@@ -53,6 +55,15 @@ const PSEUDO_AUDIO_SOURCES: ReadonlySet<string> = new Set([
 
 export function isPseudoAudioSource(asrc: string): boolean {
 	return PSEUDO_AUDIO_SOURCES.has(asrc);
+}
+
+export function isSelectedAudioLost(
+	asrc: string | undefined,
+	available: readonly string[],
+): boolean {
+	if (!asrc) return false;
+	if (asrc === AUDIO_SOURCE_AUTO || isPseudoAudioSource(asrc)) return false;
+	return !available.includes(asrc);
 }
 
 export type AudioMode = "none" | "default" | "device";
@@ -261,6 +272,17 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 
 	audioDevices = sortedList;
 	logger.debug("audio devices:", audioDevices);
+
+	// Lifecycle indicator: the selected audio device vanishing mid-stream keeps
+	// the stream running in SILENCE (Todo 17 failover — never a test tone); raise
+	// a persistent notification so the operator knows the audio dropped.
+	reportActiveAudioSource({
+		isStreaming: getStreamingProcesses().length > 0,
+		isDeviceLost: isSelectedAudioLost(
+			getConfig().asrc,
+			Object.keys(audioDevices),
+		),
+	});
 
 	const labels = await resolveAudioLabelsForTick(audioDevices);
 	broadcastMsg("status", {

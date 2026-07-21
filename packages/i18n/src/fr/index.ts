@@ -1369,6 +1369,16 @@ const fr = {
 			lostTitle: "Appareil déconnecté",
 			lostBody:
 				"Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
+			lostStreamingTitle: "Source en direct déconnectée",
+			lostStreamingBody:
+				"La source que vous diffusez a été perdue. Reconnectez-la ou changez de source pour garder votre direct actif.",
+			audioLostStreamingTitle: "Périphérique audio en direct déconnecté",
+			audioLostStreamingBody:
+				"Votre direct continue en silence. Reconnectez le périphérique audio pour rétablir le son.",
+			linksDownStreamingTitle: "Tous les liens agrégés hors service",
+			linksDownStreamingBody:
+				"Aucune donnée ne peut être envoyée pour le moment. Le direct reprend automatiquement dès qu'un lien est rétabli.",
+
 			audioNone: "Aucune source audio détectée",
 			audioEmbedded: "Audio intégré (du flux entrant)",
 			audioEdit: "Codec et délai",
@@ -1534,6 +1544,18 @@ const fr = {
 		streamHealthDegraded: "État du flux dégradé",
 		streamHealthDead: "Le flux est interrompu",
 		streamHealthRecovered: "État du flux rétabli",
+		activeSourceLost:
+			"La source vidéo que vous diffusez a été perdue. Reconnectez-la ou changez de source pour garder votre direct actif.",
+		activeSourceRecovered: "Source vidéo reconnectée.",
+		activeAudioLost:
+			"Le périphérique audio que vous diffusez a été perdu. Le direct continue en silence jusqu'à sa reconnexion.",
+		activeAudioRecovered: "Périphérique audio reconnecté. Le son est revenu.",
+		allLinksDown:
+			"Tous les liens agrégés sont hors service. Le direct ne peut pas envoyer de données tant qu'un lien n'est pas rétabli.",
+		linksRecovered: "Liens agrégés rétablis.",
+		engineCrashed:
+			"Le moteur de streaming s'est arrêté de façon inattendue. Récupération…",
+		engineRecovered: "Le moteur de streaming a récupéré.",
 		relayWaiting: "Waiting for relay servers\u2026",
 		relayNone: "No relay servers available",
 		panel: {
