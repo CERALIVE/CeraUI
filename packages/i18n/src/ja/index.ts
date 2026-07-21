@@ -870,6 +870,7 @@ const ja = {
 		healthHealthy: "正常",
 		healthDegraded: "劣化",
 		healthDead: "停止",
+		healthIdle: "アイドル",
 		healthUnknown: "不明",
 		announceStreamStarted: "配信を開始しました",
 		announceStreamStopped: "配信を停止しました",
@@ -891,6 +892,8 @@ const ja = {
 			"ストリーミング中ですが、フレームが停滞しているか、一部のボンドリンクがダウンしています。",
 		healthExplainDead:
 			"エンコーダープロセスが実行されていません。ストリームがダウンしています。",
+		healthExplainIdle:
+			"配信していません。デバイスはアイドル状態で準備完了です。",
 		buffering: "バッファリング",
 		bufferingStoreForward: "蓄積転送が有効",
 		bufferingHint:

@@ -17,9 +17,14 @@ import { getStreamHealth } from "../streaming/health.ts";
 import { type BootReadiness, getBootReadiness } from "./readiness.ts";
 
 export interface LocalObservabilitySurface {
-	process: { alive: boolean; uptime: number };
-	frames: { advancing: boolean; count: number };
-	srt: { reconnecting: boolean; reconnectCount: number };
+	// Mirrors the tri-state health rollup. `null` = unknown (idle posture / no
+	// reconnect flag), never coerced to a boolean — so `curl /api/health` on an
+	// idle device reads the truthful `state:"idle"` + `alive:null`, not a
+	// misleading `alive:false` that looks "dead".
+	state: StreamHealthOutput["state"];
+	process: { alive: boolean | null; uptime: number };
+	frames: { advancing: boolean | null; count: number | null };
+	srt: { reconnecting: boolean | null; reconnectCount: number };
 	bond: { linkCount: number; activeLinks: number };
 	timestamp: string;
 	/**
@@ -45,6 +50,7 @@ export function buildLocalObservabilitySurface(
 	readiness?: BootReadiness,
 ): LocalObservabilitySurface {
 	return {
+		state: health.state,
 		process: { alive: health.process.alive, uptime: uptimeSeconds },
 		frames: { advancing: health.frames.advancing, count: health.frames.count },
 		srt: {

@@ -8,6 +8,10 @@ import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
 import {
+	getStreamHealth,
+	HEALTH_EVENT_TYPE,
+} from "../modules/streaming/health.ts";
+import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
@@ -186,6 +190,11 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	if (initialStatus.capabilities) {
 		sendToClient(ws, "capabilities", initialStatus.capabilities);
 	}
+	// The `health` rollup broadcasts only on a state TRANSITION, so a client that
+	// connects mid-idle would otherwise render the pre-broadcast `unknown` dot
+	// forever. Seed the current rollup so the HUD shows the truthful idle/live
+	// verdict on load.
+	sendToClient(ws, HEALTH_EVENT_TYPE, getStreamHealth());
 }
 
 /**

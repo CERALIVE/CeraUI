@@ -841,6 +841,7 @@ const hi = {
 		healthHealthy: "स्वस्थ",
 		healthDegraded: "घटिया",
 		healthDead: "बंद",
+		healthIdle: "निष्क्रिय",
 		healthUnknown: "अज्ञात",
 		announceStreamStarted: "स्ट्रीमिंग शुरू हुई",
 		announceStreamStopped: "स्ट्रीमिंग रुकी",
@@ -861,6 +862,7 @@ const hi = {
 		healthExplainDegraded:
 			"स्ट्रीमिंग जारी है, लेकिन फ़्रेम रुके हुए हैं या कुछ बॉन्डेड लिंक बंद हैं।",
 		healthExplainDead: "एन्कोडर प्रक्रिया नहीं चल रही है। स्ट्रीम बंद है।",
+		healthExplainIdle: "स्ट्रीमिंग नहीं हो रही है। डिवाइस निष्क्रिय और तैयार है।",
 		buffering: "बफ़रिंग",
 		bufferingStoreForward: "स्टोर और फ़ॉरवर्ड सक्रिय",
 		bufferingHint:

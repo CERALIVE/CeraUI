@@ -35,11 +35,17 @@ import { push as pushNotification } from "$lib/stores/notifications.svelte";
 // ============================================
 
 /**
- * The render-ready health indicator. Extends the backend's tri-state
- * (`healthy` | `degraded` | `dead`) with `unknown` — the pre-broadcast state
- * before any `health` event has arrived (and after a reset on stream stop).
+ * The render-ready health indicator. The backend broadcasts
+ * `healthy` | `degraded` | `dead` | `idle` (`idle` = the truthful non-streaming
+ * posture, device-stability Todo 19); `unknown` is the pre-broadcast state before
+ * any `health` event has arrived (and after a reset on stream stop).
  */
-export type HealthIndicator = "healthy" | "degraded" | "dead" | "unknown";
+export type HealthIndicator =
+	| "healthy"
+	| "degraded"
+	| "dead"
+	| "idle"
+	| "unknown";
 
 /** Current health plus the state it transitioned from (for edge detection). */
 export interface HealthSnapshot {
@@ -65,9 +71,12 @@ export interface HealthReason {
 export interface HealthRollup {
 	state: Exclude<HealthIndicator, "unknown">;
 	reason?: HealthReason;
-	process: { alive: boolean };
-	frames: { advancing: boolean; count: number };
-	srt: { reconnecting: boolean; reconnectCount: number };
+	// `null` = unknown (idle posture / tri-state SRT); a boolean is a real
+	// streaming observation. Never coerce `null` to `false` — that is the
+	// idle-vs-dead / stable-vs-unknown distinction the HUD renders.
+	process: { alive: boolean | null };
+	frames: { advancing: boolean | null; count: number | null };
+	srt: { reconnecting: boolean | null; reconnectCount: number };
 	bond: { linkCount: number; activeLinks: number };
 }
 
@@ -75,6 +84,7 @@ const KNOWN_STATES: ReadonlySet<string> = new Set([
 	"healthy",
 	"degraded",
 	"dead",
+	"idle",
 ]);
 
 // ============================================
@@ -100,14 +110,22 @@ export function parseHealthState(data: unknown): HealthIndicator {
 	return "unknown";
 }
 
-function asFlag(value: unknown): boolean {
-	return value === true;
-}
-
 function asCount(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) && value >= 0
 		? Math.trunc(value)
 		: 0;
+}
+
+// Preserve an explicit `null` (unknown / idle) — only a literal `true` is a
+// positive observation; `false`/missing collapse to `false`, `null` stays `null`.
+function asNullableFlag(value: unknown): boolean | null {
+	if (value === null) return null;
+	return value === true;
+}
+
+function asNullableCount(value: unknown): number | null {
+	if (value === null) return null;
+	return asCount(value);
 }
 
 /**
@@ -139,13 +157,13 @@ export function parseHealthRollup(data: unknown): HealthRollup | null {
 	return {
 		state,
 		...(reason ? { reason } : {}),
-		process: { alive: asFlag(process.alive) },
+		process: { alive: asNullableFlag(process.alive) },
 		frames: {
-			advancing: asFlag(frames.advancing),
-			count: asCount(frames.count),
+			advancing: asNullableFlag(frames.advancing),
+			count: asNullableCount(frames.count),
 		},
 		srt: {
-			reconnecting: asFlag(srt.reconnecting),
+			reconnecting: asNullableFlag(srt.reconnecting),
 			reconnectCount: asCount(srt.reconnectCount),
 		},
 		bond: {
@@ -217,6 +235,10 @@ export function notificationForTransition(
 					duration: 4,
 				};
 			}
+			return null;
+		case "idle":
+			// Idle is the calm non-streaming posture — never an alarm, and stopping
+			// a stream (live/degraded/dead → idle) must not raise a toast.
 			return null;
 		default:
 			return null;

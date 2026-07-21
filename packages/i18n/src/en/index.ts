@@ -252,6 +252,7 @@ const en = {
 		healthHealthy: "Healthy",
 		healthDegraded: "Degraded",
 		healthDead: "Dead",
+		healthIdle: "Idle",
 		healthUnknown: "Unknown",
 		announceStreamStarted: "Streaming started",
 		announceStreamStopped: "Streaming stopped",
@@ -273,6 +274,7 @@ const en = {
 		healthExplainDegraded:
 			"Streaming, but frames stalled or some bonded links are down.",
 		healthExplainDead: "Encoder process not running. The stream is down.",
+		healthExplainIdle: "Not streaming. The device is idle and ready.",
 		buffering: "Buffering",
 		bufferingStoreForward: "Store & forward active",
 		bufferingHint:
