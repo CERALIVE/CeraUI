@@ -67,7 +67,7 @@ CeraUI/
 │   │       └── system.schema.ts           # KIOSK_UNAVAILABLE_ERROR + system schemas
 │   └── i18n/         # typesafe-i18n, 10 languages (workspace:*)
 ├── scripts/build/    # build-debian-package.sh — produces ceraui .deb
-├── docs/             # ARCHITECTURE, BUILD_PIPELINE, APT_VERSION_CONTROL, BRANDING, TOUCHSCREEN
+├── docs/             # ARCHITECTURE, BUILD_PIPELINE, APT_VERSION_CONTROL, BRANDING, TOUCHSCREEN, LIFECYCLE-INDICATORS
 └── .impeccable.md    # UI/UX design constraints — read before touching frontend visuals
 ```
 
@@ -142,6 +142,7 @@ CeraUI/
 | **Network-ingest operator enable/disable (topology-aware desired-state + systemctl apply + boot reconcile)** | `apps/backend/src/modules/network/network-ingest-control.ts` |
 | **Settings "Network ingest" dialog (per-protocol enable/disable toggle)** | `apps/frontend/src/main/dialogs/NetworkIngestDialog.svelte` |
 | **BondedLinksSection — sole owner of live per-link telemetry (RTT/NAK/weight) on the Network view** | `apps/frontend/src/main/network/BondedLinksSection.svelte` |
+| **Lifecycle indicator gap matrix + recommendations register (31-row inventory: EXISTS/FIXED/RECOMMENDED per transition)** | `docs/LIFECYCLE-INDICATORS.md` |
 | **Deprecation-shim register entries (legacy broadcasts + unmounted GoLiveCard-migration files)** | `docs/TECHNICAL_DEBT.md` → `TD-legacy-source-broadcasts` / `TD-unmounted-source-shims` |
 | **`device.activeProfile` status-frame emitter (drift-detection loop)** | `apps/backend/src/modules/remote-control/active-profile-reporter.ts` (`reportActiveProfile({force?})` — reads the ACTUALLY-applied `StreamConfig` via injected `readActiveProfile`, de-dups on the 4 fields, emits `{config}` via injected `broadcast`) + `active-profile-wiring.ts` (`wireActiveProfileReporter()` — binds `readActiveProfile` to the persisted `stream_profile`/`srt_latency`/`fec_enabled`/`recovery_mode` config, `broadcast` to `broadcastMsg`; called from `main.ts` after `wireSetProfile()`). Three emit sites: `set-profile-wiring.ts` (after a successful `setProfile` apply), `rpc/procedures/streaming.procedure.ts` (after a UI Stream-Tuning config change), `modules/remote-control/channel.ts` `handleOpen()` (force re-emit on control-channel connect/reconnect — reseeds the hub, which loses its snapshot on disconnect). Frame type registered in `protocol.ts` `STATUS_TYPES` + `RELAYABLE_TYPES` (`status-relay.ts`) as `ACTIVE_PROFILE_STATUS = "device.activeProfile"`. Platform-side consumer: `ceralive-platform/apps/api/lib/remote-control/hub/internal-gate.ts` `applyActiveProfile` (see `ceralive-platform/AGENTS.md` → SRT-receive profile reconciliation) |
 
