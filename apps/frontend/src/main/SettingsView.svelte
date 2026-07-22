@@ -37,6 +37,7 @@ import { AppDialog } from '$lib/components/dialogs';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getConfig, getKiosk } from '$lib/rpc/subscriptions.svelte';
+import { clearRequestedDialog, getRequestedDialog } from '$lib/stores/dialog-request.svelte';
 import { cn } from '$lib/utils';
 
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
@@ -238,6 +239,15 @@ function openEntry(entry: Entry) {
 }
 
 const ActiveIcon = $derived(active?.icon);
+
+// A notification tap (Todo 24) requests the Updates dialog via the dialog-request
+// bus, which has already switched the destination to Settings; open it here.
+$effect(() => {
+	if (getRequestedDialog() === 'updates-dialog') {
+		updatesOpen = true;
+		clearRequestedDialog();
+	}
+});
 </script>
 
 <div class="flex-col md:flex">

@@ -33,7 +33,11 @@
  * `* 1000` — never `* 2500`.
  */
 import { getLL } from "@ceraui/i18n/svelte";
-import type { Notification, NotificationType } from "@ceraui/rpc/schemas";
+import type {
+	Notification,
+	NotificationAction,
+	NotificationType,
+} from "@ceraui/rpc/schemas";
 
 // ============================================
 // Types
@@ -55,6 +59,8 @@ export interface ActiveNotification {
 	durationMs: number;
 	/** When this entry was pushed (ms epoch). */
 	receivedAt: number;
+	/** Optional versioned deep-link affordance (Todo 24) — undefined for legacy notifications. */
+	action?: NotificationAction;
 }
 
 /** A callable translation leaf as exposed by the `$LL` proxy. */
@@ -150,6 +156,9 @@ export function toActiveNotification(
 		isPersistent: notification.is_persistent,
 		durationMs: notification.duration * 1000,
 		receivedAt: now,
+		...(notification.action !== undefined
+			? { action: notification.action }
+			: {}),
 	};
 }
 

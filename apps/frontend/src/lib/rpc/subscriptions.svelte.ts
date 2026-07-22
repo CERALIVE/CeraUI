@@ -24,6 +24,7 @@ import type {
 	SensorsStatus,
 	SourcesMessage,
 	StatusResponse,
+	UpdateState,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
 import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
@@ -93,6 +94,7 @@ let availableUpdatesState = $state<
 	StatusResponse["available_updates"] | undefined
 >(undefined);
 let updatingState = $state<StatusResponse["updating"]>(null);
+let updateStateState = $state<UpdateState | undefined>(undefined);
 
 // Network state
 let netifState = $state<NetifMessage | undefined>(undefined);
@@ -185,6 +187,10 @@ export function getAvailableUpdates() {
 
 export function getUpdating() {
 	return updatingState;
+}
+
+export function getUpdateState() {
+	return updateStateState;
 }
 
 export function getNetif() {
@@ -372,6 +378,9 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			}
 			if (statusData.updating !== undefined) {
 				updatingState = statusData.updating;
+			}
+			if (statusData.update_state !== undefined) {
+				updateStateState = statusData.update_state;
 			}
 			if (statusData.wifi !== undefined) {
 				wifiState = statusData.wifi;

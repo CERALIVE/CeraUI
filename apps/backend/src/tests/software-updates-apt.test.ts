@@ -120,6 +120,7 @@ Need to get 12.3 MB/44.0 MB of archives.
 				upgradeCount: 3,
 				downloadSize: "12.3 MB",
 				ceralivePackages: true,
+				packages: ["ceraui", "unrelated"],
 			});
 		}
 	});
@@ -133,6 +134,7 @@ Need to get 12.3 MB/44.0 MB of archives.
 			expect(result.value).toEqual({
 				upgradeCount: 0,
 				ceralivePackages: false,
+				packages: [],
 			});
 		}
 	});

@@ -8,8 +8,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type { UpdateProgress } from '@ceraui/rpc/schemas';
-import { Download, RefreshCw } from '@lucide/svelte';
+import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
@@ -20,7 +19,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
-import { getAvailableUpdates, getUpdating } from '$lib/rpc/subscriptions.svelte';
+import { getUpdateState } from '$lib/rpc/subscriptions.svelte';
 
 interface Props {
 	open?: boolean;
@@ -28,27 +27,32 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-// `available_updates` is `false`/`null` (no updates / not yet checked) or the
-// package summary object; narrow to the object so falsy sentinels read as zero.
-const updates = $derived(getAvailableUpdates());
-const updateInfo = $derived(
-	updates && typeof updates === 'object' ? updates : undefined,
-);
-const count = $derived(updateInfo?.package_count ?? 0);
-const size = $derived(updateInfo?.download_size ?? '');
+// The ONE update state machine (Todo 24). The dialog and the notification both
+// derive from this, so an `available` state already carries the version + summary
+// — no manual re-check is needed to render it.
+const updateState = $derived(getUpdateState());
 
-const updating = $derived(getUpdating());
-// In progress = literal true OR a progress object that hasn't resolved (result !== 0).
-const isUpdating = $derived(
-	updating === true ||
-		(typeof updating === 'object' && updating !== null && updating.result !== 0),
+const available = $derived(
+	updateState?.kind === 'available' ? updateState : undefined,
+);
+const count = $derived(available?.package_count ?? 0);
+const size = $derived(available?.download_size ?? '');
+const version = $derived(available?.identity.version ?? '');
+const packages = $derived(available?.identity.packages ?? []);
+
+const failed = $derived(updateState?.kind === 'failed' ? updateState : undefined);
+const inProgress = $derived(
+	updateState?.kind === 'downloading' || updateState?.kind === 'installing',
+);
+const progress = $derived(
+	updateState?.kind === 'downloading' || updateState?.kind === 'installing'
+		? updateState.progress
+		: undefined,
 );
 
-// Best-effort percentage when a structured progress object is present.
 const progressValue = $derived.by(() => {
-	if (typeof updating !== 'object' || updating === null) return undefined;
-	const p = updating as UpdateProgress;
-	if (!p.total || p.total <= 0) return undefined;
+	const p = progress;
+	if (!p?.total || p.total <= 0) return undefined;
 	const done = (p.downloading ?? 0) + (p.unpacking ?? 0) + (p.setting_up ?? 0);
 	return Math.min(100, Math.max(0, Math.round((100 * done) / (3 * p.total))));
 });
@@ -56,9 +60,7 @@ const progressValue = $derived.by(() => {
 let confirmOpen = $state(false);
 
 // `update` op covers ONLY the brief start-dispatch window: it stays `pending`
-// from the startUpdate dispatch until the first `updating` broadcast confirms it
-// (or a `{ success: false }`/reject fails it with a calm toast). The progress UI
-// below keeps reading the broadcast directly — it is NOT under this op's TTL.
+// from the startUpdate dispatch until the first in-progress state confirms it.
 const starting = $derived(getOperationPhase('update') === 'pending');
 
 async function doInstall() {
@@ -67,18 +69,15 @@ async function doInstall() {
 		rpc: () => rpc.system.startUpdate(),
 		failMessage: () => $LL.network.os.operationFailed(),
 		busyMessage: () => $LL.network.os.deviceBusy(),
-		// NO confirmOnResolve — the first `updating` broadcast confirms the start.
 	});
 }
 
 let checking = $state(false);
 let checkTimeout: ReturnType<typeof setTimeout> | undefined;
-let checkBaseline: typeof updates = undefined;
 
 async function doCheck() {
-	if (checking || isUpdating) return;
+	if (checking || inProgress) return;
 	checking = true;
-	checkBaseline = updates;
 	clearTimeout(checkTimeout);
 	checkTimeout = setTimeout(() => {
 		checking = false;
@@ -90,9 +89,9 @@ async function doCheck() {
 	}
 }
 
-// A fresh available_updates broadcast (new object ref) confirms the check ran.
+// A transition OUT of `checking`/`failed` confirms the re-check ran.
 $effect(() => {
-	if (checking && updates !== checkBaseline) {
+	if (checking && updateState?.kind !== 'checking' && updateState?.kind !== 'failed') {
 		checking = false;
 		clearTimeout(checkTimeout);
 	}
@@ -100,10 +99,10 @@ $effect(() => {
 
 $effect(() => () => clearTimeout(checkTimeout));
 
-// Confirm the start-dispatch op once the first `updating` broadcast lands.
+// Confirm the start-dispatch op once the first in-progress state lands.
 $effect(() => {
 	if (getOperationPhase('update') !== 'pending') return;
-	if (isUpdating) confirmOperation('update');
+	if (inProgress) confirmOperation('update');
 });
 </script>
 
@@ -115,9 +114,22 @@ $effect(() => {
 	title={$LL.settings.index.updates()}
 >
 	<div class="space-y-5">
-		<!-- Availability summary -->
-		<div class="bg-muted/40 rounded-lg border p-4">
-			{#if count > 0}
+		<!-- Availability summary — the version is already present in the `available`
+		     state, so it renders without any manual re-check. -->
+		<div class="bg-muted/40 rounded-lg border p-4" data-testid="update-summary">
+			{#if failed}
+				<div class="flex items-start gap-2" data-testid="update-failed">
+					<AlertTriangle class="text-destructive mt-0.5 size-5 shrink-0" />
+					<div class="min-w-0">
+						<p class="text-destructive text-lg font-semibold">
+							{$LL.general.updateFailed()}
+						</p>
+						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
+							{failed.reason}
+						</p>
+					</div>
+				</div>
+			{:else if count > 0}
 				<p class="text-2xl font-bold">
 					{count}
 					{count === 1 ? $LL.general.package() : $LL.general.packages()}
@@ -125,13 +137,22 @@ $effect(() => {
 				{#if size}
 					<p class="text-muted-foreground mt-0.5 text-sm">{size}</p>
 				{/if}
+				{#if version}
+					<p class="text-muted-foreground mt-1 font-mono text-xs" data-testid="update-version">
+						{version}
+					</p>
+				{/if}
+				{#if packages.length > 0}
+					<p class="text-muted-foreground mt-1 text-xs break-words" data-testid="update-packages">
+						{packages.join(', ')}
+					</p>
+				{/if}
 			{:else}
 				<p class="text-lg font-semibold">{$LL.general.noUpdatesAvailable()}</p>
 			{/if}
 		</div>
 
-		{#if isUpdating}
-			<!-- In-progress (reads the live broadcast, not the start-dispatch op) -->
+		{#if inProgress}
 			<div class="space-y-2" aria-live="polite">
 				<div class="flex items-center gap-2 text-sm font-medium">
 					<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
@@ -140,21 +161,30 @@ $effect(() => {
 				<Progress value={progressValue ?? 100} />
 			</div>
 		{:else if starting}
-			<!-- Brief start-dispatch window before the first `updating` broadcast -->
 			<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 				{$LL.network.os.applying()}
 			</div>
+		{:else if failed}
+			<Button
+				aria-busy={checking}
+				class="w-full gap-2"
+				disabled={checking}
+				onclick={doCheck}
+				variant="outline"
+				data-testid="update-retry"
+			>
+				<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
+				{$LL.general.retryUpdateCheck()}
+			</Button>
 		{:else if count > 0}
-			<!-- Install action (opens destructive confirmation) -->
 			<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
 				<Download class="size-4" />
 				{$LL.general.updateButton()}
 			</Button>
 		{/if}
 
-		{#if !isUpdating && !starting}
-			<!-- Manual re-check: re-runs the discovery pipeline on the device -->
+		{#if !inProgress && !starting && !failed}
 			<Button
 				aria-busy={checking}
 				class="w-full gap-2"

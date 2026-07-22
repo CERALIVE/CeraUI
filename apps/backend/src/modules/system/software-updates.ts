@@ -39,6 +39,14 @@ import {
 	parseFail,
 	parseOk,
 } from "./cli-parse.ts";
+import {
+	deriveUpdateIdentity,
+	deriveUpdateState,
+	type UpdateFailure,
+	type UpdateIdentity,
+	type UpdateState,
+	updateDismissalKey,
+} from "./update-state.ts";
 
 let availableUpdates:
 	| {
@@ -59,6 +67,15 @@ let aptGetUpdating = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 
+// Unified-update-state signals (Todo 24). The identity of the currently-available
+// update; the identity being installed; and the terminal outcome of the last run.
+// A terminal failure/success PERSISTS across background discovery re-runs — only a
+// new install (startSoftwareUpdate) or a manual re-check clears it.
+let availableIdentity: UpdateIdentity | null = null;
+let currentUpdateIdentity: UpdateIdentity | null = null;
+let lastUpdateFailure: UpdateFailure | null = null;
+let lastUpdateSucceeded = false;
+
 export function getAvailableUpdates() {
 	return availableUpdates;
 }
@@ -69,6 +86,35 @@ export function getSoftUpdateStatus() {
 
 export function isUpdating() {
 	return softUpdateStatus != null;
+}
+
+export function getUpdateState(): UpdateState {
+	const available =
+		availableUpdates === false
+			? false
+			: availableUpdates && availableIdentity
+				? {
+						identity: availableIdentity,
+						package_count: availableUpdates.package_count,
+						...(availableUpdates.download_size !== undefined
+							? { download_size: availableUpdates.download_size }
+							: {}),
+					}
+				: null;
+	return deriveUpdateState({
+		checking: aptGetUpdating,
+		available,
+		updating:
+			softUpdateStatus && softUpdateStatus.result === undefined
+				? softUpdateStatus
+				: null,
+		failure: lastUpdateFailure,
+		succeeded: lastUpdateSucceeded,
+	});
+}
+
+function broadcastUpdateState() {
+	broadcastMsg("status", { update_state: getUpdateState() });
 }
 
 // Auto-reboot runner DI seam: default runs the real argv-only run(); tests spy it.
@@ -99,6 +145,7 @@ export type AptUpgradeSummary = {
 	readonly upgradeCount: number;
 	readonly downloadSize?: string;
 	readonly ceralivePackages: boolean;
+	readonly packages: string[];
 };
 
 export function parseUpgradePackageCount(text: string): ParseResult<number> {
@@ -220,7 +267,7 @@ export function parseAptUpgradeSummary(
 	const upgradeCount = parseUpgradePackageCount(stdout);
 	if (!upgradeCount.ok) return upgradeCount;
 	if (upgradeCount.value === 0) {
-		return parseOk({ upgradeCount: 0, ceralivePackages: false });
+		return parseOk({ upgradeCount: 0, ceralivePackages: false, packages: [] });
 	}
 
 	const downloadSize = parseUpgradeDownloadSize(stdout);
@@ -243,6 +290,7 @@ export function parseAptUpgradeSummary(
 			packageList.value,
 			ceralivePackageList,
 		),
+		packages: packageList.value.split(/\s+/).filter((n) => n.length > 0),
 	});
 }
 
@@ -314,14 +362,31 @@ async function getSoftwareUpdateSize() {
 		aptHeldBackPackages = undefined;
 	}
 
-	if (res.ceralivePackages) {
+	availableIdentity =
+		res.upgradeCount > 0
+			? deriveUpdateIdentity(res.packages, res.upgradeCount, res.downloadSize)
+			: null;
+
+	if (res.ceralivePackages && availableIdentity) {
 		notificationBroadcast(
 			"ceralive_update",
 			"warning",
-			"A CERALIVE update is available. Scroll down to the System menu to install it.",
+			"A CERALIVE update is available. Open Settings → Software Updates to install it.",
 			0,
 			true,
-			false,
+			true,
+			true,
+			"notifications.ceraliveUpdateAvailable",
+			undefined,
+			{
+				action: {
+					schema: 1,
+					kind: "navigate",
+					target: "updates-dialog",
+					labelKey: "notifications.openUpdates",
+				},
+				dismissalKey: updateDismissalKey(availableIdentity),
+			},
 		);
 	}
 
@@ -331,7 +396,10 @@ async function getSoftwareUpdateSize() {
 			? { download_size: res.downloadSize }
 			: {}),
 	};
-	broadcastMsg("status", { available_updates: availableUpdates });
+	broadcastMsg("status", {
+		available_updates: availableUpdates,
+		update_state: getUpdateState(),
+	});
 
 	return null;
 }
@@ -500,10 +568,18 @@ export function periodicCheckForSoftwareUpdates() {
 // Reuses the periodic discovery + skip guard but never touches its timer.
 // Returns false when skipped (streaming/updating/apt busy).
 export function triggerManualUpdateCheck(): boolean {
+	// A manual re-check supersedes a prior terminal outcome (Todo 24) — the
+	// dialog's retry affordance routes here to re-enter `checking`.
+	lastUpdateFailure = null;
+	lastUpdateSucceeded = false;
 	if (shouldUseMocks()) {
 		if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
 		availableUpdates = { package_count: 0 };
-		broadcastMsg("status", { available_updates: availableUpdates });
+		availableIdentity = null;
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
 		return true;
 	}
 	return softwareUpdateCheckRunner(async () => {
@@ -523,15 +599,52 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
 		if (err === null) {
 			doSoftwareUpdate();
 		} else if (softUpdateStatus) {
-			softUpdateStatus.result =
+			const reason =
 				"Failed to fetch the updated package list; aborting the update.";
-			broadcastMsg("status", { updating: softUpdateStatus });
+			lastUpdateSucceeded = false;
+			lastUpdateFailure = {
+				reason,
+				...((currentUpdateIdentity ?? availableIdentity)
+					? {
+							identity: (currentUpdateIdentity ??
+								availableIdentity) as UpdateIdentity,
+						}
+					: {}),
+			};
+			notificationBroadcast(
+				"ceralive_update_failed",
+				"error",
+				"The software update failed. Open Settings → Software Updates to see the reason and retry.",
+				0,
+				true,
+				true,
+				true,
+				"notifications.ceraliveUpdateFailed",
+				undefined,
+				{
+					action: {
+						schema: 1,
+						kind: "navigate",
+						target: "updates-dialog",
+						labelKey: "notifications.openUpdates",
+					},
+				},
+			);
+			softUpdateStatus.result = reason;
+			broadcastMsg("status", {
+				updating: softUpdateStatus,
+				update_state: getUpdateState(),
+			});
 			softUpdateStatus = null;
+			broadcastUpdateState();
 		}
 	});
 
 	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
-	broadcastMsg("status", { updating: softUpdateStatus });
+	broadcastMsg("status", {
+		updating: softUpdateStatus,
+		update_state: getUpdateState(),
+	});
 };
 
 let softwareUpdateRunner: SoftwareUpdateRunner = defaultSoftwareUpdateRunner;
@@ -578,12 +691,23 @@ async function simulateMockSoftwareUpdate(): Promise<void> {
 	await Bun.sleep(MOCK_UPDATE_STEP_DELAY_MS);
 	if (!softUpdateStatus) return;
 	softUpdateStatus = { ...softUpdateStatus, result: 0 };
-	broadcastMsg("status", { updating: softUpdateStatus });
+	lastUpdateSucceeded = true;
+	lastUpdateFailure = null;
+	broadcastMsg("status", {
+		updating: softUpdateStatus,
+		update_state: getUpdateState(),
+	});
 	softUpdateStatus = null;
+	broadcastUpdateState();
 }
 
 export function startSoftwareUpdate() {
 	if (!setup.apt_update_enabled || getIsStreaming() || isUpdating()) return;
+
+	// A fresh install supersedes any prior terminal outcome (Todo 24).
+	currentUpdateIdentity = availableIdentity;
+	lastUpdateFailure = null;
+	lastUpdateSucceeded = false;
 
 	// if an apt-get update is already in progress, retry later
 	if (aptGetUpdating) {
@@ -702,9 +826,47 @@ function doSoftwareUpdate() {
 		]);
 
 		if (softUpdateStatus) {
+			if (code === 0) {
+				lastUpdateSucceeded = true;
+				lastUpdateFailure = null;
+			} else {
+				lastUpdateSucceeded = false;
+				lastUpdateFailure = {
+					reason: aptErr.trim() || `apt-get exited with code ${code}`,
+					...((currentUpdateIdentity ?? availableIdentity)
+						? {
+								identity: (currentUpdateIdentity ??
+									availableIdentity) as UpdateIdentity,
+							}
+						: {}),
+				};
+				notificationBroadcast(
+					"ceralive_update_failed",
+					"error",
+					"The software update failed. Open Settings → Software Updates to see the reason and retry.",
+					0,
+					true,
+					true,
+					true,
+					"notifications.ceraliveUpdateFailed",
+					undefined,
+					{
+						action: {
+							schema: 1,
+							kind: "navigate",
+							target: "updates-dialog",
+							labelKey: "notifications.openUpdates",
+						},
+					},
+				);
+			}
 			softUpdateStatus.result = code === 0 ? code : aptErr;
-			broadcastMsg("status", { updating: softUpdateStatus });
+			broadcastMsg("status", {
+				updating: softUpdateStatus,
+				update_state: getUpdateState(),
+			});
 			softUpdateStatus = null;
+			broadcastUpdateState();
 		}
 
 		if (aptLog) logger.info(aptLog);

@@ -153,6 +153,9 @@ const ar = {
 			"سطح المكتب + الهاتف (5 علامات تبويب، موضوعان لكل منها) + غير متصل (موضوعان) = 22 إجمالي",
 	},
 	general: {
+		updateFailed: "فشل التحديث",
+		retryUpdateCheck: "أعد المحاولة",
+		updateComplete: "اكتمل التحديث",
 		status: "الحالة",
 		streaming: "البث",
 		offline: "غير متصل",
@@ -1454,6 +1457,11 @@ const ar = {
 		bitrateRange: "يجب أن يكون معدل البت بين 2000 و12000 كيلوبت/ثانية",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"يتوفر تحديث CERALIVE. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
+		ceraliveUpdateFailed:
+			"فشل تحديث البرنامج. افتح الإعدادات ← تحديثات البرامج لمعرفة السبب وإعادة المحاولة.",
+		openUpdates: "فتح التحديثات",
 		error: "خطأ",
 		saved: "تم الحفظ",
 		saveFailed: "فشل الحفظ",

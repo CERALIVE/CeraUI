@@ -5,7 +5,12 @@ import { z } from 'zod';
 
 import { modemListSchema } from './modems.schema';
 import { audioSourceSchema } from './streaming.schema';
-import { availableUpdatesSchema, sshStatusSchema, updatingStatusSchema } from './system.schema';
+import {
+	availableUpdatesSchema,
+	sshStatusSchema,
+	updateStateSchema,
+	updatingStatusSchema,
+} from './system.schema';
 import { wifiStatusSchema } from './wifi.schema';
 
 // Audio sources enum
@@ -47,6 +52,7 @@ export const statusMessageSchema = z.object({
 	is_streaming: z.boolean(),
 	available_updates: availableUpdatesFieldSchema,
 	updating: updatingStatusSchema,
+	update_state: updateStateSchema.optional(),
 	ssh: sshStatusSchema,
 	wifi: wifiStatusSchema,
 	asrcs: z.array(z.string()),
@@ -172,6 +178,7 @@ export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
 	available_updates: availableUpdatesFieldSchema.optional(),
 	updating: updatingStatusSchema.optional(),
+	update_state: updateStateSchema.optional(),
 	ssh: sshStatusSchema.optional(),
 	wifi: wifiStatusSchema.optional(),
 	modems: modemListSchema.optional(),

@@ -161,6 +161,9 @@ const en = {
 			"Desktop + Mobile (5 tabs, 2 themes each) + Offline (2 themes) = 22 total",
 	},
 	general: {
+		updateFailed: "Update failed",
+		retryUpdateCheck: "Try again",
+		updateComplete: "Update complete",
 		status: "Status",
 		streaming: "Streaming",
 		offline: "Offline",
@@ -731,6 +734,11 @@ const en = {
 		bitrateRange: "Bitrate must be between 2000 and 12000 Kbps",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"A CERALIVE update is available. Open Settings → Software Updates to install it.",
+		ceraliveUpdateFailed:
+			"The software update failed. Open Settings → Software Updates to see the reason and retry.",
+		openUpdates: "Open updates",
 		error: "Error",
 		saved: "Saved",
 		saveFailed: "Failed to save",

@@ -38,6 +38,7 @@ import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
+	getUpdateState,
 } from "../../modules/system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../../modules/system/ssh.ts";
 import { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
@@ -68,6 +69,7 @@ export const getStatusProcedure = authedProcedure
 			is_streaming: getIsStreaming(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
+			update_state: getUpdateState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: modemListSchema.parse(buildModemsMessage()),
@@ -108,6 +110,7 @@ export function buildInitialStatus() {
 			is_streaming: getIsStreaming(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
+			update_state: getUpdateState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: modemListSchema.parse(buildModemsMessage()),

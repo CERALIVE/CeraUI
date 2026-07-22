@@ -14,6 +14,9 @@ const zh = {
 		steps: "步骤",
 	},
 	general: {
+		updateFailed: "更新失败",
+		retryUpdateCheck: "重试",
+		updateComplete: "更新完成",
 		status: "状态",
 		streaming: "直播中",
 		offline: "离线",
@@ -1267,6 +1270,10 @@ const zh = {
 		bitrateRange: "比特率必须在 2000 到 12000 Kbps 之间",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"有可用的 CERALIVE 更新。打开 设置 → 软件更新 进行安装。",
+		ceraliveUpdateFailed: "软件更新失败。打开 设置 → 软件更新 查看原因并重试。",
+		openUpdates: "打开更新",
 		error: "错误",
 		saved: "已保存",
 		saveFailed: "保存失败",

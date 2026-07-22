@@ -15,6 +15,9 @@ const ko = {
 		steps: "단계",
 	},
 	general: {
+		updateFailed: "업데이트 실패",
+		retryUpdateCheck: "다시 시도",
+		updateComplete: "업데이트 완료",
 		status: "상태",
 		streaming: "스트리밍",
 		offline: "오프라인",
@@ -1331,6 +1334,11 @@ const ko = {
 		bitrateRange: "비트레이트는 2000에서 12000 Kbps 사이여야 합니다",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"CERALIVE 업데이트가 있습니다. 설정 → 소프트웨어 업데이트를 열어 설치하세요.",
+		ceraliveUpdateFailed:
+			"소프트웨어 업데이트에 실패했습니다. 설정 → 소프트웨어 업데이트를 열어 이유를 확인하고 다시 시도하세요.",
+		openUpdates: "업데이트 열기",
 		error: "오류",
 		saved: "저장됨",
 		saveFailed: "저장하지 못했습니다",

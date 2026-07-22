@@ -1,12 +1,29 @@
 <script lang="ts">
+import { getLL } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Toaster } from '$lib/components/ui/sonner';
+import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import {
 	startStreaming as startStreamingFn,
 	stopStreaming as stopStreamingFn,
 } from '$lib/helpers/SystemHelper';
 import { clearNotifications, dismiss, getActive } from '$lib/stores/notifications.svelte';
+
+// Resolve the action label i18n key against the live translation tree, falling
+// back to the raw key so an unknown label never blocks the deep-link affordance.
+function resolveActionLabel(key: string): string {
+	const ll = getLL() as Record<string, unknown>;
+	let node: unknown = ll;
+	for (const seg of key.split('.')) {
+		if (node && typeof node === 'object' && seg in (node as object)) {
+			node = (node as Record<string, unknown>)[seg];
+		} else {
+			return key;
+		}
+	}
+	return typeof node === 'function' ? (node as () => string)() : key;
+}
 
 // Bookkeeping for which active notifications have already been surfaced as a
 // toast. Keyed by the store's dedup key (`name`) → the `receivedAt` stamp of
@@ -26,6 +43,7 @@ $effect(() => {
 		if (renderedAt.get(notification.name) === notification.receivedAt) continue;
 		renderedAt.set(notification.name, notification.receivedAt);
 
+		const action = notification.action;
 		toast[notification.type](notification.text, {
 			id: notification.name,
 			duration: notification.isPersistent
@@ -34,6 +52,17 @@ $effect(() => {
 			dismissable: notification.isDismissable,
 			onDismiss: () => dismiss(notification.name),
 			onAutoClose: () => dismiss(notification.name),
+			...(action?.kind === 'navigate'
+				? {
+						action: {
+							label: resolveActionLabel(action.labelKey),
+							onClick: () => {
+								requestDialog(action.target);
+								toast.dismiss(notification.name);
+							},
+						},
+					}
+				: {}),
 		});
 	}
 
