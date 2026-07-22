@@ -1076,6 +1076,13 @@ const hi = {
 			audioLabel: "ऑडियो स्तर",
 			audioSilent: "मौन",
 			channelAria: "चैनल {n} स्तर",
+			audioUnavailable: "मीटर उपलब्ध नहीं",
+			audioUnavailableReason: {
+				device_busy: "ऑडियो डिवाइस व्यस्त",
+				no_device: "कोई ऑडियो डिवाइस नहीं",
+				mode_none: "ऑडियो अक्षम",
+				handoff: "बदल रहा है\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "इंजन शुरू हो रहा है",

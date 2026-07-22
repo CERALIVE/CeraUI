@@ -1113,6 +1113,13 @@ const ja = {
 			audioLabel: "音声レベル",
 			audioSilent: "無音",
 			channelAria: "チャンネル {n} レベル",
+			audioUnavailable: "メーターは利用できません",
+			audioUnavailableReason: {
+				device_busy: "オーディオデバイス使用中",
+				no_device: "オーディオデバイスなし",
+				mode_none: "オーディオ無効",
+				handoff: "切り替え中\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "エンジン起動中",

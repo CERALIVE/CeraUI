@@ -35,6 +35,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getIsStreaming: () => state.isStreaming,
 	getSensors: () => ({}),
 	getLinkTelemetry: () => null,
+	getAudioLevel: () => undefined,
 	getDevices: () => [],
 	getActiveInput: () => undefined,
 	getConnectionState: () => "connected",

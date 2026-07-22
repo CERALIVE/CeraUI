@@ -103,19 +103,84 @@ export function groupAudioSources(list: readonly AudioSource[]): {
 	return { devices, pseudo };
 }
 
+// Uppercase transport tag rendered beside the product name (`RØDE NT-USB · USB`).
+// Bluetooth abbreviates to BT; onboard reads "Onboard".
+const AUDIO_TRANSPORT_TAG: Record<
+	NonNullable<AudioSource["transport"]>,
+	string
+> = {
+	usb: "USB",
+	hdmi: "HDMI",
+	bluetooth: "BT",
+	onboard: "Onboard",
+};
+
 /**
- * Display label for an audio-source entry. Preference order (T6):
- *   1. `entry.label` — the verbatim hardware name resolved by the backend (T4);
- *      wins when present, NEVER translated.
- *   2. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
+ * Display label for an audio-source entry. Preference order:
+ *   1. `<product_name> · <TRANSPORT>` (device-quality-wave2 Todo 22) — the real
+ *      engine product name + its transport tag; the transport is appended only
+ *      when a product name is present (a bare tag is meaningless).
+ *   2. `entry.label` — the verbatim hardware name resolved by the backend (T4);
+ *      NEVER translated.
+ *   3. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
  *      Pipeline default).
- *   3. `entry.id` — the raw wire id, for a legacy device entry with no label.
+ *   4. `entry.id` — the raw wire id, for a legacy device entry with no label.
  */
 export function audioSourceLabel(
 	entry: AudioSource,
 	t: (key: string) => string,
 ): string {
+	if (entry.product_name !== undefined && entry.product_name.length > 0) {
+		const tag =
+			entry.transport !== undefined
+				? AUDIO_TRANSPORT_TAG[entry.transport]
+				: undefined;
+		return tag !== undefined
+			? `${entry.product_name} \u00b7 ${tag}`
+			: entry.product_name;
+	}
 	return entry.label ?? (entry.labelKey ? t(entry.labelKey) : entry.id);
+}
+
+/**
+ * Resolve a SAVED audio selection (an old asrc-key OR the new `stable_id`) to the
+ * matching current entry — the migration shim (device-quality-wave2 Todo 22). A
+ * pre-upgrade `config.asrc` (the asrc-key id) keeps resolving after the identity
+ * scheme change, and a `stable_id` resolves once the UI binds selection to it.
+ * Match order: exact `stable_id` → exact `id`. Returns `undefined` when the saved
+ * selection matches no current entry (a device that is no longer present).
+ */
+export function resolveAudioSelection(
+	saved: string | undefined,
+	sources: readonly AudioSource[],
+): AudioSource | undefined {
+	if (saved === undefined) return undefined;
+	return (
+		sources.find((s) => s.stable_id !== undefined && s.stable_id === saved) ??
+		sources.find((s) => s.id === saved)
+	);
+}
+
+/**
+ * The value the audio-source `<Select>` binds to for an entry: the reboot-stable
+ * `stable_id` when present (device-quality-wave2 Todo 22), else the wire `id`. The
+ * persisted `config.asrc` stays the wire `id` — `audioSelectionWireId` maps a
+ * selected value back to it, so the engine ALSA path is unchanged.
+ */
+export function audioSelectionValue(entry: AudioSource): string {
+	return entry.stable_id ?? entry.id;
+}
+
+/**
+ * Map an audio `<Select>` value (a `stable_id` or a wire `id`) back to the wire
+ * `id` persisted as `config.asrc`. Falls back to the value itself when it matches
+ * no entry (a pseudo-source or a legacy id has no `stable_id`).
+ */
+export function audioSelectionWireId(
+	value: string,
+	sources: readonly AudioSource[],
+): string {
+	return resolveAudioSelection(value, sources)?.id ?? value;
 }
 
 /**

@@ -18,7 +18,7 @@
       "name": "backend",
       "version": "2026.6.2",
       "dependencies": {
-        "@ceralive/cerastream": "2026.7.2",
+        "@ceralive/cerastream": "2026.7.3",
         "@ceralive/control-protocol": "2026.7.0",
         "@ceralive/srtla-send": "2026.6.2",
         "@ceraui/rpc": "workspace:*",
@@ -342,7 +342,7 @@
 
     "@ceralive/biome-config": ["@ceralive/biome-config@2026.6.2", "", {}, "sha512-LqDaJufxLOC3Rm38u/ocpUro/ub8llv1q9pcS3W/Ys7gBy+wLjS2TmcyhMjNMRg9c7pCQlPMI6eS8JkhpN+ecw=="],
 
-    "@ceralive/cerastream": ["@ceralive/cerastream@2026.7.2", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-5Zw7XJ7qhtAHSd1kZRUnBD8ZHQGjhhLwgZj2ZluXRqNBMoEieEp+9p4WrPDwJZluBc6pMbj6T+5zDSqdFxrLTw=="],
+    "@ceralive/cerastream": ["@ceralive/cerastream@2026.7.3", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-Re0aP5yxe0Nb/LDkyvLTIfwktsBnywLusADXTNSZvLuYCDWQ0C7m1nyW0viOUilq8uB++H/jPJaEcykPq+cEzA=="],
 
     "@ceralive/control-protocol": ["@ceralive/control-protocol@2026.7.0", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-/pLQpo3bTUzzxaQJK0zta4XKS6EJWr26p5jj2YST69ejxafQiCCjXKgdOkMWU9VjKm0XeMNQehxXOb6ylMGGHg=="],
 

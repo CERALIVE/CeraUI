@@ -491,6 +491,13 @@ const en = {
 			audioLabel: "Audio levels",
 			audioSilent: "Silent",
 			channelAria: "Channel {n:number} level",
+			audioUnavailable: "Meter unavailable",
+			audioUnavailableReason: {
+				device_busy: "Audio device busy",
+				no_device: "No audio device",
+				mode_none: "Audio disabled",
+				handoff: "Switching\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "Engine starting",

@@ -506,6 +506,13 @@ const de = {
 			audioLabel: "Audiopegel",
 			audioSilent: "Stille",
 			channelAria: "Pegel Kanal {n}",
+			audioUnavailable: "Pegelanzeige nicht verfügbar",
+			audioUnavailableReason: {
+				device_busy: "Audiogerät belegt",
+				no_device: "Kein Audiogerät",
+				mode_none: "Audio deaktiviert",
+				handoff: "Wird umgeschaltet\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "Engine startet",

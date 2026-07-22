@@ -1272,6 +1272,13 @@ const fr = {
 			audioLabel: "Niveaux audio",
 			audioSilent: "Silence",
 			channelAria: "Niveau du canal {n}",
+			audioUnavailable: "Indicateur indisponible",
+			audioUnavailableReason: {
+				device_busy: "Périphérique audio occupé",
+				no_device: "Aucun périphérique audio",
+				mode_none: "Audio désactivé",
+				handoff: "Changement\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "Démarrage du moteur",

@@ -9,6 +9,7 @@
   e-ink freeze stills them automatically (never JS-drive these).
 -->
 <script lang="ts">
+import type { AudioLevelUnavailableReason } from '@ceraui/rpc/schemas';
 import { LL } from '@ceraui/i18n/svelte';
 
 import { cn } from '$lib/utils';
@@ -16,10 +17,26 @@ import { cn } from '$lib/utils';
 interface Props {
 	rmsDb?: number[];
 	peakDb?: number[];
+	// ADR-0007: the engine emits an explicit `unavailable` marker (lease handoff
+	// gap, missing device, or audio.mode=none) — NEVER a fabricated silence level.
+	// When set, render the unavailable state instead of bars, so a dead meter is
+	// visibly distinct from real digital silence.
+	unavailable?: boolean;
+	reason?: AudioLevelUnavailableReason;
 	class?: string;
 }
 
-const { rmsDb = [], peakDb = [], class: className = undefined }: Props = $props();
+const {
+	rmsDb = [],
+	peakDb = [],
+	unavailable = false,
+	reason = undefined,
+	class: className = undefined,
+}: Props = $props();
+
+const reasonLabel = $derived(
+	reason !== undefined ? $LL.live.preview.audioUnavailableReason[reason]() : undefined,
+);
 
 // dBFS window mapped to the bar: -60 dBFS reads empty, 0 dBFS reads full.
 const FLOOR_DB = -60;
@@ -46,12 +63,23 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 <div
 	data-testid="audio-level-meter"
 	data-silent={silent ? 'true' : 'false'}
+	data-unavailable={unavailable ? 'true' : 'false'}
 	data-channels={channelCount}
 	class={cn('space-y-1.5', className)}
 	role="group"
 	aria-label={$LL.live.preview.audioLabel()}
 >
-	{#if silent}
+	{#if unavailable}
+		<p
+			class="text-muted-foreground font-mono text-[11px] tracking-wide"
+			data-testid="audio-unavailable"
+			role="status"
+		>
+			{$LL.live.preview.audioUnavailable()}{#if reasonLabel}<span class="opacity-70">
+					{' \u00b7 '}{reasonLabel}</span
+				>{/if}
+		</p>
+	{:else if silent}
 		<p class="text-muted-foreground font-mono text-[11px] tracking-wide" data-testid="audio-silent">
 			{$LL.live.preview.audioSilent()}
 		</p>

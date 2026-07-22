@@ -52,8 +52,10 @@ import {
 	resolveReceiverKind,
 } from '$lib/streaming/receiver-experience';
 import {
+	audioSelectionWireId,
 	audioSourceLabel,
 	deriveActiveSummary,
+	resolveAudioSelection,
 	resolveAudioSourceList,
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
@@ -93,6 +95,7 @@ import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.s
 import ServerDialog from '$main/dialogs/ServerDialog.svelte';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
+import LiveAudioMeter from '$main/live/LiveAudioMeter.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
 import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
@@ -512,6 +515,14 @@ const audioSources = $derived(getStatus()?.asrcs ?? []);
 // Typed audio-source model (status.audio_sources) beside the legacy asrcs — drives
 // the humanized picker; falls back to `audioSources` on an older backend.
 const audioSourceList = $derived(getStatus()?.audio_sources);
+// Resolved typed entries + the migration-shim selection (device-quality-wave2
+// Todo 22): a SAVED `config.asrc` — an old asrc-key OR a new stable_id — resolves
+// to the current entry's wire id, so a pre-upgrade selection keeps resolving after
+// the identity scheme change. The persisted wire value stays the asrc id.
+const audioEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
+const resolvedAudioSource = $derived(
+	resolveAudioSelection(effectiveAudioSource, audioEntries)?.id ?? effectiveAudioSource,
+);
 
 function handleAudioSave(values: AudioConfigValues) {
 	audioOverride = values;
@@ -522,7 +533,11 @@ function handleAudioSave(values: AudioConfigValues) {
 // config reflect it immediately, then persists via setConfig (no stream restart)
 // — mirrors AudioDialog's asrc path. Live audio switching stays gated (Task 10):
 // the Source section only offers this control while idle.
-async function handleSelectAudioSource(asrc: string) {
+async function handleSelectAudioSource(selection: string) {
+	// The picker value may be a stable_id (Todo 22); map it back to the wire asrc
+	// id before persisting — the engine ALSA path is keyed on the asrc id, and the
+	// field-lock/echo must key on the same wire value the `config` broadcast echoes.
+	const asrc = audioSelectionWireId(selection, audioEntries);
 	audioOverride = {
 		asrc,
 		acodec: effectiveAudioCodec ?? 'aac',
@@ -930,7 +945,7 @@ const configRows = $derived<ConfigRow[]>([
 			{audioSources}
 			{audioSourceList}
 			audioStatus={getStatus()}
-			selectedAudioSource={effectiveAudioSource}
+			selectedAudioSource={resolvedAudioSource}
 			onSelectAudioSource={handleSelectAudioSource}
 			onOpenAudioDialog={() => (audioDialogOpen = true)}
 			selectedPipeline={config?.pipeline}
@@ -938,6 +953,11 @@ const configRows = $derived<ConfigRow[]>([
 			activeEncode={getStatus()?.active_encode ?? null}
 		/>
 	{/if}
+
+	<!-- Always-visible audio level meter (Todo 22): OUTSIDE the preview, so the
+	     bars move while idle with no preview open and continue across start/stop.
+	     Renders in both the idle and live cockpit states. -->
+	<LiveAudioMeter />
 </div>
 
 <ServerDialog bind:open={serverDialogOpen} onSaved={validateSavedDestination} />

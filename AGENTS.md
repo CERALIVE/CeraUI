@@ -14,7 +14,7 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.7.2"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.7.3"   (public npm, @ceralive scope)
 "@ceralive/srtla-send":  "2026.6.2"   (public npm, @ceralive scope)
 ```
 

@@ -1213,6 +1213,13 @@ const ar = {
 			audioLabel: "مستويات الصوت",
 			audioSilent: "صامت",
 			channelAria: "مستوى القناة {n}",
+			audioUnavailable: "المقياس غير متوفر",
+			audioUnavailableReason: {
+				device_busy: "جهاز الصوت مشغول",
+				no_device: "لا يوجد جهاز صوت",
+				mode_none: "الصوت معطّل",
+				handoff: "جارٍ التبديل\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "المحرك قيد التشغيل",

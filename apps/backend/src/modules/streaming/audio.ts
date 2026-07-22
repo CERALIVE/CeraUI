@@ -29,7 +29,12 @@ import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import { parseAsoundCards, resolveAudioLabels } from "./audio-naming.ts";
+import type { AudioDeviceIdentity } from "./audio-naming.ts";
+import {
+	parseAsoundCards,
+	resolveAudioIdentities,
+	resolveAudioLabels,
+} from "./audio-naming.ts";
 import {
 	type AudioDeviceWatcher,
 	createAudioDeviceWatcher,
@@ -161,6 +166,7 @@ export function warnIfConfiguredAudioSourceUnavailable(
 export function deriveAudioSources(
 	devices: Record<string, string> = getAudioDevices(),
 	labels?: Map<string, string>,
+	identities?: Map<string, AudioDeviceIdentity>,
 ): AudioSource[] {
 	return Object.keys(devices).map((name): AudioSource => {
 		if (name === NO_AUDIO_ID) {
@@ -174,10 +180,20 @@ export function deriveAudioSources(
 			};
 		}
 		const label = labels?.get(name);
+		const identity = identities?.get(name);
 		return {
 			id: name,
 			kind: "device",
 			...(label !== undefined ? { label } : {}),
+			...(identity?.product_name !== undefined
+				? { product_name: identity.product_name }
+				: {}),
+			...(identity?.transport !== undefined
+				? { transport: identity.transport }
+				: {}),
+			...(identity?.stable_id !== undefined
+				? { stable_id: identity.stable_id }
+				: {}),
 		};
 	});
 }
@@ -285,9 +301,13 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	});
 
 	const labels = await resolveAudioLabelsForTick(audioDevices);
+	const identities = resolveAudioIdentities(
+		audioDevices,
+		getEngineAudioDevices(),
+	);
 	broadcastMsg("status", {
 		asrcs: Object.keys(audioDevices),
-		audio_sources: deriveAudioSources(audioDevices, labels),
+		audio_sources: deriveAudioSources(audioDevices, labels, identities),
 	});
 
 	// A re-enumeration may change what "Auto" resolves to; refresh the idle

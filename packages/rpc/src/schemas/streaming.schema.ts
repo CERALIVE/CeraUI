@@ -94,6 +94,12 @@ export const AUDIO_SOURCE_AUTO = 'Auto';
 export const audioSourceKindSchema = z.enum(['device', 'none', 'pipeline_default', 'auto']);
 export type AudioSourceKind = z.infer<typeof audioSourceKindSchema>;
 
+// Physical transport tag for a device source (cerastream Todo 20). Mirrors the
+// binding `deviceTransportSchema`; rendered beside the product name as
+// `<Product Name> · USB`.
+export const audioTransportSchema = z.enum(['usb', 'hdmi', 'bluetooth', 'onboard']);
+export type AudioTransport = z.infer<typeof audioTransportSchema>;
+
 export const audioSourceSchema = z.object({
 	id: z.string(),
 	kind: audioSourceKindSchema,
@@ -102,6 +108,16 @@ export const audioSourceSchema = z.object({
 	// optional: pseudo-sources (none/pipeline_default/auto) carry `labelKey`
 	// instead; a legacy device entry with no label still parses.
 	label: z.string().optional(),
+	// Real product name from the engine (cerastream Todo 20 `product_name`),
+	// deduped with a #N suffix upstream. Additive + optional — a legacy entry
+	// without it falls back to `label`.
+	product_name: z.string().optional(),
+	// Physical transport tag rendered beside the product name.
+	transport: audioTransportSchema.optional(),
+	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). The UI
+	// selection binds to this; the persisted `config.asrc` wire value is
+	// unchanged (still the asrc key), so the engine ALSA path is untouched.
+	stable_id: z.string().optional(),
 });
 export type AudioSource = z.infer<typeof audioSourceSchema>;
 
