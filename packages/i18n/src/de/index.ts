@@ -12,6 +12,9 @@ const de = {
 		successMessage: "Erfolgreich Aktualisiert",
 		successDescription:
 			"Das Gerät wird neu gestartet, Sie können es in wenigen Minuten mit den neuesten Funktionen benutzen",
+		failedMessage: "Aktualisierung Fehlgeschlagen",
+		failedDescription:
+			"Die Aktualisierung konnte nicht abgeschlossen werden. Das Gerät wurde nicht verändert.",
 		of: "von",
 		steps: "Schritte",
 	},

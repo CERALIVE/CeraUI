@@ -12,6 +12,9 @@ const ptBR = {
 		successMessage: "Atualizado com Sucesso",
 		successDescription:
 			"O dispositivo está reiniciando, você poderá usá-lo com as últimas funcionalidades em alguns minutos",
+		failedMessage: "Falha na Atualização",
+		failedDescription:
+			"Não foi possível concluir a atualização. O dispositivo não foi alterado.",
 		of: "de",
 		steps: "etapas",
 	},
