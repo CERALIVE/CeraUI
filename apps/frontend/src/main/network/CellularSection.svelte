@@ -42,38 +42,66 @@ const { modemEntries, netif, isFullyStale, staleInterfaces, onConfigure }: Props
 				{@const entry = netif?.[modem.ifname]}
 				{@const ifaceStale = staleInterfaces.has(modem.ifname) || isFullyStale}
 				{@const showStale = ifaceStale && !noSim}
+				{@const unavailableReason = modem.availability_reason}
 				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
-				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+				<div
+					class={cn(
+						'flex flex-wrap items-center gap-3 px-4 py-2.5',
+						unavailableReason && 'opacity-60',
+					)}
+					data-testid="cellular-modem-row"
+					data-unavailable={unavailableReason ? '' : undefined}
+				>
 					<span
 						class={cn('size-2 shrink-0 rounded-full', connected ? 'bg-primary' : 'bg-muted-foreground/40')}
 						aria-hidden="true"
 					></span>
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm font-medium">{modem.name}</p>
-						<p
-							class={cn(
-								'text-muted-foreground truncate text-xs transition-opacity',
-								ifaceStale && 'opacity-50',
-							)}
-						>
-							{#if noSim}
-								{$LL.network.view.noModems()}
-							{:else}
-								{operator}{#if modem.status?.network_type}
-									· {modem.status.network_type}{/if} ·
-								{#if scanning}
-									{$LL.network.modem.scanning()}
-								{:else}
-									{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
-								{/if}
+						<p class="truncate text-sm font-medium">
+							{modem.name}{#if modem.slot_label}
+								<span class="text-muted-foreground ms-1 text-xs font-normal">· {modem.slot_label}</span>
 							{/if}
 						</p>
+						{#if unavailableReason}
+							<p
+								class="text-status-warning truncate text-xs"
+								role="note"
+								data-testid="cellular-modem-unavailable-reason"
+							>
+								{$LL.network.modem.unavailable.title()} · {unavailableReason}
+							</p>
+						{:else}
+							<p
+								class={cn(
+									'text-muted-foreground truncate text-xs transition-opacity',
+									ifaceStale && 'opacity-50',
+								)}
+							>
+								{#if noSim}
+									{$LL.network.view.noModems()}
+								{:else}
+									{operator}{#if modem.status?.network_type}
+										· {modem.status.network_type}{/if} ·
+									{#if scanning}
+										{$LL.network.modem.scanning()}
+									{:else}
+										{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+									{/if}
+								{/if}
+							</p>
+						{/if}
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
 							<Badge variant="stale" data-stale-interface={modem.ifname} />
 						{/if}
-						{#if noSim}
+						{#if unavailableReason}
+							<BondToggle
+								name={modem.ifname}
+								enabled={false}
+								disabledReason={unavailableReason}
+							/>
+						{:else if noSim}
 							<BondToggle
 								name={modem.ifname}
 								enabled={false}

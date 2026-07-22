@@ -9,6 +9,8 @@ import {
 	modemListSchema,
 	modemScanInputSchema,
 	modemScanOutputSchema,
+	setUsbModeInputSchema,
+	setUsbModeOutputSchema,
 	simPukUnlockInputSchema,
 	simPukUnlockOutputSchema,
 	simUnlockInputSchema,
@@ -40,6 +42,13 @@ export const modemsContract = oc.router({
 	 * Submit a SIM PUK + new PIN to recover a PUK-locked modem
 	 */
 	unlockSimPuk: oc.input(simPukUnlockInputSchema).output(simPukUnlockOutputSchema),
+
+	/**
+	 * Switch a modem's USB composition mode. Guarded by the default-absent
+	 * `modem_provisioning` config key: refuses with `provisioning_disabled` while
+	 * that key is absent (Phase B, T5.4).
+	 */
+	setUsbMode: oc.input(setUsbModeInputSchema).output(setUsbModeOutputSchema),
 
 	/**
 	 * Subscribe to modem status changes

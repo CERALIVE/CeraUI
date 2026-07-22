@@ -736,6 +736,10 @@ export const configMessageSchema = z.object({
 	// Sources dialog reflect the saved test-pattern visibility on reload. Written
 	// only by streaming.setSourceVisibility (never streaming.setConfig).
 	sources_visibility: sourcesVisibilitySchema.optional(),
+	// Opt-in `modem_provisioning` gate (Phase B, T5.4), echoed so the modem
+	// dialog can render USB-mode switching as enabled or disabled-with-reason.
+	// Default-absent: an absent key ⇒ switching stays gated/unreachable.
+	modem_provisioning: z.boolean().optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

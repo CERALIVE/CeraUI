@@ -729,6 +729,7 @@ const fr = {
 			scanningForNetworks: "Recherche d'opérateurs…",
 			save: "Enregistrer",
 			autoapn: "APN Automatique",
+			autoapnRecommended: "Automatique (recommandé)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "Nom d'utilisateur",
@@ -792,6 +793,24 @@ const fr = {
 				scanning: "Scan en cours",
 				searching: "Recherche",
 				enabled: "Activé",
+			},
+			dataUsage: {
+				title: "Consommation de données",
+				session: "Cette session",
+				monthly: "Ce mois-ci",
+				thresholdReached: "Seuil de données atteint",
+			},
+			usbMode: {
+				title: "Mode USB",
+				active: "Mode actif",
+				recommended: "Recommandé : {mode}",
+				switchAction: "Changer de mode",
+				lockedTitle: "Changement de mode verrouillé",
+				locked:
+					"Le changement de mode USB est désactivé sur cet appareil. Activez le provisionnement du modem pour le modifier.",
+			},
+			unavailable: {
+				title: "Modem indisponible",
 			},
 		},
 		dialog: {

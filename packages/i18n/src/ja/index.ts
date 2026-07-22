@@ -562,6 +562,7 @@ const ja = {
 			scanningForNetworks: "事業者を検索中…",
 			save: "保存",
 			autoapn: "自動APN",
+			autoapnRecommended: "自動（推奨）",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "ユーザー名",
@@ -625,6 +626,24 @@ const ja = {
 				connecting: "接続中",
 				scanning: "スキャン中",
 				searching: "検索中",
+			},
+			dataUsage: {
+				title: "データ使用量",
+				session: "今回のセッション",
+				monthly: "今月",
+				thresholdReached: "データのしきい値に達しました",
+			},
+			usbMode: {
+				title: "USBモード",
+				active: "アクティブモード",
+				recommended: "推奨: {mode}",
+				switchAction: "モードを切り替え",
+				lockedTitle: "モード切り替えはロックされています",
+				locked:
+					"このデバイスではUSBモードの切り替えが無効です。変更するにはモデムのプロビジョニングを有効にしてください。",
+			},
+			unavailable: {
+				title: "モデムを利用できません",
 			},
 		},
 		dialog: {

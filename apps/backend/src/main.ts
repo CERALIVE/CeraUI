@@ -43,6 +43,8 @@ import {
 	getMockEngineDevices,
 } from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
+import { initCellularStack } from "./modules/cellular/cellular-stack.ts";
+import { startModemShadowIfEnabled } from "./modules/cellular/shadow.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
@@ -327,6 +329,15 @@ wifiStateInit(networkMonitor);
 
 // Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
 networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
+
+// Cellular-control composition root: select + init the modem backend. Awaited
+// before the modem loop so the init gate is settled before any modem procedure
+// runs (mmcli default is an instant no-op; dbus opt-in commits or falls back).
+await guardNonCritical("cellular-stack", initCellularStack);
+
+// Opt-in read-only observer beside mmcli. A no-op unless `modem_shadow` is set, so
+// the default path never loads the D-Bus transport. Never mutates the bus.
+await guardNonCritical("cellular-shadow", startModemShadowIfEnabled);
 
 // Event-driven modems share the SAME monitor (one nmcli monitor for all)
 void initModemUpdateLoop({ monitor: networkMonitor });

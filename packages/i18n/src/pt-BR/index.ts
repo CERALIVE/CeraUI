@@ -722,6 +722,7 @@ const ptBR = {
 			scanningForNetworks: "Procurando operadoras…",
 			save: "Salvar",
 			autoapn: "APN Automático",
+			autoapnRecommended: "Automático (recomendado)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "Nome de usuário",
@@ -786,6 +787,24 @@ const ptBR = {
 				scanning: "Escaneando",
 				searching: "Procurando",
 				enabled: "Habilitado",
+			},
+			dataUsage: {
+				title: "Uso de dados",
+				session: "Esta sessão",
+				monthly: "Este mês",
+				thresholdReached: "Limite de dados atingido",
+			},
+			usbMode: {
+				title: "Modo USB",
+				active: "Modo ativo",
+				recommended: "Recomendado: {mode}",
+				switchAction: "Trocar modo",
+				lockedTitle: "Troca de modo bloqueada",
+				locked:
+					"A troca de modo USB está desativada neste dispositivo. Ative o provisionamento do modem para alterá-la.",
+			},
+			unavailable: {
+				title: "Modem indisponível",
 			},
 		},
 		dialog: {

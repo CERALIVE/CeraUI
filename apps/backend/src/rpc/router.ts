@@ -21,6 +21,7 @@ import {
 	configureModemProcedure,
 	getAllModemsProcedure,
 	scanModemProcedure,
+	setUsbModeProcedure,
 	unlockSimProcedure,
 	unlockSimPukProcedure,
 } from "./procedures/modems.procedure.ts";
@@ -138,6 +139,7 @@ const stableRoutes = {
 		scan: scanModemProcedure,
 		unlockSim: unlockSimProcedure,
 		unlockSimPuk: unlockSimPukProcedure,
+		setUsbMode: setUsbModeProcedure,
 	}),
 
 	wifi: base.router({

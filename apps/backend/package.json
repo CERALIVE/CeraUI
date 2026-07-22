@@ -11,6 +11,7 @@
 	"dependencies": {
 		"@ceralive/cerastream": "2026.7.2",
 		"@ceralive/control-protocol": "2026.7.0",
+		"@ceralive/modem-control": "0.2.0",
 		"@ceralive/srtla-send": "2026.6.2",
 		"@ceraui/rpc": "workspace:*",
 		"@orpc/server": "^1.14.7",

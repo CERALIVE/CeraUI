@@ -679,6 +679,7 @@ const ar = {
 			scanningForNetworks: "جارٍ البحث عن المشغّلين…",
 			save: "حفظ",
 			autoapn: "APN تلقائي",
+			autoapnRecommended: "تلقائي (موصى به)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "اسم المستخدم",
@@ -739,6 +740,23 @@ const ar = {
 				connecting: "جاري الاتصال",
 				scanning: "جارٍ المسح",
 				searching: "البحث",
+			},
+			dataUsage: {
+				title: "استهلاك البيانات",
+				session: "هذه الجلسة",
+				monthly: "هذا الشهر",
+				thresholdReached: "تم بلوغ حد البيانات",
+			},
+			usbMode: {
+				title: "وضع USB",
+				active: "الوضع النشط",
+				recommended: "موصى به: {mode}",
+				switchAction: "تبديل الوضع",
+				lockedTitle: "تبديل الوضع مقفل",
+				locked: "تبديل وضع USB معطّل على هذا الجهاز. فعّل تهيئة المودم لتغييره.",
+			},
+			unavailable: {
+				title: "المودم غير متاح",
 			},
 		},
 		dialog: {

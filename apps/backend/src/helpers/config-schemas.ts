@@ -154,6 +154,14 @@ export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
 
 export type Balancer = z.infer<typeof balancerSchema>;
 
+// Per-boot cellular-control backend selection. `mmcli` (default) is the legacy
+// one-shot-CLI path; `dbus` selects the @ceralive/modem-control ModemManager
+// backend, committed only after its first snapshot — see the commit/fallback
+// contract in modules/cellular/cellular-stack.ts.
+export const modemBackendSchema = z.enum(["mmcli", "dbus"]);
+
+export type ModemBackend = z.infer<typeof modemBackendSchema>;
+
 // One persisted last-seen capture-device snapshot (C7 lost-device retention),
 // carrying exactly the fields `captureSourceSchema` needs to synthesize a `lost`
 // row: `devicePath` is REQUIRED there, and `pipelineId` is the
@@ -291,6 +299,26 @@ export const runtimeConfigSchema = z.object({
 	// every source visible via the inner default; kept `.optional()` so
 	// `let config: RuntimeConfig = {}` still parses (E3 additive pattern).
 	sources_visibility: sourcesVisibilitySchema.optional(),
+
+	// Per-boot cellular-control backend selection. Absent (old config) resolves to
+	// the mmcli default in the composition root — no default is injected here so an
+	// existing config's echo stays byte-identical (additive-optional).
+	modem_backend: modemBackendSchema.optional(),
+
+	// Opt-in `modem_shadow` observation (Phase B). When true, the read-only
+	// @ceralive/modem-control observer runs BESIDE the active (mmcli) backend and
+	// logs redacted divergences — it never becomes the control path and never
+	// mutates the bus. Additive-optional with no injected default: an absent key
+	// (old config) echoes byte-identical and shadow mode stays off.
+	modem_shadow: z.boolean().optional(),
+
+	// Opt-in `modem_provisioning` gate (Phase B, T5.4). DEFAULT-ABSENT: while this
+	// key is absent (every existing device that hasn't opted in) the guarded
+	// USB-composition-mode mutation is UNREACHABLE — the setUsbMode RPC refuses
+	// with a typed error at entry, not merely hidden in the UI. No default is
+	// injected here so an absent key echoes byte-identical (additive-optional);
+	// the mutation stays off until an operator explicitly provisions it.
+	modem_provisioning: z.boolean().optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;

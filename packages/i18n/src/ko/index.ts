@@ -549,6 +549,7 @@ const ko = {
 			scanningForNetworks: "사업자 검색 중…",
 			save: "저장",
 			autoapn: "자동 APN",
+			autoapnRecommended: "자동(권장)",
 			apn: "APN",
 			apnPlaceholder: "internet.provider.com",
 			username: "사용자 이름",
@@ -611,6 +612,24 @@ const ko = {
 				connecting: "연결 중",
 				scanning: "스캔 중",
 				searching: "검색 중",
+			},
+			dataUsage: {
+				title: "데이터 사용량",
+				session: "이번 세션",
+				monthly: "이번 달",
+				thresholdReached: "데이터 임계값 도달",
+			},
+			usbMode: {
+				title: "USB 모드",
+				active: "활성 모드",
+				recommended: "권장: {mode}",
+				switchAction: "모드 전환",
+				lockedTitle: "모드 전환이 잠김",
+				locked:
+					"이 장치에서는 USB 모드 전환이 비활성화되어 있습니다. 변경하려면 모뎀 프로비저닝을 활성화하세요.",
+			},
+			unavailable: {
+				title: "모뎀을 사용할 수 없음",
 			},
 		},
 		dialog: {
