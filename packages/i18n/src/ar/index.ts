@@ -11,6 +11,8 @@ const ar = {
 		successMessage: "تم التحديث بنجاح",
 		successDescription:
 			"يتم إعادة تشغيل الجهاز، وستتمكن من استخدامه بأحدث الميزات في غضون دقائق",
+		failedMessage: "فشل التحديث",
+		failedDescription: "تعذّر إكمال التحديث. لم يتم تغيير الجهاز.",
 		of: "من",
 		steps: "خطوات",
 	},

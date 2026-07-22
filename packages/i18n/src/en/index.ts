@@ -14,6 +14,9 @@ const en = {
 		successMessage: "Successfully Updated",
 		successDescription:
 			"Device is restarting, you'll be able to use it with the latest features in a few minutes",
+		failedMessage: "Update Failed",
+		failedDescription:
+			"The update could not be completed. The device was not changed.",
 	},
 	devtools: {
 		title: "Dev Tools",

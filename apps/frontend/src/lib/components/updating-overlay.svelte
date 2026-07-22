@@ -13,7 +13,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
-import { CheckCircle2, Cog, Download, Package, RotateCw } from '@lucide/svelte';
+import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
 import { toast } from 'svelte-sonner';
 
@@ -24,8 +24,12 @@ const { details }: { details: Exclude<StatusMessage['updating'], boolean | null>
 
 // Enhanced state management
 let isVisible = $state(false);
-let hasShownSuccess = $state(false);
-let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete'>('downloading');
+// One latch for BOTH terminal outcomes — once a success OR a failure toast has
+// fired we never fire a second terminal toast for the same overlay.
+let hasShownResult = $state(false);
+let animationPhase = $state<'downloading' | 'unpacking' | 'installing' | 'complete' | 'failed'>(
+	'downloading',
+);
 
 // Safe progress calculation with null checks and NaN prevention
 const progress: number = $derived.by(() => {
@@ -54,27 +58,48 @@ const progressPercentage = $derived.by(() => {
 	return Number.isFinite(percentage) ? Math.min(percentage, 100) : 0;
 });
 
+// Truthful terminal-state detection. `details.result` is a NUMBER (`0` marks a
+// successful completion) or a STRING (the apt failure message the update loop
+// broadcasts before clearing state). Collapsing both into one `isComplete`
+// boolean made a FAILED update render the green success checkmark + toast — a
+// truthfulness bug. A string result is a failure; a numeric result (or a
+// progress-complete run with no result yet) is a success.
+const failureReason = $derived(
+	typeof details?.result === 'string' ? details.result : undefined,
+);
+const isFailure = $derived(failureReason !== undefined);
+const isSuccess = $derived(
+	!isFailure && (details?.result !== undefined || (total > 1 && progress >= total)),
+);
+
 // Determine current animation phase
 $effect(() => {
 	if (!details) return;
 
-	if (details.downloading && details.downloading > 0) {
+	if (isFailure) {
+		animationPhase = 'failed';
+	} else if (details.downloading && details.downloading > 0) {
 		animationPhase = 'downloading';
 	} else if (details.unpacking && details.unpacking > 0) {
 		animationPhase = 'unpacking';
 	} else if (details.setting_up && details.setting_up > 0) {
 		animationPhase = 'installing';
-	} else if (progress >= total && total > 0) {
+	} else if (isSuccess || (progress >= total && total > 0)) {
 		animationPhase = 'complete';
 	}
 });
 
-// Enhanced completion detection
-const isComplete = $derived(details?.result !== undefined || (total > 1 && progress >= total));
-
 $effect(() => {
-	if (isComplete && !hasShownSuccess) {
-		hasShownSuccess = true;
+	if (hasShownResult) return;
+	if (isFailure) {
+		hasShownResult = true;
+		setTimeout(() => {
+			toast.error($LL.updatingOverlay.failedMessage(), {
+				description: failureReason ?? $LL.updatingOverlay.failedDescription(),
+			});
+		}, 500);
+	} else if (isSuccess) {
+		hasShownResult = true;
 		setTimeout(() => {
 			toast.success($LL.updatingOverlay.successMessage(), {
 				description: $LL.updatingOverlay.successDescription(),
@@ -152,6 +177,11 @@ onMount(() => {
 								<span class="text-sm font-medium text-status-success sm:text-base"
 									>{$LL.updatingOverlay.successMessage()}</span
 								>
+							{:else if animationPhase === 'failed'}
+								<XCircle class="h-4 w-4 text-status-error sm:h-5 sm:w-5" />
+								<span class="text-sm font-medium text-status-error sm:text-base"
+									>{$LL.updatingOverlay.failedMessage()}</span
+								>
 							{/if}
 						</div>
 					</div>
@@ -162,26 +192,48 @@ onMount(() => {
 					<!-- Spinning Update Icon -->
 					<div class="flex flex-col items-center justify-center">
 						<div class="relative mb-4 sm:mb-6">
-							{#if animationPhase === 'complete'}
+							{#if animationPhase === 'failed'}
+								<XCircle class="h-32 w-32 text-status-error sm:h-40 sm:w-40" />
+							{:else if animationPhase === 'complete'}
 								<CheckCircle2 class="h-32 w-32 text-status-success sm:h-40 sm:w-40" />
 							{:else}
 								<RotateCw class="text-primary h-32 w-32 animate-spin sm:h-40 sm:w-40" />
 							{/if}
 
 							<!-- Percentage Overlay -->
-							<div class="absolute inset-0 flex items-center justify-center">
-								<span
-									class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
-								>
-									{isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
-								</span>
-							</div>
+							{#if animationPhase !== 'failed'}
+								<div class="absolute inset-0 flex items-center justify-center">
+									<span
+										class="text-foreground bg-background/80 rounded-full px-3 py-1.5 text-xl font-bold sm:text-2xl"
+									>
+										{isFinite(progressPercentage) ? progressPercentage.toFixed(0) : '0'}%
+									</span>
+								</div>
+							{/if}
 						</div>
 
-						<!-- Progress Label -->
-						<div class="text-muted-foreground text-sm sm:text-base">
-							{$LL.updatingOverlay.progress()}
-						</div>
+						{#if animationPhase === 'failed'}
+							<!-- Failure indicator -->
+							<div
+								class="flex flex-col items-center gap-1 text-center"
+								data-testid="update-failed"
+							>
+								<div class="text-sm font-medium text-status-error sm:text-base">
+									{$LL.updatingOverlay.failedMessage()}
+								</div>
+								<div
+									class="text-muted-foreground max-w-md text-xs break-words sm:text-sm"
+									data-testid="update-failed-reason"
+								>
+									{failureReason ?? $LL.updatingOverlay.failedDescription()}
+								</div>
+							</div>
+						{:else}
+							<!-- Progress Label -->
+							<div class="text-muted-foreground text-sm sm:text-base">
+								{$LL.updatingOverlay.progress()}
+							</div>
+						{/if}
 					</div>
 
 					<!-- Linear Progress Bar -->

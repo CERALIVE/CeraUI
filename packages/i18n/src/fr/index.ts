@@ -12,6 +12,9 @@ const fr = {
 		successMessage: "Mise à jour Réussie",
 		successDescription:
 			"L'appareil est en cours de redémarrage, vous pourrez l'utiliser avec les dernières fonctionnalités dans quelques minutes",
+		failedMessage: "Échec de la Mise à jour",
+		failedDescription:
+			"La mise à jour n'a pas pu être terminée. L'appareil n'a pas été modifié.",
 		of: "de",
 		steps: "étapes",
 	},

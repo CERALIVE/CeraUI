@@ -10,6 +10,8 @@ const zh = {
 		progress: "进度：",
 		successMessage: "更新成功。",
 		successDescription: "设备正在重新启动，几分钟后您就可以使用最新功能",
+		failedMessage: "更新失败",
+		failedDescription: "无法完成更新。设备未被更改。",
 		of: "的",
 		steps: "步骤",
 	},

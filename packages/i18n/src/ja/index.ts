@@ -11,6 +11,9 @@ const ja = {
 		successMessage: "更新が完了しました。",
 		successDescription:
 			"デバイスは再起動中です。数分後に最新の機能で使用できるようになります",
+		failedMessage: "更新に失敗しました",
+		failedDescription:
+			"更新を完了できませんでした。デバイスは変更されていません。",
 		of: "の",
 		steps: "ステップ",
 	},

@@ -11,6 +11,9 @@ const ko = {
 		successMessage: "업데이트가 성공적으로 완료되었습니다.",
 		successDescription:
 			"기기가 재시작 중입니다. 몇 분 내에 최신 기능으로 사용할 수 있습니다",
+		failedMessage: "업데이트 실패",
+		failedDescription:
+			"업데이트를 완료할 수 없습니다. 기기는 변경되지 않았습니다.",
 		of: "의",
 		steps: "단계",
 	},

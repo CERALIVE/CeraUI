@@ -12,6 +12,9 @@ const es = {
 		successMessage: "Actualizado con Éxito",
 		successDescription:
 			"El dispositivo se está reiniciando, podrá utilizarlo con las últimas características en unos minutos",
+		failedMessage: "Error en la Actualización",
+		failedDescription:
+			"No se pudo completar la actualización. El dispositivo no se modificó.",
 		of: "de",
 		steps: "pasos",
 	},
