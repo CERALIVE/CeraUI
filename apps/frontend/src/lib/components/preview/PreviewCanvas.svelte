@@ -39,6 +39,17 @@ import {
 	type PlaybackSample,
 	pushBoundedSegment,
 } from '$lib/components/preview/preview-live-edge';
+import {
+	buildTierList,
+	createTierLadder,
+	currentTier,
+	DEFAULT_WEBRTC_NO_FRAME_DEADLINE_MS,
+	DEFAULT_WEBRTC_SIGNALING_TIMEOUT_MS,
+	descend,
+	evaluateWebrtcDeadline,
+	type LadderFallbackTrigger,
+	type WebrtcPhase,
+} from '$lib/components/preview/preview-tier-ladder';
 import { Button } from '$lib/components/ui/button';
 import { getPreviewSocketUrl } from '$lib/env';
 import { rpc } from '$lib/rpc';
@@ -103,11 +114,24 @@ const VIEWER_IDLE_TIMEOUT_MS = 30000;
 const hasWindow = typeof window !== 'undefined';
 const supportsWebCodecs = hasWindow && typeof window.VideoDecoder === 'function';
 const supportsMse = hasWindow && typeof window.MediaSource === 'function';
-const tier: 'webcodecs' | 'mse' | 'none' = supportsWebCodecs
-	? 'webcodecs'
-	: supportsMse
-		? 'mse'
-		: 'none';
+const supportsWebRtc =
+	hasWindow && typeof window.RTCPeerConnection === 'function';
+
+// Ordered delivery-tier ladder (ADR-0006): WebRTC is the low-latency PRIMARY
+// tier, MSE the guaranteed FLOOR, with the pre-WebRTC WebCodecs decoder as an
+// intermediate rung when the browser supports it. The pure FSM lives in
+// `preview-tier-ladder.ts`; the component drives it and descends one rung on a
+// signaling timeout, an ICE failure, or a no-frame deadline.
+const baseTiers = buildTierList({
+	webrtc: supportsWebRtc,
+	webcodecs: supportsWebCodecs,
+	mse: supportsMse,
+});
+let ladder = $state(createTierLadder(baseTiers));
+const activeTier = $derived(currentTier(ladder));
+function resetLadder(): void {
+	ladder = createTierLadder(baseTiers);
+}
 
 let enabled = $state(false);
 let status = $state<PreviewStatus>('idle');
@@ -164,6 +188,15 @@ let mediaSource: MediaSource | null = null;
 let sourceBuffer: SourceBuffer | null = null;
 let mediaObjectUrl: string | null = null;
 const pendingSegments: ArrayBuffer[] = [];
+
+// ── WebRTC tier (ADR-0006) ──────────────────────────────────────────────────
+// The engine is the offerer (sendonly H.264); the browser answers (recvonly) and
+// renders the peer-connection track onto the shared <video>. Media rides the peer
+// connection, NOT the preview WS — the WS carries only the signaling frames.
+let pc: RTCPeerConnection | null = null;
+let webrtcPhase: WebrtcPhase = 'offer-wait';
+let webrtcWatchdog: ReturnType<typeof setTimeout> | null = null;
+let webrtcStartMs = 0;
 
 function base64ToBuffer(b64: string): ArrayBuffer {
 	const binary = atob(b64);
@@ -336,6 +369,19 @@ function handleText(raw: string): void {
 		return;
 	}
 	const type = msg.type;
+	// WebRTC signaling (ADR-0006) rides the same WS. Route it before the generic
+	// failure/codec-config handling; it is a no-op off the WebRTC rung.
+	if (typeof type === 'string' && type.startsWith('webrtc-')) {
+		handleWebrtcFrame(type, msg);
+		return;
+	}
+	if (type === 'preview-error') {
+		// The session-cap rejection (§4) degrades WebRTC to the MSE floor.
+		if (msg.reason === 'rejected-limit' && activeTier === 'webrtc') {
+			fallbackFromWebrtc('rejected-limit');
+		}
+		return;
+	}
 	// Engine typed idle-preview failure frame (cerastream Todo 10). Tolerant of both
 	// `{type:'error',reason}` and `{type:'<reason>'}` — see PREVIEW_ENGINE_FAILURE_REASONS.
 	const failureBand =
@@ -347,10 +393,14 @@ function handleText(raw: string): void {
 		return;
 	}
 	if (type === 'codec-config' || type === 'config') {
+		// On the WebRTC rung media rides the peer connection, not the WS — ignore a
+		// codec-config the engine may emit and let the WebRTC watchdog fall back.
+		if (activeTier === 'webrtc') return;
 		// Media is flowing — the socket is no longer a silent stall.
 		clearMediaWatchdog();
 		everProgressed = true;
-		if ((msg.tier ?? tier) === 'mse') configureMse(msg as Parameters<typeof configureMse>[0]);
+		if ((msg.tier ?? activeTier) === 'mse')
+			configureMse(msg as Parameters<typeof configureMse>[0]);
 		else configureWebCodecs(msg as Parameters<typeof configureWebCodecs>[0]);
 		return;
 	}
@@ -373,11 +423,13 @@ function handleMessage(event: MessageEvent): void {
 		return;
 	}
 	if (event.data instanceof ArrayBuffer) {
+		// On the WebRTC rung media rides the peer connection, never the WS.
+		if (activeTier === 'webrtc') return;
 		// A binary access unit is unambiguous media progress; stand the watchdog
 		// down even if the codec-config text was missed.
 		clearMediaWatchdog();
 		everProgressed = true;
-		if (tier === 'webcodecs') decodeAccessUnit(event.data);
+		if (activeTier === 'webcodecs') decodeAccessUnit(event.data);
 		else appendMseSegment(event.data);
 	}
 }
@@ -438,17 +490,24 @@ async function connect(): Promise<void> {
 		remintAttempted = false;
 		closeReason = null;
 		status = 'connecting';
+		const t = activeTier;
 		ws.send(
 			JSON.stringify(
 				inputId !== undefined
-					? { action: 'start', tier, input_id: inputId }
-					: { action: 'start', tier },
+					? { action: 'start', tier: t, input_id: inputId }
+					: { action: 'start', tier: t },
 			),
 		);
-		// The socket is open but no media has arrived yet. Guard against an engine
-		// that accepts the socket and stays silent (the idle case) so the UI does
-		// not sit on "Connecting…" indefinitely.
-		armMediaWatchdog();
+		if (t === 'webrtc') {
+			// WebRTC media rides the peer connection; the WS-media watchdog does not
+			// apply. The WebRTC establishment watchdog owns the fallback deadline.
+			startWebrtc(ws, generation);
+		} else {
+			// The socket is open but no media has arrived yet. Guard against an engine
+			// that accepts the socket and stays silent (the idle case) so the UI does
+			// not sit on "Connecting…" indefinitely.
+			armMediaWatchdog();
+		}
 	};
 	ws.onmessage = (event) => {
 		if (generation !== connectionGeneration) return;
@@ -485,6 +544,194 @@ function clearMediaWatchdog(): void {
 	if (mediaWatchdog) {
 		clearTimeout(mediaWatchdog);
 		mediaWatchdog = null;
+	}
+}
+
+// ── WebRTC handshake (ADR-0006) ──────────────────────────────────────────────
+// Host-ICE-only (no STUN, per §5): the browser gathers host + mDNS candidates and
+// the engine gathers raw LAN host candidates. On any establishment failure the
+// ladder descends to the MSE floor.
+function startWebrtc(ws: WebSocket, generation: number): void {
+	teardownWebrtc();
+	webrtcPhase = 'offer-wait';
+	let peer: RTCPeerConnection;
+	try {
+		peer = new RTCPeerConnection({ iceServers: [] });
+	} catch {
+		fallbackFromWebrtc('ice-failure');
+		return;
+	}
+	pc = peer;
+	peer.onicecandidate = (event) => {
+		if (generation !== connectionGeneration) return;
+		if (event.candidate) {
+			ws.send(
+				JSON.stringify({
+					action: 'webrtc-ice',
+					candidate: event.candidate.candidate,
+					sdpMLineIndex: event.candidate.sdpMLineIndex ?? 0,
+				}),
+			);
+		}
+	};
+	peer.ontrack = (event) => {
+		if (generation !== connectionGeneration) return;
+		const v = videoEl;
+		if (!v) return;
+		v.srcObject = event.streams[0] ?? new MediaStream([event.track]);
+		v.onloadeddata = () => onWebrtcFrameRendered();
+		// Standard muted-autoplay: the <video> is muted+playsinline, so play() is
+		// permitted without a gesture; ignore a transient rejection (and a jsdom
+		// environment where play() is unimplemented).
+		try {
+			void v.play?.()?.catch(() => {
+				// transient autoplay rejection
+			});
+		} catch {
+			// play() unsupported in this environment
+		}
+	};
+	peer.oniceconnectionstatechange = () => {
+		if (generation !== connectionGeneration || !pc) return;
+		const iceState = pc.iceConnectionState;
+		if (iceState === 'connected' || iceState === 'completed') {
+			if (webrtcPhase !== 'playing') webrtcPhase = 'connected';
+		} else if (iceState === 'failed') {
+			fallbackFromWebrtc('ice-failure');
+		}
+	};
+	armWebrtcWatchdog();
+}
+
+// The engine offers; the browser answers (recvonly). setRemoteDescription →
+// createAnswer → setLocalDescription → send the answer over the WS.
+async function handleWebrtcOffer(
+	sdp: string,
+	generation: number,
+): Promise<void> {
+	const peer = pc;
+	if (!peer) return;
+	try {
+		await peer.setRemoteDescription({ type: 'offer', sdp });
+		const answer = await peer.createAnswer();
+		await peer.setLocalDescription(answer);
+		if (generation !== connectionGeneration || !socket) return;
+		if (webrtcPhase === 'offer-wait') webrtcPhase = 'answered';
+		socket.send(JSON.stringify({ action: 'webrtc-answer', sdp: answer.sdp }));
+	} catch {
+		fallbackFromWebrtc('ice-failure');
+	}
+}
+
+async function handleWebrtcIce(candidate: string, mline: number): Promise<void> {
+	const peer = pc;
+	// An empty candidate is the advisory end-of-candidates marker (§3) — ignore it.
+	if (!peer || !candidate) return;
+	try {
+		await peer.addIceCandidate({ candidate, sdpMLineIndex: mline });
+	} catch {
+		// Candidate arrived before the remote description or after teardown.
+	}
+}
+
+function onWebrtcFrameRendered(): void {
+	clearWebrtcWatchdog();
+	webrtcPhase = 'playing';
+	everProgressed = true;
+	status = 'live';
+}
+
+// Single WebRTC establishment deadline: fires at the signaling budget; if ICE is
+// connected but no frame has painted it re-arms for the remaining no-frame budget.
+// The trigger reason (signaling-timeout vs no-frame-deadline) is the pure decision
+// `evaluateWebrtcDeadline`.
+function armWebrtcWatchdog(): void {
+	clearWebrtcWatchdog();
+	webrtcStartMs = Date.now();
+	webrtcWatchdog = setTimeout(onWebrtcDeadline, DEFAULT_WEBRTC_SIGNALING_TIMEOUT_MS);
+}
+
+function clearWebrtcWatchdog(): void {
+	if (webrtcWatchdog) {
+		clearTimeout(webrtcWatchdog);
+		webrtcWatchdog = null;
+	}
+}
+
+function onWebrtcDeadline(): void {
+	webrtcWatchdog = null;
+	if (destroyed || !enabled) return;
+	const elapsedMs = Date.now() - webrtcStartMs;
+	const trigger = evaluateWebrtcDeadline({ phase: webrtcPhase, elapsedMs });
+	if (trigger) {
+		fallbackFromWebrtc(trigger);
+		return;
+	}
+	const remaining = DEFAULT_WEBRTC_NO_FRAME_DEADLINE_MS - elapsedMs;
+	webrtcWatchdog = setTimeout(onWebrtcDeadline, Math.max(0, remaining));
+}
+
+// Descend the ladder one rung and restart the session at the new tier. At the
+// floor (no lower rung) a WebRTC drop surfaces the terminal band instead.
+function fallbackFromWebrtc(trigger: LadderFallbackTrigger): void {
+	if (destroyed) return;
+	const next = descend(ladder, trigger);
+	teardownWebrtc();
+	if (!next.fellBack) {
+		closeReason = everProgressed ? 'interrupted' : 'engineOffline';
+		return;
+	}
+	ladder = next.state;
+	stop();
+	start();
+}
+
+function teardownWebrtc(): void {
+	clearWebrtcWatchdog();
+	webrtcPhase = 'offer-wait';
+	if (pc) {
+		pc.onicecandidate = null;
+		pc.ontrack = null;
+		pc.oniceconnectionstatechange = null;
+		try {
+			pc.close();
+		} catch {
+			// already closed
+		}
+		pc = null;
+	}
+	if (videoEl) {
+		try {
+			videoEl.srcObject = null;
+		} catch {
+			// video element detached
+		}
+	}
+}
+
+function handleWebrtcFrame(type: string, msg: Record<string, unknown>): void {
+	// Signaling is only meaningful while the ladder is on the WebRTC rung.
+	if (activeTier !== 'webrtc') return;
+	switch (type) {
+		case 'webrtc-offer':
+			if (typeof msg.sdp === 'string') {
+				void handleWebrtcOffer(msg.sdp, connectionGeneration);
+			}
+			return;
+		case 'webrtc-ice':
+			if (typeof msg.candidate === 'string') {
+				void handleWebrtcIce(
+					msg.candidate,
+					typeof msg.sdpMLineIndex === 'number' ? msg.sdpMLineIndex : 0,
+				);
+			}
+			return;
+		case 'webrtc-connected':
+			if (webrtcPhase !== 'playing') webrtcPhase = 'connected';
+			return;
+		case 'webrtc-failed':
+			fallbackFromWebrtc('webrtc-failed');
+			return;
 	}
 }
 
@@ -537,6 +784,7 @@ function scheduleReconnect(): void {
 }
 
 function resetMedia(): void {
+	teardownWebrtc();
 	sawKeyframe = false;
 	rmsDb = [];
 	peakDb = [];
@@ -558,7 +806,7 @@ function resetMedia(): void {
 }
 
 function start(): void {
-	if (tier === 'none') {
+	if (activeTier === undefined) {
 		status = 'unsupported';
 		return;
 	}
@@ -613,6 +861,8 @@ function toggle(): void {
 		closeReason = null;
 		remintAttempted = false;
 		paused = false;
+		// A fresh enable retries from the top of the ladder (WebRTC first).
+		resetLadder();
 	}
 }
 
@@ -726,6 +976,8 @@ $effect(() => {
 		if (source === appliedSource) return;
 		appliedSource = source;
 		if (!enabled || !isSessionActive(status)) return;
+		// A new source retries from the top of the ladder (WebRTC first).
+		resetLadder();
 		// stop()/start() each bump the connection generation, so an in-flight mint
 		// for the previous source is aborted before it can open a socket.
 		stop();
@@ -790,13 +1042,27 @@ const overlayText = $derived.by(() => {
 			return '';
 	}
 });
+
+// Human label for the active delivery-tier badge (WebRTC / WebCodecs / MSE).
+const tierLabel = $derived.by(() => {
+	switch (activeTier) {
+		case 'webrtc':
+			return $LL.live.preview.tierWebrtc();
+		case 'webcodecs':
+			return $LL.live.preview.tierWebcodecs();
+		case 'mse':
+			return $LL.live.preview.tierMse();
+		default:
+			return '';
+	}
+});
 </script>
 
 <section
 	bind:this={sectionEl}
 	data-testid="preview"
 	data-status={status}
-	data-tier={tier}
+	data-tier={activeTier ?? 'none'}
 	data-compact={compact ? 'true' : 'false'}
 	class={cn(compact ? undefined : 'bg-card rounded-xl border p-4 sm:p-5', className)}
 >
@@ -860,14 +1126,14 @@ const overlayText = $derived.by(() => {
 			</div>
 		{:else}
 			<div class="bg-muted/40 relative aspect-video w-full overflow-hidden rounded-lg">
-				{#if tier === 'webcodecs'}
+				{#if activeTier === 'webcodecs'}
 					<canvas
 						bind:this={canvasEl}
 						data-testid="preview-canvas"
 						aria-label={$LL.live.preview.canvasAria()}
 						class="h-full w-full object-contain"
 					></canvas>
-				{:else if tier === 'mse'}
+				{:else if activeTier === 'mse' || activeTier === 'webrtc'}
 					<!-- svelte-ignore a11y_media_has_caption -->
 					<video
 						bind:this={videoEl}
@@ -877,6 +1143,17 @@ const overlayText = $derived.by(() => {
 						muted
 						playsinline
 					></video>
+				{/if}
+
+				{#if activeTier}
+					<span
+						data-testid="preview-tier-badge"
+						data-tier={activeTier}
+						aria-label={$LL.live.preview.tierBadgeAria()}
+						class="bg-background/70 text-muted-foreground absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide backdrop-blur-sm"
+					>
+						{tierLabel}
+					</span>
 				{/if}
 
 				{#if status === 'reconnecting'}
@@ -894,7 +1171,7 @@ const overlayText = $derived.by(() => {
 					</div>
 				{/if}
 
-				{#if tier === 'mse'}
+				{#if activeTier === 'mse'}
 					<span
 						data-testid="preview-compat"
 						class="bg-background/70 text-muted-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"

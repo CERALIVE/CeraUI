@@ -114,6 +114,83 @@ describe("BoundedDropOldestQueue — pinned init frame", () => {
 	});
 });
 
+describe("BoundedDropOldestQueue — never-drop control lane (WebRTC signaling)", () => {
+	// Values in [500,600) are "control" frames (WebRTC signaling / preview-error).
+	// A handshake frame must survive backpressure eviction — dropping an offer or
+	// an ICE candidate breaks the WebRTC session (Todo 16, ADR-0006).
+	const isControl = (n: number) => n >= 500 && n < 600;
+
+	function controlQueue(maxItems: number) {
+		return new BoundedDropOldestQueue<number>({
+			maxItems,
+			maxBytes: Number.POSITIVE_INFINITY,
+			sizeOf,
+			isControl,
+		});
+	}
+
+	it("never evicts control frames under a media flood", () => {
+		const q = controlQueue(3);
+		q.enqueue(500); // webrtc-offer
+		q.enqueue(501); // webrtc-ice
+		q.enqueue(502); // webrtc-ice
+		// A flood of media that would evict everything if these were media frames.
+		for (let i = 0; i < 1000; i++) q.enqueue(i);
+		const all = q.peekAll();
+		expect(all).toContain(500);
+		expect(all).toContain(501);
+		expect(all).toContain(502);
+	});
+
+	it("preserves control-frame FIFO order and drains them FIRST", () => {
+		const q = controlQueue(2);
+		q.enqueue(1); // media
+		q.enqueue(500); // offer
+		q.enqueue(2); // media
+		q.enqueue(501); // ice
+		q.enqueue(3); // media
+		// Control frames drain first, in the order they arrived.
+		expect(q.dequeue()).toBe(500);
+		expect(q.dequeue()).toBe(501);
+		// Then the (bounded) media in order.
+		expect(q.dequeue()).toBe(2);
+		expect(q.dequeue()).toBe(3);
+		expect(q.dequeue()).toBeUndefined();
+	});
+
+	it("counts control frames in length/byteLength and clear() frees them", () => {
+		const q = controlQueue(4);
+		q.enqueue(500);
+		q.enqueue(501);
+		expect(q.length).toBe(2);
+		expect(q.byteLength).toBe(2);
+		q.clear();
+		expect(q.length).toBe(0);
+		expect(q.byteLength).toBe(0);
+		expect(q.peekAll()).toEqual([]);
+	});
+
+	it("coexists with a pinned init frame (control → pinned → media order)", () => {
+		const q = new BoundedDropOldestQueue<number>({
+			maxItems: 2,
+			maxBytes: Number.POSITIVE_INFINITY,
+			sizeOf,
+			isPinned: (n) => n >= 100 && n < 200,
+			isControl,
+		});
+		q.enqueue(100); // pinned init
+		q.enqueue(500); // control
+		q.enqueue(1); // media
+		q.enqueue(2); // media
+		q.enqueue(3); // media, evicts oldest media (1)
+		expect(q.dequeue()).toBe(500); // control first
+		expect(q.dequeue()).toBe(100); // then pinned init
+		expect(q.dequeue()).toBe(2); // then bounded media
+		expect(q.dequeue()).toBe(3);
+		expect(q.dequeue()).toBeUndefined();
+	});
+});
+
 describe("BoundedDropOldestQueue — teardown", () => {
 	it("clear() frees all buffered bytes and frames", () => {
 		const q = newQueue({ maxItems: 5, isPinned: (n) => n >= 100 });
