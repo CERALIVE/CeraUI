@@ -166,6 +166,46 @@ describe("preview proxy — legacy close-on-overflow (bound the old code violate
 	});
 });
 
+describe("preview proxy — WebRTC signaling frames survive backpressure", () => {
+	const OFFER_FRAME = JSON.stringify({
+		type: "webrtc-offer",
+		session_id: "rtc-0",
+		sdp: "v=0...",
+	});
+	const ICE_FRAME = JSON.stringify({
+		type: "webrtc-ice",
+		session_id: "rtc-0",
+		candidate: "candidate:1 1 udp 2122260223 192.168.1.10 40000 typ host",
+		sdpMLineIndex: 0,
+	});
+
+	it("never evicts a signaling frame under a media flood, and drains it first", () => {
+		const up = fakeUpstream();
+		const state = createPreviewProxyState(up as unknown as WebSocket);
+		const ws = new SlowConsumerSocket();
+
+		forward(ws, state, mediaFrame(1024)); // trips the pause
+		forward(ws, state, OFFER_FRAME); // control — queued, never dropped
+		forward(ws, state, ICE_FRAME); // control — queued, never dropped
+		for (let i = 0; i < 5000; i++) forward(ws, state, mediaFrame(1024));
+
+		const queued = state.queue.peekAll();
+		expect(queued).toContain(OFFER_FRAME);
+		expect(queued).toContain(ICE_FRAME);
+		// Control lane drains ahead of media, in arrival order.
+		expect(queued[0]).toBe(OFFER_FRAME);
+		expect(queued[1]).toBe(ICE_FRAME);
+
+		// On drain the signaling frames are forwarded before any media.
+		ws.buffered = 0;
+		const sentBefore = ws.sent.length;
+		resume(ws, state);
+		expect(ws.sent[sentBefore]).toBe(OFFER_FRAME);
+		expect(ws.sent[sentBefore + 1]).toBe(ICE_FRAME);
+		expect(ws.closed).toBeNull();
+	});
+});
+
 describe("preview proxy — teardown frees all buffers", () => {
 	it("freePreviewProxyState clears the queue and closes upstream", () => {
 		const up = fakeUpstream();

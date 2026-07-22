@@ -146,6 +146,12 @@ test.describe('PreviewCanvas — WebCodecs tier + idle copy', () => {
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the Live column');
 		pageWs = null;
+		// WebCodecs-tier proof: neutralize RTCPeerConnection before app boot so the
+		// tier ladder (Todo 16) selects WebCodecs (matching the real mock upstream's
+		// WebCodecs framing) instead of putting WebRTC on top.
+		await page.addInitScript(() => {
+			(window as { RTCPeerConnection?: unknown }).RTCPeerConnection = undefined;
+		});
 		await routeBackend(page);
 		await page.goto('/');
 		await ensureAuthenticated(page);
@@ -202,6 +208,9 @@ test.describe('PreviewCanvas — forced MSE tier', () => {
 		await page.addInitScript(() => {
 			// biome-ignore lint/performance/noDelete: force the MSE fallback path.
 			delete (window as { VideoDecoder?: unknown }).VideoDecoder;
+			// Also drop WebRTC so the tier ladder (Todo 16) selects the MSE floor
+			// rather than putting WebRTC on top of the mock's MSE codec-config.
+			(window as { RTCPeerConnection?: unknown }).RTCPeerConnection = undefined;
 		});
 		// The real mock-preview upstream serves WebCodecs framing only, so fake the
 		// `/preview` leg here to supply an MSE codec-config and capture the client's

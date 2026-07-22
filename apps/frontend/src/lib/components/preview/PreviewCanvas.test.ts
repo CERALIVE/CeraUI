@@ -12,6 +12,7 @@ import {
 	cappedAttemptText,
 	derivePreviewAvailability,
 } from "./preview-availability";
+import { DEFAULT_WEBRTC_SIGNALING_TIMEOUT_MS } from "./preview-tier-ladder";
 
 // Controllable capability snapshot: the component reads it through
 // getCapabilities() to decide whether the preview is dialable.
@@ -924,6 +925,234 @@ describe("PreviewCanvas", () => {
 			}
 		});
 	}
+});
+
+// Minimal RTCPeerConnection double: records the answer flow and lets a test drive
+// ICE state + track events. The engine is the offerer; the browser answers.
+class FakeRTCPeerConnection {
+	static instances: FakeRTCPeerConnection[] = [];
+	iceConnectionState = "new";
+	localDescription: unknown = null;
+	remote: unknown = null;
+	closed = false;
+	onicecandidate: ((e: unknown) => void) | null = null;
+	ontrack: ((e: unknown) => void) | null = null;
+	oniceconnectionstatechange: (() => void) | null = null;
+	// biome-ignore lint/suspicious/noExplicitAny: test double config is opaque
+	constructor(public config: any) {
+		FakeRTCPeerConnection.instances.push(this);
+	}
+	async setRemoteDescription(desc: unknown): Promise<void> {
+		this.remote = desc;
+	}
+	async createAnswer(): Promise<{ type: string; sdp: string }> {
+		return { type: "answer", sdp: "answer-sdp" };
+	}
+	async setLocalDescription(desc: unknown): Promise<void> {
+		this.localDescription = desc;
+	}
+	async addIceCandidate(): Promise<void> {}
+	close(): void {
+		this.closed = true;
+	}
+}
+
+class FakeMediaStream {
+	constructor(public tracks?: unknown) {}
+}
+
+// Drive a preview socket to an OPEN WebRTC session: toggle on, flush the async
+// mint→dial, then fire `onopen` (which sends `start` + builds the peer connection).
+async function turnOnWebrtc(
+	getByTestId: (id: string) => HTMLElement,
+): Promise<FakeWebSocket> {
+	await fireEvent.click(getByTestId("preview-toggle"));
+	await flush();
+	const ws = FakeWebSocket.instances.at(-1);
+	if (!ws) throw new Error("no preview socket dialed");
+	ws.onopen?.({});
+	await flush();
+	return ws;
+}
+
+describe("PreviewCanvas — WebRTC tier ladder", () => {
+	// Browser advertises WebRTC + MSE but NOT WebCodecs → ladder is [webrtc, mse]
+	// (the canonical WebRTC → MSE ladder; MSE is the floor).
+	function stubWebrtcBrowser(): void {
+		vi.stubGlobal("RTCPeerConnection", FakeRTCPeerConnection);
+		vi.stubGlobal("MediaStream", FakeMediaStream);
+		vi.stubGlobal(
+			"MediaSource",
+			class {
+				addEventListener(): void {}
+			},
+		);
+		vi.stubGlobal("WebSocket", FakeWebSocket);
+		FakeRTCPeerConnection.instances = [];
+	}
+
+	it("starts on the WebRTC rung: badge=WebRTC and start frame carries tier=webrtc", async () => {
+		stubWebrtcBrowser();
+		const { getByTestId } = render(PreviewCanvas);
+
+		const ws = await turnOnWebrtc(getByTestId);
+
+		expect(getByTestId("preview").getAttribute("data-tier")).toBe("webrtc");
+		const badge = getByTestId("preview-tier-badge");
+		expect(badge.getAttribute("data-tier")).toBe("webrtc");
+		expect(ws.sent).toContain(
+			JSON.stringify({ action: "start", tier: "webrtc" }),
+		);
+		// A peer connection was created for the WebRTC session.
+		expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+	});
+
+	it("answers the engine offer and trickles ICE both ways", async () => {
+		stubWebrtcBrowser();
+		const { getByTestId } = render(PreviewCanvas);
+		const ws = await turnOnWebrtc(getByTestId);
+
+		// Engine offers → the browser answers over the WS.
+		ws.onmessage?.({
+			data: JSON.stringify({
+				type: "webrtc-offer",
+				session_id: "rtc-0",
+				sdp: "offer-sdp",
+			}),
+		});
+		await flush();
+		expect(ws.sent).toContain(
+			JSON.stringify({ action: "webrtc-answer", sdp: "answer-sdp" }),
+		);
+
+		// A locally-gathered host candidate is trickled to the engine.
+		const pc = FakeRTCPeerConnection.instances.at(-1);
+		pc?.onicecandidate?.({
+			candidate: {
+				candidate: "candidate:1 1 udp 2122260223 192.168.1.20 50000 typ host",
+				sdpMLineIndex: 0,
+			},
+		});
+		expect(
+			ws.sent.some(
+				(s) => typeof s === "string" && s.includes('"action":"webrtc-ice"'),
+			),
+		).toBe(true);
+	});
+
+	it("goes live when ICE connects and the first frame paints", async () => {
+		stubWebrtcBrowser();
+		const { container, getByTestId } = render(PreviewCanvas);
+		const ws = await turnOnWebrtc(getByTestId);
+		ws.onmessage?.({
+			data: JSON.stringify({ type: "webrtc-offer", sdp: "offer-sdp" }),
+		});
+		await flush();
+
+		const pc = FakeRTCPeerConnection.instances.at(-1);
+		// The engine's track arrives; the <video> receives the stream.
+		const video = container.querySelector(
+			'[data-testid="preview-video"]',
+		) as HTMLVideoElement;
+		expect(video).not.toBeNull();
+		pc?.ontrack?.({ streams: [new FakeMediaStream()], track: {} });
+		ws.onmessage?.({ data: JSON.stringify({ type: "webrtc-connected" }) });
+		await tick();
+
+		// First frame paints → live.
+		video.dispatchEvent(new Event("loadeddata"));
+		await tick();
+		expect(getByTestId("preview").getAttribute("data-status")).toBe("live");
+	});
+
+	it("falls back to MSE on a webrtc-failed frame (badge=MSE, start tier=mse)", async () => {
+		stubWebrtcBrowser();
+		const { getByTestId } = render(PreviewCanvas);
+		const ws = await turnOnWebrtc(getByTestId);
+		expect(getByTestId("preview-tier-badge").getAttribute("data-tier")).toBe(
+			"webrtc",
+		);
+
+		// The engine reports a typed mid-session failure → the ladder descends.
+		ws.onmessage?.({
+			data: JSON.stringify({ type: "webrtc-failed", reason: "ice_timeout" }),
+		});
+		await flush();
+
+		// The badge and data-tier now reflect the MSE floor …
+		expect(getByTestId("preview").getAttribute("data-tier")).toBe("mse");
+		expect(getByTestId("preview-tier-badge").getAttribute("data-tier")).toBe(
+			"mse",
+		);
+		// … the WebRTC peer connection was torn down …
+		expect(FakeRTCPeerConnection.instances.at(0)?.closed).toBe(true);
+		// … exactly ONE live socket remains (no leaked dial from the restart) …
+		const openSockets = FakeWebSocket.instances.filter(
+			(w) => w.readyState !== 3,
+		);
+		expect(openSockets).toHaveLength(1);
+		// … and it starts on the MSE tier.
+		const mseWs = openSockets[0];
+		expect(mseWs).not.toBe(ws);
+		mseWs?.onopen?.({});
+		expect(mseWs?.sent).toContain(
+			JSON.stringify({ action: "start", tier: "mse" }),
+		);
+	});
+
+	it("falls back to MSE within the signaling deadline when no offer arrives (TIMED)", async () => {
+		vi.useFakeTimers();
+		try {
+			stubWebrtcBrowser();
+			const { getByTestId } = render(PreviewCanvas);
+			await fireEvent.click(getByTestId("preview-toggle"));
+			await flushFake();
+			FakeWebSocket.instances.at(-1)?.onopen?.({});
+			await flushFake();
+			// On the WebRTC rung, still awaiting the engine's offer.
+			expect(getByTestId("preview-tier-badge").getAttribute("data-tier")).toBe(
+				"webrtc",
+			);
+			expect(FakeRTCPeerConnection.instances).toHaveLength(1);
+
+			// The signaling budget elapses with no offer → the ladder must have
+			// landed on the MSE floor by the deadline (never hang on WebRTC).
+			vi.advanceTimersByTime(DEFAULT_WEBRTC_SIGNALING_TIMEOUT_MS);
+			await flushFake();
+
+			expect(getByTestId("preview").getAttribute("data-tier")).toBe("mse");
+			expect(getByTestId("preview-tier-badge").getAttribute("data-tier")).toBe(
+				"mse",
+			);
+			// The dropped peer connection was torn down.
+			expect(FakeRTCPeerConnection.instances.at(0)?.closed).toBe(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("descends only to the floor — a stray webrtc frame on MSE does not re-ladder", async () => {
+		stubWebrtcBrowser();
+		const { getByTestId } = render(PreviewCanvas);
+		const ws = await turnOnWebrtc(getByTestId);
+
+		ws.onmessage?.({ data: JSON.stringify({ type: "webrtc-failed" }) });
+		await flush();
+		expect(getByTestId("preview").getAttribute("data-tier")).toBe("mse");
+
+		const mseWs = FakeWebSocket.instances.at(-1);
+		mseWs?.onopen?.({});
+		const dialsAfterFallback = FakeWebSocket.instances.length;
+		const pcsAfterFallback = FakeRTCPeerConnection.instances.length;
+
+		// A stray webrtc-failed on the MSE floor is ignored (signaling is only
+		// meaningful on the WebRTC rung) — no re-ladder, no new peer connection.
+		mseWs?.onmessage?.({ data: JSON.stringify({ type: "webrtc-failed" }) });
+		await flush();
+		expect(getByTestId("preview").getAttribute("data-tier")).toBe("mse");
+		expect(FakeRTCPeerConnection.instances.length).toBe(pcsAfterFallback);
+		expect(FakeWebSocket.instances.length).toBe(dialsAfterFallback);
+	});
 });
 
 describe("derivePreviewAvailability", () => {

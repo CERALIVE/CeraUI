@@ -148,6 +148,14 @@ test.describe('C4 preview follows the applied source', () => {
 		heldSetConfigId = null;
 		heldSetConfigInput = null;
 
+		// The mock preview leg speaks WebCodecs codec-config only, so force the
+		// non-WebRTC tier: neutralize RTCPeerConnection before app boot so the tier
+		// ladder (Todo 16) does not put WebRTC on top and inflate the dial count with
+		// a fallback redial.
+		await page.addInitScript(() => {
+			(window as { RTCPeerConnection?: unknown }).RTCPeerConnection = undefined;
+		});
+
 		await page.routeWebSocket(/:(3002|31\d\d|6173)/, (ws) => {
 			if (ws.url().includes('/preview')) {
 				previewDials += 1;

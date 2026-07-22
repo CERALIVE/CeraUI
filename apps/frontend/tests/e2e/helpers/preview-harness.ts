@@ -124,6 +124,10 @@ export function installPreviewHarness(token: string): void {
 		}
 	}
 	w.VideoDecoder = FakeVideoDecoder;
+	// Force the non-WebRTC tier: the harness drives the WebCodecs path (via the
+	// FakeVideoDecoder + codec-config control ops), so the tier ladder (Todo 16)
+	// must NOT put WebRTC on top — the fake preview socket speaks no WebRTC offer.
+	w.RTCPeerConnection = undefined;
 
 	class FakePreviewSocket {
 		url: string;

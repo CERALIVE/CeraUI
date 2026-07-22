@@ -126,6 +126,12 @@ async function openPreviewDisclosure(page: Page): Promise<void> {
 test.describe('LiveView preview placement (#72)', () => {
 	test.beforeEach(async ({ page }) => {
 		pageWs = null;
+		// The mock preview leg speaks WebCodecs codec-config only, so force the
+		// non-WebRTC tier: neutralize RTCPeerConnection before app boot so the tier
+		// ladder (Todo 16) does not put WebRTC on top of the mock's WebCodecs path.
+		await page.addInitScript(() => {
+			(window as { RTCPeerConnection?: unknown }).RTCPeerConnection = undefined;
+		});
 		await routeBackend(page);
 		await page.goto('/');
 		await ensureAuthenticated(page);

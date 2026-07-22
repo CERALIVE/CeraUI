@@ -37,6 +37,13 @@
  * slow consumer therefore plateaus the proxy's memory instead of tearing the
  * preview down, and the browser resumes at the freshest media (a live-edge
  * skip-on-lag, paired with the frontend's live-edge seek policy).
+ *
+ * WebRTC signaling / preview-error text frames (Todo 16, ADR-0006:
+ * `webrtc-offer`/`webrtc-ice`/`webrtc-connected`/`webrtc-failed`/`preview-error`)
+ * ride the SAME socket. They are relayed transparently like every other frame, but
+ * classified into the queue's never-dropped CONTROL lane so a backpressure
+ * eviction can never drop a handshake frame and break the WebRTC session — they
+ * are forwarded ahead of any queued media, in arrival order.
  */
 
 import {
@@ -128,12 +135,39 @@ function isInitFrame(frame: Frame): boolean {
 	}
 }
 
+// Server→client WebRTC signaling / preview-error control frames (Todo 16,
+// ADR-0006). They ride the same preview WS as the media, but a handshake frame
+// dropped under backpressure breaks the WebRTC session — so they go in the
+// queue's never-dropped control lane, forwarded ahead of any media.
+const PREVIEW_CONTROL_FRAME_TYPES = new Set([
+	"webrtc-offer",
+	"webrtc-ice",
+	"webrtc-connected",
+	"webrtc-failed",
+	"preview-error",
+]);
+
+export function isPreviewControlFrame(frame: Frame): boolean {
+	if (typeof frame !== "string") {
+		return false;
+	}
+	try {
+		const msg = JSON.parse(frame) as { type?: unknown };
+		return (
+			typeof msg?.type === "string" && PREVIEW_CONTROL_FRAME_TYPES.has(msg.type)
+		);
+	} catch {
+		return false;
+	}
+}
+
 export function createPreviewQueue(): BoundedDropOldestQueue<Frame> {
 	return new BoundedDropOldestQueue<Frame>({
 		maxItems: PREVIEW_MAX_PENDING_FRAMES,
 		maxBytes: PREVIEW_MAX_PENDING_BYTES,
 		sizeOf: frameByteLength,
 		isPinned: isInitFrame,
+		isControl: isPreviewControlFrame,
 	});
 }
 

@@ -155,12 +155,25 @@ divergence between dev and prod dial targets.
   segment (codec-config text frame) is PINNED — never dropped, dequeued first — so
   the latest fragments stay decodable. Socket close frees every buffered frame
   (`freePreviewProxyState` clears the queue).
+- **WebRTC signaling relay — never-dropped control lane (Todo 16, ADR-0006):** the
+  preview WS ALSO carries WebRTC signaling. Server→client control frames
+  (`webrtc-offer`/`webrtc-ice`/`webrtc-connected`/`webrtc-failed`/`preview-error`,
+  classified by `isPreviewControlFrame`) are relayed transparently like every other
+  frame, but routed into the queue's separate never-dropped CONTROL LANE
+  (`BoundedDropOldestQueue` `isControl`): they are forwarded AHEAD of any queued
+  media, in FIFO arrival order, and a backpressure eviction can NEVER drop a
+  handshake frame (dropping an offer or ICE candidate would break the WebRTC
+  session). Media still drop-oldest; the pinned MSE init still newest-wins — the
+  control lane is orthogonal. WebRTC media itself rides the browser↔engine peer
+  connection, NOT this WS, so a WebRTC session puts almost nothing on the WS media
+  path. Client half: `apps/frontend/.../PreviewCanvas.svelte` + `preview-tier-ladder.ts`.
 
 Coverage: `tests/preview-token.test.ts` (mint/consume/expire/single-use) +
 `tests/preview-proxy.test.ts` (pipe, 4401/4502/4503, authed mint gate) +
-`tests/preview-frame-queue.test.ts` (drop-oldest by count/bytes, pinned init) +
-`tests/preview-proxy-bounded.test.ts` (slow-consumer plateau, socket stays open,
-teardown frees buffers).
+`tests/preview-frame-queue.test.ts` (drop-oldest by count/bytes, pinned init,
+never-drop control lane) + `tests/preview-proxy-bounded.test.ts` (slow-consumer
+plateau, socket stays open, signaling frames survive backpressure, teardown frees
+buffers).
 
 ## DEV MOCK SEAMS [EXISTS]
 
