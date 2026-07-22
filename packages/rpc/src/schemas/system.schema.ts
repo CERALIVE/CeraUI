@@ -56,6 +56,51 @@ export type UpdateProgress = z.infer<typeof updateProgressSchema>;
 export const updatingStatusSchema = z.union([z.boolean(), z.null(), updateProgressSchema]);
 export type UpdatingStatus = z.infer<typeof updatingStatusSchema>;
 
+// =============================================================================
+// Unified update state machine (Todo 24)
+// =============================================================================
+// Single source of truth for update availability + lifecycle. Both the backend
+// notification producer AND the frontend UpdatesDialog derive from this one wire
+// value, so the dialog already shows an available update with no manual re-check.
+// `available_updates`/`updating` stay on the wire (back-compat) but are computed
+// from the SAME backend signals this state derives from.
+
+// Semantic identity (Todo-23 dismissal key source): a NEW `version` re-notifies
+// even if the previous update was dismissed.
+export const updateIdentitySchema = z.object({
+	version: z.string(),
+	packages: z.array(z.string()),
+});
+export type UpdateIdentity = z.infer<typeof updateIdentitySchema>;
+
+export const updateStateSchema = z.discriminatedUnion('kind', [
+	z.object({ kind: z.literal('idle') }),
+	z.object({ kind: z.literal('checking') }),
+	z.object({
+		kind: z.literal('available'),
+		identity: updateIdentitySchema,
+		package_count: z.number(),
+		download_size: z.string().optional(),
+	}),
+	z.object({
+		kind: z.literal('downloading'),
+		progress: updateProgressSchema,
+		identity: updateIdentitySchema.optional(),
+	}),
+	z.object({
+		kind: z.literal('installing'),
+		progress: updateProgressSchema,
+		identity: updateIdentitySchema.optional(),
+	}),
+	z.object({ kind: z.literal('success') }),
+	z.object({
+		kind: z.literal('failed'),
+		reason: z.string(),
+		identity: updateIdentitySchema.optional(),
+	}),
+]);
+export type UpdateState = z.infer<typeof updateStateSchema>;
+
 // System command input schema
 export const systemCommandInputSchema = z.object({
 	command: z.enum([

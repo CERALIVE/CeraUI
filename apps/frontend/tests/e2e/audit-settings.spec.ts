@@ -205,11 +205,22 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 	test("software-update start walk shows the mock progress frames (seam asserted)", async ({
 		page,
 	}) => {
-		// Reveal the install action: additive available_updates over the socket
-		// (the default scenario reports no pending updates).
+		// Reveal the install action: the dialog derives from the ONE unified update
+		// state machine (Todo 24), so drive `update_state` (the authoritative wire
+		// field) — `available_updates` stays alongside it exactly as the backend
+		// broadcasts both together (the default scenario reports no pending updates).
 		send({
 			status: {
 				available_updates: { package_count: 2, download_size: "24.5 MB" },
+				update_state: {
+					kind: "available",
+					identity: {
+						version: "e2e-audit-01",
+						packages: ["cerastream", "ceraui"],
+					},
+					package_count: 2,
+					download_size: "24.5 MB",
+				},
 			},
 		});
 
@@ -227,11 +238,18 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 		await confirm.getByRole("button", { name: "Update", exact: true }).click();
 
 		// The seeded e2e backend has no apt_update_enabled, so the real apt seam
-		// (simulateMockSoftwareUpdate) early-returns; the mock seam's OUTPUT — the
-		// {updating:…} status frame — is modeled over the socket, and the dialog
-		// renders the in-progress state from it exactly as it would on a device.
+		// (simulateMockSoftwareUpdate) early-returns; the mock seam's OUTPUT is
+		// modeled over the socket. The dialog derives its in-progress state from
+		// `update_state` (the unified machine, Todo 24) — driven here as the backend
+		// broadcasts it alongside the legacy `updating` frame during a download.
 		send({
-			status: { updating: { total: 100, downloading: 40, unpacking: 0, setting_up: 0 } },
+			status: {
+				updating: { total: 100, downloading: 40, unpacking: 0, setting_up: 0 },
+				update_state: {
+					kind: "downloading",
+					progress: { total: 100, downloading: 40, unpacking: 0, setting_up: 0 },
+				},
+			},
 		});
 		await expect(updates.getByText(/Updating/i)).toBeVisible({ timeout: 5000 });
 		expect(pageErrors).toEqual([]);

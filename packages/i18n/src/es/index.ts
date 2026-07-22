@@ -169,6 +169,9 @@ const es = {
 			"Escritorio + Móvil (5 pestañas, 2 temas cada una) + Offline (2 temas) = 22 total",
 	},
 	general: {
+		updateFailed: "Error en la actualización",
+		retryUpdateCheck: "Reintentar",
+		updateComplete: "Actualización completada",
 		status: "Estado",
 		streaming: "Transmitiendo",
 		offline: "Desconectado",
@@ -752,6 +755,11 @@ const es = {
 		bitrateRange: "El bitrate debe estar entre 2000 y 12000 Kbps",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"Hay una actualización de CERALIVE disponible. Abre Ajustes → Actualizaciones de software para instalarla.",
+		ceraliveUpdateFailed:
+			"La actualización de software falló. Abre Ajustes → Actualizaciones de software para ver el motivo y reintentar.",
+		openUpdates: "Abrir actualizaciones",
 		error: "Error",
 		saved: "Guardado",
 		saveFailed: "Error al guardar",

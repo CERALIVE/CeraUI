@@ -9,7 +9,6 @@ import App from "./App.svelte";
 import { initSubscriptions } from "./lib/rpc";
 import { initAsyncOperations } from "./lib/rpc/async-operation.svelte";
 import { initFieldSyncState } from "./lib/rpc/field-sync-state.svelte";
-import { push } from "./lib/stores/notifications.svelte";
 import { setStoredVersion } from "./lib/stores/version.svelte";
 
 // Feeds the HUD's `subscriptions.svelte` getters from the same shared socket the
@@ -25,27 +24,20 @@ initFieldSyncState();
 // later external transitions (begin/confirm/reconcile) never reach the surface.
 initAsyncOperations();
 
-// Register Service Worker for PWA updates
+// Register the Service Worker for PWA auto-update. There is deliberately NO
+// onNeedRefresh notification (Todo 24): the SW is registerType:"autoUpdate" with
+// skipWaiting+clientsClaim (pwa.config.ts), so a new bundle is applied
+// automatically — a manual "Update Available" toast never actually fired under
+// autoUpdate and was a SECOND, frontend-only "update available" source of truth
+// that bypassed the durable dismissal/action system. Device (apt) updates are the
+// ONE unified update state machine now; the browser-bundle refresh is silent.
 registerSW({
 	immediate: true,
-	onNeedRefresh() {
-		// Show update notification when new version is available
-		push({
-			name: "pwa-update-available",
-			type: "info",
-			msg: "Update Available",
-			key: "notifications.updateAvailable",
-			is_dismissable: true,
-			is_persistent: true,
-			duration: 0,
-		});
-	},
 	onOfflineReady() {
 		/* no-op: offline readiness is surfaced via the PWA UI, not logged */
 	},
 	onRegistered(registration) {
 		if (registration) {
-			// Update stored version when PWA registers successfully
 			setStoredVersion(__APP_VERSION__);
 		}
 	},

@@ -167,6 +167,9 @@ const ptBR = {
 			"Desktop + Móvel (5 abas, 2 temas cada) + Offline (2 temas) = 22 total",
 	},
 	general: {
+		updateFailed: "Falha na atualização",
+		retryUpdateCheck: "Tentar novamente",
+		updateComplete: "Atualização concluída",
 		status: "Status",
 		streaming: "Transmitindo",
 		offline: "Offline",
@@ -1490,6 +1493,11 @@ const ptBR = {
 		bitrateRange: "A taxa de bits deve estar entre 2000 e 12000 Kbps",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"Há uma atualização do CERALIVE disponível. Abra Configurações → Atualizações de software para instalá-la.",
+		ceraliveUpdateFailed:
+			"A atualização de software falhou. Abra Configurações → Atualizações de software para ver o motivo e tentar novamente.",
+		openUpdates: "Abrir atualizações",
 		error: "Erro",
 		saved: "Salvo",
 		saveFailed: "Falha ao salvar",

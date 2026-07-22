@@ -15,6 +15,9 @@ const ja = {
 		steps: "ステップ",
 	},
 	general: {
+		updateFailed: "更新に失敗しました",
+		retryUpdateCheck: "再試行",
+		updateComplete: "更新が完了しました",
 		status: "ステータス",
 		streaming: "ストリーミング",
 		offline: "オフライン",
@@ -1357,6 +1360,11 @@ const ja = {
 		bitrateRange: "ビットレートは2000から12000 Kbpsの間でなければなりません",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"CERALIVE のアップデートがあります。設定 → ソフトウェア更新 を開いてインストールしてください。",
+		ceraliveUpdateFailed:
+			"ソフトウェア更新に失敗しました。設定 → ソフトウェア更新 を開いて理由を確認し、再試行してください。",
+		openUpdates: "更新を開く",
 		error: "エラー",
 		saved: "保存しました",
 		saveFailed: "保存に失敗しました",

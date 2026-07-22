@@ -28,9 +28,22 @@ import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Badge } from '$lib/components/ui/badge';
 import { Button } from '$lib/components/ui/button';
 import { rpc } from '$lib/rpc';
+import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import { getDisplayProfile, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
 import { dismiss, getPersistent } from '$lib/stores/notifications.svelte';
 import { cn } from '$lib/utils';
+
+function lookupLabel(key: string): string {
+	let node: unknown = $LL;
+	for (const seg of key.split('.')) {
+		if (node && typeof node === 'object' && seg in (node as object)) {
+			node = (node as Record<string, unknown>)[seg];
+		} else {
+			return key;
+		}
+	}
+	return typeof node === 'function' ? (node as () => string)() : key;
+}
 
 let open = $state(false);
 
@@ -110,9 +123,26 @@ async function handleDismiss(name: string) {
 					data-notification={item.name}
 				>
 					<Icon class={cn('mt-0.5 size-4 shrink-0', TONES[item.type])} aria-hidden="true" />
-					<p class="text-foreground min-w-0 flex-1 text-sm leading-relaxed break-words">
-						{item.text}
-					</p>
+					<div class="min-w-0 flex-1">
+						<p class="text-foreground text-sm leading-relaxed break-words">
+							{item.text}
+						</p>
+						{#if item.action?.kind === 'navigate'}
+							<Button
+								class="mt-2 h-7 px-2 text-xs"
+								size="sm"
+								variant="outline"
+								data-testid="notification-action"
+								onclick={() => {
+									const target = item.action?.target;
+									if (target) requestDialog(target);
+									open = false;
+								}}
+							>
+								{lookupLabel(item.action.labelKey)}
+							</Button>
+						{/if}
+					</div>
 					{#if item.isDismissable}
 						<Button
 							class="size-7 shrink-0"

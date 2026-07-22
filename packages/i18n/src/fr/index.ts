@@ -167,6 +167,9 @@ const fr = {
 			"Bureau + Mobile (5 onglets, 2 thèmes chacun) + Hors ligne (2 thèmes) = 22 total",
 	},
 	general: {
+		updateFailed: "Échec de la mise à jour",
+		retryUpdateCheck: "Réessayer",
+		updateComplete: "Mise à jour terminée",
 		status: "Statut",
 		streaming: "En streaming",
 		offline: "Hors ligne",
@@ -1515,6 +1518,11 @@ const fr = {
 		bitrateRange: "Le débit doit être compris entre 2000 et 12000 Kbps",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"Une mise à jour CERALIVE est disponible. Ouvrez Paramètres → Mises à jour logicielles pour l'installer.",
+		ceraliveUpdateFailed:
+			"La mise à jour logicielle a échoué. Ouvrez Paramètres → Mises à jour logicielles pour voir la raison et réessayer.",
+		openUpdates: "Ouvrir les mises à jour",
 		error: "Erreur",
 		saved: "Enregistré",
 		saveFailed: "Échec de l'enregistrement",

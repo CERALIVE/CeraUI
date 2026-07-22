@@ -284,9 +284,21 @@ test.describe(
 			const updates = page.getByRole("dialog", { name: UPDATES_DIALOG });
 			await expect(updates).toBeVisible();
 
-			// Advertise an available update so the install action renders.
+			// Advertise an available update so the install action renders. The dialog
+			// derives from the ONE unified update state machine (Todo 24), so drive
+			// `update_state` (the authoritative wire field) alongside the legacy
+			// `available_updates` — exactly as the backend broadcasts both together.
 			await emit(page, "status", {
 				available_updates: { package_count: 3, download_size: "12 MB" },
+				update_state: {
+					kind: "available",
+					identity: {
+						version: "e2e-power-01",
+						packages: ["cerastream", "ceraui", "srtla-send-rs"],
+					},
+					package_count: 3,
+					download_size: "12 MB",
+				},
 			});
 			const install = updates.getByRole("button", { name: "Update", exact: true });
 			await expect(install).toBeVisible();

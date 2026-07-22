@@ -15,6 +15,9 @@ const hi = {
 		steps: "चरण",
 	},
 	general: {
+		updateFailed: "अपडेट विफल",
+		retryUpdateCheck: "पुनः प्रयास करें",
+		updateComplete: "अपडेट पूर्ण",
 		status: "स्थिति",
 		streaming: "स्ट्रीमिंग",
 		offline: "ऑफलाइन",
@@ -1315,6 +1318,11 @@ const hi = {
 		bitrateRange: "बिटरेट 2000 और 12000 Kbps के बीच होना चाहिए",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"एक CERALIVE अपडेट उपलब्ध है। इसे इंस्टॉल करने के लिए सेटिंग्स → सॉफ़्टवेयर अपडेट खोलें।",
+		ceraliveUpdateFailed:
+			"सॉफ़्टवेयर अपडेट विफल रहा। कारण देखने और पुनः प्रयास करने के लिए सेटिंग्स → सॉफ़्टवेयर अपडेट खोलें।",
+		openUpdates: "अपडेट खोलें",
 		error: "त्रुटि",
 		saved: "सहेजा गया",
 		saveFailed: "सहेजने में विफल",

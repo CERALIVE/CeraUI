@@ -169,6 +169,9 @@ const de = {
 		loadingCompleteDesc: "Der Ladevorgang wurde erfolgreich abgeschlossen.",
 	},
 	general: {
+		updateFailed: "Update fehlgeschlagen",
+		retryUpdateCheck: "Erneut versuchen",
+		updateComplete: "Update abgeschlossen",
 		status: "Status",
 		streaming: "Streaming",
 		offline: "Offline",
@@ -749,6 +752,11 @@ const de = {
 		bitrateRange: "Die Bitrate muss zwischen 2000 und 12000 Kbps liegen",
 	},
 	notifications: {
+		ceraliveUpdateAvailable:
+			"Ein CERALIVE-Update ist verfügbar. Öffnen Sie Einstellungen → Softwareupdates, um es zu installieren.",
+		ceraliveUpdateFailed:
+			"Das Softwareupdate ist fehlgeschlagen. Öffnen Sie Einstellungen → Softwareupdates, um den Grund zu sehen und es erneut zu versuchen.",
+		openUpdates: "Updates öffnen",
 		error: "Fehler",
 		saved: "Gespeichert",
 		saveFailed: "Speichern fehlgeschlagen",

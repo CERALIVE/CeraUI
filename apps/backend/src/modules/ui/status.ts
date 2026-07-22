@@ -48,6 +48,7 @@ import { getSensors } from "../system/sensors.ts";
 import {
 	getAvailableUpdates,
 	getSoftUpdateStatus,
+	getUpdateState,
 } from "../system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../system/ssh.ts";
 import { wifiBuildMsg } from "../wifi/wifi.ts";
@@ -58,6 +59,7 @@ export type StatusResponseMessage = {
 	is_streaming?: ReturnType<typeof getIsStreaming>;
 	available_updates?: ReturnType<typeof getAvailableUpdates>;
 	updating?: ReturnType<typeof getSoftUpdateStatus>;
+	update_state?: ReturnType<typeof getUpdateState>;
 	ssh?: ReturnType<typeof getCachedSshStatus>;
 	wifi?: ReturnType<typeof wifiBuildMsg>;
 	modems?: ReturnType<typeof buildModemsMessage>;
@@ -82,6 +84,7 @@ export function sendStatus(conn: WebSocket) {
 			is_streaming: getIsStreaming(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
+			update_state: getUpdateState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
 			modems: buildModemsMessage(),
