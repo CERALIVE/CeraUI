@@ -40,6 +40,56 @@ any leftover from a prior crash, fail-soft, every boot.
 | File | Writer | Atomicity | Notes |
 |------|--------|-----------|-------|
 | `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail); unchanged by this wave. |
+| `notification_dismissals.json` | `NotificationDismissalStore.recordDismissal` (`modules/ui/notification-dismissals.ts`) | Atomic (`writeFileAtomicSync`) | Durable record of which persistent notifications the operator dismissed, keyed by SEMANTIC identity so a dismissal survives a page reload AND a backend restart. LRU-bounded, corruption-quarantined. Path overridable via `CERALIVE_DISMISSALS_FILE` (tests). See the dedicated subsection below. |
+
+#### Notification dismissal store — on-disk format + semantics
+
+The durable dismissal store (`apps/backend/src/modules/ui/notification-dismissals.ts`)
+records which persistent notifications an operator dismissed so they stay
+dismissed. It replaces an in-memory `Map` that survived neither a page reload nor
+a backend restart.
+
+**On-disk format** (`notification_dismissals.json`):
+
+```json
+{
+  "version": 1,
+  "entries": [
+    { "key": "update:2026.7.3", "dismissedAt": 1737590400000 }
+  ]
+}
+```
+
+- `version` — the store schema version (currently `1`); a future shape change
+  bumps it.
+- `entries` — an ordered array of `{ key, dismissedAt }`. Array order IS LRU order:
+  the front is the least-recently-dismissed. `dismissedAt` is a `Date.now()`
+  millisecond epoch.
+
+**Keyed by semantic identity.** The `key` is the notification's SEMANTIC identity,
+never an incidental per-boot id. For a software-update notification the key is the
+version string (`update:<version>`), so dismissing "update 2026.7.3 available" does
+NOT suppress a later "update 2026.7.4 available" — a NEW version re-notifies because
+its key was never dismissed. A notification without a semantic dismissal key is
+merely removed (its dismissal is not persisted), preserving the pre-existing
+transient behavior.
+
+**Durability guarantees.**
+
+- **Atomic write** — every `recordDismissal` re-serializes the whole set and writes
+  it through `writeFileAtomicSync` (temp file → `fsync` → `rename`), so a crash
+  mid-write leaves the previously-committed file intact; a torn write can never
+  corrupt the committed dismissals.
+- **LRU bound** — the set is capped (`DEFAULT_MAX_DISMISSALS = 256`). Recording past
+  the cap evicts the oldest dismissal; re-recording an existing key refreshes its
+  recency. The cap is also enforced when loading an over-cap file off disk.
+- **Corruption quarantine** — on load, an unparseable file (or a well-formed JSON
+  file whose shape fails the Zod schema) is renamed aside to
+  `notification_dismissals.json.corrupt-<timestamp>`, the event is logged, and the
+  store starts fresh with an empty set. A corrupt file never throws or crashes boot.
+  The quarantine sidecar uses a `.corrupt-<ts>` suffix — distinct from the atomic
+  writer's `.<basename>.<pid>.tmp` temp convention, so the T7 orphan sweep does not
+  touch it.
 
 ### Setup / hardware identity
 
