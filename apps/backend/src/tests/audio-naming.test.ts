@@ -394,6 +394,36 @@ describe("device naming/identity (device-quality-wave2 Todo 22)", () => {
 		).toBe(0);
 	});
 
+	test("a GENERIC engine product_name (equal to the card id) is dropped — transport still rides", () => {
+		// The board RØDE audio node: cerastream emits product_name "usbaudio"
+		// (generic, == the card id). It must not compose "usbaudio · USB"; the
+		// transport tag survives and the label falls back to the longname.
+		const generic: EngineAudioDevice[] = [
+			{
+				input_id: "audio:usbaudio",
+				display_name:
+					"RØDE RØDE HDMI to USB-C at usb-xhci-hcd.17.auto-1, super speed",
+				alsa_card_id: "usbaudio",
+				product_name: "usbaudio",
+				transport: "usb",
+				stable_id: "card:usbaudio",
+			},
+		];
+		const identity = resolveAudioIdentities(
+			{ "USB audio": "usbaudio" },
+			generic,
+		).get("USB audio");
+		expect(identity?.product_name).toBeUndefined();
+		expect(identity?.transport).toBe("usb");
+		expect(identity?.stable_id).toBe("card:usbaudio");
+		const label = resolveAudioLabels(
+			{ "USB audio": "usbaudio" },
+			generic,
+			new Map(),
+		).get("USB audio");
+		expect(label).toContain("RØDE");
+	});
+
 	test("resolveAudioLabels prefers the real product_name over the generic display_name", () => {
 		const engine: EngineAudioDevice[] = [
 			{

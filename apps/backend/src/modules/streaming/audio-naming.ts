@@ -191,18 +191,26 @@ function resolveOneLabel(
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
 ): string {
-	// (1) engine-join: an audio entry whose join key matches this card. The real
-	//     `product_name` (cerastream Todo 20) wins outright; else the generic
-	//     `display_name` only if it passes the human-name heuristic (rejects junk
-	//     so the longname path below wins over a generic GStreamer label).
+	// (1) engine-join: an audio entry whose join key matches this card. Prefer the
+	//     real `product_name` (cerastream Todo 20), then the generic `display_name`
+	//     — but each ONLY if it passes the human-name heuristic. The heuristic
+	//     rejects a value equal to the card id ("usbaudio"), so a generic engine
+	//     product_name never beats the longname path below (which carries the real
+	//     "RØDE …" name for a device the engine mislabels generically).
 	const engineMatch = engineAudio.find(
 		(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
 	);
 	if (
 		engineMatch?.product_name !== undefined &&
-		engineMatch.product_name.length > 0
+		isHumanAudioName(engineMatch.product_name, cardId)
 	) {
 		return engineMatch.product_name;
+	}
+	if (
+		engineMatch !== undefined &&
+		isHumanAudioName(engineMatch.display_name, cardId)
+	) {
+		return engineMatch.display_name;
 	}
 	if (
 		engineMatch !== undefined &&
@@ -273,10 +281,15 @@ export function resolveAudioIdentities(
 			(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
 		);
 		if (match === undefined) continue;
+		// Only surface a product_name that passes the human-name heuristic, so a
+		// generic engine value (e.g. "usbaudio", equal to the card id) is never
+		// composed as `<Product Name> · <Transport>` — the transport tag still
+		// rides on its own, and the picker falls back to the longname-derived label.
+		const hasRealProduct =
+			match.product_name !== undefined &&
+			isHumanAudioName(match.product_name, cardId);
 		const identity: AudioDeviceIdentity = {
-			...(match.product_name !== undefined
-				? { product_name: match.product_name }
-				: {}),
+			...(hasRealProduct ? { product_name: match.product_name } : {}),
 			...(match.transport !== undefined ? { transport: match.transport } : {}),
 			...(match.stable_id !== undefined ? { stable_id: match.stable_id } : {}),
 		};
