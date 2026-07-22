@@ -13,12 +13,15 @@ import { describe, expect, it } from "vitest";
 
 import {
 	AUTO_AUDIO_SOURCE_ENTRY,
+	audioSelectionValue,
+	audioSelectionWireId,
 	audioSourceLabel,
 	type CapabilitySummary,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
 	formatCodec,
 	groupAudioSources,
+	resolveAudioSelection,
 	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
@@ -886,5 +889,136 @@ describe("source×audio mixture matrix (M1–M6) — display derivation", () => 
 			t,
 		);
 		expect(r.current).toBe("Auto \u2014 currently: Pipeline default");
+	});
+});
+
+// device-quality-wave2 Todo 22 — device-naming label + saved-selection migration.
+const t = (key: string): string => key;
+
+describe("audioSourceLabel — <Product Name> · <Transport> (Todo 22)", () => {
+	it("composes the product name with the transport tag", () => {
+		const entry: AudioSource = {
+			id: "USB audio",
+			kind: "device",
+			label: "usbaudio",
+			product_name: "RØDE NT-USB",
+			transport: "usb",
+			stable_id: "card:usbaudio",
+		};
+		expect(audioSourceLabel(entry, t)).toBe("RØDE NT-USB \u00b7 USB");
+	});
+
+	it("renders the product name alone when no transport is present", () => {
+		const entry: AudioSource = {
+			id: "USB audio",
+			kind: "device",
+			product_name: "RØDE NT-USB",
+		};
+		expect(audioSourceLabel(entry, t)).toBe("RØDE NT-USB");
+	});
+
+	it("falls back to the legacy label for an entry with no product name", () => {
+		const entry: AudioSource = {
+			id: "USB audio",
+			kind: "device",
+			label: "usbaudio",
+		};
+		expect(audioSourceLabel(entry, t)).toBe("usbaudio");
+	});
+
+	it("abbreviates bluetooth to BT and names onboard", () => {
+		expect(
+			audioSourceLabel(
+				{
+					id: "a",
+					kind: "device",
+					product_name: "Buds",
+					transport: "bluetooth",
+				},
+				t,
+			),
+		).toBe("Buds \u00b7 BT");
+		expect(
+			audioSourceLabel(
+				{
+					id: "b",
+					kind: "device",
+					product_name: "Codec",
+					transport: "onboard",
+				},
+				t,
+			),
+		).toBe("Codec \u00b7 Onboard");
+	});
+});
+
+describe("resolveAudioSelection — saved-selection migration (Todo 22)", () => {
+	const SOURCES: AudioSource[] = [
+		{
+			id: "USB audio",
+			kind: "device",
+			product_name: "RØDE NT-USB",
+			transport: "usb",
+			stable_id: "card:usbaudio",
+		},
+		{ id: "HDMI audio", kind: "device", stable_id: "card:hdmi" },
+	];
+
+	it("resolves a PRE-UPGRADE saved identifier (the old asrc-key) to the current entry", () => {
+		// This is the red→green migration guard: an old stored `config.asrc` (the
+		// asrc-key, saved before the identity scheme existed) must still resolve
+		// after the update. A resolver that keyed ONLY on stable_id would return
+		// undefined here.
+		const resolved = resolveAudioSelection("USB audio", SOURCES);
+		expect(resolved?.id).toBe("USB audio");
+		expect(resolved?.stable_id).toBe("card:usbaudio");
+	});
+
+	it("resolves a stable_id to the same entry (selection binds to stable_id)", () => {
+		expect(resolveAudioSelection("card:usbaudio", SOURCES)?.id).toBe(
+			"USB audio",
+		);
+	});
+
+	it("returns undefined for a selection that matches no current entry", () => {
+		expect(resolveAudioSelection("card:gone", SOURCES)).toBeUndefined();
+		expect(resolveAudioSelection(undefined, SOURCES)).toBeUndefined();
+	});
+
+	it("prefers a stable_id match over an id match on collision", () => {
+		const collide: AudioSource[] = [
+			{ id: "x", kind: "device", stable_id: "shared" },
+			{ id: "shared", kind: "device", stable_id: "card:other" },
+		];
+		expect(resolveAudioSelection("shared", collide)?.id).toBe("x");
+	});
+});
+
+describe("audioSelectionValue / audioSelectionWireId — UI value ↔ wire id (Todo 22)", () => {
+	const SOURCES: AudioSource[] = [
+		{ id: "USB audio", kind: "device", stable_id: "card:usbaudio" },
+		{ id: "HDMI audio", kind: "device" },
+	];
+
+	it("binds the UI value to the stable_id when present, else the wire id", () => {
+		expect(
+			audioSelectionValue({
+				id: "USB audio",
+				kind: "device",
+				stable_id: "card:usbaudio",
+			}),
+		).toBe("card:usbaudio");
+		expect(audioSelectionValue({ id: "HDMI audio", kind: "device" })).toBe(
+			"HDMI audio",
+		);
+	});
+
+	it("maps a selected stable_id BACK to the persisted wire asrc id", () => {
+		expect(audioSelectionWireId("card:usbaudio", SOURCES)).toBe("USB audio");
+	});
+
+	it("passes a wire id or unknown value through unchanged (pseudo-sources)", () => {
+		expect(audioSelectionWireId("HDMI audio", SOURCES)).toBe("HDMI audio");
+		expect(audioSelectionWireId("No audio", SOURCES)).toBe("No audio");
 	});
 });

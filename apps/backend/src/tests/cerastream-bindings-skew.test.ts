@@ -96,6 +96,8 @@ describe("cerastream bindings version-skew guard", () => {
 	});
 
 	test("event topics + discriminated union stay in lockstep", () => {
+		// device-quality-wave2 Todo 22: the 2026.7.3 pin adds the additive 8th
+		// `audio-level` topic (ADR-0007) — the always-on level meter.
 		expect([...EVENT_TOPICS]).toEqual([
 			"status",
 			"switch",
@@ -104,6 +106,7 @@ describe("cerastream bindings version-skew guard", () => {
 			"srt-stats",
 			"error",
 			"preview",
+			"audio-level",
 		]);
 		expect(eventParamsSchema.options.length).toBe(EVENT_TOPICS.length);
 	});
@@ -117,8 +120,36 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(7);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.4.0", () => {
-		expect(SCHEMA_VERSION).toBe("0.4.0");
+	test("SCHEMA_VERSION is pinned to 0.8.0", () => {
+		// device-quality-wave2 Todo 22: the 2026.7.3 pin ships schema 0.8.0 (the
+		// additive Todo 20/21/30 batch), superseding the 0.4.0 the prior pin shipped.
+		expect(SCHEMA_VERSION).toBe("0.8.0");
+	});
+
+	test("audio-level topic + connect-error codes are on the surface (Todo 22)", () => {
+		const level = eventParamsSchema.parse({
+			type: "audio-level",
+			seq: 1,
+			source: { identity: "card:usbaudio", owner: "sidecar" },
+			channels: 2,
+			rms_db: [-18, -19],
+			peak_db: [-6, -7],
+		});
+		expect(level.type).toBe("audio-level");
+		const unavailable = eventParamsSchema.parse({
+			type: "audio-level",
+			seq: 2,
+			unavailable: true,
+			reason: "mode_none",
+		});
+		expect((unavailable as { unavailable?: boolean }).unavailable).toBe(true);
+		expect([...bindings.CERASTREAM_CONNECT_ERROR_CODES]).toEqual([
+			"absent",
+			"refused",
+			"unreachable",
+			"lost",
+			"closed",
+		]);
 	});
 
 	test("0.4.0 surface: startParamsSchema has additive optional fields", () => {
@@ -203,12 +234,12 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(withEncode.active_encode?.decoder).toBe("mppvideodec");
 	});
 
-	test("SKEW: the binding statusEventSchema STRIPS active_encode.passthrough", () => {
-		// cerastream reports `active_encode.passthrough` (Todo 16, schema 0.5.0) but
-		// the published binding predates it and Zod-strips the field — which is why
-		// CeraUI reads it over the raw passthrough event bridge, not the typed
-		// subscribeEvents path. If a future binding bump adds the field this
-		// assertion flips and the raw bridge can be retired.
+	test("the binding statusEventSchema now RETAINS active_encode.passthrough", () => {
+		// The 2026.7.3 pin (schema 0.8.0) carries the 0.5.0 passthrough field, so
+		// the typed subscribeEvents path now surfaces it — the prior 0.4.0 pin
+		// Zod-stripped it (the reason CeraUI still reads it over the raw passthrough
+		// event bridge). This assertion flipped on the bump; retiring that raw
+		// bridge is a separate follow-up, out of scope here.
 		const parsed = bindings.statusEventSchema.parse({
 			type: "status",
 			seq: 1,
@@ -223,7 +254,7 @@ describe("cerastream bindings version-skew guard", () => {
 		});
 		expect(
 			(parsed.active_encode as { passthrough?: unknown }).passthrough,
-		).toBeUndefined();
+		).toBe(true);
 	});
 
 	test("0.4.0 surface: getCapabilitiesResultSchema has additive optional preview field", () => {

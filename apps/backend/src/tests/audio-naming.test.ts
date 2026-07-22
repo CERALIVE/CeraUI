@@ -8,6 +8,7 @@ import {
 	isHumanAudioName,
 	parseAsoundCards,
 	resetAudioNamingDiagnostics,
+	resolveAudioIdentities,
 	resolveAudioLabels,
 } from "../modules/streaming/audio-naming.ts";
 import {
@@ -351,6 +352,91 @@ describe("deriveAudioSources — label attachment", () => {
 			id: "USB audio",
 			kind: "device",
 		});
+	});
+});
+
+describe("device naming/identity (device-quality-wave2 Todo 22)", () => {
+	test("resolveAudioIdentities joins product_name/transport/stable_id on alsa_card_id", () => {
+		const engine: EngineAudioDevice[] = [
+			{
+				input_id: "audio:usbaudio",
+				display_name: "USB Audio",
+				alsa_card_id: "usbaudio",
+				product_name: "RØDE NT-USB",
+				transport: "usb",
+				stable_id: "card:usbaudio",
+			},
+		];
+		const identities = resolveAudioIdentities(
+			{ "USB audio": "usbaudio" },
+			engine,
+		);
+		expect(identities.get("USB audio")).toEqual({
+			product_name: "RØDE NT-USB",
+			transport: "usb",
+			stable_id: "card:usbaudio",
+		});
+	});
+
+	test("a card with no matching engine entry (or a pre-2026.7.3 pin) yields no identity", () => {
+		expect(resolveAudioIdentities({ "USB audio": "usbaudio" }, []).size).toBe(
+			0,
+		);
+		const legacy: EngineAudioDevice[] = [
+			{
+				input_id: "audio:usbaudio",
+				display_name: "USB Audio",
+				alsa_card_id: "usbaudio",
+			},
+		];
+		expect(
+			resolveAudioIdentities({ "USB audio": "usbaudio" }, legacy).size,
+		).toBe(0);
+	});
+
+	test("resolveAudioLabels prefers the real product_name over the generic display_name", () => {
+		const engine: EngineAudioDevice[] = [
+			{
+				input_id: "audio:usbaudio",
+				display_name: "USB Audio Device",
+				alsa_card_id: "usbaudio",
+				product_name: "RØDE NT-USB",
+			},
+		];
+		const labels = resolveAudioLabels(
+			{ "USB audio": "usbaudio" },
+			engine,
+			new Map(),
+		);
+		expect(labels.get("USB audio")).toBe("RØDE NT-USB");
+	});
+
+	test("deriveAudioSources attaches the identity fields onto device entries", () => {
+		const identities = new Map([
+			[
+				"USB audio",
+				{
+					product_name: "RØDE NT-USB",
+					transport: "usb" as const,
+					stable_id: "card:usbaudio",
+				},
+			],
+		]);
+		const sources = deriveAudioSources(
+			{ "USB audio": "usbaudio", "No audio": "No audio" },
+			new Map([["USB audio", "RØDE NT-USB"]]),
+			identities,
+		);
+		expect(sources.find((s) => s.id === "USB audio")).toEqual({
+			id: "USB audio",
+			kind: "device",
+			label: "RØDE NT-USB",
+			product_name: "RØDE NT-USB",
+			transport: "usb",
+			stable_id: "card:usbaudio",
+		});
+		// Pseudo-sources never carry identity fields.
+		expect(sources.find((s) => s.id === "No audio")?.stable_id).toBeUndefined();
 	});
 });
 

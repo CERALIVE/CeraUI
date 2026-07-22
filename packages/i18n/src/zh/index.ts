@@ -1027,6 +1027,13 @@ const zh = {
 			audioLabel: "音频电平",
 			audioSilent: "静音",
 			channelAria: "频道 {n} 电平",
+			audioUnavailable: "电平表不可用",
+			audioUnavailableReason: {
+				device_busy: "音频设备忙",
+				no_device: "无音频设备",
+				mode_none: "音频已禁用",
+				handoff: "切换中\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "引擎启动中",

@@ -661,11 +661,27 @@ export async function refreshEngineDeviceCache(
 		engineAudioDeviceCache = result.devices
 			.filter((d) => d.media_class === "audio")
 			.map((d) => {
-				const alsaCardId = (d as { alsa_card_id?: string }).alsa_card_id;
+				const extra = d as {
+					alsa_card_id?: string;
+					product_name?: string;
+					transport?: EngineAudioDevice["transport"];
+					stable_id?: string;
+				};
 				return {
 					input_id: d.input_id,
 					display_name: d.display_name,
-					...(alsaCardId !== undefined ? { alsa_card_id: alsaCardId } : {}),
+					...(extra.alsa_card_id !== undefined
+						? { alsa_card_id: extra.alsa_card_id }
+						: {}),
+					...(extra.product_name !== undefined
+						? { product_name: extra.product_name }
+						: {}),
+					...(extra.transport !== undefined
+						? { transport: extra.transport }
+						: {}),
+					...(extra.stable_id !== undefined
+						? { stable_id: extra.stable_id }
+						: {}),
 				};
 			});
 		recordObservedDevices(engineDeviceCache);

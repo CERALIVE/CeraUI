@@ -55,3 +55,43 @@ describe("AudioLevelMeter (Task 33)", () => {
 		expect(meterOf(container).getAttribute("data-silent")).toBe("true");
 	});
 });
+
+describe("AudioLevelMeter — unavailable state (device-quality-wave2 Todo 22)", () => {
+	it("renders the unavailable state (not silence, not bars) when unavailable", () => {
+		const { container } = render(AudioLevelMeter, {
+			props: { unavailable: true, reason: "mode_none" },
+		});
+		const meter = meterOf(container);
+
+		expect(meter.getAttribute("data-unavailable")).toBe("true");
+		// The unavailable marker renders — NOT the silent floor, NOT channel bars.
+		expect(
+			meter.querySelector('[data-testid="audio-unavailable"]'),
+		).not.toBeNull();
+		expect(meter.querySelector('[data-testid="audio-silent"]')).toBeNull();
+		expect(
+			meter.querySelectorAll('[data-testid="audio-channel"]'),
+		).toHaveLength(0);
+	});
+
+	it("surfaces the reason label alongside the unavailable heading", () => {
+		const { container } = render(AudioLevelMeter, {
+			props: { unavailable: true, reason: "no_device" },
+		});
+		const marker = meterOf(container).querySelector(
+			'[data-testid="audio-unavailable"]',
+		);
+		expect(marker?.textContent).toContain("No audio device");
+	});
+
+	it("prefers unavailable over any stale rms/peak arrays (never fake silence)", () => {
+		const { container } = render(AudioLevelMeter, {
+			props: { unavailable: true, rmsDb: [-12], peakDb: [-6] },
+		});
+		const meter = meterOf(container);
+		expect(meter.getAttribute("data-unavailable")).toBe("true");
+		expect(
+			meter.querySelectorAll('[data-testid="audio-channel"]'),
+		).toHaveLength(0);
+	});
+});

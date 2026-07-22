@@ -1090,6 +1090,13 @@ const ko = {
 			audioLabel: "오디오 레벨",
 			audioSilent: "무음",
 			channelAria: "채널 {n} 레벨",
+			audioUnavailable: "미터를 사용할 수 없음",
+			audioUnavailableReason: {
+				device_busy: "오디오 장치 사용 중",
+				no_device: "오디오 장치 없음",
+				mode_none: "오디오 비활성화",
+				handoff: "전환 중\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "엔진 시작 중",

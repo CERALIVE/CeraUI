@@ -7,6 +7,7 @@
 
 import type {
 	AddonState,
+	AudioLevelMessage,
 	CapabilitiesMessage,
 	CaptureDevice,
 	ConfigMessage,
@@ -108,6 +109,12 @@ let linkTelemetryState = $state<LinkTelemetryMessage | null | undefined>(
 	undefined,
 );
 
+// Always-on audio level (device-quality-wave2 Todo 22). Fed by the main-WS
+// `audio-level` broadcast the backend audio-meter bridge re-emits from the engine
+// sidecar — drives the LiveView meter OUTSIDE a preview. `undefined` before the
+// first event; an `unavailable` variant renders the meter's unavailable state.
+let audioLevelState = $state<AudioLevelMessage | undefined>(undefined);
+
 // System state
 let deviceStatsState = $state<DeviceStats | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
@@ -207,6 +214,10 @@ export function getModems() {
 
 export function getLinkTelemetry() {
 	return linkTelemetryState;
+}
+
+export function getAudioLevel() {
+	return audioLevelState;
 }
 
 export function getSensors() {
@@ -453,6 +464,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			netifState = merged;
 			break;
 		}
+
+		case "audio-level":
+			audioLevelState = data as AudioLevelMessage;
+			break;
 
 		case "wifi": {
 			// WiFi responses carry several shapes. The connect/new RESULT frames are
@@ -830,6 +845,7 @@ export function resetState(): void {
 	wifiState = undefined;
 	modemsState = undefined;
 	linkTelemetryState = undefined;
+	audioLevelState = undefined;
 	sensorsState = undefined;
 	deviceStatsState = undefined;
 	revisionsState = undefined;

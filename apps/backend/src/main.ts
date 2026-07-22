@@ -77,6 +77,7 @@ import {
 	startAudioDeviceWatcher,
 	updateAudioDevices,
 } from "./modules/streaming/audio.ts";
+import { initAudioMeterBridge } from "./modules/streaming/audio-meter-bridge.ts";
 import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
@@ -264,6 +265,15 @@ await guardNonCritical("sources", () =>
 			: undefined,
 	),
 );
+// Always-on audio-level bridge: one long-lived subscription to the engine's
+// `audio-level` topic, re-broadcast over the main authed WS so the LiveView meter
+// moves while idle with no preview open (device-quality-wave2 Todo 22). Skipped
+// under mocks (no real engine socket); fire-and-forget, never blocks boot.
+if (!shouldUseMocks()) {
+	await guardNonCritical("audio-meter", async () => {
+		initAudioMeterBridge();
+	});
+}
 logger.info(bootTimer.phase("🔌", "pipelines"));
 
 // DEV-ONLY preview WebSocket server: `startMockPreviewServer` gates on

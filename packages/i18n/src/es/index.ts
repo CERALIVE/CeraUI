@@ -508,6 +508,13 @@ const es = {
 			audioLabel: "Niveles de audio",
 			audioSilent: "Silencio",
 			channelAria: "Nivel del canal {n}",
+			audioUnavailable: "Medidor no disponible",
+			audioUnavailableReason: {
+				device_busy: "Dispositivo de audio ocupado",
+				no_device: "Sin dispositivo de audio",
+				mode_none: "Audio desactivado",
+				handoff: "Cambiando\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "El motor se está iniciando",

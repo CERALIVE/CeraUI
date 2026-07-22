@@ -54,6 +54,17 @@ export interface EngineAudioDevice {
 	input_id: string;
 	display_name: string;
 	alsa_card_id?: string;
+	product_name?: string;
+	transport?: AudioDeviceTransport;
+	stable_id?: string;
+}
+
+export type AudioDeviceTransport = "usb" | "hdmi" | "bluetooth" | "onboard";
+
+export interface AudioDeviceIdentity {
+	product_name?: string;
+	transport?: AudioDeviceTransport;
+	stable_id?: string;
 }
 
 /**
@@ -180,16 +191,25 @@ function resolveOneLabel(
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
 ): string {
-	// (1) engine-join: an audio entry whose join key matches this card AND whose
-	//     display_name is a real human name (the heuristic rejects junk so the
-	//     longname path below wins over a generic GStreamer label).
+	// (1) engine-join: an audio entry whose join key matches this card. The real
+	//     `product_name` (cerastream Todo 20) wins outright; else the generic
+	//     `display_name` only if it passes the human-name heuristic (rejects junk
+	//     so the longname path below wins over a generic GStreamer label).
 	const engineMatch = engineAudio.find(
-		(d) =>
-			d.alsa_card_id !== undefined &&
-			d.alsa_card_id === cardId &&
-			isHumanAudioName(d.display_name, cardId),
+		(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
 	);
-	if (engineMatch !== undefined) return engineMatch.display_name;
+	if (
+		engineMatch?.product_name !== undefined &&
+		engineMatch.product_name.length > 0
+	) {
+		return engineMatch.product_name;
+	}
+	if (
+		engineMatch !== undefined &&
+		isHumanAudioName(engineMatch.display_name, cardId)
+	) {
+		return engineMatch.display_name;
+	}
 
 	// (2) the `/proc/asound/cards` longname for that card.
 	const longname = longnames.get(cardId);
@@ -232,4 +252,35 @@ export function resolveAudioLabels(
 		labels.set(asrcKey, nextCount === 1 ? raw : `${raw} (${nextCount})`);
 	}
 	return labels;
+}
+
+/**
+ * Resolve the stable-identity metadata (`product_name` / `transport` /
+ * `stable_id`, cerastream Todo 20) for every DEVICE card, joining the engine
+ * `list-devices` audio entries on `alsa_card_id`. A card with no matching engine
+ * entry — or an engine on the pre-2026.7.3 pin that strips the fields — yields no
+ * entry, so the frontend falls back to the plain label. Pseudo-sources are
+ * skipped. The `cards` argument is never mutated.
+ */
+export function resolveAudioIdentities(
+	cards: Record<string, string>,
+	engineAudio: readonly EngineAudioDevice[],
+): Map<string, AudioDeviceIdentity> {
+	const identities = new Map<string, AudioDeviceIdentity>();
+	for (const [asrcKey, cardId] of Object.entries(cards)) {
+		if (PSEUDO_SOURCE_IDS.has(cardId)) continue;
+		const match = engineAudio.find(
+			(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
+		);
+		if (match === undefined) continue;
+		const identity: AudioDeviceIdentity = {
+			...(match.product_name !== undefined
+				? { product_name: match.product_name }
+				: {}),
+			...(match.transport !== undefined ? { transport: match.transport } : {}),
+			...(match.stable_id !== undefined ? { stable_id: match.stable_id } : {}),
+		};
+		if (Object.keys(identity).length > 0) identities.set(asrcKey, identity);
+	}
+	return identities;
 }

@@ -1248,6 +1248,13 @@ const ptBR = {
 			audioLabel: "Níveis de áudio",
 			audioSilent: "Silêncio",
 			channelAria: "Nível do canal {n}",
+			audioUnavailable: "Medidor indisponível",
+			audioUnavailableReason: {
+				device_busy: "Dispositivo de áudio ocupado",
+				no_device: "Nenhum dispositivo de áudio",
+				mode_none: "Áudio desativado",
+				handoff: "Alternando\u2026",
+			},
 			unavailable: {
 				engineStarting: {
 					title: "Motor iniciando",
