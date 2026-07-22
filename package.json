@@ -41,13 +41,13 @@
 		"clean:all": "bun run clean"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.2",
+		"@biomejs/biome": "2.5.4",
 		"@ceralive/biome-config": "^2026.6.2",
 		"@types/node": "^26.1.1",
 		"dotenv-cli": "^11.0.0",
 		"glob": "^13.0.6",
 		"mprocs": "^0.9.6",
-		"typescript": "^6.0.3"
+		"typescript": "^7.0.2"
 	},
 	"volta": {
 		"node": "24.0.0"
