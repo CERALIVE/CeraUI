@@ -28,9 +28,16 @@
   isDismissable - is the user allowed to hide it?
 */
 
+import type { NotificationAction } from "@ceraui/rpc/schemas";
+
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
 import type { MessageSocket } from "./message-socket.ts";
+import {
+	isNotificationDismissed,
+	recordNotificationDismissal,
+} from "./notification-dismissals.ts";
+import { notificationRemaining } from "./notification-liveness.ts";
 import {
 	broadcastMsg,
 	buildMsg,
@@ -47,17 +54,34 @@ type Notification = {
 	isPersistent: boolean;
 	isDismissable: boolean;
 	authedOnly: boolean;
+	action?: NotificationAction;
+	dismissalKey?: string;
 };
 
 type PersistentNotification = Notification & {
 	isPersistent: true;
 	last_sent: number;
 	updated: number;
+	revision: number;
+};
+
+export type NotificationOptions = {
+	action?: NotificationAction;
+	dismissalKey?: string;
 };
 
 const persistentNotifications = new Map<string, PersistentNotification>();
 
-export function buildNotificationMsg(n: Notification, duration: number) {
+let revisionCounter = 0;
+function nextRevision(): number {
+	return ++revisionCounter;
+}
+
+export function buildNotificationMsg(
+	n: Notification,
+	duration: number,
+	revision?: number,
+) {
 	return {
 		name: n.name,
 		type: n.type,
@@ -65,6 +89,8 @@ export function buildNotificationMsg(n: Notification, duration: number) {
 		// Omit key/params when absent so legacy msg-only notifications keep their wire shape.
 		...(n.key !== undefined ? { key: n.key } : {}),
 		...(n.params !== undefined ? { params: n.params } : {}),
+		...(n.action !== undefined ? { action: n.action } : {}),
+		...(revision !== undefined ? { revision } : {}),
 		is_dismissable: n.isDismissable,
 		is_persistent: n.isPersistent,
 		duration,
@@ -82,9 +108,17 @@ export function notificationSend(
 	authedOnly = true,
 	key?: Notification["key"],
 	params?: Notification["params"],
+	opts?: NotificationOptions,
 ) {
 	if (isPersistent && conn !== undefined) {
 		logger.error("error: attempted to send persistent unicast notification");
+		return false;
+	}
+
+	// A persistent notification carrying a semantic dismissal key that the
+	// operator already dismissed stays suppressed across reloads and restarts.
+	const dismissalKey = opts?.dismissalKey;
+	if (isPersistent && dismissalKey && isNotificationDismissed(dismissalKey)) {
 		return false;
 	}
 
@@ -94,12 +128,15 @@ export function notificationSend(
 		msg,
 		...(key !== undefined ? { key } : {}),
 		...(params !== undefined ? { params } : {}),
+		...(opts?.action !== undefined ? { action: opts.action } : {}),
+		...(dismissalKey !== undefined ? { dismissalKey } : {}),
 		isDismissable,
 		isPersistent,
 		duration,
 		authedOnly,
 	};
 	let doSend = true;
+	let revision: number | undefined;
 	if (isPersistent) {
 		let pn = persistentNotifications.get(name);
 		if (pn) {
@@ -109,6 +146,7 @@ export function notificationSend(
 			}
 			Object.assign(pn, notification);
 			pn.updated = getms();
+			pn.revision = nextRevision();
 			if (doSend) {
 				pn.last_sent = getms();
 			}
@@ -118,15 +156,17 @@ export function notificationSend(
 				isPersistent: true,
 				last_sent: 0,
 				updated: getms(),
+				revision: nextRevision(),
 			};
 			persistentNotifications.set(name, pn);
 		}
+		revision = pn.revision;
 	}
 
 	if (!doSend) return;
 
 	const notificationMsg = {
-		show: [buildNotificationMsg(notification, duration)],
+		show: [buildNotificationMsg(notification, duration, revision)],
 	};
 	if (conn) {
 		const senderId = getSocketSenderId(conn);
@@ -150,6 +190,7 @@ export function notificationBroadcast(
 	authedOnly = true,
 	key?: Notification["key"],
 	params?: Notification["params"],
+	opts?: NotificationOptions,
 ) {
 	notificationSend(
 		undefined,
@@ -162,6 +203,7 @@ export function notificationBroadcast(
 		authedOnly,
 		key,
 		params,
+		opts,
 	);
 }
 
@@ -169,39 +211,58 @@ export function notificationRemove(name: string) {
 	const n = persistentNotifications.get(name);
 	persistentNotifications.delete(name);
 
-	const msg = { remove: [name] };
+	const msg = { remove: [{ id: name, revision: nextRevision() }] };
 	broadcastMsg("notification", msg, 0, !n || n.authedOnly);
+	return msg;
 }
 
-function _notificationIsLive(n: PersistentNotification) {
-	if (n.duration === 0) return 0;
-
-	const remainingDuration = Math.ceil(
-		n.duration - (getms() - n.updated) / 1000,
-	);
-	if (remainingDuration <= 0) {
-		persistentNotifications.delete(n.name);
-		return false;
+// Persists the dismissal (survives reload + restart) only when the notification
+// carries a semantic dismissalKey; a keyless notification is merely removed.
+export function notificationDismiss(name: string) {
+	const pn = persistentNotifications.get(name);
+	if (pn?.dismissalKey) {
+		recordNotificationDismissal(pn.dismissalKey);
 	}
-	return remainingDuration;
+	return notificationRemove(name);
 }
 
-export function notificationExists(name: string) {
+function _notificationIsLive(
+	n: PersistentNotification,
+	nowMs: number = getms(),
+) {
+	const remaining = notificationRemaining({
+		isPersistent: n.isPersistent,
+		duration: n.duration,
+		updatedMs: n.updated,
+		nowMs,
+	});
+	if (remaining === false) {
+		persistentNotifications.delete(n.name);
+	}
+	return remaining;
+}
+
+export function notificationExists(name: string, nowMs: number = getms()) {
 	const pn = persistentNotifications.get(name);
 	if (!pn) return;
 
-	if (_notificationIsLive(pn) !== false) return pn;
+	if (_notificationIsLive(pn, nowMs) !== false) return pn;
 	return undefined;
 }
 
-export function getPersistentNotifications(isAuthed = false) {
+export function getPersistentNotifications(
+	isAuthed = false,
+	nowMs: number = getms(),
+) {
 	const notifications = [];
 	for (const n of persistentNotifications) {
 		if (!isAuthed && n[1].authedOnly) continue;
 
-		const remainingDuration = _notificationIsLive(n[1]);
+		const remainingDuration = _notificationIsLive(n[1], nowMs);
 		if (remainingDuration !== false) {
-			notifications.push(buildNotificationMsg(n[1], remainingDuration));
+			notifications.push(
+				buildNotificationMsg(n[1], remainingDuration, n[1].revision),
+			);
 		}
 	}
 

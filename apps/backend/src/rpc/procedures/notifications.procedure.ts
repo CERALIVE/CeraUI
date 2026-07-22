@@ -12,8 +12,8 @@ import { z } from "zod";
 
 import {
 	getPersistentNotifications,
+	notificationDismiss,
 	notificationExists,
-	notificationRemove,
 } from "../../modules/ui/notifications.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -49,7 +49,7 @@ export const dismissNotificationProcedure = authedProcedure
 		// Check if notification exists before removing
 		const exists = notificationExists(name);
 		if (exists) {
-			notificationRemove(name);
+			notificationDismiss(name);
 		}
 
 		return { success: true };

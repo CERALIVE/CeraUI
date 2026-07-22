@@ -26,7 +26,7 @@ import type {
 	StatusResponse,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
-
+import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
@@ -581,16 +581,17 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 
 		// SINGULAR: the backend broadcasts `buildMsg("notification", …)`; the plural never hits the wire.
 		case "notification": {
-			// `show` adds/updates; `remove` (backend `notificationRemove`, or
-			// another client dismissing a persistent item) drops it live. The
-			// remove-only frame carries no `show`, so both arrays are optional.
-			const message = data as NotificationsMessage & { remove?: string[] };
-			notificationsState = data as NotificationsMessage;
+			// `show` adds/updates; typed `remove` drops by id. A malformed frame is
+			// skipped rather than cast blindly into the store.
+			const parsed = notificationsMessageSchema.safeParse(data);
+			if (!parsed.success) break;
+			const message = parsed.data;
+			notificationsState = message;
 			for (const notification of message.show ?? []) {
 				pushNotification(notification);
 			}
-			for (const name of message.remove ?? []) {
-				dismissNotification(name);
+			for (const entry of message.remove ?? []) {
+				dismissNotification(entry.id);
 			}
 			break;
 		}
