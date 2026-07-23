@@ -87,6 +87,37 @@ describe('Applied-state output schemas', () => {
 				expect(result.data.applied?.max_br).toBe(8000);
 			}
 		});
+
+		it.each(['busy', 'cancelled'] as const)('preserves the typed %s result', (lifecycleResult:
+			| 'busy'
+			| 'cancelled') => {
+			const result = streamingStartOutputSchemaExtended.parse({
+				success: false,
+				is_streaming: false,
+				result: lifecycleResult,
+				attemptId: 'att_schema_test',
+			});
+			expect(result).toMatchObject({
+				result: lifecycleResult,
+				attemptId: 'att_schema_test',
+			});
+		});
+
+		it('strips internal lifecycle metadata from an established failure response', () => {
+			const result = streamingStartOutputSchemaExtended.parse({
+				success: false,
+				is_streaming: false,
+				error: 'source_lost',
+				result: 'failed',
+				attemptId: 'att_schema_test',
+				failure: { class: 'start_invalid' },
+			});
+			expect(result).toEqual({
+				success: false,
+				is_streaming: false,
+				error: 'source_lost',
+			});
+		});
 	});
 
 	describe('bitrateOutputSchema', () => {

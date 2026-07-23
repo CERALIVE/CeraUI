@@ -182,7 +182,7 @@ describe("streaming source availability rejection (C7)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toMatchObject({
+		expect(result).toEqual({
 			success: false,
 			is_streaming: false,
 			error: "source_lost",

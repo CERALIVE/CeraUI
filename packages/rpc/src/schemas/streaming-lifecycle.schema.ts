@@ -1,6 +1,6 @@
 /**
- * Start-lifecycle contract — the typed WIRE CONTRACT for the streaming
- * start/stop lifecycle (device-quality-wave2 Todo 25, DESIGN + SCHEMA ONLY).
+ * Start-lifecycle contract — the canonical typed result model for the streaming
+ * start/stop lifecycle (device-quality-wave2 Todo 25).
  *
  * This module is the single source of truth for:
  *   (a) the wire RESULT UNION `StartResult = started | busy | cancelled | failed`
@@ -14,8 +14,10 @@
  * by a stop terminates as the first-class `cancelled` result (one concept, one
  * representation).
  *
- * EVERY union variant is a discriminated wire object carrying `attemptId` so a
- * later change (Todo 29) can fence a stale response from an older attempt.
+ * EVERY canonical union variant carries `attemptId` so Todo 29 can fence a stale
+ * response from an older attempt. The public `streaming.start` adapter exposes
+ * that metadata only for the new `busy` and `cancelled` variants; established
+ * success/failure response shapes remain backward compatible.
  *
  * Todo 26 wires the lifecycle/result contract into start/stop runtime paths;
  * retry, suppression, and stale-response fencing remain Todos 27-29. This is browser-safe

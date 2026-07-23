@@ -136,7 +136,6 @@ function startResponse(
 	switch (result.result) {
 		case "started":
 			return {
-				...result,
 				success: true,
 				is_streaming: getIsStreaming(),
 				...(applied !== undefined ? { applied } : {}),
@@ -157,7 +156,6 @@ function startResponse(
 			};
 		case "failed":
 			return {
-				...result,
 				success: false,
 				is_streaming: false,
 				error:

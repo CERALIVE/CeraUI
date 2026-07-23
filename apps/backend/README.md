@@ -105,7 +105,7 @@ Key streaming procedures:
 
 | Procedure | Purpose |
 |-----------|---------|
-| `streaming.start(config)` | Validate and admit one lifecycle attempt; resolves with typed `started`, `busy`, `cancelled`, or `failed` result plus `attemptId` |
+| `streaming.start(config)` | Validate and admit one lifecycle attempt; concurrent/cancelled admission resolves as typed `busy`/`cancelled` plus `attemptId`, while established success/failure responses keep their legacy wire shape |
 | `streaming.stop()` | Cancel/stop the active lifecycle generation and return a typed stop result |
 | `streaming.setConfig(fields)` | Persist config fields without starting the stream |
 | `streaming.setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
