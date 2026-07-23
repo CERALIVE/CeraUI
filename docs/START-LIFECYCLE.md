@@ -133,10 +133,12 @@ require — each row is a site that was found and mapped.
 **Notes on sites the plan assumed but the codebase does NOT currently have as
 literal code:**
 
-- **PLAYING confirmation (row 21).** CeraUI awaits the binding's `start` result,
-  then validates its streaming state inside the 5s `playing-wait` deadline.
-  `started` is impossible before both awaits finish. The second checkpoint
-  validates the response; it does not invent another engine operation.
+- **PLAYING confirmation (row 21).** CeraUI parses the binding's `start` result
+  inside the 5s `playing-wait` deadline. A direct `state: "streaming"` result
+  completes the phase. A valid transitional result such as `state: "starting"`
+  keeps the phase pending until the existing event subscription receives a
+  concordant runtime status (`state: "streaming"`, `streaming: true`). No polling
+  loop or second engine operation is introduced.
 - **`spawn-sender` phase.** A local sender spawn/setup failure maps here. Any
   later engine-phase failure unwinds the exact sender handle.
 - **`-32001` (not_streaming), `-32004` (bitrate), `-32005` (preview),
@@ -278,9 +280,20 @@ Machine-readable classification is:
 | outer combined-operation deadline without a binding error | `connect` |
 
 Application-owned awaits stay separate and bounded: subscribe (10s), start RPC
-(10s), and PLAYING-result validation (5s). Stop is bounded at 12s and returns
+(10s), and PLAYING confirmation (5s). The direct start reply is authoritative
+only when it reports `state: "streaming"`; any other valid state, including
+`state: "starting"`, waits for a subscribed status heartbeat whose state is
+`streaming` and whose `streaming` flag is true. Missing that confirmation returns
+typed `start_timeout` in `playing-wait`. Stop is bounded at 12s and returns
 `stop_failed(reason: "stop_timeout")` when cleanup does not settle. Sender
 termination retains the existing 10s SIGTERM-to-SIGKILL policy.
+
+Connect and subscription are acquisition phases: their cleanup is registered on
+the acquisition promise before it enters the deadline race. If either promise
+resolves after timeout and rollback, transaction registration observes the
+rolled-back state and closes the late resource immediately. The race retains a
+rejection observer as well, so a late failed acquisition cannot become an
+unhandled rejection.
 
 IP-list preparation completes before sender launch. Initial read/write or
 no-interface failures are launch-critical typed failures. Network-change refresh

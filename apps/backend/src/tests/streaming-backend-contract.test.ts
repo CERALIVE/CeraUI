@@ -4,6 +4,7 @@ import type {
 	CaptureDevice,
 	CerastreamClient,
 	EventParams,
+	StartResult,
 } from "@ceralive/cerastream";
 import {
 	CerastreamConnectionError,
@@ -17,6 +18,11 @@ import {
 	cerastreamBackend,
 	classifyConnectHandshakePhase,
 } from "../modules/streaming/cerastream-backend.ts";
+import {
+	createLaunchTransaction,
+	type LaunchDeadlineTimers,
+} from "../modules/streaming/launch-transaction.ts";
+import { START_PHASE_DEADLINES_MS } from "../modules/streaming/start-lifecycle-timing.ts";
 import type {
 	StreamingBackend,
 	StreamRunOptions,
@@ -66,15 +72,25 @@ interface FakeClientHarness {
 	client: CerastreamClient;
 	calls: Array<{ op: string; params?: unknown }>;
 	readonly subscribed: Promise<void>;
+	readonly started: Promise<void>;
 	emit(event: EventParams): void;
 }
 
-function makeFakeClient(): FakeClientHarness {
+interface FakeClientOptions {
+	readonly startResult?: StartResult;
+	readonly subscribeGate?: Promise<void>;
+}
+
+function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 	const calls: Array<{ op: string; params?: unknown }> = [];
 	let listener: ((event: EventParams) => void) | undefined;
 	let resolveSubscribed: (() => void) | undefined;
+	let resolveStarted: (() => void) | undefined;
 	const subscribed = new Promise<void>((resolve) => {
 		resolveSubscribed = resolve;
+	});
+	const started = new Promise<void>((resolve) => {
+		resolveStarted = resolve;
 	});
 	const client: CerastreamClient = {
 		hello: {
@@ -84,7 +100,8 @@ function makeFakeClient(): FakeClientHarness {
 		},
 		start: async (params) => {
 			calls.push({ op: "start", params });
-			return { session_id: "s1", state: "streaming" };
+			resolveStarted?.();
+			return options.startResult ?? { session_id: "s1", state: "streaming" };
 		},
 		stop: async (params) => {
 			calls.push({ op: "stop", params });
@@ -122,6 +139,9 @@ function makeFakeClient(): FakeClientHarness {
 			calls.push({ op: "subscribe-events", params });
 			listener = eventListener;
 			resolveSubscribed?.();
+			if (options.subscribeGate !== undefined) {
+				await options.subscribeGate;
+			}
 			return {
 				result: {
 					subscribed: [
@@ -170,8 +190,51 @@ function makeFakeClient(): FakeClientHarness {
 		client,
 		calls,
 		subscribed,
+		started,
 		emit: (event) => listener?.(event),
 	};
+}
+
+interface Deferred<Value> {
+	readonly promise: Promise<Value>;
+	readonly resolve: (value: Value) => void;
+}
+
+function deferred<Value>(): Deferred<Value> {
+	let resolvePromise: (value: Value) => void = () => undefined;
+	const promise = new Promise<Value>((resolve) => {
+		resolvePromise = resolve;
+	});
+	return { promise, resolve: resolvePromise };
+}
+
+function fakeDeadlineTimers(): {
+	readonly timers: LaunchDeadlineTimers;
+	readonly fire: () => void;
+	readonly delay: () => number | undefined;
+} {
+	let callback: (() => void) | undefined;
+	let delayMs: number | undefined;
+	return {
+		timers: {
+			schedule: (next, delay) => {
+				callback = next;
+				delayMs = delay;
+				return 1;
+			},
+			cancel: () => undefined,
+		},
+		fire: () => callback?.(),
+		delay: () => delayMs,
+	};
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+	for (let attempt = 0; attempt < 50; attempt += 1) {
+		if (predicate()) return;
+		await Bun.sleep(0);
+	}
+	expect(predicate()).toBe(true);
 }
 
 interface BridgeHarness {
@@ -214,11 +277,12 @@ function makeBackend(
 	opts: {
 		connect?: CerastreamBackendDeps["connect"];
 		config?: Partial<RuntimeConfig>;
+		fakeOptions?: FakeClientOptions;
 		scheduleTimeout?: CerastreamBackendDeps["scheduleTimeout"];
 		cancelTimeout?: CerastreamBackendDeps["cancelTimeout"];
 	} = {},
 ): BackendHarness {
-	const fake = makeFakeClient();
+	const fake = makeFakeClient(opts.fakeOptions);
 	const bridgeH = makeBridge();
 	const config: RuntimeConfig = { ...STREAM_CONFIG, ...opts.config };
 	let saves = 0;
@@ -365,6 +429,123 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(params.srt.streamid).toBe("stream-1");
 		expect(params.bitrate.max_bitrate).toBe(8000);
 		expect(params.pipeline).toBe("h264_hdmi_1080p");
+	});
+
+	test("a starting reply remains pending until an authoritative streaming status event", async () => {
+		const { backend, fake } = makeBackend({
+			fakeOptions: {
+				startResult: { session_id: "s-starting", state: "starting" },
+			},
+		});
+		const start = backend.start(STREAM_CONFIG, RUN_OPTS);
+		await fake.started;
+		let settled = false;
+		void start.then(
+			() => {
+				settled = true;
+			},
+			() => {
+				settled = true;
+			},
+		);
+		await Bun.sleep(0);
+
+		expect(settled).toBe(false);
+		fake.emit({ type: "status", seq: 1, state: "streaming", streaming: true });
+		await start;
+		expect(settled).toBe(true);
+	});
+
+	test("a starting reply without a streaming heartbeat times out in playing-wait and rolls back", async () => {
+		const clock = fakeDeadlineTimers();
+		const { backend, fake } = makeBackend({
+			fakeOptions: {
+				startResult: { session_id: "s-starting", state: "starting" },
+			},
+		});
+		const transaction = createLaunchTransaction("attempt-playing-timeout", {
+			timers: clock.timers,
+		});
+		const start = backend.start(STREAM_CONFIG, RUN_OPTS, transaction);
+		await fake.started;
+		await waitFor(
+			() => clock.delay() === START_PHASE_DEADLINES_MS["playing-wait"],
+		);
+		clock.fire();
+
+		await expect(start).rejects.toMatchObject({
+			failure: {
+				attemptId: "attempt-playing-timeout",
+				phase: "playing-wait",
+				class: "start_timeout",
+			},
+		});
+		expect(
+			fake.calls
+				.map((call) => call.op)
+				.filter((op) => ["stop", "unsubscribe", "close"].includes(op)),
+		).toEqual(["stop", "unsubscribe", "close"]);
+		expect(fake.calls.filter((call) => call.op === "close")).toHaveLength(1);
+		expect(fake.calls.filter((call) => call.op === "unsubscribe")).toHaveLength(
+			1,
+		);
+		expect(backend.stop(() => undefined)).toBe(false);
+	});
+
+	test("a client acquired after the connect deadline is immediately closed with no ownership residue", async () => {
+		const clock = fakeDeadlineTimers();
+		const lateClient = deferred<CerastreamClient>();
+		const harness = makeBackend({ connect: () => lateClient.promise });
+		const transaction = createLaunchTransaction("attempt-late-connect", {
+			timers: clock.timers,
+		});
+		const start = harness.backend.start(STREAM_CONFIG, RUN_OPTS, transaction);
+		await waitFor(() => clock.delay() === START_PHASE_DEADLINES_MS.connect);
+		clock.fire();
+		await expect(start).rejects.toMatchObject({
+			failure: { phase: "connect", class: "start_timeout" },
+		});
+
+		lateClient.resolve(harness.fake.client);
+		await waitFor(() => harness.fake.calls.some((call) => call.op === "close"));
+		expect(
+			harness.fake.calls.filter((call) => call.op === "close"),
+		).toHaveLength(1);
+		expect(
+			harness.fake.calls.some((call) => call.op === "subscribe-events"),
+		).toBe(false);
+		expect(harness.backend.stop(() => undefined)).toBe(false);
+	});
+
+	test("a subscription acquired after its deadline is immediately closed with no ownership residue", async () => {
+		const clock = fakeDeadlineTimers();
+		const subscribeGate = deferred<void>();
+		const harness = makeBackend({
+			fakeOptions: { subscribeGate: subscribeGate.promise },
+		});
+		const transaction = createLaunchTransaction("attempt-late-subscribe", {
+			timers: clock.timers,
+		});
+		const start = harness.backend.start(STREAM_CONFIG, RUN_OPTS, transaction);
+		await harness.fake.subscribed;
+		await waitFor(() => clock.delay() === START_PHASE_DEADLINES_MS.subscribe);
+		clock.fire();
+		await expect(start).rejects.toMatchObject({
+			failure: { phase: "subscribe", class: "start_timeout" },
+		});
+
+		subscribeGate.resolve(undefined);
+		await waitFor(() =>
+			harness.fake.calls.some((call) => call.op === "unsubscribe"),
+		);
+		expect(
+			harness.fake.calls.filter((call) => call.op === "close"),
+		).toHaveLength(1);
+		expect(
+			harness.fake.calls.filter((call) => call.op === "unsubscribe"),
+		).toHaveLength(1);
+		expect(harness.fake.calls.some((call) => call.op === "start")).toBe(false);
+		expect(harness.backend.stop(() => undefined)).toBe(false);
 	});
 
 	test("setBitrate persists and pushes the value over IPC while streaming", async () => {

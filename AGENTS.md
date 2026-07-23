@@ -914,7 +914,14 @@ the Todo-27 launch transaction. Initial IP-list preparation is awaited before
 sender spawn. Sender, telemetry, control client, subscription, and accepted
 engine start register cleanup immediately; failure unwinds them in reverse order
 and leaves lifecycle/status idle. The start response is emitted only after the
-engine's streaming result parses successfully.
+engine confirms PLAYING. A direct start reply with `state: "streaming"` is an
+authoritative confirmation; every other schema-valid reply (including
+`state: "starting"`) remains in `playing-wait` until a subscribed status heartbeat
+reports the concordant pair `state: "streaming"` plus `streaming: true`. If that
+heartbeat misses the 5-second phase deadline, start returns typed
+`start_timeout` and rolls back. Connect/subscription cleanup is attached to each
+acquisition promise before its deadline race, so a resource delivered after
+rollback is closed immediately and cannot become backend-owned.
 
 Connect and hello share the published binding's combined operation and are
 classified by machine-readable error shape; CeraUI does not simulate a separate

@@ -17,6 +17,12 @@ export type LaunchDeadlineTimers = {
 
 export type LaunchTransaction = {
 	readonly register: (cleanup: () => void | Promise<void>) => void;
+	readonly acquirePhase: <Resource>(
+		phase: StartDeadlinePhase,
+		operation: () => Promise<Resource>,
+		cleanup: (resource: Resource) => void | Promise<void>,
+		errorPhase?: (error: unknown) => StartDeadlinePhase,
+	) => Promise<Resource>;
 	readonly runPhase: <Result>(
 		phase: StartDeadlinePhase,
 		operation: () => Promise<Result>,
@@ -54,45 +60,57 @@ export function createLaunchTransaction(
 			});
 		}
 	};
+	const register = (cleanup: () => void | Promise<void>): void => {
+		if (rolledBack) {
+			void runCleanup(cleanup);
+			return;
+		}
+		cleanups.push(cleanup);
+	};
+	const runPhase = async <Result>(
+		phase: StartDeadlinePhase,
+		operation: () => Promise<Result>,
+		errorPhase: (error: unknown) => StartDeadlinePhase = () => phase,
+	): Promise<Result> => {
+		let timer: LaunchTimer | undefined;
+		let deadlineExpired = false;
+		const timeout = new Promise<never>((_resolve, reject) => {
+			timer = timers.schedule(() => {
+				deadlineExpired = true;
+				reject(
+					new CerastreamTimeoutError(phase, START_PHASE_DEADLINES_MS[phase]),
+				);
+			}, START_PHASE_DEADLINES_MS[phase]);
+		});
+		try {
+			return await Promise.race([operation(), timeout]);
+		} catch (error) {
+			throw new StreamStartFailure(
+				classifyStartFailure(
+					deadlineExpired ? phase : errorPhase(error),
+					error,
+					attemptId,
+					{ warn },
+				),
+			);
+		} finally {
+			if (timer !== undefined) timers.cancel(timer);
+		}
+	};
 
 	return {
-		register: (cleanup) => {
-			if (rolledBack) {
-				void runCleanup(cleanup);
-				return;
-			}
-			cleanups.push(cleanup);
-		},
-		runPhase: async <Result>(
-			phase: StartDeadlinePhase,
-			operation: () => Promise<Result>,
-			errorPhase: (error: unknown) => StartDeadlinePhase = () => phase,
-		): Promise<Result> => {
-			let timer: LaunchTimer | undefined;
-			let deadlineExpired = false;
-			const timeout = new Promise<never>((_resolve, reject) => {
-				timer = timers.schedule(() => {
-					deadlineExpired = true;
-					reject(
-						new CerastreamTimeoutError(phase, START_PHASE_DEADLINES_MS[phase]),
-					);
-				}, START_PHASE_DEADLINES_MS[phase]);
-			});
-			try {
-				return await Promise.race([operation(), timeout]);
-			} catch (error) {
-				throw new StreamStartFailure(
-					classifyStartFailure(
-						deadlineExpired ? phase : errorPhase(error),
-						error,
-						attemptId,
-						{ warn },
-					),
-				);
-			} finally {
-				if (timer !== undefined) timers.cancel(timer);
-			}
-		},
+		register,
+		acquirePhase: (phase, operation, cleanup, errorPhase) =>
+			runPhase(
+				phase,
+				() =>
+					operation().then((resource) => {
+						register(() => cleanup(resource));
+						return resource;
+					}),
+				errorPhase,
+			),
+		runPhase,
 		rollback: () => {
 			if (rollbackPromise !== undefined) return rollbackPromise;
 			rolledBack = true;

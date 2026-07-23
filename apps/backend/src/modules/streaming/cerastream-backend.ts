@@ -487,18 +487,33 @@ export class CerastreamBackend implements StreamingBackend {
 			transaction ?? createLaunchTransaction("backend-start");
 		try {
 			await this.enqueue(async () => {
-				const client = await launchTransaction.runPhase(
+				let confirmStreaming: (() => void) | undefined;
+				const streamingStatus = new Promise<void>((resolve) => {
+					confirmStreaming = resolve;
+				});
+				const client = await launchTransaction.acquirePhase(
 					"connect",
 					() => this.deps.connect(this.deps.connectOptions),
+					(client) => client.close(),
 					classifyConnectHandshakePhase,
 				);
 				this.client = client;
-				launchTransaction.register(() => client.close());
-				const subscription = await launchTransaction.runPhase("subscribe", () =>
-					client.subscribeEvents({}, (event) => this.handleEvent(event)),
+				const subscription = await launchTransaction.acquirePhase(
+					"subscribe",
+					() =>
+						client.subscribeEvents({}, (event) => {
+							this.handleEvent(event);
+							if (
+								event.type === "status" &&
+								classifyRuntimeState(event.state, event.streaming) ===
+									"streaming"
+							) {
+								confirmStreaming?.();
+							}
+						}),
+					(subscription) => subscription.close(),
 				);
 				this.subscription = subscription;
-				launchTransaction.register(() => subscription.close());
 				launchTransaction.register(async () => {
 					try {
 						await client.stop();
@@ -515,11 +530,15 @@ export class CerastreamBackend implements StreamingBackend {
 					this.dispatchStart(client, params),
 				);
 				await launchTransaction.runPhase("playing-wait", async () => {
-					startResultSchema.parse(result);
+					const parsed = startResultSchema.parse(result);
+					if (parsed.state !== "streaming") await streamingStatus;
 				});
 			}, "start");
 		} catch (error) {
 			await launchTransaction.rollback();
+			this.active = false;
+			this.client = undefined;
+			this.subscription = undefined;
 			throw error;
 		}
 	}
