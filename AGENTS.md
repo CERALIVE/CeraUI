@@ -931,6 +931,15 @@ bounds. Stop confirms engine/process cleanup or returns typed `stop_failed` afte
 12 seconds. Full contract and timeout values: `docs/START-LIFECYCLE.md`.
 
 Todo 28 adds a 5-attempt/60-second exponential retry bound around that transaction.
+Each individual launch is also capped at 10 seconds; expiry cancels that launch's
+generation, awaits bounded cleanup, and classifies the attempt as a retriable
+connect-phase `start_timeout` so a hung engine call cannot hold the lifecycle slot.
+The prior launch must settle after cleanup before backoff is armed; if it does not
+settle within the cleanup bound, `start_cleanup_timeout` is terminal and no later
+attempt is launched.
+Cerastream stop is the deliberate exception to the backend IPC queue: it is sent
+immediately through the active client so cleanup cannot wait behind the launch it
+must interrupt.
 Suppression reads only existing update, engine capability, and boot-uptime signals;
 suppressed attempts remain `starting` and emit no error toast. Structured retry and
 terminal records carry attempt id, phase, class, optional engine code, and retry

@@ -78,6 +78,7 @@ interface FakeClientHarness {
 
 interface FakeClientOptions {
 	readonly startResult?: StartResult;
+	readonly startGate?: Promise<StartResult>;
 	readonly subscribeGate?: Promise<void>;
 }
 
@@ -86,6 +87,13 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 	let listener: ((event: EventParams) => void) | undefined;
 	let resolveSubscribed: (() => void) | undefined;
 	let resolveStarted: (() => void) | undefined;
+	let rejectStartOnClose: ((error: Error) => void) | undefined;
+	const startClosed =
+		options.startGate === undefined
+			? undefined
+			: new Promise<never>((_resolve, reject) => {
+					rejectStartOnClose = reject;
+				});
 	const subscribed = new Promise<void>((resolve) => {
 		resolveSubscribed = resolve;
 	});
@@ -101,6 +109,9 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 		start: async (params) => {
 			calls.push({ op: "start", params });
 			resolveStarted?.();
+			if (options.startGate !== undefined && startClosed !== undefined) {
+				return await Promise.race([options.startGate, startClosed]);
+			}
 			return options.startResult ?? { session_id: "s1", state: "streaming" };
 		},
 		stop: async (params) => {
@@ -170,6 +181,7 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 		},
 		close: async () => {
 			calls.push({ op: "close" });
+			rejectStartOnClose?.(new Error("client_closed"));
 		},
 	};
 	// `switch-audio` is dispatched by the backend through the client's raw
@@ -429,6 +441,31 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(params.srt.streamid).toBe("stream-1");
 		expect(params.bitrate.max_bitrate).toBe(8000);
 		expect(params.pipeline).toBe("h264_hdmi_1080p");
+	});
+
+	test("stop interrupts an in-flight start instead of waiting behind its queue", async () => {
+		// Given an accepted start request whose reply remains in flight.
+		const startGate = deferred<StartResult>();
+		const { backend, fake } = makeBackend({
+			fakeOptions: { startGate: startGate.promise },
+		});
+		const starting = backend.start(STREAM_CONFIG, RUN_OPTS);
+		const startFailure = starting.catch((error: unknown) => error);
+		await fake.started;
+		let stopped = false;
+
+		// When lifecycle cleanup requests a stop before that start reply settles.
+		expect(backend.stop(() => (stopped = true))).toBe(true);
+		await waitFor(() => stopped);
+
+		// Then stop reaches the engine immediately instead of joining behind start.
+		expect(fake.calls.map((call) => call.op)).toContain("stop");
+		expect(stopped).toBe(true);
+		expect(await startFailure).toMatchObject({
+			failure: { phase: "start-rpc", class: "engine_internal" },
+		});
+		await backend.settle();
+		expect(backend.stop(() => undefined)).toBe(false);
 	});
 
 	test("a starting reply remains pending until an authoritative streaming status event", async () => {

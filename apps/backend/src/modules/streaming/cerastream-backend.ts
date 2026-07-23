@@ -433,8 +433,9 @@ export class CerastreamBackend implements StreamingBackend {
 	private subscription: Subscription | undefined;
 	private active = false;
 	private telemetry: EngineTelemetry | null = null;
-	// Serializes async IPC ops so they never interleave; `settle()` awaits the tail.
+	// Serializes non-stop IPC ops; stop interrupts a pending start through its client.
 	private queue: Promise<void> = Promise.resolve();
+	private interrupt: Promise<void> = Promise.resolve();
 
 	constructor(deps: Partial<CerastreamBackendDeps> = {}) {
 		this.deps = { ...defaultCerastreamBackendDeps(), ...deps };
@@ -566,7 +567,7 @@ export class CerastreamBackend implements StreamingBackend {
 		this.active = false;
 		const client = this.client;
 		const subscription = this.subscription;
-		void this.enqueue(async () => {
+		const operation = (async () => {
 			subscription?.close();
 			try {
 				await client?.stop();
@@ -576,11 +577,14 @@ export class CerastreamBackend implements StreamingBackend {
 				} catch {
 					// already closing
 				}
-				this.client = undefined;
-				this.subscription = undefined;
+				if (this.client === client) this.client = undefined;
+				if (this.subscription === subscription) this.subscription = undefined;
 				onStopped();
 			}
-		}, "stop");
+		})();
+		this.interrupt = operation.catch((error) =>
+			this.handleOpFailure("stop", error),
+		);
 		return true;
 	}
 
@@ -783,8 +787,8 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	/** Test seam: resolve once every queued IPC op has settled. */
-	settle(): Promise<void> {
-		return this.queue;
+	async settle(): Promise<void> {
+		await Promise.all([this.queue, this.interrupt]);
 	}
 
 	/** Bridge one engine event onto notifications / telemetry / status. */

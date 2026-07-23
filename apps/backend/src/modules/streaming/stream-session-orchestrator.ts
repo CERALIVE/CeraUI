@@ -75,6 +75,13 @@ export type StreamSessionOrchestratorDeps = {
 	readonly cancelTimeout?: (
 		timer: ReturnType<typeof globalThis.setTimeout> | number,
 	) => void;
+	readonly scheduleLaunchDeadline?: (
+		callback: () => void,
+		delayMs: number,
+	) => ReturnType<typeof globalThis.setTimeout> | number;
+	readonly cancelLaunchDeadline?: (
+		timer: ReturnType<typeof globalThis.setTimeout> | number,
+	) => void;
 	readonly retryPolicy?: RetryPolicy;
 	readonly now?: () => number;
 	readonly suppressionContext?: () => SuppressionContext;
@@ -110,6 +117,14 @@ export function createStreamSessionOrchestrator(
 			globalThis.setTimeout(callback, delayMs));
 	const cancelTimeout =
 		deps.cancelTimeout ??
+		((timer: ReturnType<typeof globalThis.setTimeout> | number) =>
+			globalThis.clearTimeout(timer));
+	const scheduleLaunchDeadline =
+		deps.scheduleLaunchDeadline ??
+		((callback: () => void, delayMs: number) =>
+			globalThis.setTimeout(callback, delayMs));
+	const cancelLaunchDeadline =
+		deps.cancelLaunchDeadline ??
 		((timer: ReturnType<typeof globalThis.setTimeout> | number) =>
 			globalThis.clearTimeout(timer));
 
@@ -171,27 +186,46 @@ export function createStreamSessionOrchestrator(
 		};
 		active = attempt;
 		transition("starting");
-		const context: StreamLaunchContext = {
-			attemptId,
-			generation: attempt.generation,
-			origin: request.origin,
-			cancelled: () => attempt.cancelled,
-		};
+		const deadlineCancelledLaunches = new Set<number>();
 
 		const launchResult = await runStartWithRetry({
 			attemptId,
-			launch: () => request.launch(context),
+			launch: (launchNumber) =>
+				request.launch({
+					attemptId,
+					generation: attempt.generation,
+					origin: request.origin,
+					cancelled: () =>
+						attempt.cancelled || deadlineCancelledLaunches.has(launchNumber),
+				}),
 			classifyUnknown: (error) =>
 				classifyStartFailure("start-rpc", error, attemptId, {
 					warn: (message, meta) => logger.warn(message, meta),
 				}),
 			cancelled: () => attempt.cancelled || active !== attempt,
+			onLaunchTimeout: async (launchNumber) => {
+				deadlineCancelledLaunches.add(launchNumber);
+				try {
+					await stopWithinDeadline(attempt.generation);
+				} catch (error) {
+					logger.error("Timed-out stream launch cleanup failed", {
+						attemptId,
+						generation: attempt.generation,
+						launchNumber,
+						error,
+					});
+					throw error;
+				}
+			},
 			setCancelWait: (cancel) => {
 				if (cancel === undefined) delete attempt.cancelRetryWait;
 				else attempt.cancelRetryWait = cancel;
 			},
 			schedule: scheduleTimeout,
 			cancelTimer: cancelTimeout,
+			scheduleDeadline: scheduleLaunchDeadline,
+			cancelDeadline: cancelLaunchDeadline,
+			cleanupDeadlineMs: stopDeadlineMs,
 			...(deps.retryPolicy !== undefined
 				? { retryPolicy: deps.retryPolicy }
 				: {}),

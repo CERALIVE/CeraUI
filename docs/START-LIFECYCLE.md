@@ -187,8 +187,9 @@ suppressed — that gating lives in the retry loop (Todo 28), not in this predic
 
 ## (d) Retry policy
 
-Bounded exponential backoff, for **retriable classes only**, with a max-attempts
-AND a total-time budget (`DEFAULT_START_RETRY_POLICY`: 5 attempts / 60s budget /
+Bounded exponential backoff, for **retriable classes only**, with a max-attempts,
+per-attempt launch deadline, AND a total-time budget
+(`DEFAULT_START_RETRY_POLICY`: 5 attempts / 10s launch deadline / 60s budget /
 2s base / 16s ceiling — chosen against the supervision windows: systemd
 `RestartSec=5`, crash-loop 5/60s).
 
@@ -198,6 +199,16 @@ AND a total-time budget (`DEFAULT_START_RETRY_POLICY`: 5 attempts / 60s budget /
 - Every failed launch finishes its transactional rollback before the backoff timer
   is armed. Stop cancels that timer by generation and produces `cancelled` with no
   notification.
+- A launch that remains in flight for 10 seconds has its generation cancelled and
+  bounded cleanup awaited before it becomes a retriable connect-phase
+  `start_timeout`. The launch itself must then settle before backoff is armed. If
+  cleanup cannot make it settle within the stop bound, the result is terminal
+  `start_cleanup_timeout` and no next attempt launches. A late completion remains
+  fenced to that cancelled launch and cannot declare the session started.
+- Engine stop bypasses `CerastreamBackend`'s ordinary IPC queue and uses the active
+  client immediately. This lets deadline cleanup interrupt the in-flight start
+  instead of deadlocking behind it; the client is closed after the stop response,
+  which releases the queued start operation before a retry is admitted.
 - A scheduled retry logs `attemptId`, phase, class, engine code when present, and
   retry state. It emits a class-keyed localized warning only outside a suppression
   window. Terminal exhaustion/non-retriable failure emits exactly one keyed error

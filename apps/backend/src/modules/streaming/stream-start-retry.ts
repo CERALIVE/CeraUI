@@ -45,12 +45,19 @@ export type StartRetryRunResult =
 
 export type StartRetryRunDeps = {
 	readonly attemptId: string;
-	readonly launch: () => Promise<void>;
+	readonly launch: (attempt: number) => Promise<void>;
 	readonly classifyUnknown: (error: unknown) => StartFailure;
 	readonly cancelled: () => boolean;
+	readonly onLaunchTimeout: (attempt: number) => Promise<void>;
 	readonly setCancelWait: (cancel: (() => void) | undefined) => void;
 	readonly schedule: (callback: () => void, delayMs: number) => RetryTimer;
 	readonly cancelTimer: (timer: RetryTimer) => void;
+	readonly scheduleDeadline: (
+		callback: () => void,
+		delayMs: number,
+	) => RetryTimer;
+	readonly cancelDeadline: (timer: RetryTimer) => void;
+	readonly cleanupDeadlineMs: number;
 	readonly retryPolicy?: RetryPolicy;
 	readonly now?: () => number;
 	readonly suppressionContext?: () => SuppressionContext;
@@ -64,6 +71,71 @@ const NO_SUPPRESSION: SuppressionContext = {
 	bootWindow: false,
 	cancelledByStop: false,
 };
+
+type LaunchOutcome =
+	| { readonly result: "started" }
+	| { readonly result: "failed"; readonly error: unknown }
+	| { readonly result: "timed_out" }
+	| { readonly result: "cleanup_failed" }
+	| { readonly result: "cancelled" };
+
+function runLaunchWithinDeadline(
+	deps: StartRetryRunDeps,
+	attempt: number,
+	deadlineMs: number,
+): Promise<LaunchOutcome> {
+	return new Promise((resolve) => {
+		let settled = false;
+		let deadlineExpired = false;
+		let timer: RetryTimer | undefined;
+		let cleanupTimer: RetryTimer | undefined;
+		const finish = (outcome: LaunchOutcome): void => {
+			if (settled) return;
+			settled = true;
+			if (timer !== undefined) deps.cancelDeadline(timer);
+			if (cleanupTimer !== undefined) deps.cancelDeadline(cleanupTimer);
+			deps.setCancelWait(undefined);
+			resolve(outcome);
+		};
+		const launch = deps.launch(attempt).then<LaunchOutcome, LaunchOutcome>(
+			() => ({ result: "started" }),
+			(error: unknown) => ({ result: "failed", error }),
+		);
+		void launch.then((outcome) => {
+			if (!deadlineExpired) finish(outcome);
+		});
+		timer = deps.scheduleDeadline(() => {
+			if (settled) return;
+			deadlineExpired = true;
+			deps.setCancelWait(undefined);
+			const cleanup = deps.onLaunchTimeout(attempt).then(
+				async () => {
+					await launch;
+					return true;
+				},
+				() => false,
+			);
+			const cleanupDeadline = new Promise<false>((resolveDeadline) => {
+				cleanupTimer = deps.scheduleDeadline(
+					() => resolveDeadline(false),
+					deps.cleanupDeadlineMs,
+				);
+			});
+			void Promise.race([cleanup, cleanupDeadline]).then(
+				(cleaned) =>
+					finish({
+						result: cleaned ? "timed_out" : "cleanup_failed",
+					}),
+				() => finish({ result: "cleanup_failed" }),
+			);
+		}, deadlineMs);
+		deps.setCancelWait(() => {
+			if (settled) return;
+			if (timer !== undefined) deps.cancelDeadline(timer);
+			deps.setCancelWait(undefined);
+		});
+	});
+}
 
 function waitForRetry(
 	deps: StartRetryRunDeps,
@@ -108,10 +180,38 @@ export async function runStartWithRetry(
 
 	while (true) {
 		attempts += 1;
-		try {
-			await deps.launch();
-			return deps.cancelled() ? { result: "cancelled" } : { result: "started" };
-		} catch (error) {
+		const remainingBeforeLaunch = Math.max(
+			0,
+			policy.totalBudgetMs - Math.max(0, now() - startedAt),
+		);
+		const launch = await runLaunchWithinDeadline(
+			deps,
+			attempts,
+			Math.min(
+				policy.attemptTimeoutMs ??
+					DEFAULT_START_RETRY_POLICY.attemptTimeoutMs ??
+					policy.totalBudgetMs,
+				remainingBeforeLaunch,
+			),
+		);
+		if (launch.result === "cancelled" || deps.cancelled()) {
+			return { result: "cancelled" };
+		}
+		if (launch.result === "started") return { result: "started" };
+		{
+			const error =
+				launch.result === "timed_out" || launch.result === "cleanup_failed"
+					? new StreamStartFailure({
+							attemptId: deps.attemptId,
+							phase: "connect",
+							class: "start_timeout",
+							code:
+								launch.result === "timed_out"
+									? "start_attempt_deadline"
+									: "start_cleanup_timeout",
+							retriable: launch.result === "timed_out",
+						})
+					: launch.error;
 			if (deps.cancelled()) return { result: "cancelled" };
 			const classified =
 				error instanceof StreamStartFailure

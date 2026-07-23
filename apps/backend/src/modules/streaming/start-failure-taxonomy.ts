@@ -181,6 +181,8 @@ export interface RetryPolicy {
 	maxAttempts: number;
 	/** Total wall-clock budget across all attempts, in ms. */
 	totalBudgetMs: number;
+	/** Deadline for one in-flight launch before its generation is cancelled. */
+	attemptTimeoutMs?: number;
 	/** First backoff delay, in ms. */
 	baseDelayMs: number;
 	/** Backoff ceiling, in ms. */
@@ -193,6 +195,7 @@ export interface RetryPolicy {
 export const DEFAULT_START_RETRY_POLICY: RetryPolicy = {
 	maxAttempts: 5,
 	totalBudgetMs: 60_000,
+	attemptTimeoutMs: 10_000,
 	baseDelayMs: 2_000,
 	maxDelayMs: 16_000,
 };
