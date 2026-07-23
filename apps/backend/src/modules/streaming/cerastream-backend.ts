@@ -879,14 +879,6 @@ export class CerastreamBackend implements StreamingBackend {
 			this.active = false;
 			this.client = undefined;
 			this.subscription = undefined;
-			this.deps.bridge.notify(
-				"cerastream",
-				"error",
-				"The streaming engine failed to start. Retrying...",
-				5,
-				true,
-				false,
-			);
 		}
 	}
 

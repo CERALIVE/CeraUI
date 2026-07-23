@@ -131,7 +131,6 @@ describe("autostart.ts backoff seam", () => {
 		const retry = scheduled.find((s) => s.delay === AUTOSTART_RETRY_DELAY);
 		expect(retry).toBeDefined();
 		expect(typeof retry?.fn).toBe("function");
-		// It must retry with autoStartStream itself (self-rescheduling backoff).
-		expect(retry?.fn).toBe(autostartFn);
+		expect(retry?.fn).not.toBe(autostartFn);
 	});
 });

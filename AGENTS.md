@@ -886,8 +886,9 @@ uses generation-scoped cancellation for stop-during-start, and reconciles the
 actual cerastream state at boot/reconnect. Timeout, failure, transitional, or
 contradictory engine status remains `reconciling` until the heal path retries;
 only concordant streaming/idle status is adopted. `status.stream_lifecycle` is additive;
-legacy `is_streaming` flips true only after engine confirmation. Todo 27, not this
-orchestrator, owns general engine-phase failure rollback.
+legacy `is_streaming` flips true only after engine confirmation. The bounded retry
+runner retries only connect-phase transient classes, after transactional rollback,
+and stop cancels a pending backoff without notification.
 
 `apps/backend/src/modules/streaming/streamloop.ts` is now a 5-line barrel re-exporting
 from `streamloop/index.ts`. The 10 public exports are unchanged — all caller import paths
@@ -928,6 +929,14 @@ classified by machine-readable error shape; CeraUI does not simulate a separate
 hello I/O wait. Subscribe, start-RPC, PLAYING validation, and stop have explicit
 bounds. Stop confirms engine/process cleanup or returns typed `stop_failed` after
 12 seconds. Full contract and timeout values: `docs/START-LIFECYCLE.md`.
+
+Todo 28 adds a 5-attempt/60-second exponential retry bound around that transaction.
+Suppression reads only existing update, engine capability, and boot-uptime signals;
+suppressed attempts remain `starting` and emit no error toast. Structured retry and
+terminal records carry attempt id, phase, class, optional engine code, and retry
+state. User copy is keyed across all 10 locales, and terminal copy points to the
+cerastream journal. Autostart's no-link loop is capped at five checks; permanent
+configuration/engine failures stop immediately with a visible reason.
 
 ### timing-constants.ts
 

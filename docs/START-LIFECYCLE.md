@@ -1,9 +1,9 @@
 # Start-Lifecycle Contract
 
-> **Status: RUNTIME THROUGH TRANSACTIONAL LAUNCH** (device-quality-wave2 Todos
-> 25-27). The typed contract, unified session orchestrator, cleanup transaction,
-> phase deadlines, and bounded stop result are wired. Retry/suppression and
-> frontend rendering remain Todos 28-29.
+> **Status: RUNTIME THROUGH BOUNDED RETRY** (device-quality-wave2 Todos 25-28).
+> The typed contract, unified session orchestrator, cleanup transaction, phase
+> deadlines, bounded stop, retry/suppression, and truthful notification
+> diagnostics are wired. Frontend generation fencing/rendering remains Todo 29.
 
 The streaming **start** is a multi-phase pipeline that can fail at any of several
 sites, in several ways, with very different correct responses (retry vs. surface
@@ -19,6 +19,8 @@ Typed modules:
 |---------|--------|
 | Wire contract (`StartResult`, `StartFailure`, `StopResult`, state set, transitions, retriability) | `packages/rpc/src/schemas/streaming-lifecycle.schema.ts` |
 | Mapping table + attempt-id + retry policy + suppression predicate | `apps/backend/src/modules/streaming/start-failure-taxonomy.ts` |
+| Bounded retry runner + cancellation | `apps/backend/src/modules/streaming/stream-start-retry.ts` |
+| Suppression signals + keyed notifications/logs | `apps/backend/src/modules/streaming/stream-start-retry-reporting.ts` |
 | Contract tests (schema) | `packages/rpc/src/schemas/streaming-lifecycle.schema.test.ts` |
 | Contract tests (table-driven mapping) | `apps/backend/src/tests/start-failure-taxonomy.test.ts` |
 
@@ -169,13 +171,13 @@ per public start entry; Todo 29 uses it to fence stale responses.
 A transient (retriable) failure inside a KNOWN window should show a calm "engine
 starting…" state, not an error notification. `shouldSuppressTransientFailure(ctx)`
 is the pure predicate; each input is sourced from an **existing** backend signal
-(Todo 28 binds them — this contract defines the shape + the source map):
+(Todo 28 binding):
 
 | Window | `SuppressionContext` field | Existing signal source |
 |--------|----------------------------|------------------------|
 | Software update active | `softwareUpdateActive` | `isUpdating()` (software-updates module) |
-| Known engine restart (systemd `RestartSec=5`) | `engineRestartWindow` | engine-reconnect capability state (`engineUnavailable`/`engineStarting`) |
-| Boot window | `bootWindow` | boot-readiness/health module |
+| Known engine restart (systemd `RestartSec=5`) | `engineRestartWindow` | a prior capability snapshot plus the current retriable connect failure (the engine was reachable this run and is now absent/refused) |
+| Boot window | `bootWindow` | initial `engineStarting` capability or process uptime within the 60-second start budget |
 | Cancelled by stop | `cancelledByStop` | the attempt ended as the first-class `cancelled` result — it notifies nothing |
 
 A **real terminal** failure (budget exhausted, or a non-retriable class) is NEVER
@@ -193,6 +195,13 @@ AND a total-time budget (`DEFAULT_START_RETRY_POLICY`: 5 attempts / 60s budget /
 - `nextBackoffDelayMs(attempt, policy)` — `base·2^attempt`, capped at `maxDelayMs`.
 - `shouldRetryStart(failure, {attempts, elapsedMs}, policy)` — retries iff the
   failure is `retriable` AND both budgets remain.
+- Every failed launch finishes its transactional rollback before the backoff timer
+  is armed. Stop cancels that timer by generation and produces `cancelled` with no
+  notification.
+- A scheduled retry logs `attemptId`, phase, class, engine code when present, and
+  retry state. It emits a class-keyed localized warning only outside a suppression
+  window. Terminal exhaustion/non-retriable failure emits exactly one keyed error
+  with attempt count and `journalctl -u cerastream.service`.
 
 Retriability is **phase-scoped** (see the retriability table below): only failures
 in the connection-establishment phases (`connect`, and `hello` for the
@@ -257,7 +266,7 @@ reconciling → idle          (engine was idle — adopt)
 |------|-------------------------|
 | 26 (unified lock + boot reconciliation) | `busy`/`cancelled` results, `attemptId`, the state set + transitions, `reconciling` |
 | 27 (implemented) | idempotent LIFO rollback, per-phase `start_timeout`, bounded `StopResult` |
-| 28 (bounded retry + suppression + truthful copy) | retry policy, retriability table, suppression predicate, `code`/`class` for copy |
+| 28 (implemented) | bounded retry, suppression binding, keyed copy, diagnostic payloads, bounded autostart |
 | 29 (frontend watchdog + generation identity + typed rendering) | `attemptId` fencing, `phase`+`class` → i18n rendering |
 
 ---

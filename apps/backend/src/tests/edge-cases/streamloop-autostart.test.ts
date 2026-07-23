@@ -23,9 +23,12 @@ import {
 	getIsStreaming,
 	updateStatus,
 } from "../../modules/streaming/streaming.ts";
-import { autoStartStream } from "../../modules/streaming/streamloop/autostart.ts";
+import {
+	AUTOSTART_MAX_LINK_ATTEMPTS,
+	autoStartStream,
+} from "../../modules/streaming/streamloop/autostart.ts";
 
-type Scheduled = { fn: unknown; delay: unknown };
+type Scheduled = { fn: () => unknown; delay: number | undefined };
 
 // Replace setTimeout with a recorder so retries are observed, never armed.
 function captureTimers(): {
@@ -93,26 +96,30 @@ describe("autostart: abort when a stream is already running", () => {
 });
 
 describe("autostart: no links available yet (transient boot state)", () => {
-	test("arms exactly one self-rescheduling retry, never a synchronous loop", async () => {
+	test("bounds self-rescheduling retries without a synchronous loop", async () => {
 		const restoreLinks = withNoLinks();
 		const timers = captureTimers();
+		const observed: Scheduled[] = [];
 		try {
 			expect(getIsStreaming()).toBe(false);
 			expect(genSrtlaIpList().length).toBe(0);
 			await autoStartStream();
+			while (timers.scheduled.length > 0) {
+				const scheduled = timers.scheduled.shift();
+				if (scheduled === undefined) break;
+				observed.push(scheduled);
+				await scheduled.fn();
+			}
 		} finally {
 			timers.restore();
 			restoreLinks();
 		}
 
-		// Exactly one timer: the no-links path must back off once and return, not
-		// recurse synchronously (which would wedge the event loop on a device that
-		// boots before any interface is up).
-		expect(timers.scheduled.length).toBe(1);
-		const retry = timers.scheduled[0];
-		expect(retry?.delay).toBe(AUTOSTART_RETRY_DELAY);
-		// It re-arms with autoStartStream itself (self-rescheduling backoff).
-		expect(retry?.fn).toBe(autoStartStream);
+		expect(observed).toHaveLength(AUTOSTART_MAX_LINK_ATTEMPTS - 1);
+		expect(observed.every(({ delay }) => delay === AUTOSTART_RETRY_DELAY)).toBe(
+			true,
+		);
+		expect(timers.scheduled).toEqual([]);
 	});
 });
 

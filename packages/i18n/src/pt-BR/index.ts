@@ -1507,6 +1507,26 @@ const ptBR = {
 		bitrateRange: "A taxa de bits deve estar entre 2000 e 12000 Kbps",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"Falha no início automático: nenhum link de rede após {attempt}/{maxAttempts} verificações. Verifique journalctl -u ceralive.service.",
+		streamStartEngineUnavailableRetrying:
+			"Mecanismo de streaming indisponível — tentando novamente ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"O mecanismo de streaming está reiniciando — tentando novamente ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"O mecanismo de streaming não respondeu a tempo — tentando novamente ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"Falha ao iniciar: mecanismo indisponível ({attempt}/{maxAttempts} tentativas). Verifique journalctl -u cerastream.service.",
+		streamStartEngineRestartingFailed:
+			"Falha ao iniciar: o mecanismo continuou reiniciando ({attempt}/{maxAttempts} tentativas). Verifique journalctl -u cerastream.service.",
+		streamStartTimeoutFailed:
+			"Falha ao iniciar: tempo limite do mecanismo ({attempt}/{maxAttempts} tentativas). Verifique journalctl -u cerastream.service.",
+		streamStartInvalidFailed:
+			"Falha ao iniciar: configuração ou dispositivo inválido. Verifique journalctl -u cerastream.service.",
+		streamStartProtocolFailed:
+			"Falha ao iniciar: protocolo do mecanismo incompatível. Verifique journalctl -u cerastream.service.",
+		streamStartInternalFailed:
+			"Falha ao iniciar: erro interno do mecanismo. Verifique journalctl -u cerastream.service.",
 		ceraliveUpdateAvailable:
 			"Há uma atualização do CERALIVE disponível. Abra Configurações → Atualizações de software para instalá-la.",
 		ceraliveUpdateFailed:

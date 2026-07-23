@@ -1374,6 +1374,26 @@ const ja = {
 		bitrateRange: "ビットレートは2000から12000 Kbpsの間でなければなりません",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"自動配信を開始できませんでした：{attempt}/{maxAttempts} 回確認してもネットワークリンクを利用できません。journalctl -u ceralive.service を確認してください。",
+		streamStartEngineUnavailableRetrying:
+			"ストリーミングエンジンを利用できません — 再試行中（{nextAttempt}/{maxAttempts}）…",
+		streamStartEngineRestartingRetrying:
+			"ストリーミングエンジンを再起動中です — 再試行中（{nextAttempt}/{maxAttempts}）…",
+		streamStartTimeoutRetrying:
+			"ストリーミングエンジンが時間内に応答しませんでした — 再試行中（{nextAttempt}/{maxAttempts}）…",
+		streamStartEngineUnavailableFailed:
+			"配信を開始できませんでした：エンジンを利用できません（{attempt}/{maxAttempts} 回）。journalctl -u cerastream.service を確認してください。",
+		streamStartEngineRestartingFailed:
+			"配信を開始できませんでした：エンジンが再起動を繰り返しました（{attempt}/{maxAttempts} 回）。journalctl -u cerastream.service を確認してください。",
+		streamStartTimeoutFailed:
+			"配信を開始できませんでした：エンジンがタイムアウトしました（{attempt}/{maxAttempts} 回）。journalctl -u cerastream.service を確認してください。",
+		streamStartInvalidFailed:
+			"配信を開始できませんでした：設定またはデバイスが無効です。journalctl -u cerastream.service を確認してください。",
+		streamStartProtocolFailed:
+			"配信を開始できませんでした：エンジンプロトコルに互換性がありません。journalctl -u cerastream.service を確認してください。",
+		streamStartInternalFailed:
+			"配信を開始できませんでした：エンジン内部エラー。journalctl -u cerastream.service を確認してください。",
 		ceraliveUpdateAvailable:
 			"CERALIVE のアップデートがあります。設定 → ソフトウェア更新 を開いてインストールしてください。",
 		ceraliveUpdateFailed:

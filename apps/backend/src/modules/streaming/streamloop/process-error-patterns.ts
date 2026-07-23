@@ -65,23 +65,24 @@ export const PROCESS_ERROR_MESSAGES: Record<
 	ProcessErrorMessageEntry
 > = {
 	[PROCESS_ERROR_CODES.SRTLA_INITIAL_CONNECT_FAILED]: {
-		message: "Failed to connect to the SRTLA server. Retrying...",
+		message:
+			"The SRTLA sender exhausted its initial connection attempts and stopped.",
 		suppressIfSrtlaNotified: false,
 	},
 	[PROCESS_ERROR_CODES.SRTLA_NO_CONNECTIONS]: {
-		message: "All SRTLA connections failed. Trying to reconnect...",
+		message: "All SRTLA links are down. The sender is reconnecting its links.",
 		suppressIfSrtlaNotified: false,
 	},
 	[PROCESS_ERROR_CODES.CAPTURE_AUDIO_ERROR]: {
-		message: "Capture card error (audio). Trying to restart...",
+		message: "Capture card error (audio). No automatic restart is scheduled.",
 		suppressIfSrtlaNotified: false,
 	},
 	[PROCESS_ERROR_CODES.CAPTURE_VIDEO_ERROR]: {
-		message: "Capture card error (video). Trying to restart...",
+		message: "Capture card error (video). No automatic restart is scheduled.",
 		suppressIfSrtlaNotified: false,
 	},
 	[PROCESS_ERROR_CODES.PIPELINE_STALL]: {
-		message: "The input source has stalled. Trying to restart...",
+		message: "The input source has stalled. No automatic restart is scheduled.",
 		suppressIfSrtlaNotified: false,
 	},
 	[PROCESS_ERROR_CODES.SRT_CONNECT_FAILED]: {
@@ -89,7 +90,7 @@ export const PROCESS_ERROR_MESSAGES: Record<
 		suppressIfSrtlaNotified: true,
 	},
 	[PROCESS_ERROR_CODES.SRT_CONNECTION_LOST]: {
-		message: "The SRT connection failed. Trying to reconnect...",
+		message: "The SRT connection failed. No automatic reconnect is scheduled.",
 		suppressIfSrtlaNotified: true,
 	},
 };

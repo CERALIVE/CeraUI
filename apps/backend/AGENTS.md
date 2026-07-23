@@ -27,6 +27,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | Transactional launch cleanup + phase/stop deadlines | `modules/streaming/launch-transaction.ts`, `start-lifecycle-timing.ts`, `streamloop/start-stream.ts`; contract in `../../docs/START-LIFECYCLE.md` |
+| Bounded start retry + suppression + diagnostics | `modules/streaming/stream-start-retry.ts`, `stream-start-retry-reporting.ts` |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
@@ -516,8 +517,11 @@ heal path retries. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
 
-Todo 26 owns arbitration, cancellation, and adoption. General transactional
-rollback of resources after an engine-phase start failure remains Todo 27.
+The launch transaction owns rollback and phase deadlines. The retry runner starts
+the next connect attempt only after rollback resolves, caps attempts and elapsed
+time, and exposes a cancellable timer to the same generation. Reporting suppresses
+transient toasts only during existing update/restart/boot windows; terminal
+failures are never suppressed and carry keyed 10-locale copy plus journal guidance.
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 **one** implementation behind the seam (the legacy ceracoder engine is fully

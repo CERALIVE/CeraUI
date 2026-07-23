@@ -93,7 +93,7 @@ export async function start(
 	generation = 0,
 	attemptId = "legacy-start",
 ): Promise<StartStreamResult> {
-	if (getIsStreaming() || isUpdating()) {
+	if (getIsStreaming()) {
 		sendStatus(conn);
 		return {
 			success: false,
@@ -101,6 +101,16 @@ export async function start(
 			reason: "stream_start_unavailable",
 			phase: "params",
 		};
+	}
+	if (isUpdating()) {
+		sendStatus(conn);
+		throw new StreamStartFailure({
+			attemptId,
+			phase: "connect",
+			class: "engine_restarting",
+			code: "stream_start_suppressed_update",
+			retriable: true,
+		});
 	}
 
 	const senderId = getSocketSenderId(conn);
@@ -190,6 +200,10 @@ export async function start(
 		};
 	}
 
+	if (!result.success && sessionResources?.generation === generation) {
+		sessionResources.removeNetworkInterfacesChangeListener();
+		sessionResources = undefined;
+	}
 	return result;
 }
 

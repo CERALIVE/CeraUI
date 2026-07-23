@@ -1532,6 +1532,26 @@ const fr = {
 		bitrateRange: "Le débit doit être compris entre 2000 et 12000 Kbps",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"Échec du démarrage automatique : aucun lien réseau après {attempt}/{maxAttempts} vérifications. Consultez journalctl -u ceralive.service.",
+		streamStartEngineUnavailableRetrying:
+			"Moteur de streaming indisponible — nouvelle tentative ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"Le moteur de streaming redémarre — nouvelle tentative ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"Le moteur de streaming n’a pas répondu à temps — nouvelle tentative ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"Échec du démarrage : moteur indisponible ({attempt}/{maxAttempts} tentatives). Consultez journalctl -u cerastream.service.",
+		streamStartEngineRestartingFailed:
+			"Échec du démarrage : redémarrages répétés du moteur ({attempt}/{maxAttempts} tentatives). Consultez journalctl -u cerastream.service.",
+		streamStartTimeoutFailed:
+			"Échec du démarrage : délai du moteur dépassé ({attempt}/{maxAttempts} tentatives). Consultez journalctl -u cerastream.service.",
+		streamStartInvalidFailed:
+			"Échec du démarrage : configuration ou appareil non valide. Consultez journalctl -u cerastream.service.",
+		streamStartProtocolFailed:
+			"Échec du démarrage : protocole du moteur incompatible. Consultez journalctl -u cerastream.service.",
+		streamStartInternalFailed:
+			"Échec du démarrage : erreur interne du moteur. Consultez journalctl -u cerastream.service.",
 		ceraliveUpdateAvailable:
 			"Une mise à jour CERALIVE est disponible. Ouvrez Paramètres → Mises à jour logicielles pour l'installer.",
 		ceraliveUpdateFailed:

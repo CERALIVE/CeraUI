@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
-
+import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
 import {
 	createStreamSessionOrchestrator,
+	type StartRetryDiagnostic,
 	type StreamLaunchContext,
 } from "../modules/streaming/stream-session-orchestrator.ts";
-import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
 
 function deferred(): {
 	readonly promise: Promise<void>;
@@ -25,6 +25,19 @@ function attemptIds(): () => string {
 	return () => `attempt-${++next}`;
 }
 
+function retriableFailure(attemptId: string): StreamStartFailure {
+	return new StreamStartFailure({
+		attemptId,
+		phase: "connect",
+		class: "engine_unavailable",
+		retriable: true,
+	});
+}
+
+async function settleMicrotasks(): Promise<void> {
+	for (let index = 0; index < 5; index += 1) await Promise.resolve();
+}
+
 describe("stream session orchestrator", () => {
 	test("characterizes merged one-shot behavior for a retriable connect failure", async () => {
 		// Given merged Todo 27 behavior and a connect-phase engine outage.
@@ -34,6 +47,12 @@ describe("stream session orchestrator", () => {
 			setStreamingStatus: () => {},
 			stopRuntime: async () => {},
 			queryRuntime: async () => "idle",
+			retryPolicy: {
+				maxAttempts: 1,
+				totalBudgetMs: 60_000,
+				baseDelayMs: 2_000,
+				maxDelayMs: 16_000,
+			},
 		});
 
 		// When the only launch attempt reports a retriable typed failure.
@@ -62,6 +81,233 @@ describe("stream session orchestrator", () => {
 				retriable: true,
 			},
 		});
+	});
+
+	test("retries a refused connect until the socket appears and succeeds without a terminal report", async () => {
+		// Given an engine boot window and deterministic retry timers.
+		const retryCallbacks: Array<() => void> = [];
+		const diagnostics: StartRetryDiagnostic[] = [];
+		const terminal: StartRetryDiagnostic[] = [];
+		let launches = 0;
+		let nowMs = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			now: () => nowMs,
+			scheduleTimeout: (callback) => {
+				retryCallbacks.push(callback);
+				return retryCallbacks.length;
+			},
+			cancelTimeout: () => {},
+			suppressionContext: () => ({
+				softwareUpdateActive: false,
+				engineRestartWindow: false,
+				bootWindow: true,
+				cancelledByStop: false,
+			}),
+			reportRetry: (diagnostic) => diagnostics.push(diagnostic),
+			reportTerminalFailure: (diagnostic) => terminal.push(diagnostic),
+		});
+
+		// When two refused connects are followed by a successful socket connection.
+		const resultPromise = orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				launches += 1;
+				if (launches < 3) throw retriableFailure(attemptId);
+			},
+		});
+		await settleMicrotasks();
+		nowMs = 2_000;
+		retryCallbacks.shift()?.();
+		await settleMicrotasks();
+		nowMs = 6_000;
+		retryCallbacks.shift()?.();
+		const result = await resultPromise;
+
+		// Then retrying remains calm and the eventual start has no terminal alert.
+		expect(result).toEqual({ result: "started", attemptId: "attempt-1" });
+		expect(launches).toBe(3);
+		expect(diagnostics.map((entry) => entry.retry.state)).toEqual([
+			"scheduled",
+			"scheduled",
+		]);
+		expect(diagnostics.every((entry) => entry.retry.suppressed)).toBe(true);
+		expect(terminal).toEqual([]);
+	});
+
+	test("budget exhaustion reports one terminal diagnostic with the attempt count", async () => {
+		// Given a three-attempt policy and an engine that remains unavailable.
+		const retryCallbacks: Array<() => void> = [];
+		const terminal: StartRetryDiagnostic[] = [];
+		let nowMs = 0;
+		let launches = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			now: () => nowMs,
+			retryPolicy: {
+				maxAttempts: 3,
+				totalBudgetMs: 20,
+				baseDelayMs: 5,
+				maxDelayMs: 10,
+			},
+			scheduleTimeout: (callback) => {
+				retryCallbacks.push(callback);
+				return retryCallbacks.length;
+			},
+			cancelTimeout: () => {},
+			reportTerminalFailure: (diagnostic) => terminal.push(diagnostic),
+		});
+
+		// When every bounded attempt fails.
+		const resultPromise = orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				launches += 1;
+				throw retriableFailure(attemptId);
+			},
+		});
+		await settleMicrotasks();
+		nowMs = 5;
+		retryCallbacks.shift()?.();
+		await settleMicrotasks();
+		nowMs = 15;
+		retryCallbacks.shift()?.();
+		const result = await resultPromise;
+
+		// Then one truthful exhausted diagnostic carries the final class and count.
+		expect(result).toMatchObject({
+			result: "failed",
+			failure: { class: "engine_unavailable" },
+		});
+		expect(launches).toBe(3);
+		expect(terminal).toHaveLength(1);
+		expect(terminal[0]?.retry).toMatchObject({
+			state: "exhausted",
+			attempt: 3,
+			maxAttempts: 3,
+		});
+	});
+
+	test("a deterministic start error is terminal without scheduling a retry", async () => {
+		// Given a non-retriable engine rejection.
+		const retryDiagnostics: StartRetryDiagnostic[] = [];
+		const terminal: StartRetryDiagnostic[] = [];
+		let launches = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			reportRetry: (diagnostic) => retryDiagnostics.push(diagnostic),
+			reportTerminalFailure: (diagnostic) => terminal.push(diagnostic),
+		});
+
+		// When start parameters are rejected.
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				launches += 1;
+				throw new StreamStartFailure({
+					attemptId,
+					phase: "start-rpc",
+					class: "start_invalid",
+					code: -32602,
+					retriable: false,
+				});
+			},
+		});
+
+		// Then the failure is immediate and its diagnostic says no retry.
+		expect(result).toMatchObject({
+			result: "failed",
+			failure: { class: "start_invalid", code: -32602 },
+		});
+		expect(launches).toBe(1);
+		expect(retryDiagnostics).toEqual([]);
+		expect(terminal[0]?.retry.state).toBe("not_retriable");
+	});
+
+	test("stop cancels a scheduled retry without a terminal notification", async () => {
+		// Given a failed first attempt waiting on its retry timer.
+		const terminal: StartRetryDiagnostic[] = [];
+		let launches = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			scheduleTimeout: () => 1,
+			cancelTimeout: () => {},
+			reportTerminalFailure: (diagnostic) => terminal.push(diagnostic),
+		});
+		const start = orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				launches += 1;
+				throw retriableFailure(attemptId);
+			},
+		});
+		await Promise.resolve();
+
+		// When stop interrupts the pending backoff.
+		expect(await orchestrator.stop()).toEqual({ result: "stopped" });
+		const result = await start;
+
+		// Then no stale timer launches again and cancellation notifies nothing.
+		expect(result).toEqual({ result: "cancelled", attemptId: "attempt-1" });
+		expect(launches).toBe(1);
+		expect(terminal).toEqual([]);
+	});
+
+	test("awaits failed-attempt rollback before scheduling the next launch", async () => {
+		// Given a launch whose rejection follows an observable rollback barrier.
+		const events: string[] = [];
+		let retryCallback: (() => void) | undefined;
+		let launches = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			scheduleTimeout: (callback) => {
+				retryCallback = callback;
+				events.push("scheduled");
+				return 1;
+			},
+			cancelTimeout: () => {},
+		});
+
+		// When attempt one rolls back and attempt two succeeds.
+		const start = orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				launches += 1;
+				events.push(`launch-${launches}`);
+				if (launches === 1) {
+					await Promise.resolve();
+					events.push("rollback-complete");
+					throw retriableFailure(attemptId);
+				}
+			},
+		});
+		await Promise.resolve();
+		await Promise.resolve();
+		retryCallback?.();
+		expect(await start).toMatchObject({ result: "started" });
+
+		// Then cleanup completion precedes both scheduling and the next launch.
+		expect(events).toEqual([
+			"launch-1",
+			"rollback-complete",
+			"scheduled",
+			"launch-2",
+		]);
 	});
 
 	test("parallel starts launch once and return one busy result", async () => {

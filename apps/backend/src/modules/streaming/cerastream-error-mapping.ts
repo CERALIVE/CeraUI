@@ -88,7 +88,7 @@ function messageFor(code: ProcessErrorCode, reason?: string): string {
 	// <reason>; the structured event carries it as a field instead of stderr text.
 	if (code === PROCESS_ERROR_CODES.SRT_CONNECT_FAILED) {
 		const detail = reason ? ` (${reason})` : "";
-		return `Failed to connect to the SRT server${detail}. Retrying...`;
+		return `Failed to connect to the SRT server${detail}. No automatic retry is scheduled.`;
 	}
 
 	return `Engine error: ${code}`;

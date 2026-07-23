@@ -11,10 +11,20 @@ import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
 	classifyStartFailure,
 	newAttemptId,
-	StreamStartFailure,
+	type RetryPolicy,
+	type SuppressionContext,
 } from "./start-failure-taxonomy.ts";
 import { STOP_DEADLINE_MS } from "./start-lifecycle-timing.ts";
 import { updateStreamLifecycleState } from "./stream-lifecycle-status.ts";
+import {
+	runStartWithRetry,
+	type StartRetryDiagnostic,
+} from "./stream-start-retry.ts";
+import {
+	getStartSuppressionContext,
+	reportStartRetry,
+	reportStartTerminalFailure,
+} from "./stream-start-retry-reporting.ts";
 import { getIsStreaming, updateStatus } from "./streaming.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
 import { stopGeneration } from "./streamloop/session.ts";
@@ -44,6 +54,8 @@ export type StreamSessionSnapshot = {
 	readonly generation: number;
 };
 
+export type { StartRetryDiagnostic } from "./stream-start-retry.ts";
+
 export type StreamSessionOrchestratorDeps = {
 	readonly createAttemptId: () => string;
 	readonly setStreamingStatus: (streaming: boolean) => void;
@@ -63,12 +75,18 @@ export type StreamSessionOrchestratorDeps = {
 	readonly cancelTimeout?: (
 		timer: ReturnType<typeof globalThis.setTimeout> | number,
 	) => void;
+	readonly retryPolicy?: RetryPolicy;
+	readonly now?: () => number;
+	readonly suppressionContext?: () => SuppressionContext;
+	readonly reportRetry?: (diagnostic: StartRetryDiagnostic) => void;
+	readonly reportTerminalFailure?: (diagnostic: StartRetryDiagnostic) => void;
 };
 
 type ActiveAttempt = {
 	readonly attemptId: string;
 	readonly generation: number;
 	cancelled: boolean;
+	cancelRetryWait?: () => void;
 };
 
 export type StreamSessionOrchestrator = {
@@ -160,32 +178,50 @@ export function createStreamSessionOrchestrator(
 			cancelled: () => attempt.cancelled,
 		};
 
-		try {
-			await request.launch(context);
-			if (attempt.cancelled || active !== attempt) {
-				return await finishCancelled(attempt);
-			}
-			transition("streaming");
-			deps.setStreamingStatus(true);
-			return { result: "started", attemptId };
-		} catch (error) {
-			if (attempt.cancelled || active !== attempt) {
-				return await finishCancelled(attempt);
-			}
+		const launchResult = await runStartWithRetry({
+			attemptId,
+			launch: () => request.launch(context),
+			classifyUnknown: (error) =>
+				classifyStartFailure("start-rpc", error, attemptId, {
+					warn: (message, meta) => logger.warn(message, meta),
+				}),
+			cancelled: () => attempt.cancelled || active !== attempt,
+			setCancelWait: (cancel) => {
+				if (cancel === undefined) delete attempt.cancelRetryWait;
+				else attempt.cancelRetryWait = cancel;
+			},
+			schedule: scheduleTimeout,
+			cancelTimer: cancelTimeout,
+			...(deps.retryPolicy !== undefined
+				? { retryPolicy: deps.retryPolicy }
+				: {}),
+			...(deps.now !== undefined ? { now: deps.now } : {}),
+			...(deps.suppressionContext !== undefined
+				? { suppressionContext: deps.suppressionContext }
+				: {}),
+			...(deps.reportRetry !== undefined
+				? { reportRetry: deps.reportRetry }
+				: {}),
+			...(deps.reportTerminalFailure !== undefined
+				? { reportTerminalFailure: deps.reportTerminalFailure }
+				: {}),
+		});
+		if (launchResult.result === "cancelled") {
+			return await finishCancelled(attempt);
+		}
+		if (launchResult.result === "failed") {
 			transition("idle");
 			active = undefined;
 			deps.setStreamingStatus(false);
 			return {
 				result: "failed",
 				attemptId,
-				failure:
-					error instanceof StreamStartFailure
-						? error.failure
-						: classifyStartFailure("start-rpc", error, attemptId, {
-								warn: (message, meta) => logger.warn(message, meta),
-							}),
+				failure: launchResult.failure,
 			};
 		}
+		transition("streaming");
+		deps.setStreamingStatus(true);
+		return { result: "started", attemptId };
 	};
 
 	const stop = async (): Promise<StopResult> => {
@@ -199,7 +235,10 @@ export function createStreamSessionOrchestrator(
 
 		const stoppedGeneration = active?.generation ?? generation;
 		const cancellingStart = state === "starting";
-		if (cancellingStart && active !== undefined) active.cancelled = true;
+		if (cancellingStart && active !== undefined) {
+			active.cancelled = true;
+			active.cancelRetryWait?.();
+		}
 		if (!transition("stopping")) {
 			return {
 				result: "stop_failed",
@@ -263,6 +302,9 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 			true,
 		);
 	},
+	suppressionContext: getStartSuppressionContext,
+	reportRetry: reportStartRetry,
+	reportTerminalFailure: reportStartTerminalFailure,
 });
 
 export function startStreamSession(

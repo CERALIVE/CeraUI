@@ -1470,6 +1470,26 @@ const ar = {
 		bitrateRange: "يجب أن يكون معدل البت بين 2000 و12000 كيلوبت/ثانية",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"فشل بدء البث التلقائي: لم تتوفر روابط شبكة بعد {attempt}/{maxAttempts} فحوصات. افحص journalctl -u ceralive.service.",
+		streamStartEngineUnavailableRetrying:
+			"محرك البث غير متاح — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"تتم إعادة تشغيل محرك البث — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"لم يستجب محرك البث في الوقت المحدد — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"فشل بدء البث: المحرك غير متاح ({attempt}/{maxAttempts} محاولات). افحص journalctl -u cerastream.service.",
+		streamStartEngineRestartingFailed:
+			"فشل بدء البث: استمر المحرك في إعادة التشغيل ({attempt}/{maxAttempts} محاولات). افحص journalctl -u cerastream.service.",
+		streamStartTimeoutFailed:
+			"فشل بدء البث: انتهت مهلة المحرك ({attempt}/{maxAttempts} محاولات). افحص journalctl -u cerastream.service.",
+		streamStartInvalidFailed:
+			"فشل بدء البث: الإعداد أو الجهاز غير صالح. افحص journalctl -u cerastream.service.",
+		streamStartProtocolFailed:
+			"فشل بدء البث: بروتوكول المحرك غير متوافق. افحص journalctl -u cerastream.service.",
+		streamStartInternalFailed:
+			"فشل بدء البث: خطأ داخلي في المحرك. افحص journalctl -u cerastream.service.",
 		ceraliveUpdateAvailable:
 			"يتوفر تحديث CERALIVE. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
 		ceraliveUpdateFailed:

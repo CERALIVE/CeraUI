@@ -646,7 +646,7 @@ describe("CerastreamBackend error mapping", () => {
 		expect(bridgeH.notifications).toHaveLength(1);
 		expect(bridgeH.notifications[0]).toEqual({
 			name: "cerastream",
-			msg: "The input source has stalled. Trying to restart...",
+			msg: "The input source has stalled. No automatic restart is scheduled.",
 		});
 	});
 
@@ -656,7 +656,7 @@ describe("CerastreamBackend error mapping", () => {
 
 		expect(bridgeH.notifications[0]).toEqual({
 			name: "srtla",
-			msg: "All SRTLA connections failed. Trying to reconnect...",
+			msg: "All SRTLA links are down. The sender is reconnecting its links.",
 		});
 	});
 
@@ -671,7 +671,7 @@ describe("CerastreamBackend error mapping", () => {
 		});
 
 		expect(bridgeH.notifications[0]?.msg).toBe(
-			"Failed to connect to the SRT server (Connection timed out). Retrying...",
+			"Failed to connect to the SRT server (Connection timed out). No automatic retry is scheduled.",
 		);
 	});
 
@@ -854,7 +854,7 @@ describe("CerastreamBackend engine crash", () => {
 		expect(backend.stop(() => {})).toBe(false);
 	});
 
-	test("a connect failure on start surfaces a notification and clears the session", async () => {
+	test("a connect failure defers notification policy to the session orchestrator", async () => {
 		const { backend, bridgeH } = makeBackend({
 			connect: async () => {
 				throw new CerastreamConnectionError(
@@ -870,11 +870,7 @@ describe("CerastreamBackend engine crash", () => {
 		});
 		await backend.settle();
 
-		expect(
-			bridgeH.notifications.some(
-				(n) => n.name === "cerastream" && n.msg.includes("failed to start"),
-			),
-		).toBe(true);
+		expect(bridgeH.notifications).toEqual([]);
 
 		const found = backend.stop(() => {});
 		expect(found).toBe(false);

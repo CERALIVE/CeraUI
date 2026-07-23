@@ -25,6 +25,7 @@ import { logger } from "../../../helpers/logger.ts";
 import { AUTOSTART_RETRY_DELAY } from "../../../helpers/timing-constants.ts";
 import { getConfig, saveConfig } from "../../config.ts";
 import { isUpdating } from "../../system/software-updates.ts";
+import { notificationBroadcast } from "../../ui/notifications.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
@@ -37,6 +38,7 @@ import { getIsStreaming, validateConfig } from "../streaming.ts";
 import { startStream } from "./start-stream.ts";
 
 export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
+export const AUTOSTART_MAX_LINK_ATTEMPTS = 5;
 
 export function setAutostart(value: boolean): boolean {
 	const config = getConfig();
@@ -55,7 +57,7 @@ export async function checkAutoStartStream() {
 	fs.writeFileSync(AUTOSTART_CHECK_FILE, "");
 }
 
-export async function autoStartStream(): Promise<void> {
+export async function autoStartStream(linkAttempt = 1): Promise<void> {
 	if (getIsStreaming() || isUpdating()) {
 		logger.info("autostart aborted");
 		return;
@@ -64,7 +66,35 @@ export async function autoStartStream(): Promise<void> {
 	/* Populate the connections list file for srtla_send
        If no interfaces are available, retry later as we won't be able to stream yet */
 	if (genSrtlaIpList().length < 1) {
-		setTimeout(autoStartStream, AUTOSTART_RETRY_DELAY);
+		if (linkAttempt < AUTOSTART_MAX_LINK_ATTEMPTS) {
+			setTimeout(
+				() => void autoStartStream(linkAttempt + 1),
+				AUTOSTART_RETRY_DELAY,
+			);
+			return;
+		}
+		logger.error("autostart failed", {
+			class: "network_links_unavailable",
+			attempt: linkAttempt,
+			maxAttempts: AUTOSTART_MAX_LINK_ATTEMPTS,
+			retryState: "exhausted",
+		});
+		notificationBroadcast(
+			"stream_autostart_failed",
+			"error",
+			`Automatic stream start failed: no network links became available after ${linkAttempt}/${AUTOSTART_MAX_LINK_ATTEMPTS} checks. Check journalctl -u ceralive.service.`,
+			0,
+			false,
+			true,
+			true,
+			"notifications.streamAutostartNoLinksFailed",
+			{
+				attempt: linkAttempt,
+				maxAttempts: AUTOSTART_MAX_LINK_ATTEMPTS,
+				class: "network_links_unavailable",
+				retryState: "exhausted",
+			},
+		);
 		return;
 	}
 
@@ -80,6 +110,21 @@ export async function autoStartStream(): Promise<void> {
 		c = await validateConfig(config);
 	} catch (err) {
 		logger.error("autostart failed", { err });
+		notificationBroadcast(
+			"stream_autostart_failed",
+			"error",
+			"Automatic stream start failed: configuration or device is invalid. Check journalctl -u ceralive.service.",
+			0,
+			false,
+			true,
+			true,
+			"notifications.streamStartInvalidFailed",
+			{
+				phase: "params",
+				class: "start_invalid",
+				retryState: "not_retriable",
+			},
+		);
 		return;
 	}
 
@@ -103,8 +148,15 @@ export async function autoStartStream(): Promise<void> {
 		},
 	});
 	if (result.result === "failed") {
-		logger.warn("autostart failed, but will retry", { result });
-		setTimeout(autoStartStream, AUTOSTART_RETRY_DELAY);
+		logger.error("autostart failed", {
+			attemptId: result.attemptId,
+			phase: result.failure.phase,
+			class: result.failure.class,
+			...(result.failure.code !== undefined
+				? { code: result.failure.code }
+				: {}),
+			retryState: result.failure.retriable ? "exhausted" : "not_retriable",
+		});
 		return;
 	}
 	if (result.result === "busy") {
