@@ -4,6 +4,7 @@ import {
 	createStreamSessionOrchestrator,
 	type StreamLaunchContext,
 } from "../modules/streaming/stream-session-orchestrator.ts";
+import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
 
 function deferred(): {
 	readonly promise: Promise<void>;
@@ -25,6 +26,44 @@ function attemptIds(): () => string {
 }
 
 describe("stream session orchestrator", () => {
+	test("characterizes merged one-shot behavior for a retriable connect failure", async () => {
+		// Given merged Todo 27 behavior and a connect-phase engine outage.
+		let launches = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+		});
+
+		// When the only launch attempt reports a retriable typed failure.
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				launches += 1;
+				throw new StreamStartFailure({
+					attemptId,
+					phase: "connect",
+					class: "engine_unavailable",
+					retriable: true,
+				});
+			},
+		});
+
+		// Then the merged baseline is one-shot and immediately terminal.
+		expect(launches).toBe(1);
+		expect(result).toEqual({
+			result: "failed",
+			attemptId: "attempt-1",
+			failure: {
+				attemptId: "attempt-1",
+				phase: "connect",
+				class: "engine_unavailable",
+				retriable: true,
+			},
+		});
+	});
+
 	test("parallel starts launch once and return one busy result", async () => {
 		// Given a first launch held at a deterministic engine barrier.
 		const engineConfirmed = deferred();
