@@ -939,7 +939,9 @@ settle within the cleanup bound, `start_cleanup_timeout` is terminal and no late
 attempt is launched.
 Cerastream stop is the deliberate exception to the backend IPC queue: it is sent
 immediately through the active client so cleanup cannot wait behind the launch it
-must interrupt.
+must interrupt. The client is then closed without waiting for a stop reply; this
+settles pending start/stop requests and releases the serialized queue even when a
+crashed engine can no longer answer.
 Suppression reads only existing update, engine capability, and boot-uptime signals;
 suppressed attempts remain `starting` and emit no error toast. Structured retry and
 terminal records carry attempt id, phase, class, optional engine code, and retry

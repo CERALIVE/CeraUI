@@ -569,14 +569,16 @@ export class CerastreamBackend implements StreamingBackend {
 		const subscription = this.subscription;
 		const operation = (async () => {
 			subscription?.close();
+			void client?.stop().catch((error) => {
+				this.deps.logger.debug("cerastream: stop request interrupted", {
+					error,
+				});
+			});
 			try {
-				await client?.stop();
+				await client?.close();
+			} catch {
+				// already closing
 			} finally {
-				try {
-					await client?.close();
-				} catch {
-					// already closing
-				}
 				if (this.client === client) this.client = undefined;
 				if (this.subscription === subscription) this.subscription = undefined;
 				onStopped();

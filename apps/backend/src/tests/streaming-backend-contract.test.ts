@@ -23,6 +23,7 @@ import {
 	type LaunchDeadlineTimers,
 } from "../modules/streaming/launch-transaction.ts";
 import { START_PHASE_DEADLINES_MS } from "../modules/streaming/start-lifecycle-timing.ts";
+import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import type {
 	StreamingBackend,
 	StreamRunOptions,
@@ -79,6 +80,7 @@ interface FakeClientHarness {
 interface FakeClientOptions {
 	readonly startResult?: StartResult;
 	readonly startGate?: Promise<StartResult>;
+	readonly stopGate?: Promise<{ state: "idle" }>;
 	readonly subscribeGate?: Promise<void>;
 }
 
@@ -88,11 +90,18 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 	let resolveSubscribed: (() => void) | undefined;
 	let resolveStarted: (() => void) | undefined;
 	let rejectStartOnClose: ((error: Error) => void) | undefined;
+	let rejectStopOnClose: ((error: Error) => void) | undefined;
 	const startClosed =
 		options.startGate === undefined
 			? undefined
 			: new Promise<never>((_resolve, reject) => {
 					rejectStartOnClose = reject;
+				});
+	const stopClosed =
+		options.stopGate === undefined
+			? undefined
+			: new Promise<never>((_resolve, reject) => {
+					rejectStopOnClose = reject;
 				});
 	const subscribed = new Promise<void>((resolve) => {
 		resolveSubscribed = resolve;
@@ -116,6 +125,9 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 		},
 		stop: async (params) => {
 			calls.push({ op: "stop", params });
+			if (options.stopGate !== undefined && stopClosed !== undefined) {
+				return await Promise.race([options.stopGate, stopClosed]);
+			}
 			return { state: "idle" };
 		},
 		reloadConfig: async (params) => {
@@ -181,7 +193,9 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 		},
 		close: async () => {
 			calls.push({ op: "close" });
-			rejectStartOnClose?.(new Error("client_closed"));
+			const closed = new Error("client_closed");
+			rejectStartOnClose?.(closed);
+			rejectStopOnClose?.(closed);
 		},
 	};
 	// `switch-audio` is dispatched by the backend through the client's raw
@@ -357,6 +371,115 @@ describe("engine selection", () => {
 // ---------------------------------------------------------------------------
 
 describe("CerastreamBackend behavioural contract", () => {
+	test("a dead engine cannot retain the backend queue after lifecycle cleanup", async () => {
+		// Production-wired reproduction of the board failure: generation one owns
+		// the real CerastreamBackend queue while both start and stop replies hang.
+		const deadStart = deferred<StartResult>();
+		const deadStop = deferred<{ state: "idle" }>();
+		const dead = makeFakeClient({
+			startGate: deadStart.promise,
+			stopGate: deadStop.promise,
+		});
+		const recovered = makeFakeClient();
+		const bridgeH = makeBridge();
+		const config: RuntimeConfig = { ...STREAM_CONFIG };
+		let connections = 0;
+		const backend = new CerastreamBackend({
+			connect: async () => {
+				connections += 1;
+				if (connections === 1) return dead.client;
+				if (connections === 2) throw new Error("engine_restart_window");
+				return recovered.client;
+			},
+			connectOptions: {},
+			getConfig: () => config,
+			saveConfig: () => undefined,
+			bridge: bridgeH.bridge,
+			execPath: "cerastream",
+			configPath: "/tmp/cerastream-contract.json",
+			logger: silentLogger,
+		});
+		const stopTimers: Array<() => void> = [];
+		const launchTimers: Array<{ callback: () => void; delayMs: number }> = [];
+		let streaming = false;
+		let nextAttempt = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: () => {
+				nextAttempt += 1;
+				return `attempt-${nextAttempt}`;
+			},
+			setStreamingStatus: (next) => {
+				streaming = next;
+			},
+			getStreamingStatus: () => streaming,
+			stopRuntime: (generation) =>
+				new Promise<void>((resolve) => {
+					if (!backend.stop(resolve)) resolve();
+					expect(generation).toBeGreaterThan(0);
+				}),
+			queryRuntime: async () => "idle",
+			stopDeadlineMs: 12,
+			retryPolicy: {
+				maxAttempts: 1,
+				totalBudgetMs: 10,
+				attemptTimeoutMs: 10,
+				baseDelayMs: 1,
+				maxDelayMs: 1,
+			},
+			now: () => 10,
+			scheduleTimeout: (callback) => {
+				stopTimers.push(callback);
+				return stopTimers.length;
+			},
+			cancelTimeout: () => undefined,
+			scheduleLaunchDeadline: (callback, delayMs) => {
+				launchTimers.push({ callback, delayMs });
+				return launchTimers.length;
+			},
+			cancelLaunchDeadline: () => undefined,
+		});
+		const launch = () => backend.start(STREAM_CONFIG, RUN_OPTS);
+
+		const first = orchestrator.start({ origin: "ui", launch });
+		await dead.started;
+		launchTimers.find(({ delayMs }) => delayMs === 10)?.callback();
+		await Bun.sleep(0);
+		stopTimers.shift()?.();
+		expect(await first).toMatchObject({ result: "failed" });
+		expect(streaming).toBe(false);
+		expect(orchestrator.snapshot()).toEqual({
+			state: "idle",
+			generation: 1,
+		});
+		const deadOps = dead.calls.map(({ op }) => op);
+		expect(deadOps.filter((op) => op === "start")).toHaveLength(1);
+		expect(deadOps.filter((op) => op === "stop")).toHaveLength(2);
+		expect(deadOps.filter((op) => op === "close")).toHaveLength(2);
+		expect(deadOps.filter((op) => op === "unsubscribe")).toHaveLength(2);
+
+		// A second owner must reach the recovered connect path and terminate; it
+		// must not park behind generation one's dead queue and make a third RPC busy.
+		const second = orchestrator.start({ origin: "ui", launch });
+		for (let tick = 0; tick < 10; tick += 1) await Bun.sleep(0);
+		expect(await second).toMatchObject({ result: "failed" });
+		expect(streaming).toBe(false);
+		expect(orchestrator.snapshot()).toEqual({
+			state: "idle",
+			generation: 2,
+		});
+		const third = await orchestrator.start({ origin: "ui", launch });
+		expect(third).toMatchObject({ result: "started" });
+		expect(connections).toBe(3);
+		expect(streaming).toBe(true);
+		expect(orchestrator.snapshot()).toEqual({
+			state: "streaming",
+			generation: 3,
+		});
+
+		await orchestrator.stop();
+		await backend.settle();
+	});
+
 	test("reconciliation adopts an engine-held stream", async () => {
 		// Given a fresh backend connected to an engine whose session survived it.
 		const { backend, fake } = makeBackend();

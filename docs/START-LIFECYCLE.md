@@ -207,8 +207,9 @@ per-attempt launch deadline, AND a total-time budget
   fenced to that cancelled launch and cannot declare the session started.
 - Engine stop bypasses `CerastreamBackend`'s ordinary IPC queue and uses the active
   client immediately. This lets deadline cleanup interrupt the in-flight start
-  instead of deadlocking behind it; the client is closed after the stop response,
-  which releases the queued start operation before a retry is admitted.
+  instead of deadlocking behind it. After dispatching stop, CeraUI closes the
+  client without waiting for a reply; closure settles pending start/stop requests
+  and releases the serialized queue before another generation is admitted.
 - A scheduled retry logs `attemptId`, phase, class, engine code when present, and
   retry state. It emits a class-keyed localized warning only outside a suppression
   window. Terminal exhaustion/non-retriable failure emits exactly one keyed error
