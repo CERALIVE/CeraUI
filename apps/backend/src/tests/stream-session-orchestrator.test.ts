@@ -110,6 +110,33 @@ describe("stream session orchestrator", () => {
 		expect(orchestrator.snapshot().state).toBe("idle");
 	});
 
+	test("a stuck runtime stop returns stop_failed after the configured bound", async () => {
+		const stopBarrier = deferred();
+		let deadlineCallback: (() => void) | undefined;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: () => {},
+			stopRuntime: () => stopBarrier.promise,
+			queryRuntime: async () => "idle",
+			stopDeadlineMs: 12_000,
+			scheduleTimeout: (callback) => {
+				deadlineCallback = callback;
+				return 1;
+			},
+			cancelTimeout: () => {},
+		});
+		await orchestrator.start({ origin: "ui", launch: async () => {} });
+
+		const stopping = orchestrator.stop();
+		deadlineCallback?.();
+
+		expect(await stopping).toEqual({
+			result: "stop_failed",
+			reason: "stop_timeout",
+		});
+		expect(orchestrator.snapshot().state).toBe("stop_failed");
+	});
+
 	test("a cancelled generation cannot cancel the next start", async () => {
 		// Given generation one cancelled before its engine confirmation.
 		const firstBarrier = deferred();

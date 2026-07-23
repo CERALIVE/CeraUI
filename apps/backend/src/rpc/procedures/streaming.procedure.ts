@@ -88,9 +88,11 @@ import {
 	type ResolveSourceRoutingResult,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
-import { classifyStartFailure } from "../../modules/streaming/start-failure-taxonomy.ts";
 import {
+	classifyStartFailure,
 	StreamStartFailure,
+} from "../../modules/streaming/start-failure-taxonomy.ts";
+import {
 	startStreamSession,
 	stopStreamSession,
 } from "../../modules/streaming/stream-session-orchestrator.ts";
@@ -301,11 +303,12 @@ export const streamingStartProcedure = authedProcedure
 					context.ws as unknown as import("ws").default,
 					applied,
 					generation,
+					attemptId,
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;
 					throwStartFailure(
-						"spawn-sender",
+						startResult.phase,
 						new Error(startResult.error),
 						attemptId,
 					);

@@ -1,10 +1,9 @@
 # Start-Lifecycle Contract
 
-> **Status: DESIGN + SCHEMA ONLY** (device-quality-wave2 Todo 25).
-> This document and its two typed modules are the deliverable. Nothing here is
-> wired into a runtime path — the start/stop RPC handlers, the retry loop, the
-> suppression signals, and the frontend rendering are Todos 26-29. This contract
-> is the thing those todos build against.
+> **Status: RUNTIME THROUGH TRANSACTIONAL LAUNCH** (device-quality-wave2 Todos
+> 25-27). The typed contract, unified session orchestrator, cleanup transaction,
+> phase deadlines, and bounded stop result are wired. Retry/suppression and
+> frontend rendering remain Todos 28-29.
 
 The streaming **start** is a multi-phase pipeline that can fail at any of several
 sites, in several ways, with very different correct responses (retry vs. surface
@@ -134,19 +133,14 @@ require — each row is a site that was found and mapped.
 **Notes on sites the plan assumed but the codebase does NOT currently have as
 literal code:**
 
-- **PLAYING wait timeout (row 21).** There is **no dedicated 5s PLAYING wait** in
-  CeraUI's start path today. The `@ceralive/cerastream` client's `start` call
-  resolves only when the engine confirms PLAYING, bounded by the SAME 10s
-  `requestTimeoutMs` — surfacing as a `CerastreamTimeoutError`. The `playing-wait`
-  phase and its `start_timeout → not-retriable` mapping are therefore reserved
-  for Todo 27, which introduces an explicit awaited PLAYING wait with a per-phase
-  deadline. (`health.ts:39` `FRAMES_FRESHNESS_MS = 5000` is a frame-freshness
-  value for the health rollup, NOT a start-time wait — do not conflate them.)
-- **`spawn-sender` phase.** The `srtla_send` spawn (`start-stream.ts`) has no
-  typed failure today (Todo 27 adds the transactional rollback). The phase is
-  reserved so a spawn failure has a home when that wiring lands. It maps to
-  `start_invalid`/`engine_internal` via the generic `Error` fallback in the
-  interim.
+- **PLAYING confirmation (row 21).** CeraUI parses the binding's `start` result
+  inside the 5s `playing-wait` deadline. A direct `state: "streaming"` result
+  completes the phase. A valid transitional result such as `state: "starting"`
+  keeps the phase pending until the existing event subscription receives a
+  concordant runtime status (`state: "streaming"`, `streaming: true`). No polling
+  loop or second engine operation is introduced.
+- **`spawn-sender` phase.** A local sender spawn/setup failure maps here. Any
+  later engine-phase failure unwinds the exact sender handle.
 - **`-32001` (not_streaming), `-32004` (bitrate), `-32005` (preview),
   `-32006` (audio device)** exist in the client's `RPC_ERROR_NUMERIC`
   (`errors.js:76-81`) but are not START-path outcomes (they belong to stop /
@@ -262,6 +256,45 @@ reconciling → idle          (engine was idle — adopt)
 | Todo | Uses from this contract |
 |------|-------------------------|
 | 26 (unified lock + boot reconciliation) | `busy`/`cancelled` results, `attemptId`, the state set + transitions, `reconciling` |
-| 27 (transactional launch + phase deadlines + honest stop) | per-phase `StartFailure`, `start_timeout`, `StopResult` |
+| 27 (implemented) | idempotent LIFO rollback, per-phase `start_timeout`, bounded `StopResult` |
 | 28 (bounded retry + suppression + truthful copy) | retry policy, retriability table, suppression predicate, `code`/`class` for copy |
 | 29 (frontend watchdog + generation identity + typed rendering) | `attemptId` fencing, `phase`+`class` → i18n rendering |
+
+---
+
+## Transactional runtime (Todo 27)
+
+Each acquired launch resource registers cleanup immediately. Failure unwinds in
+strict reverse order: engine stop, event subscription, control client, link
+telemetry, then the exact `srtla_send` process. Rollback is idempotent; one
+cleanup failure is logged and cannot prevent the remaining entries from running.
+
+The public binding's `connect()` combines the UDS connect and mandatory hello
+request, so CeraUI does not simulate a separate hello I/O operation.
+Machine-readable classification is:
+
+| Binding failure | Reported phase |
+|---|---|
+| `CerastreamConnectionError` (`absent`/`refused`/`unreachable`) | `connect` |
+| hello RPC error, hello-response Zod error, or hello request timeout | `hello` |
+| outer combined-operation deadline without a binding error | `connect` |
+
+Application-owned awaits stay separate and bounded: subscribe (10s), start RPC
+(10s), and PLAYING confirmation (5s). The direct start reply is authoritative
+only when it reports `state: "streaming"`; any other valid state, including
+`state: "starting"`, waits for a subscribed status heartbeat whose state is
+`streaming` and whose `streaming` flag is true. Missing that confirmation returns
+typed `start_timeout` in `playing-wait`. Stop is bounded at 12s and returns
+`stop_failed(reason: "stop_timeout")` when cleanup does not settle. Sender
+termination retains the existing 10s SIGTERM-to-SIGKILL policy.
+
+Connect and subscription are acquisition phases: their cleanup is registered on
+the acquisition promise before it enters the deadline race. If either promise
+resolves after timeout and rollback, transaction registration observes the
+rolled-back state and closes the late resource immediately. The race retains a
+rejection observer as well, so a late failed acquisition cannot become an
+unhandled rejection.
+
+IP-list preparation completes before sender launch. Initial read/write or
+no-interface failures are launch-critical typed failures. Network-change refresh
+failures after launch are logged separately and cannot rewrite the start result.

@@ -56,7 +56,7 @@ export function spawnStreamingLoop(
 	command: string,
 	args: Array<string>,
 	errCallback: (data: string) => void,
-) {
+): StreamingProcess {
 	const proc = Bun.spawn([command, ...args], {
 		stdin: "inherit",
 		stdout: "inherit",
@@ -119,6 +119,7 @@ export function spawnStreamingLoop(
 		reportStreamProcessExit();
 		broadcastHealthIfChanged();
 	});
+	return streamingProcess;
 }
 
 function removeProc(streamingProcess: StreamingProcess) {
@@ -141,6 +142,32 @@ export function stopProcess(streamingProcess: StreamingProcess) {
 
 	removeProc(streamingProcess);
 	return true;
+}
+
+export async function stopProcessAndWait(
+	streamingProcess: StreamingProcess,
+): Promise<void> {
+	if (stopProcess(streamingProcess)) return;
+	let killTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+	try {
+		await Promise.race([
+			streamingProcess.proc.exited.then(() => undefined),
+			new Promise<void>((resolve) => {
+				killTimer = globalThis.setTimeout(() => {
+					if (
+						streamingProcess.proc.exitCode === null &&
+						streamingProcess.proc.signalCode === null
+					) {
+						streamingProcess.proc.kill("SIGKILL");
+					}
+					resolve();
+				}, SHUTDOWN_SIGKILL_TIMEOUT_MS);
+			}),
+		]);
+		await streamingProcess.proc.exited;
+	} finally {
+		if (killTimer !== undefined) globalThis.clearTimeout(killTimer);
+	}
 }
 
 const stopCheckInterval = 50;

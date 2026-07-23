@@ -48,6 +48,14 @@ import {
 
 import { randomBase64 } from "../../helpers/crypto.ts";
 
+export class StreamStartFailure extends Error {
+	override readonly name = "StreamStartFailure";
+
+	constructor(readonly failure: StartFailure) {
+		super(`${failure.phase}:${failure.class}`);
+	}
+}
+
 // ─── (b) Attempt-ID generation at the public start boundary ──────────────────
 
 // Monotonic-ish component so ids sort roughly by creation time in logs, plus a

@@ -41,12 +41,17 @@ import { getLastCapabilities } from "../capabilities.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
 import { embeddedAudioActive } from "../embedded-audio.ts";
 import { clearStreamProcessExit } from "../health.ts";
-import { srtlaStatsFile, startLinkTelemetry } from "../link-telemetry.ts";
+import { createLaunchTransaction } from "../launch-transaction.ts";
+import {
+	srtlaStatsFile,
+	startLinkTelemetry,
+	stopLinkTelemetry,
+} from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
-import { spawnStreamingLoop } from "./process-runner.ts";
+import { spawnStreamingLoop, stopProcessAndWait } from "./process-runner.ts";
 
 export interface AudioProbeDeps {
 	probe?: (asrc: string) => Promise<string>;
@@ -54,10 +59,16 @@ export interface AudioProbeDeps {
 }
 
 export const AUDIO_SOURCE_PROBE_FAILED = "audio_source_probe_failed";
+export const IP_LIST_READ_FAILED = "ip_list_read_failed";
 
 export type StartStreamResult =
 	| { success: true }
-	| { success: false; error: string; reason: string };
+	| {
+			success: false;
+			error: string;
+			reason: string;
+			phase: "params" | "spawn-sender";
+	  };
 
 export async function maybeProbeAudioSource(
 	pipeline: Pipeline,
@@ -100,6 +111,7 @@ export async function startStream(
 	srtlaPort: number,
 	streamid: string,
 	audioDeps: AudioProbeDeps = {},
+	attemptId = "legacy-start",
 ): Promise<StartStreamResult> {
 	const config = getConfig();
 	const launchConfig = resolveLaunchConfig(config);
@@ -117,54 +129,77 @@ export async function startStream(
 			success: false,
 			error: AUDIO_SOURCE_PROBE_FAILED,
 			reason: AUDIO_SOURCE_PROBE_FAILED,
+			phase: "params",
 		};
 	}
 	const statsFile = srtlaStatsFile();
 	// ADR-001 control socket: telemetry rides the JSON-RPC subscription when the
 	// sender advertises it, with --stats-file as the airtight fallback poll.
 	const controlSocket = controlSocketPath(SRTLA_LISTEN_PORT);
-	spawnStreamingLoop(
-		srtlaSendExec,
-		buildSrtlaSendArgs({
-			listenPort: SRTLA_LISTEN_PORT,
-			srtlaHost: srtlaAddr,
-			srtlaPort,
-			ipsFile: setup.ips_file,
-			statsFile,
-			controlSocket,
-			execPath: setup.srtla_path,
-		}),
-		(err) => {
-			const resolved = resolveProcessError("srtla", err);
-			if (resolved) {
-				notificationBroadcast(
-					"srtla",
-					"error",
-					resolved.message,
-					5,
-					true,
-					false,
-				);
-			}
-		},
-	);
-
-	// Begin ingesting srtla_send's per-uplink telemetry. Seed the conn_id->iface
-	// registry from the exact file srtla_send reads at spawn so tlm_id (file
-	// order) maps back to interface names.
-	const ipsContent = await Bun.file(setup.ips_file ?? "")
-		.text()
-		.catch(() => "");
-	startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });
-
-	// Engine launch (session start over structured IPC) is behind the seam.
-	await getStreamingBackend().start(launchConfig, {
-		pipeline: pipeline.source,
-		host: "127.0.0.1",
-		port: SRTLA_LISTEN_PORT,
-		streamid,
-		reducedPacketSize: hasLowMtu(),
+	let ipsContent: string;
+	try {
+		ipsContent = await Bun.file(setup.ips_file ?? "").text();
+	} catch (error) {
+		logger.warn("startStream: IP list read failed; aborting start", { error });
+		return {
+			success: false,
+			error: IP_LIST_READ_FAILED,
+			reason: IP_LIST_READ_FAILED,
+			phase: "params",
+		};
+	}
+	const transaction = createLaunchTransaction(attemptId, {
+		warn: (message, meta) => logger.warn(message, meta),
 	});
+	try {
+		const sender = spawnStreamingLoop(
+			srtlaSendExec,
+			buildSrtlaSendArgs({
+				listenPort: SRTLA_LISTEN_PORT,
+				srtlaHost: srtlaAddr,
+				srtlaPort,
+				ipsFile: setup.ips_file,
+				statsFile,
+				controlSocket,
+				execPath: setup.srtla_path,
+			}),
+			(err) => {
+				const resolved = resolveProcessError("srtla", err);
+				if (resolved) {
+					notificationBroadcast(
+						"srtla",
+						"error",
+						resolved.message,
+						5,
+						true,
+						false,
+					);
+				}
+			},
+		);
+		transaction.register(() => stopProcessAndWait(sender));
+
+		// Begin ingesting srtla_send's per-uplink telemetry. Seed the conn_id->iface
+		// registry from the exact file srtla_send reads at spawn so tlm_id (file
+		// order) maps back to interface names.
+		startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });
+		transaction.register(() => stopLinkTelemetry());
+
+		await getStreamingBackend().start(
+			launchConfig,
+			{
+				pipeline: pipeline.source,
+				host: "127.0.0.1",
+				port: SRTLA_LISTEN_PORT,
+				streamid,
+				reducedPacketSize: hasLowMtu(),
+			},
+			transaction,
+		);
+	} catch (error) {
+		await transaction.rollback();
+		throw error;
+	}
 
 	return { success: true };
 }

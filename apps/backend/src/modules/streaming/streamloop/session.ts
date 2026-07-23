@@ -39,6 +39,10 @@ import {
 	setSrtlaIpList,
 } from "../srtla.ts";
 import {
+	classifyStartFailure,
+	StreamStartFailure,
+} from "../start-failure-taxonomy.ts";
+import {
 	type ConfigParameters,
 	getIsStreaming,
 	startError,
@@ -46,7 +50,7 @@ import {
 	updateStatus,
 } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
-import { getStreamingProcesses, stopAll } from "./process-runner.ts";
+import { getStreamingProcesses, stopProcessAndWait } from "./process-runner.ts";
 import { type StartStreamResult, startStream } from "./start-stream.ts";
 
 type SessionResources = {
@@ -56,10 +60,38 @@ type SessionResources = {
 
 let sessionResources: SessionResources | undefined;
 
+export type SrtlaIpPreparationDeps = {
+	readonly isLocal: (address: string) => boolean;
+	readonly localList: (address: string) => string[];
+	readonly bondedList: () => string[];
+	readonly writeList: (addresses: string[]) => Promise<void>;
+};
+
+const defaultSrtlaIpPreparationDeps: SrtlaIpPreparationDeps = {
+	isLocal: isLocalIp,
+	localList: genSrtlaIpListForLocalIpAddress,
+	bondedList: genSrtlaIpList,
+	writeList: setSrtlaIpList,
+};
+
+export async function prepareSrtlaIpAddresses(
+	srtlaAddr: string,
+	deps: SrtlaIpPreparationDeps = defaultSrtlaIpPreparationDeps,
+): Promise<void> {
+	const srtlaIpList = deps.isLocal(srtlaAddr)
+		? deps.localList(srtlaAddr)
+		: deps.bondedList();
+	if (srtlaIpList.length === 0) {
+		throw new Error("no_available_network_connections");
+	}
+	await deps.writeList(srtlaIpList);
+}
+
 export async function start(
 	conn: WebSocket,
 	params: ConfigParameters,
 	generation = 0,
+	attemptId = "legacy-start",
 ): Promise<StartStreamResult> {
 	if (getIsStreaming() || isUpdating()) {
 		sendStatus(conn);
@@ -67,6 +99,7 @@ export async function start(
 			success: false,
 			error: "stream_start_unavailable",
 			reason: "stream_start_unavailable",
+			phase: "params",
 		};
 	}
 
@@ -91,6 +124,7 @@ export async function start(
 			success: false,
 			error: typeof err === "string" ? err : "start_invalid",
 			reason: typeof err === "string" ? err : "start_invalid",
+			phase: "params",
 		};
 	}
 
@@ -102,31 +136,27 @@ export async function start(
 		sessionResources.removeNetworkInterfacesChangeListener();
 	}
 
-	const handleSrtlaIpAddresses = async () => {
-		const srtlaIpList = isLocalIp(c.srtlaAddr)
-			? genSrtlaIpListForLocalIpAddress(c.srtlaAddr)
-			: genSrtlaIpList();
-		if (!srtlaIpList.length) {
-			startError(
-				conn,
-				"Failed to start, no available network connections",
-				senderId,
-			);
-			return;
-		}
-
-		await setSrtlaIpList(srtlaIpList);
-
-		if (getIsStreaming()) {
-			restartSrtla();
+	try {
+		await prepareSrtlaIpAddresses(c.srtlaAddr);
+	} catch (error) {
+		throw new StreamStartFailure(
+			classifyStartFailure("params", error, attemptId, {
+				warn: (message, meta) => logger.warn(message, meta),
+			}),
+		);
+	}
+	const refreshSrtlaIpAddresses = async () => {
+		try {
+			await prepareSrtlaIpAddresses(c.srtlaAddr);
+			if (getIsStreaming()) restartSrtla();
+		} catch (error) {
+			logger.warn("Failed to refresh SRTLA IP addresses", { error });
 		}
 	};
-
-	void handleSrtlaIpAddresses();
 	sessionResources = {
 		generation,
 		removeNetworkInterfacesChangeListener: onNetworkInterfacesChange(
-			handleSrtlaIpAddresses,
+			refreshSrtlaIpAddresses,
 		),
 	};
 
@@ -137,8 +167,15 @@ export async function start(
 			c.srtlaAddr,
 			c.srtlaPort,
 			c.streamid,
+			{},
+			attemptId,
 		);
 	} catch (err) {
+		if (sessionResources?.generation === generation) {
+			sessionResources.removeNetworkInterfacesChangeListener();
+			sessionResources = undefined;
+		}
+		if (err instanceof StreamStartFailure) throw err;
 		if (typeof err === "string") {
 			startError(conn, err, senderId);
 		} else {
@@ -149,6 +186,7 @@ export async function start(
 			success: false,
 			error: typeof err === "string" ? err : "engine_internal",
 			reason: typeof err === "string" ? err : "engine_internal",
+			phase: "spawn-sender",
 		};
 	}
 
@@ -173,22 +211,31 @@ export function stopGeneration(generation: number): Promise<void> {
 	setPendingAudioFollowAsrc(null);
 
 	return new Promise((resolve) => {
+		let finishPromise: Promise<void> | undefined;
 		const finish = () => {
-			if (sessionResources?.generation === generation) {
-				sessionResources.removeNetworkInterfacesChangeListener();
-				sessionResources = undefined;
-			}
-			stopAll();
-			stopLinkTelemetry();
-			updateStatus(false);
-			resolve();
+			if (finishPromise !== undefined) return finishPromise;
+			finishPromise = (async () => {
+				if (sessionResources?.generation === generation) {
+					sessionResources.removeNetworkInterfacesChangeListener();
+					sessionResources = undefined;
+				}
+				await Promise.all(
+					[...getStreamingProcesses()].map((process) =>
+						stopProcessAndWait(process),
+					),
+				);
+				stopLinkTelemetry();
+				updateStatus(false);
+				resolve();
+			})();
+			return finishPromise;
 		};
 
 		if (isAsrcProbeRejectResolved()) {
 			clearAsrcProbeReject();
 
 			if (getStreamingProcesses().length === 0) {
-				finish();
+				void finish();
 				return;
 			}
 
@@ -200,7 +247,9 @@ export function stopGeneration(generation: number): Promise<void> {
 
 		// Bring the engine down first (it owns the engine-first shutdown ordering),
 		// then sweep the rest once it has exited.
-		const foundEngine = getStreamingBackend().stop(finish);
+		const foundEngine = getStreamingBackend().stop(() => {
+			void finish();
+		});
 
 		if (!foundEngine) {
 			if (
@@ -212,7 +261,7 @@ export function stopGeneration(generation: number): Promise<void> {
 					"engine session missing while generation-owned resources remained",
 				);
 			}
-			finish();
+			void finish();
 		}
 	});
 }
