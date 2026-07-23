@@ -26,6 +26,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
+| Transactional launch cleanup + phase/stop deadlines | `modules/streaming/launch-transaction.ts`, `start-lifecycle-timing.ts`, `streamloop/start-stream.ts`; contract in `../../docs/START-LIFECYCLE.md` |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |

@@ -907,6 +907,21 @@ modules/streaming/streamloop/
 `bcrptExec`, `checkAutoStartStream`, `setAutostart`, `srtlaSendExec`,
 `start`, `startStream`, `stop`. Adding or removing any of these is a breaking change.
 
+### Transactional start/stop lifecycle
+
+The Todo-25 start taxonomy is wired through one Todo-26 session orchestrator and
+the Todo-27 launch transaction. Initial IP-list preparation is awaited before
+sender spawn. Sender, telemetry, control client, subscription, and accepted
+engine start register cleanup immediately; failure unwinds them in reverse order
+and leaves lifecycle/status idle. The start response is emitted only after the
+engine's streaming result parses successfully.
+
+Connect and hello share the published binding's combined operation and are
+classified by machine-readable error shape; CeraUI does not simulate a separate
+hello I/O wait. Subscribe, start-RPC, PLAYING validation, and stop have explicit
+bounds. Stop confirms engine/process cleanup or returns typed `stop_failed` after
+12 seconds. Full contract and timeout values: `docs/START-LIFECYCLE.md`.
+
 ### timing-constants.ts
 
 `apps/backend/src/modules/streaming/timing-constants.ts` centralizes all hardcoded

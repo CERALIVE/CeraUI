@@ -36,6 +36,7 @@
 //          supervised process; its telemetry is owned by `link-telemetry.ts`.
 
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
+import type { LaunchTransaction } from "./launch-transaction.ts";
 
 /** Per-field bitrate input — mirrors the RPC bitrate setter payload. */
 export type BitrateParams = { max_br?: number | undefined };
@@ -88,7 +89,11 @@ export interface StreamingBackend {
 	buildRunArgs(config: RuntimeConfig, opts: StreamRunOptions): Array<string>;
 
 	/** Launch the engine process and resolve after the engine confirms PLAYING. */
-	start(config: RuntimeConfig, opts: StreamRunOptions): Promise<void>;
+	start(
+		config: RuntimeConfig,
+		opts: StreamRunOptions,
+		transaction?: LaunchTransaction,
+	): Promise<void>;
 	/**
 	 * Stop the engine process. `onStopped` fires once the engine has terminated
 	 * (synchronously if it was already dead). Returns whether an engine process

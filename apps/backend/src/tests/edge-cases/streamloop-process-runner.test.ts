@@ -37,19 +37,12 @@ async function waitUntil(
 	return predicate();
 }
 
-// spawnStreamingLoop does not return the process it creates, so identify "ours"
-// as the single entry that appeared in the supervised list after the call.
 function spawnAndCapture(
 	command: string,
 	args: string[],
 	cb: (data: string) => void,
 ): StreamingProcess {
-	const before = new Set(getStreamingProcesses());
-	spawnStreamingLoop(command, args, cb);
-	const mine = getStreamingProcesses().find((p) => !before.has(p));
-	if (!mine)
-		throw new Error("spawned process was not registered in the supervisor");
-	return mine;
+	return spawnStreamingLoop(command, args, cb);
 }
 
 describe("process-runner: stderr is drained into the error callback", () => {

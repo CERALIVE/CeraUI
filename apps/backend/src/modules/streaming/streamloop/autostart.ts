@@ -28,11 +28,11 @@ import { isUpdating } from "../../system/software-updates.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
-import { classifyStartFailure } from "../start-failure-taxonomy.ts";
 import {
+	classifyStartFailure,
 	StreamStartFailure,
-	startStreamSession,
-} from "../stream-session-orchestrator.ts";
+} from "../start-failure-taxonomy.ts";
+import { startStreamSession } from "../stream-session-orchestrator.ts";
 import { getIsStreaming, validateConfig } from "../streaming.ts";
 import { startStream } from "./start-stream.ts";
 
@@ -92,10 +92,12 @@ export async function autoStartStream(): Promise<void> {
 				srtlaAddr,
 				c.srtlaPort,
 				c.streamid,
+				{},
+				attemptId,
 			);
 			if (!launched.success) {
 				throw new StreamStartFailure(
-					classifyStartFailure("spawn-sender", launched.error, attemptId),
+					classifyStartFailure(launched.phase, launched.error, attemptId),
 				);
 			}
 		},

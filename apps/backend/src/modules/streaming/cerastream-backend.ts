@@ -61,6 +61,7 @@ import {
 	type SwitchInputParams,
 	type SwitchInputResult,
 	startParamsSchema,
+	startResultSchema,
 	switchAudioParamsSchema,
 	switchAudioResultSchema,
 	writeCerastreamConfig,
@@ -83,6 +84,10 @@ import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
 import { isEmbeddedAudioPipeline } from "./embedded-audio.ts";
 import { validateBitrate } from "./encoder.ts";
+import {
+	createLaunchTransaction,
+	type LaunchTransaction,
+} from "./launch-transaction.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
@@ -381,6 +386,19 @@ function isZodLikeError(err: unknown): boolean {
 	);
 }
 
+export function classifyConnectHandshakePhase(
+	error: unknown,
+): "connect" | "hello" {
+	if (
+		error instanceof CerastreamTimeoutError ||
+		error instanceof CerastreamRpcError ||
+		isZodLikeError(error)
+	) {
+		return "hello";
+	}
+	return "connect";
+}
+
 /** Classify a failed `connect()`/handshake into an {@link EngineProbe}. */
 export function classifyEngineProbeError(err: unknown): EngineProbe {
 	if (err instanceof CerastreamRpcError) {
@@ -458,17 +476,52 @@ export class CerastreamBackend implements StreamingBackend {
 		return ["--config", this.deps.configPath];
 	}
 
-	async start(config: RuntimeConfig, opts: StreamRunOptions): Promise<void> {
+	async start(
+		config: RuntimeConfig,
+		opts: StreamRunOptions,
+		transaction?: LaunchTransaction,
+	): Promise<void> {
 		this.active = true;
 		const params = this.buildStartParams(config, opts);
-		await this.enqueue(async () => {
-			const client = await this.deps.connect(this.deps.connectOptions);
-			this.client = client;
-			this.subscription = await client.subscribeEvents({}, (event) =>
-				this.handleEvent(event),
-			);
-			await this.dispatchStart(client, params);
-		}, "start");
+		const launchTransaction =
+			transaction ?? createLaunchTransaction("backend-start");
+		try {
+			await this.enqueue(async () => {
+				const client = await launchTransaction.runPhase(
+					"connect",
+					() => this.deps.connect(this.deps.connectOptions),
+					classifyConnectHandshakePhase,
+				);
+				this.client = client;
+				launchTransaction.register(() => client.close());
+				const subscription = await launchTransaction.runPhase("subscribe", () =>
+					client.subscribeEvents({}, (event) => this.handleEvent(event)),
+				);
+				this.subscription = subscription;
+				launchTransaction.register(() => subscription.close());
+				launchTransaction.register(async () => {
+					try {
+						await client.stop();
+					} catch (error) {
+						this.deps.logger.debug(
+							"cerastream: rollback stop best-effort failed",
+							{
+								error,
+							},
+						);
+					}
+				});
+				const result = await launchTransaction.runPhase("start-rpc", () =>
+					this.dispatchStart(client, params),
+				);
+				await launchTransaction.runPhase("playing-wait", async () => {
+					startResultSchema.parse(result);
+				});
+			}, "start");
+		} catch (error) {
+			await launchTransaction.rollback();
+			throw error;
+		}
 	}
 
 	// Send `start` so `audio.mode` / `video_passthrough` survive: an engine that
@@ -478,16 +531,15 @@ export class CerastreamBackend implements StreamingBackend {
 	private async dispatchStart(
 		client: CerastreamClient,
 		params: StartParamsWithAudioMode,
-	): Promise<void> {
+	): Promise<unknown> {
 		const version = client.hello.schema_version;
 		if (supportsAudioMode(version) || supportsVideoPassthrough(version)) {
 			const raw = client as unknown as {
 				rawRequest(method: string, params?: unknown): Promise<unknown>;
 			};
-			await raw.rawRequest("start", params);
-			return;
+			return raw.rawRequest("start", params);
 		}
-		await client.start(params as StartParams);
+		return client.start(params as StartParams);
 	}
 
 	stop(onStopped: () => void): boolean {

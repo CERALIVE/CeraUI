@@ -35,9 +35,11 @@ import { RUNTIME_CONFIG_DEFAULTS } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
-import { classifyStartFailure } from "../streaming/start-failure-taxonomy.ts";
 import {
+	classifyStartFailure,
 	StreamStartFailure,
+} from "../streaming/start-failure-taxonomy.ts";
+import {
 	startStreamSession,
 	stopStreamSession,
 } from "../streaming/stream-session-orchestrator.ts";
@@ -78,10 +80,10 @@ async function reconnect(): Promise<void> {
 	const started = await startStreamSession({
 		origin: "set-profile",
 		launch: async ({ attemptId, generation }) => {
-			const result = await startStream(stubConn, {}, generation);
+			const result = await startStream(stubConn, {}, generation, attemptId);
 			if (!result.success) {
 				throw new StreamStartFailure(
-					classifyStartFailure("spawn-sender", result.error, attemptId),
+					classifyStartFailure(result.phase, result.error, attemptId),
 				);
 			}
 		},

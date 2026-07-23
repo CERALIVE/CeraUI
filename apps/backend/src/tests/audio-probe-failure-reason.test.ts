@@ -60,6 +60,7 @@ describe("startStream — audio-source probe failure surfaces a structured reaso
 			success: false,
 			error: AUDIO_SOURCE_PROBE_FAILED,
 			reason: AUDIO_SOURCE_PROBE_FAILED,
+			phase: "params",
 		});
 		expect(AUDIO_SOURCE_PROBE_FAILED).toBe("audio_source_probe_failed");
 	});

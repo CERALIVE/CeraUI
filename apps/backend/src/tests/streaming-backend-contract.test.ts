@@ -5,11 +5,17 @@ import type {
 	CerastreamClient,
 	EventParams,
 } from "@ceralive/cerastream";
+import {
+	CerastreamConnectionError,
+	CerastreamRpcError,
+	CerastreamTimeoutError,
+} from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import {
 	CerastreamBackend,
 	type CerastreamBackendDeps,
 	cerastreamBackend,
+	classifyConnectHandshakePhase,
 } from "../modules/streaming/cerastream-backend.ts";
 import type {
 	StreamingBackend,
@@ -602,16 +608,85 @@ describe("CerastreamBackend RPC passthroughs", () => {
 // ---------------------------------------------------------------------------
 
 describe("CerastreamBackend engine crash", () => {
+	test("successful start resolves only after the engine confirms streaming", async () => {
+		const { backend, fake } = makeBackend();
+		let confirmStart: (() => void) | undefined;
+		let markStartEntered: (() => void) | undefined;
+		const startEntered = new Promise<void>((resolve) => {
+			markStartEntered = resolve;
+		});
+		let settled = false;
+		fake.client.start = (params) => {
+			fake.calls.push({ op: "start", params });
+			markStartEntered?.();
+			return new Promise((resolve) => {
+				confirmStart = () => resolve({ session_id: "s1", state: "streaming" });
+			});
+		};
+		const starting = backend.start(STREAM_CONFIG, RUN_OPTS).then(() => {
+			settled = true;
+		});
+		await startEntered;
+
+		expect(settled).toBe(false);
+		confirmStart?.();
+		await starting;
+		expect(settled).toBe(true);
+	});
+
+	test("a close between hello and start RPC returns one failure and closes the client", async () => {
+		const { backend, fake } = makeBackend();
+		fake.client.subscribeEvents = async () => {
+			throw new CerastreamConnectionError(
+				"connection lost before subscription",
+				undefined,
+				"lost",
+			);
+		};
+
+		await expect(backend.start(STREAM_CONFIG, RUN_OPTS)).rejects.toMatchObject({
+			failure: { phase: "subscribe", class: "engine_unavailable" },
+		});
+		await backend.settle();
+
+		expect(fake.calls.map((call) => call.op)).not.toContain("start");
+		expect(fake.calls.filter((call) => call.op === "close")).toHaveLength(1);
+	});
+
+	test("a post-subscribe start failure closes the subscription and client", async () => {
+		// Given the current backend has connected and subscribed before start fails.
+		const { backend, fake } = makeBackend();
+		fake.client.start = async (params) => {
+			fake.calls.push({ op: "start", params });
+			throw new Error("engine refused start after subscribe");
+		};
+
+		// When the engine rejects the start RPC.
+		await expect(backend.start(STREAM_CONFIG, RUN_OPTS)).rejects.toMatchObject({
+			failure: { phase: "start-rpc", class: "engine_internal" },
+		});
+		await backend.settle();
+
+		// Then rollback releases both acquired IPC resources.
+		expect(fake.calls.map((call) => call.op)).toContain("unsubscribe");
+		expect(fake.calls.map((call) => call.op)).toContain("close");
+		expect(backend.stop(() => {})).toBe(false);
+	});
+
 	test("a connect failure on start surfaces a notification and clears the session", async () => {
 		const { backend, bridgeH } = makeBackend({
 			connect: async () => {
-				throw new Error("cerastream control socket unreachable");
+				throw new CerastreamConnectionError(
+					"cerastream control socket unreachable",
+					undefined,
+					"refused",
+				);
 			},
 		});
 
-		await expect(backend.start(STREAM_CONFIG, RUN_OPTS)).rejects.toThrow(
-			"cerastream control socket unreachable",
-		);
+		await expect(backend.start(STREAM_CONFIG, RUN_OPTS)).rejects.toMatchObject({
+			failure: { phase: "connect", class: "engine_unavailable" },
+		});
 		await backend.settle();
 
 		expect(
@@ -622,6 +697,29 @@ describe("CerastreamBackend engine crash", () => {
 
 		const found = backend.stop(() => {});
 		expect(found).toBe(false);
+	});
+
+	test("combined binding errors classify transport as connect and handshake as hello", () => {
+		expect(
+			classifyConnectHandshakePhase(
+				new CerastreamConnectionError("refused", undefined, "refused"),
+			),
+		).toBe("connect");
+		expect(
+			classifyConnectHandshakePhase(
+				new CerastreamRpcError(
+					-32000,
+					"unsupported",
+					"cerastream.protocol.unsupported_version",
+					null,
+				),
+			),
+		).toBe("hello");
+		expect(
+			classifyConnectHandshakePhase(
+				new CerastreamTimeoutError("hello", 10_000),
+			),
+		).toBe("hello");
 	});
 });
 

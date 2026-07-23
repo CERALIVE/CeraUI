@@ -1,7 +1,6 @@
 import {
 	isLegalLifecycleTransition,
 	type LifecycleState,
-	type StartFailure,
 	type StartResult,
 	type StopResult,
 } from "@ceraui/rpc/schemas";
@@ -12,7 +11,9 @@ import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
 	classifyStartFailure,
 	newAttemptId,
+	StreamStartFailure,
 } from "./start-failure-taxonomy.ts";
+import { STOP_DEADLINE_MS } from "./start-lifecycle-timing.ts";
 import { updateStreamLifecycleState } from "./stream-lifecycle-status.ts";
 import { getIsStreaming, updateStatus } from "./streaming.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
@@ -54,6 +55,14 @@ export type StreamSessionOrchestratorDeps = {
 		from: LifecycleState,
 		to: LifecycleState,
 	) => void;
+	readonly stopDeadlineMs?: number;
+	readonly scheduleTimeout?: (
+		callback: () => void,
+		delayMs: number,
+	) => ReturnType<typeof globalThis.setTimeout> | number;
+	readonly cancelTimeout?: (
+		timer: ReturnType<typeof globalThis.setTimeout> | number,
+	) => void;
 };
 
 type ActiveAttempt = {
@@ -76,6 +85,30 @@ export function createStreamSessionOrchestrator(
 	let generation = 0;
 	let active: ActiveAttempt | undefined;
 	let reconciliationEpoch = 0;
+	const stopDeadlineMs = deps.stopDeadlineMs ?? STOP_DEADLINE_MS;
+	const scheduleTimeout =
+		deps.scheduleTimeout ??
+		((callback: () => void, delayMs: number) =>
+			globalThis.setTimeout(callback, delayMs));
+	const cancelTimeout =
+		deps.cancelTimeout ??
+		((timer: ReturnType<typeof globalThis.setTimeout> | number) =>
+			globalThis.clearTimeout(timer));
+
+	const stopWithinDeadline = (generationToStop: number): Promise<void> => {
+		let timer: ReturnType<typeof globalThis.setTimeout> | number | undefined;
+		const timeout = new Promise<never>((_resolve, reject) => {
+			timer = scheduleTimeout(
+				() => reject(new Error("stop_timeout")),
+				stopDeadlineMs,
+			);
+		});
+		return Promise.race([deps.stopRuntime(generationToStop), timeout]).finally(
+			() => {
+				if (timer !== undefined) cancelTimeout(timer);
+			},
+		);
+	};
 
 	const transition = (next: LifecycleState): boolean => {
 		if (state === next) return true;
@@ -91,7 +124,7 @@ export function createStreamSessionOrchestrator(
 	const finishCancelled = async (
 		attempt: ActiveAttempt,
 	): Promise<StartResult> => {
-		await deps.stopRuntime(attempt.generation);
+		await stopWithinDeadline(attempt.generation);
 		if (active === attempt) {
 			transition("idle");
 			active = undefined;
@@ -175,7 +208,7 @@ export function createStreamSessionOrchestrator(
 		}
 
 		try {
-			await deps.stopRuntime(stoppedGeneration);
+			await stopWithinDeadline(stoppedGeneration);
 			if (!cancellingStart) {
 				active = undefined;
 				transition("idle");
@@ -210,14 +243,6 @@ export function createStreamSessionOrchestrator(
 		reconcile,
 		snapshot: () => ({ state, generation }),
 	};
-}
-
-export class StreamStartFailure extends Error {
-	override readonly name = "StreamStartFailure";
-
-	constructor(readonly failure: StartFailure) {
-		super(`${failure.phase}:${failure.class}`);
-	}
 }
 
 const productionOrchestrator = createStreamSessionOrchestrator({
