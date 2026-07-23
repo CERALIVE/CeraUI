@@ -150,7 +150,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 			{ pipeline: "rtmp" },
 			{ context: makeContext() },
 		);
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: "network_ingest_gateway_inactive",
@@ -180,7 +180,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: GATEWAY_INACTIVE_ERROR,
@@ -194,7 +194,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: GATEWAY_INACTIVE_ERROR,
@@ -224,7 +224,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: GATEWAY_INACTIVE_ERROR,
@@ -264,7 +264,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 			// operator-disabled rtmp row is available:false — so resolveSourceRouting
 			// (C7) rejects with source_unavailable before the pipeline gateway gate is
 			// reached. Still a refusal, still not unknown_source (Metis #7).
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				success: false,
 				is_streaming: false,
 				error: "source_unavailable",
@@ -285,7 +285,7 @@ describe("streaming.start — network-ingest gateway gate (Task 17)", () => {
 				{ context: makeContext() },
 			);
 
-			expect(result).toEqual({
+			expect(result).toMatchObject({
 				success: false,
 				is_streaming: false,
 				error: GATEWAY_INACTIVE_ERROR,

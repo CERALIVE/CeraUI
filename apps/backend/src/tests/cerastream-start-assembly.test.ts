@@ -144,7 +144,7 @@ async function startParamsFor(
 	opts: Parameters<typeof makeBackend>[1] = {},
 ): Promise<Record<string, unknown>> {
 	const { backend, fake } = makeBackend(config, opts);
-	backend.start(config, RUN_OPTS);
+	await backend.start(config, RUN_OPTS);
 	await backend.settle();
 	const started = fake.calls.find((c) => c.op === "start");
 	expect(started).toBeDefined();
@@ -292,7 +292,7 @@ describe("buildStartParams — pseudo-source → audio.mode wire contract (Todo 
 			{ ...BASE, asrc: "usbaudio" },
 			{ schemaVersion: "0.6.0" },
 		);
-		backend.start({ ...BASE, asrc: "usbaudio" }, RUN_OPTS);
+		await backend.start({ ...BASE, asrc: "usbaudio" }, RUN_OPTS);
 		await backend.settle();
 		const started = fake.calls.find((c) => c.op === "start");
 		expect(started).toBeDefined();
@@ -326,7 +326,7 @@ describe("buildStartParams — video_passthrough wire contract (Todo 18)", () =>
 	test("a ≥0.5.0 engine receives start over the RAW bridge (field survives)", async () => {
 		const cfg = { ...BASE, video_passthrough: "off" as const };
 		const { backend, fake } = makeBackend(cfg, { schemaVersion: "0.5.0" });
-		backend.start(cfg, RUN_OPTS);
+		await backend.start(cfg, RUN_OPTS);
 		await backend.settle();
 		const started = fake.calls.find((c) => c.op === "start");
 		expect(started?.raw).toBe(true);
@@ -338,7 +338,7 @@ describe("buildStartParams — video_passthrough wire contract (Todo 18)", () =>
 	test("a <0.5.0 engine gets the TYPED start (no raw video_passthrough path)", async () => {
 		const cfg = { ...BASE, video_passthrough: "force" as const };
 		const { backend, fake } = makeBackend(cfg, { schemaVersion: "0.4.0" });
-		backend.start(cfg, RUN_OPTS);
+		await backend.start(cfg, RUN_OPTS);
 		await backend.settle();
 		const started = fake.calls.find((c) => c.op === "start");
 		expect(started?.raw).toBe(false);
@@ -437,7 +437,7 @@ describe("reloadAudioDelay — delay routing by engine hello version", () => {
 		const { backend, fake } = makeBackend(FULL_CONFIG, {
 			schemaVersion: "0.4.0",
 		});
-		backend.start(FULL_CONFIG, RUN_OPTS);
+		await backend.start(FULL_CONFIG, RUN_OPTS);
 		await backend.settle();
 		await backend.reloadAudioDelay(-500);
 		const reload = fake.calls.find((c) => c.op === "reload-config");
@@ -452,7 +452,7 @@ describe("reloadAudioDelay — delay routing by engine hello version", () => {
 			schemaVersion: "0.3.0",
 			logger,
 		});
-		backend.start(FULL_CONFIG, RUN_OPTS);
+		await backend.start(FULL_CONFIG, RUN_OPTS);
 		await backend.settle();
 		await backend.reloadAudioDelay(-500);
 		const reload = fake.calls.find((c) => c.op === "reload-config");
@@ -468,7 +468,7 @@ describe("toReloadParams — general reload carries the signed delay", () => {
 		const { backend, fake } = makeBackend(FULL_CONFIG, {
 			schemaVersion: "0.4.0",
 		});
-		backend.start(FULL_CONFIG, RUN_OPTS);
+		await backend.start(FULL_CONFIG, RUN_OPTS);
 		await backend.settle();
 		backend.reloadConfig();
 		await backend.settle();

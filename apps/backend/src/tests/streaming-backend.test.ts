@@ -55,7 +55,10 @@ class FakeBackend implements StreamingBackend {
 		return ["--config", this.configPath];
 	}
 
-	start(): void {
+	async start(
+		_config: Parameters<StreamingBackend["start"]>[0],
+		_opts: Parameters<StreamingBackend["start"]>[1],
+	): Promise<void> {
 		this.calls.push({ op: "start" });
 		this.engineRunning = true;
 	}
@@ -97,10 +100,10 @@ class FakeBackend implements StreamingBackend {
 }
 
 describe("StreamingBackend contract", () => {
-	test("start → setBitrate → stop fire in the order the session drives them", () => {
+	test("start → setBitrate → stop fire in the order the session drives them", async () => {
 		const backend = new FakeBackend();
 
-		backend.start(
+		await backend.start(
 			{ max_br: 8000 } as Parameters<StreamingBackend["start"]>[0],
 			RUN_OPTS,
 		);

@@ -12,6 +12,7 @@ import {
 import { call } from "@orpc/server";
 
 import { getConfig } from "../../modules/config.ts";
+import { updateStatus } from "../../modules/streaming/streaming.ts";
 import * as streamloop from "../../modules/streaming/streamloop.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 
@@ -53,11 +54,15 @@ const startSpy = mock(async () => {
 	await new Promise<void>((resolve) => {
 		releaseStart = resolve;
 	});
+	return { success: true as const };
 });
 
 let streamingStartProcedure: Awaited<
 	typeof import("./streaming.procedure.ts")
 >["streamingStartProcedure"];
+let streamingStopProcedure: Awaited<
+	typeof import("./streaming.procedure.ts")
+>["streamingStopProcedure"];
 
 describe("streaming.start — in-flight re-entry guard (S5)", () => {
 	const savedMockMode = process.env.MOCK_MODE;
@@ -76,7 +81,9 @@ describe("streaming.start — in-flight re-entry guard (S5)", () => {
 			stop: () => {},
 		}));
 
-		({ streamingStartProcedure } = await import("./streaming.procedure.ts"));
+		({ streamingStartProcedure, streamingStopProcedure } = await import(
+			"./streaming.procedure.ts"
+		));
 	});
 
 	afterAll(() => {
@@ -88,6 +95,7 @@ describe("streaming.start — in-flight re-entry guard (S5)", () => {
 	});
 
 	beforeEach(() => {
+		updateStatus(false);
 		// No persisted pipeline → the offered-set gate is skipped so start reaches
 		// the launch path.
 		priorPipeline = getConfig().pipeline;
@@ -139,6 +147,9 @@ describe("streaming.start — in-flight re-entry guard (S5)", () => {
 		releaseStart();
 		await first;
 		expect(spawnSpy).toHaveBeenCalledTimes(1);
+		expect(
+			await call(streamingStopProcedure, undefined, { context }),
+		).toMatchObject({ result: "stopped" });
 
 		const second = call(streamingStartProcedure, {}, { context });
 		await new Promise((resolve) => setTimeout(resolve, 0));

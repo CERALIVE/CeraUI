@@ -168,7 +168,7 @@ function telemetry(): Telemetry {
 describe("media-path backend contracts", () => {
 	test("cerastream start then setBitrate use the JSON-RPC wire shapes CeraUI relies on", async () => {
 		const { backend, calls } = makeCerastreamHarness();
-		backend.start(CONFIG, RUN_OPTS);
+		await backend.start(CONFIG, RUN_OPTS);
 		await backend.settle();
 		backend.setBitrate({ max_br: 9000 });
 		await backend.settle();

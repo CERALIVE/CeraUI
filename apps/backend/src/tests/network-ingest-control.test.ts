@@ -500,7 +500,7 @@ describe("network.setIngestEnabled handler — mocks (zero spawns)", () => {
 			{ pipeline: "rtmp" },
 			{ context: makeContext() },
 		);
-		expect(blocked).toEqual({
+		expect(blocked).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: GATEWAY_INACTIVE_ERROR,

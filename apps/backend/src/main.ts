@@ -92,6 +92,7 @@ import {
 } from "./modules/streaming/link-telemetry.ts";
 import { getPipelineList } from "./modules/streaming/pipelines.ts";
 import { refreshAndBroadcastSources } from "./modules/streaming/sources.ts";
+import { reconcileStreamSession } from "./modules/streaming/stream-session-orchestrator.ts";
 import {
 	getStreamingProcesses,
 	gracefulShutdown,
@@ -238,6 +239,11 @@ await guardNonCritical("pipelines", () =>
 			: {},
 	),
 );
+if (!shouldUseMocks()) {
+	await guardNonCritical("stream-session-reconcile", async () => {
+		await reconcileStreamSession();
+	});
+}
 
 // Resolve the runtime hardware kind (engine → device-tree → setup.hw → generic)
 // and seed the cache BEFORE the sensor/audio/pipeline consumers read it, so

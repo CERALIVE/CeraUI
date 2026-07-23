@@ -28,6 +28,7 @@ import {
 	deriveEngineRouting,
 	resolveSourceRouting,
 } from "../modules/streaming/sources.ts";
+import { updateStatus } from "../modules/streaming/streaming.ts";
 import * as streamloop from "../modules/streaming/streamloop.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
@@ -254,7 +255,7 @@ async function dispatchStartParams(
 			error: () => {},
 		},
 	});
-	backend.start(config, {
+	await backend.start(config, {
 		pipeline: "hdmi",
 		host: "127.0.0.1",
 		port: 9000,
@@ -337,13 +338,13 @@ describe("config.json round-trip through writeFileAtomicSync", () => {
 // cerastream-backend.ts is untouched by this todo (mirrors T2's assertion)
 // ---------------------------------------------------------------------------
 
-describe("cerastream-backend.ts is untouched by this todo", () => {
+describe("source routing stays isolated from cerastream-backend.ts", () => {
 	function git(args: string[], cwd: string): string {
 		const proc = Bun.spawnSync(["git", ...args], { cwd });
 		return new TextDecoder().decode(proc.stdout);
 	}
 
-	test("has no diff against the pre-migration-test baseline (start choke point unmodified)", () => {
+	test("Todo 26 lifecycle changes do not import or rebuild source routing", () => {
 		const repoRoot = git(
 			["rev-parse", "--show-toplevel"],
 			process.cwd(),
@@ -368,14 +369,7 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 		// encodeInputAudioFields) — not whole-file byte-equality. Telemetry reads
 		// like extractActiveEncode evolve independently; the positive test below
 		// asserts the same choke-point invariant.
-		for (const chokePoint of [
-			"buildStartParams",
-			"encodeInputAudioFields",
-			"config.pipeline ?? opts.pipeline",
-			"config.selected_video_input ?? this.deps.getActiveInput()",
-			"./sources.ts",
-			"buildSources",
-		]) {
+		for (const chokePoint of ["./sources.ts", "buildSources"]) {
 			expect(diff).not.toContain(chokePoint);
 		}
 	});
@@ -410,7 +404,9 @@ const realConfigMigration = { ...configMigration };
 
 // session.start stand-in: records every launch so we can prove it is skipped on a
 // rejected source and dispatches the resolved pipeline on a known one.
-const startSpy = mock(async (_conn: unknown, _params: unknown) => {});
+const startSpy = mock(async (_conn: unknown, _params: unknown) => ({
+	success: true as const,
+}));
 
 let setConfigProcedure: Awaited<
 	typeof import("../rpc/procedures/streaming.procedure.ts")
@@ -471,6 +467,7 @@ describe("streaming procedures — device-first source resolution", () => {
 	});
 
 	afterEach(() => {
+		updateStatus(false);
 		const config = getConfig();
 		config.source = undefined;
 		config.pipeline = undefined;

@@ -2,6 +2,7 @@
  * Streaming configuration and status Zod schemas
  */
 import { z } from 'zod';
+import { stopResultSchema } from './streaming-lifecycle.schema';
 
 /**
  * Canonical bitrate range — SINGLE SOURCE OF TRUTH (Task 14).
@@ -763,9 +764,11 @@ export const streamingStartOutputSchema = z.object({
 export type StreamingStartOutput = z.infer<typeof streamingStartOutputSchema>;
 
 // Streaming stop output
-export const streamingStopOutputSchema = z.object({
-	success: z.boolean(),
-});
+export const streamingStopOutputSchema = z
+	.object({
+		success: z.boolean(),
+	})
+	.and(stopResultSchema);
 export type StreamingStopOutput = z.infer<typeof streamingStopOutputSchema>;
 
 // Streaming setConfig output — includes applied config fields post-clamp, plus a
@@ -781,12 +784,24 @@ export type StreamingSetConfigOutput = z.infer<typeof streamingSetConfigOutputSc
 // Streaming start output extended — applied config fields post-clamp, plus a
 // stable structured `error` code on a blocked start (e.g. a persisted pipeline
 // the current hardware no longer offers).
-export const streamingStartOutputSchemaExtended = z.object({
+const streamingStartLegacyOutputSchema = z.object({
 	success: z.boolean(),
 	is_streaming: z.boolean().optional(),
 	applied: streamingConfigInputSchema.partial().optional(),
 	error: z.string().optional(),
 });
+
+export const streamingStartOutputSchemaExtended = z.union([
+	streamingStartLegacyOutputSchema.extend({
+		result: z.literal('busy'),
+		attemptId: z.string(),
+	}),
+	streamingStartLegacyOutputSchema.extend({
+		result: z.literal('cancelled'),
+		attemptId: z.string(),
+	}),
+	streamingStartLegacyOutputSchema,
+]);
 export type StreamingStartOutputExtended = z.infer<typeof streamingStartOutputSchemaExtended>;
 
 // ─── Stream health (Task 13) ────────────────────────────────────────────────

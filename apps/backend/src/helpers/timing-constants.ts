@@ -28,6 +28,8 @@ export const INITIAL_RETRY_DELAY = 1000; // ms
 // Retry interval when no interfaces are available or autostart fails
 export const AUTOSTART_RETRY_DELAY = 1000; // ms
 
+export const ENGINE_STATE_RECONCILE_TIMEOUT = 2500;
+
 // Audio source polling delay (audio.ts)
 // Retry interval when selected audio input is unavailable
 export const AUDIO_SOURCE_POLL_DELAY = 1000; // ms

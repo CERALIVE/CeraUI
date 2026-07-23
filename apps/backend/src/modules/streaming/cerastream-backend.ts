@@ -70,6 +70,7 @@ import { toEngineResolution } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import { ENGINE_STATE_RECONCILE_TIMEOUT } from "../../helpers/timing-constants.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import {
@@ -85,6 +86,7 @@ import { validateBitrate } from "./encoder.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
+	EngineRuntimeState,
 	EngineTelemetry,
 	StreamingBackend,
 	StreamRunOptions,
@@ -134,6 +136,11 @@ export interface CerastreamBackendDeps {
 	// assembly omits `audio.device` and the engine routes embedded audio.
 	// Injected so the assembly stays unit-testable without global state.
 	isEmbeddedAudioActive: (pipelineId: string | undefined) => boolean;
+	scheduleTimeout: (
+		callback: () => void,
+		delayMs: number,
+	) => ReturnType<typeof setTimeout>;
+	cancelTimeout: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -325,7 +332,18 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		logger: defaultLogger,
 		getActiveInput: () => deviceRegistry.getActiveInput(),
 		isEmbeddedAudioActive: isEmbeddedAudioPipeline,
+		scheduleTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+		cancelTimeout: (timer) => clearTimeout(timer),
 	};
+}
+
+function classifyRuntimeState(
+	state: unknown,
+	streaming: unknown,
+): EngineRuntimeState {
+	if (state === "streaming" && streaming) return "streaming";
+	if (state === "idle" && !streaming) return "idle";
+	return "unknown";
 }
 
 /**
@@ -440,10 +458,10 @@ export class CerastreamBackend implements StreamingBackend {
 		return ["--config", this.deps.configPath];
 	}
 
-	start(config: RuntimeConfig, opts: StreamRunOptions): void {
+	async start(config: RuntimeConfig, opts: StreamRunOptions): Promise<void> {
 		this.active = true;
 		const params = this.buildStartParams(config, opts);
-		this.enqueue(async () => {
+		await this.enqueue(async () => {
 			const client = await this.deps.connect(this.deps.connectOptions);
 			this.client = client;
 			this.subscription = await client.subscribeEvents({}, (event) =>
@@ -477,7 +495,7 @@ export class CerastreamBackend implements StreamingBackend {
 		this.active = false;
 		const client = this.client;
 		const subscription = this.subscription;
-		this.enqueue(async () => {
+		void this.enqueue(async () => {
 			subscription?.close();
 			try {
 				await client?.stop();
@@ -506,7 +524,7 @@ export class CerastreamBackend implements StreamingBackend {
 			this.deps.saveConfig();
 			const client = this.client;
 			if (client) {
-				this.enqueue(
+				void this.enqueue(
 					() => client.setBitrate({ max_bitrate: maxBr }).then(() => undefined),
 					"set-bitrate",
 				);
@@ -526,7 +544,7 @@ export class CerastreamBackend implements StreamingBackend {
 			this.deps.getConfig(),
 			client.hello.schema_version,
 		);
-		this.enqueue(
+		void this.enqueue(
 			() => client.reloadConfig(params).then(() => undefined),
 			"reload-config",
 		);
@@ -538,6 +556,64 @@ export class CerastreamBackend implements StreamingBackend {
 
 	getTelemetry(): EngineTelemetry | null {
 		return this.telemetry;
+	}
+
+	async reconcileRuntimeState(): Promise<EngineRuntimeState> {
+		const existing = this.telemetry;
+		if (existing !== null && this.client !== undefined) {
+			return classifyRuntimeState(existing.state, existing.streaming);
+		}
+
+		let client: CerastreamClient | undefined;
+		let subscription: Subscription | undefined;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		try {
+			client = await this.deps.connect({
+				...this.deps.connectOptions,
+				autoReconnect: false,
+				requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
+			});
+			let resolveRuntimeState:
+				| ((runtimeState: EngineRuntimeState) => void)
+				| undefined;
+			const runtimeStateEvent = new Promise<EngineRuntimeState>((resolve) => {
+				resolveRuntimeState = resolve;
+			});
+			subscription = await client.subscribeEvents(
+				{ topics: ["status"] },
+				(event) => {
+					this.handleEvent(event);
+					if (event.type === "status") {
+						resolveRuntimeState?.(
+							classifyRuntimeState(event.state, event.streaming),
+						);
+					}
+				},
+			);
+			timer = this.deps.scheduleTimeout(
+				() => resolveRuntimeState?.("unknown"),
+				ENGINE_STATE_RECONCILE_TIMEOUT,
+			);
+			const runtimeState = await runtimeStateEvent;
+			if (runtimeState === "streaming") {
+				this.client = client;
+				this.subscription = subscription;
+				this.active = true;
+				return runtimeState;
+			}
+			subscription?.close();
+			await client.close();
+			return runtimeState;
+		} catch (error) {
+			subscription?.close();
+			await client?.close();
+			this.deps.logger.debug("cerastream: runtime-state query unresolved", {
+				error,
+			});
+			return "unknown";
+		} finally {
+			if (timer !== undefined) this.deps.cancelTimeout(timer);
+		}
 	}
 
 	/**
@@ -720,10 +796,10 @@ export class CerastreamBackend implements StreamingBackend {
 		for (const listener of this.errorListeners) listener(raw);
 	}
 
-	private enqueue(op: () => Promise<void>, label: string): void {
-		this.queue = this.queue
-			.then(op)
-			.catch((err) => this.handleOpFailure(label, err));
+	private enqueue(op: () => Promise<void>, label: string): Promise<void> {
+		const operation = this.queue.then(op);
+		this.queue = operation.catch((err) => this.handleOpFailure(label, err));
+		return operation;
 	}
 
 	private handleOpFailure(label: string, err: unknown): void {

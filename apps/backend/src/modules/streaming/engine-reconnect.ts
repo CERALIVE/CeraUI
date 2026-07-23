@@ -70,6 +70,7 @@ import {
 	type EngineDeviceCacheDeps,
 	refreshAndBroadcastSources,
 } from "./sources.ts";
+import { reconcileStreamSession } from "./stream-session-orchestrator.ts";
 import { getIsStreaming } from "./streaming.ts";
 
 /**
@@ -161,6 +162,7 @@ function buildDefaultBroadcastEngineState(
 		await (sourcesOverride
 			? refreshAndBroadcastSources(sourcesOverride)
 			: refreshAndBroadcastSources());
+		if (sourcesOverride === undefined) await reconcileStreamSession();
 	};
 }
 
