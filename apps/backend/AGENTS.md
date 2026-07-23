@@ -25,6 +25,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
 | srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
+| Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
@@ -500,6 +501,19 @@ updating both the spawn site and the stats-file path.
 See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full wire-protocol reference.
 
 ## STREAMING ENGINE SEAM [EXISTS]
+
+`stream-session-orchestrator.ts` is the sole owner of public start/stop state.
+UI, autostart, remote control, and set-profile restarts enter the same synchronous
+admission boundary; only one launch can move `idle → starting`, and stop during
+start cancels that generation before a later launch can be admitted. The legacy
+`is_streaming` flag changes only after the awaited engine start confirms success.
+At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
+engine's actual status and adopts an engine-held session. The additive
+`status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
+stop_failed | reconciling`; `is_streaming` remains backward compatible.
+
+Todo 26 owns arbitration, cancellation, and adoption. General transactional
+rollback of resources after an engine-phase start failure remains Todo 27.
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 **one** implementation behind the seam (the legacy ceracoder engine is fully

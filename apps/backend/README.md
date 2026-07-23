@@ -105,8 +105,8 @@ Key streaming procedures:
 
 | Procedure | Purpose |
 |-----------|---------|
-| `streaming.start(config)` | Validate config, launch stream, persist config |
-| `streaming.stop()` | Stop active stream |
+| `streaming.start(config)` | Validate and admit one lifecycle attempt; resolves with typed `started`, `busy`, `cancelled`, or `failed` result plus `attemptId` |
+| `streaming.stop()` | Cancel/stop the active lifecycle generation and return a typed stop result |
 | `streaming.setConfig(fields)` | Persist config fields without starting the stream |
 | `streaming.setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
 | `streaming.getPipelines()` | List available GStreamer pipelines |
@@ -114,6 +114,12 @@ Key streaming procedures:
 | `streaming.getConfig()` | Return current config snapshot |
 
 All setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-validation values actually written to config. Clients must lock their UI to `applied`, not to the raw input.
+
+All start origins share `stream-session-orchestrator.ts`; UI, autostart, remote
+control, and set-profile cannot launch parallel engine sessions. The backend
+publishes additive `status.stream_lifecycle` transitions and keeps legacy
+`is_streaming=false` until the engine confirms the stream. Boot/reconnect
+reconciliation adopts a stream that survived a backend process restart.
 
 ### Broadcast Events
 

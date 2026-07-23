@@ -20,6 +20,8 @@ import {
 	reloadAudioDelayInputSchema,
 	reloadAudioDelayOutputSchema,
 	SRTLA_MIN_LATENCY_MS,
+	type StartFailurePhase,
+	type StartResult,
 	type StreamingConfigInput,
 	SWITCH_AUDIO_ERRORS,
 	type SwitchInputOutput,
@@ -86,18 +88,18 @@ import {
 	type ResolveSourceRoutingResult,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
+import { classifyStartFailure } from "../../modules/streaming/start-failure-taxonomy.ts";
 import {
-	getIsStreaming,
-	updateStatus,
-} from "../../modules/streaming/streaming.ts";
+	StreamStartFailure,
+	startStreamSession,
+	stopStreamSession,
+} from "../../modules/streaming/stream-session-orchestrator.ts";
+import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import {
 	getConfiguredEngine,
 	getStreamingBackend,
 } from "../../modules/streaming/streaming-engine.ts";
-import {
-	start as startStream,
-	stop as stopStream,
-} from "../../modules/streaming/streamloop.ts";
+import { start as startStream } from "../../modules/streaming/streamloop.ts";
 import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -114,7 +116,58 @@ const authedProcedure = baseProcedure.use(authMiddleware);
 // double-spawn the sender and double-start the engine.
 const START_IN_PROGRESS = "START_IN_PROGRESS";
 
-let startInFlight = false;
+function throwStartFailure(
+	phase: StartFailurePhase,
+	error: unknown,
+	attemptId: string,
+): never {
+	throw new StreamStartFailure(
+		classifyStartFailure(phase, error, attemptId, {
+			warn: (message, meta) => logger.warn(message, meta),
+		}),
+	);
+}
+
+function startResponse(
+	result: StartResult,
+	applied: StreamingConfigInput | undefined,
+	legacyError: string | undefined,
+) {
+	switch (result.result) {
+		case "started":
+			return {
+				...result,
+				success: true,
+				is_streaming: getIsStreaming(),
+				...(applied !== undefined ? { applied } : {}),
+			};
+		case "busy":
+			return {
+				...result,
+				success: false,
+				is_streaming: getIsStreaming(),
+				error: START_IN_PROGRESS,
+			};
+		case "cancelled":
+			return {
+				...result,
+				success: false,
+				is_streaming: false,
+				error: "START_CANCELLED",
+			};
+		case "failed":
+			return {
+				...result,
+				success: false,
+				is_streaming: false,
+				error:
+					legacyError ??
+					(typeof result.failure.code === "string"
+						? result.failure.code
+						: result.failure.class),
+			};
+	}
+}
 
 /**
  * Start streaming procedure
@@ -123,104 +176,102 @@ export const streamingStartProcedure = authedProcedure
 	.input(streamingConfigInputSchema)
 	.output(streamingStartOutputSchemaExtended)
 	.handler(async ({ input, context }) => {
-		if (startInFlight) {
-			return {
-				success: false,
-				is_streaming: getIsStreaming(),
-				error: START_IN_PROGRESS,
-			};
-		}
-		startInFlight = true;
-		try {
-			const applied: StreamingConfigInput = {
-				...input,
-				...(input.max_br !== undefined
-					? { max_br: clampBitrate(input.max_br) }
-					: {}),
-				...(input.srt_latency !== undefined
-					? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
-					: {}),
-			};
+		let appliedResponse: StreamingConfigInput | undefined;
+		let legacyError: string | undefined;
+		const lifecycleResult = await startStreamSession({
+			origin:
+				context.ws.remoteAddress === "control-channel"
+					? "remote-control"
+					: "ui",
+			launch: async ({ attemptId, generation }) => {
+				const applied: StreamingConfigInput = {
+					...input,
+					...(input.max_br !== undefined
+						? { max_br: clampBitrate(input.max_br) }
+						: {}),
+					...(input.srt_latency !== undefined
+						? { srt_latency: Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS) }
+						: {}),
+				};
 
-			// Device-first source pre-validation (T3). Resolve the EFFECTIVE source
-			// (this start's input, else the persisted post-coercion config.source)
-			// HERE, before delegating: an unknown source rejects WITHOUT calling
-			// session.start (session.ts swallows updateConfig errors, so the reject
-			// must happen at this layer). A known source folds its derived pipeline +
-			// recomputed selected_video_input into `applied` so the launch dispatches
-			// the resolved pipeline through the existing offered-set gate below.
-			const effectiveSource = input.source ?? getConfig().source;
-			if (effectiveSource !== undefined) {
-				const routed = resolveSourceRouting(
-					effectiveSource,
-					getSourcesMessage().sources,
-				);
-				if (!routed.ok) {
-					return {
-						success: false,
-						is_streaming: false,
-						error: routed.error,
-					};
-				}
-				applied.pipeline = routed.pipeline;
-				applied.selected_video_input = routed.selected_video_input;
-				applied.source = effectiveSource;
-			}
-
-			// Block start when the effective pipeline is not in the offered set — a
-			// persisted pipeline the current hardware no longer offers. No silent
-			// reset; the client surfaces the structured code so the operator re-picks.
-			const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
-			if (effectivePipeline !== undefined) {
-				const check = validatePersistedPipeline(
-					effectivePipeline,
-					Object.keys(getPipelineList()),
-				);
-				if (!check.valid) {
-					return { success: false, is_streaming: false, error: check.error };
+				// Device-first source pre-validation (T3). Resolve the EFFECTIVE source
+				// (this start's input, else the persisted post-coercion config.source)
+				// HERE, before delegating: an unknown source rejects WITHOUT calling
+				// session.start (session.ts swallows updateConfig errors, so the reject
+				// must happen at this layer). A known source folds its derived pipeline +
+				// recomputed selected_video_input into `applied` so the launch dispatches
+				// the resolved pipeline through the existing offered-set gate below.
+				const effectiveSource = input.source ?? getConfig().source;
+				if (effectiveSource !== undefined) {
+					const routed = resolveSourceRouting(
+						effectiveSource,
+						getSourcesMessage().sources,
+					);
+					if (!routed.ok) {
+						legacyError = routed.error;
+						throwStartFailure("params", new Error(routed.error), attemptId);
+					}
+					applied.pipeline = routed.pipeline;
+					applied.selected_video_input = routed.selected_video_input;
+					applied.source = effectiveSource;
 				}
 
-				// Network-ingest pipelines (rtmp/srt) can only encode once their
-				// local ingest gateway is up. The entry stays visible in the
-				// registry (disabled-with-reason); block the start with a structured
-				// code when the gateway is inactive. Mock honors a test-set flag;
-				// real devices consult the gateway probe (Todo 16 seam).
-				const requiresGateway =
-					searchPipelines(effectivePipeline)?.requires_gateway;
-				if (requiresGateway !== undefined) {
-					const gatewayUp = shouldUseMocks()
-						? isMockGatewayActive(requiresGateway)
-						: isGatewayActive(requiresGateway);
-					if (!gatewayUp) {
-						return {
-							success: false,
-							is_streaming: false,
-							error: GATEWAY_INACTIVE_ERROR,
-						};
+				// Block start when the effective pipeline is not in the offered set — a
+				// persisted pipeline the current hardware no longer offers. No silent
+				// reset; the client surfaces the structured code so the operator re-picks.
+				const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
+				if (effectivePipeline !== undefined) {
+					const check = validatePersistedPipeline(
+						effectivePipeline,
+						Object.keys(getPipelineList()),
+					);
+					if (!check.valid) {
+						legacyError = check.error;
+						throwStartFailure("params", new Error(check.error), attemptId);
+					}
+
+					// Network-ingest pipelines (rtmp/srt) can only encode once their
+					// local ingest gateway is up. The entry stays visible in the
+					// registry (disabled-with-reason); block the start with a structured
+					// code when the gateway is inactive. Mock honors a test-set flag;
+					// real devices consult the gateway probe (Todo 16 seam).
+					const requiresGateway =
+						searchPipelines(effectivePipeline)?.requires_gateway;
+					if (requiresGateway !== undefined) {
+						const gatewayUp = shouldUseMocks()
+							? isMockGatewayActive(requiresGateway)
+							: isGatewayActive(requiresGateway);
+						if (!gatewayUp) {
+							legacyError = GATEWAY_INACTIVE_ERROR;
+							throwStartFailure(
+								"params",
+								new Error(GATEWAY_INACTIVE_ERROR),
+								attemptId,
+							);
+						}
 					}
 				}
-			}
 
-			// Transport × audio-codec coherence gate (C5). Every relay transport is
-			// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
-			// effective codec the effective transport can't carry at START — config
-			// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
-			const effectiveAcodec = applied.acodec ?? getConfig().acodec;
-			if (effectiveAcodec !== undefined) {
-				const effectiveTransport =
-					applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
-				if (
-					!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)
-				) {
-					return {
-						success: false,
-						is_streaming: false,
-						error: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
-					};
+				// Transport × audio-codec coherence gate (C5). Every relay transport is
+				// an MPEG-TS carrier, so only AAC-in-TS is proven end-to-end; refuse an
+				// effective codec the effective transport can't carry at START — config
+				// SAVES stay permitted (mirrors the pipeline_not_in_offered_set gate).
+				const effectiveAcodec = applied.acodec ?? getConfig().acodec;
+				if (effectiveAcodec !== undefined) {
+					const effectiveTransport =
+						applied.relay_protocol ?? getConfig().relay_protocol ?? "srtla";
+					if (
+						!audioCodecAllowedForTransport(effectiveAcodec, effectiveTransport)
+					) {
+						legacyError = AUDIO_CODEC_UNSUPPORTED_TRANSPORT;
+						throwStartFailure(
+							"params",
+							new Error(AUDIO_CODEC_UNSUPPORTED_TRANSPORT),
+							attemptId,
+						);
+					}
 				}
-			}
 
-			try {
 				if (shouldUseMocks()) {
 					// A test-injected Tier-2 error stands in for the engine refusing the
 					// start on device: consume it once and surface the structured reason,
@@ -228,11 +279,8 @@ export const streamingStartProcedure = authedProcedure
 					const injected = getInjectedMockStreamError();
 					if (injected) {
 						clearMockStreamError();
-						return {
-							success: false,
-							is_streaming: false,
-							error: mapCerastreamError(injected),
-						};
+						legacyError = mapCerastreamError(injected);
+						throwStartFailure("start-rpc", injected, attemptId);
 					}
 					// Dev has no srtla_send/cerastream binaries: the real start() flips
 					// is_streaming on then immediately errors and flips it off. Simulate
@@ -245,8 +293,8 @@ export const streamingStartProcedure = authedProcedure
 						max_br: applied.max_br,
 					});
 					setStreamingState(true);
-					updateStatus(true);
-					return { success: true, is_streaming: getIsStreaming(), applied };
+					appliedResponse = applied;
+					return;
 				}
 				// The existing start function handles validation and config saving.
 				// Pass the clamped copy so the persisted config matches the applied
@@ -254,25 +302,20 @@ export const streamingStartProcedure = authedProcedure
 				const startResult = await startStream(
 					context.ws as unknown as import("ws").default,
 					applied,
+					generation,
 				);
-				if (startResult && !startResult.success) {
-					return {
-						success: false,
-						is_streaming: false,
-						error: startResult.error,
-					};
+				if (!startResult.success) {
+					legacyError = startResult.error;
+					throwStartFailure(
+						"spawn-sender",
+						new Error(startResult.error),
+						attemptId,
+					);
 				}
-				return { success: true, is_streaming: getIsStreaming(), applied };
-			} catch (error) {
-				return {
-					success: false,
-					is_streaming: false,
-					error: mapCerastreamError(error),
-				};
-			}
-		} finally {
-			startInFlight = false;
-		}
+				appliedResponse = applied;
+			},
+		});
+		return startResponse(lifecycleResult, appliedResponse, legacyError);
 	});
 
 /**
@@ -280,18 +323,16 @@ export const streamingStartProcedure = authedProcedure
  */
 export const streamingStopProcedure = authedProcedure
 	.output(streamingStopOutputSchema)
-	.handler(() => {
+	.handler(async () => {
 		if (shouldUseMocks()) {
 			// A deferred auto-audio follow only applies at the NEXT start; a stop
 			// cancels it (mirrors the real stop path in streamloop's stop handler)
 			// so the picker never keeps a stale "follows on restart" hint (T7).
 			setPendingAudioFollowAsrc(null);
 			setStreamingState(false);
-			updateStatus(false);
-			return { success: true };
 		}
-		stopStream();
-		return { success: true };
+		const result = await stopStreamSession();
+		return { ...result, success: result.result !== "stop_failed" };
 	});
 
 /**

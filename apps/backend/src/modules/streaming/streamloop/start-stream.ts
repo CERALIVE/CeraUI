@@ -43,7 +43,6 @@ import { embeddedAudioActive } from "../embedded-audio.ts";
 import { clearStreamProcessExit } from "../health.ts";
 import { srtlaStatsFile, startLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
-import { updateStatus } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
@@ -111,7 +110,6 @@ export async function startStream(
 	clearStreamProcessExit();
 
 	if (!(await maybeProbeAudioSource(pipeline, launchConfig, audioDeps))) {
-		updateStatus(false);
 		logger.warn("startStream: audio source probe failed; aborting start", {
 			asrc: launchConfig.asrc,
 		});
@@ -160,7 +158,7 @@ export async function startStream(
 	startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });
 
 	// Engine launch (session start over structured IPC) is behind the seam.
-	getStreamingBackend().start(launchConfig, {
+	await getStreamingBackend().start(launchConfig, {
 		pipeline: pipeline.source,
 		host: "127.0.0.1",
 		port: SRTLA_LISTEN_PORT,

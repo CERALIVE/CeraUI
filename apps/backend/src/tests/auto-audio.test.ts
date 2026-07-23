@@ -836,7 +836,7 @@ async function startParamsFor(
 		getActiveInput: () => undefined,
 		isEmbeddedAudioActive: () => false,
 	});
-	backend.start(config, RUN_OPTS);
+	await backend.start(config, RUN_OPTS);
 	await backend.settle();
 	const started = fake.calls.find((c) => c.op === "start");
 	return started?.params as Record<string, unknown>;

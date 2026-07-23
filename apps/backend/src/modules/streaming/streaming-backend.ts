@@ -85,8 +85,8 @@ export interface StreamingBackend {
 	/** Build the engine argv and persist the run config for a launch. */
 	buildRunArgs(config: RuntimeConfig, opts: StreamRunOptions): Array<string>;
 
-	/** Launch the engine process for a configured stream. */
-	start(config: RuntimeConfig, opts: StreamRunOptions): void;
+	/** Launch the engine process and resolve after the engine confirms PLAYING. */
+	start(config: RuntimeConfig, opts: StreamRunOptions): Promise<void>;
 	/**
 	 * Stop the engine process. `onStopped` fires once the engine has terminated
 	 * (synchronously if it was already dead). Returns whether an engine process
@@ -106,4 +106,6 @@ export interface StreamingBackend {
 
 	/** Optional engine-side telemetry hook. */
 	getTelemetry?(): EngineTelemetry | null;
+	/** Adopt an already-running engine session after a backend reconnect. */
+	reconcileRuntimeState?(): Promise<boolean>;
 }

@@ -25,6 +25,7 @@ import { isLocalIp } from "../../../helpers/ip-addresses.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { onNetworkInterfacesChange } from "../../network/network-interfaces.ts";
 import { isUpdating } from "../../system/software-updates.ts";
+import { notificationBroadcast } from "../../ui/notifications.ts";
 import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
 import { clearAsrcProbeReject, isAsrcProbeRejectResolved } from "../audio.ts";
@@ -48,18 +49,27 @@ import { getStreamingBackend } from "../streaming-engine.ts";
 import { getStreamingProcesses, stopAll } from "./process-runner.ts";
 import { type StartStreamResult, startStream } from "./start-stream.ts";
 
-let removeNetworkInterfacesChangeListener: (() => void) | undefined;
+type SessionResources = {
+	readonly generation: number;
+	readonly removeNetworkInterfacesChangeListener: () => void;
+};
+
+let sessionResources: SessionResources | undefined;
 
 export async function start(
 	conn: WebSocket,
 	params: ConfigParameters,
-): Promise<StartStreamResult | undefined> {
+	generation = 0,
+): Promise<StartStreamResult> {
 	if (getIsStreaming() || isUpdating()) {
 		sendStatus(conn);
-		return;
+		return {
+			success: false,
+			error: "stream_start_unavailable",
+			reason: "stream_start_unavailable",
+		};
 	}
 
-	updateStatus(true);
 	const senderId = getSocketSenderId(conn);
 
 	let c: {
@@ -77,11 +87,19 @@ export async function start(
 			startError(conn, "Failed to save the config, unknown error", senderId);
 			logger.error("Failed to save config", { err });
 		}
-		return;
+		return {
+			success: false,
+			error: typeof err === "string" ? err : "start_invalid",
+			reason: typeof err === "string" ? err : "start_invalid",
+		};
 	}
 
-	if (removeNetworkInterfacesChangeListener) {
-		removeNetworkInterfacesChangeListener();
+	if (sessionResources !== undefined) {
+		reportSessionInvariant(
+			generation,
+			`start found resources owned by generation ${sessionResources.generation}`,
+		);
+		sessionResources.removeNetworkInterfacesChangeListener();
 	}
 
 	const handleSrtlaIpAddresses = async () => {
@@ -105,9 +123,12 @@ export async function start(
 	};
 
 	void handleSrtlaIpAddresses();
-	removeNetworkInterfacesChangeListener = onNetworkInterfacesChange(
-		handleSrtlaIpAddresses,
-	);
+	sessionResources = {
+		generation,
+		removeNetworkInterfacesChangeListener: onNetworkInterfacesChange(
+			handleSrtlaIpAddresses,
+		),
+	};
 
 	let result: StartStreamResult;
 	try {
@@ -124,35 +145,82 @@ export async function start(
 			startError(conn, "Failed to start, unknown error", senderId);
 			logger.error("Failed to start stream", { err });
 		}
-		return;
+		return {
+			success: false,
+			error: typeof err === "string" ? err : "engine_internal",
+			reason: typeof err === "string" ? err : "engine_internal",
+		};
 	}
 
 	return result;
 }
 
-export function stop() {
+function reportSessionInvariant(generation: number, reason: string): void {
+	logger.error("stream-session invariant violation", { generation, reason });
+	notificationBroadcast(
+		"stream_session_recovered",
+		"warning",
+		"The stream session had inconsistent resource ownership and was recovered.",
+		10,
+		false,
+		true,
+	);
+}
+
+export function stopGeneration(generation: number): Promise<void> {
 	// A deferred auto-audio follow (T7) only applies at the NEXT start; a stop
 	// cancels it so the picker never keeps a stale "follows on restart" hint.
 	setPendingAudioFollowAsrc(null);
 
-	if (isAsrcProbeRejectResolved()) {
-		clearAsrcProbeReject();
-
-		if (getStreamingProcesses().length === 0) {
-			updateStatus(false);
+	return new Promise((resolve) => {
+		const finish = () => {
+			if (sessionResources?.generation === generation) {
+				sessionResources.removeNetworkInterfacesChangeListener();
+				sessionResources = undefined;
+			}
+			stopAll();
 			stopLinkTelemetry();
-			return;
+			updateStatus(false);
+			resolve();
+		};
+
+		if (isAsrcProbeRejectResolved()) {
+			clearAsrcProbeReject();
+
+			if (getStreamingProcesses().length === 0) {
+				finish();
+				return;
+			}
+
+			reportSessionInvariant(
+				generation,
+				"audio probe cancellation overlapped running processes",
+			);
 		}
 
-		logger.error("stop: BUG?: found both an asrcProbe and running processes");
-	}
+		// Bring the engine down first (it owns the engine-first shutdown ordering),
+		// then sweep the rest once it has exited.
+		const foundEngine = getStreamingBackend().stop(finish);
 
-	// Bring the engine down first (it owns the engine-first shutdown ordering),
-	// then sweep the rest once it has exited.
-	const foundEngine = getStreamingBackend().stop(() => stopAll());
+		if (!foundEngine) {
+			if (
+				sessionResources?.generation === generation ||
+				getStreamingProcesses().length > 0
+			) {
+				reportSessionInvariant(
+					generation,
+					"engine session missing while generation-owned resources remained",
+				);
+			}
+			finish();
+		}
+	});
+}
 
-	if (!foundEngine) {
-		logger.error("stop: BUG?: engine not found, terminating all processes");
-		stopAll();
-	}
+export function stop(): void {
+	setPendingAudioFollowAsrc(null);
+	if (isAsrcProbeRejectResolved()) clearAsrcProbeReject();
+	void import("../stream-session-orchestrator.ts").then(
+		({ stopStreamSession }) => stopStreamSession(),
+	);
 }

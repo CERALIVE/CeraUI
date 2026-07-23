@@ -59,10 +59,17 @@ const silentLogger: CerastreamBackendDeps["logger"] = {
 interface FakeClientHarness {
 	client: CerastreamClient;
 	calls: Array<{ op: string; params?: unknown }>;
+	readonly subscribed: Promise<void>;
+	emit(event: EventParams): void;
 }
 
 function makeFakeClient(): FakeClientHarness {
 	const calls: Array<{ op: string; params?: unknown }> = [];
+	let listener: ((event: EventParams) => void) | undefined;
+	let resolveSubscribed: (() => void) | undefined;
+	const subscribed = new Promise<void>((resolve) => {
+		resolveSubscribed = resolve;
+	});
 	const client: CerastreamClient = {
 		hello: {
 			protocol: "cerastream-ipc/1",
@@ -93,8 +100,22 @@ function makeFakeClient(): FakeClientHarness {
 			calls.push({ op: "list-devices", params });
 			return { devices: [CAPTURE_DEVICE] };
 		},
-		subscribeEvents: async (params) => {
+		getCapabilities: async () => ({
+			platform: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: "1920x1080",
+			},
+			encoder: {
+				codecs: ["h264", "h265"],
+				bitrate_range: { min: 500, max: 50_000, unit: "kbps" },
+			},
+			sources: [],
+		}),
+		subscribeEvents: async (params, eventListener) => {
 			calls.push({ op: "subscribe-events", params });
+			listener = eventListener;
+			resolveSubscribed?.();
 			return {
 				result: {
 					subscribed: [
@@ -139,7 +160,12 @@ function makeFakeClient(): FakeClientHarness {
 		}
 		return {};
 	};
-	return { client, calls };
+	return {
+		client,
+		calls,
+		subscribed,
+		emit: (event) => listener?.(event),
+	};
 }
 
 interface BridgeHarness {
@@ -165,6 +191,7 @@ function makeBridge(): BridgeHarness {
 			broadcastStatus: () => {
 				broadcasts.count += 1;
 			},
+			broadcastBuffering: (_payload) => undefined,
 		},
 	};
 }
@@ -244,9 +271,27 @@ describe("engine selection", () => {
 // ---------------------------------------------------------------------------
 
 describe("CerastreamBackend behavioural contract", () => {
+	test("reconciliation adopts an engine-held stream", async () => {
+		// Given a fresh backend connected to an engine whose session survived it.
+		const { backend, fake } = makeBackend();
+		const reconciliation = backend.reconcileRuntimeState();
+		await fake.subscribed;
+
+		// When the subscribed engine reports its actual streaming state.
+		fake.emit({ type: "status", seq: 1, state: "streaming", streaming: true });
+
+		// Then the backend adopts the client and can stop the existing runtime.
+		expect(await reconciliation).toBe(true);
+		let stopped = false;
+		expect(backend.stop(() => (stopped = true))).toBe(true);
+		await backend.settle();
+		expect(stopped).toBe(true);
+		expect(fake.calls.map((call) => call.op)).toContain("stop");
+	});
+
 	test("start connects, subscribes, and sends the serialized config", async () => {
 		const { backend, fake } = makeBackend();
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.start(STREAM_CONFIG, RUN_OPTS);
 		await backend.settle();
 
 		const ops = fake.calls.map((c) => c.op);
@@ -268,7 +313,7 @@ describe("CerastreamBackend behavioural contract", () => {
 
 	test("setBitrate persists and pushes the value over IPC while streaming", async () => {
 		const { backend, fake, config, saveCount } = makeBackend();
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.start(STREAM_CONFIG, RUN_OPTS);
 		await backend.settle();
 
 		const applied = backend.setBitrate({ max_br: 9000 });
@@ -311,7 +356,7 @@ describe("CerastreamBackend behavioural contract", () => {
 
 	test("start then stop tears down the session and signals onStopped", async () => {
 		const { backend, fake } = makeBackend();
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.start(STREAM_CONFIG, RUN_OPTS);
 		await backend.settle();
 
 		let stopped = false;
@@ -452,7 +497,7 @@ describe("CerastreamBackend status bridge", () => {
 describe("CerastreamBackend RPC passthroughs", () => {
 	test("switchInput and listDevices proxy to the control client", async () => {
 		const { backend, fake } = makeBackend();
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.start(STREAM_CONFIG, RUN_OPTS);
 		await backend.settle();
 
 		const switched = await backend.switchInput({
@@ -473,7 +518,7 @@ describe("CerastreamBackend RPC passthroughs", () => {
 
 	test("switchAudio dispatches switch-audio and returns the active audio input", async () => {
 		const { backend, fake } = makeBackend();
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.start(STREAM_CONFIG, RUN_OPTS);
 		await backend.settle();
 
 		const result = await backend.switchAudio({
@@ -486,7 +531,7 @@ describe("CerastreamBackend RPC passthroughs", () => {
 
 	test("reloadAudioDelay applies the audio delay via reload-config", async () => {
 		const { backend, fake } = makeBackend();
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await backend.start(STREAM_CONFIG, RUN_OPTS);
 		await backend.settle();
 
 		const applied = await backend.reloadAudioDelay(120);
@@ -514,7 +559,9 @@ describe("CerastreamBackend engine crash", () => {
 			},
 		});
 
-		backend.start(STREAM_CONFIG, RUN_OPTS);
+		await expect(backend.start(STREAM_CONFIG, RUN_OPTS)).rejects.toThrow(
+			"cerastream control socket unreachable",
+		);
 		await backend.settle();
 
 		expect(

@@ -154,7 +154,7 @@ describe("streaming.start — transport × audio-codec gate (C5)", () => {
 			{ acodec: "opus" },
 			{ context: makeContext() },
 		);
-		expect(res).toEqual({
+		expect(res).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: AUDIO_CODEC_UNSUPPORTED_TRANSPORT,

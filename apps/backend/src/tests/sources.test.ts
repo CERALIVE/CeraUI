@@ -584,13 +584,13 @@ describe("engine-device cache", () => {
 	});
 });
 
-describe("cerastream-backend.ts is untouched by this todo", () => {
+describe("source routing stays isolated from cerastream-backend.ts", () => {
 	function git(args: string[], cwd: string): string {
 		const proc = Bun.spawnSync(["git", ...args], { cwd });
 		return new TextDecoder().decode(proc.stdout);
 	}
 
-	it("has no diff against the pre-sources.ts baseline (start choke point unmodified)", () => {
+	it("Todo 26 lifecycle changes do not import or rebuild source routing", () => {
 		const repoRoot = git(
 			["rev-parse", "--show-toplevel"],
 			process.cwd(),
@@ -615,14 +615,7 @@ describe("cerastream-backend.ts is untouched by this todo", () => {
 		// encodeInputAudioFields) and the no-sources-import rule — not whole-file
 		// byte-equality. Telemetry reads like extractActiveEncode evolve
 		// independently; the positive test below asserts the same choke-point invariant.
-		for (const chokePoint of [
-			"buildStartParams",
-			"encodeInputAudioFields",
-			"config.pipeline ?? opts.pipeline",
-			"config.selected_video_input ?? this.deps.getActiveInput()",
-			"./sources.ts",
-			"buildSources",
-		]) {
+		for (const chokePoint of ["./sources.ts", "buildSources"]) {
 			expect(diff).not.toContain(chokePoint);
 		}
 	});

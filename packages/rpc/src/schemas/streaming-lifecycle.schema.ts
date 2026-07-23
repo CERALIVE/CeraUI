@@ -8,8 +8,8 @@
  *   (b) the stop-result union `stopping → stopped | stop_failed`;
  *   (e) the lifecycle state set + its legal transitions.
  *
- * `busy` and `cancelled` are FIRST-CLASS results, NOT failure classes: a later
- * change (Todo 26) returns them for concurrent-entry and stop-during-start. There
+ * `busy` and `cancelled` are FIRST-CLASS results, NOT failure classes: Todo 26
+ * returns them for concurrent-entry and stop-during-start. There
  * is deliberately NO `superseded` failure class — an attempt superseded/cancelled
  * by a stop terminates as the first-class `cancelled` result (one concept, one
  * representation).
@@ -17,8 +17,8 @@
  * EVERY union variant is a discriminated wire object carrying `attemptId` so a
  * later change (Todo 29) can fence a stale response from an older attempt.
  *
- * Nothing here is wired into a runtime path — the start/stop RPC handlers,
- * retry loop, and suppression signals are Todos 26-29. This is browser-safe
+ * Todo 26 wires the lifecycle/result contract into start/stop runtime paths;
+ * retry, suppression, and stale-response fencing remain Todos 27-29. This is browser-safe
  * (pure Zod + pure predicates, no Node/Bun deps) so both the backend producer
  * and the frontend renderer consume the identical types.
  */

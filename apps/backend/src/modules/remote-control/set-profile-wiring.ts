@@ -35,17 +35,17 @@ import { RUNTIME_CONFIG_DEFAULTS } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
-import { getIsStreaming } from "../streaming/streaming.ts";
+import { classifyStartFailure } from "../streaming/start-failure-taxonomy.ts";
 import {
-	start as startStream,
-	stop as stopStream,
-} from "../streaming/streamloop.ts";
+	StreamStartFailure,
+	startStreamSession,
+	stopStreamSession,
+} from "../streaming/stream-session-orchestrator.ts";
+import { getIsStreaming } from "../streaming/streaming.ts";
+import { start as startStream } from "../streaming/streamloop.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { reportActiveProfile } from "./active-profile-reporter.ts";
 import { configureSetProfile, type SetProfileCaps } from "./set-profile.ts";
-
-const RECONNECT_SETTLE_TIMEOUT_MS = 5_000;
-const RECONNECT_SETTLE_POLL_MS = 50;
 
 function projectCaps(): SetProfileCaps {
 	const caps = getLastCapabilities();
@@ -58,27 +58,12 @@ function projectCaps(): SetProfileCaps {
 	};
 }
 
-function waitUntilIdle(): Promise<boolean> {
-	return new Promise((resolve) => {
-		const start = Date.now();
-		const poll = () => {
-			if (!getIsStreaming()) return resolve(true);
-			if (Date.now() - start >= RECONNECT_SETTLE_TIMEOUT_MS) {
-				return resolve(false);
-			}
-			setTimeout(poll, RECONNECT_SETTLE_POLL_MS);
-		};
-		poll();
-	});
-}
-
 async function reconnect(): Promise<void> {
 	if (!getIsStreaming()) return;
-	stopStream();
-	const settled = await waitUntilIdle();
-	if (!settled) {
+	const stopped = await stopStreamSession();
+	if (stopped.result !== "stopped") {
 		logger.warn(
-			"set-profile: stream did not settle within the reconnect window; persisted config applies on next start",
+			"set-profile: stream stop failed; persisted config applies on next start",
 		);
 		return;
 	}
@@ -90,7 +75,20 @@ async function reconnect(): Promise<void> {
 		},
 		data: { isAuthenticated: true, lastActive: Date.now() },
 	} as unknown as import("ws").default;
-	await startStream(stubConn, {});
+	const started = await startStreamSession({
+		origin: "set-profile",
+		launch: async ({ attemptId, generation }) => {
+			const result = await startStream(stubConn, {}, generation);
+			if (!result.success) {
+				throw new StreamStartFailure(
+					classifyStartFailure("spawn-sender", result.error, attemptId),
+				);
+			}
+		},
+	});
+	if (started.result !== "started") {
+		logger.warn("set-profile: stream restart did not complete", { started });
+	}
 }
 
 export function wireSetProfile(): void {

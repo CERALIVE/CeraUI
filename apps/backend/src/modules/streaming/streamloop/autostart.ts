@@ -28,7 +28,12 @@ import { isUpdating } from "../../system/software-updates.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
-import { getIsStreaming, updateStatus, validateConfig } from "../streaming.ts";
+import { classifyStartFailure } from "../start-failure-taxonomy.ts";
+import {
+	StreamStartFailure,
+	startStreamSession,
+} from "../stream-session-orchestrator.ts";
+import { getIsStreaming, validateConfig } from "../streaming.ts";
 import { startStream } from "./start-stream.ts";
 
 export const AUTOSTART_CHECK_FILE = "/tmp/ceralive_restarted";
@@ -63,9 +68,6 @@ export async function autoStartStream(): Promise<void> {
 		return;
 	}
 
-	// The first await is used below, so we have to lock the status
-	updateStatus(true);
-
 	// If the config is invalid, then we won't ever be able to start, so don't retry
 	const config = getConfig();
 	let c: {
@@ -78,18 +80,37 @@ export async function autoStartStream(): Promise<void> {
 		c = await validateConfig(config);
 	} catch (err) {
 		logger.error("autostart failed", { err });
-		updateStatus(false);
 		return;
 	}
 
-	try {
-		// This will returned a cached address if the resolver is temporarily unavailable
-		const srtlaAddr: string = await resolveSrtla(c.srtlaAddr);
-		await startStream(c.pipeline, srtlaAddr, c.srtlaPort, c.streamid);
-	} catch (err) {
-		logger.warn("autostart failed, but will retry", { err });
+	const result = await startStreamSession({
+		origin: "autostart",
+		launch: async ({ attemptId }) => {
+			const srtlaAddr: string = await resolveSrtla(c.srtlaAddr);
+			const launched = await startStream(
+				c.pipeline,
+				srtlaAddr,
+				c.srtlaPort,
+				c.streamid,
+			);
+			if (!launched.success) {
+				throw new StreamStartFailure(
+					classifyStartFailure("spawn-sender", launched.error, attemptId),
+				);
+			}
+		},
+	});
+	if (result.result === "failed") {
+		logger.warn("autostart failed, but will retry", { result });
 		setTimeout(autoStartStream, AUTOSTART_RETRY_DELAY);
-		updateStatus(false);
+		return;
+	}
+	if (result.result === "busy") {
+		logger.info("autostart aborted", { result });
+		return;
+	}
+	if (result.result === "cancelled") {
+		logger.info("autostart cancelled", { result });
 		return;
 	}
 

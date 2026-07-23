@@ -72,6 +72,8 @@ describe('Applied-state output schemas', () => {
 			const output = {
 				success: true,
 				is_streaming: true,
+				result: 'started',
+				attemptId: 'att_schema_test',
 				applied: {
 					max_br: 8000,
 					pipeline: 'hdmi',

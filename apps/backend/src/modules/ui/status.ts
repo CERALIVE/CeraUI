@@ -42,6 +42,7 @@ import {
 import { AUDIO_CODECS } from "../streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
 import { getSourcesMessage } from "../streaming/sources.ts";
+import { getStreamLifecycleState } from "../streaming/stream-lifecycle-status.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import { getRevisions } from "../system/revisions.ts";
 import { getSensors } from "../system/sensors.ts";
@@ -57,6 +58,7 @@ import { buildMsg } from "./websocket-server.ts";
 
 export type StatusResponseMessage = {
 	is_streaming?: ReturnType<typeof getIsStreaming>;
+	stream_lifecycle?: ReturnType<typeof getStreamLifecycleState>;
 	available_updates?: ReturnType<typeof getAvailableUpdates>;
 	updating?: ReturnType<typeof getSoftUpdateStatus>;
 	update_state?: ReturnType<typeof getUpdateState>;
@@ -82,6 +84,7 @@ export function sendStatus(conn: WebSocket) {
 	conn.send(
 		buildMsg("status", {
 			is_streaming: getIsStreaming(),
+			stream_lifecycle: getStreamLifecycleState(),
 			available_updates: getAvailableUpdates(),
 			updating: getSoftUpdateStatus(),
 			update_state: getUpdateState(),

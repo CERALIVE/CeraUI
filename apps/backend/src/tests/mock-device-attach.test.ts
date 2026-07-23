@@ -194,7 +194,7 @@ describe("setMockDeviceAttached seam (C7)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: "source_lost",

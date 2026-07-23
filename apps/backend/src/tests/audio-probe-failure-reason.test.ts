@@ -65,7 +65,7 @@ describe("startStream — audio-source probe failure surfaces a structured reaso
 	});
 
 	test("the probe-fail path leaves is_streaming false and spawns no srtla process", async () => {
-		updateStatus(true);
+		updateStatus(false);
 
 		const result = await startStream(audioPipeline, "192.0.2.10", 5000, "sid", {
 			probe: failingProbe,

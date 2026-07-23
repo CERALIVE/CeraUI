@@ -11,10 +11,10 @@
  * the JSON-RPC codes) — so those live behind the client, and CeraUI classifies
  * their surfaced shapes here.
  *
- * NOTHING here is wired into a runtime path. `streaming.procedure.ts`,
- * `session.ts`, and the engine backend are untouched — Todos 26-29 do the
- * wiring. This module is pure + fully unit-tested against fabricated error
- * shapes.
+ * Todo 26 wires this taxonomy into the public start boundary and carries one
+ * attempt id through the orchestrator. Retry/suppression and rollback policy
+ * remain Todos 27-29. This module is pure + fully unit-tested against fabricated
+ * error shapes.
  *
  * ── Failure-site cross-check (every site found in the codebase, mapped) ──
  *   params        zod (oRPC input / validateConfig safeParse / startParams.parse)

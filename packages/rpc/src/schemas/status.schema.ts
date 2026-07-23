@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { modemListSchema } from './modems.schema';
 import { audioSourceSchema } from './streaming.schema';
+import { lifecycleStateSchema } from './streaming-lifecycle.schema';
 import {
 	availableUpdatesSchema,
 	sshStatusSchema,
@@ -50,6 +51,7 @@ export type ResolvedAsrcReason = z.infer<typeof resolvedAsrcReasonSchema>;
 export const statusMessageSchema = z.object({
 	set_password: z.boolean().optional(),
 	is_streaming: z.boolean(),
+	stream_lifecycle: lifecycleStateSchema.optional(),
 	available_updates: availableUpdatesFieldSchema,
 	updating: updatingStatusSchema,
 	update_state: updateStateSchema.optional(),
@@ -176,6 +178,7 @@ export type NetworkIngest = z.infer<typeof networkIngestSchema>;
 // Status response message schema (what server sends)
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
+	stream_lifecycle: lifecycleStateSchema.optional(),
 	available_updates: availableUpdatesFieldSchema.optional(),
 	updating: updatingStatusSchema.optional(),
 	update_state: updateStateSchema.optional(),

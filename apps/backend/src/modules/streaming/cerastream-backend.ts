@@ -70,6 +70,7 @@ import { toEngineResolution } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import { ENGINE_STATE_RECONCILE_TIMEOUT } from "../../helpers/timing-constants.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import {
@@ -440,10 +441,10 @@ export class CerastreamBackend implements StreamingBackend {
 		return ["--config", this.deps.configPath];
 	}
 
-	start(config: RuntimeConfig, opts: StreamRunOptions): void {
+	async start(config: RuntimeConfig, opts: StreamRunOptions): Promise<void> {
 		this.active = true;
 		const params = this.buildStartParams(config, opts);
-		this.enqueue(async () => {
+		await this.enqueue(async () => {
 			const client = await this.deps.connect(this.deps.connectOptions);
 			this.client = client;
 			this.subscription = await client.subscribeEvents({}, (event) =>
@@ -477,7 +478,7 @@ export class CerastreamBackend implements StreamingBackend {
 		this.active = false;
 		const client = this.client;
 		const subscription = this.subscription;
-		this.enqueue(async () => {
+		void this.enqueue(async () => {
 			subscription?.close();
 			try {
 				await client?.stop();
@@ -506,7 +507,7 @@ export class CerastreamBackend implements StreamingBackend {
 			this.deps.saveConfig();
 			const client = this.client;
 			if (client) {
-				this.enqueue(
+				void this.enqueue(
 					() => client.setBitrate({ max_bitrate: maxBr }).then(() => undefined),
 					"set-bitrate",
 				);
@@ -526,7 +527,7 @@ export class CerastreamBackend implements StreamingBackend {
 			this.deps.getConfig(),
 			client.hello.schema_version,
 		);
-		this.enqueue(
+		void this.enqueue(
 			() => client.reloadConfig(params).then(() => undefined),
 			"reload-config",
 		);
@@ -538,6 +539,65 @@ export class CerastreamBackend implements StreamingBackend {
 
 	getTelemetry(): EngineTelemetry | null {
 		return this.telemetry;
+	}
+
+	async reconcileRuntimeState(): Promise<boolean> {
+		const existing = this.telemetry?.streaming;
+		if (typeof existing === "boolean" && this.client !== undefined) {
+			return existing;
+		}
+
+		const client = await this.deps.connect({
+			...this.deps.connectOptions,
+			autoReconnect: false,
+			requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
+		});
+		let subscription: Subscription | undefined;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let subscribed = false;
+		try {
+			let resolveStreaming: ((streaming: boolean) => void) | undefined;
+			let rejectStreaming: ((error: Error) => void) | undefined;
+			const streamingEvent = new Promise<boolean>((resolve, reject) => {
+				resolveStreaming = resolve;
+				rejectStreaming = reject;
+			});
+			subscription = await client.subscribeEvents(
+				{ topics: ["status"] },
+				(event) => {
+					this.handleEvent(event);
+					if (event.type === "status") resolveStreaming?.(event.streaming);
+				},
+			);
+			subscribed = true;
+			timer = setTimeout(
+				() =>
+					rejectStreaming?.(
+						new CerastreamTimeoutError(
+							"runtime-state",
+							ENGINE_STATE_RECONCILE_TIMEOUT,
+						),
+					),
+				ENGINE_STATE_RECONCILE_TIMEOUT,
+			);
+			const streaming = await streamingEvent;
+			if (streaming) {
+				this.client = client;
+				this.subscription = subscription;
+				this.active = true;
+				return true;
+			}
+			subscription?.close();
+			await client.close();
+			return false;
+		} catch (error) {
+			subscription?.close();
+			await client.close();
+			if (subscribed && error instanceof CerastreamTimeoutError) return false;
+			throw error;
+		} finally {
+			if (timer !== undefined) clearTimeout(timer);
+		}
 	}
 
 	/**
@@ -720,10 +780,10 @@ export class CerastreamBackend implements StreamingBackend {
 		for (const listener of this.errorListeners) listener(raw);
 	}
 
-	private enqueue(op: () => Promise<void>, label: string): void {
-		this.queue = this.queue
-			.then(op)
-			.catch((err) => this.handleOpFailure(label, err));
+	private enqueue(op: () => Promise<void>, label: string): Promise<void> {
+		const operation = this.queue.then(op);
+		this.queue = operation.catch((err) => this.handleOpFailure(label, err));
+		return operation;
 	}
 
 	private handleOpFailure(label: string, err: unknown): void {
