@@ -244,7 +244,11 @@ State set: `idle | starting | streaming | stopping | stop_failed | reconciling`.
   after engine confirmation).
 - `reconciling` is the boot/reconnect state where the backend queries the
   engine's actual runtime state and adopts it (the engine may be streaming while
-  CeraUI restarted).
+  CeraUI restarted). A successfully subscribed probe observes status for 2.5
+  seconds: concordant streaming/idle is adopted immediately, silence resolves
+  idle because live sessions heartbeat every 2 seconds, and query failure or a
+  contradictory/transitional event remains unknown. Events arriving after the
+  probe closes are fenced.
 - `stop_failed` is a terminal-until-retried state a stop can land in.
 
 Legal transitions (anything else is an invariant violation → structured recovery,

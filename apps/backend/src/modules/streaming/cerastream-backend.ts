@@ -644,6 +644,7 @@ export class CerastreamBackend implements StreamingBackend {
 		let client: CerastreamClient | undefined;
 		let subscription: Subscription | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		let acceptingEvents = true;
 		try {
 			client = await this.deps.connect({
 				...this.deps.connectOptions,
@@ -659,6 +660,7 @@ export class CerastreamBackend implements StreamingBackend {
 			subscription = await client.subscribeEvents(
 				{ topics: ["status"] },
 				(event) => {
+					if (!acceptingEvents) return;
 					this.handleEvent(event);
 					if (event.type === "status") {
 						resolveRuntimeState?.(
@@ -668,10 +670,11 @@ export class CerastreamBackend implements StreamingBackend {
 				},
 			);
 			timer = this.deps.scheduleTimeout(
-				() => resolveRuntimeState?.("unknown"),
+				() => resolveRuntimeState?.("idle"),
 				ENGINE_STATE_RECONCILE_TIMEOUT,
 			);
 			const runtimeState = await runtimeStateEvent;
+			acceptingEvents = false;
 			if (runtimeState === "streaming") {
 				this.client = client;
 				this.subscription = subscription;
@@ -682,6 +685,7 @@ export class CerastreamBackend implements StreamingBackend {
 			await client.close();
 			return runtimeState;
 		} catch (error) {
+			acceptingEvents = false;
 			subscription?.close();
 			await client?.close();
 			this.deps.logger.debug("cerastream: runtime-state query unresolved", {

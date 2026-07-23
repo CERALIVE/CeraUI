@@ -883,9 +883,11 @@ Public stream start/stop admission now routes through
 `apps/backend/src/modules/streaming/stream-session-orchestrator.ts`. It owns the
 single lifecycle state machine for UI, autostart, remote control, and set-profile,
 uses generation-scoped cancellation for stop-during-start, and reconciles the
-actual cerastream state at boot/reconnect. Timeout, failure, transitional, or
-contradictory engine status remains `reconciling` until the heal path retries;
-only concordant streaming/idle status is adopted. `status.stream_lifecycle` is additive;
+actual cerastream state at boot/reconnect. Query/subscription failure or a
+transitional/contradictory status remains `reconciling` until the heal path retries.
+After a successful status subscription, a full 2.5-second window with no event is
+authoritative idle because active streams emit a 2-second heartbeat; late events
+from that closed probe are fenced. `status.stream_lifecycle` is additive;
 legacy `is_streaming` flips true only after engine confirmation. The bounded retry
 runner retries only connect-phase transient classes, after transactional rollback,
 and stop cancels a pending backoff without notification.
