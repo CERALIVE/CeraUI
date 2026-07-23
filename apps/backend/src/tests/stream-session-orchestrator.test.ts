@@ -33,7 +33,7 @@ describe("stream session orchestrator", () => {
 			createAttemptId: attemptIds(),
 			setStreamingStatus: () => {},
 			stopRuntime: async () => {},
-			queryRuntime: async () => false,
+			queryRuntime: async () => "idle",
 		});
 		const launch = async (_context: StreamLaunchContext) => {
 			launches += 1;
@@ -64,7 +64,7 @@ describe("stream session orchestrator", () => {
 				stoppedGenerations.push(generation);
 				engineStreaming = false;
 			},
-			queryRuntime: async () => engineStreaming,
+			queryRuntime: async () => (engineStreaming ? "streaming" : "idle"),
 		});
 		const start = orchestrator.start({
 			origin: "ui",
@@ -96,7 +96,7 @@ describe("stream session orchestrator", () => {
 			createAttemptId: attemptIds(),
 			setStreamingStatus: () => {},
 			stopRuntime: async () => {},
-			queryRuntime: async () => false,
+			queryRuntime: async () => "idle",
 		});
 		expect(
 			await orchestrator.start({ origin: "ui", launch: async () => {} }),
@@ -117,7 +117,7 @@ describe("stream session orchestrator", () => {
 			createAttemptId: attemptIds(),
 			setStreamingStatus: () => {},
 			stopRuntime: async () => {},
-			queryRuntime: async () => false,
+			queryRuntime: async () => "idle",
 		});
 		const first = orchestrator.start({
 			origin: "ui",
@@ -151,7 +151,7 @@ describe("stream session orchestrator", () => {
 			createAttemptId: attemptIds(),
 			setStreamingStatus: (streaming) => statusEdges.push(streaming),
 			stopRuntime: async () => {},
-			queryRuntime: async () => true,
+			queryRuntime: async () => "streaming",
 		});
 
 		// When boot reconciliation queries the engine.
@@ -161,5 +161,40 @@ describe("stream session orchestrator", () => {
 		expect(state).toBe("streaming");
 		expect(statusEdges).toEqual([true]);
 		expect(orchestrator.snapshot().state).toBe("streaming");
+	});
+
+	test("unknown runtime state remains reconciling until a heal adopts streaming", async () => {
+		const runtimeStates: Array<"unknown" | "streaming"> = [
+			"unknown",
+			"streaming",
+		];
+		const statusEdges: boolean[] = [];
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: (streaming) => statusEdges.push(streaming),
+			stopRuntime: async () => {},
+			queryRuntime: async () => runtimeStates.shift() ?? "unknown",
+		});
+
+		expect(await orchestrator.reconcile()).toBe("reconciling");
+		expect(statusEdges).toEqual([]);
+		expect(await orchestrator.reconcile()).toBe("streaming");
+		expect(statusEdges).toEqual([true]);
+	});
+
+	test("unknown runtime state remains reconciling until a heal adopts idle", async () => {
+		const runtimeStates: Array<"unknown" | "idle"> = ["unknown", "idle"];
+		const statusEdges: boolean[] = [];
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: attemptIds(),
+			setStreamingStatus: (streaming) => statusEdges.push(streaming),
+			stopRuntime: async () => {},
+			queryRuntime: async () => runtimeStates.shift() ?? "unknown",
+		});
+
+		expect(await orchestrator.reconcile()).toBe("reconciling");
+		expect(statusEdges).toEqual([]);
+		expect(await orchestrator.reconcile()).toBe("idle");
+		expect(statusEdges).toEqual([false]);
 	});
 });

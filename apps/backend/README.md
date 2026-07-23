@@ -119,7 +119,9 @@ All start origins share `stream-session-orchestrator.ts`; UI, autostart, remote
 control, and set-profile cannot launch parallel engine sessions. The backend
 publishes additive `status.stream_lifecycle` transitions and keeps legacy
 `is_streaming=false` until the engine confirms the stream. Boot/reconnect
-reconciliation adopts a stream that survived a backend process restart.
+reconciliation adopts a stream that survived a backend process restart. A timeout,
+query error, or contradictory engine status stays `reconciling`; the reconnect-heal
+path retries instead of publishing a false idle state.
 
 ### Broadcast Events
 

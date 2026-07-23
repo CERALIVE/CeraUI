@@ -1,11 +1,8 @@
+import type { EngineRuntimeState } from "./streaming-backend.ts";
 import { getStreamingBackend } from "./streaming-engine.ts";
 
-export class EngineRuntimeStateTimeoutError extends Error {
-	override readonly name = "EngineRuntimeStateTimeoutError";
-}
-
-export async function queryEngineRuntimeStreaming(): Promise<boolean> {
+export async function queryEngineRuntimeStreaming(): Promise<EngineRuntimeState> {
 	const query = getStreamingBackend().reconcileRuntimeState;
-	if (query === undefined) throw new EngineRuntimeStateTimeoutError();
+	if (query === undefined) return "unknown";
 	return query.call(getStreamingBackend());
 }

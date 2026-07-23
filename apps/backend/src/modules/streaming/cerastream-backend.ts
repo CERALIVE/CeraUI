@@ -86,6 +86,7 @@ import { validateBitrate } from "./encoder.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
+	EngineRuntimeState,
 	EngineTelemetry,
 	StreamingBackend,
 	StreamRunOptions,
@@ -135,6 +136,11 @@ export interface CerastreamBackendDeps {
 	// assembly omits `audio.device` and the engine routes embedded audio.
 	// Injected so the assembly stays unit-testable without global state.
 	isEmbeddedAudioActive: (pipelineId: string | undefined) => boolean;
+	scheduleTimeout: (
+		callback: () => void,
+		delayMs: number,
+	) => ReturnType<typeof setTimeout>;
+	cancelTimeout: (timer: ReturnType<typeof setTimeout>) => void;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -326,7 +332,18 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		logger: defaultLogger,
 		getActiveInput: () => deviceRegistry.getActiveInput(),
 		isEmbeddedAudioActive: isEmbeddedAudioPipeline,
+		scheduleTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
+		cancelTimeout: (timer) => clearTimeout(timer),
 	};
+}
+
+function classifyRuntimeState(
+	state: unknown,
+	streaming: unknown,
+): EngineRuntimeState {
+	if (state === "streaming" && streaming) return "streaming";
+	if (state === "idle" && !streaming) return "idle";
+	return "unknown";
 }
 
 /**
@@ -541,62 +558,61 @@ export class CerastreamBackend implements StreamingBackend {
 		return this.telemetry;
 	}
 
-	async reconcileRuntimeState(): Promise<boolean> {
-		const existing = this.telemetry?.streaming;
-		if (typeof existing === "boolean" && this.client !== undefined) {
-			return existing;
+	async reconcileRuntimeState(): Promise<EngineRuntimeState> {
+		const existing = this.telemetry;
+		if (existing !== null && this.client !== undefined) {
+			return classifyRuntimeState(existing.state, existing.streaming);
 		}
 
-		const client = await this.deps.connect({
-			...this.deps.connectOptions,
-			autoReconnect: false,
-			requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
-		});
+		let client: CerastreamClient | undefined;
 		let subscription: Subscription | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		let subscribed = false;
 		try {
-			let resolveStreaming: ((streaming: boolean) => void) | undefined;
-			let rejectStreaming: ((error: Error) => void) | undefined;
-			const streamingEvent = new Promise<boolean>((resolve, reject) => {
-				resolveStreaming = resolve;
-				rejectStreaming = reject;
+			client = await this.deps.connect({
+				...this.deps.connectOptions,
+				autoReconnect: false,
+				requestTimeoutMs: ENGINE_STATE_RECONCILE_TIMEOUT,
+			});
+			let resolveRuntimeState:
+				| ((runtimeState: EngineRuntimeState) => void)
+				| undefined;
+			const runtimeStateEvent = new Promise<EngineRuntimeState>((resolve) => {
+				resolveRuntimeState = resolve;
 			});
 			subscription = await client.subscribeEvents(
 				{ topics: ["status"] },
 				(event) => {
 					this.handleEvent(event);
-					if (event.type === "status") resolveStreaming?.(event.streaming);
+					if (event.type === "status") {
+						resolveRuntimeState?.(
+							classifyRuntimeState(event.state, event.streaming),
+						);
+					}
 				},
 			);
-			subscribed = true;
-			timer = setTimeout(
-				() =>
-					rejectStreaming?.(
-						new CerastreamTimeoutError(
-							"runtime-state",
-							ENGINE_STATE_RECONCILE_TIMEOUT,
-						),
-					),
+			timer = this.deps.scheduleTimeout(
+				() => resolveRuntimeState?.("unknown"),
 				ENGINE_STATE_RECONCILE_TIMEOUT,
 			);
-			const streaming = await streamingEvent;
-			if (streaming) {
+			const runtimeState = await runtimeStateEvent;
+			if (runtimeState === "streaming") {
 				this.client = client;
 				this.subscription = subscription;
 				this.active = true;
-				return true;
+				return runtimeState;
 			}
 			subscription?.close();
 			await client.close();
-			return false;
+			return runtimeState;
 		} catch (error) {
 			subscription?.close();
-			await client.close();
-			if (subscribed && error instanceof CerastreamTimeoutError) return false;
-			throw error;
+			await client?.close();
+			this.deps.logger.debug("cerastream: runtime-state query unresolved", {
+				error,
+			});
+			return "unknown";
 		} finally {
-			if (timer !== undefined) clearTimeout(timer);
+			if (timer !== undefined) this.deps.cancelTimeout(timer);
 		}
 	}
 

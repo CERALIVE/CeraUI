@@ -15,6 +15,7 @@ import {
 } from "./start-failure-taxonomy.ts";
 import { updateStreamLifecycleState } from "./stream-lifecycle-status.ts";
 import { getIsStreaming, updateStatus } from "./streaming.ts";
+import type { EngineRuntimeState } from "./streaming-backend.ts";
 import { stopGeneration } from "./streamloop/session.ts";
 
 export const STREAM_LAUNCH_ORIGINS = [
@@ -47,7 +48,7 @@ export type StreamSessionOrchestratorDeps = {
 	readonly setStreamingStatus: (streaming: boolean) => void;
 	readonly getStreamingStatus?: () => boolean;
 	readonly stopRuntime: (generation: number) => Promise<void>;
-	readonly queryRuntime: () => Promise<boolean>;
+	readonly queryRuntime: () => Promise<EngineRuntimeState>;
 	readonly setLifecycleState?: (state: LifecycleState) => void;
 	readonly invariantViolation?: (
 		from: LifecycleState,
@@ -195,10 +196,11 @@ export function createStreamSessionOrchestrator(
 			return state;
 		if (state !== "reconciling") transition("reconciling");
 		const epoch = ++reconciliationEpoch;
-		const streaming = await deps.queryRuntime();
+		const runtimeState = await deps.queryRuntime();
 		if (epoch !== reconciliationEpoch) return state;
-		transition(streaming ? "streaming" : "idle");
-		deps.setStreamingStatus(streaming);
+		if (runtimeState === "unknown") return state;
+		transition(runtimeState);
+		deps.setStreamingStatus(runtimeState === "streaming");
 		return state;
 	};
 

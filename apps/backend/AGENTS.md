@@ -508,7 +508,10 @@ admission boundary; only one launch can move `idle → starting`, and stop durin
 start cancels that generation before a later launch can be admitted. The legacy
 `is_streaming` flag changes only after the awaited engine start confirms success.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
-engine's actual status and adopts an engine-held session. The additive
+engine's actual status and adopts an engine-held session. Only concordant
+`streaming` or `idle` status is authoritative; timeout, query failure, transitional
+state, or contradictory fields leave the lifecycle `reconciling` until the reconnect
+heal path retries. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
 

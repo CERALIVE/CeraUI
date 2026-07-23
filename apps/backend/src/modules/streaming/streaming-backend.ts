@@ -60,6 +60,8 @@ export interface StreamRunOptions {
  */
 export type BackendErrorListener = (rawStderr: string) => void;
 
+export type EngineRuntimeState = "streaming" | "idle" | "unknown";
+
 /**
  * Engine-side telemetry snapshot (srtla owns per-link telemetry separately).
  * Kept as an open marker type so the seam stays engine-agnostic.
@@ -107,5 +109,5 @@ export interface StreamingBackend {
 	/** Optional engine-side telemetry hook. */
 	getTelemetry?(): EngineTelemetry | null;
 	/** Adopt an already-running engine session after a backend reconnect. */
-	reconcileRuntimeState?(): Promise<boolean>;
+	reconcileRuntimeState?(): Promise<EngineRuntimeState>;
 }

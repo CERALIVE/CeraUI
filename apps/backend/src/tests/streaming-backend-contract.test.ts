@@ -208,6 +208,8 @@ function makeBackend(
 	opts: {
 		connect?: CerastreamBackendDeps["connect"];
 		config?: Partial<RuntimeConfig>;
+		scheduleTimeout?: CerastreamBackendDeps["scheduleTimeout"];
+		cancelTimeout?: CerastreamBackendDeps["cancelTimeout"];
 	} = {},
 ): BackendHarness {
 	const fake = makeFakeClient();
@@ -225,6 +227,8 @@ function makeBackend(
 		execPath: "cerastream",
 		configPath: "/tmp/cerastream-contract.json",
 		logger: silentLogger,
+		...(opts.scheduleTimeout ? { scheduleTimeout: opts.scheduleTimeout } : {}),
+		...(opts.cancelTimeout ? { cancelTimeout: opts.cancelTimeout } : {}),
 	});
 	return { backend, fake, bridgeH, config, saveCount: () => saves };
 }
@@ -281,12 +285,58 @@ describe("CerastreamBackend behavioural contract", () => {
 		fake.emit({ type: "status", seq: 1, state: "streaming", streaming: true });
 
 		// Then the backend adopts the client and can stop the existing runtime.
-		expect(await reconciliation).toBe(true);
+		expect(await reconciliation).toBe("streaming");
 		let stopped = false;
 		expect(backend.stop(() => (stopped = true))).toBe(true);
 		await backend.settle();
 		expect(stopped).toBe(true);
 		expect(fake.calls.map((call) => call.op)).toContain("stop");
+	});
+
+	test("reconciliation reports contradictory engine status as unknown", async () => {
+		const { backend, fake } = makeBackend();
+		const reconciliation = backend.reconcileRuntimeState();
+		await fake.subscribed;
+
+		fake.emit({ type: "status", seq: 1, state: "streaming", streaming: false });
+
+		expect(await reconciliation).toBe("unknown");
+	});
+
+	test("reconciliation reports an engine query error as unknown", async () => {
+		const { backend } = makeBackend({
+			connect: async () => {
+				throw new Error("engine unavailable");
+			},
+		});
+
+		expect(await backend.reconcileRuntimeState()).toBe("unknown");
+	});
+
+	test("reconciliation timeout is bounded and remains unknown", async () => {
+		for (let repeat = 0; repeat < 5; repeat += 1) {
+			let timeoutCallback: (() => void) | undefined;
+			let scheduledDelay: number | undefined;
+			let cancelled = 0;
+			const { backend, fake } = makeBackend({
+				scheduleTimeout: (callback, delayMs) => {
+					timeoutCallback = callback;
+					scheduledDelay = delayMs;
+					return repeat as unknown as ReturnType<typeof setTimeout>;
+				},
+				cancelTimeout: () => {
+					cancelled += 1;
+				},
+			});
+			const reconciliation = backend.reconcileRuntimeState();
+			await fake.subscribed;
+			await Promise.resolve();
+
+			expect(scheduledDelay).toBe(2500);
+			timeoutCallback?.();
+			expect(await reconciliation).toBe("unknown");
+			expect(cancelled).toBe(1);
+		}
 	});
 
 	test("start connects, subscribes, and sends the serialized config", async () => {
