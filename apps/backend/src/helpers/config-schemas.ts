@@ -165,6 +165,12 @@ export const lastSeenDeviceSchema = z.object({
 	kind: deviceKindSchema,
 	pipelineId: z.string(),
 	devicePath: z.string(),
+	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`) captured at
+	// observation time. Additive + optional: a snapshot persisted before Todo 34
+	// still parses, and the reconciler falls back to node-path identity when it is
+	// absent. Lets a re-enumerated device (video1→video2) migrate its row instead
+	// of leaving a stuck `lost` row (Todo 34).
+	stableId: z.string().optional(),
 });
 
 export type LastSeenDevice = z.infer<typeof lastSeenDeviceSchema>;

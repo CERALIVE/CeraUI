@@ -157,6 +157,10 @@ export interface EngineCaptureDevice {
 	media_class: DeviceMediaClass;
 	kind?: string | undefined;
 	caps?: CaptureCap[] | undefined;
+	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). Carried
+	// verbatim so sources reconciliation can migrate a re-enumerated device by
+	// stable identity rather than node path (Todo 34).
+	stable_id?: string | undefined;
 }
 
 /** Map one engine device onto a CeraUI {@link CaptureDevice}: ids are carried
@@ -170,6 +174,7 @@ export function fromEngineDevice(device: EngineCaptureDevice): CaptureDevice {
 		media_class: device.media_class,
 		kind: mapEngineDeviceKind(device.kind, device.display_name),
 		...(device.caps !== undefined ? { caps: device.caps } : {}),
+		...(device.stable_id !== undefined ? { stable_id: device.stable_id } : {}),
 	};
 }
 
@@ -237,6 +242,7 @@ async function defaultGetEngineDevices(): Promise<CaptureDevice[] | null> {
 				media_class: d.media_class,
 				kind: d.kind,
 				caps: d.caps,
+				stable_id: d.stable_id,
 			}),
 		);
 	} catch (err) {

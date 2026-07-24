@@ -887,6 +887,11 @@ export const captureDeviceSchema = z.object({
 	media_class: deviceMediaClassSchema,
 	kind: deviceKindSchema,
 	caps: z.array(captureCapSchema).optional(),
+	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). Additive +
+	// optional. Sources reconciliation keys a re-enumerated device (node path
+	// changed, video1→video2) on this, not `input_id`, so a rename migrates the
+	// row instead of orphaning a stale `lost:true` one (Todo 34).
+	stable_id: z.string().optional(),
 	lost: z.boolean().optional(),
 });
 export type CaptureDevice = z.infer<typeof captureDeviceSchema>;
