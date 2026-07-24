@@ -375,20 +375,25 @@ function handleText(raw: string): void {
 		handleWebrtcFrame(type, msg);
 		return;
 	}
-	if (type === 'preview-error') {
-		// The session-cap rejection (§4) degrades WebRTC to the MSE floor.
-		if (msg.reason === 'rejected-limit' && activeTier === 'webrtc') {
-			fallbackFromWebrtc('rejected-limit');
-		}
+	if (type === 'preview-error' && msg.reason === 'rejected-limit') {
+		// The session-cap rejection (§4) degrades WebRTC to the MSE floor — it is a
+		// ladder event, never a terminal band.
+		if (activeTier === 'webrtc') fallbackFromWebrtc('rejected-limit');
 		return;
 	}
-	// Engine typed idle-preview failure frame (cerastream Todo 10). Tolerant of both
-	// `{type:'error',reason}` and `{type:'<reason>'}` — see PREVIEW_ENGINE_FAILURE_REASONS.
+	// Engine typed idle-preview failure frame (cerastream Todo 10). Tolerant of all
+	// three shipped shapes — `{type:'preview-error',reason}` (what cerastream
+	// actually emits, `preview/leg_control.rs`), `{type:'error',reason}` and
+	// `{type:'<reason>'}` — see PREVIEW_ENGINE_FAILURE_REASONS.
 	const failureBand =
 		engineFailureBand(typeof type === 'string' ? type : undefined) ??
 		engineFailureBand(typeof msg.reason === 'string' ? msg.reason : undefined);
 	if (failureBand) {
 		clearMediaWatchdog();
+		// A typed engine failure is terminal for EVERY rung: descending the ladder
+		// cannot make an unresolvable source resolve, and leaving the WebRTC deadline
+		// armed would overwrite this band with a bogus signaling-timeout fallback.
+		teardownWebrtc();
 		closeReason = failureBand;
 		return;
 	}

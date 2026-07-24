@@ -63,10 +63,30 @@ distinct `data-reason` band (or `live`) is rendered.
 | `sourceUnavailable` | engine failure frame `source-unavailable` | `handleText` | re-toggle | yes |
 | `deviceBusy` | engine failure frame `device-busy` | `handleText` | re-toggle | yes |
 | `pipelineFailed` | engine failure frame `pipeline-failed` | `handleText` | re-toggle | yes |
+| `passthroughActive` | engine failure frame `passthrough-active` | `handleText` | re-toggle | yes |
 | `pausedHidden` | 30s unwatched (see below) | viewer-liveness effect | **resume / re-view** | until-resume |
 
 `4401` is the one code that does NOT immediately band: it re-mints exactly ONCE
 (silent), then a second `4401` surfaces `tokenRejected`.
+
+### Engine typed-failure frames — accepted shapes
+
+The five engine failure reasons above arrive on the WS text channel in any of
+three shapes, all accepted by `handleText`:
+
+| Shape | Emitted by |
+|-------|-----------|
+| `{ type:"preview-error", reason:"<reason>" }` | **what cerastream actually ships** (`preview/leg_control.rs`) |
+| `{ type:"error", reason:"<reason>" }` | tolerated legacy shape |
+| `{ type:"<reason>" }` | tolerated legacy shape |
+
+The `preview-error` shape was previously consumed by the WebRTC session-cap branch
+and dropped for every reason other than `rejected-limit`, so a real engine failure
+never reached its band — the operator sat on "Connecting…" and then the misleading
+`noVideo` band. `rejected-limit` remains the ONE `preview-error` reason that is a
+ladder event rather than a band (it degrades WebRTC to the next rung, §ADR-0006 §4);
+every other reason is terminal and additionally tears the WebRTC session down so the
+armed signaling deadline cannot overwrite the band with a bogus fallback.
 
 ## Reconnect budget
 
@@ -101,7 +121,13 @@ viewed (`status === "live"` AND viewed).
 The WS `start` frame carries the resolved applied source:
 `{ action:"start", tier, input_id }` where `input_id = config.source` (the
 broadcast-confirmed pick; for a capture device this IS the engine `list-devices`
-id). A coarse/absent source omits the field so the engine falls back to its own
-selection or replies with `no-source-applied` / `source-unavailable`. A confirmed
-`config.source` change redials with the new `input_id` via the existing
-applied-source follow effect.
+id). An absent source omits the field so the engine falls back to its own selection
+or replies with `no-source-applied`. A confirmed `config.source` change redials with
+the new `input_id` via the existing applied-source follow effect.
+
+`config.source` may legitimately hold a COARSE pipeline id rather than a device id
+— e.g. `"hdmi"` when the operator picks a source row that no enumerated device is
+currently bound to. CeraUI sends it verbatim and the engine answers
+`source-unavailable`, which is the honest result: the selected source really has no
+device behind it. The band above is what makes that visible; do NOT silently drop
+the field to paper over it.
