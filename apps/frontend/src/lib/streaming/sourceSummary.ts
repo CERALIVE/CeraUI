@@ -117,19 +117,22 @@ const AUDIO_TRANSPORT_TAG: Record<
 
 /**
  * Display label for an audio-source entry. Preference order:
- *   1. `<product_name> · <TRANSPORT>` (device-quality-wave2 Todo 22) — the real
+ *   1. `entry.alias` — the operator's own name for this device. An explicit
+ *      rename outranks every hardware-derived name, including `product_name`.
+ *   2. `<product_name> · <TRANSPORT>` (device-quality-wave2 Todo 22) — the real
  *      engine product name + its transport tag; the transport is appended only
  *      when a product name is present (a bare tag is meaningless).
- *   2. `entry.label` — the verbatim hardware name resolved by the backend (T4);
+ *   3. `entry.label` — the cleaned hardware name resolved by the backend (T4);
  *      NEVER translated.
- *   3. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
+ *   4. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
  *      Pipeline default).
- *   4. `entry.id` — the raw wire id, for a legacy device entry with no label.
+ *   5. `entry.id` — the raw wire id, for a legacy device entry with no label.
  */
 export function audioSourceLabel(
 	entry: AudioSource,
 	t: (key: string) => string,
 ): string {
+	if (entry.alias !== undefined && entry.alias.length > 0) return entry.alias;
 	if (entry.product_name !== undefined && entry.product_name.length > 0) {
 		const tag =
 			entry.transport !== undefined

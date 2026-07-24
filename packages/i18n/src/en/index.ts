@@ -1153,6 +1153,11 @@ const en = {
 		audioSource: "Audio source",
 		activeAudioSource: "Active audio source",
 		changeAudioSourceHint: "Change it in the Source section",
+		audioDeviceName: "Display name",
+		audioDeviceNameHelp:
+			"A custom name for this audio device. It is remembered by hardware identity, so it survives an unplug or reboot.",
+		audioDeviceNamePlaceholder: "e.g. Interview mic",
+		audioDeviceNameReset: "Leave empty to use the hardware name.",
 		noAudioSourceSelected: "No audio source selected",
 		notAvailableAudioSource: "Not Available",
 		selectAudioSource: "Select an audio source",

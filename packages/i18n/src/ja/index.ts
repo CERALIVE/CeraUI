@@ -352,6 +352,11 @@ const ja = {
 		audioSource: "オーディオソース",
 		activeAudioSource: "アクティブなオーディオソース",
 		changeAudioSourceHint: "ソースセクションで変更してください",
+		audioDeviceName: "表示名",
+		audioDeviceNameHelp:
+			"このオーディオデバイスのカスタム名です。ハードウェアの識別情報で記憶されるため、取り外しや再起動後も保持されます。",
+		audioDeviceNamePlaceholder: "例: インタビュー用マイク",
+		audioDeviceNameReset: "空欄にするとハードウェア名を使用します。",
 		noAudioSourceSelected: "オーディオソースが選択されていません",
 		notAvailableAudioSource: "利用できません",
 		selectAudioSource: "オーディオソースを選択",

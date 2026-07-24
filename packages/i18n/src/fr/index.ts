@@ -508,6 +508,11 @@ const fr = {
 		audioSource: "Source audio",
 		activeAudioSource: "Source audio active",
 		changeAudioSourceHint: "Modifiez-la dans la section Source",
+		audioDeviceName: "Nom d'affichage",
+		audioDeviceNameHelp:
+			"Un nom personnalisé pour ce périphérique audio. Il est mémorisé par identité matérielle et survit à un débranchement ou un redémarrage.",
+		audioDeviceNamePlaceholder: "ex. Micro interview",
+		audioDeviceNameReset: "Laissez vide pour utiliser le nom du matériel.",
 		noAudioSourceSelected: "Aucune source audio sélectionnée",
 		notAvailableAudioSource: "Non disponible",
 		selectAudioSource: "Sélectionnez une source audio",

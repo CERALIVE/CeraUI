@@ -24,7 +24,12 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { AUDIO_SOURCE_AUTO, audioCodecSchema, type AudioCodec } from '@ceraui/rpc/schemas';
+import {
+	AUDIO_DEVICE_ALIAS_MAX_LENGTH,
+	AUDIO_SOURCE_AUTO,
+	audioCodecSchema,
+	type AudioCodec,
+} from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 import {
@@ -148,6 +153,7 @@ const audioEmbeddedComingSoon = $derived(
 // `asrc` is NO LONGER drafted here — the Source section owns it.
 let draftCodec = $state<AudioCodec | undefined>(undefined);
 let draftDelay = $state(0);
+let draftAlias = $state('');
 let wasOpen = $state(false);
 
 // Federation prop-boundary coercion (C5): an OLD platform mounting the NEW
@@ -163,6 +169,7 @@ $effect(() => {
 		// Opening: seed the draft from the effective current values.
 		draftCodec = coerceIncomingCodec(audioCodec);
 		draftDelay = clampDelay(audioDelay ?? 0);
+		draftAlias = activeAudioEntry?.alias ?? '';
 	}
 	wasOpen = open;
 });
@@ -238,14 +245,43 @@ const activeAudioSourceLabel = $derived.by(() => {
 	if (resolvedAudio.current) return resolvedAudio.current;
 	if (activeAudioSource === AUDIO_SOURCE_AUTO) return '\u2014';
 	if (!activeAudioSource) return $LL.settings.noAudioSourceSelected();
-	const entry = audioSourceEntries.find((e) => e.id === activeAudioSource);
-	return entry ? audioSourceLabel(entry, t) : activeAudioSource;
+	return activeAudioEntry ? audioSourceLabel(activeAudioEntry, t) : activeAudioSource;
 });
 const codecTriggerLabel = $derived(
 	draftCodec && audioCodecs
 		? (audioCodecs[draftCodec]?.name ?? $LL.settings.selectAudioCodec())
 		: $LL.settings.selectAudioCodec(),
 );
+
+// ---- Device rename (device-quality-wave2) ----
+// Offered only for a real hardware device the backend gave a stable rename key
+// for. A pseudo-source (Auto / No audio / Pipeline default) and the embedded
+// network-ingest state have no hardware identity to rename; a federation mount
+// has no local RPC to persist through.
+const activeAudioEntry = $derived(
+	audioSourceEntries.find((entry) => entry.id === activeAudioSource),
+);
+const activeAudioSourceDetail = $derived(activeAudioEntry?.detail);
+const canRenameAudioDevice = $derived(
+	hostAdapter === undefined &&
+		!audioEmbeddedActive &&
+		!resolvedAudio.embedded &&
+		activeAudioEntry?.kind === 'device' &&
+		activeAudioEntry.alias_key !== undefined,
+);
+
+/** Persist the rename only when it actually changed — never a redundant write. */
+async function persistAliasIfChanged(): Promise<void> {
+	const aliasKey = activeAudioEntry?.alias_key;
+	if (!canRenameAudioDevice || aliasKey === undefined) return;
+	const next = draftAlias.trim();
+	if (next === (activeAudioEntry?.alias ?? '')) return;
+	const result = await rpc.streaming.setAudioDeviceAlias({
+		alias_key: aliasKey,
+		label: next,
+	});
+	if (!result.success) throw new Error(result.error ?? 'setAudioDeviceAlias');
+}
 
 async function handleSave() {
 	if (saveDisabled) return;
@@ -266,6 +302,7 @@ async function handleSave() {
 	try {
 		const result = await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
 		requireAppliedConfig(result);
+		await persistAliasIfChanged();
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {
@@ -288,6 +325,11 @@ async function handleSave() {
 		onOpenEncoder={onOpenEncoder ? () => { open = false; onOpenEncoder(); } : undefined}
 		{audioEmbeddedComingSoon}
 		{activeAudioSourceLabel}
+		{activeAudioSourceDetail}
+		{canRenameAudioDevice}
+		{draftAlias}
+		aliasMaxLength={AUDIO_DEVICE_ALIAS_MAX_LENGTH}
+		onAliasChange={(value) => (draftAlias = value)}
 		{draftCodec}
 		codecOptions={audioCodecs}
 		{codecHasSource}

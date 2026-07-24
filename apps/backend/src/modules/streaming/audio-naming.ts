@@ -19,12 +19,22 @@
 /*
  * Real audio-device naming (T4). Resolution is PURE — no I/O, no imports of the
  * effectful streaming graph. It turns the raw audio-card map into a per-card
- * human-readable label via a strict 3-tier fallback:
+ * human-readable label via a strict 4-tier fallback:
  *
+ *   (0) an operator-assigned alias from `config.audio_device_aliases`, keyed on
+ *       the card's STABLE identity (`stable_id`, else `card:<alsaCardId>`);
  *   (1) the engine `list-devices` audio entry whose `alsa_card_id` join key
  *       matches the card AND whose `display_name` passes a human-name heuristic;
  *   (2) else the `/proc/asound/cards` longname for that card;
  *   (3) else the current alias/name (byte-identical fallback).
+ *
+ * Tiers 1 and 2 both yield RAW device strings — on Linux both are literally the
+ * ALSA longname (`sound/usb/card.c` appends " at usb-<bus>-<path>, <speed> speed"
+ * to "<manufacturer> <product>"), and cerastream sets `display_name` to that same
+ * longname. They are therefore run through `cleanAudioDeviceName()` before being
+ * shown; the untouched raw string is preserved as the display `detail` so the
+ * bus path / link speed / full legal manufacturer name stay available for
+ * diagnostics. Tiers 0 and 3 are curated strings and are never rewritten.
  *
  * Identical resolved labels are deduped with " (2)", " (3)" in STABLE card order.
  * The `config.asrc` wire keys are NEVER touched — only the display `label` is
@@ -127,6 +137,118 @@ export function parseAsoundCards(text: string): Map<string, string> {
 // is still caught; the generic USB audio-class card enumerates as `usbaudio`.
 const USB_AUDIO_FAMILY_RE = /^usbaudio/i;
 
+/**
+ * The kernel's USB-audio longname suffix: `sound/usb/card.c` appends
+ * `" at usb-<bus_name>-<devpath>, <speed> speed"` to the card longname. Anchored
+ * on the trailing `speed` word so a product name that merely CONTAINS " at " is
+ * never truncated — only the kernel-generated diagnostic tail matches.
+ */
+const ALSA_BUS_SUFFIX_RE = /\s+at\s+\S+,\s*[^,]*\bspeed\s*$/i;
+
+/**
+ * Corporate-entity filler tokens. Used ONLY to bridge a repeated manufacturer
+ * token: `"DJI Technology Co., Ltd. DJI MIC MINI"` → the leading `DJI` reappears
+ * with nothing but legal boilerplate in between, so the boilerplate run and the
+ * duplicate are dropped together. A token outside this set BLOCKS the collapse,
+ * so a genuine product name that happens to repeat a word ("Blue Microphones
+ * Yeti Blue") is left alone.
+ */
+const CORPORATE_FILLER = new Set([
+	"co",
+	"company",
+	"corp",
+	"corporation",
+	"electronic",
+	"electronics",
+	"gmbh",
+	"inc",
+	"incorporated",
+	"international",
+	"limited",
+	"llc",
+	"ltd",
+	"plc",
+	"pte",
+	"sa",
+	"sarl",
+	"sas",
+	"tech",
+	"technologies",
+	"technology",
+]);
+
+function normalizeToken(token: string): string {
+	// Strip trailing/leading punctuation so `Co.,` and `Ltd.` compare as words.
+	return token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "").toLowerCase();
+}
+
+/**
+ * Drop a manufacturer name that is repeated as a prefix of the product string.
+ * Two shapes are collapsed, both keyed on the FIRST token reappearing later:
+ *   - an immediate repeat — `"RØDE RØDE HDMI to USB-C"` → `"RØDE HDMI to USB-C"`;
+ *   - a repeat separated only by corporate filler — `"DJI Technology Co., Ltd.
+ *     DJI MIC MINI"` → `"DJI MIC MINI"`.
+ * Anything else is returned verbatim. Comparison is case-insensitive and
+ * punctuation-insensitive; the SURVIVING occurrence keeps its original casing.
+ */
+function dedupeManufacturerPrefix(name: string): string {
+	const tokens = name.split(/\s+/).filter((t) => t.length > 0);
+	if (tokens.length < 2) return name;
+	const head = normalizeToken(tokens[0] ?? "");
+	if (head.length === 0) return name;
+	for (let i = 1; i < tokens.length - 1; i++) {
+		if (normalizeToken(tokens[i] ?? "") !== head) continue;
+		// Everything between the two occurrences must be corporate filler (an
+		// immediate repeat, i === 1, has an empty in-between run and passes).
+		const bridged = tokens
+			.slice(1, i)
+			.every((t) => CORPORATE_FILLER.has(normalizeToken(t)));
+		if (!bridged) break;
+		return tokens.slice(i).join(" ");
+	}
+	return name;
+}
+
+/** The operator-facing name plus the raw string it was derived from. */
+export interface CleanedAudioName {
+	/** The cleaned, operator-facing name. */
+	name: string;
+	/**
+	 * The untouched source string, present ONLY when cleaning changed it — the
+	 * bus path, link speed, and full legal manufacturer name live here so the
+	 * diagnostic value is moved to a secondary surface, never deleted.
+	 */
+	detail?: string;
+}
+
+/**
+ * Turn a RAW ALSA/engine device string into an operator-facing name: strip the
+ * kernel's `" at <bus-path>, <speed> speed"` diagnostic suffix, then drop a
+ * manufacturer name duplicated as the product prefix. Idempotent, never throws,
+ * and returns the input unchanged (with no `detail`) when nothing matched.
+ */
+export function cleanAudioDeviceName(raw: string): CleanedAudioName {
+	const trimmed = raw.trim().replace(/\s+/g, " ");
+	const withoutSuffix = trimmed.replace(ALSA_BUS_SUFFIX_RE, "").trim();
+	const base = withoutSuffix.length > 0 ? withoutSuffix : trimmed;
+	const name = dedupeManufacturerPrefix(base).trim();
+	if (name.length === 0 || name === trimmed) return { name: trimmed };
+	return { name, detail: trimmed };
+}
+
+/**
+ * The rename key for a card: the engine's reboot-stable hardware identity when
+ * it published one, else the ALSA card id namespaced as `card:<id>`. NEVER the
+ * volatile USB bus path — that changes on replug/reboot. The engine's own
+ * card-derived `stable_id` already uses the `card:` form, so the two agree for a
+ * card with no richer identity.
+ */
+export function audioAliasKey(cardId: string, stableId?: string): string {
+	return stableId !== undefined && stableId.length > 0
+		? stableId
+		: `card:${cardId}`;
+}
+
 const loggedTierMissCardIds = new Set<string>();
 
 /**
@@ -184,54 +306,101 @@ function logAliasTierMiss(
 	);
 }
 
-/** Resolve the RAW (pre-dedupe) label for one card via the 3-tier fallback. */
-function resolveOneLabel(
+/** The operator-facing presentation of one audio card. */
+export interface AudioDeviceDisplay {
+	/** The name shown in the picker (already deduped with " (2)" when needed). */
+	label: string;
+	/** The raw hardware descriptor behind `label` — bus path, speed, legal name. */
+	detail?: string;
+	/** Stable rename key — see `audioAliasKey`. */
+	aliasKey: string;
+	/** The operator-assigned name, when one is set for `aliasKey`. */
+	alias?: string;
+}
+
+function resolveOneDisplay(
 	asrcKey: string,
 	cardId: string,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
-): string {
+	aliases: Readonly<Record<string, string>>,
+): Omit<AudioDeviceDisplay, "label"> & { raw: string } {
+	const engineMatch = engineAudio.find(
+		(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
+	);
+	const aliasKey = audioAliasKey(cardId, engineMatch?.stable_id);
+	const hardware = resolveHardwareName(
+		asrcKey,
+		cardId,
+		engineMatch,
+		engineAudio,
+		longnames,
+	);
+
+	// (0) an operator rename wins outright — it is an explicit override, and it is
+	//     keyed on stable identity so it survives a replug/reboot renumber. The
+	//     hardware name it replaces falls back to `detail` so it is never lost.
+	const alias = aliases[aliasKey]?.trim();
+	if (alias !== undefined && alias.length > 0) {
+		return {
+			raw: alias,
+			aliasKey,
+			alias,
+			detail: hardware.detail ?? hardware.name,
+		};
+	}
+
+	return {
+		raw: hardware.name,
+		aliasKey,
+		...(hardware.detail !== undefined ? { detail: hardware.detail } : {}),
+	};
+}
+
+/** Tiers 1-3 of the ladder: the hardware-derived name, with tiers 1-2 cleaned. */
+function resolveHardwareName(
+	asrcKey: string,
+	cardId: string,
+	engineMatch: EngineAudioDevice | undefined,
+	engineAudio: readonly EngineAudioDevice[],
+	longnames: Map<string, string>,
+): CleanedAudioName {
 	// (1) engine-join: an audio entry whose join key matches this card. Prefer the
 	//     real `product_name` (cerastream Todo 20), then the generic `display_name`
 	//     — but each ONLY if it passes the human-name heuristic. The heuristic
 	//     rejects a value equal to the card id ("usbaudio"), so a generic engine
 	//     product_name never beats the longname path below (which carries the real
 	//     "RØDE …" name for a device the engine mislabels generically).
-	const engineMatch = engineAudio.find(
-		(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
-	);
 	if (
 		engineMatch?.product_name !== undefined &&
 		isHumanAudioName(engineMatch.product_name, cardId)
 	) {
-		return engineMatch.product_name;
+		return cleanAudioDeviceName(engineMatch.product_name);
 	}
+	// cerastream sets an audio entry's `display_name` to the ALSA longname
+	// verbatim, so this tier carries the same kernel diagnostic tail as tier 2.
 	if (
 		engineMatch !== undefined &&
 		isHumanAudioName(engineMatch.display_name, cardId)
 	) {
-		return engineMatch.display_name;
-	}
-	if (
-		engineMatch !== undefined &&
-		isHumanAudioName(engineMatch.display_name, cardId)
-	) {
-		return engineMatch.display_name;
+		return cleanAudioDeviceName(engineMatch.display_name);
 	}
 
 	// (2) the `/proc/asound/cards` longname for that card.
 	const longname = longnames.get(cardId);
-	if (longname !== undefined && longname.length > 0) return longname;
+	if (longname !== undefined && longname.length > 0) {
+		return cleanAudioDeviceName(longname);
+	}
 
 	// (3) the current alias/name (byte-identical fallback — the map key IS the
 	//     name currently shown, so `config.asrc` semantics are unchanged).
 	logAliasTierMiss(cardId, engineAudio, longnames);
-	return asrcKey;
+	return { name: asrcKey };
 }
 
 /**
- * Resolve the display label for every DEVICE card, then dedupe identical labels
- * with " (2)", " (3)" in stable card order.
+ * Resolve the full display model for every DEVICE card, deduping identical
+ * labels with " (2)", " (3)" in stable card order.
  *
  * @param cards       asrcKey → cardId (the live `audioDevices` map). Iteration
  *                    order is the caller's priority-sorted order and drives the
@@ -240,24 +409,55 @@ function resolveOneLabel(
  *                    `alsa_card_id`); empty on the pre-T18 pin.
  * @param longnames   `/proc/asound/cards` cardId → longname (empty when the
  *                    read was skipped or failed).
- * @returns Map<asrcKey, label> for device cards only. An engine entry whose
+ * @param aliases     operator renames from `config.audio_device_aliases`, keyed
+ *                    on `audioAliasKey`.
+ * @returns Map<asrcKey, display> for device cards only. An engine entry whose
  *          `alsa_card_id` matches no scanned card is never surfaced (no phantom
- *          entry — the result only ever contains keys from `cards`). The `cards`
- *          argument is never mutated.
+ *          entry — the result only ever contains keys from `cards`). Neither
+ *          argument is mutated.
  */
+export function resolveAudioDisplays(
+	cards: Record<string, string>,
+	engineAudio: readonly EngineAudioDevice[],
+	longnames: Map<string, string>,
+	aliases: Readonly<Record<string, string>> = {},
+): Map<string, AudioDeviceDisplay> {
+	const displays = new Map<string, AudioDeviceDisplay>();
+	const seenCounts = new Map<string, number>();
+	for (const [asrcKey, cardId] of Object.entries(cards)) {
+		if (PSEUDO_SOURCE_IDS.has(cardId)) continue;
+		const { raw, ...rest } = resolveOneDisplay(
+			asrcKey,
+			cardId,
+			engineAudio,
+			longnames,
+			aliases,
+		);
+		const nextCount = (seenCounts.get(raw) ?? 0) + 1;
+		seenCounts.set(raw, nextCount);
+		displays.set(asrcKey, {
+			label: nextCount === 1 ? raw : `${raw} (${nextCount})`,
+			...rest,
+		});
+	}
+	return displays;
+}
+
+/** Label-only projection of {@link resolveAudioDisplays}. */
 export function resolveAudioLabels(
 	cards: Record<string, string>,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
+	aliases: Readonly<Record<string, string>> = {},
 ): Map<string, string> {
 	const labels = new Map<string, string>();
-	const seenCounts = new Map<string, number>();
-	for (const [asrcKey, cardId] of Object.entries(cards)) {
-		if (PSEUDO_SOURCE_IDS.has(cardId)) continue;
-		const raw = resolveOneLabel(asrcKey, cardId, engineAudio, longnames);
-		const nextCount = (seenCounts.get(raw) ?? 0) + 1;
-		seenCounts.set(raw, nextCount);
-		labels.set(asrcKey, nextCount === 1 ? raw : `${raw} (${nextCount})`);
+	for (const [asrcKey, display] of resolveAudioDisplays(
+		cards,
+		engineAudio,
+		longnames,
+		aliases,
+	)) {
+		labels.set(asrcKey, display.label);
 	}
 	return labels;
 }

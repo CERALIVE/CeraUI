@@ -399,10 +399,15 @@ const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audi
 const groupedAudio = $derived(groupAudioSources(audioSourceEntries));
 // Picker entries carry the FE-injected Auto row FIRST (backend never emits it).
 const pickerEntries = $derived(withAutoAudioEntry(audioSourceEntries));
-const displayedAudioLabel = $derived.by(() => {
-	const entry = pickerEntries.find((e) => e.id === displayedAudioSource);
-	return entry ? audioSourceLabel(entry, t) : displayedAudioSource;
-});
+const displayedAudioEntry = $derived(
+	pickerEntries.find((e) => e.id === displayedAudioSource),
+);
+const displayedAudioLabel = $derived(
+	displayedAudioEntry ? audioSourceLabel(displayedAudioEntry, t) : displayedAudioSource,
+);
+// Raw hardware descriptor (bus path / link speed / full legal name) — a tooltip,
+// never the primary label.
+const displayedAudioDetail = $derived(displayedAudioEntry?.detail);
 const notAvailableAudioSource = $derived(
 	displayedAudioSource && !pickerEntries.some((e) => e.id === displayedAudioSource)
 		? displayedAudioSource
@@ -938,6 +943,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				<div
 					class="bg-muted/40 flex min-h-11 flex-wrap items-center gap-x-2 rounded-lg border px-3 py-2"
 					data-testid="audio-source-readonly"
+					title={displayedAudioDetail}
 				>
 					<span class="truncate font-mono text-sm">
 						{displayedAudioLabel ?? $LL.live.source.audioNone()}
@@ -980,7 +986,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								value={AUDIO_SOURCE_AUTO}
 							></Select.Item>
 							{#each groupedAudio.devices as entry (entry.id)}
-								<Select.Item label={audioSourceLabel(entry, t)} value={entry.id}></Select.Item>
+								<Select.Item
+									label={audioSourceLabel(entry, t)}
+									title={entry.detail}
+									value={entry.id}
+								></Select.Item>
 							{/each}
 							{#if notAvailableAudioSource}
 								<Select.Item

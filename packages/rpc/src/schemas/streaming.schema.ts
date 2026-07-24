@@ -119,6 +119,17 @@ export const audioSourceSchema = z.object({
 	// selection binds to this; the persisted `config.asrc` wire value is
 	// unchanged (still the asrc key), so the engine ALSA path is untouched.
 	stable_id: z.string().optional(),
+	// The raw hardware descriptor `label` was cleaned from — the ALSA longname
+	// with its `at <bus-path>, <speed> speed` tail and full legal manufacturer
+	// name. Diagnostic-only: rendered as a tooltip/secondary line, never as the
+	// primary label. Absent when the raw string needed no cleaning.
+	detail: z.string().optional(),
+	// Stable rename key for `config.audio_device_aliases` (`stable_id`, else
+	// `card:<alsaCardId>`). Never the volatile USB bus path.
+	alias_key: z.string().optional(),
+	// The operator-assigned display name for `alias_key`, when one is set. Wins
+	// over `product_name`/`label` at every render site.
+	alias: z.string().optional(),
 });
 export type AudioSource = z.infer<typeof audioSourceSchema>;
 
@@ -687,6 +698,7 @@ export const audioCodecsMessageSchema = z.record(
 );
 export type AudioCodecsMessage = z.infer<typeof audioCodecsMessageSchema>;
 
+import { audioDeviceAliasesSchema } from './audio-aliases.schema';
 import {
 	customProviderInputSchema,
 	detectionMethodSchema,
@@ -753,6 +765,9 @@ export const configMessageSchema = z.object({
 	// Sources dialog reflect the saved test-pattern visibility on reload. Written
 	// only by streaming.setSourceVisibility (never streaming.setConfig).
 	sources_visibility: sourcesVisibilitySchema.optional(),
+	// Operator-assigned audio-device display names, echoed so a rename survives a
+	// reload. Written only by streaming.setAudioDeviceAlias (never setConfig).
+	audio_device_aliases: audioDeviceAliasesSchema.optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

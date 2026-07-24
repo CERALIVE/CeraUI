@@ -29,11 +29,14 @@ import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import type { AudioDeviceIdentity } from "./audio-naming.ts";
+import type {
+	AudioDeviceDisplay,
+	AudioDeviceIdentity,
+} from "./audio-naming.ts";
 import {
 	parseAsoundCards,
+	resolveAudioDisplays,
 	resolveAudioIdentities,
-	resolveAudioLabels,
 } from "./audio-naming.ts";
 import {
 	type AudioDeviceWatcher,
@@ -171,13 +174,21 @@ export function warnIfConfiguredAudioSourceUnavailable(
 	);
 }
 
+// Last resolved display/identity maps, so the pull-based `status` snapshots
+// (status.ts, status.procedure.ts) serve the SAME labels/aliases as the push
+// broadcast instead of falling back to the bare asrc key.
+let lastAudioDisplays = new Map<string, AudioDeviceDisplay>();
+let lastAudioIdentities = new Map<string, AudioDeviceIdentity>();
+
 // `id` MUST equal the device-map key (the asrc wire string) so it stays byte-equal
 // to the matching `asrcs` entry and `config.asrc` semantics are unchanged. Only the
 // two pseudo-sources carry a `labelKey`; hardware device names are never translated.
 export function deriveAudioSources(
 	devices: Record<string, string> = getAudioDevices(),
-	labels?: Map<string, string>,
-	identities?: Map<string, AudioDeviceIdentity>,
+	displays: Map<string, AudioDeviceDisplay> | undefined = lastAudioDisplays,
+	identities:
+		| Map<string, AudioDeviceIdentity>
+		| undefined = lastAudioIdentities,
 ): AudioSource[] {
 	return Object.keys(devices).map((name): AudioSource => {
 		if (name === NO_AUDIO_ID) {
@@ -190,12 +201,18 @@ export function deriveAudioSources(
 				labelKey: "audio.sources.pipelineDefault",
 			};
 		}
-		const label = labels?.get(name);
+		const display = displays?.get(name);
+		const label = display?.label;
 		const identity = identities?.get(name);
 		return {
 			id: name,
 			kind: "device",
 			...(label !== undefined ? { label } : {}),
+			...(display?.detail !== undefined ? { detail: display.detail } : {}),
+			...(display?.aliasKey !== undefined
+				? { alias_key: display.aliasKey }
+				: {}),
+			...(display?.alias !== undefined ? { alias: display.alias } : {}),
 			...(identity?.product_name !== undefined
 				? { product_name: identity.product_name }
 				: {}),
@@ -227,15 +244,41 @@ function addAudioCardById(list: Record<string, string>, id: string) {
 // The `/proc/asound/cards` read is isRealDevice()-gated and degrades to an empty
 // longname map — `readTextFile` swallows read errors and `parseAsoundCards` never
 // throws, so a garbled/absent/unreadable file never breaks the audio broadcast.
-async function resolveAudioLabelsForTick(
+async function resolveAudioDisplaysForTick(
 	devices: Record<string, string>,
-): Promise<Map<string, string>> {
+): Promise<Map<string, AudioDeviceDisplay>> {
 	let longnames = new Map<string, string>();
 	if (await isRealDevice()) {
 		const text = await readTextFile(PROC_ASOUND_CARDS);
 		if (text !== undefined) longnames = parseAsoundCards(text);
 	}
-	return resolveAudioLabels(devices, getEngineAudioDevices(), longnames);
+	return resolveAudioDisplays(
+		devices,
+		getEngineAudioDevices(),
+		longnames,
+		getConfig().audio_device_aliases ?? {},
+	);
+}
+
+/**
+ * Re-resolve every audio label/detail/alias and push the `status` audio surface.
+ * Called on every device re-enumeration AND after an operator rename, so a new
+ * custom name lands live without waiting for a hotplug tick.
+ */
+export async function broadcastAudioSources(): Promise<void> {
+	lastAudioDisplays = await resolveAudioDisplaysForTick(audioDevices);
+	lastAudioIdentities = resolveAudioIdentities(
+		audioDevices,
+		getEngineAudioDevices(),
+	);
+	broadcastMsg("status", {
+		asrcs: Object.keys(audioDevices),
+		audio_sources: deriveAudioSources(
+			audioDevices,
+			lastAudioDisplays,
+			lastAudioIdentities,
+		),
+	});
 }
 
 export async function updateAudioDevices(dir: string = deviceDir) {
@@ -311,15 +354,7 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 		),
 	});
 
-	const labels = await resolveAudioLabelsForTick(audioDevices);
-	const identities = resolveAudioIdentities(
-		audioDevices,
-		getEngineAudioDevices(),
-	);
-	broadcastMsg("status", {
-		asrcs: Object.keys(audioDevices),
-		audio_sources: deriveAudioSources(audioDevices, labels, identities),
-	});
+	await broadcastAudioSources();
 
 	// A re-enumeration may change what "Auto" resolves to; refresh the idle
 	// preview (a no-op while streaming — the live value stays frozen).

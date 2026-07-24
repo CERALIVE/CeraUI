@@ -38,6 +38,8 @@ import type {
 	ReloadAudioDelayInput,
 	ReloadAudioDelayOutput,
 	RemoteConfigInput,
+	SetAudioDeviceAliasInput,
+	SetAudioDeviceAliasOutput,
 	SetIngestEnabledInput,
 	SetIngestEnabledOutput,
 	SetPasswordInput,
@@ -557,6 +559,9 @@ export interface TypedRPC {
 		setSourceVisibility: (
 			input: SetSourceVisibilityInput,
 		) => Promise<SetSourceVisibilityOutput>;
+		setAudioDeviceAlias: (
+			input: SetAudioDeviceAliasInput,
+		) => Promise<SetAudioDeviceAliasOutput>;
 		// Dev-only mock hardware switcher
 		setMockHardware: (input: {
 			hardware: "jetson" | "n100" | "rk3588" | "generic";

@@ -329,6 +329,11 @@ const zh = {
 		audioSource: "音频源",
 		activeAudioSource: "当前音频源",
 		changeAudioSourceHint: "在“来源”部分更改",
+		audioDeviceName: "显示名称",
+		audioDeviceNameHelp:
+			"此音频设备的自定义名称。按硬件标识保存，因此拔插或重启后仍然保留。",
+		audioDeviceNamePlaceholder: "例如：采访麦克风",
+		audioDeviceNameReset: "留空则使用硬件名称。",
 		noAudioSourceSelected: "未选择音频源",
 		selectAudioSource: "选择音频源",
 		notAvailableAudioSource: "不可用",

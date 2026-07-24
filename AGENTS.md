@@ -1767,6 +1767,24 @@ always a dropped `alsa_card_id` join key upstream of CeraUI). One-shot per
 `cardId` per boot (`resetAudioNamingDiagnostics()` wired into `resetMockState()`
 for test isolation).
 
+**Audio-device naming cleanup + operator rename (device-quality-wave2).** The
+ladder above is now **4-tier** — an operator alias is tier 0 — and tiers 1/2 are
+CLEANED before display. Both tiers carry raw ALSA longnames (cerastream sets an
+audio entry's `display_name` to the longname verbatim), so a live report showed
+`RØDE RØDE HDMI to USB-C at usb-xhci-hcd.17.auto-1, super speed` (leaked via
+tier 1, because the engine `product_name` was the generic `"usbaudio"` the
+human-name heuristic rejects) and `DJI Technology Co., Ltd. DJI MIC MINI at
+usb-fc8c0000.usb-1, full speed` (tier 2, no engine entry). `cleanAudioDeviceName()`
+strips the kernel `at <bus-path>, <speed> speed` tail and collapses a manufacturer
+duplicated as the product prefix (generic rule, no vendor allowlist — a non-filler
+token between the repeats blocks the collapse). The raw string is MOVED, not
+deleted: it rides `AudioSource.detail` as a tooltip/secondary line. Renames persist
+in `config.audio_device_aliases` keyed on `stable_id` (else `card:<alsaCardId>`) —
+NEVER the volatile bus path — written only by `streaming.setAudioDeviceAlias`, and
+are presentation-only (`config.asrc` and the engine ALSA path untouched). Frontend
+label precedence is `alias` → `product_name · TRANSPORT` → `label` → `labelKey` →
+`id`. Full contract: `apps/backend/AGENTS.md` → AUDIO-DEVICE NAMING.
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.

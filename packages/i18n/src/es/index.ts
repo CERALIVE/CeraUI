@@ -1181,6 +1181,11 @@ const es = {
 		audioSource: "Fuente de audio",
 		activeAudioSource: "Fuente de audio activa",
 		changeAudioSourceHint: "Cámbiala en la sección Fuente",
+		audioDeviceName: "Nombre visible",
+		audioDeviceNameHelp:
+			"Un nombre personalizado para este dispositivo de audio. Se recuerda por identidad de hardware, así que sobrevive a una desconexión o reinicio.",
+		audioDeviceNamePlaceholder: "p. ej. Micrófono entrevista",
+		audioDeviceNameReset: "Déjalo vacío para usar el nombre del hardware.",
 		noAudioSourceSelected: "Ninguna fuente de audio seleccionada",
 		notAvailableAudioSource: "No disponible",
 		selectAudioSource: "Seleccione una fuente de audio",
