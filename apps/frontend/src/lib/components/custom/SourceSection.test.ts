@@ -62,6 +62,26 @@ const RODE: CaptureStreamSource = {
 	audioKind: "selectable",
 	available: true,
 };
+// A dual-codec UVC camera: the engine collapsed its scalar `kind` to the
+// H.265-priority value, but its modes advertise BOTH hardware codecs — the badge
+// must name both instead of hiding the H.264 capability behind "UVC H.265".
+const DUAL_CODEC: CaptureStreamSource = {
+	origin: "capture",
+	id: "usb-dual",
+	pipelineId: "libuvch265",
+	kind: "uvc_h265",
+	displayName: "Elgato Dual Codec Cam",
+	devicePath: "/dev/video2",
+	modes: [
+		{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h265" },
+		{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h264" },
+	],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	audioKind: "selectable",
+	available: true,
+};
 const HDMI_CAPTURE: CaptureStreamSource = {
 	origin: "capture",
 	id: "hdmi-rx",
@@ -224,6 +244,39 @@ describe("SourceSection — unified device-first source list (Task 13)", () => {
 		expect(kindBadge?.textContent?.trim()).toBe("UVC H.264");
 		// …never the coarse "HDMI Capture" mislabel.
 		expect(row?.textContent).not.toContain("HDMI Capture");
+	});
+
+	it("names BOTH codecs on a dual-codec device whose modes advertise h264+h265, not just the collapsed kind", () => {
+		const { container } = mount({ sources: sourcesMsg([DUAL_CODEC]) });
+		const kindBadge = container.querySelector<HTMLElement>(
+			'[data-testid="source-kind-usb-dual"]',
+		);
+		expect(kindBadge).not.toBeNull();
+		expect(kindBadge?.textContent?.trim()).toBe("UVC H.264/H.265");
+		// The raw collapsed kind stays on the data attribute as the stable hook.
+		expect(kindBadge?.getAttribute("data-source-kind")).toBe("uvc_h265");
+		// Never the single-codec label that hides the H.264 capability.
+		expect(kindBadge?.textContent?.trim()).not.toBe("UVC H.265");
+	});
+
+	it("leaves a single-codec device's badge unchanged (one accurate codec)", () => {
+		const singleH265: CaptureStreamSource = {
+			...DUAL_CODEC,
+			id: "usb-h265",
+			modes: [
+				{
+					width: 1920,
+					height: 1080,
+					framerates: [30],
+					media_type: "video/x-h265",
+				},
+			],
+		};
+		const { container } = mount({ sources: sourcesMsg([singleH265]) });
+		const kindBadge = container.querySelector<HTMLElement>(
+			'[data-testid="source-kind-usb-h265"]',
+		);
+		expect(kindBadge?.textContent?.trim()).toBe("UVC H.265");
 	});
 
 	it("renders a coarse capability source as a SELECTABLE row with its labelKey label", () => {

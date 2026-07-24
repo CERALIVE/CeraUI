@@ -9,9 +9,31 @@
 // warning — the engine would reject that start typed, and the pre-start disclosure
 // is what makes `force` safe.
 
-import type { VideoCodec, VideoPassthrough } from "@ceraui/rpc/schemas";
+import type {
+	DeviceMode,
+	VideoCodec,
+	VideoPassthrough,
+} from "@ceraui/rpc/schemas";
 
 export type PassthroughMode = "passthrough" | "transcode" | "forceUnavailable";
+
+export const MEDIA_TYPE_H264 = "video/x-h264";
+export const MEDIA_TYPE_H265 = "video/x-h265";
+
+// The hardware codecs a capture device's probed modes reveal, h264→h265 order.
+// The engine collapses a dual-capable UVC camera's scalar `kind` to a single
+// H.265-priority value (`devices.rs`), but emits one mode per media type — so a
+// dual device returns `["h264","h265"]` here even though `kind` names only one.
+// Raw/MJPEG modes contribute nothing (`[]` → caller keeps its scalar-kind label).
+export function captureModeCodecs(
+	modes: readonly DeviceMode[] | undefined,
+): VideoCodec[] {
+	if (modes === undefined) return [];
+	const codecs: VideoCodec[] = [];
+	if (modes.some((m) => m.media_type === MEDIA_TYPE_H264)) codecs.push("h264");
+	if (modes.some((m) => m.media_type === MEDIA_TYPE_H265)) codecs.push("h265");
+	return codecs;
+}
 
 export interface PassthroughInputs {
 	setting: VideoPassthrough;
@@ -40,7 +62,14 @@ export function resolvePassthroughMode(i: PassthroughInputs): PassthroughMode {
 export function sourceOffersCodec(
 	kind: string | undefined,
 	outputCodec: VideoCodec,
+	offeredCodecs?: readonly VideoCodec[],
 ): boolean {
+	// The modes-derived codec set is authoritative when present: it is the ONLY
+	// input that stays correct for a dual-codec device (whose `kind` collapsed to
+	// one value). Scalar-kind matching is the coarse/old-engine fallback.
+	if (offeredCodecs !== undefined && offeredCodecs.length > 0) {
+		return offeredCodecs.includes(outputCodec);
+	}
 	if (kind === "uvc_h264" || kind === "libuvch264")
 		return outputCodec === "h264";
 	if (kind === "uvc_h265") return outputCodec === "h265";
