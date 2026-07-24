@@ -14,7 +14,7 @@
  * --signal=SIGUSR2 ceralive.service`, which targets exactly the unit's tracked
  * MAIN pid via its cgroup — never another process. `--kill-whom=main` also
  * preserves the old `pkill -o` single-process intent, so the whole-cgroup default
- * (`all`) can never collaterally SIGUSR2-terminate srtla_send/bcrpt (which share
+ * (`all`) can never collaterally SIGUSR2-terminate srtla_send (which shares
  * the cgroup while streaming and do NOT handle SIGUSR2).
  *
  * This suite is a static assertion on the shipped rule FILES (the source of truth
@@ -97,7 +97,7 @@ describe("udev SIGUSR2 hotplug rules — scoped, avahi-safe delivery", () => {
 			// Must name the unit explicitly (cgroup scoping) …
 			expect(target).toContain("ceralive.service");
 			// … and target only the main pid, so a whole-cgroup SIGUSR2 can never
-			// terminate srtla_send/bcrpt during a live stream.
+			// terminate srtla_send during a live stream.
 			expect(target).toContain("--kill-whom=main");
 			expect(target).toContain("--signal=SIGUSR2");
 			// udev RUN+= is exec'd without a shell → absolute path is mandatory.

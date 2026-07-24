@@ -187,7 +187,6 @@ describe("no-secrets contract", () => {
 			"paseto",
 			"pin",
 			"remote_key",
-			"bcrpt",
 		];
 		for (const type of forbidden) {
 			expect(isRelayable(type)).toBe(false);

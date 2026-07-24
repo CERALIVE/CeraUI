@@ -7,8 +7,6 @@
  *     instead of blanking the result;
  *   - the software-update size check logs + notifies the operator when apt
  *     itself cannot run (vs. the intentional `--assume-no` non-zero exit);
- *   - a permanent BCRPT failure raises an operator notification, not a log
- *     line the operator never sees;
  *   - a malformed nmcli WiFi scan row is logged + skipped (typed null) instead
  *     of broadcasting NaN signal/freq.
  */
@@ -17,7 +15,6 @@ import { afterEach, describe, expect, it, spyOn } from "bun:test";
 
 import { execPNR } from "../helpers/exec.ts";
 import { logger } from "../helpers/logger.ts";
-import { notifyBcrptPermanentFailure } from "../modules/streaming/bcrpt.ts";
 import { reportUpdateCheckFailure } from "../modules/system/software-updates.ts";
 import * as notifMod from "../modules/ui/notifications.ts";
 import { parseWifiScanRow } from "../modules/wifi/wifi-connections.ts";
@@ -102,38 +99,6 @@ describe("reportUpdateCheckFailure — surfaces a broken update check", () => {
 		} finally {
 			notifySpy.mockRestore();
 			removeSpy.mockRestore();
-		}
-	});
-});
-
-describe("notifyBcrptPermanentFailure — surfaces a down bonded relay", () => {
-	afterEach(() => {
-		notifMod.notificationRemove("bcrpt_failed");
-	});
-
-	it("logs the detail and raises an operator notification", () => {
-		const errSpy = spyOn(logger, "error").mockImplementation(noop);
-		const notifySpy = spyOn(
-			notifMod,
-			"notificationBroadcast",
-		).mockImplementation((() => true) as never);
-		try {
-			notifyBcrptPermanentFailure(
-				"failed to spawn the BCRPT process",
-				new Error("boom"),
-			);
-			expect(errSpy).toHaveBeenCalled();
-			expect(notifySpy).toHaveBeenCalledWith(
-				"bcrpt_failed",
-				"error",
-				expect.any(String),
-				0,
-				true,
-				true,
-			);
-		} finally {
-			errSpy.mockRestore();
-			notifySpy.mockRestore();
 		}
 	});
 });
