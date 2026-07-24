@@ -17,6 +17,7 @@ import {
 	getEngineDeviceCache,
 	refreshEngineDeviceCache,
 	resetEngineDeviceCache,
+	resolveSourceIdentity,
 	resolveSourceRouting,
 	SOURCE_LOST_ERROR,
 	SOURCE_UNAVAILABLE_ERROR,
@@ -69,6 +70,9 @@ function captureDevice(
 		media_class: overrides.media_class ?? "video",
 		kind,
 		...(overrides.caps !== undefined ? { caps: overrides.caps } : {}),
+		...(overrides.stable_id !== undefined
+			? { stable_id: overrides.stable_id }
+			: {}),
 	};
 }
 
@@ -775,5 +779,82 @@ describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () 
 
 		expect(lostRows(sources)).toHaveLength(1);
 		expect(captureRows(sources)).toHaveLength(1);
+	});
+});
+
+describe("resolveSourceRouting — renumbered-replug self-heal (Todo 36)", () => {
+	const STABLE_A = "usb:19f7:0080:SN-A";
+	const STABLE_B = "usb:19f7:0080:SN-B";
+
+	function seen(id: string, stableId: string | undefined): LastSeenDevice {
+		return {
+			id,
+			displayName: "RØDE HDMI to USB-C",
+			kind: "hdmi",
+			pipelineId: "hdmi",
+			devicePath: `/dev/${id}`,
+			...(stableId !== undefined ? { stableId } : {}),
+		};
+	}
+
+	it("a renumbered replug (video1→video2, same stable id) self-heals the persisted config.source routing", () => {
+		const video1 = seen("video1", STABLE_A);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [captureDevice("video2", "hdmi", { stable_id: STABLE_A })],
+			networkIngest: NO_INGEST,
+			configSource: "video1",
+			lastSeenDevices: [video1],
+			sessionSnapshots: new Map([[video1.id, video1]]),
+		});
+		// Todo 34 already suppressed the stale video1 Lost row; the persisted
+		// config.source "video1" is now absent from the live list.
+		expect(sources.find((s) => s.id === "video1")).toBeUndefined();
+
+		const routed = resolveSourceRouting("video1", sources, [video1]);
+		expect(routed).toEqual({
+			ok: true,
+			pipeline: "hdmi",
+			selected_video_input: "video2",
+		});
+	});
+
+	it("a persisted id whose stable identity matches NO live device is NOT silently adopted (over-matching guard)", () => {
+		const video1 = seen("video1", STABLE_A);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			// A genuinely DIFFERENT device (SN-B) at the new node — not video1's.
+			devices: [captureDevice("video2", "hdmi", { stable_id: STABLE_B })],
+			networkIngest: NO_INGEST,
+		});
+
+		expect(resolveSourceIdentity("video1", sources, [video1])).toBe("video1");
+		const routed = resolveSourceRouting("video1", sources, [video1]);
+		expect(routed).toEqual({ ok: false, error: UNKNOWN_SOURCE_ERROR });
+	});
+
+	it("no remembered stable identity → the stale id keeps failing closed (no self-heal, unchanged)", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [captureDevice("video2", "hdmi", { stable_id: STABLE_A })],
+			networkIngest: NO_INGEST,
+		});
+		// No last_seen record for video1 → its identity cannot be recovered.
+		expect(resolveSourceRouting("video1", sources, [])).toEqual({
+			ok: false,
+			error: UNKNOWN_SOURCE_ERROR,
+		});
+	});
+
+	it("a live capture source exposes its stable identity on the wire", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [captureDevice("video2", "hdmi", { stable_id: STABLE_A })],
+			networkIngest: NO_INGEST,
+		});
+		const live = sources.find((s) => s.id === "video2");
+		expect(live?.origin === "capture" ? live.stableId : undefined).toBe(
+			STABLE_A,
+		);
 	});
 });

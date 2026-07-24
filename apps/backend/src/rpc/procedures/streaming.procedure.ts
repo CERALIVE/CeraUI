@@ -206,6 +206,7 @@ export const streamingStartProcedure = authedProcedure
 					const routed = resolveSourceRouting(
 						effectiveSource,
 						getSourcesMessage().sources,
+						getConfig().last_seen_devices,
 					);
 					if (!routed.ok) {
 						legacyError = routed.error;
@@ -471,6 +472,7 @@ export const setConfigProcedure = authedProcedure
 			const routed = resolveSourceRouting(
 				input.source,
 				getSourcesMessage().sources,
+				getConfig().last_seen_devices,
 			);
 			if (!routed.ok) {
 				return { success: false, error: routed.error, applied: {} };

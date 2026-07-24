@@ -265,6 +265,9 @@ function buildCaptureEntry(
 		kind: device.kind,
 		displayName: device.display_name,
 		devicePath: device.device_path,
+		...(device.stable_id !== undefined && device.stable_id !== ""
+			? { stableId: device.stable_id }
+			: {}),
 	};
 }
 
@@ -497,11 +500,38 @@ export type ResolveSourceRoutingResult =
 // the picker but must STILL route (a hidden-but-selected source is not broken); a
 // capture row's only false path is `lost`, handled above. Absent →
 // `unknown_source` (semantics unchanged). Never mutates config.
+// Self-heal a persisted `config.source` whose literal id went stale after a
+// device re-enumerated under a new node path (video1→video2). When the id is no
+// longer a live source, look it up in `last_seen_devices` to recover its stable
+// hardware identity, then return the LIVE capture source sharing that identity —
+// so the operator's chosen device keeps routing across a replug instead of
+// failing closed. A direct id hit, a missing stable id, or no live successor all
+// return the id unchanged (no over-matching: a genuinely different device is
+// never silently adopted). Mirrors the audio `resolveAudioSelection` stable-id
+// join, adapted to the id→stableId indirection video persists.
+export function resolveSourceIdentity(
+	sourceId: string,
+	sources: readonly StreamSource[],
+	lastSeenDevices?: readonly LastSeenDevice[],
+): string {
+	if (sources.some((s) => s.id === sourceId)) return sourceId;
+	const stableId = (lastSeenDevices ?? []).find(
+		(d) => d.id === sourceId,
+	)?.stableId;
+	if (stableId === undefined || stableId === "") return sourceId;
+	const successor = sources.find(
+		(s) => s.origin === "capture" && s.stableId === stableId,
+	);
+	return successor?.id ?? sourceId;
+}
+
 export function resolveSourceRouting(
 	sourceId: string,
 	sources: readonly StreamSource[],
+	lastSeenDevices?: readonly LastSeenDevice[],
 ): ResolveSourceRoutingResult {
-	const source = sources.find((s) => s.id === sourceId);
+	const effectiveId = resolveSourceIdentity(sourceId, sources, lastSeenDevices);
+	const source = sources.find((s) => s.id === effectiveId);
 	if (source === undefined) {
 		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
 	}
@@ -511,7 +541,7 @@ export function resolveSourceRouting(
 	if (source.origin === "network" && source.available === false) {
 		return { ok: false, error: SOURCE_UNAVAILABLE_ERROR };
 	}
-	const routing = deriveEngineRouting(sourceId, sources);
+	const routing = deriveEngineRouting(effectiveId, sources);
 	if (routing === undefined) {
 		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
 	}
