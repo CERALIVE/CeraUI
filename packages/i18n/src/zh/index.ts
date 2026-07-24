@@ -307,7 +307,7 @@ const zh = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "USB 摄像头",
+			libuvch264: "USB 摄像头 (UVC)",
 			hdmi: "HDMI 采集",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
