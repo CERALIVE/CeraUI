@@ -271,12 +271,31 @@ describe("buildStartParams — pseudo-source → audio.mode wire contract (Todo 
 		expect(params.audio).not.toHaveProperty("device");
 	});
 
-	test('a real device ⇒ mode:"device" + its ALSA id', async () => {
+	test('a real device ⇒ mode:"device" + a hw:CARD= ALSA device string', async () => {
 		const params = await startParamsFor(
 			{ ...BASE, asrc: "usbaudio" },
 			{ schemaVersion: "0.6.0" },
 		);
-		expect(params.audio).toEqual({ mode: "device", device: "usbaudio" });
+		// The engine feeds audio.device straight to `alsasrc device=`, which needs a
+		// real ALSA device string — a bare card id ("usbaudio") never opens and the
+		// engine rejects the start with -32602 audio-device-unavailable. CeraUI must
+		// send the engine's own `hw:CARD=<id>` form.
+		expect(params.audio).toEqual({
+			mode: "device",
+			device: "hw:CARD=usbaudio",
+		});
+	});
+
+	test("a real device audio.device is a valid alsasrc string, never a bare card id (regression: -32602 audio-device-unavailable)", async () => {
+		const params = await startParamsFor(
+			{ ...BASE, asrc: "usbaudio" },
+			{ schemaVersion: "0.6.0" },
+		);
+		const device = (params.audio as { device: string }).device;
+		// Must carry an ALSA selector (`hw:CARD=`); a bare card id is exactly what
+		// produced the board's `-32602 start_invalid` UI-happy-path failure.
+		expect(device.startsWith("hw:CARD=")).toBe(true);
+		expect(device).not.toBe("usbaudio");
 	});
 
 	test("a legacy caller that omits asrc sends NO audio section (compat)", async () => {

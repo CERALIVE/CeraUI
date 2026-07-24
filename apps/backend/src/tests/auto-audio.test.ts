@@ -859,10 +859,13 @@ describe("Auto launch → engine start assembly", () => {
 			{ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" },
 		);
 		// The launch copy carries the asrcKey "HDMI"; the engine maps it via
-		// getAudioSrcId → the card id (rk3588 test host).
+		// getAudioSrcId → the card id, wrapped as an alsasrc `hw:CARD=<id>` string
+		// (rk3588 test host).
 		expect(launch.asrc).toBe("HDMI");
 		const params = await startParamsFor(launch);
-		expect((params.audio as { device: string }).device).toBe("rockchiphdmiin");
+		expect((params.audio as { device: string }).device).toBe(
+			"hw:CARD=rockchiphdmiin",
+		);
 	});
 
 	test("Pipeline-default resolution → engine start params carry NO audio.device", async () => {

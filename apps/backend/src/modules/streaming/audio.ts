@@ -90,7 +90,18 @@ export function resolveAudioMode(
 	if (asrc === NO_AUDIO_ID) return { mode: "none" };
 	if (asrc === DEFAULT_AUDIO_ID) return { mode: "default" };
 	if (embeddedAudioActive) return { mode: "default" };
-	return { mode: "device", device: getAudioSrcId(asrc) };
+	return { mode: "device", device: toAlsaCaptureDevice(getAudioSrcId(asrc)) };
+}
+
+// The engine passes `audio.device` straight to `alsasrc device=`, which needs a
+// real ALSA device string, not a bare card id: `alsasrc device="usbaudio"` never
+// opens and the engine rejects the start with `-32602 audio-device-unavailable`.
+// Wrap a bare card id as `hw:CARD=<id>` (the engine's own per-source default form);
+// a value that already carries an ALSA selector (`hw:0`, `hw:CARD=x`, `plughw:…`)
+// is passed through unchanged, so the transform is idempotent.
+function toAlsaCaptureDevice(cardId: string): string {
+	if (cardId.includes(":") || cardId.includes("=")) return cardId;
+	return `hw:CARD=${cardId}`;
 }
 const BASE_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	C4K: "Cam Link 4K",
