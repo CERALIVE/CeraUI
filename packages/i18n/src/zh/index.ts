@@ -913,6 +913,23 @@ const zh = {
 			source_lost: "所选源已断开连接。请重新连接或选择其他源后重试。",
 			source_unavailable: "所选源当前不可用。请选择其他源或检查其设置后重试。",
 		},
+		startFailure: {
+			class: {
+				engine_unavailable: "The streaming engine is unavailable.",
+				engine_restarting: "The streaming engine is restarting.",
+				protocol_incompatible:
+					"The streaming engine version is incompatible. Update the device.",
+				start_invalid:
+					"The stream configuration or device is invalid. Check your settings.",
+				engine_internal: "The streaming engine hit an internal error.",
+				start_timeout:
+					"The streaming engine didn't confirm the stream in time.",
+			},
+			retriedThenFailed:
+				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+			notRetriable:
+				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
 			title: "直播设置",

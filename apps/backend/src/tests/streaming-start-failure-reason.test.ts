@@ -82,11 +82,20 @@ describe("streaming.start — structured failure error code (Task 16)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: "srt_connect_failed",
+			result: "failed",
+			failure: {
+				phase: "start-rpc",
+				class: "engine_internal",
+				retriable: false,
+			},
 		});
+		expect((result as { attemptId?: unknown }).attemptId).toEqual(
+			expect.any(String),
+		);
 	});
 
 	test("the success path is unchanged — no error field on a clean start", async () => {
@@ -131,11 +140,20 @@ describe("streaming.start — structured failure error code (Task 16)", () => {
 			{},
 			{ context: makeContext() },
 		);
-		expect(failed).toEqual({
+		expect(failed).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: "srtla_no_connections",
+			result: "failed",
+			failure: {
+				phase: "start-rpc",
+				class: "engine_internal",
+				retriable: false,
+			},
 		});
+		expect((failed as { attemptId?: unknown }).attemptId).toEqual(
+			expect.any(String),
+		);
 
 		const retried = await call(
 			streamingStartProcedure,

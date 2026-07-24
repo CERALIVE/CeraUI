@@ -5,16 +5,28 @@
  * reconciliation to authoritative broadcast, and failure revert with reason.
  */
 
+import type { StartFailure } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 import {
 	clearStopReason,
 	createOptimismStore,
 	reconcileToAuthority,
+	revertWithFailure,
 	revertWithReason,
 	type StreamingOptimismStore,
 	transitionToStarting,
 	transitionToStopping,
 } from "./streaming-optimism.svelte";
+
+function failure(overrides: Partial<StartFailure> = {}): StartFailure {
+	return {
+		attemptId: "att_test",
+		phase: "connect",
+		class: "engine_unavailable",
+		retriable: true,
+		...overrides,
+	};
+}
 
 describe("streaming-optimism", () => {
 	describe("createOptimismStore", () => {
@@ -263,6 +275,109 @@ describe("streaming-optimism", () => {
 			store = revertWithReason(store, "no_server_configured");
 			expect(store.state).toBe("idle");
 			expect(store.stopReason).toBe("no_server_configured");
+		});
+	});
+
+	describe("generation identity (Todo 29)", () => {
+		it("mints a fresh generation on every transitionToStarting", () => {
+			let store = createOptimismStore();
+			const g0 = store.generation;
+
+			store = transitionToStarting(store);
+			const g1 = store.generation;
+			expect(g1).toBeGreaterThan(g0);
+
+			store = reconcileToAuthority(store, true); // confirm attempt 1
+			store = transitionToStarting(store); // attempt 2
+			expect(store.generation).toBeGreaterThan(g1);
+		});
+
+		it("IGNORES a revert carrying an OLDER attempt's generation (stale response)", () => {
+			// Attempt 1 begins.
+			let store = transitionToStarting(createOptimismStore());
+			const staleGen = store.generation;
+
+			// Attempt 1 confirmed, then a NEWER attempt 2 begins.
+			store = reconcileToAuthority(store, true);
+			store = transitionToStarting(store);
+			expect(store.state).toBe("starting");
+
+			// Attempt 1's DELAYED failure reply lands late, tagged with its old gen.
+			const next = revertWithReason(store, "engine_error", staleGen);
+
+			// It must NOT clobber attempt 2 — same object returned, still starting.
+			expect(next).toBe(store);
+			expect(next.state).toBe("starting");
+			expect(next.stopReason).toBeUndefined();
+		});
+
+		it("APPLIES a revert carrying the CURRENT attempt's generation", () => {
+			let store = transitionToStarting(createOptimismStore());
+			const gen = store.generation;
+
+			store = revertWithReason(store, "engine_error", gen);
+			expect(store.state).toBe("idle");
+			expect(store.stopReason).toBe("engine_error");
+		});
+
+		it("IGNORES a typed-failure revert from an OLDER generation", () => {
+			let store = transitionToStarting(createOptimismStore());
+			const staleGen = store.generation;
+
+			store = reconcileToAuthority(store, true);
+			store = transitionToStarting(store); // newer attempt
+
+			const next = revertWithFailure(store, failure(), staleGen);
+			expect(next).toBe(store);
+			expect(next.state).toBe("starting");
+			expect(next.failure).toBeUndefined();
+		});
+
+		it("a revert with NO generation is unconditional (legacy caller)", () => {
+			let store = transitionToStarting(createOptimismStore());
+			store = revertWithReason(store, "engine_error");
+			expect(store.state).toBe("idle");
+			expect(store.stopReason).toBe("engine_error");
+		});
+	});
+
+	describe("typed failure revert (Todo 29)", () => {
+		it("reverts to idle carrying the typed failure + a string stopReason", () => {
+			let store = transitionToStarting(createOptimismStore());
+			const f = failure({ class: "start_invalid", retriable: false });
+
+			store = revertWithFailure(store, f, store.generation);
+			expect(store.state).toBe("idle");
+			expect(store.failure).toEqual(f);
+			expect(store.stopReason).toBe("start_invalid");
+		});
+
+		it("uses a string `code` as stopReason when present", () => {
+			let store = transitionToStarting(createOptimismStore());
+			const f = failure({ code: "audio_device_unavailable" });
+
+			store = revertWithFailure(store, f, store.generation);
+			expect(store.stopReason).toBe("audio_device_unavailable");
+		});
+
+		it("transitionToStarting clears a prior typed failure", () => {
+			let store = transitionToStarting(createOptimismStore());
+			store = revertWithFailure(store, failure(), store.generation);
+			expect(store.failure).toBeDefined();
+
+			store = transitionToStarting(store);
+			expect(store.failure).toBeUndefined();
+			expect(store.stopReason).toBeUndefined();
+		});
+
+		it("reconcile-confirm clears a lingering typed failure", () => {
+			let store = transitionToStarting(createOptimismStore());
+			store = revertWithFailure(store, failure(), store.generation);
+			store = transitionToStarting(store);
+
+			store = reconcileToAuthority(store, true);
+			expect(store.state).toBe("idle");
+			expect(store.failure).toBeUndefined();
 		});
 	});
 });

@@ -454,6 +454,21 @@ class RPCClient {
  *   rpc.auth.login({ password: "xxx" }) - calls ['auth', 'login'] procedure
  *   rpc.system.reboot() - calls ['system', 'reboot'] procedure
  */
+/**
+ * Per-procedure client-call timeout overrides (dotted path → ms). Absent paths
+ * use `RPCClient.call`'s 30s default.
+ *
+ * `streaming.start` awaits the backend's transactional launch AND its bounded
+ * connect-retry (DEFAULT_START_RETRY_POLICY — up to a 60s total budget). The 30s
+ * default would reject a still-valid in-flight start and drop the terminal typed
+ * `failure` payload, so it is raised above the retry budget (and kept below the
+ * 90s optimism start-watchdog, so the awaited reply stays the primary signal and
+ * the watchdog is only the lost-signal backstop).
+ */
+const PROCEDURE_TIMEOUT_MS: Readonly<Record<string, number>> = {
+	"streaming.start": 75_000,
+};
+
 function createRPCProxy<T extends object>(
 	client: RPCClient,
 	path: string[] = [],
@@ -463,7 +478,10 @@ function createRPCProxy<T extends object>(
 		// Handle function calls: rpc.auth.login(input)
 		apply(_target, _thisArg, args) {
 			const input = args[0];
-			return client.call(path, input);
+			const timeout = PROCEDURE_TIMEOUT_MS[path.join(".")];
+			return timeout !== undefined
+				? client.call(path, input, timeout)
+				: client.call(path, input);
 		},
 
 		// Handle property access: rpc.auth or rpc.auth.login

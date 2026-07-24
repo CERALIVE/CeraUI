@@ -1152,6 +1152,23 @@ const fr = {
 			source_unavailable:
 				"La source sélectionnée n'est pas disponible pour le moment. Choisissez une autre source ou vérifiez ses réglages, puis réessayez.",
 		},
+		startFailure: {
+			class: {
+				engine_unavailable: "The streaming engine is unavailable.",
+				engine_restarting: "The streaming engine is restarting.",
+				protocol_incompatible:
+					"The streaming engine version is incompatible. Update the device.",
+				start_invalid:
+					"The stream configuration or device is invalid. Check your settings.",
+				engine_internal: "The streaming engine hit an internal error.",
+				start_timeout:
+					"The streaming engine didn't confirm the stream in time.",
+			},
+			retriedThenFailed:
+				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+			notRetriable:
+				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
 			title: "Préparation du direct",

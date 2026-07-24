@@ -2,7 +2,7 @@
  * Streaming configuration and status Zod schemas
  */
 import { z } from 'zod';
-import { stopResultSchema } from './streaming-lifecycle.schema';
+import { startFailureSchema, stopResultSchema } from './streaming-lifecycle.schema';
 
 /**
  * Canonical bitrate range — SINGLE SOURCE OF TRUTH (Task 14).
@@ -799,6 +799,14 @@ export const streamingStartOutputSchemaExtended = z.union([
 	streamingStartLegacyOutputSchema.extend({
 		result: z.literal('cancelled'),
 		attemptId: z.string(),
+	}),
+	// Terminal failure echoes the typed StartFailure (phase/class/retriable) +
+	// attemptId beside the legacy `error`; the UI renders it and fences stale
+	// older-attempt responses on `attemptId`.
+	streamingStartLegacyOutputSchema.extend({
+		result: z.literal('failed'),
+		attemptId: z.string(),
+		failure: startFailureSchema,
 	}),
 	streamingStartLegacyOutputSchema,
 ]);

@@ -16,9 +16,16 @@
  * on first selector access.
  */
 
+import type { StartFailure } from "@ceraui/rpc/schemas";
+
 import { stopStreaming as directStopStreaming } from "$lib/helpers/SystemHelper";
 
 import { rpc } from "./client";
+import {
+	runStartWatchdog,
+	START_WATCHDOG_TIMEOUT_MS,
+	type StartWatchdogDeps,
+} from "./streaming-start-watchdog";
 import {
 	runStopWatchdog,
 	STOP_WATCHDOG_REPULL_DELAY_MS,
@@ -35,8 +42,16 @@ export type StreamingOptimismState = "idle" | "starting" | "stopping";
 export interface StreamingOptimismStore {
 	/** Current optimistic state. */
 	state: StreamingOptimismState;
-	/** Stop reason (if start failed). */
+	/** Stop reason (if start failed) — a legacy code string. */
 	stopReason?: string;
+	/** Typed start failure (phase + class + retriable), when the reason is one. */
+	failure?: StartFailure;
+	/**
+	 * Monotonic attempt generation. Bumped on every `transitionToStarting`; a
+	 * revert carrying an older generation is a stale response from a superseded
+	 * attempt and is ignored.
+	 */
+	generation: number;
 }
 
 // ============================================
@@ -47,16 +62,23 @@ export interface StreamingOptimismStore {
  * Create an empty optimism store.
  */
 export function createOptimismStore(): StreamingOptimismStore {
-	return { state: "idle" };
+	return { state: "idle", generation: 0 };
 }
 
 /**
- * Transition to `starting` state. Called when the user clicks Start.
+ * Transition to `starting` state. Called when the user clicks Start. Mints a new
+ * attempt `generation` so a late response from a superseded attempt is fenced.
  */
 export function transitionToStarting(
 	store: StreamingOptimismStore,
 ): StreamingOptimismStore {
-	return { ...store, state: "starting", stopReason: undefined };
+	return {
+		...store,
+		state: "starting",
+		stopReason: undefined,
+		failure: undefined,
+		generation: store.generation + 1,
+	};
 }
 
 /**
@@ -65,7 +87,12 @@ export function transitionToStarting(
 export function transitionToStopping(
 	store: StreamingOptimismStore,
 ): StreamingOptimismStore {
-	return { ...store, state: "stopping", stopReason: undefined };
+	return {
+		...store,
+		state: "stopping",
+		stopReason: undefined,
+		failure: undefined,
+	};
 }
 
 /**
@@ -97,26 +124,63 @@ export function reconcileToAuthority(
 	switch (store.state) {
 		case "starting":
 			return isStreaming
-				? { ...store, state: "idle", stopReason: undefined }
+				? { ...store, state: "idle", stopReason: undefined, failure: undefined }
 				: store;
 		case "stopping":
 			return isStreaming
 				? store
-				: { ...store, state: "idle", stopReason: undefined };
+				: {
+						...store,
+						state: "idle",
+						stopReason: undefined,
+						failure: undefined,
+					};
 		default:
 			return store;
 	}
 }
 
 /**
+ * Whether a revert carrying `generation` targets the CURRENT attempt. A revert
+ * with no generation is unconditional (legacy callers); one with an older
+ * generation is a stale response from a superseded attempt.
+ */
+function revertTargetsCurrentAttempt(
+	store: StreamingOptimismStore,
+	generation: number | undefined,
+): boolean {
+	return generation === undefined || generation === store.generation;
+}
+
+/**
  * Revert to `idle` with a stop reason (start failed). Called when the start RPC
- * rejects or the backend reports a failure.
+ * rejects or the backend reports a failure. When `generation` is supplied and
+ * does not match the store's current attempt, the revert is a stale
+ * older-attempt response and is IGNORED (the store is returned untouched).
  */
 export function revertWithReason(
 	store: StreamingOptimismStore,
 	reason: string,
+	generation?: number,
 ): StreamingOptimismStore {
-	return { ...store, state: "idle", stopReason: reason };
+	if (!revertTargetsCurrentAttempt(store, generation)) return store;
+	return { ...store, state: "idle", stopReason: reason, failure: undefined };
+}
+
+/**
+ * Revert to `idle` with a typed `StartFailure` (phase + class + retriable). Same
+ * generation fencing as `revertWithReason`. `stopReason` mirrors the failure's
+ * string identity (code, else class) so legacy string consumers keep working.
+ */
+export function revertWithFailure(
+	store: StreamingOptimismStore,
+	failure: StartFailure,
+	generation?: number,
+): StreamingOptimismStore {
+	if (!revertTargetsCurrentAttempt(store, generation)) return store;
+	const reason =
+		typeof failure.code === "string" ? failure.code : failure.class;
+	return { ...store, state: "idle", stopReason: reason, failure };
 }
 
 /**
@@ -125,7 +189,7 @@ export function revertWithReason(
 export function clearStopReason(
 	store: StreamingOptimismStore,
 ): StreamingOptimismStore {
-	return { ...store, stopReason: undefined };
+	return { ...store, stopReason: undefined, failure: undefined };
 }
 
 // ============================================
@@ -135,17 +199,20 @@ export function clearStopReason(
 interface ReactiveOptimismStore {
 	getState: () => StreamingOptimismState;
 	getStopReason: () => string | undefined;
+	getFailure: () => StartFailure | undefined;
+	getGeneration: () => number;
 	transitionToStarting: () => void;
 	transitionToStopping: () => void;
 	reconcileToAuthority: (isStreaming: boolean) => void;
-	revertWithReason: (reason: string) => void;
+	revertWithReason: (reason: string, generation?: number) => void;
+	revertWithFailure: (failure: StartFailure, generation?: number) => void;
 	clearStopReason: () => void;
 	retryStop: () => void;
 	destroy: () => void;
 	getStore: () => StreamingOptimismStore;
 }
 
-/** Prod-inert e2e seam: shrink the watchdog fire window (mirrors `__ceraRebootCountdownSeconds`). */
+/** Prod-inert e2e seam: shrink the stop-watchdog fire window (mirrors `__ceraRebootCountdownSeconds`). */
 function resolveWatchdogMs(): number {
 	const override =
 		typeof window !== "undefined"
@@ -155,6 +222,18 @@ function resolveWatchdogMs(): number {
 	return typeof override === "number" && override >= 0
 		? override
 		: STOP_WATCHDOG_TIMEOUT_MS;
+}
+
+/** Prod-inert e2e seam: shrink the START-watchdog fire window (mirrors `resolveWatchdogMs`). */
+function resolveStartWatchdogMs(): number {
+	const override =
+		typeof window !== "undefined"
+			? (window as unknown as { __ceraStartWatchdogMs?: number })
+					.__ceraStartWatchdogMs
+			: undefined;
+	return typeof override === "number" && override >= 0
+		? override
+		: START_WATCHDOG_TIMEOUT_MS;
 }
 
 // Module-level so an ASYNC watchdog write propagates to LiveView's `$derived`
@@ -173,11 +252,20 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 	let store = $state<StreamingOptimismStore>(createOptimismStore());
 	let watchdogTimer: ReturnType<typeof setTimeout> | undefined;
 	let watchdogRunning = false;
+	let startWatchdogTimer: ReturnType<typeof setTimeout> | undefined;
+	let startWatchdogRunning = false;
 
 	function clearWatchdogTimer(): void {
 		if (watchdogTimer !== undefined) {
 			clearTimeout(watchdogTimer);
 			watchdogTimer = undefined;
+		}
+	}
+
+	function clearStartWatchdogTimer(): void {
+		if (startWatchdogTimer !== undefined) {
+			clearTimeout(startWatchdogTimer);
+			startWatchdogTimer = undefined;
 		}
 	}
 
@@ -187,6 +275,14 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			watchdogTimer = undefined;
 			if (store.state === "stopping") void runWatchdogOnce();
 		}, resolveWatchdogMs());
+	}
+
+	function armStartWatchdog(): void {
+		clearStartWatchdogTimer();
+		startWatchdogTimer = setTimeout(() => {
+			startWatchdogTimer = undefined;
+			if (store.state === "starting") void runStartWatchdogOnce();
+		}, resolveStartWatchdogMs());
 	}
 
 	async function runWatchdogOnce(): Promise<void> {
@@ -199,7 +295,18 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		}
 	}
 
-	// A confirmed stop (`stopping`→`idle`, push OR pull) ends the watchdog + banner.
+	async function runStartWatchdogOnce(): Promise<void> {
+		if (startWatchdogRunning) return;
+		startWatchdogRunning = true;
+		try {
+			await runStartWatchdog(buildStartWatchdogDeps());
+		} finally {
+			startWatchdogRunning = false;
+		}
+	}
+
+	// A confirmed transition (`stopping`→`idle` or `starting`→`idle`, push OR
+	// pull) ends the matching watchdog; only the stop path owns the stuck banner.
 	function applyReconcile(isStreaming: boolean): void {
 		const prev = store.state;
 		store = reconcileToAuthority(store, isStreaming);
@@ -207,6 +314,28 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
 		}
+		if (prev === "starting" && store.state === "idle") {
+			clearStartWatchdogTimer();
+		}
+	}
+
+	function buildStartWatchdogDeps(): StartWatchdogDeps {
+		return {
+			pullStatus: async () => {
+				const status = await rpc.status.getStatus();
+				const { ingestPulledStatus } = await import("./subscriptions.svelte");
+				ingestPulledStatus(status);
+				return Boolean(
+					(status as { is_streaming?: unknown } | null | undefined)
+						?.is_streaming,
+				);
+			},
+			reconcile: (isStreaming: boolean) => applyReconcile(isStreaming),
+			revert: (reason: string) => {
+				clearStartWatchdogTimer();
+				store = revertWithReason(store, reason, store.generation);
+			},
+		};
 	}
 
 	function buildWatchdogDeps(): StopWatchdogDeps {
@@ -237,12 +366,16 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 	return {
 		getState: () => store.state,
 		getStopReason: () => store.stopReason,
+		getFailure: () => store.failure,
+		getGeneration: () => store.generation,
 		transitionToStarting: () => {
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
 			store = transitionToStarting(store);
+			armStartWatchdog();
 		},
 		transitionToStopping: () => {
+			clearStartWatchdogTimer();
 			stopStuckBannerState = false;
 			store = transitionToStopping(store);
 			armWatchdog();
@@ -250,10 +383,21 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		reconcileToAuthority: (isStreaming: boolean) => {
 			applyReconcile(isStreaming);
 		},
-		revertWithReason: (reason: string) => {
+		revertWithReason: (reason: string, generation?: number) => {
+			const next = revertWithReason(store, reason, generation);
+			if (next === store) return;
+			clearStartWatchdogTimer();
 			clearWatchdogTimer();
 			stopStuckBannerState = false;
-			store = revertWithReason(store, reason);
+			store = next;
+		},
+		revertWithFailure: (failure: StartFailure, generation?: number) => {
+			const next = revertWithFailure(store, failure, generation);
+			if (next === store) return;
+			clearStartWatchdogTimer();
+			clearWatchdogTimer();
+			stopStuckBannerState = false;
+			store = next;
 		},
 		clearStopReason: () => {
 			store = clearStopReason(store);
@@ -263,6 +407,7 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		},
 		destroy: () => {
 			clearWatchdogTimer();
+			clearStartWatchdogTimer();
 			stopStuckBannerState = false;
 		},
 		getStore: () => store,
@@ -288,10 +433,27 @@ export function getStreamingOptimismState(): StreamingOptimismState {
 }
 
 /**
- * Get the stop reason (if start failed).
+ * Get the stop reason (if start failed) — a legacy code string.
  */
 export function getStreamingStopReason(): string | undefined {
 	return store().getStopReason();
+}
+
+/**
+ * Get the typed start failure (phase + class + retriable), if the last revert
+ * carried one. `undefined` for a legacy string-only revert.
+ */
+export function getStreamingStartFailure(): StartFailure | undefined {
+	return store().getFailure();
+}
+
+/**
+ * Get the current attempt generation. Capture this right after
+ * `startStreamingOptimism()` and pass it back to `revertStreamingOptimism*` so a
+ * late response from a superseded attempt is fenced.
+ */
+export function getStreamingAttemptGeneration(): number {
+	return store().getGeneration();
 }
 
 /**
@@ -316,10 +478,25 @@ export function reconcileStreamingOptimism(isStreaming: boolean): void {
 }
 
 /**
- * Revert to `idle` with a stop reason (start failed).
+ * Revert to `idle` with a stop reason (start failed). Pass the attempt
+ * `generation` captured at start to fence a stale older-attempt response.
  */
-export function revertStreamingOptimism(reason: string): void {
-	store().revertWithReason(reason);
+export function revertStreamingOptimism(
+	reason: string,
+	generation?: number,
+): void {
+	store().revertWithReason(reason, generation);
+}
+
+/**
+ * Revert to `idle` with a typed `StartFailure` (phase + class + retriable). Pass
+ * the attempt `generation` captured at start to fence a stale response.
+ */
+export function revertStreamingOptimismFailure(
+	failure: StartFailure,
+	generation?: number,
+): void {
+	store().revertWithFailure(failure, generation);
 }
 
 /**

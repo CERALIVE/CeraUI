@@ -7,6 +7,9 @@ import en from "../../../../packages/i18n/src/en/index";
 
 const state = vi.hoisted(() => ({
 	stopReason: undefined as string | undefined,
+	failure: undefined as
+		| { class: string; phase: string; retriable: boolean; attemptId: string }
+		| undefined,
 }));
 const toastError = vi.hoisted(() => vi.fn());
 
@@ -38,11 +41,14 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
 	getStreamingOptimismState: () => "idle",
 	getStreamingStopReason: () => state.stopReason,
+	getStreamingStartFailure: () => state.failure,
+	getStreamingAttemptGeneration: () => 1,
 	getStopStuckBannerVisible: () => false,
 	startStreamingOptimism: vi.fn(),
 	stopStreamingOptimism: vi.fn(),
 	reconcileStreamingOptimism: vi.fn(),
 	revertStreamingOptimism: vi.fn(),
+	revertStreamingOptimismFailure: vi.fn(),
 	retryStopStreaming: vi.fn(),
 }));
 
@@ -75,6 +81,7 @@ const startFailed = en.live.startFailed as Readonly<Record<string, string>>;
 afterEach(() => {
 	cleanup();
 	state.stopReason = undefined;
+	state.failure = undefined;
 	toastError.mockReset();
 });
 
@@ -101,5 +108,59 @@ describe("LiveView start-failure output", () => {
 		await tick();
 
 		expect(toastError).toHaveBeenCalledWith(startFailed.generic);
+	});
+});
+
+const startFailure = en.live.startFailure;
+
+describe("LiveView typed start-failure rendering (Todo 29)", () => {
+	it("renders the class message + retried-then-failed suffix for a retriable class", async () => {
+		state.failure = {
+			class: "engine_unavailable",
+			phase: "connect",
+			retriable: true,
+			attemptId: "att_a",
+		};
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledWith(
+			`${startFailure.class.engine_unavailable} ${startFailure.retriedThenFailed}`,
+		);
+	});
+
+	it("renders the class message + not-retriable suffix for a deterministic class", async () => {
+		state.failure = {
+			class: "start_invalid",
+			phase: "params",
+			retriable: false,
+			attemptId: "att_b",
+		};
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledWith(
+			`${startFailure.class.start_invalid} ${startFailure.notRetriable}`,
+		);
+	});
+
+	it("prefers the typed failure over a legacy stopReason (single toast)", async () => {
+		state.failure = {
+			class: "engine_internal",
+			phase: "start-rpc",
+			retriable: false,
+			attemptId: "att_c",
+		};
+		state.stopReason = "source_lost";
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledTimes(1);
+		expect(toastError).toHaveBeenCalledWith(
+			`${startFailure.class.engine_internal} ${startFailure.notRetriable}`,
+		);
 	});
 });

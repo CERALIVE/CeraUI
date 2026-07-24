@@ -158,6 +158,9 @@ function startResponse(
 			};
 		case "failed":
 			return {
+				result: "failed" as const,
+				attemptId: result.attemptId,
+				failure: result.failure,
 				success: false,
 				is_streaming: false,
 				error:
