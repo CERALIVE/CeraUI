@@ -36,6 +36,7 @@ import { logger } from "../../helpers/logger.ts";
 import { validatePortNo } from "../../helpers/number.ts";
 import { writeTextFileAtomic } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { getMockRelayRtt } from "../../mocks/providers/relays.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
@@ -118,8 +119,10 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 
 	Object.entries(relaysCache.servers).forEach(([id, srv]) => {
 		if (!srv) return;
+		const rtt = shouldUseMocks() ? getMockRelayRtt(id) : undefined;
 		msg.servers[id] = {
 			name: srv.name,
+			...(rtt !== undefined ? { rtt } : {}),
 			...(srv.default !== undefined ? { default: srv.default } : {}),
 			addr: srv.addr,
 			port: srv.port,

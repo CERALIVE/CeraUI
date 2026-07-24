@@ -35,7 +35,8 @@ test('device package uses the installed sender and does not require BCRPT at boo
 	expect(deviceSetup.sound_device_dir).toBe('/sys/class/sound');
 	expect(deviceSetup.usb_device_dir).toBe('/dev');
 	expect(deviceSetup.bcrpt_path).toBeUndefined();
-	expect(backendMain).toContain('if (setup.bcrpt_path) {');
+	expect(backendMain).not.toContain('setup.bcrpt_path');
+	expect(backendMain).not.toContain('startBcrpt');
 });
 
 test('device package leaves port 80 to the CeraUI service', () => {
