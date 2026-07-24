@@ -281,8 +281,9 @@ The packaged `ceralive.service` runs as `root` because it manages device hardwar
 and privileged system controls. The unit and compiled backend both pin
 `NODE_ENV=production`; development mock mode must never run on a device image.
 Its boot identity uses the installed `srtla_send` binary and real `/dev` hardware
-directories. The legacy BCRPT helper is opt-in and is not required to boot a
-device image.
+directories. (The legacy `bcrpt` streaming helper was retired as dead code in
+PR #199 — it is no longer spawned or packaged; the independent BCRPT/proto-v16
+relay socket in `modules/remote/remote.ts` is a separate, still-present component.)
 
 ## Build Process
 
