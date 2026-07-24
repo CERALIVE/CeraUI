@@ -1177,6 +1177,12 @@ const zh = {
 			mjpegBody:
 				"这是一台输出 Motion-JPEG 的标准 USB 视频类（UVC）设备：它自己的 USB 硬件描述只声明未压缩视频和 Motion-JPEG（MJPEG），没有通过 USB 的硬件 H.264/H.265 编码，也没有为此隐藏的厂商通道，因此编码器会采集其 MJPEG 视频，再重新编码为你选择的编码格式。这是对硬件的准确描述，并非故障。",
 			mjpegLearnMore: "我们如何检测 UVC H.264",
+			coarseUnboundTitle: "该源没有连接任何设备",
+			coarseUnboundBody:
+				"你选择的是一项当前没有接入任何设备的功能，无法从该源开始推流。请改选一个已连接的源。",
+			coarseSuggestionOne: "你是想选择 {name} 吗？",
+			coarseSuggestionMany: "你是想选择这些已连接设备中的一个吗？",
+			coarseSuggestionAction: "切换到 {name}",
 		},
 		summary: {
 			nowStreaming: "正在直播",

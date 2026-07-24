@@ -1241,6 +1241,12 @@ const ko = {
 			mjpegBody:
 				"이 장치는 Motion-JPEG를 출력하는 표준 USB Video Class(UVC) 장치입니다. USB 하드웨어 설명자에는 비압축 및 Motion-JPEG(MJPEG) 영상만 표시되어 있으며, USB를 통한 하드웨어 H.264/H.265 인코딩도, 이를 위한 숨겨진 공급업체 채널도 없습니다. 그래서 인코더가 해당 장치의 MJPEG 영상을 캡처한 뒤 선택한 코덱으로 다시 인코딩합니다. 이는 하드웨어에 대한 정확한 설명이며 결함이 아닙니다.",
 			mjpegLearnMore: "UVC H.264 확인 방법",
+			coarseUnboundTitle: "이 소스에 연결된 장치가 없습니다",
+			coarseUnboundBody:
+				"지금 아무것도 연결되지 않은 기능을 선택했습니다. 이 소스로는 스트림을 시작할 수 없습니다. 연결된 소스를 선택하세요.",
+			coarseSuggestionOne: "{name}을(를) 말씀하신 건가요?",
+			coarseSuggestionMany: "연결된 이 장치들 중 하나를 말씀하신 건가요?",
+			coarseSuggestionAction: "{name}(으)로 전환",
 		},
 		summary: {
 			nowStreaming: "스트리밍 중",

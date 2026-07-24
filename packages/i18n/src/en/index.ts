@@ -641,6 +641,12 @@ const en = {
 			mjpegBody:
 				"This is a standard USB Video Class (UVC) device that outputs Motion-JPEG: its own USB hardware description advertises only uncompressed and Motion-JPEG (MJPEG) video — no hardware H.264/H.265 over USB and no hidden vendor channel for it — so the encoder captures its MJPEG video and re-encodes it to your chosen codec. That's an accurate description of the hardware, not a fault.",
 			mjpegLearnMore: "How we check for UVC H.264",
+			coarseUnboundTitle: "This source has no device connected",
+			coarseUnboundBody:
+				"You've selected a capability that nothing is plugged into right now, so the stream can't start from it. Pick a connected source instead.",
+			coarseSuggestionOne: "Did you mean {name:string}?",
+			coarseSuggestionMany: "Did you mean one of these connected devices?",
+			coarseSuggestionAction: "Switch to {name:string}",
 		},
 		summary: {
 			nowStreaming: "Now streaming",

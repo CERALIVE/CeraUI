@@ -323,6 +323,22 @@ const SRC_DUAL = captureSource(
 	] as Mode[],
 );
 
+// The coarse `hdmi` capability placeholder — kept by the sources model only when
+// NO enumerated device bridged to that pipeline. On RK3588 the on-board HDMI-RX
+// enumerates under a different pipeline, so this row is permanently "Not connected".
+const SRC_COARSE_HDMI: Record<string, unknown> = {
+	origin: "coarse",
+	id: "hdmi",
+	pipelineId: "hdmi",
+	labelKey: "settings.sources.hdmi",
+	modes: [],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	audioKind: "selectable",
+	available: true,
+};
+
 const SRC_TEST: Record<string, unknown> = {
 	origin: "virtual",
 	id: "test",
@@ -595,6 +611,77 @@ test.describe("Capability truthfulness (functional)", () => {
 		// visible badge must name both codecs the device's modes advertise.
 		await expect(kindBadge).toHaveAttribute("data-source-kind", "uvc_h265");
 		await expect(kindBadge).toHaveText("UVC H.264/H.265");
+	});
+
+	// A coarse row stays honestly "Not connected" AND stays selectable — but the
+	// selected-plus-unbound combination used to render the same lime affirmation a
+	// working device gets, so an operator could sit on a source that can never
+	// connect while their actual camera waited one row below.
+	test("a SELECTED unbound coarse row warns and points at the connected device whose real name matches", async ({
+		page,
+	}) => {
+		serverConfig({ source: "hdmi" });
+		sendFullCaps();
+		sendSources([SRC_COARSE_HDMI, SRC_RODE]);
+
+		const row = page.getByTestId("source-row-hdmi");
+		await expect(row).toBeVisible({ timeout: 15_000 });
+		await expect(row).toHaveAttribute("data-selected", "true");
+		await expect(row).toHaveAttribute("data-unbound", "true");
+
+		// The honest state is never hidden or faked: the "Not connected" pill and
+		// its explainer stay exactly where they were.
+		await expect(page.getByTestId("source-not-connected-hdmi")).toBeVisible();
+		await expect(
+			page.getByTestId("source-not-connected-info-hdmi"),
+		).toBeVisible();
+
+		// …and the consequence is now impossible to miss, naming the RØDE row.
+		const band = page.getByTestId("source-coarse-unbound-hdmi");
+		await expect(band).toBeVisible();
+		await expect(page.getByTestId("source-coarse-suggestion-lead-hdmi")).toHaveText(
+			`Did you mean ${RODE_DISPLAY_NAME}?`,
+		);
+		await expect(
+			page.getByTestId("source-coarse-suggestion-video-usb"),
+		).toBeVisible();
+	});
+
+	test("an unbound coarse row that is NOT selected, and a selected row with no name-matching device, get no warning band", async ({
+		page,
+	}) => {
+		serverConfig({ source: "video-usb" });
+		sendFullCaps();
+		sendSources([SRC_COARSE_HDMI, SRC_RODE]);
+
+		await expect(page.getByTestId("source-row-hdmi")).toBeVisible({
+			timeout: 15_000,
+		});
+		// Unselected coarse row keeps its existing calm muted treatment.
+		await expect(page.getByTestId("source-coarse-unbound-hdmi")).toHaveCount(0);
+		await expect(page.getByTestId("source-row-hdmi")).not.toHaveAttribute(
+			"data-unbound",
+			"true",
+		);
+		// A selected CONCRETE capture row is never flagged.
+		await expect(page.getByTestId("source-coarse-unbound-video-usb")).toHaveCount(
+			0,
+		);
+
+		// Re-inject with the coarse row selected but only a device whose real name
+		// has nothing to do with HDMI: the band warns, but offers NO false pointer.
+		sendSources([
+			SRC_COARSE_HDMI,
+			captureSource("video-cam", "uvc_h264", "libuvch264", "Logitech BRIO Webcam"),
+		]);
+		serverConfig({ source: "hdmi" });
+		await expect(page.getByTestId("source-coarse-unbound-hdmi")).toBeVisible();
+		await expect(
+			page.getByTestId("source-coarse-suggestion-lead-hdmi"),
+		).toHaveCount(0);
+		await expect(
+			page.getByTestId("source-coarse-suggestion-video-cam"),
+		).toHaveCount(0);
 	});
 
 	// ── (c) Network-ingest rows: disabled-with-reason ⇄ selectable via gateway ──

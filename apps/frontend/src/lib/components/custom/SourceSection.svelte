@@ -7,7 +7,12 @@
                 coarse "HDMI Capture" label — this is what kills the mislabel).
     • coarse  — a legacy / no-device-yet capability source: its labelKey-translated
                 label, FULLY selectable (the old pipeline-picker behavior surfaced
-                through the unified list).
+                through the unified list). SELECTING one is a real operator state,
+                but a quiet one — so a selected coarse row swaps its lime
+                "Selected" affirmation for an amber warning treatment plus a
+                "did you mean <connected device>?" pointer (see
+                `$lib/streaming/coarse-source-hint`). Its "Not connected" state is
+                never hidden or faked.
     • virtual — the single Test-pattern row (exactly once).
     • network — an rtmp/srt LAN ingest source with URL + QR/copy affordances,
                 disabled-with-reason from `source.available` / `source.unavailableReason`
@@ -60,6 +65,7 @@ import * as Select from '$lib/components/ui/select';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { generateDeviceAccessQr } from '$lib/helpers/NetworkHelper';
 import { rpc } from '$lib/rpc';
+import { deriveCoarseUnboundState } from '$lib/streaming/coarse-source-hint';
 import {
 	beginFieldSync,
 	markFieldApplied,
@@ -526,15 +532,25 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						{@const selected = config?.source === source.id}
 						{@const disabled = rowDisabled(source)}
 						{@const RowIcon = rowIcon(source)}
+						<!-- A selected coarse row has no device behind it, so the lime
+						     "Selected" affirmation would read as "this works". -->
+						{@const coarseUnbound = deriveCoarseUnboundState(
+							source,
+							selected,
+							sources?.sources,
+						)}
 						<li
 							data-testid={`source-row-${source.id}`}
 							data-origin={source.origin}
 							data-selected={selected}
+							data-unbound={coarseUnbound.unbound ? 'true' : undefined}
 						>
 							<div class="flex items-center gap-2">
 								<button
 									class="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors {selected
-										? 'border-primary bg-primary/10'
+										? coarseUnbound.unbound
+											? 'border-status-warning/60 bg-status-warning/10'
+											: 'border-primary bg-primary/10'
 										: 'border-border hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
 									data-selected={selected}
 									data-testid={source.origin === 'network'
@@ -548,7 +564,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									<span class="flex min-w-0 items-center gap-2.5">
 										<RowIcon
 											aria-hidden={true}
-											class="size-4 shrink-0 {selected ? 'text-primary' : 'text-muted-foreground'}"
+											class="size-4 shrink-0 {selected
+												? coarseUnbound.unbound
+													? 'text-status-warning'
+													: 'text-primary'
+												: 'text-muted-foreground'}"
 										/>
 										<span class="flex min-w-0 flex-col">
 											<span
@@ -608,8 +628,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											</span>
 										{/if}
 										{#if selected}
-											<span class="text-primary inline-flex items-center gap-1 text-xs font-semibold">
-												<Check aria-hidden={true} class="size-4" />
+											<span
+												class="inline-flex items-center gap-1 text-xs font-semibold {coarseUnbound.unbound
+													? 'text-status-warning'
+													: 'text-primary'}"
+												data-testid={`source-selected-${source.id}`}
+											>
+												{#if coarseUnbound.unbound}
+													<TriangleAlert aria-hidden={true} class="size-4" />
+												{:else}
+													<Check aria-hidden={true} class="size-4" />
+												{/if}
 												{$LL.live.inputPicker.selected()}
 											</span>
 										{/if}
@@ -674,6 +703,67 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									/>
 								{/if}
 							</div>
+
+							<!-- Selected-but-unbound coarse row: the honest "Not connected" pill
+							     above stays, and this band makes the consequence impossible to
+							     miss — plus a one-tap route to the connected device whose real
+							     hardware name matches what this capability is called. -->
+							{#if coarseUnbound.unbound}
+								<div
+									class="border-status-warning/40 bg-status-warning/10 mt-2 flex items-start gap-3 rounded-lg border p-3"
+									data-testid={`source-coarse-unbound-${source.id}`}
+									role="status"
+								>
+									<TriangleAlert
+										aria-hidden={true}
+										class="text-status-warning mt-0.5 size-4 shrink-0"
+									/>
+									<div class="min-w-0 flex-1 space-y-1.5">
+										<p class="text-status-warning text-sm font-medium">
+											{$LL.live.source.coarseUnboundTitle()}
+										</p>
+										<p class="text-muted-foreground text-xs leading-relaxed">
+											{$LL.live.source.coarseUnboundBody()}
+										</p>
+										{#if coarseUnbound.suggestions.length > 0}
+											{@const only =
+												coarseUnbound.suggestions.length === 1
+													? coarseUnbound.suggestions[0]
+													: undefined}
+											<p
+												class="text-foreground text-xs font-medium"
+												data-testid={`source-coarse-suggestion-lead-${source.id}`}
+											>
+												{only
+													? $LL.live.source.coarseSuggestionOne({ name: only.displayName })
+													: $LL.live.source.coarseSuggestionMany()}
+											</p>
+											<div class="flex flex-wrap gap-2 pt-0.5">
+												{#each coarseUnbound.suggestions as suggestion (suggestion.id)}
+													{@const SuggestionIcon = rowIcon(suggestion)}
+													<!-- Overrides the Button base's shrink-0/nowrap: a long
+													     device name must wrap inside the band, not overflow it. -->
+													<Button
+														class="h-auto max-w-full min-h-11 shrink py-2 text-left leading-snug whitespace-normal"
+														data-testid={`source-coarse-suggestion-${suggestion.id}`}
+														disabled={isStreaming}
+														onclick={() => handleSelectSource(suggestion)}
+														size="sm"
+														variant="outline"
+													>
+														<SuggestionIcon aria-hidden={true} class="size-3.5" />
+														<span class="min-w-0 break-words">
+															{$LL.live.source.coarseSuggestionAction({
+																name: suggestion.displayName,
+															})}
+														</span>
+													</Button>
+												{/each}
+											</div>
+										{/if}
+									</div>
+								</div>
+							{/if}
 
 							{#if source.origin === 'network' && !source.available}
 								<p

@@ -1363,6 +1363,12 @@ const ar = {
 			mjpegBody:
 				"هذا جهاز USB Video Class‏ (UVC) قياسي يُخرج Motion-JPEG: فوصف عتاده عبر USB لا يعلن سوى فيديو غير مضغوط وMotion-JPEG‏ (MJPEG) — دون ترميز H.264/H.265 عبر العتاد من خلال USB ودون أي قناة مصنّع مخفية لذلك — لذا يلتقط المُرمِّز فيديو MJPEG ويعيد ترميزه إلى الترميز الذي تختاره. هذا وصف دقيق للعتاد، وليس عيبًا.",
 			mjpegLearnMore: "كيف نتحقق من UVC H.264",
+			coarseUnboundTitle: "لا يوجد جهاز متصل بهذا المصدر",
+			coarseUnboundBody:
+				"لقد اخترت إمكانية لا يوجد شيء متصل بها حاليًا، لذا لا يمكن بدء البث منها. اختر مصدرًا متصلًا بدلًا من ذلك.",
+			coarseSuggestionOne: "هل تقصد {name}؟",
+			coarseSuggestionMany: "هل تقصد أحد هذه الأجهزة المتصلة؟",
+			coarseSuggestionAction: "التبديل إلى {name}",
 		},
 		summary: {
 			nowStreaming: "يبث الآن",
