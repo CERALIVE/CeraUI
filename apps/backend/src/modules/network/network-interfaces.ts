@@ -30,7 +30,6 @@ import {
 	getMockIfconfigOutput,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
-import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
 
 import {
 	notificationBroadcast,
@@ -381,7 +380,6 @@ export function processIfconfigOutput(
 
 	if (intsChanged) {
 		triggerNetworkInterfacesChange();
-		void updateBcrptSourceIps();
 	}
 
 	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the

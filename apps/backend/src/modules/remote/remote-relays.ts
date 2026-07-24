@@ -38,7 +38,6 @@ import { writeTextFileAtomic } from "../../helpers/text-files.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 
 import { getConfig, saveConfig } from "../config.ts";
-import { getRelayRtt, updateBcrptServerConfig } from "../streaming/bcrpt.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
 // Use the shared RelaysCache type from config-schemas
@@ -119,10 +118,8 @@ export function buildRelaysMsg(): RelaysResponseMessage {
 
 	Object.entries(relaysCache.servers).forEach(([id, srv]) => {
 		if (!srv) return;
-		const rtt = getRelayRtt(id);
 		msg.servers[id] = {
 			name: srv.name,
-			...(rtt !== undefined ? { rtt } : {}),
 			...(srv.default !== undefined ? { default: srv.default } : {}),
 			addr: srv.addr,
 			port: srv.port,
@@ -353,6 +350,5 @@ export async function handleRemoteRelays(
 			saveConfig();
 			broadcastMsg("config", getConfig());
 		}
-		void updateBcrptServerConfig();
 	}
 }
