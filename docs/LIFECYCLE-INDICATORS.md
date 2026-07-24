@@ -256,15 +256,20 @@ the **backend-restart signal** follow-up (see Named Follow-ups below).
 tracks update progress and disables a duplicate concurrent start;
 `apps/frontend/src/lib/components/updating-overlay.svelte:23-84,92-130` renders
 the downloading/unpacking/setting-up phases and the completion state.
-**Status: EXISTS** — the in-progress rendering itself is solid, but a related
-gap is already known and unconsumed: the Todo-1 salvage branch
-(`feat/lifecycle-indicator-audit-salvage`, `d19b5a56`) contains an
-update-failure phase fix for `updating-overlay.svelte` (today a failed update
-can render as "Successfully Updated") plus a dismiss escape hatch and an
-update-failed band in `UpdatesDialog.svelte` — this was **deliberately left
-unconsumed** by Todo 20 ("out of this todo's scope (indicator work only) and
-left for its own change", `task-20-device-stability-wrapup.md` §Salvage
-consumption). See **update rollback lifecycle** in Named Follow-ups below.
+**Status: EXISTS** — the in-progress rendering itself is solid, and the related
+gap the Todo-1 salvage branch flagged is now **CONSUMED** (device-quality-wave2).
+The "failed update shown as Successfully Updated" bug is FIXED:
+`updating-overlay.svelte` now splits the single `isComplete` into truthful
+`failureReason`/`isFailure`/`isSuccess` derivations — a string `result` (the apt
+failure message) renders a `failed` phase (`XCircle` + error toast carrying the
+real apt reason), never the green checkmark (CeraUI PR `fix/updating-overlay-false-success`,
+merged `e8704449`; covered by `updating-overlay.test.ts`). Todo 24
+(update-notification unification, PR #184) additionally shipped the truthful
+`UpdatesDialog` `failed(reason)` band + retry off the unified update state
+machine. The overlay auto-clears when the update loop clears `status.updating`,
+so the salvage branch's separate "dismiss escape hatch" is subsumed. See
+**update rollback lifecycle** in Named Follow-ups below (now resolved) and the
+Todo-37 triage section.
 
 ---
 
@@ -455,17 +460,105 @@ it makes them discoverable for whoever plans the next indicator wave.
    (`task-19-device-stability-wrapup.md` §Todo-21 follow-up). This is the
    sender-side half of what would make `one-link-drops`/`engine-unavailable`'s
    SRT-reconnect dimension fully truthful, rather than honestly-unknown.
+   **Triage verdict (Todo 37 · Audit b): `backlog`.** Re-verified at execution:
+   `srtla-send-rs/src/telemetry_file.rs`'s emitted `ConnRecord` has exactly
+   seven fields (`conn_id`, `rtt_ms`, `nak_count`, `weight_percent`, `window`,
+   `in_flight`, `bitrate_bps`) — no `connected`/`reconnecting` field; the
+   internal `LinkStats.connected` is used only to compute `weight_percent` and is
+   never serialized. The consumer IS wired: `streaming.schema.ts:856`
+   (`reconnecting: z.boolean().nullable()`), `deriveStreamHealth` (tri-state), and
+   `HudBar.svelte:496` all read it. Cost to wire: a cross-repo ADR-001 telemetry
+   schema v2 — sender producer field + unfreezing the `@ceralive/srtla` Zod
+   reader + C-reference parity + a binding republish; the CeraUI consumer lights
+   up with zero change once the producer lands (≈4–5 coordinated PRs across two
+   sibling repos). Not a CeraUI-only change → not implement-now.
 2. **Thermal threshold indicator.** See `thermal-warning` above.
 3. **Disk-full stream-facing warning.** See `disk-low-full` above.
 4. **Backend-restart signal.** See `backend-restart-dashboard-open` above.
 5. **Multi-tab coordination.** See `multiple-browser-tabs` above.
 6. **Per-link recovery toast granularity.** See `link-recovers` above.
-7. **Update rollback lifecycle.** See `update-in-progress` above — the
-   unconsumed Todo-1 salvage branch (`feat/lifecycle-indicator-audit-salvage`,
-   `d19b5a56`) already contains a candidate fix for the "failed update shown as
-   Successfully Updated" bug plus a dismiss escape hatch; it was deliberately
-   left out of Todo 20's scope and remains available to consume in a future
-   change.
+7. **Update rollback lifecycle.** ~~See `update-in-progress` above — the
+   unconsumed Todo-1 salvage branch.~~ **RESOLVED (Todo 37 triage: `done-in-this-plan`).**
+   The core "failed update shown as Successfully Updated" bug is FIXED on `main`:
+   `updating-overlay.svelte` now renders a truthful `failed` phase for a string
+   (apt-error) `result` instead of the green success toast (CeraUI PR
+   `fix/updating-overlay-false-success`, merged `e8704449`; covered by
+   `updating-overlay.test.ts` red→green). Todo 24 (PR #184) additionally shipped
+   the `UpdatesDialog` `failed(reason)` band + retry off the unified update state
+   machine. The overlay auto-clears when the update loop clears `status.updating`
+   and the dialog retry covers re-attempt, so the salvage branch's separate
+   "dismiss escape hatch" is subsumed. Cross-verified against Todo 24's evidence
+   (`task-24-device-quality-wave2.md` §8, which flagged the overlay `isComplete`
+   bug as still-open at Todo 24 time — that residual is what the
+   `fix/updating-overlay-false-success` PR then closed).
+
+---
+
+## Triage — device-quality-wave2 Todo 37
+
+This section is the authoritative disposition of the 6 `RECOMMENDED` rows and 7
+Named Follow-ups above, plus two targeted audits, recorded by
+`device-quality-wave2` Todo 37 (2026-07-24). Each `done-in-this-plan` claim was
+cross-verified against the cited todo's actual evidence — not the doc's prior
+assumption. `backlog` verdicts carry a one-line cost. No item qualified as a
+genuinely-small (≤1 focused PR) `implement-now`: every `RECOMMENDED` row is, by
+construction, a registered *backend-event-cost* follow-up, so all were
+`backlog`ed rather than scope-exploded. Full evidence:
+`.omo/evidence/device-quality-wave2/task-37-device-quality-wave2.md`.
+
+### 6 RECOMMENDED lifecycle rows
+
+| Row | Verdict | Cost / resolving todo |
+|-----|---------|-----------------------|
+| `stream-stop-hang` | `backlog` | New backend `stream.stopEscalated` status field emitted from the `process-runner.ts` SIGKILL-escalation branch + a `LiveCockpit` "stopping is taking longer…" band + i18n(10) + tests. The backend never hangs forever (SIGKILL already bounds teardown), so the gap is cosmetic distinctness only — deferred. ~1 cross-layer PR. |
+| `link-recovers` | `backlog` | = Named Follow-up #6. Per-link (`conn_id`-keyed) down→up transition tracker in `lifecycle-indicators.ts` mirroring the all-links-down emit pattern + toast copy(10) + tests. Aggregate all-links recovery already toasts; per-link is a granularity nicety. ~1 backend PR. |
+| `backend-restart-dashboard-open` | `backlog` | = Named Follow-up #4. Monotonic `serverInstanceId`/`bootId` on the first frame after connect + `connection-ux` diff + a distinct `DisconnectedBanner` state + i18n + tests. Cross-layer. |
+| `thermal-warning` | `backlog` | = Named Follow-up #2. Board-specific threshold classifier in `sensors.ts` + additive `thermal.level` riding the device-stats broadcast + `HudBar` band + i18n + tests. Needs per-board calibration data. |
+| `multiple-browser-tabs` | `backlog` | = Named Follow-up #5. Even the cheapest frontend-only form (`BroadcastChannel` + "also open elsewhere" band) is a new store + banner + i18n(10) + tests. The existing per-resource `osCommand` race guard already blocks the dangerous concurrent-mutation case. |
+| `audio-unplugged-before-start` | `backlog` | Extending `deriveGoLiveReadiness()` needs a 5th gate (or a new warn dimension) + plumbing the `audio_sources` list into the pure input + call-site wiring + tests, and would contradict the deliberate "audio is NOT a readiness row" decision (live-correctness-pass Todo #11). Runtime silence-failover (Todo 17) also means blocking Start on a since-vanished audio device may be undesirable — a product decision, not a mechanical mirror of the video gate. Deferred. |
+
+### 7 Named Follow-ups
+
+| # | Follow-up | Verdict | Cost / resolving todo |
+|---|-----------|---------|-----------------------|
+| 1 | Sender-side SRT reconnect-state contract (Todo 19b) | `backlog` | = **Audit (b)**. `srtla-send-rs/src/telemetry_file.rs` emits no `connected`/`reconnecting` field; CeraUI already consumes `srt.reconnecting` tri-state so the live value is honestly `null`. Cost: cross-repo ADR-001 telemetry schema v2 (sender producer + `@ceralive/srtla` Zod-reader unfreeze + C-reference parity + binding republish); consumer lights up with zero change. ≈4–5 PRs across two sibling repos. |
+| 2 | Thermal threshold indicator | `backlog` | = `thermal-warning` row (dedup). |
+| 3 | Disk-full stream-facing warning | `backlog` | General low-disk banner already EXISTS (`LowDiskBanner` + `isDiskLow` off the existing device-stats `disk` signal — no new collector); the gap is a stream-start-path-specific warning. Reuses the existing signal but still needs a Live-path surface + a streaming-specific threshold design + tests. Deferred. |
+| 4 | Backend-restart signal | `backlog` | = `backend-restart-dashboard-open` row (dedup). |
+| 5 | Multi-tab coordination | `backlog` | = `multiple-browser-tabs` row (dedup). |
+| 6 | Per-link recovery toast granularity | `backlog` | = `link-recovers` row (dedup). |
+| 7 | Update rollback lifecycle | `done-in-this-plan` | Todo 24 (PR #184, `UpdatesDialog` `failed(reason)` band + retry) **and** CeraUI PR `fix/updating-overlay-false-success` (`e8704449`, the overlay false-success fix). Cross-verified: Todo 24's evidence §8 flagged the overlay `isComplete` bug as still-open at Todo 24 time; the `fix/updating-overlay-false-success` PR then closed it (verified in current `updating-overlay.svelte` on `main`). |
+
+### Two audits
+
+**(a) Program-path WebCodecs Annex-B — verdict: `done-in-this-plan` (Todo 14
+cerastream-half); CeraUI consumer already correct.**
+CeraUI's WebCodecs decoder (`PreviewCanvas.svelte:238-248`) constructs the
+`VideoDecoder` with `{ codec }` and sets `config.description` (the avcC box) ONLY
+when the engine sends one; with no `description` the decoder runs in **Annex-B**
+(byte-stream) mode, and `decodeAccessUnit` (`:293-304`) feeds raw H.264 access
+units with **no length-prefix parse** — i.e. it expects Annex-B, never AVCC. The
+engine's spliced *program-path* preview leg formerly emitted `avc`
+(AVCC/`codec_data`) where byte-stream is required (the mp4mux/MSE muxer AND the
+WebCodecs tier both need byte-stream); Todo 14 cerastream-half fixed it by adding
+a `video/x-h264,stream-format=byte-stream,alignment=au` `preview_annexb`
+capsfilter to `splice_preview` (`leg.rs`), so the engine now emits Annex-B —
+matching the CeraUI decoder. No CeraUI change is needed. The engine fix lives in
+the `cerastream` repo (protected sibling — read-only for this triage); its
+presence in a shipped engine `.deb` is a cerastream-release/device-image tracking
+item, not a CeraUI change.
+
+**(b) Sender `srt.reconnecting` field — verdict: `backlog` (= Named Follow-up
+#1); CeraUI consumer already wired.**
+`srtla-send-rs/src/telemetry_file.rs`'s emitted `ConnRecord` has exactly seven
+fields (`conn_id`, `rtt_ms`, `nak_count`, `weight_percent`, `window`,
+`in_flight`, `bitrate_bps`) — **no** `connected`/`reconnecting`. The internal
+`LinkStats.connected` drives `weight_percent` only and is never serialized. CeraUI
+DOES consume `srt.reconnecting` — schema `streaming.schema.ts:856`
+(`z.boolean().nullable()`), `deriveStreamHealth` (tri-state: `null`=unknown,
+`false`=ok, `true`=bad), `HudBar.svelte:496` — so on real hardware the value is
+honestly `null`. Wiring it is a cross-repo ADR-001 telemetry schema-v2 change (see
+Follow-up #1 cost); the consumer needs zero change once the producer lands.
 
 ## Cross-references
 
@@ -477,5 +570,10 @@ it makes them discoverable for whoever plans the next indicator wave.
   full four-indicator implementation + live-drill evidence (PR #180).
 - `.omo/evidence/device-stability-wrapup/task-21-rows.txt` — the durable,
   verbatim 31-row-ID oracle this document's coverage is checked against.
+- `.omo/plans/device-quality-wave2.md` — Todo 37 (this doc's Triage section),
+  Todos 24/28/29 (the fixes cross-verified above).
+- `.omo/evidence/device-quality-wave2/task-37-device-quality-wave2.md` — the
+  13-row triage table + two audit verdicts (WebCodecs Annex-B, sender
+  `srt.reconnecting`) recorded by Todo 37.
 - [`AGENTS.md`](../AGENTS.md) → WHERE TO LOOK — cross-link entry for this
   document.
