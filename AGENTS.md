@@ -895,17 +895,17 @@ are unmodified.
 
 ```
 modules/streaming/streamloop/
-├── exec-paths.ts    # srtlaSendExec, bcrptExec constants
+├── exec-paths.ts    # srtlaSendExec constant
 ├── process-runner.ts # mutable streamingProcesses list + spawnStreamingLoop/stopProcess/stopAll/getStreamingProcesses
 ├── start-stream.ts  # startStream — spawns srtla_send, wires telemetry, starts the engine session over the seam
 ├── session.ts       # start / stop + removeNetworkInterfacesChangeListener module-state
 ├── autostart.ts     # AUTOSTART_CHECK_FILE / setAutostart / checkAutoStartStream / autoStartStream backoff
-└── index.ts         # named re-export barrel (exactly the 10 public exports)
+└── index.ts         # named re-export barrel (exactly the 8 public exports)
 ```
 
-**Locked public API surface (9 exports):** `AUTOSTART_CHECK_FILE`, `autoStartStream`,
-`bcrptExec`, `checkAutoStartStream`, `setAutostart`, `srtlaSendExec`,
-`start`, `startStream`, `stop`. Adding or removing any of these is a breaking change.
+**Locked public API surface (8 exports):** `AUTOSTART_CHECK_FILE`, `autoStartStream`,
+`checkAutoStartStream`, `setAutostart`, `srtlaSendExec`, `start`, `startStream`, `stop`.
+Adding or removing any of these is a breaking change.
 
 ### Transactional start/stop lifecycle
 
@@ -937,8 +937,6 @@ modules.
 
 | Constant | Value | Used in |
 |----------|-------|---------|
-| `MAX_BCRPT_RETRIES` | 5 | `bcrpt.ts` |
-| `INITIAL_RETRY_DELAY` | 1000ms | `bcrpt.ts` |
 | `AUTOSTART_RETRY_DELAY` | 1000ms | `streamloop/autostart.ts` |
 | `AUDIO_SOURCE_POLL_DELAY` | 1000ms | `audio.ts` |
 
