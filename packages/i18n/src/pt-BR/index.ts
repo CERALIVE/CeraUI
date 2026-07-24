@@ -483,7 +483,7 @@ const ptBR = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "Câmera USB",
+			libuvch264: "Câmera USB (UVC)",
 			hdmi: "Captura HDMI",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",

@@ -330,7 +330,7 @@ const ja = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "USB カメラ",
+			libuvch264: "USB カメラ (UVC)",
 			hdmi: "HDMI キャプチャ",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",

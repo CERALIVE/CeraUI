@@ -307,7 +307,7 @@ export const HARDWARE_COLORS: Record<HardwareType, { text: string; bg: string; b
 // Video source labels (browser-safe)
 export const VIDEO_SOURCE_LABELS: Record<string, string> = {
 	camlink: 'Cam Link 4K',
-	libuvch264: 'USB camera with hardware H.264 (UVC)',
+	libuvch264: 'USB camera (UVC)',
 	uvc_h264: 'UVC H.264 Camera',
 	uvc_h265: 'UVC H.265 Camera',
 	hdmi: 'HDMI Capture',

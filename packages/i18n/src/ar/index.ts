@@ -453,7 +453,7 @@ const ar = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "كاميرا USB",
+			libuvch264: "كاميرا USB (UVC)",
 			hdmi: "التقاط HDMI",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",

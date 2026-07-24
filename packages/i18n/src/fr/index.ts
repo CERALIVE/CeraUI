@@ -486,7 +486,7 @@ const fr = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "Caméra USB",
+			libuvch264: "Caméra USB (UVC)",
 			hdmi: "Capture HDMI",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",

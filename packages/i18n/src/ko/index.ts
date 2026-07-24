@@ -320,7 +320,7 @@ const ko = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "USB 카메라",
+			libuvch264: "USB 카메라 (UVC)",
 			hdmi: "HDMI 캡처",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
