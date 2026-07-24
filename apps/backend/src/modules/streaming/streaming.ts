@@ -44,7 +44,6 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import { getAudioDevices } from "./audio.ts";
-import { updateBcrptServerIps } from "./bcrpt.ts";
 import { getSupportedTransports } from "./capabilities.ts";
 import { validateBitrate } from "./encoder.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
@@ -86,9 +85,6 @@ export function updateStatus(status: boolean) {
 	if (status !== isStreaming) {
 		isStreaming = status;
 		broadcastMsg("status", { is_streaming: isStreaming });
-
-		// Clear out the BCRP server list on start, and re-populate it on stop
-		void updateBcrptServerIps();
 
 		return true;
 	}
