@@ -77,6 +77,9 @@ export const captureSourceSchema = streamSourceBase.extend({
 	kind: deviceKindSchema,
 	displayName: z.string(),
 	devicePath: z.string(),
+	// Reboot-stable hardware identity (cerastream `stable_id`). Lets routing
+	// self-heal a persisted selection whose node id went stale after a replug.
+	stableId: z.string().optional(),
 });
 export type CaptureStreamSource = z.infer<typeof captureSourceSchema>;
 
