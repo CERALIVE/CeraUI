@@ -464,8 +464,6 @@ describe("PreviewCanvas", () => {
 		});
 	}
 
-
-
 	it("sends the applied config.source as input_id on the start frame", async () => {
 		vi.stubGlobal("VideoDecoder", DecoderStub);
 		vi.stubGlobal("WebSocket", FakeWebSocket);
