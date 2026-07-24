@@ -1332,6 +1332,26 @@ const hi = {
 		bitrateRange: "बिटरेट 2000 और 12000 Kbps के बीच होना चाहिए",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"स्वचालित स्ट्रीम शुरू नहीं हुई: {attempt}/{maxAttempts} जाँचों के बाद कोई नेटवर्क लिंक उपलब्ध नहीं था। journalctl -u ceralive.service देखें।",
+		streamStartEngineUnavailableRetrying:
+			"स्ट्रीमिंग इंजन उपलब्ध नहीं है — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"स्ट्रीमिंग इंजन पुनः आरंभ हो रहा है — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"स्ट्रीमिंग इंजन ने समय पर उत्तर नहीं दिया — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"स्ट्रीम शुरू नहीं हुई: इंजन उपलब्ध नहीं है ({attempt}/{maxAttempts} प्रयास)। journalctl -u cerastream.service देखें।",
+		streamStartEngineRestartingFailed:
+			"स्ट्रीम शुरू नहीं हुई: इंजन बार-बार पुनः आरंभ हुआ ({attempt}/{maxAttempts} प्रयास)। journalctl -u cerastream.service देखें।",
+		streamStartTimeoutFailed:
+			"स्ट्रीम शुरू नहीं हुई: इंजन का समय समाप्त हुआ ({attempt}/{maxAttempts} प्रयास)। journalctl -u cerastream.service देखें।",
+		streamStartInvalidFailed:
+			"स्ट्रीम शुरू नहीं हुई: कॉन्फ़िगरेशन या डिवाइस अमान्य है। journalctl -u cerastream.service देखें।",
+		streamStartProtocolFailed:
+			"स्ट्रीम शुरू नहीं हुई: इंजन प्रोटोकॉल असंगत है। journalctl -u cerastream.service देखें।",
+		streamStartInternalFailed:
+			"स्ट्रीम शुरू नहीं हुई: इंजन की आंतरिक त्रुटि। journalctl -u cerastream.service देखें।",
 		ceraliveUpdateAvailable:
 			"एक CERALIVE अपडेट उपलब्ध है। इसे इंस्टॉल करने के लिए सेटिंग्स → सॉफ़्टवेयर अपडेट खोलें।",
 		ceraliveUpdateFailed:

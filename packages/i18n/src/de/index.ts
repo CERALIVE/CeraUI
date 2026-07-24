@@ -767,6 +767,26 @@ const de = {
 		bitrateRange: "Die Bitrate muss zwischen 2000 und 12000 Kbps liegen",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"Automatischer Streamstart fehlgeschlagen: nach {attempt}/{maxAttempts} Prüfungen waren keine Netzwerkverbindungen verfügbar. Prüfe journalctl -u ceralive.service.",
+		streamStartEngineUnavailableRetrying:
+			"Streaming-Engine nicht verfügbar – neuer Versuch ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"Streaming-Engine wird neu gestartet – neuer Versuch ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"Streaming-Engine antwortete nicht rechtzeitig – neuer Versuch ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"Streamstart fehlgeschlagen: Engine nicht verfügbar ({attempt}/{maxAttempts} Versuche). Prüfe journalctl -u cerastream.service.",
+		streamStartEngineRestartingFailed:
+			"Streamstart fehlgeschlagen: Engine startete wiederholt neu ({attempt}/{maxAttempts} Versuche). Prüfe journalctl -u cerastream.service.",
+		streamStartTimeoutFailed:
+			"Streamstart fehlgeschlagen: Zeitüberschreitung ({attempt}/{maxAttempts} Versuche). Prüfe journalctl -u cerastream.service.",
+		streamStartInvalidFailed:
+			"Streamstart fehlgeschlagen: Konfiguration oder Gerät ungültig. Prüfe journalctl -u cerastream.service.",
+		streamStartProtocolFailed:
+			"Streamstart fehlgeschlagen: Engine-Protokoll inkompatibel. Prüfe journalctl -u cerastream.service.",
+		streamStartInternalFailed:
+			"Streamstart fehlgeschlagen: interner Engine-Fehler. Prüfe journalctl -u cerastream.service.",
 		ceraliveUpdateAvailable:
 			"Ein CERALIVE-Update ist verfügbar. Öffnen Sie Einstellungen → Softwareupdates, um es zu installieren.",
 		ceraliveUpdateFailed:

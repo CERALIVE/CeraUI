@@ -883,11 +883,14 @@ Public stream start/stop admission now routes through
 `apps/backend/src/modules/streaming/stream-session-orchestrator.ts`. It owns the
 single lifecycle state machine for UI, autostart, remote control, and set-profile,
 uses generation-scoped cancellation for stop-during-start, and reconciles the
-actual cerastream state at boot/reconnect. Timeout, failure, transitional, or
-contradictory engine status remains `reconciling` until the heal path retries;
-only concordant streaming/idle status is adopted. `status.stream_lifecycle` is additive;
-legacy `is_streaming` flips true only after engine confirmation. Todo 27, not this
-orchestrator, owns general engine-phase failure rollback.
+actual cerastream state at boot/reconnect. Query/subscription failure or a
+transitional/contradictory status remains `reconciling` until the heal path retries.
+After a successful status subscription, a full 2.5-second window with no event is
+authoritative idle because active streams emit a 2-second heartbeat; late events
+from that closed probe are fenced. `status.stream_lifecycle` is additive;
+legacy `is_streaming` flips true only after engine confirmation. The bounded retry
+runner retries only connect-phase transient classes, after transactional rollback,
+and stop cancels a pending backoff without notification.
 
 `apps/backend/src/modules/streaming/streamloop.ts` is now a 5-line barrel re-exporting
 from `streamloop/index.ts`. The 10 public exports are unchanged — all caller import paths
@@ -928,6 +931,25 @@ classified by machine-readable error shape; CeraUI does not simulate a separate
 hello I/O wait. Subscribe, start-RPC, PLAYING validation, and stop have explicit
 bounds. Stop confirms engine/process cleanup or returns typed `stop_failed` after
 12 seconds. Full contract and timeout values: `docs/START-LIFECYCLE.md`.
+
+Todo 28 adds a 5-attempt/60-second exponential retry bound around that transaction.
+Each individual launch is also capped at 10 seconds; expiry cancels that launch's
+generation, awaits bounded cleanup, and classifies the attempt as a retriable
+connect-phase `start_timeout` so a hung engine call cannot hold the lifecycle slot.
+The prior launch must settle after cleanup before backoff is armed; if it does not
+settle within the cleanup bound, `start_cleanup_timeout` is terminal and no later
+attempt is launched.
+Cerastream stop is the deliberate exception to the backend IPC queue: it is sent
+immediately through the active client so cleanup cannot wait behind the launch it
+must interrupt. The client is then closed without waiting for a stop reply; this
+settles pending start/stop requests and releases the serialized queue even when a
+crashed engine can no longer answer.
+Suppression reads only existing update, engine capability, and boot-uptime signals;
+suppressed attempts remain `starting` and emit no error toast. Structured retry and
+terminal records carry attempt id, phase, class, optional engine code, and retry
+state. User copy is keyed across all 10 locales, and terminal copy points to the
+cerastream journal. Autostart's no-link loop is capped at five checks; permanent
+configuration/engine failures stop immediately with a visible reason.
 
 ### timing-constants.ts
 

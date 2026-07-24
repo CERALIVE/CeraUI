@@ -27,6 +27,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | Transactional launch cleanup + phase/stop deadlines | `modules/streaming/launch-transaction.ts`, `start-lifecycle-timing.ts`, `streamloop/start-stream.ts`; contract in `../../docs/START-LIFECYCLE.md` |
+| Bounded start retry + suppression + diagnostics | `modules/streaming/stream-start-retry.ts`, `stream-start-retry-reporting.ts` |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
@@ -510,14 +511,18 @@ start cancels that generation before a later launch can be admitted. The legacy
 `is_streaming` flag changes only after the awaited engine start confirms success.
 At boot and after an engine reconnect, `reconcileRuntimeState()` subscribes to the
 engine's actual status and adopts an engine-held session. Only concordant
-`streaming` or `idle` status is authoritative; timeout, query failure, transitional
-state, or contradictory fields leave the lifecycle `reconciling` until the reconnect
-heal path retries. The additive
+`streaming` or `idle` status is authoritative. A successful subscription that sees
+no event for 2.5 seconds resolves idle because an active stream emits status every
+2 seconds; query/subscription failure, transitional state, or contradictory fields
+remain `reconciling`, and late events from a completed probe are fenced. The additive
 `status.stream_lifecycle` field exposes `idle | starting | streaming | stopping |
 stop_failed | reconciling`; `is_streaming` remains backward compatible.
 
-Todo 26 owns arbitration, cancellation, and adoption. General transactional
-rollback of resources after an engine-phase start failure remains Todo 27.
+The launch transaction owns rollback and phase deadlines. The retry runner starts
+the next connect attempt only after rollback resolves, caps attempts and elapsed
+time, and exposes a cancellable timer to the same generation. Reporting suppresses
+transient toasts only during existing update/restart/boot windows; terminal
+failures are never suppressed and carry keyed 10-locale copy plus journal guidance.
 
 The `StreamingBackend` interface (`modules/streaming/streaming-backend.ts`) has
 **one** implementation behind the seam (the legacy ceracoder engine is fully

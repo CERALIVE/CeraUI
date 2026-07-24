@@ -18,11 +18,13 @@ import {
 	cerastreamBackend,
 	classifyConnectHandshakePhase,
 } from "../modules/streaming/cerastream-backend.ts";
+import { deriveStreamHealth } from "../modules/streaming/health.ts";
 import {
 	createLaunchTransaction,
 	type LaunchDeadlineTimers,
 } from "../modules/streaming/launch-transaction.ts";
 import { START_PHASE_DEADLINES_MS } from "../modules/streaming/start-lifecycle-timing.ts";
+import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import type {
 	StreamingBackend,
 	StreamRunOptions,
@@ -77,6 +79,8 @@ interface FakeClientHarness {
 
 interface FakeClientOptions {
 	readonly startResult?: StartResult;
+	readonly startGate?: Promise<StartResult>;
+	readonly stopGate?: Promise<{ state: "idle" }>;
 	readonly subscribeGate?: Promise<void>;
 }
 
@@ -85,6 +89,20 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 	let listener: ((event: EventParams) => void) | undefined;
 	let resolveSubscribed: (() => void) | undefined;
 	let resolveStarted: (() => void) | undefined;
+	let rejectStartOnClose: ((error: Error) => void) | undefined;
+	let rejectStopOnClose: ((error: Error) => void) | undefined;
+	const startClosed =
+		options.startGate === undefined
+			? undefined
+			: new Promise<never>((_resolve, reject) => {
+					rejectStartOnClose = reject;
+				});
+	const stopClosed =
+		options.stopGate === undefined
+			? undefined
+			: new Promise<never>((_resolve, reject) => {
+					rejectStopOnClose = reject;
+				});
 	const subscribed = new Promise<void>((resolve) => {
 		resolveSubscribed = resolve;
 	});
@@ -100,10 +118,16 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 		start: async (params) => {
 			calls.push({ op: "start", params });
 			resolveStarted?.();
+			if (options.startGate !== undefined && startClosed !== undefined) {
+				return await Promise.race([options.startGate, startClosed]);
+			}
 			return options.startResult ?? { session_id: "s1", state: "streaming" };
 		},
 		stop: async (params) => {
 			calls.push({ op: "stop", params });
+			if (options.stopGate !== undefined && stopClosed !== undefined) {
+				return await Promise.race([options.stopGate, stopClosed]);
+			}
 			return { state: "idle" };
 		},
 		reloadConfig: async (params) => {
@@ -169,6 +193,9 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 		},
 		close: async () => {
 			calls.push({ op: "close" });
+			const closed = new Error("client_closed");
+			rejectStartOnClose?.(closed);
+			rejectStopOnClose?.(closed);
 		},
 	};
 	// `switch-audio` is dispatched by the backend through the client's raw
@@ -344,6 +371,171 @@ describe("engine selection", () => {
 // ---------------------------------------------------------------------------
 
 describe("CerastreamBackend behavioural contract", () => {
+	test("a silent idle engine terminalizes reconciliation and admits start", async () => {
+		// Given a connected, subscribed production backend whose idle engine emits
+		// no status heartbeat, matching the board's active-engine/idle-health state.
+		let reconcileTimeout: (() => void) | undefined;
+		const { backend, fake } = makeBackend({
+			scheduleTimeout: (callback) => {
+				reconcileTimeout = callback;
+				return 1 as unknown as ReturnType<typeof setTimeout>;
+			},
+			cancelTimeout: () => undefined,
+		});
+		let streaming = false;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: () => "attempt-after-idle-reconcile",
+			setStreamingStatus: (next) => {
+				streaming = next;
+			},
+			getStreamingStatus: () => streaming,
+			stopRuntime: async () => undefined,
+			queryRuntime: () => backend.reconcileRuntimeState(),
+		});
+		const reconciling = orchestrator.reconcile();
+		await fake.subscribed;
+		await waitFor(() => reconcileTimeout !== undefined);
+
+		// When the bounded observation window expires without a status event.
+		reconcileTimeout?.();
+		const reconciled = await reconciling;
+		const health = deriveStreamHealth({
+			isStreaming: streaming,
+			processAlive: null,
+			framesAdvancing: null,
+			frameCount: null,
+			reconnecting: null,
+			reconnectCount: 0,
+			linkCount: 0,
+			activeLinks: 0,
+		});
+		const started = await orchestrator.start({
+			origin: "ui",
+			launch: async () => undefined,
+		});
+
+		// Then idle is authoritative, health agrees, and Start owns generation one.
+		expect(reconciled).toBe("idle");
+		expect(health.state).toBe("idle");
+		expect(started).toEqual({
+			result: "started",
+			attemptId: "attempt-after-idle-reconcile",
+		});
+		expect(orchestrator.snapshot()).toEqual({
+			state: "streaming",
+			generation: 1,
+		});
+	});
+
+	test("a dead engine cannot retain the backend queue after lifecycle cleanup", async () => {
+		// Production-wired reproduction of the board failure: generation one owns
+		// the real CerastreamBackend queue while both start and stop replies hang.
+		const deadStart = deferred<StartResult>();
+		const deadStop = deferred<{ state: "idle" }>();
+		const dead = makeFakeClient({
+			startGate: deadStart.promise,
+			stopGate: deadStop.promise,
+		});
+		const recovered = makeFakeClient();
+		const bridgeH = makeBridge();
+		const config: RuntimeConfig = { ...STREAM_CONFIG };
+		let connections = 0;
+		const backend = new CerastreamBackend({
+			connect: async () => {
+				connections += 1;
+				if (connections === 1) return dead.client;
+				if (connections === 2) throw new Error("engine_restart_window");
+				return recovered.client;
+			},
+			connectOptions: {},
+			getConfig: () => config,
+			saveConfig: () => undefined,
+			bridge: bridgeH.bridge,
+			execPath: "cerastream",
+			configPath: "/tmp/cerastream-contract.json",
+			logger: silentLogger,
+		});
+		const stopTimers: Array<() => void> = [];
+		const launchTimers: Array<{ callback: () => void; delayMs: number }> = [];
+		let streaming = false;
+		let nextAttempt = 0;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: () => {
+				nextAttempt += 1;
+				return `attempt-${nextAttempt}`;
+			},
+			setStreamingStatus: (next) => {
+				streaming = next;
+			},
+			getStreamingStatus: () => streaming,
+			stopRuntime: (generation) =>
+				new Promise<void>((resolve) => {
+					if (!backend.stop(resolve)) resolve();
+					expect(generation).toBeGreaterThan(0);
+				}),
+			queryRuntime: async () => "idle",
+			stopDeadlineMs: 12,
+			retryPolicy: {
+				maxAttempts: 1,
+				totalBudgetMs: 10,
+				attemptTimeoutMs: 10,
+				baseDelayMs: 1,
+				maxDelayMs: 1,
+			},
+			now: () => 10,
+			scheduleTimeout: (callback) => {
+				stopTimers.push(callback);
+				return stopTimers.length;
+			},
+			cancelTimeout: () => undefined,
+			scheduleLaunchDeadline: (callback, delayMs) => {
+				launchTimers.push({ callback, delayMs });
+				return launchTimers.length;
+			},
+			cancelLaunchDeadline: () => undefined,
+		});
+		const launch = () => backend.start(STREAM_CONFIG, RUN_OPTS);
+
+		const first = orchestrator.start({ origin: "ui", launch });
+		await dead.started;
+		launchTimers.find(({ delayMs }) => delayMs === 10)?.callback();
+		await Bun.sleep(0);
+		stopTimers.shift()?.();
+		expect(await first).toMatchObject({ result: "failed" });
+		expect(streaming).toBe(false);
+		expect(orchestrator.snapshot()).toEqual({
+			state: "idle",
+			generation: 1,
+		});
+		const deadOps = dead.calls.map(({ op }) => op);
+		expect(deadOps.filter((op) => op === "start")).toHaveLength(1);
+		expect(deadOps.filter((op) => op === "stop")).toHaveLength(2);
+		expect(deadOps.filter((op) => op === "close")).toHaveLength(2);
+		expect(deadOps.filter((op) => op === "unsubscribe")).toHaveLength(2);
+
+		// A second owner must reach the recovered connect path and terminate; it
+		// must not park behind generation one's dead queue and make a third RPC busy.
+		const second = orchestrator.start({ origin: "ui", launch });
+		for (let tick = 0; tick < 10; tick += 1) await Bun.sleep(0);
+		expect(await second).toMatchObject({ result: "failed" });
+		expect(streaming).toBe(false);
+		expect(orchestrator.snapshot()).toEqual({
+			state: "idle",
+			generation: 2,
+		});
+		const third = await orchestrator.start({ origin: "ui", launch });
+		expect(third).toMatchObject({ result: "started" });
+		expect(connections).toBe(3);
+		expect(streaming).toBe(true);
+		expect(orchestrator.snapshot()).toEqual({
+			state: "streaming",
+			generation: 3,
+		});
+
+		await orchestrator.stop();
+		await backend.settle();
+	});
+
 	test("reconciliation adopts an engine-held stream", async () => {
 		// Given a fresh backend connected to an engine whose session survived it.
 		const { backend, fake } = makeBackend();
@@ -364,12 +556,26 @@ describe("CerastreamBackend behavioural contract", () => {
 
 	test("reconciliation reports contradictory engine status as unknown", async () => {
 		const { backend, fake } = makeBackend();
-		const reconciliation = backend.reconcileRuntimeState();
+		let streaming = false;
+		const orchestrator = createStreamSessionOrchestrator({
+			createAttemptId: () => "attempt-disagreement",
+			setStreamingStatus: (next) => {
+				streaming = next;
+			},
+			getStreamingStatus: () => streaming,
+			stopRuntime: async () => undefined,
+			queryRuntime: () => backend.reconcileRuntimeState(),
+		});
+		const reconciliation = orchestrator.reconcile();
 		await fake.subscribed;
 
 		fake.emit({ type: "status", seq: 1, state: "streaming", streaming: false });
 
-		expect(await reconciliation).toBe("unknown");
+		expect(await reconciliation).toBe("reconciling");
+		expect(streaming).toBe(false);
+		expect(
+			await orchestrator.start({ origin: "ui", launch: async () => undefined }),
+		).toMatchObject({ result: "busy" });
 	});
 
 	test("reconciliation reports an engine query error as unknown", async () => {
@@ -382,7 +588,7 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(await backend.reconcileRuntimeState()).toBe("unknown");
 	});
 
-	test("reconciliation timeout is bounded and remains unknown", async () => {
+	test("a silent subscribed reconciliation is bounded and resolves idle", async () => {
 		for (let repeat = 0; repeat < 5; repeat += 1) {
 			let timeoutCallback: (() => void) | undefined;
 			let scheduledDelay: number | undefined;
@@ -403,9 +609,30 @@ describe("CerastreamBackend behavioural contract", () => {
 
 			expect(scheduledDelay).toBe(2500);
 			timeoutCallback?.();
-			expect(await reconciliation).toBe("unknown");
+			expect(await reconciliation).toBe("idle");
 			expect(cancelled).toBe(1);
 		}
+	});
+
+	test("a status event arriving after idle reconciliation cannot become owned", async () => {
+		let timeoutCallback: (() => void) | undefined;
+		const { backend, fake } = makeBackend({
+			scheduleTimeout: (callback) => {
+				timeoutCallback = callback;
+				return 1 as unknown as ReturnType<typeof setTimeout>;
+			},
+			cancelTimeout: () => undefined,
+		});
+		const reconciliation = backend.reconcileRuntimeState();
+		await fake.subscribed;
+		await waitFor(() => timeoutCallback !== undefined);
+
+		timeoutCallback?.();
+		expect(await reconciliation).toBe("idle");
+		fake.emit({ type: "status", seq: 2, state: "streaming", streaming: true });
+
+		expect(backend.getTelemetry()).toBeNull();
+		expect(backend.stop(() => undefined)).toBe(false);
 	});
 
 	test("start connects, subscribes, and sends the serialized config", async () => {
@@ -428,6 +655,31 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(params.srt.streamid).toBe("stream-1");
 		expect(params.bitrate.max_bitrate).toBe(8000);
 		expect(params.pipeline).toBe("h264_hdmi_1080p");
+	});
+
+	test("stop interrupts an in-flight start instead of waiting behind its queue", async () => {
+		// Given an accepted start request whose reply remains in flight.
+		const startGate = deferred<StartResult>();
+		const { backend, fake } = makeBackend({
+			fakeOptions: { startGate: startGate.promise },
+		});
+		const starting = backend.start(STREAM_CONFIG, RUN_OPTS);
+		const startFailure = starting.catch((error: unknown) => error);
+		await fake.started;
+		let stopped = false;
+
+		// When lifecycle cleanup requests a stop before that start reply settles.
+		expect(backend.stop(() => (stopped = true))).toBe(true);
+		await waitFor(() => stopped);
+
+		// Then stop reaches the engine immediately instead of joining behind start.
+		expect(fake.calls.map((call) => call.op)).toContain("stop");
+		expect(stopped).toBe(true);
+		expect(await startFailure).toMatchObject({
+			failure: { phase: "start-rpc", class: "engine_internal" },
+		});
+		await backend.settle();
+		expect(backend.stop(() => undefined)).toBe(false);
 	});
 
 	test("a starting reply remains pending until an authoritative streaming status event", async () => {
@@ -645,7 +897,7 @@ describe("CerastreamBackend error mapping", () => {
 		expect(bridgeH.notifications).toHaveLength(1);
 		expect(bridgeH.notifications[0]).toEqual({
 			name: "cerastream",
-			msg: "The input source has stalled. Trying to restart...",
+			msg: "The input source has stalled. No automatic restart is scheduled.",
 		});
 	});
 
@@ -655,7 +907,7 @@ describe("CerastreamBackend error mapping", () => {
 
 		expect(bridgeH.notifications[0]).toEqual({
 			name: "srtla",
-			msg: "All SRTLA connections failed. Trying to reconnect...",
+			msg: "All SRTLA links are down. The sender is reconnecting its links.",
 		});
 	});
 
@@ -670,7 +922,7 @@ describe("CerastreamBackend error mapping", () => {
 		});
 
 		expect(bridgeH.notifications[0]?.msg).toBe(
-			"Failed to connect to the SRT server (Connection timed out). Retrying...",
+			"Failed to connect to the SRT server (Connection timed out). No automatic retry is scheduled.",
 		);
 	});
 
@@ -853,7 +1105,7 @@ describe("CerastreamBackend engine crash", () => {
 		expect(backend.stop(() => {})).toBe(false);
 	});
 
-	test("a connect failure on start surfaces a notification and clears the session", async () => {
+	test("a connect failure defers notification policy to the session orchestrator", async () => {
 		const { backend, bridgeH } = makeBackend({
 			connect: async () => {
 				throw new CerastreamConnectionError(
@@ -869,11 +1121,7 @@ describe("CerastreamBackend engine crash", () => {
 		});
 		await backend.settle();
 
-		expect(
-			bridgeH.notifications.some(
-				(n) => n.name === "cerastream" && n.msg.includes("failed to start"),
-			),
-		).toBe(true);
+		expect(bridgeH.notifications).toEqual([]);
 
 		const found = backend.stop(() => {});
 		expect(found).toBe(false);

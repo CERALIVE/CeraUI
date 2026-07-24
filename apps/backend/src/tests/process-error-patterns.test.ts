@@ -4,6 +4,7 @@ import { resolveCerastreamError } from "../modules/streaming/cerastream-error-ma
 import {
 	PROCESS_ERROR_CODES,
 	PROCESS_ERROR_MESSAGES,
+	type ProcessErrorCode,
 	type ProcessSource,
 	resolveProcessError,
 } from "../modules/streaming/streamloop/process-error-patterns.ts";
@@ -12,7 +13,7 @@ describe("srtla stderr pattern table lookup", () => {
 	const cases: Array<{
 		source: ProcessSource;
 		stderr: string;
-		code: string;
+		code: ProcessErrorCode;
 		message: string;
 		suppressIfSrtlaNotified: boolean;
 	}> = [
@@ -20,14 +21,16 @@ describe("srtla stderr pattern table lookup", () => {
 			source: "srtla",
 			stderr: "srtla_send: Failed to establish any initial connections",
 			code: PROCESS_ERROR_CODES.SRTLA_INITIAL_CONNECT_FAILED,
-			message: "Failed to connect to the SRTLA server. Retrying...",
+			message:
+				"The SRTLA sender exhausted its initial connection attempts and stopped.",
 			suppressIfSrtlaNotified: false,
 		},
 		{
 			source: "srtla",
 			stderr: "srtla_send: no available connections, dropping packet",
 			code: PROCESS_ERROR_CODES.SRTLA_NO_CONNECTIONS,
-			message: "All SRTLA connections failed. Trying to reconnect...",
+			message:
+				"All SRTLA links are down. The sender is reconnecting its links.",
 			suppressIfSrtlaNotified: false,
 		},
 	];
@@ -63,19 +66,21 @@ describe("shared code → message catalog (Task-7 table)", () => {
 	const staticMessages: Array<{ code: string; message: string }> = [
 		{
 			code: PROCESS_ERROR_CODES.CAPTURE_AUDIO_ERROR,
-			message: "Capture card error (audio). Trying to restart...",
+			message: "Capture card error (audio). No automatic restart is scheduled.",
 		},
 		{
 			code: PROCESS_ERROR_CODES.CAPTURE_VIDEO_ERROR,
-			message: "Capture card error (video). Trying to restart...",
+			message: "Capture card error (video). No automatic restart is scheduled.",
 		},
 		{
 			code: PROCESS_ERROR_CODES.PIPELINE_STALL,
-			message: "The input source has stalled. Trying to restart...",
+			message:
+				"The input source has stalled. No automatic restart is scheduled.",
 		},
 		{
 			code: PROCESS_ERROR_CODES.SRT_CONNECTION_LOST,
-			message: "The SRT connection failed. Trying to reconnect...",
+			message:
+				"The SRT connection failed. No automatic reconnect is scheduled.",
 		},
 	];
 
@@ -113,7 +118,7 @@ describe("SRT connect failure — dynamic reason message (structured path)", () 
 		);
 		expect(resolved.code).toBe(PROCESS_ERROR_CODES.SRT_CONNECT_FAILED);
 		expect(resolved.message).toBe(
-			"Failed to connect to the SRT server (connection refused). Retrying...",
+			"Failed to connect to the SRT server (connection refused). No automatic retry is scheduled.",
 		);
 		expect(resolved.suppressIfSrtlaNotified).toBe(true);
 	});
@@ -121,7 +126,7 @@ describe("SRT connect failure — dynamic reason message (structured path)", () 
 	test("omits the parenthetical when no reason is present", () => {
 		const resolved = resolveCerastreamError("srt_connect_failed", "engine");
 		expect(resolved.message).toBe(
-			"Failed to connect to the SRT server. Retrying...",
+			"Failed to connect to the SRT server. No automatic retry is scheduled.",
 		);
 	});
 });

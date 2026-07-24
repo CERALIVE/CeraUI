@@ -1349,6 +1349,26 @@ const ko = {
 		bitrateRange: "비트레이트는 2000에서 12000 Kbps 사이여야 합니다",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"자동 스트림 시작에 실패했습니다: {attempt}/{maxAttempts}회 확인 후에도 네트워크 링크가 없습니다. journalctl -u ceralive.service를 확인하세요.",
+		streamStartEngineUnavailableRetrying:
+			"스트리밍 엔진을 사용할 수 없습니다 — 재시도 중 ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"스트리밍 엔진이 다시 시작 중입니다 — 재시도 중 ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"스트리밍 엔진이 제시간에 응답하지 않았습니다 — 재시도 중 ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"스트림을 시작하지 못했습니다: 엔진을 사용할 수 없습니다 ({attempt}/{maxAttempts}회). journalctl -u cerastream.service를 확인하세요.",
+		streamStartEngineRestartingFailed:
+			"스트림을 시작하지 못했습니다: 엔진이 계속 다시 시작되었습니다 ({attempt}/{maxAttempts}회). journalctl -u cerastream.service를 확인하세요.",
+		streamStartTimeoutFailed:
+			"스트림을 시작하지 못했습니다: 엔진 시간 초과 ({attempt}/{maxAttempts}회). journalctl -u cerastream.service를 확인하세요.",
+		streamStartInvalidFailed:
+			"스트림을 시작하지 못했습니다: 구성 또는 장치가 올바르지 않습니다. journalctl -u cerastream.service를 확인하세요.",
+		streamStartProtocolFailed:
+			"스트림을 시작하지 못했습니다: 엔진 프로토콜이 호환되지 않습니다. journalctl -u cerastream.service를 확인하세요.",
+		streamStartInternalFailed:
+			"스트림을 시작하지 못했습니다: 엔진 내부 오류. journalctl -u cerastream.service를 확인하세요.",
 		ceraliveUpdateAvailable:
 			"CERALIVE 업데이트가 있습니다. 설정 → 소프트웨어 업데이트를 열어 설치하세요.",
 		ceraliveUpdateFailed:

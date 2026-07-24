@@ -749,6 +749,26 @@ const en = {
 		bitrateRange: "Bitrate must be between 2000 and 12000 Kbps",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"Automatic stream start failed: no network links became available after {attempt:number}/{maxAttempts:number} checks. Check journalctl -u ceralive.service.",
+		streamStartEngineUnavailableRetrying:
+			"Streaming engine unavailable — retrying ({nextAttempt:number}/{maxAttempts:number})…",
+		streamStartEngineRestartingRetrying:
+			"Streaming engine is restarting — retrying ({nextAttempt:number}/{maxAttempts:number})…",
+		streamStartTimeoutRetrying:
+			"Streaming engine did not answer in time — retrying ({nextAttempt:number}/{maxAttempts:number})…",
+		streamStartEngineUnavailableFailed:
+			"Stream failed to start: streaming engine unavailable ({attempt:number}/{maxAttempts:number} attempts). Check journalctl -u cerastream.service.",
+		streamStartEngineRestartingFailed:
+			"Stream failed to start: streaming engine kept restarting ({attempt:number}/{maxAttempts:number} attempts). Check journalctl -u cerastream.service.",
+		streamStartTimeoutFailed:
+			"Stream failed to start: streaming engine timed out ({attempt:number}/{maxAttempts:number} attempts). Check journalctl -u cerastream.service.",
+		streamStartInvalidFailed:
+			"Stream failed to start: configuration or device is invalid. Check journalctl -u cerastream.service.",
+		streamStartProtocolFailed:
+			"Stream failed to start: streaming engine protocol is incompatible. Check journalctl -u cerastream.service.",
+		streamStartInternalFailed:
+			"Stream failed to start: streaming engine internal error. Check journalctl -u cerastream.service.",
 		ceraliveUpdateAvailable:
 			"A CERALIVE update is available. Open Settings → Software Updates to install it.",
 		ceraliveUpdateFailed:

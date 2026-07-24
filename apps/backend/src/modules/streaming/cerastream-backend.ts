@@ -433,8 +433,9 @@ export class CerastreamBackend implements StreamingBackend {
 	private subscription: Subscription | undefined;
 	private active = false;
 	private telemetry: EngineTelemetry | null = null;
-	// Serializes async IPC ops so they never interleave; `settle()` awaits the tail.
+	// Serializes non-stop IPC ops; stop interrupts a pending start through its client.
 	private queue: Promise<void> = Promise.resolve();
+	private interrupt: Promise<void> = Promise.resolve();
 
 	constructor(deps: Partial<CerastreamBackendDeps> = {}) {
 		this.deps = { ...defaultCerastreamBackendDeps(), ...deps };
@@ -566,21 +567,26 @@ export class CerastreamBackend implements StreamingBackend {
 		this.active = false;
 		const client = this.client;
 		const subscription = this.subscription;
-		void this.enqueue(async () => {
+		const operation = (async () => {
 			subscription?.close();
+			void client?.stop().catch((error) => {
+				this.deps.logger.debug("cerastream: stop request interrupted", {
+					error,
+				});
+			});
 			try {
-				await client?.stop();
+				await client?.close();
+			} catch {
+				// already closing
 			} finally {
-				try {
-					await client?.close();
-				} catch {
-					// already closing
-				}
-				this.client = undefined;
-				this.subscription = undefined;
+				if (this.client === client) this.client = undefined;
+				if (this.subscription === subscription) this.subscription = undefined;
 				onStopped();
 			}
-		}, "stop");
+		})();
+		this.interrupt = operation.catch((error) =>
+			this.handleOpFailure("stop", error),
+		);
 		return true;
 	}
 
@@ -638,6 +644,7 @@ export class CerastreamBackend implements StreamingBackend {
 		let client: CerastreamClient | undefined;
 		let subscription: Subscription | undefined;
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		let acceptingEvents = true;
 		try {
 			client = await this.deps.connect({
 				...this.deps.connectOptions,
@@ -653,6 +660,7 @@ export class CerastreamBackend implements StreamingBackend {
 			subscription = await client.subscribeEvents(
 				{ topics: ["status"] },
 				(event) => {
+					if (!acceptingEvents) return;
 					this.handleEvent(event);
 					if (event.type === "status") {
 						resolveRuntimeState?.(
@@ -662,10 +670,11 @@ export class CerastreamBackend implements StreamingBackend {
 				},
 			);
 			timer = this.deps.scheduleTimeout(
-				() => resolveRuntimeState?.("unknown"),
+				() => resolveRuntimeState?.("idle"),
 				ENGINE_STATE_RECONCILE_TIMEOUT,
 			);
 			const runtimeState = await runtimeStateEvent;
+			acceptingEvents = false;
 			if (runtimeState === "streaming") {
 				this.client = client;
 				this.subscription = subscription;
@@ -676,6 +685,7 @@ export class CerastreamBackend implements StreamingBackend {
 			await client.close();
 			return runtimeState;
 		} catch (error) {
+			acceptingEvents = false;
 			subscription?.close();
 			await client?.close();
 			this.deps.logger.debug("cerastream: runtime-state query unresolved", {
@@ -783,8 +793,8 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	/** Test seam: resolve once every queued IPC op has settled. */
-	settle(): Promise<void> {
-		return this.queue;
+	async settle(): Promise<void> {
+		await Promise.all([this.queue, this.interrupt]);
 	}
 
 	/** Bridge one engine event onto notifications / telemetry / status. */
@@ -879,14 +889,6 @@ export class CerastreamBackend implements StreamingBackend {
 			this.active = false;
 			this.client = undefined;
 			this.subscription = undefined;
-			this.deps.bridge.notify(
-				"cerastream",
-				"error",
-				"The streaming engine failed to start. Retrying...",
-				5,
-				true,
-				false,
-			);
 		}
 	}
 

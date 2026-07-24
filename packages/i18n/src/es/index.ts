@@ -770,6 +770,26 @@ const es = {
 		bitrateRange: "El bitrate debe estar entre 2000 y 12000 Kbps",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"El inicio automático falló: no hubo enlaces de red tras {attempt}/{maxAttempts} comprobaciones. Revisa journalctl -u ceralive.service.",
+		streamStartEngineUnavailableRetrying:
+			"Motor de streaming no disponible; reintentando ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineRestartingRetrying:
+			"El motor de streaming se está reiniciando; reintentando ({nextAttempt}/{maxAttempts})…",
+		streamStartTimeoutRetrying:
+			"El motor de streaming no respondió a tiempo; reintentando ({nextAttempt}/{maxAttempts})…",
+		streamStartEngineUnavailableFailed:
+			"No se pudo iniciar el stream: motor no disponible ({attempt}/{maxAttempts} intentos). Revisa journalctl -u cerastream.service.",
+		streamStartEngineRestartingFailed:
+			"No se pudo iniciar el stream: el motor siguió reiniciándose ({attempt}/{maxAttempts} intentos). Revisa journalctl -u cerastream.service.",
+		streamStartTimeoutFailed:
+			"No se pudo iniciar el stream: tiempo de espera agotado ({attempt}/{maxAttempts} intentos). Revisa journalctl -u cerastream.service.",
+		streamStartInvalidFailed:
+			"No se pudo iniciar el stream: la configuración o el dispositivo no son válidos. Revisa journalctl -u cerastream.service.",
+		streamStartProtocolFailed:
+			"No se pudo iniciar el stream: el protocolo del motor es incompatible. Revisa journalctl -u cerastream.service.",
+		streamStartInternalFailed:
+			"No se pudo iniciar el stream: error interno del motor. Revisa journalctl -u cerastream.service.",
 		ceraliveUpdateAvailable:
 			"Hay una actualización de CERALIVE disponible. Abre Ajustes → Actualizaciones de software para instalarla.",
 		ceraliveUpdateFailed:

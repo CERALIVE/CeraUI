@@ -67,6 +67,7 @@ function makeBackend(): BackendHarness {
 			},
 			notificationExists: () => false,
 			broadcastStatus: () => {},
+			broadcastBuffering: () => {},
 		},
 		execPath: "cerastream",
 		configPath: "/tmp/cerastream-mock-errors.json",
@@ -83,31 +84,31 @@ const EXPECTED: Record<
 > = {
 	srtla_initial_connect_failed: {
 		channel: "srtla",
-		msg: "Failed to connect to the SRTLA server. Retrying...",
+		msg: "The SRTLA sender exhausted its initial connection attempts and stopped.",
 	},
 	srtla_no_connections: {
 		channel: "srtla",
-		msg: "All SRTLA connections failed. Trying to reconnect...",
+		msg: "All SRTLA links are down. The sender is reconnecting its links.",
 	},
 	capture_audio_error: {
 		channel: "cerastream",
-		msg: "Capture card error (audio). Trying to restart...",
+		msg: "Capture card error (audio). No automatic restart is scheduled.",
 	},
 	capture_video_error: {
 		channel: "cerastream",
-		msg: "Capture card error (video). Trying to restart...",
+		msg: "Capture card error (video). No automatic restart is scheduled.",
 	},
 	pipeline_stall: {
 		channel: "cerastream",
-		msg: "The input source has stalled. Trying to restart...",
+		msg: "The input source has stalled. No automatic restart is scheduled.",
 	},
 	srt_connect_failed: {
 		channel: "cerastream",
-		msg: "Failed to connect to the SRT server. Retrying...",
+		msg: "Failed to connect to the SRT server. No automatic retry is scheduled.",
 	},
 	srt_connection_lost: {
 		channel: "cerastream",
-		msg: "The SRT connection failed. Trying to reconnect...",
+		msg: "The SRT connection failed. No automatic reconnect is scheduled.",
 	},
 };
 
@@ -169,7 +170,7 @@ describe("mock cerastream Tier-2 error injection → backend mapping", () => {
 
 		expect(notifications[0]?.name).toBe("cerastream");
 		expect(notifications[0]?.msg).toBe(
-			"Failed to connect to the SRT server (Connection timed out). Retrying...",
+			"Failed to connect to the SRT server (Connection timed out). No automatic retry is scheduled.",
 		);
 	});
 

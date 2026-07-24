@@ -1284,6 +1284,26 @@ const zh = {
 		bitrateRange: "比特率必须在 2000 到 12000 Kbps 之间",
 	},
 	notifications: {
+		streamAutostartNoLinksFailed:
+			"自动流启动失败：检查 {attempt}/{maxAttempts} 次后仍无可用网络链路。请检查 journalctl -u ceralive.service。",
+		streamStartEngineUnavailableRetrying:
+			"流媒体引擎不可用 — 正在重试（{nextAttempt}/{maxAttempts}）…",
+		streamStartEngineRestartingRetrying:
+			"流媒体引擎正在重启 — 正在重试（{nextAttempt}/{maxAttempts}）…",
+		streamStartTimeoutRetrying:
+			"流媒体引擎未及时响应 — 正在重试（{nextAttempt}/{maxAttempts}）…",
+		streamStartEngineUnavailableFailed:
+			"流启动失败：引擎不可用（已尝试 {attempt}/{maxAttempts} 次）。请检查 journalctl -u cerastream.service。",
+		streamStartEngineRestartingFailed:
+			"流启动失败：引擎持续重启（已尝试 {attempt}/{maxAttempts} 次）。请检查 journalctl -u cerastream.service。",
+		streamStartTimeoutFailed:
+			"流启动失败：引擎超时（已尝试 {attempt}/{maxAttempts} 次）。请检查 journalctl -u cerastream.service。",
+		streamStartInvalidFailed:
+			"流启动失败：配置或设备无效。请检查 journalctl -u cerastream.service。",
+		streamStartProtocolFailed:
+			"流启动失败：引擎协议不兼容。请检查 journalctl -u cerastream.service。",
+		streamStartInternalFailed:
+			"流启动失败：引擎内部错误。请检查 journalctl -u cerastream.service。",
 		ceraliveUpdateAvailable:
 			"有可用的 CERALIVE 更新。打开 设置 → 软件更新 进行安装。",
 		ceraliveUpdateFailed: "软件更新失败。打开 设置 → 软件更新 查看原因并重试。",

@@ -11,10 +11,10 @@
  * the JSON-RPC codes) — so those live behind the client, and CeraUI classifies
  * their surfaced shapes here.
  *
- * Todo 26 wires this taxonomy into the public start boundary and carries one
- * attempt id through the orchestrator. Retry/suppression and rollback policy
- * remain Todos 27-29. This module is pure + fully unit-tested against fabricated
- * error shapes.
+ * Todo 26 wired this taxonomy into the public start boundary and carries one
+ * attempt id through the orchestrator. Todo 28 consumes the policy below for
+ * bounded retries and suppression. This module stays pure and fully unit-tested
+ * against fabricated error shapes.
  *
  * ── Failure-site cross-check (every site found in the codebase, mapped) ──
  *   params        zod (oRPC input / validateConfig safeParse / startParams.parse)
@@ -181,6 +181,8 @@ export interface RetryPolicy {
 	maxAttempts: number;
 	/** Total wall-clock budget across all attempts, in ms. */
 	totalBudgetMs: number;
+	/** Deadline for one in-flight launch before its generation is cancelled. */
+	attemptTimeoutMs?: number;
 	/** First backoff delay, in ms. */
 	baseDelayMs: number;
 	/** Backoff ceiling, in ms. */
@@ -189,10 +191,11 @@ export interface RetryPolicy {
 
 // Defaults chosen against the supervision windows (systemd RestartSec=5,
 // crash-loop 5/60s): a few short retries that comfortably span one restart
-// window, then escalate. Not yet consumed by any runtime loop (Todo 28 wires it).
+// window, then escalate.
 export const DEFAULT_START_RETRY_POLICY: RetryPolicy = {
 	maxAttempts: 5,
 	totalBudgetMs: 60_000,
+	attemptTimeoutMs: 10_000,
 	baseDelayMs: 2_000,
 	maxDelayMs: 16_000,
 };
