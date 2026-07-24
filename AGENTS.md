@@ -255,6 +255,16 @@ Test coverage: `apps/backend/src/tests/addon-reconciler.test.ts` — re-material
 (missing + VERSION_ID mismatch), idempotency, the pending/defer negative paths,
 and the boot-safety (never-throws) + emulated-mode no-op guarantees.
 
+**Packaging contract (#194).** `ceralive-addon-reconciler.service` is staged into
+the `.deb` **from `deployment/`**, not from `dist/`. `dist/` only ever held the
+unit as a side effect of `build_backend_only` mirroring `deployment/*` into it, so
+the unit's presence in the package was hostage to that mirror step. Sourcing it
+directly from `deployment/` makes the staging explicit and mirror-independent.
+Pinned by a contract test wired into `bun run test:release-package-contracts`,
+which asserts the unit is staged, enabled in `postinst`, and present in the payload
+of a scratch-built `.deb` — so a future build-script refactor cannot silently drop
+the post-boot reconciler from the device image.
+
 **sysext refresh protocol**
 
 The add-on manager must follow the protocol from

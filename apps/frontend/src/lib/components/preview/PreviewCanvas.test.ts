@@ -435,6 +435,35 @@ describe("PreviewCanvas", () => {
 		);
 	});
 
+	// WIRE CONTRACT: cerastream ships `{type:"preview-error", reason}` — NOT the two
+	// shapes the cases above cover. That drift is why this path went untested.
+	for (const [reason, band] of [
+		["no-source-applied", "noSourceApplied"],
+		["source-unavailable", "sourceUnavailable"],
+		["device-busy", "deviceBusy"],
+		["pipeline-failed", "pipelineFailed"],
+		["passthrough-active", "passthroughActive"],
+	] as const) {
+		it(`renders a distinct band for the engine preview-error frame '${reason}'`, async () => {
+			vi.stubGlobal("VideoDecoder", DecoderStub);
+			vi.stubGlobal("WebSocket", FakeWebSocket);
+
+			const { getByTestId } = render(PreviewCanvas);
+			await turnOn(getByTestId);
+
+			FakeWebSocket.instances.at(-1)?.onopen?.({});
+			await tick();
+			FakeWebSocket.instances.at(-1)?.onmessage?.({
+				data: JSON.stringify({ type: "preview-error", reason }),
+			});
+			await tick();
+
+			expect(
+				getByTestId("preview-unavailable").getAttribute("data-reason"),
+			).toBe(band);
+		});
+	}
+
 	it("sends the applied config.source as input_id on the start frame", async () => {
 		vi.stubGlobal("VideoDecoder", DecoderStub);
 		vi.stubGlobal("WebSocket", FakeWebSocket);
@@ -1063,6 +1092,41 @@ describe("PreviewCanvas — WebRTC tier ladder", () => {
 		video.dispatchEvent(new Event("loadeddata"));
 		await tick();
 		expect(getByTestId("preview").getAttribute("data-status")).toBe("live");
+	});
+
+	it("surfaces an engine preview-error band on the WebRTC rung instead of waiting out the deadline", async () => {
+		stubWebrtcBrowser();
+		const { getByTestId } = render(PreviewCanvas);
+		const ws = await turnOnWebrtc(getByTestId);
+
+		ws.onmessage?.({
+			data: JSON.stringify({
+				type: "preview-error",
+				reason: "source-unavailable",
+			}),
+		});
+		await flush();
+
+		expect(getByTestId("preview-unavailable").getAttribute("data-reason")).toBe(
+			"sourceUnavailable",
+		);
+	});
+
+	it("keeps rejected-limit a ladder fallback, never a terminal band", async () => {
+		stubWebrtcBrowser();
+		const { getByTestId, queryByTestId } = render(PreviewCanvas);
+		const ws = await turnOnWebrtc(getByTestId);
+
+		ws.onmessage?.({
+			data: JSON.stringify({ type: "preview-error", reason: "rejected-limit" }),
+		});
+		await flush();
+
+		// Asymmetry guard: rejected-limit degrades the ladder, never a terminal band.
+		expect(queryByTestId("preview-unavailable")).toBeNull();
+		expect(getByTestId("preview-tier-badge").getAttribute("data-tier")).toBe(
+			"mse",
+		);
 	});
 
 	it("falls back to MSE on a webrtc-failed frame (badge=MSE, start tier=mse)", async () => {
