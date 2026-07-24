@@ -1400,6 +1400,13 @@ const ptBR = {
 			mjpegBody:
 				"Este é um dispositivo USB Video Class (UVC) padrão que produz Motion-JPEG: a própria descrição de hardware USB dele anuncia apenas vídeo não comprimido e Motion-JPEG (MJPEG) — sem codificação H.264/H.265 por hardware via USB e sem nenhum canal oculto do fabricante para isso —, então o codificador captura o vídeo MJPEG e o recodifica para o codec escolhido. É uma descrição precisa do hardware, não uma falha.",
 			mjpegLearnMore: "Como verificamos UVC H.264",
+			coarseUnboundTitle: "Esta fonte não tem nenhum dispositivo conectado",
+			coarseUnboundBody:
+				"Você selecionou um recurso ao qual nada está conectado agora, então a transmissão não pode começar por ele. Escolha uma fonte conectada.",
+			coarseSuggestionOne: "Você quis dizer {name}?",
+			coarseSuggestionMany:
+				"Você quis dizer um destes dispositivos conectados?",
+			coarseSuggestionAction: "Mudar para {name}",
 		},
 		summary: {
 			nowStreaming: "Transmitindo agora",

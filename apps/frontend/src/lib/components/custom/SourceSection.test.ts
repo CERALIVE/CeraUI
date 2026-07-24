@@ -481,6 +481,139 @@ describe("SourceSection — capture rows render without reorder affordance", () 
 	});
 });
 
+// The live operator report: on RK3588 the on-board HDMI-RX never bridges to the
+// coarse `hdmi` pipeline, so that row is permanently "Not connected" — yet
+// selecting it painted the same lime checkmark a working device gets, while the
+// operator's actual camera (a RØDE HDMI-to-USB-C adapter) sat one row below.
+describe("SourceSection — selected-but-unbound coarse row (operator confusion fix)", () => {
+	const SELECTED_COARSE = { source: "hdmi" };
+
+	it("swaps the lime affirmation for a warning band naming the connected device the operator likely meant", () => {
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, RODE]),
+			config: SELECTED_COARSE,
+		});
+		const band = container.querySelector<HTMLElement>(
+			'[data-testid="source-coarse-unbound-hdmi"]',
+		);
+		expect(band).not.toBeNull();
+		expect(band?.textContent).toContain("This source has no device connected");
+		// The pointer names the RØDE row verbatim — the whole point of the fix.
+		expect(
+			container.querySelector(
+				'[data-testid="source-coarse-suggestion-lead-hdmi"]',
+			)?.textContent,
+		).toContain("Did you mean RØDE HDMI to USB-C: RØDE HDMI?");
+		expect(
+			container.querySelector('[data-testid="source-coarse-suggestion-usb"]'),
+		).not.toBeNull();
+		expect(
+			container
+				.querySelector('[data-testid="source-row-hdmi"]')
+				?.getAttribute("data-unbound"),
+		).toBe("true");
+	});
+
+	it("keeps the honest 'Not connected' state — the band never replaces or fakes it", () => {
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, RODE]),
+			config: SELECTED_COARSE,
+		});
+		expect(
+			container.querySelector('[data-testid="source-not-connected-hdmi"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-not-connected-info-hdmi"]'),
+		).not.toBeNull();
+	});
+
+	it("switches to the suggested device in ONE tap", async () => {
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, RODE]),
+			config: SELECTED_COARSE,
+		});
+		const action = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-coarse-suggestion-usb"]',
+		);
+		expect(action).not.toBeNull();
+		if (action) {
+			await fireEvent.click(action);
+			expect(setConfig).toHaveBeenCalledWith({ source: "usb" });
+		}
+	});
+
+	it("warns without a pointer when no connected device's name relates to the capability", () => {
+		const webcam: CaptureStreamSource = {
+			...RODE,
+			id: "webcam",
+			displayName: "Logitech BRIO Webcam",
+			devicePath: "/dev/video4",
+		};
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, webcam]),
+			config: SELECTED_COARSE,
+		});
+		expect(
+			container.querySelector('[data-testid="source-coarse-unbound-hdmi"]'),
+		).not.toBeNull();
+		// No false "did you mean" — a wrong pointer is worse than none.
+		expect(
+			container.querySelector(
+				'[data-testid="source-coarse-suggestion-lead-hdmi"]',
+			),
+		).toBeNull();
+		expect(
+			container.querySelector(
+				'[data-testid="source-coarse-suggestion-webcam"]',
+			),
+		).toBeNull();
+	});
+
+	it("never suggests a lost device", () => {
+		const lostRode: CaptureStreamSource = { ...RODE, lost: true };
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, lostRode]),
+			config: SELECTED_COARSE,
+		});
+		expect(
+			container.querySelector('[data-testid="source-coarse-suggestion-usb"]'),
+		).toBeNull();
+	});
+
+	it("leaves an UNSELECTED coarse row on its existing calm muted treatment", () => {
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, RODE]),
+			config: { source: "usb" },
+		});
+		expect(
+			container.querySelector('[data-testid="source-coarse-unbound-hdmi"]'),
+		).toBeNull();
+		expect(
+			container
+				.querySelector('[data-testid="source-row-hdmi"]')
+				?.getAttribute("data-unbound"),
+		).toBeNull();
+	});
+
+	it("never flags a selected CONCRETE capture row", () => {
+		const { container } = mount({
+			sources: sourcesMsg([COARSE_HDMI, RODE]),
+			config: { source: "usb" },
+		});
+		expect(
+			container.querySelector('[data-testid="source-coarse-unbound-usb"]'),
+		).toBeNull();
+		expect(
+			container
+				.querySelector('[data-testid="source-row-usb"]')
+				?.getAttribute("data-unbound"),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-selected-usb"]'),
+		).not.toBeNull();
+	});
+});
+
 describe("SourceSection — source selection (config.source via field-sync)", () => {
 	it("dispatches setConfig({source}) when a coarse row is selected", async () => {
 		const { container } = mount({

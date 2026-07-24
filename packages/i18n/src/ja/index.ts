@@ -1266,6 +1266,12 @@ const ja = {
 			mjpegBody:
 				"これは Motion-JPEG を出力する標準的な USB Video Class（UVC）デバイスです。USB ハードウェア記述子には非圧縮と Motion-JPEG（MJPEG）の映像しか記載されておらず、USB 経由のハードウェア H.264/H.265 エンコードも、それ用の隠れたベンダーチャネルもありません。そのためエンコーダーはその MJPEG 映像を取り込み、選択したコーデックに再エンコードします。これはハードウェアの正確な説明であり、不具合ではありません。",
 			mjpegLearnMore: "UVC H.264 の確認方法",
+			coarseUnboundTitle: "このソースにはデバイスが接続されていません",
+			coarseUnboundBody:
+				"現在何も接続されていない機能を選択しています。このソースから配信を開始することはできません。接続済みのソースを選んでください。",
+			coarseSuggestionOne: "{name} のことですか？",
+			coarseSuggestionMany: "接続済みのこれらのデバイスのことですか？",
+			coarseSuggestionAction: "{name} に切り替える",
 		},
 		summary: {
 			nowStreaming: "配信中",
