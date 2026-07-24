@@ -31,6 +31,7 @@ import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import { getActiveMockKioskHarness } from "../mocks/providers/kiosk.ts";
 import { getConfig } from "../modules/config.ts";
 import {
+	initKiosk,
 	peekMockKioskHarness,
 	pollKioskOnce,
 	resetKioskDeps,
@@ -115,6 +116,7 @@ beforeEach(() => {
 	stopKioskPolling();
 	resetKioskConfig();
 	resetKioskDeps();
+	initKiosk();
 });
 
 afterEach(() => {
