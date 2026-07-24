@@ -315,7 +315,7 @@ const hi = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "USB कैमरा",
+			libuvch264: "USB कैमरा (UVC)",
 			hdmi: "HDMI कैप्चर",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
