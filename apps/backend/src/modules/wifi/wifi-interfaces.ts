@@ -31,7 +31,6 @@ import {
 	nmDeviceProp,
 	nmDevices,
 } from "../network/network-manager.ts";
-import { updateBcrptSourceIps } from "../streaming/bcrpt.ts";
 import {
 	logParseError,
 	type ParseResult,
@@ -300,7 +299,6 @@ export async function wifiUpdateDevices() {
 		if (hotspotCount) {
 			triggerNetworkInterfacesChange();
 			// Remove hotspot IPs from the source IP address list for BCRPT
-			void updateBcrptSourceIps();
 		}
 	}
 	logger.debug("Wifi interfaces", wifiInterfacesByMacAddress);

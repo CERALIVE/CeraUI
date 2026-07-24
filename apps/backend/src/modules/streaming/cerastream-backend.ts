@@ -958,13 +958,11 @@ export class CerastreamBackend implements StreamingBackend {
 			host: string;
 			port: number;
 			latency_ms: number;
-			reduced_packet_size: boolean;
 			streamid?: string;
 		} = {
 			host: opts.host,
 			port: opts.port,
 			latency_ms: config.srt_latency ?? DEFAULT_SRT_LATENCY,
-			reduced_packet_size: opts.reducedPacketSize,
 		};
 		if (opts.streamid) srt.streamid = opts.streamid;
 

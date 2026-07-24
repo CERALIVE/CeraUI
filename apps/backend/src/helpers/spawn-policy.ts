@@ -36,7 +36,7 @@
  *  - bounded-probe     read-only / quick probe (killall, version probes). MUST be
  *                      timed; allowlisted where applicable.
  *  - supervised-worker media-path process that runs for the stream's lifetime
- *                      (srtla_send, bcrpt, srt ingest). Carries a startup /
+ *                      (srtla_send, srt ingest). Carries a startup /
  *                      readiness timeout + shutdown cleanup, and is EXEMPT from a
  *                      process-lifetime timeout — a lifetime timeout would kill
  *                      the live stream.
@@ -52,7 +52,6 @@
  *    (ADR-0005), never spawned by the backend.
  *  - srtla_send + the streamloop are observe-and-notify ONLY: systemd is the SOLE
  *    restart authority (process-runner.ts). The app never respawns them.
- *  - bcrpt is the ONE supervised-worker with app-level restart + bounded backoff.
  *  - supervised-workers must NEVER be given a process-lifetime timeout.
  */
 
@@ -228,23 +227,6 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		status: "enforced",
 		mechanism:
 			"startStream readiness gate; stopAll()/gracefulShutdown() SIGTERM→SIGKILL. systemd is the SOLE restart authority (ADR-0005) — never respawned by the app",
-	},
-	{
-		id: "streaming.bcrpt",
-		file: "modules/streaming/bcrpt.ts",
-		symbol: "startBcrpt",
-		command: "[bcrptExec, ...args]",
-		class: "supervised-worker",
-		contract: {
-			timed: false,
-			startupTimeout: true,
-			shutdownCleanup: true,
-			shutdownAbort: false,
-			lifetimeTimeoutExempt: true,
-		},
-		status: "enforced",
-		mechanism:
-			"config-generation gate before spawn; SIGHUP reload + exit handler. The ONE site with app-level restart + bounded backoff (MAX_BCRPT_RETRIES)",
 	},
 	{
 		id: "ingest.srtLiveTransmit",

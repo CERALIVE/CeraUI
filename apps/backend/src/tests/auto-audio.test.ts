@@ -763,7 +763,6 @@ const RUN_OPTS: StreamRunOptions = {
 	host: "127.0.0.1",
 	port: 9000,
 	streamid: "sid",
-	reducedPacketSize: false,
 };
 
 const silentLogger: CerastreamBackendDeps["logger"] = {

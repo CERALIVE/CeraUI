@@ -28,7 +28,6 @@ const RUN_OPTS: StreamRunOptions = {
 	pipeline: "hdmi",
 	host: "127.0.0.1",
 	port: 9000,
-	reducedPacketSize: false,
 };
 
 const silentLogger: CerastreamBackendDeps["logger"] = {

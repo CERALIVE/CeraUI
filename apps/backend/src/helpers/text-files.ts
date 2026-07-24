@@ -37,7 +37,7 @@ export async function writeTextFile(file: string, contents: string) {
  * (auth_tokens / relays_cache / dns_cache / gsm_operator_cache). Delegates to the
  * single canonical `writeFileAtomicSync` (sibling `.<basename>.<pid>.tmp` + fsync
  * + rename) and swallows write errors like `writeTextFile` does. Deliberately not
- * folded into `writeTextFile`: the ephemeral tmpfs writers (bcrpt/srtla IP + key
+ * folded into `writeTextFile`: the ephemeral tmpfs writers (srtla IP + key
  * files) must stay non-atomic and emit no `.tmp` sidecars.
  */
 export function writeTextFileAtomic(file: string, contents: string): boolean {

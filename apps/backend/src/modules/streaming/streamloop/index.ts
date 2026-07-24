@@ -26,9 +26,6 @@ export {
 	checkAutoStartStream,
 	setAutostart,
 } from "./autostart.ts";
-export {
-	bcrptExec,
-	srtlaSendExec,
-} from "./exec-paths.ts";
+export { srtlaSendExec } from "./exec-paths.ts";
 export { start, stop } from "./session.ts";
 export { startStream } from "./start-stream.ts";

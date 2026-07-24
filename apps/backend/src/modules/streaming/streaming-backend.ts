@@ -29,9 +29,6 @@
 //   * IN:  everything engine-specific — exec path, config persistence, the
 //          config hot-reload, run-arg construction, the engine session
 //          start/stop, error classification, the streaming-time bitrate setter.
-//   * OUT: `bcrpt` (the BCRP relay-probe binary). It is an INDEPENDENT process
-//          with its own spawn/retry lifecycle in `bcrpt.ts` and is unrelated to
-//          the encoder, so `bcrptExec` deliberately stays outside this interface.
 //   * OUT: srtla link bonding + per-link telemetry. srtla_send is a separate
 //          supervised process; its telemetry is owned by `link-telemetry.ts`.
 
@@ -51,7 +48,6 @@ export interface StreamRunOptions {
 	host: string;
 	port: number;
 	streamid: string;
-	reducedPacketSize: boolean;
 }
 
 /**

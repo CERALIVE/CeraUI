@@ -16,13 +16,9 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Resolved executable paths for the supervised stream subprocesses. Kept in a
-// dependency-light module (no streaming logic) so other modules — bcrpt.ts,
-// system/revisions.ts — can read them without pulling in the spawn/orchestration
-// graph, which also breaks the streamloop<->bcrpt import cycle cleanly.
+// Resolved executable paths for the supervised stream subprocesses.
 
 import { getSrtlaSendExec } from "@ceralive/srtla-send/sender";
 import { setup } from "../../setup.ts";
 
 export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);
-export const bcrptExec = `${setup.bcrpt_path ?? "/usr/bin"}/bcrpt`;

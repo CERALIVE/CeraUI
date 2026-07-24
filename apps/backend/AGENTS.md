@@ -363,7 +363,7 @@ avahi-daemon's process title `avahi-daemon: registering [ceralive.local]` (the
 device hostname is `ceralive.local`) and killed mDNS on every hotplug.
 `--kill-whom=main` scopes the signal to the tracked MAIN pid via the unit cgroup —
 mirroring the old `pkill -o` single-process intent — so the whole-cgroup default
-(`all`) can never collaterally SIGUSR2-terminate `srtla_send`/`bcrpt` (which share
+ (`all`) can never collaterally SIGUSR2-terminate `srtla_send` (which shares
 `ceralive.service`'s cgroup while streaming and do NOT handle SIGUSR2). `systemctl
 kill` from a udev `RUN+=` is safe: it creates no systemd job (returns after the
 PID-1 D-Bus request), so the `--no-block` / deadlock caveats that apply to

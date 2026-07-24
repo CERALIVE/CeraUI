@@ -36,7 +36,6 @@ import {
 	resolveAutoAsrcFromLiveState,
 	setResolvedAsrcFromStart,
 } from "../auto-audio.ts";
-import { hasLowMtu } from "../bcrpt.ts";
 import { getLastCapabilities } from "../capabilities.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
 import { embeddedAudioActive } from "../embedded-audio.ts";
@@ -192,7 +191,6 @@ export async function startStream(
 				host: "127.0.0.1",
 				port: SRTLA_LISTEN_PORT,
 				streamid,
-				reducedPacketSize: hasLowMtu(),
 			},
 			transaction,
 		);

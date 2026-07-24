@@ -20,10 +20,6 @@
  * Extracted from hardcoded values to enable consistent tuning and testing
  */
 
-// BCRPT retry logic (bcrpt.ts)
-export const MAX_BCRPT_RETRIES = 5;
-export const INITIAL_RETRY_DELAY = 1000; // ms
-
 // Autostart retry delay (streamloop.ts)
 // Retry interval when no interfaces are available or autostart fails
 export const AUTOSTART_RETRY_DELAY = 1000; // ms

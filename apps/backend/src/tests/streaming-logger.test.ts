@@ -2,34 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { logger } from "../helpers/logger.ts";
 
 describe("streaming modules logger integration", () => {
-	test("bcrpt: logger.error accepts max retries exhaustion message", () => {
-		// Verify logger.error method exists and accepts the expected message format
-		const MAX_BCRPT_RETRIES = 5;
-		const bcrptRetryCount = MAX_BCRPT_RETRIES;
-
-		expect(() => {
-			if (bcrptRetryCount >= MAX_BCRPT_RETRIES) {
-				logger.error(
-					`BCRPT process failed ${MAX_BCRPT_RETRIES} times. Stopping restart attempts.`,
-				);
-			}
-		}).not.toThrow();
-	});
-
-	test("bcrpt: logger.warn accepts config generation retry message", () => {
-		// Verify logger.warn method exists and accepts the expected message format
-		const MAX_BCRPT_RETRIES = 5;
-		const bcrptRetryCount = 1;
-		const INITIAL_RETRY_DELAY = 1000;
-
-		expect(() => {
-			const delay = INITIAL_RETRY_DELAY * 2 ** (bcrptRetryCount - 1);
-			logger.warn(
-				`BCRPT config generation failed (attempt ${bcrptRetryCount}/${MAX_BCRPT_RETRIES}). Retrying in ${delay}ms...`,
-			);
-		}).not.toThrow();
-	});
-
 	test("streamloop: logger.error accepts config save failure with structured metadata", () => {
 		// Verify logger.error method exists and accepts structured metadata
 		const err = new Error("Config save failed");
@@ -67,25 +39,6 @@ describe("streaming modules logger integration", () => {
 		const error = new Error("Failed to write engine config");
 		expect(() => {
 			logger.error("Failed to set bitrate", { error });
-		}).not.toThrow();
-	});
-
-	test("bcrpt: logger.info accepts startup mode selection message", () => {
-		// Verify logger.info method exists and accepts the expected message format
-		const isMockBcrpt = true;
-		expect(() => {
-			if (isMockBcrpt) {
-				logger.info("Starting BCRPT in development mode (using mock)");
-			}
-		}).not.toThrow();
-	});
-
-	test("bcrpt: logger.debug accepts stdout parse error with structured metadata", () => {
-		// Verify logger.debug method exists and accepts structured metadata
-		const err = new Error("JSON parse failed");
-		const data = "invalid json";
-		expect(() => {
-			logger.debug("BCRPT stdout parse error", { err, data });
 		}).not.toThrow();
 	});
 
