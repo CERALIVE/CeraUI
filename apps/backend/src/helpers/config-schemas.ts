@@ -424,29 +424,43 @@ const legacyTolerantStreamingEngineSchema = streamingEngineSchema.catch(
 	},
 );
 
-export const setupConfigSchema = z.object({
-	hw: hardwareTypeSchema,
-	engine: legacyTolerantStreamingEngineSchema.optional(),
-	// Cerastream control-socket / exec overrides.
-	cerastream_path: z.string().optional(),
-	cerastream_socket: z.string().optional(),
+// MIGRATION TOLERANCE: older setup.json files may still carry bcrpt_path. The
+// executable is retired, so warn once while parsing and let the object schema
+// strip the obsolete key rather than rejecting the whole boot config.
+export const setupConfigSchema = z.preprocess(
+	(raw) => {
+		if (
+			raw !== null &&
+			typeof raw === "object" &&
+			Object.hasOwn(raw, "bcrpt_path")
+		) {
+			logger.warn("setup.json: bcrpt_path is retired and will be ignored");
+		}
+		return raw;
+	},
+	z.object({
+		hw: hardwareTypeSchema,
+		engine: legacyTolerantStreamingEngineSchema.optional(),
+		// Cerastream control-socket / exec overrides.
+		cerastream_path: z.string().optional(),
+		cerastream_socket: z.string().optional(),
 
-	srtla_path: z.string().optional(),
-	sound_device_dir: z.string().optional(),
-	usb_device_dir: z.string().optional(),
-	mmcli_binary: z.string().optional(),
-	killall_binary: z.string().optional(),
-	bcrpt_path: z.string().optional(),
-	ips_file: z.string().optional(),
-	// Legacy belaUI setup.json fields read at runtime (opt-in overrides).
-	ssh_user: z.string().optional(),
-	apt_update_enabled: z.boolean().optional(),
-	has_gsm_autoconfig: z.boolean().optional(),
-	remote_protocol_version: z.number().optional(),
-	remote_endpoint_secure: z.boolean().optional(),
-	remote_endpoint_host: z.string().optional(),
-	remote_endpoint_path: z.string().optional(),
-});
+		srtla_path: z.string().optional(),
+		sound_device_dir: z.string().optional(),
+		usb_device_dir: z.string().optional(),
+		mmcli_binary: z.string().optional(),
+		killall_binary: z.string().optional(),
+		ips_file: z.string().optional(),
+		// Legacy belaUI setup.json fields read at runtime (opt-in overrides).
+		ssh_user: z.string().optional(),
+		apt_update_enabled: z.boolean().optional(),
+		has_gsm_autoconfig: z.boolean().optional(),
+		remote_protocol_version: z.number().optional(),
+		remote_endpoint_secure: z.boolean().optional(),
+		remote_endpoint_host: z.string().optional(),
+		remote_endpoint_path: z.string().optional(),
+	}),
+);
 
 export type SetupConfig = z.infer<typeof setupConfigSchema>;
 

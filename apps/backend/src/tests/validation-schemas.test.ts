@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 
 import {
 	BITRATE_MAX,
@@ -10,6 +10,7 @@ import {
 	wifiNewInputSchema,
 } from "@ceraui/rpc/schemas";
 import { setupConfigSchema } from "../helpers/config-schemas.ts";
+import { logger } from "../helpers/logger.ts";
 
 const validHotspot = {
 	device: "wlan0",
@@ -244,5 +245,20 @@ describe("setupConfigSchema engine field (legacy tolerance)", () => {
 	it("leaves a missing engine undefined (defaulted at the call site)", () => {
 		const parsed = setupConfigSchema.parse({ hw: "n100" });
 		expect(parsed.engine).toBeUndefined();
+	});
+
+	it("drops a legacy bcrpt_path and warns instead of crashing", () => {
+		const warnSpy = spyOn(logger, "warn").mockImplementation(() => undefined);
+		try {
+			const parsed = setupConfigSchema.parse({
+				hw: "rk3588",
+				bcrpt_path: "/usr/local/bin",
+			});
+			expect(parsed).not.toHaveProperty("bcrpt_path");
+			expect(warnSpy).toHaveBeenCalledTimes(1);
+			expect(warnSpy.mock.calls[0]?.[0]).toContain("bcrpt_path");
+		} finally {
+			warnSpy.mockRestore();
+		}
 	});
 });
