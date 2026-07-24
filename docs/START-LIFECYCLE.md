@@ -1,9 +1,9 @@
 # Start-Lifecycle Contract
 
-> **Status: RUNTIME THROUGH BOUNDED RETRY** (device-quality-wave2 Todos 25-28).
-> The typed contract, unified session orchestrator, cleanup transaction, phase
-> deadlines, bounded stop, retry/suppression, and truthful notification
-> diagnostics are wired. Frontend generation fencing/rendering remains Todo 29.
+> **Status: FULLY WIRED** (device-quality-wave2 Todos 25-29). The typed contract,
+> unified session orchestrator, cleanup transaction, phase deadlines, bounded stop,
+> retry/suppression, truthful notification diagnostics, and the frontend start
+> watchdog + attempt generations + typed failure rendering (Todo 29) are all wired.
 
 The streaming **start** is a multi-phase pipeline that can fail at any of several
 sites, in several ways, with very different correct responses (retry vs. surface
@@ -323,3 +323,48 @@ unhandled rejection.
 IP-list preparation completes before sender launch. Initial read/write or
 no-interface failures are launch-critical typed failures. Network-change refresh
 failures after launch are logged separately and cannot rewrite the start result.
+
+---
+
+## Frontend consumption (Todo 29)
+
+The frontend closes the loop with three pieces, all in `apps/frontend/src/lib/rpc/`:
+
+- **Attempt generations** (`streaming-optimism.svelte.ts`). The optimism store
+  carries a monotonic `generation`, bumped on every `transitionToStarting`. A
+  revert (`revertWithReason`/`revertWithFailure`) that carries an OLDER generation
+  is a stale response from a superseded attempt and is IGNORED — so a delayed
+  reply from attempt N cannot clobber attempt N+1's state. `LiveView.handleStart`
+  captures the generation right after `startStreamingOptimism()` and passes it back
+  on revert. The authoritative-status precedence rule is unchanged: a
+  contradicting `is_streaming` push during `starting` is still ignored (no flicker)
+  — the fencing applies only to the explicit typed/legacy revert path.
+
+- **Start watchdog** (`streaming-start-watchdog.ts`, the sibling of the stop
+  watchdog). Armed on `transitionToStarting`; if `starting` persists past
+  `START_WATCHDOG_TIMEOUT_MS` (90s — above the retry budget) it PULLS authoritative
+  status via `rpc.status.getStatus` and reconciles: streaming → confirm
+  `starting`→`idle` (a lost success push), NOT streaming → revert with
+  `start_timeout` (a lost failure reply / wedged attempt). This is the "no infinite
+  spinner" guarantee.
+
+- **Typed failure rendering** (`LiveView.svelte`). The `failed` RPC result echoes
+  the typed `StartFailure` (phase + class + retriable + attemptId, exposed on
+  `streamingStartOutputSchemaExtended`). `LiveView` maps `class` → the
+  `live.startFailure.class.*` i18n message and appends a retry-state suffix
+  (`retriedThenFailed` for retriable classes, `notRetriable` for deterministic
+  ones); a legacy code-string reason is the fallback. The terminal failure reverts
+  the UI to idle with the reason shown.
+
+- **Client-call timeout contract** (`client.ts` `PROCEDURE_TIMEOUT_MS`). Because
+  `streaming.start` now awaits the bounded connect-retry (up to a 60s budget), the
+  RPC client's 30s default `call` timeout would reject a still-valid in-flight start
+  and drop the terminal typed `failure`. The proxy raises `streaming.start` to 75s
+  (above the retry budget, below the 90s watchdog), so the awaited reply stays the
+  primary signal and the watchdog is only the lost-signal backstop. Every other
+  procedure keeps the 30s default.
+
+The authoritative `is_streaming=false` broadcast the Todo-27 rollback emits (on a
+terminal failure that HAD reached streaming) is consumed by `subscriptions.svelte`
+and drives `getIsStreaming()` — proven through the WS layer by
+`streaming-status-broadcast.integration.test.ts`.

@@ -78,13 +78,16 @@ import {
 } from '$lib/rpc/subscriptions.svelte';
 import {
 	getStopStuckBannerVisible,
+	getStreamingAttemptGeneration,
 	getStreamingOptimismState,
+	getStreamingStartFailure,
 	getStreamingStopReason,
 	retryStopStreaming,
 	startStreamingOptimism,
 	stopStreamingOptimism,
 	reconcileStreamingOptimism,
 	revertStreamingOptimism,
+	revertStreamingOptimismFailure,
 } from '$lib/rpc/streaming-optimism.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
@@ -116,6 +119,10 @@ const audioSourceLost = $derived(
 // Streaming optimism state (Task 6): reflects user intent immediately on click.
 const streamingOptimismState = $derived(getStreamingOptimismState());
 const streamingStopReason = $derived(getStreamingStopReason());
+// Typed start failure (Todo 29): phase + class + retriable, when the revert
+// carried one. Rendered class-first with retry state; the legacy string reason
+// is the fallback for code-only reverts.
+const streamingStartFailure = $derived(getStreamingStartFailure());
 // Truthful stop-stuck banner (T0): shown only while the authoritative flag still
 // says streaming after the bounded stopping watchdog pulled + re-dispatched.
 const stopStuckBanner = $derived(getStopStuckBannerVisible());
@@ -222,8 +229,30 @@ function startFailedMessage(code: string): string {
 		: $LL.live.startFailed.generic();
 }
 
-// Show error toast if start failed (stop reason set).
+// Todo-25 typed failure → localized message: the class names WHAT failed, and
+// `retriable` selects the retry-state suffix (exhausted-retries vs deterministic).
+function startFailureMessage(failure: {
+	class: string;
+	retriable: boolean;
+}): string {
+	const cls = $LL.live.startFailure.class[
+		failure.class as keyof (typeof $LL.live.startFailure)['class']
+	];
+	const reason = typeof cls === 'function' ? cls() : $LL.live.startFailed.generic();
+	const retryState = failure.retriable
+		? $LL.live.startFailure.retriedThenFailed()
+		: $LL.live.startFailure.notRetriable();
+	return `${reason} ${retryState}`;
+}
+
+// Show error toast if start failed. Prefer the typed failure (class + retry
+// state); fall back to the legacy code-string reason. A terminal revert sets
+// both, so the typed branch wins and only one toast fires per failure.
 $effect(() => {
+	if (streamingStartFailure) {
+		toast.error(startFailureMessage(streamingStartFailure));
+		return;
+	}
 	if (streamingStopReason) {
 		toast.error(startFailedMessage(streamingStopReason));
 	}
@@ -779,19 +808,26 @@ async function handleStart(overrides: { source?: string } = {}) {
 		/* dismiss is best-effort */
 	}
 
-	// Optimistic transient: show `starting` immediately.
+	// Optimistic transient: show `starting` immediately, and capture THIS attempt's
+	// generation so a late reply from a superseded attempt cannot clobber a newer
+	// one (Todo 29 generation identity).
 	startStreamingOptimism();
+	const attempt = getStreamingAttemptGeneration();
 
 	try {
 		const startResult = await startStreaming(result.config);
 		if (startResult && !startResult.success) {
-			revertStreamingOptimism(startResult.error ?? 'unknown_error');
+			if ('failure' in startResult && startResult.failure) {
+				revertStreamingOptimismFailure(startResult.failure, attempt);
+			} else {
+				revertStreamingOptimism(startResult.error ?? 'unknown_error', attempt);
+			}
 		}
 	} catch (error) {
 		// Transport/validation throw: revert to idle with the error message.
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
-		revertStreamingOptimism(reason);
+		revertStreamingOptimism(reason, attempt);
 	}
 }
 

@@ -62,6 +62,9 @@ vi.mock("$lib/rpc/subscriptions.svelte", async () => {
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
 	getStreamingOptimismState: () => "idle",
 	getStreamingStopReason: () => undefined,
+	getStreamingStartFailure: () => undefined,
+	getStreamingAttemptGeneration: () => 1,
+	revertStreamingOptimismFailure: vi.fn(),
 	getStopStuckBannerVisible: () => false,
 	startStreamingOptimism: vi.fn(),
 	stopStreamingOptimism: vi.fn(),

@@ -182,11 +182,16 @@ describe("streaming source availability rejection (C7)", () => {
 			{ context: makeContext() },
 		);
 
-		expect(result).toEqual({
+		expect(result).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: "source_lost",
+			result: "failed",
+			failure: { phase: "params", class: "start_invalid", retriable: false },
 		});
+		expect((result as { attemptId?: unknown }).attemptId).toEqual(
+			expect.any(String),
+		);
 		expect(getConfig().source).toBe("video0");
 	});
 
