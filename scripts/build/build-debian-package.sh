@@ -96,7 +96,7 @@ cp apps/backend/setup.json "$TEMP_DIR/opt/ceralive/"
 # on every real device.
 printf '%s\n' "$COMMIT" > "$TEMP_DIR/opt/ceralive/revision"
 ln -s /var/www/ceralive "$TEMP_DIR/opt/ceralive/public"
-cp dist/override-belaui.sh "$TEMP_DIR/usr/local/bin/"
+cp dist/override-ceralive.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
 
 # Privileged add-on lifecycle helper (T27) + its narrow sudoers drop-in, copied
@@ -106,7 +106,7 @@ cp apps/backend/ceralive-addon-helper.sudoers "$TEMP_DIR/etc/sudoers.d/ceralive-
 
 # Make binaries executable
 chmod +x "$TEMP_DIR/usr/local/bin/ceralive"
-chmod +x "$TEMP_DIR/usr/local/bin/override-belaui.sh"
+chmod +x "$TEMP_DIR/usr/local/bin/override-ceralive.sh"
 chmod +x "$TEMP_DIR/usr/local/bin/reset-to-default.sh"
 chmod 0755 "$TEMP_DIR/usr/bin/ceralive-addon-helper"
 # sudo REFUSES a drop-in that is group/world-writable — ship it 0440.
