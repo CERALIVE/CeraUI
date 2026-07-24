@@ -40,7 +40,7 @@ OPTIONS:
   --help, -h          Show this help message
 
 ARGUMENTS:
-  SSH_TARGET          SSH target for remote deployment (default: root@belabox.local)
+  SSH_TARGET          SSH target for remote deployment (default: root@ceralive.local)
                       Only used with --remote option
 
 EXAMPLES:
@@ -50,7 +50,7 @@ EXAMPLES:
   # Remote deployment from local dist folder
   $0 --remote
   $0 --remote root@192.168.1.100
-  $0 --remote user@belabox.local
+  $0 --remote user@ceralive.local
 
 EOF
 }
@@ -86,7 +86,7 @@ done
 
 # Set default SSH target for remote deployment
 if [[ "$DEPLOY_MODE" == "remote" && -z "$SSH_TARGET" ]]; then
-  SSH_TARGET="root@belabox.local"
+  SSH_TARGET="root@ceralive.local"
 fi
 
 # detect_package_manager determines the system's package manager by checking the OS type and available commands, returning 'brew', 'apt', 'pacman', or 'unknown'.
@@ -295,12 +295,12 @@ main() {
 
   # Run the override script
   if [[ "$DEPLOY_MODE" == "remote" ]]; then
-    execute_cmd "cd $BELAUI_PATH && [[ -f ./override-belaui.sh ]] && bash ./override-belaui.sh || echo 'Warning: override-belaui.sh not found, skipping override'"
+    execute_cmd "cd $BELAUI_PATH && [[ -f ./override-ceralive.sh ]] && bash ./override-ceralive.sh || echo 'Warning: override-ceralive.sh not found, skipping override'"
   else
-    if [[ -f "$BELAUI_PATH/override-belaui.sh" ]]; then
-      execute_cmd "cd $BELAUI_PATH && bash ./override-belaui.sh"
+    if [[ -f "$BELAUI_PATH/override-ceralive.sh" ]]; then
+      execute_cmd "cd $BELAUI_PATH && bash ./override-ceralive.sh"
     else
-      echo "Warning: override-belaui.sh not found, skipping override"
+      echo "Warning: override-ceralive.sh not found, skipping override"
     fi
   fi
 

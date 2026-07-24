@@ -3,7 +3,7 @@
 # Reset BELABOX to default BelaUI package (removes CeraUI monorepo installation)
 # This script removes the custom CeraUI installation and reinstalls the default BelaUI from apt
 
-SSH_TARGET=root@belabox.local
+SSH_TARGET=root@ceralive.local
 
 # stop on error
 set -e
@@ -26,4 +26,3 @@ ssh "$SSH_TARGET" "systemctl start belaUI"
 echo "Enable service and socket"
 ssh "$SSH_TARGET" "systemctl enable belaUI.service"
 ssh "$SSH_TARGET" "systemctl enable belaUI.socket"
-
