@@ -260,7 +260,6 @@ async function dispatchStartParams(
 		host: "127.0.0.1",
 		port: 9000,
 		streamid: "stream-1",
-		reducedPacketSize: false,
 	});
 	await backend.settle();
 	const params = spy.get();
