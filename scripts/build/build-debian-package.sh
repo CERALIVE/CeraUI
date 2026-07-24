@@ -83,7 +83,9 @@ log_step "Copying files to package structure"
 cp dist/ceralive "$TEMP_DIR/usr/local/bin/ceralive"
 cp dist/ceralive.service "$TEMP_DIR/etc/systemd/system/"
 # Post-boot add-on reconciler oneshot (T29). Non-blocking; never gates rollback.
-cp dist/ceralive-addon-reconciler.service "$TEMP_DIR/etc/systemd/system/"
+# Sourced from deployment/ (the repo source of truth), not dist/, so the unit lands
+# in the .deb even if smart_build's deployment/*→dist/ mirror is reordered or skipped.
+cp deployment/ceralive-addon-reconciler.service "$TEMP_DIR/etc/systemd/system/"
 cp dist/98-ceralive-audio.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp dist/99-ceralive-check-usb-devices.rules "$TEMP_DIR/etc/udev/rules.d/"
 cp -r dist/public/* "$TEMP_DIR/var/www/ceralive/"
