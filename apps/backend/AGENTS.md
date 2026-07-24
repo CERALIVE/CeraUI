@@ -765,6 +765,19 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   producers/fields. Tracked as `TD-legacy-source-broadcasts` in
   `docs/TECHNICAL_DEBT.md`; do not delete the producers until that entry's
   exit condition is met.
+- **Hotplug re-enumeration reconciliation (Todo 34)**: a capture device that
+  re-enumerates under a new node path (video1→video2, e.g. a USB reset or
+  module unbind-rebind) is reconciled by STABLE IDENTITY, not node path. The
+  engine's `stable_id` (cerastream Todo 20, `usb:<vid>:<pid>[:serial|@port]`) is
+  threaded verbatim through `fromEngineDevice()` → the engine-device cache →
+  the persisted `last_seen_devices` snapshot (`stableId`). In `buildSources`,
+  a remembered snapshot absent from the live list by node path but PRESENT by
+  stable identity is dropped (the live successor owns the row) — so a rename
+  migrates the row instead of leaving a stuck `lost:true` row. A TRUE unplug
+  (no live device shares the snapshot's stable id) still yields a `lost` row,
+  and an engine that never emits `stable_id` degrades to the prior node-path
+  behavior. Coverage: `tests/sources.test.ts` ("hotplug re-enumeration
+  reconciliation (Todo 34)").
 - **`getLinkTelemetry` null-on-stop** is a backend-locked contract:
   `stopLinkTelemetry()` clears the source state so the NEXT heartbeat tick's
   `broadcastLinkTelemetryIfChanged()` emits `{linkTelemetry: null}` exactly

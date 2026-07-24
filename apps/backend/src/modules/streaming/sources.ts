@@ -370,9 +370,19 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 
 	const capturesByPipeline = new Map<string, StreamSource[]>();
 	const liveVideoIds = new Set<string>();
+	// Stable hardware identities of the currently-live video devices. A remembered
+	// device absent from the live list by NODE PATH but present here by STABLE
+	// IDENTITY has re-enumerated (video1→video2 on a USB reset / unbind-rebind);
+	// its row migrates to the live successor instead of orphaning a `lost` row
+	// (Todo 34). An engine that never emits `stable_id` contributes nothing here,
+	// so the lost loop degrades to node-path identity.
+	const liveStableIds = new Set<string>();
 	for (const device of input.devices) {
 		if (device.media_class !== "video") continue;
 		liveVideoIds.add(device.input_id);
+		if (device.stable_id !== undefined && device.stable_id !== "") {
+			liveStableIds.add(device.stable_id);
+		}
 		const bridged = deviceKindToPipelineId(device.kind);
 		if (bridged === undefined) continue;
 		const coarse = coarseByPipeline.get(bridged);
@@ -390,6 +400,17 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	const lostByPipeline = new Map<string, StreamSource[]>();
 	for (const snapshot of collectLostCandidates(input)) {
 		if (liveVideoIds.has(snapshot.id)) continue;
+		// Same physical device under a new node path (re-enumeration): the live
+		// successor already owns the row, so drop the stale `lost` candidate — this
+		// is the migrate-don't-orphan fix (Todo 34). A true unplug (no successor)
+		// has no matching live stable id, so its `lost` row is preserved.
+		if (
+			snapshot.stableId !== undefined &&
+			snapshot.stableId !== "" &&
+			liveStableIds.has(snapshot.stableId)
+		) {
+			continue;
+		}
 		const coarse = coarseByPipeline.get(snapshot.pipelineId);
 		if (coarse === undefined) continue;
 		const list = lostByPipeline.get(snapshot.pipelineId) ?? [];
@@ -545,6 +566,7 @@ function snapshotFromDevice(device: CaptureDevice): LastSeenDevice | undefined {
 		kind: device.kind,
 		pipelineId,
 		devicePath: device.device_path,
+		...(device.stable_id !== undefined ? { stableId: device.stable_id } : {}),
 	};
 }
 
@@ -651,6 +673,7 @@ export async function refreshEngineDeviceCache(
 				media_class: d.media_class,
 				kind: d.kind,
 				caps: d.caps,
+				stable_id: d.stable_id,
 			}),
 		);
 		// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries

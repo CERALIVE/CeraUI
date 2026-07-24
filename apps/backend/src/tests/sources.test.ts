@@ -632,3 +632,148 @@ describe("source routing stays isolated from cerastream-backend.ts", () => {
 		expect(backend).not.toContain("buildSources");
 	});
 });
+
+describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () => {
+	// A physical device carries a stable hardware identity that survives a node
+	// rename (video1→video2 on a USB reset / unbind-rebind). Reconciliation keys
+	// on this, not the node path, so a rename migrates the row.
+	const STABLE_A = "usb:19f7:0003:SN-A";
+	const STABLE_B = "usb:19f7:0003:SN-B";
+
+	function hotplugDevice(
+		input_id: string,
+		stableId: string | undefined,
+	): CaptureDevice {
+		return {
+			input_id,
+			device_path: `/dev/${input_id}`,
+			display_name: "RØDE HDMI to USB-C",
+			media_class: "video",
+			kind: "hdmi",
+			...(stableId !== undefined ? { stable_id: stableId } : {}),
+		};
+	}
+
+	function seenSnapshot(
+		id: string,
+		stableId: string | undefined,
+	): LastSeenDevice {
+		return {
+			id,
+			displayName: "RØDE HDMI to USB-C",
+			kind: "hdmi",
+			pipelineId: "hdmi",
+			devicePath: `/dev/${id}`,
+			...(stableId !== undefined ? { stableId } : {}),
+		};
+	}
+
+	function lostRows(sources: StreamSource[]): StreamSource[] {
+		return sources.filter((s) => s.lost === true);
+	}
+
+	function captureRows(sources: StreamSource[]): StreamSource[] {
+		return sources.filter((s) => s.origin === "capture" && s.lost !== true);
+	}
+
+	it("a video1→video2 rename migrates the row: ONE live capture, no stuck Lost row", () => {
+		// video1 was seen this session (and is the configured source); the engine
+		// now lists the SAME physical device re-enumerated at video2.
+		const video1 = seenSnapshot("video1", STABLE_A);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [hotplugDevice("video2", STABLE_A)],
+			networkIngest: NO_INGEST,
+			configSource: "video1",
+			lastSeenDevices: [video1],
+			sessionSnapshots: new Map([[video1.id, video1]]),
+		});
+
+		expect(lostRows(sources)).toHaveLength(0);
+		const captures = captureRows(sources);
+		expect(captures).toHaveLength(1);
+		expect(captures[0]?.id).toBe("video2");
+	});
+
+	it("a TRUE unplug (no successor) still shows Lost — guards against over-deletion", () => {
+		// video1 was seen this session; the engine now lists NOTHING — a genuine
+		// unplug, not a rename. The Lost row MUST remain.
+		const video1 = seenSnapshot("video1", STABLE_A);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [],
+			networkIngest: NO_INGEST,
+			configSource: "video1",
+			lastSeenDevices: [video1],
+			sessionSnapshots: new Map([[video1.id, video1]]),
+		});
+
+		const lost = lostRows(sources);
+		expect(lost).toHaveLength(1);
+		expect(lost[0]?.id).toBe("video1");
+		expect(captureRows(sources)).toHaveLength(0);
+	});
+
+	it("a rapid rename cycle (video1→video2→video3) collapses to ONE live row, no Lost rows", () => {
+		// Every intermediate node was session-seen; the engine now lists only the
+		// final node. All prior nodes share the ONE stable identity.
+		const video1 = seenSnapshot("video1", STABLE_A);
+		const video2 = seenSnapshot("video2", STABLE_A);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [hotplugDevice("video3", STABLE_A)],
+			networkIngest: NO_INGEST,
+			configSource: "video1",
+			lastSeenDevices: [video1, video2],
+			sessionSnapshots: new Map([
+				[video1.id, video1],
+				[video2.id, video2],
+			]),
+		});
+
+		expect(lostRows(sources)).toHaveLength(0);
+		const captures = captureRows(sources);
+		expect(captures).toHaveLength(1);
+		expect(captures[0]?.id).toBe("video3");
+	});
+
+	it("a DIFFERENT physical device at a new node does NOT suppress the original's Lost row", () => {
+		// video1 (SN-A) vanished; the engine lists a genuinely different device
+		// (SN-B) at video2. SN-A has no successor, so its Lost row must remain and
+		// SN-B is its own live row.
+		const video1 = seenSnapshot("video1", STABLE_A);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [hotplugDevice("video2", STABLE_B)],
+			networkIngest: NO_INGEST,
+			configSource: "video1",
+			lastSeenDevices: [video1],
+			sessionSnapshots: new Map([[video1.id, video1]]),
+		});
+
+		const lost = lostRows(sources);
+		expect(lost).toHaveLength(1);
+		expect(lost[0]?.id).toBe("video1");
+		const captures = captureRows(sources);
+		expect(captures).toHaveLength(1);
+		expect(captures[0]?.id).toBe("video2");
+	});
+
+	it("without a stable identity (old engine), a rename falls back to node-path behavior (unchanged)", () => {
+		// No stable_id on either side → the reconciler cannot prove a successor, so
+		// the pre-Todo-34 node-path behavior is preserved (a Lost row appears). This
+		// documents the safe degradation boundary, not a regression.
+		const video1 = seenSnapshot("video1", undefined);
+		const sources = buildSources({
+			sources: [capSource("hdmi"), capSource("test")],
+			devices: [hotplugDevice("video2", undefined)],
+			networkIngest: NO_INGEST,
+			configSource: "video1",
+			lastSeenDevices: [video1],
+			sessionSnapshots: new Map([[video1.id, video1]]),
+		});
+
+		expect(lostRows(sources)).toHaveLength(1);
+		expect(captureRows(sources)).toHaveLength(1);
+	});
+});
