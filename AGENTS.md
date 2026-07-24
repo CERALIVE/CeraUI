@@ -528,19 +528,19 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 
 | Package | Version |
 |---------|---------|
-| `@orpc/*` (client, server, contract) | 1.14.7 |
+| `@orpc/*` (client, server, contract) | 1.14.8 |
 | Bun pin (`.bun-version`) | 1.3.14 |
-| `svelte` | 5.56.4 |
+| `svelte` | 5.56.7 |
 | `vitest` | 4.1.10 |
-| `vite` | 8.1.3 |
-| `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.2 |
+| `vite` | 8.1.5 |
+| `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
 | `@biomejs/biome` | 2.5.2 |
 | `@playwright/test` | 1.61.1 |
-| `@lucide/svelte` | 1.23.0 |
-| `svelte-check` | 4.7.1 |
+| `@lucide/svelte` | 1.26.0 |
+| `svelte-check` | 4.7.3 |
 | `@sveltejs/vite-plugin-svelte` | 7.1.3 |
 | `@axe-core/playwright` | 4.12.1 |
-| `@types/node` | 26.1.0 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
+| `@types/node` | 26.1.1 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 
