@@ -41,7 +41,6 @@ const RUN_OPTS: StreamRunOptions = {
 	host: "127.0.0.1",
 	port: 9000,
 	streamid: "stream-1",
-	reducedPacketSize: false,
 };
 
 const silentLogger: CerastreamBackendDeps["logger"] = {
@@ -181,7 +180,6 @@ describe("media-path backend contracts", () => {
 				port: 9000,
 				streamid: "stream-1",
 				latency_ms: 2000,
-				reduced_packet_size: false,
 			},
 			bitrate: { min_bitrate: 300, max_bitrate: 8000, balancer: "adaptive" },
 		});
