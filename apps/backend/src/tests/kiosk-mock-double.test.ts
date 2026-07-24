@@ -31,6 +31,7 @@ import { initMockService, stopMockService } from "../mocks/mock-service.ts";
 import { getActiveMockKioskHarness } from "../mocks/providers/kiosk.ts";
 import { getConfig } from "../modules/config.ts";
 import {
+	initKiosk,
 	peekMockKioskHarness,
 	pollKioskOnce,
 	resetKioskDeps,
@@ -97,15 +98,25 @@ function enterDevMockMode(): void {
 	initMockService("multi-modem-wifi");
 }
 
-/** Drain the fire-and-forget async tail of a kiosk toggle (the add-on enable). */
-async function flushAsyncTail(): Promise<void> {
-	await new Promise((resolve) => setTimeout(resolve, 0));
+async function flushAsyncTail(expectedMerged: boolean): Promise<void> {
+	const deadline = Date.now() + 2_000;
+	while (Date.now() < deadline) {
+		const harness = peekMockKioskHarness();
+		const mutationSettled =
+			harness !== null &&
+			(expectedMerged
+				? harness.enableAddonCalls.length >= 1 && harness.isSysextMerged()
+				: harness.disableAddonCalls.length >= 1 && !harness.isSysextMerged());
+		if (mutationSettled) return;
+		await new Promise((resolve) => setTimeout(resolve, 10));
+	}
 }
 
 beforeEach(() => {
 	stopKioskPolling();
 	resetKioskConfig();
 	resetKioskDeps();
+	initKiosk();
 });
 
 afterEach(() => {
@@ -142,7 +153,7 @@ describe("kiosk (dev / shouldUseMocks) — toggles hit the in-memory harness", (
 
 		// Let the fire-and-forget add-on enable settle, then assert the store was
 		// actually MUTATED (sysext merged) — not merely a success return value.
-		await flushAsyncTail();
+		await flushAsyncTail(true);
 		expect(harness?.enableAddonCalls).toHaveLength(1);
 		expect(harness?.isSysextMerged()).toBe(true);
 
@@ -153,7 +164,7 @@ describe("kiosk (dev / shouldUseMocks) — toggles hit the in-memory harness", (
 		enterDevMockMode();
 
 		await call(kioskStartProcedure, undefined, { context: makeContext() });
-		await flushAsyncTail();
+		await flushAsyncTail(true);
 		const harness = peekMockKioskHarness();
 		expect(harness?.isSysextMerged()).toBe(true);
 
@@ -168,7 +179,7 @@ describe("kiosk (dev / shouldUseMocks) — toggles hit the in-memory harness", (
 		// start + stop shared ONE harness singleton.
 		expect(peekMockKioskHarness()).toBe(harness);
 
-		await flushAsyncTail();
+		await flushAsyncTail(false);
 		expect(harness?.disableAddonCalls).toHaveLength(1);
 		expect(harness?.isSysextMerged()).toBe(false);
 		expect(getConfig().kiosk_enabled).toBe(false);
