@@ -46,7 +46,7 @@ export const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 /**
  * Default wall-clock budget for a single OS command: 30 s. Sane for the one-shot
  * host queries this runner is built for (nmcli/mmcli/systemctl/ip/…). Long-lived
- * or streaming work (apt-get progress, bcrpt relay) deliberately does NOT go
+ * or streaming work (apt-get progress) deliberately does NOT go
  * through run()/runWithStdin() — see modules' direct-spawn sites.
  */
 export const DEFAULT_TIMEOUT_MS = 30_000;

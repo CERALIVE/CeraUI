@@ -122,7 +122,7 @@ export function getMockRelayRtt(serverId: string): number {
 /**
  * Get mock RTT for all relay servers
  * Returns a Record<serverId, rtt> keyed by fixture server IDs
- * Matches the signature of bcrpt.ts:getAllRelaysRtt()
+ * Matches the relay RTT lookup signature used by the relay cache.
  */
 export function getAllMockRelaysRtt(): Record<string, number> {
 	const rtt: Record<string, number> = {};
