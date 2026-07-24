@@ -1,5 +1,5 @@
 /*
- * Task 13 — bcrpt.ts + srtla.ts Bun-native I/O migration.
+ * Task 13 — srtla.ts Bun-native I/O migration.
  *
  * Proves the two semantics that MUST NOT drift after replacing node:fs sync
  * APIs with Bun-native equivalents:
@@ -10,14 +10,9 @@
  *      aggregation. We compare the migrated writer's bytes against a reference
  *      produced by the original node:fs.writeFileSync.
  *
- *   2. The bcrpt working-dir "ensure" idiom creates a missing directory and is
- *      a no-op when it exists. This documents WHY the migration uses
- *      mkdir({ recursive: true }) rather than the spec's Bun.file(dir).exists()
- *      guard: Bun.file(dir).exists() is FALSE for directories.
  */
 import { describe, expect, it } from "bun:test";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setup } from "../modules/setup.ts";
@@ -55,28 +50,5 @@ describe("srtla ips-file writer (Task 13 Bun.write migration)", () => {
 	it("writes an empty file for an empty address list", async () => {
 		await setSrtlaIpList([]);
 		expect(await Bun.file(ipsFile).text()).toBe("");
-	});
-});
-
-describe("bcrpt working-dir ensure (Task 13 mkdir migration)", () => {
-	it("Bun.file(dir).exists() is false for directories (why we use mkdir recursive)", async () => {
-		const dir = mkdtempSync(join(tmpdir(), "bcrpt-pitfall-"));
-		expect(existsSync(dir)).toBe(true);
-		expect(await Bun.file(dir).exists()).toBe(false);
-	});
-
-	it("creates the directory when it does not exist", async () => {
-		const base = mkdtempSync(join(tmpdir(), "bcrpt-"));
-		const target = join(base, "bcrpt-run");
-
-		expect(existsSync(target)).toBe(false);
-		await mkdir(target, { recursive: true });
-		expect(existsSync(target)).toBe(true);
-	});
-
-	it("is a no-op when the directory already exists", async () => {
-		const base = mkdtempSync(join(tmpdir(), "bcrpt-"));
-		await mkdir(base, { recursive: true });
-		expect(existsSync(base)).toBe(true);
 	});
 });

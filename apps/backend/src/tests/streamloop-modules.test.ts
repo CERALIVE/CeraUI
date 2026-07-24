@@ -18,10 +18,7 @@ import {
 	checkAutoStartStream as checkAutostartFn,
 	setAutostart as setAutostartFn,
 } from "../modules/streaming/streamloop/autostart.ts";
-import {
-	bcrptExec as bcrptExecOwned,
-	srtlaSendExec as srtlaSendExecOwned,
-} from "../modules/streaming/streamloop/exec-paths.ts";
+import { srtlaSendExec as srtlaSendExecOwned } from "../modules/streaming/streamloop/exec-paths.ts";
 import { getStreamingProcesses } from "../modules/streaming/streamloop/process-runner.ts";
 import {
 	start as startOwned,
@@ -35,7 +32,6 @@ import * as barrel from "../modules/streaming/streamloop.ts";
 const LOCKED_API: Record<string, "string" | "function"> = {
 	AUTOSTART_CHECK_FILE: "string",
 	autoStartStream: "function",
-	bcrptExec: "string",
 	checkAutoStartStream: "function",
 	setAutostart: "function",
 	srtlaSendExec: "string",
@@ -60,7 +56,6 @@ describe("streamloop public API surface is preserved by the split", () => {
 describe("barrel routes each symbol to its new owning sub-module", () => {
 	test("exec-path constants are owned by exec-paths.ts", () => {
 		expect(barrel.srtlaSendExec).toBe(srtlaSendExecOwned);
-		expect(barrel.bcrptExec).toBe(bcrptExecOwned);
 	});
 
 	test("session control is owned by session.ts", () => {
@@ -81,9 +76,7 @@ describe("barrel routes each symbol to its new owning sub-module", () => {
 });
 
 describe("exec-paths.ts extraction", () => {
-	test("derives the bcrpt executable path and exposes string exec paths", () => {
-		expect(typeof bcrptExecOwned).toBe("string");
-		expect(bcrptExecOwned.endsWith("/bcrpt")).toBe(true);
+	test("exposes the srtla executable path as a string", () => {
 		expect(typeof srtlaSendExecOwned).toBe("string");
 	});
 });
