@@ -250,12 +250,18 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		await expect(page.getByTestId("source-audio")).toBeVisible();
 
 		// ── 3a. Direct streaming.start → EXACT wire codes (not a toast). ──────────
-		const started = await directStartStream(pageRpc, "usb");
-		expect(started).toEqual({
+		const started = (await directStartStream(pageRpc, "usb")) as Record<
+			string,
+			unknown
+		>;
+		expect(started).toMatchObject({
 			success: false,
 			is_streaming: false,
 			error: "source_lost",
+			result: "failed",
+			failure: { phase: "params", class: "start_invalid", retriable: false },
 		});
+		expect(typeof started.attemptId).toBe("string");
 
 		// ── 4. REATTACH via the REAL seam → row re-enables, SAME selection kept. ──
 		const reattach = await setDeviceAttached(pageRpc, "usb", true);
