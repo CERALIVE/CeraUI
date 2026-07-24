@@ -78,7 +78,6 @@ import {
 	updateAudioDevices,
 } from "./modules/streaming/audio.ts";
 import { initAudioMeterBridge } from "./modules/streaming/audio-meter-bridge.ts";
-import { startBcrpt } from "./modules/streaming/bcrpt.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
 import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
@@ -98,7 +97,6 @@ import {
 	gracefulShutdown,
 } from "./modules/streaming/streamloop/process-runner.ts";
 import {
-	bcrptExec,
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
@@ -161,9 +159,6 @@ if (isDevelopment()) {
 }
 
 checkExecPath(srtlaSendExec);
-if (setup.bcrpt_path) {
-	checkExecPath(bcrptExec);
-}
 
 // CRITICAL boot phase. A failure here is genuinely fatal: the device cannot
 // serve correct state without its config, so runCritical() logs loudly and
@@ -358,9 +353,6 @@ startAudioDeviceWatcher(() => getStreamingProcesses().length > 0);
 // Hotplug input discovery (Task 34): v4l2 + unified audio scan, broadcasts the
 // `devices` payload that feeds the cerastream picker + live switch-input RPC.
 startDeviceDiscovery();
-if (setup.bcrpt_path) {
-	void startBcrpt();
-}
 logger.info(bootTimer.phase("🎵", "audio & devices"));
 
 // Don't autostart when restarting CeraLive after a software update or after a crash
