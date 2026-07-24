@@ -307,7 +307,7 @@ const zh = {
 		},
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "带硬件 H.264 的 USB 摄像头 (UVC)",
+			libuvch264: "USB 摄像头",
 			hdmi: "HDMI 采集",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",
@@ -1124,6 +1124,7 @@ const zh = {
 				other: "其他",
 				uvc_h264: "UVC H.264",
 				uvc_h265: "UVC H.265",
+				uvc_dual: "UVC H.264/H.265",
 				mjpeg: "UVC · MJPEG",
 				camlink: "Cam Link",
 			},

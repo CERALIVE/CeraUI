@@ -310,6 +310,19 @@ function captureSource(
 const SRC_RODE = captureSource("video-usb", "uvc_h264", "libuvch264", RODE_DISPLAY_NAME);
 const SRC_HDMI_CAP = captureSource("video-hdmi", "hdmi", "hdmi", "Rockchip HDMI-RX");
 
+// A dual-codec UVC camera: the engine collapsed its `kind` to the H.265-priority
+// value, but its modes advertise BOTH hardware codecs — the badge must name both.
+const SRC_DUAL = captureSource(
+	"video-dual",
+	"uvc_h265",
+	"libuvch265",
+	"Elgato Dual Codec Cam",
+	[
+		{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h265" },
+		{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h264" },
+	] as Mode[],
+);
+
 const SRC_TEST: Record<string, unknown> = {
 	origin: "virtual",
 	id: "test",
@@ -567,6 +580,21 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(kindBadge).toHaveText("UVC H.264");
 		// …and the coarse "HDMI Capture" pipeline label never appears on the row.
 		await expect(row).not.toContainText("HDMI Capture");
+	});
+
+	test("a dual-codec capture source names BOTH codecs, not just its collapsed kind", async ({
+		page,
+	}) => {
+		serverConfig();
+		sendFullCaps();
+		sendSources([SRC_DUAL]);
+
+		const kindBadge = page.getByTestId("source-kind-video-dual");
+		await expect(kindBadge).toBeVisible({ timeout: 15_000 });
+		// The engine collapsed the kind to uvc_h265 (stable data hook), but the
+		// visible badge must name both codecs the device's modes advertise.
+		await expect(kindBadge).toHaveAttribute("data-source-kind", "uvc_h265");
+		await expect(kindBadge).toHaveText("UVC H.264/H.265");
 	});
 
 	// ── (c) Network-ingest rows: disabled-with-reason ⇄ selectable via gateway ──

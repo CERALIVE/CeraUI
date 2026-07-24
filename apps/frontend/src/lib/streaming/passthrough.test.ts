@@ -1,9 +1,18 @@
+import type { DeviceMode } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 import {
+	captureModeCodecs,
 	type PassthroughInputs,
 	resolvePassthroughMode,
 	sourceOffersCodec,
 } from "./passthrough.ts";
+
+const mode = (media_type: string): DeviceMode => ({
+	width: 1920,
+	height: 1080,
+	framerates: [30],
+	media_type,
+});
 
 const base: PassthroughInputs = {
 	setting: "auto",
@@ -87,5 +96,39 @@ describe("sourceOffersCodec", () => {
 			expect(sourceOffersCodec(kind, "h264")).toBe(false);
 			expect(sourceOffersCodec(kind, "h265")).toBe(false);
 		}
+	});
+
+	it("modes-derived offeredCodecs win over the collapsed kind: a dual device passes through BOTH", () => {
+		const dual = ["h264", "h265"] as const;
+		// The engine collapsed this device's kind to uvc_h265, but its modes
+		// advertise both — so h264 passthrough must be eligible, not rejected.
+		expect(sourceOffersCodec("uvc_h265", "h264", dual)).toBe(true);
+		expect(sourceOffersCodec("uvc_h265", "h265", dual)).toBe(true);
+	});
+
+	it("an empty offeredCodecs falls back to the scalar-kind branch (old engine)", () => {
+		expect(sourceOffersCodec("uvc_h264", "h264", [])).toBe(true);
+		expect(sourceOffersCodec("uvc_h264", "h265", [])).toBe(false);
+	});
+});
+
+describe("captureModeCodecs", () => {
+	it("returns both codecs h264→h265 for a dual-capable device's modes", () => {
+		expect(
+			captureModeCodecs([mode("video/x-h265"), mode("video/x-h264")]),
+		).toEqual(["h264", "h265"]);
+	});
+
+	it("returns the single codec for a single-codec device", () => {
+		expect(captureModeCodecs([mode("video/x-h264")])).toEqual(["h264"]);
+		expect(captureModeCodecs([mode("video/x-h265")])).toEqual(["h265"]);
+	});
+
+	it("returns [] for raw/MJPEG/empty/undefined modes", () => {
+		expect(
+			captureModeCodecs([mode("image/jpeg"), mode("video/x-raw")]),
+		).toEqual([]);
+		expect(captureModeCodecs([])).toEqual([]);
+		expect(captureModeCodecs(undefined)).toEqual([]);
 	});
 });

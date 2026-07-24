@@ -100,7 +100,11 @@ import {
 	getSources,
 } from '$lib/rpc/subscriptions.svelte';
 import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
-import { resolvePassthroughMode, sourceOffersCodec } from '$lib/streaming/passthrough';
+import {
+	captureModeCodecs,
+	resolvePassthroughMode,
+	sourceOffersCodec,
+} from '$lib/streaming/passthrough';
 
 interface Props {
 	open?: boolean;
@@ -275,8 +279,14 @@ const passthroughOutputCodec = $derived<VideoCodec>(localCodec ?? resolvedAutoCo
 const activeSourceKind = $derived(
 	activeSource?.origin === 'capture' ? activeSource.kind : undefined,
 );
+// A dual-codec device's `kind` collapses to one value, so pass the truthful
+// modes-derived codec set: it keeps passthrough eligibility correct when the
+// operator picks the codec the collapsed `kind` doesn't name.
+const activeSourceCodecs = $derived(
+	activeSource?.origin === 'capture' ? captureModeCodecs(activeSource.modes) : undefined,
+);
 const passthroughSourceEligible = $derived(
-	sourceOffersCodec(activeSourceKind, passthroughOutputCodec),
+	sourceOffersCodec(activeSourceKind, passthroughOutputCodec, activeSourceCodecs),
 );
 const resolvedPassthroughMode = $derived(
 	resolvePassthroughMode({

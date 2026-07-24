@@ -607,6 +607,7 @@ const es = {
 				other: "Otro",
 				uvc_h264: "UVC H.264",
 				uvc_h265: "UVC H.265",
+				uvc_dual: "UVC H.264/H.265",
 				mjpeg: "UVC · MJPEG",
 				camlink: "Cam Link",
 			},
@@ -1114,7 +1115,7 @@ const es = {
 		// Video sources
 		sources: {
 			camlink: "Cam Link 4K",
-			libuvch264: "Cámara USB con H.264 por hardware (UVC)",
+			libuvch264: "Cámara USB",
 			hdmi: "Captura HDMI",
 			usb_mjpeg: "USB MJPEG",
 			v4l_mjpeg: "V4L2 MJPEG",

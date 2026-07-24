@@ -68,6 +68,7 @@ import {
 } from '$lib/rpc/field-sync-state.svelte';
 import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
 import { hasEffectiveSource } from '$lib/streaming/effective-source';
+import { captureModeCodecs } from '$lib/streaming/passthrough';
 import {
 	audioSourceLabel,
 	deriveActiveSummary,
@@ -287,12 +288,22 @@ const KIND_ICON = { hdmi: Cable, usb: Usb, network: Radio, other: Video } as con
 function kindLabel(kind: DeviceKind): string {
 	return t(`live.inputPicker.groups.${kind}`);
 }
+// A capture device that advertises BOTH hardware codecs is collapsed by the engine
+// to a single H.265-priority `kind`, so the scalar-kind label alone ("UVC H.265")
+// hides the H.264 capability. When the device's modes reveal both, name both.
+function captureBadgeLabel(source: CaptureStreamSource): string {
+	return captureModeCodecs(source.modes).length >= 2
+		? t('live.inputPicker.groups.uvc_dual')
+		: kindLabel(source.kind);
+}
 // Hardware-encoding UVC kinds run onboard H.264/H.265 — surface that with the
 // phosphor-lime "live" accent so the hardware-encode path reads distinctly from
 // raw/other capture (which stay neutral). The text differs per kind regardless,
-// so colour is reinforcement, never the sole signal.
-function kindBadgeClass(kind: DeviceKind): string {
-	return kind === 'uvc_h264' || kind === 'uvc_h265'
+// so colour is reinforcement, never the sole signal. A dual-codec device is
+// hardware-encoding on both, so it earns the same accent.
+function captureBadgeClass(source: CaptureStreamSource): string {
+	if (captureModeCodecs(source.modes).length >= 2) return 'bg-primary/10 text-primary';
+	return source.kind === 'uvc_h264' || source.kind === 'uvc_h265'
 		? 'bg-primary/10 text-primary'
 		: 'bg-muted text-muted-foreground';
 }
@@ -563,11 +574,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									<span class="flex shrink-0 items-center gap-1.5">
 										{#if source.origin === 'capture'}
 											<span
-												class="{kindBadgeClass(source.kind)} rounded px-1.5 py-0.5 text-xs font-medium"
+												class="{captureBadgeClass(source)} rounded px-1.5 py-0.5 text-xs font-medium"
 												data-source-kind={source.kind}
 												data-testid={`source-kind-${source.id}`}
 											>
-												{kindLabel(source.kind)}
+												{captureBadgeLabel(source)}
 											</span>
 											{#if source.lost}
 												<span
