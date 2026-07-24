@@ -337,6 +337,11 @@ const hi = {
 		audioSource: "ऑडियो स्रोत",
 		activeAudioSource: "सक्रिय ऑडियो स्रोत",
 		changeAudioSourceHint: "इसे स्रोत अनुभाग में बदलें",
+		audioDeviceName: "प्रदर्शन नाम",
+		audioDeviceNameHelp:
+			"इस ऑडियो डिवाइस के लिए कस्टम नाम। यह हार्डवेयर पहचान से याद रखा जाता है, इसलिए अनप्लग या रीबूट के बाद भी बना रहता है।",
+		audioDeviceNamePlaceholder: "उदा. इंटरव्यू माइक",
+		audioDeviceNameReset: "हार्डवेयर नाम उपयोग करने के लिए खाली छोड़ें।",
 		noAudioSourceSelected: "कोई ऑडियो स्रोत चयनित नहीं",
 		notAvailableAudioSource: "उपलब्ध नहीं",
 		selectAudioSource: "ऑडियो स्रोत चुनें",

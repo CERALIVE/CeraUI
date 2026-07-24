@@ -323,22 +323,24 @@ describe("deriveAudioSources — label attachment", () => {
 			"No audio": "No audio",
 			"Pipeline default": "Pipeline default",
 		};
-		const labels = new Map([
-			["HDMI", "Rockchip HDMI In"],
-			["USB audio", "RØDE AI-Micro"],
+		const displays = new Map([
+			["HDMI", { label: "Rockchip HDMI In", aliasKey: "card:rockchiphdmiin" }],
+			["USB audio", { label: "RØDE AI-Micro", aliasKey: "card:usbaudio" }],
 		]);
-		const sources = deriveAudioSources(devices, labels);
+		const sources = deriveAudioSources(devices, displays);
 
 		expect(sources.map((s) => s.id)).toEqual(Object.keys(devices));
 		expect(sources.find((s) => s.id === "HDMI")).toEqual({
 			id: "HDMI",
 			kind: "device",
 			label: "Rockchip HDMI In",
+			alias_key: "card:rockchiphdmiin",
 		});
 		expect(sources.find((s) => s.id === "USB audio")).toEqual({
 			id: "USB audio",
 			kind: "device",
 			label: "RØDE AI-Micro",
+			alias_key: "card:usbaudio",
 		});
 		expect(sources.find((s) => s.id === "No audio")?.label).toBeUndefined();
 		expect(
@@ -454,13 +456,16 @@ describe("device naming/identity (device-quality-wave2 Todo 22)", () => {
 		]);
 		const sources = deriveAudioSources(
 			{ "USB audio": "usbaudio", "No audio": "No audio" },
-			new Map([["USB audio", "RØDE NT-USB"]]),
+			new Map([
+				["USB audio", { label: "RØDE NT-USB", aliasKey: "card:usbaudio" }],
+			]),
 			identities,
 		);
 		expect(sources.find((s) => s.id === "USB audio")).toEqual({
 			id: "USB audio",
 			kind: "device",
 			label: "RØDE NT-USB",
+			alias_key: "card:usbaudio",
 			product_name: "RØDE NT-USB",
 			transport: "usb",
 			stable_id: "card:usbaudio",

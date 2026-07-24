@@ -475,6 +475,11 @@ const ar = {
 		audioSource: "مصدر الصوت",
 		activeAudioSource: "مصدر الصوت النشط",
 		changeAudioSourceHint: "غيّره في قسم المصدر",
+		audioDeviceName: "اسم العرض",
+		audioDeviceNameHelp:
+			"اسم مخصص لجهاز الصوت هذا. يُحفظ حسب هوية العتاد، لذا يبقى بعد الفصل أو إعادة التشغيل.",
+		audioDeviceNamePlaceholder: "مثال: ميكروفون المقابلة",
+		audioDeviceNameReset: "اتركه فارغًا لاستخدام اسم العتاد.",
 		noAudioSourceSelected: "لم يتم تحديد مصدر صوت",
 		notAvailableAudioSource: "غير متوفر",
 		selectAudioSource: "حدد مصدر الصوت",

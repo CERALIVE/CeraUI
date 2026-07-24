@@ -665,6 +665,51 @@ describe("audioSourceLabel — translate pseudo, never translate hardware (Task 
 			),
 		).toBe("Rockchip HDMI-in");
 	});
+
+	it("prefers an operator alias over the engine product_name and its transport tag", () => {
+		expect(
+			audioSourceLabel(
+				{
+					id: "USB audio",
+					kind: "device",
+					alias: "Camera A",
+					product_name: "RØDE NT-USB",
+					transport: "usb",
+					label: "RØDE HDMI to USB-C",
+				},
+				t,
+			),
+		).toBe("Camera A");
+	});
+
+	it("falls back to the cleaned hardware label when the alias is empty", () => {
+		expect(
+			audioSourceLabel(
+				{
+					id: "USB audio",
+					kind: "device",
+					alias: "",
+					label: "RØDE HDMI to USB-C",
+				},
+				t,
+			),
+		).toBe("RØDE HDMI to USB-C");
+	});
+
+	it("never renders the raw bus-path detail as the label", () => {
+		expect(
+			audioSourceLabel(
+				{
+					id: "MINI",
+					kind: "device",
+					label: "DJI MIC MINI",
+					detail:
+						"DJI Technology Co., Ltd. DJI MIC MINI at usb-fc8c0000.usb-1, full speed",
+				},
+				t,
+			),
+		).toBe("DJI MIC MINI");
+	});
 });
 
 describe("withAutoAudioEntry — Auto injected FIRST (T6)", () => {
