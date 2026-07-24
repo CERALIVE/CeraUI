@@ -46,9 +46,7 @@ describe("getSourceLabel", () => {
 	});
 
 	it("still resolves a known video source to its friendly label", () => {
-		expect(getSourceLabel("libuvch264")).toBe(
-			"USB camera with hardware H.264 (UVC)",
-		);
+		expect(getSourceLabel("libuvch264")).toBe("USB camera (UVC)");
 	});
 
 	it("preserves the translated-key branch when a resolver hits", () => {
@@ -58,16 +56,14 @@ describe("getSourceLabel", () => {
 	});
 
 	it("falls back to bindings label when the resolver misses the key", () => {
-		expect(getSourceLabel("libuvch264", passthroughT)).toBe(
-			"USB camera with hardware H.264 (UVC)",
-		);
+		expect(getSourceLabel("libuvch264", passthroughT)).toBe("USB camera (UVC)");
 	});
 });
 
 describe("getPipelineDisplayName", () => {
 	it("resolves a known source id to its friendly label", () => {
 		expect(getPipelineDisplayName("libuvch264", pipelines)).toBe(
-			"USB camera with hardware H.264 (UVC)",
+			"USB camera (UVC)",
 		);
 	});
 
@@ -83,9 +79,7 @@ describe("getPipelineDisplayName", () => {
 	});
 
 	it("is pure and tolerates missing pipelines", () => {
-		expect(getPipelineDisplayName("libuvch264")).toBe(
-			"USB camera with hardware H.264 (UVC)",
-		);
+		expect(getPipelineDisplayName("libuvch264")).toBe("USB camera (UVC)");
 		expect(getPipelineDisplayName(HASH_ID)).toBe("Unknown source");
 	});
 });
