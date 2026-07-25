@@ -687,15 +687,16 @@ export function getEngineAudioDevices(): EngineAudioDevice[] {
 }
 
 /**
- * Refresh the engine-device cache from a fresh `list-devices` probe. A throwing
- * fetch (engine unavailable) RETAINS the prior cache — the last-known device list
- * is never lost to a transient outage. A successful fetch replaces the cache
- * wholesale (an empty live list legitimately clears it — that is a reachable
- * engine reporting no devices, NOT an outage).
+ * Refresh the engine-device cache from a fresh `list-devices` probe, reporting
+ * whether the probe actually answered. A throwing fetch (engine unavailable)
+ * RETAINS the prior cache — the last-known device list is never lost to a
+ * transient outage — and returns `false`, so a caller holding its OWN truthful
+ * observation can tell "the engine confirmed this" from "the engine said nothing
+ * and you are looking at the previous answer".
  */
-export async function refreshEngineDeviceCache(
+export async function tryRefreshEngineDeviceCache(
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
-): Promise<CaptureDevice[]> {
+): Promise<boolean> {
 	try {
 		const result = await deps.fetchEngineDevices();
 		engineDeviceCache = result.devices.map((d) =>
@@ -741,12 +742,26 @@ export async function refreshEngineDeviceCache(
 				};
 			});
 		recordObservedDevices(engineDeviceCache);
+		return true;
 	} catch (err) {
 		logger.debug(
 			"sources: engine device fetch failed; retaining last-known device cache",
 			{ err },
 		);
+		return false;
 	}
+}
+
+/**
+ * Refresh the engine-device cache from a fresh `list-devices` probe. A successful
+ * fetch replaces the cache wholesale (an empty live list legitimately clears it —
+ * that is a reachable engine reporting no devices, NOT an outage); a failing one
+ * retains the prior cache.
+ */
+export async function refreshEngineDeviceCache(
+	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+): Promise<CaptureDevice[]> {
+	await tryRefreshEngineDeviceCache(deps);
 	return engineDeviceCache;
 }
 
@@ -827,4 +842,27 @@ export async function refreshAndBroadcastSources(
 ): Promise<void> {
 	await refreshEngineDeviceCache(deps);
 	broadcastSources();
+}
+
+/**
+ * Rebuild + broadcast `sources` for a hotplug transition the device registry
+ * detected with its OWN scan.
+ *
+ * A fresh authoritative engine `list-devices` probe is still preferred — its
+ * typed kinds beat the local scan's display-name heuristic — but it is a SECOND,
+ * separately-fallible round-trip, and on failure the cache is deliberately
+ * RETAINED. For a removal that means rebroadcasting the device the operator just
+ * unplugged as still available, until some later poll's probe happens to answer.
+ * So a failing probe hands over to the observation the registry already paid for,
+ * which is the one thing here that is known to be current.
+ */
+export async function refreshSourcesForHotplug(
+	observed: readonly CaptureDevice[],
+	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+): Promise<void> {
+	if (await tryRefreshEngineDeviceCache(deps)) {
+		broadcastSources();
+		return;
+	}
+	applyObservedDevicesAndBroadcast(observed);
 }

@@ -39,7 +39,9 @@ import {
 	getEngineDeviceCache,
 	getSessionSeenDeviceSnapshots,
 	getSourcesMessage,
+	refreshAndBroadcastSources,
 	refreshEngineDeviceCache,
+	refreshSourcesForHotplug,
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
@@ -546,5 +548,105 @@ describe("applyObservedDevicesAndBroadcast — combined hotplug transition (C7)"
 		// getSourcesMessage rebuilt from module state agrees (single source of truth).
 		const rebuilt = getSourcesMessage().sources.find((s) => s.id === "video0");
 		expect(rebuilt?.lost).toBe(true);
+	});
+});
+
+// ─── hotplug rebuild: the engine probe never gets to mask an observed removal ──
+
+describe("refreshSourcesForHotplug — a failing engine probe never masks a removal", () => {
+	beforeEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		getConfig().last_seen_devices = [];
+		delete getConfig().source;
+	});
+
+	afterEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		getConfig().last_seen_devices = [];
+		delete getConfig().source;
+	});
+
+	async function seedPresentDevice(): Promise<void> {
+		await seedHdmiCaps();
+		getConfig().source = "video0";
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+		]);
+		expect(getEngineDeviceCache()).toHaveLength(1);
+	}
+
+	function captureBroadcast(
+		run: () => void | Promise<void>,
+	): Promise<Array<Record<string, unknown>>> {
+		const sink: string[] = [];
+		const client = recordingClient(sink);
+		addClient(client);
+		return Promise.resolve(run())
+			.finally(() => removeClient(client))
+			.then(() =>
+				sink.map((raw) => JSON.parse(raw) as Record<string, unknown>),
+			);
+	}
+
+	it("a removal seen by the local scan still reaches the sources broadcast when the engine list-devices probe throws", async () => {
+		await seedPresentDevice();
+
+		const frames = await captureBroadcast(() =>
+			// The registry observed the device gone; the second engine round-trip is
+			// down (mid-restart / socket refused) — exactly the live-board case where
+			// the unplugged device kept rendering as available.
+			refreshSourcesForHotplug([], {
+				fetchEngineDevices: async () => {
+					throw new Error("engine unavailable");
+				},
+			}),
+		);
+
+		const sourcesFrame = frames.find((f) => "sources" in f);
+		expect(sourcesFrame).toBeDefined();
+		const video0 = (
+			sourcesFrame?.sources as { sources: Array<Record<string, unknown>> }
+		).sources.find((s) => s.id === "video0");
+		expect(video0?.lost).toBe(true);
+		expect(video0?.available).toBe(false);
+
+		// the cache followed the observation, not the retained pre-removal list.
+		expect(getEngineDeviceCache()).toHaveLength(0);
+	});
+
+	it("a reachable engine still wins: its typed device list replaces the local observation", async () => {
+		await seedPresentDevice();
+
+		await refreshSourcesForHotplug(
+			[captureDevice("video0", "usb", { display_name: "Local Scan Name" })],
+			{
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice("video0", "Engine HDMI")],
+				}),
+			},
+		);
+
+		const cached = getEngineDeviceCache();
+		expect(cached).toHaveLength(1);
+		expect(cached[0]?.display_name).toBe("Engine HDMI");
+		// the engine's typed kind survives — the local scan's heuristic never lands.
+		expect(cached[0]?.kind).toBe("hdmi");
+	});
+
+	it("the plain refresh keeps its retain-on-failure contract (a transient outage must not erase the last-known list)", async () => {
+		await seedPresentDevice();
+
+		await refreshAndBroadcastSources({
+			fetchEngineDevices: async () => {
+				throw new Error("engine unavailable");
+			},
+		});
+
+		// Deliberate and unchanged: with no independent observation to trust, the
+		// last-known list is better than an empty one. That is precisely why the
+		// hotplug path must feed its own observation in instead of re-fetching.
+		expect(getEngineDeviceCache()).toHaveLength(1);
 	});
 });

@@ -139,6 +139,26 @@ describe("device registry", () => {
 		expect(onDevicesChanged).toHaveBeenCalledTimes(2);
 	});
 
+	test("hands onDevicesChanged the list this scan observed, so a removal never depends on a second engine round-trip", async () => {
+		const observed: string[][] = [];
+		let cards = ["video63", "video64"];
+		const registry = createDeviceRegistry(
+			makeDeps({
+				onDevicesChanged: (devices) =>
+					observed.push(devices.map((d) => d.input_id)),
+				getAudioSources: () => ({}),
+				listVideoCards: async () => cards,
+				readCardName: async (card) =>
+					card === "video64" ? "Second-Cam" : "QA-Cam",
+			}),
+		);
+		await registry.rescan(); // boot seed
+		cards = ["video63"];
+		await registry.rescan(); // video64 unplugged
+
+		expect(observed).toEqual([["/dev/video63"]]);
+	});
+
 	test("switchInput returns a sub-frame gap_ms and sets the active input", async () => {
 		let clock = 0;
 		const registry = createDeviceRegistry(
