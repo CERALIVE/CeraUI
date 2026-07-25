@@ -1,13 +1,17 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { call } from "@orpc/server";
 
 import { withDeviceLock } from "../../modules/network/state/device-lock.ts";
 import {
 	addWifiInterface,
-	removeWifiInterface,
+	getWifiInterfacesByMacAddress,
 } from "../../modules/wifi/wifi-connections.ts";
 import type { WifiInterface } from "../../modules/wifi/wifi-interfaces.ts";
+import {
+	isolateWifiRegistry,
+	restoreWifiRegistry,
+} from "../../tests/helpers/wifi-registry.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import { hotspotConfigureProcedure } from "./wifi.procedure.ts";
 
@@ -49,17 +53,23 @@ const validConfig = {
 };
 
 describe("wifi.hotspotConfigure — device lock (S5)", () => {
-	let seededMac: string | undefined;
+	// An id-0 interface left in the shared registry by an earlier test file makes
+	// `device: "0"` resolve to a MAC this test never locked, so the lock below
+	// would guard a free device and the call would read as success.
+	let inherited: ReturnType<typeof isolateWifiRegistry> = [];
+
+	beforeEach(() => {
+		inherited = isolateWifiRegistry();
+	});
 
 	afterEach(() => {
-		if (seededMac) removeWifiInterface(seededMac);
-		seededMac = undefined;
+		restoreWifiRegistry(inherited);
 	});
 
 	test("returns DEVICE_BUSY while the interface lock is held by another op", async () => {
 		const mac = "dc:a6:32:de:ad:01";
-		seededMac = mac;
 		seedInterface(mac);
+		expect(Object.keys(getWifiInterfacesByMacAddress())).toEqual([mac]);
 
 		// A concurrent op holds the per-interface lock until we release the gate.
 		let release!: () => void;
@@ -82,8 +92,8 @@ describe("wifi.hotspotConfigure — device lock (S5)", () => {
 
 	test("acquires the lock and succeeds once the prior op releases it", async () => {
 		const mac = "dc:a6:32:de:ad:02";
-		seededMac = mac;
 		seedInterface(mac);
+		expect(Object.keys(getWifiInterfacesByMacAddress())).toEqual([mac]);
 
 		const result = await call(hotspotConfigureProcedure, validConfig, {
 			context: makeContext(),
