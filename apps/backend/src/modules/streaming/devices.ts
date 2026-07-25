@@ -49,6 +49,7 @@ import {
 	VIDEO_HOTPLUG_POLL_INTERVAL_MS,
 } from "./constants.ts";
 import { reportActiveVideoSource } from "./lifecycle-indicators.ts";
+import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
 import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
@@ -165,12 +166,21 @@ export interface EngineCaptureDevice {
 
 /** Map one engine device onto a CeraUI {@link CaptureDevice}: ids are carried
  *  verbatim (path-preferred, the single id namespace) and the engine's typed
- *  `kind` wins when present (see {@link mapEngineDeviceKind}). */
+ *  `kind` wins when present (see {@link mapEngineDeviceKind}).
+ *
+ *  `display_name` is the ONE field this seam rewrites: a known ONBOARD driver id
+ *  (`rk_hdmirx`) is replaced by its static operator-facing name. This is the
+ *  single seam every consumer of the engine device list flows through — the
+ *  `sources` broadcast, the legacy `devices` broadcast, and the persisted
+ *  last-seen snapshots alike — so the raw id never reaches a UI surface. Ids and
+ *  routing (`input_id` / `device_path`) are UNTOUCHED; this is display-only.
+ *  The RAW name still drives {@link mapEngineDeviceKind}, so the kind heuristic
+ *  sees exactly what the engine reported. */
 export function fromEngineDevice(device: EngineCaptureDevice): CaptureDevice {
 	return {
 		input_id: device.input_id,
 		device_path: device.device_path,
-		display_name: device.display_name,
+		display_name: applyOnboardVideoDisplayRule(device.display_name),
 		media_class: device.media_class,
 		kind: mapEngineDeviceKind(device.kind, device.display_name),
 		...(device.caps !== undefined ? { caps: device.caps } : {}),
@@ -198,7 +208,8 @@ export function buildDeviceList(
 			// SAME id the engine itself would report — no engine-up/down mismatch.
 			input_id: `/dev/${card}`,
 			device_path: `/dev/${card}`,
-			display_name: display,
+			// Same rule as fromEngineDevice, so engine-down never shows a raw id.
+			display_name: applyOnboardVideoDisplayRule(display),
 			media_class: "video",
 			kind: deriveKind(display),
 		});

@@ -54,6 +54,7 @@
  */
 
 import { logger } from "../../helpers/logger.ts";
+import { normalizeOnboardKey } from "./onboard-display-names.ts";
 
 /**
  * The engine-audio join record — a DEDICATED local type carrying ONLY the three
@@ -247,8 +248,10 @@ export function cleanAudioDeviceName(raw: string): CleanedAudioName {
  * nothing human in it to clean, so the name is a RULE that ships with the app —
  * deliberately NOT an operator-writable alias (no UI, no RPC, no config field).
  *
- * Keys are `normalizeCardKey`d, so one entry covers every punctuation spelling
+ * Keys are `normalizeOnboardKey`d, so one entry covers every punctuation spelling
  * of the same block (card id `rockchiphdmiin`, longname `rockchip,hdmiin`, …).
+ * The same folding backs the VIDEO half of this port
+ * (`onboard-display-names.ts`), so both media types key their rules identically.
  * Only cards that can REACH the picker are listed — `updateAudioDevices` already
  * excludes the HDMI-output and codec-playback cards.
  */
@@ -257,10 +260,6 @@ const ONBOARD_AUDIO_DISPLAY_RULES: ReadonlyMap<string, string> = new Map([
 	["rockchiphdmiind", "HDMI Input"],
 	["rockchipes8388", "Onboard Audio"],
 ]);
-
-function normalizeCardKey(value: string): string {
-	return value.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
-}
 
 /**
  * The static onboard display name for a card, else `undefined`. Both the ALSA
@@ -271,10 +270,10 @@ export function resolveOnboardDisplayName(
 	cardId: string,
 	rawName?: string,
 ): string | undefined {
-	const byCardId = ONBOARD_AUDIO_DISPLAY_RULES.get(normalizeCardKey(cardId));
+	const byCardId = ONBOARD_AUDIO_DISPLAY_RULES.get(normalizeOnboardKey(cardId));
 	if (byCardId !== undefined) return byCardId;
 	if (rawName === undefined) return undefined;
-	return ONBOARD_AUDIO_DISPLAY_RULES.get(normalizeCardKey(rawName));
+	return ONBOARD_AUDIO_DISPLAY_RULES.get(normalizeOnboardKey(rawName));
 }
 
 const loggedTierMissCardIds = new Set<string>();

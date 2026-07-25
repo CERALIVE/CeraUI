@@ -1784,6 +1784,20 @@ it a fixed name (`HDMI Input`) — a RULE that ships with the app, keyed on the
 driver/card id. The raw string is MOVED, not deleted: it rides
 `AudioSource.detail` as a tooltip.
 
+**The VIDEO half of that port gets the same rule.** cerastream reports the RK3588
+HDMI-RX capture node's `display_name` as the raw driver id `rk_hdmirx`, which
+surfaced verbatim in the Live source row AND the "Configured" summary line once
+cerastream PR #69/#70 made the node a real selectable row.
+`ONBOARD_VIDEO_DISPLAY_RULES` (`apps/backend/src/modules/streaming/onboard-display-names.ts`)
+names it `HDMI Input` — the SAME name as the audio half, since both are one
+physical port — and shares the audio rule's `normalizeOnboardKey` folding. The row
+and the "Configured" label are NOT separate code paths: both read
+`StreamSource.displayName` off the one `sources` broadcast, so the rule is applied
+once at `fromEngineDevice()` (plus the v4l2 fallback scan and pre-rule persisted
+snapshots) and never at a render site. Display-only — `input_id`/`device_path`/
+`stable_id` and the kind heuristic are untouched. Full contract:
+`apps/backend/AGENTS.md` → ONBOARD VIDEO DISPLAY NAMES.
+
 **There is NO operator rename.** #206 briefly shipped an alias/rename UI backed by
 `config.audio_device_aliases`; #207 removed it in full — UI, `setAudioDeviceAlias`
 RPC, oRPC contract entry, `audio-aliases.schema.ts`, and the config field — by
@@ -1808,5 +1822,5 @@ re-derived from bus-path string matching. Frontend label precedence is
 - Don't re-derive the "gateway inactive" disabled-with-reason rule inline on a new surface — route through `pipelineAvailability.ts`.
 - Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`GoLiveCard.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
 - Don't re-add per-link RTT/NAK/weight numbers to the WiFi/Cellular/Ethernet per-interface sections — `BondedLinksSection.svelte` is the sole owner of that telemetry on the Network destination.
-- Don't add an audio-device rename affordance (text field, button, or dialog) — device naming is code-level only; a pluggable device gets the read-only `isExternalAudioSource` "External" badge instead.
+- Don't add a device rename affordance (text field, button, or dialog) for ANY device or media type — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` / `ONBOARD_VIDEO_DISPLAY_RULES`); a pluggable audio device gets the read-only `isExternalAudioSource` "External" badge instead.
 - Don't add a fifth fact to the compact HUD strip — the 4-fact scope (lifecycle badge, health dot, bitrate, one temp chip) is deliberate; anything else belongs in the expanded Sheet.
