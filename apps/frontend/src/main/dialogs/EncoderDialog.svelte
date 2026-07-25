@@ -59,7 +59,7 @@ export interface EncoderConfig {
 
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { Binary, Cable, Cpu, Radio, SquareDashed, Usb, Video } from '@lucide/svelte';
+import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
 import { BITRATE_DEFAULT_MIN, type DeviceKind, type StreamSource } from '@ceraui/rpc/schemas';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
@@ -339,7 +339,9 @@ function sourceKindLabel(source: StreamSource): string {
 }
 function sourceIcon(source: StreamSource) {
 	if (source.origin === 'capture') return SOURCE_KIND_ICON[kindFamily(source.kind)];
-	if (source.origin === 'virtual') return SquareDashed;
+	// Colour-bars glyph for the generated test pattern — kept identical to
+	// SourceSection's row icon so the same source reads the same on both surfaces.
+	if (source.origin === 'virtual') return Columns3;
 	if (source.origin === 'network') return Radio;
 	return Video;
 }
