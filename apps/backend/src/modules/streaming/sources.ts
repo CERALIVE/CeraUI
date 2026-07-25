@@ -74,6 +74,7 @@ import {
 	groupDeviceCaps,
 } from "./capabilities.ts";
 import { fromEngineDevice } from "./devices.ts";
+import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
 import { getEffectiveHardware } from "./pipelines.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
 
@@ -301,7 +302,9 @@ function buildLostEntry(
 		lost: true,
 		origin: "capture",
 		kind: snapshot.kind,
-		displayName: snapshot.displayName,
+		// A snapshot persisted before the onboard rule existed still holds the raw
+		// driver id, so the rule is re-applied on read, not just on capture.
+		displayName: applyOnboardVideoDisplayRule(snapshot.displayName),
 		devicePath: snapshot.devicePath,
 	};
 }

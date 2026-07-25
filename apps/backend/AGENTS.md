@@ -64,7 +64,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
 | **Audio-naming resolution (4-tier: static onboard rule → engine join → ALSA longname → generic alias) + name cleaning + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
-| **Static onboard display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
+| **Static onboard AUDIO display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
+| **Static onboard VIDEO display-name rules (`rk_hdmirx` → `HDMI Input`) + the shared key folding** | `modules/streaming/onboard-display-names.ts` (`ONBOARD_VIDEO_DISPLAY_RULES`, `applyOnboardVideoDisplayRule`, `normalizeOnboardKey`) |
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
@@ -130,7 +131,7 @@ only hardware string is a raw driver id: the RK3588 HDMI-RX capture card reports
 there is nothing human in it to recover. `ONBOARD_AUDIO_DISPLAY_RULES` maps such
 a card to a fixed operator-facing name (`rockchiphdmiin` → `HDMI Input`,
 `rockchipes8388` → `Onboard Audio`). Keys are normalized through
-`normalizeCardKey` (punctuation + case folded), so ONE entry matches every
+`normalizeOnboardKey` (punctuation + case folded), so ONE entry matches every
 spelling of the same block — the ALSA card id `rockchiphdmiin`, the driver name
 `rockchip_hdmiin`, and the longname `rockchip,hdmiin`. `resolveOnboardDisplayName`
 probes the card id first, then the raw hardware string. Only cards that can
@@ -157,6 +158,45 @@ maps, so the pull-based `status` snapshots (`modules/ui/status.ts`,
 broadcast instead of falling back to the bare asrc key.
 
 Coverage: `tests/audio-device-naming-cleanup.test.ts`, `tests/audio-naming.test.ts`.
+
+## ONBOARD VIDEO DISPLAY NAMES [EXISTS]
+
+The video half of the same port needed the same treatment. cerastream reports the
+RK3588 HDMI-RX capture node's `display_name` as the raw kernel driver id
+`rk_hdmirx`, and once cerastream PR #69/#70 fixed its classification the node
+became a real, selectable, connected row — so that raw id surfaced verbatim in the
+Live source list AND in the "Configured" summary line above it.
+
+`modules/streaming/onboard-display-names.ts` is the video counterpart of the audio
+tier-0 rule and shares its key folding: `normalizeOnboardKey` lives there and
+`audio-naming.ts` imports it, so both media types key their rules identically.
+`ONBOARD_VIDEO_DISPLAY_RULES` maps `rkhdmirx` / `rockchiphdmirx` /
+`rockchiphdmirxcontroller` → `HDMI Input` — deliberately the SAME name the audio
+ladder gives `rockchip,hdmiin`, because the two are the video and audio halves of
+ONE physical port. Like the audio rule it is code-level only: no UI, no RPC, no
+config field. Adding a board is a code change.
+
+**It is applied at the device-construction seam, not at each render site.** The
+"Configured" label and the picker row are NOT separate code paths — both read
+`StreamSource.displayName` off the single `sources` broadcast (the frontend's
+`resolveSourceName` in `lib/streaming/sourceSummary.ts` and `SourceSection`'s row
+label). So the rule fires once, in `fromEngineDevice()`
+(`modules/streaming/devices.ts`), which every engine-device consumer flows through
+— the `sources` builder, the legacy `devices` broadcast, and the persisted
+`last_seen_devices` snapshots alike. Two supporting sites: `buildDeviceList()`
+(the engine-down v4l2 fallback scan reads the same `rk_hdmirx` from
+`/sys/class/video4linux/*/name`) and `buildLostEntry()` in `sources.ts` (a
+snapshot persisted BEFORE this rule existed still holds the raw id, so it is
+re-applied on read).
+
+**Display-only, and the raw name still drives classification.** `input_id`,
+`device_path`, and `stable_id` are untouched — routing is byte-identical — and
+`mapEngineDeviceKind`/`deriveKind` are still passed the RAW string, so the kind
+heuristic sees exactly what the engine reported.
+
+Coverage: `tests/onboard-video-display-name.test.ts` (the pure rule, both device
+seams, the rendered `sources` payload, and the lost row — the last two assert the
+serialized payload contains no `rk_hdmirx` at all).
 
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
@@ -937,5 +977,6 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 - Don't multiplex the control channel onto the BCRPT relay socket — the two channels are independent by design (different token audiences, different endpoints, different authority models).
 - Don't add secret-bearing event types to `RELAYABLE_TYPES` — the no-secrets contract test will catch it.
 - Don't delete the `devices`/`pipelines` broadcasts or the `capabilities.device_modes` field yet — they're deprecation shims kept for one release (`TD-legacy-source-broadcasts`); route new consumers through `getSources()`/the `sources` broadcast instead.
-- Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision.
+- Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
+- Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
