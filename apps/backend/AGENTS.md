@@ -898,21 +898,21 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   and an engine that never emits `stable_id` degrades to the prior node-path
   behavior. Coverage: `tests/sources.test.ts` ("hotplug re-enumeration
   reconciliation (Todo 34)").
-- **`config.source` routing self-heal across a renumber (#197)**: Todo 34 (above)
-  migrates the source-list ROW by stable identity, but the persisted
-  `config.source` is a literal engine id — so after a `video1`→`video2` replug the
-  routing seam still failed closed with `unknown_source` and the operator's chosen
-  device stopped routing until they re-picked it. `resolveSourceIdentity(sourceId,
-  sources, lastSeenDevices)` runs first inside `resolveSourceRouting()`: a live id
-  is returned untouched; a stale id is looked up in `last_seen_devices` to recover
-  its `stableId`, and the LIVE `capture` source sharing that identity is routed to
-  instead. No stable id, or no live successor, returns the id unchanged so the
-  `unknown_source` rejection still fires — a genuinely different device is never
-  silently adopted. `stableId` is threaded onto the capture `StreamSource`
-  additively (`sources.schema.ts`), consuming the `stable_id` the engine already
-  publishes — no IPC/binding change. This is the UI-side half of cerastream PR
-  #66's operator-source re-promotion: engine and UI recover the same selection
-  through the same stable identity. Coverage: `tests/sources.test.ts`.
+- **Source-routing self-heal across a renumber (PR #197)**: Todo 34 migrates the
+  source-list ROW by stable identity, but the persisted operator selection
+  (`config.source`) is a literal engine id (e.g. `video1`). When that device
+  re-enumerates under a new node (`video1`→`video2`, same hardware), the routing
+  seam used to resolve `config.source` by literal id only, so the stale id failed
+  closed as `unknown_source` and the chosen device stopped routing until the
+  operator re-picked it. `resolveSourceRouting()` now runs a `resolveSourceIdentity()`
+  step: when the persisted id is no longer live, it recovers the id's stable identity
+  from `last_seen_devices` and routes to the live capture source that shares it. A
+  genuinely different device (no stable-identity match) is NEVER adopted, and a
+  missing identity still fails closed. This is additive — it consumes the
+  already-published cerastream `stable_id` (no binding change) and is the UI-side
+  mirror of the engine's operator re-promotion (cerastream PR #66). The stable id is
+  threaded additive-optional through `StreamSource` (`sources.schema.ts`). Coverage:
+ `tests/sources.test.ts`.
 - **`getLinkTelemetry` null-on-stop** is a backend-locked contract:
   `stopLinkTelemetry()` clears the source state so the NEXT heartbeat tick's
   `broadcastLinkTelemetryIfChanged()` emits `{linkTelemetry: null}` exactly
