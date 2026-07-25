@@ -905,14 +905,14 @@ test.describe("Capability truthfulness (functional)", () => {
 		serverConfig({
 			pipeline: "hdmi",
 			source: "video-hdmi",
-			resolution: "1080p",
+			resolution: "720p",
 			framerate: 30,
 		});
 		send(GENERIC_PIPELINES);
 		sendFullCaps();
 		sendSources([
 			captureSource("video-hdmi", "hdmi", "hdmi", "Rockchip HDMI-RX", [
-				{ width: 1920, height: 1080, framerates: [30] },
+				{ width: 1280, height: 720, framerates: [30] },
 			]),
 		]);
 
@@ -933,14 +933,15 @@ test.describe("Capability truthfulness (functional)", () => {
 			'[data-testid="framerate-option"][data-value="30"]',
 		);
 
-		// PHASE 1 — the device advertises only 1080p@30: 720p is disabled-with-reason
-		// and 60fps at 1080p is disabled-with-reason (never hidden).
+		// PHASE 1 — the source reports a single 720p30 signal, so it bounds the encode
+		// target from ABOVE: 1080p and 60fps are disabled-with-reason (you cannot
+		// upscale a signal that isn't there), while 720p stays selectable.
 		await page.locator("#encoder-resolution").click();
-		await expect(res1080).toBeVisible();
-		await expect(res720).toHaveAttribute("aria-disabled", "true");
-		await expect(res720).toHaveAttribute("title", /\S/);
-		await expect(res1080).not.toHaveAttribute("aria-disabled", "true");
-		await res1080.click();
+		await expect(res720).toBeVisible();
+		await expect(res1080).toHaveAttribute("aria-disabled", "true");
+		await expect(res1080).toHaveAttribute("title", /\S/);
+		await expect(res720).not.toHaveAttribute("aria-disabled", "true");
+		await res720.click();
 
 		await page.locator("#encoder-framerate").click();
 		await expect(fps30).toBeVisible();
@@ -959,7 +960,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		]);
 
 		await page.locator("#encoder-resolution").click();
-		await expect(res720).not.toHaveAttribute("aria-disabled", "true");
+		await expect(res1080).not.toHaveAttribute("aria-disabled", "true");
 		await page.keyboard.press("Escape");
 
 		await page.locator("#encoder-framerate").click();

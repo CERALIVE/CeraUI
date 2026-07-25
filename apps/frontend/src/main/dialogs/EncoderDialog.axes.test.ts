@@ -502,6 +502,86 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		}
 	});
 
+	it("a receiver's live signal is a ceiling: a LOWER encode target is valid and saves", () => {
+		// The reported defect: with 1080p59.94 on the cable the dialog disabled every
+		// other resolution/framerate, so 720p30 — a plain downscale the capture leg
+		// handles — could not be picked at all.
+		state.pipelines = pipelinesMessage("rk3588");
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [SOC_HDMIRX_SOURCE]);
+		seedConfig({ source: "/dev/video0", pipeline: "hdmi" });
+
+		const onSave = vi.fn();
+		render(EncoderDialog, {
+			props: {
+				open: true,
+				config: encoderConfig({ resolution: "720p", framerate: 30 }),
+				onSave,
+			},
+		});
+
+		expect(
+			document.body
+				.querySelector("#encoder-resolution")
+				?.getAttribute("aria-invalid"),
+		).toBe("false");
+		expect(
+			document.body
+				.querySelector("#encoder-framerate")
+				?.getAttribute("aria-invalid"),
+		).toBe("false");
+		expect(
+			document.body.querySelector('[data-testid="encoder-save-blocked"]'),
+		).toBeNull();
+		// The informational device-max still names the actual signal, not the target.
+		expect(summaryText()).toContain("1080p");
+		expect(summaryText()).toContain("59.94");
+
+		const saveButton = Array.from(
+			document.body.querySelectorAll("button"),
+		).find((b) => b.textContent?.trim() === "Save");
+		expect((saveButton as HTMLButtonElement).disabled).toBe(false);
+		fireEvent.click(saveButton as HTMLButtonElement);
+		expect(onSave).toHaveBeenCalledTimes(1);
+		const saved = onSave.mock.calls[0]?.[0] as EncoderConfig;
+		expect(saved.resolution).toBe("720p");
+		expect(saved.framerate).toBe(30);
+	});
+
+	it("a receiver's live signal still blocks an encode target ABOVE it (no upscale)", async () => {
+		// The other half of the rule: 4K/60 from a 1080p59.94 signal is not something
+		// the device can produce, so it stays flagged and save stays blocked.
+		state.pipelines = pipelinesMessage("rk3588");
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [SOC_HDMIRX_SOURCE]);
+		seedConfig({ source: "/dev/video0", pipeline: "hdmi" });
+
+		const onSave = vi.fn();
+		render(EncoderDialog, {
+			props: {
+				open: true,
+				config: encoderConfig({ resolution: "2160p", framerate: 60 }),
+				onSave,
+			},
+		});
+
+		expect(
+			document.body
+				.querySelector("#encoder-resolution")
+				?.getAttribute("aria-invalid"),
+		).toBe("true");
+		expect(
+			document.body.querySelector('[data-testid="encoder-save-blocked"]'),
+		).not.toBeNull();
+
+		const saveButton = Array.from(
+			document.body.querySelectorAll("button"),
+		).find((b) => b.textContent?.trim() === "Save");
+		expect((saveButton as HTMLButtonElement).disabled).toBe(true);
+		await fireEvent.click(saveButton as HTMLButtonElement);
+		expect(onSave).not.toHaveBeenCalled();
+	});
+
 	it("device-max shows the achievable pair (1080p/30) and per-option fps hints (usb 720p@60 + 1080p@30)", async () => {
 		state.pipelines = pipelinesMessage("rk3588");
 		state.capabilities = capsWith();

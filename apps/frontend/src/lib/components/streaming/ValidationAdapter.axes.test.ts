@@ -20,6 +20,7 @@ import {
 	resolutionOptions,
 	resolveDeviceModes,
 	seededAxisSelection,
+	singleModeSourceCeiling,
 } from "./ValidationAdapter";
 
 // An override-capable HDMI-like source (mirrors the ValidationAdapter.capabilities
@@ -530,18 +531,128 @@ const SOC_HDMIRX_SOURCE: CaptureStreamSource = {
 	available: true,
 };
 
+describe("offeredAxes — a reported signal is a CEILING, not an enumeration", () => {
+	const axes = offeredAxes("rk3588", SOC_HDMIRX_SOURCE);
+
+	it("offers every encode target at or below the signal", () => {
+		// The defect: the receiver's single mode was intersected with the encode
+		// target, so 1080p59.94 was the ONLY selectable pair and every lower rung
+		// rendered disabled — even though the capture leg downscales/rate-converts.
+		expect(axes.offered.resolutions).toEqual(["480p", "720p", "1080p"]);
+		expect(axes.offered.framerates).toEqual([25, 29.97, 30, 50, 59.94]);
+		// One mode applies uniformly, so there is no per-resolution divergence left
+		// to refine — hence no device-mode list on the axes.
+		expect(axes.deviceModes).toBeUndefined();
+	});
+
+	it("keeps every rung ABOVE the signal disabled (no upscaling what isn't there)", () => {
+		const resolutions = resolutionOptions(axes.offered);
+		for (const rung of ["1440p", "2160p"] as const) {
+			const option = resolutions.find((o) => o.value === rung);
+			expect(option?.supported).toBe(false);
+			expect(option?.reason).toBe(OPTION_UNSUPPORTED_ON_PLATFORM);
+		}
+		const sixty = framerateOptions(axes.offered).find((o) => o.value === 60);
+		expect(sixty?.supported).toBe(false);
+		expect(sixty?.reason).toBe(OPTION_UNSUPPORTED_ON_PLATFORM);
+	});
+
+	it("keeps the rates selectable at a LOWER target resolution too", () => {
+		// The second half of the defect: the per-resolution gate asked which rates
+		// the source drives AT 720p — a rung the receiver never reports — so every
+		// rate went disabled the moment a lower resolution was picked.
+		const at720 = framerateOptionsForResolution(axes, "720p");
+		expect(at720.find((o) => o.value === 30)?.supported).toBe(true);
+		expect(at720.find((o) => o.value === 25)?.supported).toBe(true);
+		expect(at720.find((o) => o.value === 60)?.supported).toBe(false);
+	});
+
+	it("still reports the signal itself as the informational device-max", () => {
+		expect(axisCeiling(axes)).toEqual({
+			resolution: "1080p",
+			framerate: 59.94,
+		});
+	});
+
+	it("leaves an ENUMERATED multi-mode source on the exact per-mode narrowing", () => {
+		expect(singleModeSourceCeiling(RODE_CAPTURE_SOURCE.modes)).toBeUndefined();
+		const enumerated = offeredAxes("rk3588", RODE_CAPTURE_SOURCE);
+		expect(enumerated.offered.resolutions).toEqual(["720p", "1080p"]);
+		expect(enumerated.offered.framerates).toEqual([30, 60]);
+		expect(enumerated.deviceModes).toBe(RODE_CAPTURE_SOURCE.modes);
+	});
+});
+
+describe("singleModeSourceCeiling", () => {
+	it("collapses one mode repeated per media type into a single ceiling", () => {
+		expect(
+			singleModeSourceCeiling([
+				{
+					width: 1920,
+					height: 1080,
+					framerates: [59.94],
+					media_type: "video/x-raw",
+				},
+				{
+					width: 1920,
+					height: 1080,
+					framerates: [59.94],
+					media_type: "video/x-h264",
+				},
+			]),
+		).toEqual({ resolution: "1080p", framerate: 59.94 });
+	});
+
+	it("is fail-closed on a modeless source and on rungs that do not normalize", () => {
+		expect(singleModeSourceCeiling(undefined)).toBeUndefined();
+		expect(singleModeSourceCeiling([])).toBeUndefined();
+		// A pre-DV-timings receiver reporting raw v4l2 range bounds: the rate snaps
+		// to no rung, so nothing is widened.
+		expect(
+			singleModeSourceCeiling([
+				{ width: 32768, height: 32768, framerates: [0] },
+			]),
+		).toBeUndefined();
+	});
+});
+
+// A receiver whose reported signal sits BELOW the hardcoded 1080p/30 fallback on
+// both axes — the case that still needs the seed reconciled downward.
+const SD_HDMIRX_SOURCE: CaptureStreamSource = {
+	...SOC_HDMIRX_SOURCE,
+	modes: [{ width: 720, height: 480, framerates: [25] }],
+};
+
 describe("seededAxisSelection — reconciling a saved draft onto the active source", () => {
-	it("takes the signal's own rate when the 30 fps fallback is not on offer", () => {
-		// The reported defect: with no stored framerate the dialog fell back to 30
-		// against a 59.94-only receiver, so the FPS control opened aria-invalid and
-		// save was blocked before the operator had touched anything.
+	it("keeps the 30 fps fallback on a 59.94 receiver — a lower target is genuinely offered", () => {
+		// The signal is a ceiling, not an enumeration, so the hardcoded fallback is
+		// drivable (the capture leg rate-converts 59.94 → 30) and stands untouched.
 		const axes = offeredAxes("rk3588", SOC_HDMIRX_SOURCE);
+		const seeded = seededAxisSelection(axes, {
+			resolution: undefined,
+			framerate: undefined,
+		});
+		expect(seeded).toEqual({ resolution: "1080p", framerate: 30 });
+		// The invariant this case protects: the dialog opens VALID, never red.
+		expect(axes.offered.resolutions).toContain(seeded.resolution);
+		expect(
+			framerateOptionsForResolution(axes, seeded.resolution).find(
+				(option) => option.value === seeded.framerate,
+			)?.supported,
+		).toBe(true);
+	});
+
+	it("still reconciles DOWN when the signal sits below the fallback (480p25)", () => {
+		// 30 fps and 1080p are both above this signal, so neither can be encoded and
+		// the seed must move — otherwise the dialog opens aria-invalid with save
+		// blocked before the operator has touched anything.
+		const axes = offeredAxes("rk3588", SD_HDMIRX_SOURCE);
 		expect(
 			seededAxisSelection(axes, {
 				resolution: undefined,
 				framerate: undefined,
 			}),
-		).toEqual({ resolution: "1080p", framerate: 59.94 });
+		).toEqual({ resolution: "480p", framerate: 25 });
 	});
 
 	it("NEVER rewrites a framerate the operator actually stored, offered or not", () => {
