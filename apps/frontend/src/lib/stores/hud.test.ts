@@ -621,6 +621,69 @@ describe("buildLinks — throughput join from netif.tp", () => {
 	});
 });
 
+describe("buildLinks — measured interface rates (ungated by streaming)", () => {
+	it("derives rateTxKbps/rateRxKbps from the backend's per-second bit rates", () => {
+		const netif: NetifMessage = {
+			wlan0: {
+				tp: 0,
+				enabled: true,
+				ip: "10.0.0.2",
+				tx_bps: 4_200_000,
+				rx_bps: 1_100_000,
+			},
+		};
+		const links = buildLinks(
+			undefined,
+			wifiFixture,
+			netif,
+			false,
+			false,
+			false,
+		);
+		expect(links[0]?.rateTxKbps).toBe(4200);
+		expect(links[0]?.rateRxKbps).toBe(1100);
+	});
+
+	it("keeps the measured rate while idle, where the stream-gated value is 0", () => {
+		// The live regression: Bonded Links read 0 kbps because the only throughput
+		// source was gated on an active stream.
+		const netif: NetifMessage = {
+			wlan0: {
+				tp: 64_000,
+				enabled: true,
+				ip: "10.0.0.2",
+				tx_bps: 2_000_000,
+				rx_bps: 0,
+			},
+		};
+		const links = buildLinks(
+			undefined,
+			wifiFixture,
+			netif,
+			false,
+			false,
+			false,
+			new Set<string>(),
+			false,
+		);
+		expect(links[0]?.throughputKbps).toBe(0);
+		expect(links[0]?.rateTxKbps).toBe(2000);
+	});
+
+	it("reports null rates when the backend does not send per-second rates", () => {
+		const links = buildLinks(
+			undefined,
+			wifiFixture,
+			netifFixture,
+			false,
+			false,
+			false,
+		);
+		expect(links[0]?.rateTxKbps).toBeNull();
+		expect(links[0]?.rateRxKbps).toBeNull();
+	});
+});
+
 describe("buildLinks — enabled propagation from netif", () => {
 	// The enabled:false case is now covered by the exclusion block below: a
 	// bond-excluded modem/wifi link is DROPPED, not carried with enabled:false. So

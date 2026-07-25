@@ -7,7 +7,7 @@ import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { Button } from '$lib/components/ui/button';
-import { deriveWifiModeOutcome } from '$lib/helpers/wifi-mode-outcome';
+import { deriveWifiModeOutcome, isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import {
 	confirmOperation,
 	getOperationPhase,
@@ -88,7 +88,7 @@ async function switchToStation(device: string) {
 $effect(() => {
 	for (const [id, iface] of wifiRadios) {
 		if (getOperationPhase(`hotspot:${id}`) !== 'pending') continue;
-		if (deriveWifiModeOutcome(switchTargets[id], Boolean(iface.hotspot)) === 'confirmed') {
+		if (deriveWifiModeOutcome(switchTargets[id], isApRadio(iface)) === 'confirmed') {
 			confirmOperation(`hotspot:${id}`);
 		}
 	}
@@ -109,13 +109,13 @@ $effect(() => {
 		{:else}
 			{#each wifiRadios as [id, iface] (id)}
 				{@const entry = netif?.[iface.ifname]}
-				{@const isHotspot = Boolean(iface.hotspot)}
+				{@const isHotspot = isApRadio(iface)}
 				{@const isSwitching = isOperationPending(`hotspot:${id}`)}
 				<!-- Hold the label on the CURRENT mode while a switch is pending: a raw
 				     `wifi` broadcast must not flip it before the op is confirmed. -->
 				{@const displayIsHotspot = isSwitching ? switchTargets[id] === 'station' : isHotspot}
 				{@const net = activeWifiNetwork(iface)}
-				{@const connected = Boolean(iface.conn && net)}
+				{@const connected = !isHotspot && Boolean(iface.conn && net)}
 				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
 				{@const showStale = ifaceStale && !displayIsHotspot && connected}
 				{@const hasIp = Boolean(entry?.ip)}

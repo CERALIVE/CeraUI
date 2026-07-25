@@ -29,7 +29,7 @@
 */
 
 import type { StateDiff, WifiState } from "../../network/state-types.ts";
-import { isHotspot } from "../wifi-hotspot-types.ts";
+import { isApMode } from "../wifi-hotspot-types.ts";
 import type { WifiInterface } from "../wifi-interfaces.ts";
 
 type WifiStateEntry = WifiState[string];
@@ -78,13 +78,14 @@ export function onWifiChange(cb: WifiChangeCallback): void {
 // ─── mode derivation ─────────────────────────────────────────────────────────
 
 /**
- * Derives the operating mode of a WiFi interface using the existing
- * `isHotspot()` logic (a `WifiInterfaceWithHotspot` actively in hotspot mode).
+ * Derives the operating mode of a WiFi interface. Uses `isApMode()` — the same
+ * predicate `wifiBuildMsg` broadcasts — so the cached mode and the wire mode can
+ * never disagree.
  */
 export function getModeForInterface(
 	iface: WifiInterface,
 ): "station" | "hotspot" {
-	return isHotspot(iface) ? "hotspot" : "station";
+	return isApMode(iface) ? "hotspot" : "station";
 }
 
 // ─── reconciliation ──────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { deriveWifiModeOutcome } from "./wifi-mode-outcome";
+import { deriveWifiModeOutcome, isApRadio } from "./wifi-mode-outcome";
 
 describe("deriveWifiModeOutcome", () => {
 	it("confirms a hotspot switch once the snapshot reports hotspot mode", () => {
@@ -31,5 +31,27 @@ describe("deriveWifiModeOutcome", () => {
 	it("is always pending when no switch is in flight (target undefined)", () => {
 		expect(deriveWifiModeOutcome(undefined, true)).toBe("pending");
 		expect(deriveWifiModeOutcome(undefined, false)).toBe("pending");
+	});
+});
+
+describe("isApRadio", () => {
+	it("classifies a radio the backend reports as hotspot mode as an access point", () => {
+		expect(isApRadio({ mode: "hotspot" })).toBe(true);
+	});
+
+	it("classifies an AP-mode radio whose hotspot profile is not yet adopted", () => {
+		// The live regression: `hotspot` is still absent while the profile is being
+		// discovered, but `mode` already says the radio is broadcasting. Reading
+		// `hotspot` alone rendered it as a client connection with Connect/In Bond.
+		expect(isApRadio({ mode: "hotspot", hotspot: undefined })).toBe(true);
+	});
+
+	it("classifies a station-mode radio as a client, even with an active connection", () => {
+		expect(isApRadio({ mode: "station" })).toBe(false);
+	});
+
+	it("falls back to the hotspot payload when the backend reports no mode", () => {
+		expect(isApRadio({ hotspot: { available_channels: {} } })).toBe(true);
+		expect(isApRadio({})).toBe(false);
 	});
 });

@@ -128,6 +128,9 @@ CeraUI/
 | **Network Ingest card (LAN RTMP/SRT publish sources, frontend)** | `apps/frontend/src/lib/components/custom/NetworkIngestSection.svelte` |
 | **Gateway-availability truthfulness rule (single shared helper, no duplication)** | `apps/frontend/src/lib/streaming/pipelineAvailability.ts` |
 | **Same-subnet / policy-route netif schema fields (`same_subnet_group`, `policy_route_missing`)** | `packages/rpc/src/schemas/network.schema.ts` (`netifEntrySchema`) |
+| **Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s — `tp` is a byte delta, NOT a rate)** | `apps/backend/src/modules/network/network-interfaces.ts` (`computeInterfaceRate`) + `packages/rpc/src/schemas/network.schema.ts` |
+| **Consolidated bond bandwidth (per-link + `TOTAL BANDWIDTH` ↑/↓)** | `apps/frontend/src/lib/helpers/bond-bandwidth.ts` (`aggregateBondBandwidth`) → `apps/frontend/src/main/network/BondedLinksSection.svelte` |
+| **WiFi AP-vs-client classification (`isApMode` backend / `isApRadio` frontend)** | `apps/backend/src/modules/wifi/wifi-hotspot-types.ts` + `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts` |
 | **Policy-route self-check for bonded wifi/modem interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
 | **Subnet-collision + policy-route info/warning bands (frontend)** | `apps/frontend/src/main/network/CollisionBands.svelte` |
 | **Connection/subscriptions store (sole `rpcClient.onMessage` owner — `websocket-store` fully deleted)** | `apps/frontend/src/lib/rpc/subscriptions.svelte.ts` |
