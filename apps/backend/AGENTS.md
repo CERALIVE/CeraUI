@@ -535,6 +535,40 @@ unweakened — retain-on-failure is still its contract for every caller that has
 independent observation (`main.ts` boot seed, `engine-reconnect.ts` heal). Do NOT
 "simplify" the hotplug path back to a bare `refreshAndBroadcastSources()`.
 
+**On the hotplug path the OBSERVED set is authoritative for MEMBERSHIP; the probe
+supplies METADATA only.** A probe that answers is not the same as a probe that is
+right. Its `list-devices` reflects whatever the engine could enumerate at the
+moment it was asked, and a just-replugged USB device the kernel has not finished
+re-enumerating is truthfully ABSENT from a successful answer. Overwriting the
+cache with that reply hid a device the registry's own scan had already proved
+present — confirmed live: a RØDE HDMI-to-USB-C came back at the kernel level but
+its row stayed `lost:true`, and because `lost` is never explicitly cleared (a live
+row simply wins) and the registry only re-pokes on a device-SET *change*, the row
+stayed stuck rather than self-correcting. This is the mirror of the probe-FAILURE
+case above and needed its own fix: `mergeObservedWithProbe(observed, probed)`
+(`sources.ts`) now takes video membership from `observed` and metadata from
+`probed` — a probe entry matching an observed `input_id` wins outright (typed
+kind, caps, `stable_id` all survive), a video device the probe never mentions
+keeps its observed row instead of vanishing, and a video device the probe still
+lists but the scan no longer sees is dropped. NON-video entries follow the probe
+verbatim: the observed list's audio rows are in CeraUI's own `audio:<id>`
+namespace, not the engine's, and `buildSources` overlays video only. The
+`engineAudioDeviceCache` is still refreshed from the probe on this path — it is
+the one cache the local scan cannot populate.
+
+**Overlapping hotplug refreshes are ordered by a generation fence.** Each
+`onDevicesChanged` starts its own probe, so an unplug and a replug moments apart
+run two round-trips concurrently and the OLDER one can answer LAST — republishing
+the world it asked about over the newer, correct view. `refreshSourcesForHotplug`
+therefore takes a monotonic `hotplugRefreshGeneration` ticket before probing and
+drops its result (no cache write, no broadcast, on BOTH the success and the
+observed-fallback branch) if a newer refresh has since started. The counter is
+deliberately NOT reset by `resetEngineDeviceCache()` — a superseded probe must
+stay superseded. This is why the probe round-trip (`probeEngineDevices`) is split
+from the cache write (`commitEngineDevices`): the fence has to be checked between
+them. `tryRefreshEngineDeviceCache` is the unchanged probe+commit composition for
+every caller that has no ordering concern.
+
 The fallback is id-safe and its cost is bounded: `buildDeviceList()` keys the
 fallback scan `/dev/<card>`, which is byte-identical to the engine's own
 `input_id` (verified on a real Rock 5B+: cerastream reports `/dev/video0` +
@@ -549,7 +583,10 @@ warned about cannot recur (`deriveKind` tests usb/uvc BEFORE hdmi).
 Coverage: `tests/devices.test.ts` (`fires onDevicesChanged on a hotplug set
 change…` + `hands onDevicesChanged the list this scan observed…`) and
 `tests/lost-device-retention.test.ts` (`refreshSourcesForHotplug — a failing
-engine probe never masks a removal`).
+engine probe never masks a removal` + `refreshSourcesForHotplug — a stale
+successful probe never masks the observed set`, which covers the replug-vs-empty-
+probe case, the removal-vs-pre-removal-probe case, metadata preference, the audio
+cache, and both out-of-order fences).
 
 ## BROADCAST EVENTS
 
@@ -1025,3 +1062,4 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 - Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
+- Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.

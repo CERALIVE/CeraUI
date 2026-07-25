@@ -686,6 +686,87 @@ export function getEngineAudioDevices(): EngineAudioDevice[] {
 	return engineAudioDeviceCache;
 }
 
+/** One answered `list-devices` probe, mapped but NOT yet applied to the caches. */
+interface EngineDeviceProbe {
+	devices: CaptureDevice[];
+	audio: EngineAudioDevice[];
+}
+
+/**
+ * Run one `list-devices` probe and map its result, WITHOUT touching the caches.
+ * Separating the round-trip from the commit lets a caller decide — after the
+ * await, with fresher knowledge than it had before — whether this answer still
+ * deserves to become the current view (see `refreshSourcesForHotplug`).
+ * `undefined` means the engine said nothing at all.
+ */
+async function probeEngineDevices(
+	deps: EngineDeviceCacheDeps,
+): Promise<EngineDeviceProbe | undefined> {
+	try {
+		const result = await deps.fetchEngineDevices();
+		return {
+			devices: result.devices.map((d) =>
+				fromEngineDevice({
+					input_id: d.input_id,
+					device_path: d.device_path,
+					display_name: d.display_name,
+					media_class: d.media_class,
+					kind: d.kind,
+					caps: d.caps,
+					stable_id: d.stable_id,
+				}),
+			),
+			// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
+			// that PRESERVES the `alsa_card_id` join key verbatim. It is read
+			// defensively (the pre-T18 binding schema strips it → `undefined`; the
+			// bumped schema retains it), and it is NOT routed through the video
+			// whitelist copy above or `fromEngineDevice()`, both of which drop it.
+			audio: result.devices
+				.filter((d) => d.media_class === "audio")
+				.map((d) => {
+					const extra = d as {
+						alsa_card_id?: string;
+						product_name?: string;
+						transport?: EngineAudioDevice["transport"];
+						stable_id?: string;
+					};
+					return {
+						input_id: d.input_id,
+						display_name: d.display_name,
+						...(extra.alsa_card_id !== undefined
+							? { alsa_card_id: extra.alsa_card_id }
+							: {}),
+						...(extra.product_name !== undefined
+							? { product_name: extra.product_name }
+							: {}),
+						...(extra.transport !== undefined
+							? { transport: extra.transport }
+							: {}),
+						...(extra.stable_id !== undefined
+							? { stable_id: extra.stable_id }
+							: {}),
+					};
+				}),
+		};
+	} catch (err) {
+		logger.debug(
+			"sources: engine device fetch failed; retaining last-known device cache",
+			{ err },
+		);
+		return undefined;
+	}
+}
+
+/** Make a device list the current view, remembering every device it proves live. */
+function commitEngineDevices(
+	devices: readonly CaptureDevice[],
+	audio?: readonly EngineAudioDevice[],
+): void {
+	engineDeviceCache = [...devices];
+	if (audio !== undefined) engineAudioDeviceCache = [...audio];
+	recordObservedDevices(engineDeviceCache);
+}
+
 /**
  * Refresh the engine-device cache from a fresh `list-devices` probe, reporting
  * whether the probe actually answered. A throwing fetch (engine unavailable)
@@ -697,59 +778,10 @@ export function getEngineAudioDevices(): EngineAudioDevice[] {
 export async function tryRefreshEngineDeviceCache(
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
 ): Promise<boolean> {
-	try {
-		const result = await deps.fetchEngineDevices();
-		engineDeviceCache = result.devices.map((d) =>
-			fromEngineDevice({
-				input_id: d.input_id,
-				device_path: d.device_path,
-				display_name: d.display_name,
-				media_class: d.media_class,
-				kind: d.kind,
-				caps: d.caps,
-				stable_id: d.stable_id,
-			}),
-		);
-		// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
-		// that PRESERVES the `alsa_card_id` join key verbatim. It is read
-		// defensively (the pre-T18 binding schema strips it → `undefined`; the
-		// bumped schema retains it), and it is NOT routed through the video
-		// whitelist copy above or `fromEngineDevice()`, both of which drop it.
-		engineAudioDeviceCache = result.devices
-			.filter((d) => d.media_class === "audio")
-			.map((d) => {
-				const extra = d as {
-					alsa_card_id?: string;
-					product_name?: string;
-					transport?: EngineAudioDevice["transport"];
-					stable_id?: string;
-				};
-				return {
-					input_id: d.input_id,
-					display_name: d.display_name,
-					...(extra.alsa_card_id !== undefined
-						? { alsa_card_id: extra.alsa_card_id }
-						: {}),
-					...(extra.product_name !== undefined
-						? { product_name: extra.product_name }
-						: {}),
-					...(extra.transport !== undefined
-						? { transport: extra.transport }
-						: {}),
-					...(extra.stable_id !== undefined
-						? { stable_id: extra.stable_id }
-						: {}),
-				};
-			});
-		recordObservedDevices(engineDeviceCache);
-		return true;
-	} catch (err) {
-		logger.debug(
-			"sources: engine device fetch failed; retaining last-known device cache",
-			{ err },
-		);
-		return false;
-	}
+	const probe = await probeEngineDevices(deps);
+	if (probe === undefined) return false;
+	commitEngineDevices(probe.devices, probe.audio);
+	return true;
 }
 
 /**
@@ -785,8 +817,7 @@ export function resetEngineDeviceCache(): void {
 export function applyObservedEngineDevices(
 	devices: readonly CaptureDevice[],
 ): void {
-	engineDeviceCache = [...devices];
-	recordObservedDevices(engineDeviceCache);
+	commitEngineDevices(devices);
 }
 
 /**
@@ -845,24 +876,82 @@ export async function refreshAndBroadcastSources(
 }
 
 /**
+ * Fold an answered probe into the observation that triggered the rebuild.
+ *
+ * MEMBERSHIP comes from `observed` — the scan that just detected the transition
+ * is, for the video set, the only list here known to be current. METADATA comes
+ * from `probed`: an engine entry matching an observed `input_id` wins outright,
+ * so typed kinds, capabilities and stable ids survive (the local scan only ever
+ * guesses a kind from the display name). A device the probe never mentions keeps
+ * its observed row rather than disappearing, and a device the probe still lists
+ * but the scan no longer sees is dropped.
+ *
+ * The join key is `input_id` alone: `buildDeviceList()` keys the fallback scan
+ * `/dev/<card>`, byte-identical to the engine's own path-preferred id (verified
+ * on a real Rock 5B+), so the two lists share one id namespace.
+ *
+ * NON-VIDEO entries follow the probe verbatim. The observed list's audio rows
+ * live in CeraUI's own `audio:<id>` namespace, not the engine's, so they are not
+ * comparable — and `buildSources` overlays video only.
+ */
+export function mergeObservedWithProbe(
+	observed: readonly CaptureDevice[],
+	probed: readonly CaptureDevice[],
+): CaptureDevice[] {
+	const observedVideoIds = new Set(
+		observed.filter((d) => d.media_class === "video").map((d) => d.input_id),
+	);
+	const probedVideoIds = new Set(
+		probed.filter((d) => d.media_class === "video").map((d) => d.input_id),
+	);
+	const confirmed = probed.filter(
+		(d) => d.media_class !== "video" || observedVideoIds.has(d.input_id),
+	);
+	const unprobed = observed.filter(
+		(d) => d.media_class === "video" && !probedVideoIds.has(d.input_id),
+	);
+	return [...confirmed, ...unprobed];
+}
+
+// Monotonic, never reset: a superseded probe answering late must stay superseded
+// even across a `resetEngineDeviceCache()`.
+let hotplugRefreshGeneration = 0;
+
+/**
  * Rebuild + broadcast `sources` for a hotplug transition the device registry
  * detected with its OWN scan.
  *
  * A fresh authoritative engine `list-devices` probe is still preferred — its
  * typed kinds beat the local scan's display-name heuristic — but it is a SECOND,
- * separately-fallible round-trip, and on failure the cache is deliberately
- * RETAINED. For a removal that means rebroadcasting the device the operator just
- * unplugged as still available, until some later poll's probe happens to answer.
- * So a failing probe hands over to the observation the registry already paid for,
- * which is the one thing here that is known to be current.
+ * separately-fallible round-trip that answers about a moment of its own choosing.
+ * Two ways it can be wrong, and neither may overrule the observation:
+ *
+ * 1. It FAILS, and the cache is deliberately RETAINED — rebroadcasting the device
+ *    the operator just unplugged as still available. So a failing probe hands over
+ *    to the observation the registry already paid for.
+ * 2. It SUCCEEDS but answers stale — a just-replugged USB device the OS has not
+ *    finished re-enumerating is simply absent from a truthful engine answer. So
+ *    membership is taken from the observation and only metadata from the probe.
+ *
+ * And because each transition starts its own round-trip, an OLDER refresh can
+ * answer after a NEWER one has already published: a generation fence drops any
+ * result that is no longer the current view rather than reviving the world it
+ * asked about.
  */
 export async function refreshSourcesForHotplug(
 	observed: readonly CaptureDevice[],
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
 ): Promise<void> {
-	if (await tryRefreshEngineDeviceCache(deps)) {
-		broadcastSources();
+	const generation = ++hotplugRefreshGeneration;
+	const probe = await probeEngineDevices(deps);
+	if (generation !== hotplugRefreshGeneration) return;
+	if (probe === undefined) {
+		applyObservedDevicesAndBroadcast(observed);
 		return;
 	}
-	applyObservedDevicesAndBroadcast(observed);
+	commitEngineDevices(
+		mergeObservedWithProbe(observed, probe.devices),
+		probe.audio,
+	);
+	broadcastSources();
 }

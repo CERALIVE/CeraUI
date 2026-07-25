@@ -36,6 +36,7 @@ import {
 	applyObservedDevicesAndBroadcast,
 	applyObservedEngineDevices,
 	buildSources,
+	getEngineAudioDevices,
 	getEngineDeviceCache,
 	getSessionSeenDeviceSnapshots,
 	getSourcesMessage,
@@ -648,5 +649,237 @@ describe("refreshSourcesForHotplug — a failing engine probe never masks a remo
 		// last-known list is better than an empty one. That is precisely why the
 		// hotplug path must feed its own observation in instead of re-fetching.
 		expect(getEngineDeviceCache()).toHaveLength(1);
+	});
+});
+
+// ─── hotplug rebuild: a SUCCEEDING but stale probe never masks the observation ─
+
+describe("refreshSourcesForHotplug — a stale successful probe never masks the observed set", () => {
+	beforeEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		getConfig().last_seen_devices = [];
+		delete getConfig().source;
+	});
+
+	afterEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		getConfig().last_seen_devices = [];
+		delete getConfig().source;
+	});
+
+	function captureBroadcast(
+		run: () => void | Promise<void>,
+	): Promise<Array<Record<string, unknown>>> {
+		const sink: string[] = [];
+		const client = recordingClient(sink);
+		addClient(client);
+		return Promise.resolve(run())
+			.finally(() => removeClient(client))
+			.then(() =>
+				sink.map((raw) => JSON.parse(raw) as Record<string, unknown>),
+			);
+	}
+
+	function sourceRow(
+		frames: Array<Record<string, unknown>>,
+		id: string,
+	): Record<string, unknown> | undefined {
+		const frame = frames.find((f) => "sources" in f);
+		expect(frame).toBeDefined();
+		return (
+			frame?.sources as { sources: Array<Record<string, unknown>> }
+		).sources.find((s) => s.id === id);
+	}
+
+	/** The device was seen, then unplugged — so it currently renders `lost`. */
+	async function seedLostDevice(): Promise<void> {
+		await seedHdmiCaps();
+		getConfig().source = "video0";
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+		]);
+		applyObservedEngineDevices([]);
+		expect(
+			getSourcesMessage().sources.find((s) => s.id === "video0")?.lost,
+		).toBe(true);
+	}
+
+	it("a replug the local scan observed is NOT hidden by a probe that answers with a stale empty list", async () => {
+		await seedLostDevice();
+
+		const frames = await captureBroadcast(() =>
+			// The RØDE replug: the registry's own scan already proved the node is
+			// back, but the engine probe answers BEFORE the OS finished re-
+			// enumerating the USB device, so it truthfully reports "no devices".
+			refreshSourcesForHotplug(
+				[captureDevice("video0", "hdmi", { display_name: "Studio HDMI" })],
+				{ fetchEngineDevices: async () => ({ devices: [] }) },
+			),
+		);
+
+		const video0 = sourceRow(frames, "video0");
+		expect(video0?.lost).toBeUndefined();
+		expect(video0?.available).toBe(true);
+		expect(getEngineDeviceCache().map((d) => d.input_id)).toEqual(["video0"]);
+	});
+
+	it("a removal the local scan observed is NOT resurrected by a probe still answering with the pre-removal list", async () => {
+		await seedHdmiCaps();
+		getConfig().source = "video0";
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+		]);
+
+		const frames = await captureBroadcast(() =>
+			refreshSourcesForHotplug([], {
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice("video0", "Studio HDMI")],
+				}),
+			}),
+		);
+
+		const video0 = sourceRow(frames, "video0");
+		expect(video0?.lost).toBe(true);
+		expect(video0?.available).toBe(false);
+		expect(getEngineDeviceCache()).toHaveLength(0);
+	});
+
+	it("the probe still supplies the richer metadata for every device the observation confirms", async () => {
+		await seedHdmiCaps();
+
+		await refreshSourcesForHotplug(
+			[
+				captureDevice("video0", "usb", { display_name: "Local Scan Name" }),
+				captureDevice("video1", "usb", {
+					display_name: "Only The Scan Saw It",
+				}),
+			],
+			{
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice("video0", "Engine HDMI")],
+				}),
+			},
+		);
+
+		const cached = getEngineDeviceCache();
+		expect(cached.map((d) => d.input_id)).toEqual(["video0", "video1"]);
+		expect(cached[0]?.display_name).toBe("Engine HDMI");
+		expect(cached[0]?.kind).toBe("hdmi");
+		expect(cached[1]?.display_name).toBe("Only The Scan Saw It");
+		expect(cached[1]?.kind).toBe("usb");
+	});
+
+	it("keeps refreshing the audio-naming cache, which only the engine can populate", async () => {
+		await seedHdmiCaps();
+
+		await refreshSourcesForHotplug(
+			[
+				captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+				// The local scan names audio in CeraUI's own namespace, which shares
+				// no ids with the engine's — so it is not comparable, and merging it
+				// in would duplicate the card under a second identity.
+				captureDevice("audio:usbaudio", "audio", {
+					device_path: "alsa:usbaudio",
+					media_class: "audio",
+				}),
+			],
+			{
+				fetchEngineDevices: async () => ({
+					devices: [
+						engineDevice("video0", "Studio HDMI"),
+						{
+							input_id: "audio:card0",
+							device_path: "alsa:card0",
+							display_name: "RØDE HDMI to USB-C",
+							media_class: "audio",
+							kind: "audio",
+							alsa_card_id: "Device",
+						} as ListDevicesResult["devices"][number],
+					],
+				}),
+			},
+		);
+
+		const audio = getEngineAudioDevices();
+		expect(audio).toHaveLength(1);
+		expect(audio[0]?.alsa_card_id).toBe("Device");
+		// The observation carries no engine audio rows, so it must not evict them.
+		expect(getEngineDeviceCache().map((d) => d.input_id)).toEqual([
+			"video0",
+			"audio:card0",
+		]);
+	});
+
+	it("an OLDER hotplug refresh answering late never clobbers a NEWER one's result", async () => {
+		await seedHdmiCaps();
+		getConfig().source = "video0";
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+		]);
+
+		// The unplug fires first, but its engine probe hangs.
+		let releaseStaleProbe: (result: ListDevicesResult) => void = () => {};
+		const staleProbe = new Promise<ListDevicesResult>((resolve) => {
+			releaseStaleProbe = resolve;
+		});
+		const older = refreshSourcesForHotplug([], {
+			fetchEngineDevices: () => staleProbe,
+		});
+
+		await refreshSourcesForHotplug(
+			[captureDevice("video0", "hdmi", { display_name: "Studio HDMI" })],
+			{
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice("video0", "Studio HDMI")],
+				}),
+			},
+		);
+		expect(getEngineDeviceCache()).toHaveLength(1);
+
+		// Only NOW does the removal's probe answer — with the world as it was.
+		const frames = await captureBroadcast(() => {
+			releaseStaleProbe({ devices: [] });
+			return older;
+		});
+
+		expect(frames.some((f) => "sources" in f)).toBe(false);
+		expect(getEngineDeviceCache().map((d) => d.input_id)).toEqual(["video0"]);
+		expect(
+			getSourcesMessage().sources.find((s) => s.id === "video0")?.lost,
+		).toBeUndefined();
+	});
+
+	it("an OLDER refresh whose probe FAILS late does not fall back over a NEWER result", async () => {
+		await seedHdmiCaps();
+		getConfig().source = "video0";
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+		]);
+
+		let failStaleProbe: (err: Error) => void = () => {};
+		const staleProbe = new Promise<ListDevicesResult>((_resolve, reject) => {
+			failStaleProbe = reject;
+		});
+		const older = refreshSourcesForHotplug([], {
+			fetchEngineDevices: () => staleProbe,
+		});
+
+		await refreshSourcesForHotplug(
+			[captureDevice("video0", "hdmi", { display_name: "Studio HDMI" })],
+			{
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice("video0", "Studio HDMI")],
+				}),
+			},
+		);
+
+		failStaleProbe(new Error("engine unavailable"));
+		await older;
+
+		// The PR #214 observed-fallback is still correct — it just belongs to the
+		// generation that owns the current view, not to a superseded one.
+		expect(getEngineDeviceCache().map((d) => d.input_id)).toEqual(["video0"]);
 	});
 });
