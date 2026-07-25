@@ -961,6 +961,33 @@ state. User copy is keyed across all 10 locales, and terminal copy points to the
 cerastream journal. Autostart's no-link loop is capped at five checks; permanent
 configuration/engine failures stop immediately with a visible reason.
 
+**A bounded pre-engine gate DEFERS the per-attempt deadline — it never loses to it.**
+The 10 s launch cap bounds engine work, but the audio-source probe
+(`AUDIO_PROBE_TIMEOUT_MS`, 15 s) runs BEFORE any engine IPC and deliberately waits
+longer, so the generic deadline used to fire first and report a permanently-absent
+audio device as a retriable connect-phase `start_timeout` — five rounds of
+"Streaming engine did not answer in time" for an engine that was never contacted
+(found live on a board). `runStartWithRetry` therefore takes a
+`pendingGateRemainingMs` seam: when the deadline fires while a bounded pre-engine
+gate still has grace left, it RESCHEDULES itself past that grace (plus a small
+slack) instead of timing out. The production orchestrator wires it to
+`asrcProbeRemainingMs()` (`modules/streaming/audio.ts`). The seam's contract is
+that the value MUST be bounded by the gate's own hard timeout — an unbounded
+implementation disables the attempt deadline entirely. Do NOT "fix" a future
+instance of this by shortening the gate or lengthening `attemptTimeoutMs`
+globally: the first weakens a real grace window, the second halves the retry
+count available to a genuine engine-restart race.
+
+**`audio_source_unavailable` is the probe's own terminal class.** It is
+non-retriable on every phase (`START_FAILURE_RETRIABILITY`): the probe ALREADY
+spent its grace window waiting, so retrying re-runs the same wait against the same
+absent hardware. `startStream` returns it on the failure result as `failureClass`,
+and the three launch wrappers (`streaming.procedure.ts`, `streamloop/autostart.ts`,
+`remote-control/set-profile-wiring.ts`) pass it through `typedStartFailure()`
+rather than re-deriving a class from the opaque `error` string. The legacy
+`error: "audio_source_probe_failed"` wire value is unchanged, so the existing
+`live.startFailed.audio_source_probe_failed` copy still resolves.
+
 ### timing-constants.ts
 
 `apps/backend/src/modules/streaming/timing-constants.ts` centralizes all hardcoded
@@ -1817,6 +1844,7 @@ re-derived from bus-path string matching. Frontend label precedence is
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
 - Don't hardcode timeout/retry values in streaming modules — import from `timing-constants.ts`.
+- Don't shorten the audio-probe grace window or raise `attemptTimeoutMs` globally to resolve a probe-vs-deadline race — extend the `pendingGateRemainingMs` deferral seam instead (see STREAMING BACKEND QUALITY → bounded pre-engine gate).
 - Don't add new exports to the streamloop barrel without updating the locked-API surface test in `tests/streamloop-modules.test.ts`.
 - Don't re-add a `websocket-store` wrapper or a second `rpcClient.onMessage` owner — `subscriptions.svelte.ts` (connection/non-auth state) and `auth-status.svelte.ts` (auth mutation state) are the only two stores allowed to own this state; a CI grep gate blocks the literal module name from reappearing in `apps/frontend/src`.
 - Don't re-derive the "gateway inactive" disabled-with-reason rule inline on a new surface — route through `pipelineAvailability.ts`.

@@ -1037,8 +1037,14 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								</Select.Item>
 							{/each}
 							{#if notAvailableAudioSource}
+								<!-- Listed so the operator sees what is selected, disabled because
+								     re-picking it only buys another failed start. -->
 								<Select.Item
+									aria-disabled="true"
+									data-testid="audio-option-unavailable"
+									disabled
 									label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
+									title={$LL.settings.notAvailableAudioSourceHint()}
 									value={notAvailableAudioSource}
 								></Select.Item>
 							{/if}

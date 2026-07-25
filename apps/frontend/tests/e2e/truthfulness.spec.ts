@@ -1067,6 +1067,38 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.getByTestId("audio-source-select")).toHaveCount(0);
 	});
 
+	// ── An unavailable-but-selected audio device is shown, never re-offered ──────
+	test("the selected audio device the engine no longer reports is listed disabled with a reason, not as a fresh choice", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.asrcs so the selected device is deliberately absent from the reported list",
+		},
+	}, async ({
+		page,
+	}) => {
+		serverConfig({ asrc: "Gone USB mic" });
+		send({ status: { asrcs: ["No audio", "Pipeline default"] } });
+		sendFullCaps();
+		sendSources([SRC_HDMI_CAP]);
+
+		// The problem stays visible: the trigger still names what is selected.
+		const audioSelect = page.getByTestId("audio-source-select");
+		await expect(audioSelect).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("audio-source-unavailable")).toContainText(
+			"Gone USB mic",
+		);
+
+		// …but re-picking it is refused — it only buys another failed start.
+		await audioSelect.click();
+		const unavailable = page.getByTestId("audio-option-unavailable");
+		await expect(unavailable).toBeVisible();
+		await expect(unavailable).toHaveAttribute("aria-disabled", "true");
+		await expect(unavailable).toHaveAttribute("data-disabled", /.*/);
+		await expect(unavailable).toHaveAttribute("title", /.+/);
+		await page.keyboard.press("Escape");
+	});
+
 	// ── (b) The test-pattern source appears once and resolves to pipeline 'test' ─
 	test("the test-pattern source appears exactly once and selecting it persists a config whose pipeline is 'test'", async ({
 		page,

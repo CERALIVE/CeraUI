@@ -7,6 +7,7 @@ import {
 
 import { logger } from "../../helpers/logger.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
+import { asrcProbeRemainingMs } from "./audio.ts";
 import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
 	classifyStartFailure,
@@ -82,6 +83,7 @@ export type StreamSessionOrchestratorDeps = {
 	readonly cancelLaunchDeadline?: (
 		timer: ReturnType<typeof globalThis.setTimeout> | number,
 	) => void;
+	readonly pendingGateRemainingMs?: () => number;
 	readonly retryPolicy?: RetryPolicy;
 	readonly now?: () => number;
 	readonly suppressionContext?: () => SuppressionContext;
@@ -226,6 +228,9 @@ export function createStreamSessionOrchestrator(
 			scheduleDeadline: scheduleLaunchDeadline,
 			cancelDeadline: cancelLaunchDeadline,
 			cleanupDeadlineMs: stopDeadlineMs,
+			...(deps.pendingGateRemainingMs !== undefined
+				? { pendingGateRemainingMs: deps.pendingGateRemainingMs }
+				: {}),
 			...(deps.retryPolicy !== undefined
 				? { retryPolicy: deps.retryPolicy }
 				: {}),
@@ -336,6 +341,10 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 			true,
 		);
 	},
+	// The audio-source probe deliberately waits longer than one attempt deadline;
+	// without this the generic timeout preempts it and reports a missing audio
+	// device as an unanswered engine.
+	pendingGateRemainingMs: () => asrcProbeRemainingMs(),
 	suppressionContext: getStartSuppressionContext,
 	reportRetry: reportStartRetry,
 	reportTerminalFailure: reportStartTerminalFailure,

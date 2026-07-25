@@ -341,6 +341,8 @@ const hi = {
 		audioDeviceExternalHint: "एक प्लग-इन सहायक उपकरण, इस डिवाइस में अंतर्निहित नहीं।",
 		noAudioSourceSelected: "कोई ऑडियो स्रोत चयनित नहीं",
 		notAvailableAudioSource: "उपलब्ध नहीं",
+		notAvailableAudioSourceHint:
+			"यह ऑडियो इनपुट अब पहचाना नहीं जा रहा है। इसे फिर से कनेक्ट करें या कोई दूसरा स्रोत चुनें।",
 		selectAudioSource: "ऑडियो स्रोत चुनें",
 		audioCodec: "ऑडियो कोडेक",
 		selectAudioCodec: "ऑडियो कोडेक चुनें",
@@ -973,6 +975,7 @@ const hi = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable: "चयनित ऑडियो इनपुट उपलब्ध नहीं है।",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1377,6 +1380,8 @@ const hi = {
 			"स्ट्रीम शुरू नहीं हुई: इंजन प्रोटोकॉल असंगत है। journalctl -u cerastream.service देखें।",
 		streamStartInternalFailed:
 			"स्ट्रीम शुरू नहीं हुई: इंजन की आंतरिक त्रुटि। journalctl -u cerastream.service देखें।",
+		streamStartAudioSourceUnavailableFailed:
+			"स्ट्रीम शुरू नहीं हुई: चयनित ऑडियो इनपुट उपलब्ध नहीं है। इसे फिर से कनेक्ट करें या कोई दूसरा ऑडियो स्रोत चुनें।",
 		ceraliveUpdateAvailable:
 			"एक CERALIVE अपडेट उपलब्ध है। इसे इंस्टॉल करने के लिए सेटिंग्स → सॉफ़्टवेयर अपडेट खोलें।",
 		ceraliveUpdateFailed:

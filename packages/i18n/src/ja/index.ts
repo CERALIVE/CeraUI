@@ -357,6 +357,8 @@ const ja = {
 			"着脱可能なアクセサリーで、本体に内蔵されたものではありません。",
 		noAudioSourceSelected: "オーディオソースが選択されていません",
 		notAvailableAudioSource: "利用できません",
+		notAvailableAudioSourceHint:
+			"このオーディオ入力は検出されていません。接続し直すか、別のソースを選んでください。",
 		selectAudioSource: "オーディオソースを選択",
 		audioCodec: "オーディオコーデック",
 		selectAudioCodec: "オーディオコーデックを選択",
@@ -1009,6 +1011,7 @@ const ja = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable: "選択したオーディオ入力が利用できません。",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1421,6 +1424,8 @@ const ja = {
 			"配信を開始できませんでした：エンジンプロトコルに互換性がありません。journalctl -u cerastream.service を確認してください。",
 		streamStartInternalFailed:
 			"配信を開始できませんでした：エンジン内部エラー。journalctl -u cerastream.service を確認してください。",
+		streamStartAudioSourceUnavailableFailed:
+			"配信を開始できませんでした：選択したオーディオ入力が利用できません。接続し直すか、別のオーディオソースを選んでください。",
 		ceraliveUpdateAvailable:
 			"CERALIVE のアップデートがあります。設定 → ソフトウェア更新 を開いてインストールしてください。",
 		ceraliveUpdateFailed:

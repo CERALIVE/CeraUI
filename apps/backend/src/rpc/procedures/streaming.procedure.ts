@@ -91,6 +91,7 @@ import {
 import {
 	classifyStartFailure,
 	StreamStartFailure,
+	typedStartFailure,
 } from "../../modules/streaming/start-failure-taxonomy.ts";
 import {
 	startStreamSession,
@@ -311,6 +312,16 @@ export const streamingStartProcedure = authedProcedure
 				);
 				if (!startResult.success) {
 					legacyError = startResult.error;
+					if (startResult.failureClass !== undefined) {
+						throw new StreamStartFailure(
+							typedStartFailure(
+								attemptId,
+								startResult.phase,
+								startResult.failureClass,
+								startResult.error,
+							),
+						);
+					}
 					throwStartFailure(
 						startResult.phase,
 						new Error(startResult.error),
