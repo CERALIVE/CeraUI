@@ -104,13 +104,37 @@ export function canHotspot(
  * its hotspot connection. There is no force-timer override anymore — a hotspot
  * that is still `activating` reports `false` here (and `transition` carries the
  * in-flight signal for the UI).
+ *
+ * `activeConn` is accepted alongside `conn` because `conn` is additionally gated
+ * on the radio holding an IP; without it a broadcasting hotspot flickered back
+ * to station mode whenever the ifconfig poll lagged.
  */
 export function isHotspot(
 	wifiInterface: WifiInterface,
 ): wifiInterface is WifiInterfaceWithHotspot {
+	if (!canHotspot(wifiInterface)) return false;
+	const hotspotConn = wifiInterface.hotspot.conn;
+	if (!hotspotConn) return false;
 	return (
-		canHotspot(wifiInterface) &&
-		!!wifiInterface.hotspot.conn &&
-		wifiInterface.conn === wifiInterface.hotspot.conn
+		wifiInterface.conn === hotspotConn ||
+		wifiInterface.activeConn === hotspotConn
+	);
+}
+
+/**
+ * True when the radio is operating as an access point — either confirmed via its
+ * own hotspot profile ({@link isHotspot}), or because NetworkManager reports the
+ * active connection's 802.11 mode as `ap` before that profile has been adopted.
+ *
+ * This is the classification the operator UI must use. `isHotspot` alone
+ * depended on hotspot-profile discovery having completed, so an AP-mode radio
+ * could still be presented with client "Connect" / "In Bond" controls.
+ */
+export function isApMode(
+	wifiInterface: WifiInterface,
+): wifiInterface is WifiInterfaceWithHotspot {
+	return (
+		isHotspot(wifiInterface) ||
+		(canHotspot(wifiInterface) && wifiInterface.activeMode === "ap")
 	);
 }

@@ -55,10 +55,37 @@ export type NetworkInterface = {
 	netmask?: string;
 	tp: number;
 	txb: number;
+	rxb: number;
+	/** Clock reading of the sample that produced `txb`/`rxb`; absent until sampled. */
+	sampledAt?: number;
+	/** Measured interface throughput in BITS per second over the last window. */
+	tx_bps?: number;
+	rx_bps?: number;
 	enabled: boolean;
 	error: number;
 	same_subnet_group?: string;
 };
+
+/**
+ * Throughput in bits/second between two byte-counter samples.
+ *
+ * Returns 0 when there is no baseline, no elapsed time, or the counter went
+ * backwards (interface bounce / 32-bit wrap) — a wrap must read as idle, never
+ * as a multi-gigabit spike.
+ */
+export function computeInterfaceRate(
+	currentBytes: number,
+	previousBytes: number | undefined,
+	elapsedMs: number,
+): number {
+	if (previousBytes === undefined) return 0;
+	if (!Number.isFinite(currentBytes) || !Number.isFinite(previousBytes))
+		return 0;
+	if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return 0;
+	const delta = currentBytes - previousBytes;
+	if (delta <= 0) return 0;
+	return Math.round((delta * 8 * 1000) / elapsedMs);
+}
 
 export type NetworkInterfaceMessage = {
 	netif: {
@@ -156,7 +183,7 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 	if (isNetifUpState(event.state)) {
 		if (!netif[name]) {
 			// New running interface; IP/throughput get filled in by the next poll.
-			netif[name] = { tp: 0, txb: 0, enabled: true, error: 0 };
+			netif[name] = { tp: 0, txb: 0, rxb: 0, enabled: true, error: 0 };
 			mutated = true;
 		}
 	} else if (isNetifDownState(event.state)) {
@@ -245,6 +272,7 @@ async function refreshNetifFromOs(): Promise<void> {
 export function processIfconfigOutput(
 	stdout: string,
 	ipOverrides?: Map<string, IpAddrSelection>,
+	now: number = getms(),
 ) {
 	let intsChanged = false;
 	const newInterfaces: Record<string, NetworkInterface> = {};
@@ -289,18 +317,33 @@ export function processIfconfigOutput(
 				(txBytesMatch?.[0] ?? "").split(" ").pop() ?? "0",
 				10,
 			);
+			const rxBytesMatch = int.match(/RX packets \d+ {2}bytes \d+/);
+			const rxBytes = Number.parseInt(
+				(rxBytesMatch?.[0] ?? "").split(" ").pop() ?? "0",
+				10,
+			);
 
+			const previous = netif[name];
 			let tp = 0;
-			if (netif[name]) {
-				tp = txBytes - netif[name].txb;
+			if (previous) {
+				tp = txBytes - previous.txb;
 			}
 
-			const enabled = !netif[name] || netif[name].enabled;
-			const error = netif[name] ? netif[name].error : 0;
+			const elapsedMs =
+				previous?.sampledAt !== undefined ? now - previous.sampledAt : 0;
+			const txBps = computeInterfaceRate(txBytes, previous?.txb, elapsedMs);
+			const rxBps = computeInterfaceRate(rxBytes, previous?.rxb, elapsedMs);
+
+			const enabled = !previous || previous.enabled;
+			const error = previous ? previous.error : 0;
 			newInterfaces[name] = {
 				...(inetAddr !== undefined ? { ip: inetAddr } : {}),
 				...(netmask !== undefined ? { netmask } : {}),
 				txb: txBytes,
+				rxb: rxBytes,
+				sampledAt: now,
+				tx_bps: txBps,
+				rx_bps: rxBps,
 				tp,
 				enabled,
 				error,
@@ -580,6 +623,8 @@ type NetworkInterfaceResponseMessage = {
 		error?: string;
 		same_subnet_group?: string;
 		policy_route_missing?: boolean;
+		tx_bps?: number;
+		rx_bps?: number;
 	};
 };
 
@@ -598,6 +643,12 @@ export function netIfBuildMsg() {
 			...(networkInterface.ip !== undefined ? { ip: networkInterface.ip } : {}),
 			tp: networkInterface.tp,
 			enabled: networkInterface.enabled,
+			...(networkInterface.tx_bps !== undefined
+				? { tx_bps: networkInterface.tx_bps }
+				: {}),
+			...(networkInterface.rx_bps !== undefined
+				? { rx_bps: networkInterface.rx_bps }
+				: {}),
 		};
 		m[i] = entry;
 

@@ -27,6 +27,7 @@ import {
 import {
 	type ConnectionUUID,
 	type MacAddress,
+	nmConnGetFields,
 	nmcliParseSep,
 	nmDeviceProp,
 	nmDevices,
@@ -54,8 +55,10 @@ import {
 	wifiDeviceListGetInetAddress,
 	wifiDeviceListGetMacAddress,
 } from "./wifi-device-list.ts";
+import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
-	isHotspot,
+	canHotspot,
+	isApMode,
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
@@ -63,10 +66,22 @@ import {
 export type SSID = string;
 export type WifiInterfaceId = number;
 
+export type WifiActiveMode = "ap" | "infrastructure" | "unknown";
+
 export type BaseWifiInterface = {
 	id: WifiInterfaceId; // numeric id for the adapter - temporary for each CeraLive execution
 	ifname: string;
-	conn: ConnectionUUID | null; // the active connection
+	conn: ConnectionUUID | null; // the active connection, gated on the radio holding an IP
+	/*
+	  NM's active connection WITHOUT the `conn` IP gate. The gate is right for
+	  bonding (a client link with no lease is unusable) but must never decide
+	  AP-vs-client: a hotspot whose IP the ifconfig poll had not yet cached
+	  collapsed to "station", rendering a broadcasting radio as
+	  "Connected · <ssid>" with Connect/In-Bond controls one tick and
+	  "Disconnected" the next.
+	*/
+	activeConn?: ConnectionUUID | null;
+	activeMode?: WifiActiveMode;
 	hw: string; // the name of the wifi adapter hardware
 	available: Map<SSID, WifiNetwork>;
 	saved: Record<SSID, ConnectionUUID>;
@@ -148,6 +163,66 @@ export function getMacAddressForWifiInterface(id: WifiInterfaceId) {
 let unavailableDeviceRetryExpiry = 0;
 let wifiIfId = 0;
 
+const connectionModeCache = new Map<ConnectionUUID, WifiActiveMode>();
+
+export function resetWifiConnectionModeCache() {
+	connectionModeCache.clear();
+}
+
+export function parseWifiConnectionMode(
+	raw: string | undefined,
+): WifiActiveMode {
+	if (raw === "ap") return "ap";
+	if (raw === "infrastructure") return "infrastructure";
+	return "unknown";
+}
+
+// An `unknown` result is NOT cached: it means the nmcli read failed, and caching
+// it would permanently pin an AP radio to the client-mode UI.
+async function resolveConnectionMode(
+	uuid: ConnectionUUID,
+): Promise<WifiActiveMode> {
+	const cached = connectionModeCache.get(uuid);
+	if (cached !== undefined) return cached;
+
+	const fields = await nmConnGetFields(uuid, ["802-11-wireless.mode"] as const);
+	const mode = parseWifiConnectionMode(fields?.[0]);
+	if (mode !== "unknown") connectionModeCache.set(uuid, mode);
+	return mode;
+}
+
+async function syncActiveConnection(
+	wifiInterface: WifiInterface,
+	macAddress: MacAddress,
+	activeConn: ConnectionUUID | null,
+): Promise<boolean> {
+	const previousConn = wifiInterface.activeConn ?? null;
+	const previousMode = wifiInterface.activeMode;
+
+	if (activeConn === null) {
+		wifiInterface.activeConn = null;
+		delete wifiInterface.activeMode;
+		return previousConn !== null || previousMode !== undefined;
+	}
+
+	const mode = await resolveConnectionMode(activeConn);
+	wifiInterface.activeConn = activeConn;
+	wifiInterface.activeMode = mode;
+
+	// NM is the authority on AP mode, so adopt the AP profile as this radio's
+	// hotspot connection here rather than waiting on the saved-connection sweep
+	// (which only runs when a NEW adapter appears).
+	if (
+		mode === "ap" &&
+		canHotspot(wifiInterface) &&
+		wifiInterface.hotspot.conn !== activeConn
+	) {
+		await handleHotspotConn(macAddress, activeConn);
+	}
+
+	return previousConn !== activeConn || previousMode !== mode;
+}
+
 export async function wifiUpdateDevices() {
 	let newDevices = false;
 	let statusChange = false;
@@ -182,9 +257,11 @@ export async function wifiUpdateDevices() {
 				continue;
 			}
 
+			const activeConn: ConnectionUUID | null =
+				connUuid !== "" ? connUuid : null;
 			const conn =
-				connUuid !== "" && wifiDeviceListGetInetAddress(ifname)
-					? connUuid
+				activeConn !== null && wifiDeviceListGetInetAddress(ifname)
+					? activeConn
 					: null;
 			const macAddress = wifiDeviceListGetMacAddress(ifname);
 			if (!macAddress) continue;
@@ -247,6 +324,11 @@ export async function wifiUpdateDevices() {
 			const updatedInterface = getWifiInterfaceByMacAddress(macAddress);
 			if (updatedInterface) {
 				wifiIdToMacAddress[updatedInterface.id] = macAddress;
+				if (
+					await syncActiveConnection(updatedInterface, macAddress, activeConn)
+				) {
+					statusChange = true;
+				}
 			}
 		} catch (err) {
 			if (err instanceof Error) {
@@ -286,7 +368,7 @@ export async function wifiUpdateDevices() {
 		const networkInterfaces = getNetworkInterfaces();
 		for (const i in wifiInterfacesByMacAddress) {
 			const wifiInterface = wifiInterfacesByMacAddress[i];
-			if (wifiInterface && isHotspot(wifiInterface)) {
+			if (wifiInterface && isApMode(wifiInterface)) {
 				const n = networkInterfaces[wifiInterface.ifname];
 				if (!n) continue;
 				if (n.error & NETIF_ERR_HOTSPOT) continue;

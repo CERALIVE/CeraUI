@@ -62,7 +62,7 @@ import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
 	canHotspot,
-	isHotspot,
+	isApMode,
 	type WifiHotspot,
 	type WifiHotspotMessage,
 } from "./wifi-hotspot-types.ts";
@@ -217,7 +217,7 @@ export function wifiBuildMsg() {
 		};
 		ifs[id] = entry;
 
-		if (isHotspot(wifiInterface)) {
+		if (isApMode(wifiInterface)) {
 			const hotspot: NonNullable<WifiInterfaceResponseMessage["hotspot"]> = {
 				...(wifiInterface.hotspot.name !== undefined
 					? { name: wifiInterface.hotspot.name }
@@ -246,7 +246,7 @@ export function wifiBuildMsg() {
 			}
 		}
 
-		entry.mode = isHotspot(wifiInterface) ? "hotspot" : "station";
+		entry.mode = isApMode(wifiInterface) ? "hotspot" : "station";
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
 			entry.transition = wifiInterface.hotspot.transition;
 		}

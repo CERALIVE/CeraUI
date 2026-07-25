@@ -7,6 +7,17 @@ export const convertBytesToKbids = (bytes: number): number => {
 };
 
 /**
+ * Convert bits per second to kilobits per second.
+ *
+ * Decimal (÷1000), matching `formatThroughput`'s kbps→Mbps divisor so a value
+ * does not change magnitude as it crosses the Mbps boundary.
+ */
+export const bitsPerSecondToKbps = (bps: number): number => {
+	if (!Number.isFinite(bps) || bps <= 0) return 0;
+	return Math.round(bps / 1000);
+};
+
+/**
  * Format throughput in kbps to human-readable string
  * - < 1000 kbps: "N kbps"
  * - >= 1000 kbps: "X.X Mbps" (one decimal place)

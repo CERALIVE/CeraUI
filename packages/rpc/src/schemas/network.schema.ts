@@ -19,6 +19,11 @@ export const netifEntrySchema = z.object({
 	// True when a bonded (modem/wifi) interface is missing its SRTLA source-routing
 	// policy rule or its table's default route. Real-device diagnostic; additive-optional.
 	policy_route_missing: z.boolean().optional(),
+	// Measured interface throughput in BITS PER SECOND over the last sample
+	// window. Distinct from `tp`, which is a raw TX byte delta over an unstated
+	// interval and therefore cannot be rendered as a rate. Additive-optional.
+	tx_bps: z.number().optional(),
+	rx_bps: z.number().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 

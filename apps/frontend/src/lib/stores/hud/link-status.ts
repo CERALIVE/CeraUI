@@ -12,7 +12,10 @@ import type {
 	NetifMessage,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
-import { convertBytesToKbids } from "$lib/helpers/network-speed";
+import {
+	bitsPerSecondToKbps,
+	convertBytesToKbids,
+} from "$lib/helpers/network-speed";
 import { modemSignal } from "$lib/helpers/signal";
 import type { LinkSignal } from "$lib/types/hud";
 import { MAX_LINKS } from "./constants";
@@ -69,6 +72,15 @@ export function buildLinks(
 	const throughputFor = (id: string): number =>
 		isStreaming ? convertBytesToKbids(netifEntries[id]?.tp ?? 0) : 0;
 	const enabledFor = (id: string): boolean => netifEntries[id]?.enabled ?? true;
+	const rateFor = (id: string, direction: "tx" | "rx"): number | null => {
+		const bps =
+			direction === "tx" ? netifEntries[id]?.tx_bps : netifEntries[id]?.rx_bps;
+		return bps === undefined ? null : bitsPerSecondToKbps(bps);
+	};
+	const ratesFor = (id: string) => ({
+		rateTxKbps: rateFor(id, "tx"),
+		rateRxKbps: rateFor(id, "rx"),
+	});
 
 	for (const [key, iface] of Object.entries(wifi ?? {})) {
 		// Key by the kernel interface name, not the wifi record key: the backend
@@ -90,6 +102,7 @@ export function buildLinks(
 			isConnected,
 			isStale: wifiStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
+			...ratesFor(id),
 			enabled: enabledFor(id),
 			connectionState: isConnected ? "connected" : "disconnected",
 		});
@@ -110,6 +123,7 @@ export function buildLinks(
 			isConnected: connectionState === "connected",
 			isStale: modemsStale || fullyStale || staleIds.has(id),
 			throughputKbps: throughputFor(id),
+			...ratesFor(id),
 			enabled: enabledFor(id),
 			connectionState,
 		});
@@ -127,6 +141,7 @@ export function buildLinks(
 			isConnected: true,
 			isStale: fullyStale || staleIds.has(ifname),
 			throughputKbps: throughputFor(ifname),
+			...ratesFor(ifname),
 			enabled: entry.enabled,
 			connectionState: "connected",
 		});

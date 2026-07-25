@@ -46,8 +46,19 @@ export interface LinkSignal {
 	label: string;
 	isConnected: boolean;
 	isStale: boolean;
-	/** Throughput in kbps, or `null` when unavailable. */
+	/**
+	 * Stream-gated throughput in kbps — zeroed while idle so the HUD never
+	 * persists a bitrate from the last session (Live-Data Discipline, T6).
+	 */
 	throughputKbps: number | null;
+	/**
+	 * Measured interface throughput in kbps, independent of the stream state.
+	 * Re-derived from kernel byte counters every netif tick, so an idle link
+	 * self-zeroes rather than going stale — which is why it is NOT stream-gated.
+	 * `null` when the backend does not report per-second rates.
+	 */
+	rateTxKbps: number | null;
+	rateRxKbps: number | null;
 	/** Whether this link is enabled/active. */
 	enabled: boolean;
 	/** Modem connection state: connected, scanning, disconnected, or no_sim. */

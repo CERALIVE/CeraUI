@@ -62,6 +62,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Network-ingest operator enable/disable (topology-aware desired-state + systemctl apply + boot reconcile)** | `modules/network/network-ingest-control.ts` |
 | Gateway-active probe seam (blocks rtmp/srt `streaming.start` until the gateway is up; fail-safe default) | `modules/streaming/gateway-availability.ts` |
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
+| Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s) | `modules/network/network-interfaces.ts` (`computeInterfaceRate`, `processIfconfigOutput`) |
+| WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
@@ -1171,6 +1173,82 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 → "LIVE-CORRECTNESS-PASS FIXES" for the frontend-side contract
 (`NetworkIngestDialog.svelte`, `SourceSection.svelte`'s visible-row filter).
 
+## WIFI AP-vs-CLIENT CLASSIFICATION [EXISTS]
+
+A radio in AP/hotspot mode and a radio associated with somebody else's access
+point are DIFFERENT operator states, and the Network page must never confuse
+them — an access point cannot be bonded and cannot be "connected to". Found live
+on a board: a broadcasting `wlan0` rendered as "Connected · CERALIVE_03f6" with
+an ON "In Bond" toggle and a "Connect >" button, then as plain "Disconnected"
+one poll later.
+
+**One cause, both symptoms: the classification hung off `conn`.**
+`wifiUpdateDevices` nulls `conn` unless the SEPARATELY polled ifconfig cache
+(`wifi-device-list.ts`) has already seen an address for the radio. That gate is
+right for bonding — a client link with no lease is unusable — but it made an
+active hotspot indistinguishable from a disconnected station whenever the two
+pollers were momentarily out of step. Worse, NetworkManager lists a radio's OWN
+access point in its scan results with IN-USE set, so the station branch then
+rendered the hotspot's own SSID as a client association.
+
+- **`activeConn` / `activeMode`** (`wifi-interfaces.ts`) carry NM's active
+  connection for the radio WITHOUT the IP gate, plus that connection's
+  `802-11-wireless.mode`. The mode is resolved once per UUID and cached;
+  `unknown` (an nmcli read that failed) is deliberately NOT cached, or a
+  transient failure would pin an AP radio to the client UI for the process
+  lifetime.
+- **`isApMode(iface)`** (`wifi-hotspot-types.ts`) is the classification every
+  operator surface uses: `isHotspot()` OR (hotspot-capable AND
+  `activeMode === 'ap'`). `isHotspot()` still requires the adopted hotspot
+  profile and stays the predicate for anything that dereferences
+  `hotspot.conn` (`wifi-hotspot-config.ts`, `wifi-hotspot-activation.ts`,
+  `wifi-hotspot-info.ts`) — do NOT swap those to `isApMode`.
+- **`isHotspot()` now also accepts `activeConn === hotspot.conn`**, so a
+  confirmed hotspot no longer flickers back to station on a lagging IP poll.
+- **AP-mode adoption happens in the device loop.** When NM reports the active
+  connection as `ap`, `wifiUpdateDevices` calls `handleHotspotConn` immediately
+  rather than waiting for `wifiUpdateSavedConns` (which only runs when a NEW
+  adapter appears).
+- **`getModeForInterface`** (`state/wifi-state.ts`) and `wifiBuildMsg`'s
+  `mode` + `hotspot` block both route through `isApMode`, so the cached mode and
+  the broadcast mode can never disagree. An AP-mode radio's `available` scan
+  list and `saved` map are omitted from the wire — there is no Connect target to
+  render.
+- The netif hotspot marker (`setNetifHotspot`, which removes the radio from the
+  bonded source-IP list) is likewise keyed on `isApMode`, so an AP radio is
+  excluded from bonding before its profile is adopted.
+
+Frontend half: `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts`
+(`isApRadio`) — `mode` first, `hotspot` presence only as a pre-`mode` fallback.
+
+Coverage: `tests/wifi-ap-mode-classification.test.ts`.
+
+## MEASURED INTERFACE THROUGHPUT [EXISTS]
+
+`netif` entries carry TWO different throughput quantities, and only one of them
+is a rate:
+
+| Field | Meaning |
+|-------|---------|
+| `tp` | raw TX **byte delta** since the previous poll, over an unstated interval (legacy; kept for wire compat) |
+| `tx_bps` / `rx_bps` | measured throughput in **bits per second** (additive-optional) |
+
+`tp` cannot be rendered as a rate — nothing on the wire says how long its window
+was — which is why the Network page's Bonded Links card read `0 kbps` and its
+`TOTAL BANDWIDTH` never moved. `computeInterfaceRate(current, previous,
+elapsedMs)` is the pure derivation: 0 with no baseline, 0 when no time elapsed,
+and 0 on a counter reset (interface bounce / 32-bit wrap) so a wrap reads as
+idle rather than a multi-gigabit spike. `processIfconfigOutput` takes an
+injectable `now` so the window is the ACTUAL elapsed time, not the nominal
+`NETIF_POLL_INTERVAL_MS`.
+
+These are kernel counters, so they are meaningful whether or not a stream is
+running — that is the point. This does NOT relax the Live-Data Discipline rule
+for stream telemetry: the HUD's stream-gated `throughputKbps` is unchanged, and
+`linkTelemetry` still clears on stop.
+
+Coverage: `tests/netif-throughput-rate.test.ts`.
+
 ## ANTI-PATTERNS
 
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
@@ -1194,4 +1272,6 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 - Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
+- Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
+- Don't render `netif.tp` as a rate — it is a byte delta over an unstated window. Use `tx_bps`/`rx_bps`.
 - Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.

@@ -14,6 +14,23 @@
  * and an absent target (no switch in flight for this radio) is always `"pending"`.
  */
 
+import type { WifiInterface } from "@ceraui/rpc/schemas";
+
+/**
+ * Whether a radio is operating as an access point rather than a client station.
+ *
+ * `mode` is the backend's authoritative classification and is checked FIRST; the
+ * `hotspot` payload is only a fallback for a backend that predates it. Deriving
+ * this from `hotspot` alone made an AP-mode radio whose hotspot profile had not
+ * been adopted render as a client connection, complete with "Connect" and
+ * "In Bond" controls that cannot apply to an access point.
+ */
+export function isApRadio(
+	iface: Pick<WifiInterface, "mode" | "hotspot">,
+): boolean {
+	return iface.mode === "hotspot" || Boolean(iface.hotspot);
+}
+
 /** The mode a switch is driving toward. */
 export type WifiModeTarget = "hotspot" | "station";
 

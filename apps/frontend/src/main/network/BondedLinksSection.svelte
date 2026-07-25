@@ -6,6 +6,7 @@ import { Radio } from '@lucide/svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import LinkTelemetry from '$lib/components/custom/LinkTelemetry.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import { aggregateBondBandwidth, linkUpKbps } from '$lib/helpers/bond-bandwidth';
 import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
@@ -41,17 +42,17 @@ function linkTypeLabel(link: LinkSignal): string {
 	return modem?.status?.network_type || $LL.network.view.cellular();
 }
 
-// Aggregate throughput across every enabled link — the bond's working bandwidth.
-const totalKbps = $derived(
-	links.reduce((sum, link) => (link.enabled ? sum + (link.throughputKbps ?? 0) : sum), 0),
-);
+const total = $derived(aggregateBondBandwidth(links));
+const totalUpKbps = $derived(total.upKbps);
+const totalDownKbps = $derived(total.downKbps);
+const hasDownstream = $derived(total.hasDownstream);
 
 // The bond total is only as fresh as its links: when every link has aged out
 // (i.e. on a full disconnect, where `isFullyStale` is baked into each
 // `link.isStale`), the aggregate is stale too. Route through the shared helper
 // so the dimming threshold matches every other live value (Task 18).
 const totalStale = $derived(
-	getStalenessState(totalKbps, null, links.length > 0 && links.every((link) => link.isStale)) ===
+	getStalenessState(totalUpKbps, null, links.length > 0 && links.every((link) => link.isStale)) ===
 		'stale',
 );
 </script>
@@ -116,7 +117,7 @@ const totalStale = $derived(
 						</span>
 					{/if}
 					<!-- per-link throughput (Task 18) -->
-					<Badge variant="speed" class="shrink-0" kbps={link.throughputKbps} stale={link.isStale} />
+					<Badge variant="speed" class="shrink-0" kbps={linkUpKbps(link)} stale={link.isStale} />
 
 					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
 					     the same row via a left divider, at reduced size (Task 19). -->
@@ -144,8 +145,25 @@ const totalStale = $derived(
 			<span class="text-muted-foreground uppercase tracking-wide"
 				>{$LL.network.view.totalBandwidth()}</span
 			>
-			<span data-live-value class="text-foreground font-mono text-sm font-bold tabular-nums">
-				{formatThroughput(totalKbps)}
+			<span class="flex items-baseline gap-2.5">
+				<span
+					data-live-value
+					data-testid="total-bandwidth-up"
+					class="text-foreground font-mono text-sm font-bold tabular-nums"
+				>
+					<span aria-hidden="true">↑</span>
+					{formatThroughput(totalUpKbps)}
+				</span>
+				{#if hasDownstream}
+					<span
+						data-live-value
+						data-testid="total-bandwidth-down"
+						class="text-muted-foreground font-mono text-xs tabular-nums"
+					>
+						<span aria-hidden="true">↓</span>
+						{formatThroughput(totalDownKbps)}
+					</span>
+				{/if}
 			</span>
 		</div>
 	{/if}
