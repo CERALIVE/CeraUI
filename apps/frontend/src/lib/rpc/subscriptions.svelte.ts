@@ -429,8 +429,13 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// Lock-aware ingestion for the `enabled` field only.
 			// BondToggle registers per-interface locks as `enabled_${name}` via
 			// markPending/onRpcResolved. Guard only `enabled` — all other fields
-			// (tp, ip, error, mac, same_subnet_group, policy_route_missing) flow
-			// through live without registry interaction.
+			// (tp, ip, error, mac, same_subnet_group, policy_route_missing,
+			// tx_bps, rx_bps) flow through live without registry interaction.
+			//
+			// This rebuilds each entry from an EXPLICIT allowlist rather than
+			// spreading `entry`, so a field added to `netifEntrySchema` reaches the
+			// store ONLY if it is added below too — omitting the measured rates is
+			// why Bonded Links read `0 kbps` on a board pushing ~95 Mbit/s.
 			const incoming = data as NetifMessage;
 			const merged: NetifMessage = { ...netifState };
 			for (const [ifname, entry] of Object.entries(incoming)) {
@@ -451,6 +456,8 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					...(entry.policy_route_missing !== undefined
 						? { policy_route_missing: entry.policy_route_missing }
 						: {}),
+					...(entry.tx_bps !== undefined ? { tx_bps: entry.tx_bps } : {}),
+					...(entry.rx_bps !== undefined ? { rx_bps: entry.rx_bps } : {}),
 				};
 				// Guard the `enabled` field through the dirty-field registry.
 				const field = `enabled_${ifname}`;
