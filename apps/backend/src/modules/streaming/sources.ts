@@ -251,6 +251,9 @@ function buildCaptureEntry(
 		id: device.input_id,
 		pipelineId,
 		modes: device.caps !== undefined ? groupDeviceCaps(device.caps) : [],
+		// Stamped by `fromEngineDevice` (the only seam that knows the engine
+		// authored the row); anything else is honestly `unknown`.
+		signal: device.signal ?? "unknown",
 		supportsAudio: coarse.supportsAudio,
 		supportsResolutionOverride: coarse.supportsResolutionOverride,
 		supportsFramerateOverride: coarse.supportsFramerateOverride,

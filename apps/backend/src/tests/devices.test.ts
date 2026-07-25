@@ -5,6 +5,7 @@ import {
 	createDeviceRegistry,
 	type DeviceRegistryDeps,
 	deriveKind,
+	fromEngineDevice,
 } from "../modules/streaming/devices.ts";
 
 function makeDeps(
@@ -47,6 +48,40 @@ describe("deriveKind", () => {
 		expect(deriveKind("USB Webcam")).toBe("usb");
 		expect(deriveKind("QA-Cam")).toBe("usb");
 		expect(deriveKind("Mystery")).toBe("other");
+	});
+});
+
+describe("fromEngineDevice — signal verdict", () => {
+	// The live Rock 5B+ pair: cerastream OMITS `caps` for the severed-link
+	// HDMI-RX node and carries a full list for the UVC device beside it.
+	const HDMI_RX = {
+		input_id: "/dev/video0",
+		device_path: "/dev/video0",
+		display_name: "rk_hdmirx",
+		media_class: "video" as const,
+		kind: "hdmi",
+		stable_id: "port:fdee0000.hdmirx-controller",
+	};
+
+	test("reports `absent` when the engine listed the device but projected no caps", () => {
+		expect(fromEngineDevice(HDMI_RX).signal).toBe("absent");
+	});
+
+	test("reports `absent` for an explicitly empty caps array too", () => {
+		expect(fromEngineDevice({ ...HDMI_RX, caps: [] }).signal).toBe("absent");
+	});
+
+	test("reports `present` for a device that enumerated at least one cap", () => {
+		const signal = fromEngineDevice({
+			...HDMI_RX,
+			caps: [{ width: 1920, height: 1080, framerate: "60/1" }],
+		}).signal;
+		expect(signal).toBe("present");
+	});
+
+	test("leaves the verdict UNSET on the v4l2 fallback scan, so an engine outage never fakes a no-signal state", () => {
+		const list = buildDeviceList([{ card: "video0", name: "QA-Cam" }], {});
+		expect(list[0]?.signal).toBeUndefined();
 	});
 });
 

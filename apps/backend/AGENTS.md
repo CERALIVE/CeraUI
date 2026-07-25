@@ -995,6 +995,39 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   mirror of the engine's operator re-promotion (cerastream PR #66). The stable id is
   threaded additive-optional through `StreamSource` (`sources.schema.ts`). Coverage:
  `tests/sources.test.ts`.
+- **THREE capture-row states, not two (`signal`)**: a capture row is one of
+  **healthy** / **lost** / **signal-absent**, and the third one is new. `lost`
+  (`buildLostEntry`) means the device DISAPPEARED — it is not in the engine's
+  device list at all. `signal:'absent'` means the device IS enumerated and IS
+  bound but the engine projected ZERO capture modes for it: exactly what an idle
+  HDMI-RX port looks like (`v4l2-ctl --query-dv-timings` answers "Link has been
+  severed", yet `list-devices` still returns the node). Found live on a board,
+  where such a row rendered with NO negative marker at all and read as healthy.
+  The field is ADDITIVE-OPTIONAL on both `captureDeviceSchema` and
+  `captureSourceSchema` (`sourceSignalSchema` in `streaming.schema.ts`), so a
+  consumer that does not know it is unaffected.
+- **The verdict is stamped at `fromEngineDevice`, and PROVENANCE — not
+  absent-vs-empty caps — is the discriminator.** Verified on a real Rock 5B+:
+  cerastream **OMITS** `caps` entirely for the severed-link node (the live UVC
+  device beside it carries 64), so "empty array" and "no array" are
+  indistinguishable on the wire and a rule keyed on that difference would report
+  the signal-less device as `unknown` and render nothing. What actually
+  distinguishes the two cases is WHO authored the row: `fromEngineDevice`
+  (`devices.ts`) is the one seam that knows the engine answered, so zero caps
+  there is a real finding (`absent`) rather than a gap. `buildDeviceList`'s v4l2
+  fallback scan and the hotplug path's observed-but-unprobed rows leave the field
+  UNSET — stamping them `absent` would mark every device signal-less during an
+  engine outage — and `buildCaptureEntry` reads `device.signal ?? "unknown"`. Do
+  NOT move this derivation into `sources.ts`/`buildCaptureEntry`: that layer
+  cannot see provenance. This is the same "apply it at the device-construction
+  seam, not per-consumer" rule as ONBOARD VIDEO DISPLAY NAMES above.
+- The new state changes nothing else: the row stays `available:true`, stays
+  selectable, and `resolveSourceRouting` still routes it (a signal can appear at
+  any moment). `capabilities.ts` `foldDeviceModes` is untouched — it still drops
+  capless devices from `device_modes` for its own consumers. Frontend half:
+  `apps/frontend/AGENTS.md` → "No-signal capture row". Coverage:
+  `tests/devices.test.ts` ("fromEngineDevice — signal verdict", incl. the
+  fallback-scan negative) + `tests/sources.test.ts` ("capture signal state").
 - **`getLinkTelemetry` null-on-stop** is a backend-locked contract:
   `stopLinkTelemetry()` clears the source state so the NEXT heartbeat tick's
   `broadcastLinkTelemetryIfChanged()` emits `{linkTelemetry: null}` exactly

@@ -1178,6 +1178,10 @@ const zh = {
 			notConnectedTitle: "未连接",
 			notConnectedBody:
 				"你的设备支持此类信号源，但目前没有为其连接任何设备。请连接匹配的设备以使用它，或选择已连接的信号源。",
+			noSignal: "无信号",
+			noSignalTitle: "此输入没有信号",
+			noSignalBody:
+				"该输入已识别且工作正常，但目前没有任何画面传入——线缆另一端的设备没有输出画面。请检查它是否已开机，以及线缆两端是否插紧。你仍然可以选择此信号源：一旦有信号，它就会立即开始工作。",
 			mjpegTitle: "为什么是 MJPEG？",
 			mjpegBody:
 				"这是一台输出 Motion-JPEG 的标准 USB 视频类（UVC）设备：它自己的 USB 硬件描述只声明未压缩视频和 Motion-JPEG（MJPEG），没有通过 USB 的硬件 H.264/H.265 编码，也没有为此隐藏的厂商通道，因此编码器会采集其 MJPEG 视频，再重新编码为你选择的编码格式。这是对硬件的准确描述，并非故障。",

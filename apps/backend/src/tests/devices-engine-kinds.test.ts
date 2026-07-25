@@ -85,6 +85,9 @@ describe("fromEngineDevice — verbatim ids, typed kinds, no heuristic", () => {
 			display_name: "Elgato HDMI Grabber",
 			media_class: "video",
 			kind: "uvc_h264",
+			// The engine listed this device and projected no caps for it, which is
+			// the signal-less verdict — see `fromEngineDevice — signal verdict`.
+			signal: "absent",
 		});
 	});
 

@@ -338,6 +338,85 @@ describe("buildSources — caps-first base + device overlay", () => {
 	});
 });
 
+describe("buildSources — capture signal state (present / absent / unknown)", () => {
+	function hdmiCaptureSignal(
+		overrides: Partial<CaptureDevice>,
+	): string | undefined {
+		const sources = buildSources({
+			sources: [capSource("hdmi")],
+			devices: [{ ...captureDevice("video0", "hdmi"), ...overrides }],
+			networkIngest: NO_INGEST,
+		});
+		const capture = sources.find((s) => s.origin === "capture");
+		return capture?.origin === "capture" ? capture.signal : undefined;
+	}
+
+	it("carries the engine seam's `absent` verdict onto the capture row", () => {
+		expect(hdmiCaptureSignal({ signal: "absent" })).toBe("absent");
+	});
+
+	it("carries the engine seam's `present` verdict onto the capture row", () => {
+		expect(hdmiCaptureSignal({ signal: "present" })).toBe("present");
+	});
+
+	it("reports `unknown` — never `absent` — for a device no engine probe authored", () => {
+		expect(hdmiCaptureSignal({})).toBe("unknown");
+	});
+
+	it("keeps a `present` verdict even when no cap groups to a legal mode", () => {
+		// The verdict comes from the engine's raw caps, so grouping dropping every
+		// unnormalizable rung must never turn a real signal into a missing one.
+		const sources = buildSources({
+			sources: [capSource("hdmi")],
+			devices: [
+				{
+					...captureDevice("video0", "hdmi", { caps: [{ framerate: "30" }] }),
+					signal: "present",
+				},
+			],
+			networkIngest: NO_INGEST,
+		});
+		const capture = sources.find((s) => s.origin === "capture");
+		expect(capture?.modes).toEqual([]);
+		if (capture?.origin === "capture") expect(capture.signal).toBe("present");
+	});
+
+	it("keeps the signal-less row selectable and available — it is not the `lost` state", () => {
+		const sources = buildSources({
+			sources: [capSource("hdmi")],
+			devices: [{ ...captureDevice("video0", "hdmi"), signal: "absent" }],
+			networkIngest: NO_INGEST,
+		});
+		const capture = sources.find((s) => s.origin === "capture");
+		expect(capture?.available).toBe(true);
+		expect(capture?.lost).toBeUndefined();
+		expect(resolveSourceRouting("video0", sources).ok).toBe(true);
+		for (const source of sources) {
+			expect(() => streamSourceSchema.parse(source)).not.toThrow();
+		}
+	});
+
+	it("leaves a lost row's shape untouched — no signal field is invented for it", () => {
+		const snapshot: LastSeenDevice = {
+			id: "video9",
+			displayName: "Unplugged HDMI",
+			kind: "hdmi",
+			pipelineId: "hdmi",
+			devicePath: "/dev/video9",
+		};
+		const sources = buildSources({
+			sources: [capSource("hdmi")],
+			devices: [],
+			networkIngest: NO_INGEST,
+			configSource: "video9",
+			lastSeenDevices: [snapshot],
+		});
+		const lost = sources.find((s) => s.id === "video9");
+		expect(lost?.lost).toBe(true);
+		if (lost?.origin === "capture") expect(lost.signal).toBeUndefined();
+	});
+});
+
 describe("deriveAudioKind — test-pattern selectable-audio precedence (C2)", () => {
 	function virtualAudioKind(supportsAudio: boolean): string | undefined {
 		const sources = buildSources({

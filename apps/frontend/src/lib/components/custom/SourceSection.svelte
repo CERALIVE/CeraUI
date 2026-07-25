@@ -248,6 +248,18 @@ const hasSources = $derived(visibleSources.length > 0);
 const lostCaptures = $derived(captureSources.filter((s) => s.lost === true));
 const hasLostDevice = $derived(lostCaptures.length > 0);
 
+// The THIRD negative state: the device is PRESENT and bound, but the backend
+// explicitly reported zero usable capture modes (an idle HDMI-RX port with
+// nothing on the cable). Distinct from `lost` (device gone) and from a coarse
+// row's "Not connected" (no device bound at all) — before this such a row was
+// indistinguishable from a healthy one. Only the EXPLICIT `absent` surfaces it:
+// a legacy backend sends no `signal` at all, and `unknown` is not a negative.
+function hasNoSignal(source: StreamSource): boolean {
+	return (
+		source.origin === 'capture' && source.lost !== true && source.signal === 'absent'
+	);
+}
+
 // A row is unselectable when a network gateway is down (consume source.available —
 // never re-derive it) or a capture device was unplugged (lost).
 function rowDisabled(source: StreamSource): boolean {
@@ -625,6 +637,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													<TriangleAlert aria-hidden={true} class="size-3" />
 													{$LL.live.inputPicker.lost()}
 												</span>
+											{:else if hasNoSignal(source)}
+												<!-- Calm amber, NOT the destructive red `lost` treatment: the
+												     device is fine, the cable is idle. The row stays selectable —
+												     a signal can appear at any moment. -->
+												<span
+													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+													data-testid={`source-no-signal-${source.id}`}
+												>
+													<TriangleAlert aria-hidden={true} class="size-3" />
+													{$LL.live.source.noSignal()}
+												</span>
 											{/if}
 										{/if}
 										{#if source.origin === 'coarse'}
@@ -706,6 +729,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										body={$LL.live.source.notConnectedBody()}
 										testId={`source-not-connected-info-${source.id}`}
 										title={$LL.live.source.notConnectedTitle()}
+									/>
+								{/if}
+
+								<!-- Present-but-signal-less capture device: explain that the input
+								     itself is fine and the cable/source is what's missing (sits
+								     OUTSIDE the select button — never a nested interactive). -->
+								{#if hasNoSignal(source)}
+									<InfoPopover
+										body={$LL.live.source.noSignalBody()}
+										testId={`source-no-signal-info-${source.id}`}
+										title={$LL.live.source.noSignalTitle()}
 									/>
 								{/if}
 

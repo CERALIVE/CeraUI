@@ -38,6 +38,7 @@ import {
 	pipelineAudioKindSchema,
 	requiresGatewaySchema,
 	resolutionSchema,
+	sourceSignalSchema,
 } from './streaming.schema';
 
 /** The four StreamSource origins (the discriminated-union discriminator). */
@@ -80,6 +81,10 @@ export const captureSourceSchema = streamSourceBase.extend({
 	// Reboot-stable hardware identity (cerastream `stable_id`). Lets routing
 	// self-heal a persisted selection whose node id went stale after a replug.
 	stableId: z.string().optional(),
+	// Whether this present device is carrying a usable signal (see
+	// `sourceSignalSchema`). ADDITIVE-OPTIONAL: absent on a legacy backend, which
+	// a consumer must read as `unknown` — never as a negative.
+	signal: sourceSignalSchema.optional(),
 });
 export type CaptureStreamSource = z.infer<typeof captureSourceSchema>;
 
