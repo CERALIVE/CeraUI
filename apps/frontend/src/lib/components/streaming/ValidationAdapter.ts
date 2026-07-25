@@ -395,11 +395,26 @@ function resolveDeviceModesFromDeviceModes(
 // wired in both cerastream's generic capture-leg builder and its RK3588 template.
 // A reported signal BOUNDS the encode target from above; it does not enumerate it.
 //
-// An enumerated multi-mode source therefore keeps the exact per-mode narrowing:
-// its modes are a real menu, and the per-resolution refinement below carries
-// genuine information about which rate lives at which rung. Relaxing that case to
-// a ceiling too first needs hardware proof that a UVC capture leg negotiates its
-// own native mode rather than the requested encode mode.
+// An enumerated multi-mode source keeps the exact per-mode narrowing — and that is
+// SOURCE-CONFIRMED correct, not merely conservative. A UVC camera's modes really are
+// COMMANDED: the requested resolution/framerate travel `start` → `InputKind::UvcH264`/
+// `UvcH265` → a `libuvch264src ! capsfilter` carrying those exact dimensions, and the
+// plugin intersects that capsfilter against the device's OWN enumerated descriptors
+// before `uvc_get_stream_ctrl_format_size()` turns the winner into a UVC `SET_CUR` on
+// the wire. The capsfilter IS the device negotiation. (With no override the plugin
+// auto-selects the highest compatible enumerated mode — still a negotiation, not a
+// passive read of whatever the device happened to default to.)
+//
+// Which is precisely WHY UVC must NOT inherit the ceiling model. The HDMI ceiling is
+// safe because `videoscale`/`videorate` normalize an uncontrolled capture downstream;
+// in front of a UVC negotiation there is no such safety net, so an encode target the
+// device does not enumerate has no mode to negotiate at all. Narrowing to the real
+// enumerated modes is the truthful offering here.
+//
+// The open follow-up is NOT whether that negotiation happens — it does. It is that
+// changing a UVC mode requires tearing the capture down and rebuilding it (libuvc
+// refuses a mode change on a running stream), so a mid-session change needs restart
+// UX plus real-camera validation. See `apps/frontend/AGENTS.md` → "Known follow-up".
 
 /** The encode-target ceiling a source's single reported capture mode imposes. */
 export interface SourceModeCeiling {
