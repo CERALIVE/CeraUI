@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	test,
+} from "bun:test";
 
 import { wifiMessageSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
@@ -9,6 +17,7 @@ import { withDeviceLock } from "../modules/network/state/device-lock.ts";
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
+	getWifiInterfacesByMacAddress,
 	removeWifiInterface,
 } from "../modules/wifi/wifi-connections.ts";
 import type { WifiInterface } from "../modules/wifi/wifi-interfaces.ts";
@@ -20,6 +29,10 @@ import {
 	wifiConnectProcedure,
 } from "../rpc/procedures/wifi.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
+import {
+	isolateWifiRegistry,
+	restoreWifiRegistry,
+} from "./helpers/wifi-registry.ts";
 
 function makeContext(): RPCContext {
 	const ws = {
@@ -162,6 +175,19 @@ describe("network.configure — mock immediate netif broadcast (Issue 2)", () =>
 });
 
 describe("wifi conflict — DEVICE_BUSY", () => {
+	// An id-0 interface left in the shared registry by an earlier test file makes
+	// `device: "0"` resolve to a MAC this test never locked, so the lock below
+	// would guard a free device and the call would read as success.
+	let inherited: ReturnType<typeof isolateWifiRegistry> = [];
+
+	beforeEach(() => {
+		inherited = isolateWifiRegistry();
+	});
+
+	afterEach(() => {
+		restoreWifiRegistry(inherited);
+	});
+
 	test("hotspotStart returns DEVICE_BUSY while the device lock is held", async () => {
 		const mac = "dc:a6:32:aa:bb:cc";
 		addWifiInterface(mac, {
@@ -173,6 +199,7 @@ describe("wifi conflict — DEVICE_BUSY", () => {
 			saved: {},
 			hotspot: { availableChannels: ["auto"], warnings: {} },
 		} as unknown as WifiInterface);
+		expect(Object.keys(getWifiInterfacesByMacAddress())).toEqual([mac]);
 
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => {
@@ -191,7 +218,6 @@ describe("wifi conflict — DEVICE_BUSY", () => {
 		} finally {
 			release();
 			await held;
-			removeWifiInterface(mac);
 		}
 	});
 });
