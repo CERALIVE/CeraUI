@@ -45,11 +45,11 @@ import {
 	Cable,
 	Check,
 	ChevronRight,
+	Columns3,
 	Copy,
 	Pencil,
 	QrCode,
 	Radio,
-	SquareDashed,
 	TriangleAlert,
 	Unplug,
 	Usb,
@@ -317,7 +317,11 @@ function captureBadgeClass(source: CaptureStreamSource): string {
 }
 function rowIcon(source: StreamSource) {
 	if (source.origin === 'capture') return KIND_ICON[kindFamily(source.kind)];
-	if (source.origin === 'virtual') return SquareDashed;
+	// The virtual row is the generated test pattern: `Columns3` is a framed screen
+	// split into three vertical bars, which reads as broadcast colour bars. The
+	// previous `SquareDashed` rendered as a plain empty square and carried no
+	// meaning — an operator scanning the list could not tell what the row was.
+	if (source.origin === 'virtual') return Columns3;
 	if (source.origin === 'network') return Radio;
 	return Video;
 }
