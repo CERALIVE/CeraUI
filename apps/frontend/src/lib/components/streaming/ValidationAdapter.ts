@@ -299,10 +299,14 @@ export function framerateOptions(
 // to the coarse offering.
 
 /**
- * The effective offered set plus the device modes that narrowed it. `deviceModes`
- * is `undefined` when nothing narrowed the coarse offering (no engine caps, a
- * non-device pipeline, or zero kind-matched devices) — the per-resolution
- * framerate refinement then falls back to the coarse framerate list.
+ * The effective offered set plus the device modes that refine it per resolution.
+ *
+ * `deviceModes` is `undefined` whenever there is no per-resolution refinement to
+ * apply — either nothing narrowed the coarse offering (no engine caps, a
+ * non-device pipeline, zero kind-matched devices), or the source reports a SINGLE
+ * capture mode whose ceiling already applies uniformly to every rung at or below
+ * it (see {@link singleModeSourceCeiling}). In both cases the per-resolution
+ * framerate refinement falls back to the coarse framerate list.
  */
 export interface OfferedAxes {
 	offered: OfferedSet;
@@ -380,13 +384,135 @@ function resolveDeviceModesFromDeviceModes(
 	return union.length > 0 ? union : undefined;
 }
 
+// ── Source signal vs encode target ───────────────────────────────────────────
+//
+// A UVC camera's `modes` ENUMERATE a menu of modes it can be commanded into. An
+// HDMI receiver's do not: cerastream's DV-timings projection collapses it to
+// exactly ONE mode — whatever signal is currently on the cable. Intersecting the
+// ENCODE TARGET with that single mode disabled every other rung (a 1080p59.94
+// signal on the onboard HDMI-RX could not be encoded at 720p30) even though the
+// capture leg scales and rate-converts freely — `videoscale`/`videorate` are
+// wired in both cerastream's generic capture-leg builder and its RK3588 template.
+// A reported signal BOUNDS the encode target from above; it does not enumerate it.
+//
+// An enumerated multi-mode source keeps the exact per-mode narrowing — and that is
+// SOURCE-CONFIRMED correct, not merely conservative. A UVC camera's modes really are
+// COMMANDED: the requested resolution/framerate travel `start` → `InputKind::UvcH264`/
+// `UvcH265` → a `libuvch264src ! capsfilter` carrying those exact dimensions, and the
+// plugin intersects that capsfilter against the device's OWN enumerated descriptors
+// before `uvc_get_stream_ctrl_format_size()` turns the winner into a UVC `SET_CUR` on
+// the wire. The capsfilter IS the device negotiation. (With no override the plugin
+// auto-selects the highest compatible enumerated mode — still a negotiation, not a
+// passive read of whatever the device happened to default to.)
+//
+// Which is precisely WHY UVC must NOT inherit the ceiling model. The HDMI ceiling is
+// safe because `videoscale`/`videorate` normalize an uncontrolled capture downstream;
+// in front of a UVC negotiation there is no such safety net, so an encode target the
+// device does not enumerate has no mode to negotiate at all. Narrowing to the real
+// enumerated modes is the truthful offering here.
+//
+// The open follow-up is NOT whether that negotiation happens — it does. It is that
+// changing a UVC mode requires tearing the capture down and rebuilding it (libuvc
+// refuses a mode change on a running stream), so a mid-session change needs restart
+// UX plus real-camera validation. See `apps/frontend/AGENTS.md` → "Known follow-up".
+
+/** The encode-target ceiling a source's single reported capture mode imposes. */
+export interface SourceModeCeiling {
+	resolution: Resolution;
+	framerate: Framerate;
+}
+
+/**
+ * The ceiling a source reporting a SINGLE capture mode imposes on the encode
+ * target.
+ *
+ * `undefined` for a source that enumerates a mode menu (two or more distinct
+ * rungs on either axis), for a modeless source, and — fail-closed — for a mode
+ * list whose rungs do not normalize onto the ladder, so a noisy payload can never
+ * widen the offering.
+ */
+export function singleModeSourceCeiling(
+	modes: readonly DeviceMode[] | undefined,
+): SourceModeCeiling | undefined {
+	if (!modes || modes.length === 0) return undefined;
+	const resolutions = new Set<Resolution>();
+	const framerates = new Set<Framerate>();
+	for (const mode of modes) {
+		const rung = normalizeResolutionToRung(`${mode.width}x${mode.height}`);
+		if (rung !== undefined) resolutions.add(rung);
+		for (const framerate of mode.framerates) {
+			const rate = normalizeFramerateToRung(framerate);
+			if (rate !== undefined) framerates.add(rate);
+		}
+	}
+	if (resolutions.size !== 1 || framerates.size !== 1) return undefined;
+	const [resolution] = [...resolutions];
+	const [framerate] = [...framerates];
+	if (resolution === undefined || framerate === undefined) return undefined;
+	return { resolution, framerate };
+}
+
+/**
+ * Narrow an offered set to everything AT OR BELOW the source's reported signal —
+ * downscale/rate-reduction is always available, an encode target above the signal
+ * never is.
+ */
+function capOfferedToSourceCeiling(
+	offered: OfferedSet,
+	ceiling: SourceModeCeiling,
+): OfferedSet {
+	const ceilingIndex = AVAILABLE_RESOLUTIONS.indexOf(ceiling.resolution);
+	return {
+		...offered,
+		resolutions: offered.resolutions.filter((resolution) => {
+			const rung = normalizeResolutionToRung(resolution);
+			return (
+				rung !== undefined &&
+				AVAILABLE_RESOLUTIONS.indexOf(rung) <= ceilingIndex
+			);
+		}),
+		framerates: offered.framerates.filter(
+			(framerate) => framerate <= ceiling.framerate,
+		),
+	};
+}
+
+/**
+ * The shared axes tail both {@link offeredAxes} overloads resolve through: the
+ * source's modes either impose a single-signal ceiling (capped axes, no
+ * per-resolution refinement) or enumerate a menu that narrows `intersectCaps`
+ * exactly, as before.
+ */
+function axesFromResolvedModes(
+	platform: PlatformCaps,
+	source: VideoSourceCap | undefined,
+	mode: string,
+	resolvedModes: readonly DeviceMode[] | undefined,
+): OfferedAxes {
+	const ceiling = singleModeSourceCeiling(resolvedModes);
+	if (ceiling) {
+		return {
+			offered: capOfferedToSourceCeiling(
+				intersectCaps(platform, source, mode),
+				ceiling,
+			),
+			deviceModes: undefined,
+		};
+	}
+	return {
+		offered: intersectCaps(platform, source, mode, resolvedModes),
+		deviceModes: resolvedModes,
+	};
+}
+
 /**
  * The offered capability set for platform ∩ the active {@link StreamSource} ∩ its
  * own Tier-2 device modes. The source's `modes` (see {@link resolveDeviceModes})
- * are threaded into `intersectCaps` for the resolution/framerate narrowing;
- * per-resolution framerate refinement is {@link framerateOptionsForResolution}'s
- * job. With `source.modes` empty the result is byte-identical to the coarse
- * {@link offeredEncoderCaps} offering.
+ * bound the resolution/framerate axes — as a ceiling when the source reports one
+ * signal, as an exact per-mode narrowing when it enumerates a menu (see
+ * {@link axesFromResolvedModes}); per-resolution framerate refinement is
+ * {@link framerateOptionsForResolution}'s job. With `source.modes` empty the
+ * result is byte-identical to the coarse {@link offeredEncoderCaps} offering.
  */
 export function offeredAxes(
 	hardware: HardwareType | undefined,
@@ -433,11 +559,12 @@ export function offeredAxes(
 	const sourceMode = typeof pipelineOrMode === "string" ? pipelineOrMode : mode;
 	const platform = platformCapsForHardware(hardware);
 	const cap = source ? videoSourceCapFromStreamSource(source) : undefined;
-	const resolvedModes = resolveDeviceModes(source);
-	return {
-		offered: intersectCaps(platform, cap, sourceMode, resolvedModes),
-		deviceModes: resolvedModes,
-	};
+	return axesFromResolvedModes(
+		platform,
+		cap,
+		sourceMode,
+		resolveDeviceModes(source),
+	);
 }
 
 function offeredAxesFromPipeline(
@@ -453,15 +580,12 @@ function offeredAxesFromPipeline(
 		pipelineId && pipeline
 			? videoSourceCapFromPipeline(pipelineId, pipeline)
 			: undefined;
-	const resolvedModes = resolveDeviceModes(
-		deviceModes,
-		pipelineId,
-		selectedVideoInput,
+	return axesFromResolvedModes(
+		platform,
+		source,
+		mode,
+		resolveDeviceModes(deviceModes, pipelineId, selectedVideoInput),
 	);
-	return {
-		offered: intersectCaps(platform, source, mode, resolvedModes),
-		deviceModes: resolvedModes,
-	};
 }
 
 /** The framerate rungs the device modes can drive at one specific resolution. */
@@ -599,10 +723,11 @@ export const DEFAULT_ENCODE_FRAMERATE: Framerate = 30;
  * the operator re-decides it, never as a silent rewrite of their encode settings.
  *
  * An axis with NO stored value is different — there is no operator intent to
- * protect, only a hardcoded fallback. An HDMI receiver locked to 1080p59.94 offers
- * exactly ONE frame rate, so falling back to 30 opened the dialog already-invalid:
- * red FPS control, save blocked, and nothing the operator had done wrong. Such an
- * axis is reconciled onto what the source can actually drive.
+ * protect, only a hardcoded fallback. A source whose ceiling sits BELOW that
+ * fallback (a receiver locked to 480p25, a device that tops out at 720p) would
+ * otherwise open the dialog already-invalid: red control, save blocked, and
+ * nothing the operator had done wrong. Such an axis is reconciled onto what the
+ * source can actually drive.
  *
  * Reconciling is safe because a reconciled value is always one the source offers,
  * and unsupported options render `disabled` — so this can never overwrite a choice
@@ -714,8 +839,8 @@ export function axisCeiling(axes: OfferedAxes): AxisCeiling {
 					: undefined,
 		};
 	}
-	// Coarse fallback (no device modes): the independent-axes ceiling, BYTE-IDENTICAL
-	// to the pre-change behaviour.
+	// No per-resolution refinement: the independent-axes ceiling. Still exact for a
+	// single-signal source, whose axes were both capped at that one reported mode.
 	const { framerates } = offered;
 	return {
 		resolution,
