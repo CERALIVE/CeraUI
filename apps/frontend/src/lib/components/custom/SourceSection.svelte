@@ -26,7 +26,8 @@
 
   The audio selector block (embedded / read-only / selectable / none) stays exactly
   as before — audio devices are filtered out of `sources` by the backend, so this is
-  the ONLY audio surface here.
+  the ONLY audio surface here. It also carries the inline `LiveAudioMeter`, so the
+  level sits with the device it meters instead of in a separate page section.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
@@ -60,6 +61,7 @@ import { toast } from 'svelte-sonner';
 
 import Badge from '$lib/components/custom/Badge.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
+import LiveAudioMeter from '$lib/components/preview/LiveAudioMeter.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
 import * as Select from '$lib/components/ui/select';
@@ -1052,10 +1054,16 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									></Select.Item>
 								{/each}
 							</Select.Group>
-						{/if}
-					</Select.Content>
-				</Select.Root>
-			{/if}
+					{/if}
+				</Select.Content>
+			</Select.Root>
+		{/if}
+
+			<!-- Live level meter for the source picked directly above — a slim inline
+			     strip, not its own page section, so the bars sit next to the device
+			     they belong to. Always mounted: the meter's own unavailable copy is
+			     the honest answer when no level frame has arrived. -->
+			<LiveAudioMeter class="pt-0.5" />
 		</div>
 		{/if}
 	</Card.Content>

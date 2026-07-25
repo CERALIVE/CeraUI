@@ -38,6 +38,13 @@ vi.mock("$lib/rpc", () => ({
 	rpcClient: {},
 }));
 
+// The audio block now hosts the inline LiveAudioMeter, which reads the
+// `audio-level` broadcast. Stub the feed so these tests stay socket-free; the
+// meter's own states are covered by LiveAudioMeter.test.ts.
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
+	getAudioLevel: () => undefined,
+}));
+
 import {
 	destroyFieldSyncState,
 	getFieldState,
