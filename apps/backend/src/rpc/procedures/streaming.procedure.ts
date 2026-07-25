@@ -25,8 +25,6 @@ import {
 	type StreamingConfigInput,
 	SWITCH_AUDIO_ERRORS,
 	type SwitchInputOutput,
-	setAudioDeviceAliasInputSchema,
-	setAudioDeviceAliasOutputSchema,
 	setMockDeviceAttachedInputSchema,
 	setMockDeviceAttachedOutputSchema,
 	setMockHardwareInputSchema,
@@ -59,7 +57,6 @@ import {
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
-import { broadcastAudioSources } from "../../modules/streaming/audio.ts";
 import {
 	getResolvedAsrc,
 	refreshResolvedAsrcPreview,
@@ -667,36 +664,6 @@ export const setSourceVisibilityProcedure = authedProcedure
 		return {
 			success: true,
 			applied: { hide_test_pattern: input.hide_test_pattern },
-		};
-	});
-
-/**
- * Persist (or clear) one operator-assigned audio-device display name — the SINGLE
- * mutation path for `audio_device_aliases`. Presentation-only: `config.asrc` and
- * the engine's ALSA device path are never touched, so a rename can never break a
- * running or configured stream. Persist via the atomic saveConfig, then rebroadcast
- * BOTH the `status` audio surface (so every picker/HUD re-renders with the new
- * name immediately) and the `config` echo.
- */
-export const setAudioDeviceAliasProcedure = authedProcedure
-	.input(setAudioDeviceAliasInputSchema)
-	.output(setAudioDeviceAliasOutputSchema)
-	.handler(async ({ input }) => {
-		const config = getConfig();
-		const label = input.label.trim();
-		const aliases = { ...(config.audio_device_aliases ?? {}) };
-		if (label.length > 0) aliases[input.alias_key] = label;
-		else delete aliases[input.alias_key];
-		config.audio_device_aliases = aliases;
-		saveConfig();
-		broadcastMsg("config", config);
-		await broadcastAudioSources();
-		return {
-			success: true,
-			applied: {
-				alias_key: input.alias_key,
-				...(label.length > 0 ? { label } : {}),
-			},
 		};
 	});
 

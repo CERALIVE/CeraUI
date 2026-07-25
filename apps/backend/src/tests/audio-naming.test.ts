@@ -72,7 +72,9 @@ describe("resolveAudioLabels — 3-tier fallback (engine-join → longname → a
 			);
 		}).not.toThrow();
 		expect(labels?.get("USB audio")).toBe("USB audio");
-		expect(labels?.get("HDMI")).toBe("HDMI");
+		// `rockchiphdmiin` is covered by the static onboard rule, so it never
+		// reaches the tier-3 passthrough even with no longname and no engine entry.
+		expect(labels?.get("HDMI")).toBe("HDMI Input");
 	});
 
 	test("two identical labels dedupe with ' (2)' in stable card order", () => {
@@ -324,8 +326,8 @@ describe("deriveAudioSources — label attachment", () => {
 			"Pipeline default": "Pipeline default",
 		};
 		const displays = new Map([
-			["HDMI", { label: "Rockchip HDMI In", aliasKey: "card:rockchiphdmiin" }],
-			["USB audio", { label: "RØDE AI-Micro", aliasKey: "card:usbaudio" }],
+			["HDMI", { label: "Rockchip HDMI In" }],
+			["USB audio", { label: "RØDE AI-Micro" }],
 		]);
 		const sources = deriveAudioSources(devices, displays);
 
@@ -334,13 +336,11 @@ describe("deriveAudioSources — label attachment", () => {
 			id: "HDMI",
 			kind: "device",
 			label: "Rockchip HDMI In",
-			alias_key: "card:rockchiphdmiin",
 		});
 		expect(sources.find((s) => s.id === "USB audio")).toEqual({
 			id: "USB audio",
 			kind: "device",
 			label: "RØDE AI-Micro",
-			alias_key: "card:usbaudio",
 		});
 		expect(sources.find((s) => s.id === "No audio")?.label).toBeUndefined();
 		expect(
@@ -456,16 +456,13 @@ describe("device naming/identity (device-quality-wave2 Todo 22)", () => {
 		]);
 		const sources = deriveAudioSources(
 			{ "USB audio": "usbaudio", "No audio": "No audio" },
-			new Map([
-				["USB audio", { label: "RØDE NT-USB", aliasKey: "card:usbaudio" }],
-			]),
+			new Map([["USB audio", { label: "RØDE NT-USB" }]]),
 			identities,
 		);
 		expect(sources.find((s) => s.id === "USB audio")).toEqual({
 			id: "USB audio",
 			kind: "device",
 			label: "RØDE NT-USB",
-			alias_key: "card:usbaudio",
 			product_name: "RØDE NT-USB",
 			transport: "usb",
 			stable_id: "card:usbaudio",
@@ -609,7 +606,8 @@ describe("resolveAudioLabels — tier-3 alias-fallback diagnostic (one-shot per 
 			[],
 			new Map(),
 		);
-		expect(labels.get("HDMI")).toBe("HDMI");
+		// The static onboard rule names it; the tier-3 diagnostic is usbaudio-only.
+		expect(labels.get("HDMI")).toBe("HDMI Input");
 		expect(diagnosticRecords()).toHaveLength(0);
 	});
 

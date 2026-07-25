@@ -209,10 +209,6 @@ export function deriveAudioSources(
 			kind: "device",
 			...(label !== undefined ? { label } : {}),
 			...(display?.detail !== undefined ? { detail: display.detail } : {}),
-			...(display?.aliasKey !== undefined
-				? { alias_key: display.aliasKey }
-				: {}),
-			...(display?.alias !== undefined ? { alias: display.alias } : {}),
 			...(identity?.product_name !== undefined
 				? { product_name: identity.product_name }
 				: {}),
@@ -252,19 +248,10 @@ async function resolveAudioDisplaysForTick(
 		const text = await readTextFile(PROC_ASOUND_CARDS);
 		if (text !== undefined) longnames = parseAsoundCards(text);
 	}
-	return resolveAudioDisplays(
-		devices,
-		getEngineAudioDevices(),
-		longnames,
-		getConfig().audio_device_aliases ?? {},
-	);
+	return resolveAudioDisplays(devices, getEngineAudioDevices(), longnames);
 }
 
-/**
- * Re-resolve every audio label/detail/alias and push the `status` audio surface.
- * Called on every device re-enumeration AND after an operator rename, so a new
- * custom name lands live without waiting for a hotplug tick.
- */
+/** Re-resolve every audio label/detail and push the `status` audio surface. */
 export async function broadcastAudioSources(): Promise<void> {
 	lastAudioDisplays = await resolveAudioDisplaysForTick(audioDevices);
 	lastAudioIdentities = resolveAudioIdentities(

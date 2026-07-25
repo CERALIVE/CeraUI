@@ -15,10 +15,10 @@
  */
 import { describe, expect, test } from "bun:test";
 import {
-	audioAliasKey,
 	cleanAudioDeviceName,
 	type EngineAudioDevice,
 	resolveAudioDisplays,
+	resolveOnboardDisplayName,
 } from "../modules/streaming/audio-naming.ts";
 
 const RODE_LONGNAME =
@@ -113,20 +113,30 @@ describe("cleanAudioDeviceName — duplicated manufacturer prefix", () => {
 	});
 });
 
-describe("audioAliasKey — stable identity, never the bus path", () => {
-	test("prefers the engine stable_id", () => {
-		expect(audioAliasKey("usbaudio", "usb:19f7:0080:OC0001967")).toBe(
-			"usb:19f7:0080:OC0001967",
-		);
+describe("resolveOnboardDisplayName — static, code-level rules", () => {
+	test("names the RK3588 HDMI-RX card from its ALSA card id", () => {
+		expect(resolveOnboardDisplayName("rockchiphdmiin")).toBe("HDMI Input");
 	});
 
-	test("falls back to the namespaced ALSA card id", () => {
-		expect(audioAliasKey("MINI")).toBe("card:MINI");
-		expect(audioAliasKey("MINI", "")).toBe("card:MINI");
+	test("matches the same block through its raw driver/longname spelling", () => {
+		for (const raw of [
+			"rockchip,hdmiin",
+			"rockchip_hdmiin",
+			"ROCKCHIP-HDMIIN",
+		]) {
+			expect(resolveOnboardDisplayName("whatever", raw)).toBe("HDMI Input");
+		}
 	});
 
-	test("never contains the volatile USB bus path", () => {
-		expect(audioAliasKey("usbaudio")).not.toContain("usb-xhci-hcd");
+	test("names the onboard analog codec", () => {
+		expect(resolveOnboardDisplayName("rockchipes8388")).toBe("Onboard Audio");
+	});
+
+	test("leaves an external device alone — no rule, no rewrite", () => {
+		expect(
+			resolveOnboardDisplayName("usbaudio", RODE_LONGNAME),
+		).toBeUndefined();
+		expect(resolveOnboardDisplayName("MINI", DJI_LONGNAME)).toBeUndefined();
 	});
 });
 
@@ -160,92 +170,68 @@ describe("resolveAudioDisplays — the live board scenario", () => {
 		);
 		expect(display?.label).toBe("RØDE HDMI to USB-C");
 		expect(display?.detail).toBe(RODE_LONGNAME);
-		expect(display?.aliasKey).toBe("card:usbaudio");
-		expect(display?.alias).toBeUndefined();
 	});
 
 	test("cleans the tier-2 leak (DJI Mic Mini) with no engine entry at all", () => {
 		const display = resolveAudioDisplays(cards, engine, longnames).get("MINI");
 		expect(display?.label).toBe("DJI MIC MINI");
 		expect(display?.detail).toBe(DJI_LONGNAME);
-		expect(display?.aliasKey).toBe("card:MINI");
 	});
 
-	test("leaves a longname that needs no cleaning untouched and detail-free", () => {
+	test("names the onboard HDMI-RX card by rule, keeping the raw id as detail", () => {
 		const display = resolveAudioDisplays(cards, engine, longnames).get("HDMI");
-		expect(display?.label).toBe("rockchip,hdmiin");
-		expect(display?.detail).toBeUndefined();
+		expect(display?.label).toBe("HDMI Input");
+		expect(display?.detail).toBe("rockchip,hdmiin");
 	});
 });
 
-describe("resolveAudioDisplays — tier-0 operator alias", () => {
-	const cards = { "USB audio": "usbaudio", MINI: "MINI" };
+describe("resolveAudioDisplays — onboard rules are code-level, not operator input", () => {
+	const cards = {
+		HDMI: "rockchiphdmiin",
+		"USB audio": "usbaudio",
+		MINI: "MINI",
+	};
 	const longnames = new Map([
+		["rockchiphdmiin", "rockchip,hdmiin"],
 		["usbaudio", RODE_LONGNAME],
 		["MINI", DJI_LONGNAME],
 	]);
 
-	test("an alias outranks every hardware-derived tier", () => {
-		const display = resolveAudioDisplays(cards, [], longnames, {
-			"card:MINI": "Presenter mic",
-		}).get("MINI");
-		expect(display?.label).toBe("Presenter mic");
-		expect(display?.alias).toBe("Presenter mic");
+	test("a rule applies to its own card only — it never bleeds across cards", () => {
+		const displays = resolveAudioDisplays(cards, [], longnames);
+		expect(displays.get("HDMI")?.label).toBe("HDMI Input");
+		expect(displays.get("USB audio")?.label).toBe("RØDE HDMI to USB-C");
+		expect(displays.get("MINI")?.label).toBe("DJI MIC MINI");
 	});
 
-	test("the replaced hardware name survives as detail", () => {
-		const display = resolveAudioDisplays(cards, [], longnames, {
-			"card:MINI": "Presenter mic",
-		}).get("MINI");
-		expect(display?.detail).toBe(DJI_LONGNAME);
-	});
-
-	test("an alias keyed on the engine stable_id applies to its card", () => {
+	test("the rule wins over an engine-supplied name for the same card", () => {
 		const engine: EngineAudioDevice[] = [
 			{
-				input_id: "audio:usbaudio",
-				display_name: RODE_LONGNAME,
-				alsa_card_id: "usbaudio",
-				stable_id: "usb:19f7:0080:OC0001967",
+				input_id: "audio:rockchiphdmiin",
+				display_name: "rockchip,hdmiin",
+				alsa_card_id: "rockchiphdmiin",
+				product_name: "rk_hdmiin",
+				transport: "hdmi",
 			},
 		];
-		const display = resolveAudioDisplays(cards, engine, longnames, {
-			"usb:19f7:0080:OC0001967": "Camera A",
-		}).get("USB audio");
-		expect(display?.label).toBe("Camera A");
+		const display = resolveAudioDisplays(cards, engine, longnames).get("HDMI");
+		expect(display?.label).toBe("HDMI Input");
+		expect(display?.detail).toBe("rk_hdmiin");
 	});
 
-	test("an alias for another device never bleeds across cards", () => {
-		const displays = resolveAudioDisplays(cards, [], longnames, {
-			"card:MINI": "Presenter mic",
-		});
-		expect(displays.get("USB audio")?.label).toBe("RØDE HDMI to USB-C");
-		expect(displays.get("USB audio")?.alias).toBeUndefined();
+	test("a card with no rule and no cleanable name is passed through verbatim", () => {
+		const displays = resolveAudioDisplays({ Odd: "oddcard" }, [], new Map());
+		expect(displays.get("Odd")?.label).toBe("Odd");
+		expect(displays.get("Odd")?.detail).toBeUndefined();
 	});
 
-	test("a blank/whitespace alias is ignored — the hardware name is restored", () => {
-		for (const blank of ["", "   "]) {
-			const display = resolveAudioDisplays(cards, [], longnames, {
-				"card:MINI": blank,
-			}).get("MINI");
-			expect(display?.label).toBe("DJI MIC MINI");
-			expect(display?.alias).toBeUndefined();
-		}
-	});
-
-	test("an alias for a device that is not present is simply unused", () => {
-		const displays = resolveAudioDisplays(cards, [], longnames, {
-			"card:GONE": "Unplugged mic",
-		});
-		expect([...displays.keys()]).toEqual(["USB audio", "MINI"]);
-	});
-
-	test("two devices renamed to the SAME label still dedupe", () => {
-		const displays = resolveAudioDisplays(cards, [], longnames, {
-			"card:usbaudio": "Mic",
-			"card:MINI": "Mic",
-		});
-		expect(displays.get("USB audio")?.label).toBe("Mic");
-		expect(displays.get("MINI")?.label).toBe("Mic (2)");
+	test("two cards resolving to the same name still dedupe", () => {
+		const displays = resolveAudioDisplays(
+			{ A: "rockchiphdmiin", B: "rockchiphdmiind" },
+			[],
+			new Map(),
+		);
+		expect(displays.get("A")?.label).toBe("HDMI Input");
+		expect(displays.get("B")?.label).toBe("HDMI Input (2)");
 	});
 });

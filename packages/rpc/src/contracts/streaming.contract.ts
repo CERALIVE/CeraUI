@@ -14,8 +14,6 @@ import {
 	pipelinesSchema,
 	reloadAudioDelayInputSchema,
 	reloadAudioDelayOutputSchema,
-	setAudioDeviceAliasInputSchema,
-	setAudioDeviceAliasOutputSchema,
 	setMockDeviceAttachedInputSchema,
 	setMockDeviceAttachedOutputSchema,
 	setMockHardwareInputSchema,
@@ -77,16 +75,6 @@ export const streamingContract = oc.router({
 	setSourceVisibility: oc
 		.input(setSourceVisibilityInputSchema)
 		.output(setSourceVisibilityOutputSchema),
-
-	/**
-	 * Assign (or clear, with an empty label) a custom display name for one audio
-	 * device, keyed on its stable identity. Persists `audio_device_aliases` and
-	 * rebroadcasts `status` + `config`. The single mutation path for audio-device
-	 * renames; never `setConfig`.
-	 */
-	setAudioDeviceAlias: oc
-		.input(setAudioDeviceAliasInputSchema)
-		.output(setAudioDeviceAliasOutputSchema),
 
 	/**
 	 * Subscribe to streaming status changes

@@ -58,6 +58,7 @@ import {
 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import Badge from '$lib/components/custom/Badge.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
@@ -81,6 +82,7 @@ import {
 	deriveCapabilitySummary,
 	formatCodec,
 	groupAudioSources,
+	isExternalAudioSource,
 	resolveAudioSourceList,
 	resolveAudioSourceMode,
 	resolveDisplayedAudioSource,
@@ -408,6 +410,11 @@ const displayedAudioLabel = $derived(
 // Raw hardware descriptor (bus path / link speed / full legal name) — a tooltip,
 // never the primary label.
 const displayedAudioDetail = $derived(displayedAudioEntry?.detail);
+// Read-only marker: this device is a pluggable accessory, not an onboard block.
+// Driven by the engine `transport` field — never re-derived from the bus path.
+const displayedAudioExternal = $derived(
+	displayedAudioEntry !== undefined && isExternalAudioSource(displayedAudioEntry),
+);
 const notAvailableAudioSource = $derived(
 	displayedAudioSource && !pickerEntries.some((e) => e.id === displayedAudioSource)
 		? displayedAudioSource
@@ -948,6 +955,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					<span class="truncate font-mono text-sm">
 						{displayedAudioLabel ?? $LL.live.source.audioNone()}
 					</span>
+					{#if displayedAudioExternal}
+						<Badge
+							data-testid="audio-source-external"
+							label={$LL.settings.audioDeviceExternal()}
+							size="micro"
+							title={$LL.settings.audioDeviceExternalHint()}
+							variant="info"
+						/>
+					{/if}
 					{#if notAvailableAudioSource}
 						<span
 							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
@@ -974,7 +990,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								{`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
 							</span>
 						{:else}
-							{displayedAudioLabel ?? $LL.settings.selectAudioSource()}
+							<span class="flex min-w-0 items-center gap-2">
+								<span class="truncate">{displayedAudioLabel ?? $LL.settings.selectAudioSource()}</span>
+								{#if displayedAudioExternal}
+									<Badge
+										data-testid="audio-source-external"
+										label={$LL.settings.audioDeviceExternal()}
+										size="micro"
+										variant="info"
+									/>
+								{/if}
+							</span>
 						{/if}
 					</Select.Trigger>
 					<Select.Content>
@@ -990,7 +1016,19 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									label={audioSourceLabel(entry, t)}
 									title={entry.detail}
 									value={entry.id}
-								></Select.Item>
+								>
+									<span class="flex min-w-0 items-center gap-2">
+										<span class="truncate">{audioSourceLabel(entry, t)}</span>
+										{#if isExternalAudioSource(entry)}
+											<Badge
+												data-testid="audio-option-external-{entry.id}"
+												label={$LL.settings.audioDeviceExternal()}
+												size="micro"
+												variant="info"
+											/>
+										{/if}
+									</span>
+								</Select.Item>
 							{/each}
 							{#if notAvailableAudioSource}
 								<Select.Item

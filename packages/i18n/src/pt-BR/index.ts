@@ -505,11 +505,9 @@ const ptBR = {
 		audioSource: "Fonte de Áudio",
 		activeAudioSource: "Fonte de áudio ativa",
 		changeAudioSourceHint: "Altere na seção Fonte",
-		audioDeviceName: "Nome de exibição",
-		audioDeviceNameHelp:
-			"Um nome personalizado para este dispositivo de áudio. É lembrado pela identidade do hardware, então sobrevive a desconexões ou reinicializações.",
-		audioDeviceNamePlaceholder: "ex. Microfone entrevista",
-		audioDeviceNameReset: "Deixe vazio para usar o nome do hardware.",
+		audioDeviceExternal: "Externo",
+		audioDeviceExternalHint:
+			"Um acessório conectável, não integrado a este dispositivo.",
 		noAudioSourceSelected: "Nenhuma fonte de áudio selecionada",
 		notAvailableAudioSource: "Não disponível",
 		selectAudioSource: "Selecione uma fonte de áudio",

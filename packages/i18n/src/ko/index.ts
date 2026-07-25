@@ -342,11 +342,9 @@ const ko = {
 		audioSource: "오디오 소스",
 		activeAudioSource: "활성 오디오 소스",
 		changeAudioSourceHint: "소스 섹션에서 변경하세요",
-		audioDeviceName: "표시 이름",
-		audioDeviceNameHelp:
-			"이 오디오 장치의 사용자 지정 이름입니다. 하드웨어 식별자로 저장되므로 분리하거나 재부팅해도 유지됩니다.",
-		audioDeviceNamePlaceholder: "예: 인터뷰 마이크",
-		audioDeviceNameReset: "비워 두면 하드웨어 이름을 사용합니다.",
+		audioDeviceExternal: "외장",
+		audioDeviceExternalHint:
+			"기기에 내장된 것이 아니라 연결해서 쓰는 액세서리입니다.",
 		noAudioSourceSelected: "선택된 오디오 소스 없음",
 		selectAudioSource: "오디오 소스 선택",
 		notAvailableAudioSource: "사용할 수 없음",

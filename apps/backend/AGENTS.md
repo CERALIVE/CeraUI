@@ -63,8 +63,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
-| **Audio-naming resolution (4-tier: operator alias → engine join → ALSA longname → generic alias) + name cleaning + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
-| **Audio-device rename persistence (`config.audio_device_aliases`, stable-id keyed)** | `modules/streaming/audio-naming.ts` (`audioAliasKey`) + `rpc/procedures/streaming.procedure.ts` (`setAudioDeviceAlias`) |
+| **Audio-naming resolution (4-tier: static onboard rule → engine join → ALSA longname → generic alias) + name cleaning + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
+| **Static onboard display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
 | Mock hardware data | `mocks/providers/` |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
@@ -81,7 +81,6 @@ The `streaming` router exposes these procedures:
 | `getPipelines()` | List available capture sources, derived from the capability contract (`getCapabilities`) — NOT the `pipeline-sources.ts` tables directly |
 | `getAudioCodecs()` | List available audio codecs |
 | `getConfig()` | Return current config snapshot |
-| `setAudioDeviceAlias({alias_key, label})` | Persist/clear one operator-assigned audio-device display name |
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
 
@@ -93,10 +92,15 @@ tier-3 diagnostic below) and runs a **4-tier** ladder:
 
 | Tier | Source |
 |------|--------|
-| **0** | an operator alias from `config.audio_device_aliases`, keyed on stable identity |
+| **0** | a STATIC, code-level display-name rule for a known ONBOARD card (`ONBOARD_AUDIO_DISPLAY_RULES`) |
 | 1 | the engine `list-devices` entry joined on `alsa_card_id` (`product_name`, then `display_name`), each gated by `isHumanAudioName()` |
 | 2 | the `/proc/asound/cards` longname |
 | 3 | the current generic alias/name (byte-identical fallback) |
+
+**There is NO operator rename anywhere in CeraUI.** No text field, no RPC, no
+config field, for any device. Device naming is either the cleaned hardware name
+(tiers 1-2) or a code-level rule (tier 0) reviewed like any other source change.
+Do not re-add an alias/rename surface.
 
 **Tiers 1 and 2 both carry RAW device strings and are CLEANED before display.**
 On Linux both are literally the ALSA longname — `sound/usb/card.c` appends
@@ -120,30 +124,39 @@ in between; any other token BLOCKS the collapse, so `"Blue Microphones Yeti Blue
 is left alone. Diacritics are not folded (`Rode` ≠ `RØDE`) — a wrong collapse
 silently mangles a real product name.
 
-**The raw string is moved, never deleted.** It rides `AudioSource.detail`
-(diagnostic-only: a tooltip on the picker rows and a secondary line under the
-rename input) so the bus path, link speed, and full legal manufacturer name stay
-available for debugging. `detail` is absent when the raw string needed no cleaning.
+**Tier 0 — static onboard display-name rules.** Cleaning cannot help a card whose
+only hardware string is a raw driver id: the RK3588 HDMI-RX capture card reports
+`rockchip,hdmiin` through every tier (engine, longname, and card id alike), and
+there is nothing human in it to recover. `ONBOARD_AUDIO_DISPLAY_RULES` maps such
+a card to a fixed operator-facing name (`rockchiphdmiin` → `HDMI Input`,
+`rockchipes8388` → `Onboard Audio`). Keys are normalized through
+`normalizeCardKey` (punctuation + case folded), so ONE entry matches every
+spelling of the same block — the ALSA card id `rockchiphdmiin`, the driver name
+`rockchip_hdmiin`, and the longname `rockchip,hdmiin`. `resolveOnboardDisplayName`
+probes the card id first, then the raw hardware string. Only cards that can
+actually REACH the picker are listed — `updateAudioDevices` already excludes the
+HDMI-output and codec-playback cards. Adding a board is a code change.
 
-**Renames (`config.audio_device_aliases`).** `audioAliasKey(cardId, stableId)`
-returns `stable_id` when the engine published one, else `card:<alsaCardId>` —
-**NEVER the USB bus path**, which changes on every replug/reboot. The
-`streaming.setAudioDeviceAlias` RPC is the SINGLE mutation path (`setConfig`
-strips the field): it persists via the atomic `saveConfig`, then rebroadcasts
-`config` + the `status` audio surface via `broadcastAudioSources()` so a rename
-lands live without waiting for a hotplug tick. An empty/whitespace label CLEARS
-the alias. It is **presentation-only** — `config.asrc` and the engine's ALSA
-device path are never touched, so a rename can never break a configured or
-running stream. Verified on hardware across a service restart AND a real USB
-re-enumeration.
+**The raw string is moved, never deleted.** It rides `AudioSource.detail`
+(diagnostic-only: a tooltip on the picker rows and the read-only source line) so
+the bus path, link speed, full legal manufacturer name, and the raw driver id a
+tier-0 rule replaced all stay available for debugging. `detail` is absent when the
+resolved name is already the raw string.
+
+**External vs onboard is a READ-ONLY marker, derived from `transport`.** The
+engine's `transport` field (`usb` / `hdmi` / `bluetooth` / `onboard`, corrected in
+cerastream PR #69) rides `AudioSource.transport` through `resolveAudioIdentities`
+unchanged. The frontend turns `usb`/`bluetooth` into an "External" badge
+(`isExternalAudioSource`, `apps/frontend/src/lib/streaming/sourceSummary.ts`).
+NEVER re-derive external-ness from bus-path string matching — the engine reports
+it correctly.
 
 `deriveAudioSources()` defaults its display/identity args to the last resolved
 maps, so the pull-based `status` snapshots (`modules/ui/status.ts`,
-`rpc/procedures/status.procedure.ts`) serve the same labels/aliases as the push
+`rpc/procedures/status.procedure.ts`) serve the same labels as the push
 broadcast instead of falling back to the bare asrc key.
 
-Coverage: `tests/audio-device-naming-cleanup.test.ts`,
-`tests/audio-device-alias-rpc.test.ts`, `tests/audio-naming.test.ts`.
+Coverage: `tests/audio-device-naming-cleanup.test.ts`, `tests/audio-naming.test.ts`.
 
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
@@ -924,4 +937,5 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 - Don't multiplex the control channel onto the BCRPT relay socket — the two channels are independent by design (different token audiences, different endpoints, different authority models).
 - Don't add secret-bearing event types to `RELAYABLE_TYPES` — the no-secrets contract test will catch it.
 - Don't delete the `devices`/`pipelines` broadcasts or the `capabilities.device_modes` field yet — they're deprecation shims kept for one release (`TD-legacy-source-broadcasts`); route new consumers through `getSources()`/the `sources` broadcast instead.
+- Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.

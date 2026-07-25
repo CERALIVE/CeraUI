@@ -116,23 +116,44 @@ const AUDIO_TRANSPORT_TAG: Record<
 };
 
 /**
+ * Physical transports that mean "pluggable external accessory" rather than an
+ * onboard SoC block. Sourced from the engine's `transport` field (cerastream
+ * PR #69), NEVER re-derived from bus-path string matching.
+ */
+const EXTERNAL_AUDIO_TRANSPORTS: ReadonlySet<
+	NonNullable<AudioSource["transport"]>
+> = new Set(["usb", "bluetooth"]);
+
+/**
+ * Whether an audio entry is a pluggable external accessory. Informational only —
+ * it drives a read-only "External" badge, never a gate or a rename affordance.
+ */
+export function isExternalAudioSource(entry: AudioSource): boolean {
+	return (
+		entry.kind === "device" &&
+		entry.transport !== undefined &&
+		EXTERNAL_AUDIO_TRANSPORTS.has(entry.transport)
+	);
+}
+
+/**
  * Display label for an audio-source entry. Preference order:
- *   1. `entry.alias` — the operator's own name for this device. An explicit
- *      rename outranks every hardware-derived name, including `product_name`.
- *   2. `<product_name> · <TRANSPORT>` (device-quality-wave2 Todo 22) — the real
+ *   1. `<product_name> · <TRANSPORT>` (device-quality-wave2 Todo 22) — the real
  *      engine product name + its transport tag; the transport is appended only
  *      when a product name is present (a bare tag is meaningless).
- *   3. `entry.label` — the cleaned hardware name resolved by the backend (T4);
- *      NEVER translated.
- *   4. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
+ *   2. `entry.label` — the cleaned hardware name resolved by the backend (T4);
+ *      NEVER translated. Onboard cards get a static rule-based name here.
+ *   3. `entry.labelKey` — the translated pseudo-source label (Auto / No audio /
  *      Pipeline default).
- *   5. `entry.id` — the raw wire id, for a legacy device entry with no label.
+ *   4. `entry.id` — the raw wire id, for a legacy device entry with no label.
+ *
+ * There is deliberately no operator-rename tier: CeraUI exposes no way to type a
+ * custom name for a device.
  */
 export function audioSourceLabel(
 	entry: AudioSource,
 	t: (key: string) => string,
 ): string {
-	if (entry.alias !== undefined && entry.alias.length > 0) return entry.alias;
 	if (entry.product_name !== undefined && entry.product_name.length > 0) {
 		const tag =
 			entry.transport !== undefined
