@@ -40,6 +40,7 @@ import {
 	getEngineDeviceCache,
 	getSessionSeenDeviceSnapshots,
 	getSourcesMessage,
+	mergeObservedWithProbe,
 	refreshAndBroadcastSources,
 	refreshEngineDeviceCache,
 	refreshSourcesForHotplug,
@@ -881,5 +882,223 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 		// The PR #214 observed-fallback is still correct — it just belongs to the
 		// generation that owns the current view, not to a superseded one.
 		expect(getEngineDeviceCache().map((d) => d.input_id)).toEqual(["video0"]);
+	});
+});
+
+// ─── replug: a probe that cannot speak for the device must not DEGRADE it ─────
+//
+// The live RØDE reconnect regression. #214/#215 made the replugged device stay
+// PRESENT; this is about it staying ITSELF. The local scan can only guess a kind
+// from the card name (`deriveKind`), and for a UVC dongle the guess is `usb` —
+// which bridges to NO pipeline, so `buildSources` drops the row entirely and the
+// coarse `usb_mjpeg` slot renders "USB MJPEG / not connected" instead. It is
+// permanent for the same reason #215 was: nothing re-pokes a stable device set.
+
+describe("refreshSourcesForHotplug — a replug the probe has not caught up with keeps its engine identity", () => {
+	// Byte-exact strings from the bug hardware (Rock 5B+). The v4l2 card name
+	// (`/sys/class/video4linux/video1/name`) and the engine's `display_name` are
+	// the SAME kernel string — that is what makes the name a sound identity gate.
+	const RODE_NAME = "RØDE HDMI to USB-C: RØDE HDMI";
+	const RODE_STABLE_ID = "usb:19f7:0080:RØDE_RØDE_HDMI_to_USB-C_OC0001967";
+
+	beforeEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		getConfig().last_seen_devices = [];
+		delete getConfig().source;
+	});
+
+	afterEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		getConfig().last_seen_devices = [];
+		delete getConfig().source;
+	});
+
+	function engineHdmiRx(): ListDevicesResult["devices"][number] {
+		return {
+			input_id: "/dev/video0",
+			device_path: "/dev/video0",
+			display_name: "rk_hdmirx",
+			media_class: "video",
+			kind: "hdmi",
+		};
+	}
+
+	function engineRode(): ListDevicesResult["devices"][number] {
+		return {
+			input_id: "/dev/video1",
+			device_path: "/dev/video1",
+			display_name: RODE_NAME,
+			media_class: "video",
+			kind: "mjpeg",
+			stable_id: RODE_STABLE_ID,
+			caps: [
+				{
+					media_type: "video/x-raw",
+					width: 1920,
+					height: 1080,
+					framerate: "30/1",
+				},
+			],
+		};
+	}
+
+	// What the v4l2 fallback scan sees: real card names, GUESSED kinds.
+	function scannedHdmiRx(): CaptureDevice {
+		return captureDevice("/dev/video0", "hdmi", {
+			device_path: "/dev/video0",
+			display_name: "stream_hdmirx",
+		});
+	}
+	function scannedRode(): CaptureDevice {
+		return captureDevice("/dev/video1", "usb", {
+			device_path: "/dev/video1",
+			display_name: RODE_NAME,
+		});
+	}
+
+	async function seedHdmiAndMjpegCaps(): Promise<void> {
+		await getCapabilities({
+			fetchEngineCapabilities: async () => ({
+				caps: {
+					platform: {
+						supports_h265: true,
+						hardware_accelerated: true,
+						max_resolution: "1080p",
+					},
+					encoder: {
+						codecs: ["h264"],
+						bitrate_range: { min: 500, max: 20000, unit: "kbps" },
+					},
+					sources: [capSource("hdmi"), capSource("usb_mjpeg")],
+				},
+				schemaVersion: SCHEMA_VERSION,
+			}),
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+	}
+
+	async function seedThenUnplugRode(): Promise<void> {
+		await seedHdmiAndMjpegCaps();
+		getConfig().source = "/dev/video1";
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({
+				devices: [engineHdmiRx(), engineRode()],
+			}),
+		});
+		await refreshSourcesForHotplug([scannedHdmiRx()], {
+			fetchEngineDevices: async () => ({ devices: [engineHdmiRx()] }),
+		});
+		expect(
+			getSourcesMessage().sources.find((s) => s.id === "/dev/video1")?.lost,
+		).toBe(true);
+	}
+
+	it("a replugged device the probe still omits keeps its engine kind, name and stable id — never a coarse 'not connected' row", async () => {
+		await seedThenUnplugRode();
+
+		// The node is back and the scan proves it, but the engine's list-devices
+		// has not caught up with the re-enumeration yet.
+		await refreshSourcesForHotplug([scannedHdmiRx(), scannedRode()], {
+			fetchEngineDevices: async () => ({ devices: [engineHdmiRx()] }),
+		});
+
+		const sources = getSourcesMessage().sources;
+		const rode = sources.find((s) => s.id === "/dev/video1");
+		expect(rode?.origin).toBe("capture");
+		expect(rode?.available).toBe(true);
+		expect(rode?.lost).toBeUndefined();
+		if (rode?.origin === "capture") {
+			expect(rode.displayName).toBe(RODE_NAME);
+			expect(rode.kind).toBe("mjpeg");
+			expect(rode.stableId).toBe(RODE_STABLE_ID);
+		}
+		// the coarse slot it bridges to is REPLACED, not left rendering
+		// "USB MJPEG · not connected" beside a vanished device.
+		expect(
+			sources.some((s) => s.origin === "coarse" && s.id === "usb_mjpeg"),
+		).toBe(false);
+	});
+
+	it("the same restoration applies when the probe FAILS outright (the #214 observed-fallback branch)", async () => {
+		await seedThenUnplugRode();
+
+		await refreshSourcesForHotplug([scannedHdmiRx(), scannedRode()], {
+			fetchEngineDevices: async () => {
+				throw new Error("engine unavailable");
+			},
+		});
+
+		const rode = getSourcesMessage().sources.find(
+			(s) => s.id === "/dev/video1",
+		);
+		expect(rode?.origin).toBe("capture");
+		expect(rode?.available).toBe(true);
+		if (rode?.origin === "capture") expect(rode.kind).toBe("mjpeg");
+	});
+
+	it("a DIFFERENT device recycling the same node path is never given the old identity", async () => {
+		await seedThenUnplugRode();
+
+		// The kernel handed /dev/video1 to something else entirely.
+		await refreshSourcesForHotplug(
+			[
+				scannedHdmiRx(),
+				captureDevice("/dev/video1", "usb", {
+					device_path: "/dev/video1",
+					display_name: "Generic USB Camera",
+				}),
+			],
+			{ fetchEngineDevices: async () => ({ devices: [engineHdmiRx()] }) },
+		);
+
+		const cached = getEngineDeviceCache().find(
+			(d) => d.input_id === "/dev/video1",
+		);
+		expect(cached?.display_name).toBe("Generic USB Camera");
+		expect(cached?.kind).toBe("usb");
+		expect(cached?.stable_id).toBeUndefined();
+	});
+
+	it("a live probe entry still wins outright over the remembered one", async () => {
+		await seedThenUnplugRode();
+
+		await refreshSourcesForHotplug([scannedHdmiRx(), scannedRode()], {
+			fetchEngineDevices: async () => ({
+				devices: [
+					engineHdmiRx(),
+					{ ...engineRode(), display_name: "RØDE (renamed by the engine)" },
+				],
+			}),
+		});
+
+		const cached = getEngineDeviceCache().find(
+			(d) => d.input_id === "/dev/video1",
+		);
+		expect(cached?.display_name).toBe("RØDE (renamed by the engine)");
+	});
+
+	it("mergeObservedWithProbe restores only from the map it is handed (pure)", () => {
+		const remembered = new Map<string, CaptureDevice>([
+			[
+				"/dev/video1",
+				captureDevice("/dev/video1", "mjpeg", {
+					device_path: "/dev/video1",
+					display_name: RODE_NAME,
+				}),
+			],
+		]);
+		const merged = mergeObservedWithProbe(
+			[scannedRode()],
+			[],
+			remembered,
+		) as CaptureDevice[];
+		expect(merged.map((d) => d.kind)).toEqual(["mjpeg"]);
+
+		// with no memory to draw on, the observation passes through untouched.
+		expect(
+			mergeObservedWithProbe([scannedRode()], [], new Map()).map((d) => d.kind),
+		).toEqual(["usb"]);
 	});
 });

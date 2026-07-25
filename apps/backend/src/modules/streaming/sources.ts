@@ -578,6 +578,18 @@ let engineDeviceCache: CaptureDevice[] = [];
 // copy — because those all drop the join key. `buildSources` never reads it.
 let engineAudioDeviceCache: EngineAudioDevice[] = [];
 
+// The last ENGINE-AUTHORED row for every video device this process has probed,
+// keyed by `input_id`. Monotonic like `sessionSeenDeviceSnapshots` — a device
+// leaving the list must NOT erase what the engine told us about it, because the
+// case this exists for is precisely a device that left and came back.
+//
+// The local v4l2 scan reads a truthful card NAME but can only GUESS a kind from
+// it (`deriveKind`), and for a UVC dongle that guess is `usb`, which bridges to
+// no pipeline at all — so a row the scan alone vouches for silently disappears
+// from `buildSources` and its coarse slot renders "not connected" instead. This
+// map is what turns that guess back into the engine's own answer.
+const lastEngineVideoDevices = new Map<string, CaptureDevice>();
+
 /** The persisted last-seen list cap (C7). The current `config.source` id is
  *  exempt from eviction, so the configured device's snapshot survives churn. */
 const LAST_SEEN_DEVICES_CAP = 12;
@@ -707,18 +719,20 @@ async function probeEngineDevices(
 ): Promise<EngineDeviceProbe | undefined> {
 	try {
 		const result = await deps.fetchEngineDevices();
+		const devices = result.devices.map((d) =>
+			fromEngineDevice({
+				input_id: d.input_id,
+				device_path: d.device_path,
+				display_name: d.display_name,
+				media_class: d.media_class,
+				kind: d.kind,
+				caps: d.caps,
+				stable_id: d.stable_id,
+			}),
+		);
+		rememberEngineVideoDevices(devices);
 		return {
-			devices: result.devices.map((d) =>
-				fromEngineDevice({
-					input_id: d.input_id,
-					device_path: d.device_path,
-					display_name: d.display_name,
-					media_class: d.media_class,
-					kind: d.kind,
-					caps: d.caps,
-					stable_id: d.stable_id,
-				}),
-			),
+			devices,
 			// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
 			// that PRESERVES the `alsa_card_id` join key verbatim. It is read
 			// defensively (the pre-T18 binding schema strips it → `undefined`; the
@@ -758,6 +772,38 @@ async function probeEngineDevices(
 		);
 		return undefined;
 	}
+}
+
+function rememberEngineVideoDevices(devices: readonly CaptureDevice[]): void {
+	for (const device of devices) {
+		if (device.media_class !== "video") continue;
+		lastEngineVideoDevices.set(device.input_id, device);
+	}
+}
+
+/**
+ * Restore the last engine-authored row for an observed video device the current
+ * probe cannot speak for — the same rule as "a probe entry matching an observed
+ * `input_id` wins outright", applied to a REMEMBERED probe entry when there is
+ * no current one.
+ *
+ * GUARDED BY DISPLAY NAME, not by `input_id` alone: the kernel recycles node
+ * paths, so `/dev/video1` after an unplug may be a different device entirely,
+ * and inheriting an identity is worse than showing a coarse one. Both lists
+ * derive the name from the SAME kernel string — verified on the bug hardware,
+ * where `/sys/class/video4linux/video1/name` and the engine's `display_name` are
+ * byte-identical — so an equal name is real evidence of the same device, and an
+ * unequal one leaves the observation exactly as it was.
+ */
+function withKnownEngineMetadata(
+	observed: CaptureDevice,
+	known: ReadonlyMap<string, CaptureDevice>,
+): CaptureDevice {
+	if (observed.media_class !== "video") return observed;
+	const remembered = known.get(observed.input_id);
+	if (remembered === undefined) return observed;
+	if (remembered.display_name !== observed.display_name) return observed;
+	return { ...remembered };
 }
 
 /** Make a device list the current view, remembering every device it proves live. */
@@ -806,6 +852,7 @@ export function resetEngineDeviceCache(): void {
 	engineDeviceCache = [];
 	engineAudioDeviceCache = [];
 	sessionSeenDeviceSnapshots.clear();
+	lastEngineVideoDevices.clear();
 }
 
 /**
@@ -889,6 +936,13 @@ export async function refreshAndBroadcastSources(
  * its observed row rather than disappearing, and a device the probe still lists
  * but the scan no longer sees is dropped.
  *
+ * Staying PRESENT is not the same as staying ITSELF, though, and the scan's
+ * guess is not a harmless approximation: `deriveKind` calls a UVC dongle `usb`,
+ * which bridges to no pipeline, so `buildSources` drops the row and renders the
+ * coarse slot as "not connected". A device the probe omits therefore falls back
+ * to what the engine last said about it (`known`) before it falls back to the
+ * scan's guess.
+ *
  * The join key is `input_id` alone: `buildDeviceList()` keys the fallback scan
  * `/dev/<card>`, byte-identical to the engine's own path-preferred id (verified
  * on a real Rock 5B+), so the two lists share one id namespace.
@@ -900,6 +954,7 @@ export async function refreshAndBroadcastSources(
 export function mergeObservedWithProbe(
 	observed: readonly CaptureDevice[],
 	probed: readonly CaptureDevice[],
+	known: ReadonlyMap<string, CaptureDevice> = lastEngineVideoDevices,
 ): CaptureDevice[] {
 	const observedVideoIds = new Set(
 		observed.filter((d) => d.media_class === "video").map((d) => d.input_id),
@@ -910,9 +965,9 @@ export function mergeObservedWithProbe(
 	const confirmed = probed.filter(
 		(d) => d.media_class !== "video" || observedVideoIds.has(d.input_id),
 	);
-	const unprobed = observed.filter(
-		(d) => d.media_class === "video" && !probedVideoIds.has(d.input_id),
-	);
+	const unprobed = observed
+		.filter((d) => d.media_class === "video" && !probedVideoIds.has(d.input_id))
+		.map((d) => withKnownEngineMetadata(d, known));
 	return [...confirmed, ...unprobed];
 }
 
@@ -949,7 +1004,9 @@ export async function refreshSourcesForHotplug(
 	const probe = await probeEngineDevices(deps);
 	if (generation !== hotplugRefreshGeneration) return;
 	if (probe === undefined) {
-		applyObservedDevicesAndBroadcast(observed);
+		applyObservedDevicesAndBroadcast(
+			observed.map((d) => withKnownEngineMetadata(d, lastEngineVideoDevices)),
+		);
 		return;
 	}
 	commitEngineDevices(

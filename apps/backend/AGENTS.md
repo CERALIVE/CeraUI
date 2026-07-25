@@ -666,17 +666,40 @@ from the cache write (`commitEngineDevices`): the fence has to be checked betwee
 them. `tryRefreshEngineDeviceCache` is the unchanged probe+commit composition for
 every caller that has no ordering concern.
 
-The fallback is id-safe and its cost is bounded: `buildDeviceList()` keys the
-fallback scan `/dev/<card>`, which is byte-identical to the engine's own
-`input_id` (verified on a real Rock 5B+: cerastream reports `/dev/video0` +
-`/dev/video1`, and de-dupes the RØDE's two nodes exactly as the scan does), so a
-fallback row can never split into a duplicate or orphan a persisted
-`config.source`. What DOES degrade is `kind`: the scan's `deriveKind()` heuristic
-labels the RØDE `usb` where the engine says `mjpeg`, so a device ADDED while
-cerastream is unreachable can bridge to a neighbouring coarse row until the next
-poll's probe answers. That is accepted — a present-but-coarsely-labelled row beats
-an absent one, and the specific USB-as-HDMI mislabel this seam was originally
-warned about cannot recur (`deriveKind` tests usb/uvc BEFORE hdmi).
+**Staying PRESENT is not the same as staying ITSELF — an observed row falls back
+to the engine's LAST ANSWER before it falls back to the scan's guess.** The
+fallback is id-safe: `buildDeviceList()` keys the fallback scan `/dev/<card>`,
+byte-identical to the engine's own `input_id` (verified on a real Rock 5B+:
+cerastream reports `/dev/video0` + `/dev/video1`, and de-dupes the RØDE's two
+nodes exactly as the scan does), so a fallback row can never split into a
+duplicate or orphan a persisted `config.source`. What the scan CANNOT supply is
+`kind`: `deriveKind()` guesses it from the card name, and for a UVC dongle named
+`RØDE HDMI to USB-C: RØDE HDMI` the guess is `usb` — which bridges to NO
+pipeline. This was previously written off as a bounded cosmetic degradation; it
+is not. An unbridged row is DROPPED by `buildSources` (no capture row) and is
+simultaneously live enough to suppress its own `lost` row, so its coarse slot
+renders as **"USB MJPEG · not connected"** — a device that is physically present,
+enumerated, and named, reported as absent under a generic label. And the same
+"nothing re-pokes a stable device set" fact that made the #215 bug permanent
+makes this one permanent too. Confirmed live and reproduced byte-for-byte from
+the board's own `list-devices` + `/sys/class/video4linux/*/name` payloads.
+
+`lastEngineVideoDevices` (`sources.ts`) is the fix: the last ENGINE-AUTHORED row
+per `input_id`, recorded in `probeEngineDevices` and monotonic (a device leaving
+the list must not erase what the engine said about it — the whole case is a
+device that left and came back). A video device the probe omits, on BOTH the
+merge path and the #214 probe-failure path, is restored from it — kind, caps,
+`stable_id` and display name together, exactly as a live probe entry would win.
+It is **guarded by display name, not `input_id` alone**: the kernel recycles node
+paths, and inheriting an identity is worse than showing a coarse one. Both lists
+read the name from the same kernel string (byte-identical on the bug hardware),
+so an equal name is real evidence of the same device and an unequal one leaves
+the observation untouched. `resetEngineDeviceCache()` clears the map.
+
+The specific USB-as-HDMI mislabel this seam was originally warned about still
+cannot recur (`deriveKind` tests usb/uvc BEFORE hdmi), and a device seen for the
+FIRST time while cerastream is unreachable still has no memory to draw on — it
+keeps the coarse fallback, which is the accepted degradation.
 Coverage: `tests/devices.test.ts` (`fires onDevicesChanged on a hotplug set
 change…` + `hands onDevicesChanged the list this scan observed…`) and
 `tests/lost-device-retention.test.ts` (`refreshSourcesForHotplug — a failing
@@ -1275,3 +1298,4 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't render `netif.tp` as a rate — it is a byte delta over an unstated window. Use `tx_bps`/`rx_bps`.
 - Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.
+- Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one.
