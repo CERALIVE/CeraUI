@@ -270,9 +270,39 @@ Do NOT add a CeraUI-side "force this device" path that tries to override that.
 A failed push NEVER breaks the meter: `pushPreference` swallows and logs, the previous
 preference stands, and the next config change or reconnect re-pushes.
 
+**Because it is only a preference, the bridge must also REFUSE another card's audio.**
+The engine reorders candidates but still meters whatever it CAN open, so an unopenable
+selection leaves real, moving bars on screen that belong to a different device — the
+meter lies rather than goes quiet. Found live on a Rock 5B+ with nothing plugged into
+the HDMI-RX port: the operator selected `HDMI Input`, and the meter reported the RØDE
+(`card:usbaudio`, rms ≈ −30 dBFS ⇒ ~49% fill on BOTH channels), which reads as healthy
+embedded HDMI audio. `projectLevel()` therefore drops a level whose reported
+`source.identity` names a different ALSA card than `meterPreference()` and broadcasts
+the ADR's existing `unavailable` + `no_device` gap instead. `alsaCardKey()` reduces both
+sides to the bare card id (mirroring cerastream's own `alsa_card_key`), so
+`hw:CARD=x` / `plughw:CARD=x,DEV=0` / `card:x` all compare equal.
+
+**It can only ever suppress a reading PROVEN foreign.** `isForeignCardLevel` returns
+false unless BOTH sides name a card: an `Auto` pick (`null`) hands selection to the
+engine by design, and an engine that reports no identity cannot be shown to mismatch.
+An engine-sent `unavailable` passes through with its OWN reason. Do NOT "simplify" this
+by gating on the video-side `signal` field — audio and video are separate device lists
+with no shared identifier (see "THREE capture-row states"), and the audio card's own
+absence is the direct, device-agnostic evidence.
+
+**Why an absent HDMI signal is genuinely NO audio, not silence.** Verified on the board:
+without a signal the RK3588 `rockchiphdmiin` card still lists in `/proc/asound/cards` but
+exposes NO capture PCM substream (no `card3/pcm0c`), `alsasrc device=hw:CARD=rockchiphdmiin`
+fails `No such file or directory`, and the card never appears in the engine's
+`list-devices` at all — so the preference is inert rather than merely losing. HDMI
+embedded audio is therefore unavailable, never noise-that-reads-as-signal; a device that
+DOES deliver audio without video still enumerates, still matches, and still meters.
+
 Coverage: `tests/audio-meter-bridge.test.ts` (push on connect, `null` for Auto, re-push
 on change, nothing sent to a pre-0.9.0 engine, a refused reload leaves levels flowing,
-no-op while down, plus the schema gate) and `tests/audio-sources.test.ts`
+no-op while down, the schema gate, plus the foreign-card gate: suppressed mismatch,
+untouched match, never-gated Auto/identity-less, passthrough `unavailable`, and the
+`alsaCardKey`/`isForeignCardLevel` unit table) and `tests/audio-sources.test.ts`
 (`resolveMeterPreference` — alias, no-alias, every `null` case, selector passthrough).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]

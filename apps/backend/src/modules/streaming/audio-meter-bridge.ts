@@ -84,6 +84,53 @@ export interface AudioMeterBridgeDeps {
 }
 
 /**
+ * The ALSA card identity inside a device/identity string, so the operator's
+ * preference (`hw:CARD=rockchiphdmiin`, `plughw:CARD=usbaudio,DEV=0`) and the
+ * engine's reported source identity (`card:usbaudio`) both reduce to the bare
+ * card id they name. Mirrors cerastream's own `alsa_card_key` so the two sides
+ * cannot drift on spelling. `undefined` when nothing is named.
+ */
+export function alsaCardKey(value: string | undefined): string | undefined {
+	if (value === undefined) return undefined;
+	const head = value.trim().split(",")[0] ?? "";
+	const colon = head.lastIndexOf(":");
+	const tail = colon === -1 ? head : head.slice(colon + 1);
+	const card = tail.startsWith("CARD=") ? tail.slice("CARD=".length) : tail;
+	return card === "" ? undefined : card;
+}
+
+/**
+ * Is this level a reading of a DIFFERENT card than the one the operator picked?
+ *
+ * The engine's `meter_device` is a PREFERENCE, not a pin (ADR-0007 §10-11): it
+ * only reorders the candidate list, so a selected card the engine cannot open —
+ * or does not enumerate at all — silently leaves the meter on some other card.
+ * Found live on a Rock 5B+: with nothing plugged into the HDMI-RX port, the
+ * RK3588 `rockchiphdmiin` card exposes NO capture PCM substream (`alsasrc
+ * device=hw:CARD=rockchiphdmiin` fails "No such file or directory") and never
+ * reaches the engine's device list at all, so selecting "HDMI Input" left the
+ * meter reporting a USB microphone. The operator saw real, moving bars and read
+ * them as live HDMI embedded audio.
+ *
+ * A level that names a different card is simply not the selected source's level,
+ * so it must be reported as a gap rather than rendered. Deliberately requires
+ * BOTH sides to be known: an "Auto" pick (`null` preference) hands selection to
+ * the engine by design, and an engine that reports no identity cannot be PROVEN
+ * to mismatch — neither is gated, so this can only ever suppress a reading we
+ * know belongs to another device.
+ */
+export function isForeignCardLevel(
+	preference: string | null,
+	identity: string | undefined,
+): boolean {
+	if (preference === null) return false;
+	const wanted = alsaCardKey(preference);
+	const reported = alsaCardKey(identity);
+	if (wanted === undefined || reported === undefined) return false;
+	return wanted !== reported;
+}
+
+/**
  * Project a cerastream `audio-level` event onto the wire message: drop the
  * envelope `type`/`seq` (the broadcast layer stamps its own `seq`) and keep every
  * level/unavailable field. Exported for the bridge test.
@@ -155,11 +202,27 @@ function errMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
+// A foreign-card level reuses the ADR's existing `no_device` reason ("No audio
+// device") rather than a new one: from the operator's seat the SELECTED device
+// is precisely the one not being metered, and the reason set is already wired
+// through 10 locales.
+function projectLevel(
+	event: Extract<EventParams, { type: "audio-level" }>,
+	deps: AudioMeterBridgeDeps,
+): AudioLevelMessage {
+	const message = toAudioLevelMessage(event);
+	if (message.unavailable === true) return message;
+	if (!isForeignCardLevel(deps.meterPreference(), message.source?.identity)) {
+		return message;
+	}
+	return { unavailable: true, reason: "no_device" };
+}
+
 function handleEvent(event: EventParams): void {
 	if (!state || state.stopped) return;
 	if (event.type !== "audio-level") return;
 	try {
-		state.deps.broadcast(toAudioLevelMessage(event));
+		state.deps.broadcast(projectLevel(event, state.deps));
 	} catch (err) {
 		state.deps.logger.debug(
 			`audio-meter bridge: broadcast threw: ${errMessage(err)}`,

@@ -9,7 +9,9 @@ import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
 import {
 	type AudioMeterBridgeDeps,
 	type AudioMeterBridgeLogger,
+	alsaCardKey,
 	initAudioMeterBridge,
+	isForeignCardLevel,
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
 	syncAudioMeterPreference,
@@ -283,6 +285,84 @@ describe("audio-meter bridge — the operator's audio pick reaches the idle mete
 	test("syncing while the bridge is down is a silent no-op", () => {
 		stopAudioMeterBridge();
 		expect(() => syncAudioMeterPreference()).not.toThrow();
+	});
+});
+
+// The board bug (live QA, 2026-07-25): with NOTHING plugged into the RK3588
+// HDMI-RX port, selecting "HDMI Input" as the audio source showed moving bars on
+// both channels. Verified on a Rock 5B+: the `rockchiphdmiin` card exposes no
+// capture PCM substream without a signal (`alsasrc device=hw:CARD=rockchiphdmiin`
+// → "No such file or directory") and never enters the engine's device list, so
+// the meter_device preference was inert and the meter stayed on a USB mic. Those
+// bars were real audio — from the wrong device.
+describe("audio-meter bridge — a level from an unselected card is never rendered", () => {
+	test("reports the selected device as unavailable instead of another card's audio", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=rockchiphdmiin");
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "no_device" }]);
+	});
+
+	test("forwards the level untouched once the selected card IS the metered one", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toEqual([toAudioLevelMessage(levelEvent)]);
+	});
+
+	test("never suppresses a level it cannot prove foreign (Auto, or no identity)", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+
+		h.setPreference("hw:CARD=rockchiphdmiin");
+		h.emit({ ...levelEvent, source: { owner: "sidecar" } });
+
+		expect(h.broadcasts).toHaveLength(2);
+		expect(h.broadcasts.every((b) => b.unavailable === undefined)).toBe(true);
+	});
+
+	test("passes an engine-sent unavailable marker through with its own reason", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=rockchiphdmiin");
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit(unavailableEvent);
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+});
+
+describe("alsaCardKey / isForeignCardLevel — card identity, not literal spelling", () => {
+	test("every ALSA spelling of one card reduces to the same key", () => {
+		for (const spelling of [
+			"usbaudio",
+			"hw:CARD=usbaudio",
+			"plughw:CARD=usbaudio,DEV=0",
+			"card:usbaudio",
+		]) {
+			expect(alsaCardKey(spelling)).toBe("usbaudio");
+		}
+		expect(alsaCardKey(undefined)).toBeUndefined();
+		expect(alsaCardKey("   ")).toBeUndefined();
+	});
+
+	test("a mismatch is only claimed when BOTH sides name a card", () => {
+		expect(isForeignCardLevel("hw:CARD=rockchiphdmiin", "card:Rx")).toBe(true);
+		expect(isForeignCardLevel("hw:CARD=usbaudio", "card:usbaudio")).toBe(false);
+		expect(isForeignCardLevel(null, "card:Rx")).toBe(false);
+		expect(isForeignCardLevel("hw:CARD=rockchiphdmiin", undefined)).toBe(false);
 	});
 });
 
