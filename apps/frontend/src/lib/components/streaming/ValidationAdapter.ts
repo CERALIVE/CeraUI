@@ -585,6 +585,89 @@ export function framerateOptionsForResolution(
 	});
 }
 
+/** The encode axes a device with no stored choice starts from. */
+export const DEFAULT_ENCODE_RESOLUTION: Resolution = "1080p";
+export const DEFAULT_ENCODE_FRAMERATE: Framerate = 30;
+
+/**
+ * The resolution+framerate a freshly-seeded encoder draft should open on for the
+ * ACTIVE source.
+ *
+ * An axis the operator has actually stored a value for is passed through
+ * UNTOUCHED, even when the current source cannot deliver it. That is deliberate:
+ * a stale explicit choice must surface as a flagged control and a blocked save so
+ * the operator re-decides it, never as a silent rewrite of their encode settings.
+ *
+ * An axis with NO stored value is different — there is no operator intent to
+ * protect, only a hardcoded fallback. An HDMI receiver locked to 1080p59.94 offers
+ * exactly ONE frame rate, so falling back to 30 opened the dialog already-invalid:
+ * red FPS control, save blocked, and nothing the operator had done wrong. Such an
+ * axis is reconciled onto what the source can actually drive.
+ *
+ * Reconciling is safe because a reconciled value is always one the source offers,
+ * and unsupported options render `disabled` — so this can never overwrite a choice
+ * the operator was able to make.
+ *
+ * Each axis steps DOWN its ladder first: a fallback the hardware cannot reach
+ * should degrade rather than silently exceed the default (30 must not become 60
+ * while 25 is on offer). Only when nothing at or below is offered does it take the
+ * lowest thing that is — which is how a 59.94-only receiver resolves 30. With
+ * nothing offered at all the fallback stands.
+ */
+export function seededAxisSelection(
+	axes: OfferedAxes,
+	stored: {
+		resolution: Resolution | undefined;
+		framerate: Framerate | undefined;
+	},
+): { resolution: Resolution; framerate: Framerate } {
+	const resolution =
+		stored.resolution ??
+		snapToLadder(DEFAULT_ENCODE_RESOLUTION, AVAILABLE_RESOLUTIONS, (rung) =>
+			axes.offered.resolutions.includes(rung),
+		) ??
+		DEFAULT_ENCODE_RESOLUTION;
+	if (stored.framerate !== undefined) {
+		return { resolution, framerate: stored.framerate };
+	}
+	const drivable = new Set(
+		framerateOptionsForResolution(axes, resolution)
+			.filter((option) => option.supported)
+			.map((option) => option.value),
+	);
+	return {
+		resolution,
+		framerate:
+			snapToLadder(DEFAULT_ENCODE_FRAMERATE, AVAILABLE_FRAMERATES, (rung) =>
+				drivable.has(rung),
+			) ?? DEFAULT_ENCODE_FRAMERATE,
+	};
+}
+
+/**
+ * `seed` when it is offered; else the nearest offered rung, searching DOWN the
+ * ascending `ladder` before UP. `undefined` when nothing is offered, or when
+ * `seed` is not on the ladder at all.
+ */
+function snapToLadder<T>(
+	seed: T,
+	ladder: readonly T[],
+	isOffered: (rung: T) => boolean,
+): T | undefined {
+	if (isOffered(seed)) return seed;
+	const at = ladder.indexOf(seed);
+	if (at < 0) return undefined;
+	for (let i = at - 1; i >= 0; i -= 1) {
+		const rung = ladder[i];
+		if (rung !== undefined && isOffered(rung)) return rung;
+	}
+	for (let i = at + 1; i < ladder.length; i += 1) {
+		const rung = ladder[i];
+		if (rung !== undefined && isOffered(rung)) return rung;
+	}
+	return undefined;
+}
+
 /** The highest resolution rung present in an offered list (ladder order). */
 function highestResolutionRung(
 	resolutions: readonly string[],

@@ -11,6 +11,7 @@ import {
 	framerateAvailableAt,
 	framerateOptions,
 	framerateOptionsForResolution,
+	type OfferedAxes,
 	OPTION_FIXED_BY_SOURCE,
 	OPTION_UNSUPPORTED_AT_RESOLUTION,
 	OPTION_UNSUPPORTED_ON_PLATFORM,
@@ -18,6 +19,7 @@ import {
 	offeredEncoderCaps,
 	resolutionOptions,
 	resolveDeviceModes,
+	seededAxisSelection,
 } from "./ValidationAdapter";
 
 // An override-capable HDMI-like source (mirrors the ValidationAdapter.capabilities
@@ -504,5 +506,96 @@ describe("resolveDeviceModes — source-keyed (StreamSource) form", () => {
 
 	it("returns undefined for an undefined source", () => {
 		expect(resolveDeviceModes(undefined)).toBeUndefined();
+	});
+});
+
+// The RK3588 SoC HDMI-RX carrying a live 1080p59.94 signal — the shape the engine
+// reports once it resolves a receiver's v4l2 range bounds into the mode actually on
+// the cable. ONE resolution, ONE frame rate, and that rate is not the 30 fps a
+// fresh config defaults to.
+const SOC_HDMIRX_SOURCE: CaptureStreamSource = {
+	origin: "capture",
+	id: "/dev/video0",
+	pipelineId: "hdmi",
+	kind: "hdmi",
+	displayName: "rk_hdmirx",
+	devicePath: "/dev/video0",
+	modes: [{ width: 1920, height: 1080, framerates: [59.94] }],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
+};
+
+describe("seededAxisSelection — reconciling a saved draft onto the active source", () => {
+	it("takes the signal's own rate when the 30 fps fallback is not on offer", () => {
+		// The reported defect: with no stored framerate the dialog fell back to 30
+		// against a 59.94-only receiver, so the FPS control opened aria-invalid and
+		// save was blocked before the operator had touched anything.
+		const axes = offeredAxes("rk3588", SOC_HDMIRX_SOURCE);
+		expect(
+			seededAxisSelection(axes, {
+				resolution: undefined,
+				framerate: undefined,
+			}),
+		).toEqual({ resolution: "1080p", framerate: 59.94 });
+	});
+
+	it("NEVER rewrites a framerate the operator actually stored, offered or not", () => {
+		// A stale explicit choice must keep surfacing as a flagged control and a
+		// blocked save — the operator re-decides it, the UI does not decide for them.
+		const axes = offeredAxes("rk3588", SOC_HDMIRX_SOURCE);
+		expect(
+			seededAxisSelection(axes, { resolution: "2160p", framerate: 30 }),
+		).toEqual({ resolution: "2160p", framerate: 30 });
+	});
+
+	it("leaves the fallback alone when the source can already deliver it", () => {
+		const axes = offeredAxes("rk3588", RODE_CAPTURE_SOURCE);
+		expect(
+			seededAxisSelection(axes, {
+				resolution: undefined,
+				framerate: undefined,
+			}),
+		).toEqual({ resolution: "1080p", framerate: 30 });
+	});
+
+	it("resolves the fallback rate AT the resolution the fallback landed on", () => {
+		// RØDE drives 1080p at 30 and 720p at 30/60; the 1080p fallback stands and 30
+		// is drivable there, so neither axis moves.
+		const axes = offeredAxes("rk3588", RODE_CAPTURE_SOURCE);
+		const seeded = seededAxisSelection(axes, {
+			resolution: undefined,
+			framerate: undefined,
+		});
+		expect(
+			framerateOptionsForResolution(axes, seeded.resolution).find(
+				(option) => option.value === seeded.framerate,
+			)?.supported,
+		).toBe(true);
+	});
+
+	it("keeps the fallback when nothing at all is offered", () => {
+		const axes: OfferedAxes = {
+			offered: {
+				resolutions: [],
+				framerates: [],
+				codecs: [],
+				bitrateRange: { min: 0, max: 0, unit: "kbps" },
+				supportsAudio: true,
+				supportsResolutionOverride: true,
+				supportsFramerateOverride: true,
+			},
+			deviceModes: undefined,
+		};
+		expect(
+			seededAxisSelection(axes, {
+				resolution: undefined,
+				framerate: undefined,
+			}),
+		).toEqual({ resolution: "1080p", framerate: 30 });
 	});
 });

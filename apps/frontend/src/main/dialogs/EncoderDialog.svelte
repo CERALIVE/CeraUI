@@ -77,6 +77,7 @@ import {
 	offeredAxes,
 	platformCapsForHardware,
 	resolutionOptions,
+	seededAxisSelection,
 	summarizeProbedCaps,
 } from '$lib/components/streaming/ValidationAdapter';
 import { normalizeValue, updateMaxBitrate } from '$lib/components/streaming/StreamingUtils';
@@ -222,16 +223,20 @@ function seedDraft(fromSaved: boolean): void {
 		// Re-seed from the NEW active config (getConfig): the operator switched
 		// source in the Source section, so the bound draft is stale — the device
 		// config is the truth for the new input.
-		localResolution = savedConfig?.resolution ?? '1080p';
-		localFramerate = savedConfig?.framerate ?? 30;
+		({ resolution: localResolution, framerate: localFramerate } = seededAxisSelection(axes, {
+			resolution: savedConfig?.resolution,
+			framerate: savedConfig?.framerate,
+		}));
 		const seedBitrate = savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = savedConfig?.bitrate_overlay ?? false;
 		localCodec = savedConfig?.video_codec;
 		localPassthrough = savedConfig?.video_passthrough ?? 'auto';
 	} else {
-		localResolution = config?.resolution ?? '1080p';
-		localFramerate = config?.framerate ?? 30;
+		({ resolution: localResolution, framerate: localFramerate } = seededAxisSelection(axes, {
+			resolution: config?.resolution,
+			framerate: config?.framerate,
+		}));
 		const seedBitrate = config?.bitrate ?? savedConfig?.max_br ?? BITRATE.defaultMin;
 		localBitrate = Number.isFinite(seedBitrate) ? seedBitrate : BITRATE.defaultMin;
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;

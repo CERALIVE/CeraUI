@@ -94,6 +94,26 @@ const HDMI_SOURCE: CaptureStreamSource = {
 	available: true,
 };
 
+// The RK3588 SoC HDMI-RX carrying a live 1080p59.94 signal — the shape the engine
+// reports once it resolves a receiver's v4l2 range bounds into the mode actually on
+// the cable. ONE resolution, ONE rate, and that rate is not the 30 fps fallback.
+const SOC_HDMIRX_SOURCE: CaptureStreamSource = {
+	id: "/dev/video0",
+	origin: "capture",
+	pipelineId: "hdmi",
+	kind: "hdmi",
+	displayName: "rk_hdmirx",
+	devicePath: "/dev/video0",
+	modes: [{ width: 1920, height: 1080, framerates: [59.94] }],
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	defaultResolution: "1080p",
+	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
+};
+
 // A legacy/no-device-yet coarse source: empty modes → axes fall back to the
 // platform-coarse offering (byte-identical to an old engine with no device modes).
 const COARSE_HDMI: CoarseStreamSource = {
@@ -301,6 +321,38 @@ describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 		expect(h265?.getAttribute("data-supported")).toBe("false");
 		expect(h265?.hasAttribute("disabled")).toBe(true);
 		expect(h265?.getAttribute("title")).toBeTruthy();
+	});
+
+	it("opens VALID on a receiver whose only rate is not the 30 fps fallback", async () => {
+		// The RK3588 SoC HDMI-RX carrying 1080p59.94: one resolution, one rate. With
+		// no stored framerate the draft used to fall back to 30 — a rate this source
+		// cannot drive — so the FPS control opened red and save was blocked before the
+		// operator had done anything. It now opens on the rate that is actually there.
+		state.pipelines = pipelinesMessage("rk3588");
+		state.capabilities = capsWith();
+		state.sources = sourcesMessage("rk3588", [SOC_HDMIRX_SOURCE]);
+		seedConfig({ source: "/dev/video0", pipeline: "hdmi" });
+
+		render(EncoderDialog, {
+			props: {
+				open: true,
+				config: { bitrate: 6000, bitrateOverlay: false } as EncoderConfig,
+			},
+		});
+
+		expect(
+			document.body
+				.querySelector("#encoder-framerate")
+				?.getAttribute("aria-invalid"),
+		).toBe("false");
+		expect(
+			document.body
+				.querySelector("#encoder-resolution")
+				?.getAttribute("aria-invalid"),
+		).toBe("false");
+		// And the summary names the same signal rather than an empty half.
+		expect(summaryText()).toContain("59.94");
+		expect(summaryText()).not.toContain("—");
 	});
 
 	it("device modes limit the selected resolution: 60 fps disabled at 4K with a reason title", async () => {
