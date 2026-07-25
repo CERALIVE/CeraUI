@@ -21,12 +21,17 @@
  * effectful streaming graph. It turns the raw audio-card map into a per-card
  * human-readable label via a strict 4-tier fallback:
  *
- *   (0) an operator-assigned alias from `config.audio_device_aliases`, keyed on
- *       the card's STABLE identity (`stable_id`, else `card:<alsaCardId>`);
+ *   (0) a STATIC, code-level display-name rule for a known ONBOARD card — see
+ *       `ONBOARD_AUDIO_DISPLAY_RULES` (e.g. the RK3588 HDMI-RX capture card,
+ *       whose only hardware string is the raw driver id `rockchip,hdmiin`);
  *   (1) the engine `list-devices` audio entry whose `alsa_card_id` join key
  *       matches the card AND whose `display_name` passes a human-name heuristic;
  *   (2) else the `/proc/asound/cards` longname for that card;
  *   (3) else the current alias/name (byte-identical fallback).
+ *
+ * Tier 0 is a RULE, not a customization surface: it ships with the app, is keyed
+ * on the driver/card id, and there is NO operator-facing way to write it. There
+ * is deliberately no per-device rename anywhere in CeraUI.
  *
  * Tiers 1 and 2 both yield RAW device strings — on Linux both are literally the
  * ALSA longname (`sound/usb/card.c` appends " at usb-<bus>-<path>, <speed> speed"
@@ -34,7 +39,7 @@
  * longname. They are therefore run through `cleanAudioDeviceName()` before being
  * shown; the untouched raw string is preserved as the display `detail` so the
  * bus path / link speed / full legal manufacturer name stay available for
- * diagnostics. Tiers 0 and 3 are curated strings and are never rewritten.
+ * diagnostics. Tier 3 is a curated string and is never rewritten.
  *
  * Identical resolved labels are deduped with " (2)", " (3)" in STABLE card order.
  * The `config.asrc` wire keys are NEVER touched — only the display `label` is
@@ -237,16 +242,39 @@ export function cleanAudioDeviceName(raw: string): CleanedAudioName {
 }
 
 /**
- * The rename key for a card: the engine's reboot-stable hardware identity when
- * it published one, else the ALSA card id namespaced as `card:<id>`. NEVER the
- * volatile USB bus path — that changes on replug/reboot. The engine's own
- * card-derived `stable_id` already uses the `card:` form, so the two agree for a
- * card with no richer identity.
+ * Static, code-level display names for ONBOARD (non-pluggable) audio cards. An
+ * SoC block's only hardware string is a raw driver id (`rockchip,hdmiin`) with
+ * nothing human in it to clean, so the name is a RULE that ships with the app —
+ * deliberately NOT an operator-writable alias (no UI, no RPC, no config field).
+ *
+ * Keys are `normalizeCardKey`d, so one entry covers every punctuation spelling
+ * of the same block (card id `rockchiphdmiin`, longname `rockchip,hdmiin`, …).
+ * Only cards that can REACH the picker are listed — `updateAudioDevices` already
+ * excludes the HDMI-output and codec-playback cards.
  */
-export function audioAliasKey(cardId: string, stableId?: string): string {
-	return stableId !== undefined && stableId.length > 0
-		? stableId
-		: `card:${cardId}`;
+const ONBOARD_AUDIO_DISPLAY_RULES: ReadonlyMap<string, string> = new Map([
+	["rockchiphdmiin", "HDMI Input"],
+	["rockchiphdmiind", "HDMI Input"],
+	["rockchipes8388", "Onboard Audio"],
+]);
+
+function normalizeCardKey(value: string): string {
+	return value.replace(/[^\p{L}\p{N}]+/gu, "").toLowerCase();
+}
+
+/**
+ * The static onboard display name for a card, else `undefined`. Both the ALSA
+ * card id and the raw hardware string are probed, so the rule fires whichever
+ * of the two the ladder produced.
+ */
+export function resolveOnboardDisplayName(
+	cardId: string,
+	rawName?: string,
+): string | undefined {
+	const byCardId = ONBOARD_AUDIO_DISPLAY_RULES.get(normalizeCardKey(cardId));
+	if (byCardId !== undefined) return byCardId;
+	if (rawName === undefined) return undefined;
+	return ONBOARD_AUDIO_DISPLAY_RULES.get(normalizeCardKey(rawName));
 }
 
 const loggedTierMissCardIds = new Set<string>();
@@ -312,10 +340,6 @@ export interface AudioDeviceDisplay {
 	label: string;
 	/** The raw hardware descriptor behind `label` — bus path, speed, legal name. */
 	detail?: string;
-	/** Stable rename key — see `audioAliasKey`. */
-	aliasKey: string;
-	/** The operator-assigned name, when one is set for `aliasKey`. */
-	alias?: string;
 }
 
 function resolveOneDisplay(
@@ -323,12 +347,10 @@ function resolveOneDisplay(
 	cardId: string,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
-	aliases: Readonly<Record<string, string>>,
 ): Omit<AudioDeviceDisplay, "label"> & { raw: string } {
 	const engineMatch = engineAudio.find(
 		(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
 	);
-	const aliasKey = audioAliasKey(cardId, engineMatch?.stable_id);
 	const hardware = resolveHardwareName(
 		asrcKey,
 		cardId,
@@ -337,22 +359,15 @@ function resolveOneDisplay(
 		longnames,
 	);
 
-	// (0) an operator rename wins outright — it is an explicit override, and it is
-	//     keyed on stable identity so it survives a replug/reboot renumber. The
-	//     hardware name it replaces falls back to `detail` so it is never lost.
-	const alias = aliases[aliasKey]?.trim();
-	if (alias !== undefined && alias.length > 0) {
-		return {
-			raw: alias,
-			aliasKey,
-			alias,
-			detail: hardware.detail ?? hardware.name,
-		};
+	// (0) a static onboard rule wins over every hardware-derived string. The name
+	//     it replaces falls back to `detail` so the raw driver id is never lost.
+	const onboard = resolveOnboardDisplayName(cardId, hardware.name);
+	if (onboard !== undefined && onboard !== hardware.name) {
+		return { raw: onboard, detail: hardware.detail ?? hardware.name };
 	}
 
 	return {
 		raw: hardware.name,
-		aliasKey,
 		...(hardware.detail !== undefined ? { detail: hardware.detail } : {}),
 	};
 }
@@ -409,8 +424,6 @@ function resolveHardwareName(
  *                    `alsa_card_id`); empty on the pre-T18 pin.
  * @param longnames   `/proc/asound/cards` cardId → longname (empty when the
  *                    read was skipped or failed).
- * @param aliases     operator renames from `config.audio_device_aliases`, keyed
- *                    on `audioAliasKey`.
  * @returns Map<asrcKey, display> for device cards only. An engine entry whose
  *          `alsa_card_id` matches no scanned card is never surfaced (no phantom
  *          entry — the result only ever contains keys from `cards`). Neither
@@ -420,7 +433,6 @@ export function resolveAudioDisplays(
 	cards: Record<string, string>,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
-	aliases: Readonly<Record<string, string>> = {},
 ): Map<string, AudioDeviceDisplay> {
 	const displays = new Map<string, AudioDeviceDisplay>();
 	const seenCounts = new Map<string, number>();
@@ -431,7 +443,6 @@ export function resolveAudioDisplays(
 			cardId,
 			engineAudio,
 			longnames,
-			aliases,
 		);
 		const nextCount = (seenCounts.get(raw) ?? 0) + 1;
 		seenCounts.set(raw, nextCount);
@@ -448,14 +459,12 @@ export function resolveAudioLabels(
 	cards: Record<string, string>,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
-	aliases: Readonly<Record<string, string>> = {},
 ): Map<string, string> {
 	const labels = new Map<string, string>();
 	for (const [asrcKey, display] of resolveAudioDisplays(
 		cards,
 		engineAudio,
 		longnames,
-		aliases,
 	)) {
 		labels.set(asrcKey, display.label);
 	}

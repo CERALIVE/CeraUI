@@ -21,6 +21,7 @@ import {
 	deriveCapabilitySummary,
 	formatCodec,
 	groupAudioSources,
+	isExternalAudioSource,
 	resolveAudioSelection,
 	resolveAudioSourceList,
 	resolveAudioSourceMode,
@@ -666,34 +667,10 @@ describe("audioSourceLabel — translate pseudo, never translate hardware (Task 
 		).toBe("Rockchip HDMI-in");
 	});
 
-	it("prefers an operator alias over the engine product_name and its transport tag", () => {
+	it("renders the backend's rule-based onboard name verbatim", () => {
 		expect(
-			audioSourceLabel(
-				{
-					id: "USB audio",
-					kind: "device",
-					alias: "Camera A",
-					product_name: "RØDE NT-USB",
-					transport: "usb",
-					label: "RØDE HDMI to USB-C",
-				},
-				t,
-			),
-		).toBe("Camera A");
-	});
-
-	it("falls back to the cleaned hardware label when the alias is empty", () => {
-		expect(
-			audioSourceLabel(
-				{
-					id: "USB audio",
-					kind: "device",
-					alias: "",
-					label: "RØDE HDMI to USB-C",
-				},
-				t,
-			),
-		).toBe("RØDE HDMI to USB-C");
+			audioSourceLabel({ id: "HDMI", kind: "device", label: "HDMI Input" }, t),
+		).toBe("HDMI Input");
 	});
 
 	it("never renders the raw bus-path detail as the label", () => {
@@ -709,6 +686,58 @@ describe("audioSourceLabel — translate pseudo, never translate hardware (Task 
 				t,
 			),
 		).toBe("DJI MIC MINI");
+	});
+});
+
+describe("isExternalAudioSource — read-only accessory marker (transport-driven)", () => {
+	it("marks a USB-attached device external", () => {
+		expect(
+			isExternalAudioSource({
+				id: "USB audio",
+				kind: "device",
+				transport: "usb",
+			}),
+		).toBe(true);
+	});
+
+	it("marks a Bluetooth accessory external", () => {
+		expect(
+			isExternalAudioSource({
+				id: "BT mic",
+				kind: "device",
+				transport: "bluetooth",
+			}),
+		).toBe(true);
+	});
+
+	it("never marks an onboard or HDMI capture block external", () => {
+		for (const transport of ["hdmi", "onboard"] as const) {
+			expect(
+				isExternalAudioSource({ id: "HDMI", kind: "device", transport }),
+			).toBe(false);
+		}
+	});
+
+	it("is false when the engine published no transport (never guessed)", () => {
+		expect(
+			isExternalAudioSource({
+				id: "MINI",
+				kind: "device",
+				label: "DJI MIC MINI",
+				detail:
+					"DJI Technology Co., Ltd. DJI MIC MINI at usb-fc8c0000.usb-1, full speed",
+			}),
+		).toBe(false);
+	});
+
+	it("never marks a pseudo-source external", () => {
+		expect(
+			isExternalAudioSource({
+				id: "No audio",
+				kind: "none",
+				labelKey: "audio.sources.noAudio",
+			}),
+		).toBe(false);
 	});
 });
 

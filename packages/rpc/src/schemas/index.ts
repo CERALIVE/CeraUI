@@ -2,7 +2,6 @@
  * Export all Zod schemas
  */
 export * from './addons.schema';
-export * from './audio-aliases.schema';
 export * from './audio-level.schema';
 export * from './auth.schema';
 export * from './broadcast.schema';

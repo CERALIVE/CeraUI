@@ -29,7 +29,6 @@ import { appRouter } from "../router.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
 import {
 	reloadAudioDelayProcedure,
-	setAudioDeviceAliasProcedure,
 	setBitrateProcedure,
 	setConfigProcedure,
 	setMockDeviceAttachedProcedure,
@@ -97,11 +96,6 @@ const MUTATIONS: ReadonlyArray<{
 		name: "setSourceVisibility",
 		procedure: setSourceVisibilityProcedure,
 		args: { hide_test_pattern: true },
-	},
-	{
-		name: "setAudioDeviceAlias",
-		procedure: setAudioDeviceAliasProcedure,
-		args: { alias_key: "card:usbaudio", label: "Camera A" },
 	},
 	{
 		name: "switchInput",

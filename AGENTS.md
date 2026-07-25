@@ -1767,23 +1767,32 @@ always a dropped `alsa_card_id` join key upstream of CeraUI). One-shot per
 `cardId` per boot (`resetAudioNamingDiagnostics()` wired into `resetMockState()`
 for test isolation).
 
-**Audio-device naming cleanup + operator rename (device-quality-wave2).** The
-ladder above is now **4-tier** — an operator alias is tier 0 — and tiers 1/2 are
-CLEANED before display. Both tiers carry raw ALSA longnames (cerastream sets an
-audio entry's `display_name` to the longname verbatim), so a live report showed
-`RØDE RØDE HDMI to USB-C at usb-xhci-hcd.17.auto-1, super speed` (leaked via
-tier 1, because the engine `product_name` was the generic `"usbaudio"` the
-human-name heuristic rejects) and `DJI Technology Co., Ltd. DJI MIC MINI at
-usb-fc8c0000.usb-1, full speed` (tier 2, no engine entry). `cleanAudioDeviceName()`
-strips the kernel `at <bus-path>, <speed> speed` tail and collapses a manufacturer
-duplicated as the product prefix (generic rule, no vendor allowlist — a non-filler
-token between the repeats blocks the collapse). The raw string is MOVED, not
-deleted: it rides `AudioSource.detail` as a tooltip/secondary line. Renames persist
-in `config.audio_device_aliases` keyed on `stable_id` (else `card:<alsaCardId>`) —
-NEVER the volatile bus path — written only by `streaming.setAudioDeviceAlias`, and
-are presentation-only (`config.asrc` and the engine ALSA path untouched). Frontend
-label precedence is `alias` → `product_name · TRANSPORT` → `label` → `labelKey` →
-`id`. Full contract: `apps/backend/AGENTS.md` → AUDIO-DEVICE NAMING.
+**Audio-device naming cleanup + External marker (device-quality-wave2).** The
+ladder above is now **4-tier** — a STATIC, code-level onboard display-name rule is
+tier 0 — and tiers 1/2 are CLEANED before display. Both tiers carry raw ALSA
+longnames (cerastream sets an audio entry's `display_name` to the longname
+verbatim), so a live report showed `RØDE RØDE HDMI to USB-C at
+usb-xhci-hcd.17.auto-1, super speed` (leaked via tier 1, because the engine
+`product_name` was the generic `"usbaudio"` the human-name heuristic rejects) and
+`DJI Technology Co., Ltd. DJI MIC MINI at usb-fc8c0000.usb-1, full speed` (tier 2,
+no engine entry). `cleanAudioDeviceName()` strips the kernel `at <bus-path>,
+<speed> speed` tail and collapses a manufacturer duplicated as the product prefix
+(generic rule, no vendor allowlist — a non-filler token between the repeats blocks
+the collapse). An onboard card whose only hardware string is a raw driver id
+(`rockchip,hdmiin`) has nothing to clean, so `ONBOARD_AUDIO_DISPLAY_RULES` gives
+it a fixed name (`HDMI Input`) — a RULE that ships with the app, keyed on the
+driver/card id. The raw string is MOVED, not deleted: it rides
+`AudioSource.detail` as a tooltip.
+
+**There is NO operator rename.** #206 briefly shipped an alias/rename UI backed by
+`config.audio_device_aliases`; #207 removed it in full — UI, `setAudioDeviceAlias`
+RPC, oRPC contract entry, `audio-aliases.schema.ts`, and the config field — by
+explicit product decision. Device naming is code-level only. Instead, a pluggable
+accessory carries a read-only **"External"** badge, decided by the engine's
+`transport` field (`usb`/`bluetooth`; corrected in cerastream PR #69) and never
+re-derived from bus-path string matching. Frontend label precedence is
+`product_name · TRANSPORT` → `label` → `labelKey` → `id`. Full contract:
+`apps/backend/AGENTS.md` → AUDIO-DEVICE NAMING.
 
 ## ANTI-PATTERNS
 
@@ -1799,4 +1808,5 @@ label precedence is `alias` → `product_name · TRANSPORT` → `label` → `lab
 - Don't re-derive the "gateway inactive" disabled-with-reason rule inline on a new surface — route through `pipelineAvailability.ts`.
 - Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`GoLiveCard.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
 - Don't re-add per-link RTT/NAK/weight numbers to the WiFi/Cellular/Ethernet per-interface sections — `BondedLinksSection.svelte` is the sole owner of that telemetry on the Network destination.
+- Don't add an audio-device rename affordance (text field, button, or dialog) — device naming is code-level only; a pluggable device gets the read-only `isExternalAudioSource` "External" badge instead.
 - Don't add a fifth fact to the compact HUD strip — the 4-fact scope (lifecycle badge, health dot, bitrate, one temp chip) is deliberate; anything else belongs in the expanded Sheet.

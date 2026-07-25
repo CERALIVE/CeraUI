@@ -1163,11 +1163,9 @@ const de = {
 		audioSource: "Audioquelle",
 		activeAudioSource: "Aktive Audioquelle",
 		changeAudioSourceHint: "Im Abschnitt Quelle ändern",
-		audioDeviceName: "Anzeigename",
-		audioDeviceNameHelp:
-			"Ein eigener Name für dieses Audiogerät. Er wird über die Hardware-Identität gespeichert und übersteht Abziehen oder Neustart.",
-		audioDeviceNamePlaceholder: "z. B. Interview-Mikrofon",
-		audioDeviceNameReset: "Leer lassen, um den Hardwarenamen zu verwenden.",
+		audioDeviceExternal: "Extern",
+		audioDeviceExternalHint:
+			"Ein ansteckbares Zubehör, nicht fest im Gerät verbaut.",
 		noAudioSourceSelected: "Keine Audioquelle ausgewählt",
 		notAvailableAudioSource: "Nicht verfügbar",
 		selectAudioSource: "Audioquelle auswählen",

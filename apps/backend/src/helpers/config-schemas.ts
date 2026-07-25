@@ -44,7 +44,6 @@ import {
 	AddonConfigSchema,
 	AUDIO_SOURCE_AUTO,
 	audioCodecSchema,
-	audioDeviceAliasesSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
 	deviceKindSchema,
@@ -298,11 +297,6 @@ export const runtimeConfigSchema = z.object({
 	// every source visible via the inner default; kept `.optional()` so
 	// `let config: RuntimeConfig = {}` still parses (E3 additive pattern).
 	sources_visibility: sourcesVisibilitySchema.optional(),
-	// Operator-assigned audio-device display names, keyed on stable device
-	// identity (never the volatile USB bus path). Presentation-only: it never
-	// touches `asrc` or the engine's ALSA device path. `.optional()` so a config
-	// written before renames existed still parses (E3 additive pattern).
-	audio_device_aliases: audioDeviceAliasesSchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;

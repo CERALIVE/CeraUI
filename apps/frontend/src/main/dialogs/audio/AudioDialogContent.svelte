@@ -3,10 +3,10 @@ import { LL } from '@ceraui/i18n/svelte';
 import type { AudioCodec } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 
+import Badge from '$lib/components/custom/Badge.svelte';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { Button } from '$lib/components/ui/button';
-import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import type { AudioGateState } from '$lib/streaming/audioGate';
@@ -24,11 +24,8 @@ interface Props {
 	activeAudioSourceLabel: string;
 	/** Raw hardware descriptor behind the active source — bus path, speed, full name. */
 	activeAudioSourceDetail?: string;
-	/** Rename is offered only when the active source is a renameable hardware device. */
-	canRenameAudioDevice: boolean;
-	draftAlias: string;
-	aliasMaxLength: number;
-	onAliasChange: (value: string) => void;
+	/** The active source is a pluggable external accessory (read-only marker). */
+	activeAudioSourceExternal?: boolean;
 	draftCodec?: AudioCodec;
 	codecOptions?: Readonly<Record<string, CodecOption>>;
 	codecHasSource: boolean;
@@ -45,8 +42,8 @@ interface Props {
 
 let {
 	gateState, isStreaming, onOpenEncoder, audioEmbeddedComingSoon,
-	activeAudioSourceLabel, activeAudioSourceDetail, canRenameAudioDevice,
-	draftAlias, aliasMaxLength, onAliasChange, draftCodec, codecOptions, codecHasSource,
+	activeAudioSourceLabel, activeAudioSourceDetail, activeAudioSourceExternal = false,
+	draftCodec, codecOptions, codecHasSource,
 	codecDisabledReason, codecTriggerLabel, isCodecAllowed, onCodecChange,
 	draftDelay, delayMin, delayMax, delayStep, onDelayChange,
 }: Props = $props();
@@ -76,32 +73,22 @@ let {
 				{#if audioEmbeddedComingSoon}<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />{/if}
 			</div>
 			<div class="bg-muted/40 flex min-h-11 flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2" data-testid="audio-source-active" title={activeAudioSourceDetail}>
-				<span class="flex items-center gap-2"><Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" /><span class="text-sm">{activeAudioSourceLabel}</span></span>
+				<span class="flex items-center gap-2">
+					<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
+					<span class="text-sm">{activeAudioSourceLabel}</span>
+					{#if activeAudioSourceExternal}
+						<Badge
+							data-testid="audio-device-external"
+							label={$LL.settings.audioDeviceExternal()}
+							size="micro"
+							title={$LL.settings.audioDeviceExternalHint()}
+							variant="info"
+						/>
+					{/if}
+				</span>
 				<span class="text-muted-foreground shrink-0 text-xs">{$LL.settings.changeAudioSourceHint()}</span>
 			</div>
 		</div>
-		{#if canRenameAudioDevice}
-			<div class="space-y-2" data-testid="audio-device-rename">
-				<div class="flex items-center gap-1">
-					<Label class="text-sm font-medium" for="audioDeviceName">{$LL.settings.audioDeviceName()}</Label>
-					<InfoPopover body={$LL.settings.audioDeviceNameHelp()} testId="info-audio-device-name" title={$LL.settings.audioDeviceName()} />
-				</div>
-				<Input
-					id="audioDeviceName"
-					data-testid="audio-device-rename-input"
-					maxlength={aliasMaxLength}
-					oninput={(event) => onAliasChange(event.currentTarget.value)}
-					placeholder={$LL.settings.audioDeviceNamePlaceholder()}
-					value={draftAlias}
-				/>
-				{#if activeAudioSourceDetail}
-					<p class="text-muted-foreground font-mono text-xs break-all" data-testid="audio-device-hardware-detail">
-						{activeAudioSourceDetail}
-					</p>
-				{/if}
-				<p class="text-muted-foreground text-xs">{$LL.settings.audioDeviceNameReset()}</p>
-			</div>
-		{/if}
 		<div class="space-y-2">
 			<div class="flex items-center justify-between gap-2">
 				<div class="flex items-center gap-1"><Label class="text-sm font-medium" for="audioCodec">{$LL.settings.audioCodec()}</Label><InfoPopover body={$LL.live.education.field.codec.body()} testId="info-audio-codec" title={$LL.live.education.field.codec.title()} /></div>
