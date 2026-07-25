@@ -9,6 +9,8 @@
               the "Embedded audio" copy) PLUS a calm hint pill naming the deferred
               audio-follow target when one is pending (T7). The strip shows what the
               stream is USING — never the future follow target as if it were live.
+              The inline `LiveAudioMeter` sits under it: SourceSection owns the idle
+              placement, this strip the streaming one, so the meter is continuous.
 
   Every field is fed from LiveView (deriveActiveSummary / resolvedAudioLabel); this
   component owns NO `$state`, NO RPC, and NO derivation of engine truth. Absent
@@ -20,6 +22,7 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { ArrowRightLeft, Radio, Zap } from '@lucide/svelte';
 
+import LiveAudioMeter from '$lib/components/preview/LiveAudioMeter.svelte';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
 interface Props {
@@ -142,4 +145,9 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 			{/if}
 		</p>
 	{/if}
+
+	<!-- Live level meter, inline under the audio line it belongs to. Mounted
+	     unconditionally (the audio line itself can be absent) so the meter is
+	     continuous across start/stop — SourceSection owns the idle placement. -->
+	<LiveAudioMeter />
 </div>

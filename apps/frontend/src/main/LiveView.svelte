@@ -98,7 +98,6 @@ import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.s
 import ServerDialog from '$main/dialogs/ServerDialog.svelte';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
-import LiveAudioMeter from '$main/live/LiveAudioMeter.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
 import LiveHeader from '$main/live/LiveHeader.svelte';
 import type { ConfigRow } from '$main/live/StreamSettingsCard.svelte';
@@ -989,11 +988,6 @@ const configRows = $derived<ConfigRow[]>([
 			activeEncode={getStatus()?.active_encode ?? null}
 		/>
 	{/if}
-
-	<!-- Always-visible audio level meter (Todo 22): OUTSIDE the preview, so the
-	     bars move while idle with no preview open and continue across start/stop.
-	     Renders in both the idle and live cockpit states. -->
-	<LiveAudioMeter />
 </div>
 
 <ServerDialog bind:open={serverDialogOpen} onSaved={validateSavedDestination} />

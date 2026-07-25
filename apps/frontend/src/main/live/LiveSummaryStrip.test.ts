@@ -25,7 +25,14 @@ import type {
 	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// The strip now hosts the inline LiveAudioMeter, which reads the `audio-level`
+// broadcast. Stub the feed so these tests stay socket-free; the meter's own
+// states are covered by LiveAudioMeter.test.ts.
+vi.mock("$lib/rpc/subscriptions.svelte", () => ({
+	getAudioLevel: () => undefined,
+}));
 
 import {
 	type ActiveSummary,

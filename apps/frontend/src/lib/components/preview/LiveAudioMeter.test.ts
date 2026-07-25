@@ -23,7 +23,7 @@ function innerMeter(container: HTMLElement): HTMLElement | null {
 	);
 }
 
-describe("LiveAudioMeter — always-visible slot + staleness watchdog (Todo 22)", () => {
+describe("LiveAudioMeter — always-mounted inline meter + staleness watchdog", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 		currentLevel = undefined;
@@ -32,9 +32,26 @@ describe("LiveAudioMeter — always-visible slot + staleness watchdog (Todo 22)"
 		vi.useRealTimers();
 	});
 
-	it("renders nothing before the first audio-level frame (no fake silence)", () => {
+	it("stays mounted and shows `unavailable` before the first frame (never vanishes)", () => {
 		const { container } = render(LiveAudioMeter);
-		expect(meter(container)).toBeNull();
+
+		// The outer wrapper NEVER unmounts — the inner meter's own unavailable
+		// state is what an operator sees, not a blank gap where the meter was.
+		expect(meter(container)).not.toBeNull();
+		expect(meter(container)?.getAttribute("data-pending")).toBe("true");
+		expect(innerMeter(container)?.getAttribute("data-unavailable")).toBe(
+			"true",
+		);
+		expect(
+			innerMeter(container)?.querySelector('[data-testid="audio-unavailable"]'),
+		).not.toBeNull();
+	});
+
+	it("renders no fake silence before the first frame (no channel bars)", () => {
+		const { container } = render(LiveAudioMeter);
+		expect(
+			innerMeter(container)?.querySelectorAll('[data-testid="audio-channel"]'),
+		).toHaveLength(0);
 	});
 
 	it("renders the meter live from a real level frame (not stale)", () => {
@@ -46,6 +63,7 @@ describe("LiveAudioMeter — always-visible slot + staleness watchdog (Todo 22)"
 		};
 		const { container } = render(LiveAudioMeter);
 		expect(meter(container)?.getAttribute("data-stale")).toBe("false");
+		expect(meter(container)?.getAttribute("data-pending")).toBe("false");
 		expect(innerMeter(container)?.getAttribute("data-unavailable")).toBe(
 			"false",
 		);
