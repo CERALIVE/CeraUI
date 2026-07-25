@@ -175,6 +175,20 @@ const de = {
 		updateFailed: "Update fehlgeschlagen",
 		retryUpdateCheck: "Erneut versuchen",
 		updateComplete: "Update abgeschlossen",
+		updateCompleteDetail:
+			"Das Gerät hat das Update installiert und seine Dienste neu gestartet.",
+		updateStartRefused: "Das Gerät hat das Update nicht gestartet",
+		updateNoProgress:
+			"Das Gerät hat das Update angenommen, aber keinerlei Fortschritt gemeldet. Es wurde nichts installiert.",
+		updateReasonDisabled:
+			"Software-Updates sind auf diesem Gerät deaktiviert. Sie werden außerhalb von CeraUI verwaltet.",
+		updateReasonStreaming:
+			"Beende den Stream, bevor du ein Update installierst.",
+		updateReasonAlreadyUpdating: "Es läuft bereits ein Update.",
+		updateReasonCheckUnavailable:
+			"Die Paketliste konnte nicht aktualisiert werden. Prüfe die Internetverbindung des Geräts und versuche es erneut.",
+		updateReasonUnknown:
+			"Das Gerät hat das Update ohne Angabe eines Grundes abgelehnt.",
 		status: "Status",
 		streaming: "Streaming",
 		offline: "Offline",

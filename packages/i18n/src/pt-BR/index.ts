@@ -173,6 +173,20 @@ const ptBR = {
 		updateFailed: "Falha na atualização",
 		retryUpdateCheck: "Tentar novamente",
 		updateComplete: "Atualização concluída",
+		updateCompleteDetail:
+			"O dispositivo instalou a atualização e reiniciou seus serviços.",
+		updateStartRefused: "O dispositivo não iniciou a atualização",
+		updateNoProgress:
+			"O dispositivo aceitou a atualização mas nunca relatou nenhum progresso. Nada foi instalado.",
+		updateReasonDisabled:
+			"As atualizações de software estão desativadas neste dispositivo. Elas são gerenciadas fora do CeraUI.",
+		updateReasonStreaming:
+			"Pare a transmissão antes de instalar uma atualização.",
+		updateReasonAlreadyUpdating: "Já há uma atualização em andamento.",
+		updateReasonCheckUnavailable:
+			"Não foi possível atualizar a lista de pacotes. Verifique a conexão de internet do dispositivo e tente novamente.",
+		updateReasonUnknown:
+			"O dispositivo recusou a atualização sem informar um motivo.",
 		status: "Status",
 		streaming: "Transmitindo",
 		offline: "Offline",

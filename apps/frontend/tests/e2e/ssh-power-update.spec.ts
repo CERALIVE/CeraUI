@@ -20,6 +20,9 @@ import { evidencePath, navigateTo } from "./helpers";
  *      returning `{ success:false }` (the backend's streaming/updating guard)
  *      must surface a CALM failure and NOT proceed: the dialog stays open, the
  *      device is never marked "rebooting", and no update progress is shown.
+ *      Reboot surfaces a toast; the update surfaces a STANDING band naming the
+ *      device's reason, because a refusal that decays out of view is exactly the
+ *      silent revert the update-trigger fix removed.
  *
  * ── WebSocket harness (addInitScript) ────────────────────────────────────────
  * Adapted from wifi-surface.spec.ts (field-lock.spec.ts must not be modified).
@@ -310,12 +313,17 @@ test.describe(
 			await expect(confirm).toBeVisible();
 			await confirm.getByRole("button", { name: "Update", exact: true }).click();
 
-			// Calm refusal: a single failure toast, the dialog stays open, and NO
-			// "Updating" progress is shown (the start was never confirmed).
-			await expect(page.getByText(FAIL_TEXT)).toBeVisible();
+			// Calm refusal: a STANDING band naming the reason (not a transient toast
+			// that decays with the async-op phase — the silent-revert bug), the
+			// dialog stays open, and NO "Updating" progress is shown.
+			const refused = updates.getByTestId("update-start-refused");
+			await expect(refused).toBeVisible();
+			await expect(refused).toContainText("didn't start the update");
 			await expect(updates).toBeVisible();
 			await expect(updates.getByText(/Updating, please wait/)).toHaveCount(0);
-			record(`startUpdate returned {success:false} → "${FAIL_TEXT}" toast, dialog OPEN, no progress ✓`);
+			record(
+				"startUpdate returned {success:false} → standing refusal band, dialog OPEN, no progress ✓",
+			);
 		});
 	},
 );

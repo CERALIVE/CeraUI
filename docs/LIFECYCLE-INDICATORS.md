@@ -275,6 +275,30 @@ so the salvage branch's separate "dismiss escape hatch" is subsumed. See
 **update rollback lifecycle** in Named Follow-ups below (now resolved) and the
 Todo-37 triage section.
 
+### `update-start-refused` / `update-start-unacknowledged`
+**Current indicator:** `apps/frontend/src/main/dialogs/UpdatesDialog.svelte`
+renders a standing `update-start-refused` band carrying the device's own reason
+(`updates_disabled` / `streaming` / `already_updating` / `check_unavailable`),
+and calls out a start the device accepted but never reported progress for.
+**Status: EXISTS** — added after a live Rock 5B+ report where Update → confirm
+showed "Applying…", reverted to the Update button a few seconds later, and
+installed nothing. Two properties make that state unrepresentable now:
+
+- **The backend never refuses silently.** `startSoftwareUpdate()` returns a typed
+  `UpdateStartOutcome`; `system.startUpdate` answers `{success:false, error:<reason>}`
+  instead of a phantom `{success:true}`, and the refusal is logged. The
+  procedure no longer duplicates the guards — `startSoftwareUpdate()` is the one
+  place that decides whether an update may run.
+- **The dialog latches the outcome itself.** The async-op phase decays to `idle`
+  after `ASYNC_OP_TERMINAL_LINGER_MS`, which is precisely how the old surface lost
+  its explanation; the dialog records the last start outcome in its own state so
+  the band stands until the operator acts.
+
+The overlay's global mount is unchanged and was never trigger-specific: `Layout.svelte`
+mounts `updating-overlay.svelte` off `status.updating` alone, so the Settings →
+Software Updates path and the notification path show the identical live
+percentage/phase/step counts. Locked by `Layout.updating-overlay.test.ts`.
+
 ---
 
 ## 5. Preview lifecycle

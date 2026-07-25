@@ -167,6 +167,19 @@ const en = {
 		updateFailed: "Update failed",
 		retryUpdateCheck: "Try again",
 		updateComplete: "Update complete",
+		updateCompleteDetail:
+			"The device installed the update and restarted its services.",
+		updateStartRefused: "The device didn't start the update",
+		updateNoProgress:
+			"The device accepted the update but never reported any progress. Nothing was installed.",
+		updateReasonDisabled:
+			"Software updates are turned off on this device. They're managed outside CeraUI.",
+		updateReasonStreaming: "Stop the stream before installing an update.",
+		updateReasonAlreadyUpdating: "An update is already running.",
+		updateReasonCheckUnavailable:
+			"The package list couldn't be refreshed. Check the device's internet connection, then try again.",
+		updateReasonUnknown:
+			"The device refused the update without giving a reason.",
 		status: "Status",
 		streaming: "Streaming",
 		offline: "Offline",

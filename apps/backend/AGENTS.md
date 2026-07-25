@@ -275,6 +275,40 @@ on change, nothing sent to a pre-0.9.0 engine, a refused reload leaves levels fl
 no-op while down, plus the schema gate) and `tests/audio-sources.test.ts`
 (`resolveMeterPreference` — alias, no-alias, every `null` case, selector passthrough).
 
+## SOFTWARE-UPDATE START CONTRACT [EXISTS]
+
+`modules/system/software-updates.ts` owns whether an apt update may run, and it
+never refuses in silence.
+
+- **`aptUpdatesEnabled()` is the ONE predicate.** Discovery
+  (`getSoftwareUpdateSize`), the apt package-list refresh
+  (`checkForSoftwareUpdates`), the periodic loop, and the install path all read
+  it, so the UI can never advertise an update the install path would refuse.
+- **`apt_update_enabled` defaults to TRUE** (`SETUP_CONFIG_DEFAULTS`,
+  `helpers/config-schemas.ts`). The shipped `setup.json` carries no such key and
+  the field is `z.boolean().optional()`, so "absent ⇒ falsy" left the install
+  path dead on 100% of field hardware while discovery — which was never gated —
+  kept offering an Update button. Confirmed live on a Rock 5B+: `debug.log`
+  recorded `System: software update started` and then nothing at all. Only an
+  explicit `"apt_update_enabled": false` opts a device out.
+- **`startSoftwareUpdate(): UpdateStartOutcome`.** Every refusal is a typed
+  `UpdateStartRefusal` — `updates_disabled` / `streaming` / `already_updating` /
+  `check_unavailable` — logged at `warn` and returned to the caller.
+  `rpc/procedures/system.procedure.ts` `startUpdateProcedure` forwards it as
+  `{success:false, error:<reason>}` and does NOT re-check the guards itself;
+  duplicating them is what let a refusal answer `{success:true}`.
+- **A skipped pre-check no longer wedges the latch.** `defaultSoftwareUpdateRunner`
+  routes through the `softwareUpdateCheckRunner` seam and latches `softUpdateStatus`
+  only once the check has actually started. The check's callback is the ONLY
+  thing that ever clears that latch, so latching it after a declined check left
+  `isUpdating()` true for the lifetime of the process — refusing every later
+  update and silently killing the periodic loop with it.
+- **`resetSoftwareUpdateState()`** is a test seam (mirrors the `reset*Runner`
+  seams): it drops the in-flight latch and the last terminal outcome. Never call
+  it from production code — it would discard a real in-flight update.
+
+Coverage: `tests/software-updates-start-refusal.test.ts`.
+
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
 Opt-in boot auto-unlock for a PIN-locked SIM. Two modules under `modules/modems/`:
@@ -1145,6 +1179,9 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
 - Don't drive the engine directly — route through `getStreamingBackend()`, never
   the `cerastreamBackend` singleton.
+- Don't refuse a software update with a bare `return`, and don't re-check the
+  update guards at a call site — `startSoftwareUpdate()` owns every refusal and
+  always names it (see SOFTWARE-UPDATE START CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.

@@ -175,6 +175,20 @@ const es = {
 		updateFailed: "Error en la actualización",
 		retryUpdateCheck: "Reintentar",
 		updateComplete: "Actualización completada",
+		updateCompleteDetail:
+			"El dispositivo instaló la actualización y reinició sus servicios.",
+		updateStartRefused: "El dispositivo no inició la actualización",
+		updateNoProgress:
+			"El dispositivo aceptó la actualización pero nunca informó ningún progreso. No se instaló nada.",
+		updateReasonDisabled:
+			"Las actualizaciones de software están desactivadas en este dispositivo. Se gestionan fuera de CeraUI.",
+		updateReasonStreaming:
+			"Detén la transmisión antes de instalar una actualización.",
+		updateReasonAlreadyUpdating: "Ya hay una actualización en curso.",
+		updateReasonCheckUnavailable:
+			"No se pudo actualizar la lista de paquetes. Comprueba la conexión a internet del dispositivo e inténtalo de nuevo.",
+		updateReasonUnknown:
+			"El dispositivo rechazó la actualización sin indicar un motivo.",
 		status: "Estado",
 		streaming: "Transmitiendo",
 		offline: "Desconectado",

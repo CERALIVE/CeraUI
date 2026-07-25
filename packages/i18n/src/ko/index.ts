@@ -21,6 +21,18 @@ const ko = {
 		updateFailed: "업데이트 실패",
 		retryUpdateCheck: "다시 시도",
 		updateComplete: "업데이트 완료",
+		updateCompleteDetail:
+			"기기가 업데이트를 설치하고 서비스를 다시 시작했습니다.",
+		updateStartRefused: "기기가 업데이트를 시작하지 않았습니다",
+		updateNoProgress:
+			"기기가 업데이트를 수락했지만 진행 상황을 전혀 보고하지 않았습니다. 아무것도 설치되지 않았습니다.",
+		updateReasonDisabled:
+			"이 기기에서는 소프트웨어 업데이트가 꺼져 있습니다. CeraUI 외부에서 관리됩니다.",
+		updateReasonStreaming: "업데이트를 설치하기 전에 스트림을 중지하세요.",
+		updateReasonAlreadyUpdating: "이미 업데이트가 진행 중입니다.",
+		updateReasonCheckUnavailable:
+			"패키지 목록을 새로 고치지 못했습니다. 기기의 인터넷 연결을 확인한 뒤 다시 시도하세요.",
+		updateReasonUnknown: "기기가 이유를 밝히지 않고 업데이트를 거부했습니다.",
 		status: "상태",
 		streaming: "스트리밍",
 		offline: "오프라인",

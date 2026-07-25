@@ -453,6 +453,8 @@ export const setupConfigSchema = z.preprocess(
 		ips_file: z.string().optional(),
 		// Legacy belaUI setup.json fields read at runtime (opt-in overrides).
 		ssh_user: z.string().optional(),
+		// Absent means ENABLED — see SETUP_CONFIG_DEFAULTS. Only an explicit
+		// `false` opts a device out of apt-managed software updates.
 		apt_update_enabled: z.boolean().optional(),
 		has_gsm_autoconfig: z.boolean().optional(),
 		remote_protocol_version: z.number().optional(),
@@ -464,10 +466,17 @@ export const setupConfigSchema = z.preprocess(
 
 export type SetupConfig = z.infer<typeof setupConfigSchema>;
 
-// Default paths based on hardware
+// Default paths based on hardware.
+//
+// `apt_update_enabled` defaults to TRUE because the shipped setup.json carries
+// no such key: every CeraLive image installs an apt source for apt.ceralive.tv
+// and updates through it, so treating the absent key as "disabled" left the
+// whole update path dead on 100% of field hardware. Turning updates off is a
+// deliberate deployment choice and must be spelled `"apt_update_enabled": false`.
 export const SETUP_CONFIG_DEFAULTS: Partial<SetupConfig> = {
 	engine: "cerastream",
 	ips_file: "/tmp/srtla_ips",
+	apt_update_enabled: true,
 };
 
 // =============================================================================

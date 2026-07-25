@@ -19,6 +19,16 @@ const zh = {
 		updateFailed: "更新失败",
 		retryUpdateCheck: "重试",
 		updateComplete: "更新完成",
+		updateCompleteDetail: "设备已安装更新并重启了相关服务。",
+		updateStartRefused: "设备未开始更新",
+		updateNoProgress: "设备接受了更新，但从未报告任何进度。没有安装任何内容。",
+		updateReasonDisabled:
+			"此设备已关闭软件更新，更新由 CeraUI 之外的方式管理。",
+		updateReasonStreaming: "请先停止推流，再安装更新。",
+		updateReasonAlreadyUpdating: "已有更新正在进行。",
+		updateReasonCheckUnavailable:
+			"无法刷新软件包列表。请检查设备的网络连接后重试。",
+		updateReasonUnknown: "设备拒绝了更新，且未说明原因。",
 		status: "状态",
 		streaming: "直播中",
 		offline: "离线",
