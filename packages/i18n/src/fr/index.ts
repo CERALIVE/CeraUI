@@ -1428,6 +1428,10 @@ const fr = {
 			notConnectedTitle: "Non connecté",
 			notConnectedBody:
 				"Votre appareil prend en charge ce type de source, mais rien n'est branché pour l'instant. Branchez un appareil compatible pour l'utiliser, ou choisissez une source déjà connectée.",
+			noSignal: "Aucun signal",
+			noSignalTitle: "Aucun signal sur cette entrée",
+			noSignalBody:
+				"Cette entrée est présente et fonctionne, mais rien n'y arrive pour l'instant : l'appareil à l'autre bout du câble n'envoie pas d'image. Vérifiez qu'il est allumé et que le câble est bien enfoncé aux deux extrémités. Vous pouvez quand même sélectionner cette source : elle fonctionnera dès qu'un signal apparaîtra.",
 			mjpegTitle: "Pourquoi MJPEG ?",
 			mjpegBody:
 				"C'est un appareil USB Video Class (UVC) standard qui produit du Motion-JPEG : sa propre description matérielle USB n'annonce que de la vidéo non compressée et du Motion-JPEG (MJPEG) — aucun encodage matériel H.264/H.265 via USB ni canal constructeur caché pour cela —, l'encodeur capture donc sa vidéo MJPEG et la réencode dans le codec que vous choisissez. C'est une description exacte du matériel, pas un défaut.",

@@ -34,6 +34,7 @@ import {
 	type DeviceMediaClass,
 	type DevicesMessage,
 	deviceKindSchema,
+	type SourceSignal,
 	type StreamingEngineKind,
 	SWITCH_INPUT_ERRORS,
 	type SwitchInputOutput,
@@ -187,7 +188,26 @@ export function fromEngineDevice(device: EngineCaptureDevice): CaptureDevice {
 		kind: mapEngineDeviceKind(device.kind, device.display_name),
 		...(device.caps !== undefined ? { caps: device.caps } : {}),
 		...(device.stable_id !== undefined ? { stable_id: device.stable_id } : {}),
+		signal: engineSignal(device),
 	};
+}
+
+/**
+ * The signal verdict for a device the ENGINE answered for. Zero caps is a real
+ * finding here, not a gap: the engine listed the device, so it probed it, and it
+ * projected nothing usable — the idle-HDMI-RX case. Verified on a real Rock 5B+
+ * where cerastream OMITS `caps` entirely for the severed-link node while the
+ * live UVC device beside it carries 64 of them, so an absent array and an empty
+ * one mean the same thing on this path and both read `absent`.
+ *
+ * This is exactly why the verdict is stamped HERE and nowhere else: only this
+ * seam knows the engine is the author of the row. `buildDeviceList`'s v4l2
+ * fallback scan carries no caps because nothing probed for them, and stamping
+ * `absent` there would report every device as signal-less whenever the engine is
+ * down. It leaves the field unset, which reads as `unknown`.
+ */
+function engineSignal(device: EngineCaptureDevice): SourceSignal {
+	return (device.caps?.length ?? 0) > 0 ? "present" : "absent";
 }
 
 /** Pure: collapse a v4l2 scan + audio map into the deduped device list. */

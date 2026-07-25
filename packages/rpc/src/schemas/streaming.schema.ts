@@ -891,8 +891,34 @@ export const captureCapSchema = z.object({
 });
 export type CaptureCap = z.infer<typeof captureCapSchema>;
 
-// Mirrors the cerastream `captureDeviceSchema` plus two CeraUI-owned UI facets:
-// `kind` for grouping and `lost` for the unplugged-during-session grace state.
+/**
+ * Whether a PRESENT capture device is actually carrying a usable signal — the
+ * THIRD state, distinct from the two negatives that already existed:
+ *
+ *   • `lost`            — the device DISAPPEARED (unplugged); it is not in the
+ *                         engine's device list at all.
+ *   • "Not connected"   — a `coarse` capability row with no device bound to it.
+ *   • `signal:'absent'` — the device IS enumerated and IS bound, but the ENGINE
+ *                         enumerated zero capture modes for it. That is what an
+ *                         idle HDMI-RX port looks like: the v4l2 node exists and
+ *                         `list-devices` returns it, but `v4l2-ctl
+ *                         --query-dv-timings` answers "Link has been severed" so
+ *                         the engine projects no caps at all. Before this field
+ *                         such a row rendered identically to a healthy one.
+ *
+ * `unknown` is the honest answer whenever the ENGINE is not the source of the
+ * row — the v4l2 fallback scan and hotplug rows the engine never confirmed carry
+ * no caps simply because nothing probed them. Verified on a real Rock 5B+: the
+ * engine OMITS `caps` for a signal-less device rather than sending `[]`, so
+ * absent-vs-empty on the wire proves nothing and PROVENANCE is the real
+ * discriminator. Only the explicit `absent` may surface a negative state.
+ */
+export const sourceSignalSchema = z.enum(['present', 'absent', 'unknown']);
+export type SourceSignal = z.infer<typeof sourceSignalSchema>;
+
+// Mirrors the cerastream `captureDeviceSchema` plus three CeraUI-owned UI facets:
+// `kind` for grouping, `lost` for the unplugged-during-session grace state, and
+// `signal` for the present-but-nothing-arriving state.
 export const captureDeviceSchema = z.object({
 	input_id: z.string(),
 	device_path: z.string(),
@@ -906,6 +932,9 @@ export const captureDeviceSchema = z.object({
 	// row instead of orphaning a stale `lost:true` one (Todo 34).
 	stable_id: z.string().optional(),
 	lost: z.boolean().optional(),
+	// Set ONLY by `fromEngineDevice` — the seam that knows the engine answered
+	// for this device. Absent everywhere else, which reads as `unknown`.
+	signal: sourceSignalSchema.optional(),
 });
 export type CaptureDevice = z.infer<typeof captureDeviceSchema>;
 

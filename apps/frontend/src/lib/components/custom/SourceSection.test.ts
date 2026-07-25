@@ -977,6 +977,106 @@ describe("SourceSection — lost device explanation (from source.lost)", () => {
 	});
 });
 
+describe("SourceSection — present-but-signal-less capture row (source.signal)", () => {
+	// The onboard HDMI-RX with nothing on the cable: enumerated, bound, and
+	// reporting zero usable modes. Before `signal` it was indistinguishable from
+	// the healthy row below it.
+	const SIGNAL_ABSENT: CaptureStreamSource = {
+		...HDMI_CAPTURE,
+		signal: "absent",
+	};
+
+	it("marks a signal-absent capture row with the No-signal badge and its explainer", () => {
+		const { container } = mount({ sources: sourcesMsg([SIGNAL_ABSENT]) });
+		const badge = container.querySelector<HTMLElement>(
+			'[data-testid="source-no-signal-hdmi-rx"]',
+		);
+		if (!badge) throw new Error("no-signal badge not rendered");
+		expect(badge.textContent).toMatch(/no signal/i);
+		expect(
+			container.querySelector('[data-testid="source-no-signal-info-hdmi-rx"]'),
+		).not.toBeNull();
+	});
+
+	it("uses the amber warning register, NOT the destructive lost treatment", () => {
+		const { container } = mount({ sources: sourcesMsg([SIGNAL_ABSENT]) });
+		const badge = container.querySelector<HTMLElement>(
+			'[data-testid="source-no-signal-hdmi-rx"]',
+		);
+		expect(badge?.className).toContain("bg-status-warning/10");
+		expect(badge?.className).toContain("border-status-warning/60");
+		expect(badge?.className).not.toContain("destructive");
+	});
+
+	it("keeps the signal-less row selectable and raises no lost banner", () => {
+		const { container } = mount({ sources: sourcesMsg([SIGNAL_ABSENT]) });
+		const select = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-select-hdmi-rx"]',
+		);
+		expect(select?.disabled).toBe(false);
+		expect(
+			container.querySelector('[data-testid="source-lost-banner"]'),
+		).toBeNull();
+	});
+
+	it("is structurally distinct from a healthy row, which shows no negative marker", () => {
+		const healthy: CaptureStreamSource = {
+			...HDMI_CAPTURE,
+			signal: "present",
+		};
+		const { container } = mount({ sources: sourcesMsg([healthy]) });
+		expect(
+			container.querySelector('[data-testid="source-no-signal-hdmi-rx"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-no-signal-info-hdmi-rx"]'),
+		).toBeNull();
+	});
+
+	it("shows nothing for `unknown` or a legacy row with no signal field at all", () => {
+		for (const source of [
+			{ ...HDMI_CAPTURE, signal: "unknown" } as CaptureStreamSource,
+			HDMI_CAPTURE,
+		]) {
+			const { container, unmount } = mount({ sources: sourcesMsg([source]) });
+			expect(
+				container.querySelector('[data-testid="source-no-signal-hdmi-rx"]'),
+			).toBeNull();
+			unmount();
+		}
+	});
+
+	it("a lost row keeps the Lost badge and never gains the No-signal badge", () => {
+		const lostAndSignalless: CaptureStreamSource = {
+			...HDMI_CAPTURE,
+			lost: true,
+			available: false,
+			signal: "absent",
+		};
+		const { container } = mount({ sources: sourcesMsg([lostAndSignalless]) });
+		expect(
+			container.querySelector('[data-testid="source-no-signal-hdmi-rx"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-lost-banner"]'),
+		).not.toBeNull();
+		const select = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-select-hdmi-rx"]',
+		);
+		expect(select?.disabled).toBe(true);
+	});
+
+	it("a coarse row still shows Not connected — the new state does not leak onto it", () => {
+		const { container } = mount({ sources: sourcesMsg([COARSE_HDMI]) });
+		expect(
+			container.querySelector('[data-testid="source-not-connected-hdmi"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-no-signal-hdmi"]'),
+		).toBeNull();
+	});
+});
+
 describe("SourceSection — audio source single vs multiple (kept)", () => {
 	it("renders a SINGLE audio source read-only (no misleading dropdown)", () => {
 		const { container } = mount({ audioSources: ["alsa:usbaudio"] });

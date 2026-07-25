@@ -1403,6 +1403,10 @@ const ptBR = {
 			notConnectedTitle: "Não conectado",
 			notConnectedBody:
 				"Seu dispositivo é compatível com esse tipo de fonte, mas nada está conectado para ela no momento. Conecte um dispositivo compatível para usá-la, ou escolha uma fonte já conectada.",
+			noSignal: "Sem sinal",
+			noSignalTitle: "Sem sinal nesta entrada",
+			noSignalBody:
+				"Esta entrada está presente e funcionando, mas nada está chegando por ela agora — o dispositivo na outra ponta do cabo não está enviando imagem. Verifique se ele está ligado e se o cabo está bem encaixado nas duas pontas. Você ainda pode selecionar esta fonte: ela passa a funcionar assim que houver sinal.",
 			mjpegTitle: "Por que MJPEG?",
 			mjpegBody:
 				"Este é um dispositivo USB Video Class (UVC) padrão que produz Motion-JPEG: a própria descrição de hardware USB dele anuncia apenas vídeo não comprimido e Motion-JPEG (MJPEG) — sem codificação H.264/H.265 por hardware via USB e sem nenhum canal oculto do fabricante para isso —, então o codificador captura o vídeo MJPEG e o recodifica para o codec escolhido. É uma descrição precisa do hardware, não uma falha.",
