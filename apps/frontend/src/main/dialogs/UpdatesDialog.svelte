@@ -4,11 +4,18 @@
   Shows the available package count and download size from live status. Install
   is a destructive action: it routes through a confirmation AppDialog before
   calling the system RPC (startUpdate). While an update is running, a progress
-  indicator replaces the install action and the dialog cannot start another.
+  indicator replaces the install action and the dialog cannot start another —
+  the full-screen `updating-overlay` (mounted globally in Layout.svelte off
+  `status.updating`) carries the real percentage, phase and step counts.
+
+  Every start attempt ends in a state the operator can read: the device either
+  reports progress, refuses with a named reason, or is called out for having
+  accepted the start and then reported nothing at all. It never just stops
+  showing a spinner.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import { AlertTriangle, Download, RefreshCw } from '@lucide/svelte';
+import { AlertTriangle, CheckCircle2, Download, RefreshCw } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
@@ -41,6 +48,7 @@ const version = $derived(available?.identity.version ?? '');
 const packages = $derived(available?.identity.packages ?? []);
 
 const failed = $derived(updateState?.kind === 'failed' ? updateState : undefined);
+const succeeded = $derived(updateState?.kind === 'success');
 const inProgress = $derived(
 	updateState?.kind === 'downloading' || updateState?.kind === 'installing',
 );
@@ -63,13 +71,42 @@ let confirmOpen = $state(false);
 // from the startUpdate dispatch until the first in-progress state confirms it.
 const starting = $derived(getOperationPhase('update') === 'pending');
 
+// The outcome of the last start attempt, latched HERE rather than read off the
+// async-op phase: that phase decays to idle after ASYNC_OP_TERMINAL_LINGER_MS,
+// which is precisely how a refused or unacknowledged update used to disappear
+// with no explanation at all.
+type StartOutcome = { kind: 'refused'; reason: string } | { kind: 'stalled' };
+let startOutcome = $state<StartOutcome | undefined>();
+
+const refusalMessage = $derived.by(() => {
+	if (startOutcome?.kind !== 'refused') return undefined;
+	switch (startOutcome.reason) {
+		case 'updates_disabled':
+			return $LL.general.updateReasonDisabled();
+		case 'streaming':
+			return $LL.general.updateReasonStreaming();
+		case 'already_updating':
+			return $LL.general.updateReasonAlreadyUpdating();
+		case 'check_unavailable':
+			return $LL.general.updateReasonCheckUnavailable();
+		default:
+			return $LL.general.updateReasonUnknown();
+	}
+});
+
 async function doInstall() {
-	await osCommand({
+	startOutcome = undefined;
+	// `silent` because the refusal is rendered as a durable inline band with the
+	// device's actual reason — a transient generic toast is what made this
+	// failure read as "nothing happened".
+	const res = await osCommand({
 		key: 'update',
 		rpc: () => rpc.system.startUpdate(),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		silent: true,
 	});
+	if (!res?.success) {
+		startOutcome = { kind: 'refused', reason: res?.error ?? 'unknown' };
+	}
 }
 
 let checking = $state(false);
@@ -104,6 +141,19 @@ $effect(() => {
 	if (getOperationPhase('update') !== 'pending') return;
 	if (inProgress) confirmOperation('update');
 });
+
+// The device accepted the start but never reported a single progress frame.
+// Say so — the operator must never be left to infer it from a vanished spinner.
+$effect(() => {
+	if (getOperationPhase('update') === 'timed_out') {
+		startOutcome = { kind: 'stalled' };
+	}
+});
+
+// A real update (or a fresh terminal state) supersedes the last start outcome.
+$effect(() => {
+	if (inProgress || failed || succeeded) startOutcome = undefined;
+});
 </script>
 
 <AppDialog
@@ -126,6 +176,18 @@ $effect(() => {
 						</p>
 						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
 							{failed.reason}
+						</p>
+					</div>
+				</div>
+			{:else if succeeded}
+				<div class="flex items-start gap-2" data-testid="update-succeeded">
+					<CheckCircle2 class="text-status-success mt-0.5 size-5 shrink-0" />
+					<div class="min-w-0">
+						<p class="text-status-success text-lg font-semibold">
+							{$LL.general.updateComplete()}
+						</p>
+						<p class="text-muted-foreground mt-1 text-sm">
+							{$LL.general.updateCompleteDetail()}
 						</p>
 					</div>
 				</div>
@@ -165,36 +227,64 @@ $effect(() => {
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
 				{$LL.network.os.applying()}
 			</div>
-		{:else if failed}
-			<Button
-				aria-busy={checking}
-				class="w-full gap-2"
-				disabled={checking}
-				onclick={doCheck}
-				variant="outline"
-				data-testid="update-retry"
-			>
-				<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
-				{$LL.general.retryUpdateCheck()}
-			</Button>
-		{:else if count > 0}
-			<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
-				<Download class="size-4" />
-				{$LL.general.updateButton()}
-			</Button>
-		{/if}
+		{:else}
+			<!-- A start that was refused, or accepted and then never reported, must
+			     leave a standing explanation — not just stop showing a spinner. -->
+			{#if startOutcome}
+				<div
+					class="border-status-warning/60 bg-status-warning/10 flex items-start gap-2 rounded-lg border p-3"
+					data-testid="update-start-refused"
+					role="status"
+				>
+					<AlertTriangle class="text-status-warning mt-0.5 size-4 shrink-0" />
+					<div class="min-w-0 space-y-0.5">
+						<p class="text-sm font-medium">
+							{startOutcome.kind === 'stalled'
+								? $LL.general.updateNoProgress()
+								: $LL.general.updateStartRefused()}
+						</p>
+						{#if refusalMessage}
+							<p
+								class="text-muted-foreground text-sm break-words"
+								data-testid="update-start-refused-reason"
+							>
+								{refusalMessage}
+							</p>
+						{/if}
+					</div>
+				</div>
+			{/if}
 
-		{#if !inProgress && !starting && !failed}
-			<Button
-				aria-busy={checking}
-				class="w-full gap-2"
-				disabled={checking}
-				onclick={doCheck}
-				variant="outline"
-			>
-				<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
-				{checking ? $LL.general.checkingForUpdates() : $LL.general.checkForUpdates()}
-			</Button>
+			{#if failed}
+				<Button
+					aria-busy={checking}
+					class="w-full gap-2"
+					disabled={checking}
+					onclick={doCheck}
+					variant="outline"
+					data-testid="update-retry"
+				>
+					<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
+					{$LL.general.retryUpdateCheck()}
+				</Button>
+			{:else}
+				{#if count > 0}
+					<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
+						<Download class="size-4" />
+						{$LL.general.updateButton()}
+					</Button>
+				{/if}
+				<Button
+					aria-busy={checking}
+					class="w-full gap-2"
+					disabled={checking}
+					onclick={doCheck}
+					variant="outline"
+				>
+					<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
+					{checking ? $LL.general.checkingForUpdates() : $LL.general.checkForUpdates()}
+				</Button>
+			{/if}
 		{/if}
 	</div>
 </AppDialog>

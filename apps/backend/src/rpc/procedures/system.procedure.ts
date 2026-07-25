@@ -46,6 +46,7 @@ import { getLog } from "../../modules/system/logs.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
+	aptUpdatesEnabled,
 	isUpdating,
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
@@ -174,14 +175,19 @@ export const rebootProcedure = authedProcedure
 /**
  * Start update procedure
  */
+// startSoftwareUpdate() owns every refusal so there is exactly ONE place that
+// decides whether an update may run, and it always names the reason. Duplicating
+// the guards here is what let a refusal answer `{success:true}` while nothing
+// happened, parking the dialog on "Applying…" until it silently timed out.
 export const startUpdateProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
-		if (getIsStreaming() || isUpdating()) {
-			return { success: false };
+		const outcome = startSoftwareUpdate();
+		if (!outcome.started) {
+			logger.info(`System: software update refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
 		}
 		logger.info("System: software update started");
-		startSoftwareUpdate();
 		return { success: true };
 	});
 
@@ -193,8 +199,15 @@ export const checkForUpdatesProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(() => {
 		const started = triggerManualUpdateCheck();
-		if (started) logger.info("System: manual software update check started");
-		return { success: started };
+		if (started) {
+			logger.info("System: manual software update check started");
+			return { success: true };
+		}
+		if (!aptUpdatesEnabled()) {
+			logger.info("System: software update check refused (updates_disabled)");
+			return { success: false, error: "updates_disabled" };
+		}
+		return { success: false, error: "check_unavailable" };
 	});
 
 /**

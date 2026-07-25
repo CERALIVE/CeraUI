@@ -202,7 +202,7 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 		expect(pageErrors).toEqual([]);
 	});
 
-	test("software-update start walk shows the mock progress frames (seam asserted)", async ({
+	test("software-update start walk reaches the real mock seam and reports success", async ({
 		page,
 	}) => {
 		// Reveal the install action: the dialog derives from the ONE unified update
@@ -237,21 +237,15 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 		await expect(confirm).toBeVisible();
 		await confirm.getByRole("button", { name: "Update", exact: true }).click();
 
-		// The seeded e2e backend has no apt_update_enabled, so the real apt seam
-		// (simulateMockSoftwareUpdate) early-returns; the mock seam's OUTPUT is
-		// modeled over the socket. The dialog derives its in-progress state from
-		// `update_state` (the unified machine, Todo 24) — driven here as the backend
-		// broadcasts it alongside the legacy `updating` frame during a download.
-		send({
-			status: {
-				updating: { total: 100, downloading: 40, unpacking: 0, setting_up: 0 },
-				update_state: {
-					kind: "downloading",
-					progress: { total: 100, downloading: 40, unpacking: 0, setting_up: 0 },
-				},
-			},
+		// No frame modeling: `apt_update_enabled` defaults to true, so the confirm
+		// genuinely reaches the real mock seam (simulateMockSoftwareUpdate), which
+		// broadcasts the progress sequence and then the terminal success state. The
+		// standing success panel is asserted rather than the transient progress —
+		// it is deterministic, and it proves the start reached the seam at all,
+		// which is the exact link that was broken on shipped devices.
+		await expect(updates.getByTestId("update-succeeded")).toBeVisible({
+			timeout: 15000,
 		});
-		await expect(updates.getByText(/Updating/i)).toBeVisible({ timeout: 5000 });
 		expect(pageErrors).toEqual([]);
 	});
 

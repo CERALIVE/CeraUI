@@ -21,6 +21,18 @@ const ja = {
 		updateFailed: "更新に失敗しました",
 		retryUpdateCheck: "再試行",
 		updateComplete: "更新が完了しました",
+		updateCompleteDetail:
+			"デバイスは更新をインストールし、サービスを再起動しました。",
+		updateStartRefused: "デバイスは更新を開始しませんでした",
+		updateNoProgress:
+			"デバイスは更新を受け付けましたが、進捗を一切報告しませんでした。何もインストールされていません。",
+		updateReasonDisabled:
+			"このデバイスではソフトウェア更新が無効です。CeraUI の外部で管理されています。",
+		updateReasonStreaming: "更新をインストールする前に配信を停止してください。",
+		updateReasonAlreadyUpdating: "更新はすでに実行中です。",
+		updateReasonCheckUnavailable:
+			"パッケージ一覧を更新できませんでした。デバイスのインターネット接続を確認して、もう一度お試しください。",
+		updateReasonUnknown: "デバイスは理由を示さずに更新を拒否しました。",
 		status: "ステータス",
 		streaming: "ストリーミング",
 		offline: "オフライン",

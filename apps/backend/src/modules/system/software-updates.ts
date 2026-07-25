@@ -54,7 +54,7 @@ let availableUpdates:
 			download_size?: string;
 	  }
 	| null
-	| false = setup.apt_update_enabled ? null : false;
+	| false = aptUpdatesEnabled() ? null : false;
 type SoftUpdateStatus = {
 	total: number;
 	downloading: number;
@@ -76,6 +76,31 @@ let currentUpdateIdentity: UpdateIdentity | null = null;
 let lastUpdateFailure: UpdateFailure | null = null;
 let lastUpdateSucceeded = false;
 
+// Why an update start was refused. A refusal is ALWAYS one of these — never a
+// bare `return` — so the operator gets a reason instead of a dialog that shows
+// "Applying…" and reverts in silence (the live Rock 5B+ report this fixes).
+export type UpdateStartRefusal =
+	| "updates_disabled"
+	| "streaming"
+	| "already_updating"
+	| "check_unavailable";
+
+export type UpdateStartOutcome =
+	| { started: true }
+	| { started: false; reason: UpdateStartRefusal };
+
+function refuseUpdateStart(reason: UpdateStartRefusal): UpdateStartOutcome {
+	logger.warn(`Software update refused: ${reason}`);
+	return { started: false, reason };
+}
+
+// The ONE predicate for "may this device install apt updates". Discovery, the
+// periodic check, and the install path all read it, so the UI can never offer an
+// update the install path would refuse.
+export function aptUpdatesEnabled(): boolean {
+	return setup.apt_update_enabled !== false;
+}
+
 export function getAvailableUpdates() {
 	return availableUpdates;
 }
@@ -86,6 +111,16 @@ export function getSoftUpdateStatus() {
 
 export function isUpdating() {
 	return softUpdateStatus != null;
+}
+
+// Test seam, mirroring the reset*Runner seams below: drops the in-flight latch
+// and the last terminal outcome so a suite that leaves an update mid-flight
+// cannot refuse the next test's start with `already_updating`.
+export function resetSoftwareUpdateState(): void {
+	softUpdateStatus = null;
+	currentUpdateIdentity = null;
+	lastUpdateFailure = null;
+	lastUpdateSucceeded = false;
 }
 
 export function getUpdateState(): UpdateState {
@@ -323,6 +358,8 @@ export function reportUpdateCheckFailure(upgrade: {
 }
 
 async function getSoftwareUpdateSize() {
+	// Never advertise an update the install path would refuse to run.
+	if (!aptUpdatesEnabled()) return null;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
 
 	// First see if any packages can be upgraded by dist-upgrade
@@ -442,6 +479,7 @@ export function classifyAptUpdateResult(
 function checkForSoftwareUpdates(
 	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
 ): boolean {
+	if (!aptUpdatesEnabled()) return false;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
 
 	aptGetUpdating = true;
@@ -535,6 +573,10 @@ function scheduleNextSoftwareUpdateCheck(delay: number): void {
 }
 
 export function periodicCheckForSoftwareUpdates() {
+	if (!aptUpdatesEnabled()) return;
+	// A dev/CI host must never be handed to apt. The manual check has its own
+	// mock branch; this background loop simply does not run there.
+	if (shouldUseMocks()) return;
 	if (nextCheckForSoftwareUpdatesTimer) {
 		clearTimeout(nextCheckForSoftwareUpdatesTimer);
 		nextCheckForSoftwareUpdatesTimer = undefined;
@@ -592,10 +634,12 @@ export function triggerManualUpdateCheck(): boolean {
 // progress sequence instead); tests spy it to assert the real path fired (prod)
 // or stayed untouched (dev). This is SEPARATE from the rebootRunner seam above,
 // which only gates the post-update reboot — this gates the entire apt spawn.
-type SoftwareUpdateRunner = () => void;
+// The runner reports its own outcome: a refusal is only discoverable once the
+// apt package-list refresh has been dispatched.
+type SoftwareUpdateRunner = () => UpdateStartOutcome;
 
 const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
-	checkForSoftwareUpdates((err) => {
+	const checkStarted = softwareUpdateCheckRunner((err) => {
 		if (err === null) {
 			doSoftwareUpdate();
 		} else if (softUpdateStatus) {
@@ -640,11 +684,18 @@ const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
 		}
 	});
 
+	// The callback above is the ONLY thing that ever clears softUpdateStatus, so
+	// latching it after a check that declined to run would leave isUpdating()
+	// true for the lifetime of the process — refusing every later update and
+	// silently killing the periodic check loop with it.
+	if (!checkStarted) return refuseUpdateStart("check_unavailable");
+
 	softUpdateStatus = { downloading: 0, unpacking: 0, setting_up: 0, total: 0 };
 	broadcastMsg("status", {
 		updating: softUpdateStatus,
 		update_state: getUpdateState(),
 	});
+	return { started: true };
 };
 
 let softwareUpdateRunner: SoftwareUpdateRunner = defaultSoftwareUpdateRunner;
@@ -701,8 +752,10 @@ async function simulateMockSoftwareUpdate(): Promise<void> {
 	broadcastUpdateState();
 }
 
-export function startSoftwareUpdate() {
-	if (!setup.apt_update_enabled || getIsStreaming() || isUpdating()) return;
+export function startSoftwareUpdate(): UpdateStartOutcome {
+	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
+	if (getIsStreaming()) return refuseUpdateStart("streaming");
+	if (isUpdating()) return refuseUpdateStart("already_updating");
 
 	// A fresh install supersedes any prior terminal outcome (Todo 24).
 	currentUpdateIdentity = availableIdentity;
@@ -712,7 +765,7 @@ export function startSoftwareUpdate() {
 	// if an apt-get update is already in progress, retry later
 	if (aptGetUpdating) {
 		setTimeout(startSoftwareUpdate, 3 * 1000);
-		return;
+		return { started: true };
 	}
 
 	// Dev/mock seam: simulate the progress→complete sequence without ever
@@ -720,14 +773,14 @@ export function startSoftwareUpdate() {
 	if (shouldUseMocks()) {
 		mockSoftwareUpdatePromise = simulateMockSoftwareUpdate();
 		void mockSoftwareUpdatePromise;
-		return;
+		return { started: true };
 	}
 
-	softwareUpdateRunner();
+	return softwareUpdateRunner();
 }
 
 function doSoftwareUpdate() {
-	if (!setup.apt_update_enabled || getIsStreaming()) return;
+	if (!aptUpdatesEnabled() || getIsStreaming()) return;
 
 	let rebootAfterUpgrade = false;
 	let aptLog = "";

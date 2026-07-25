@@ -173,6 +173,19 @@ const fr = {
 		updateFailed: "Échec de la mise à jour",
 		retryUpdateCheck: "Réessayer",
 		updateComplete: "Mise à jour terminée",
+		updateCompleteDetail:
+			"L'appareil a installé la mise à jour et redémarré ses services.",
+		updateStartRefused: "L'appareil n'a pas démarré la mise à jour",
+		updateNoProgress:
+			"L'appareil a accepté la mise à jour mais n'a signalé aucune progression. Rien n'a été installé.",
+		updateReasonDisabled:
+			"Les mises à jour logicielles sont désactivées sur cet appareil. Elles sont gérées en dehors de CeraUI.",
+		updateReasonStreaming: "Arrêtez le flux avant d'installer une mise à jour.",
+		updateReasonAlreadyUpdating: "Une mise à jour est déjà en cours.",
+		updateReasonCheckUnavailable:
+			"La liste des paquets n'a pas pu être actualisée. Vérifiez la connexion internet de l'appareil, puis réessayez.",
+		updateReasonUnknown:
+			"L'appareil a refusé la mise à jour sans donner de raison.",
 		status: "Statut",
 		streaming: "En streaming",
 		offline: "Hors ligne",

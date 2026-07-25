@@ -138,6 +138,7 @@ describe("software update — dev mock seam", () => {
 		let runnerCalls = 0;
 		setSoftwareUpdateRunner(() => {
 			runnerCalls++;
+			return { started: true };
 		});
 
 		const sent: string[] = [];
@@ -186,6 +187,7 @@ describe("software update — production proof", () => {
 		let runnerCalls = 0;
 		setSoftwareUpdateRunner(() => {
 			runnerCalls++;
+			return { started: true };
 		});
 
 		startSoftwareUpdate();

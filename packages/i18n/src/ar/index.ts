@@ -158,6 +158,17 @@ const ar = {
 		updateFailed: "فشل التحديث",
 		retryUpdateCheck: "أعد المحاولة",
 		updateComplete: "اكتمل التحديث",
+		updateCompleteDetail: "قام الجهاز بتثبيت التحديث وأعاد تشغيل خدماته.",
+		updateStartRefused: "لم يبدأ الجهاز التحديث",
+		updateNoProgress:
+			"قبل الجهاز التحديث لكنه لم يُبلّغ عن أي تقدّم. لم يتم تثبيت أي شيء.",
+		updateReasonDisabled:
+			"تحديثات البرامج معطّلة على هذا الجهاز. تتم إدارتها خارج CeraUI.",
+		updateReasonStreaming: "أوقف البث قبل تثبيت التحديث.",
+		updateReasonAlreadyUpdating: "هناك تحديث قيد التشغيل بالفعل.",
+		updateReasonCheckUnavailable:
+			"تعذّر تحديث قائمة الحزم. تحقّق من اتصال الجهاز بالإنترنت ثم أعد المحاولة.",
+		updateReasonUnknown: "رفض الجهاز التحديث دون ذكر سبب.",
 		status: "الحالة",
 		streaming: "البث",
 		offline: "غير متصل",

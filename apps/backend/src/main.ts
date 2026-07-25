@@ -322,9 +322,9 @@ logger.info(bootTimer.phase("🖥️", "hardware"));
 void updateGwWrapper();
 setInterval(updateGwWrapper, UPDATE_GW_INT);
 
-if (setup.apt_update_enabled) {
-	periodicCheckForSoftwareUpdates();
-}
+// Self-gating: it no-ops when updates are disabled for this device or when the
+// host is a dev/mock box (a dev machine must never be handed to apt).
+periodicCheckForSoftwareUpdates();
 
 initNetworkInterfaceMonitoring();
 

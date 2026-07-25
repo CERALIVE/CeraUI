@@ -20,6 +20,17 @@ const hi = {
 		updateFailed: "अपडेट विफल",
 		retryUpdateCheck: "पुनः प्रयास करें",
 		updateComplete: "अपडेट पूर्ण",
+		updateCompleteDetail: "डिवाइस ने अपडेट इंस्टॉल किया और अपनी सेवाएँ पुनः आरंभ कीं।",
+		updateStartRefused: "डिवाइस ने अपडेट शुरू नहीं किया",
+		updateNoProgress:
+			"डिवाइस ने अपडेट स्वीकार किया लेकिन कोई प्रगति नहीं बताई। कुछ भी इंस्टॉल नहीं हुआ।",
+		updateReasonDisabled:
+			"इस डिवाइस पर सॉफ़्टवेयर अपडेट बंद हैं। इन्हें CeraUI के बाहर प्रबंधित किया जाता है।",
+		updateReasonStreaming: "अपडेट इंस्टॉल करने से पहले स्ट्रीम रोकें।",
+		updateReasonAlreadyUpdating: "एक अपडेट पहले से चल रहा है।",
+		updateReasonCheckUnavailable:
+			"पैकेज सूची ताज़ा नहीं हो सकी। डिवाइस का इंटरनेट कनेक्शन जाँचें, फिर पुनः प्रयास करें।",
+		updateReasonUnknown: "डिवाइस ने बिना कोई कारण बताए अपडेट अस्वीकार कर दिया।",
 		status: "स्थिति",
 		streaming: "स्ट्रीमिंग",
 		offline: "ऑफलाइन",
