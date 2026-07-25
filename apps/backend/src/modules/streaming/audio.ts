@@ -355,15 +355,34 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 
 let asrcProbeReject: (() => void) | undefined;
 let asrcProbeWake: (() => void) | undefined;
+let asrcProbeDeadlineAt: number | undefined;
 
 export function isAsrcProbeRejectResolved() {
 	return asrcProbeReject !== undefined;
+}
+
+/**
+ * Milliseconds the in-flight probe may still legitimately spend waiting for its
+ * device, or 0 when none is pending. The start-retry runner defers its generic
+ * per-attempt deadline by this much: without it the shorter generic deadline
+ * preempts the probe and reports an absent audio device as an engine timeout.
+ * Bounded by construction — never exceeds AUDIO_PROBE_TIMEOUT_MS.
+ */
+export function asrcProbeRemainingMs(now: number = Date.now()): number {
+	if (asrcProbeReject === undefined || asrcProbeDeadlineAt === undefined) {
+		return 0;
+	}
+	return Math.min(
+		AUDIO_PROBE_TIMEOUT_MS,
+		Math.max(0, asrcProbeDeadlineAt - now),
+	);
 }
 
 export function clearAsrcProbeReject() {
 	asrcProbeReject?.();
 	asrcProbeReject = undefined;
 	asrcProbeWake = undefined;
+	asrcProbeDeadlineAt = undefined;
 }
 
 export class AudioProbeTimeoutError extends Error {
@@ -385,12 +404,14 @@ export async function asrcProbe(asrc: string): Promise<string> {
 		asrcProbeReject = () => {
 			rej(new AudioProbeTimeoutError(asrc));
 		};
+		asrcProbeDeadlineAt = Date.now() + AUDIO_PROBE_TIMEOUT_MS;
 
 		// Set timeout for audio device probe (QW-J)
 		const timeoutHandle = setTimeout(() => {
 			if (asrcProbeReject) {
 				asrcProbeReject();
 				asrcProbeReject = undefined;
+				asrcProbeDeadlineAt = undefined;
 			}
 		}, AUDIO_PROBE_TIMEOUT_MS);
 
@@ -400,6 +421,7 @@ export async function asrcProbe(asrc: string): Promise<string> {
 				if (audioSrcId) {
 					clearTimeout(timeoutHandle);
 					asrcProbeReject = undefined;
+					asrcProbeDeadlineAt = undefined;
 					res(audioSrcId);
 					return;
 				}
@@ -420,6 +442,7 @@ export async function asrcProbe(asrc: string): Promise<string> {
 			}
 			// If the loop exited, then rej() was already called externally. Nothing left to do
 			asrcProbeWake = undefined;
+			asrcProbeDeadlineAt = undefined;
 			clearTimeout(timeoutHandle);
 		};
 

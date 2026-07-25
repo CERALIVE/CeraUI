@@ -24,7 +24,7 @@ import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
 } from "@ceralive/srtla-send/sender";
-import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../../helpers/config-schemas.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { getConfig } from "../../config.ts";
@@ -67,6 +67,12 @@ export type StartStreamResult =
 			error: string;
 			reason: string;
 			phase: "params" | "spawn-sender";
+			/**
+			 * Set when this site already knows the taxonomy class. The launch
+			 * wrappers use it verbatim instead of re-deriving a class from the
+			 * opaque `error` string.
+			 */
+			failureClass?: StartFailureClass;
 	  };
 
 export async function maybeProbeAudioSource(
@@ -129,6 +135,7 @@ export async function startStream(
 			error: AUDIO_SOURCE_PROBE_FAILED,
 			reason: AUDIO_SOURCE_PROBE_FAILED,
 			phase: "params",
+			failureClass: "audio_source_unavailable",
 		};
 	}
 	const statsFile = srtlaStatsFile();

@@ -38,6 +38,7 @@ import { getLastCapabilities } from "../streaming/capabilities.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
+	typedStartFailure,
 } from "../streaming/start-failure-taxonomy.ts";
 import {
 	startStreamSession,
@@ -83,7 +84,14 @@ async function reconnect(): Promise<void> {
 			const result = await startStream(stubConn, {}, generation, attemptId);
 			if (!result.success) {
 				throw new StreamStartFailure(
-					classifyStartFailure(result.phase, result.error, attemptId),
+					result.failureClass !== undefined
+						? typedStartFailure(
+								attemptId,
+								result.phase,
+								result.failureClass,
+								result.error,
+							)
+						: classifyStartFailure(result.phase, result.error, attemptId),
 				);
 			}
 		},

@@ -62,6 +62,7 @@ export const START_FAILURE_CLASSES = [
 	'start_invalid',
 	'engine_internal',
 	'start_timeout',
+	'audio_source_unavailable',
 ] as const;
 export const startFailureClassSchema = z.enum(START_FAILURE_CLASSES);
 export type StartFailureClass = z.infer<typeof startFailureClassSchema>;
@@ -205,6 +206,10 @@ export const START_FAILURE_RETRIABILITY: Record<
 	engine_internal: {
 		retriablePhases: [],
 		why: 'A deterministic engine-side fault or state conflict (e.g. already_streaming / -32603); retrying masks a real bug and can orphan resources — surface with a journal pointer.',
+	},
+	audio_source_unavailable: {
+		retriablePhases: [],
+		why: 'The selected audio input never appeared. The probe ALREADY spent its own grace window waiting for the device to come back, so a further retry re-runs the same wait against the same absent hardware — tell the operator to reconnect or pick another input instead of looping.',
 	},
 };
 

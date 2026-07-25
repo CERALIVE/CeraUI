@@ -120,6 +120,27 @@ export function classifyStartFailure(
 	};
 }
 
+/**
+ * Build a `StartFailure` for a site that already knows its taxonomy class (e.g.
+ * the audio-source probe). Bypassing `classifyStartFailure` is the point — that
+ * function can only guess from an opaque error shape, and guessing at a reason
+ * the caller already knows is how a specific failure decays into a generic one.
+ */
+export function typedStartFailure(
+	attemptId: string,
+	phase: StartFailurePhase,
+	cls: StartFailureClass,
+	code?: number | string,
+): StartFailure {
+	return {
+		attemptId,
+		phase,
+		class: cls,
+		...(code !== undefined ? { code } : {}),
+		retriable: isRetriableStartFailure(cls, phase),
+	};
+}
+
 function classifyClass(
 	phase: StartFailurePhase,
 	error: unknown,

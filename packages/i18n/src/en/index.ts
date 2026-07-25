@@ -384,6 +384,7 @@ const en = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable: "The selected audio input is not available.",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -792,6 +793,8 @@ const en = {
 			"Stream failed to start: streaming engine protocol is incompatible. Check journalctl -u cerastream.service.",
 		streamStartInternalFailed:
 			"Stream failed to start: streaming engine internal error. Check journalctl -u cerastream.service.",
+		streamStartAudioSourceUnavailableFailed:
+			"Stream failed to start: the selected audio input is not available. Reconnect it or choose another audio source.",
 		ceraliveUpdateAvailable:
 			"A CERALIVE update is available. Open Settings → Software Updates to install it.",
 		ceraliveUpdateFailed:
@@ -1158,6 +1161,8 @@ const en = {
 			"A pluggable accessory, not built into this device.",
 		noAudioSourceSelected: "No audio source selected",
 		notAvailableAudioSource: "Not Available",
+		notAvailableAudioSourceHint:
+			"This audio input is no longer detected. Reconnect it or choose another source.",
 		selectAudioSource: "Select an audio source",
 		audioCodec: "Audio Codec",
 		selectAudioCodec: "Select an audio codec",

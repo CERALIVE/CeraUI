@@ -32,6 +32,7 @@ import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
+	typedStartFailure,
 } from "../start-failure-taxonomy.ts";
 import { startStreamSession } from "../stream-session-orchestrator.ts";
 import { getIsStreaming, validateConfig } from "../streaming.ts";
@@ -142,7 +143,14 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 			);
 			if (!launched.success) {
 				throw new StreamStartFailure(
-					classifyStartFailure(launched.phase, launched.error, attemptId),
+					launched.failureClass !== undefined
+						? typedStartFailure(
+								attemptId,
+								launched.phase,
+								launched.failureClass,
+								launched.error,
+							)
+						: classifyStartFailure(launched.phase, launched.error, attemptId),
 				);
 			}
 		},

@@ -28,6 +28,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | Transactional launch cleanup + phase/stop deadlines | `modules/streaming/launch-transaction.ts`, `start-lifecycle-timing.ts`, `streamloop/start-stream.ts`; contract in `../../docs/START-LIFECYCLE.md` |
 | Bounded start retry + suppression + diagnostics | `modules/streaming/stream-start-retry.ts`, `stream-start-retry-reporting.ts` |
+| Pre-engine gate deadline deferral (`pendingGateRemainingMs` ← `asrcProbeRemainingMs`) | `modules/streaming/stream-start-retry.ts` + `modules/streaming/audio.ts`; contract in `../../AGENTS.md` → STREAMING BACKEND QUALITY |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
@@ -158,6 +159,21 @@ maps, so the pull-based `status` snapshots (`modules/ui/status.ts`,
 broadcast instead of falling back to the bare asrc key.
 
 Coverage: `tests/audio-device-naming-cleanup.test.ts`, `tests/audio-naming.test.ts`.
+
+**An unavailable selected input fails the start ONCE, as itself.** `asrcProbe()`
+polls for `AUDIO_PROBE_TIMEOUT_MS` (15 s) — a deliberate "give the device a moment
+to come back" grace window that also wakes early on a hotplug re-enumeration. That
+window is LONGER than the generic 10 s per-attempt launch deadline, so the deadline
+used to preempt it and misclassify a permanently-absent device as a retriable
+`start_timeout`. `asrcProbeRemainingMs()` now feeds the retry runner's
+`pendingGateRemainingMs` seam so the deadline defers behind the probe, and the
+probe's own expiry surfaces the non-retriable `audio_source_unavailable` class
+(carried on `StartStreamResult.failureClass`). The probe still runs BEFORE the
+sender spawn and any engine IPC, so a probe failure dispatches ZERO engine `start`
+calls. A stop during the window still resolves as the first-class `cancelled`
+result, not a failure — the orchestrator's cancellation check runs ahead of
+classification. Coverage: `tests/audio-probe-start-classification.test.ts`,
+`tests/audio-probe-failure-reason.test.ts`.
 
 ## ONBOARD VIDEO DISPLAY NAMES [EXISTS]
 

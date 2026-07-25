@@ -510,6 +510,8 @@ const ptBR = {
 			"Um acessório conectável, não integrado a este dispositivo.",
 		noAudioSourceSelected: "Nenhuma fonte de áudio selecionada",
 		notAvailableAudioSource: "Não disponível",
+		notAvailableAudioSourceHint:
+			"Esta entrada de áudio não é mais detectada. Reconecte-a ou escolha outra fonte.",
 		selectAudioSource: "Selecione uma fonte de áudio",
 		audioCodec: "Codec de Áudio",
 		selectAudioCodec: "Selecione um codec de áudio",
@@ -1142,6 +1144,8 @@ const ptBR = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable:
+					"A entrada de áudio selecionada não está disponível.",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1555,6 +1559,8 @@ const ptBR = {
 			"Falha ao iniciar: protocolo do mecanismo incompatível. Verifique journalctl -u cerastream.service.",
 		streamStartInternalFailed:
 			"Falha ao iniciar: erro interno do mecanismo. Verifique journalctl -u cerastream.service.",
+		streamStartAudioSourceUnavailableFailed:
+			"Falha ao iniciar: a entrada de áudio selecionada não está disponível. Reconecte-a ou escolha outra fonte de áudio.",
 		ceraliveUpdateAvailable:
 			"Há uma atualização do CERALIVE disponível. Abra Configurações → Atualizações de software para instalá-la.",
 		ceraliveUpdateFailed:

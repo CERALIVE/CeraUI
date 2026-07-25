@@ -348,6 +348,8 @@ const ko = {
 		noAudioSourceSelected: "선택된 오디오 소스 없음",
 		selectAudioSource: "오디오 소스 선택",
 		notAvailableAudioSource: "사용할 수 없음",
+		notAvailableAudioSourceHint:
+			"이 오디오 입력이 더 이상 감지되지 않습니다. 다시 연결하거나 다른 소스를 선택하세요.",
 		audioCodec: "오디오 코덱",
 		selectAudioCodec: "오디오 코덱 선택",
 		audioDelay: "오디오 지연(ms)",
@@ -987,6 +989,7 @@ const ko = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable: "선택한 오디오 입력을 사용할 수 없습니다.",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1395,6 +1398,8 @@ const ko = {
 			"스트림을 시작하지 못했습니다: 엔진 프로토콜이 호환되지 않습니다. journalctl -u cerastream.service를 확인하세요.",
 		streamStartInternalFailed:
 			"스트림을 시작하지 못했습니다: 엔진 내부 오류. journalctl -u cerastream.service를 확인하세요.",
+		streamStartAudioSourceUnavailableFailed:
+			"스트림을 시작하지 못했습니다: 선택한 오디오 입력을 사용할 수 없습니다. 다시 연결하거나 다른 오디오 소스를 선택하세요.",
 		ceraliveUpdateAvailable:
 			"CERALIVE 업데이트가 있습니다. 설정 → 소프트웨어 업데이트를 열어 설치하세요.",
 		ceraliveUpdateFailed:

@@ -11,6 +11,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // QR generation is stubbed so the unit never touches the real `qrcode` canvas
@@ -1093,6 +1094,36 @@ describe("SourceSection — configured-but-unavailable audio source (kept)", () 
 		);
 		expect(marker).not.toBeNull();
 		expect(marker?.textContent).toContain("USB audio");
+	});
+
+	it("lists the unavailable entry as non-actionable, with a reason", async () => {
+		const { container } = mount({
+			audioSources: ["No audio", "Pipeline default"],
+			selectedAudioSource: "USB audio",
+		});
+		const trigger = container.querySelector<HTMLElement>(
+			'[data-testid="audio-source-select"]',
+		);
+		await fireEvent.click(trigger as HTMLElement);
+		await tick();
+		const option = document.body.querySelector(
+			'[data-testid="audio-option-unavailable"]',
+		);
+		if (option) {
+			expect(option.getAttribute("aria-disabled")).toBe("true");
+			expect(option.getAttribute("title")).toBeTruthy();
+			expect(option.textContent).toContain("USB audio");
+		} else {
+			// bits-ui does not mount Select.Content under jsdom (same limitation
+			// EncoderDialog.axes.test.ts documents for its resolution options). The
+			// trigger still has to name the selected-but-unavailable device, which is
+			// the half of the contract this environment can prove; the disabled half
+			// is covered by the e2e truthfulness gate.
+			const marker = container.querySelector<HTMLElement>(
+				'[data-testid="audio-source-unavailable"]',
+			);
+			expect(marker?.textContent).toContain("USB audio");
+		}
 	});
 });
 

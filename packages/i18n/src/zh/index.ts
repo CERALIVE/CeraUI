@@ -334,6 +334,8 @@ const zh = {
 		noAudioSourceSelected: "未选择音频源",
 		selectAudioSource: "选择音频源",
 		notAvailableAudioSource: "不可用",
+		notAvailableAudioSourceHint:
+			"已检测不到此音频输入。请重新连接或选择其他音源。",
 		audioCodec: "音频编解码器",
 		selectAudioCodec: "选择音频编解码器",
 		audioDelay: "音频延迟 (毫秒)",
@@ -926,6 +928,7 @@ const zh = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable: "所选音频输入不可用。",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1329,6 +1332,8 @@ const zh = {
 			"流启动失败：引擎协议不兼容。请检查 journalctl -u cerastream.service。",
 		streamStartInternalFailed:
 			"流启动失败：引擎内部错误。请检查 journalctl -u cerastream.service。",
+		streamStartAudioSourceUnavailableFailed:
+			"流启动失败：所选音频输入不可用。请重新连接或选择其他音频源。",
 		ceraliveUpdateAvailable:
 			"有可用的 CERALIVE 更新。打开 设置 → 软件更新 进行安装。",
 		ceraliveUpdateFailed: "软件更新失败。打开 设置 → 软件更新 查看原因并重试。",

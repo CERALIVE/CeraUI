@@ -58,6 +58,13 @@ export type StartRetryRunDeps = {
 	) => RetryTimer;
 	readonly cancelDeadline: (timer: RetryTimer) => void;
 	readonly cleanupDeadlineMs: number;
+	/**
+	 * Remaining grace of a bounded pre-engine gate the launch is legitimately
+	 * sitting in, else 0. While positive the attempt deadline is deferred rather
+	 * than fired, so the gate reports its own typed failure. MUST be bounded by
+	 * that gate's hard timeout; an unbounded value disables the deadline.
+	 */
+	readonly pendingGateRemainingMs?: () => number;
 	readonly retryPolicy?: RetryPolicy;
 	readonly now?: () => number;
 	readonly suppressionContext?: () => SuppressionContext;
@@ -71,6 +78,10 @@ const NO_SUPPRESSION: SuppressionContext = {
 	bootWindow: false,
 	cancelledByStop: false,
 };
+
+// Slack added when deferring the attempt deadline behind a pre-engine gate, so
+// the gate's own timeout always resolves first instead of tying with it.
+const GATE_DEFERRAL_SLACK_MS = 500;
 
 type LaunchOutcome =
 	| { readonly result: "started" }
@@ -104,8 +115,16 @@ function runLaunchWithinDeadline(
 		void launch.then((outcome) => {
 			if (!deadlineExpired) finish(outcome);
 		});
-		timer = deps.scheduleDeadline(() => {
+		const onDeadline = () => {
 			if (settled) return;
+			const gateRemainingMs = deps.pendingGateRemainingMs?.() ?? 0;
+			if (gateRemainingMs > 0) {
+				timer = deps.scheduleDeadline(
+					onDeadline,
+					gateRemainingMs + GATE_DEFERRAL_SLACK_MS,
+				);
+				return;
+			}
 			deadlineExpired = true;
 			deps.setCancelWait(undefined);
 			const cleanup = deps.onLaunchTimeout(attempt).then(
@@ -128,7 +147,8 @@ function runLaunchWithinDeadline(
 					}),
 				() => finish({ result: "cleanup_failed" }),
 			);
-		}, deadlineMs);
+		};
+		timer = deps.scheduleDeadline(onDeadline, deadlineMs);
 		deps.setCancelWait(() => {
 			if (settled) return;
 			if (timer !== undefined) deps.cancelDeadline(timer);

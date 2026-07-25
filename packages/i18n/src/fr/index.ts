@@ -513,6 +513,8 @@ const fr = {
 			"Un accessoire amovible, non intégré à cet appareil.",
 		noAudioSourceSelected: "Aucune source audio sélectionnée",
 		notAvailableAudioSource: "Non disponible",
+		notAvailableAudioSourceHint:
+			"Cette entrée audio n'est plus détectée. Rebranchez-la ou choisissez une autre source.",
 		selectAudioSource: "Sélectionnez une source audio",
 		audioCodec: "Codec audio",
 		selectAudioCodec: "Sélectionnez un codec audio",
@@ -1166,6 +1168,8 @@ const fr = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable:
+					"L'entrée audio sélectionnée n'est pas disponible.",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1580,6 +1584,8 @@ const fr = {
 			"Échec du démarrage : protocole du moteur incompatible. Consultez journalctl -u cerastream.service.",
 		streamStartInternalFailed:
 			"Échec du démarrage : erreur interne du moteur. Consultez journalctl -u cerastream.service.",
+		streamStartAudioSourceUnavailableFailed:
+			"Échec du démarrage : l'entrée audio sélectionnée n'est pas disponible. Rebranchez-la ou choisissez une autre source audio.",
 		ceraliveUpdateAvailable:
 			"Une mise à jour CERALIVE est disponible. Ouvrez Paramètres → Mises à jour logicielles pour l'installer.",
 		ceraliveUpdateFailed:

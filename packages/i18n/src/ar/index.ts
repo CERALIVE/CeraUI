@@ -479,6 +479,8 @@ const ar = {
 		audioDeviceExternalHint: "ملحق قابل للتوصيل، وليس مدمجًا في هذا الجهاز.",
 		noAudioSourceSelected: "لم يتم تحديد مصدر صوت",
 		notAvailableAudioSource: "غير متوفر",
+		notAvailableAudioSourceHint:
+			"لم يعد يتم اكتشاف مدخل الصوت هذا. أعد توصيله أو اختر مصدرًا آخر.",
 		selectAudioSource: "حدد مصدر الصوت",
 		audioCodec: "ترميز الصوت",
 		selectAudioCodec: "حدد ترميز الصوت",
@@ -1112,6 +1114,7 @@ const ar = {
 				engine_internal: "The streaming engine hit an internal error.",
 				start_timeout:
 					"The streaming engine didn't confirm the stream in time.",
+				audio_source_unavailable: "مدخل الصوت المحدد غير متوفر.",
 			},
 			retriedThenFailed:
 				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
@@ -1516,6 +1519,8 @@ const ar = {
 			"فشل بدء البث: بروتوكول المحرك غير متوافق. افحص journalctl -u cerastream.service.",
 		streamStartInternalFailed:
 			"فشل بدء البث: خطأ داخلي في المحرك. افحص journalctl -u cerastream.service.",
+		streamStartAudioSourceUnavailableFailed:
+			"فشل بدء البث: مدخل الصوت المحدد غير متوفر. أعد توصيله أو اختر مصدر صوت آخر.",
 		ceraliveUpdateAvailable:
 			"يتوفر تحديث CERALIVE. افتح الإعدادات ← تحديثات البرامج لتثبيته.",
 		ceraliveUpdateFailed:
