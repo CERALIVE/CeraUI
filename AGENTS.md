@@ -1825,6 +1825,17 @@ snapshots) and never at a render site. Display-only — `input_id`/`device_path`
 `stable_id` and the kind heuristic are untouched. Full contract:
 `apps/backend/AGENTS.md` → ONBOARD VIDEO DISPLAY NAMES.
 
+**The idle level meter follows the picker.** Selecting an audio source used to change
+nothing about the meter: cerastream chose its own idle card, so an operator who picked
+the RØDE could watch the meter report the DJI Mic Mini — or "Meter unavailable" — with
+no way to correct it. `config.asrc` is now resolved by `resolveMeterPreference()` and
+pushed to the engine as `reload-config` `audio.meter_device` over the always-idle
+`audio-meter-bridge` connection (schema ≥ 0.9.0; an older engine is sent nothing and
+keeps auto-picking). "Auto" sends an explicit `null`, handing selection back to the
+engine. It is a PREFERENCE, not a pin — cerastream still demotes a selected card that
+delivers no samples, so a powered-off receiver can never leave the meter dead. Full
+contract: `apps/backend/AGENTS.md` → IDLE AUDIO-METER DEVICE PREFERENCE.
+
 **There is NO operator rename.** #206 briefly shipped an alias/rename UI backed by
 `config.audio_device_aliases`; #207 removed it in full — UI, `setAudioDeviceAlias`
 RPC, oRPC contract entry, `audio-aliases.schema.ts`, and the config field — by
