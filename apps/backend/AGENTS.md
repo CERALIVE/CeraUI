@@ -509,18 +509,47 @@ RØDE is not even covered by the Elgato-scoped `99-ceralive-check-usb-devices.ru
 The live video-hotplug → `sources` reactivity is owned by `modules/streaming/
 devices.ts`: its `/dev` `fs.watch` + 2 s `VIDEO_HOTPLUG_POLL_INTERVAL_MS` poll
 already detected the device-set change but previously only rebroadcast the legacy
-`devices` event. It now also fires the injected `onDevicesChanged` (default →
-`sources.ts` `refreshAndBroadcastSources()`) on a genuine device-SET change —
-keyed on the device array alone, so a live `active_input` switch (same set) never
-re-probes and the boot seed (already covered by `main.ts`) is skipped. The rebuild
-re-fetches the AUTHORITATIVE engine `list-devices` (idle-safe short-lived probe),
-NOT the local v4l2 scan, so the correct engine kind labels (e.g. `mjpeg`) are
-preserved. This is why unplug/replug now updates the Live Sources list with no
-page refresh. cerastream's own `GstDeviceMonitor` DOES watch add/remove but the
-production engine wires it to a `NullSink`, so the engine emits no device-change
-IPC push today — CeraUI's `/dev` watch is the live trigger. Coverage:
-`tests/devices.test.ts` (`fires onDevicesChanged on a hotplug set change, not on
-the boot seed, an unchanged rescan, or an input switch`).
+`devices` event. It now also fires the injected `onDevicesChanged(observed)`
+(default → `sources.ts` `refreshSourcesForHotplug()`) on a genuine device-SET
+change — keyed on the device array alone, so a live `active_input` switch (same
+set) never re-probes and the boot seed (already covered by `main.ts`) is skipped.
+This is why unplug/replug updates the Live Sources list with no page refresh.
+cerastream's own `GstDeviceMonitor` DOES watch add/remove but the production
+engine wires it to a `NullSink`, so the engine emits no device-change IPC push
+today — CeraUI's `/dev` watch is the live trigger.
+
+**The rebuild prefers the engine probe but never LOSES a removal to it.**
+`refreshSourcesForHotplug(observed)` first re-fetches the AUTHORITATIVE engine
+`list-devices` (idle-safe short-lived probe) so the correct engine kind labels
+(e.g. `mjpeg`) are preserved — the local v4l2 scan's display-name heuristic is
+still not what feeds `sources` on the happy path. But that probe is a SECOND,
+separately-fallible round-trip, and `tryRefreshEngineDeviceCache` deliberately
+RETAINS the last-known cache when it throws (a transient outage must not erase
+the device list). For a REMOVAL that retention is exactly wrong: it rebroadcasts
+the device the operator just unplugged as still available until some later poll's
+probe happens to answer — observed live on a board as a stale, still-selectable
+source row that self-corrected only after ~a minute. So a FAILING probe now hands
+over to `applyObservedDevicesAndBroadcast(observed)`, applying the list the
+registry's own scan already proved current. The engine-fetch path itself is
+unweakened — retain-on-failure is still its contract for every caller that has no
+independent observation (`main.ts` boot seed, `engine-reconnect.ts` heal). Do NOT
+"simplify" the hotplug path back to a bare `refreshAndBroadcastSources()`.
+
+The fallback is id-safe and its cost is bounded: `buildDeviceList()` keys the
+fallback scan `/dev/<card>`, which is byte-identical to the engine's own
+`input_id` (verified on a real Rock 5B+: cerastream reports `/dev/video0` +
+`/dev/video1`, and de-dupes the RØDE's two nodes exactly as the scan does), so a
+fallback row can never split into a duplicate or orphan a persisted
+`config.source`. What DOES degrade is `kind`: the scan's `deriveKind()` heuristic
+labels the RØDE `usb` where the engine says `mjpeg`, so a device ADDED while
+cerastream is unreachable can bridge to a neighbouring coarse row until the next
+poll's probe answers. That is accepted — a present-but-coarsely-labelled row beats
+an absent one, and the specific USB-as-HDMI mislabel this seam was originally
+warned about cannot recur (`deriveKind` tests usb/uvc BEFORE hdmi).
+Coverage: `tests/devices.test.ts` (`fires onDevicesChanged on a hotplug set
+change…` + `hands onDevicesChanged the list this scan observed…`) and
+`tests/lost-device-retention.test.ts` (`refreshSourcesForHotplug — a failing
+engine probe never masks a removal`).
 
 ## BROADCAST EVENTS
 

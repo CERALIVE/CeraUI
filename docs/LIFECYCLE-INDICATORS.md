@@ -42,7 +42,7 @@ Each row below carries exactly one `Status: <tag>` line.
 
 ### `usb-source-connect-idle`
 **Current indicator:** `apps/backend/src/modules/streaming/devices.ts:363-380` detects
-a changed device set and calls `onDevicesChanged()`, rebroadcasting the unified
+a changed device set and calls `onDevicesChanged(observed)`, rebroadcasting the unified
 `sources` list; `apps/frontend/src/lib/components/custom/SourceSection.svelte:192-200`
 re-renders the newly-appeared row. There is no dedicated "device connected" toast —
 the row simply appears, which is the correct calm behavior while idle (nothing was
@@ -56,7 +56,11 @@ place. No dedicated idle-disconnect banner or toast exists — while idle (no ac
 stream), the passive row-graying is sufficient: nothing is actively broken, so a
 persistent alert would be noise. Contrast with `usb-source-disconnect-streaming`
 below, where the same disappearance IS alert-worthy because a stream is actually
-consuming the source.
+consuming the source. The passive graying is only calm if it is also PROMPT: the
+rebuild hands the observed device list to `sources.ts` `refreshSourcesForHotplug()`,
+which falls back to that observation when the engine `list-devices` re-probe fails,
+so a removal can no longer sit behind a retained (stale) engine cache until a later
+poll succeeds — see `apps/backend/AGENTS.md` → SIGUSR2 UDEV HOTPLUG HOOK.
 **Status: EXISTS**
 
 ### `usb-source-disconnect-streaming`

@@ -85,11 +85,13 @@ export interface DeviceRegistryDeps {
 		isDismissable: boolean,
 	) => void;
 	broadcast: (type: string, data: unknown) => void;
-	// Fired on a video-device SET change so the unified `sources` snapshot is
-	// rebuilt from a fresh authoritative engine `list-devices` probe. The default
-	// must NOT feed the local v4l2 scan into sources — its kind heuristic would
-	// re-introduce the USB-as-HDMI mislabel the sources model removed.
-	onDevicesChanged: () => void;
+	// Fired on a video-device SET change, carrying the list this scan actually
+	// observed, so the unified `sources` snapshot can be rebuilt. The default
+	// still prefers a fresh authoritative engine `list-devices` probe (its typed
+	// kinds beat the v4l2 scan's display-name heuristic) and only falls back to
+	// the observed list when that probe fails — a retained-because-unreachable
+	// cache would otherwise keep an unplugged device on screen.
+	onDevicesChanged: (observed: readonly CaptureDevice[]) => void;
 	reportActiveVideoSource: typeof reportActiveVideoSource;
 	watch: typeof fs.watch;
 	now: () => number;
@@ -291,9 +293,9 @@ function defaultDeps(): DeviceRegistryDeps {
 				broadcastMsg(type, data),
 			);
 		},
-		onDevicesChanged: () => {
-			void import("./sources.ts").then(({ refreshAndBroadcastSources }) =>
-				refreshAndBroadcastSources(),
+		onDevicesChanged: (observed) => {
+			void import("./sources.ts").then(({ refreshSourcesForHotplug }) =>
+				refreshSourcesForHotplug(observed),
 			);
 		},
 		reportActiveVideoSource,
@@ -393,7 +395,7 @@ export function createDeviceRegistry(
 		if (deviceSetSerialized !== lastDeviceSetSerialized) {
 			const isInitialScan = lastDeviceSetSerialized === "";
 			lastDeviceSetSerialized = deviceSetSerialized;
-			if (!isInitialScan) deps.onDevicesChanged();
+			if (!isInitialScan) deps.onDevicesChanged(devices);
 		}
 		// Lifecycle indicator: the applied video source vanishing from the device
 		// set WHILE streaming raises a persistent notification (the idle
