@@ -14,6 +14,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 
 | Task | Location |
 |------|----------|
+| Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
 | Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
@@ -213,6 +214,66 @@ heuristic sees exactly what the engine reported.
 Coverage: `tests/onboard-video-display-name.test.ts` (the pure rule, both device
 seams, the rendered `sources` payload, and the lost row — the last two assert the
 serialized payload contains no `rk_hdmirx` at all).
+
+## IDLE AUDIO-METER DEVICE PREFERENCE [EXISTS]
+
+The engine's ALWAYS-ON level meter (ADR-0007) used to pick its own ALSA card while
+idle, entirely independent of the operator's **Audio source** selection. Found live on
+a board: the operator selected the RØDE, `SourceSection` showed the RØDE, and the meter
+reported the DJI Mic Mini (or "Meter unavailable") — because with two healthy cards the
+engine's candidate list is ordered by enumeration and `"DJI Technology…"` sorts first.
+
+`config.asrc` now reaches the engine's idle meter:
+
+- **`resolveMeterPreference(asrc)`** (`modules/streaming/audio.ts`) turns the picker
+  value into the ALSA device the meter should prefer, or `null` for "engine, choose for
+  yourself". `null` covers `AUDIO_SOURCE_AUTO`, both pipeline pseudo-sources
+  (`"No audio"` / `"Pipeline default"`), an unset `asrc`, and anything that resolves to
+  no card. It reuses the SAME `audioDevices` map + alias reverse-lookup + `hw:CARD=`
+  wrapping that `resolveAudioMode` uses for `start`, so the meter and the program leg
+  can never disagree about which card a pick names. It is deliberately NOT
+  `resolveAudioMode`: this is the IDLE meter, which has no notion of network-embedded
+  program audio and must keep following the card the picker is showing.
+- **The `audio-meter-bridge` delivers it**, because it already holds the ONE long-lived
+  IDLE connection to the engine (`cerastream-backend.ts`'s client only exists while
+  streaming). `pushPreference()` sends `reload-config` with
+  `{ audio: { meter_device } }`.
+- **`syncAudioMeterPreference()`** re-pushes on change. Three call sites: the bridge's
+  own `runAttempt` (every fresh connect — the engine holds NO preference across a
+  restart), `streaming.setConfig` when `input.asrc` changed, and `updateAudioDevices`
+  (a re-enumeration can change which card an UNCHANGED pick resolves to).
+
+**Why `reload-config` and not `switch-audio`.** `switch-audio` is stream-only — it
+answers `-32001 cerastream.state.not_streaming` while idle, which is exactly when the
+idle meter runs. `reload-config` already carries an `audio` section and is idle-safe on
+the engine side (it no-ops against an absent session).
+
+**Three wire states, and they are NOT interchangeable.** `audio.meter_device` ABSENT
+leaves the engine's preference unchanged (so `reloadAudioDelay`'s delay-only reload can
+never clear it), explicit `null` restores the engine's own delivery-based auto-pick, and
+a string prefers that card. Never send `undefined` expecting "Auto".
+
+**Sent over `rawRequest`, gated on schema ≥ 0.9.0.** The published
+`@ceralive/cerastream` client Zod-STRIPS the additive `meter_device` key, so the typed
+`reloadConfig()` would silently drop it — same constraint as `audio.mode` and
+`video_passthrough`. `supportsMeterDevicePreference(schemaVersion)`
+(`cerastream-backend.ts`) is the fail-safe gate: an older engine is sent nothing and
+keeps auto-picking, which is the exact pre-0.9.0 behaviour.
+
+**It is a PREFERENCE, not a pin — and the engine is what guarantees that.** cerastream
+only moves the named card to the head of its candidate list; its delivery-confirmation
+demotion (a card holding the ALSA handle for 2 s without clocking a sample yields to the
+next candidate, cerastream PR #71 / ADR-0007 §10–§11) is unchanged. So selecting a
+powered-off receiver still ends on a working card, never on a permanently dead meter.
+Do NOT add a CeraUI-side "force this device" path that tries to override that.
+
+A failed push NEVER breaks the meter: `pushPreference` swallows and logs, the previous
+preference stands, and the next config change or reconnect re-pushes.
+
+Coverage: `tests/audio-meter-bridge.test.ts` (push on connect, `null` for Auto, re-push
+on change, nothing sent to a pre-0.9.0 engine, a refused reload leaves levels flowing,
+no-op while down, plus the schema gate) and `tests/audio-sources.test.ts`
+(`resolveMeterPreference` — alias, no-alias, every `null` case, selector passthrough).
 
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
@@ -1084,6 +1145,7 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
 - Don't drive the engine directly — route through `getStreamingBackend()`, never
   the `cerastreamBackend` singleton.
+- Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it

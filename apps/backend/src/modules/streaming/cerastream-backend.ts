@@ -302,6 +302,25 @@ export function supportsVideoPassthrough(
 	return major > 0 || (major === 0 && (minor ?? 0) >= 5);
 }
 
+/**
+ * Whether the engine understands the additive `reload-config`
+ * `audio.meter_device` field (schema ≥ 0.9.0) — the operator's audio-source pick
+ * threaded down to the ALWAYS-IDLE level meter. Like `audio.mode`, the published
+ * client Zod-STRIPS the unknown field, so a supporting engine must be driven
+ * through the raw `reload-config` bridge. Fail-safe `false` on an
+ * absent/unparseable version: an older engine keeps its own auto-pick, which is
+ * exactly the pre-0.9.0 behaviour.
+ */
+export function supportsMeterDevicePreference(
+	schemaVersion: string | undefined,
+): boolean {
+	if (!schemaVersion) return false;
+	const [major, minor] = schemaVersion.split(".").map(Number);
+	if (major === undefined || Number.isNaN(major) || Number.isNaN(minor))
+		return false;
+	return major > 0 || (major === 0 && (minor ?? 0) >= 9);
+}
+
 // Local schema extension for the raw `start` bridge: the published client's
 // frozen `startParamsSchema` has no `audio.mode` or `video_passthrough`, so a
 // start carrying either is validated here and dispatched over the raw JSON-RPC

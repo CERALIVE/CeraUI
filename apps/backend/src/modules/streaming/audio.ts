@@ -29,6 +29,7 @@ import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { syncAudioMeterPreference } from "./audio-meter-bridge.ts";
 import type {
 	AudioDeviceDisplay,
 	AudioDeviceIdentity,
@@ -94,6 +95,27 @@ export function resolveAudioMode(
 	if (asrc === DEFAULT_AUDIO_ID) return { mode: "default" };
 	if (embeddedAudioActive) return { mode: "default" };
 	return { mode: "device", device: toAlsaCaptureDevice(getAudioSrcId(asrc)) };
+}
+
+/**
+ * The ALSA capture device the engine's ALWAYS-IDLE level meter should prefer,
+ * derived from the operator's audio-source pick — or `null` for "let the engine
+ * choose", which is the pre-0.9.0 behaviour.
+ *
+ * `null` covers every selection that names no single real card: "Auto" (the
+ * explicit hand-back), both pipeline pseudo-sources, and a selection that
+ * resolves to nothing. Deliberately independent of `resolveAudioMode`: this is
+ * the IDLE meter, so it has no notion of network-embedded program audio and must
+ * keep following the card the picker is showing.
+ */
+export function resolveMeterPreference(
+	asrc: string | undefined,
+): string | null {
+	if (asrc === undefined || asrc === AUDIO_SOURCE_AUTO) return null;
+	if (isPseudoAudioSource(asrc)) return null;
+	const cardId = audioDevices[asrc] ?? getAudioSrcId(asrc);
+	if (cardId.trim() === "") return null;
+	return toAlsaCaptureDevice(cardId);
 }
 
 // The engine passes `audio.device` straight to `alsasrc device=`, which needs a
@@ -346,6 +368,10 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	// A re-enumeration may change what "Auto" resolves to; refresh the idle
 	// preview (a no-op while streaming — the live value stays frozen).
 	refreshResolvedAsrcPreview();
+
+	// A re-enumeration can also change which ALSA card the operator's pick resolves
+	// to (or bring it back after an unplug), so the idle meter is re-pointed too.
+	syncAudioMeterPreference();
 
 	// A hotplug re-enumeration may have brought in the device a stream start is
 	// waiting on — wake the pending probe so it re-checks now instead of after

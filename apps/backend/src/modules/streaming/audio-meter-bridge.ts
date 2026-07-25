@@ -47,8 +47,11 @@ import type {
 import { connect as defaultConnect } from "@ceralive/cerastream";
 import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
+import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { resolveMeterPreference } from "./audio.ts";
+import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
 
 /** Backoff bounds for the initial-connect retry. Mirrors `engine-reconnect.ts`. */
 export const AUDIO_METER_CONNECT_BASE_MS = 2_000;
@@ -67,6 +70,11 @@ export interface AudioMeterBridgeDeps {
 	connectOptions: ConnectOptions;
 	/** Re-broadcast one audio-level payload over the main authenticated WS. */
 	broadcast: (payload: AudioLevelMessage) => void;
+	/**
+	 * The ALSA device the operator's audio-source pick resolves to, or `null` for
+	 * "Auto" (hand selection back to the engine's own delivery-based pick).
+	 */
+	meterPreference: () => string | null;
 	logger: AudioMeterBridgeLogger;
 	random: () => number;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
@@ -109,6 +117,7 @@ function defaultDeps(): AudioMeterBridgeDeps {
 			client: "ceraui-audio-meter",
 		},
 		broadcast: (payload) => broadcastMsg("audio-level", payload),
+		meterPreference: () => resolveMeterPreference(getConfig().asrc),
 		logger: defaultLogger,
 		random: Math.random,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
@@ -159,6 +168,55 @@ function handleEvent(event: EventParams): void {
 }
 
 /**
+ * Tell the engine which card the operator selected, so the idle meter follows the
+ * "Audio source" picker instead of picking for itself. `null` restores the
+ * engine's own delivery-based auto-pick ("Auto").
+ *
+ * Sent over the RAW `reload-config` primitive: the published `@ceralive/cerastream`
+ * client Zod-STRIPS the additive `audio.meter_device` key, so the typed call would
+ * silently drop it. Gated on the engine advertising schema ≥ 0.9.0 — an older
+ * engine keeps auto-picking, which is exactly what it did before this existed.
+ *
+ * NEVER throws and never blocks the meter: a failed push leaves the previous
+ * preference in place, and the next config change or reconnect re-pushes.
+ */
+async function pushPreference(client: CerastreamClient): Promise<void> {
+	if (!state || state.stopped) return;
+	const { deps } = state;
+	if (!supportsMeterDevicePreference(client.hello.schema_version)) {
+		deps.logger.debug(
+			`audio-meter bridge: engine schema ${client.hello.schema_version} predates audio.meter_device — leaving idle-meter selection to the engine`,
+		);
+		return;
+	}
+	const meter_device = deps.meterPreference();
+	const raw = client as unknown as {
+		rawRequest(method: string, params?: unknown): Promise<unknown>;
+	};
+	try {
+		await raw.rawRequest("reload-config", { audio: { meter_device } });
+		deps.logger.debug(
+			`audio-meter bridge: idle-meter preference set to ${meter_device ?? "auto"}`,
+		);
+	} catch (err) {
+		deps.logger.warn(
+			`audio-meter bridge: could not set the idle-meter preference: ${errMessage(err)}`,
+		);
+	}
+}
+
+/**
+ * Re-push the idle-meter preference after the operator changed the audio source
+ * (or the card set was re-enumerated). Fire-and-forget: a no-op when the bridge
+ * is not connected — the next connect pushes the current value anyway.
+ */
+export function syncAudioMeterPreference(): void {
+	const client = state?.stopped === false ? state.client : undefined;
+	if (client === undefined) return;
+	void pushPreference(client);
+}
+
+/**
  * One connect + subscribe attempt. Resolves `true` when the subscription is live
  * (the binding's autoReconnect then owns resilience), `false` to reschedule.
  */
@@ -185,6 +243,9 @@ async function runAttempt(): Promise<boolean> {
 		deps.logger.info(
 			"audio-meter bridge: subscribed to the engine audio-level topic",
 		);
+		// The engine holds no preference across a restart, so every fresh
+		// connection re-asserts the operator's current pick.
+		await pushPreference(client);
 		return true;
 	} catch (err) {
 		deps.logger.debug(

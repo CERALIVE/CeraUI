@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { audioSourceSchema } from "@ceraui/rpc/schemas";
+import { AUDIO_SOURCE_AUTO, audioSourceSchema } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
 import { buildMockAudioDevices } from "../mocks/fixture-factory.ts";
@@ -12,6 +12,7 @@ import { getMockAudioDevices } from "../mocks/providers/streaming.ts";
 import {
 	deriveAudioSources,
 	getAudioDevices,
+	resolveMeterPreference,
 	setMockAudioDevicesProvider,
 	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
@@ -114,5 +115,34 @@ describe("updateAudioDevices — sysfs card discovery", () => {
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
+	});
+});
+
+// The idle level meter can only follow the picker if the picker's value is first
+// turned into something `alsasrc device=` understands. `null` is the explicit
+// "engine, choose for yourself" hand-back — never a silent no-op.
+describe("resolveMeterPreference — picker value → idle-meter ALSA device", () => {
+	test("an explicit device pick resolves to its hw:CARD= form", () => {
+		expect(resolveMeterPreference("USB audio")).toBe("hw:CARD=usbaudio");
+	});
+
+	test("a card with no display alias keeps its own id", () => {
+		expect(resolveMeterPreference("MINI")).toBe("hw:CARD=MINI");
+	});
+
+	test("Auto, the pseudo-sources and an unset pick all hand back to the engine", () => {
+		for (const asrc of [
+			AUDIO_SOURCE_AUTO,
+			"No audio",
+			"Pipeline default",
+			undefined,
+		]) {
+			expect(resolveMeterPreference(asrc)).toBeNull();
+		}
+	});
+
+	test("a value that already names an ALSA selector passes through unchanged", () => {
+		expect(resolveMeterPreference("hw:CARD=usbaudio")).toBe("hw:CARD=usbaudio");
+		expect(resolveMeterPreference("plughw:1,0")).toBe("plughw:1,0");
 	});
 });

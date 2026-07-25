@@ -12,8 +12,10 @@ import {
 	initAudioMeterBridge,
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
+	syncAudioMeterPreference,
 	toAudioLevelMessage,
 } from "../modules/streaming/audio-meter-bridge.ts";
+import { supportsMeterDevicePreference } from "../modules/streaming/cerastream-backend.ts";
 
 const silent: AudioMeterBridgeLogger = {
 	info: () => {},
@@ -26,7 +28,7 @@ type TimerHandle = ReturnType<typeof setTimeout>;
 // A fake engine: `connect` either throws (engine down) or resolves a client whose
 // `subscribeEvents` captures the handler so the test can push events by hand. The
 // manual timer queue drives the boot-retry loop with no real time.
-function harness(connectOutcomes: boolean[]) {
+function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 	const timers: Array<{ fn: () => void }> = [];
 	let idx = 0;
 	let handler: EventHandler | undefined;
@@ -34,6 +36,10 @@ function harness(connectOutcomes: boolean[]) {
 	let clientClosed = false;
 	let subscribedTopics: readonly string[] | undefined;
 	const broadcasts: AudioLevelMessage[] = [];
+
+	const reloads: unknown[] = [];
+	let preference: string | null = "hw:CARD=usbaudio";
+	let reloadRejects = false;
 
 	const subscription: Subscription = {
 		result: { topics: ["audio-level"] },
@@ -50,7 +56,13 @@ function harness(connectOutcomes: boolean[]) {
 		close: async () => {
 			clientClosed = true;
 		},
-		// biome-ignore lint/suspicious/noExplicitAny: the bridge only uses connect/subscribeEvents/close.
+		hello: { schema_version: schemaVersion },
+		rawRequest: async (_method: string, params?: unknown) => {
+			if (reloadRejects) throw new Error("reload refused (test)");
+			reloads.push(params);
+			return {};
+		},
+		// biome-ignore lint/suspicious/noExplicitAny: the bridge uses connect/subscribeEvents/close/hello/rawRequest.
 	} as any;
 
 	const deps: AudioMeterBridgeDeps = {
@@ -63,6 +75,7 @@ function harness(connectOutcomes: boolean[]) {
 		},
 		connectOptions: {},
 		broadcast: (payload) => broadcasts.push(payload),
+		meterPreference: () => preference,
 		logger: silent,
 		random: () => 0.5,
 		setTimer: (fn: () => void, _ms: number): TimerHandle => {
@@ -84,6 +97,13 @@ function harness(connectOutcomes: boolean[]) {
 			await settleAudioMeterBridge();
 		},
 		pendingTimers: () => timers.length,
+		reloads,
+		setPreference: (next: string | null) => {
+			preference = next;
+		},
+		failReloads: () => {
+			reloadRejects = true;
+		},
 		state: () => ({ subscriptionClosed, clientClosed, subscribedTopics }),
 	};
 }
@@ -196,5 +216,83 @@ describe("toAudioLevelMessage — envelope projection", () => {
 			peak_db: [-6, -7],
 			floor_db: -1e6,
 		});
+	});
+});
+
+// The board bug (live QA, 2026-07-25): the operator selected the RØDE, the picker
+// showed the RØDE, and the idle meter still reported the DJI — because nothing ever
+// told the engine what the operator had chosen. This bridge already holds the ONE
+// long-lived idle connection to the engine, so it is where the pick is delivered.
+describe("audio-meter bridge — the operator's audio pick reaches the idle meter", () => {
+	test("pushes the selected card over reload-config as soon as it connects", async () => {
+		const h = harness([true]);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		expect(h.reloads).toEqual([
+			{ audio: { meter_device: "hw:CARD=usbaudio" } },
+		]);
+	});
+
+	test('"Auto" sends an explicit null — hand selection back to the engine', async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		expect(h.reloads).toEqual([{ audio: { meter_device: null } }]);
+	});
+
+	test("re-pushes after the operator changes the audio source", async () => {
+		const h = harness([true]);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.setPreference("hw:CARD=MINI");
+		syncAudioMeterPreference();
+		await settleAudioMeterBridge();
+		await Promise.resolve();
+
+		expect(h.reloads).toEqual([
+			{ audio: { meter_device: "hw:CARD=usbaudio" } },
+			{ audio: { meter_device: "hw:CARD=MINI" } },
+		]);
+	});
+
+	test("sends NOTHING to an engine older than schema 0.9.0", async () => {
+		const h = harness([true], "0.8.0");
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		expect(h.reloads).toEqual([]);
+		// The meter itself is untouched — an old engine still auto-picks and streams.
+		h.emit(levelEvent);
+		expect(h.broadcasts).toHaveLength(1);
+	});
+
+	test("a refused reload never breaks the meter", async () => {
+		const h = harness([true]);
+		h.failReloads();
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit(levelEvent);
+		expect(h.broadcasts).toHaveLength(1);
+	});
+
+	test("syncing while the bridge is down is a silent no-op", () => {
+		stopAudioMeterBridge();
+		expect(() => syncAudioMeterPreference()).not.toThrow();
+	});
+});
+
+describe("supportsMeterDevicePreference — fail-safe schema gate", () => {
+	test("0.9.0 and later support it; earlier and unparseable do not", () => {
+		for (const v of ["0.9.0", "0.10.0", "1.0.0"]) {
+			expect(supportsMeterDevicePreference(v)).toBe(true);
+		}
+		for (const v of ["0.8.0", "0.4.0", "", undefined, "nonsense"]) {
+			expect(supportsMeterDevicePreference(v)).toBe(false);
+		}
 	});
 });

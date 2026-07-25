@@ -57,6 +57,7 @@ import {
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
+import { syncAudioMeterPreference } from "../../modules/streaming/audio-meter-bridge.ts";
 import {
 	getResolvedAsrc,
 	refreshResolvedAsrcPreview,
@@ -652,6 +653,11 @@ export const setConfigProcedure = authedProcedure
 		// config.asrc is the sentinel; frozen while streaming).
 		if (input.source !== undefined || input.asrc !== undefined) {
 			refreshResolvedAsrcPreview();
+		}
+		// A new audio pick must reach the ALWAYS-IDLE level meter too, or the meter
+		// keeps reporting whichever card the engine chose for itself.
+		if (input.asrc !== undefined) {
+			syncAudioMeterPreference();
 		}
 		return { success: true, applied };
 	});
