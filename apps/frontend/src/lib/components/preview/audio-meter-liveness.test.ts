@@ -11,10 +11,13 @@ import {
 	AUDIO_METER_FLOOR_DB,
 	AUDIO_METER_STALE_MS,
 	INITIAL_METER_FRESHNESS,
+	INITIAL_METER_SELECTION_GATE,
 	isDigitalSilence,
+	isLevelSuperseded,
 	isMeterStale,
 	meterFingerprint,
 	trackMeterFreshness,
+	trackMeterSelection,
 } from "./audio-meter-liveness";
 
 /**
@@ -218,5 +221,106 @@ describe("trackMeterFreshness — the clock advances on CONTENT, not arrival", (
 
 	it("is not stale before any frame has ever landed", () => {
 		expect(isMeterStale(INITIAL_METER_FRESHNESS, 10_000_000)).toBe(false);
+	});
+});
+
+/**
+ * Wave H board bug: switching the audio source to "No audio" left the previous
+ * device's bars on screen for seconds. The level standing at the moment of the
+ * switch was measured for a pick the operator has already abandoned, and nothing
+ * replaces it until the next broadcast.
+ */
+describe("trackMeterSelection — a reading belongs to the pick that produced it", () => {
+	const LEVEL_A: AudioLevelMessage = {
+		source: { owner: "sidecar", identity: "card:usbaudio" },
+		channels: 2,
+		rms_db: [-18, -19],
+		peak_db: [-6, -7],
+	};
+	const LEVEL_B: AudioLevelMessage = { ...LEVEL_A, rms_db: [-30, -31] };
+
+	it("never supersedes the first frame it ever sees", () => {
+		const gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			LEVEL_A,
+		);
+		expect(isLevelSuperseded(gate, LEVEL_A)).toBe(false);
+	});
+
+	it("retires the standing reading the moment the pick changes", () => {
+		let gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			LEVEL_A,
+		);
+		gate = trackMeterSelection(gate, "No audio", LEVEL_A);
+		expect(isLevelSuperseded(gate, LEVEL_A)).toBe(true);
+	});
+
+	it("releases on the very next frame — a re-evaluated pick is not muted", () => {
+		let gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			LEVEL_A,
+		);
+		gate = trackMeterSelection(gate, "MINI", LEVEL_A);
+		gate = trackMeterSelection(gate, "MINI", LEVEL_B);
+		expect(isLevelSuperseded(gate, LEVEL_B)).toBe(false);
+	});
+
+	it("holds the gate for as long as the same object keeps being read", () => {
+		let gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			LEVEL_A,
+		);
+		gate = trackMeterSelection(gate, "MINI", LEVEL_A);
+		for (let i = 0; i < 5; i += 1) {
+			gate = trackMeterSelection(gate, "MINI", LEVEL_A);
+		}
+		expect(isLevelSuperseded(gate, LEVEL_A)).toBe(true);
+	});
+
+	it("keys on the FRAME, so an equal-content replacement still renders", () => {
+		let gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			LEVEL_A,
+		);
+		gate = trackMeterSelection(gate, "MINI", LEVEL_A);
+		const replay = { ...LEVEL_A };
+		gate = trackMeterSelection(gate, "MINI", replay);
+		expect(isLevelSuperseded(gate, replay)).toBe(false);
+	});
+
+	it("is a no-op while the pick is unchanged", () => {
+		const first = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			LEVEL_A,
+		);
+		expect(trackMeterSelection(first, "RODE", LEVEL_A)).toBe(first);
+	});
+
+	it("distinguishes an unset pick from a pick not yet observed", () => {
+		let gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			undefined,
+			LEVEL_A,
+		);
+		expect(isLevelSuperseded(gate, LEVEL_A)).toBe(false);
+		gate = trackMeterSelection(gate, "RODE", LEVEL_A);
+		expect(isLevelSuperseded(gate, LEVEL_A)).toBe(true);
+	});
+
+	it("supersedes nothing when there was no reading to retire", () => {
+		let gate = trackMeterSelection(
+			INITIAL_METER_SELECTION_GATE,
+			"RODE",
+			undefined,
+		);
+		gate = trackMeterSelection(gate, "No audio", undefined);
+		expect(isLevelSuperseded(gate, undefined)).toBe(false);
 	});
 });

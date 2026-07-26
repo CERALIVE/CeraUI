@@ -52,6 +52,7 @@ import { setup } from "../setup.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
 	isMeterPreferenceDevicePresent,
+	isMeterSilencedByPick,
 	resolveMeterPreference,
 } from "./audio.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
@@ -85,6 +86,12 @@ export interface AudioMeterBridgeDeps {
 	meterPreference: () => string | null;
 	/** Whether that pick is a card CeraUI's own device scan currently lists. */
 	meterPreferencePresent: () => boolean;
+	/**
+	 * Whether the operator asked for NO audio at all — the one pick a `null`
+	 * preference cannot express, because `null` means "engine, choose for
+	 * yourself" and the engine has no "meter nothing" value.
+	 */
+	meterSilenced: () => boolean;
 	logger: AudioMeterBridgeLogger;
 	random: () => number;
 	now: () => number;
@@ -177,6 +184,7 @@ function defaultDeps(): AudioMeterBridgeDeps {
 		broadcast: (payload) => broadcastMsg("audio-level", payload),
 		meterPreference: () => resolveMeterPreference(getConfig().asrc),
 		meterPreferencePresent: () => isMeterPreferenceDevicePresent(),
+		meterSilenced: () => isMeterSilencedByPick(getConfig().asrc),
 		logger: defaultLogger,
 		random: Math.random,
 		now: Date.now,
@@ -200,6 +208,8 @@ interface BridgeState {
 	mismatchSince: number | undefined;
 	mismatchLogged: boolean;
 	lastReassertAt: number | undefined;
+	/** Selection the last broadcast level was attributable to (see `noteMeterSelection`). */
+	lastSelection: string | undefined;
 }
 
 let state: BridgeState | undefined;
@@ -279,6 +289,14 @@ function projectLevel(
 	deps: AudioMeterBridgeDeps,
 ): AudioLevelMessage {
 	const message = toAudioLevelMessage(event);
+	// An explicit "No audio" pick outranks whatever the engine is metering,
+	// including the engine's own gap reason: the operator asked for silence, so
+	// that is the state — and the engine, told only `meter_device: null`, is
+	// auto-picking a real card whose real levels would otherwise render.
+	if (deps.meterSilenced()) {
+		clearForeignCardRun();
+		return { unavailable: true, reason: "mode_none" };
+	}
 	if (message.unavailable === true) {
 		clearForeignCardRun();
 		return message;
@@ -304,6 +322,48 @@ function handleEvent(event: EventParams): void {
 }
 
 /**
+ * The selection every broadcast level is attributable to. Keyed on the PAIR,
+ * because the two halves move independently: "Auto" and "No audio" both resolve
+ * to a `null` preference yet mean opposite things, so the preference alone
+ * cannot see that switch.
+ */
+function meterSelectionKey(deps: AudioMeterBridgeDeps): string {
+	const pick = deps.meterSilenced() ? "silenced" : "device";
+	return `${pick}:${deps.meterPreference() ?? "auto"}`;
+}
+
+/**
+ * Retire the currently-rendered level the instant the operator's pick changes.
+ *
+ * Every gate below only ever acts on the NEXT level the engine sends, and the
+ * engine itself needs a moment to re-point the sidecar — so between the config
+ * write and that frame the meter keeps drawing the PREVIOUS device's bars. Wave
+ * H QA caught exactly that: switching to "No audio" left active green bars up
+ * for seconds. Publishing the gap immediately makes the transition window read
+ * as a transition instead of as live audio, and the very next real level
+ * replaces it (this is a re-evaluation, never a pin).
+ */
+function noteMeterSelection(deps: AudioMeterBridgeDeps): void {
+	if (!state || state.stopped) return;
+	const key = meterSelectionKey(deps);
+	const previous = state.lastSelection;
+	state.lastSelection = key;
+	if (previous === undefined || previous === key) return;
+	clearForeignCardRun();
+	try {
+		deps.broadcast(
+			deps.meterSilenced()
+				? { unavailable: true, reason: "mode_none" }
+				: { unavailable: true, reason: "handoff" },
+		);
+	} catch (err) {
+		deps.logger.debug(
+			`audio-meter bridge: selection-change broadcast threw: ${errMessage(err)}`,
+		);
+	}
+}
+
+/**
  * Tell the engine which card the operator selected, so the idle meter follows the
  * "Audio source" picker instead of picking for itself. `null` restores the
  * engine's own delivery-based auto-pick ("Auto").
@@ -319,6 +379,7 @@ function handleEvent(event: EventParams): void {
 async function pushPreference(client: CerastreamClient): Promise<void> {
 	if (!state || state.stopped) return;
 	const { deps } = state;
+	noteMeterSelection(deps);
 	if (!supportsMeterDevicePreference(client.hello.schema_version)) {
 		deps.logger.debug(
 			`audio-meter bridge: engine schema ${client.hello.schema_version} predates audio.meter_device — leaving idle-meter selection to the engine`,
@@ -377,9 +438,14 @@ async function reassertPreference(): Promise<void> {
  * Re-push the idle-meter preference after the operator changed the audio source
  * (or the card set was re-enumerated). Fire-and-forget: a no-op when the bridge
  * is not connected — the next connect pushes the current value anyway.
+ *
+ * Retiring the stale level is NOT gated on the connection, though: the level the
+ * operator is looking at was already broadcast, so a changed pick must invalidate
+ * it whether or not the engine can be told about the change yet.
  */
 export function syncAudioMeterPreference(): void {
 	const client = state?.stopped === false ? state.client : undefined;
+	if (state && !state.stopped) noteMeterSelection(state.deps);
 	if (client === undefined) return;
 	void pushPreference(client);
 }
@@ -467,6 +533,7 @@ export function initAudioMeterBridge(
 		mismatchSince: undefined,
 		mismatchLogged: false,
 		lastReassertAt: undefined,
+		lastSelection: undefined,
 	};
 	state.inflight = tick();
 }

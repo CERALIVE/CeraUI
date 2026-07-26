@@ -15,16 +15,32 @@
  * signal, so each write genuinely re-runs the component's liveness effect,
  * exactly as the real `subscriptions.svelte` broadcast handler does.
  */
-import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
+import type { AudioLevelMessage, ConfigMessage } from "@ceraui/rpc/schemas";
 
 let level = $state<AudioLevelMessage | undefined>(undefined);
+let asrc = $state<string | undefined>(undefined);
 
 /** Mirrors the real `subscriptions.svelte` getter consumed by LiveAudioMeter. */
 export function getAudioLevel(): AudioLevelMessage | undefined {
 	return level;
 }
 
+/**
+ * The meter reads only `config.asrc` (its selection gate), so the fixture serves
+ * that one field rather than a whole synthetic config.
+ */
+export function getConfig(): ConfigMessage | undefined {
+	return asrc === undefined
+		? undefined
+		: ({ asrc } as unknown as ConfigMessage);
+}
+
 /** Deliver one `audio-level` frame (or clear the feed) from a test. */
 export function setAudioLevel(next: AudioLevelMessage | undefined): void {
 	level = next;
+}
+
+/** Change the operator's audio-source pick from a test. */
+export function setAudioSelection(next: string | undefined): void {
+	asrc = next;
 }

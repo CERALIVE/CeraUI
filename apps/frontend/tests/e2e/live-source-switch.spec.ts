@@ -224,10 +224,12 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId("live-source-switch")).toBeVisible();
 
-		// The running (HDMI) row is the disabled "Active" one; the USB row is switchable.
+		// The running (HDMI) row states that it is Active and offers no button at all;
+		// only the USB row is switchable.
 		const usbSwitch = page.locator('[data-switch-input="video1"]');
 		await expect(usbSwitch).toBeEnabled();
-		await expect(page.locator('[data-switch-input="video0"]')).toBeDisabled();
+		await expect(page.getByTestId("source-selected-video0")).toBeVisible();
+		await expect(page.locator('[data-switch-input="video0"]')).toHaveCount(0);
 
 		// Perform the live switch through the card. The RPC is intercepted so the
 		// audio_follow_pending path is deterministic.

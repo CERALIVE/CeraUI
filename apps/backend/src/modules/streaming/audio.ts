@@ -119,6 +119,27 @@ export function resolveMeterPreference(
 }
 
 /**
+ * Did the operator ask for NO audio at all?
+ *
+ * `resolveMeterPreference` answers `null` for BOTH "Auto" and "No audio", but the
+ * two mean opposite things. "Auto" hands selection to the engine, so whatever
+ * card it picks IS the operator's meter. "No audio" is `audio.mode=none` — an
+ * explicit video-only stream — and the engine has no wire value for "meter
+ * nothing", so a `null` preference makes it auto-pick and deliver a real, moving
+ * level for a card the operator just said they did not want. Found live during
+ * Wave H QA: with "No audio" selected the meter drew active green bars for
+ * several seconds (until the frozen-content watchdog happened to age them out).
+ *
+ * The distinction is therefore made HERE, on the picker value, and enforced by
+ * the audio-meter bridge — the engine side stays unchanged.
+ */
+export function isMeterSilencedByPick(
+	asrc: string | undefined = getConfig().asrc,
+): boolean {
+	return asrc === NO_AUDIO_ID;
+}
+
+/**
  * Does this card directory listing expose a CAPTURE PCM substream?
  *
  * ALSA names a card's PCM nodes `pcmC<card>D<device><p|c>`; the `c` suffix IS the
