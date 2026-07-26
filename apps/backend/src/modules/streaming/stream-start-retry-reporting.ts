@@ -63,6 +63,9 @@ function notificationParams(
 		phase: diagnostic.phase,
 		class: diagnostic.class,
 		...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}),
+		...(diagnostic.message !== undefined
+			? { message: diagnostic.message }
+			: {}),
 		retryState: diagnostic.retry.state,
 		attempt: diagnostic.retry.attempt,
 		maxAttempts: diagnostic.retry.maxAttempts,

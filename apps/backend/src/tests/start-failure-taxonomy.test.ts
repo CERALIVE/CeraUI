@@ -210,6 +210,22 @@ describe("classifyStartFailure — table over every known failure site", () => {
 		});
 	}
 
+	test("preserves the descriptive JSON-RPC message alongside code and class", () => {
+		const message =
+			"invalid params: audio-device-unavailable: ALSA capture device 'hw:CARD=rockchiphdmiin' is busy or unavailable";
+		const failure = classifyStartFailure(
+			"start-rpc",
+			new CerastreamRpcError(-32602, message, "cerastream.params.invalid"),
+			"att_diagnostic",
+		);
+
+		expect(failure).toMatchObject({
+			class: "start_invalid",
+			code: -32602,
+			message,
+		});
+	});
+
 	test("an unmapped/opaque error falls to engine_internal + a logged warning, never throws", () => {
 		const warnings: string[] = [];
 		const failure = classifyStartFailure(

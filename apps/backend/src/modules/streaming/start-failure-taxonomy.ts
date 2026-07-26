@@ -89,6 +89,20 @@ function isZodLikeError(err: unknown): boolean {
 	);
 }
 
+function diagnosticMessage(error: unknown): string | undefined {
+	if (error instanceof Error && error.message.length > 0) return error.message;
+	if (typeof error !== "object" || error === null) return undefined;
+	const message = Reflect.get(error, "message");
+	return typeof message === "string" && message.length > 0
+		? message
+		: undefined;
+}
+
+function diagnosticMessageField(error: unknown): { message?: string } {
+	const message = diagnosticMessage(error);
+	return message === undefined ? {} : { message };
+}
+
 export interface ClassifyDeps {
 	warn: (message: string, meta?: Record<string, unknown>) => void;
 }
@@ -110,12 +124,13 @@ export function classifyStartFailure(
 	attemptId: string,
 	deps: ClassifyDeps = defaultClassifyDeps,
 ): StartFailure {
-	const { cls, code } = classifyClass(phase, error, deps);
+	const { cls, code, message } = classifyClass(phase, error, deps);
 	return {
 		attemptId,
 		phase,
 		class: cls,
 		...(code !== undefined ? { code } : {}),
+		...(message !== undefined ? { message } : {}),
 		retriable: isRetriableStartFailure(cls, phase),
 	};
 }
@@ -145,16 +160,16 @@ function classifyClass(
 	phase: StartFailurePhase,
 	error: unknown,
 	deps: ClassifyDeps,
-): { cls: StartFailureClass; code?: number | string } {
+): { cls: StartFailureClass; code?: number | string; message?: string } {
 	// A timeout is always a timeout, whatever the phase — retriability is derived
 	// per-phase downstream (connect-only) so we don't decide it here.
 	if (error instanceof CerastreamTimeoutError) {
-		return { cls: "start_timeout" };
+		return { cls: "start_timeout", ...diagnosticMessageField(error) };
 	}
 
 	// A lost/unreachable control connection means the engine isn't answering.
 	if (error instanceof CerastreamConnectionError) {
-		return { cls: "engine_unavailable" };
+		return { cls: "engine_unavailable", ...diagnosticMessageField(error) };
 	}
 
 	// A structured engine error response — map by its numeric JSON-RPC code. The
@@ -164,10 +179,10 @@ function classifyClass(
 	if (error instanceof CerastreamRpcError) {
 		const mapped = RPC_CODE_TO_CLASS[error.code];
 		if (mapped !== undefined) {
-			return { cls: mapped, code: error.code };
+			return { cls: mapped, code: error.code, message: error.message };
 		}
 		// A real engine error with an unknown code is an engine-side fault.
-		return { cls: "engine_internal", code: error.code };
+		return { cls: "engine_internal", code: error.code, message: error.message };
 	}
 
 	// A Zod validation failure: params-phase → invalid config; hello-phase →
@@ -175,6 +190,7 @@ function classifyClass(
 	if (isZodLikeError(error)) {
 		return {
 			cls: phase === "hello" ? "protocol_incompatible" : "start_invalid",
+			...diagnosticMessageField(error),
 		};
 	}
 
@@ -183,7 +199,7 @@ function classifyClass(
 		error instanceof Error &&
 		(phase === "params" || phase === "spawn-sender")
 	) {
-		return { cls: "start_invalid" };
+		return { cls: "start_invalid", ...diagnosticMessageField(error) };
 	}
 
 	// Unmapped/opaque — never throw. Bucket as engine_internal + a warning so the
@@ -191,8 +207,11 @@ function classifyClass(
 	deps.warn("start-failure-taxonomy: unmapped error shape → engine_internal", {
 		phase,
 		errorName: error instanceof Error ? error.name : typeof error,
+		...(diagnosticMessage(error) !== undefined
+			? { message: diagnosticMessage(error) }
+			: {}),
 	});
-	return { cls: "engine_internal" };
+	return { cls: "engine_internal", ...diagnosticMessageField(error) };
 }
 
 // ─── (d) Retry policy — bounded exponential backoff, retriable classes only ──
