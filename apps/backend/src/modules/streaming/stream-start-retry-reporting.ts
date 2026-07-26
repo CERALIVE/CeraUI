@@ -49,7 +49,7 @@ const TERMINAL_NOTIFICATION_KEYS: Readonly<Record<StartFailureClass, string>> =
 	};
 
 // A class whose terminal cause has nothing to do with the engine needs its own
-// untranslated fallback — the generic one points at the cerastream journal.
+// untranslated fallback — the generic one points at the in-app log viewer.
 const TERMINAL_FALLBACK_MESSAGES: Partial<Record<StartFailureClass, string>> = {
 	audio_source_unavailable:
 		"Stream failed to start: the selected audio input is not available. Reconnect it or choose another audio source.",
@@ -110,7 +110,7 @@ export function reportStartTerminalFailure(
 		"stream_start_failed",
 		"error",
 		TERMINAL_FALLBACK_MESSAGES[diagnostic.class] ??
-			`Stream failed to start (${diagnostic.class}) after ${diagnostic.retry.attempt}/${diagnostic.retry.maxAttempts} attempts. Check journalctl -u cerastream.service.`,
+			`Stream failed to start (${diagnostic.class}) after ${diagnostic.retry.attempt}/${diagnostic.retry.maxAttempts} attempts. Open Settings → System Logs for details.`,
 		0,
 		false,
 		true,

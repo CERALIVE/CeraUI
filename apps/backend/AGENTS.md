@@ -814,7 +814,7 @@ no controller string, no HDMI special case anywhere in the path; it re-reads
 whatever the engine's `VIDIOC_QUERY_DV_TIMINGS` result projected into `caps[]`,
 so any device whose engine-reported caps change is picked up identically. It
 reuses `refreshSourcesForHotplug`'s membership rule, metadata rule and
-generation fence verbatim, with TWO deliberate divergences:
+generation fence verbatim, with THREE deliberate divergences:
 
 - **A probe that says nothing changes nothing.** A hotplug tick MUST fall back
   to `observed` (it holds a detected removal the retained cache would mask);
@@ -824,6 +824,17 @@ generation fence verbatim, with TWO deliberate divergences:
 - **It broadcasts only on change** (`broadcastSourcesIfChanged`), so `sources`
   keeps its documented on-change cadence instead of pushing an identical
   snapshot to every client every 5 s.
+- **A tick that finds one already in flight YIELDS** (`signalRecheckInFlight`).
+  This is the one caller that fires unconditionally on a fixed interval, so it
+  is the one that can supersede ITSELF: a probe slower than the 5 s interval is
+  fenced out by the very next tick, whose probe is fenced out by the one after
+  it, and the loop publishes nothing for as long as the engine stays slow. An
+  enumeration is exactly what gets slow when a receiver loses its link (the
+  kernel re-runs `VIDIOC_QUERY_DV_TIMINGS` against a retraining PHY), so the
+  direction this tick exists to report is the direction that starves it. Do NOT
+  "simplify" this away by leaning on the generation fence — the fence orders
+  DIFFERENT views, and two consecutive ticks of the same periodic loop are not
+  that.
 
 While STREAMING this tick is redundant-but-harmless: a live control session
 makes `getEngineDevices()` engine-backed, so a signal change DOES alter the
@@ -866,13 +877,28 @@ the board's own `list-devices` + `/sys/class/video4linux/*/name` payloads.
 per `input_id`, recorded in `probeEngineDevices` and monotonic (a device leaving
 the list must not erase what the engine said about it — the whole case is a
 device that left and came back). A video device the probe omits, on BOTH the
-merge path and the #214 probe-failure path, is restored from it — kind, caps,
-`stable_id` and display name together, exactly as a live probe entry would win.
+merge path and the #214 probe-failure path, is restored from it.
 It is **guarded by display name, not `input_id` alone**: the kernel recycles node
 paths, and inheriting an identity is worse than showing a coarse one. Both lists
 read the name from the same kernel string (byte-identical on the bug hardware),
 so an equal name is real evidence of the same device and an unequal one leaves
 the observation untouched. `resetEngineDeviceCache()` clears the map.
+
+**What it restores is IDENTITY (`kind` + `stable_id`) — never the remembered
+`caps` or `signal`.** Restoring the whole remembered row was the second half of
+the latch above, in the other direction: a capture input that LOSES its signal
+and drops out of `list-devices` had its last locked answer re-asserted on every
+tick, so the payload never changed, `broadcastSourcesIfChanged` correctly stayed
+silent, and an already-open UI kept rendering a live 1080p59.94 source for an
+unplugged cable — indefinitely, because nothing else re-pokes a stable device
+set. `kind`/`stable_id` are properties of the HARDWARE (and `kind` is the whole
+point of the memory — a `usb` guess bridges to no pipeline); `caps` and the
+`signal` projected from them are one probe's reading of what the cable was
+carrying when it was asked. This is the same provenance rule `fromEngineDevice`
+states: only the engine's own answer authors a verdict, so a row the engine did
+not confirm THIS time carries no caps because nothing probed it — which reads
+`unknown` (no badge, no modes), never a remembered `present`. Do NOT widen the
+restore back to a whole-row `{...remembered}` copy.
 
 **Staying ITSELF is not the same as keeping its NODE PATH, and the persisted id
 must follow the hardware.** A replug WHILE STREAMING cannot reuse the old node —
@@ -1525,7 +1551,8 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
 - Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.
 - Don't record a device's `stable_id` into `liveStableIds` before the bridge check in `buildSources` — an unbridged device renders no row, so letting it suppress the remembered `lost` row erases the device from the list entirely.
 - Don't leave a re-enumerated `config.source`/`config.asrc` unrepaired, and don't repair either by name, slot, or "whichever id resolves" — migration is by STABLE IDENTITY only (`reconcileConfiguredSourceIdentity` / `reconcileConfiguredAudioIdentity`), and the retired id must be published as `previousIds` so consumers can tell MOVED from GONE.
-- Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one.
+- Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one. And don't widen that restore past IDENTITY (`kind`/`stable_id`) back onto the remembered `caps`/`signal` — re-asserting a past probe's verdict is how a device that loses its signal keeps claiming it has one, forever.
+- Don't let the periodic signal recheck start a second probe while its own is still out (`signalRecheckInFlight`) — a fixed-interval loop whose probe outlives its interval supersedes ITSELF on every tick and publishes nothing at all, and a link-losing receiver is exactly what makes an enumeration slow.
 - Don't assert a GLOBAL call count on a process-wide seam like `helpers/run.ts` — `bun test` loads every file into ONE process, and background work started by an earlier file keeps issuing OS commands. `wifiUpdateDevices()` is the known offender: while any Wi-Fi adapter reads unavailable it re-arms itself every 3 s for a five-minute budget (`modules/wifi/wifi-interfaces.ts`), firing several `run("nmcli", …)` calls per pass. Filter the spy's calls to the binary under test instead (`logs-injection.test.ts`), which asserts the same property and cannot be flipped by a foreign command.
 ## START-FAILURE DIAGNOSTICS [EXISTS]
 
@@ -1533,6 +1560,19 @@ The typed `StartFailure` contract preserves the optional original diagnostic
 `message` alongside its stable `class` and `code`. `classifyStartFailure()` keeps
 cerastream JSON-RPC messages (including invalid-params `-32602` and internal
 `-32603` responses) generic and engine-authored; retry/terminal diagnostics and
-notification params carry the field to logs, and the frontend appends it to the
-localized start-failure toast. Do not replace this with an engine-code-specific
-or HDMI-specific mapping — the message is the generic diagnostic surface.
+notification params carry the field so it reaches `logger.error("stream start
+failed", diagnostic)` and, through it, `getLog()` / the LogsDialog download. Do
+not replace this with an engine-code-specific or HDMI-specific mapping — the
+message is the generic diagnostic surface.
+
+**It reaches the LOG, never the primary toast.** The frontend used to concatenate
+`message` onto the localized failure toast; that shipped a raw JSON-RPC/ALSA
+string (`invalid params: audio-device-unavailable: ALSA capture device
+'hw:CARD=rockchiphdmiin' is busy or unavailable`) verbatim to an operator with no
+console, stacked under a second toast telling them to run `journalctl`. Neither is
+actionable for the audience CeraLive targets. `LiveView.startFailureMessage()`
+therefore renders class + retry-state only, and every operator-facing string
+points at Settings → System Logs instead of a shell command or a unit name. The
+propagation above is UNCHANGED — do not weaken it to "fix" the toast, and do not
+re-add the concatenation. Gate: `apps/frontend/src/tests/operator-copy-no-internals.test.ts`
+sweeps all 10 locales for `journalctl` / `systemctl` / `*.service` / `hw:CARD=`.

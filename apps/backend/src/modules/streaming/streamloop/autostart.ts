@@ -83,7 +83,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 		notificationBroadcast(
 			"stream_autostart_failed",
 			"error",
-			`Automatic stream start failed: no network links became available after ${linkAttempt}/${AUTOSTART_MAX_LINK_ATTEMPTS} checks. Check journalctl -u ceralive.service.`,
+			`Automatic stream start failed: no network links became available after ${linkAttempt}/${AUTOSTART_MAX_LINK_ATTEMPTS} checks. Open Settings → System Logs for details.`,
 			0,
 			false,
 			true,
@@ -114,7 +114,7 @@ export async function autoStartStream(linkAttempt = 1): Promise<void> {
 		notificationBroadcast(
 			"stream_autostart_failed",
 			"error",
-			"Automatic stream start failed: configuration or device is invalid. Check journalctl -u ceralive.service.",
+			"Automatic stream start failed: configuration or device is invalid. Open Settings → System Logs for details.",
 			0,
 			false,
 			true,

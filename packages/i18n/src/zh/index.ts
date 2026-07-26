@@ -949,9 +949,9 @@ const zh = {
 				audio_source_unavailable: "所选音频输入不可用。",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1336,7 +1336,7 @@ const zh = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"自动流启动失败：检查 {attempt}/{maxAttempts} 次后仍无可用网络链路。请检查 journalctl -u ceralive.service。",
+			"自动流启动失败：检查 {attempt}/{maxAttempts} 次后仍无可用网络链路。打开 设置 → 系统日志 查看详情。",
 		streamStartEngineUnavailableRetrying:
 			"流媒体引擎不可用 — 正在重试（{nextAttempt}/{maxAttempts}）…",
 		streamStartEngineRestartingRetrying:
@@ -1344,17 +1344,17 @@ const zh = {
 		streamStartTimeoutRetrying:
 			"流媒体引擎未及时响应 — 正在重试（{nextAttempt}/{maxAttempts}）…",
 		streamStartEngineUnavailableFailed:
-			"流启动失败：引擎不可用（已尝试 {attempt}/{maxAttempts} 次）。请检查 journalctl -u cerastream.service。",
+			"流启动失败：引擎不可用（已尝试 {attempt}/{maxAttempts} 次）。打开 设置 → 系统日志 查看详情。",
 		streamStartEngineRestartingFailed:
-			"流启动失败：引擎持续重启（已尝试 {attempt}/{maxAttempts} 次）。请检查 journalctl -u cerastream.service。",
+			"流启动失败：引擎持续重启（已尝试 {attempt}/{maxAttempts} 次）。打开 设置 → 系统日志 查看详情。",
 		streamStartTimeoutFailed:
-			"流启动失败：引擎超时（已尝试 {attempt}/{maxAttempts} 次）。请检查 journalctl -u cerastream.service。",
+			"流启动失败：引擎超时（已尝试 {attempt}/{maxAttempts} 次）。打开 设置 → 系统日志 查看详情。",
 		streamStartInvalidFailed:
-			"流启动失败：配置或设备无效。请检查 journalctl -u cerastream.service。",
+			"流启动失败：配置或设备无效。打开 设置 → 系统日志 查看详情。",
 		streamStartProtocolFailed:
-			"流启动失败：引擎协议不兼容。请检查 journalctl -u cerastream.service。",
+			"流启动失败：引擎协议不兼容。打开 设置 → 系统日志 查看详情。",
 		streamStartInternalFailed:
-			"流启动失败：引擎内部错误。请检查 journalctl -u cerastream.service。",
+			"流启动失败：引擎内部错误。打开 设置 → 系统日志 查看详情。",
 		streamStartAudioSourceUnavailableFailed:
 			"流启动失败：所选音频输入不可用。请重新连接或选择其他音频源。",
 		ceraliveUpdateAvailable:

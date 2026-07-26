@@ -1194,9 +1194,9 @@ const fr = {
 					"L'entrée audio sélectionnée n'est pas disponible.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1592,7 +1592,7 @@ const fr = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"Échec du démarrage automatique : aucun lien réseau après {attempt}/{maxAttempts} vérifications. Consultez journalctl -u ceralive.service.",
+			"Échec du démarrage automatique : aucun lien réseau après {attempt}/{maxAttempts} vérifications. Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartEngineUnavailableRetrying:
 			"Moteur de streaming indisponible — nouvelle tentative ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -1600,17 +1600,17 @@ const fr = {
 		streamStartTimeoutRetrying:
 			"Le moteur de streaming n’a pas répondu à temps — nouvelle tentative ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"Échec du démarrage : moteur indisponible ({attempt}/{maxAttempts} tentatives). Consultez journalctl -u cerastream.service.",
+			"Échec du démarrage : moteur indisponible ({attempt}/{maxAttempts} tentatives). Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartEngineRestartingFailed:
-			"Échec du démarrage : redémarrages répétés du moteur ({attempt}/{maxAttempts} tentatives). Consultez journalctl -u cerastream.service.",
+			"Échec du démarrage : redémarrages répétés du moteur ({attempt}/{maxAttempts} tentatives). Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartTimeoutFailed:
-			"Échec du démarrage : délai du moteur dépassé ({attempt}/{maxAttempts} tentatives). Consultez journalctl -u cerastream.service.",
+			"Échec du démarrage : délai du moteur dépassé ({attempt}/{maxAttempts} tentatives). Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartInvalidFailed:
-			"Échec du démarrage : configuration ou appareil non valide. Consultez journalctl -u cerastream.service.",
+			"Échec du démarrage : configuration ou appareil non valide. Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartProtocolFailed:
-			"Échec du démarrage : protocole du moteur incompatible. Consultez journalctl -u cerastream.service.",
+			"Échec du démarrage : protocole du moteur incompatible. Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartInternalFailed:
-			"Échec du démarrage : erreur interne du moteur. Consultez journalctl -u cerastream.service.",
+			"Échec du démarrage : erreur interne du moteur. Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartAudioSourceUnavailableFailed:
 			"Échec du démarrage : l'entrée audio sélectionnée n'est pas disponible. Rebranchez-la ou choisissez une autre source audio.",
 		ceraliveUpdateAvailable:

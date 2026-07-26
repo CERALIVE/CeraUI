@@ -425,9 +425,9 @@ const es = {
 					"La entrada de audio seleccionada no está disponible.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -825,7 +825,7 @@ const es = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"El inicio automático falló: no hubo enlaces de red tras {attempt}/{maxAttempts} comprobaciones. Revisa journalctl -u ceralive.service.",
+			"El inicio automático falló: no hubo enlaces de red tras {attempt}/{maxAttempts} comprobaciones. Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartEngineUnavailableRetrying:
 			"Motor de streaming no disponible; reintentando ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -833,17 +833,17 @@ const es = {
 		streamStartTimeoutRetrying:
 			"El motor de streaming no respondió a tiempo; reintentando ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"No se pudo iniciar el stream: motor no disponible ({attempt}/{maxAttempts} intentos). Revisa journalctl -u cerastream.service.",
+			"No se pudo iniciar el stream: motor no disponible ({attempt}/{maxAttempts} intentos). Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartEngineRestartingFailed:
-			"No se pudo iniciar el stream: el motor siguió reiniciándose ({attempt}/{maxAttempts} intentos). Revisa journalctl -u cerastream.service.",
+			"No se pudo iniciar el stream: el motor siguió reiniciándose ({attempt}/{maxAttempts} intentos). Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartTimeoutFailed:
-			"No se pudo iniciar el stream: tiempo de espera agotado ({attempt}/{maxAttempts} intentos). Revisa journalctl -u cerastream.service.",
+			"No se pudo iniciar el stream: tiempo de espera agotado ({attempt}/{maxAttempts} intentos). Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartInvalidFailed:
-			"No se pudo iniciar el stream: la configuración o el dispositivo no son válidos. Revisa journalctl -u cerastream.service.",
+			"No se pudo iniciar el stream: la configuración o el dispositivo no son válidos. Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartProtocolFailed:
-			"No se pudo iniciar el stream: el protocolo del motor es incompatible. Revisa journalctl -u cerastream.service.",
+			"No se pudo iniciar el stream: el protocolo del motor es incompatible. Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartInternalFailed:
-			"No se pudo iniciar el stream: error interno del motor. Revisa journalctl -u cerastream.service.",
+			"No se pudo iniciar el stream: error interno del motor. Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartAudioSourceUnavailableFailed:
 			"No se pudo iniciar el stream: la entrada de audio seleccionada no está disponible. Vuelve a conectarla o elige otra fuente de audio.",
 		ceraliveUpdateAvailable:

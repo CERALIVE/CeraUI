@@ -425,9 +425,9 @@ const de = {
 					"Der ausgewählte Audioeingang ist nicht verfügbar.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -821,7 +821,7 @@ const de = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"Automatischer Streamstart fehlgeschlagen: nach {attempt}/{maxAttempts} Prüfungen waren keine Netzwerkverbindungen verfügbar. Prüfe journalctl -u ceralive.service.",
+			"Automatischer Streamstart fehlgeschlagen: nach {attempt}/{maxAttempts} Prüfungen waren keine Netzwerkverbindungen verfügbar. Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartEngineUnavailableRetrying:
 			"Streaming-Engine nicht verfügbar – neuer Versuch ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -829,17 +829,17 @@ const de = {
 		streamStartTimeoutRetrying:
 			"Streaming-Engine antwortete nicht rechtzeitig – neuer Versuch ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"Streamstart fehlgeschlagen: Engine nicht verfügbar ({attempt}/{maxAttempts} Versuche). Prüfe journalctl -u cerastream.service.",
+			"Streamstart fehlgeschlagen: Engine nicht verfügbar ({attempt}/{maxAttempts} Versuche). Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartEngineRestartingFailed:
-			"Streamstart fehlgeschlagen: Engine startete wiederholt neu ({attempt}/{maxAttempts} Versuche). Prüfe journalctl -u cerastream.service.",
+			"Streamstart fehlgeschlagen: Engine startete wiederholt neu ({attempt}/{maxAttempts} Versuche). Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartTimeoutFailed:
-			"Streamstart fehlgeschlagen: Zeitüberschreitung ({attempt}/{maxAttempts} Versuche). Prüfe journalctl -u cerastream.service.",
+			"Streamstart fehlgeschlagen: Zeitüberschreitung ({attempt}/{maxAttempts} Versuche). Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartInvalidFailed:
-			"Streamstart fehlgeschlagen: Konfiguration oder Gerät ungültig. Prüfe journalctl -u cerastream.service.",
+			"Streamstart fehlgeschlagen: Konfiguration oder Gerät ungültig. Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartProtocolFailed:
-			"Streamstart fehlgeschlagen: Engine-Protokoll inkompatibel. Prüfe journalctl -u cerastream.service.",
+			"Streamstart fehlgeschlagen: Engine-Protokoll inkompatibel. Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartInternalFailed:
-			"Streamstart fehlgeschlagen: interner Engine-Fehler. Prüfe journalctl -u cerastream.service.",
+			"Streamstart fehlgeschlagen: interner Engine-Fehler. Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 		streamStartAudioSourceUnavailableFailed:
 			"Streamstart fehlgeschlagen: der ausgewählte Audioeingang ist nicht verfügbar. Schließe ihn wieder an oder wähle eine andere Audioquelle.",
 		ceraliveUpdateAvailable:

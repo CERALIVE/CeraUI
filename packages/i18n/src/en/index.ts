@@ -409,9 +409,9 @@ const en = {
 				audio_source_unavailable: "The selected audio input is not available.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -801,7 +801,7 @@ const en = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"Automatic stream start failed: no network links became available after {attempt:number}/{maxAttempts:number} checks. Check journalctl -u ceralive.service.",
+			"Automatic stream start failed: no network links became available after {attempt:number}/{maxAttempts:number} checks. Open Settings → System Logs for details.",
 		streamStartEngineUnavailableRetrying:
 			"Streaming engine unavailable — retrying ({nextAttempt:number}/{maxAttempts:number})…",
 		streamStartEngineRestartingRetrying:
@@ -809,17 +809,17 @@ const en = {
 		streamStartTimeoutRetrying:
 			"Streaming engine did not answer in time — retrying ({nextAttempt:number}/{maxAttempts:number})…",
 		streamStartEngineUnavailableFailed:
-			"Stream failed to start: streaming engine unavailable ({attempt:number}/{maxAttempts:number} attempts). Check journalctl -u cerastream.service.",
+			"Stream failed to start: streaming engine unavailable ({attempt:number}/{maxAttempts:number} attempts). Open Settings → System Logs for details.",
 		streamStartEngineRestartingFailed:
-			"Stream failed to start: streaming engine kept restarting ({attempt:number}/{maxAttempts:number} attempts). Check journalctl -u cerastream.service.",
+			"Stream failed to start: streaming engine kept restarting ({attempt:number}/{maxAttempts:number} attempts). Open Settings → System Logs for details.",
 		streamStartTimeoutFailed:
-			"Stream failed to start: streaming engine timed out ({attempt:number}/{maxAttempts:number} attempts). Check journalctl -u cerastream.service.",
+			"Stream failed to start: streaming engine timed out ({attempt:number}/{maxAttempts:number} attempts). Open Settings → System Logs for details.",
 		streamStartInvalidFailed:
-			"Stream failed to start: configuration or device is invalid. Check journalctl -u cerastream.service.",
+			"Stream failed to start: configuration or device is invalid. Open Settings → System Logs for details.",
 		streamStartProtocolFailed:
-			"Stream failed to start: streaming engine protocol is incompatible. Check journalctl -u cerastream.service.",
+			"Stream failed to start: streaming engine protocol is incompatible. Open Settings → System Logs for details.",
 		streamStartInternalFailed:
-			"Stream failed to start: streaming engine internal error. Check journalctl -u cerastream.service.",
+			"Stream failed to start: streaming engine internal error. Open Settings → System Logs for details.",
 		streamStartAudioSourceUnavailableFailed:
 			"Stream failed to start: the selected audio input is not available. Reconnect it or choose another audio source.",
 		ceraliveUpdateAvailable:

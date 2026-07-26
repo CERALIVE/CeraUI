@@ -1035,9 +1035,9 @@ const ja = {
 				audio_source_unavailable: "選択したオーディオ入力が利用できません。",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1431,7 +1431,7 @@ const ja = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"自動配信を開始できませんでした：{attempt}/{maxAttempts} 回確認してもネットワークリンクを利用できません。journalctl -u ceralive.service を確認してください。",
+			"自動配信を開始できませんでした：{attempt}/{maxAttempts} 回確認してもネットワークリンクを利用できません。詳細は 設定 → システムログ を開いてください。",
 		streamStartEngineUnavailableRetrying:
 			"ストリーミングエンジンを利用できません — 再試行中（{nextAttempt}/{maxAttempts}）…",
 		streamStartEngineRestartingRetrying:
@@ -1439,17 +1439,17 @@ const ja = {
 		streamStartTimeoutRetrying:
 			"ストリーミングエンジンが時間内に応答しませんでした — 再試行中（{nextAttempt}/{maxAttempts}）…",
 		streamStartEngineUnavailableFailed:
-			"配信を開始できませんでした：エンジンを利用できません（{attempt}/{maxAttempts} 回）。journalctl -u cerastream.service を確認してください。",
+			"配信を開始できませんでした：エンジンを利用できません（{attempt}/{maxAttempts} 回）。詳細は 設定 → システムログ を開いてください。",
 		streamStartEngineRestartingFailed:
-			"配信を開始できませんでした：エンジンが再起動を繰り返しました（{attempt}/{maxAttempts} 回）。journalctl -u cerastream.service を確認してください。",
+			"配信を開始できませんでした：エンジンが再起動を繰り返しました（{attempt}/{maxAttempts} 回）。詳細は 設定 → システムログ を開いてください。",
 		streamStartTimeoutFailed:
-			"配信を開始できませんでした：エンジンがタイムアウトしました（{attempt}/{maxAttempts} 回）。journalctl -u cerastream.service を確認してください。",
+			"配信を開始できませんでした：エンジンがタイムアウトしました（{attempt}/{maxAttempts} 回）。詳細は 設定 → システムログ を開いてください。",
 		streamStartInvalidFailed:
-			"配信を開始できませんでした：設定またはデバイスが無効です。journalctl -u cerastream.service を確認してください。",
+			"配信を開始できませんでした：設定またはデバイスが無効です。詳細は 設定 → システムログ を開いてください。",
 		streamStartProtocolFailed:
-			"配信を開始できませんでした：エンジンプロトコルに互換性がありません。journalctl -u cerastream.service を確認してください。",
+			"配信を開始できませんでした：エンジンプロトコルに互換性がありません。詳細は 設定 → システムログ を開いてください。",
 		streamStartInternalFailed:
-			"配信を開始できませんでした：エンジン内部エラー。journalctl -u cerastream.service を確認してください。",
+			"配信を開始できませんでした：エンジン内部エラー。詳細は 設定 → システムログ を開いてください。",
 		streamStartAudioSourceUnavailableFailed:
 			"配信を開始できませんでした：選択したオーディオ入力が利用できません。接続し直すか、別のオーディオソースを選んでください。",
 		ceraliveUpdateAvailable:

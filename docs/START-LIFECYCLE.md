@@ -213,7 +213,10 @@ per-attempt launch deadline, AND a total-time budget
 - A scheduled retry logs `attemptId`, phase, class, engine code when present, and
   retry state. It emits a class-keyed localized warning only outside a suppression
   window. Terminal exhaustion/non-retriable failure emits exactly one keyed error
-  with attempt count and `journalctl -u cerastream.service`.
+  with attempt count and a pointer at the in-app log viewer (Settings → System
+  Logs). Operator-facing copy never names a shell command or a systemd unit —
+  CeraLive operators have no console; the raw journal stays the support channel,
+  reachable from that dialog.
 
 Retriability is **phase-scoped** (see the retriability table below): only failures
 in the connection-establishment phases (`connect`, and `hello` for the

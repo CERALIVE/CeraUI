@@ -1171,9 +1171,9 @@ const ptBR = {
 					"A entrada de áudio selecionada não está disponível.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1568,7 +1568,7 @@ const ptBR = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"Falha no início automático: nenhum link de rede após {attempt}/{maxAttempts} verificações. Verifique journalctl -u ceralive.service.",
+			"Falha no início automático: nenhum link de rede após {attempt}/{maxAttempts} verificações. Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartEngineUnavailableRetrying:
 			"Mecanismo de streaming indisponível — tentando novamente ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -1576,17 +1576,17 @@ const ptBR = {
 		streamStartTimeoutRetrying:
 			"O mecanismo de streaming não respondeu a tempo — tentando novamente ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"Falha ao iniciar: mecanismo indisponível ({attempt}/{maxAttempts} tentativas). Verifique journalctl -u cerastream.service.",
+			"Falha ao iniciar: mecanismo indisponível ({attempt}/{maxAttempts} tentativas). Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartEngineRestartingFailed:
-			"Falha ao iniciar: o mecanismo continuou reiniciando ({attempt}/{maxAttempts} tentativas). Verifique journalctl -u cerastream.service.",
+			"Falha ao iniciar: o mecanismo continuou reiniciando ({attempt}/{maxAttempts} tentativas). Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartTimeoutFailed:
-			"Falha ao iniciar: tempo limite do mecanismo ({attempt}/{maxAttempts} tentativas). Verifique journalctl -u cerastream.service.",
+			"Falha ao iniciar: tempo limite do mecanismo ({attempt}/{maxAttempts} tentativas). Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartInvalidFailed:
-			"Falha ao iniciar: configuração ou dispositivo inválido. Verifique journalctl -u cerastream.service.",
+			"Falha ao iniciar: configuração ou dispositivo inválido. Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartProtocolFailed:
-			"Falha ao iniciar: protocolo do mecanismo incompatível. Verifique journalctl -u cerastream.service.",
+			"Falha ao iniciar: protocolo do mecanismo incompatível. Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartInternalFailed:
-			"Falha ao iniciar: erro interno do mecanismo. Verifique journalctl -u cerastream.service.",
+			"Falha ao iniciar: erro interno do mecanismo. Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartAudioSourceUnavailableFailed:
 			"Falha ao iniciar: a entrada de áudio selecionada não está disponível. Reconecte-a ou escolha outra fonte de áudio.",
 		ceraliveUpdateAvailable:
