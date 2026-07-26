@@ -13,6 +13,16 @@
  *
  * Pre-fix this FAILS: getLog uses exec() (run() is never called) and the real
  * shell creates /tmp/pwned. Post-fix it passes (run() argv, no shell).
+ *
+ * ISOLATION: `run()` is a process-wide seam and `bun test` loads every file into
+ * ONE process, so the spy below sees OS commands issued by anything still alive
+ * from an earlier file — and this test deliberately sleeps 300 ms of real time
+ * with the spy installed. `wifiUpdateDevices()` in particular re-arms itself
+ * every 3 s for a five-minute budget while any Wi-Fi adapter reads unavailable
+ * (`modules/wifi/wifi-interfaces.ts`), firing several `run("nmcli", …)` calls per
+ * pass, so a whole-suite run can land one inside this window. Assert on the
+ * JOURNALCTL invocations rather than on a global call count: that is the actual
+ * security property, and it cannot be flipped either way by a foreign command.
  */
 
 import {
@@ -38,6 +48,22 @@ function fakeConn() {
 	return { send: () => {}, data: { senderId: "test" } } as never;
 }
 
+type RunCall = [string, string[], { maxBuffer: number }];
+
+/**
+ * Every `run()` call this test's own subject could have made — i.e. journalctl.
+ * A background poller's `nmcli`/`ip` call is not evidence about `getLog()` and
+ * must not be counted as one.
+ */
+function journalctlCalls(spy: { mock: { calls: unknown[][] } }): RunCall[] {
+	return spy.mock.calls.filter(
+		(call): call is RunCall => call[0] === "journalctl",
+	);
+}
+
+/** Binaries that would re-introduce shell interpretation if getLog used them. */
+const SHELL_BINARIES = new Set(["sh", "bash", "dash", "zsh", "/bin/sh"]);
+
 function cleanup() {
 	try {
 		rmSync(PWNED, { force: true });
@@ -60,18 +86,21 @@ describe("logs.ts getLog() — journalctl command injection", () => {
 		// Allow any (pre-fix) real exec() callback to fire before asserting.
 		await new Promise((resolve) => setTimeout(resolve, 300));
 
-		expect(runSpy).toHaveBeenCalledTimes(1);
-		const [bin, args, opts] = runSpy.mock.calls[0] as [
-			string,
-			string[],
-			{ maxBuffer: number },
-		];
+		const calls = journalctlCalls(runSpy);
+		// Exactly one journalctl invocation — pre-fix there are ZERO (getLog used
+		// exec()), and a second would mean the argv was split.
+		expect(calls.length).toBe(1);
+		const [bin, args, opts] = calls[0] as RunCall;
 		expect(bin).toBe("journalctl");
 		// The malicious string is a single argv token — NOT split on ';'.
 		expect(args).toEqual(["-b", "-u", MALICIOUS]);
 		expect(args[2]).toBe(MALICIOUS);
 		// 10 MiB ceiling preserved from the original exec() call.
 		expect(opts.maxBuffer).toBe(10 * 1024 * 1024);
+		// No shell was reached for the log path, whatever else the process ran.
+		expect(
+			runSpy.mock.calls.filter((call) => SHELL_BINARIES.has(String(call[0]))),
+		).toEqual([]);
 	});
 
 	it("does NOT execute the injected `touch /tmp/pwned` (no shell interpretation)", async () => {
