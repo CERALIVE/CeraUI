@@ -164,7 +164,9 @@ export const networkIngestProtocolSchema = z.object({
 	// The operator disabled this protocol in Settings (desired-state control). The
 	// unit is stopped by the desired-state reconciler; `service_active` stays the
 	// UNIT truth (a NEW-topology shared unit may still run for the sibling
-	// protocol). Additive-optional, present ONLY when true — like policy_route_missing.
+	// protocol). Additive-optional, present ONLY when true — which is safe here
+	// because `status` entries are replaced wholesale, unlike the `netif` merge
+	// that made `policy_route_missing` need an explicit `false` to retract.
 	operator_disabled: z.boolean().optional(),
 });
 export type NetworkIngestProtocol = z.infer<typeof networkIngestProtocolSchema>;

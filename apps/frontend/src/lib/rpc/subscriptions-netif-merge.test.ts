@@ -121,4 +121,37 @@ describe("netif merge propagates same_subnet_group + policy_route_missing (Fix 1
 		expect(netif?.eth0?.same_subnet_group).toBeUndefined();
 		expect(netif?.eth0?.policy_route_missing).toBeUndefined();
 	});
+
+	/*
+	 * The preserve-on-omission rule above is right for a field the backend could
+	 * not evaluate, but it also meant a raised policy-route warning could never
+	 * come down: the backend only ever emitted `true`, so recovery looked exactly
+	 * like an omitted tick. It now publishes an explicit `false` whenever the
+	 * check completed — which the merge must honour, or the amber band survives
+	 * the condition that raised it.
+	 */
+	it("clears a raised policy-route warning when a later frame reports false", () => {
+		pushNetif({
+			wlan0: {
+				tp: 1,
+				enabled: true,
+				ip: "192.168.2.100",
+				policy_route_missing: true,
+			},
+		});
+		expect(getNetif()?.wlan0?.policy_route_missing).toBe(true);
+
+		// The radio moved to AP mode and left the bond: the check completed and no
+		// longer flags it.
+		pushNetif({
+			wlan0: {
+				tp: 2,
+				enabled: false,
+				ip: "10.42.0.1",
+				policy_route_missing: false,
+			},
+		});
+
+		expect(getNetif()?.wlan0?.policy_route_missing).toBe(false);
+	});
 });

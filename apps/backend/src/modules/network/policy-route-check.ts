@@ -294,6 +294,24 @@ export function isPolicyRouteMissing(ifname: string): boolean {
 	return flaggedIfaces?.has(ifname) ?? false;
 }
 
+/**
+ * The interface's verdict as a TRISTATE: `true`/`false` are both AUTHORITATIVE
+ * (the check completed), `undefined` is INDETERMINATE (dev host, spawn failure,
+ * malformed output).
+ *
+ * Do NOT collapse `undefined` into `false`. The frontend's netif merge PRESERVES
+ * an omitted optional field, so publishing only `true` made "no problem" and
+ * "couldn't check" the same absent field and latched the warning in the client
+ * forever — an interface flagged while it was a bonded station kept the amber
+ * band after moving to AP mode and leaving the bond. An explicit `false` is what
+ * lets recovery reach the operator; omission stays reserved for genuinely
+ * unknown, where holding the last value is correct.
+ */
+export function getPolicyRouteVerdict(ifname: string): boolean | undefined {
+	if (flaggedIfaces === null) return undefined;
+	return flaggedIfaces.has(ifname);
+}
+
 /** The full cached flag set (read-only) — `null` when indeterminate. */
 export function getPolicyRouteFlags(): ReadonlySet<string> | null {
 	return flaggedIfaces;
