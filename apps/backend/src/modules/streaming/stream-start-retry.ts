@@ -21,6 +21,7 @@ export type StartRetryDiagnostic = {
 	readonly phase: StartFailurePhase;
 	readonly class: StartFailureClass;
 	readonly code?: number | string;
+	readonly message?: string;
 	readonly retry:
 		| {
 				readonly state: "scheduled";
@@ -186,6 +187,7 @@ function diagnostic(
 		phase: failure.phase,
 		class: failure.class,
 		...(failure.code !== undefined ? { code: failure.code } : {}),
+		...(failure.message !== undefined ? { message: failure.message } : {}),
 		retry,
 	};
 }

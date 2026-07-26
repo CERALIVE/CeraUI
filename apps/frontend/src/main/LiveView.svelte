@@ -233,6 +233,7 @@ function startFailedMessage(code: string): string {
 function startFailureMessage(failure: {
 	class: string;
 	retriable: boolean;
+	message?: string;
 }): string {
 	const cls = $LL.live.startFailure.class[
 		failure.class as keyof (typeof $LL.live.startFailure)['class']
@@ -241,7 +242,7 @@ function startFailureMessage(failure: {
 	const retryState = failure.retriable
 		? $LL.live.startFailure.retriedThenFailed()
 		: $LL.live.startFailure.notRetriable();
-	return `${reason} ${retryState}`;
+	return `${reason} ${retryState}${failure.message ? `: ${failure.message}` : ""}`;
 }
 
 // Show error toast if start failed. Prefer the typed failure (class + retry

@@ -8,7 +8,13 @@ import en from "../../../../packages/i18n/src/en/index";
 const state = vi.hoisted(() => ({
 	stopReason: undefined as string | undefined,
 	failure: undefined as
-		| { class: string; phase: string; retriable: boolean; attemptId: string }
+		| {
+				class: string;
+				phase: string;
+				retriable: boolean;
+				attemptId: string;
+				message?: string;
+		  }
 		| undefined,
 }));
 const toastError = vi.hoisted(() => vi.fn());
@@ -161,6 +167,24 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		expect(toastError).toHaveBeenCalledTimes(1);
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.engine_internal} ${startFailure.notRetriable}`,
+		);
+	});
+
+	it("includes the descriptive engine message in the typed failure toast", async () => {
+		state.failure = {
+			class: "start_invalid",
+			phase: "start-rpc",
+			retriable: false,
+			attemptId: "att_d",
+			message:
+				"invalid params: audio-device-unavailable: ALSA capture device is busy",
+		};
+
+		render(LiveView);
+		await tick();
+
+		expect(toastError).toHaveBeenCalledWith(
+			`${startFailure.class.start_invalid} ${startFailure.notRetriable}: invalid params: audio-device-unavailable: ALSA capture device is busy`,
 		);
 	});
 });
