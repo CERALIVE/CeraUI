@@ -242,10 +242,14 @@ describe("isVideoSignalLost", () => {
 
 	it("never contradicts a healthy or idle dot beside it", () => {
 		expect(
-			isVideoSignalLost(rollup({ state: "healthy", frames: { advancing: false, count: 1 } })),
+			isVideoSignalLost(
+				rollup({ state: "healthy", frames: { advancing: false, count: 1 } }),
+			),
 		).toBe(false);
 		expect(
-			isVideoSignalLost(rollup({ state: "idle", frames: { advancing: false, count: null } })),
+			isVideoSignalLost(
+				rollup({ state: "idle", frames: { advancing: false, count: null } }),
+			),
 		).toBe(false);
 	});
 

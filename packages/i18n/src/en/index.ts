@@ -260,7 +260,8 @@ const en = {
 		bitrate: "Bitrate",
 		bitrateLimit: "Configured limit",
 		bitrateAdapting: "Adapting",
-		bitrateBelowLimitHint: "Encoding below your configured limit — the engine lowers the rate when the network can't carry the full amount.",
+		bitrateBelowLimitHint:
+			"Encoding below your configured limit — the engine lowers the rate when the network can't carry the full amount.",
 		temperature: "Temperature",
 		network: "Network",
 		uptime: "Uptime",

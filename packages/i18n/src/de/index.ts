@@ -270,7 +270,8 @@ const de = {
 		bitrate: "Bitrate",
 		bitrateLimit: "Konfiguriertes Limit",
 		bitrateAdapting: "Passt an",
-		bitrateBelowLimitHint: "Encoding unterhalb deines konfigurierten Limits — die Engine senkt die Rate, wenn das Netzwerk die volle Menge nicht tragen kann.",
+		bitrateBelowLimitHint:
+			"Encoding unterhalb deines konfigurierten Limits — die Engine senkt die Rate, wenn das Netzwerk die volle Menge nicht tragen kann.",
 		temperature: "Temperatur",
 		network: "Netzwerk",
 		uptime: "Betriebszeit",

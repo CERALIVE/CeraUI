@@ -270,7 +270,8 @@ const es = {
 		bitrate: "Bitrate",
 		bitrateLimit: "Límite configurado",
 		bitrateAdapting: "Adaptando",
-		bitrateBelowLimitHint: "Codificando por debajo de tu límite configurado: el motor reduce la tasa cuando la red no puede transportar la cantidad completa.",
+		bitrateBelowLimitHint:
+			"Codificando por debajo de tu límite configurado: el motor reduce la tasa cuando la red no puede transportar la cantidad completa.",
 		temperature: "Temperatura",
 		network: "Red",
 		uptime: "Tiempo activo",

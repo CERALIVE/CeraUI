@@ -863,7 +863,8 @@ const ko = {
 		bitrate: "비트레이트",
 		bitrateLimit: "설정한 상한",
 		bitrateAdapting: "조정 중",
-		bitrateBelowLimitHint: "설정한 상한보다 낮게 인코딩 중입니다. 네트워크가 전량을 감당하지 못하면 엔진이 비트레이트를 낮춥니다.",
+		bitrateBelowLimitHint:
+			"설정한 상한보다 낮게 인코딩 중입니다. 네트워크가 전량을 감당하지 못하면 엔진이 비트레이트를 낮춥니다.",
 		temperature: "온도",
 		network: "네트워크",
 		uptime: "가동 시간",

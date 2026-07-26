@@ -882,7 +882,8 @@ const ja = {
 		bitrate: "ビットレート",
 		bitrateLimit: "設定した上限",
 		bitrateAdapting: "調整中",
-		bitrateBelowLimitHint: "設定した上限を下回ってエンコード中です。ネットワークが全量を運べない場合、エンジンがレートを下げます。",
+		bitrateBelowLimitHint:
+			"設定した上限を下回ってエンコード中です。ネットワークが全量を運べない場合、エンジンがレートを下げます。",
 		temperature: "温度",
 		network: "ネットワーク",
 		uptime: "稼働時間",

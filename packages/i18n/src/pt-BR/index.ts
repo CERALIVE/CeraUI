@@ -1017,7 +1017,8 @@ const ptBR = {
 		bitrate: "Bitrate",
 		bitrateLimit: "Limite configurado",
 		bitrateAdapting: "Adaptando",
-		bitrateBelowLimitHint: "Codificando abaixo do seu limite configurado — o motor reduz a taxa quando a rede não consegue transportar tudo.",
+		bitrateBelowLimitHint:
+			"Codificando abaixo do seu limite configurado — o motor reduz a taxa quando a rede não consegue transportar tudo.",
 		temperature: "Temperatura",
 		network: "Rede",
 		uptime: "Tempo ativo",

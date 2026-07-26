@@ -811,7 +811,8 @@ const zh = {
 		bitrate: "比特率",
 		bitrateLimit: "配置上限",
 		bitrateAdapting: "自适应中",
-		bitrateBelowLimitHint: "当前编码低于你配置的上限——当网络无法承载全部码率时，引擎会自动降低码率。",
+		bitrateBelowLimitHint:
+			"当前编码低于你配置的上限——当网络无法承载全部码率时，引擎会自动降低码率。",
 		temperature: "温度",
 		network: "网络",
 		uptime: "运行时间",

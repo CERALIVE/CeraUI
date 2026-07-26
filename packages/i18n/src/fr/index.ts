@@ -1040,7 +1040,8 @@ const fr = {
 		bitrate: "Bitrate",
 		bitrateLimit: "Limite configurée",
 		bitrateAdapting: "Adaptation",
-		bitrateBelowLimitHint: "Encodage sous votre limite configurée — le moteur réduit le débit lorsque le réseau ne peut pas tout transporter.",
+		bitrateBelowLimitHint:
+			"Encodage sous votre limite configurée — le moteur réduit le débit lorsque le réseau ne peut pas tout transporter.",
 		temperature: "Température",
 		network: "Réseau",
 		uptime: "Temps de fonctionnement",
