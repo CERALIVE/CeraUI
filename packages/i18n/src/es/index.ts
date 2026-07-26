@@ -189,6 +189,15 @@ const es = {
 			"No se pudo actualizar la lista de paquetes. Comprueba la conexión a internet del dispositivo e inténtalo de nuevo.",
 		updateReasonUnknown:
 			"El dispositivo rechazó la actualización sin indicar un motivo.",
+		updateCheckFailed: "No se pudo buscar actualizaciones",
+		updateCheckRefused: "El dispositivo no ejecutó la comprobación",
+		updateCheckReasonRefreshFailed:
+			"El dispositivo no pudo acceder a los repositorios de paquetes, así que no puede saber si hay una actualización disponible. Revisa la conexión de red y vuelve a intentarlo.",
+		updateCheckReasonDiscoveryFailed:
+			"El dispositivo actualizó la lista de paquetes pero no pudo leer el resultado, así que no puede saber si hay una actualización disponible. Vuelve a intentarlo.",
+		updateCheckReasonBusy:
+			"El dispositivo está transmitiendo o instalando una actualización. Inténtalo de nuevo en un momento.",
+		updateLastChecked: "Última comprobación a las {time}",
 		status: "Estado",
 		streaming: "Transmitiendo",
 		offline: "Desconectado",

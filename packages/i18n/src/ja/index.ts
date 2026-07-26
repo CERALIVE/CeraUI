@@ -33,6 +33,15 @@ const ja = {
 		updateReasonCheckUnavailable:
 			"パッケージ一覧を更新できませんでした。デバイスのインターネット接続を確認して、もう一度お試しください。",
 		updateReasonUnknown: "デバイスは理由を示さずに更新を拒否しました。",
+		updateCheckFailed: "更新を確認できませんでした",
+		updateCheckRefused: "デバイスは確認を実行しませんでした",
+		updateCheckReasonRefreshFailed:
+			"デバイスがパッケージリポジトリに接続できなかったため、更新があるかどうか判断できません。ネットワーク接続を確認してから再試行してください。",
+		updateCheckReasonDiscoveryFailed:
+			"デバイスはパッケージ一覧を更新しましたが結果を読み取れなかったため、更新があるかどうか判断できません。再試行してください。",
+		updateCheckReasonBusy:
+			"デバイスは配信中または更新のインストール中です。しばらくしてから再試行してください。",
+		updateLastChecked: "最終確認: {time}",
 		status: "ステータス",
 		streaming: "ストリーミング",
 		offline: "オフライン",

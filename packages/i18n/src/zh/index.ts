@@ -29,6 +29,14 @@ const zh = {
 		updateReasonCheckUnavailable:
 			"无法刷新软件包列表。请检查设备的网络连接后重试。",
 		updateReasonUnknown: "设备拒绝了更新，且未说明原因。",
+		updateCheckFailed: "无法检查更新",
+		updateCheckRefused: "设备未执行检查",
+		updateCheckReasonRefreshFailed:
+			"设备无法连接到软件源，因此无法判断是否有可用更新。请检查网络连接后重试。",
+		updateCheckReasonDiscoveryFailed:
+			"设备已刷新软件包列表，但无法读取结果，因此无法判断是否有可用更新。请重试。",
+		updateCheckReasonBusy: "设备正在直播或安装更新，请稍后重试。",
+		updateLastChecked: "上次检查时间 {time}",
 		status: "状态",
 		streaming: "直播中",
 		offline: "离线",

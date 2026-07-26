@@ -187,6 +187,15 @@ const ptBR = {
 			"Não foi possível atualizar a lista de pacotes. Verifique a conexão de internet do dispositivo e tente novamente.",
 		updateReasonUnknown:
 			"O dispositivo recusou a atualização sem informar um motivo.",
+		updateCheckFailed: "Não foi possível verificar atualizações",
+		updateCheckRefused: "O dispositivo não executou a verificação",
+		updateCheckReasonRefreshFailed:
+			"O dispositivo não conseguiu acessar os repositórios de pacotes, então não consegue dizer se há uma atualização disponível. Verifique a conexão de rede e tente novamente.",
+		updateCheckReasonDiscoveryFailed:
+			"O dispositivo atualizou a lista de pacotes, mas não conseguiu ler o resultado, então não consegue dizer se há uma atualização disponível. Tente novamente.",
+		updateCheckReasonBusy:
+			"O dispositivo está transmitindo ou instalando uma atualização. Tente novamente em instantes.",
+		updateLastChecked: "Última verificação às {time}",
 		status: "Status",
 		streaming: "Transmitindo",
 		offline: "Offline",

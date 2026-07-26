@@ -169,6 +169,15 @@ const ar = {
 		updateReasonCheckUnavailable:
 			"تعذّر تحديث قائمة الحزم. تحقّق من اتصال الجهاز بالإنترنت ثم أعد المحاولة.",
 		updateReasonUnknown: "رفض الجهاز التحديث دون ذكر سبب.",
+		updateCheckFailed: "تعذر التحقق من التحديثات",
+		updateCheckRefused: "لم يقم الجهاز بإجراء الفحص",
+		updateCheckReasonRefreshFailed:
+			"تعذر على الجهاز الوصول إلى مستودعات الحزم، لذا لا يمكنه تحديد ما إذا كان هناك تحديث متاح. تحقق من اتصال الشبكة ثم أعد المحاولة.",
+		updateCheckReasonDiscoveryFailed:
+			"حدّث الجهاز قائمة الحزم لكنه لم يتمكن من قراءة النتيجة، لذا لا يمكنه تحديد ما إذا كان هناك تحديث متاح. أعد المحاولة.",
+		updateCheckReasonBusy:
+			"الجهاز مشغول بالبث أو بتثبيت تحديث. أعد المحاولة بعد قليل.",
+		updateLastChecked: "آخر فحص في {time}",
 		status: "الحالة",
 		streaming: "البث",
 		offline: "غير متصل",
