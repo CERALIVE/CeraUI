@@ -51,6 +51,11 @@ export const VIDEO_HOTPLUG_DEBOUNCE_MS = 200;
  *  hotplug is reflected in the picker within the 3s product budget (T34). */
 export const VIDEO_HOTPLUG_POLL_INTERVAL_MS = 2_000;
 
+/** Signal-only re-probe (ms). A receiver that reports "no link" while its HDMI
+ *  link retrains, then locks, changes NEITHER the `/dev` node nor the device SET,
+ *  so both detectors above stay silent and the signal-less answer latches. */
+export const VIDEO_SIGNAL_RECHECK_INTERVAL_MS = 5_000;
+
 // ─── timing / jitter (shared across periodic loops) ──────────────────────────
 // Per-tick jitter de-correlates fleet-wide fixed-period timers so devices stop
 // hitting a relay/hub on the same wall-clock boundary (thundering herd). Shared
