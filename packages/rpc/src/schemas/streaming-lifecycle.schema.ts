@@ -80,6 +80,7 @@ export const startFailureSchema = z.object({
 	phase: startFailurePhaseSchema,
 	class: startFailureClassSchema,
 	code: z.union([z.number(), z.string()]).optional(),
+	message: z.string().optional(),
 	retriable: z.boolean(),
 });
 export type StartFailure = z.infer<typeof startFailureSchema>;
