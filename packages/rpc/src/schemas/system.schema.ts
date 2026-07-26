@@ -73,14 +73,32 @@ export const updateIdentitySchema = z.object({
 });
 export type UpdateIdentity = z.infer<typeof updateIdentitySchema>;
 
+// Why a CHECK could not complete — NOT the same as `failed` (an install that ran
+// and failed). A check failure means the device could not establish whether an
+// update exists, so answering "up to date" would be a lie.
+// `refresh_failed`: `apt-get update` exited non-zero (repos unreachable, apt lock).
+// `discovery_failed`: refresh was fine, `dist-upgrade --assume-no` was unreadable.
+export const UPDATE_CHECK_FAILURE_REASONS = ['refresh_failed', 'discovery_failed'] as const;
+export const updateCheckFailureReasonSchema = z.enum(UPDATE_CHECK_FAILURE_REASONS);
+export type UpdateCheckFailureReason = z.infer<typeof updateCheckFailureReasonSchema>;
+
 export const updateStateSchema = z.discriminatedUnion('kind', [
-	z.object({ kind: z.literal('idle') }),
-	z.object({ kind: z.literal('checking') }),
+	// `checked_at` (epoch ms) is the operator's evidence a check actually ran: a
+	// successful check that changes nothing is otherwise indistinguishable from a
+	// dead button — same "up to date" line either way.
+	z.object({ kind: z.literal('idle'), checked_at: z.number().optional() }),
+	z.object({ kind: z.literal('checking'), checked_at: z.number().optional() }),
+	z.object({
+		kind: z.literal('check_failed'),
+		reason: updateCheckFailureReasonSchema,
+		checked_at: z.number().optional(),
+	}),
 	z.object({
 		kind: z.literal('available'),
 		identity: updateIdentitySchema,
 		package_count: z.number(),
 		download_size: z.string().optional(),
+		checked_at: z.number().optional(),
 	}),
 	z.object({
 		kind: z.literal('downloading'),
