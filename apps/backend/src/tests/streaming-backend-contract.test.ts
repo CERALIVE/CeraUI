@@ -554,6 +554,38 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(fake.calls.map((call) => call.op)).toContain("stop");
 	});
 
+	// A crashed or already-disconnected engine sends no final idle status, so the
+	// stop itself must clear the encode — otherwise the Live-page summary keeps
+	// labelling the stopped session "Live" (live board bug).
+	test("stop() clears the active encode even with no final engine status", async () => {
+		const { backend, fake } = makeBackend();
+		const reconciliation = backend.reconcileRuntimeState();
+		await fake.subscribed;
+		fake.emit({
+			type: "status",
+			seq: 1,
+			state: "streaming",
+			streaming: true,
+			active_encode: {
+				codec: "h265",
+				resolution: "1920x1080",
+				framerate: 60,
+				active_input: "/dev/video1",
+			},
+		} as Parameters<CerastreamBackend["handleEvent"]>[0]);
+		expect(await reconciliation).toBe("streaming");
+		expect(
+			(backend.getTelemetry() as { active_encode?: unknown }).active_encode,
+		).toBeDefined();
+
+		expect(backend.stop(() => undefined)).toBe(true);
+		await backend.settle();
+
+		expect(
+			(backend.getTelemetry() as { active_encode?: unknown }).active_encode,
+		).toBeUndefined();
+	});
+
 	test("reconciliation reports contradictory engine status as unknown", async () => {
 		const { backend, fake } = makeBackend();
 		let streaming = false;

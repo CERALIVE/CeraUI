@@ -12,6 +12,8 @@ import { getMockAudioDevices } from "../mocks/providers/streaming.ts";
 import {
 	deriveAudioSources,
 	getAudioDevices,
+	hasCapturePcmNode,
+	isMeterPreferenceDevicePresent,
 	resolveMeterPreference,
 	setMockAudioDevicesProvider,
 	updateAudioDevices,
@@ -144,5 +146,112 @@ describe("resolveMeterPreference — picker value → idle-meter ALSA device", (
 	test("a value that already names an ALSA selector passes through unchanged", () => {
 		expect(resolveMeterPreference("hw:CARD=usbaudio")).toBe("hw:CARD=usbaudio");
 		expect(resolveMeterPreference("plughw:1,0")).toBe("plughw:1,0");
+	});
+});
+
+describe("hasCapturePcmNode — ALSA capture substream detection", () => {
+	test("a card exposing a pcmC<N>D<M>c node can be captured from", () => {
+		expect(hasCapturePcmNode(["controlC5", "id", "number", "pcmC5D0c"])).toBe(
+			true,
+		);
+		expect(hasCapturePcmNode(["pcmC4D0c", "pcmC4D0p"])).toBe(true);
+	});
+
+	test("a playback-only card, and a card with no PCM node at all, cannot", () => {
+		expect(hasCapturePcmNode(["controlC0", "id", "pcmC0D0p"])).toBe(false);
+		expect(hasCapturePcmNode(["controlC3", "id", "number", "input5"])).toBe(
+			false,
+		);
+		expect(hasCapturePcmNode([])).toBe(false);
+	});
+});
+
+// Live board bug: with "HDMI Input" selected as the audio source, the meter read
+// "Meter unavailable · Not the selected device". The RK3588 HDMI-RX card really
+// is listed (`/proc/asound/cards` and the picker both show it), but with no
+// signal it exposes NO capture PCM — `/proc/asound/pcm` reports
+// "03-00: rockchip,hdmiin i2s-hifi-0 : " with no `capture N` field, and there is
+// no `pcmC3D0c` node. Nothing can ever meter it, so the honest reason is
+// `no_device`, not a mismatch that does not exist. Device-agnostic: the rule is
+// "has a capture PCM", never a driver or card-id test.
+describe("isMeterPreferenceDevicePresent — listed is not the same as usable", () => {
+	async function scan(
+		cards: Array<{ dir: string; id: string; entries?: string[] }>,
+	): Promise<string> {
+		const root = await mkdtemp(join(tmpdir(), "ceraui-capture-"));
+		for (const card of cards) {
+			await mkdir(join(root, card.dir));
+			await Bun.write(join(root, card.dir, "id"), `${card.id}\n`);
+			for (const entry of card.entries ?? []) {
+				await mkdir(join(root, card.dir, entry));
+			}
+		}
+		await updateAudioDevices(root);
+		return root;
+	}
+
+	// The picker key for a card is alias-resolved and depends on the resolved
+	// hardware kind, so look it up rather than hardcoding a display name.
+	function pickerKeyFor(cardId: string): string {
+		const entry = Object.entries(getAudioDevices()).find(
+			([, id]) => id === cardId,
+		);
+		if (entry === undefined) throw new Error(`card ${cardId} is not listed`);
+		return entry[0];
+	}
+
+	test("a listed card with ZERO capture PCM reports absent (→ no_device)", async () => {
+		const root = await scan([
+			{ dir: "card3", id: "rockchiphdmiin" },
+			{ dir: "card5", id: "usbaudio", entries: ["pcmC5D0c"] },
+		]);
+		try {
+			expect(
+				isMeterPreferenceDevicePresent(pickerKeyFor("rockchiphdmiin")),
+			).toBe(false);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	test("a card that DOES own a capture PCM reports present (→ not_selected_device)", async () => {
+		const root = await scan([
+			{ dir: "card5", id: "usbaudio", entries: ["pcmC5D0c"] },
+		]);
+		try {
+			expect(isMeterPreferenceDevicePresent(pickerKeyFor("usbaudio"))).toBe(
+				true,
+			);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	// Device-agnostic: an unaliased third-party card follows the same rule, so the
+	// verdict is "has a capture PCM", not anything about HDMI or Rockchip.
+	test("the same card becomes present once its capture PCM appears", async () => {
+		const without = await scan([{ dir: "card1", id: "MINI" }]);
+		expect(isMeterPreferenceDevicePresent(pickerKeyFor("MINI"))).toBe(false);
+		await rm(without, { recursive: true, force: true });
+
+		const withCapture = await scan([
+			{ dir: "card1", id: "MINI", entries: ["pcmC1D0c"] },
+		]);
+		try {
+			expect(isMeterPreferenceDevicePresent(pickerKeyFor("MINI"))).toBe(true);
+		} finally {
+			await rm(withCapture, { recursive: true, force: true });
+		}
+	});
+
+	test("a pick CeraUI does not list at all stays absent", async () => {
+		const root = await scan([
+			{ dir: "card5", id: "usbaudio", entries: ["pcmC5D0c"] },
+		]);
+		try {
+			expect(isMeterPreferenceDevicePresent("Nonexistent")).toBe(false);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 });
