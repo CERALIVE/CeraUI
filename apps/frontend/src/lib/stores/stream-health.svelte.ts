@@ -187,18 +187,75 @@ export function reduceHealth(
 }
 
 /**
+ * Is the running stream receiving no video at all?
+ *
+ * The backend rolls this up already — `deriveReason` answers
+ * `{component:"frames", detail:"No frames advancing"}` the moment the frame
+ * counter stops moving — but the HUD only renders it as an amber triangle plus
+ * a reason string that is `hidden` below the `sm` breakpoint, and the transition
+ * toast expires after five seconds. An operator who looks at the Live cockpit
+ * thirty seconds into a dead-air outage sees nothing at all, which is exactly
+ * how a mid-stream HDMI unplug was reported as "not showing signal loss".
+ *
+ * This is a DISPLAY predicate over the backend's own verdict — it never
+ * re-derives liveness. Two deliberate strictnesses:
+ *   - a `healthy`/`idle` rollup can never report signal loss, so the banner can
+ *     never contradict the dot beside it;
+ *   - `advancing` must be EXACTLY `false`. `null` means "no frame telemetry this
+ *     window" (the cold-start branch), and an unknown is not an outage.
+ */
+export function isVideoSignalLost(rollup: HealthRollup | null): boolean {
+	if (rollup === null) return false;
+	if (rollup.state === "healthy" || rollup.state === "idle") return false;
+	return rollup.frames.advancing === false;
+}
+
+/**
+ * Cause-specific copy for a `degraded` rollup, keyed on the backend's OWN
+ * `reason.component` so the toast and the HUD reason can never disagree.
+ *
+ * "Stream health degraded" is true and useless: it is the same sentence whether
+ * the camera was unplugged or one of three bonded links dropped, and those want
+ * opposite reactions from the operator. Naming the cause is the whole point of
+ * the notification — the dot already conveys "something is wrong".
+ *
+ * `process` is deliberately absent: a stopped process rolls up to `dead`, which
+ * already has its own unambiguous "Stream is down" copy.
+ */
+const DEGRADED_CAUSE_COPY: Readonly<
+	Record<string, { readonly key: string; readonly msg: string }>
+> = {
+	frames: {
+		key: "notifications.streamHealthNoVideo",
+		msg: "No video is reaching your stream",
+	},
+	links: {
+		key: "notifications.streamHealthLinksDegraded",
+		msg: "Some bonded links are down",
+	},
+};
+
+/**
  * The toast (if any) to raise for a `previous → current` transition. Returns
  * `null` when no notification is warranted:
  *   - no state change,
  *   - any settle into `unknown` (never alarms),
  *   - the initial `unknown → healthy` (a clean start is silent).
  *
+ * `reason` is the rollup's own top cause; when it names a component we have copy
+ * for, the `degraded` toast says WHAT broke instead of merely that something
+ * did. An absent or unrecognised component falls back to the generic wording —
+ * a new backend component can never produce a missing-key toast.
+ *
  * Notifications dedup by `name`, so rapid flapping into the same state replaces
- * the prior toast rather than stacking — bounded under load.
+ * the prior toast rather than stacking — bounded under load. The cause-specific
+ * variants deliberately keep the single `stream-health-degraded` name so a
+ * frames→links flap still replaces rather than stacks.
  */
 export function notificationForTransition(
 	previous: HealthIndicator,
 	current: HealthIndicator,
+	reason?: HealthReason | undefined,
 ): Notification | null {
 	if (current === previous) return null;
 
@@ -213,16 +270,18 @@ export function notificationForTransition(
 				is_persistent: false,
 				duration: 6,
 			};
-		case "degraded":
+		case "degraded": {
+			const cause = reason ? DEGRADED_CAUSE_COPY[reason.component] : undefined;
 			return {
 				name: "stream-health-degraded",
 				type: "warning",
-				key: "notifications.streamHealthDegraded",
-				msg: "Stream health degraded",
+				key: cause?.key ?? "notifications.streamHealthDegraded",
+				msg: cause?.msg ?? "Stream health degraded",
 				is_dismissable: true,
 				is_persistent: false,
 				duration: 5,
 			};
+		}
 		case "healthy":
 			if (previous === "degraded" || previous === "dead") {
 				return {
@@ -268,9 +327,17 @@ function createStreamHealthStore(): StreamHealthStore {
 		// out the last-known-good indicator. `unknown` is reachable only as the
 		// pre-broadcast initial state or via an explicit reset(), never a broadcast.
 		if (next === "unknown") return;
-		const notification = notificationForTransition(snapshot.current, next);
+		// Parse the rollup BEFORE deciding the toast: the notification names its
+		// cause from this frame's own `reason`, so reading it after would caption
+		// the transition with the PREVIOUS frame's cause.
+		const nextRollup = parseHealthRollup(data);
+		const notification = notificationForTransition(
+			snapshot.current,
+			next,
+			nextRollup?.reason,
+		);
 		snapshot = reduceHealth(snapshot, next);
-		rollup = parseHealthRollup(data);
+		rollup = nextRollup;
 		if (notification) pushNotification(notification);
 	};
 

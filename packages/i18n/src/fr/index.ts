@@ -1038,6 +1038,10 @@ const fr = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateLimit: "Limite configurée",
+		bitrateAdapting: "Adaptation",
+		bitrateBelowLimitHint:
+			"Encodage sous votre limite configurée — le moteur réduit le débit lorsque le réseau ne peut pas tout transporter.",
 		temperature: "Température",
 		network: "Réseau",
 		uptime: "Temps de fonctionnement",
@@ -1443,6 +1447,9 @@ const fr = {
 			linksDownStreamingTitle: "Tous les liens agrégés hors service",
 			linksDownStreamingBody:
 				"Aucune donnée ne peut être envoyée pour le moment. Le direct reprend automatiquement dès qu'un lien est rétabli.",
+			signalLostStreamingTitle: "Aucune vidéo n'arrive dans votre direct",
+			signalLostStreamingBody:
+				"Votre source est toujours connectée mais n'envoie plus d'image. Vérifiez qu'elle est allumée et que le câble est bien enfoncé aux deux extrémités — votre direct se rétablit tout seul dès que la vidéo revient.",
 
 			audioNone: "Aucune source audio détectée",
 			audioEmbedded: "Audio intégré (du flux entrant)",
@@ -1647,6 +1654,10 @@ const fr = {
 		streamHealthDegraded: "État du flux dégradé",
 		streamHealthDead: "Le flux est interrompu",
 		streamHealthRecovered: "État du flux rétabli",
+		streamHealthNoVideo:
+			"Aucune vidéo n'arrive dans votre direct. Vérifiez que votre caméra ou source HDMI est allumée et que le câble est bien enfoncé aux deux extrémités.",
+		streamHealthLinksDegraded:
+			"Certains de vos liens agrégés sont hors service. Votre direct continue sur les liens encore actifs.",
 		activeSourceLost:
 			"La source vidéo que vous diffusez a été perdue. Reconnectez-la ou changez de source pour garder votre direct actif.",
 		activeSourceRecovered: "Source vidéo reconnectée.",

@@ -268,6 +268,10 @@ const de = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateLimit: "Konfiguriertes Limit",
+		bitrateAdapting: "Passt an",
+		bitrateBelowLimitHint:
+			"Encoding unterhalb deines konfigurierten Limits — die Engine senkt die Rate, wenn das Netzwerk die volle Menge nicht tragen kann.",
 		temperature: "Temperatur",
 		network: "Netzwerk",
 		uptime: "Betriebszeit",
@@ -673,6 +677,9 @@ const de = {
 			linksDownStreamingTitle: "Alle gebündelten Verbindungen ausgefallen",
 			linksDownStreamingBody:
 				"Es können gerade keine Daten gesendet werden. Der Stream wird automatisch fortgesetzt, sobald eine Verbindung zurückkehrt.",
+			signalLostStreamingTitle: "Kein Video erreicht deinen Stream",
+			signalLostStreamingBody:
+				"Deine Quelle ist weiterhin verbunden, sendet aber kein Bild mehr. Prüfe, ob sie eingeschaltet ist und das Kabel an beiden Enden fest sitzt — dein Stream erholt sich von selbst, sobald wieder Video ankommt.",
 
 			audioNone: "Keine Audioquelle erkannt",
 			audioEmbedded: "Eingebetteter Ton (aus dem eingehenden Stream)",
@@ -876,6 +883,10 @@ const de = {
 		streamHealthDegraded: "Stream-Zustand beeinträchtigt",
 		streamHealthDead: "Stream ist ausgefallen",
 		streamHealthRecovered: "Stream-Zustand wiederhergestellt",
+		streamHealthNoVideo:
+			"Es erreicht kein Video deinen Stream. Prüfe, ob deine Kamera oder HDMI-Quelle eingeschaltet ist und das Kabel an beiden Enden fest sitzt.",
+		streamHealthLinksDegraded:
+			"Einige deiner gebündelten Verbindungen sind ausgefallen. Dein Stream läuft über die verbleibenden Verbindungen weiter.",
 		activeSourceLost:
 			"Die gestreamte Videoquelle ging verloren. Schließe sie wieder an oder wechsle die Quelle, um den Stream aufrechtzuerhalten.",
 		activeSourceRecovered: "Videoquelle wieder verbunden.",

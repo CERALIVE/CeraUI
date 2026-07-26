@@ -987,6 +987,10 @@ const ar = {
 	},
 	hud: {
 		bitrate: "معدل البت",
+		bitrateLimit: "الحد المُعد",
+		bitrateAdapting: "يتكيف",
+		bitrateBelowLimitHint:
+			"الترميز أقل من الحد المُعد — يخفض المحرك المعدل عندما لا تستطيع الشبكة حمل الكمية الكاملة.",
 		temperature: "درجة الحرارة",
 		network: "الشبكة",
 		uptime: "مدة التشغيل",
@@ -1377,6 +1381,9 @@ const ar = {
 			linksDownStreamingTitle: "جميع الروابط المجمّعة معطّلة",
 			linksDownStreamingBody:
 				"لا يمكن إرسال أي بيانات الآن. يُستأنف البث تلقائياً عند تعافي أحد الروابط.",
+			signalLostStreamingTitle: "لا تصل أي صورة إلى بثك",
+			signalLostStreamingBody:
+				"مصدرك ما زال متصلاً لكنه توقف عن إرسال الصورة. تأكد من أنه يعمل ومن أن الكابل مثبت جيداً من الطرفين — سيتعافى بثك تلقائياً بمجرد عودة الفيديو.",
 
 			audioNone: "لم يتم اكتشاف مصدر صوت",
 			audioEmbedded: "صوت مضمّن (من البث الوارد)",
@@ -1580,6 +1587,10 @@ const ar = {
 		streamHealthDegraded: "تدهورت حالة البث",
 		streamHealthDead: "البث متوقف",
 		streamHealthRecovered: "تمت استعادة حالة البث",
+		streamHealthNoVideo:
+			"لا يصل أي فيديو إلى بثك. تأكد من أن الكاميرا أو مصدر HDMI يعمل ومن أن الكابل مثبت جيداً من الطرفين.",
+		streamHealthLinksDegraded:
+			"بعض روابطك المجمّعة متوقفة. يستمر بثك عبر الروابط التي ما زالت تعمل.",
 		activeSourceLost:
 			"فُقد مصدر الفيديو الذي تبثه. أعد توصيله أو بدّل إلى مصدر آخر لإبقاء البث مستمراً.",
 		activeSourceRecovered: "تمت إعادة الاتصال بمصدر الفيديو.",

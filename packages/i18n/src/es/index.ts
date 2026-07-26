@@ -268,6 +268,10 @@ const es = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateLimit: "Límite configurado",
+		bitrateAdapting: "Adaptando",
+		bitrateBelowLimitHint:
+			"Codificando por debajo de tu límite configurado: el motor reduce la tasa cuando la red no puede transportar la cantidad completa.",
 		temperature: "Temperatura",
 		network: "Red",
 		uptime: "Tiempo activo",
@@ -675,6 +679,9 @@ const es = {
 			linksDownStreamingTitle: "Todos los enlaces combinados caídos",
 			linksDownStreamingBody:
 				"Ahora mismo no se pueden enviar datos. El directo se reanuda automáticamente cuando un enlace se recupera.",
+			signalLostStreamingTitle: "No llega vídeo a tu directo",
+			signalLostStreamingBody:
+				"Tu fuente sigue conectada, pero ha dejado de enviar imagen. Comprueba que está encendida y que el cable está bien conectado por ambos extremos: tu directo se recupera solo en cuanto vuelva el vídeo.",
 
 			audioNone: "No se detectó ninguna fuente de audio",
 			audioEmbedded: "Audio incorporado (del flujo entrante)",
@@ -880,6 +887,10 @@ const es = {
 		streamHealthDegraded: "Estado del stream degradado",
 		streamHealthDead: "El stream está caído",
 		streamHealthRecovered: "Estado del stream recuperado",
+		streamHealthNoVideo:
+			"No llega vídeo a tu directo. Comprueba que tu cámara o fuente HDMI está encendida y que el cable está bien conectado por ambos extremos.",
+		streamHealthLinksDegraded:
+			"Algunos de tus enlaces agrupados están caídos. Tu directo continúa por los enlaces que siguen activos.",
 		activeSourceLost:
 			"Se perdió la fuente de vídeo que estás transmitiendo. Vuelve a conectarla o cambia de fuente para mantener el directo.",
 		activeSourceRecovered: "Fuente de vídeo reconectada.",

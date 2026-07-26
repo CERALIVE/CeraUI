@@ -75,6 +75,14 @@ const lifecycle = $derived<HudLifecycle>(isOffline ? 'offline' : isLive ? 'live'
 const bitrateDimmed = $derived(isLive && hud.isBitrateStale);
 const bitrateText = $derived(isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—');
 
+// `hud.bitrateKbps` is the rate the engine has APPLIED; `bitrateCeilingKbps` is
+// what the operator configured. They differ whenever the adaptive controller has
+// throttled down, and showing only the ceiling is what made a protective
+// reduction look like the device ignoring the setting. The ceiling is rendered
+// as a qualifier ON the existing bitrate fact, not as a fifth HUD fact.
+const bitrateBelowLimit = $derived(isLive && hud.isBitrateBelowCeiling);
+const bitrateLimitText = $derived(hud.bitrateCeilingKbps != null ? formatBitrate(loc)(hud.bitrateCeilingKbps) : '—');
+
 // Store-and-forward buffering (Task 34): null until the engine advertises it.
 const buffering = $derived(getBufferingState());
 
@@ -182,7 +190,8 @@ $effect(() => {
 // dimming conveys — never a fresh-sounding value for an aged reading.
 const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
 const bitrateLabel = $derived(
-	`${$LL.hud.bitrate()}: ${isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}${staleSuffix(bitrateDimmed)}`,
+	`${$LL.hud.bitrate()}: ${isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}` +
+		`${bitrateBelowLimit ? `, ${$LL.hud.bitrateLimit()} ${bitrateLimitText}` : ''}${staleSuffix(bitrateDimmed)}`,
 );
 // The compact strip now shows a single temperature chip; the aria name carries
 // just that value + its staleness (voltage / current moved to the sheet).
@@ -332,17 +341,27 @@ $effect(() => {
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
-				<!-- Bitrate — live-only; renders "—" when idle/offline (never a dimmed stale number) -->
+				<!-- Bitrate — live-only; renders "—" when idle/offline (never a dimmed stale number).
+				     While the engine is throttled below the configured limit, that limit rides
+				     along as a muted qualifier so the operator sees their setting was honoured
+				     as a ceiling, not ignored. -->
 				<span
 					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', bitrateDimmed && 'opacity-50')}
 					role="img"
 					aria-label={bitrateLabel}
-					title={$LL.hud.bitrate()}
+					title={bitrateBelowLimit ? $LL.hud.bitrateBelowLimitHint() : $LL.hud.bitrate()}
+					data-testid="hud-bitrate"
+					data-below-limit={bitrateBelowLimit ? 'true' : undefined}
 				>
 					{#if bitrateDimmed}
 						<ClockIcon class="size-3 shrink-0" aria-hidden="true" />
 					{/if}
 					{bitrateText}
+					{#if bitrateBelowLimit}
+						<span class="text-muted-foreground/70 text-[0.7rem]" data-testid="hud-bitrate-limit">
+							/ {bitrateLimitText}
+						</span>
+					{/if}
 				</span>
 
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
@@ -536,6 +555,22 @@ $effect(() => {
 						{bitrateText}
 					</span>
 				</div>
+
+				<!-- The configured ceiling, shown ONLY once the engine has proved it is
+				     encoding below it. The sheet has room for the explanation the compact
+				     strip can only hint at. -->
+				{#if bitrateBelowLimit}
+					<div class="flex items-center justify-between gap-3 border-b py-2" data-testid="hud-bitrate-limit-row">
+						<span class="text-muted-foreground flex items-center gap-2">
+							<InfoIcon class="size-3.5 shrink-0" aria-hidden="true" />
+							{$LL.hud.bitrateLimit()}
+						</span>
+						<span class="font-mono tabular-nums">{bitrateLimitText}</span>
+					</div>
+					<p class="text-muted-foreground/70 py-2 text-xs" data-testid="hud-bitrate-below-limit-hint">
+						{$LL.hud.bitrateBelowLimitHint()}
+					</p>
+				{/if}
 			</section>
 
 			<!-- Network links -->

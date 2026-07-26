@@ -111,6 +111,38 @@ export const bufferingStatusSchema = z.object({
 });
 export type BufferingStatus = z.infer<typeof bufferingStatusSchema>;
 
+// The engine's adaptive bitrate reading: the rate cerastream has APPLIED to the
+// encoder right now (`applied_kbps`) beside the CEILING it was given
+// (`ceiling_kbps`). Two different quantities, and conflating them is precisely
+// the confusion this field exists to remove.
+//
+// `config.max_br` is the operator's REQUEST — CeraUI sends it verbatim as the
+// engine's `bitrate.max_bitrate`. cerastream's adaptive controller then drives
+// the encoder anywhere between `bitrate.min_bitrate` (300 kbps) and that ceiling
+// on a 20 ms loop fed by SRT RTT / send-buffer depth / packet loss, and reports
+// the outcome on its own `bitrate` event. A 5000 kbps request on a link that
+// cannot sustain it therefore runs at ~3000 kbps — correct, protective behaviour
+// that CeraUI previously had no way to show, because every surface fell back to
+// the ceiling and reported the request as if it were the result.
+//
+// `applied_kbps` is an ENCODER TARGET, not a measurement of bytes on the wire.
+// Measured wire throughput lives elsewhere (`netif.tx_bps`, and srtla_send's
+// per-link `bitrate_bps`); do not relabel this as "measured".
+//
+// Unlike `buffering` / `active_encode` this is NOT a verbatim pass-through of a
+// `status` frame field — it is assembled from a separate event topic, so the
+// names state their unit and their role rather than mirroring the engine's
+// unit-less `current_bitrate` / `max_bitrate`. Additive + nullable + optional,
+// so an engine that emits no `bitrate` event surfaces nothing at all and
+// consumers keep their existing configured-ceiling fallback.
+export const engineBitrateSchema = z.object({
+	/** What the adaptive controller has set the encoder to right now, kbps. */
+	applied_kbps: z.number().nonnegative(),
+	/** The ceiling the engine was started/reloaded with, kbps. */
+	ceiling_kbps: z.number().nonnegative(),
+});
+export type EngineBitrate = z.infer<typeof engineBitrateSchema>;
+
 // Realized runtime encode reported by the engine on the `status` event
 // (cerastream `ActiveEncode`, cerastream Todo 10). Reflects the RESOLVED graph
 // (post platform-default/override), NOT the requested StartParams. Additive +
@@ -201,6 +233,7 @@ export const statusResponseSchema = z.object({
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
 	buffering: bufferingStatusSchema.nullable().optional(),
 	active_encode: activeEncodeSchema.nullable().optional(),
+	engine_bitrate: engineBitrateSchema.nullable().optional(),
 	network_ingest: networkIngestSchema.nullable().optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;

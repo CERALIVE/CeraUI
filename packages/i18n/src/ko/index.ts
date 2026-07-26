@@ -861,6 +861,10 @@ const ko = {
 	},
 	hud: {
 		bitrate: "비트레이트",
+		bitrateLimit: "설정한 상한",
+		bitrateAdapting: "조정 중",
+		bitrateBelowLimitHint:
+			"설정한 상한보다 낮게 인코딩 중입니다. 네트워크가 전량을 감당하지 못하면 엔진이 비트레이트를 낮춥니다.",
 		temperature: "온도",
 		network: "네트워크",
 		uptime: "가동 시간",
@@ -1257,6 +1261,9 @@ const ko = {
 			linksDownStreamingTitle: "모든 본딩 링크 다운",
 			linksDownStreamingBody:
 				"지금은 데이터를 보낼 수 없습니다. 링크가 복구되면 스트림이 자동으로 재개됩니다.",
+			signalLostStreamingTitle: "스트림에 영상이 들어오지 않습니다",
+			signalLostStreamingBody:
+				"소스는 여전히 연결되어 있지만 화면 전송이 멈췄습니다. 전원이 켜져 있는지, 케이블이 양쪽 끝에 제대로 꽂혀 있는지 확인하세요. 영상이 돌아오면 스트림은 자동으로 복구됩니다.",
 
 			audioNone: "오디오 소스가 감지되지 않음",
 			audioEmbedded: "임베디드 오디오 (수신 스트림에서)",
@@ -1460,6 +1467,10 @@ const ko = {
 		streamHealthDegraded: "스트림 상태가 저하되었습니다",
 		streamHealthDead: "스트림이 중단되었습니다",
 		streamHealthRecovered: "스트림 상태가 복구되었습니다",
+		streamHealthNoVideo:
+			"스트림에 영상이 들어오지 않습니다. 카메라 또는 HDMI 소스의 전원이 켜져 있는지, 케이블이 양쪽 끝에 제대로 꽂혀 있는지 확인하세요.",
+		streamHealthLinksDegraded:
+			"본딩된 링크 일부가 끊겼습니다. 스트림은 아직 살아 있는 링크로 계속됩니다.",
 		activeSourceLost:
 			"스트리밍 중인 비디오 소스가 끊겼습니다. 다시 연결하거나 다른 소스로 전환하여 스트림을 유지하세요.",
 		activeSourceRecovered: "비디오 소스가 다시 연결되었습니다.",

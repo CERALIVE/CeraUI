@@ -223,13 +223,80 @@ describe("LiveCockpit — all-links-down banner", () => {
 	});
 });
 
+describe("LiveCockpit — video-signal-lost banner", () => {
+	// Wave H: unplugging HDMI mid-stream left the ENTIRE cockpit blank. The
+	// onboard RK3588 HDMI-RX stays enumerated when its cable is pulled, so the
+	// source is neither missing nor `lost` — every existing banner stayed silent
+	// while the operator broadcast dead air.
+	const stillPresent = {
+		config: { source: "cam0" },
+		sources: { hardware: [], sources: [capture("cam0")] },
+	};
+
+	it("shows when frames stopped on a source that is still connected", async () => {
+		const { getByTestId } = render(
+			LiveCockpit,
+			baseProps({ ...stillPresent, videoSignalLost: true }),
+		);
+		await tick();
+		expect(getByTestId("video-signal-lost-banner").textContent).toContain(
+			en.live.source.signalLostStreamingTitle,
+		);
+	});
+
+	it("is the ONLY banner that fires for that state — the regression itself", async () => {
+		const { queryByTestId } = render(
+			LiveCockpit,
+			baseProps({ ...stillPresent, videoSignalLost: true }),
+		);
+		await tick();
+		expect(queryByTestId("video-signal-lost-banner")).toBeTruthy();
+		expect(queryByTestId("active-source-lost-banner")).toBeNull();
+		expect(queryByTestId("active-audio-lost-banner")).toBeNull();
+		expect(queryByTestId("all-links-down-banner")).toBeNull();
+	});
+
+	it("does NOT show when frames are flowing", async () => {
+		const { queryByTestId } = render(
+			LiveCockpit,
+			baseProps({ ...stillPresent, videoSignalLost: false }),
+		);
+		await tick();
+		expect(queryByTestId("video-signal-lost-banner")).toBeNull();
+	});
+
+	it("yields to the more specific source-lost banner instead of stacking two alerts", async () => {
+		const { queryByTestId } = render(
+			LiveCockpit,
+			baseProps({
+				videoSignalLost: true,
+				config: { source: "cam0" },
+				sources: { hardware: [], sources: [capture("cam1")] },
+			}),
+		);
+		await tick();
+		expect(queryByTestId("active-source-lost-banner")).toBeTruthy();
+		expect(queryByTestId("video-signal-lost-banner")).toBeNull();
+	});
+
+	it("does NOT show while idle", async () => {
+		const { queryByTestId } = render(
+			LiveCockpit,
+			baseProps({ ...stillPresent, isStreaming: false, videoSignalLost: true }),
+		);
+		await tick();
+		expect(queryByTestId("video-signal-lost-banner")).toBeNull();
+	});
+});
+
 describe("LiveCockpit — summary mode suppresses every lifecycle banner", () => {
-	it("hides all three banners in summaryMode", async () => {
+	it("hides all four banners in summaryMode", async () => {
 		const { queryByTestId } = render(
 			LiveCockpit,
 			baseProps({
 				summaryMode: true,
 				audioSourceLost: true,
+				videoSignalLost: true,
 				config: { source: "cam0" },
 				sources: { hardware: [], sources: [capture("cam1")] },
 				telemetry: { links: [link(true)] },
@@ -239,5 +306,6 @@ describe("LiveCockpit — summary mode suppresses every lifecycle banner", () =>
 		expect(queryByTestId("active-source-lost-banner")).toBeNull();
 		expect(queryByTestId("active-audio-lost-banner")).toBeNull();
 		expect(queryByTestId("all-links-down-banner")).toBeNull();
+		expect(queryByTestId("video-signal-lost-banner")).toBeNull();
 	});
 });

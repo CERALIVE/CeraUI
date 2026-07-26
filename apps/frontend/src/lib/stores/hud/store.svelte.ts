@@ -18,6 +18,7 @@ import {
 	getModems,
 	getNetif,
 	getSensors,
+	getStatus,
 	getUpdating,
 	getWifi,
 } from "$lib/rpc/subscriptions.svelte";
@@ -74,6 +75,7 @@ function readSources(): HudSources {
 		netif: getNetif(),
 		sensors: getSensors(),
 		updating: getUpdating(),
+		engineBitrate: getStatus()?.engine_bitrate ?? null,
 	};
 }
 

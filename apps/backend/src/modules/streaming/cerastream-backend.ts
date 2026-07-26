@@ -196,18 +196,24 @@ function defaultBridge(): CerastreamBridge {
 						{ broadcastMsg },
 						{ getIsStreaming },
 						{ getActiveEncodeStatus },
+						{ getEngineBitrateStatus },
 					] = await Promise.all([
 						import("../ui/websocket-server.ts"),
 						import("./streaming.ts"),
 						import("./active-encode-status.ts"),
+						import("./engine-bitrate-status.ts"),
 					]);
 					// Explicit on every nudge, never by omission: the frontend status
 					// merge deliberately preserves an omitted field, so a value pushed
 					// only while it exists can be raised but never retracted — which
 					// left a stopped session's encode on screen under a "Live" badge.
+					// `engine_bitrate` rides the same nudge because the adaptive
+					// controller's own `bitrate` event is what triggers it, so this is
+					// the path by which a throttled rate reaches the operator live.
 					broadcastMsg("status", {
 						is_streaming: getIsStreaming(),
 						active_encode: getActiveEncodeStatus(),
+						engine_bitrate: getEngineBitrateStatus(),
 					});
 				} catch (err) {
 					defaultLogger.debug("cerastream: status broadcast skipped", { err });
@@ -672,7 +678,7 @@ export class CerastreamBackend implements StreamingBackend {
 		this.active = false;
 		// A crashed or already-gone engine sends no final idle status, so the
 		// stop itself has to be the clearing signal.
-		this.clearActiveEncode();
+		this.clearSessionScopedTelemetry();
 		const client = this.client;
 		const subscription = this.subscription;
 		const operation = (async () => {
@@ -743,11 +749,19 @@ export class CerastreamBackend implements StreamingBackend {
 		return this.telemetry;
 	}
 
-	private clearActiveEncode(): void {
+	// `active_encode` and `bitrate` both describe a LIVE session — what the engine
+	// is encoding, and the rate its adaptive controller settled on. Neither may
+	// outlive the session: a retained `bitrate` renders a stopped stream under a
+	// live-looking rate exactly as a retained `active_encode` renders it under a
+	// "Live" badge.
+	private clearSessionScopedTelemetry(): void {
 		const previous = this.telemetry;
-		if (previous === null || previous.active_encode === undefined) return;
+		if (previous === null) return;
+		if (previous.active_encode === undefined && previous.bitrate === undefined)
+			return;
 		const next = { ...previous };
 		delete next.active_encode;
+		delete next.bitrate;
 		this.telemetry = next;
 		this.deps.bridge.broadcastStatus();
 	}
@@ -960,8 +974,15 @@ export class CerastreamBackend implements StreamingBackend {
 					? this.telemetry?.active_encode
 					: undefined;
 				const nextEncode = activeEncode ?? retainedEncode;
+				// The adaptive bitrate reading is session-scoped for the same reason:
+				// the engine sends no farewell `bitrate` event, so an idle status frame
+				// is the only signal that the last applied rate is now history.
+				const nextBitrate = event.streaming
+					? this.telemetry?.bitrate
+					: undefined;
 				const carried = { ...this.telemetry };
 				delete carried.active_encode;
+				delete carried.bitrate;
 				this.telemetry = {
 					...carried,
 					state: event.state,
@@ -969,6 +990,7 @@ export class CerastreamBackend implements StreamingBackend {
 					...(event.active_input ? { active_input: event.active_input } : {}),
 					...(buffering ? { buffering } : {}),
 					...(nextEncode ? { active_encode: nextEncode } : {}),
+					...(nextBitrate ? { bitrate: nextBitrate } : {}),
 				};
 				this.deps.bridge.broadcastStatus();
 				if (buffering) this.deps.bridge.broadcastBuffering(buffering);

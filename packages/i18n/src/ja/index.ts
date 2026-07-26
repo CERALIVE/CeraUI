@@ -880,6 +880,10 @@ const ja = {
 	},
 	hud: {
 		bitrate: "ビットレート",
+		bitrateLimit: "設定した上限",
+		bitrateAdapting: "調整中",
+		bitrateBelowLimitHint:
+			"設定した上限を下回ってエンコード中です。ネットワークが全量を運べない場合、エンジンがレートを下げます。",
 		temperature: "温度",
 		network: "ネットワーク",
 		uptime: "稼働時間",
@@ -1282,6 +1286,9 @@ const ja = {
 			linksDownStreamingTitle: "すべてのボンディングリンクがダウン",
 			linksDownStreamingBody:
 				"現在データを送信できません。リンクが回復すると配信は自動的に再開します。",
+			signalLostStreamingTitle: "配信に映像が届いていません",
+			signalLostStreamingBody:
+				"ソースは接続されたままですが、映像の送出が止まっています。電源が入っているか、ケーブルが両端でしっかり挿さっているかを確認してください。映像が戻れば配信は自動的に回復します。",
 
 			audioNone: "オーディオソースが検出されません",
 			audioEmbedded: "埋め込みオーディオ（受信ストリームから）",
@@ -1486,6 +1493,10 @@ const ja = {
 		streamHealthDegraded: "ストリーム状態が劣化しました",
 		streamHealthDead: "ストリームが停止しました",
 		streamHealthRecovered: "ストリーム状態が回復しました",
+		streamHealthNoVideo:
+			"配信に映像が届いていません。カメラまたは HDMI ソースの電源が入っているか、ケーブルが両端でしっかり挿さっているかを確認してください。",
+		streamHealthLinksDegraded:
+			"ボンディングされた回線の一部が停止しています。配信は残りの回線で継続しています。",
 		activeSourceLost:
 			"配信中の映像ソースが失われました。再接続するか、別のソースに切り替えて配信を維持してください。",
 		activeSourceRecovered: "映像ソースが再接続されました。",

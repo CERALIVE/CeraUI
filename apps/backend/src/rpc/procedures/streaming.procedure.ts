@@ -366,6 +366,13 @@ export const setBitrateProcedure = authedProcedure
 				if (shouldUseMocks()) {
 					setMockEncoderConfig({ max_br: newBitrate });
 				}
+				// The engine backend persisted config.max_br but nothing published
+				// it — the one config write in the backend with no `config` echo.
+				// Clients kept the pre-adjust bitrate cached, and the Live bitrate
+				// control re-seeds from that cache on every mount (a destination
+				// switch unmounts LiveView), so a hot-adjust visibly reverted on
+				// tab-return while the device streamed on at the new rate.
+				broadcastMsg("config", getConfig());
 				return { success: true, applied: newBitrate };
 			}
 			// Streaming, but the engine refused the change — report a failure so the
