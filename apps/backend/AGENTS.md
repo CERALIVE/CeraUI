@@ -319,6 +319,29 @@ indefinitely for a present device, with no recovery short of the operator re-pic
   CeraUI can no longer see keeps `no_device`, unchanged. Keying on the picker value is
   deliberate: a pick that is not a device-map key resolves through the alias fallback to
   a card CeraUI cannot vouch for, and must not claim presence.
+- **LISTED IS NOT USABLE — presence requires a CAPTURE PCM.** The predicate above
+  originally asked only `asrc in audioDevices`, i.e. "did CeraUI's `/sys/class/sound`
+  scan see this card". That is not the same question. The RK3588 HDMI-RX enumerates
+  PERMANENTLY — it is in the scan and in the picker whether or not a cable is live —
+  so with "HDMI Input" selected the meter reported `not_selected_device` ("Not the
+  selected device"), asserting a mismatch that does not exist for a card nothing can
+  ever meter. Confirmed live: `/proc/asound/pcm` carries
+  `03-00: rockchip,hdmiin i2s-hifi-0 : ` with NO `capture N` field, and
+  `/sys/class/sound/card3/` has no `pcmC3D0c` node, while every working card does
+  (`05-00: USB Audio : USB Audio : capture 1`, `pcmC5D0c`). This is EXACTLY the
+  "absent HDMI signal is genuinely NO audio" case documented two paragraphs above, so
+  it must report the SAME gap: `no_device`. `updateAudioDevices` therefore also records
+  `audioCaptureCardIds` — the scanned cards owning at least one capture PCM, decided by
+  the pure `hasCapturePcmNode(entries)` (ALSA names capture substreams
+  `pcmC<card>D<device>c`; the `c` suffix IS the rule) — and presence now requires the
+  pick to resolve to a card in THAT set. Same semantics as cerastream's
+  `capture_card_ids()` (PR #73), which intersects `/proc/asound/cards` with the
+  `capture N` fields of `/proc/asound/pcm`; asked here of the sysfs tree the audio scan
+  already walks, so it costs no extra source of truth.
+- **The card stays in the PICKER.** `audioCaptureCardIds` is a parallel set, never a
+  filter on `audioDevices`: the operator selected that PORT and a signal can arrive at
+  any moment, so removing the row would be a regression (and would change `asrcs` on
+  the wire). Only claims that the card can DELIVER audio are gated on it.
 - `noteForeignCardLevel()` re-asserts the preference **through `null`** — the only way
   to make the value change, so the engine clears its demotions and re-probes — after
   `AUDIO_METER_MISMATCH_GRACE_MS` (5 s) of uninterrupted foreign readings, at most once
@@ -339,7 +362,10 @@ untouched match, never-gated Auto/identity-less, passthrough `unavailable`, the
 `alsaCardKey`/`isForeignCardLevel` unit table, and the reason/re-assert behaviour:
 `not_selected_device` vs `no_device`, the grace window, the interval floor, and the
 run reset) and `tests/audio-sources.test.ts` (`resolveMeterPreference` — alias,
-no-alias, every `null` case, selector passthrough).
+no-alias, every `null` case, selector passthrough; plus `hasCapturePcmNode` and the
+capture-PCM presence rule: a listed card with zero capture PCM is absent, a card that
+owns one is present, the same card flips once its capture PCM appears, and an unlisted
+pick stays absent — driven through a real sysfs-shaped fixture dir).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
@@ -1480,7 +1506,9 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
   that is how "up to date" came to mean "couldn't reach any repo" (see
   SOFTWARE-UPDATE CHECK CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
-- Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
+- Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
+- Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
+- Don't fold `active_encode` into telemetry preserve-on-omission past the end of a session, and don't let `stop()` rely on a final engine status frame to clear it — a crashed engine sends none, and the stale encode then renders the stopped session under a "Live" badge.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it

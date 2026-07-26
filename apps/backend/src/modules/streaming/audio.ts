@@ -119,23 +119,42 @@ export function resolveMeterPreference(
 }
 
 /**
- * Is the card the operator's pick resolves to one CeraUI itself enumerated?
+ * Does this card directory listing expose a CAPTURE PCM substream?
  *
- * The `/sys/class/sound` scan and the engine's own meter-candidate list are
- * INDEPENDENT: a card the kernel exposes can be absent from the engine (it owns
- * no capture PCM, or the engine never re-probed after a hotplug). That gap is
- * what turns a mis-bound meter preference into a level from another card, so it
- * is also what separates "the pick is genuinely gone" from "the pick is here and
- * the meter is elsewhere". Deliberately keyed on the picker value, not the
- * resolved ALSA string — a pick that is not a device-map key resolves through the
- * alias fallback to a card CeraUI cannot vouch for, and must not claim presence.
+ * ALSA names a card's PCM nodes `pcmC<card>D<device><p|c>`; the `c` suffix IS the
+ * capture substream, so its absence means the card cannot be recorded from at
+ * all. Same question cerastream's `capture_card_ids()` answers by intersecting
+ * `/proc/asound/cards` with the `capture N` fields of `/proc/asound/pcm` — asked
+ * here of the sysfs tree the audio scan already walks. Purely structural: no
+ * driver name, no card id, no HDMI special case.
+ */
+export function hasCapturePcmNode(entries: readonly string[]): boolean {
+	return entries.some((entry) => /^pcmC\d+D\d+c$/.test(entry));
+}
+
+/**
+ * Can the card the operator's pick resolves to actually deliver audio?
+ *
+ * Listing a card is NOT the same as being able to record from it. The RK3588
+ * HDMI-RX enumerates permanently — it is in `/sys/class/sound` and in the picker
+ * whether or not a cable is live — but with no signal it exposes ZERO capture
+ * PCMs, so nothing can ever meter it. Answering "present" for such a card made
+ * a genuinely dead input report `not_selected_device` ("Not the selected
+ * device"), which claims a mismatch that does not exist; `no_device` is the
+ * truthful gap, exactly as for a card that has been unplugged.
+ *
+ * Deliberately keyed on the picker value, not the resolved ALSA string — a pick
+ * that is not a device-map key resolves through the alias fallback to a card
+ * CeraUI cannot vouch for, and must not claim presence.
  */
 export function isMeterPreferenceDevicePresent(
 	asrc: string | undefined = getConfig().asrc,
 ): boolean {
 	if (asrc === undefined) return false;
 	if (resolveMeterPreference(asrc) === null) return false;
-	return asrc in audioDevices;
+	const cardId = audioDevices[asrc];
+	if (cardId === undefined) return false;
+	return audioCaptureCardIds.has(cardId);
 }
 
 // The engine passes `audio.device` straight to `alsasrc device=`, which needs a
@@ -181,6 +200,12 @@ function getAudioSrcReverseAliases(): Record<string, string> {
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
 addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
+
+// The subset of the scanned cards that own at least one capture PCM. Kept beside
+// `audioDevices` rather than filtered out of it: a signal-less card stays in the
+// picker (the operator picked that PORT, and a signal can arrive at any moment) —
+// only claims about it being able to deliver audio are gated on this set.
+let audioCaptureCardIds: ReadonlySet<string> = new Set();
 
 // Dev/e2e seam merged into the list WITHOUT touching the real /sys/class/sound
 // scan; injected at boot under shouldUseMocks(), unset (no-op) in production.
@@ -379,6 +404,16 @@ export async function broadcastAudioSources(): Promise<void> {
 	});
 }
 
+// A card can disappear mid-scan (hotplug); an unreadable card simply reports no
+// capture PCM rather than aborting the whole audio refresh.
+async function readCardEntries(path: string): Promise<string[]> {
+	try {
+		return await readdirP(path);
+	} catch {
+		return [];
+	}
+}
+
 export async function updateAudioDevices(dir: string = deviceDir) {
 	// Ignore the onboard audio cards
 	const exclude = [
@@ -409,6 +444,7 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 		devices = [];
 	}
 	const list: Record<string, true> = {};
+	const captureCards = new Set<string>();
 
 	for (const d of devices) {
 		// Only inspect cards
@@ -421,6 +457,9 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 		if (exclude.includes(id)) continue;
 
 		list[id] = true;
+		if (hasCapturePcmNode(await readCardEntries(`${dir}/${d}`))) {
+			captureCards.add(id);
+		}
 	}
 	// First add any priority cards found
 	const sortedList = {};
@@ -439,6 +478,7 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 	addAudioCardById(sortedList, DEFAULT_AUDIO_ID);
 
 	audioDevices = sortedList;
+	audioCaptureCardIds = captureCards;
 	logger.debug("audio devices:", audioDevices);
 
 	// Migrate BEFORE the lost verdict below: a card that only changed ALSA id is
