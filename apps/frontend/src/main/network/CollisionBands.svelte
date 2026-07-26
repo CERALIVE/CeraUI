@@ -42,7 +42,8 @@ const sameSubnetGroups = $derived([
 	),
 ]);
 
-// policy_route_missing is only ever `true` when flagged (absent/false otherwise).
+// Tristate: `true` flags a real gap, `false` is an all-clear that must retract a
+// previously-raised band, and absent means the backend had no verdict this tick.
 const hasPolicyRouteMissing = $derived(entries.some((entry) => entry.policy_route_missing === true));
 </script>
 

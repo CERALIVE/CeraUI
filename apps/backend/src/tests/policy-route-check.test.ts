@@ -24,6 +24,7 @@ import {
 	collectPolicyRouteCandidates,
 	defaultPolicyRouteCheckDeps,
 	derivePolicyRouteMissing,
+	getPolicyRouteVerdict,
 	isBondedModemOrWifiIface,
 	isPolicyRouteMissing,
 	type PolicyRouteCheckDeps,
@@ -321,5 +322,88 @@ describe("refreshPolicyRouteFlags / isPolicyRouteMissing", () => {
 		expect(isPolicyRouteMissing("usb1")).toBe(true);
 		resetPolicyRouteFlags();
 		expect(isPolicyRouteMissing("usb1")).toBe(false);
+	});
+});
+
+// ─── getPolicyRouteVerdict (tristate published on the netif wire) ─────────────
+
+describe("getPolicyRouteVerdict", () => {
+	it("distinguishes checked-and-clean (false) from never-checked (undefined)", async () => {
+		expect(getPolicyRouteVerdict("usb1")).toBeUndefined();
+
+		const deps = makeSpyDeps({
+			runIpRuleShow: mock(async () => IP_RULE_SHOW_MISSING_USB1),
+		});
+		await refreshPolicyRouteFlags(NETIF, deps);
+
+		expect(getPolicyRouteVerdict("usb1")).toBe(true);
+		expect(getPolicyRouteVerdict("usb0")).toBe(false);
+		expect(getPolicyRouteVerdict("eth0")).toBe(false);
+	});
+
+	it("a degraded (null) check publishes NO verdict rather than a false all-clear", async () => {
+		const flagging = makeSpyDeps({
+			runIpRuleShow: mock(async () => IP_RULE_SHOW_MISSING_USB1),
+		});
+		await refreshPolicyRouteFlags(NETIF, flagging);
+		expect(getPolicyRouteVerdict("usb1")).toBe(true);
+
+		const degraded = makeSpyDeps({
+			runIpRuleShow: mock(async () => {
+				throw new Error("ip unavailable");
+			}),
+		});
+		await refreshPolicyRouteFlags(NETIF, degraded);
+		expect(getPolicyRouteVerdict("usb1")).toBeUndefined();
+	});
+});
+
+// ─── Bond-exclusion reconciliation (AP-mode regression) ──────────────────────
+
+/*
+ * Live case: a single-radio board whose wlan0 is promoted to AP/hotspot duty,
+ * which `setNetifHotspot` records as `enabled: false`. The check already stopped
+ * flagging it (a disabled iface is not a candidate), but the recovery was
+ * UNPUBLISHABLE — the flag was only ever emitted as `true`, so a cleared state
+ * left the field absent and the client's preserve-on-omission merge kept the
+ * amber band up indefinitely.
+ */
+describe("policy-route verdict across bond exclusion", () => {
+	const STATION = {
+		eth0: { ip: "192.168.1.100", enabled: true },
+		wlan0: { ip: "192.168.2.100", enabled: true },
+	};
+	// The same board after the radio is switched to AP mode: still addressed, no
+	// longer bonded.
+	const AP_MODE = {
+		eth0: { ip: "192.168.1.100", enabled: true },
+		wlan0: { ip: "10.42.0.1", enabled: false },
+	};
+	// wlan0's source rule is absent, so it is flagged while it is a station.
+	const RULES_WITHOUT_WLAN0 = `0:\tfrom all lookup local
+32766:\tfrom all lookup main
+32767:\tfrom all lookup default
+`;
+
+	it("clears a station-era flag once the radio is excluded from the bond", async () => {
+		const deps = makeSpyDeps({
+			runIpRuleShow: mock(async () => RULES_WITHOUT_WLAN0),
+		});
+
+		await refreshPolicyRouteFlags(STATION, deps);
+		expect(getPolicyRouteVerdict("wlan0")).toBe(true);
+
+		await refreshPolicyRouteFlags(AP_MODE, deps);
+		expect(getPolicyRouteVerdict("wlan0")).toBe(false);
+	});
+
+	it("a sole bonded ethernet link needs no source rule and is never flagged", async () => {
+		const deps = makeSpyDeps({
+			runIpRuleShow: mock(async () => RULES_WITHOUT_WLAN0),
+		});
+		await refreshPolicyRouteFlags(AP_MODE, deps);
+
+		expect(getPolicyRouteVerdict("eth0")).toBe(false);
+		expect(collectPolicyRouteCandidates(AP_MODE)).toEqual([]);
 	});
 });

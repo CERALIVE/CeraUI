@@ -44,7 +44,7 @@ import {
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
 import {
-	isPolicyRouteMissing,
+	getPolicyRouteVerdict,
 	refreshPolicyRouteFlags,
 } from "./policy-route-check.ts";
 import { onNetifChange, setNetifState } from "./state/netif-state.ts";
@@ -667,8 +667,9 @@ export function netIfBuildMsg() {
 			entry.same_subnet_group = networkInterface.same_subnet_group;
 		}
 
-		if (isPolicyRouteMissing(i)) {
-			entry.policy_route_missing = true;
+		const policyRouteVerdict = getPolicyRouteVerdict(i);
+		if (policyRouteVerdict !== undefined) {
+			entry.policy_route_missing = policyRouteVerdict;
 		}
 	}
 	return m;

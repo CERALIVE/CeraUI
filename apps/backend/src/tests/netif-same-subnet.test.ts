@@ -6,6 +6,11 @@ import {
 	processIfconfigOutput,
 	setNetifDupIpSuppression,
 } from "../modules/network/network-interfaces.ts";
+import {
+	type PolicyRouteCheckDeps,
+	refreshPolicyRouteFlags,
+	resetPolicyRouteFlags,
+} from "../modules/network/policy-route-check.ts";
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 
 // Minimal `ifconfig` stanza the existing parser understands (RUNNING flag +
@@ -39,6 +44,7 @@ function resetState(): void {
 	for (const name of ["usb0", "usb1", "eth0", "eth1", "wwan0"]) {
 		setNetifDupIpSuppression(name, false);
 	}
+	resetPolicyRouteFlags();
 }
 
 beforeEach(() => {
@@ -107,5 +113,46 @@ describe("netif same-subnet detection (informational, AP-excluded)", () => {
 		// No same-subnet tag double-fire on the dup-IP pair.
 		expect(msg.usb0?.same_subnet_group).toBeUndefined();
 		expect(msg.eth0?.same_subnet_group).toBeUndefined();
+	});
+});
+
+describe("netif payload publishes the policy-route verdict, not just the alarm", () => {
+	const deps: PolicyRouteCheckDeps = {
+		isRealDevice: async () => true,
+		shouldUseMocks: () => false,
+		resolveMockPolicyRouteMissing: () => null,
+		// No `from <ip> lookup <t>` rule for usb0, so it is flagged while bonded.
+		runIpRuleShow: async () =>
+			"0:\tfrom all lookup local\n32766:\tfrom all lookup main\n32767:\tfrom all lookup default\n",
+		runIpRouteShowTable: async () => "",
+	};
+
+	test("a recovered interface carries an explicit false rather than an absent field", async () => {
+		processIfconfigOutput(ifconfig(ifconfigStanza("usb0", "10.0.0.5")));
+		const netif = getNetworkInterfaces();
+
+		await refreshPolicyRouteFlags(netif, deps);
+		expect(netIfBuildMsg().usb0?.policy_route_missing).toBe(true);
+
+		// The bond-exclusion a hotspot switch performs (setNetifHotspot → enabled:
+		// false) drops it from the candidate set, so the next check clears it.
+		const usb0 = netif.usb0;
+		if (usb0) usb0.enabled = false;
+		await refreshPolicyRouteFlags(netif, deps);
+
+		expect(netIfBuildMsg().usb0?.policy_route_missing).toBe(false);
+	});
+
+	test("an interface the check could not evaluate carries no verdict at all", async () => {
+		processIfconfigOutput(ifconfig(ifconfigStanza("usb0", "10.0.0.5")));
+
+		await refreshPolicyRouteFlags(getNetworkInterfaces(), {
+			...deps,
+			runIpRuleShow: async () => {
+				throw new Error("ip unavailable");
+			},
+		});
+
+		expect(netIfBuildMsg().usb0).not.toHaveProperty("policy_route_missing");
 	});
 });
