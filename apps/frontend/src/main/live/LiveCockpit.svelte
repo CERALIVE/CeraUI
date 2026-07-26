@@ -35,6 +35,7 @@ import { TriangleAlert } from '@lucide/svelte';
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
 import BitrateAdjuster from './BitrateAdjuster.svelte';
@@ -131,20 +132,16 @@ const {
 
 // Mid-stream active-source loss. The idle `source-lost-banner` lives in
 // SourceSection, which never mounts while streaming — so an unplugged running
-// source was previously silent here. Fire ONLY once the `sources` snapshot has
-// arrived (an empty list is the pre-first-broadcast state, not a loss) and only
-// while actually live: either the running id is gone from the list, or it is
-// present but flagged `lost`.
-const runningId = $derived(activeEncode?.active_input ?? config?.source);
-const runningSource = $derived(
-	runningId ? sources?.sources.find((s) => s.id === runningId) : undefined,
-);
+// source was previously silent here. The verdict is SHARED with LiveSourceSwitch
+// (see live-source-state.ts) so the alert and the affordance it names agree.
 const activeSourceLost = $derived(
-	isStreaming &&
-		!summaryMode &&
-		runningId !== undefined &&
-		(sources?.sources.length ?? 0) > 0 &&
-		(runningSource === undefined || runningSource.lost === true),
+	deriveLiveSourceState({
+		activeInput: activeEncode?.active_input,
+		configSource: config?.source,
+		sources: sources?.sources,
+		isStreaming,
+		summaryMode,
+	}).sourceLost,
 );
 
 // All bonded links down mid-stream: every reported link is stale while ≥1 link
@@ -220,7 +217,11 @@ const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
 		<!-- Live capture-source switch: the ONLY reachable surface for a live input
 		     switch while streaming (SourceSection's streaming branch never mounts
 		     here). Self-gates: renders nothing unless the running source is capture
-		     AND ≥2 capture sources exist. -->
+		     AND ≥2 capture sources exist — plus `sourceLost`, which keeps the card
+		     up for exactly the alert above. The lost banner tells the operator to
+		     "switch to another source to keep your stream alive", so the two MUST
+		     be driven by one verdict; when they were derived independently the
+		     alert outlived the affordance and instructed an impossible action. -->
 		<LiveSourceSwitch
 			{sources}
 			{config}
@@ -228,6 +229,7 @@ const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
 			{activeInput}
 			{switchingInput}
 			{onSwitch}
+			sourceLost={activeSourceLost}
 		/>
 
 		<StreamTelemetryStrip {bitrate} {tempSensor} {uptimeSensor} />

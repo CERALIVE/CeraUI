@@ -9,11 +9,13 @@
   — and T7's deferred audio-follow flow that rides on it — is reachable end-to-end.
 
   RENDER GATE (load-bearing): the card renders ONLY when BOTH hold —
-    (a) the CURRENTLY-RUNNING source is capture-origin
-        (`sources.find(s => s.id === (activeEncode?.active_input ?? config.source))
-          ?.origin === 'capture'`) — cerastream sessions are mutually exclusive, so a
+    (a) the CURRENTLY-RUNNING source is capture-origin (resolved via the shared
+        `deriveLiveSourceState`) — cerastream sessions are mutually exclusive, so a
         network/test stream has no capture legs and `switch_input` on a leg-less id
-        always fails; a Switch button in that mode would be a lie; AND
+        always fails; a Switch button in that mode would be a lie — OR the running
+        source is LOST (`sourceLost`, LiveCockpit's banner verdict): that banner
+        tells the operator to switch, so the affordance it names must be on screen
+        whenever it is; AND
     (b) ≥2 capture sources exist (nothing to switch between with one).
   Otherwise it renders NOTHING (absent from the DOM — not an empty card).
 
@@ -32,6 +34,10 @@ import { Cable, Radio, RefreshCw, Usb, Video } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import {
+	canOfferLiveSourceSwitch,
+	deriveLiveSourceState,
+} from '$lib/streaming/live-source-state';
 
 interface Props {
 	/** The unified `sources` broadcast — capture rows are filtered out of it here. */
@@ -46,6 +52,14 @@ interface Props {
 	switchingInput?: string | undefined;
 	/** Dispatch a live input switch (LiveView's handleSwitchInput). */
 	onSwitch?: (id: string) => void;
+	/**
+	 * LiveCockpit's active-source-lost verdict — the SAME boolean that renders the
+	 * "switch to another source to keep your stream alive" alert. It opens the
+	 * render gate on its own because a running id that resolves to no row is the
+	 * one moment the operator most needs this card, and the capture-origin test
+	 * below cannot pass in exactly that state.
+	 */
+	sourceLost?: boolean;
 }
 
 const {
@@ -55,6 +69,7 @@ const {
 	activeInput,
 	switchingInput,
 	onSwitch,
+	sourceLost = false,
 }: Props = $props();
 
 // Every capture-origin source, in broadcast order (mirrors SourceSection's filter).
@@ -64,15 +79,22 @@ const captureSources = $derived(
 	),
 );
 
-// The id the engine is running right now: engine truth (`active_input`) wins, then
-// the saved `config.source`. Its origin decides whether a live switch is even valid.
-const runningId = $derived(activeEncode?.active_input ?? config?.source);
+// The running source, resolved by the SAME rule that decides the lost banner —
+// including the identity-aware lookup that follows a node path retired by a
+// mid-stream re-enumeration onto its successor row.
 const runningSource = $derived(
-	runningId ? sources?.sources.find((s) => s.id === runningId) : undefined,
+	deriveLiveSourceState({
+		activeInput: activeEncode?.active_input,
+		configSource: config?.source,
+		sources: sources?.sources,
+		isStreaming: true,
+		summaryMode: false,
+	}).runningSource,
 );
 
-// The full render gate: a capture session AND something to switch between.
-const showCard = $derived(runningSource?.origin === 'capture' && captureSources.length >= 2);
+const showCard = $derived(
+	canOfferLiveSourceSwitch(runningSource, captureSources.length, sourceLost),
+);
 
 // Capture kind → coarse device family (drives icon + badge) — mirrors SourceSection.
 type KindFamily = 'hdmi' | 'usb' | 'network' | 'other';
