@@ -33,6 +33,15 @@ const ko = {
 		updateReasonCheckUnavailable:
 			"패키지 목록을 새로 고치지 못했습니다. 기기의 인터넷 연결을 확인한 뒤 다시 시도하세요.",
 		updateReasonUnknown: "기기가 이유를 밝히지 않고 업데이트를 거부했습니다.",
+		updateCheckFailed: "업데이트를 확인하지 못했습니다",
+		updateCheckRefused: "기기가 확인을 실행하지 않았습니다",
+		updateCheckReasonRefreshFailed:
+			"기기가 패키지 저장소에 연결하지 못해 업데이트가 있는지 판단할 수 없습니다. 네트워크 연결을 확인한 뒤 다시 시도하세요.",
+		updateCheckReasonDiscoveryFailed:
+			"기기가 패키지 목록은 갱신했지만 결과를 읽지 못해 업데이트가 있는지 판단할 수 없습니다. 다시 시도하세요.",
+		updateCheckReasonBusy:
+			"기기가 스트리밍 중이거나 업데이트를 설치하고 있습니다. 잠시 후 다시 시도하세요.",
+		updateLastChecked: "마지막 확인 {time}",
 		status: "상태",
 		streaming: "스트리밍",
 		offline: "오프라인",

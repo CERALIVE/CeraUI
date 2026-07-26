@@ -42,6 +42,7 @@ import {
 import {
 	deriveUpdateIdentity,
 	deriveUpdateState,
+	type UpdateCheckFailureReason,
 	type UpdateFailure,
 	type UpdateIdentity,
 	type UpdateState,
@@ -75,6 +76,19 @@ let availableIdentity: UpdateIdentity | null = null;
 let currentUpdateIdentity: UpdateIdentity | null = null;
 let lastUpdateFailure: UpdateFailure | null = null;
 let lastUpdateSucceeded = false;
+
+// Check-cycle outcome, separate from the install-cycle signals above. A check
+// that could not complete MUST NOT read as "up to date", and a check that
+// completed with nothing to do must still leave proof it ran — otherwise the
+// operator's only evidence is a button that appears to do nothing (the live
+// Rock 5B+ report this fixes: apt-get update ran and succeeded in 1.8 s while the
+// dialog showed no spinner, no result and no error for 11 s).
+let lastCheckFailure: UpdateCheckFailureReason | null = null;
+let lastCheckedAt: number | null = null;
+
+function failCurrentCheck(reason: UpdateCheckFailureReason): void {
+	lastCheckFailure = reason;
+}
 
 // Why an update start was refused. A refusal is ALWAYS one of these — never a
 // bare `return` — so the operator gets a reason instead of a dialog that shows
@@ -121,6 +135,8 @@ export function resetSoftwareUpdateState(): void {
 	currentUpdateIdentity = null;
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
+	lastCheckFailure = null;
+	lastCheckedAt = null;
 }
 
 export function getUpdateState(): UpdateState {
@@ -145,6 +161,8 @@ export function getUpdateState(): UpdateState {
 				: null,
 		failure: lastUpdateFailure,
 		succeeded: lastUpdateSucceeded,
+		checkFailure: lastCheckFailure,
+		checkedAt: lastCheckedAt,
 	});
 }
 
@@ -364,10 +382,14 @@ async function getSoftwareUpdateSize() {
 
 	// First see if any packages can be upgraded by dist-upgrade
 	const upgrade = await execPNR("apt-get dist-upgrade --assume-no");
-	if (reportUpdateCheckFailure(upgrade)) return null;
+	if (reportUpdateCheckFailure(upgrade)) {
+		failCurrentCheck("discovery_failed");
+		return null;
+	}
 	let parsedSummary = parseAptUpgradeSummary(upgrade.stdout);
 	if (!parsedSummary.ok) {
 		logParseError(parsedSummary);
+		failCurrentCheck("discovery_failed");
 		return null;
 	}
 	let res = parsedSummary.value;
@@ -380,6 +402,7 @@ async function getSoftwareUpdateSize() {
 		);
 		if (!heldBackPackages.ok) {
 			logParseError(heldBackPackages);
+			failCurrentCheck("discovery_failed");
 			return null;
 		}
 		aptHeldBackPackages = heldBackPackages.value;
@@ -390,6 +413,7 @@ async function getSoftwareUpdateSize() {
 			parsedSummary = parseAptUpgradeSummary(stdout);
 			if (!parsedSummary.ok) {
 				logParseError(parsedSummary);
+				failCurrentCheck("discovery_failed");
 				return null;
 			}
 			res = parsedSummary.value;
@@ -482,7 +506,14 @@ function checkForSoftwareUpdates(
 	if (!aptUpdatesEnabled()) return false;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
 
+	// A fresh cycle supersedes the previous one's verdict, and the `checking`
+	// transition is BROADCAST: it is derivable server-side the moment this flag
+	// flips, but nothing published it, so no client could ever observe a check in
+	// flight and the dialog cancelled its own spinner on the next frame.
+	lastCheckFailure = null;
 	aptGetUpdating = true;
+	broadcastUpdateState();
+
 	void (async () => {
 		const res = await Bun.$`apt-get update --allow-releaseinfo-change`
 			.nothrow()
@@ -491,6 +522,12 @@ function checkForSoftwareUpdates(
 		const stderr = res.stderr.toString();
 
 		aptGetUpdating = false;
+
+		// The operator-visible verdict keys on the EXIT CODE, never on stderr:
+		// apt writes benign warnings there on a perfectly good refresh, and
+		// classifyAptUpdateResult's stderr rule (kept for the retry cadence) would
+		// turn every one of those into a false alarm.
+		if (res.exitCode !== 0) failCurrentCheck("refresh_failed");
 
 		const errOrStderr = classifyAptUpdateResult(res.exitCode, stderr);
 
@@ -561,6 +598,18 @@ export function resetSoftwareUpdateSizeRunner(): void {
 	softwareUpdateSizeRunner = getSoftwareUpdateSize;
 }
 
+// The ONE place a check cycle lands, for both the periodic loop and the manual
+// re-check. It stamps the attempt before discovery (so the discovery broadcast
+// already carries it) and always emits a terminal frame — discovery has several
+// early returns that broadcast nothing, and each of those used to leave the
+// operator on whatever the dialog happened to be showing.
+async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
+	lastCheckedAt = Date.now();
+	const discovery = await softwareUpdateSizeRunner();
+	broadcastUpdateState();
+	return discovery;
+}
+
 let nextCheckForSoftwareUpdates = getms();
 let nextCheckForSoftwareUpdatesTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -595,7 +644,7 @@ export function periodicCheckForSoftwareUpdates() {
 		// Discovery runs on every completed check; err_/failures drive ONLY the retry
 		// cadence, so a failed apt-get update refresh retries sooner without ever
 		// suppressing the available_updates broadcast.
-		const discovery = await softwareUpdateSizeRunner();
+		const discovery = await runUpdateDiscoveryAndReport();
 		const err = err_ === null ? discovery : err_;
 		scheduleNextSoftwareUpdateCheck(computeNextCheckDelay(err, failures));
 	});
@@ -610,12 +659,12 @@ export function periodicCheckForSoftwareUpdates() {
 // Reuses the periodic discovery + skip guard but never touches its timer.
 // Returns false when skipped (streaming/updating/apt busy).
 export function triggerManualUpdateCheck(): boolean {
-	// A manual re-check supersedes a prior terminal outcome (Todo 24) — the
-	// dialog's retry affordance routes here to re-enter `checking`.
-	lastUpdateFailure = null;
-	lastUpdateSucceeded = false;
 	if (shouldUseMocks()) {
 		if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
+		lastUpdateFailure = null;
+		lastUpdateSucceeded = false;
+		lastCheckFailure = null;
+		lastCheckedAt = Date.now();
 		availableUpdates = { package_count: 0 };
 		availableIdentity = null;
 		broadcastMsg("status", {
@@ -624,9 +673,26 @@ export function triggerManualUpdateCheck(): boolean {
 		});
 		return true;
 	}
-	return softwareUpdateCheckRunner(async () => {
-		await softwareUpdateSizeRunner();
+
+	// A manual re-check supersedes a prior terminal outcome (Todo 24) — the
+	// dialog's retry affordance routes here to re-enter `checking`. The clear has
+	// to happen BEFORE dispatch (the runner broadcasts `checking` from inside) yet
+	// must not survive a REFUSED check: that wiped the failed-install state the
+	// operator was reading and broadcast nothing in its place, leaving the dialog
+	// rendering a state the device no longer held.
+	const priorFailure = lastUpdateFailure;
+	const priorSucceeded = lastUpdateSucceeded;
+	lastUpdateFailure = null;
+	lastUpdateSucceeded = false;
+
+	const started = softwareUpdateCheckRunner(async () => {
+		await runUpdateDiscoveryAndReport();
 	});
+	if (!started) {
+		lastUpdateFailure = priorFailure;
+		lastUpdateSucceeded = priorSucceeded;
+	}
+	return started;
 }
 
 // apt spawn seam (T8): the default kicks off the real `apt-get update` →

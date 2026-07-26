@@ -189,6 +189,15 @@ const de = {
 			"Die Paketliste konnte nicht aktualisiert werden. Prüfe die Internetverbindung des Geräts und versuche es erneut.",
 		updateReasonUnknown:
 			"Das Gerät hat das Update ohne Angabe eines Grundes abgelehnt.",
+		updateCheckFailed: "Suche nach Updates fehlgeschlagen",
+		updateCheckRefused: "Das Gerät hat die Prüfung nicht ausgeführt",
+		updateCheckReasonRefreshFailed:
+			"Das Gerät konnte die Paketquellen nicht erreichen und kann daher nicht feststellen, ob ein Update verfügbar ist. Prüfe die Netzwerkverbindung und versuche es erneut.",
+		updateCheckReasonDiscoveryFailed:
+			"Das Gerät hat die Paketliste aktualisiert, konnte das Ergebnis aber nicht lesen, und kann daher nicht feststellen, ob ein Update verfügbar ist. Versuche es erneut.",
+		updateCheckReasonBusy:
+			"Das Gerät streamt gerade oder installiert ein Update. Versuche es gleich noch einmal.",
+		updateLastChecked: "Zuletzt geprüft um {time}",
 		status: "Status",
 		streaming: "Streaming",
 		offline: "Offline",

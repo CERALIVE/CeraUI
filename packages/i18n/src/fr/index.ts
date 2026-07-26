@@ -186,6 +186,15 @@ const fr = {
 			"La liste des paquets n'a pas pu être actualisée. Vérifiez la connexion internet de l'appareil, puis réessayez.",
 		updateReasonUnknown:
 			"L'appareil a refusé la mise à jour sans donner de raison.",
+		updateCheckFailed: "Impossible de rechercher des mises à jour",
+		updateCheckRefused: "L'appareil n'a pas lancé la vérification",
+		updateCheckReasonRefreshFailed:
+			"L'appareil n'a pas pu joindre les dépôts de paquets ; il ne peut donc pas savoir si une mise à jour est disponible. Vérifie la connexion réseau, puis réessaie.",
+		updateCheckReasonDiscoveryFailed:
+			"L'appareil a actualisé la liste des paquets mais n'a pas pu en lire le résultat ; il ne peut donc pas savoir si une mise à jour est disponible. Réessaie.",
+		updateCheckReasonBusy:
+			"L'appareil diffuse ou installe une mise à jour. Réessaie dans un instant.",
+		updateLastChecked: "Dernière vérification à {time}",
 		status: "Statut",
 		streaming: "En streaming",
 		offline: "Hors ligne",

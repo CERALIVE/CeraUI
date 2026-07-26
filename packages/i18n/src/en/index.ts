@@ -180,6 +180,15 @@ const en = {
 			"The package list couldn't be refreshed. Check the device's internet connection, then try again.",
 		updateReasonUnknown:
 			"The device refused the update without giving a reason.",
+		updateCheckFailed: "Couldn't check for updates",
+		updateCheckRefused: "The device didn't run the check",
+		updateCheckReasonRefreshFailed:
+			"The device couldn't reach the package repositories, so it can't tell whether an update is available. Check the network connection, then try again.",
+		updateCheckReasonDiscoveryFailed:
+			"The device refreshed the package list but couldn't read the result, so it can't tell whether an update is available. Try again.",
+		updateCheckReasonBusy:
+			"The device is busy streaming or installing an update. Try again in a moment.",
+		updateLastChecked: "Last checked at {time:string}",
 		status: "Status",
 		streaming: "Streaming",
 		offline: "Offline",

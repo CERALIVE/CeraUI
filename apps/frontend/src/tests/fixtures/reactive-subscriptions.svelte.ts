@@ -14,11 +14,13 @@ import type {
 	ConfigMessage,
 	RelayMessage,
 	SourcesMessage,
+	UpdateState,
 } from "@ceraui/rpc/schemas";
 
 let config = $state<ConfigMessage | undefined>(undefined);
 let relays = $state<RelayMessage | undefined>(undefined);
 let sources = $state<SourcesMessage | undefined>(undefined);
+let updateState = $state<UpdateState | undefined>(undefined);
 
 export const reactiveConfig = {
 	get value(): ConfigMessage | undefined {
@@ -53,5 +55,17 @@ export const reactiveSources = {
 	},
 	reset(): void {
 		sources = undefined;
+	},
+};
+
+export const reactiveUpdateState = {
+	get value(): UpdateState | undefined {
+		return updateState;
+	},
+	set value(next: UpdateState | undefined) {
+		updateState = next;
+	},
+	reset(): void {
+		updateState = undefined;
 	},
 };

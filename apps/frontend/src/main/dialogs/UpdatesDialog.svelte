@@ -49,6 +49,15 @@ const packages = $derived(available?.identity.packages ?? []);
 
 const failed = $derived(updateState?.kind === 'failed' ? updateState : undefined);
 const succeeded = $derived(updateState?.kind === 'success');
+const checkFailed = $derived(
+	updateState?.kind === 'check_failed' ? updateState : undefined,
+);
+const lastCheckedAt = $derived(
+	updateState && 'checked_at' in updateState ? updateState.checked_at : undefined,
+);
+const lastCheckedLabel = $derived(
+	lastCheckedAt === undefined ? '' : new Date(lastCheckedAt).toLocaleTimeString(),
+);
 const inProgress = $derived(
 	updateState?.kind === 'downloading' || updateState?.kind === 'installing',
 );
@@ -109,11 +118,41 @@ async function doInstall() {
 	}
 }
 
+// A check the device declined to run at all — separate from `check_failed`,
+// which is a check that ran and could not reach a verdict.
+let checkRefusal = $state<string | undefined>();
+
+const checkRefusalMessage = $derived.by(() => {
+	if (checkRefusal === undefined) return undefined;
+	switch (checkRefusal) {
+		case 'updates_disabled':
+			return $LL.general.updateReasonDisabled();
+		case 'check_unavailable':
+			return $LL.general.updateCheckReasonBusy();
+		default:
+			return $LL.general.updateReasonUnknown();
+	}
+});
+
+const checkFailureMessage = $derived.by(() => {
+	switch (checkFailed?.reason) {
+		case 'refresh_failed':
+			return $LL.general.updateCheckReasonRefreshFailed();
+		case 'discovery_failed':
+			return $LL.general.updateCheckReasonDiscoveryFailed();
+		default:
+			return undefined;
+	}
+});
+
 let checking = $state(false);
 let checkTimeout: ReturnType<typeof setTimeout> | undefined;
+let checkedAtOnDispatch = $state<number | undefined>();
 
 async function doCheck() {
 	if (checking || inProgress) return;
+	checkRefusal = undefined;
+	checkedAtOnDispatch = lastCheckedAt;
 	checking = true;
 	clearTimeout(checkTimeout);
 	checkTimeout = setTimeout(() => {
@@ -123,12 +162,19 @@ async function doCheck() {
 	if (!res.success) {
 		checking = false;
 		clearTimeout(checkTimeout);
+		checkRefusal = res.error ?? 'unknown';
 	}
 }
 
-// A transition OUT of `checking`/`failed` confirms the re-check ran.
+// The device confirms a COMPLETED check by stamping a new `checked_at`. Latching
+// on that rather than on a transition out of `checking` is what keeps the spinner
+// alive: `available` outranks `checking` in the state machine, so a device that
+// already knows about an update never publishes a `checking` frame at all — and
+// the previous rule then cancelled the spinner on the very next flush, before the
+// RPC had even been dispatched.
 $effect(() => {
-	if (checking && updateState?.kind !== 'checking' && updateState?.kind !== 'failed') {
+	if (!checking) return;
+	if (lastCheckedAt !== undefined && lastCheckedAt !== checkedAtOnDispatch) {
 		checking = false;
 		clearTimeout(checkTimeout);
 	}
@@ -209,8 +255,32 @@ $effect(() => {
 						{packages.join(', ')}
 					</p>
 				{/if}
+			{:else if checkFailed}
+				<div class="flex items-start gap-2" data-testid="update-check-failed">
+					<AlertTriangle class="text-status-warning mt-0.5 size-5 shrink-0" />
+					<div class="min-w-0">
+						<p class="text-status-warning text-lg font-semibold">
+							{$LL.general.updateCheckFailed()}
+						</p>
+						{#if checkFailureMessage}
+							<p
+								class="text-muted-foreground mt-1 text-sm break-words"
+								data-testid="update-check-failed-reason"
+							>
+								{checkFailureMessage}
+							</p>
+						{/if}
+					</div>
+				</div>
 			{:else}
 				<p class="text-lg font-semibold">{$LL.general.noUpdatesAvailable()}</p>
+				<!-- Without this the operator cannot tell a successful check that found
+				     nothing from a button that did nothing at all. -->
+				{#if lastCheckedLabel}
+					<p class="text-muted-foreground mt-1 text-sm" data-testid="update-last-checked">
+						{$LL.general.updateLastChecked({ time: lastCheckedLabel })}
+					</p>
+				{/if}
 			{/if}
 		</div>
 
@@ -249,6 +319,27 @@ $effect(() => {
 								data-testid="update-start-refused-reason"
 							>
 								{refusalMessage}
+							</p>
+						{/if}
+					</div>
+				</div>
+			{/if}
+
+			{#if checkRefusal}
+				<div
+					class="border-status-warning/60 bg-status-warning/10 flex items-start gap-2 rounded-lg border p-3"
+					data-testid="update-check-refused"
+					role="status"
+				>
+					<AlertTriangle class="text-status-warning mt-0.5 size-4 shrink-0" />
+					<div class="min-w-0 space-y-0.5">
+						<p class="text-sm font-medium">{$LL.general.updateCheckRefused()}</p>
+						{#if checkRefusalMessage}
+							<p
+								class="text-muted-foreground text-sm break-words"
+								data-testid="update-check-refused-reason"
+							>
+								{checkRefusalMessage}
 							</p>
 						{/if}
 					</div>
