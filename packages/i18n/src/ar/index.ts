@@ -1250,6 +1250,7 @@ const ar = {
 			audioUnavailableReason: {
 				device_busy: "جهاز الصوت مشغول",
 				no_device: "لا يوجد جهاز صوت",
+				not_selected_device: "ليس الجهاز المحدَّد",
 				mode_none: "الصوت معطّل",
 				handoff: "جارٍ التبديل\u2026",
 			},

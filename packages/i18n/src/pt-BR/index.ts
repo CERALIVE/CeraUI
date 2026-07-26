@@ -1290,6 +1290,7 @@ const ptBR = {
 			audioUnavailableReason: {
 				device_busy: "Dispositivo de áudio ocupado",
 				no_device: "Nenhum dispositivo de áudio",
+				not_selected_device: "Não é o dispositivo selecionado",
 				mode_none: "Áudio desativado",
 				handoff: "Alternando\u2026",
 			},

@@ -1152,6 +1152,7 @@ const ja = {
 			audioUnavailableReason: {
 				device_busy: "オーディオデバイス使用中",
 				no_device: "オーディオデバイスなし",
+				not_selected_device: "選択したデバイスではありません",
 				mode_none: "オーディオ無効",
 				handoff: "切り替え中\u2026",
 			},

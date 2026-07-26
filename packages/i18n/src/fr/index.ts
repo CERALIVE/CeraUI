@@ -1313,6 +1313,7 @@ const fr = {
 			audioUnavailableReason: {
 				device_busy: "Périphérique audio occupé",
 				no_device: "Aucun périphérique audio",
+				not_selected_device: "Pas le périphérique sélectionné",
 				mode_none: "Audio désactivé",
 				handoff: "Changement\u2026",
 			},

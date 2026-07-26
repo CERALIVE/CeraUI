@@ -1129,6 +1129,7 @@ const ko = {
 			audioUnavailableReason: {
 				device_busy: "오디오 장치 사용 중",
 				no_device: "오디오 장치 없음",
+				not_selected_device: "선택한 장치가 아님",
 				mode_none: "오디오 비활성화",
 				handoff: "전환 중\u2026",
 			},

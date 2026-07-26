@@ -543,6 +543,7 @@ const de = {
 			audioUnavailableReason: {
 				device_busy: "Audiogerät belegt",
 				no_device: "Kein Audiogerät",
+				not_selected_device: "Nicht das gewählte Gerät",
 				mode_none: "Audio deaktiviert",
 				handoff: "Wird umgeschaltet\u2026",
 			},

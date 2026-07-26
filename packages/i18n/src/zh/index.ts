@@ -1063,6 +1063,7 @@ const zh = {
 			audioUnavailableReason: {
 				device_busy: "音频设备忙",
 				no_device: "无音频设备",
+				not_selected_device: "不是所选设备",
 				mode_none: "音频已禁用",
 				handoff: "切换中\u2026",
 			},
