@@ -726,10 +726,49 @@ read the name from the same kernel string (byte-identical on the bug hardware),
 so an equal name is real evidence of the same device and an unequal one leaves
 the observation untouched. `resetEngineDeviceCache()` clears the map.
 
+**Staying ITSELF is not the same as keeping its NODE PATH, and the persisted id
+must follow the hardware.** A replug WHILE STREAMING cannot reuse the old node —
+the engine still holds it open — so the device returns on a new one. Confirmed on
+a Rock 5B+: `config.source` stayed `/dev/video1` while the RØDE came back as
+`/dev/video2`, and `last_seen_devices` carried BOTH ids under one `stableId`. Every
+consumer matches that id LITERALLY against a `sources[]` row, so ONE stale string
+stranded four operator surfaces at once (stuck lost-alert, raw `/dev/videoN`
+labels, dead audio meter, vanished Switch card). Two fixes, both in `sources.ts`:
+
+- **`liveStableIds` is recorded only AFTER the bridge check.** Todo 34 drops a
+  remembered `lost` row when a live successor shares its stable identity — but "the
+  successor owns the row" is false for a device whose kind bridges to no pipeline,
+  because it renders NO row. Recording it earlier suppressed the `lost` row for a
+  successor that never appeared, so the device vanished from the list entirely.
+  Keeping the `lost` row is the honest floor.
+- **`reconcileConfiguredSourceIdentity(sources)`** (called from `broadcastSources`)
+  PERSISTS the migration: it runs the same `resolveSourceIdentity` rule PR #197
+  already used read-only at the routing choke point, writes the successor to
+  `config.source` (and to `selected_video_input` when that field still names the
+  old id), `saveConfig()`s, and rebroadcasts `config`. `broadcastSources` rebuilds
+  the payload after a migration because `config.source` feeds
+  `collectLostCandidates`. Match is by STABLE IDENTITY only — a different device
+  that merely took the freed slot is never adopted, and a true unplug (no
+  successor) keeps its `lost` row untouched.
+
+The retired id is ALSO published on the wire as `previousIds` on the successor's
+capture row (`captureSourceSchema`, additive-optional), because the engine keeps
+reporting the node it opened at start: without the alias every consumer holding the
+old id resolves to nothing and reports a live device lost. Frontend half:
+`apps/frontend/AGENTS.md` → "Re-enumeration is MOVED, not GONE".
+
+The audio twin is `reconcileConfiguredAudioIdentity()` (`audio.ts`) — `config.asrc`
+stores a kernel-assigned ALSA card key and the kernel recycles those identically.
+It is backed by `rememberedAudioIdentities` (monotonic `asrc → stable_id`, the
+mirror of `lastEngineVideoDevices`) and runs BEFORE the `reportActiveAudioSource`
+lost verdict, because a card that only changed id is not lost and reporting it lost
+raises a persistent alert nothing can clear.
+
 The specific USB-as-HDMI mislabel this seam was originally warned about still
 cannot recur (`deriveKind` tests usb/uvc BEFORE hdmi), and a device seen for the
 FIRST time while cerastream is unreachable still has no memory to draw on — it
 keeps the coarse fallback, which is the accepted degradation.
+Coverage: `tests/source-identity-renumber.test.ts` + `tests/audio-identity-renumber.test.ts`.
 Coverage: `tests/devices.test.ts` (`fires onDevicesChanged on a hotplug set
 change…` + `hands onDevicesChanged the list this scan observed…`) and
 `tests/lost-device-retention.test.ts` (`refreshSourcesForHotplug — a failing
@@ -1328,4 +1367,6 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't render `netif.tp` as a rate — it is a byte delta over an unstated window. Use `tx_bps`/`rx_bps`.
 - Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.
+- Don't record a device's `stable_id` into `liveStableIds` before the bridge check in `buildSources` — an unbridged device renders no row, so letting it suppress the remembered `lost` row erases the device from the list entirely.
+- Don't leave a re-enumerated `config.source`/`config.asrc` unrepaired, and don't repair either by name, slot, or "whichever id resolves" — migration is by STABLE IDENTITY only (`reconcileConfiguredSourceIdentity` / `reconcileConfiguredAudioIdentity`), and the retired id must be published as `previousIds` so consumers can tell MOVED from GONE.
 - Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one.
