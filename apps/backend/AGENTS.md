@@ -341,6 +341,53 @@ never refuses in silence.
 
 Coverage: `tests/software-updates-start-refusal.test.ts`.
 
+## SOFTWARE-UPDATE CHECK CONTRACT [EXISTS]
+
+The install path above never refuses in silence; the CHECK path now never
+*answers* in silence either. A manual "Check for updates" used to change nothing
+observable at all — confirmed live on a Rock 5B+, where the button produced no
+spinner, no result and no error for 11 s while `debug.log` recorded
+`System: manual software update check started` and `apt-get update: success`
+1.8 s later. The check ran; only its result was unpublished.
+
+- **A check has THREE outcomes, never zero.** `update_state` gains
+  `check_failed` (typed `UpdateCheckFailureReason`: `refresh_failed` /
+  `discovery_failed`) and a `checked_at` epoch-ms stamp on
+  `idle`/`checking`/`available`/`check_failed`. `check_failed` is DISTINCT from
+  `failed` — the latter is an install that ran and failed; the former means the
+  device could not establish whether an update exists at all.
+- **`checked_at` is load-bearing, not decoration.** Without it a successful check
+  that finds nothing rebroadcasts a byte-identical state, so a working check and a
+  dead button are indistinguishable. It is also the ONLY completion signal the
+  frontend can latch on: `checking` sits below `available` in precedence, so a
+  device that already knows about an update never publishes a `checking` frame.
+- **Precedence** (`deriveUpdateState`): `check_failed` sits BELOW `available` — a
+  proven-available update stays installable even when a later refresh could not
+  confirm it — and ABOVE `idle`, because "we could not check" must never render as
+  "up to date".
+- **The operator-visible verdict keys on the apt EXIT CODE, never stderr.**
+  `classifyAptUpdateResult`'s stderr rule is retained for the RETRY CADENCE only.
+  apt writes benign warnings on a healthy refresh, and one unreachable repo among
+  several still exits 0 (verified on the board) — escalating either would
+  false-alarm and would break the documented "a noisy-but-nonfatal `apt-get
+  update` must not suppress the broadcast" invariant.
+- **A failed refresh is NOT cleared by a later successful discovery.** Only the
+  START of a new cycle clears it. Otherwise `dist-upgrade --assume-no` parsing the
+  STALE package lists reports "0 upgraded" and erases the very failure that made
+  the answer untrustworthy — that is exactly how the device came to answer
+  "System is up to date" when it had reached no repository at all.
+- **`runUpdateDiscoveryAndReport()` is the ONE landing seam** for both the
+  periodic loop and the manual re-check: it stamps `checked_at` BEFORE discovery
+  (so discovery's own broadcast already carries it) and ALWAYS emits a terminal
+  frame, because discovery has several early returns that broadcast nothing.
+- **A refused check restores what it did not replace.** `triggerManualUpdateCheck`
+  save/restores `lastUpdateFailure`/`lastUpdateSucceeded` around dispatch, so a
+  skipped check no longer wipes the failed-install state the operator was reading
+  and then broadcasts nothing in its place.
+
+Coverage: `tests/software-updates-check-visibility.test.ts` + the frontend half in
+`apps/frontend/src/main/dialogs/UpdatesDialog.check.test.ts`.
+
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
 Opt-in boot auto-unlock for a PIN-locked SIM. Two modules under `modules/modems/`:
@@ -1313,6 +1360,11 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
 - Don't refuse a software update with a bare `return`, and don't re-check the
   update guards at a call site — `startSoftwareUpdate()` owns every refusal and
   always names it (see SOFTWARE-UPDATE START CONTRACT).
+- Don't let an update CHECK end without publishing something: route every cycle
+  through `runUpdateDiscoveryAndReport()`, and don't derive a check failure from
+  apt's stderr (benign warnings) or clear one on a stale-list discovery success —
+  that is how "up to date" came to mean "couldn't reach any repo" (see
+  SOFTWARE-UPDATE CHECK CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
