@@ -378,6 +378,9 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	}
 
 	const capturesByPipeline = new Map<string, StreamSource[]>();
+	// Live capture rows indexed by stable identity, so a remembered id the loop
+	// below decides has MIGRATED can be published as an alias on its successor.
+	const capturesByStableId = new Map<string, StreamSource[]>();
 	const liveVideoIds = new Set<string>();
 	// Stable hardware identities of the currently-live video devices. A remembered
 	// device absent from the live list by NODE PATH but present here by STABLE
@@ -385,19 +388,30 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	// its row migrates to the live successor instead of orphaning a `lost` row
 	// (Todo 34). An engine that never emits `stable_id` contributes nothing here,
 	// so the lost loop degrades to node-path identity.
+	//
+	// Recorded only AFTER the bridge check, because "the live successor already
+	// owns the row" is the whole justification for dropping the remembered `lost`
+	// row — and an unbridged device owns no row. Recording it earlier suppressed
+	// the `lost` row for a successor that was never rendered, so the device
+	// vanished entirely (live: a RØDE replugged mid-stream returned as
+	// /dev/video2 and neither row survived). Keeping `lost` is the honest floor.
 	const liveStableIds = new Set<string>();
 	for (const device of input.devices) {
 		if (device.media_class !== "video") continue;
 		liveVideoIds.add(device.input_id);
-		if (device.stable_id !== undefined && device.stable_id !== "") {
-			liveStableIds.add(device.stable_id);
-		}
 		const bridged = deviceKindToPipelineId(device.kind);
 		if (bridged === undefined) continue;
 		const coarse = coarseByPipeline.get(bridged);
 		if (coarse === undefined) continue;
+		const entry = buildCaptureEntry(device, bridged, coarse);
+		if (device.stable_id !== undefined && device.stable_id !== "") {
+			liveStableIds.add(device.stable_id);
+			const byIdentity = capturesByStableId.get(device.stable_id) ?? [];
+			byIdentity.push(entry);
+			capturesByStableId.set(device.stable_id, byIdentity);
+		}
 		const list = capturesByPipeline.get(bridged) ?? [];
-		list.push(buildCaptureEntry(device, bridged, coarse));
+		list.push(entry);
 		capturesByPipeline.set(bridged, list);
 	}
 
@@ -418,6 +432,14 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 			snapshot.stableId !== "" &&
 			liveStableIds.has(snapshot.stableId)
 		) {
+			// Publish the retired node id as an alias on the successor. Without it
+			// the migration is invisible on the wire, and every consumer still
+			// holding the old id (the engine's `active_input`, a persisted
+			// `config.source`) resolves to nothing and reports a live device lost.
+			for (const successor of capturesByStableId.get(snapshot.stableId) ?? []) {
+				if (successor.origin !== "capture") continue;
+				successor.previousIds = [...(successor.previousIds ?? []), snapshot.id];
+			}
 			continue;
 		}
 		const coarse = coarseByPipeline.get(snapshot.pipelineId);
@@ -908,9 +930,60 @@ export function getSourcesMessage(): SourcesMessage {
 	return { hardware: getEffectiveHardware(), sources };
 }
 
+/**
+ * Migrate a persisted `config.source` onto the live successor of a device that
+ * re-enumerated under a new node path, and PERSIST the migration.
+ *
+ * `resolveSourceIdentity` (PR #197) already recovers the successor at the
+ * routing choke point, but it never wrote the result back — so the stored id
+ * stayed the dead node path forever and every consumer that matches
+ * `config.source` LITERALLY against a row id kept failing. That is one defect
+ * with four faces, all confirmed live after a mid-stream RØDE replug
+ * (/dev/video1 → /dev/video2): the "source disconnected" alert never cleared,
+ * the "Now streaming" labels fell back to the raw `/dev/video1`, the switch
+ * card's capture-session gate stopped matching so it vanished, and the operator
+ * was left with an alert telling them to switch and nothing to switch with.
+ *
+ * Only a STABLE-IDENTITY match migrates (never a name or a slot guess), so a
+ * genuinely different device is never adopted, and a real unplug keeps its
+ * `lost` row and is left untouched. Returns whether the config changed.
+ */
+export function reconcileConfiguredSourceIdentity(
+	sources: readonly StreamSource[],
+): boolean {
+	const config = getConfig();
+	const configured = config.source;
+	if (configured === undefined) return false;
+	const successor = resolveSourceIdentity(
+		configured,
+		sources,
+		config.last_seen_devices,
+	);
+	if (successor === configured) return false;
+
+	config.source = successor;
+	if (config.selected_video_input === configured) {
+		config.selected_video_input = successor;
+	}
+	saveConfig();
+	broadcastMsg("config", getConfig());
+	logger.info(
+		"sources: configured source re-enumerated under a new node path — migrated by stable identity",
+		{ from: configured, to: successor },
+	);
+	return true;
+}
+
 /** Push the current `sources` snapshot to all authenticated clients. */
 export function broadcastSources(): void {
-	broadcastMsg("sources", getSourcesMessage());
+	const message = getSourcesMessage();
+	// `config.source` feeds `collectLostCandidates`, so a migration has to be
+	// rebuilt rather than published from the pre-migration snapshot.
+	if (reconcileConfiguredSourceIdentity(message.sources)) {
+		broadcastMsg("sources", getSourcesMessage());
+		return;
+	}
+	broadcastMsg("sources", message);
 }
 
 /**

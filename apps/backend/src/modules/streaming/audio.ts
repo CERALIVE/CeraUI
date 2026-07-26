@@ -23,7 +23,7 @@ import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
 import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
 
-import { getConfig } from "../config.ts";
+import { getConfig, saveConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
@@ -202,6 +202,74 @@ export function warnIfConfiguredAudioSourceUnavailable(
 let lastAudioDisplays = new Map<string, AudioDeviceDisplay>();
 let lastAudioIdentities = new Map<string, AudioDeviceIdentity>();
 
+// asrc wire key → stable hardware identity, for every card seen this process
+// lifetime. MONOTONIC on purpose (the mirror of `lastEngineVideoDevices` in
+// sources.ts): a card leaving the list must not erase what we knew about it,
+// because the case this exists for is a card that left and came back.
+const rememberedAudioIdentities = new Map<string, string>();
+
+function rememberAudioIdentities(
+	identities: ReadonlyMap<string, AudioDeviceIdentity>,
+): void {
+	for (const [asrc, identity] of identities) {
+		const stableId = identity.stable_id;
+		if (stableId === undefined || stableId === "") continue;
+		rememberedAudioIdentities.set(asrc, stableId);
+	}
+}
+
+/** Drop the remembered audio identities (test isolation). */
+export function resetRememberedAudioIdentities(): void {
+	rememberedAudioIdentities.clear();
+}
+
+/**
+ * Migrate a persisted `config.asrc` onto the live successor of a card that
+ * re-enumerated under a new ALSA id, and PERSIST the migration.
+ *
+ * The kernel RECYCLES the card key `config.asrc` stores: replugging while the old
+ * card is still held open yields a different id for the same hardware, so the
+ * selection matches nothing and reads exactly like a genuine unplug — banner stuck,
+ * label degraded to the raw key, and `resolveMeterPreference` aimed at a card that
+ * no longer exists. Video has the same failure and the same fix
+ * (`reconcileConfiguredSourceIdentity`). Only a STABLE-IDENTITY match migrates, so
+ * a genuinely absent device is never swapped for whatever else is plugged in.
+ */
+export function reconcileConfiguredAudioIdentity(
+	identities: ReadonlyMap<string, AudioDeviceIdentity> = lastAudioIdentities,
+	devices: Record<string, string> = audioDevices,
+	remembered: ReadonlyMap<string, string> = rememberedAudioIdentities,
+): boolean {
+	const config = getConfig();
+	const configured = config.asrc;
+	if (configured === undefined) return false;
+	if (configured === AUDIO_SOURCE_AUTO || isPseudoAudioSource(configured)) {
+		return false;
+	}
+	if (configured in devices) return false;
+
+	const stableId = remembered.get(configured);
+	if (stableId === undefined) return false;
+
+	let successor: string | undefined;
+	for (const [asrc, identity] of identities) {
+		if (identity.stable_id !== stableId) continue;
+		if (!(asrc in devices)) continue;
+		successor = asrc;
+		break;
+	}
+	if (successor === undefined || successor === configured) return false;
+
+	config.asrc = successor;
+	saveConfig();
+	broadcastMsg("config", getConfig());
+	logger.info(
+		"audio: configured card re-enumerated under a new ALSA id — migrated by stable identity",
+		{ from: configured, to: successor },
+	);
+	return true;
+}
+
 // `id` MUST equal the device-map key (the asrc wire string) so it stays byte-equal
 // to the matching `asrcs` entry and `config.asrc` semantics are unchanged. Only the
 // two pseudo-sources carry a `labelKey`; hardware device names are never translated.
@@ -280,6 +348,7 @@ export async function broadcastAudioSources(): Promise<void> {
 		audioDevices,
 		getEngineAudioDevices(),
 	);
+	rememberAudioIdentities(lastAudioIdentities);
 	broadcastMsg("status", {
 		asrcs: Object.keys(audioDevices),
 		audio_sources: deriveAudioSources(
@@ -351,6 +420,12 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 
 	audioDevices = sortedList;
 	logger.debug("audio devices:", audioDevices);
+
+	// Migrate BEFORE the lost verdict below: a card that only changed ALSA id is
+	// not lost, and reporting it lost raises a persistent alert nothing can clear.
+	reconcileConfiguredAudioIdentity(
+		resolveAudioIdentities(audioDevices, getEngineAudioDevices()),
+	);
 
 	// Lifecycle indicator: the selected audio device vanishing mid-stream keeps
 	// the stream running in SILENCE (Todo 17 failover — never a test tone); raise
