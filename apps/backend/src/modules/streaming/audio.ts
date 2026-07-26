@@ -118,6 +118,26 @@ export function resolveMeterPreference(
 	return toAlsaCaptureDevice(cardId);
 }
 
+/**
+ * Is the card the operator's pick resolves to one CeraUI itself enumerated?
+ *
+ * The `/sys/class/sound` scan and the engine's own meter-candidate list are
+ * INDEPENDENT: a card the kernel exposes can be absent from the engine (it owns
+ * no capture PCM, or the engine never re-probed after a hotplug). That gap is
+ * what turns a mis-bound meter preference into a level from another card, so it
+ * is also what separates "the pick is genuinely gone" from "the pick is here and
+ * the meter is elsewhere". Deliberately keyed on the picker value, not the
+ * resolved ALSA string — a pick that is not a device-map key resolves through the
+ * alias fallback to a card CeraUI cannot vouch for, and must not claim presence.
+ */
+export function isMeterPreferenceDevicePresent(
+	asrc: string | undefined = getConfig().asrc,
+): boolean {
+	if (asrc === undefined) return false;
+	if (resolveMeterPreference(asrc) === null) return false;
+	return asrc in audioDevices;
+}
+
 // The engine passes `audio.device` straight to `alsasrc device=`, which needs a
 // real ALSA device string, not a bare card id: `alsasrc device="usbaudio"` never
 // opens and the engine rejects the start with `-32602 audio-device-unavailable`.

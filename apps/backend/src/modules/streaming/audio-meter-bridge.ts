@@ -50,12 +50,20 @@ import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import { resolveMeterPreference } from "./audio.ts";
+import {
+	isMeterPreferenceDevicePresent,
+	resolveMeterPreference,
+} from "./audio.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
 
 /** Backoff bounds for the initial-connect retry. Mirrors `engine-reconnect.ts`. */
 export const AUDIO_METER_CONNECT_BASE_MS = 2_000;
 export const AUDIO_METER_CONNECT_MAX_MS = 30_000;
+
+/** How long a foreign-card reading must persist before it is re-asserted. */
+export const AUDIO_METER_MISMATCH_GRACE_MS = 5_000;
+/** Floor between two re-assertions, so a permanent mismatch stays cheap. */
+export const AUDIO_METER_REASSERT_INTERVAL_MS = 30_000;
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -75,8 +83,11 @@ export interface AudioMeterBridgeDeps {
 	 * "Auto" (hand selection back to the engine's own delivery-based pick).
 	 */
 	meterPreference: () => string | null;
+	/** Whether that pick is a card CeraUI's own device scan currently lists. */
+	meterPreferencePresent: () => boolean;
 	logger: AudioMeterBridgeLogger;
 	random: () => number;
+	now: () => number;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
 	clearTimer: (timer: TimerHandle) => void;
 	baseDelayMs: number;
@@ -165,8 +176,10 @@ function defaultDeps(): AudioMeterBridgeDeps {
 		},
 		broadcast: (payload) => broadcastMsg("audio-level", payload),
 		meterPreference: () => resolveMeterPreference(getConfig().asrc),
+		meterPreferencePresent: () => isMeterPreferenceDevicePresent(),
 		logger: defaultLogger,
 		random: Math.random,
+		now: Date.now,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
 		clearTimer: (timer) => clearTimeout(timer),
 		baseDelayMs: AUDIO_METER_CONNECT_BASE_MS,
@@ -183,6 +196,10 @@ interface BridgeState {
 	subscription: Subscription | undefined;
 	/** Tail of the in-flight connect attempt (test seam via settleAudioMeterBridge). */
 	inflight: Promise<void>;
+	/** Start of the current uninterrupted run of foreign-card readings. */
+	mismatchSince: number | undefined;
+	mismatchLogged: boolean;
+	lastReassertAt: number | undefined;
 }
 
 let state: BridgeState | undefined;
@@ -202,20 +219,76 @@ function errMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-// A foreign-card level reuses the ADR's existing `no_device` reason ("No audio
-// device") rather than a new one: from the operator's seat the SELECTED device
-// is precisely the one not being metered, and the reason set is already wired
-// through 10 locales.
+/**
+ * The gap reason a suppressed foreign-card level is reported as.
+ *
+ * `no_device` is only honest when the selected card is genuinely absent. When
+ * CeraUI's OWN device scan still lists it, the operator's device IS plugged in —
+ * the meter is simply on a different card — and saying "No audio device" sent a
+ * live investigation looking for an unplugged cable that was never unplugged.
+ */
+function foreignCardReason(
+	deps: AudioMeterBridgeDeps,
+): "no_device" | "not_selected_device" {
+	return deps.meterPreferencePresent() ? "not_selected_device" : "no_device";
+}
+
+/**
+ * A sustained foreign-card run means the engine is NOT honouring the preference,
+ * and the engine will not correct itself: `set_preferred_device` early-returns on
+ * an unchanged value, so a card demoted for not delivering during its probe
+ * window stays demoted while any other candidate keeps delivering, and a
+ * preference pushed while the card was missing from the engine's registry stays
+ * inert. Either way the meter is dead for a device that is present, with no
+ * recovery short of the operator re-picking. Re-asserting through `null` is what
+ * makes the value change, so the engine clears its demotions and re-probes.
+ *
+ * Bounded on both sides (a grace window, then an interval floor) so a mismatch
+ * that is simply permanent — a selected card with no capture PCM — costs one
+ * cheap pair of reloads per interval and never a loop.
+ */
+function noteForeignCardLevel(deps: AudioMeterBridgeDeps): void {
+	if (!state || state.stopped) return;
+	const now = deps.now();
+	if (state.mismatchSince === undefined) state.mismatchSince = now;
+	if (!state.mismatchLogged) {
+		state.mismatchLogged = true;
+		deps.logger.warn(
+			`audio-meter bridge: the engine is metering a different card than the selected ${deps.meterPreference() ?? "auto"} — suppressing its levels`,
+		);
+	}
+	if (now - state.mismatchSince < AUDIO_METER_MISMATCH_GRACE_MS) return;
+	if (
+		state.lastReassertAt !== undefined &&
+		now - state.lastReassertAt < AUDIO_METER_REASSERT_INTERVAL_MS
+	) {
+		return;
+	}
+	state.lastReassertAt = now;
+	void reassertPreference();
+}
+
+function clearForeignCardRun(): void {
+	if (!state) return;
+	state.mismatchSince = undefined;
+	state.mismatchLogged = false;
+}
+
 function projectLevel(
 	event: Extract<EventParams, { type: "audio-level" }>,
 	deps: AudioMeterBridgeDeps,
 ): AudioLevelMessage {
 	const message = toAudioLevelMessage(event);
-	if (message.unavailable === true) return message;
-	if (!isForeignCardLevel(deps.meterPreference(), message.source?.identity)) {
+	if (message.unavailable === true) {
+		clearForeignCardRun();
 		return message;
 	}
-	return { unavailable: true, reason: "no_device" };
+	if (!isForeignCardLevel(deps.meterPreference(), message.source?.identity)) {
+		clearForeignCardRun();
+		return message;
+	}
+	noteForeignCardLevel(deps);
+	return { unavailable: true, reason: foreignCardReason(deps) };
 }
 
 function handleEvent(event: EventParams): void {
@@ -253,17 +326,49 @@ async function pushPreference(client: CerastreamClient): Promise<void> {
 		return;
 	}
 	const meter_device = deps.meterPreference();
-	const raw = client as unknown as {
-		rawRequest(method: string, params?: unknown): Promise<unknown>;
-	};
 	try {
-		await raw.rawRequest("reload-config", { audio: { meter_device } });
+		await sendMeterDevice(client, meter_device);
 		deps.logger.debug(
 			`audio-meter bridge: idle-meter preference set to ${meter_device ?? "auto"}`,
 		);
 	} catch (err) {
 		deps.logger.warn(
 			`audio-meter bridge: could not set the idle-meter preference: ${errMessage(err)}`,
+		);
+	}
+}
+
+function sendMeterDevice(
+	client: CerastreamClient,
+	meter_device: string | null,
+): Promise<unknown> {
+	const raw = client as unknown as {
+		rawRequest(method: string, params?: unknown): Promise<unknown>;
+	};
+	return raw.rawRequest("reload-config", { audio: { meter_device } });
+}
+
+/**
+ * Clear the engine's preference, then re-apply it — see `noteForeignCardLevel`
+ * for why the intermediate `null` is the whole point. Never throws, and a failed
+ * half leaves the meter exactly where it already was.
+ */
+async function reassertPreference(): Promise<void> {
+	const client = state?.stopped === false ? state.client : undefined;
+	if (client === undefined || !state) return;
+	const { deps } = state;
+	if (!supportsMeterDevicePreference(client.hello.schema_version)) return;
+	const meter_device = deps.meterPreference();
+	if (meter_device === null) return;
+	try {
+		await sendMeterDevice(client, null);
+		await sendMeterDevice(client, meter_device);
+		deps.logger.info(
+			`audio-meter bridge: re-asserted the idle-meter preference ${meter_device} after a sustained foreign-card reading`,
+		);
+	} catch (err) {
+		deps.logger.warn(
+			`audio-meter bridge: could not re-assert the idle-meter preference: ${errMessage(err)}`,
 		);
 	}
 }
@@ -359,6 +464,9 @@ export function initAudioMeterBridge(
 		client: undefined,
 		subscription: undefined,
 		inflight: Promise.resolve(),
+		mismatchSince: undefined,
+		mismatchLogged: false,
+		lastReassertAt: undefined,
 	};
 	state.inflight = tick();
 }

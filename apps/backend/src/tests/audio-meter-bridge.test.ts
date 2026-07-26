@@ -7,6 +7,8 @@ import type {
 } from "@ceralive/cerastream";
 import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
 import {
+	AUDIO_METER_MISMATCH_GRACE_MS,
+	AUDIO_METER_REASSERT_INTERVAL_MS,
 	type AudioMeterBridgeDeps,
 	type AudioMeterBridgeLogger,
 	alsaCardKey,
@@ -27,6 +29,10 @@ const silent: AudioMeterBridgeLogger = {
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
+// The re-assert is fired-and-forgotten from a synchronous broadcast path, so its
+// two awaited reloads settle over several microtask turns.
+const drainMicrotasks = () => new Promise<void>((r) => setTimeout(r, 0));
+
 // A fake engine: `connect` either throws (engine down) or resolves a client whose
 // `subscribeEvents` captures the handler so the test can push events by hand. The
 // manual timer queue drives the boot-retry loop with no real time.
@@ -41,6 +47,8 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 
 	const reloads: unknown[] = [];
 	let preference: string | null = "hw:CARD=usbaudio";
+	let preferencePresent = false;
+	let clock = 1_000;
 	let reloadRejects = false;
 
 	const subscription: Subscription = {
@@ -78,8 +86,10 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		connectOptions: {},
 		broadcast: (payload) => broadcasts.push(payload),
 		meterPreference: () => preference,
+		meterPreferencePresent: () => preferencePresent,
 		logger: silent,
 		random: () => 0.5,
+		now: () => clock,
 		setTimer: (fn: () => void, _ms: number): TimerHandle => {
 			timers.push({ fn });
 			return timers.length as unknown as TimerHandle;
@@ -102,6 +112,13 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		reloads,
 		setPreference: (next: string | null) => {
 			preference = next;
+		},
+		setPreferencePresent: (next: boolean) => {
+			preferencePresent = next;
+		},
+		advance: async (ms: number) => {
+			clock += ms;
+			await drainMicrotasks();
 		},
 		failReloads: () => {
 			reloadRejects = true;
@@ -341,6 +358,143 @@ describe("audio-meter bridge — a level from an unselected card is never render
 		h.emit(unavailableEvent);
 
 		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+});
+
+// The follow-up board bug (live QA, 2026-07-25): explicitly picking a CONNECTED,
+// audio-delivering device left the idle meter on "Meter unavailable · No audio
+// device" indefinitely, while "Auto" — resolving to that same device — showed
+// bars at once. The gate was right to refuse the other card's audio; what was
+// wrong is that it said the device was gone, and that nothing ever re-tried.
+describe("audio-meter bridge — a suppressed foreign level names the real cause", () => {
+	test("reports the selection as not-metered while CeraUI still lists it", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		h.setPreferencePresent(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit({
+			...levelEvent,
+			source: { identity: "card:Rx", owner: "sidecar" },
+		});
+
+		expect(h.broadcasts).toEqual([
+			{ unavailable: true, reason: "not_selected_device" },
+		]);
+	});
+
+	test("keeps `no_device` for a selection CeraUI can no longer see", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		h.setPreferencePresent(false);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		h.emit({
+			...levelEvent,
+			source: { identity: "card:Rx", owner: "sidecar" },
+		});
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "no_device" }]);
+	});
+});
+
+describe("audio-meter bridge — a stuck preference is re-asserted, bounded", () => {
+	const foreign = {
+		...levelEvent,
+		source: { identity: "card:Rx", owner: "sidecar" as const },
+	};
+
+	async function connectedWithForeignLevels() {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		h.setPreferencePresent(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.reloads.length = 0;
+		return h;
+	}
+
+	test("re-asserts through null only after the grace window, exactly once", async () => {
+		const h = await connectedWithForeignLevels();
+
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS - 1);
+		h.emit(foreign);
+		expect(h.reloads).toEqual([]);
+
+		await h.advance(2);
+		h.emit(foreign);
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([
+			{ audio: { meter_device: null } },
+			{ audio: { meter_device: "hw:CARD=usbaudio" } },
+		]);
+	});
+
+	test("holds the interval floor rather than re-asserting on every level", async () => {
+		const h = await connectedWithForeignLevels();
+
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS);
+		h.emit(foreign);
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(2);
+
+		await h.advance(AUDIO_METER_REASSERT_INTERVAL_MS - 1);
+		h.emit(foreign);
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(2);
+
+		await h.advance(2);
+		h.emit(foreign);
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(4);
+	});
+
+	test("a level from the selected card ends the run and re-arms the grace", async () => {
+		const h = await connectedWithForeignLevels();
+
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS);
+		h.emit(levelEvent);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS);
+		h.emit(foreign);
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+	});
+
+	test("never re-asserts for Auto — the engine owns that selection", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.reloads.length = 0;
+
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS * 4);
+		h.emit(foreign);
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+		expect(h.broadcasts.every((b) => b.unavailable === undefined)).toBe(true);
+	});
+
+	test("a refused re-assert leaves levels flowing, never a thrown bridge", async () => {
+		const h = await connectedWithForeignLevels();
+		h.failReloads();
+
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS);
+		h.emit(foreign);
+		await h.advance(0);
+
+		h.setPreference("hw:CARD=Rx");
+		h.emit(foreign);
+		expect(h.broadcasts.at(-1)).toEqual(toAudioLevelMessage(foreign));
 	});
 });
 
