@@ -1,12 +1,17 @@
 import { createHash } from "node:crypto";
 
 import type {
+	UpdateCheckFailureReason,
 	UpdateIdentity,
 	UpdateProgress,
 	UpdateState,
 } from "@ceraui/rpc/schemas";
 
-export type { UpdateIdentity, UpdateState } from "@ceraui/rpc/schemas";
+export type {
+	UpdateCheckFailureReason,
+	UpdateIdentity,
+	UpdateState,
+} from "@ceraui/rpc/schemas";
 
 export interface AvailableUpdate {
 	identity: UpdateIdentity;
@@ -27,6 +32,8 @@ export interface UpdateSnapshot {
 	updating: UpdateProgress | null;
 	failure: UpdateFailure | null;
 	succeeded: boolean;
+	checkFailure?: UpdateCheckFailureReason | null;
+	checkedAt?: number | null;
 }
 
 // The version signature covers the sorted package set + count + download size, so
@@ -57,9 +64,12 @@ function deriveInstallState(progress: UpdateProgress): UpdateState {
 }
 
 // Precedence: an in-flight install outranks everything, then a terminal
-// failure/success, then an available update, then a bare in-progress check.
-// Failure deliberately outranks `checking` so a background re-check never masks
-// a real failed-update state.
+// failure/success, then an available update, then a bare in-progress check, then
+// a failed check. Failure deliberately outranks `checking` so a background
+// re-check never masks a real failed-update state. A failed CHECK sits BELOW
+// `available` on purpose — a known-available update stays installable even when a
+// later refresh could not reach the repos — but ABOVE `idle`, because "we could
+// not check" must never render as "up to date".
 export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 	if (s.updating) return deriveInstallState(s.updating);
 	if (s.failure) {
@@ -72,12 +82,19 @@ export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 			: { kind: "failed", reason: s.failure.reason };
 	}
 	if (s.succeeded) return { kind: "success" };
+
+	const checkedAt = s.checkedAt ?? undefined;
+	const stamp = checkedAt !== undefined ? { checked_at: checkedAt } : {};
+
 	if (s.available && s.available.package_count > 0) {
 		const { identity, package_count, download_size } = s.available;
 		return download_size !== undefined
-			? { kind: "available", identity, package_count, download_size }
-			: { kind: "available", identity, package_count };
+			? { kind: "available", identity, package_count, download_size, ...stamp }
+			: { kind: "available", identity, package_count, ...stamp };
 	}
-	if (s.checking) return { kind: "checking" };
-	return { kind: "idle" };
+	if (s.checking) return { kind: "checking", ...stamp };
+	if (s.checkFailure) {
+		return { kind: "check_failed", reason: s.checkFailure, ...stamp };
+	}
+	return { kind: "idle", ...stamp };
 }
