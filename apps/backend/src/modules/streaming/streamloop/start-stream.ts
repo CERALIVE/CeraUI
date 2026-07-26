@@ -30,6 +30,10 @@ import { logger } from "../../../helpers/logger.ts";
 import { getConfig } from "../../config.ts";
 import { setup } from "../../setup.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
+import {
+	resetActiveEncodeLiveness,
+	resetActivePassthrough,
+} from "../active-passthrough.ts";
 import { asrcProbe, isPseudoAudioSource } from "../audio.ts";
 import {
 	buildAutoLaunchConfig,
@@ -123,8 +127,14 @@ export async function startStream(
 	getStreamingBackend().setBitrate(launchConfig);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
-	// health rollup tracks this new session (ADR-0005 observe-and-notify).
+	// health rollup tracks this new session (ADR-0005 observe-and-notify). The
+	// raw-bridge caches are dropped for the same reason: they describe the
+	// PREVIOUS session, and the bridge holds its connection across a stop/start,
+	// so nothing else would retire them. A new session must read as a genuine
+	// cold start until its own first heartbeat lands.
 	clearStreamProcessExit();
+	resetActiveEncodeLiveness();
+	resetActivePassthrough();
 
 	if (!(await maybeProbeAudioSource(pipeline, launchConfig, audioDeps))) {
 		logger.warn("startStream: audio source probe failed; aborting start", {

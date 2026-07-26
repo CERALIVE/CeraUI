@@ -30,6 +30,9 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Transactional launch cleanup + phase/stop deadlines | `modules/streaming/launch-transaction.ts`, `start-lifecycle-timing.ts`, `streamloop/start-stream.ts`; contract in `../../docs/START-LIFECYCLE.md` |
 | Bounded start retry + suppression + diagnostics | `modules/streaming/stream-start-retry.ts`, `stream-start-retry-reporting.ts` |
 | Pre-engine gate deadline deferral (`pendingGateRemainingMs` ← `asrcProbeRemainingMs`) | `modules/streaming/stream-start-retry.ts` + `modules/streaming/audio.ts`; contract in `../../AGENTS.md` → STREAMING BACKEND QUALITY |
+| Raw `active_encode` bridge (passthrough + frame-liveness the typed client strips) | `modules/streaming/active-passthrough.ts`; cache-lifetime contract below → RAW `active_encode` BRIDGE |
+| Engine restarted mid-session (session control connection dropped → retire the session so the next start works) | `modules/streaming/cerastream-backend.ts` (`noteConnectionLoss`, `withSessionClient`, `onSessionConnectionLost`); contract below → SESSION CONTROL CONNECTION |
+| Stream health rollup (`frames.advancing` freshness window, idle/dead/degraded/healthy) | `modules/streaming/health.ts` (`collectRealLiveness`, `deriveFramesAdvancing`, `FRAMES_FRESHNESS_MS`) |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
 | PASETO device-token verification (relay-config + device-control, ADR-0006) | `modules/pairing/device-token.ts` — `verifyDeviceControlToken`, `resolveControlChannelEndpoint` |
@@ -354,6 +357,46 @@ The gate itself is unchanged: a level whose `source.identity` names a different 
 than the preference is still dropped. Only the reason string and the retry behaviour
 moved. `AudioLevelMeter` needed no change — it already indexes
 `$LL.live.preview.audioUnavailableReason[reason]()`.
+
+**"No audio" is NOT "Auto", and only the picker value can tell them apart.**
+`resolveMeterPreference` answers `null` for both, and `null` on the wire means
+"engine, choose for yourself" — so the one pick that means *meter nothing* made the
+engine auto-pick a card AND left `isForeignCardLevel` unarmed (it returns `false` for
+a `null` preference by design). The meter therefore rendered another card's real,
+moving audio under an "Audio source: No audio" label. Found live in Wave H QA; it read
+as a transient "few seconds of green bars" only because PR #232's frozen-content
+watchdog happened to age the bars out once that card's content stopped changing.
+`isMeterSilencedByPick(asrc)` (`audio.ts`, true for `NO_AUDIO_ID` alone) is the
+distinction, and `projectLevel` applies it BEFORE every other branch — including the
+engine's own `unavailable` reason, because the operator's explicit silence outranks
+whatever gap the engine is reporting. It reuses the existing `mode_none` reason
+(`resolveAudioMode("No audio")` is literally `{mode:"none"}`), so no schema or locale
+change was needed. `DEFAULT_AUDIO_ID` and `AUDIO_SOURCE_AUTO` are deliberately NOT
+silenced — both hand sourcing to the engine, so whatever it picks IS the operator's
+meter.
+
+**A pick change retires the level already on screen, without waiting for a frame.**
+Every gate above acts on the NEXT event the engine sends, and the engine needs a
+moment to re-point its sidecar — so between the config write and that event the meter
+keeps drawing the PREVIOUS device's bars. `noteMeterSelection()` broadcasts the gap
+immediately on a changed pick: `mode_none` when the new pick is silenced, `handoff`
+otherwise. Three properties are load-bearing:
+
+- **The change key is the PAIR** `(silenced, preference)` — "Auto" and "No audio" both
+  resolve to a `null` preference, so a preference-only diff cannot see that switch.
+- **It fires even while the bridge is disconnected.** `syncAudioMeterPreference()`
+  calls it BEFORE the client check: the stale level was already broadcast, so it must
+  be retired whether or not the engine can be told about the change yet.
+- **It never fires on the first connect** (no prior selection recorded ⇒ nothing has
+  been shown) nor on a re-enumeration that re-syncs an UNCHANGED pick — otherwise
+  `updateAudioDevices` would blink the meter on every hotplug.
+
+This is a re-evaluation, never a pin: the very next real level replaces the gap.
+
+Coverage for both: `tests/audio-meter-bridge.test.ts` (the silenced pick vs. Auto at
+the same `null` preference, the engine-reason override, no re-assert while silenced,
+the switching gap before any frame, the Auto→No-audio pair key, the unchanged-pick and
+first-connect silences, the disconnected path, and the hand-back to the new device).
 
 Coverage: `tests/audio-meter-bridge.test.ts` (push on connect, `null` for Auto, re-push
 on change, nothing sent to a pre-0.9.0 engine, a refused reload leaves levels flowing,
@@ -1515,6 +1558,122 @@ for stream telemetry: the HUD's stream-gated `throughputKbps` is unchanged, and
 
 Coverage: `tests/netif-throughput-rate.test.ts`.
 
+## RAW `active_encode` BRIDGE — SESSION vs CONNECTION LIFETIME [EXISTS]
+
+`modules/streaming/active-passthrough.ts` holds its OWN persistent control-socket
+connection, separate from the streaming session's, purely to read the raw
+`active_encode` fields the published `@ceralive/cerastream` client Zod-strips
+(`passthrough`, `frames_emitted`, `pipeline_playing`). Both caches it keeps
+describe the SESSION — what the engine is encoding — not that socket.
+
+**Those are different lifetimes, and conflating them made health lie.** The
+bridge's `close`/`error` fire on any transient reconnect (engine restart, socket
+hiccup, a read that outlived its window) — none of which says anything about
+whether video is flowing. Clearing `cachedLiveness` there erased a REAL,
+correctly-stalled frame counter, and `collectRealLiveness()` (`health.ts`) read
+the resulting `undefined` as the genuine COLD-START case and fell back to
+`processAlive` — which only reports that the supervised OS process has not
+crashed. Confirmed live during a Wave H HDMI mid-stream unplug drill: health
+reported the frozen counter as `degraded` for several seconds, then flipped to
+`state: "healthy"`, `frames: {advancing: true, count: null}` the instant the
+bridge reconnected — while a local SRT receiver had already errored out
+(`Error during demuxing: Input/output error`) and the kernel reported
+`power_present: 0`. The wipe also BYPASSED `FRAMES_FRESHNESS_MS`, the mechanism
+that exists precisely to age a stale reading into `advancing: false`.
+
+The caches are therefore cleared at SESSION boundaries only, and there are
+exactly three:
+
+| Seam | Why it is a boundary |
+|------|----------------------|
+| `readStreamingFalse(msg)` in `onLine` | an engine-AUTHORED status event saying the session ended — ground truth, clears immediately |
+| `startStream()` (beside `clearStreamProcessExit()`) | a new session must not inherit the previous one's counter; the bridge holds its connection across a stop/start, so nothing else retires it |
+| `stopActivePassthroughBridge()` | process teardown — nothing left to describe |
+
+A dropped socket is NOT one of them. The retained reading ages out on its own:
+`lastStatusAtMs` stops advancing and `health.ts`'s freshness window turns it into
+`advancing: false` (degraded) — the honest verdict, and the one the wipe was
+preventing from ever running. `cachedPassthrough` follows the same rule for the
+same reason (a blip used to drop the "Passthrough active" state mid-session);
+it is overlaid onto `active_encode` only when the engine telemetry already
+carries one, so a retained value can never outlive a stopped session on the wire.
+
+The cold-start fallback itself is CORRECT and must not be "fixed": on a stream's
+very first heartbeat window no frame telemetry exists to judge advancement, so
+raw process liveness is the only honest signal available.
+
+Coverage: `tests/liveness-bridge-reconnect.test.ts` (the blip drives the real
+`close`/`error` handlers over an injected socket; the engine-authored stop, the
+fresh-start reset, and both cold-start cases are the controls).
+
+## SESSION CONTROL CONNECTION — A DROP *IS* A SESSION BOUNDARY [EXISTS]
+
+The exact inverse of the rule above, for a different connection. Read both
+together: the same event (a socket closing) carries opposite authority depending
+on what the socket is FOR.
+
+`cerastream-backend.ts`'s `this.client` is opened once in `start()` and held for
+the session's whole lifetime. It is dialled with the published client's
+`autoReconnect` at its default (**false**), and that client — inspected in the
+shipped `dist/client.js`, v2026.7.3 — exposes **no** close/error event, **no**
+`isConnected()`, and **no** `reconnect()`. Once its Unix socket drops, the
+instance is permanently unusable: `rawRequest` short-circuits on `if (!socket)`
+and every later call rejects `CerastreamConnectionError("control connection is
+not open", code "closed")`. Only a fresh `connect()` produces a usable client.
+
+**Nothing was watching, and three things compounded.** Confirmed live in Wave H:
+`cerastream.service` restarted mid-session and CeraUI never noticed for 11+
+minutes.
+
+1. `switchInput` (and `switchAudio` / `setBitrate` / `reloadConfig` /
+   `reloadAudioDelay` / `listDevicesIfActive`) kept dispatching onto the dead
+   client, rejecting identically forever, changing no state.
+2. `reconcileRuntimeState()` short-circuits on
+   `telemetry !== null && this.client !== undefined` — it treated a **dead client
+   as proof of a live session** and re-affirmed `"streaming"` from the last stale
+   heartbeat, so even the `engine-reconnect.ts` heal path's
+   `reconcileStreamSession()` could not correct it.
+3. `is_streaming` therefore stayed true and the lifecycle stayed `streaming`, so
+   a fresh `streaming.start` was inadmissible; forced through, an engine with no
+   memory of the session answered an RPC error classified `engine_internal`.
+
+`engine-reconnect.ts` does NOT cover this: it SETTLES (`state.stopped = true`)
+once the engine is reachable at boot and never re-arms, and it heals the
+capability probe — a short-lived connection — not a session's dedicated one.
+
+**The rule.** cerastream is systemd-owned (ADR-0005), so a dropped control
+connection means the process CeraUI was driving went away; a restarted engine has
+no memory of the session, and the client cannot re-establish one. The socket is
+the ONLY handle on the engine-side pipeline, so losing it retires the session.
+
+`noteConnectionLoss(client, error, site)` is the single seam. It acts only on
+PROOF — a `CerastreamConnectionError` from the client we are STILL holding, for a
+session we still believe is `active`. An engine RPC error, a request timeout, a
+rejection from an already-superseded client, and our own `stop()`'s close (which
+clears `active` first) are all deliberately NOT proof.
+
+| Concern | Rule |
+|---------|------|
+| Detection (proactive) | `listDevicesIfActive()` — the device registry re-polls it every couple of seconds for the whole session, so it is the first call to touch a dead socket. **No watchdog timer**, so nothing can mis-fire on a missed heartbeat. |
+| Detection (on demand) | `withSessionClient(site, op)` wraps every session-scoped RPC; the caller still receives its ORIGINAL error, this only adds the missing state change. `handleOpFailure` covers the queued ops. |
+| Order | The dead client is dropped FIRST (see cause 2 above), with the subscription and telemetry, then `bridge.broadcastStatus()`. |
+| `active` | Deliberately LEFT SET, so `stop()` still recognises the session it must tear down — clearing it makes `stop()` return `false` and trips `reportSessionInvariant`. |
+| Reaction | `deps.onSessionConnectionLost(site)`. Production wiring raises the EXISTING `engine-crashed` lifecycle indicator (before the stop, since the reporter is gated on `isStreaming`), then retires the session via `stopStreamSession()` — its single owner. Fire-and-forget: it runs inside a rejected RPC's catch and must never replace the caller's error. |
+
+Net effect: the board lands in a real `idle` and the next `streaming.start` dials
+a fresh connection and succeeds — no `ceralive.service` restart.
+
+**Scoped OUT, deliberately:** there is no transparent mid-session reconnect that
+resumes the running stream. It is not achievable against this engine — a
+restarted cerastream has no session to resume — and would need engine-side
+session recovery first. The stream ends; the operator restarts it.
+
+Coverage: `tests/engine-session-connection-loss.test.ts` (dead-connection
+`switchInput` retires once and only once, the registry poll detects it with no
+operator action, a fresh start dials a NEW client and works, reconciliation stops
+re-affirming the phantom session, and the orchestrator re-admits a start; the RPC
+error and operator-stop negatives are the controls, green on both trees).
+
 ## ANTI-PATTERNS
 
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
@@ -1534,7 +1693,11 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
+- Don't infer "the operator wants no meter" from a `null` meter preference — `null` is ALSO "Auto", which legitimately meters whatever the engine picks. Ask `isMeterSilencedByPick()`, key the selection-change detection on the `(silenced, preference)` PAIR, and don't let an engine-sent `unavailable` reason outrank an explicit "No audio".
+- Don't leave a pick change to be corrected by the next engine frame — the level already broadcast belongs to the previous pick, so `noteMeterSelection()` must retire it immediately (and must stay silent on an unchanged pick, or every re-enumeration blinks the meter).
 - Don't fold `active_encode` into telemetry preserve-on-omission past the end of a session, and don't let `stop()` rely on a final engine status frame to clear it — a crashed engine sends none, and the stale encode then renders the stopped session under a "Live" badge.
+- Don't clear the raw bridge's `cachedLiveness`/`cachedPassthrough` from its own socket `close`/`error` — that is a CONNECTION blip, not a session boundary, and wiping there hands `collectRealLiveness()` an `undefined` it can only read as a cold start, so a dead stream reports `healthy` off raw process liveness. Let `FRAMES_FRESHNESS_MS` age the retained reading out instead.
+- Don't apply that same rule to the SESSION-scoped control client — it is the inverse case. Losing `cerastream-backend.ts`'s `this.client` retires the session (the published client cannot reconnect and a restarted engine has no session to resume), so route every session RPC through `withSessionClient` and never swallow a `CerastreamConnectionError` without calling `noteConnectionLoss`. And don't treat `this.client !== undefined` as evidence the engine is reachable — that is exactly how `reconcileRuntimeState()` re-affirmed a phantom "streaming" state off stale telemetry until the backend was restarted.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it

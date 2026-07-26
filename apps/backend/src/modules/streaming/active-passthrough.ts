@@ -36,6 +36,36 @@
  *     rollup consumes (a monotonic counter increasing across two consecutive status
  *     heartbeats = advancing; a flat counter = a stalled encode). Idle/legacy → the
  *     cache is cleared/absent so the fields simply stay undefined.
+ *
+ * WHAT CLEARS THE CACHES — a SESSION boundary, never a CONNECTION blip.
+ *
+ * Both caches describe the SESSION (what the engine is encoding), not this
+ * module's socket (how we happen to be reading it). Those are different
+ * lifetimes, and conflating them made the health rollup lie: this bridge holds
+ * its OWN persistent connection, so its `close`/`error` fire on any transient
+ * reconnect — an engine restart, a socket hiccup, a slow read — none of which
+ * says anything about whether video is still flowing. Wiping `cachedLiveness`
+ * there erased a REAL, correctly-stalled frame counter, and `collectRealLiveness`
+ * read the resulting `undefined` as the genuine cold-start case and fell back to
+ * raw process liveness. Confirmed live during a Wave H HDMI mid-stream unplug:
+ * health reported the frozen counter as `degraded` for several seconds, then
+ * flipped to `state: "healthy"`, `frames: {advancing: true, count: null}` the
+ * instant the bridge reconnected — while the receiver had already errored out
+ * and the kernel reported no HDMI signal at all.
+ *
+ * So the ONLY clearing paths are:
+ *
+ *   - `readStreamingFalse(msg)` in `onLine` — an engine-AUTHORED status event
+ *     saying the session ended. That is ground truth and clears immediately.
+ *   - a fresh stream start (`streamloop/start-stream.ts`, beside
+ *     `clearStreamProcessExit()`) — so a new session never inherits the previous
+ *     one's counter.
+ *   - `stopActivePassthroughBridge()` — process teardown, nothing left to describe.
+ *
+ * A dropped socket is NOT one of them. The retained reading ages out on its own:
+ * `lastStatusAtMs` stops advancing, and `health.ts`'s `FRAMES_FRESHNESS_MS`
+ * window turns it into `advancing: false` (degraded) — the honest verdict, and
+ * the mechanism the cache wipe was bypassing.
  */
 
 import { join } from "node:path";
@@ -98,7 +128,7 @@ export function getActivePassthrough(): boolean | undefined {
 	return cachedPassthrough;
 }
 
-/** Test/teardown seam: drop the cached value. */
+/** Session-boundary/teardown seam: drop the cached value. */
 export function resetActivePassthrough(): void {
 	cachedPassthrough = undefined;
 }
@@ -169,7 +199,11 @@ export function getActiveEncodeLiveness(): ActiveEncodeLiveness | undefined {
 	return cachedLiveness;
 }
 
-/** Test/teardown seam: drop the cached liveness telemetry. */
+/**
+ * Session-boundary/teardown seam: drop the cached liveness telemetry. Called by
+ * a fresh stream start so a new session cannot inherit the previous session's
+ * frame counter. NOT a reconnect hook — see the module header.
+ */
 export function resetActiveEncodeLiveness(): void {
 	cachedLiveness = undefined;
 }
@@ -263,6 +297,9 @@ export function startActivePassthroughBridge(
 			} catch {
 				return;
 			}
+			// A genuine session boundary, authored by the engine itself: the stream
+			// is over, so the cached session state describes nothing and is dropped
+			// at once. This is the ONLY mid-run clearing path (see the module header).
 			if (readStreamingFalse(msg)) {
 				cachedPassthrough = undefined;
 				cachedLiveness = undefined;
@@ -286,16 +323,15 @@ export function startActivePassthroughBridge(
 							nl = buffer.indexOf("\n");
 						}
 					},
+					// Losing THIS socket says nothing about the session behind it, so
+					// neither cache is touched — the retained reading ages out through
+					// `health.ts`'s freshness window instead (see the module header).
 					close: () => {
-						cachedPassthrough = undefined;
-						cachedLiveness = undefined;
 						activeSocket = undefined;
 						if (!stopRequested) deps.onEngineReachable(false);
 						scheduleReconnect();
 					},
 					error: () => {
-						cachedPassthrough = undefined;
-						cachedLiveness = undefined;
 						activeSocket = undefined;
 						if (!stopRequested) deps.onEngineReachable(false);
 					},
