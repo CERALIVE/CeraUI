@@ -503,9 +503,34 @@ function resolveSourceName(
 	sources: readonly StreamSource[] | undefined,
 ): string | undefined {
 	if (!sourceId) return undefined;
-	const match = sources?.find((entry) => entry.id === sourceId);
+	const match = findSourceById(sourceId, sources);
 	if (match?.origin === "capture") return match.displayName;
 	return sourceId;
+}
+
+/**
+ * Find the row a source id names, accepting the `previousIds` aliases the
+ * backend publishes when it PROVES (by stable hardware identity) that a device
+ * re-enumerated under a new node path.
+ *
+ * Id PRECEDENCE is deliberately untouched — the engine's `active_input` still
+ * wins over `config.source`, so a source the engine switched to and then lost
+ * still reports lost. Only the LOOKUP is identity-aware, so an id that moved is
+ * distinguished from an id that died instead of the two looking identical.
+ */
+export function findSourceById(
+	sourceId: string | undefined,
+	sources: readonly StreamSource[] | undefined,
+): StreamSource | undefined {
+	if (!sourceId) return undefined;
+	return (
+		sources?.find((entry) => entry.id === sourceId) ??
+		sources?.find(
+			(entry) =>
+				entry.origin === "capture" &&
+				entry.previousIds?.includes(sourceId) === true,
+		)
+	);
 }
 
 /** The `origin` of the active source id in the sources list, or undefined. */
@@ -514,7 +539,7 @@ function resolveSourceOrigin(
 	sources: readonly StreamSource[] | undefined,
 ): StreamSource["origin"] | undefined {
 	if (!sourceId) return undefined;
-	return sources?.find((entry) => entry.id === sourceId)?.origin;
+	return findSourceById(sourceId, sources)?.origin;
 }
 
 /**

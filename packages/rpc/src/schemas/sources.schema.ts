@@ -85,6 +85,12 @@ export const captureSourceSchema = streamSourceBase.extend({
 	// `sourceSignalSchema`). ADDITIVE-OPTIONAL: absent on a legacy backend, which
 	// a consumer must read as `unknown` — never as a negative.
 	signal: sourceSignalSchema.optional(),
+	// Node ids this SAME hardware previously answered to, proven by `stableId`
+	// (a replug renumbers video1→video2 while the engine still holds the old
+	// node). Consumers matching a persisted or engine-reported id must accept
+	// these as aliases, or a device that merely moved reads as one that vanished.
+	// The backend publishes it only on a proven migration — never as a guess.
+	previousIds: z.array(z.string()).optional(),
 });
 export type CaptureStreamSource = z.infer<typeof captureSourceSchema>;
 

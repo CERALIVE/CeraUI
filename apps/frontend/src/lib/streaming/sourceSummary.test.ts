@@ -19,6 +19,7 @@ import {
 	type CapabilitySummary,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
+	findSourceById,
 	formatCodec,
 	groupAudioSources,
 	isExternalAudioSource,
@@ -493,6 +494,70 @@ describe("deriveActiveSummary — source name resolved from the sources list (To
 	it("byte-identical fallback: with no sources list the raw id passes through", () => {
 		const config: ConfigMessage = { selected_video_input: "usb" };
 		expect(deriveActiveSummary(config, null, CAPS).source).toBe("usb");
+	});
+
+	// A mid-stream replug renumbers the node while the engine still holds the old
+	// one, so the engine keeps reporting the RETIRED id. The label must follow the
+	// device, not degrade to a raw path the operator has never seen.
+	it("streaming: resolves a RETIRED node id through the successor's previousIds", () => {
+		const renumbered: CaptureStreamSource = {
+			...RODE_CAPTURE,
+			id: "/dev/video2",
+			devicePath: "/dev/video2",
+			stableId: "usb:19f7:0037",
+			previousIds: ["/dev/video1"],
+		};
+		const activeEncode: ActiveEncode = {
+			codec: "h264",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: "/dev/video1",
+		};
+		expect(
+			deriveActiveSummary({ source: "/dev/video1" }, activeEncode, CAPS, [
+				renumbered,
+			]).source,
+		).toBe("RØDE HDMI to USB-C: RØDE HDMI");
+	});
+});
+
+describe("findSourceById — identity-aware row lookup", () => {
+	const base = {
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		audioKind: "selectable" as const,
+		available: true,
+	};
+
+	const RENUMBERED: CaptureStreamSource = {
+		...base,
+		origin: "capture",
+		id: "/dev/video2",
+		pipelineId: "usb_mjpeg",
+		kind: "mjpeg",
+		displayName: "RØDE HDMI to USB-C: RØDE HDMI",
+		devicePath: "/dev/video2",
+		stableId: "usb:19f7:0037",
+		previousIds: ["/dev/video1"],
+	};
+
+	it("resolves a direct id hit", () => {
+		expect(findSourceById("/dev/video2", [RENUMBERED])?.id).toBe("/dev/video2");
+	});
+
+	it("resolves a retired id through previousIds", () => {
+		expect(findSourceById("/dev/video1", [RENUMBERED])?.id).toBe("/dev/video2");
+	});
+
+	it("returns undefined for an id nothing claims — a genuine loss still reads lost", () => {
+		expect(findSourceById("/dev/video7", [RENUMBERED])).toBeUndefined();
+	});
+
+	it("returns undefined for a missing id or an absent sources list", () => {
+		expect(findSourceById(undefined, [RENUMBERED])).toBeUndefined();
+		expect(findSourceById("/dev/video1", undefined)).toBeUndefined();
 	});
 });
 
