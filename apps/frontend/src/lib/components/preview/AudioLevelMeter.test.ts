@@ -84,6 +84,17 @@ describe("AudioLevelMeter — unavailable state (device-quality-wave2 Todo 22)",
 		expect(marker?.textContent).toContain("No audio device");
 	});
 
+	it("distinguishes a present-but-unmetered device from a missing one", () => {
+		const { container } = render(AudioLevelMeter, {
+			props: { unavailable: true, reason: "not_selected_device" },
+		});
+		const marker = meterOf(container).querySelector(
+			'[data-testid="audio-unavailable"]',
+		);
+		expect(marker?.textContent).toContain("Not the selected device");
+		expect(marker?.textContent).not.toContain("No audio device");
+	});
+
 	it("prefers unavailable over any stale rms/peak arrays (never fake silence)", () => {
 		const { container } = render(AudioLevelMeter, {
 			props: { unavailable: true, rmsDb: [-12], peakDb: [-6] },

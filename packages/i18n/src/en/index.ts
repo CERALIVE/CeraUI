@@ -526,6 +526,7 @@ const en = {
 			audioUnavailableReason: {
 				device_busy: "Audio device busy",
 				no_device: "No audio device",
+				not_selected_device: "Not the selected device",
 				mode_none: "Audio disabled",
 				handoff: "Switching\u2026",
 			},

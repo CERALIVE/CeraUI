@@ -1113,6 +1113,7 @@ const hi = {
 			audioUnavailableReason: {
 				device_busy: "ऑडियो डिवाइस व्यस्त",
 				no_device: "कोई ऑडियो डिवाइस नहीं",
+				not_selected_device: "चयनित डिवाइस नहीं",
 				mode_none: "ऑडियो अक्षम",
 				handoff: "बदल रहा है\u2026",
 			},

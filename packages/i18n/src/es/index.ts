@@ -545,6 +545,7 @@ const es = {
 			audioUnavailableReason: {
 				device_busy: "Dispositivo de audio ocupado",
 				no_device: "Sin dispositivo de audio",
+				not_selected_device: "No es el dispositivo seleccionado",
 				mode_none: "Audio desactivado",
 				handoff: "Cambiando\u2026",
 			},

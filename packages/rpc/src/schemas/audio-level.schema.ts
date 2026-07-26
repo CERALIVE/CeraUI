@@ -17,9 +17,14 @@ export const AUDIO_LEVEL_OWNERS = ['sidecar', 'streaming'] as const;
 export const audioLevelOwnerSchema = z.enum(AUDIO_LEVEL_OWNERS);
 export type AudioLevelOwner = z.infer<typeof audioLevelOwnerSchema>;
 
+// `not_selected_device` is CeraUI's own reason, never emitted by the engine: the
+// backend gate raises it for a level belonging to a different ALSA card than the
+// operator picked, while that pick IS present. `no_device` there claimed the
+// device was gone when it was plugged in and delivering.
 export const AUDIO_LEVEL_UNAVAILABLE_REASONS = [
 	'device_busy',
 	'no_device',
+	'not_selected_device',
 	'mode_none',
 	'handoff',
 ] as const;
