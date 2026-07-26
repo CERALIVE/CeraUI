@@ -300,12 +300,46 @@ fails `No such file or directory`, and the card never appears in the engine's
 embedded audio is therefore unavailable, never noise-that-reads-as-signal; a device that
 DOES deliver audio without video still enumerates, still matches, and still meters.
 
+**A suppressed reading must name the RIGHT gap, and must not be permanent.** The gate
+above is correct to refuse another card's audio; two things about how it did so were
+not. It reported every suppression as `no_device` ("No audio device") — a claim CeraUI
+can prove false, because the selected card was still in its own `/sys/class/sound` list.
+A mis-bound preference was therefore indistinguishable from an unplugged cable, and a
+live investigation went looking for a missing config write that never existed. And it
+never re-tried: the engine's `set_preferred_device` early-returns on an unchanged value,
+so a plain re-push is inert, a card demoted for not delivering during its probe window
+stays demoted while any other candidate keeps delivering, and a preference pushed while
+the card was absent from the engine's registry stays inert. The meter was dead
+indefinitely for a present device, with no recovery short of the operator re-picking.
+
+- `foreignCardReason()` answers `not_selected_device` (additive
+  `AUDIO_LEVEL_UNAVAILABLE_REASONS` member, copy in all 10 locales) when
+  `isMeterPreferenceDevicePresent()` — an `audio.ts` predicate keyed on the PICKER
+  VALUE, not the resolved ALSA string — says CeraUI still lists the pick. A selection
+  CeraUI can no longer see keeps `no_device`, unchanged. Keying on the picker value is
+  deliberate: a pick that is not a device-map key resolves through the alias fallback to
+  a card CeraUI cannot vouch for, and must not claim presence.
+- `noteForeignCardLevel()` re-asserts the preference **through `null`** — the only way
+  to make the value change, so the engine clears its demotions and re-probes — after
+  `AUDIO_METER_MISMATCH_GRACE_MS` (5 s) of uninterrupted foreign readings, at most once
+  per `AUDIO_METER_REASSERT_INTERVAL_MS` (30 s). Bounded on both sides so a mismatch
+  that is simply permanent (a selected card with no capture PCM) costs one cheap reload
+  pair per interval and never a loop. One `warn` per episode names the selected card;
+  the live investigation had zero signal because nothing was logged at all.
+
+The gate itself is unchanged: a level whose `source.identity` names a different card
+than the preference is still dropped. Only the reason string and the retry behaviour
+moved. `AudioLevelMeter` needed no change — it already indexes
+`$LL.live.preview.audioUnavailableReason[reason]()`.
+
 Coverage: `tests/audio-meter-bridge.test.ts` (push on connect, `null` for Auto, re-push
 on change, nothing sent to a pre-0.9.0 engine, a refused reload leaves levels flowing,
 no-op while down, the schema gate, plus the foreign-card gate: suppressed mismatch,
-untouched match, never-gated Auto/identity-less, passthrough `unavailable`, and the
-`alsaCardKey`/`isForeignCardLevel` unit table) and `tests/audio-sources.test.ts`
-(`resolveMeterPreference` — alias, no-alias, every `null` case, selector passthrough).
+untouched match, never-gated Auto/identity-less, passthrough `unavailable`, the
+`alsaCardKey`/`isForeignCardLevel` unit table, and the reason/re-assert behaviour:
+`not_selected_device` vs `no_device`, the grace window, the interval floor, and the
+run reset) and `tests/audio-sources.test.ts` (`resolveMeterPreference` — alias,
+no-alias, every `null` case, selector passthrough).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
@@ -1314,6 +1348,7 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
   update guards at a call site — `startSoftwareUpdate()` owns every refusal and
   always names it (see SOFTWARE-UPDATE START CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
+- Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it
