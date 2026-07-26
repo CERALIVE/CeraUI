@@ -48,6 +48,7 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 	const reloads: unknown[] = [];
 	let preference: string | null = "hw:CARD=usbaudio";
 	let preferencePresent = false;
+	let silenced = false;
 	let clock = 1_000;
 	let reloadRejects = false;
 
@@ -87,6 +88,7 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		broadcast: (payload) => broadcasts.push(payload),
 		meterPreference: () => preference,
 		meterPreferencePresent: () => preferencePresent,
+		meterSilenced: () => silenced,
 		logger: silent,
 		random: () => 0.5,
 		now: () => clock,
@@ -115,6 +117,9 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		},
 		setPreferencePresent: (next: boolean) => {
 			preferencePresent = next;
+		},
+		setSilenced: (next: boolean) => {
+			silenced = next;
 		},
 		advance: async (ms: number) => {
 			clock += ms;
@@ -495,6 +500,161 @@ describe("audio-meter bridge — a stuck preference is re-asserted, bounded", ()
 		h.setPreference("hw:CARD=Rx");
 		h.emit(foreign);
 		expect(h.broadcasts.at(-1)).toEqual(toAudioLevelMessage(foreign));
+	});
+});
+
+// The Wave H board bug (live QA, 2026-07-26): with "No audio" selected the meter
+// drew ACTIVE green bars for several seconds. "No audio" and "Auto" both resolve
+// to a `null` meter preference, so the foreign-card gate was never armed for the
+// one pick that means "meter nothing" — and `null` on the wire tells the engine
+// to auto-pick, so those bars were another card's real, moving audio.
+describe("audio-meter bridge — an explicit `No audio` pick meters NOTHING", () => {
+	test("reports the silenced pick instead of the card the engine auto-picked", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		h.setSilenced(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.broadcasts.length = 0;
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+
+	test("outranks the engine's own gap reason — the operator asked for silence", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		h.setSilenced(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.broadcasts.length = 0;
+
+		h.emit({ ...unavailableEvent, reason: "device_busy" });
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+
+	test("leaves `Auto` untouched — the same null preference, the opposite meaning", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		h.setSilenced(false);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.broadcasts.length = 0;
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toEqual([toAudioLevelMessage(levelEvent)]);
+	});
+
+	test("never re-asserts a preference for a pick that wants no meter at all", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		h.setSilenced(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.reloads.length = 0;
+
+		h.emit(levelEvent);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS * 4);
+		h.emit(levelEvent);
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+	});
+});
+
+// Same live report, second half: the bars were the PREVIOUS device's. Every gate
+// above acts on the NEXT engine frame, and the engine needs a moment to re-point
+// its sidecar, so the switch window kept rendering a reading that no longer
+// belonged to the pick on screen.
+describe("audio-meter bridge — a pick change retires the level on screen at once", () => {
+	async function connected() {
+		const h = harness([true]);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+		h.broadcasts.length = 0;
+		return h;
+	}
+
+	test("publishes a switching gap before any new engine frame arrives", async () => {
+		const h = await connected();
+
+		h.setPreference("hw:CARD=MINI");
+		syncAudioMeterPreference();
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "handoff" }]);
+	});
+
+	test("publishes the silenced state when the new pick is `No audio`", async () => {
+		const h = await connected();
+
+		h.setPreference(null);
+		h.setSilenced(true);
+		syncAudioMeterPreference();
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+
+	test("sees an Auto → No audio switch that the preference alone cannot", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+		h.broadcasts.length = 0;
+
+		h.setSilenced(true);
+		syncAudioMeterPreference();
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+
+	test("stays silent when a re-enumeration re-syncs an UNCHANGED pick", async () => {
+		const h = await connected();
+
+		syncAudioMeterPreference();
+		await settleAudioMeterBridge();
+
+		expect(h.broadcasts).toEqual([]);
+	});
+
+	test("never blanks the meter on the first connect — nothing has been shown yet", async () => {
+		const h = harness([true]);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		expect(h.broadcasts).toEqual([]);
+	});
+
+	test("retires the stale reading even while the engine is unreachable", async () => {
+		const h = harness([false]);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+
+		syncAudioMeterPreference();
+		h.setPreference("hw:CARD=MINI");
+		syncAudioMeterPreference();
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "handoff" }]);
+	});
+
+	test("hands the meter straight back to the new device's first real level", async () => {
+		const h = await connected();
+
+		h.setPreference("hw:CARD=MINI");
+		syncAudioMeterPreference();
+		await settleAudioMeterBridge();
+
+		const fromNewCard = {
+			...levelEvent,
+			source: { identity: "card:MINI", owner: "sidecar" as const },
+		};
+		h.emit(fromNewCard);
+
+		expect(h.broadcasts.at(-1)).toEqual(toAudioLevelMessage(fromNewCard));
 	});
 });
 

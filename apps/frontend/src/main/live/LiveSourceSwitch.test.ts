@@ -102,7 +102,7 @@ function renderSwitch(
 }
 
 describe("LiveSourceSwitch — R7-2: capture rows + switch semantics", () => {
-	it("renders one row per capture with the active row disabled + labeled Active", () => {
+	it("renders one row per capture; the active row states Active with no Switch button", () => {
 		const { container } = renderSwitch({
 			sources: makeSources(
 				capture("cam-1", "HDMI Capture"),
@@ -116,17 +116,45 @@ describe("LiveSourceSwitch — R7-2: capture rows + switch semantics", () => {
 			container.querySelector('[data-testid="live-source-switch"]'),
 		).not.toBeNull();
 
-		const activeBtn = container.querySelector<HTMLButtonElement>(
-			'[data-switch-input="cam-1"]',
+		// The running row offers NO action — switching to the source already on air
+		// is a no-op. It carries SourceSection's selected-row affirmation instead.
+		expect(container.querySelector('[data-switch-input="cam-1"]')).toBeNull();
+		const activeBadge = container.querySelector(
+			'[data-testid="source-selected-cam-1"]',
 		);
-		expect(activeBtn?.disabled).toBe(true);
-		expect(activeBtn?.textContent?.trim()).toBe("Active");
+		expect(activeBadge).not.toBeNull();
+		expect(activeBadge?.textContent?.trim()).toBe("Active");
 
 		const otherBtn = container.querySelector<HTMLButtonElement>(
 			'[data-switch-input="cam-2"]',
 		);
 		expect(otherBtn?.disabled).toBe(false);
 		expect(otherBtn?.textContent?.trim()).toBe("Switch");
+		expect(
+			container.querySelector('[data-testid="source-selected-cam-2"]'),
+		).toBeNull();
+		expect(container.querySelectorAll("[data-switch-input]").length).toBe(1);
+	});
+
+	it("resolves the active row from the RUNNING source, not the activeInput prop", () => {
+		// The engine's active_encode names the running leg; the `activeInput` prop is
+		// absent (the state live QA hit, where every row rendered its own Switch).
+		const { container } = renderSwitch({
+			sources: makeSources(
+				capture("cam-1", "HDMI Capture"),
+				capture("cam-2", "USB Cam"),
+			),
+			runningId: "cam-2",
+		});
+
+		expect(
+			container.querySelector('[data-testid="source-selected-cam-2"]'),
+		).not.toBeNull();
+		expect(container.querySelector('[data-switch-input="cam-2"]')).toBeNull();
+		expect(
+			container.querySelector<HTMLButtonElement>('[data-switch-input="cam-1"]')
+				?.disabled,
+		).toBe(false);
 	});
 
 	it("dispatches onSwitch when a non-active row is clicked", async () => {
@@ -159,6 +187,24 @@ describe("LiveSourceSwitch — R7-2: capture rows + switch semantics", () => {
 		);
 		expect(btn?.disabled).toBe(true);
 		expect(btn?.textContent?.trim()).toBe("Switching\u2026");
+	});
+
+	it("withholds the Active affirmation from a running source that was LOST", () => {
+		const { container } = renderSwitch({
+			sources: makeSources(
+				{ ...capture("cam-1", "HDMI Capture"), lost: true },
+				capture("cam-2", "USB Cam"),
+			),
+			runningId: "cam-1",
+			activeInput: "cam-1",
+		});
+		expect(
+			container.querySelector('[data-testid="source-selected-cam-1"]'),
+		).toBeNull();
+		expect(
+			container.querySelector<HTMLButtonElement>('[data-switch-input="cam-1"]')
+				?.disabled,
+		).toBe(true);
 	});
 
 	it("renders NOTHING with fewer than 2 capture sources", () => {
@@ -205,7 +251,7 @@ describe("LiveSourceSwitch — R8-1: absent for non-capture running sources", ()
 		expect(container.querySelectorAll("[data-switch-input]").length).toBe(0);
 	});
 
-	it("running source is capture → card renders with two switch buttons", () => {
+	it("running source is capture → card renders, offering the OTHER capture only", () => {
 		const { container } = renderSwitch({
 			sources: makeSources(
 				capture("cam-1", "HDMI Capture"),
@@ -217,6 +263,12 @@ describe("LiveSourceSwitch — R8-1: absent for non-capture running sources", ()
 		expect(
 			container.querySelector('[data-testid="live-source-switch"]'),
 		).not.toBeNull();
-		expect(container.querySelectorAll("[data-switch-input]").length).toBe(2);
+		expect(container.querySelectorAll("[data-switch-input]").length).toBe(1);
+		expect(
+			container.querySelector('[data-switch-input="cam-2"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-selected-cam-1"]'),
+		).not.toBeNull();
 	});
 });

@@ -44,6 +44,7 @@ vi.mock("$lib/rpc", () => ({
 // meter's own states are covered by LiveAudioMeter.test.ts.
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAudioLevel: () => undefined,
+	getConfig: () => undefined,
 }));
 
 import {

@@ -8,6 +8,7 @@ let currentLevel: AudioLevelMessage | undefined;
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAudioLevel: () => currentLevel,
+	getConfig: () => undefined,
 }));
 
 import LiveAudioMeter from "./LiveAudioMeter.svelte";

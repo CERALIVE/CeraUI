@@ -32,6 +32,7 @@ import { describe, expect, it, vi } from "vitest";
 // states are covered by LiveAudioMeter.test.ts.
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAudioLevel: () => undefined,
+	getConfig: () => undefined,
 }));
 
 import {

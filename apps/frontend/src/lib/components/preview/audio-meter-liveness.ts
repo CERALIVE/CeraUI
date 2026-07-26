@@ -138,6 +138,67 @@ export function trackMeterFreshness(
 }
 
 /**
+ * The audio pick a rendered level belongs to, plus the one frame that is known
+ * to predate the current pick.
+ *
+ * `observed` distinguishes "no pick seen yet" from a genuinely unset `asrc`;
+ * without it the first render would supersede its own first frame.
+ */
+export interface MeterSelectionGate {
+	readonly selection: string | undefined;
+	readonly observed: boolean;
+	readonly supersededLevel: AudioLevelMessage | undefined;
+}
+
+export const INITIAL_METER_SELECTION_GATE: MeterSelectionGate = {
+	selection: undefined,
+	observed: false,
+	supersededLevel: undefined,
+};
+
+/**
+ * Retire the on-screen level the instant the operator's audio pick changes.
+ *
+ * The level standing at that moment was measured for the PREVIOUS pick, and
+ * nothing replaces it until the backend's next broadcast — so without this the
+ * old device's bars keep rendering under the new selection's label. It holds a
+ * single frame by REFERENCE (every broadcast is a fresh object, so identity is
+ * an exact "this is the frame I already had") rather than a timer, which is why
+ * it releases on the very next frame however fast or slow that arrives.
+ *
+ * Deliberately a one-frame gate, not a mute: the meter is a preference, not a
+ * pin, so a pick that is merely being re-evaluated shows real data again the
+ * moment the backend has any.
+ */
+export function trackMeterSelection(
+	previous: MeterSelectionGate,
+	selection: string | undefined,
+	level: AudioLevelMessage | undefined,
+): MeterSelectionGate {
+	if (!previous.observed) {
+		return { selection, observed: true, supersededLevel: undefined };
+	}
+	if (previous.selection !== selection) {
+		return { selection, observed: true, supersededLevel: level };
+	}
+	if (
+		previous.supersededLevel !== undefined &&
+		level !== previous.supersededLevel
+	) {
+		return { ...previous, supersededLevel: undefined };
+	}
+	return previous;
+}
+
+/** Is this level the one the current pick has already invalidated? */
+export function isLevelSuperseded(
+	gate: MeterSelectionGate,
+	level: AudioLevelMessage | undefined,
+): boolean {
+	return level !== undefined && level === gate.supersededLevel;
+}
+
+/**
  * Has the meter gone quiet — no NEW information for `staleMs`? False until the
  * first frame has ever landed (`lastChangedAt === 0`), which is the distinct
  * `pending` state the component renders instead.
