@@ -155,3 +155,9 @@ See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full 
 ## License
 
 GPL-3.0. See the [LICENSE](LICENSE) file for details.
+## Start-failure diagnostics
+
+Terminal start failures retain the engine's original diagnostic `message` beside
+the typed class/code. It is logged and carried in notification params, and the
+frontend includes it in the operator-facing failure toast, so JSON-RPC reasons
+such as an unavailable ALSA capture device are not reduced to `-32602` alone.

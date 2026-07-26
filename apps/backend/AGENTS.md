@@ -1499,3 +1499,12 @@ Coverage: `tests/netif-throughput-rate.test.ts`.
 - Don't leave a re-enumerated `config.source`/`config.asrc` unrepaired, and don't repair either by name, slot, or "whichever id resolves" — migration is by STABLE IDENTITY only (`reconcileConfiguredSourceIdentity` / `reconcileConfiguredAudioIdentity`), and the retired id must be published as `previousIds` so consumers can tell MOVED from GONE.
 - Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one.
 - Don't assert a GLOBAL call count on a process-wide seam like `helpers/run.ts` — `bun test` loads every file into ONE process, and background work started by an earlier file keeps issuing OS commands. `wifiUpdateDevices()` is the known offender: while any Wi-Fi adapter reads unavailable it re-arms itself every 3 s for a five-minute budget (`modules/wifi/wifi-interfaces.ts`), firing several `run("nmcli", …)` calls per pass. Filter the spy's calls to the binary under test instead (`logs-injection.test.ts`), which asserts the same property and cannot be flipped by a foreign command.
+## START-FAILURE DIAGNOSTICS [EXISTS]
+
+The typed `StartFailure` contract preserves the optional original diagnostic
+`message` alongside its stable `class` and `code`. `classifyStartFailure()` keeps
+cerastream JSON-RPC messages (including invalid-params `-32602` and internal
+`-32603` responses) generic and engine-authored; retry/terminal diagnostics and
+notification params carry the field to logs, and the frontend appends it to the
+localized start-failure toast. Do not replace this with an engine-code-specific
+or HDMI-specific mapping — the message is the generic diagnostic surface.
