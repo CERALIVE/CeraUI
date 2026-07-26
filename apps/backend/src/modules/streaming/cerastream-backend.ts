@@ -31,6 +31,38 @@
 // never spawns it, so `start`/`stop` drive the pipeline over IPC rather than an OS
 // process. Every effectful collaborator is injected (`CerastreamBackendDeps`) so
 // the contract suite drives a real backend against an in-memory fake client.
+//
+// THE SESSION-SCOPED CONTROL CONNECTION *IS* THE SESSION.
+//
+// `this.client` is opened once, in `start()`, and held for the session's whole
+// lifetime. The published `@ceralive/cerastream` client is dialled with
+// `autoReconnect` at its default (false) and exposes NO close/error event, no
+// `isConnected()`, and no `reconnect()` — so once its Unix socket drops, that
+// instance is permanently unusable and every later call rejects with
+// `CerastreamConnectionError("control connection is not open")`. Only a fresh
+// `connect()` produces a usable client.
+//
+// That is the OPPOSITE of the rule the raw `active_encode` bridge follows
+// (`active-passthrough.ts`): there the socket is a READER, so losing it says
+// nothing about the session and its caches must age out instead of being wiped.
+// Here the socket is the ONLY handle CeraUI has on the engine-side pipeline, and
+// cerastream is systemd-owned — a dropped control connection means the process we
+// were driving went away, and a restarted engine has no memory of the session.
+// So a proven-dead control connection IS a session boundary and must retire the
+// session. Confirmed live during Wave H: cerastream restarted mid-session, three
+// `switchInput` calls rejected with `control connection is not open`, and nothing
+// ever noticed — `is_streaming` stayed true, `reconcileRuntimeState()` kept
+// re-affirming "streaming" from stale telemetry (it trusts `this.client !==
+// undefined` as proof of a live session), and every later action failed until the
+// whole backend process was restarted.
+//
+// `noteConnectionLoss()` is the one seam that acts on it: it drops the dead
+// client + subscription + telemetry and hands off to `onSessionConnectionLost`,
+// whose production wiring raises the existing `engine-crashed` indicator and
+// retires the session through the orchestrator — so the device lands in a real
+// `idle` and the NEXT `streaming.start` dials a fresh connection and succeeds.
+// It is proven ONLY by a `CerastreamConnectionError` from the CURRENT session's
+// client (never a guess, never an engine RPC error, never a timeout).
 
 import { existsSync } from "node:fs";
 import {
@@ -146,6 +178,9 @@ export interface CerastreamBackendDeps {
 		delayMs: number,
 	) => ReturnType<typeof setTimeout>;
 	cancelTimeout: (timer: ReturnType<typeof setTimeout>) => void;
+	// Called at most ONCE per session, when the session's control connection is
+	// PROVEN dead (see the module header). `site` names the call that found it.
+	onSessionConnectionLost: (site: string) => void;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -354,6 +389,44 @@ export type StartParamsWithAudioMode = z.infer<
 	typeof startParamsWithAudioModeSchema
 >;
 
+/**
+ * Production reaction to a proven-dead session control connection: raise the
+ * existing `engine-crashed` indicator, then retire the session through its single
+ * owner (the orchestrator) so the device lands in a real `idle`.
+ *
+ * Order is load-bearing — `reportEngineState` is gated on `isStreaming` inside
+ * the reporter, so it has to run BEFORE the stop clears that flag or the operator
+ * is never told why their stream ended.
+ *
+ * Fire-and-forget by design: this runs from inside a rejected RPC's catch, and a
+ * teardown failure must never replace the error the caller is already handling.
+ * Imports are dynamic to keep the session/lifecycle graph off this module's load
+ * path (same posture as `defaultBridge`).
+ */
+function defaultOnSessionConnectionLost(site: string): void {
+	void (async () => {
+		try {
+			const [{ stopStreamSession }, { reportEngineState }, { getIsStreaming }] =
+				await Promise.all([
+					import("./stream-session-orchestrator.ts"),
+					import("./lifecycle-indicators.ts"),
+					import("./streaming.ts"),
+				]);
+			reportEngineState({ isStreaming: getIsStreaming(), reachable: false });
+			const stopped = await stopStreamSession();
+			defaultLogger.warn(
+				"cerastream: engine session retired after a control-connection loss",
+				{ site, stop: stopped.result },
+			);
+		} catch (err) {
+			defaultLogger.error(
+				"cerastream: could not retire the session after a control-connection loss",
+				{ site, err },
+			);
+		}
+	})();
+}
+
 function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 	return {
 		connect,
@@ -370,6 +443,7 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		isEmbeddedAudioActive: isEmbeddedAudioPipeline,
 		scheduleTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
 		cancelTimeout: (timer) => clearTimeout(timer),
+		onSessionConnectionLost: defaultOnSessionConnectionLost,
 	};
 }
 
@@ -778,11 +852,15 @@ export class CerastreamBackend implements StreamingBackend {
 	// ---- additive cerastream-only RPC passthroughs (NOT on the frozen seam) ----
 
 	async switchInput(params: SwitchInputParams): Promise<SwitchInputResult> {
-		return this.requireClient().switchInput(params);
+		return this.withSessionClient("switch-input", (client) =>
+			client.switchInput(params),
+		);
 	}
 
 	async listDevices(params?: ListDevicesParams): Promise<ListDevicesResult> {
-		return this.requireClient().listDevices(params);
+		return this.withSessionClient("list-devices", (client) =>
+			client.listDevices(params),
+		);
 	}
 
 	/**
@@ -801,6 +879,10 @@ export class CerastreamBackend implements StreamingBackend {
 			this.deps.logger.debug("cerastream: registry listDevices failed", {
 				err,
 			});
+			// `devices.ts` re-polls this every couple of seconds for the whole
+			// session, so it is the first call to touch a dead control connection —
+			// which makes detection proactive with no watchdog timer to mis-fire.
+			this.noteConnectionLoss(client, err, "list-devices-poll");
 			return null;
 		}
 	}
@@ -811,28 +893,32 @@ export class CerastreamBackend implements StreamingBackend {
 	// ends with the bindings' exported schemas so the call stays contract-safe.
 	async switchAudio(params: SwitchAudioParams): Promise<SwitchAudioResult> {
 		const parsed = switchAudioParamsSchema.parse(params);
-		const client = this.requireClient() as unknown as {
-			rawRequest(method: string, params?: unknown): Promise<unknown>;
-		};
-		const raw = await client.rawRequest("switch-audio", parsed);
+		const raw = await this.withSessionClient("switch-audio", (client) =>
+			(
+				client as unknown as {
+					rawRequest(method: string, params?: unknown): Promise<unknown>;
+				}
+			).rawRequest("switch-audio", parsed),
+		);
 		return switchAudioResultSchema.parse(raw);
 	}
 
 	async reloadAudioDelay(delayMs: number): Promise<ReloadConfigResult> {
-		const client = this.requireClient();
-		if (supportsSignedReloadDelay(client.hello.schema_version)) {
-			return client.reloadConfig({ audio: { delay_ms_signed: delayMs } });
-		}
-		const applied = Math.max(0, delayMs);
-		this.deps.logger.info(
-			"cerastream: engine schema_version < 0.4.0 — sending legacy unsigned audio.delay_ms (clamped to >= 0)",
-			{
-				schemaVersion: client.hello.schema_version,
-				requested: delayMs,
-				applied,
-			},
-		);
-		return client.reloadConfig({ audio: { delay_ms: applied } });
+		return this.withSessionClient("reload-audio-delay", (client) => {
+			if (supportsSignedReloadDelay(client.hello.schema_version)) {
+				return client.reloadConfig({ audio: { delay_ms_signed: delayMs } });
+			}
+			const applied = Math.max(0, delayMs);
+			this.deps.logger.info(
+				"cerastream: engine schema_version < 0.4.0 — sending legacy unsigned audio.delay_ms (clamped to >= 0)",
+				{
+					schemaVersion: client.hello.schema_version,
+					requested: delayMs,
+					applied,
+				},
+			);
+			return client.reloadConfig({ audio: { delay_ms: applied } });
+		});
 	}
 
 	/** Test seam: resolve once every queued IPC op has settled. */
@@ -941,7 +1027,70 @@ export class CerastreamBackend implements StreamingBackend {
 			this.active = false;
 			this.client = undefined;
 			this.subscription = undefined;
+			return;
 		}
+		this.noteConnectionLoss(this.client, err, label);
+	}
+
+	/**
+	 * Run one session-scoped RPC and, when it fails because the control
+	 * connection is gone, retire the session before re-throwing. The caller still
+	 * sees its original error — this only adds the state change that was missing.
+	 */
+	private async withSessionClient<Result>(
+		site: string,
+		op: (client: CerastreamClient) => Promise<Result>,
+	): Promise<Result> {
+		const client = this.requireClient();
+		try {
+			return await op(client);
+		} catch (error) {
+			this.noteConnectionLoss(client, error, site);
+			throw error;
+		}
+	}
+
+	/**
+	 * Act on PROOF that the session's control connection is dead — a
+	 * `CerastreamConnectionError` raised by the client we are still holding for a
+	 * session we still believe is active. Anything else (an engine RPC error, a
+	 * request timeout, a rejection from an already-superseded client, a rejection
+	 * during our own `stop()`) is deliberately NOT proof and is ignored.
+	 *
+	 * The dead client is dropped FIRST: `this.client !== undefined` is what
+	 * `reconcileRuntimeState()` trusts as evidence of a live session, so leaving
+	 * it in place is exactly how a phantom "streaming" state kept re-affirming
+	 * itself from stale telemetry. Dropping it also makes the next reconcile do a
+	 * real probe, and makes every later session call fail fast and loudly instead
+	 * of re-dispatching onto a socket that will never answer.
+	 *
+	 * `active` is deliberately LEFT SET so `stop()` still recognises the session
+	 * it has to tear down (srtla_send is still running and still sending nothing).
+	 */
+	private noteConnectionLoss(
+		client: CerastreamClient | undefined,
+		error: unknown,
+		site: string,
+	): void {
+		if (!(error instanceof CerastreamConnectionError)) return;
+		if (client === undefined || client !== this.client) return;
+		if (!this.active) return;
+
+		this.deps.logger.error(
+			"cerastream: session control connection lost; retiring the engine session",
+			{ site, code: error.code, message: error.message },
+		);
+
+		try {
+			this.subscription?.close();
+		} catch {
+			// The subscription rides the same dead socket; closing it is best-effort.
+		}
+		this.subscription = undefined;
+		this.client = undefined;
+		this.telemetry = null;
+		this.deps.bridge.broadcastStatus();
+		this.deps.onSessionConnectionLost(site);
 	}
 
 	/**
