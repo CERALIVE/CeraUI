@@ -12,9 +12,22 @@
   states, so a missing feed shows the meter's own "unavailable" copy rather than
   vanishing: an operator must be able to tell "the meter says nothing is coming in"
   apart from "the meter isn't here".
+
+  The staleness watchdog keys on CONTENT, not arrival — see
+  `audio-meter-liveness.ts` for why a frame landing is not evidence the audio path
+  behind it is alive.
 -->
 <script lang="ts">
+import { untrack } from 'svelte';
+
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
+import {
+	AUDIO_METER_TICK_MS,
+	INITIAL_METER_FRESHNESS,
+	isMeterStale,
+	type MeterFreshness,
+	trackMeterFreshness,
+} from '$lib/components/preview/audio-meter-liveness';
 import { getAudioLevel } from '$lib/rpc/subscriptions.svelte';
 import { cn } from '$lib/utils';
 
@@ -24,22 +37,22 @@ interface Props {
 
 const { class: className = undefined }: Props = $props();
 
-// Staleness deadline: the engine sidecar emits at ≤10Hz (≥100ms). If no frame
-// arrives for this long the source has stalled (cerastream killed/crashed, the
-// bridge dropped) — fall to `unavailable`, NEVER frozen stale bars showing a
-// last-known level. Comfortably above the cadence so a normal gap never trips it.
-const STALE_MS = 2000;
-const TICK_MS = 500;
-
 const level = $derived(getAudioLevel());
 
-let lastAt = $state(0);
+let freshness = $state<MeterFreshness>(INITIAL_METER_FRESHNESS);
 let now = $state(0);
 
-// Record arrival time on every new frame (each broadcast is a fresh object, so the
-// `level` reference changes per event — the effect re-runs and stamps lastAt).
+// Advance the liveness clock on new INFORMATION, never on arrival. Every
+// broadcast is a fresh object, so stamping here on each event proved only that
+// frames were flowing — which stays true for a device that keeps clocking ALSA
+// buffers of frozen content, and for the engine replaying its cached last
+// observation to a reconnecting subscriber. `trackMeterFreshness` returns the
+// previous state unchanged for a repeat, so the assignment is then a no-op.
 $effect(() => {
-	if (level !== undefined) lastAt = Date.now();
+	const current = level;
+	untrack(() => {
+		freshness = trackMeterFreshness(freshness, current, Date.now());
+	});
 });
 
 // Independent clock so staleness resolves even while no frame arrives.
@@ -47,11 +60,11 @@ $effect(() => {
 	now = Date.now();
 	const id = setInterval(() => {
 		now = Date.now();
-	}, TICK_MS);
+	}, AUDIO_METER_TICK_MS);
 	return () => clearInterval(id);
 });
 
-const stale = $derived(level !== undefined && lastAt > 0 && now - lastAt > STALE_MS);
+const stale = $derived(isMeterStale(freshness, now));
 // No frame has EVER arrived (engine down, bridge not up yet). Distinct from
 // `stale`, and from an engine-sent `unavailable` marker that carries a reason.
 const pending = $derived(level === undefined);
