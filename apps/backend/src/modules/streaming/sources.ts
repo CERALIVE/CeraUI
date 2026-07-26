@@ -804,10 +804,10 @@ function rememberEngineVideoDevices(devices: readonly CaptureDevice[]): void {
 }
 
 /**
- * Restore the last engine-authored row for an observed video device the current
- * probe cannot speak for — the same rule as "a probe entry matching an observed
- * `input_id` wins outright", applied to a REMEMBERED probe entry when there is
- * no current one.
+ * Restore the last engine-authored IDENTITY for an observed video device the
+ * current probe cannot speak for — the same rule as "a probe entry matching an
+ * observed `input_id` wins outright", applied to a REMEMBERED probe entry when
+ * there is no current one.
  *
  * GUARDED BY DISPLAY NAME, not by `input_id` alone: the kernel recycles node
  * paths, so `/dev/video1` after an unplug may be a different device entirely,
@@ -816,6 +816,18 @@ function rememberEngineVideoDevices(devices: readonly CaptureDevice[]): void {
  * where `/sys/class/video4linux/video1/name` and the engine's `display_name` are
  * byte-identical — so an equal name is real evidence of the same device, and an
  * unequal one leaves the observation exactly as it was.
+ *
+ * IDENTITY ONLY — never the remembered `caps`/`signal`. What the scan cannot
+ * supply is WHAT this device IS: `deriveKind()` calls a UVC dongle `usb`, which
+ * bridges to no pipeline, so its row is dropped (#219). `kind`/`stable_id` are
+ * properties of the hardware; `caps` and the `signal` projected from them are one
+ * probe's reading of what the cable carried when it was asked. Re-asserting those
+ * for a device the CURRENT probe did not mention republishes a past answer as a
+ * present one — an input that loses its signal and drops out of `list-devices`
+ * then claims `signal: 'present'` forever, because the payload never changes and
+ * `broadcastSourcesIfChanged` correctly stays silent. Same provenance rule
+ * `fromEngineDevice` states: a row the engine did not confirm THIS time carries no
+ * caps because nothing probed it, which reads `unknown` — not a stale `present`.
  */
 function withKnownEngineMetadata(
 	observed: CaptureDevice,
@@ -825,7 +837,13 @@ function withKnownEngineMetadata(
 	const remembered = known.get(observed.input_id);
 	if (remembered === undefined) return observed;
 	if (remembered.display_name !== observed.display_name) return observed;
-	return { ...remembered };
+	return {
+		...observed,
+		kind: remembered.kind,
+		...(remembered.stable_id !== undefined
+			? { stable_id: remembered.stable_id }
+			: {}),
+	};
 }
 
 /** Make a device list the current view, remembering every device it proves live. */
@@ -1106,6 +1124,8 @@ export async function refreshSourcesForHotplug(
 	broadcastSources();
 }
 
+let signalRecheckInFlight = false;
+
 /**
  * Re-probe the engine for devices whose SIGNAL may have changed while their
  * identity did not.
@@ -1122,14 +1142,39 @@ export async function refreshSourcesForHotplug(
  * identically.
  *
  * Membership, metadata and the generation fence follow `refreshSourcesForHotplug`
- * verbatim. The ONE deliberate divergence: a probe that says nothing changes
- * nothing. This tick carries no detected transition to publish, so falling back
- * to `observed` the way a hotplug tick must would republish a coarse guess over
- * the engine's last real answer for no reason at all.
+ * verbatim, with TWO deliberate divergences.
+ *
+ * A probe that says nothing changes nothing. This tick carries no detected
+ * transition to publish, so falling back to `observed` the way a hotplug tick
+ * must would republish a coarse guess over the engine's last real answer for no
+ * reason at all.
+ *
+ * And a tick that finds one already in flight yields instead of starting a
+ * second. Unlike a hotplug refresh this one fires unconditionally on a fixed
+ * interval, so it is the one caller that can supersede ITSELF: a probe slower
+ * than the interval is fenced out by the very next tick, whose probe is fenced
+ * out by the one after it, and the loop publishes nothing for as long as the
+ * engine stays slow. An enumeration is exactly what gets slow when a receiver
+ * loses its link (the kernel re-runs the DV-timings query against a retraining
+ * PHY), so the direction this exists to report is the direction that starves it.
+ * Yielding keeps a single probe in flight and guarantees its answer is published.
  */
 export async function recheckSourceSignals(
 	observed: readonly CaptureDevice[],
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+): Promise<void> {
+	if (signalRecheckInFlight) return;
+	signalRecheckInFlight = true;
+	try {
+		await runSignalRecheck(observed, deps);
+	} finally {
+		signalRecheckInFlight = false;
+	}
+}
+
+async function runSignalRecheck(
+	observed: readonly CaptureDevice[],
+	deps: EngineDeviceCacheDeps,
 ): Promise<void> {
 	const generation = ++hotplugRefreshGeneration;
 	const probe = await probeEngineDevices(deps);

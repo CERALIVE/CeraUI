@@ -1137,9 +1137,9 @@ const ar = {
 				audio_source_unavailable: "مدخل الصوت المحدد غير متوفر.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1525,7 +1525,7 @@ const ar = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"فشل بدء البث التلقائي: لم تتوفر روابط شبكة بعد {attempt}/{maxAttempts} فحوصات. افحص journalctl -u ceralive.service.",
+			"فشل بدء البث التلقائي: لم تتوفر روابط شبكة بعد {attempt}/{maxAttempts} فحوصات. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartEngineUnavailableRetrying:
 			"محرك البث غير متاح — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -1533,17 +1533,17 @@ const ar = {
 		streamStartTimeoutRetrying:
 			"لم يستجب محرك البث في الوقت المحدد — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"فشل بدء البث: المحرك غير متاح ({attempt}/{maxAttempts} محاولات). افحص journalctl -u cerastream.service.",
+			"فشل بدء البث: المحرك غير متاح ({attempt}/{maxAttempts} محاولات). افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartEngineRestartingFailed:
-			"فشل بدء البث: استمر المحرك في إعادة التشغيل ({attempt}/{maxAttempts} محاولات). افحص journalctl -u cerastream.service.",
+			"فشل بدء البث: استمر المحرك في إعادة التشغيل ({attempt}/{maxAttempts} محاولات). افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartTimeoutFailed:
-			"فشل بدء البث: انتهت مهلة المحرك ({attempt}/{maxAttempts} محاولات). افحص journalctl -u cerastream.service.",
+			"فشل بدء البث: انتهت مهلة المحرك ({attempt}/{maxAttempts} محاولات). افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartInvalidFailed:
-			"فشل بدء البث: الإعداد أو الجهاز غير صالح. افحص journalctl -u cerastream.service.",
+			"فشل بدء البث: الإعداد أو الجهاز غير صالح. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartProtocolFailed:
-			"فشل بدء البث: بروتوكول المحرك غير متوافق. افحص journalctl -u cerastream.service.",
+			"فشل بدء البث: بروتوكول المحرك غير متوافق. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartInternalFailed:
-			"فشل بدء البث: خطأ داخلي في المحرك. افحص journalctl -u cerastream.service.",
+			"فشل بدء البث: خطأ داخلي في المحرك. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartAudioSourceUnavailableFailed:
 			"فشل بدء البث: مدخل الصوت المحدد غير متوفر. أعد توصيله أو اختر مصدر صوت آخر.",
 		ceraliveUpdateAvailable:

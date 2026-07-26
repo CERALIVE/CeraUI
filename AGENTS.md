@@ -960,8 +960,11 @@ crashed engine can no longer answer.
 Suppression reads only existing update, engine capability, and boot-uptime signals;
 suppressed attempts remain `starting` and emit no error toast. Structured retry and
 terminal records carry attempt id, phase, class, optional engine code, and retry
-state. User copy is keyed across all 10 locales, and terminal copy points to the
-cerastream journal. Autostart's no-link loop is capped at five checks; permanent
+state. User copy is keyed across all 10 locales, and terminal copy points at the
+in-app log viewer (Settings → System Logs) — never at `journalctl`, a systemd unit
+name, or any other shell command, and never at the engine's raw diagnostic string;
+that detail rides the structured record into the log the dialog downloads.
+Autostart's no-link loop is capped at five checks; permanent
 configuration/engine failures stop immediately with a visible reason.
 
 **A bounded pre-engine gate DEFERS the per-attempt deadline — it never loses to it.**

@@ -170,21 +170,27 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		);
 	});
 
-	it("includes the descriptive engine message in the typed failure toast", async () => {
+	// The engine's raw diagnostic still travels to the backend logger (and so to
+	// Settings → System Logs); it must never reach the operator's primary toast.
+	it("keeps the raw engine diagnostic out of the typed failure toast", async () => {
 		state.failure = {
 			class: "start_invalid",
 			phase: "start-rpc",
 			retriable: false,
 			attemptId: "att_d",
 			message:
-				"invalid params: audio-device-unavailable: ALSA capture device is busy",
+				"invalid params: audio-device-unavailable: ALSA capture device 'hw:CARD=rockchiphdmiin' is busy or unavailable",
 		};
 
 		render(LiveView);
 		await tick();
 
 		expect(toastError).toHaveBeenCalledWith(
-			`${startFailure.class.start_invalid} ${startFailure.notRetriable}: invalid params: audio-device-unavailable: ALSA capture device is busy`,
+			`${startFailure.class.start_invalid} ${startFailure.notRetriable}`,
 		);
+		const shown = String(toastError.mock.calls[0]?.[0] ?? "");
+		expect(shown).not.toContain("invalid params");
+		expect(shown).not.toContain("hw:CARD=");
+		expect(shown).not.toContain("journalctl");
 	});
 });

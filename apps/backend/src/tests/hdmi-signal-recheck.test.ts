@@ -213,6 +213,132 @@ describe("recheckSourceSignals — a signal that arrives after the first probe",
 		expect(hdmiSource()?.signal).toBe("absent");
 	});
 
+	test("a losing signal is PUSHED just as promptly as a gained one — the badge appears with no page reload", async () => {
+		await seedHdmiCaps();
+		await recheckSourceSignals(observedHdmiRx(), {
+			fetchEngineDevices: async () => ({
+				devices: [hdmiRxEntry(LOCKED_1080P5994)],
+			}),
+		});
+
+		const frames = await captureFrames(() =>
+			recheckSourceSignals(observedHdmiRx(), {
+				fetchEngineDevices: async () => ({ devices: [hdmiRxEntry()] }),
+			}),
+		);
+
+		const sources = frames.find((f) => "sources" in f)?.sources as
+			| { sources: StreamSource[] }
+			| undefined;
+		expect(sources).toBeDefined();
+		const pushed = sources?.sources.find((s) => s.id === HDMI_RX_ID);
+		expect(pushed?.signal).toBe("absent");
+		expect(pushed?.modes).toEqual([]);
+	});
+
+	test("a device the probe stops listing drops its verdict to unknown — it never re-asserts the signal it had when last seen", async () => {
+		await seedHdmiCaps();
+		await recheckSourceSignals(observedHdmiRx(), {
+			fetchEngineDevices: async () => ({
+				devices: [hdmiRxEntry(LOCKED_1080P5994)],
+			}),
+		});
+		expect(hdmiSource()?.signal).toBe("present");
+
+		// The scan still sees the node — a v4l2 node does not go away when its
+		// cable does — but the engine no longer speaks for it. Restoring the
+		// remembered row wholesale republished its LOCKED caps, so the payload
+		// never changed and the operator kept reading a live 1080p59.94 source.
+		const frames = await captureFrames(() =>
+			recheckSourceSignals(observedHdmiRx(), {
+				fetchEngineDevices: async () => ({ devices: [] }),
+			}),
+		);
+
+		expect(hdmiSource()?.signal).toBe("unknown");
+		expect(hdmiSource()?.modes).toEqual([]);
+		expect(frames.find((f) => "sources" in f)).toBeDefined();
+	});
+
+	test("the engine's typed kind still survives that probe — only the live verdict does not", async () => {
+		await seedHdmiCaps();
+		const observedRode: CaptureDevice[] = [
+			{
+				input_id: "/dev/video1",
+				device_path: "/dev/video1",
+				// What the scan can read; `deriveKind` guesses `usb` from it, which
+				// bridges to no pipeline (#219) — the reason the memory exists.
+				display_name: "RØDE HDMI to USB-C: RØDE HDMI",
+				media_class: "video",
+				kind: "usb",
+			},
+		];
+		const engineRode = {
+			input_id: "/dev/video1",
+			device_path: "/dev/video1",
+			display_name: "RØDE HDMI to USB-C: RØDE HDMI",
+			media_class: "video" as const,
+			kind: "mjpeg",
+			stable_id: "usb:19f7:0080",
+			caps: LOCKED_1080P5994,
+		};
+
+		await recheckSourceSignals(observedRode, {
+			fetchEngineDevices: async () => ({ devices: [engineRode] }),
+		});
+		await recheckSourceSignals(observedRode, {
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+
+		const cached = getEngineDeviceCache().find(
+			(d) => d.input_id === "/dev/video1",
+		);
+		expect(cached?.kind).toBe("mjpeg");
+		expect(cached?.stable_id).toBe("usb:19f7:0080");
+		expect(cached?.caps).toBeUndefined();
+		expect(cached?.signal).toBeUndefined();
+	});
+
+	test("a probe slower than the tick is not fenced out by its own successor", async () => {
+		await seedHdmiCaps();
+		await recheckSourceSignals(observedHdmiRx(), {
+			fetchEngineDevices: async () => ({
+				devices: [hdmiRxEntry(LOCKED_1080P5994)],
+			}),
+		});
+		expect(hdmiSource()?.signal).toBe("present");
+
+		let release: (() => void) | undefined;
+		const held = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const successorProbe = mock(async () => ({ devices: [hdmiRxEntry()] }));
+
+		const frames = await captureFrames(async () => {
+			const slow = recheckSourceSignals(observedHdmiRx(), {
+				fetchEngineDevices: async () => {
+					await held;
+					return { devices: [hdmiRxEntry()] };
+				},
+			});
+			// The next 5 s tick, arriving while the enumeration above is still out.
+			await recheckSourceSignals(observedHdmiRx(), {
+				fetchEngineDevices: successorProbe,
+			});
+			release?.();
+			await slow;
+		});
+
+		expect(successorProbe).not.toHaveBeenCalled();
+		expect(hdmiSource()?.signal).toBe("absent");
+		const sources = frames.find((f) => "sources" in f)?.sources as
+			| { sources: StreamSource[] }
+			| undefined;
+		expect(sources?.sources.find((s) => s.id === HDMI_RX_ID)?.signal).toBe(
+			"absent",
+		);
+	});
+
 	test("an unchanged answer broadcasts NOTHING, so `sources` keeps its on-change cadence", async () => {
 		await seedHdmiCaps();
 		const answer = async () => ({

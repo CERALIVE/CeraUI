@@ -158,6 +158,11 @@ GPL-3.0. See the [LICENSE](LICENSE) file for details.
 ## Start-failure diagnostics
 
 Terminal start failures retain the engine's original diagnostic `message` beside
-the typed class/code. It is logged and carried in notification params, and the
-frontend includes it in the operator-facing failure toast, so JSON-RPC reasons
-such as an unavailable ALSA capture device are not reduced to `-32602` alone.
+the typed class/code. It is logged and carried in notification params, so JSON-RPC
+reasons such as an unavailable ALSA capture device are not reduced to `-32602`
+alone and stay readable in the device log.
+
+That detail lands in the **log**, not the operator's toast. CeraLive operators
+have no console, so the failure toast renders the localized class + retry state
+only and points at Settings → System Logs; the verbatim engine string (and any
+shell command or systemd unit name) never appears in user-facing copy.

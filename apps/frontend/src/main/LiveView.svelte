@@ -230,11 +230,12 @@ function startFailedMessage(code: string): string {
 
 // Todo-25 typed failure → localized message: the class names WHAT failed, and
 // `retriable` selects the retry-state suffix (exhausted-retries vs deterministic).
-function startFailureMessage(failure: {
-	class: string;
-	retriable: boolean;
-	message?: string;
-}): string {
+// The engine's raw diagnostic (`failure.message`, e.g. "invalid params:
+// audio-device-unavailable: ALSA capture device 'hw:CARD=…' is busy") is
+// DELIBERATELY not concatenated here: operators have no console, so a verbatim
+// JSON-RPC/ALSA string is unactionable noise in the primary toast. It is still
+// captured verbatim by the backend logger and readable via Settings → System Logs.
+function startFailureMessage(failure: { class: string; retriable: boolean }): string {
 	const cls = $LL.live.startFailure.class[
 		failure.class as keyof (typeof $LL.live.startFailure)['class']
 	];
@@ -242,7 +243,7 @@ function startFailureMessage(failure: {
 	const retryState = failure.retriable
 		? $LL.live.startFailure.retriedThenFailed()
 		: $LL.live.startFailure.notRetriable();
-	return `${reason} ${retryState}${failure.message ? `: ${failure.message}` : ""}`;
+	return `${reason} ${retryState}`;
 }
 
 // Show error toast if start failed. Prefer the typed failure (class + retry

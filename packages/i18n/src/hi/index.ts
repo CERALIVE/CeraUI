@@ -998,9 +998,9 @@ const hi = {
 				audio_source_unavailable: "चयनित ऑडियो इनपुट उपलब्ध नहीं है।",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1386,7 +1386,7 @@ const hi = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"स्वचालित स्ट्रीम शुरू नहीं हुई: {attempt}/{maxAttempts} जाँचों के बाद कोई नेटवर्क लिंक उपलब्ध नहीं था। journalctl -u ceralive.service देखें।",
+			"स्वचालित स्ट्रीम शुरू नहीं हुई: {attempt}/{maxAttempts} जाँचों के बाद कोई नेटवर्क लिंक उपलब्ध नहीं था। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartEngineUnavailableRetrying:
 			"स्ट्रीमिंग इंजन उपलब्ध नहीं है — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -1394,17 +1394,17 @@ const hi = {
 		streamStartTimeoutRetrying:
 			"स्ट्रीमिंग इंजन ने समय पर उत्तर नहीं दिया — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"स्ट्रीम शुरू नहीं हुई: इंजन उपलब्ध नहीं है ({attempt}/{maxAttempts} प्रयास)। journalctl -u cerastream.service देखें।",
+			"स्ट्रीम शुरू नहीं हुई: इंजन उपलब्ध नहीं है ({attempt}/{maxAttempts} प्रयास)। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartEngineRestartingFailed:
-			"स्ट्रीम शुरू नहीं हुई: इंजन बार-बार पुनः आरंभ हुआ ({attempt}/{maxAttempts} प्रयास)। journalctl -u cerastream.service देखें।",
+			"स्ट्रीम शुरू नहीं हुई: इंजन बार-बार पुनः आरंभ हुआ ({attempt}/{maxAttempts} प्रयास)। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartTimeoutFailed:
-			"स्ट्रीम शुरू नहीं हुई: इंजन का समय समाप्त हुआ ({attempt}/{maxAttempts} प्रयास)। journalctl -u cerastream.service देखें।",
+			"स्ट्रीम शुरू नहीं हुई: इंजन का समय समाप्त हुआ ({attempt}/{maxAttempts} प्रयास)। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartInvalidFailed:
-			"स्ट्रीम शुरू नहीं हुई: कॉन्फ़िगरेशन या डिवाइस अमान्य है। journalctl -u cerastream.service देखें।",
+			"स्ट्रीम शुरू नहीं हुई: कॉन्फ़िगरेशन या डिवाइस अमान्य है। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartProtocolFailed:
-			"स्ट्रीम शुरू नहीं हुई: इंजन प्रोटोकॉल असंगत है। journalctl -u cerastream.service देखें।",
+			"स्ट्रीम शुरू नहीं हुई: इंजन प्रोटोकॉल असंगत है। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartInternalFailed:
-			"स्ट्रीम शुरू नहीं हुई: इंजन की आंतरिक त्रुटि। journalctl -u cerastream.service देखें।",
+			"स्ट्रीम शुरू नहीं हुई: इंजन की आंतरिक त्रुटि। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartAudioSourceUnavailableFailed:
 			"स्ट्रीम शुरू नहीं हुई: चयनित ऑडियो इनपुट उपलब्ध नहीं है। इसे फिर से कनेक्ट करें या कोई दूसरा ऑडियो स्रोत चुनें।",
 		ceraliveUpdateAvailable:

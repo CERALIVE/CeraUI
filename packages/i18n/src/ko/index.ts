@@ -1013,9 +1013,9 @@ const ko = {
 				audio_source_unavailable: "선택한 오디오 입력을 사용할 수 없습니다.",
 			},
 			retriedThenFailed:
-				"It kept failing after automatic retries. Check journalctl -u cerastream.service.",
+				"It kept failing after automatic retries. Open Settings → System Logs for details.",
 			notRetriable:
-				"This won't recover by retrying. Check journalctl -u cerastream.service.",
+				"This won't recover by retrying. Open Settings → System Logs for details.",
 		},
 		reconfigureRequired: "Reconfigure required",
 		setup: {
@@ -1405,7 +1405,7 @@ const ko = {
 	},
 	notifications: {
 		streamAutostartNoLinksFailed:
-			"자동 스트림 시작에 실패했습니다: {attempt}/{maxAttempts}회 확인 후에도 네트워크 링크가 없습니다. journalctl -u ceralive.service를 확인하세요.",
+			"자동 스트림 시작에 실패했습니다: {attempt}/{maxAttempts}회 확인 후에도 네트워크 링크가 없습니다. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartEngineUnavailableRetrying:
 			"스트리밍 엔진을 사용할 수 없습니다 — 재시도 중 ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineRestartingRetrying:
@@ -1413,17 +1413,17 @@ const ko = {
 		streamStartTimeoutRetrying:
 			"스트리밍 엔진이 제시간에 응답하지 않았습니다 — 재시도 중 ({nextAttempt}/{maxAttempts})…",
 		streamStartEngineUnavailableFailed:
-			"스트림을 시작하지 못했습니다: 엔진을 사용할 수 없습니다 ({attempt}/{maxAttempts}회). journalctl -u cerastream.service를 확인하세요.",
+			"스트림을 시작하지 못했습니다: 엔진을 사용할 수 없습니다 ({attempt}/{maxAttempts}회). 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartEngineRestartingFailed:
-			"스트림을 시작하지 못했습니다: 엔진이 계속 다시 시작되었습니다 ({attempt}/{maxAttempts}회). journalctl -u cerastream.service를 확인하세요.",
+			"스트림을 시작하지 못했습니다: 엔진이 계속 다시 시작되었습니다 ({attempt}/{maxAttempts}회). 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartTimeoutFailed:
-			"스트림을 시작하지 못했습니다: 엔진 시간 초과 ({attempt}/{maxAttempts}회). journalctl -u cerastream.service를 확인하세요.",
+			"스트림을 시작하지 못했습니다: 엔진 시간 초과 ({attempt}/{maxAttempts}회). 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartInvalidFailed:
-			"스트림을 시작하지 못했습니다: 구성 또는 장치가 올바르지 않습니다. journalctl -u cerastream.service를 확인하세요.",
+			"스트림을 시작하지 못했습니다: 구성 또는 장치가 올바르지 않습니다. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartProtocolFailed:
-			"스트림을 시작하지 못했습니다: 엔진 프로토콜이 호환되지 않습니다. journalctl -u cerastream.service를 확인하세요.",
+			"스트림을 시작하지 못했습니다: 엔진 프로토콜이 호환되지 않습니다. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartInternalFailed:
-			"스트림을 시작하지 못했습니다: 엔진 내부 오류. journalctl -u cerastream.service를 확인하세요.",
+			"스트림을 시작하지 못했습니다: 엔진 내부 오류. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartAudioSourceUnavailableFailed:
 			"스트림을 시작하지 못했습니다: 선택한 오디오 입력을 사용할 수 없습니다. 다시 연결하거나 다른 오디오 소스를 선택하세요.",
 		ceraliveUpdateAvailable:
