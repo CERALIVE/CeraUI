@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { call } from "@orpc/server";
 import { getConfig } from "../modules/config.ts";
 import { clampBitrate } from "../modules/streaming/encoder.ts";
+import { updateStatus } from "../modules/streaming/streaming.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
 import {
@@ -15,6 +16,9 @@ import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 // A bitrate inside the zod validation window (500–50000) but above the encoder
 // hardware ceiling, so the handler must clamp it down to clampBitrate's max.
 const OVER_HARDWARE_BITRATE = 40000;
+
+// Inside the encoder hardware window, so a streaming hot-adjust applies it verbatim.
+const HOT_ADJUST_BITRATE = 7250;
 
 function makeContext(): RPCContext {
 	const ws = {
@@ -256,6 +260,44 @@ describe("streaming.setBitrate — applied (post-clamp) state", () => {
 		expect(result.success).toBe(true);
 		expect(result.applied).toBe(clampBitrate(OVER_HARDWARE_BITRATE));
 		expect(result.applied).toBeLessThan(OVER_HARDWARE_BITRATE);
+	});
+
+	// Regression: a mid-stream hot-adjust persisted config.max_br but published
+	// nothing, so every client kept the pre-adjust bitrate and the Live control
+	// re-seeded from it on remount — the operator's change vanished on screen.
+	test("echoes the hot-adjusted max_br on a config broadcast while streaming", async () => {
+		const received: string[] = [];
+		const client = captureClient(received);
+		updateStatus(true);
+		addClient(client);
+
+		try {
+			const result = await call(
+				setBitrateProcedure,
+				{ max_br: HOT_ADJUST_BITRATE },
+				{ context: makeContext() },
+			);
+
+			expect(result.success).toBe(true);
+			expect(result.applied).toBe(HOT_ADJUST_BITRATE);
+			expect(getConfig().max_br).toBe(HOT_ADJUST_BITRATE);
+
+			const configPayloads = received
+				.map((raw) => JSON.parse(raw))
+				.filter(
+					(obj): obj is { config: { max_br?: number } } =>
+						!!obj && typeof obj === "object" && "config" in obj,
+				)
+				.map((obj) => obj.config);
+
+			expect(configPayloads.length).toBeGreaterThan(0);
+			expect(configPayloads[configPayloads.length - 1].max_br).toBe(
+				HOT_ADJUST_BITRATE,
+			);
+		} finally {
+			removeClient(client);
+			updateStatus(false);
+		}
 	});
 });
 

@@ -81,6 +81,11 @@ interface Props {
 	// available audio sources vs config.asrc). Video-source-lost and all-links-down
 	// are derived inside this component from sources/activeEncode and telemetry.
 	audioSourceLost?: boolean;
+	// The source is still enumerated but has stopped delivering frames — an HDMI
+	// cable pulled from the onboard capture node does NOT remove /dev/video0, so
+	// `activeSourceLost` stays false and this is the only thing that reads it.
+	// LiveView derives it from the backend health rollup (isVideoSignalLost).
+	videoSignalLost?: boolean;
 	// ── StreamControlButton (Stop mode) ────────────────────────────────────────
 	isStreaming: boolean;
 	optimismState: StreamingOptimismState;
@@ -123,6 +128,7 @@ const {
 	telemetry,
 	bitrateKbps,
 	audioSourceLost = false,
+	videoSignalLost = false,
 	isStreaming,
 	optimismState,
 	onStop,
@@ -154,6 +160,14 @@ const allLinksDown = $derived(
 );
 
 const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
+
+// Signal loss on a source that is still THERE. Suppressed while
+// `activeSourceLost` is up: that banner names the same dead picture with a more
+// specific cause and a different action (reconnect / switch source), so showing
+// both would stack two alerts for one outage and split the operator's attention.
+const showVideoSignalLost = $derived(
+	isStreaming && !summaryMode && videoSignalLost && !activeSourceLost,
+);
 </script>
 
 <div class="space-y-6" data-testid="live-cockpit" data-summary-mode={summaryMode ? 'true' : 'false'}>
@@ -167,6 +181,22 @@ const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
 			<div class="min-w-0 space-y-0.5">
 				<p class="text-destructive text-sm font-medium">{$LL.live.source.lostStreamingTitle()}</p>
 				<p class="text-muted-foreground text-xs">{$LL.live.source.lostStreamingBody()}</p>
+			</div>
+		</div>
+	{/if}
+
+	{#if showVideoSignalLost}
+		<div
+			class="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3"
+			data-testid="video-signal-lost-banner"
+			role="alert"
+		>
+			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
+			<div class="min-w-0 space-y-0.5">
+				<p class="text-destructive text-sm font-medium">
+					{$LL.live.source.signalLostStreamingTitle()}
+				</p>
+				<p class="text-muted-foreground text-xs">{$LL.live.source.signalLostStreamingBody()}</p>
 			</div>
 		</div>
 	{/if}

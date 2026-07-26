@@ -809,6 +809,9 @@ const zh = {
 	},
 	hud: {
 		bitrate: "比特率",
+		bitrateLimit: "配置上限",
+		bitrateAdapting: "自适应中",
+		bitrateBelowLimitHint: "当前编码低于你配置的上限——当网络无法承载全部码率时，引擎会自动降低码率。",
 		temperature: "温度",
 		network: "网络",
 		uptime: "运行时间",
@@ -1189,6 +1192,9 @@ const zh = {
 			linksDownStreamingTitle: "所有绑定链路已断开",
 			linksDownStreamingBody:
 				"目前无法发送数据。当某个链路恢复时，直播将自动恢复。",
+			signalLostStreamingTitle: "没有画面进入你的直播",
+			signalLostStreamingBody:
+				"信号源仍然连接着，但已经停止输出画面。请确认它已开机、线缆两端都插紧——画面恢复后，直播会自动恢复。",
 
 			audioNone: "未检测到音频源",
 			audioEmbedded: "嵌入式音频（来自传入流）",
@@ -1390,6 +1396,10 @@ const zh = {
 		streamHealthDegraded: "推流状态已降级",
 		streamHealthDead: "推流已中断",
 		streamHealthRecovered: "推流状态已恢复",
+		streamHealthNoVideo:
+			"没有画面进入你的直播。请确认摄像机或 HDMI 信号源已开机，并且线缆两端都插紧。",
+		streamHealthLinksDegraded:
+			"部分绑定链路已断开。直播将继续通过仍然可用的链路发送。",
 		activeSourceLost:
 			"您正在推流的视频源已丢失。请重新连接或切换到其他源以保持直播。",
 		activeSourceRecovered: "视频源已重新连接。",

@@ -22,9 +22,11 @@ import {
 	getStreamHealthSnapshot,
 	getStreamHealthState,
 	type HealthIndicator,
+	type HealthRollup,
 	type HealthSnapshot,
 	ingestStreamHealth,
 	initialHealthSnapshot,
+	isVideoSignalLost,
 	notificationForTransition,
 	parseHealthRollup,
 	parseHealthState,
@@ -151,6 +153,123 @@ describe("notificationForTransition", () => {
 		expect(notificationForTransition("degraded", "idle")).toBeNull();
 		expect(notificationForTransition("dead", "idle")).toBeNull();
 		expect(notificationForTransition("idle", "healthy")).toBeNull();
+	});
+});
+
+// ============================================
+// Cause-specific degraded copy (Wave H: "still not seeing signal loss")
+// ============================================
+
+describe("notificationForTransition — names the cause behind `degraded`", () => {
+	it("says NO VIDEO, not merely 'degraded', for the frames reason", () => {
+		// The exact reason health.ts `deriveReason()` emits on real signal loss.
+		const n = notificationForTransition("healthy", "degraded", {
+			component: "frames",
+			detail: "No frames advancing",
+		});
+		expect(n?.key).toBe("notifications.streamHealthNoVideo");
+		expect(n?.key).not.toBe("notifications.streamHealthDegraded");
+	});
+
+	it("distinguishes a bonded-link degradation from a video one", () => {
+		const n = notificationForTransition("healthy", "degraded", {
+			component: "links",
+			detail: "1 of 3 links down",
+		});
+		expect(n?.key).toBe("notifications.streamHealthLinksDegraded");
+	});
+
+	it("keeps ONE toast name across causes so a frames→links flap replaces, never stacks", () => {
+		const frames = notificationForTransition("healthy", "degraded", {
+			component: "frames",
+			detail: "No frames advancing",
+		});
+		const links = notificationForTransition("healthy", "degraded", {
+			component: "links",
+			detail: "1 of 3 links down",
+		});
+		expect(frames?.name).toBe("stream-health-degraded");
+		expect(links?.name).toBe(frames?.name);
+	});
+
+	it("falls back to the generic wording for an absent or unknown component", () => {
+		expect(notificationForTransition("healthy", "degraded")?.key).toBe(
+			"notifications.streamHealthDegraded",
+		);
+		expect(
+			notificationForTransition("healthy", "degraded", {
+				component: "some-future-subsystem",
+				detail: "…",
+			})?.key,
+		).toBe("notifications.streamHealthDegraded");
+	});
+
+	it("leaves the dead and recovered toasts untouched by a reason", () => {
+		const dead = notificationForTransition("degraded", "dead", {
+			component: "process",
+			detail: "Streaming process not running",
+		});
+		expect(dead?.key).toBe("notifications.streamHealthDead");
+		expect(
+			notificationForTransition("degraded", "healthy", undefined)?.key,
+		).toBe("notifications.streamHealthRecovered");
+	});
+});
+
+// ============================================
+// isVideoSignalLost — the mid-stream dead-air predicate
+// ============================================
+
+function rollup(overrides: Partial<HealthRollup> = {}): HealthRollup {
+	return {
+		state: "degraded",
+		process: { alive: true },
+		frames: { advancing: false, count: 30415 },
+		srt: { reconnecting: false, reconnectCount: 0 },
+		bond: { linkCount: 2, activeLinks: 2 },
+		...overrides,
+	};
+}
+
+describe("isVideoSignalLost", () => {
+	it("reports the real board case: degraded with a frozen frame counter", () => {
+		expect(isVideoSignalLost(rollup())).toBe(true);
+	});
+
+	it("reports it on a dead rollup too", () => {
+		expect(isVideoSignalLost(rollup({ state: "dead" }))).toBe(true);
+	});
+
+	it("never contradicts a healthy or idle dot beside it", () => {
+		expect(
+			isVideoSignalLost(rollup({ state: "healthy", frames: { advancing: false, count: 1 } })),
+		).toBe(false);
+		expect(
+			isVideoSignalLost(rollup({ state: "idle", frames: { advancing: false, count: null } })),
+		).toBe(false);
+	});
+
+	it("stays silent on an UNKNOWN frame reading — null is not an outage", () => {
+		// The cold-start branch: no frame telemetry yet this window. Alarming here
+		// would fire a dead-air banner on every stream start.
+		expect(
+			isVideoSignalLost(rollup({ frames: { advancing: null, count: null } })),
+		).toBe(false);
+	});
+
+	it("stays silent while frames are genuinely advancing (a link-only degradation)", () => {
+		expect(
+			isVideoSignalLost(
+				rollup({
+					frames: { advancing: true, count: 900 },
+					bond: { linkCount: 3, activeLinks: 2 },
+				}),
+			),
+		).toBe(false);
+	});
+
+	it("stays silent before the first broadcast", () => {
+		expect(isVideoSignalLost(null)).toBe(false);
 	});
 });
 

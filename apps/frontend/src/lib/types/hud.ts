@@ -10,6 +10,7 @@
  */
 import type {
 	ConfigMessage,
+	EngineBitrate,
 	ModemList,
 	NetifMessage,
 	SensorsStatus,
@@ -76,8 +77,21 @@ export interface HudState {
 	// Streaming ---------------------------------------------------------------
 	isStreaming: boolean;
 	isStreamingStale: boolean;
-	/** Target/working bitrate in kbps (from `config.max_br`), or `null`. */
+	/**
+	 * The bitrate actually in effect, kbps: the engine's APPLIED encoder rate
+	 * (`status.engine_bitrate.applied_kbps`) when it reports one, else the
+	 * configured ceiling as the pre-`engine_bitrate` fallback.
+	 */
 	bitrateKbps: number | null;
+	/** The operator's configured ceiling (`config.max_br`), kbps, or `null`. */
+	bitrateCeilingKbps: number | null;
+	/**
+	 * True only when the engine PROVED it is running below the ceiling — i.e. it
+	 * reported an applied rate and that rate is under `bitrateCeilingKbps`. Never
+	 * inferred from the ceiling alone, so an engine that reports nothing (or one
+	 * running at the ceiling) is never accused of throttling.
+	 */
+	isBitrateBelowCeiling: boolean;
 	isBitrateStale: boolean;
 
 	// Network links (up to 6 bonded links) -----------------------------------
@@ -126,6 +140,12 @@ export interface HudSources {
 	netif: NetifMessage | undefined;
 	sensors: SensorsStatus | undefined;
 	updating: UpdatingStatus | undefined;
+	/**
+	 * The engine's applied-vs-ceiling bitrate pair (`status.engine_bitrate`).
+	 * Optional so an omitted value is indistinguishable from an engine that never
+	 * reports one — both fall back to the configured ceiling.
+	 */
+	engineBitrate?: EngineBitrate | null;
 }
 
 /**

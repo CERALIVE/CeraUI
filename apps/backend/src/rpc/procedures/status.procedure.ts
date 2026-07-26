@@ -29,6 +29,7 @@ import {
 } from "../../modules/streaming/auto-audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
+import { getEngineBitrateStatus } from "../../modules/streaming/engine-bitrate-status.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getSourcesMessage } from "../../modules/streaming/sources.ts";
@@ -82,6 +83,7 @@ export const getStatusProcedure = authedProcedure
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
+			engine_bitrate: getEngineBitrateStatus(),
 		};
 	});
 
@@ -124,6 +126,7 @@ export function buildInitialStatus() {
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
+			engine_bitrate: getEngineBitrateStatus(),
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),

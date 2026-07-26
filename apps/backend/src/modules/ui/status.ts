@@ -19,6 +19,7 @@ import type {
 	ActiveEncode,
 	AudioSource,
 	BufferingStatus,
+	EngineBitrate,
 	NetworkIngest,
 	ResolvedAsrcReason,
 } from "@ceraui/rpc/schemas";
@@ -35,6 +36,7 @@ import {
 	getResolvedAsrc,
 	getResolvedAsrcReason,
 } from "../streaming/auto-audio.ts";
+import { getEngineBitrateStatus } from "../streaming/engine-bitrate-status.ts";
 import {
 	buildLinkTelemetry,
 	type LinkTelemetryMessage,
@@ -76,6 +78,7 @@ export type StatusResponseMessage = {
 	buffering?: BufferingStatus | null;
 	network_ingest?: NetworkIngest | null;
 	active_encode?: ActiveEncode | null;
+	engine_bitrate?: EngineBitrate | null;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -99,6 +102,7 @@ export function sendStatus(conn: WebSocket) {
 			linkTelemetry: buildLinkTelemetry(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
+			engine_bitrate: getEngineBitrateStatus(),
 		} satisfies StatusResponseMessage),
 	);
 }

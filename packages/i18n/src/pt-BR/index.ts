@@ -1015,6 +1015,9 @@ const ptBR = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateLimit: "Limite configurado",
+		bitrateAdapting: "Adaptando",
+		bitrateBelowLimitHint: "Codificando abaixo do seu limite configurado — o motor reduz a taxa quando a rede não consegue transportar tudo.",
 		temperature: "Temperatura",
 		network: "Rede",
 		uptime: "Tempo ativo",
@@ -1419,6 +1422,9 @@ const ptBR = {
 			linksDownStreamingTitle: "Todos os links agregados fora do ar",
 			linksDownStreamingBody:
 				"Nenhum dado pode ser enviado agora. A transmissão é retomada automaticamente quando um link se recupera.",
+			signalLostStreamingTitle: "Nenhum vídeo está chegando à sua transmissão",
+			signalLostStreamingBody:
+				"Sua fonte continua conectada, mas parou de enviar imagem. Verifique se ela está ligada e se o cabo está bem encaixado nas duas pontas — sua transmissão se recupera sozinha assim que o vídeo voltar.",
 
 			audioNone: "Nenhuma fonte de áudio detectada",
 			audioEmbedded: "Áudio incorporado (do fluxo recebido)",
@@ -1623,6 +1629,10 @@ const ptBR = {
 		streamHealthDegraded: "Status da transmissão degradado",
 		streamHealthDead: "A transmissão está fora do ar",
 		streamHealthRecovered: "Status da transmissão recuperado",
+		streamHealthNoVideo:
+			"Nenhum vídeo está chegando à sua transmissão. Verifique se sua câmera ou fonte HDMI está ligada e se o cabo está bem encaixado nas duas pontas.",
+		streamHealthLinksDegraded:
+			"Alguns dos seus links agregados estão fora do ar. Sua transmissão continua pelos links que ainda estão ativos.",
 		activeSourceLost:
 			"A fonte de vídeo que você está transmitindo foi perdida. Reconecte-a ou troque de fonte para manter sua transmissão ativa.",
 		activeSourceRecovered: "Fonte de vídeo reconectada.",

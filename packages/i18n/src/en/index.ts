@@ -258,6 +258,9 @@ const en = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateLimit: "Configured limit",
+		bitrateAdapting: "Adapting",
+		bitrateBelowLimitHint: "Encoding below your configured limit — the engine lowers the rate when the network can't carry the full amount.",
 		temperature: "Temperature",
 		network: "Network",
 		uptime: "Uptime",
@@ -654,6 +657,9 @@ const en = {
 			linksDownStreamingTitle: "All bonded links down",
 			linksDownStreamingBody:
 				"No data can be sent right now. The stream resumes automatically when a link recovers.",
+			signalLostStreamingTitle: "No video reaching your stream",
+			signalLostStreamingBody:
+				"Your source is still connected but has stopped sending a picture. Check that it's powered on and the cable is seated at both ends — your stream recovers on its own the moment video comes back.",
 			audioNone: "No audio source detected",
 			audioEmbedded: "Embedded audio (from the incoming stream)",
 			audioEdit: "Codec & delay",
@@ -861,6 +867,10 @@ const en = {
 		streamHealthDegraded: "Stream health degraded",
 		streamHealthDead: "Stream is down",
 		streamHealthRecovered: "Stream health recovered",
+		streamHealthNoVideo:
+			"No video is reaching your stream. Check that your camera or HDMI source is powered on and its cable is seated at both ends.",
+		streamHealthLinksDegraded:
+			"Some of your bonded links are down. Your stream continues on the links that are still up.",
 		// Mid-stream lifecycle indicators
 		activeSourceLost:
 			"The video source you're streaming was lost. Reconnect it, or switch to another source to keep your stream alive.",
