@@ -764,6 +764,47 @@ namespace, not the engine's, and `buildSources` overlays video only. The
 `engineAudioDeviceCache` is still refreshed from the probe on this path — it is
 the one cache the local scan cannot populate.
 
+**A SIGNAL change is invisible to every hotplug detector, so it gets its own
+tick.** All three triggers above — `fs.watch` on `/dev`, the 2 s poll's
+device-SET comparison, and the boot/reconnect seeds — key on a device
+APPEARING or DISAPPEARING. A capture device that stops or starts carrying a
+usable picture does neither: same node, same `input_id`, same place in the set.
+Confirmed live on a Rock 5B+ whose HDMI-RX answered `VIDIOC_QUERY_DV_TIMINGS`
+with `ENOLINK` for the ~6 s its link spent retraining (`dmesg`:
+`hdmirx_query_dv_timings port has no link!` ×3 → `hdmirx_phy_register_write
+wait cr write done failed!` ×15 → `signal lock ok` → `New format:
+1920x1080p59.94`). cerastream drops a signal-less receiver's degenerate range
+caps entirely, so `fromEngineDevice` stamped `signal: 'absent'` from that
+retraining answer — and 45 minutes later the engine's `list-devices` reported
+`1920x1080 @ 60000/1001` while the UI still read "No signal", because nothing
+had asked it again. While IDLE nothing can: `listDevicesIfActive()` returns
+`null` with no live control session, so the registry's own poll is the local
+v4l2 scan, whose output is byte-identical every tick forever.
+
+`recheckSourceSignals(observed)` (`sources.ts`), fired by the registry's
+`onSignalRecheck` on a `VIDEO_SIGNAL_RECHECK_INTERVAL_MS` (5 s) interval, is the
+re-poke that closes it. It is device-agnostic BY CONSTRUCTION — no driver name,
+no controller string, no HDMI special case anywhere in the path; it re-reads
+whatever the engine's `VIDIOC_QUERY_DV_TIMINGS` result projected into `caps[]`,
+so any device whose engine-reported caps change is picked up identically. It
+reuses `refreshSourcesForHotplug`'s membership rule, metadata rule and
+generation fence verbatim, with TWO deliberate divergences:
+
+- **A probe that says nothing changes nothing.** A hotplug tick MUST fall back
+  to `observed` (it holds a detected removal the retained cache would mask);
+  this tick holds no detected transition at all, so falling back would
+  republish the scan's coarse guess over the engine's last real answer for no
+  reason. An unreachable engine simply leaves the last-known view standing.
+- **It broadcasts only on change** (`broadcastSourcesIfChanged`), so `sources`
+  keeps its documented on-change cadence instead of pushing an identical
+  snapshot to every client every 5 s.
+
+While STREAMING this tick is redundant-but-harmless: a live control session
+makes `getEngineDevices()` engine-backed, so a signal change DOES alter the
+device-SET serialization and the ordinary hotplug trigger already fires. Both
+paths commit the same engine-authored rows, so they cannot disagree.
+Coverage: `tests/hdmi-signal-recheck.test.ts`.
+
 **Overlapping hotplug refreshes are ordered by a generation fence.** Each
 `onDevicesChanged` starts its own probe, so an unplug and a replug moments apart
 run two round-trips concurrently and the OLDER one can answer LAST — republishing

@@ -48,6 +48,7 @@ import { getAudioDevices } from "./audio.ts";
 import {
 	VIDEO_HOTPLUG_DEBOUNCE_MS,
 	VIDEO_HOTPLUG_POLL_INTERVAL_MS,
+	VIDEO_SIGNAL_RECHECK_INTERVAL_MS,
 } from "./constants.ts";
 import { reportActiveVideoSource } from "./lifecycle-indicators.ts";
 import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
@@ -93,11 +94,18 @@ export interface DeviceRegistryDeps {
 	// the observed list when that probe fails — a retained-because-unreachable
 	// cache would otherwise keep an unplugged device on screen.
 	onDevicesChanged: (observed: readonly CaptureDevice[]) => void;
+	// Fired on a fixed interval REGARDLESS of whether anything changed, because
+	// the change it exists to catch is invisible to every detector above: a
+	// device whose signal appears or disappears keeps its node and its place in
+	// the set. Only the engine can answer it, so this hands the observed list to
+	// a fresh `list-devices` probe.
+	onSignalRecheck: (observed: readonly CaptureDevice[]) => void;
 	reportActiveVideoSource: typeof reportActiveVideoSource;
 	watch: typeof fs.watch;
 	now: () => number;
 	debounceMs: number;
 	pollMs: number;
+	signalRecheckMs: number;
 	logger: Pick<typeof defaultLogger, "debug" | "warn" | "error">;
 }
 
@@ -318,11 +326,17 @@ function defaultDeps(): DeviceRegistryDeps {
 				refreshSourcesForHotplug(observed),
 			);
 		},
+		onSignalRecheck: (observed) => {
+			void import("./sources.ts").then(({ recheckSourceSignals }) =>
+				recheckSourceSignals(observed),
+			);
+		},
 		reportActiveVideoSource,
 		watch: fs.watch,
 		now: () => performance.now(),
 		debounceMs: VIDEO_HOTPLUG_DEBOUNCE_MS,
 		pollMs: VIDEO_HOTPLUG_POLL_INTERVAL_MS,
+		signalRecheckMs: VIDEO_SIGNAL_RECHECK_INTERVAL_MS,
 		logger: defaultLogger,
 	};
 }
@@ -338,6 +352,7 @@ export function createDeviceRegistry(
 	let lastDeviceSetSerialized = "";
 	let debounceHandle: ReturnType<typeof setTimeout> | undefined;
 	let pollHandle: ReturnType<typeof setInterval> | undefined;
+	let signalRecheckHandle: ReturnType<typeof setInterval> | undefined;
 	let devWatcher: fs.FSWatcher | undefined;
 	let stopped = false;
 	let engineWasReachable = false;
@@ -506,6 +521,9 @@ export function createDeviceRegistry(
 		pollHandle = setInterval(() => {
 			if (!stopped) void rescan();
 		}, deps.pollMs);
+		signalRecheckHandle = setInterval(() => {
+			if (!stopped) deps.onSignalRecheck(devices);
+		}, deps.signalRecheckMs);
 	}
 
 	function stop(): void {
@@ -517,6 +535,10 @@ export function createDeviceRegistry(
 		if (pollHandle) {
 			clearInterval(pollHandle);
 			pollHandle = undefined;
+		}
+		if (signalRecheckHandle) {
+			clearInterval(signalRecheckHandle);
+			signalRecheckHandle = undefined;
 		}
 		devWatcher?.close();
 		devWatcher = undefined;

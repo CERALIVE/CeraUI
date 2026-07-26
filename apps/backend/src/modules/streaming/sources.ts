@@ -875,6 +875,7 @@ export function resetEngineDeviceCache(): void {
 	engineAudioDeviceCache = [];
 	sessionSeenDeviceSnapshots.clear();
 	lastEngineVideoDevices.clear();
+	lastBroadcastSources = undefined;
 }
 
 /**
@@ -974,15 +975,31 @@ export function reconcileConfiguredSourceIdentity(
 	return true;
 }
 
+// The last payload `broadcastSources` put on the wire, so a periodic re-probe
+// can honour the "on-change" cadence of the `sources` event instead of pushing
+// an identical snapshot to every client on every tick.
+let lastBroadcastSources: string | undefined;
+
 /** Push the current `sources` snapshot to all authenticated clients. */
 export function broadcastSources(): void {
 	const message = getSourcesMessage();
 	// `config.source` feeds `collectLostCandidates`, so a migration has to be
 	// rebuilt rather than published from the pre-migration snapshot.
 	if (reconcileConfiguredSourceIdentity(message.sources)) {
-		broadcastMsg("sources", getSourcesMessage());
+		const migrated = getSourcesMessage();
+		lastBroadcastSources = JSON.stringify(migrated);
+		broadcastMsg("sources", migrated);
 		return;
 	}
+	lastBroadcastSources = JSON.stringify(message);
+	broadcastMsg("sources", message);
+}
+
+function broadcastSourcesIfChanged(): void {
+	const message = getSourcesMessage();
+	const serialized = JSON.stringify(message);
+	if (serialized === lastBroadcastSources) return;
+	lastBroadcastSources = serialized;
 	broadcastMsg("sources", message);
 }
 
@@ -1087,4 +1104,40 @@ export async function refreshSourcesForHotplug(
 		probe.audio,
 	);
 	broadcastSources();
+}
+
+/**
+ * Re-probe the engine for devices whose SIGNAL may have changed while their
+ * identity did not.
+ *
+ * The engine re-runs `VIDIOC_QUERY_DV_TIMINGS` on EVERY `list-devices`, so an
+ * HDMI receiver that reports no modes while its link retrains and the one real
+ * mode once it locks is answered correctly on the very next call. But NOTHING
+ * calls: `refreshSourcesForHotplug` fires only on a device-SET change, and while
+ * idle CeraUI holds no engine connection, so the registry polls a local v4l2
+ * scan whose output never varies. `fromEngineDevice` reads zero caps as
+ * `signal: 'absent'`, so the retraining answer latches and the operator reads
+ * "No signal" for a device that locked minutes ago. Nothing here knows what an
+ * HDMI receiver is — any device whose engine-reported caps change is picked up
+ * identically.
+ *
+ * Membership, metadata and the generation fence follow `refreshSourcesForHotplug`
+ * verbatim. The ONE deliberate divergence: a probe that says nothing changes
+ * nothing. This tick carries no detected transition to publish, so falling back
+ * to `observed` the way a hotplug tick must would republish a coarse guess over
+ * the engine's last real answer for no reason at all.
+ */
+export async function recheckSourceSignals(
+	observed: readonly CaptureDevice[],
+	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
+): Promise<void> {
+	const generation = ++hotplugRefreshGeneration;
+	const probe = await probeEngineDevices(deps);
+	if (generation !== hotplugRefreshGeneration) return;
+	if (probe === undefined) return;
+	commitEngineDevices(
+		mergeObservedWithProbe(observed, probe.devices),
+		probe.audio,
+	);
+	broadcastSourcesIfChanged();
 }

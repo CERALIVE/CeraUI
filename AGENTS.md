@@ -1828,6 +1828,21 @@ snapshots) and never at a render site. Display-only — `input_id`/`device_path`
 `stable_id` and the kind heuristic are untouched. Full contract:
 `apps/backend/AGENTS.md` → ONBOARD VIDEO DISPLAY NAMES.
 
+**And that port's signal is re-checked, not read once.** The `signal` verdict
+(`present`/`absent`/`unknown`, PR #216) was only ever recomputed when the device
+SET changed — but an HDMI receiver that reports "no link" while its link
+retrains and locks seconds later never changes the set, so the retraining answer
+latched. Confirmed live on a Rock 5B+: `dmesg` logged `signal lock ok` +
+`New format: 1920x1080p59.94` at 04:29 and the engine's `list-devices` reported
+that mode correctly, while the UI still read "No signal" 45 minutes later —
+nothing had asked the engine again. The device registry now fires a
+`VIDEO_SIGNAL_RECHECK_INTERVAL_MS` (5 s) `onSignalRecheck` tick into
+`recheckSourceSignals()`, which re-probes and broadcasts ONLY on change. It is
+device-agnostic by construction — no driver or controller string anywhere in the
+path, just the caps the engine's own `VIDIOC_QUERY_DV_TIMINGS` result projected.
+Full contract: `apps/backend/AGENTS.md` → "A SIGNAL change is invisible to every
+hotplug detector".
+
 **The idle level meter follows the picker.** Selecting an audio source used to change
 nothing about the meter: cerastream chose its own idle card, so an operator who picked
 the RØDE could watch the meter report the DJI Mic Mini — or "Meter unavailable" — with
