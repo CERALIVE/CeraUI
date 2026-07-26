@@ -1656,6 +1656,23 @@ still imported (now by `StreamSetupChain`/`IdleCockpit`). Tracked as
 `TD-unmounted-source-shims` in `docs/TECHNICAL_DEBT.md` — do not delete these
 files until that entry's exit condition is met, and do not re-mount them either.
 
+### Engine-truth-clears-on-stop contract
+
+`getStatus()?.active_encode` obeys the same never-stale-past-stop rule as the
+link telemetry below. It is stronger than a cosmetic staleness issue:
+`deriveActiveSummary` reads `live = Boolean(activeEncode)` and then prefers
+`activeEncode.active_input` over the fresh `config.source`, so a retained object
+claims the device is LIVE on a device that has stopped — observed on a board as
+a stopped session still labelled `"● Live RØDE HDMI to USB-C … H.265"` after the
+operator had already picked a different source. Guaranteed on both ends:
+`cerastream-backend.ts` drops `active_encode` from telemetry when the engine
+reports it is not streaming AND on `stop()` (a crashed engine sends no final idle
+frame), and every status nudge now carries the field explicitly rather than only
+when it exists; `subscriptions.svelte.ts` additionally clears it on the
+`wasStreaming && !isStreamingState` edge, because the status merge preserves an
+omitted field — the same raise-but-never-retract latch that bit
+`policy_route_missing`.
+
 ### Telemetry-clears-on-stop contract
 
 `getLinkTelemetry()` is guaranteed `null` (never a stale object) on the

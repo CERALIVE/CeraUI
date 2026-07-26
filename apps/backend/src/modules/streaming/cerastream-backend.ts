@@ -157,11 +157,23 @@ function defaultBridge(): CerastreamBridge {
 			// import cycle; the nudge fires long after boot so a dynamic import is fine.
 			void (async () => {
 				try {
-					const [{ broadcastMsg }, { getIsStreaming }] = await Promise.all([
+					const [
+						{ broadcastMsg },
+						{ getIsStreaming },
+						{ getActiveEncodeStatus },
+					] = await Promise.all([
 						import("../ui/websocket-server.ts"),
 						import("./streaming.ts"),
+						import("./active-encode-status.ts"),
 					]);
-					broadcastMsg("status", { is_streaming: getIsStreaming() });
+					// Explicit on every nudge, never by omission: the frontend status
+					// merge deliberately preserves an omitted field, so a value pushed
+					// only while it exists can be raised but never retracted — which
+					// left a stopped session's encode on screen under a "Live" badge.
+					broadcastMsg("status", {
+						is_streaming: getIsStreaming(),
+						active_encode: getActiveEncodeStatus(),
+					});
 				} catch (err) {
 					defaultLogger.debug("cerastream: status broadcast skipped", { err });
 				}
@@ -584,6 +596,9 @@ export class CerastreamBackend implements StreamingBackend {
 	stop(onStopped: () => void): boolean {
 		if (!this.active) return false;
 		this.active = false;
+		// A crashed or already-gone engine sends no final idle status, so the
+		// stop itself has to be the clearing signal.
+		this.clearActiveEncode();
 		const client = this.client;
 		const subscription = this.subscription;
 		const operation = (async () => {
@@ -652,6 +667,15 @@ export class CerastreamBackend implements StreamingBackend {
 
 	getTelemetry(): EngineTelemetry | null {
 		return this.telemetry;
+	}
+
+	private clearActiveEncode(): void {
+		const previous = this.telemetry;
+		if (previous === null || previous.active_encode === undefined) return;
+		const next = { ...previous };
+		delete next.active_encode;
+		this.telemetry = next;
+		this.deps.bridge.broadcastStatus();
 	}
 
 	async reconcileRuntimeState(): Promise<EngineRuntimeState> {
@@ -843,13 +867,22 @@ export class CerastreamBackend implements StreamingBackend {
 			case "status": {
 				const buffering = extractBufferingStatus(event);
 				const activeEncode = extractActiveEncode(event);
+				// A partial mid-stream frame keeps the last known encode, but an
+				// engine reporting it is NOT streaming cannot have a live one — so
+				// that retention stops at the session boundary instead of outliving it.
+				const retainedEncode = event.streaming
+					? this.telemetry?.active_encode
+					: undefined;
+				const nextEncode = activeEncode ?? retainedEncode;
+				const carried = { ...this.telemetry };
+				delete carried.active_encode;
 				this.telemetry = {
-					...this.telemetry,
+					...carried,
 					state: event.state,
 					streaming: event.streaming,
 					...(event.active_input ? { active_input: event.active_input } : {}),
 					...(buffering ? { buffering } : {}),
-					...(activeEncode ? { active_encode: activeEncode } : {}),
+					...(nextEncode ? { active_encode: nextEncode } : {}),
 				};
 				this.deps.bridge.broadcastStatus();
 				if (buffering) this.deps.bridge.broadcastBuffering(buffering);

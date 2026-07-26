@@ -165,6 +165,81 @@ describe("CerastreamBackend active_encode bridge", () => {
 	});
 });
 
+// Live board bug: after a ~36 min stream was stopped from the UI (engine
+// confirmed idle), the Live-page summary still read
+// "● Live RØDE HDMI to USB-C … H.265" — the stopped session's encode, under the
+// "Live" badge — even once a different source was selected. The engine's idle
+// status frames simply omit `active_encode`, and the fold PRESERVED an omitted
+// field, so the last streaming value outlived its session indefinitely.
+describe("active_encode never outlives its session", () => {
+	const streamingEncode = {
+		type: "status",
+		seq: 0,
+		state: "streaming",
+		streaming: true,
+		active_encode: {
+			codec: "h265",
+			resolution: "1920x1080",
+			framerate: 60,
+			active_input: "/dev/video1",
+		},
+	} as Parameters<CerastreamBackend["handleEvent"]>[0];
+
+	function encodeOf(backend: CerastreamBackend): ActiveEncode | undefined {
+		return (backend.getTelemetry() as { active_encode?: ActiveEncode } | null)
+			?.active_encode;
+	}
+
+	test("an idle engine status frame drops the previous session's encode", () => {
+		const { backend } = makeBackend();
+		backend.handleEvent(streamingEncode);
+		expect(encodeOf(backend)).toBeDefined();
+
+		backend.handleEvent({
+			type: "status",
+			seq: 1,
+			state: "idle",
+			streaming: false,
+		});
+
+		expect(encodeOf(backend)).toBeUndefined();
+	});
+
+	test("a partial frame WHILE streaming still retains the last known encode", () => {
+		const { backend } = makeBackend();
+		backend.handleEvent(streamingEncode);
+
+		backend.handleEvent({
+			type: "status",
+			seq: 1,
+			state: "streaming",
+			streaming: true,
+		});
+
+		expect(encodeOf(backend)?.codec).toBe("h265");
+	});
+
+	test("the cleared field reaches the wire as an explicit null, not an omission", () => {
+		const { backend } = makeBackend();
+		backend.handleEvent(streamingEncode);
+		backend.handleEvent({
+			type: "status",
+			seq: 1,
+			state: "idle",
+			streaming: false,
+		});
+		setMockActiveEncodeProvider(() => encodeOf(backend) ?? null);
+
+		const sent: string[] = [];
+		sendStatus({ send: (f: string) => sent.push(f) } as unknown as WebSocket);
+		const framePayload = JSON.parse(sent[0] as string).status as {
+			active_encode?: ActiveEncode | null;
+		};
+
+		expect(framePayload.active_encode).toBeNull();
+	});
+});
+
 describe("extractActiveEncode — input_codec whitelist (T14)", () => {
 	test("copies a string input_codec off the event", () => {
 		const ae = extractActiveEncode({

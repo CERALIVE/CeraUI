@@ -27,6 +27,7 @@ vi.mock("$lib/rpc/client", () => ({
 }));
 
 import type {
+	ActiveEncode,
 	LinkTelemetryMessage,
 	SourcesMessage,
 	StatusResponse,
@@ -35,6 +36,7 @@ import type {
 import {
 	getLinkTelemetry,
 	getSources,
+	getStatus,
 	initSubscriptions,
 	resetState,
 } from "./subscriptions.svelte";
@@ -131,5 +133,46 @@ describe("link telemetry clears on stream stop (T6 belt-and-braces)", () => {
 		pushStreaming(true, { linkTelemetry: telemetryFixture });
 		pushStreaming(true);
 		expect(getLinkTelemetry()).toEqual(telemetryFixture);
+	});
+});
+
+// Live board bug: a stream ran, was stopped from the UI, and the Live-page
+// summary kept the STOPPED session's device/codec under a "Live" badge — even
+// after the operator picked a different source. `deriveActiveSummary` derives
+// `live` from `Boolean(activeEncode)`, and the status merge preserves an omitted
+// field, so a stop frame that omitted `active_encode` left it standing forever.
+describe("active_encode clears on stream stop", () => {
+	const activeEncodeFixture: ActiveEncode = {
+		codec: "h265",
+		resolution: "1920x1080",
+		framerate: 60,
+		active_input: "/dev/video1",
+	};
+
+	function pushStreaming(
+		is_streaming: boolean,
+		extra?: Partial<StatusResponse>,
+	) {
+		push("status", { is_streaming, ...extra } as StatusResponse);
+	}
+
+	it("clears the active encode when is_streaming flips true→false without the field", () => {
+		pushStreaming(true, { active_encode: activeEncodeFixture });
+		expect(getStatus()?.active_encode).toEqual(activeEncodeFixture);
+
+		pushStreaming(false);
+		expect(getStatus()?.active_encode).toBeNull();
+	});
+
+	it("clears the active encode even if the stop frame carries a stale one", () => {
+		pushStreaming(true, { active_encode: activeEncodeFixture });
+		pushStreaming(false, { active_encode: activeEncodeFixture });
+		expect(getStatus()?.active_encode).toBeNull();
+	});
+
+	it("keeps the active encode across steady-state streaming ticks that omit it", () => {
+		pushStreaming(true, { active_encode: activeEncodeFixture });
+		pushStreaming(true);
+		expect(getStatus()?.active_encode).toEqual(activeEncodeFixture);
 	});
 });
