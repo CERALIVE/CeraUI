@@ -39,6 +39,37 @@ type ResolveResult = Array<string> | null;
 
 type ResolveType = "a" | "aaaa";
 
+/** The slice of `dns.Resolver` this module drives — narrow so a test double
+ *  satisfies it without reimplementing every c-ares overload. */
+export interface DnsResolverLike {
+	resolve4(
+		hostname: string,
+		callback: (
+			err: NodeJS.ErrnoException | null,
+			addresses: Array<string>,
+		) => void,
+	): void;
+	resolve6(
+		hostname: string,
+		callback: (
+			err: NodeJS.ErrnoException | null,
+			addresses: Array<string>,
+		) => void,
+	): void;
+	cancel(): void;
+}
+
+const realResolverFactory = (): DnsResolverLike => new Resolver();
+let resolverFactory: () => DnsResolverLike = realResolverFactory;
+
+/** Test seam (mirrors `setIfaceResolverForTest`): swap the Resolver factory for
+ *  a double; `null` restores the real one. Never call from production code. */
+export function setDnsResolverFactoryForTest(
+	factory: (() => DnsResolverLike) | null,
+): void {
+	resolverFactory = factory ?? realResolverFactory;
+}
+
 /*
   dns.Resolver uses c-ares, with each instance (and the global
   dns.resolve*() functions) mapped one-to-one to a c-ares channel
@@ -48,17 +79,12 @@ type ResolveType = "a" | "aaaa";
   it can end up trying to use stale connections long after we change
   the default route after a network becomes unavailable
 
-  For simplicity, we create a new instance for each query unless one
-  is provided by the caller. The callers shouldn't reuse Resolver
-  instances for unrelated queries as we call resolver.cancel() on
-  timeout, which will make all pending queries time out.
+  We therefore create a new instance for every query. Sharing one across
+  unrelated queries is unsafe because resolver.cancel() on timeout makes every
+  pending query on that channel time out with it.
 */
-function resolveP(
-	hostname: string,
-	rrtype: ResolveType | undefined,
-	existingResolver?: Resolver,
-) {
-	const resolver = existingResolver ?? new Resolver();
+function resolveP(hostname: string, rrtype: ResolveType | undefined) {
+	const resolver = resolverFactory();
 
 	return new Promise<ResolveResult>((resolve, reject) => {
 		let to: ReturnType<typeof setTimeout> | undefined;
@@ -136,37 +162,49 @@ export async function dnsCacheResolve(name: string, rrtype_?: string) {
 		return { addrs: [name], fromCache: false };
 	}
 
-	let badDns = true;
+	/* The well-known check and the caller's query are INDEPENDENT lookups: the
+     check only GATES whether the answer is trusted, it is never an input to it.
+     Awaiting them in series put a second full DNS round-trip on the stream-start
+     critical path (`resolveSrtla` runs inside the per-attempt launch deadline)
+     for no ordering reason, so they fly concurrently and the call costs
+     max(check, query) instead of check + query.
 
-	// Reuse the Resolver instance for the actual query after a succesful validation
-	const resolver = new Resolver();
-
-	/* Assume that DNS resolving is broken, unless it returns
-     the expected result for a known name */
-	try {
-		const lookup = await resolveP(DNS_WELLKNOWN_NAME, "a", resolver);
-		if (lookup && lookup.length === 1 && lookup[0] === DNS_WELLKNOWN_ADDR) {
-			badDns = false;
-		} else {
+     Separate Resolver instances are REQUIRED here, not an optimisation: a shared
+     c-ares channel's cancel() on timeout aborts every pending query on it, so one
+     leg timing out would kill its sibling mid-flight. */
+	const validated = resolveP(DNS_WELLKNOWN_NAME, "a").then(
+		(lookup) => {
+			if (lookup && lookup.length === 1 && lookup[0] === DNS_WELLKNOWN_ADDR) {
+				return true;
+			}
 			logger.error(
 				`DNS validation failure: got result ${lookup} instead of the expected ${DNS_WELLKNOWN_ADDR}`,
 			);
-		}
-	} catch (e) {
-		logger.error(`DNS validation failure: ${e}`);
-	}
+			return false;
+		},
+		(e) => {
+			logger.error(`DNS validation failure: ${e}`);
+			return false;
+		},
+	);
+	const queried = resolveP(name, rrtype).then(
+		(addrs): { ok: true; addrs: ResolveResult } => ({ ok: true, addrs }),
+		(err): { ok: false; err: unknown } => ({ ok: false, err }),
+	);
+	const [goodDns, answer] = await Promise.all([validated, queried]);
 
-	if (badDns) {
+	/* A speculative answer from a network that failed the check is DISCARDED
+     unread, and its error deliberately unlogged — the serial version never
+     issued that query, so logging it would invent a new failure line. */
+	if (!goodDns) {
 		delete dnsResults[name];
-	} else {
-		try {
-			const res = (await resolveP(name, rrtype, resolver)) ?? [];
-			dnsResults[name] = res;
+	} else if (answer.ok) {
+		const res = answer.addrs ?? [];
+		dnsResults[name] = res;
 
-			return { addrs: res, fromCache: false };
-		} catch (err) {
-			logger.error(`dns error ${err}`);
-		}
+		return { addrs: res, fromCache: false };
+	} else {
+		logger.error(`dns error ${answer.err}`);
 	}
 
 	const cachedEntry = dnsCache[name];

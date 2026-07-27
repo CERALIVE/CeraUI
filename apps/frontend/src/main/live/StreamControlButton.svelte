@@ -20,6 +20,17 @@ const { isStreaming, canStart, optimismState, disabledReason, onStart, onStop }:
 
 // Disable button during transient states (starting/stopping).
 const isTransient = $derived(optimismState === 'starting' || optimismState === 'stopping');
+
+// The label follows the transient, not just the spinner. A start legitimately
+// takes seconds (engine pipeline build + PLAYING, plus the bounded retry
+// budget), and a spinner beside the unchanged "Start Stream" reads as a stuck
+// button rather than work in progress.
+const startLabel = $derived(
+	optimismState === 'starting' ? $LL.live.starting() : $LL.live.startStream(),
+);
+const stopLabel = $derived(
+	optimismState === 'stopping' ? $LL.live.stopping() : $LL.live.stopStream(),
+);
 </script>
 
 <!-- Streaming control — prominent, lime to start, neutral to stop -->
@@ -36,7 +47,7 @@ const isTransient = $derived(optimismState === 'starting' || optimismState === '
 		{:else}
 			<Square aria-hidden={true} class="h-5 w-5 transition-transform group-hover:scale-110" />
 		{/if}
-		{$LL.live.stopStream()}
+		{stopLabel}
 	</Button>
 {:else}
 	<Button
@@ -55,6 +66,6 @@ const isTransient = $derived(optimismState === 'starting' || optimismState === '
 				class="h-5 w-5 transition-transform group-hover:translate-x-0.5 group-hover:scale-110"
 			/>
 		{/if}
-		{$LL.live.startStream()}
+		{startLabel}
 	</Button>
 {/if}
