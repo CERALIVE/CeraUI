@@ -882,9 +882,41 @@ CeraUI and is NOT part of the `get-capabilities` response. Three enforcement lay
   and per-link stats for the completed session.
 - **EncoderDialog modal preview (#72)** — live encoder settings preview rendered inside
   the EncoderDialog modal before the user applies changes.
-- **HotspotDialog connect-phone section (#67, Phase-0)** — QR-code section in
-  HotspotDialog that lets a phone scan and join the device hotspot. Backed by the
-  `wifi.hotspotInfo` RPC and the `generateDeviceAccessQr` helper.
+
+## HOTSPOT QR SURFACE — ONE QR, AND IT IS ESCAPED [EXISTS]
+
+`HotspotDialog` renders exactly ONE QR: the WiFi-join code carrying the live
+hotspot credentials (`generateWifiQr`, gated on `isActive`). **Do not add a second
+one.**
+
+The connect-your-phone section (#67 Phase-0) that used to sit beneath it — a
+device-access QR encoding `http://<gatewayIp>/` so a joined phone could open
+CeraUI — is REMOVED by explicit product decision after live board QA: two QR codes
+in one dialog read as noise, and the operator has to join the hotspot before the
+second one is reachable anyway. The removal took its whole stack with it, all of
+which had exactly one consumer: `ConnectPhoneSection.svelte` + its test, the
+`connect-phone.visual.spec.ts` e2e, the `wifi.hotspotInfo` RPC (procedure, router
+registration, `client.ts` binding, `HotspotInfoOutput`/`HotspotInfo` schema,
+`modules/wifi/wifi-hotspot-info.ts`, and its backend test), and the five
+`network.hotspot.connectPhone*` / `deviceAccessQrLabel` / `navigateManuallyNote` /
+`hotspotOffPrompt` i18n keys across all 10 locales.
+
+`generateDeviceAccessQr` is deliberately UNTOUCHED — it is a shared helper with
+three other live consumers (`NetworkIngestSection`, `SourceSection`,
+`CloudRemoteDialog`) and nothing to do with the hotspot.
+
+**`generateWifiQr` escapes the four WIFI-QR reserved characters.** The payload is
+`WIFI:T:<enc>;S:<ssid>;P:<password>;;`, and the de-facto standard ZXing (and every
+phone camera that follows it) parses `\`, `;`, `,` and `:` as field structure — so
+a hotspot name or password containing one of them must carry a backslash before it
+or the scanner reads a field boundary mid-credential and joins the wrong network,
+or none at all. Nothing validates the hotspot name/password against those
+characters, so this is reachable by any operator who picks one. `escapeWifiQrField`
+does it in ONE pass over a character class, and that is load-bearing: escaping the
+four in sequence would re-escape the backslashes the earlier steps just inserted.
+Coverage: `NetworkHelper.test.ts` asserts the EXACT payload string handed to the QR
+encoder — including a plain-alphanumeric regression guard proving today's board
+credentials are byte-unchanged.
 
 ## STREAMING BACKEND QUALITY [EXISTS]
 
@@ -1917,3 +1949,4 @@ re-derived from bus-path string matching. Frontend label precedence is
 - Don't re-add per-link RTT/NAK/weight numbers to the WiFi/Cellular/Ethernet per-interface sections — `BondedLinksSection.svelte` is the sole owner of that telemetry on the Network destination.
 - Don't add a device rename affordance (text field, button, or dialog) for ANY device or media type — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` / `ONBOARD_VIDEO_DISPLAY_RULES`); a pluggable audio device gets the read-only `isExternalAudioSource` "External" badge instead.
 - Don't add a fifth fact to the compact HUD strip — the 4-fact scope (lifecycle badge, health dot, bitrate, one temp chip) is deliberate; anything else belongs in the expanded Sheet.
+- Don't add a second QR to `HotspotDialog`, and don't interpolate a raw SSID/password into a `WIFI:` payload — route the credentials through `escapeWifiQrField` in `generateWifiQr` (see HOTSPOT QR SURFACE).

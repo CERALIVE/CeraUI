@@ -9,7 +9,6 @@
  */
 
 import {
-	HotspotInfoOutput,
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
 	successResponseSchema,
@@ -38,10 +37,6 @@ import {
 import { withDeviceLock } from "../../modules/network/state/device-lock.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
-import {
-	defaultHotspotInfoDeps,
-	resolveHotspotInfo,
-} from "../../modules/wifi/wifi-hotspot-info.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -135,13 +130,6 @@ export const getWifiStatusProcedure = authedProcedure
 	.handler(() => {
 		return wifiStatusSchema.parse(wifiBuildMsg());
 	});
-
-/**
- * Get hotspot info procedure (SSID + gateway IP + active flag; never a password)
- */
-export const hotspotInfoProcedure = authedProcedure
-	.output(HotspotInfoOutput)
-	.handler(() => resolveHotspotInfo(defaultHotspotInfoDeps));
 
 /**
  * Connect to saved WiFi procedure

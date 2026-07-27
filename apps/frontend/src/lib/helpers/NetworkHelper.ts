@@ -174,6 +174,15 @@ export const getWifiUUID = (
 	return undefined;
 };
 
+// The WIFI-QR format (ZXing, and the phone cameras that follow it) reads `\ ; , :`
+// as field structure, so an unescaped one inside a credential moves the field
+// boundary and the scanner joins the wrong network. ONE pass over the character
+// class is load-bearing: escaping the four in sequence re-escapes the backslashes
+// the earlier steps just inserted.
+function escapeWifiQrField(value: string): string {
+	return value.replace(/[\\;,:]/g, "\\$&");
+}
+
 export async function generateWifiQr(
 	ssid: string,
 	password: string,
@@ -181,7 +190,7 @@ export async function generateWifiQr(
 ): Promise<string> {
 	if (!ssid) throw new Error("SSID is required");
 
-	const qrData = `WIFI:T:${encryption};S:${ssid};P:${password};;`;
+	const qrData = `WIFI:T:${encryption};S:${escapeWifiQrField(ssid)};P:${escapeWifiQrField(password)};;`;
 
 	return QRCode.toDataURL(qrData, {
 		errorCorrectionLevel: "H",

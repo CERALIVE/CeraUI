@@ -15,7 +15,6 @@ import type {
 	CompletePairingOutput,
 	GetEngineOutput,
 	HotspotConfigInput,
-	HotspotInfo,
 	HotspotToggleInput,
 	KioskConfigureInput,
 	KioskConfigureOutput,
@@ -595,7 +594,6 @@ export interface TypedRPC {
 		hotspotStart: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
-		hotspotInfo: () => Promise<HotspotInfo>;
 	};
 	network: {
 		getInterfaces: () => Promise<unknown>;

@@ -36,8 +36,6 @@ import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { cn } from '$lib/utils';
 
-import ConnectPhoneSection from './hotspot/ConnectPhoneSection.svelte';
-
 interface Props {
 	open?: boolean;
 	/** WiFi interface device key (record key in the wifi status map). */
@@ -381,9 +379,6 @@ async function copyPassword() {
 				{/if}
 			</div>
 		{/if}
-
-		<!-- Connect-your-phone: device URL + device-access QR (own RPC source) -->
-		<ConnectPhoneSection />
 	</div>
 
 	{#snippet actions()}

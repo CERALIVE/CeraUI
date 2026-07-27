@@ -86,7 +86,6 @@ import {
 import {
 	getWifiStatusProcedure,
 	hotspotConfigureProcedure,
-	hotspotInfoProcedure,
 	hotspotStartProcedure,
 	hotspotStopProcedure,
 	wifiConnectNewProcedure,
@@ -142,7 +141,6 @@ const stableRoutes = {
 
 	wifi: base.router({
 		getStatus: getWifiStatusProcedure,
-		hotspotInfo: hotspotInfoProcedure,
 		connect: wifiConnectProcedure,
 		disconnect: wifiDisconnectProcedure,
 		connectNew: wifiConnectNewProcedure,
