@@ -35,7 +35,6 @@ import {
 	setWifiState,
 } from "./state/wifi-state.ts";
 import { broadcastWifiState, type WifiNetwork } from "./wifi.ts";
-import { wifiDeviceListGetMacAddress } from "./wifi-device-list.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
@@ -48,6 +47,21 @@ export function getWifiInterfacesByMacAddress(): Readonly<
 	Record<MacAddress, WifiInterface>
 > {
 	return wifiInterfacesByMacAddress;
+}
+
+/**
+ * Look an adapter up by interface name. Monitor events carry an ifname, and the
+ * registry key is the adapter's PERMANENT hardware address — which the ifconfig
+ * poll's operational address does not reliably equal (NetworkManager randomizes
+ * it while scanning), so it must not be used to bridge the two.
+ */
+export function getWifiInterfaceByIfname(
+	ifname: string,
+): WifiInterface | undefined {
+	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
+		if (wifiInterface?.ifname === ifname) return wifiInterface;
+	}
+	return undefined;
 }
 
 export function removeWifiInterface(macAddress: MacAddress) {
@@ -206,10 +220,7 @@ function handleConnectionStateEvent(connection: string, state: string): void {
 }
 
 function handleDeviceStateEvent(device: string, state: string): void {
-	const macAddress = wifiDeviceListGetMacAddress(device);
-	if (!macAddress) return;
-
-	const wifiInterface = wifiInterfacesByMacAddress[macAddress];
+	const wifiInterface = getWifiInterfaceByIfname(device);
 	if (!wifiInterface) return;
 
 	if (state === "disconnected" || state === "unavailable") {

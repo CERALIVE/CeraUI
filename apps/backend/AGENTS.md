@@ -1573,6 +1573,104 @@ Frontend half: `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts`
 
 Coverage: `tests/wifi-ap-mode-classification.test.ts`.
 
+## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
+
+Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
+the `wifiState` cache, the numeric UI id map, the hotspot credential store, and
+the `802-11-wireless.mac-address` pinned into a NetworkManager profile — is keyed
+on the radio's **permanent hardware address**, resolved by
+`modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`).
+
+**`ifconfig`/`GENERAL.HWADDR` report the OPERATIONAL address, and it moves.**
+NetworkManager randomizes a WiFi device's MAC while scanning
+(`wifi.scan-rand-mac-address`, on by default) and resets it when it activates a
+connection. Confirmed on a Rock 5B+, roughly every 7 minutes:
+`device (wlan0): set-hw-addr: set MAC address to 26:C3:93:B6:9C:A7 (scanning)`.
+Two things broke while the registry keyed on that value:
+
+- the registry re-keyed itself, so the adapter's adopted hotspot profile, saved
+  connection map and id were discarded and rebuilt empty; and
+- profiles were pinned to a randomized address. **NetworkManager matches
+  `802-11-wireless.mac-address` against the PERMANENT address**, so those
+  profiles could never activate again — the board's journal recorded
+  `audit: op="connection-activate" result="fail" reason="… device MAC address
+  does not match the profile"` on every hotspot start.
+
+**Resolution ladder** (`resolveWifiPermanentMac(ifname, currentMac)`):
+`/sys/class/net/<ifname>/phy80211/macaddress` (the cfg80211 `wiphy->perm_addr`,
+verified byte-equal to NetworkManager's D-Bus `PermHwAddress` on the reference
+board) → the last permanent address read for that interface → the current
+address. The cached tier is load-bearing: a transient sysfs failure must not
+re-key the registry onto a scan-time address for one poll. `busctl` is
+deliberately NOT used — it is not in the `helpers/run.ts` ALLOWED set, and a
+single sysfs read needs no spawn at all. `setPermanentMacReaderForTest` is the
+test seam.
+
+**A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
+(`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
+`wifiDeviceListGetMacAddress()` — that returns the operational address and will
+miss the registry.
+
+## DURABLE PER-ADAPTER HOTSPOT IDENTITY [EXISTS]
+
+A hotspot's SSID and password are generated **once per physical adapter and
+reused forever** — across station↔hotspot switches, backend restarts, and
+reboots. Before this, every start took the "no hotspot connection yet" branch
+and minted a new pair; a test device accumulated six NetworkManager profiles
+(`Hotspot`, `Hotspot-1` … `Hotspot-5`) with six different SSIDs and passwords,
+none of which the operator's phone had been told about consistently.
+
+**Discovery runs BEFORE generation.** `startHotspotLocked`
+(`wifi-hotspot-activation.ts`) resolves the profile to activate in this order:
+the in-memory `hotspot.conn` → `findHotspotConnForAdapter()` → generate. The
+lookup (`wifi-hotspot-discovery.ts`) is deterministic, never name-guessing: the
+persisted UUID first, then the profile whose `802-11-wireless.mac-address` binds
+it to this exact permanent address, and only as a last resort a profile matching
+the persisted SSID (for profiles written before the MAC binding was
+trustworthy).
+
+**The repair must land BEFORE the activation.** `hotspotProfileFields(permMac)`
+is re-asserted with `nmConnSetFields` and only then is the profile brought up —
+a profile carrying a randomized binding is one NetworkManager will refuse, so
+activating first and repairing after (the old order) fails every time. This also
+removes the misleading `result="fail"` audit line that used to accompany every
+otherwise-successful start.
+
+**`hotspot_credentials.json` is the BACKSTOP, not the source of truth.**
+NetworkManager's own `.nmconnection` files remain primary. The store
+(`modules/wifi/hotspot-credentials.ts`, atomic JSON per
+`docs/CONFIG_PERSISTENCE.md` — **not** SQLite) exists for the one case
+NetworkManager cannot cover: a profile deleted out from under CeraUI. The
+credentials are then reused to recreate an identical hotspot rather than mint a
+new identity. It is written on generation (**before** activation, so a start
+that dies mid-flight cannot strand credentials the UI already displayed), on
+adoption (`handleHotspotConn`), and on operator rename
+(`reconfigureHotspotLocked` — otherwise a later recreate would restore the stale
+generated pair). Writes are inert until `initHotspotCredentials()` runs, so a
+unit test that never opts in cannot litter the working directory.
+
+**Duplicate consolidation is deliberately narrow.**
+`pruneDuplicateHotspotConns()` runs best-effort after a successful start (never
+blocking or failing it) and only deletes a profile that is AP mode, carries the
+nmcli-generated id (`Hotspot`, `Hotspot-N`), is used by no adapter, is claimed by
+no other adapter's persisted identity, and is bound either to THIS adapter or to
+an address no present adapter has. A profile bound to another present radio is
+always kept, so a multi-radio device cannot lose its second hotspot to the
+first's cleanup.
+
+**Side effect worth knowing:** with the binding correct, `autoconnect=yes` +
+`autoconnect-priority=999` finally work, so a hotspot left on now survives a
+reboot. `wifiHotspotStop` still sets `autoconnect=no`, so a hotspot turned off
+stays off.
+
+Coverage: `tests/wifi-hotspot-identity.test.ts` (permanent-MAC ladder, first-ever
+generation from the permanent suffix, restart reuse with zero profile creation,
+recreate-after-external-delete, repair-before-activate ordering, multi-adapter
+isolation across a restart, store round-trip, deterministic lookup, and the four
+prune negatives). Rule E proof captured in both directions: neutering the
+discovery-before-generation step reddens 5 tests; swapping the repair/activate
+order reddens the ordering test alone.
+
 ## MEASURED INTERFACE THROUGHPUT [EXISTS]
 
 `netif` entries carry TWO different throughput quantities, and only one of them
@@ -1752,6 +1850,8 @@ error and operator-stop negatives are the controls, green on both trees).
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
+- Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
+- Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.
 - Don't render `netif.tp` as a rate — it is a byte delta over an unstated window. Use `tx_bps`/`rx_bps`.
 - Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.
 - Don't record a device's `stable_id` into `liveStableIds` before the bridge check in `buildSources` — an unbridged device renders no row, so letting it suppress the remembered `lost` row erases the device from the list entirely.

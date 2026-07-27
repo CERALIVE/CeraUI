@@ -131,6 +131,8 @@ CeraUI/
 | **Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s — `tp` is a byte delta, NOT a rate)** | `apps/backend/src/modules/network/network-interfaces.ts` (`computeInterfaceRate`) + `packages/rpc/src/schemas/network.schema.ts` |
 | **Consolidated bond bandwidth (per-link + `TOTAL BANDWIDTH` ↑/↓)** | `apps/frontend/src/lib/helpers/bond-bandwidth.ts` (`aggregateBondBandwidth`) → `apps/frontend/src/main/network/BondedLinksSection.svelte` |
 | **WiFi AP-vs-client classification (`isApMode` backend / `isApRadio` frontend)** | `apps/backend/src/modules/wifi/wifi-hotspot-types.ts` + `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts` |
+| **WiFi adapter identity (permanent hardware address — NOT the scan-randomized operational one)** | `apps/backend/src/modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`) |
+| **Durable per-adapter hotspot identity (SSID/password reused forever) + duplicate-profile consolidation** | `apps/backend/src/modules/wifi/hotspot-credentials.ts` + `wifi-hotspot-discovery.ts` (`findHotspotConnForAdapter`, `pruneDuplicateHotspotConns`) |
 | **Policy-route self-check for bonded wifi/modem interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
 | **Subnet-collision + policy-route info/warning bands (frontend)** | `apps/frontend/src/main/network/CollisionBands.svelte` |
 | **Connection/subscriptions store (sole `rpcClient.onMessage` owner — `websocket-store` fully deleted)** | `apps/frontend/src/lib/rpc/subscriptions.svelte.ts` |
@@ -1950,3 +1952,5 @@ re-derived from bus-path string matching. Frontend label precedence is
 - Don't add a device rename affordance (text field, button, or dialog) for ANY device or media type — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` / `ONBOARD_VIDEO_DISPLAY_RULES`); a pluggable audio device gets the read-only `isExternalAudioSource` "External" badge instead.
 - Don't add a fifth fact to the compact HUD strip — the 4-fact scope (lifecycle badge, health dot, bitrate, one temp chip) is deliberate; anything else belongs in the expanded Sheet.
 - Don't add a second QR to `HotspotDialog`, and don't interpolate a raw SSID/password into a `WIFI:` payload — route the credentials through `escapeWifiQrField` in `generateWifiQr` (see HOTSPOT QR SURFACE).
+- Don't key a WiFi adapter (or pin a NetworkManager profile) on the MAC `ifconfig`/`GENERAL.HWADDR` reports — it is the scan-randomized OPERATIONAL address. Use `resolveWifiPermanentMac()`; see `apps/backend/AGENTS.md` → WIFI ADAPTER IDENTITY IS THE PERMANENT MAC.
+- Don't generate a hotspot SSID/password before `findHotspotConnForAdapter()` and the credential store have been consulted — that ordering is what stops a new `Hotspot-N` profile appearing on every start.

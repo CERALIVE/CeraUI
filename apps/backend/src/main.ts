@@ -118,6 +118,7 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
@@ -199,6 +200,8 @@ logger.info(bootTimer.phase("🚀", "server"));
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
+await guardNonCritical("hotspot-credentials", initHotspotCredentials);
+
 await guardNonCritical("identity", async () => {
 	await initIdentity();
 });

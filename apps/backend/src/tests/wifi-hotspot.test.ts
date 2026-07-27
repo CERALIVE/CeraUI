@@ -50,6 +50,9 @@ function makeDeps(over: Partial<HotspotActivationDeps>): HotspotActivationDeps {
 		wifiUpdateSavedConns: async () => {},
 		broadcastState: () => {},
 		setDupIpSuppression: () => {},
+		credentials: { get: () => undefined, remember: () => {} },
+		findHotspotConn: async () => undefined,
+		pruneHotspotConns: async () => {},
 		...over,
 	};
 }

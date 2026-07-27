@@ -25,6 +25,7 @@ import {
 } from "../network/network-manager.ts";
 import { withDeviceLock } from "../network/state/device-lock.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
+import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import { isWifiChannelName, wifiChannels } from "./wifi-channels.ts";
 import {
@@ -289,6 +290,18 @@ async function reconfigureHotspotLocked(
 
 	// Successfully brought up the hotspot with the new settings, reload the conn.
 	delete wifiInterface.hotspot.transition;
+	// The operator's chosen credentials are now the adapter's durable identity —
+	// a later recreate must restore these, not the originally generated pair.
+	if (isWifiChannelName(channel)) {
+		rememberHotspotCredentials(macAddress, {
+			ssid: name,
+			password,
+			channel,
+			...(wifiInterface.hotspot.conn !== undefined
+				? { conn: wifiInterface.hotspot.conn }
+				: {}),
+		});
+	}
 	await wifiUpdateSavedConns();
 	broadcastWifiState();
 	syncWifiStateCache(macAddress, wifiInterface);

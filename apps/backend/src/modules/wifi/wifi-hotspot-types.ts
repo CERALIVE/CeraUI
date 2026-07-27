@@ -15,6 +15,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import type {
+	HotspotCredentials,
+	HotspotCredentialsStore,
+} from "./hotspot-credentials.ts";
 import type { WifiChannel } from "./wifi-channels.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
 
@@ -51,8 +55,59 @@ export type WifiInterfaceWithHotspot = BaseWifiInterface & {
 	hotspot: WifiHotspot;
 };
 
-/** nmcli activation timeout (seconds) for hotspot connect operations. */
-export const HOTSPOT_UP_TO = 10;
+/**
+ * nmcli activation timeout (seconds) for hotspot connect operations.
+ *
+ * Must exceed NetworkManager's OWN verdict on an AP activation, which it
+ * delivers at a fixed 25 s (`Activation: (wifi) Hotspot network creation took
+ * too long, failing activation`). At the previous 10 s, nmcli reported a
+ * timeout while NetworkManager was still working, so a slow-but-successful
+ * hotspot was recorded as a failure — and since autoconnect is only armed on a
+ * confirmed success, that profile was left unable to recover on its own. A
+ * successful AP start takes well under a second, so this costs nothing on the
+ * happy path.
+ */
+export const HOTSPOT_UP_TO = 30;
+
+/** An existing NetworkManager AP profile resolved back to its adapter. */
+export type ExistingHotspotConn = {
+	uuid: string;
+	ssid: string;
+	password: string;
+	channel: WifiChannel;
+};
+
+/**
+ * Settings that bind an AP profile to THIS adapter and make it joinable. Applied
+ * BEFORE activation, because NetworkManager matches `802-11-wireless.mac-address`
+ * against the adapter's permanent address and refuses a profile bound to
+ * anything else — so a profile written while the address was randomized has to
+ * be repaired first or the activation simply fails.
+ *
+ * `connection.interface-name` is deliberately cleared: the MAC binding is the
+ * stable one, and NetworkManager rejects a profile whose `interface-name` names
+ * a device the MAC binding excludes. The empty string (rather than an omitted
+ * arg) is required by the Bun runtime's CLI argument handling.
+ */
+export function hotspotBindingFields(
+	permanentMacAddress: string,
+): Record<string, string> {
+	return {
+		"connection.interface-name": "",
+		"802-11-wireless.mac-address": permanentMacAddress,
+		"802-11-wireless-security.pmf": "disable",
+	};
+}
+
+/**
+ * Applied only AFTER a confirmed activation. Arming autoconnect beforehand lets
+ * NetworkManager race its own auto-activation against the explicit `con up`, and
+ * would leave a profile that never came up trying again at every boot.
+ */
+export const HOTSPOT_AUTOCONNECT_FIELDS: Record<string, string> = {
+	"connection.autoconnect": "yes",
+	"connection.autoconnect-priority": "999",
+};
 
 /** Result of a hotspot start request. */
 export type HotspotStartResult =
@@ -82,6 +137,19 @@ export type HotspotActivationDeps = {
 	wifiUpdateSavedConns: () => Promise<void>;
 	broadcastState: () => void;
 	setDupIpSuppression: (ifname: string, suppressed: boolean) => void;
+	/** Durable per-adapter hotspot identity, keyed by permanent MAC address. */
+	credentials: HotspotCredentialsStore;
+	/**
+	 * Deterministic lookup of the NetworkManager AP profile that belongs to this
+	 * adapter. Runs BEFORE any credential generation so a restart reuses the
+	 * profile it already created instead of minting a new one.
+	 */
+	findHotspotConn: (
+		macAddress: string,
+		stored: HotspotCredentials | undefined,
+	) => Promise<ExistingHotspotConn | undefined>;
+	/** Best-effort removal of superseded CeraUI-generated AP profiles. */
+	pruneHotspotConns: (macAddress: string, keepUuid: string) => Promise<void>;
 	/**
 	 * Optional bounded confirmation poll. When provided, it is retried with
 	 * backoff until it returns `true` (confirming the hotspot is up) or attempts

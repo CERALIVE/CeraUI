@@ -16,6 +16,7 @@
 */
 
 import { randomBase64 } from "../../helpers/crypto.ts";
+import { logger } from "../../helpers/logger.ts";
 import { setNetifDupIpSuppression } from "../network/network-interfaces.ts";
 import {
 	nmConnect,
@@ -23,18 +24,25 @@ import {
 	nmHotspot,
 } from "../network/network-manager.ts";
 import { withDeviceLock } from "../network/state/device-lock.ts";
+import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
+import {
+	findHotspotConnForAdapter,
+	pruneDuplicateHotspotConns,
+} from "./wifi-hotspot-discovery.ts";
 import {
 	registerPendingConfirmation,
 	syncWifiStateCache,
 } from "./wifi-hotspot-monitor.ts";
 import {
 	canHotspot,
+	HOTSPOT_AUTOCONNECT_FIELDS,
 	HOTSPOT_UP_TO,
 	type HotspotActivationDeps,
 	type HotspotStartResult,
+	hotspotBindingFields,
 	isHotspot,
 	type WifiHotspotMessage,
 	type WifiInterfaceWithHotspot,
@@ -52,6 +60,11 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	wifiUpdateSavedConns,
 	broadcastState: broadcastWifiState,
 	setDupIpSuppression: setNetifDupIpSuppression,
+	credentials: hotspotCredentialsStore,
+	findHotspotConn: findHotspotConnForAdapter,
+	pruneHotspotConns: async (macAddress, keepUuid) => {
+		await pruneDuplicateHotspotConns(macAddress, keepUuid);
+	},
 	pollHotspotActive: async (iface) => {
 		// Re-poll authoritative NM device state, then check whether the active
 		// connection now matches our hotspot connection.
@@ -131,47 +144,85 @@ async function startHotspotLocked(
 		return { success: false, error: "activation-failed" };
 	};
 
-	if (wifiInterface.hotspot.conn) {
-		// Existing hotspot connection: bring it up.
-		if (await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO)) {
-			await deps.nmConnSetFields(wifiInterface.hotspot.conn, {
-				"connection.autoconnect": "yes",
-				"connection.autoconnect-priority": "999",
-			});
-		} else {
+	const stored = deps.credentials.get(macAddress);
+
+	const remember = (conn?: string) => {
+		const { name, password, channel } = wifiInterface.hotspot;
+		if (!name || !password) return;
+		deps.credentials.remember(macAddress, {
+			ssid: name,
+			password,
+			...(conn !== undefined ? { conn } : {}),
+			...(channel !== undefined ? { channel } : {}),
+		});
+	};
+
+	/*
+	  Discovery runs BEFORE generation, and it is what makes the SSID/password
+	  stable: an adapter that has ever hosted a hotspot already owns a profile, so
+	  a restart (which wipes `hotspot.conn`) must find it rather than mint a
+	  second identity the operator's phone has never been told about.
+	*/
+	let conn = wifiInterface.hotspot.conn;
+	if (!conn) {
+		const existing = await deps.findHotspotConn(macAddress, stored);
+		if (existing) {
+			conn = existing.uuid;
+			wifiInterface.hotspot.conn = existing.uuid;
+			wifiInterface.hotspot.name = existing.ssid;
+			wifiInterface.hotspot.password = existing.password;
+			wifiInterface.hotspot.channel = existing.channel;
+		}
+	}
+
+	// Cleanup is best-effort, runs off the critical path, and never fails a start.
+	const prune = (keepUuid: string) => {
+		void deps
+			.pruneHotspotConns(macAddress, keepUuid)
+			.catch((err) => logger.debug(`hotspot profile cleanup failed: ${err}`));
+	};
+
+	if (conn) {
+		await deps.nmConnSetFields(conn, hotspotBindingFields(macAddress));
+		prune(conn);
+		if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
 			return rollback();
 		}
+		await deps.nmConnSetFields(conn, HOTSPOT_AUTOCONNECT_FIELDS);
+		remember(conn);
 	} else {
-		// No hotspot connection yet: create one with a generated name/password.
+		// First hotspot this adapter has ever hosted, or its profile was deleted
+		// outside CeraUI — reuse the persisted identity when there is one.
 		const ms = macAddress.split(":");
-		const name = `CERALIVE_${ms[4]}${ms[5]}`;
-		const password = randomBase64(9);
+		const name = stored?.ssid ?? `CERALIVE_${ms[4]}${ms[5]}`;
+		const password = stored?.password ?? randomBase64(9);
 
-		// Temporary hotspot config to send to the client during activation.
 		wifiInterface.hotspot.name = name;
 		wifiInterface.hotspot.password = password;
-		wifiInterface.hotspot.channel = "auto";
+		wifiInterface.hotspot.channel = stored?.channel ?? "auto";
+		// Persist before activating: a start that dies mid-flight must not strand
+		// credentials the UI has already shown the operator.
+		remember(stored?.conn);
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
 
 		const uuid = await deps.nmHotspot(ifname, name, password, HOTSPOT_UP_TO);
-		if (uuid) {
-			await deps.nmConnSetFields(uuid, {
-				"connection.interface-name": "", // Empty string required; Bun runtime limitation with empty CLI args
-				"connection.autoconnect": "yes",
-				"connection.autoconnect-priority": "999",
-				"802-11-wireless.mac-address": macAddress,
-				"802-11-wireless-security.pmf": "disable",
-			});
-			// The updated settings let the connection be recognised as our hotspot.
-			await deps.wifiUpdateSavedConns();
-			// Restart the connection with the updated settings (needed to disable pmf).
-			if (!(await deps.nmConnect(uuid, HOTSPOT_UP_TO))) {
-				return rollback();
-			}
-		} else {
+		if (!uuid) {
 			return rollback();
 		}
+
+		await deps.nmConnSetFields(uuid, hotspotBindingFields(macAddress));
+		// The updated settings let the connection be recognised as our hotspot.
+		await deps.wifiUpdateSavedConns();
+		prune(uuid);
+		// Restart the connection with the updated settings (needed to disable pmf).
+		if (!(await deps.nmConnect(uuid, HOTSPOT_UP_TO))) {
+			return rollback();
+		}
+		await deps.nmConnSetFields(uuid, HOTSPOT_AUTOCONNECT_FIELDS);
+		conn = uuid;
+		wifiInterface.hotspot.conn ??= uuid;
+		remember(uuid);
 	}
 
 	// NM activation issued successfully. The mode flip waits for confirmation —
