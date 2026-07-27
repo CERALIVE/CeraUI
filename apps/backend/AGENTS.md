@@ -166,6 +166,59 @@ broadcast instead of falling back to the bare asrc key.
 
 Coverage: `tests/audio-device-naming-cleanup.test.ts`, `tests/audio-naming.test.ts`.
 
+**The resolved label/identity maps are re-resolved when the ENGINE list changes,
+not only on a udev hotplug.** `lastAudioDisplays` / `lastAudioIdentities` are built
+inside `broadcastAudioSources()`, which only `updateAudioDevices()` called — and
+that runs on the SIGUSR2 udev hotplug and at boot. The engine's own audio
+enumeration lands on ITS schedule, seconds later, through `sources.ts`
+`commitEngineDevices` (the 5 s signal recheck and the video-hotplug probe both
+commit it). Nothing re-ran the join, so whatever the maps resolved to at plug time
+LATCHED. Confirmed live on a Rock 5B+: a DJI Osmo Pocket 3 plugged in mid-session
+rendered with no `transport` and no `stable_id` for the rest of the session while
+the engine had been reporting `alsa_card_id: "DJIPocket3"`, `transport: "usb"`,
+`stable_id: "card:DJIPocket3"` within seconds of the plug; one manual SIGUSR2
+filled both in instantly. Same latched-stale class as `policy_route_missing` and
+the video signal recheck.
+
+`commitEngineDevices` now fires an injected handler when the SERIALIZED audio list
+changes (default: a lazy `import("./audio.ts")` — `audio.ts` imports `sources.ts`,
+so a static import would cycle; the same shape `devices.ts` uses for
+`onDevicesChanged`). The handler is `reresolveAudioForEngineChange()`, deliberately
+NOT the whole of `updateAudioDevices()`: the sysfs card scan has not changed
+(nothing was plugged), so re-walking it would raise a spurious lost-device verdict
+and re-blink the meter through `noteMeterSelection`. Only the engine JOIN goes
+stale, so only `broadcastAudioSources()` + `refreshResolvedAsrcPreview()` are
+redone; `syncAudioMeterPreference()` is skipped because the meter preference
+resolves from the sysfs card map. Keyed on the serialized list, so the 5 s recheck's
+steady state costs one string compare and broadcasts nothing.
+`setEngineAudioChangeHandler()` is the test seam. Coverage:
+`tests/lost-device-retention.test.ts`.
+
+## "AUTO" AUDIO — THE SAME-DEVICE JOIN [EXISTS]
+
+`resolveAutoAsrc` rule 5(i) (`modules/streaming/auto-audio.ts`) picks the audio card
+belonging to the SAME chassis as the selected USB/UVC camera, by matching names with
+a `MIN_COMMON_PREFIX` (4-character) shared-prefix floor.
+
+**It must compare EVERY engine-given name, not `display_name` alone.** cerastream
+sets an audio entry's `display_name` to the ALSA longname verbatim, and the kernel
+puts the manufacturer on the front of that string. The DJI Osmo Pocket 3 is the
+worked example: audio `"DJI DJIPocket3 at usb-fc880000.usb-1, high speed"` vs video
+`"DJIPocket3: OsmoPocket3"` share only `"DJI"` — 3 characters, ONE short of the
+floor. The join missed, rule 5(ii) fired, and "Auto" served the generic `usbaudio`
+card, i.e. a **different physical device's microphone** (a still-enumerated RØDE
+whose video interface had already died). `engineAudioJoinNames()` therefore also
+offers `product_name` and `alsa_card_id` (both `"DJIPocket3"`, both already on the
+wire), which carry no manufacturer prefix and align from the first character.
+
+**The BEST match wins, not the first.** Several cards can clear a 4-character floor
+(`DJIPro` vs `DJIPocket3`), and taking whichever the engine happened to list first is
+exactly the coin-flip this rule exists to remove.
+
+Do NOT add the asrc key or any CeraUI-side alias to the candidate list — those are
+our own strings, not names the hardware chose, and would join a card to a device it
+shares nothing with. Coverage: `tests/auto-audio.test.ts`.
+
 **An unavailable selected input fails the start ONCE, as itself.** `asrcProbe()`
 polls for `AUDIO_PROBE_TIMEOUT_MS` (15 s) — a deliberate "give the device a moment
 to come back" grace window that also wakes early on a hotplug re-enumeration. That
@@ -1846,6 +1899,8 @@ error and operator-stop negatives are the controls, green on both trees).
 - Don't multiplex the control channel onto the BCRPT relay socket — the two channels are independent by design (different token audiences, different endpoints, different authority models).
 - Don't add secret-bearing event types to `RELAYABLE_TYPES` — the no-secrets contract test will catch it.
 - Don't delete the `devices`/`pipelines` broadcasts or the `capabilities.device_modes` field yet — they're deprecation shims kept for one release (`TD-legacy-source-broadcasts`); route new consumers through `getSources()`/the `sources` broadcast instead.
+- Don't resolve the rule-5(i) same-device join from `display_name` alone — it is the ALSA longname, and the manufacturer prefix the kernel puts on it can push the shared prefix under the 4-character floor for a device whose `product_name`/`alsa_card_id` match perfectly. Route through `engineAudioJoinNames()`, and don't feed it CeraUI-side strings.
+- Don't assume the audio label/identity maps are fresh because a hotplug ran — the ENGINE's audio list arrives later and separately, so `commitEngineDevices` must keep firing the re-resolve on a changed list. And don't "simplify" that handler into a full `updateAudioDevices()` call: the sysfs scan has not changed, so it would raise a spurious lost verdict and blink the meter.
 - Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.

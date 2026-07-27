@@ -425,6 +425,23 @@ export async function broadcastAudioSources(): Promise<void> {
 	});
 }
 
+/**
+ * Re-run the parts of `updateAudioDevices` that read the ENGINE's audio list,
+ * after `sources.ts` commits a changed one.
+ *
+ * Deliberately NOT the whole of `updateAudioDevices()`: the sysfs card scan has
+ * not changed (nothing was plugged), so re-walking `/sys/class/sound` would raise
+ * a spurious lost-device verdict and re-blink the meter through
+ * `noteMeterSelection`. What genuinely goes stale is the engine JOIN — the
+ * label/identity maps and what "Auto" resolves to — so only those are redone.
+ * `syncAudioMeterPreference()` is likewise skipped: the meter preference resolves
+ * from the sysfs card map, which this change cannot have touched.
+ */
+export async function reresolveAudioForEngineChange(): Promise<void> {
+	await broadcastAudioSources();
+	refreshResolvedAsrcPreview();
+}
+
 // A card can disappear mid-scan (hotplug); an unreadable card simply reports no
 // capture PCM rather than aborting the whole audio refresh.
 async function readCardEntries(path: string): Promise<string[]> {

@@ -301,6 +301,91 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 		});
 	});
 
+	// The exact payload a Rock 5B+ reports with a DJI Osmo Pocket 3 and a RØDE
+	// HDMI-to-USB-C attached. The Osmo's engine audio `display_name` is the ALSA
+	// LONGNAME, whose manufacturer prefix leaves only "DJI" (3 chars) in common
+	// with the V4L2 video card name — one short of the 4-char floor — so the
+	// same-device join missed and Auto served the RØDE's microphone instead.
+	const OSMO_VIDEO_NAME = "DJIPocket3: OsmoPocket3";
+	const OSMO_AUDIO_LONGNAME =
+		"DJI DJIPocket3 at usb-fc880000.usb-1, high speed";
+	const RODE_AUDIO_LONGNAME =
+		"RØDE RØDE HDMI to USB-C at usb-xhci-hcd.17.auto-1, super speed";
+	const OSMO_BOARD_MAP = {
+		HDMI: "rockchiphdmiin",
+		"USB audio": "usbaudio",
+		DJIPocket3: "DJIPocket3",
+		"No audio": "No audio",
+		"Pipeline default": "Pipeline default",
+	};
+
+	test("Rule 5i: the engine product_name joins when the longname display_name cannot", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", OSMO_VIDEO_NAME),
+				audioDevices: OSMO_BOARD_MAP,
+				engineAudio: [
+					{
+						input_id: OSMO_AUDIO_LONGNAME,
+						display_name: OSMO_AUDIO_LONGNAME,
+						alsa_card_id: "DJIPocket3",
+						product_name: "DJIPocket3",
+					},
+					{
+						input_id: RODE_AUDIO_LONGNAME,
+						display_name: RODE_AUDIO_LONGNAME,
+						alsa_card_id: "usbaudio",
+						product_name: "usbaudio",
+					},
+				],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: "DJIPocket3",
+			cardId: "DJIPocket3",
+			reason: "usb-same-device",
+		});
+	});
+
+	test("Rule 5i: the alsa_card_id joins even with no product_name at all", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", OSMO_VIDEO_NAME),
+				audioDevices: OSMO_BOARD_MAP,
+				engineAudio: [engineAudio(OSMO_AUDIO_LONGNAME, "DJIPocket3")],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: "DJIPocket3",
+			cardId: "DJIPocket3",
+			reason: "usb-same-device",
+		});
+	});
+
+	test("Rule 5i: the LONGEST-prefix card wins, not the first the engine listed", () => {
+		// Both clear the 4-char floor against "DJIPocket3: OsmoPocket3": the decoy
+		// shares "DJIP" (4), the real card shares all 10. Listing the decoy FIRST
+		// is what a first-match-wins scan would take.
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", OSMO_VIDEO_NAME),
+				audioDevices: {
+					...OSMO_BOARD_MAP,
+					DJIPro: "DJIPro",
+				},
+				engineAudio: [
+					engineAudio("DJIPro Headset", "DJIPro"),
+					engineAudio(OSMO_AUDIO_LONGNAME, "DJIPocket3"),
+				],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: "DJIPocket3",
+			cardId: "DJIPocket3",
+			reason: "usb-same-device",
+		});
+	});
+
 	test("Rule 5ii: USB capture + usbaudio present → USB audio card", () => {
 		expect(
 			resolveAutoAsrc({
