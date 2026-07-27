@@ -114,6 +114,33 @@ function commonPrefixLength(a: string, b: string): number {
 	return i;
 }
 
+/**
+ * Every name the engine gives for ONE audio card, for the rule-5(i) prefix join.
+ *
+ * `display_name` alone is not enough, and the DJI Osmo Pocket 3 is the proof: the
+ * engine reports its audio card as the ALSA LONGNAME
+ * `"DJI DJIPocket3 at usb-fc880000.usb-1, high speed"` while the same chassis'
+ * video device is the V4L2 card name `"DJIPocket3: OsmoPocket3"`. Those share only
+ * `"DJI"` — 3 characters, one short of {@link MIN_COMMON_PREFIX} — so the join
+ * missed and Auto fell through to whatever generic `usbaudio` card happened to be
+ * enumerated, i.e. a DIFFERENT physical device's microphone. The manufacturer
+ * prefix the kernel puts on the longname is exactly what breaks the alignment.
+ *
+ * `product_name` (`"DJIPocket3"`) and `alsa_card_id` (`"DJIPocket3"`) do not carry
+ * it, so they align with the video name from the first character. Both are already
+ * on the wire; nothing new is asked of the engine.
+ *
+ * Order is irrelevant — the caller takes the longest match — but every candidate
+ * must be a NAME the hardware chose. Do not add the asrc key or a CeraUI alias:
+ * those are our own strings and would join a card to a device it shares nothing
+ * with.
+ */
+function engineAudioJoinNames(entry: EngineAudioDevice): string[] {
+	return [entry.product_name, entry.alsa_card_id, entry.display_name].filter(
+		(name): name is string => name !== undefined && name.length > 0,
+	);
+}
+
 /** The first asrcKey whose card-id VALUE equals `cardId` (dual-space join). */
 function findAsrcKeyByCardId(
 	audioDevices: Record<string, string>,
@@ -155,8 +182,10 @@ function pipelineDefault(): AutoAsrcResolution {
  *   3. HDMI capture → the `rockchiphdmiin` card, when it is enumerated.
  *   4. Cam Link capture → the `C4K` card, when it is enumerated.
  *   5. USB/UVC capture →
- *        (i)  an engine audio entry sharing a >=4-char name prefix with the video
- *             device AND whose `alsa_card_id` is enumerated here (same device);
+ *        (i)  the engine audio entry whose BEST engine-given name (`product_name`
+ *             / `alsa_card_id` / `display_name`) shares the longest >=4-char
+ *             prefix with the video device, AND whose `alsa_card_id` is
+ *             enumerated here (same device);
  *        (ii) else the generic `usbaudio` card, when enumerated;
  *        (iii) else the first enumerated non-HDMI / non-analog device card.
  *   6. nothing matched → the pipeline-default pseudo source.
@@ -197,27 +226,38 @@ export function resolveAutoAsrc(
 
 		// Rule 5 — the USB/UVC camera family.
 		if (USB_VIDEO_KINDS.has(source.kind)) {
-			// (i) same-device join: an engine audio entry whose name shares a
-			//     >=4-char prefix with the video device AND whose card is
-			//     enumerated here. First in engine list order wins. Falls through
-			//     gracefully when `alsa_card_id` is absent (pre-T18 pin).
+			// (i) same-device join: an engine audio entry ANY of whose engine-given
+			//     names shares a >=4-char prefix with the video device AND whose
+			//     card is enumerated here. The BEST match across the whole list
+			//     wins, not the first: several cards can clear the 4-char floor
+			//     (`DJI…` vs `DJIPocket3`), and taking whichever the engine
+			//     happened to list first is the coin-flip this rule exists to
+			//     remove. Falls through gracefully when `alsa_card_id` is absent
+			//     (pre-T18 pin).
 			const cardValues = new Set(Object.values(audioDevices));
+			let best: { asrcKey: string; cardId: string; score: number } | undefined;
 			for (const entry of engineAudio) {
 				if (entry.alsa_card_id === undefined) continue;
 				if (!cardValues.has(entry.alsa_card_id)) continue;
-				if (
-					commonPrefixLength(entry.display_name, source.displayName) >=
-					MIN_COMMON_PREFIX
-				) {
-					const asrcKey = findAsrcKeyByCardId(audioDevices, entry.alsa_card_id);
-					if (asrcKey !== undefined) {
-						return {
-							asrcKey,
-							cardId: entry.alsa_card_id,
-							reason: "usb-same-device",
-						};
-					}
+				const asrcKey = findAsrcKeyByCardId(audioDevices, entry.alsa_card_id);
+				if (asrcKey === undefined) continue;
+				const score = Math.max(
+					...engineAudioJoinNames(entry).map((name) =>
+						commonPrefixLength(name, source.displayName),
+					),
+					0,
+				);
+				if (score < MIN_COMMON_PREFIX) continue;
+				if (best === undefined || score > best.score) {
+					best = { asrcKey, cardId: entry.alsa_card_id, score };
 				}
+			}
+			if (best !== undefined) {
+				return {
+					asrcKey: best.asrcKey,
+					cardId: best.cardId,
+					reason: "usb-same-device",
+				};
 			}
 
 			// (ii) the generic USB audio card alias, when enumerated.

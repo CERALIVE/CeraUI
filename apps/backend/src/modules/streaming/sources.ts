@@ -846,14 +846,65 @@ function withKnownEngineMetadata(
 	};
 }
 
-/** Make a device list the current view, remembering every device it proves live. */
+/**
+ * Re-resolve the audio labels/identities and the "Auto" preview after the engine
+ * audio list CHANGED. Lazily imported to break the `audio.ts → sources.ts` cycle
+ * (the same shape `devices.ts` uses for `onDevicesChanged`); never rejects.
+ */
+type EngineAudioChangeHandler = () => void;
+
+const defaultEngineAudioChangeHandler: EngineAudioChangeHandler = () => {
+	void import("./audio.ts")
+		.then(({ reresolveAudioForEngineChange }) =>
+			reresolveAudioForEngineChange(),
+		)
+		.catch((err) =>
+			logger.debug("sources: audio re-resolve after engine change failed", {
+				err,
+			}),
+		);
+};
+
+let engineAudioChangeHandler: EngineAudioChangeHandler =
+	defaultEngineAudioChangeHandler;
+
+/** Test seam: swap the engine-audio-change handler (`undefined` restores). */
+export function setEngineAudioChangeHandler(
+	fn: EngineAudioChangeHandler | undefined,
+): void {
+	engineAudioChangeHandler = fn ?? defaultEngineAudioChangeHandler;
+}
+
+/**
+ * Make a device list the current view, remembering every device it proves live.
+ *
+ * A CHANGED audio list also re-resolves the audio surface, and that is the whole
+ * point rather than a nicety: `audio.ts` caches the resolved label/identity maps
+ * and only ever rebuilds them inside `updateAudioDevices()`, which runs on the
+ * udev SIGUSR2 hotplug and at boot. The engine's own audio enumeration catches up
+ * on ITS schedule — seconds later, via this commit — and nothing re-ran the join.
+ * Confirmed live on a Rock 5B+: a DJI Osmo Pocket 3 plugged in mid-session showed
+ * no `transport` and no `stable_id` for its card for the rest of the session,
+ * while the engine had been reporting both within seconds of the plug; one
+ * SIGUSR2 filled them in instantly. Same latched-stale class as
+ * `policy_route_missing` and the video signal recheck.
+ *
+ * Keyed on the SERIALIZED list, so the 5 s signal recheck's steady state costs one
+ * string compare and re-broadcasts nothing.
+ */
 function commitEngineDevices(
 	devices: readonly CaptureDevice[],
 	audio?: readonly EngineAudioDevice[],
 ): void {
 	engineDeviceCache = [...devices];
-	if (audio !== undefined) engineAudioDeviceCache = [...audio];
+	let audioChanged = false;
+	if (audio !== undefined) {
+		const next = JSON.stringify(audio);
+		audioChanged = next !== JSON.stringify(engineAudioDeviceCache);
+		engineAudioDeviceCache = [...audio];
+	}
 	recordObservedDevices(engineDeviceCache);
+	if (audioChanged) engineAudioChangeHandler();
 }
 
 /**

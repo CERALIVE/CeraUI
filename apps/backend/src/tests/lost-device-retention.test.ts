@@ -45,6 +45,7 @@ import {
 	refreshEngineDeviceCache,
 	refreshSourcesForHotplug,
 	resetEngineDeviceCache,
+	setEngineAudioChangeHandler,
 } from "../modules/streaming/sources.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
@@ -811,6 +812,65 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 			"video0",
 			"audio:card0",
 		]);
+	});
+
+	it("re-resolves the audio surface when the engine audio list CHANGES, and only then", async () => {
+		// Found live: `audio.ts` caches the resolved label/identity maps and rebuilds
+		// them only inside `updateAudioDevices()` (udev SIGUSR2 / boot). The engine's
+		// own audio enumeration lands later, through this path — so a card plugged
+		// mid-session kept rendering with no `transport`/`stable_id` for the rest of
+		// the session even though the engine had reported both within seconds.
+		let reresolves = 0;
+		setEngineAudioChangeHandler(() => {
+			reresolves++;
+		});
+		try {
+			await seedHdmiCaps();
+			const observed = [
+				captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
+			];
+			const withCards = (cards: string[]) => ({
+				fetchEngineDevices: async () => ({
+					devices: [
+						engineDevice("video0", "Studio HDMI"),
+						...cards.map(
+							(card) =>
+								({
+									input_id: `audio:${card}`,
+									device_path: `alsa:${card}`,
+									display_name: card,
+									media_class: "audio",
+									kind: "audio",
+									alsa_card_id: card,
+								}) as ListDevicesResult["devices"][number],
+						),
+					],
+				}),
+			});
+
+			await refreshSourcesForHotplug(observed, withCards(["usbaudio"]));
+			expect(reresolves).toBe(1);
+
+			// The steady state of the 5 s signal recheck: identical list, no work.
+			await refreshSourcesForHotplug(observed, withCards(["usbaudio"]));
+			expect(reresolves).toBe(1);
+
+			// A card appears — exactly the DJI-plugged-mid-session case.
+			await refreshSourcesForHotplug(
+				observed,
+				withCards(["usbaudio", "DJIPocket3"]),
+			);
+			expect(reresolves).toBe(2);
+			expect(getEngineAudioDevices().map((d) => d.alsa_card_id)).toEqual([
+				"usbaudio",
+				"DJIPocket3",
+			]);
+
+			await refreshSourcesForHotplug(observed, withCards(["usbaudio"]));
+			expect(reresolves).toBe(3);
+		} finally {
+			setEngineAudioChangeHandler(undefined);
+		}
 	});
 
 	it("an OLDER hotplug refresh answering late never clobbers a NEWER one's result", async () => {
