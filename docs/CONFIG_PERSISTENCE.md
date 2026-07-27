@@ -41,6 +41,45 @@ any leftover from a prior crash, fail-soft, every boot.
 |------|--------|-----------|-------|
 | `config.json` | `saveConfig` (`modules/config.ts:93`) | Atomic (`writeFileAtomicSync`) | The single runtime state file: relay target, audio/video settings, kiosk state, add-on state, and (see below) the password/SSH hashes. Pre-dates T6 (E3 guardrail); unchanged by this wave. |
 | `notification_dismissals.json` | `NotificationDismissalStore.recordDismissal` (`modules/ui/notification-dismissals.ts`) | Atomic (`writeFileAtomicSync`) | Durable record of which persistent notifications the operator dismissed, keyed by SEMANTIC identity so a dismissal survives a page reload AND a backend restart. LRU-bounded, corruption-quarantined. Path overridable via `CERALIVE_DISMISSALS_FILE` (tests). See the dedicated subsection below. |
+| `hotspot_credentials.json` | `rememberHotspotCredentials` (`modules/wifi/hotspot-credentials.ts`) | Atomic (`writeFileAtomicSync`) | Per-adapter hotspot SSID/password, keyed by the radio's PERMANENT hardware address. A BACKSTOP behind NetworkManager's own `.nmconnection` files (which stay the source of truth) for the one case they cannot cover — a profile deleted outside CeraUI. Writes are inert until `initHotspotCredentials()` runs, so a test that never opts in writes nothing. See the dedicated subsection below. |
+
+#### Hotspot credentials store — why it exists alongside NetworkManager
+
+A hotspot's SSID and password must be generated once per physical adapter and
+reused forever; a phone told `CERALIVE_791c` once should never have to be told
+again. NetworkManager already persists that pair inside the AP profile, so the
+profile — not this file — is the source of truth, and CeraUI re-adopts it on
+every boot (`findHotspotConnForAdapter`, keyed on the adapter's permanent MAC).
+
+This file covers the gap NetworkManager cannot: if the profile is deleted out
+from under CeraUI (`nmcli con del`, a wiped `system-connections` directory, an
+image re-flash that preserves `/data`), the credentials the operator's phone
+already stores are gone and the next start would mint a new identity. With the
+store, the hotspot is recreated with the SAME SSID and password and only the
+NetworkManager object is new.
+
+On-disk format:
+
+```json
+{
+  "version": 1,
+  "adapters": {
+    "58:02:05:e1:79:1c": {
+      "ssid": "CERALIVE_791c",
+      "password": "…",
+      "conn": "18960239-bc9e-4820-8277-658608c8c697",
+      "channel": "auto",
+      "updatedAt": 1785169237000
+    }
+  }
+}
+```
+
+`conn` is a HINT — it is re-verified against NetworkManager before use and never
+trusted on its own. Keys are the permanent hardware address, lowercased, so a
+multi-radio device keeps one independent identity per radio. An unparseable file
+starts an empty store (`loadCacheFile`'s tolerant path): nothing is lost that
+re-adoption cannot recover.
 
 #### Notification dismissal store — on-disk format + semantics
 

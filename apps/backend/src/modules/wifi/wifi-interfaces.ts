@@ -62,6 +62,10 @@ import {
 	type WifiHotspot,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
+import {
+	resolveWifiPermanentMac,
+	retainWifiPermanentMacs,
+} from "./wifi-permanent-mac.ts";
 
 export type SSID = string;
 export type WifiInterfaceId = number;
@@ -217,7 +221,7 @@ async function syncActiveConnection(
 		canHotspot(wifiInterface) &&
 		wifiInterface.hotspot.conn !== activeConn
 	) {
-		await handleHotspotConn(macAddress, activeConn);
+		await handleHotspotConn(macAddress, activeConn, { active: true });
 	}
 
 	return previousConn !== activeConn || previousMode !== mode;
@@ -241,6 +245,7 @@ export async function wifiUpdateDevices() {
 
 	// Rebuild the id to mac address map
 	wifiIdToMacAddress = {};
+	const seenIfnames: string[] = [];
 
 	for (const networkDevice of networkDevices) {
 		try {
@@ -263,8 +268,17 @@ export async function wifiUpdateDevices() {
 				activeConn !== null && wifiDeviceListGetInetAddress(ifname)
 					? activeConn
 					: null;
-			const macAddress = wifiDeviceListGetMacAddress(ifname);
-			if (!macAddress) continue;
+			const currentMac = wifiDeviceListGetMacAddress(ifname);
+			if (!currentMac) continue;
+
+			/*
+			  Adapters are keyed by their PERMANENT hardware address, never the
+			  operational one the ifconfig poll reports: NetworkManager randomizes
+			  that while scanning, and a re-keyed registry silently discards the
+			  adapter's adopted hotspot profile, saved-connection map and id.
+			*/
+			seenIfnames.push(ifname);
+			const macAddress = await resolveWifiPermanentMac(ifname, currentMac);
 
 			const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 
@@ -338,6 +352,8 @@ export async function wifiUpdateDevices() {
 			}
 		}
 	}
+
+	retainWifiPermanentMacs(seenIfnames);
 
 	// delete removed adapters
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
