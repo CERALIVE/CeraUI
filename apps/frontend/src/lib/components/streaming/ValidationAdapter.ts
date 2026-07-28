@@ -308,10 +308,16 @@ export function framerateOptions(
  * capture mode whose ceiling already applies uniformly to every rung at or below
  * it (see {@link singleModeSourceCeiling}). In both cases the per-resolution
  * framerate refinement falls back to the coarse framerate list.
+ *
+ * `activeMediaType` names the ONE capture format the active source negotiates
+ * when its modes span several (see {@link resolveActiveMediaType}); `deviceModes`
+ * is already scoped to it. It is absent whenever nothing disambiguated the
+ * ladders, and every per-resolution derivation then reads every mode.
  */
 export interface OfferedAxes {
 	offered: OfferedSet;
 	deviceModes: readonly DeviceMode[] | undefined;
+	activeMediaType?: string;
 }
 
 /**
@@ -482,13 +488,20 @@ function capOfferedToSourceCeiling(
  * The shared axes tail both {@link offeredAxes} overloads resolve through: the
  * source's modes either impose a single-signal ceiling (capped axes, no
  * per-resolution refinement) or enumerate a menu that narrows `intersectCaps`
- * exactly, as before.
+ * exactly, as before — now within the ONE media type `activeKind` negotiates.
+ *
+ * The ceiling test deliberately reads the FULL mode list, before any media-type
+ * scoping. A device that enumerates a real menu must not collapse into a ceiling
+ * merely because scoping left one mode standing: for a UVC negotiation there is
+ * no `videoscale`/`videorate` safety net, so an encode target the device does not
+ * enumerate has no mode to negotiate at all.
  */
 function axesFromResolvedModes(
 	platform: PlatformCaps,
 	source: VideoSourceCap | undefined,
 	mode: string,
 	resolvedModes: readonly DeviceMode[] | undefined,
+	activeKind: string | undefined,
 ): OfferedAxes {
 	const ceiling = singleModeSourceCeiling(resolvedModes);
 	if (ceiling) {
@@ -500,9 +513,12 @@ function axesFromResolvedModes(
 			deviceModes: undefined,
 		};
 	}
+	const activeMediaType = activeMediaTypeForModes(resolvedModes, activeKind);
+	const scopedModes = scopeModesToMediaType(resolvedModes, activeMediaType);
 	return {
-		offered: intersectCaps(platform, source, mode, resolvedModes),
-		deviceModes: resolvedModes,
+		offered: intersectCaps(platform, source, mode, scopedModes),
+		deviceModes: scopedModes,
+		...(activeMediaType !== undefined ? { activeMediaType } : {}),
 	};
 }
 
@@ -565,6 +581,7 @@ export function offeredAxes(
 		cap,
 		sourceMode,
 		resolveDeviceModes(source),
+		activeCaptureKind(source),
 	);
 }
 
@@ -586,16 +603,206 @@ function offeredAxesFromPipeline(
 		source,
 		mode,
 		resolveDeviceModes(deviceModes, pipelineId, selectedVideoInput),
+		activeCaptureKindFromDeviceModes(
+			deviceModes,
+			pipelineId,
+			selectedVideoInput,
+		),
 	);
 }
 
-/** The framerate rungs the device modes can drive at one specific resolution. */
+// ── Media-type-scoped device modes ───────────────────────────────────────────
+//
+// A capture device enumerates its formats PER media type, and those ladders are
+// DISJOINT descriptor sets — not one universal capability matrix. The same
+// camera legitimately offers 3840x2160@60 as `image/jpeg` and only
+// 1920x1080@30 as `video/x-raw`; unioning the two told the operator the device
+// drives 4K60 but not 1080p60, a pairing no single capture format can honour.
+// The backend already keeps them apart (`groupDeviceCaps()` keys on
+// width × height × media_type) — this file was the only layer collapsing them.
+//
+// Which ladder applies is NOT a guess. The active source's `kind` is what
+// cerastream resolves into its `InputKind`, and that InputKind is what emits the
+// `capsfilter` media type the device negotiation is performed against (see the
+// SOURCE SIGNAL note above). So the kind names the governing media type, and the
+// other media types' modes are simply not on the table for this source.
+//
+// Fail-open, like every other none-cap rule here: a mode list carrying fewer
+// than two distinct media types, and a kind that names none of the advertised
+// ones, narrow NOTHING. An unknown must never subtract from the offering.
+
+const MEDIA_TYPE_MJPEG = "image/jpeg";
+
+/**
+ * Whether `mediaType` is the format the capture `kind` commands.
+ *
+ * Reuses the shared {@link mediaTypeToSourceKind} so the media-type taxonomy
+ * stays single-sourced; `image/jpeg` is the one token that helper leaves
+ * unclassified, so MJPEG is matched here directly. That helper disambiguates
+ * `video/x-raw` into `camlink` vs `hdmi` from a source id — the KIND is itself
+ * the truthful hint for that split, so it doubles as the argument.
+ */
+function mediaTypeDrivesKind(mediaType: string, kind: string): boolean {
+	if (mediaType === MEDIA_TYPE_MJPEG) return kind === "mjpeg";
+	return mediaTypeToSourceKind(mediaType, kind) === kind;
+}
+
+/** The distinct, explicitly tagged media types a mode list advertises. */
+function advertisedMediaTypes(modes: readonly DeviceMode[]): Set<string> {
+	const seen = new Set<string>();
+	for (const mode of modes) {
+		if (mode.media_type !== undefined) seen.add(mode.media_type);
+	}
+	return seen;
+}
+
+/**
+ * The media type whose ladder governs a source of `kind`, or `undefined` when
+ * there is nothing to disambiguate (one media type or none advertised) or the
+ * kind names none of the advertised ones — both narrow nothing.
+ */
+export function activeMediaTypeForModes(
+	modes: readonly DeviceMode[] | undefined,
+	kind: string | undefined,
+): string | undefined {
+	if (!modes || kind === undefined) return undefined;
+	const advertised = advertisedMediaTypes(modes);
+	if (advertised.size < 2) return undefined;
+	for (const mediaType of advertised) {
+		if (mediaTypeDrivesKind(mediaType, kind)) return mediaType;
+	}
+	return undefined;
+}
+
+/**
+ * The subset of `modes` belonging to `mediaType`. An UNTAGGED mode is kept —
+ * it carries no format constraint, so it can never be shown to belong to
+ * another ladder. Returns the input array UNCHANGED (same reference) whenever
+ * nothing is dropped, and falls back to it wholesale if the scope would empty
+ * the list.
+ */
+export function scopeModesToMediaType(
+	modes: readonly DeviceMode[] | undefined,
+	mediaType: string | undefined,
+): readonly DeviceMode[] | undefined {
+	if (!modes || mediaType === undefined) return modes;
+	const scoped = modes.filter(
+		(mode) => mode.media_type === undefined || mode.media_type === mediaType,
+	);
+	if (scoped.length === 0 || scoped.length === modes.length) return modes;
+	return scoped;
+}
+
+/** The capture `kind` an active {@link StreamSource} commands, if any. */
+function activeCaptureKind(
+	source: StreamSource | undefined,
+): string | undefined {
+	return source?.origin === "capture" ? source.kind : undefined;
+}
+
+/**
+ * The legacy counterpart of {@link activeCaptureKind}, keyed on the coarse
+ * `capabilities.device_modes` broadcast. A pinned device names its own kind; a
+ * pipeline-wide union does so only when every kind-matched group agrees —
+ * `libuvch264` bridges BOTH `uvc_h264` and `uvc_h265`, and a union of the two
+ * has no single governing media type, so it narrows nothing.
+ */
+function activeCaptureKindFromDeviceModes(
+	deviceModes: Record<string, DeviceModeGroup> | undefined,
+	pipelineId: string | undefined,
+	selectedVideoInput: string | undefined,
+): string | undefined {
+	if (!deviceModes) return undefined;
+	if (selectedVideoInput) {
+		const group = deviceModes[selectedVideoInput];
+		return group && group.modes.length > 0 ? group.kind : undefined;
+	}
+	if (!pipelineId) return undefined;
+	const kinds = new Set<string>();
+	for (const group of Object.values(deviceModes)) {
+		if (
+			group.kind !== undefined &&
+			deviceKindToPipelineId(group.kind) === pipelineId
+		) {
+			kinds.add(group.kind);
+		}
+	}
+	return kinds.size === 1 ? [...kinds][0] : undefined;
+}
+
+/**
+ * The media type governing the axes for the active {@link StreamSource} — the
+ * source-keyed counterpart of {@link resolveDeviceModes}.
+ */
+export function resolveActiveMediaType(
+	source: StreamSource | undefined,
+): string | undefined;
+/**
+ * Legacy media-type resolution keyed on the coarse `capabilities.device_modes`
+ * broadcast plus the pipeline/input selection, for the pre-source callers still
+ * on that broadcast (`deriveCapabilitySummary`).
+ */
+export function resolveActiveMediaType(
+	deviceModes: Record<string, DeviceModeGroup> | undefined,
+	pipelineId: string | undefined,
+	selectedVideoInput: string | undefined,
+): string | undefined;
+export function resolveActiveMediaType(
+	sourceOrDeviceModes:
+		| StreamSource
+		| Record<string, DeviceModeGroup>
+		| undefined,
+	pipelineId?: string,
+	selectedVideoInput?: string,
+): string | undefined {
+	const isLegacyForm =
+		pipelineId !== undefined ||
+		selectedVideoInput !== undefined ||
+		(sourceOrDeviceModes !== undefined && !isStreamSource(sourceOrDeviceModes));
+	if (isLegacyForm) {
+		const deviceModes = sourceOrDeviceModes as
+			| Record<string, DeviceModeGroup>
+			| undefined;
+		return activeMediaTypeForModes(
+			resolveDeviceModes(deviceModes, pipelineId, selectedVideoInput),
+			activeCaptureKindFromDeviceModes(
+				deviceModes,
+				pipelineId,
+				selectedVideoInput,
+			),
+		);
+	}
+	const source = sourceOrDeviceModes as StreamSource | undefined;
+	return activeMediaTypeForModes(
+		resolveDeviceModes(source),
+		activeCaptureKind(source),
+	);
+}
+
+/**
+ * The framerate rungs the device modes can drive at one specific resolution,
+ * within ONE media type.
+ *
+ * `mediaType` is the format the active source actually negotiates: a mode
+ * belonging to a DIFFERENT advertised media type describes a ladder this source
+ * cannot select, so it must not contribute a rate here. An untagged mode carries
+ * no format constraint and always counts; an `undefined` `mediaType` means
+ * nothing disambiguated the ladders, so every mode counts (unchanged behaviour).
+ */
 function deviceModeFrameratesAtResolution(
 	modes: readonly DeviceMode[],
 	resolution: Resolution,
+	mediaType?: string | undefined,
 ): Set<number> {
 	const framerates = new Set<number>();
 	for (const mode of modes) {
+		if (
+			mediaType !== undefined &&
+			mode.media_type !== undefined &&
+			mode.media_type !== mediaType
+		) {
+			continue;
+		}
 		if (
 			normalizeResolutionToRung(`${mode.width}x${mode.height}`) !== resolution
 		) {
@@ -639,20 +846,28 @@ export interface FramerateOption extends EncoderOption<Framerate> {
  * Keyed on the candidate framerate (NOT just the resolution) so two options
  * disabled at the same resolution get DIFFERENT hints — a 60 fps offered at 720p
  * and a 50 fps offered nowhere must not share one resolution-keyed hint.
+ *
+ * Scoped to `axes.activeMediaType`, so the hint never points at a rung only
+ * another capture format reaches — that would send the operator to a resolution
+ * where the rate is disabled all over again.
  */
 export function framerateAvailableAt(
 	axes: OfferedAxes,
 	framerate: Framerate,
 	excludeResolution: Resolution,
 ): Resolution | undefined {
-	const { offered, deviceModes } = axes;
+	const { offered, deviceModes, activeMediaType } = axes;
 	if (!deviceModes || deviceModes.length === 0) return undefined;
 	if (!offered.framerates.includes(framerate)) return undefined;
 	let best: Resolution | undefined;
 	for (const rung of AVAILABLE_RESOLUTIONS) {
 		if (rung === excludeResolution) continue;
 		if (!offered.resolutions.includes(rung)) continue;
-		if (deviceModeFrameratesAtResolution(deviceModes, rung).has(framerate)) {
+		if (
+			deviceModeFrameratesAtResolution(deviceModes, rung, activeMediaType).has(
+				framerate,
+			)
+		) {
 			best = rung;
 		}
 	}
@@ -665,16 +880,20 @@ export function framerateAvailableAt(
  * {@link OPTION_UNSUPPORTED_AT_RESOLUTION}, never hidden. With no device modes this
  * is identical to {@link framerateOptions} (coarse gating).
  *
- * The supported/disabled verdict is UNCHANGED from the pure per-resolution gate;
- * the only addition is a per-option {@link FramerateAvailabilityHint} attached to a
- * rate disabled at THIS resolution but offered at another rung (via
+ * A rate is judged against the ONE capture format the active source negotiates
+ * (`axes.activeMediaType`), never the union across formats. A device advertising
+ * 1080p60 as MJPEG and 1080p30 as raw offers two DISJOINT ladders, and unioning
+ * them offered a 60 the raw ladder cannot deliver.
+ *
+ * Each option additionally carries a {@link FramerateAvailabilityHint} when it is
+ * disabled at THIS resolution but offered at another rung (via
  * {@link framerateAvailableAt}), so EncoderDialog can render "… available at Xp".
  */
 export function framerateOptionsForResolution(
 	axes: OfferedAxes,
 	resolution: Resolution,
 ): FramerateOption[] {
-	const { offered, deviceModes } = axes;
+	const { offered, deviceModes, activeMediaType } = axes;
 	if (!deviceModes || deviceModes.length === 0) {
 		return framerateOptions(offered);
 	}
@@ -682,6 +901,7 @@ export function framerateOptionsForResolution(
 	const atResolution = deviceModeFrameratesAtResolution(
 		deviceModes,
 		resolution,
+		activeMediaType,
 	);
 	return AVAILABLE_FRAMERATES.map((value) => {
 		const inOffered = offeredSet.has(value);
@@ -817,17 +1037,19 @@ export interface AxisCeiling {
  * so it reflects the active source's real ceiling when device modes are present.
  */
 export function axisCeiling(axes: OfferedAxes): AxisCeiling {
-	const { offered, deviceModes } = axes;
+	const { offered, deviceModes, activeMediaType } = axes;
 	const resolution = highestResolutionRung(offered.resolutions);
 	// With device modes, the ceiling must be an ACHIEVABLE pair: the highest offered
 	// resolution rung and THAT rung's own max framerate (the device modes at that
 	// resolution ∩ the offered framerates), so the summary never claims a
 	// resolution+fps combo the hardware can't drive simultaneously (e.g. 4K/60 when
-	// 4K only runs at 30).
+	// 4K only runs at 30) — and, within a multi-format device, never a rate that
+	// belongs to a media type the active source does not negotiate.
 	if (deviceModes && deviceModes.length > 0 && resolution !== undefined) {
 		const atResolution = deviceModeFrameratesAtResolution(
 			deviceModes,
 			resolution,
+			activeMediaType,
 		);
 		const achievable = offered.framerates.filter((fps) =>
 			atResolution.has(fps),
@@ -944,7 +1166,6 @@ export interface ProbedCapsSummary {
 // Matched by PREFIX, not an exact token list, so every audio-capable device
 // (HDMI embedded, USB Audio Class, ALSA card) is covered without a codec table.
 const AUDIO_MEDIA_PREFIX = "audio/";
-const MEDIA_TYPE_MJPEG = "image/jpeg";
 
 const AUDIO_CAP_LABEL = "Audio";
 const AUDIO_CAP_LABEL_KEY = "live.encoder.probedCapAudio";

@@ -20,8 +20,10 @@ import { AUDIO_SOURCE_AUTO, fromEngineResolution } from "@ceraui/rpc/schemas";
 
 import {
 	axisCeiling,
+	resolveActiveMediaType,
 	resolveDeviceModes,
 	STREAMING_MODE,
+	scopeModesToMediaType,
 } from "$lib/components/streaming/ValidationAdapter";
 
 /**
@@ -361,6 +363,11 @@ function resolveActiveSourceCap(
  * `audioSupported` reflects THAT source's `supports_audio` — never "any source".
  * When no source resolves, it preserves the original platform-maxima behavior as
  * the fallback branch. Codecs stay encoder-level in both branches.
+ *
+ * The modes are scoped to the capture format the active source actually
+ * negotiates (see `resolveActiveMediaType`), so a device advertising several
+ * media types reports the ceiling of the ladder in play, not a cross-format
+ * maximum no single format can reach.
  */
 export function deriveCapabilitySummary(
 	caps: CapabilitiesMessage | undefined,
@@ -375,10 +382,18 @@ export function deriveCapabilitySummary(
 	const activeSource = resolveActiveSourceCap(sources, config);
 
 	if (activeSource) {
-		const deviceModes = resolveDeviceModes(
+		const activeMediaType = resolveActiveMediaType(
 			caps.device_modes,
 			config?.pipeline,
 			config?.selected_video_input,
+		);
+		const deviceModes = scopeModesToMediaType(
+			resolveDeviceModes(
+				caps.device_modes,
+				config?.pipeline,
+				config?.selected_video_input,
+			),
+			activeMediaType,
 		);
 		const offered = intersectCaps(
 			caps.platform,
@@ -386,7 +401,11 @@ export function deriveCapabilitySummary(
 			STREAMING_MODE,
 			deviceModes,
 		);
-		const ceiling = axisCeiling({ offered, deviceModes });
+		const ceiling = axisCeiling({
+			offered,
+			deviceModes,
+			...(activeMediaType !== undefined ? { activeMediaType } : {}),
+		});
 		return {
 			maxResolution:
 				ceiling.resolution ?? (activeSource.default_resolution || undefined),

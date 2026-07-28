@@ -1,12 +1,14 @@
 import type {
 	CaptureStreamSource,
 	CoarseStreamSource,
+	DeviceMode,
 	DeviceModeGroup,
 	Pipeline,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
+	activeMediaTypeForModes,
 	axisCeiling,
 	framerateAvailableAt,
 	framerateOptions,
@@ -18,7 +20,9 @@ import {
 	offeredAxes,
 	offeredEncoderCaps,
 	resolutionOptions,
+	resolveActiveMediaType,
 	resolveDeviceModes,
+	scopeModesToMediaType,
 	seededAxisSelection,
 	singleModeSourceCeiling,
 } from "./ValidationAdapter";
@@ -708,5 +712,277 @@ describe("seededAxisSelection — reconciling a saved draft onto the active sour
 				framerate: undefined,
 			}),
 		).toEqual({ resolution: "1080p", framerate: 30 });
+	});
+});
+
+// A camera advertising TWO disjoint hardware ladders under two media types — the
+// shape `groupDeviceCaps()` already emits (it keys on width × height × media_type):
+//   image/jpeg   → 1080p@[30,60] + 2160p@[30]
+//   video/x-h264 →  720p@[30,60] + 1080p@[30]
+// 1080p exists in BOTH and its rate lists DIFFER, which is exactly the overlap
+// the union could not represent: 60 at 1080p is an MJPEG-only capability.
+const DUAL_FORMAT_MODES: readonly DeviceMode[] = [
+	{
+		width: 1920,
+		height: 1080,
+		framerates: [30, 60],
+		media_type: "image/jpeg",
+	},
+	{ width: 3840, height: 2160, framerates: [30], media_type: "image/jpeg" },
+	{
+		width: 1280,
+		height: 720,
+		framerates: [30, 60],
+		media_type: "video/x-h264",
+	},
+	{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h264" },
+];
+
+function makeDualFormatSource(
+	kind: CaptureStreamSource["kind"],
+	modes: readonly DeviceMode[] = DUAL_FORMAT_MODES,
+): CaptureStreamSource {
+	return {
+		...RODE_CAPTURE_SOURCE,
+		id: `usb-${kind}`,
+		kind,
+		modes: [...modes],
+	};
+}
+
+describe("activeMediaTypeForModes — which ladder the source kind commands", () => {
+	it("resolves each UVC codec kind to its own media type", () => {
+		expect(activeMediaTypeForModes(DUAL_FORMAT_MODES, "uvc_h264")).toBe(
+			"video/x-h264",
+		);
+		expect(activeMediaTypeForModes(DUAL_FORMAT_MODES, "mjpeg")).toBe(
+			"image/jpeg",
+		);
+	});
+
+	it("resolves a raw-capture kind to video/x-raw, camlink included", () => {
+		const rawAndJpeg: DeviceMode[] = [
+			{
+				width: 1920,
+				height: 1080,
+				framerates: [30],
+				media_type: "video/x-raw",
+			},
+			{
+				width: 1920,
+				height: 1080,
+				framerates: [60],
+				media_type: "image/jpeg",
+			},
+		];
+		expect(activeMediaTypeForModes(rawAndJpeg, "hdmi")).toBe("video/x-raw");
+		expect(activeMediaTypeForModes(rawAndJpeg, "camlink")).toBe("video/x-raw");
+	});
+
+	it("narrows nothing when there is no ambiguity to resolve", () => {
+		// Untagged modes (the shape every pre-media_type fixture carries) and a
+		// single advertised media type both leave the offering exactly as it was.
+		expect(
+			activeMediaTypeForModes(RODE_CAPTURE_SOURCE.modes, "uvc_h264"),
+		).toBeUndefined();
+		expect(
+			activeMediaTypeForModes(
+				[
+					{
+						width: 1920,
+						height: 1080,
+						framerates: [30],
+						media_type: "video/x-h264",
+					},
+				],
+				"uvc_h264",
+			),
+		).toBeUndefined();
+	});
+
+	it("is fail-open for a kind that names none of the advertised media types", () => {
+		// Never narrow on a guess: an unclassified kind keeps the permissive union.
+		expect(
+			activeMediaTypeForModes(DUAL_FORMAT_MODES, "uvc_h265"),
+		).toBeUndefined();
+		expect(
+			activeMediaTypeForModes(DUAL_FORMAT_MODES, "mystery-kind"),
+		).toBeUndefined();
+		expect(
+			activeMediaTypeForModes(DUAL_FORMAT_MODES, undefined),
+		).toBeUndefined();
+		expect(activeMediaTypeForModes(undefined, "uvc_h264")).toBeUndefined();
+	});
+});
+
+describe("scopeModesToMediaType", () => {
+	it("keeps only the named format's modes, plus every untagged one", () => {
+		const mixed: DeviceMode[] = [
+			...DUAL_FORMAT_MODES,
+			{ width: 640, height: 480, framerates: [30] },
+		];
+		const scoped = scopeModesToMediaType(mixed, "video/x-h264");
+		expect(scoped?.map((m) => m.media_type)).toEqual([
+			"video/x-h264",
+			"video/x-h264",
+			undefined,
+		]);
+	});
+
+	it("returns the input UNCHANGED when nothing is dropped", () => {
+		expect(
+			scopeModesToMediaType(RODE_CAPTURE_SOURCE.modes, "video/x-h264"),
+		).toBe(RODE_CAPTURE_SOURCE.modes);
+		expect(scopeModesToMediaType(DUAL_FORMAT_MODES, undefined)).toBe(
+			DUAL_FORMAT_MODES,
+		);
+		expect(scopeModesToMediaType(undefined, "video/x-h264")).toBeUndefined();
+	});
+
+	it("falls back to the full list rather than emptying it", () => {
+		expect(scopeModesToMediaType(DUAL_FORMAT_MODES, "video/x-vp9")).toBe(
+			DUAL_FORMAT_MODES,
+		);
+	});
+});
+
+describe("offeredAxes — disjoint per-media-type ladders stay disjoint", () => {
+	const h264Axes = offeredAxes("rk3588", makeDualFormatSource("uvc_h264"));
+	const mjpegAxes = offeredAxes("rk3588", makeDualFormatSource("mjpeg"));
+
+	it("records the media type each source actually negotiates", () => {
+		expect(h264Axes.activeMediaType).toBe("video/x-h264");
+		expect(mjpegAxes.activeMediaType).toBe("image/jpeg");
+	});
+
+	it("offers only the resolutions the active format reaches", () => {
+		// 2160p is MJPEG-only and 720p is H.264-only; the union offered all three
+		// rungs to both sources.
+		expect(h264Axes.offered.resolutions).toEqual(["720p", "1080p"]);
+		expect(mjpegAxes.offered.resolutions).toEqual(["1080p", "2160p"]);
+	});
+
+	it("THE BUG: 60 fps at 1080p belongs to MJPEG alone, never to H.264", () => {
+		const h264At1080 = framerateOptionsForResolution(h264Axes, "1080p");
+		expect(h264At1080.find((o) => o.value === 30)?.supported).toBe(true);
+		const h264Sixty = h264At1080.find((o) => o.value === 60);
+		expect(h264Sixty?.supported).toBe(false);
+		expect(h264Sixty?.reason).toBe(OPTION_UNSUPPORTED_AT_RESOLUTION);
+
+		// The same resolution on the same hardware, under the format that DOES
+		// enumerate it — proof the two ladders are isolated, not globally clamped.
+		const mjpegAt1080 = framerateOptionsForResolution(mjpegAxes, "1080p");
+		expect(mjpegAt1080.find((o) => o.value === 60)?.supported).toBe(true);
+		expect(mjpegAt1080.find((o) => o.value === 30)?.supported).toBe(true);
+	});
+
+	it("keeps each format's own per-resolution divergence", () => {
+		const h264At720 = framerateOptionsForResolution(h264Axes, "720p");
+		expect(h264At720.find((o) => o.value === 60)?.supported).toBe(true);
+
+		const mjpegAt2160 = framerateOptionsForResolution(mjpegAxes, "2160p");
+		expect(mjpegAt2160.find((o) => o.value === 30)?.supported).toBe(true);
+		expect(mjpegAt2160.find((o) => o.value === 60)?.supported).toBe(false);
+	});
+
+	it("reports an achievable device-max within the active format", () => {
+		expect(axisCeiling(h264Axes)).toEqual({
+			resolution: "1080p",
+			framerate: 30,
+		});
+		expect(axisCeiling(mjpegAxes)).toEqual({
+			resolution: "2160p",
+			framerate: 30,
+		});
+	});
+
+	it("points the available-elsewhere hint at a rung the SAME format reaches", () => {
+		// H.264 drives 60 at 720p only, so that is where the hint sends the
+		// operator — never 1080p, which only MJPEG drives at 60.
+		expect(framerateAvailableAt(h264Axes, 60, "1080p")).toBe("720p");
+		expect(
+			framerateOptionsForResolution(h264Axes, "1080p").find(
+				(o) => o.value === 60,
+			)?.hint,
+		).toEqual({ fps: 60, resolution: "720p" });
+		expect(framerateAvailableAt(mjpegAxes, 60, "2160p")).toBe("1080p");
+	});
+
+	it("stays permissive for a kind that matches no advertised format", () => {
+		// uvc_h265 names a media type this camera never advertises: the offering
+		// falls back to the union rather than collapsing to nothing.
+		const unmatched = offeredAxes("rk3588", makeDualFormatSource("uvc_h265"));
+		expect(unmatched.activeMediaType).toBeUndefined();
+		expect(unmatched.offered.resolutions).toEqual(["720p", "1080p", "2160p"]);
+	});
+
+	it("leaves an UNTAGGED mode list byte-identical (old-engine payload)", () => {
+		const untagged = offeredAxes("rk3588", RODE_CAPTURE_SOURCE);
+		expect(untagged.activeMediaType).toBeUndefined();
+		expect(untagged.deviceModes).toBe(RODE_CAPTURE_SOURCE.modes);
+		expect(untagged.offered.resolutions).toEqual(["720p", "1080p"]);
+		expect(untagged.offered.framerates).toEqual([30, 60]);
+	});
+});
+
+describe("resolveActiveMediaType — legacy device_modes form", () => {
+	const DUAL_FORMAT_GROUPS: Record<string, DeviceModeGroup> = {
+		"/dev/video0": { kind: "mjpeg", modes: [...DUAL_FORMAT_MODES] },
+		"/dev/video1": { kind: "uvc_h264", modes: [...DUAL_FORMAT_MODES] },
+		"/dev/video2": { kind: "uvc_h265", modes: [...DUAL_FORMAT_MODES] },
+	};
+
+	it("follows the PINNED device's own kind", () => {
+		expect(
+			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "hdmi", "/dev/video1"),
+		).toBe("video/x-h264");
+		expect(
+			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "hdmi", "/dev/video0"),
+		).toBe("image/jpeg");
+	});
+
+	it("narrows nothing for a pipeline that bridges two kinds at once", () => {
+		// `libuvch264` bridges BOTH uvc_h264 and uvc_h265, so the kind-matched
+		// union has no single governing format — the permissive union stands.
+		expect(
+			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "libuvch264", undefined),
+		).toBeUndefined();
+	});
+
+	it("narrows nothing with no device_modes, no pipeline, or an unknown pin", () => {
+		expect(
+			resolveActiveMediaType(undefined, "hdmi", undefined),
+		).toBeUndefined();
+		expect(
+			resolveActiveMediaType(DUAL_FORMAT_GROUPS, undefined, undefined),
+		).toBeUndefined();
+		expect(
+			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "hdmi", "/dev/nope"),
+		).toBeUndefined();
+	});
+
+	it("reads a StreamSource's own kind in the source-keyed form", () => {
+		expect(resolveActiveMediaType(makeDualFormatSource("mjpeg"))).toBe(
+			"image/jpeg",
+		);
+		expect(resolveActiveMediaType(RODE_CAPTURE_SOURCE)).toBeUndefined();
+		expect(resolveActiveMediaType(COARSE_HDMI_SOURCE)).toBeUndefined();
+		expect(resolveActiveMediaType(undefined)).toBeUndefined();
+	});
+
+	it("gates the legacy axes path on the pinned device's format", () => {
+		const pinned = offeredAxes(
+			"rk3588",
+			"hdmi",
+			makePipeline(),
+			DUAL_FORMAT_GROUPS,
+			"/dev/video1",
+		);
+		expect(pinned.activeMediaType).toBe("video/x-h264");
+		expect(pinned.offered.resolutions).toEqual(["720p", "1080p"]);
+		expect(
+			framerateOptionsForResolution(pinned, "1080p").find((o) => o.value === 60)
+				?.supported,
+		).toBe(false);
 	});
 });
