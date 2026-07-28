@@ -3,6 +3,7 @@ import {
 	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
+	MEDIA_TYPE_RAW,
 	mediaTypeToSourceKind,
 	type OfferedSet,
 	type PlatformCaps,
@@ -940,19 +941,77 @@ export interface ProbedCapsSummary {
 	caps: string[];
 }
 
+// Matched by PREFIX, not an exact token list, so every audio-capable device
+// (HDMI embedded, USB Audio Class, ALSA card) is covered without a codec table.
+const AUDIO_MEDIA_PREFIX = "audio/";
+const MEDIA_TYPE_MJPEG = "image/jpeg";
+
+const AUDIO_CAP_LABEL = "Audio";
+const AUDIO_CAP_LABEL_KEY = "live.encoder.probedCapAudio";
+
+export type CapLabelTranslator = (key: string) => string;
+
+function audioCapLabel(t?: CapLabelTranslator): string {
+	if (t) {
+		const translated = t(AUDIO_CAP_LABEL_KEY);
+		if (translated && !translated.includes(AUDIO_CAP_LABEL_KEY)) {
+			return translated;
+		}
+	}
+	return AUDIO_CAP_LABEL;
+}
+
+function isAudioMediaType(mediaType: string): boolean {
+	return mediaType.startsWith(AUDIO_MEDIA_PREFIX);
+}
+
+/** `video/x-vp9` → `VP9` — an unmapped token still reads as a codec name. */
+function genericMediaLabel(mediaType: string): string {
+	const slash = mediaType.indexOf("/");
+	const subtype = slash === -1 ? mediaType : mediaType.slice(slash + 1);
+	const bare = subtype.startsWith("x-") ? subtype.slice(2) : subtype;
+	return bare === "" ? mediaType : bare.toUpperCase();
+}
+
 function shortMediaType(mediaType: string): string {
 	if (mediaType === MEDIA_TYPE_H265) return "H.265";
 	if (mediaType === MEDIA_TYPE_H264) return "H.264";
-	return mediaType;
+	if (mediaType === MEDIA_TYPE_MJPEG) return "MJPEG";
+	if (mediaType === MEDIA_TYPE_RAW) return "Raw";
+	return genericMediaLabel(mediaType);
 }
 
-/** Render one probed format as a compact spec string (e.g. `1920×1080 @ 30 H.265`). */
-export function formatProbedCap(cap: CaptureCap): string {
+/** `30/1` → `30`, `60000/1001` → `59.94`. A non-fraction value passes through. */
+function shortFramerate(framerate: string): string {
+	const fraction = framerate.match(/^(\d+)\s*\/\s*(\d+)$/);
+	if (!fraction) return framerate;
+	const denominator = Number(fraction[2]);
+	if (denominator === 0) return framerate;
+	const fps = Number(fraction[1]) / denominator;
+	if (!Number.isFinite(fps)) return framerate;
+	return String(Math.round(fps * 100) / 100);
+}
+
+/**
+ * Render one probed format as a compact spec string (e.g. `1920×1080 @ 59.94 H.264`).
+ *
+ * An AUDIO format collapses to one plain-language label: the engine's `CaptureCap`
+ * carries ONLY `media_type` for audio (its GStreamer probe never reads
+ * `rate`/`channels`/`format`), so `audio/x-raw` is byte-identical for every audio
+ * device — it distinguishes nothing and reads as a diagnostic string.
+ */
+export function formatProbedCap(
+	cap: CaptureCap,
+	t?: CapLabelTranslator,
+): string {
+	if (cap.media_type && isAudioMediaType(cap.media_type)) {
+		return audioCapLabel(t);
+	}
 	const parts: string[] = [];
 	if (cap.width !== undefined && cap.height !== undefined) {
 		parts.push(`${cap.width}\u00d7${cap.height}`);
 	}
-	if (cap.framerate) parts.push(`@ ${cap.framerate}`);
+	if (cap.framerate) parts.push(`@ ${shortFramerate(cap.framerate)}`);
 	if (cap.media_type) parts.push(shortMediaType(cap.media_type));
 	return parts.join(" ");
 }
@@ -964,14 +1023,21 @@ export function formatProbedCap(cap: CaptureCap): string {
  */
 export function summarizeProbedCaps(
 	devices: readonly CaptureDevice[] | undefined,
+	t?: CapLabelTranslator,
 ): ProbedCapsSummary[] {
 	if (!devices) return [];
 	const out: ProbedCapsSummary[] = [];
 	for (const device of devices) {
 		if (!device.caps || device.caps.length === 0) continue;
-		const caps = device.caps
-			.map(formatProbedCap)
-			.filter((label) => label.length > 0);
+		// Identical labels carry identical information; a device advertising two
+		// audio formats would otherwise render the same chip twice.
+		const caps = [
+			...new Set(
+				device.caps
+					.map((cap) => formatProbedCap(cap, t))
+					.filter((label) => label.length > 0),
+			),
+		];
 		if (caps.length === 0) continue;
 		out.push({
 			inputId: device.input_id,

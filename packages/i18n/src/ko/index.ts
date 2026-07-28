@@ -1368,6 +1368,7 @@ const ko = {
 			sourceChangedNote:
 				"소스가 변경됨 — 새 입력에 맞게 설정이 업데이트되었습니다.",
 			probedCaps: "감지된 기능",
+			probedCapAudio: "오디오",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",

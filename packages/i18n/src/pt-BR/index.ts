@@ -1531,6 +1531,7 @@ const ptBR = {
 			sourceChangedNote:
 				"Fonte alterada — configurações atualizadas para a nova entrada.",
 			probedCaps: "Capacidades detectadas",
+			probedCapAudio: "Áudio",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",

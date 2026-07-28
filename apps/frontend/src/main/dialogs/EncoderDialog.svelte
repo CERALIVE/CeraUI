@@ -146,9 +146,6 @@ const h265Option = $derived(codecOptions.find((codec) => codec.value === 'h265')
 const h265Supported = $derived(h265Option !== undefined);
 const h265SoftwareOnly = $derived(h265Option?.softwareWarning ?? false);
 const uvcH265Sources = $derived(deriveUvcH265Sources(devices));
-// Probed hardware formats (resolution/framerate/media-type) surfaced inline.
-const probedCaps = $derived(summarizeProbedCaps(devices));
-
 // ── i18n key resolver (mirrors the legacy EncoderCard helper) ──────────────────
 const t = (key: string): string => {
 	const parts = key.split('.');
@@ -162,6 +159,9 @@ const t = (key: string): string => {
 	}
 	return typeof result === 'function' ? (result as () => string)() : key;
 };
+
+// Probed hardware formats (resolution/framerate/media-type) surfaced inline.
+const probedCaps = $derived(summarizeProbedCaps(devices, t));
 
 // A disabled framerate option's title = its capability reason plus its OWN
 // "available elsewhere" hint (per-option: different rates disabled at the same

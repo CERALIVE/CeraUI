@@ -1488,6 +1488,7 @@ const ar = {
 			bitrateClamped: "تم الضبط إلى النطاق المدعوم",
 			sourceChangedNote: "تم تغيير المصدر — تم تحديث الإعدادات للإدخال الجديد.",
 			probedCaps: "القدرات المكتشفة",
+			probedCapAudio: "صوت",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",

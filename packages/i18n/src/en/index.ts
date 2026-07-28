@@ -771,6 +771,7 @@ const en = {
 			sourceChangedNote:
 				"Source changed \u2014 settings updated for the new input.",
 			probedCaps: "Detected capabilities",
+			probedCapAudio: "Audio",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
