@@ -68,6 +68,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s) | `modules/network/network-interfaces.ts` (`computeInterfaceRate`, `processIfconfigOutput`) |
 | WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
+| **Device-truth save guard + persisted-mode clamp (ADR-0008 §10)** | `modules/streaming/device-mode-guard.ts` (`verifySaveDeviceMode`, `clampPersistedDeviceMode`) + `modules/streaming/persisted-mode-clamp.ts` (`reconcilePersistedDeviceMode`); the RULE itself is `@ceraui/rpc` `capabilities/device-mode-truth.ts`, shared with the frontend |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **Which capture kinds release their kernel v4l2 node while the engine holds them (libuvc)** | `modules/streaming/held-devices.ts` (`releasesV4l2Node`) — CeraUI-side mirror of cerastream `engine::held_devices` |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
@@ -1470,6 +1471,62 @@ Coverage: `tests/engine-reconnect.test.ts` (boot-retry heal, later out-of-band
 reconnect, backoff-ceiling cadence, and the permanently-unavailable case through the
 REAL capability ladder — no regression to `engineUnavailable`/`engineStarting`).
 
+## DEVICE TRUTH IS ENFORCED AT THE SAVE PATH, NOT THE DIALOG [EXISTS]
+
+cerastream ADR-0008 §10 settles the contract: a device's per-`media_type` mode
+ladder is the ONLY truth, the engine reports it VERBATIM, and "the UI and the save
+path may never invent or union". The frontend already honoured it for what it
+OFFERS; nothing honoured it for what gets PERSISTED, so a 1080p60 written against a
+device whose H.264 ladder tops out at 30 survived on disk, was re-sent on every
+start, and failed `not-negotiated` every time with no operator-visible reason.
+
+**The rule lives ONCE, in `@ceraui/rpc` (`capabilities/device-mode-truth.ts`)** —
+`evaluateDeviceMode` / `nearestDeliverableMode`, shared verbatim with the frontend
+`ValidationAdapter`. An offering the save path would reject is a lie told to the
+operator; a save the offering would have disabled is a bypass. Two implementations
+of one rule drift, and the #244 defect was exactly that class one layer up. Do NOT
+fork a second copy.
+
+**`modules/streaming/device-mode-guard.ts`** is the backend binding of that rule:
+it resolves WHICH ladder governs (through `resolveSourceIdentity`, so a persisted
+id that went stale across a replug still finds its device) and hands it to the
+shared evaluator.
+
+- **SAVE-TIME (`verifySaveDeviceMode`)** — called from `streaming.setConfig`
+  (`rpc/procedures/streaming.procedure.ts`) and returning the typed
+  `device_mode_unsupported`. Three orderings are load-bearing: it runs BEFORE the
+  first config mutation (a refusal leaves disk byte-identical); both axes resolve
+  `input.X ?? config.X`, because a half-save is still a full pairing against the
+  hardware; and the source checked is the one being SAVED, since validating the
+  persisted one waves through exactly the ladder switch that makes the combo
+  illegal. It lives at the PROCEDURE, not the dialog, so a direct RPC call is
+  covered too.
+- **LOAD-TIME (`modules/streaming/persisted-mode-clamp.ts`)** — for the fleet that
+  already has a bad pairing on disk. There is no "config load" moment at which this
+  can run: `loadConfig()` is at boot, long before `list-devices` answers, and only
+  the ladder can judge the pairing. The first moment it is known is the first
+  `sources` build, so `reconcilePersistedDeviceMode` hangs off `broadcastSources`
+  beside `reconcileConfiguredSourceIdentity`. The clamp is DOWNWARD-biased —
+  clamping up would hand the operator a mode they never chose — and both axes come
+  from ONE real enumerated mode, so the result is never a synthesised pairing. It
+  reports once via the keyed `notifications.encoderModeClamped`.
+
+**Fail-open is deliberate and load-bearing.** A source with no reported ladder, a
+coarse/virtual/network source, and an un-normalizable payload all PASS. Refusing on
+an unknown would block a save the hardware can honour — the same dishonesty in the
+other direction. Do not "harden" these into refusals.
+
+**The rejection is rendered, never swallowed.** `setConfig` RESOLVES with
+`{success:false}` rather than throwing, so a caller that only try/catches reports a
+refusal as "Saved". Both save paths read the flag and route the reason through
+`lib/streaming/encoderSaveError.ts` (`apps/frontend`). The dialog itself is
+unchanged: options are still rendered DISABLED WITH A REASON, never hidden.
+
+Coverage: `tests/capability-truth-save.test.ts` (the per-`media_type` rejection
+table driven through the REAL procedure, the persistence-untouched guarantee, and
+the fail-open negatives) + `tests/capability-truth-clamp.test.ts` (the Osmo
+1080p60-on-H.264 migration, the one-time notification, and the never-clamp cases).
+
 ## DEVICE-FIRST SOURCE MODEL [EXISTS]
 
 `modules/streaming/sources.ts` is the single builder behind the `sources`
@@ -1977,6 +2034,8 @@ error and operator-stop negatives are the controls, green on both trees).
 - Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
+- Don't validate an encode target against a device ladder with a second, local copy of the rule — `@ceraui/rpc` `capabilities/device-mode-truth.ts` is shared with the frontend precisely so the offering and the save path cannot disagree. And don't turn its fail-open guards (no ladder, coarse source, un-normalizable payload) into refusals: blocking a save the hardware can honour is the same dishonesty as allowing one it cannot.
+- Don't report a `streaming.setConfig` result without reading `result.success` — a device-truth refusal RESOLVES, it does not throw, so a bare try/catch toasts "Saved" over a config the device rejected.
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.

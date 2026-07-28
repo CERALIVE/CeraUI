@@ -76,6 +76,7 @@ import {
 import { fromEngineDevice } from "./devices.ts";
 import { releasesV4l2Node } from "./held-devices.ts";
 import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
+import { reconcilePersistedDeviceMode } from "./persisted-mode-clamp.ts";
 import { getEffectiveHardware } from "./pipelines.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
 
@@ -1141,12 +1142,27 @@ export function broadcastSources(): void {
 	// rebuilt rather than published from the pre-migration snapshot.
 	if (reconcileConfiguredSourceIdentity(message.sources)) {
 		const migrated = getSourcesMessage();
+		clampPersistedModeAndEcho(migrated.sources);
 		lastBroadcastSources = JSON.stringify(migrated);
 		broadcastMsg("sources", migrated);
 		return;
 	}
+	clampPersistedModeAndEcho(message.sources);
 	lastBroadcastSources = JSON.stringify(message);
 	broadcastMsg("sources", message);
+}
+
+/**
+ * This is the FIRST moment the device's ladder is known — `loadConfig()` runs at
+ * boot, long before `list-devices` answers — which is why the persisted-mode
+ * reconciliation hangs off the sources build rather than off the config loader.
+ * It leaves the `sources` payload untouched, so no rebuild is needed; only the
+ * `config` echo has to follow the write.
+ */
+function clampPersistedModeAndEcho(sources: readonly StreamSource[]): void {
+	if (reconcilePersistedDeviceMode(sources)) {
+		broadcastMsg("config", getConfig());
+	}
 }
 
 function broadcastSourcesIfChanged(): void {

@@ -152,7 +152,7 @@ let {
 }: Props = $props();
 
 // Capability summary (res / fps / codec / audio) — compact, telemetry-style.
-const summary = $derived(deriveCapabilitySummary(capabilities, config));
+const summary = $derived(deriveCapabilitySummary(capabilities, config, sources?.sources));
 const capChips = $derived.by(() => {
 	if (!summary) return [] as string[];
 	const chips: string[] = [];

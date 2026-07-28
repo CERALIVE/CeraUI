@@ -1,12 +1,16 @@
 import {
-	deviceKindToPipelineId,
+	activeMediaTypeForModes,
 	intersectCaps,
 	MEDIA_TYPE_H264,
 	MEDIA_TYPE_H265,
+	MEDIA_TYPE_MJPEG,
 	MEDIA_TYPE_RAW,
 	mediaTypeToSourceKind,
 	type OfferedSet,
 	type PlatformCaps,
+	type SourceModeCeiling,
+	scopeModesToMediaType,
+	singleModeSourceCeiling,
 	type VideoSourceCap,
 } from "@ceraui/rpc";
 import {
@@ -122,9 +126,33 @@ export {
  * board→ceiling map: hardware-accelerated SBCs reach the 4K rung, the software
  * (`generic`) fallback tops out at 1080p (4K software encode is impractical).
  *
- * It exists because the additive `get-capabilities` engine method is not yet
- * surfaced to the FE over RPC; the moment it is, this map is replaced by the
- * engine's real PlatformCaps and deleted.
+ * WHY THIS SURVIVED THE UNION RETIREMENT (device-quality-wave3 todo 11c).
+ *
+ * The legacy device-modes union was deleted because it INVENTED device
+ * capability — it merged two devices' (or two media types') ladders and offered
+ * a mode no single device had ever reported, which cerastream ADR-0008 §10
+ * forbids outright. This map is a categorically different thing and stays.
+ *
+ * It is a PLATFORM ENCODE CEILING, not device capability. It answers "what can
+ * this BOARD's encoder emit", never "what can the attached camera deliver" —
+ * the two are independent facts about different hardware, and `intersectCaps`
+ * takes the INTERSECTION of them. So this map can only ever SUBTRACT from the
+ * offering; it can never add a mode the device did not report, which is the
+ * precise property the ADR requires. A device advertising 4K on an RK3588 still
+ * has its own ladder consulted; this only stops the UI offering an encode target
+ * the SoC cannot produce.
+ *
+ * It is also not a stand-in for absent device truth. Per-device ladders arrive
+ * VERBATIM on `StreamSource.modes` and are read by {@link resolveDeviceModes} —
+ * that path is fully wired, so nothing here is compensating for missing data.
+ *
+ * The open follow-up is unchanged and is a SEPARATE concern: the engine's real
+ * `platform` caps from `get-capabilities` are not yet surfaced to the frontend
+ * over RPC, so the board→ceiling values are still hardcoded here rather than
+ * engine-reported. When that lands, replace this map with the engine's values.
+ * Do NOT delete it before then — removing the platform ceiling would let the UI
+ * offer encode targets the board cannot produce, which is the same dishonesty
+ * the union retirement was fixing, in the other direction.
  */
 const PLATFORM_CAPS_BY_HARDWARE: Record<HardwareType, PlatformCaps> = {
 	jetson: {
@@ -197,21 +225,6 @@ export function videoSourceCapFromStreamSource(
 		default_resolution: source.defaultResolution ?? "1080p",
 		default_framerate: source.defaultFramerate ?? 30,
 	};
-}
-
-/**
- * Discriminate a {@link StreamSource} from the legacy device-modes map at the
- * overloaded {@link resolveDeviceModes} / {@link offeredAxes} entry points. A
- * StreamSource always carries the `origin` discriminant and a `modes` array; the
- * legacy `Record<inputId, DeviceModeGroup>` map carries neither at its top level.
- */
-function isStreamSource(value: unknown): value is StreamSource {
-	return (
-		typeof value === "object" &&
-		value !== null &&
-		"origin" in value &&
-		"modes" in value
-	);
 }
 
 /**
@@ -323,72 +336,22 @@ export interface OfferedAxes {
 /**
  * The device modes that narrow the axes for the active {@link StreamSource}.
  *
- * This is the SINGLE lookup that replaces the old pipelineId ∪ selectedVideoInput
- * union hack: the backend `sources` builder already folded each device's modes
- * onto its StreamSource, so the adapter just reads `source.modes`. A `[]` modes
- * list (coarse/virtual/network, or a capture device whose modes the engine has
- * not enumerated) falls back to the coarse offering (`undefined`) — an empty
- * match must NEVER collapse an axis to nothing.
+ * This is the ONLY lookup. The pipelineId ∪ selectedVideoInput union path it
+ * replaced is GONE, not deprecated: unioning every kind-matched device's ladder
+ * is exactly what cerastream ADR-0008 §10 forbids ("the UI and the save path may
+ * never invent or union"), and it is the #244 defect — the union produced a
+ * resolution/framerate pair no single device could deliver and the leg failed
+ * `not-negotiated`. The backend `sources` builder already folds each device's own
+ * modes onto its StreamSource, so the adapter just reads `source.modes`.
+ *
+ * A `[]` modes list (coarse/virtual/network, or a capture device whose modes the
+ * engine has not enumerated) falls back to the coarse offering (`undefined`) — an
+ * empty match must NEVER collapse an axis to nothing.
  */
 export function resolveDeviceModes(
 	source: StreamSource | undefined,
-): readonly DeviceMode[] | undefined;
-/**
- * Legacy device-modes reconciliation keyed on the coarse capability broadcast
- * (`capabilities.device_modes`) plus the pipeline/input selection. Retained for
- * the pre-source callers still on that broadcast (`deriveCapabilitySummary`, and
- * the EncoderDialog axes path via the legacy {@link offeredAxes} overload) until
- * they migrate to the source-keyed form.
- */
-export function resolveDeviceModes(
-	deviceModes: Record<string, DeviceModeGroup> | undefined,
-	pipelineId: string | undefined,
-	selectedVideoInput: string | undefined,
-): readonly DeviceMode[] | undefined;
-export function resolveDeviceModes(
-	sourceOrDeviceModes:
-		| StreamSource
-		| Record<string, DeviceModeGroup>
-		| undefined,
-	pipelineId?: string,
-	selectedVideoInput?: string,
 ): readonly DeviceMode[] | undefined {
-	const isLegacyForm =
-		pipelineId !== undefined ||
-		selectedVideoInput !== undefined ||
-		(sourceOrDeviceModes !== undefined && !isStreamSource(sourceOrDeviceModes));
-	if (isLegacyForm) {
-		return resolveDeviceModesFromDeviceModes(
-			sourceOrDeviceModes as Record<string, DeviceModeGroup> | undefined,
-			pipelineId,
-			selectedVideoInput,
-		);
-	}
-	const source = sourceOrDeviceModes as StreamSource | undefined;
 	return source && source.modes.length > 0 ? source.modes : undefined;
-}
-
-function resolveDeviceModesFromDeviceModes(
-	deviceModes: Record<string, DeviceModeGroup> | undefined,
-	pipelineId: string | undefined,
-	selectedVideoInput: string | undefined,
-): readonly DeviceMode[] | undefined {
-	if (!deviceModes) return undefined;
-
-	if (selectedVideoInput) {
-		const group = deviceModes[selectedVideoInput];
-		return group && group.modes.length > 0 ? group.modes : undefined;
-	}
-
-	if (!pipelineId) return undefined;
-
-	const union: DeviceMode[] = [];
-	for (const group of Object.values(deviceModes)) {
-		if (deviceKindToPipelineId(group.kind) === pipelineId) {
-			union.push(...group.modes);
-		}
-	}
-	return union.length > 0 ? union : undefined;
 }
 
 // ── Source signal vs encode target ───────────────────────────────────────────
@@ -423,41 +386,11 @@ function resolveDeviceModesFromDeviceModes(
 // refuses a mode change on a running stream), so a mid-session change needs restart
 // UX plus real-camera validation. See `apps/frontend/AGENTS.md` → "Known follow-up".
 
-/** The encode-target ceiling a source's single reported capture mode imposes. */
-export interface SourceModeCeiling {
-	resolution: Resolution;
-	framerate: Framerate;
-}
-
-/**
- * The ceiling a source reporting a SINGLE capture mode imposes on the encode
- * target.
- *
- * `undefined` for a source that enumerates a mode menu (two or more distinct
- * rungs on either axis), for a modeless source, and — fail-closed — for a mode
- * list whose rungs do not normalize onto the ladder, so a noisy payload can never
- * widen the offering.
- */
-export function singleModeSourceCeiling(
-	modes: readonly DeviceMode[] | undefined,
-): SourceModeCeiling | undefined {
-	if (!modes || modes.length === 0) return undefined;
-	const resolutions = new Set<Resolution>();
-	const framerates = new Set<Framerate>();
-	for (const mode of modes) {
-		const rung = normalizeResolutionToRung(`${mode.width}x${mode.height}`);
-		if (rung !== undefined) resolutions.add(rung);
-		for (const framerate of mode.framerates) {
-			const rate = normalizeFramerateToRung(framerate);
-			if (rate !== undefined) framerates.add(rate);
-		}
-	}
-	if (resolutions.size !== 1 || framerates.size !== 1) return undefined;
-	const [resolution] = [...resolutions];
-	const [framerate] = [...framerates];
-	if (resolution === undefined || framerate === undefined) return undefined;
-	return { resolution, framerate };
-}
+// `singleModeSourceCeiling` + `SourceModeCeiling` now live in `@ceraui/rpc`
+// (`capabilities/device-mode-truth`) because the backend save path applies the
+// SAME ceiling rule — an offering the save path would reject is a lie. Re-exported
+// here so this module stays the frontend's single constraint-import surface.
+export { type SourceModeCeiling, singleModeSourceCeiling };
 
 /**
  * Narrow an offered set to everything AT OR BELOW the source's reported signal —
@@ -534,80 +467,16 @@ function axesFromResolvedModes(
 export function offeredAxes(
 	hardware: HardwareType | undefined,
 	source: StreamSource | undefined,
-	mode?: string,
-): OfferedAxes;
-/**
- * Legacy pipeline-keyed axes resolution (coarse capability broadcast +
- * pipeline/input selection). The EncoderDialog axes path until it migrates to the
- * source-keyed overload above.
- */
-export function offeredAxes(
-	hardware: HardwareType | undefined,
-	pipelineId: string | undefined,
-	pipeline: Pipeline | undefined,
-	deviceModes: Record<string, DeviceModeGroup> | undefined,
-	selectedVideoInput: string | undefined,
-	mode?: string,
-): OfferedAxes;
-export function offeredAxes(
-	hardware: HardwareType | undefined,
-	sourceOrPipelineId: StreamSource | string | undefined,
-	pipelineOrMode?: Pipeline | string,
-	deviceModes?: Record<string, DeviceModeGroup> | undefined,
-	selectedVideoInput?: string,
 	mode: string = STREAMING_MODE,
 ): OfferedAxes {
-	const isLegacyForm =
-		typeof sourceOrPipelineId === "string" ||
-		(pipelineOrMode !== undefined && typeof pipelineOrMode === "object") ||
-		deviceModes !== undefined ||
-		selectedVideoInput !== undefined;
-	if (isLegacyForm) {
-		return offeredAxesFromPipeline(
-			hardware,
-			sourceOrPipelineId as string | undefined,
-			pipelineOrMode as Pipeline | undefined,
-			deviceModes,
-			selectedVideoInput,
-			mode,
-		);
-	}
-	const source = sourceOrPipelineId as StreamSource | undefined;
-	const sourceMode = typeof pipelineOrMode === "string" ? pipelineOrMode : mode;
 	const platform = platformCapsForHardware(hardware);
 	const cap = source ? videoSourceCapFromStreamSource(source) : undefined;
 	return axesFromResolvedModes(
 		platform,
 		cap,
-		sourceMode,
+		mode,
 		resolveDeviceModes(source),
 		activeCaptureKind(source),
-	);
-}
-
-function offeredAxesFromPipeline(
-	hardware: HardwareType | undefined,
-	pipelineId: string | undefined,
-	pipeline: Pipeline | undefined,
-	deviceModes: Record<string, DeviceModeGroup> | undefined,
-	selectedVideoInput: string | undefined,
-	mode: string,
-): OfferedAxes {
-	const platform = platformCapsForHardware(hardware);
-	const source =
-		pipelineId && pipeline
-			? videoSourceCapFromPipeline(pipelineId, pipeline)
-			: undefined;
-	return axesFromResolvedModes(
-		platform,
-		source,
-		mode,
-		resolveDeviceModes(deviceModes, pipelineId, selectedVideoInput),
-		activeCaptureKindFromDeviceModes(
-			deviceModes,
-			pipelineId,
-			selectedVideoInput,
-		),
 	);
 }
 
@@ -631,67 +500,10 @@ function offeredAxesFromPipeline(
 // than two distinct media types, and a kind that names none of the advertised
 // ones, narrow NOTHING. An unknown must never subtract from the offering.
 
-const MEDIA_TYPE_MJPEG = "image/jpeg";
-
-/**
- * Whether `mediaType` is the format the capture `kind` commands.
- *
- * Reuses the shared {@link mediaTypeToSourceKind} so the media-type taxonomy
- * stays single-sourced; `image/jpeg` is the one token that helper leaves
- * unclassified, so MJPEG is matched here directly. That helper disambiguates
- * `video/x-raw` into `camlink` vs `hdmi` from a source id — the KIND is itself
- * the truthful hint for that split, so it doubles as the argument.
- */
-function mediaTypeDrivesKind(mediaType: string, kind: string): boolean {
-	if (mediaType === MEDIA_TYPE_MJPEG) return kind === "mjpeg";
-	return mediaTypeToSourceKind(mediaType, kind) === kind;
-}
-
-/** The distinct, explicitly tagged media types a mode list advertises. */
-function advertisedMediaTypes(modes: readonly DeviceMode[]): Set<string> {
-	const seen = new Set<string>();
-	for (const mode of modes) {
-		if (mode.media_type !== undefined) seen.add(mode.media_type);
-	}
-	return seen;
-}
-
-/**
- * The media type whose ladder governs a source of `kind`, or `undefined` when
- * there is nothing to disambiguate (one media type or none advertised) or the
- * kind names none of the advertised ones — both narrow nothing.
- */
-export function activeMediaTypeForModes(
-	modes: readonly DeviceMode[] | undefined,
-	kind: string | undefined,
-): string | undefined {
-	if (!modes || kind === undefined) return undefined;
-	const advertised = advertisedMediaTypes(modes);
-	if (advertised.size < 2) return undefined;
-	for (const mediaType of advertised) {
-		if (mediaTypeDrivesKind(mediaType, kind)) return mediaType;
-	}
-	return undefined;
-}
-
-/**
- * The subset of `modes` belonging to `mediaType`. An UNTAGGED mode is kept —
- * it carries no format constraint, so it can never be shown to belong to
- * another ladder. Returns the input array UNCHANGED (same reference) whenever
- * nothing is dropped, and falls back to it wholesale if the scope would empty
- * the list.
- */
-export function scopeModesToMediaType(
-	modes: readonly DeviceMode[] | undefined,
-	mediaType: string | undefined,
-): readonly DeviceMode[] | undefined {
-	if (!modes || mediaType === undefined) return modes;
-	const scoped = modes.filter(
-		(mode) => mode.media_type === undefined || mode.media_type === mediaType,
-	);
-	if (scoped.length === 0 || scoped.length === modes.length) return modes;
-	return scoped;
-}
+// The rule itself now lives in `@ceraui/rpc` (`capabilities/device-mode-truth`),
+// shared verbatim with the backend save path. Re-exported so this module remains
+// the frontend's single constraint-import surface.
+export { activeMediaTypeForModes, scopeModesToMediaType };
 
 /** The capture `kind` an active {@link StreamSource} commands, if any. */
 function activeCaptureKind(
@@ -701,78 +513,12 @@ function activeCaptureKind(
 }
 
 /**
- * The legacy counterpart of {@link activeCaptureKind}, keyed on the coarse
- * `capabilities.device_modes` broadcast. A pinned device names its own kind; a
- * pipeline-wide union does so only when every kind-matched group agrees —
- * `libuvch264` bridges BOTH `uvc_h264` and `uvc_h265`, and a union of the two
- * has no single governing media type, so it narrows nothing.
- */
-function activeCaptureKindFromDeviceModes(
-	deviceModes: Record<string, DeviceModeGroup> | undefined,
-	pipelineId: string | undefined,
-	selectedVideoInput: string | undefined,
-): string | undefined {
-	if (!deviceModes) return undefined;
-	if (selectedVideoInput) {
-		const group = deviceModes[selectedVideoInput];
-		return group && group.modes.length > 0 ? group.kind : undefined;
-	}
-	if (!pipelineId) return undefined;
-	const kinds = new Set<string>();
-	for (const group of Object.values(deviceModes)) {
-		if (
-			group.kind !== undefined &&
-			deviceKindToPipelineId(group.kind) === pipelineId
-		) {
-			kinds.add(group.kind);
-		}
-	}
-	return kinds.size === 1 ? [...kinds][0] : undefined;
-}
-
-/**
  * The media type governing the axes for the active {@link StreamSource} — the
- * source-keyed counterpart of {@link resolveDeviceModes}.
+ * companion of {@link resolveDeviceModes}, and keyed the same way.
  */
 export function resolveActiveMediaType(
 	source: StreamSource | undefined,
-): string | undefined;
-/**
- * Legacy media-type resolution keyed on the coarse `capabilities.device_modes`
- * broadcast plus the pipeline/input selection, for the pre-source callers still
- * on that broadcast (`deriveCapabilitySummary`).
- */
-export function resolveActiveMediaType(
-	deviceModes: Record<string, DeviceModeGroup> | undefined,
-	pipelineId: string | undefined,
-	selectedVideoInput: string | undefined,
-): string | undefined;
-export function resolveActiveMediaType(
-	sourceOrDeviceModes:
-		| StreamSource
-		| Record<string, DeviceModeGroup>
-		| undefined,
-	pipelineId?: string,
-	selectedVideoInput?: string,
 ): string | undefined {
-	const isLegacyForm =
-		pipelineId !== undefined ||
-		selectedVideoInput !== undefined ||
-		(sourceOrDeviceModes !== undefined && !isStreamSource(sourceOrDeviceModes));
-	if (isLegacyForm) {
-		const deviceModes = sourceOrDeviceModes as
-			| Record<string, DeviceModeGroup>
-			| undefined;
-		return activeMediaTypeForModes(
-			resolveDeviceModes(deviceModes, pipelineId, selectedVideoInput),
-			activeCaptureKindFromDeviceModes(
-				deviceModes,
-				pipelineId,
-				selectedVideoInput,
-			),
-		);
-	}
-	const source = sourceOrDeviceModes as StreamSource | undefined;
 	return activeMediaTypeForModes(
 		resolveDeviceModes(source),
 		activeCaptureKind(source),

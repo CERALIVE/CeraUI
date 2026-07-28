@@ -1398,6 +1398,8 @@ const ja = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"接続中のカメラはこの設定では撮影できません。対応する解像度とフレームレートを選んでから、もう一度保存してください。",
 			axisSelected: "選択中",
 			axisDeviceMax: "デバイス最大",
 			fpsAvailableAt: "{fps} fps は {resolution} で利用可能",
@@ -1486,6 +1488,8 @@ const ja = {
 		streamHealthDegraded: "ストリーム状態が劣化しました",
 		streamHealthDead: "ストリームが停止しました",
 		streamHealthRecovered: "ストリーム状態が回復しました",
+		encoderModeClamped:
+			"保存されていたエンコーダー設定は接続中のカメラでは対応していなかったため、{resolution} / {framerate} fps に調整しました。",
 		streamHealthNoVideo:
 			"配信に映像が届いていません。カメラまたは HDMI ソースの電源が入っているか、ケーブルが両端でしっかり挿さっているかを確認してください。",
 		streamHealthLinksDegraded:

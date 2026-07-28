@@ -164,12 +164,33 @@ describe("deriveCapabilitySummary — active-source truthfulness (Todo 11)", () 
 		},
 	};
 
+	// The ladder is read off the ACTIVE ROW of the unified `sources` broadcast.
+	// The coarse `capabilities.device_modes` map this used to be keyed on had no
+	// per-device answer without a pinned input, so the old code unioned every
+	// kind-matched device's ladder — the invention ADR-0008 §10 forbids.
+	const USB_CAPTURE_1080P60: CaptureStreamSource = {
+		origin: "capture",
+		id: "/dev/video0",
+		pipelineId: "usb",
+		kind: "uvc_h264",
+		displayName: "USB Camera",
+		devicePath: "/dev/video0",
+		modes: [{ width: 1920, height: 1080, framerates: [30, 60] }],
+		supportsAudio: false,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		audioKind: "none",
+		available: true,
+	};
+
 	it("shows the ACTIVE source's real ceiling (usb 1080p@60 on a 4K platform → 1080p/60, not 2160p)", () => {
 		const config: ConfigMessage = {
 			pipeline: "usb",
 			selected_video_input: "/dev/video0",
 		};
-		const summary = deriveCapabilitySummary(CAPS_4K_USB, config);
+		const summary = deriveCapabilitySummary(CAPS_4K_USB, config, [
+			USB_CAPTURE_1080P60,
+		]);
 		expect(summary?.maxResolution).toBe("1080p");
 		expect(summary?.maxFramerate).toBe(60);
 		expect(summary?.audioSupported).toBe(false);
@@ -237,12 +258,32 @@ describe("deriveCapabilitySummary — achievable resolution+fps pair (Todo 3)", 
 		},
 	};
 
+	const CROSSMODE_CAPTURE: CaptureStreamSource = {
+		origin: "capture",
+		id: "/dev/video1",
+		pipelineId: "usb",
+		kind: "uvc_h264",
+		displayName: "USB Camera",
+		devicePath: "/dev/video1",
+		modes: [
+			{ width: 1920, height: 1080, framerates: [30] },
+			{ width: 1280, height: 720, framerates: [30, 60] },
+		],
+		supportsAudio: false,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		audioKind: "none",
+		available: true,
+	};
+
 	it("pairs the top rung with ITS OWN max fps, not the cross-mode maximum (1080p@30 + 720p@60 → 1080p/30, NOT 60)", () => {
 		const config: ConfigMessage = {
 			pipeline: "usb",
 			selected_video_input: "/dev/video1",
 		};
-		const summary = deriveCapabilitySummary(CAPS_CROSSMODE, config);
+		const summary = deriveCapabilitySummary(CAPS_CROSSMODE, config, [
+			CROSSMODE_CAPTURE,
+		]);
 		expect(summary?.maxResolution).toBe("1080p");
 		expect(summary?.maxFramerate).toBe(30);
 		expect(summary?.maxFramerate).not.toBe(60);

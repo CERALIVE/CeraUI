@@ -9,6 +9,7 @@ import { mount, unmount } from "svelte";
 import { toast } from "svelte-sonner";
 import "../../app.css";
 import { buildEncoderSetConfig } from "$lib/streaming/encoderConfig";
+import { encoderSaveErrorMessage } from "$lib/streaming/encoderSaveError";
 import EncoderDialog from "$main/dialogs/EncoderDialog.svelte";
 import {
 	FEDERATION_ABI_VERSION,
@@ -47,6 +48,12 @@ async function saveEncoderConfig(
 		const result = await options.host.setConfig(
 			buildEncoderSetConfig(draft, undefined),
 		);
+		// Named BEFORE `requireAppliedConfig` throws: it collapses every refusal
+		// into one opaque Error, so the typed reason has to be read off the result.
+		if (!result.success) {
+			toast.error(encoderSaveErrorMessage(result.error, getLL()));
+			return;
+		}
 		requireAppliedConfig(result);
 	} catch {
 		toast.error(getLL().notifications.saveFailed());

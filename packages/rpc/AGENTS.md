@@ -13,7 +13,7 @@ src/
 ├── contracts/     # oRPC oc.router() defs — auth, streaming, modems, wifi, network, system, status, notifications
 │   └── index.ts   # appContract root router + AppContract type
 ├── schemas/       # Zod v4 schemas mirroring contracts/ + common.schema.ts, relay.schema.ts
-└── capabilities/  # pure, browser-safe capability-intersection helpers (intersectCaps)
+└── capabilities/  # pure, browser-safe capability helpers (intersectCaps, device-mode-truth)
 ```
 
 ## WHERE TO LOOK
@@ -23,6 +23,7 @@ src/
 | Add a new RPC procedure | `contracts/{domain}.contract.ts` → wire into `contracts/index.ts` |
 | Add/change input or output shape | `schemas/{domain}.schema.ts` |
 | Effective caps for a platform/source/mode | `capabilities/intersect-caps.ts` → `intersectCaps()` (pure) |
+| Whether a device can DELIVER a resolution/framerate pairing | `capabilities/device-mode-truth.ts` → `evaluateDeviceMode()` / `nearestDeliverableMode()` (pure) |
 | Root router type (client inference) | `contracts/index.ts` → `AppContract` |
 | New domain (e.g. `audio`) | New `audio.contract.ts` + `audio.schema.ts`, add to `appContract` router |
 
@@ -53,6 +54,30 @@ Canonical claims (field names fixed by the ADR-0006 claim table — snake_case `
 | `serial` | string | no | platform-issued binding (absent on device stub) |
 
 `tenantId`/`serial` are optional because the device-side stub mints a token before tenant binding; the platform-issued (real) token carries all six. When changing this contract, update the ADR-0006 claim table, both consumers above, and this section in the same change (Rule A).
+
+## THE EXACT-CAPABILITY RULE LIVES HERE, ONCE
+
+`capabilities/device-mode-truth.ts` is cerastream ADR-0008 §10 in code: a device's
+per-`media_type` mode ladder is the ONLY truth, and a consumer "may filter and it
+may display, but it may not construct a mode the engine did not report, and it may
+not merge two media types' ladders into one list."
+
+That clause names TWO consumers, which is why the rule lives in this package rather
+than in either of them:
+
+- the frontend `ValidationAdapter` decides what the operator is OFFERED;
+- the backend `streaming.setConfig` decides what may be PERSISTED.
+
+They must agree BY CONSTRUCTION. An offering the save path would reject is a lie
+told to the operator; a save the offering would have disabled is a bypass of the
+rule. Two implementations of one rule drift — the frontend #244 defect (unioned
+ladders offering a pairing the device could not deliver, failing `not-negotiated`
+at the leg) was exactly that class, one layer up. Do NOT fork a per-consumer copy.
+
+`evaluateDeviceMode` answers the SAVE-TIME verdict; `nearestDeliverableMode` answers
+the LOAD-TIME clamp target. Both fail OPEN on an unknown — an absent ladder, an
+un-normalizable rung, or a kind naming no advertised format never subtracts,
+because refusing on an unknown blocks a save the hardware can honour.
 
 ## CONVENTIONS
 

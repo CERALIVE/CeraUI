@@ -1536,6 +1536,8 @@ const ptBR = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"A câmera conectada não consegue gravar com estas configurações. Escolha uma resolução e uma taxa de quadros compatíveis e salve novamente.",
 			axisSelected: "Selecionado",
 			axisDeviceMax: "Máximo do dispositivo",
 			fpsAvailableAt: "{fps} fps disponível em {resolution}",
@@ -1624,6 +1626,8 @@ const ptBR = {
 		streamHealthDegraded: "Status da transmissão degradado",
 		streamHealthDead: "A transmissão está fora do ar",
 		streamHealthRecovered: "Status da transmissão recuperado",
+		encoderModeClamped:
+			"A câmera conectada não é compatível com as configurações de codificador salvas, então elas foram ajustadas para {resolution} a {framerate} fps.",
 		streamHealthNoVideo:
 			"Nenhum vídeo está chegando à sua transmissão. Verifique se sua câmera ou fonte HDMI está ligada e se o cabo está bem encaixado nas duas pontas.",
 		streamHealthLinksDegraded:
