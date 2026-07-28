@@ -44,6 +44,11 @@
  * classified into the queue's never-dropped CONTROL lane so a backpressure
  * eviction can never drop a handshake frame and break the WebRTC session — they
  * are forwarded ahead of any queued media, in arrival order.
+ *
+ * The ONE frame that is not a byte-for-byte passthrough is the client→engine
+ * `{action:"start"}` frame's `input_id`, which is resolved through the SAME
+ * stable-identity machinery `streaming.start` uses. See
+ * `resolvePreviewStartFrame` below.
  */
 
 import {
@@ -57,7 +62,12 @@ import { logger } from "../../helpers/logger.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { getMockPreviewPort } from "../../mocks/providers/preview.ts";
 import type { PreviewSocketData, ServerSocketData } from "../../rpc/types.ts";
+import { getConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
+import {
+	getSourcesMessage,
+	resolveSourceIdentity,
+} from "../streaming/sources.ts";
 import { BoundedDropOldestQueue } from "./preview-frame-queue.ts";
 import { consumePreviewToken } from "./preview-token.ts";
 
@@ -171,12 +181,80 @@ export function createPreviewQueue(): BoundedDropOldestQueue<Frame> {
 	});
 }
 
+/**
+ * Resolve a client→engine preview `start` frame's `input_id` onto the CURRENT
+ * node path. `streaming.start` already runs this rule (`resolveSourceRouting` →
+ * `resolveSourceIdentity`); preview did not, so a renumbered device streamed but
+ * would not preview. This proxy is the choke point every preview start frame
+ * crosses, so the two paths are unified here rather than in each client.
+ *
+ * It RESOLVES, never rejects: an id with no live stable-identity match (a true
+ * unplug) passes through unchanged so the engine still answers its own typed
+ * `source-unavailable` and the `lost` row is untouched. Do NOT upgrade this to
+ * `resolveSourceRouting` — that refuses lost sources, replacing the engine's
+ * typed reason with a silent drop. An unchanged id returns the ORIGINAL frame,
+ * so every non-renumber case stays a byte-identical passthrough.
+ */
+export function resolvePreviewStartFrame(
+	frame: Frame,
+	resolveInputId: (inputId: string) => string,
+): Frame {
+	if (typeof frame !== "string") {
+		return frame;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(frame);
+	} catch {
+		return frame;
+	}
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		return frame;
+	}
+	const msg = parsed as Record<string, unknown>;
+	if (msg.action !== "start") {
+		return frame;
+	}
+	const inputId = msg.input_id;
+	if (typeof inputId !== "string" || inputId === "") {
+		return frame;
+	}
+	const resolved = resolveInputId(inputId);
+	if (resolved === inputId) {
+		return frame;
+	}
+	logger.info(
+		"preview proxy: start input_id re-enumerated — resolved by stable identity",
+		{ from: inputId, to: resolved },
+	);
+	return JSON.stringify({ ...msg, input_id: resolved });
+}
+
+// FAIL-OPEN: a throw here (cold engine cache, capabilities unfetched) must
+// degrade to the pre-existing passthrough, never break the preview.
+function defaultResolvePreviewInputId(inputId: string): string {
+	try {
+		return resolveSourceIdentity(
+			inputId,
+			getSourcesMessage().sources,
+			getConfig().last_seen_devices,
+		);
+	} catch (error) {
+		logger.debug(
+			`preview proxy: input-id identity resolution failed: ${error}`,
+		);
+		return inputId;
+	}
+}
+
 /** Injected collaborators so tests drive the pipe against a fake upstream. */
 export interface PreviewProxyDeps {
 	/** Validate + consume the presented token (single-use). */
 	consumeToken: (token: string) => boolean;
 	/** Resolve the engine/mock loopback preview URL, or `null` when unavailable. */
 	resolveUpstreamUrl: () => string | null;
+	/** Map a preview `start` frame's `input_id` onto the CURRENT node path. */
+	resolvePreviewInputId: (inputId: string) => string;
 }
 
 function defaultResolveUpstreamUrl(): string | null {
@@ -199,6 +277,7 @@ export function defaultPreviewProxyDeps(): PreviewProxyDeps {
 	return {
 		consumeToken: consumePreviewToken,
 		resolveUpstreamUrl: defaultResolveUpstreamUrl,
+		resolvePreviewInputId: defaultResolvePreviewInputId,
 	};
 }
 
@@ -368,7 +447,10 @@ export function createPreviewWebSocketHandler(
 			if (!state) {
 				return;
 			}
-			const frame = toFrame(data);
+			const frame = resolvePreviewStartFrame(
+				toFrame(data),
+				deps.resolvePreviewInputId,
+			);
 			if (state.upstreamOpen) {
 				try {
 					state.upstream.send(frame);

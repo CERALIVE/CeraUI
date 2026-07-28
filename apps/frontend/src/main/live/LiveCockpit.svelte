@@ -41,6 +41,7 @@ import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 import BitrateAdjuster from './BitrateAdjuster.svelte';
 import LiveSourceSwitch from './LiveSourceSwitch.svelte';
 import LiveSummaryStrip from './LiveSummaryStrip.svelte';
+import PreviewDisclosure from './PreviewDisclosure.svelte';
 import StreamControlButton from './StreamControlButton.svelte';
 import StreamTelemetryStrip from './StreamTelemetryStrip.svelte';
 
@@ -266,6 +267,12 @@ const showVideoSignalLost = $derived(
 			{onSwitch}
 			sourceLost={activeSourceLost}
 		/>
+
+		<!-- Mid-stream preview: the engine already publishes MSE during an active
+		     session (wave2 14e), but this disclosure only lived in IdleCockpit —
+		     which unmounts on start — so that capability had no surface. Same
+		     component, same single-use-token proxy dial, still off until opened. -->
+		<PreviewDisclosure streaming={true} />
 
 		<StreamTelemetryStrip {bitrate} {bitrateLimit} {tempSensor} {uptimeSensor} />
 

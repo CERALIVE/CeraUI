@@ -43,6 +43,7 @@ import {
 	resetEngineDeviceCache,
 	resolveSourceIdentity,
 } from "../modules/streaming/sources.ts";
+import { resolvePreviewStartFrame } from "../modules/ui/preview-proxy.ts";
 
 const NO_INGEST: NetworkIngest = { rtmp: null, srt: null };
 
@@ -252,6 +253,128 @@ describe("lost rows — a renumbered camera is one candidate, not one per path",
 		});
 
 		expect(sources.filter((s) => s.lost === true)).toHaveLength(2);
+	});
+});
+
+/*
+ * The preview leg used to be the ONE engine dispatch that skipped the identity
+ * rule: `streaming.start` resolved `config.source` through `resolveSourceIdentity`,
+ * while `PreviewCanvas` put the raw persisted path on its `start` frame and the
+ * proxy forwarded it verbatim. On the board that meant de-authorizing the RØDE
+ * renumbered the Osmo `/dev/video3` → `/dev/video2`, streaming still worked, and
+ * preview answered `SourceUnavailable` 0/5 on a source the UI showed "Selected".
+ */
+describe("preview start — resolves to the CURRENT node, not the saved one", () => {
+	beforeEach(resetState);
+	afterEach(resetState);
+
+	/** The production wiring: the SAME resolver `resolveSourceRouting` runs. */
+	function previewResolver(
+		sources: ReturnType<typeof buildSources>,
+	): (id: string) => string {
+		return (id) =>
+			resolveSourceIdentity(id, sources, getConfig().last_seen_devices);
+	}
+
+	async function renumberFixture() {
+		// Saved while the camera was /dev/video3; it now enumerates as /dev/video2.
+		getConfig().last_seen_devices = [osmoSnapshot("/dev/video3")];
+		getConfig().source = "/dev/video3";
+		await observe([engineDevice("/dev/video2", "uvc_h264", OSMO_STABLE_ID)]);
+		return buildSources({
+			sources: capSources(),
+			devices: [captureDevice("/dev/video2", "uvc_h264", OSMO_STABLE_ID)],
+			networkIngest: NO_INGEST,
+			lastSeenDevices: getConfig().last_seen_devices ?? [],
+			sessionSnapshots: getSessionSeenDeviceSnapshots(),
+		});
+	}
+
+	it("the PREVIEW start frame carries /dev/video2 when the saved source is the stale /dev/video3", async () => {
+		const sources = await renumberFixture();
+
+		const sent = resolvePreviewStartFrame(
+			JSON.stringify({
+				action: "start",
+				tier: "webcodecs",
+				input_id: getConfig().source,
+			}),
+			previewResolver(sources),
+		);
+
+		expect(JSON.parse(sent as string)).toEqual({
+			action: "start",
+			tier: "webcodecs",
+			input_id: "/dev/video2",
+		});
+	});
+
+	it("the config self-heal persists the same migration the preview frame used", async () => {
+		await renumberFixture();
+
+		const persisted = getConfig().last_seen_devices ?? [];
+		expect(persisted).toHaveLength(1);
+		expect(persisted[0]?.id).toBe("/dev/video2");
+		expect(persisted[0]?.previousIds).toEqual(["/dev/video3"]);
+	});
+
+	it("NEGATIVE CONTROL — a TRUE unplug keeps its id AND its lost row (no over-resolution)", async () => {
+		await observe([engineDevice("/dev/video1", "uvc_h264", OSMO_STABLE_ID)]);
+		getConfig().source = "/dev/video1";
+
+		// The camera is genuinely gone: nothing live shares its stable identity.
+		const sources = buildSources({
+			sources: capSources(),
+			devices: [captureDevice("/dev/video0", "hdmi")],
+			networkIngest: NO_INGEST,
+			lastSeenDevices: getConfig().last_seen_devices ?? [],
+			sessionSnapshots: getSessionSeenDeviceSnapshots(),
+		});
+
+		expect(sources.find((s) => s.id === "/dev/video1")?.lost).toBe(true);
+
+		const frame = JSON.stringify({
+			action: "start",
+			tier: "webcodecs",
+			input_id: "/dev/video1",
+		});
+		// Byte-identical passthrough — the engine still answers source-unavailable.
+		expect(resolvePreviewStartFrame(frame, previewResolver(sources))).toBe(
+			frame,
+		);
+	});
+
+	it("NEGATIVE CONTROL — a DIFFERENT camera that took the freed node is never adopted", async () => {
+		getConfig().last_seen_devices = [osmoSnapshot("/dev/video3")];
+
+		const sources = buildSources({
+			sources: capSources(),
+			devices: [captureDevice("/dev/video2", "mjpeg", RODE_STABLE_ID)],
+			networkIngest: NO_INGEST,
+			lastSeenDevices: getConfig().last_seen_devices ?? [],
+		});
+
+		const frame = JSON.stringify({ action: "start", input_id: "/dev/video3" });
+		expect(resolvePreviewStartFrame(frame, previewResolver(sources))).toBe(
+			frame,
+		);
+	});
+
+	it("leaves every frame that is not a resolvable start frame untouched", () => {
+		const resolve = () => "/dev/videoX";
+		const binary = new Uint8Array([1, 2, 3]).buffer;
+
+		expect(resolvePreviewStartFrame(binary, resolve)).toBe(binary);
+		for (const frame of [
+			JSON.stringify({ action: "stop" }),
+			JSON.stringify({ action: "start", tier: "mse" }),
+			JSON.stringify({ action: "start", input_id: "" }),
+			JSON.stringify({ type: "webrtc-ice", candidate: "x" }),
+			JSON.stringify(["not", "an", "object"]),
+			"not json at all",
+		]) {
+			expect(resolvePreviewStartFrame(frame, resolve)).toBe(frame);
+		}
 	});
 });
 

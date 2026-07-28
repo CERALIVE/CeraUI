@@ -258,3 +258,105 @@ test.describe('PreviewCanvas — forced MSE tier', () => {
 			.toBe('mse');
 	});
 });
+
+/**
+ * Todo 19(b) — the preview surface must exist WHILE STREAMING.
+ *
+ * The engine attaches its MSE publisher during an active session (wave2 14e), but
+ * the disclosure only ever lived in IdleCockpit, which LiveView unmounts the
+ * instant a stream starts — so the shipped capability had no UI and the board QA
+ * matrix recorded "streaming preview: NO UI SURFACE".
+ *
+ * The mirror of the idle harness: rewrite `is_streaming` to TRUE (instead of
+ * false) so LiveView renders LiveCockpit, and assert the disclosure is there AND
+ * still dials through the single-use-token proxy — the mid-stream mount must not
+ * become a second, unauthenticated path to the engine.
+ */
+test.describe('PreviewCanvas — mid-stream surface', () => {
+	test.skip(({ browserName }) => browserName !== 'chromium', 'single-browser preview proof');
+
+	let previewDialUrl: string | null = null;
+
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== 'desktop', 'desktop layout drives the Live column');
+		pageWs = null;
+		previewDialUrl = null;
+
+		await page.addInitScript(() => {
+			// biome-ignore lint/performance/noDelete: force the MSE fallback path.
+			delete (window as { VideoDecoder?: unknown }).VideoDecoder;
+			(window as { RTCPeerConnection?: unknown }).RTCPeerConnection = undefined;
+		});
+
+		await page.routeWebSocket(/:(3002|31\d\d|6173)/, (ws) => {
+			if (ws.url().includes('/preview')) {
+				previewDialUrl = ws.url();
+				ws.onMessage((message) => {
+					const text = typeof message === 'string' ? message : message.toString();
+					try {
+						if ((JSON.parse(text) as { action?: string })?.action !== 'start') return;
+					} catch {
+						return;
+					}
+					ws.send(
+						JSON.stringify({
+							type: 'codec-config',
+							tier: 'mse',
+							mime: `video/mp4; codecs="${FIXTURE_CODEC}"`,
+						}),
+					);
+				});
+				return;
+			}
+			pageWs = ws;
+			const server = ws.connectToServer();
+			ws.onMessage((m) => server.send(m));
+			server.onMessage((m) => {
+				const text = typeof m === 'string' ? m : m.toString();
+				try {
+					const frame = JSON.parse(text) as { status?: Record<string, unknown> };
+					if (frame?.status && 'is_streaming' in frame.status) {
+						frame.status.is_streaming = true;
+						ws.send(JSON.stringify(frame));
+						return;
+					}
+				} catch {
+					/* binary / non-JSON frame */
+				}
+				ws.send(m);
+			});
+		});
+
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'live');
+		injectServerConfig();
+	});
+
+	test('the preview disclosure renders while streaming and still dials the token proxy', async ({
+		page,
+	}) => {
+		// The stream is live, so the idle cockpit is gone...
+		await expect(page.getByTestId('live-cockpit')).toBeVisible();
+		await expect(page.getByTestId('idle-cockpit')).toBeHidden();
+
+		// ...and the preview surface is nonetheless reachable (the wave2 14e gap).
+		const disclosure = page.getByTestId('preview-disclosure');
+		await expect(disclosure).toBeVisible();
+		await expect(disclosure).toHaveAttribute('data-streaming', 'true');
+
+		await disclosure.locator('summary').click();
+		const preview = page.getByTestId('preview');
+		await expect(preview).toBeVisible();
+		// Still OFF until the operator asks — opening only reveals the surface.
+		await expect(preview).toHaveAttribute('data-status', 'idle');
+
+		await page.getByTestId('preview-toggle').click();
+
+		// Renders frames mid-stream, over the SAME authenticated proxy: a minted
+		// single-use token on the backend origin, never a direct engine dial.
+		await expect(page.getByTestId('preview-video')).toBeVisible();
+		await expect.poll(() => previewDialUrl).toContain('/preview?token=');
+		expect(new URL(previewDialUrl ?? '').searchParams.get('token')).toBeTruthy();
+	});
+});

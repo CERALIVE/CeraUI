@@ -40,11 +40,11 @@ import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
-import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import { LL } from '@ceraui/i18n/svelte';
 import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
 
+import PreviewDisclosure from './PreviewDisclosure.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
 import StreamSetupChain from './StreamSetupChain.svelte';
 
@@ -90,10 +90,6 @@ interface Props {
 	capabilities: CapabilitiesMessage | undefined;
 	activeEncode: ActiveEncode | null;
 }
-
-// Collapsing the preview disclosure counts as "not viewed": bound into
-// PreviewCanvas's viewer-liveness so a closed `<details>` starts the 30s auto-stop.
-let previewOpen = $state(false);
 
 const {
 	config,
@@ -167,20 +163,7 @@ const audioEmbeddedComingSoon = $derived(
 	     Placed directly under the source picker (C4) so it follows the just-picked
 	     source; PreviewCanvas watches the APPLIED config.source and redials on a
 	     confirmed change. -->
-	<details
-		bind:open={previewOpen}
-		class="bg-card rounded-xl border"
-		data-testid="preview-disclosure"
-	>
-		<summary
-			class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
-		>
-			{$LL.live.modes.preview()}
-		</summary>
-		<div class="px-4 pb-4">
-			<PreviewCanvas hostActive={previewOpen} />
-		</div>
-	</details>
+	<PreviewDisclosure />
 
 	<!-- Stream setup: readiness rows + config edits + the Start control at its foot
 	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->

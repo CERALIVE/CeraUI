@@ -68,8 +68,11 @@ function startFakeUpstream(): string {
 	return `ws://127.0.0.1:${server.port}`;
 }
 
-function startProxy(deps: PreviewProxyDeps): number {
-	const handler = createPreviewWebSocketHandler(deps);
+function startProxy(deps: Partial<PreviewProxyDeps>): number {
+	const handler = createPreviewWebSocketHandler({
+		...defaultPreviewProxyDeps(),
+		...deps,
+	});
 	const server = track(
 		Bun.serve<PreviewSocketData>({
 			port: 0,
