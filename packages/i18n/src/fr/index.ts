@@ -418,6 +418,9 @@ const fr = {
 				"Rechercher et installer les mises à jour de paquets disponibles",
 			power: "Redémarrage / Alimentation",
 			powerDesc: "Redémarrer ou éteindre l'appareil",
+			wifiCountry: "Pays Wi-Fi",
+			wifiCountryDesc:
+				"Définit le domaine réglementaire qui détermine les canaux de point d'accès autorisés",
 			versions: "Versions de l'appareil",
 			versionsDesc:
 				"Afficher les versions des composants et du firmware installés",
@@ -456,6 +459,26 @@ const fr = {
 				"L'appareil répond toujours après la fenêtre de redémarrage. Il n'a peut-être pas redémarré : réessayez ou fermez pour continuer à l'utiliser.",
 			rebootRecoveryRetry: "Redémarrer à nouveau",
 			rebootRecoveryDismiss: "Ignorer",
+			wifiCountry: {
+				title: "Pays Wi-Fi",
+				description:
+					"Votre pays détermine les canaux Wi-Fi sur lesquels cet appareil peut émettre. La liste des canaux est relue depuis la radio après application du pays.",
+				label: "Pays",
+				placeholder: "Sélectionnez un pays",
+				search: "Rechercher un pays",
+				world: "Mondial (le plus restrictif)",
+				apply: "Appliquer",
+				applying: "Application…",
+				applied: "Domaine réglementaire mis à jour.",
+				failed: "Impossible d'appliquer le domaine réglementaire.",
+				unavailable:
+					"La modification du domaine réglementaire n'est pas disponible en mode émulé.",
+				effectiveLabel: "La radio indique",
+				restartNotice:
+					"Un point d'accès actif redémarre pour prendre en compte le nouveau domaine. Les appareils connectés se reconnectent d'eux-mêmes.",
+				mismatchWarning:
+					"La radio indique toujours un domaine différent, la liste des canaux n'a donc pas changé.",
+			},
 			sources: {
 				title: "Sources",
 				description:

@@ -42,6 +42,8 @@ import type {
 	SetPasswordInput,
 	SetSourceVisibilityInput,
 	SetSourceVisibilityOutput,
+	SetWifiCountryInput,
+	SetWifiCountryOutput,
 	SimPukUnlockInput,
 	SimPukUnlockOutput,
 	SimUnlockInput,
@@ -594,6 +596,7 @@ export interface TypedRPC {
 		hotspotStart: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
+		setCountry: (input: SetWifiCountryInput) => Promise<SetWifiCountryOutput>;
 	};
 	network: {
 		getInterfaces: () => Promise<unknown>;

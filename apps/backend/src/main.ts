@@ -119,6 +119,7 @@ import {
 	getSshStatus,
 } from "./modules/system/ssh.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
+import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
@@ -201,6 +202,14 @@ logger.info(bootTimer.phase("🚀", "server"));
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
 await guardNonCritical("hotspot-credentials", initHotspotCredentials);
+
+// Apply the persisted regulatory country BEFORE the WiFi device scan, so the
+// first hotspot channel derivation already reflects the operator's domain
+// rather than the world default the kernel boots with.
+await guardNonCritical("wifi-regdomain", async () => {
+	if (!(await isRealDevice())) return;
+	await applyPersistedCountry(getConfig().country);
+});
 
 await guardNonCritical("identity", async () => {
 	await initIdentity();

@@ -6,6 +6,8 @@ import { oc } from '@orpc/contract';
 import {
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
+	setWifiCountryInputSchema,
+	setWifiCountryOutputSchema,
 	successResponseSchema,
 	wifiConnectInputSchema,
 	wifiDisconnectInputSchema,
@@ -61,6 +63,12 @@ export const wifiContract = oc.router({
 	 * Configure hotspot settings
 	 */
 	hotspotConfigure: oc.input(hotspotConfigInputSchema).output(successResponseSchema),
+
+	/**
+	 * Set the device regulatory country. Applies `iw reg set` and re-derives the
+	 * hotspot channel set from the kernel's post-regdomain answer.
+	 */
+	setCountry: oc.input(setWifiCountryInputSchema).output(setWifiCountryOutputSchema),
 
 	/**
 	 * Subscribe to WiFi status changes

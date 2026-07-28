@@ -1016,6 +1016,9 @@ const en = {
 			updatesDesc: "Check for and install available package updates",
 			power: "Reboot / Power",
 			powerDesc: "Restart or shut down the device",
+			wifiCountry: "WiFi Country",
+			wifiCountryDesc:
+				"Set the regulatory domain that decides which hotspot channels are legal",
 			versions: "Device Versions",
 			versionsDesc: "View installed component and firmware versions",
 			autostart: "Autostart streaming",
@@ -1125,6 +1128,26 @@ const en = {
 				"The device is still responding after the restart window. It may not have rebooted \u2014 try again, or dismiss to keep using it.",
 			rebootRecoveryRetry: "Reboot again",
 			rebootRecoveryDismiss: "Dismiss",
+			wifiCountry: {
+				title: "WiFi Country",
+				description:
+					"Your country decides which WiFi channels this device may broadcast on. The channel list is read back from the radio after the country is applied.",
+				label: "Country",
+				placeholder: "Select a country",
+				search: "Search countries",
+				world: "Worldwide (most restrictive)",
+				apply: "Apply",
+				applying: "Applying…",
+				applied: "Regulatory domain updated.",
+				failed: "Couldn't apply the regulatory domain.",
+				unavailable:
+					"Changing the regulatory domain isn't available in emulated mode.",
+				effectiveLabel: "Radio reports",
+				restartNotice:
+					"An active hotspot restarts to pick up the new domain. Connected devices reconnect on their own.",
+				mismatchWarning:
+					"The radio is still reporting a different domain, so the channel list has not changed.",
+			},
 			sources: {
 				title: "Sources",
 				description:

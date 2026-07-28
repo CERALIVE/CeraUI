@@ -417,6 +417,9 @@ const ptBR = {
 			updatesDesc: "Verifique e instale atualizações de pacotes disponíveis",
 			power: "Reiniciar / Desligar",
 			powerDesc: "Reinicie ou desligue o dispositivo",
+			wifiCountry: "País do Wi-Fi",
+			wifiCountryDesc:
+				"Define o domínio regulatório que determina quais canais de hotspot são permitidos",
 			versions: "Versões do dispositivo",
 			versionsDesc: "Veja as versões de componentes e firmware instalados",
 			autostart: "Iniciar transmissão automaticamente",
@@ -453,6 +456,26 @@ const ptBR = {
 				"O dispositivo ainda responde após a janela de reinicialização. Talvez não tenha reiniciado — tente novamente ou dispense para continuar usando.",
 			rebootRecoveryRetry: "Reiniciar novamente",
 			rebootRecoveryDismiss: "Dispensar",
+			wifiCountry: {
+				title: "País do Wi-Fi",
+				description:
+					"Seu país determina em quais canais Wi-Fi este dispositivo pode transmitir. A lista de canais é relida do rádio depois que o país é aplicado.",
+				label: "País",
+				placeholder: "Selecione um país",
+				search: "Buscar países",
+				world: "Mundial (mais restritivo)",
+				apply: "Aplicar",
+				applying: "Aplicando…",
+				applied: "Domínio regulatório atualizado.",
+				failed: "Não foi possível aplicar o domínio regulatório.",
+				unavailable:
+					"Alterar o domínio regulatório não está disponível no modo emulado.",
+				effectiveLabel: "O rádio informa",
+				restartNotice:
+					"Um hotspot ativo reinicia para adotar o novo domínio. Os dispositivos conectados se reconectam sozinhos.",
+				mismatchWarning:
+					"O rádio ainda informa um domínio diferente, então a lista de canais não mudou.",
+			},
 			sources: {
 				title: "Fontes",
 				description:

@@ -19,7 +19,7 @@ import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
-import type { WifiChannel } from "./wifi-channels.ts";
+import type { DerivedApChannel, WifiChannel } from "./wifi-channels.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
 
 export type WifiHotspotMessage = {
@@ -40,7 +40,15 @@ export type WifiHotspot = {
 	name?: string;
 	password?: string;
 	channel?: WifiChannel;
+	/**
+	 * The channels this adapter may be configured with: its band-wide auto
+	 * entries plus every channel derived from the LIVE regulatory domain. This
+	 * is the authoritative acceptance set — `wifiHotspotConfig` rejects anything
+	 * absent from it.
+	 */
 	availableChannels: WifiChannel[];
+	/** Last `iw phy` derivation, kept for the channel→NetworkManager band mapping. */
+	derivedChannels?: DerivedApChannel[];
 	warnings: Record<string, boolean>;
 	/**
 	 * Set while a station↔hotspot switch is in flight. The interface is NOT yet

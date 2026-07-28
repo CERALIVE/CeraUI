@@ -262,6 +262,9 @@ const ja = {
 			updatesDesc: "利用可能なパッケージ更新を確認してインストールします",
 			power: "再起動 / 電源",
 			powerDesc: "デバイスを再起動またはシャットダウンします",
+			wifiCountry: "Wi-Fi の国",
+			wifiCountryDesc:
+				"ホットスポットで使用できるチャンネルを決める規制ドメインを設定します",
 			versions: "デバイスバージョン",
 			versionsDesc:
 				"インストール済みコンポーネントとファームウェアのバージョンを表示します",
@@ -298,6 +301,25 @@ const ja = {
 				"再起動の待機時間が過ぎてもデバイスが応答しています。再起動されていない可能性があります。もう一度試すか、閉じて使用を続けてください。",
 			rebootRecoveryRetry: "もう一度再起動",
 			rebootRecoveryDismiss: "閉じる",
+			wifiCountry: {
+				title: "Wi-Fi の国",
+				description:
+					"国の設定により、このデバイスが送信できる Wi-Fi チャンネルが決まります。チャンネル一覧は国を適用した後に無線機から読み直されます。",
+				label: "国",
+				placeholder: "国を選択",
+				search: "国を検索",
+				world: "全世界（最も制限的）",
+				apply: "適用",
+				applying: "適用中…",
+				applied: "規制ドメインを更新しました。",
+				failed: "規制ドメインを適用できませんでした。",
+				unavailable: "エミュレートモードでは規制ドメインを変更できません。",
+				effectiveLabel: "無線機の報告",
+				restartNotice:
+					"動作中のホットスポットは新しいドメインを反映するために再起動します。接続中の端末は自動的に再接続します。",
+				mismatchWarning:
+					"無線機は依然として異なるドメインを報告しているため、チャンネル一覧は変わっていません。",
+			},
 			sources: {
 				title: "ソース",
 				description:

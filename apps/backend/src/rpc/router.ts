@@ -88,6 +88,7 @@ import {
 	hotspotConfigureProcedure,
 	hotspotStartProcedure,
 	hotspotStopProcedure,
+	setWifiCountryProcedure,
 	wifiConnectNewProcedure,
 	wifiConnectProcedure,
 	wifiDisconnectProcedure,
@@ -149,6 +150,7 @@ const stableRoutes = {
 		hotspotStart: hotspotStartProcedure,
 		hotspotStop: hotspotStopProcedure,
 		hotspotConfigure: hotspotConfigureProcedure,
+		setCountry: setWifiCountryProcedure,
 	}),
 
 	network: base.router({

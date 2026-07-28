@@ -132,6 +132,7 @@ CeraUI/
 | **Consolidated bond bandwidth (per-link + `TOTAL BANDWIDTH` ↑/↓)** | `apps/frontend/src/lib/helpers/bond-bandwidth.ts` (`aggregateBondBandwidth`) → `apps/frontend/src/main/network/BondedLinksSection.svelte` |
 | **WiFi AP-vs-client classification (`isApMode` backend / `isApRadio` frontend)** | `apps/backend/src/modules/wifi/wifi-hotspot-types.ts` + `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts` |
 | **WiFi adapter identity (permanent hardware address — NOT the scan-randomized operational one)** | `apps/backend/src/modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`) |
+| **Regulatory country + kernel-DERIVED hotspot channels (`iw reg set` / `iw phy`; never a country→channel table)** | `apps/backend/src/modules/wifi/regdomain.ts` + `wifi-country.ts`; UI `apps/frontend/src/main/dialogs/WifiCountryDialog.svelte` + `lib/helpers/countries.ts` |
 | **Durable per-adapter hotspot identity (SSID/password reused forever) + duplicate-profile consolidation** | `apps/backend/src/modules/wifi/hotspot-credentials.ts` + `wifi-hotspot-discovery.ts` (`findHotspotConnForAdapter`, `pruneDuplicateHotspotConns`) |
 | **Policy-route self-check for bonded wifi/modem interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
 | **Subnet-collision + policy-route info/warning bands (frontend)** | `apps/frontend/src/main/network/CollisionBands.svelte` |

@@ -3,6 +3,7 @@
  */
 import { z } from 'zod';
 import { startFailureSchema, stopResultSchema } from './streaming-lifecycle.schema';
+import { regulatoryCountrySchema } from './wifi.schema';
 
 /**
  * Canonical bitrate range — SINGLE SOURCE OF TRUTH (Task 14).
@@ -758,6 +759,9 @@ export const configMessageSchema = z.object({
 	// Sources dialog reflect the saved test-pattern visibility on reload. Written
 	// only by streaming.setSourceVisibility (never streaming.setConfig).
 	sources_visibility: sourcesVisibilitySchema.optional(),
+	// Operator-declared regulatory country, echoed so the Settings dialog can
+	// show the saved selection on reload. Absent = the world domain '00'.
+	country: regulatoryCountrySchema.optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

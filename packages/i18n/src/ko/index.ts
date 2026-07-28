@@ -257,6 +257,9 @@ const ko = {
 			updatesDesc: "사용 가능한 패키지 업데이트를 확인하고 설치합니다",
 			power: "재시작 / 전원",
 			powerDesc: "기기를 재시작하거나 종료합니다",
+			wifiCountry: "Wi-Fi 국가",
+			wifiCountryDesc:
+				"핫스팟에서 사용할 수 있는 채널을 결정하는 규제 도메인을 설정합니다",
 			versions: "기기 버전",
 			versionsDesc: "설치된 구성 요소 및 펌웨어 버전을 확인합니다",
 			autostart: "자동 스트리밍 시작",
@@ -290,6 +293,25 @@ const ko = {
 				"재시작 시간이 지난 후에도 기기가 응답하고 있습니다. 재시작되지 않았을 수 있습니다. 다시 시도하거나 닫고 계속 사용하세요.",
 			rebootRecoveryRetry: "다시 재시작",
 			rebootRecoveryDismiss: "닫기",
+			wifiCountry: {
+				title: "Wi-Fi 국가",
+				description:
+					"국가 설정에 따라 이 장치가 송신할 수 있는 Wi-Fi 채널이 결정됩니다. 채널 목록은 국가를 적용한 뒤 무선 장치에서 다시 읽어옵니다.",
+				label: "국가",
+				placeholder: "국가 선택",
+				search: "국가 검색",
+				world: "전 세계 (가장 제한적)",
+				apply: "적용",
+				applying: "적용 중…",
+				applied: "규제 도메인이 업데이트되었습니다.",
+				failed: "규제 도메인을 적용하지 못했습니다.",
+				unavailable: "에뮬레이트 모드에서는 규제 도메인을 변경할 수 없습니다.",
+				effectiveLabel: "무선 장치 보고",
+				restartNotice:
+					"실행 중인 핫스팟은 새 도메인을 반영하기 위해 다시 시작됩니다. 연결된 기기는 자동으로 다시 연결됩니다.",
+				mismatchWarning:
+					"무선 장치가 여전히 다른 도메인을 보고하고 있어 채널 목록이 변경되지 않았습니다.",
+			},
 			sources: {
 				title: "소스",
 				description:

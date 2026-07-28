@@ -1,0 +1,10 @@
+Wiphy phy0
+	Band 1:
+		Frequencies:
+			* 2412.0 MHz [1] (20.0 dBm)
+			* 2437.0 MHz [6] (20.0 dBm)
+	Band 4:
+		Frequencies:
+			* 5955.0 MHz [1] (22.0 dBm)
+			* 5975.0 MHz [5] (22.0 dBm)
+			* 6055.0 MHz [21] (22.0 dBm)

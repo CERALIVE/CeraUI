@@ -11,6 +11,8 @@
 import {
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
+	setWifiCountryInputSchema,
+	setWifiCountryOutputSchema,
 	successResponseSchema,
 	wifiConnectInputSchema,
 	wifiDisconnectInputSchema,
@@ -35,8 +37,13 @@ import {
 	setMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
 import { withDeviceLock } from "../../modules/network/state/device-lock.ts";
+import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
+import {
+	persistWifiCountry,
+	setWifiCountry,
+} from "../../modules/wifi/wifi-country.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -353,4 +360,25 @@ export const hotspotConfigureProcedure = authedProcedure
 		});
 		if (busy) return { success: false, error: "DEVICE_BUSY" };
 		return { success: true };
+	});
+
+/**
+ * Set the device regulatory country. Mirrors `network.setIngestEnabled`: the
+ * mock branch persists so dev/e2e exercise the real selection path, but NEVER
+ * reaches `iw reg set` — a dev host's own regulatory domain is not ours to move.
+ */
+export const setWifiCountryProcedure = authedProcedure
+	.input(setWifiCountryInputSchema)
+	.output(setWifiCountryOutputSchema)
+	.handler(async ({ input }) => {
+		if (shouldUseMocks()) return persistWifiCountry(input.country);
+
+		if (!(await isRealDevice())) {
+			return {
+				success: false,
+				error: "unavailable_in_emulated_mode" as const,
+			};
+		}
+
+		return setWifiCountry(input.country);
 	});

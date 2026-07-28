@@ -21,6 +21,48 @@ export type WifiSecurity = z.infer<typeof wifiSecuritySchema>;
 export const wifiBandSchema = z.enum(['auto', 'auto_50', 'auto_24']);
 export type WifiBand = z.infer<typeof wifiBandSchema>;
 
+// A hotspot channel selection: a band-wide auto entry, or a concrete channel
+// (`ch_13`) the DEVICE derived at runtime from `iw phy` after applying the
+// regulatory domain. The set of legal `ch_N` values is NOT expressible here —
+// it depends on the live regdomain and the radio — so this is a SHAPE check
+// only. The authoritative acceptance test is the device's own offered set,
+// echoed on `hotspotConfigSchema.available_channels`.
+export const wifiChannelIdSchema = z
+	.string()
+	.regex(/^(?:auto|auto_24|auto_50|ch_[1-9][0-9]{0,2})$/, {
+		message: 'Channel must be auto, auto_24, auto_50, or a derived ch_<number>',
+	});
+export type WifiChannelId = z.infer<typeof wifiChannelIdSchema>;
+
+// The kernel's "world" domain: the conservative default when no country is set.
+export const WORLD_REGULATORY_DOMAIN = '00';
+
+// ISO-3166-1 alpha-2, or the world domain.
+export const REGULATORY_COUNTRY_RE = /^(?:[A-Z]{2}|00)$/;
+
+export const regulatoryCountrySchema = z.string().regex(REGULATORY_COUNTRY_RE, {
+	message: 'Country must be an ISO-3166-1 alpha-2 code, or 00 for world',
+});
+export type RegulatoryCountry = z.infer<typeof regulatoryCountrySchema>;
+
+// An absent `country` clears the selection and returns the radio to world.
+export const setWifiCountryInputSchema = z.object({
+	country: regulatoryCountrySchema.optional(),
+});
+export type SetWifiCountryInput = z.infer<typeof setWifiCountryInputSchema>;
+
+export const setWifiCountryOutputSchema = z.object({
+	success: z.boolean(),
+	// The country actually persisted (post-normalization), absent when cleared.
+	applied: regulatoryCountrySchema.optional(),
+	// The regulatory domain the KERNEL reports after the change — it can differ
+	// from `applied` on an image with no regulatory database, which is precisely
+	// the condition the operator needs to see rather than a silent no-op.
+	effective: z.string().optional(),
+	error: z.enum(['unavailable_in_emulated_mode', 'invalid_country', 'apply_failed']).optional(),
+});
+export type SetWifiCountryOutput = z.infer<typeof setWifiCountryOutputSchema>;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -37,8 +79,11 @@ export const hotspotConfigSchema = z.object({
 	// status builder omits any that are unset, so they can be absent on the wire.
 	name: z.string().optional(),
 	password: z.string().optional(),
-	available_channels: z.record(wifiBandSchema, z.object({ name: z.string() })),
-	channel: wifiBandSchema.optional(),
+	// Keyed by `wifiChannelIdSchema` — the auto entries plus every channel the
+	// device derived from the live regulatory domain. This map IS the offered
+	// set: a channel absent from it is rejected by the device.
+	available_channels: z.record(wifiChannelIdSchema, z.object({ name: z.string() })),
+	channel: wifiChannelIdSchema.optional(),
 });
 export type HotspotConfig = z.infer<typeof hotspotConfigSchema>;
 
@@ -111,9 +156,7 @@ export const hotspotConfigInputSchema = z.object({
 		.string()
 		.min(HOTSPOT_PASSWORD_MIN, 'Password must be at least 8 characters')
 		.max(HOTSPOT_PASSWORD_MAX, 'Password must be at most 63 characters'),
-	channel: z.string().refine((c) => wifiBandSchema.safeParse(c).success, {
-		message: 'Channel must be a supported WiFi band (auto, auto_24, auto_50)',
-	}),
+	channel: wifiChannelIdSchema,
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 

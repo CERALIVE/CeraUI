@@ -1,0 +1,8 @@
+Wiphy phy0
+	Band 1:
+		Frequencies:
+			* 2412 MHz [1] (20.0 dBm)
+			* 2417 MHz [2] (20.0 dBm)
+			* 2467 MHz [12] (20.0 dBm) (passive scanning, no IBSS)
+			* 2472 MHz [13] (20.0 dBm) (passive scanning, no IBSS)
+			* 2484 MHz [14] (disabled)

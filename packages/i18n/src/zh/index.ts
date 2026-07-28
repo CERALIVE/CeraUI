@@ -246,6 +246,8 @@ const zh = {
 			updatesDesc: "检查并安装可用的软件包更新",
 			power: "重启 / 电源",
 			powerDesc: "重启或关闭设备",
+			wifiCountry: "Wi-Fi 国家/地区",
+			wifiCountryDesc: "设置监管域，它决定哪些热点信道是允许使用的",
 			versions: "设备版本",
 			versionsDesc: "查看已安装的组件和固件版本",
 			autostart: "自动开始推流",
@@ -277,6 +279,24 @@ const zh = {
 				"重启时间结束后设备仍有响应。它可能没有重启——请重试，或关闭以继续使用。",
 			rebootRecoveryRetry: "再次重启",
 			rebootRecoveryDismiss: "关闭",
+			wifiCountry: {
+				title: "Wi-Fi 国家/地区",
+				description:
+					"所选国家/地区决定本设备可以在哪些 Wi-Fi 信道上发射。信道列表会在应用国家/地区后从无线模块重新读取。",
+				label: "国家/地区",
+				placeholder: "选择国家/地区",
+				search: "搜索国家/地区",
+				world: "全球（最严格）",
+				apply: "应用",
+				applying: "正在应用…",
+				applied: "监管域已更新。",
+				failed: "无法应用监管域。",
+				unavailable: "在模拟模式下无法更改监管域。",
+				effectiveLabel: "无线模块报告",
+				restartNotice:
+					"正在运行的热点将重启以采用新的监管域，已连接的设备会自动重新连接。",
+				mismatchWarning: "无线模块仍报告不同的监管域，因此信道列表没有变化。",
+			},
 			sources: {
 				title: "信号源",
 				description:

@@ -54,6 +54,7 @@ import {
 	namespacedRelayId,
 	parseNamespacedRelayId,
 	type RelayProtocol,
+	regulatoryCountrySchema,
 	relayProtocolSchema,
 	relayProviderMetaSchema,
 	resolverDecidedBySchema,
@@ -304,6 +305,12 @@ export const runtimeConfigSchema = z.object({
 	// every source visible via the inner default; kept `.optional()` so
 	// `let config: RuntimeConfig = {}` still parses (E3 additive pattern).
 	sources_visibility: sourcesVisibilitySchema.optional(),
+
+	// Operator-declared regulatory country (ISO-3166-1 alpha-2), applied to the
+	// kernel with `iw reg set`. ABSENT means the conservative world domain '00' —
+	// so an existing config keeps today's behaviour exactly. The hotspot channel
+	// set is DERIVED from `iw phy` after this is applied, never from a table.
+	country: regulatoryCountrySchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
