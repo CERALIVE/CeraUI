@@ -11,6 +11,7 @@ import {
 	clampBitrateToBounds,
 	deriveCodecOptions,
 	deriveUvcH265Sources,
+	formatProbedCap,
 	summarizeProbedCaps,
 } from "./ValidationAdapter";
 
@@ -55,6 +56,20 @@ function makeDevice(mediaType: string | undefined): CaptureDevice {
 		caps: mediaType
 			? [{ width: 1920, height: 1080, media_type: mediaType }]
 			: [],
+	};
+}
+
+// Shape a real board reports for an audio card: media_type and nothing else.
+function makeAudioDevice(
+	caps: CaptureDevice["caps"] = [{ media_type: "audio/x-raw" }],
+): CaptureDevice {
+	return {
+		input_id: "card:usbaudio",
+		device_path: "card:usbaudio",
+		display_name: "RØDE HDMI to USB-C",
+		media_class: "audio",
+		kind: "audio",
+		caps,
 	};
 }
 
@@ -170,6 +185,83 @@ describe("summarizeProbedCaps", () => {
 				caps: ["1920\u00d71080 H.265"],
 			},
 		]);
+	});
+
+	it("summarises an audio device as one plain-language label", () => {
+		expect(summarizeProbedCaps([makeAudioDevice()])).toEqual([
+			{
+				inputId: "card:usbaudio",
+				displayName: "RØDE HDMI to USB-C",
+				caps: ["Audio"],
+			},
+		]);
+	});
+
+	it("collapses several audio formats onto a single chip", () => {
+		expect(
+			summarizeProbedCaps([
+				makeAudioDevice([
+					{ media_type: "audio/x-raw" },
+					{ media_type: "audio/mpeg" },
+				]),
+			])[0]?.caps,
+		).toEqual(["Audio"]);
+	});
+
+	it("uses the localized audio label when a translator is supplied", () => {
+		expect(
+			summarizeProbedCaps([makeAudioDevice()], () => "オーディオ")[0]?.caps,
+		).toEqual(["オーディオ"]);
+	});
+});
+
+describe("formatProbedCap", () => {
+	it("renders resolution, framerate and codec for a video format", () => {
+		expect(
+			formatProbedCap({
+				width: 1920,
+				height: 1080,
+				framerate: "30/1",
+				media_type: MEDIA_TYPE_H264,
+			}),
+		).toBe("1920\u00d71080 @ 30 H.264");
+	});
+
+	it("renders an NTSC fraction framerate as decimal fps", () => {
+		expect(
+			formatProbedCap({
+				width: 1920,
+				height: 1080,
+				framerate: "60000/1001",
+				media_type: "video/x-raw",
+			}),
+		).toBe("1920\u00d71080 @ 59.94 Raw");
+	});
+
+	it("names an MJPEG format rather than its MIME token", () => {
+		expect(
+			formatProbedCap({ width: 3840, height: 2160, media_type: "image/jpeg" }),
+		).toBe("3840\u00d72160 MJPEG");
+	});
+
+	it("shortens an unmapped codec token instead of leaking the MIME string", () => {
+		expect(
+			formatProbedCap({ width: 1280, height: 720, media_type: "video/x-vp9" }),
+		).toBe("1280\u00d7720 VP9");
+	});
+
+	it.each([
+		"audio/x-raw",
+		"audio/mpeg",
+		"audio/x-alaw",
+	])("renders %s as a plain-language audio label", (mediaType) => {
+		const label = formatProbedCap({ media_type: mediaType });
+		expect(label).toBe("Audio");
+		expect(label).not.toContain("/");
+	});
+
+	it("renders nothing for a format carrying no information at all", () => {
+		expect(formatProbedCap({})).toBe("");
 	});
 });
 

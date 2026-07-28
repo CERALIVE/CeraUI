@@ -1351,6 +1351,7 @@ const hi = {
 			bitrateClamped: "समर्थित सीमा में समायोजित",
 			sourceChangedNote: "स्रोत बदला गया — नए इनपुट के लिए सेटिंग्स अपडेट की गईं।",
 			probedCaps: "पहचानी गई क्षमताएँ",
+			probedCapAudio: "ऑडियो",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",

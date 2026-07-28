@@ -791,6 +791,7 @@ const de = {
 			sourceChangedNote:
 				"Quelle geändert – Einstellungen für die neue Eingabe aktualisiert.",
 			probedCaps: "Erkannte Fähigkeiten",
+			probedCapAudio: "Audio",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",

@@ -1555,6 +1555,7 @@ const fr = {
 			sourceChangedNote:
 				"Source modifiée — réglages mis à jour pour la nouvelle entrée.",
 			probedCaps: "Capacités détectées",
+			probedCapAudio: "Audio",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",

@@ -1301,6 +1301,7 @@ const zh = {
 			bitrateClamped: "已调整到支持范围",
 			sourceChangedNote: "源已更改 — 已为新输入更新设置。",
 			probedCaps: "检测到的能力",
+			probedCapAudio: "音频",
 			codecAuto: "Auto (recommended)",
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
