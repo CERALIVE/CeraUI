@@ -8,6 +8,10 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { toast } from "svelte-sonner";
 
+import {
+	startStreaming as systemStartStreaming,
+	stopStreaming as systemStopStreaming,
+} from "$lib/helpers/SystemHelper";
 import { pipelineAvailability } from "$lib/streaming/pipelineAvailability";
 
 type Properties = {
@@ -131,15 +135,11 @@ export function startStreamingWithConfig(config: Partial<ConfigMessage>): void {
 	) {
 		window.startStreamingWithNotificationClear(config);
 	} else {
-		import("$lib/helpers/SystemHelper")
-			.then((module) => {
-				module.startStreaming(
-					config as Parameters<typeof module.startStreaming>[0],
-				);
-			})
-			.catch((error) => {
-				console.error("Failed to load SystemHelper for streaming:", error);
-			});
+		void systemStartStreaming(
+			config as Parameters<typeof systemStartStreaming>[0],
+		).catch((error) => {
+			console.error("Failed to load SystemHelper for streaming:", error);
+		});
 	}
 }
 
@@ -153,16 +153,12 @@ export function stopStreaming(): void {
 	if (window.stopStreamingWithNotificationClear) {
 		window.stopStreamingWithNotificationClear();
 	} else {
-		import("$lib/helpers/SystemHelper")
-			.then((module) => {
-				module.stopStreaming();
-			})
-			.catch((error) => {
-				console.error(
-					"Failed to load SystemHelper for stopping streaming:",
-					error,
-				);
-			});
+		void systemStopStreaming().catch((error) => {
+			console.error(
+				"Failed to load SystemHelper for stopping streaming:",
+				error,
+			);
+		});
 	}
 }
 
