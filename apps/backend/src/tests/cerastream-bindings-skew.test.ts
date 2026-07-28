@@ -96,9 +96,12 @@ describe("cerastream bindings version-skew guard", () => {
 	});
 
 	test("event topics + discriminated union stay in lockstep", () => {
-		// device-quality-wave2 Todo 22: the 2026.7.3 pin adds the additive 8th
-		// `audio-level` topic (ADR-0007) — the always-on level meter.
-		expect([...EVENT_TOPICS]).toEqual([
+		// device-quality-wave3 Todo 10: the 2026.7.4 pin adds the additive 9th
+		// `config-change` topic (the transactional live reconfigure). Pinning the
+		// whole PRIOR prefix rather than a bare count is strictly stronger — a
+		// reorder or removal still fails loudly, while the next additive topic
+		// does not need this literal re-edited.
+		expect([...EVENT_TOPICS].slice(0, 8)).toEqual([
 			"status",
 			"switch",
 			"device",
@@ -108,6 +111,8 @@ describe("cerastream bindings version-skew guard", () => {
 			"preview",
 			"audio-level",
 		]);
+		expect([...EVENT_TOPICS]).toContain("config-change");
+		expect(EVENT_TOPICS.length).toBe(9);
 		expect(eventParamsSchema.options.length).toBe(EVENT_TOPICS.length);
 	});
 
@@ -120,10 +125,13 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(7);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.8.0", () => {
-		// device-quality-wave2 Todo 22: the 2026.7.3 pin ships schema 0.8.0 (the
-		// additive Todo 20/21/30 batch), superseding the 0.4.0 the prior pin shipped.
-		expect(SCHEMA_VERSION).toBe("0.8.0");
+	test("SCHEMA_VERSION is pinned to 0.10.0", () => {
+		// device-quality-wave3 Todo 10: the 2026.7.4 pin ships schema 0.10.0 (the
+		// additive ADR-0008 identity + Todo 9 config-change batch), superseding the
+		// 0.8.0 the prior pin shipped. This value must equal what the on-device
+		// engine reports in `hello` — capabilities.ts raises the advisory
+		// `schemaVersionMismatch` banner off exactly that comparison.
+		expect(SCHEMA_VERSION).toBe("0.10.0");
 	});
 
 	test("audio-level topic + connect-error codes are on the surface (Todo 22)", () => {
