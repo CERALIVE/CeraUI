@@ -74,6 +74,7 @@ import {
 	groupDeviceCaps,
 } from "./capabilities.ts";
 import { fromEngineDevice } from "./devices.ts";
+import { releasesV4l2Node } from "./held-devices.ts";
 import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
 import { getEffectiveHardware } from "./pipelines.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
@@ -333,23 +334,85 @@ export interface BuildSourcesInput {
 }
 
 /**
+ * The identity two snapshots describe the SAME PHYSICAL DEVICE under: the
+ * engine's `stableId` when it gave one, else the node-path id.
+ *
+ * A libuvc-driven camera renumbers its `/dev/videoN` node on every open/close
+ * cycle (see `held-devices.ts`), so keying a remembered device on its id alone
+ * treats each renumber as a NEW device. Live proof from a board's own
+ * `config.json`: THREE `last_seen_devices` entries — `/dev/video1`,
+ * `/dev/video2`, `/dev/video3` — all carrying the identical
+ * `stableId: "usb:2ca3:0023:…"`, i.e. one camera rendered as three rows.
+ *
+ * Nothing here reads a vendor, product, serial, or display name: a device the
+ * engine gives a stable identity for is folded by that identity, and one it does
+ * not still keys on its node path exactly as before.
+ */
+function identityKey(device: LastSeenDevice): string {
+	return device.stableId !== undefined && device.stableId !== ""
+		? `stable:${device.stableId}`
+		: `id:${device.id}`;
+}
+
+/** Does this remembered device answer to `id`, currently or under a retired path? */
+function remembersId(device: LastSeenDevice, id: string): boolean {
+	return device.id === id || (device.previousIds?.includes(id) ?? false);
+}
+
+/**
+ * How many retired node paths one remembered device carries. A libuvc camera
+ * renumbers on every open/close cycle, so this is unbounded churn without a cap;
+ * 8 comfortably covers the window in which a stale `config.source` can still be
+ * in play, and the list is most-recent-first so the cap drops the oldest.
+ */
+const RETIRED_ID_MEMORY = 8;
+
+/**
+ * Fold a superseded snapshot into the one that keeps the row: the survivor's
+ * current identity wins, and the retired node path is remembered so a consumer
+ * still holding it (a persisted `config.source`, the engine's `active_input`)
+ * can still resolve this device instead of failing closed.
+ */
+function foldIdentity(
+	survivor: LastSeenDevice,
+	superseded: LastSeenDevice,
+): LastSeenDevice {
+	const previousIds = [
+		...new Set([
+			superseded.id,
+			...(superseded.previousIds ?? []),
+			...(survivor.previousIds ?? []),
+		]),
+	]
+		.filter((id) => id !== survivor.id)
+		.slice(0, RETIRED_ID_MEMORY);
+	return previousIds.length > 0 ? { ...survivor, previousIds } : survivor;
+}
+
+/**
  * The remembered snapshots eligible to become a lost row: every in-session
  * snapshot, plus the configured id's persisted snapshot across a restart (the
- * session map is empty then). Deduped by id — a session snapshot wins over its
- * persisted twin (same metadata; the session copy is the freshest).
+ * session map is empty then).
+ *
+ * Deduped by IDENTITY, not by id. Within the session map (which is keyed by
+ * `input_id` and deliberately monotonic) the LAST entry for an identity wins —
+ * insertion order makes that the freshest node path. The persisted snapshot is
+ * still only consulted when the identity is not already represented, so a
+ * session snapshot keeps winning over its persisted twin.
  */
 function collectLostCandidates(input: BuildSourcesInput): LastSeenDevice[] {
 	const candidates = new Map<string, LastSeenDevice>();
 	if (input.sessionSnapshots !== undefined) {
-		for (const [id, snapshot] of input.sessionSnapshots)
-			candidates.set(id, snapshot);
+		for (const snapshot of input.sessionSnapshots.values())
+			candidates.set(identityKey(snapshot), snapshot);
 	}
 	const configSource = input.configSource;
-	if (configSource !== undefined && !candidates.has(configSource)) {
-		const persisted = (input.lastSeenDevices ?? []).find(
-			(d) => d.id === configSource,
+	if (configSource !== undefined) {
+		const persisted = (input.lastSeenDevices ?? []).find((d) =>
+			remembersId(d, configSource),
 		);
-		if (persisted !== undefined) candidates.set(configSource, persisted);
+		if (persisted !== undefined && !candidates.has(identityKey(persisted)))
+			candidates.set(identityKey(persisted), persisted);
 	}
 	return [...candidates.values()];
 }
@@ -543,8 +606,8 @@ export function resolveSourceIdentity(
 	lastSeenDevices?: readonly LastSeenDevice[],
 ): string {
 	if (sources.some((s) => s.id === sourceId)) return sourceId;
-	const stableId = (lastSeenDevices ?? []).find(
-		(d) => d.id === sourceId,
+	const stableId = (lastSeenDevices ?? []).find((d) =>
+		remembersId(d, sourceId),
 	)?.stableId;
 	if (stableId === undefined || stableId === "") return sourceId;
 	const successor = sources.find(
@@ -641,21 +704,43 @@ function snapshotFromDevice(device: CaptureDevice): LastSeenDevice | undefined {
 }
 
 /**
+ * Collapse a snapshot list to ONE entry per physical device, freshest-first-wins.
+ *
+ * Applied to the observed and persisted halves TOGETHER, which gives the merge
+ * below two properties at once: a device that came back on a new node path
+ * updates its existing entry's `id`/`devicePath` IN PLACE instead of appending a
+ * second row, and a list that ALREADY carries duplicates — persisted by a build
+ * that predates this rule — self-heals on the next observation rather than
+ * needing a hand-edited `config.json`.
+ */
+function dedupeByIdentity(
+	devices: readonly LastSeenDevice[],
+): LastSeenDevice[] {
+	const byIdentity = new Map<string, LastSeenDevice>();
+	for (const device of devices) {
+		const key = identityKey(device);
+		const kept = byIdentity.get(key);
+		byIdentity.set(
+			key,
+			kept === undefined ? device : foldIdentity(kept, device),
+		);
+	}
+	return [...byIdentity.values()];
+}
+
+/**
  * LRU-merge freshly-observed snapshots into the persisted last-seen list:
- * most-recently-observed first, then prior entries not re-observed. Over the cap,
- * evict least-recent from the tail — EXCEPT the configured id, which is pulled out
- * and always kept so the configured device's snapshot survives any churn.
+ * most-recently-observed first, then prior entries whose device was not
+ * re-observed. Over the cap, evict least-recent from the tail — EXCEPT the
+ * configured id, which is pulled out and always kept so the configured device's
+ * snapshot survives any churn.
  */
 function mergeLastSeenLru(
 	current: readonly LastSeenDevice[],
 	observed: readonly LastSeenDevice[],
 	configSource: string | undefined,
 ): LastSeenDevice[] {
-	const observedIds = new Set(observed.map((d) => d.id));
-	const ordered: LastSeenDevice[] = [
-		...observed,
-		...current.filter((d) => !observedIds.has(d.id)),
-	];
+	const ordered = dedupeByIdentity([...observed, ...current]);
 	if (ordered.length <= LAST_SEEN_DEVICES_CAP) return ordered;
 
 	const configuredIndex =
@@ -1106,6 +1191,21 @@ export async function refreshAndBroadcastSources(
  * `/dev/<card>`, byte-identical to the engine's own path-preferred id (verified
  * on a real Rock 5B+), so the two lists share one id namespace.
  *
+ * ONE kind of device is exempt from the membership rule, and the exemption is
+ * what the rule's own premise requires. `observed` is authoritative because the
+ * `/dev` scan is a truthful presence oracle — but for a libuvc-driven camera it
+ * is not one at all: the engine opens it through usbfs, which unbinds
+ * `uvcvideo`, so the node is ABSENT for exactly as long as the capture works
+ * (`held-devices.ts`). Confirmed live: the engine's own `list-devices` retained
+ * `/dev/video1` for a whole streaming session and a whole idle preview
+ * (cerastream PR #84/#86), while CeraUI's scan could not see it — so the merge
+ * dropped the row and the operator's Source list badged a camera `Lost` and
+ * "Device disconnected" while its preview was on screen. A probe-listed device
+ * whose KIND releases its v4l2 node is therefore kept on the engine's word.
+ * Safe in the other direction too: a genuinely unplugged camera is in neither
+ * the engine's v4l2 registry nor its held set, so it is absent from the probe
+ * and still yields its `lost` row.
+ *
  * NON-VIDEO entries follow the probe verbatim. The observed list's audio rows
  * live in CeraUI's own `audio:<id>` namespace, not the engine's, so they are not
  * comparable — and `buildSources` overlays video only.
@@ -1122,7 +1222,10 @@ export function mergeObservedWithProbe(
 		probed.filter((d) => d.media_class === "video").map((d) => d.input_id),
 	);
 	const confirmed = probed.filter(
-		(d) => d.media_class !== "video" || observedVideoIds.has(d.input_id),
+		(d) =>
+			d.media_class !== "video" ||
+			observedVideoIds.has(d.input_id) ||
+			releasesV4l2Node(d.kind),
 	);
 	const unprobed = observed
 		.filter((d) => d.media_class === "video" && !probedVideoIds.has(d.input_id))

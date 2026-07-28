@@ -69,6 +69,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
+| **Which capture kinds release their kernel v4l2 node while the engine holds them (libuvc)** | `modules/streaming/held-devices.ts` (`releasesV4l2Node`) — CeraUI-side mirror of cerastream `engine::held_devices` |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
 | **Audio-naming resolution (4-tier: static onboard rule → engine join → ALSA longname → generic alias) + name cleaning + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
 | **Static onboard AUDIO display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
@@ -1088,6 +1089,53 @@ successful probe never masks the observed set`, which covers the replug-vs-empty
 probe case, the removal-vs-pre-removal-probe case, metadata preference, the audio
 cache, and both out-of-order fences).
 
+## LIBUVC-HELD DEVICES — THE `/dev` SCAN IS NOT ALWAYS A PRESENCE ORACLE [EXISTS]
+
+Everything above rests on one premise: the device registry's own
+`/sys/class/video4linux` scan truthfully answers "is this device plugged in".
+For ONE family of capture devices that premise is simply false, and CeraUI kept
+reporting a working camera as disconnected because of it.
+
+`libuvch264src` never opens a v4l2 node. It drives its camera through **libuvc**,
+i.e. through **usbfs**, which unbinds the kernel `uvcvideo` driver from the USB
+interface for the whole session. So while the engine is streaming or previewing
+such a camera, `/dev/videoN` is **legitimately gone** — and on release the device
+comes back under a DIFFERENT number. Absence from `/dev` is what a *working*
+libuvc capture looks like.
+
+cerastream already knows this about itself: a leg whose resolved `InputKind` is
+`UvcH264`/`UvcH265` records the device it holds, and both `capture_rebind_tick`
+and `list_devices` union that set over the v4l2 registry (cerastream PR #84 for
+the streaming leg, PR #86 for the idle preview). Its `list-devices` is therefore
+**correct** — proven live, retaining `/dev/video1` for a whole session.
+
+CeraUI has a **second, independent** presence signal that had no such notion, and
+`mergeObservedWithProbe` takes video membership from it. So the engine answered
+"present, I am holding it", the local scan said "no such node", membership won,
+and the row was dropped — surfacing as a `Lost` / "Device disconnected" badge on
+a camera whose preview was live on screen at that moment.
+
+- **`modules/streaming/held-devices.ts` `releasesV4l2Node(kind)`** is the
+  CeraUI-side mirror, scoped exactly like the engine's rule: on the resolved
+  device **KIND** (`uvc_h264` / `uvc_h265` — the two kinds
+  `DEVICE_KIND_TO_PIPELINE_ID` bridges to `libuvch264`), **never** on a vendor
+  id, product id, serial, or display name. Every UVC-H.264/H.265 camera behaves
+  this way and no other kind does.
+- **A probe-listed device of such a kind survives the membership filter.** Every
+  other kind keeps the byte-identical observation-wins rule, including the two
+  cases that rule exists for (a failing probe must not mask a removal; a stale
+  probe must not mask a replug) — this only ever ADDS a device the engine
+  positively vouches for.
+- **A real unplug still reports lost.** An unplugged camera is in neither the
+  engine's v4l2 registry nor its held set, so it is absent from the probe too.
+  The exemption cannot manufacture a device the engine did not name.
+
+Do NOT try to fix this class of symptom by suppressing the `lost` badge, by
+special-casing a model, or by having CeraUI track preview/stream state to guess
+at a hold — the engine already tracks the hold authoritatively and reports it;
+CeraUI's job is only to stop overruling that answer with a scan that cannot see
+the device. Coverage: `tests/source-renumber-dedup.test.ts`.
+
 ## BROADCAST EVENTS
 
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
@@ -1480,6 +1528,31 @@ Every row is one of four `origin` variants (`capture`/`coarse`/`virtual`/
   and an engine that never emits `stable_id` degrades to the prior node-path
   behavior. Coverage: `tests/sources.test.ts` ("hotplug re-enumeration
   reconciliation (Todo 34)").
+- **A REMEMBERED device is keyed by stable identity too, not just the live row.**
+  Todo 34 reconciled the rendered row; the persisted memory behind it was still
+  keyed on the node path, so `mergeLastSeenLru` and the session-seen snapshot map
+  treated every renumber as a NEW device. That was harmless while renumbering was
+  rare — and stopped being rare the moment libuvc capture landed, because a
+  libuvc-driven camera renumbers on EVERY open/close cycle. Confirmed from a live
+  board's own `config.json`: THREE `last_seen_devices` entries (`/dev/video1`,
+  `/dev/video2`, `/dev/video3`) under one identical
+  `stableId: "usb:2ca3:0023:…"` — one camera, three operator-visible rows, and
+  three separate `lost` candidates when it was absent.
+  `identityKey()` (stableId when present, else the node path) is now the key for
+  BOTH the persisted merge and `collectLostCandidates`, so a renumber updates the
+  existing entry's `id`/`devicePath` IN PLACE. Two properties are load-bearing:
+  - **It self-heals.** The fold runs over the observed AND persisted halves
+    together, so a `config.json` that already carries duplicates collapses on the
+    next observation — a device does NOT need a hand-edited config.
+  - **The retired paths are KEPT, on `previousIds`.** Folding without them would
+    strand a `config.source` still holding a retired path: `resolveSourceIdentity`
+    looks the id up in `last_seen_devices` to recover its stable identity, and a
+    folded-away entry answers nothing. This is the persisted twin of the
+    `previousIds` already published on the live capture row, for the same reason.
+    Capped at `RETIRED_ID_MEMORY` (8) — a libuvc camera renumbers indefinitely.
+  Scoped on the engine's `stableId` alone: a device the engine gives no stable
+  identity for still keys on its node path, byte-identically to before.
+  Coverage: `tests/source-renumber-dedup.test.ts`.
 - **Source-routing self-heal across a renumber (PR #197)**: Todo 34 migrates the
   source-list ROW by stable identity, but the persisted operator selection
   (`config.source`) is a literal engine id (e.g. `video1`). When that device
@@ -1908,7 +1981,8 @@ error and operator-stop negatives are the controls, green on both trees).
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.
 - Don't render `netif.tp` as a rate — it is a byte delta over an unstated window. Use `tx_bps`/`rx_bps`.
-- Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata.
+- Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata. The ONE exemption is a kind that `releasesV4l2Node()` — for a libuvc-driven camera the `/dev` scan is not an observation at all (see LIBUVC-HELD DEVICES). Don't widen that exemption to any other kind, and don't "simplify" it into a blanket probe-wins membership rule.
+- Don't key a REMEMBERED device (`last_seen_devices`, the session-seen snapshot map) on its node path — a libuvc camera renumbers on every open/close cycle, so that appends a new entry per cycle and renders one camera as N rows with N `lost` candidates. Route through `identityKey()`. And when folding, don't drop the retired paths: `resolveSourceIdentity` resolves a stale `config.source` THROUGH `last_seen_devices`, so a fold that forgets them strands the operator's selection — that is what `previousIds` is for.
 - Don't record a device's `stable_id` into `liveStableIds` before the bridge check in `buildSources` — an unbridged device renders no row, so letting it suppress the remembered `lost` row erases the device from the list entirely.
 - Don't leave a re-enumerated `config.source`/`config.asrc` unrepaired, and don't repair either by name, slot, or "whichever id resolves" — migration is by STABLE IDENTITY only (`reconcileConfiguredSourceIdentity` / `reconcileConfiguredAudioIdentity`), and the retired id must be published as `previousIds` so consumers can tell MOVED from GONE.
 - Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one. And don't widen that restore past IDENTITY (`kind`/`stable_id`) back onto the remembered `caps`/`signal` — re-asserting a past probe's verdict is how a device that loses its signal keeps claiming it has one, forever.
