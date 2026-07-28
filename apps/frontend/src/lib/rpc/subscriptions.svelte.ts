@@ -28,7 +28,11 @@ import type {
 	UpdateState,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
-import { notificationsMessageSchema } from "@ceraui/rpc/schemas";
+import {
+	CONFIG_CHANGE_EVENT,
+	configChangeStateSchema,
+	notificationsMessageSchema,
+} from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
@@ -45,6 +49,10 @@ import {
 	setControlChannelConnected,
 } from "$lib/stores/pairing.svelte";
 import { ingestStreamHealth } from "$lib/stores/stream-health.svelte";
+import {
+	type ConfigChangeView,
+	reduceConfigChange,
+} from "$lib/streaming/configChangePhase";
 import {
 	type ManagedIngestAccount,
 	parseIngestSlots,
@@ -114,6 +122,11 @@ let linkTelemetryState = $state<LinkTelemetryMessage | null | undefined>(
 // sidecar — drives the LiveView meter OUTSIDE a preview. `undefined` before the
 // first event; an `unavailable` variant renders the meter's unavailable state.
 let audioLevelState = $state<AudioLevelMessage | undefined>(undefined);
+
+// Live config-change transaction phase (wave-3 todo 12). Fed by the
+// `config-change` broadcast; folded through the pure attempt-id fence so a
+// phase from a superseded transaction can never render.
+let configChangeState = $state<ConfigChangeView>(undefined);
 
 // System state
 let deviceStatsState = $state<DeviceStats | undefined>(undefined);
@@ -218,6 +231,14 @@ export function getLinkTelemetry() {
 
 export function getAudioLevel() {
 	return audioLevelState;
+}
+
+export function getConfigChange() {
+	return configChangeState;
+}
+
+export function clearConfigChange(): void {
+	configChangeState = undefined;
 }
 
 export function getSensors() {
@@ -481,6 +502,14 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 		case "audio-level":
 			audioLevelState = data as AudioLevelMessage;
 			break;
+
+		case CONFIG_CHANGE_EVENT: {
+			const parsed = configChangeStateSchema.safeParse(data);
+			if (parsed.success) {
+				configChangeState = reduceConfigChange(configChangeState, parsed.data);
+			}
+			break;
+		}
 
 		case "wifi": {
 			// WiFi responses carry several shapes. The connect/new RESULT frames are
@@ -859,6 +888,7 @@ export function resetState(): void {
 	modemsState = undefined;
 	linkTelemetryState = undefined;
 	audioLevelState = undefined;
+	configChangeState = undefined;
 	sensorsState = undefined;
 	deviceStatsState = undefined;
 	revisionsState = undefined;

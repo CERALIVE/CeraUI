@@ -1,5 +1,9 @@
 import {
+	CONFIG_CHANGE_REASON_DEADLINE,
+	type ConfigChangePhase,
+	type ConfigChangeResult,
 	isLegalLifecycleTransition,
+	isTerminalConfigChangePhase,
 	type LifecycleState,
 	type StartResult,
 	type StopResult,
@@ -8,6 +12,11 @@ import {
 import { logger } from "../../helpers/logger.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { asrcProbeRemainingMs } from "./audio.ts";
+import {
+	broadcastConfigChangePhase,
+	changeEngineRuntimeConfig,
+	classifyConfigChangeDispatchError as classifyDispatchError,
+} from "./config-change-bridge.ts";
 import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
 	classifyStartFailure,
@@ -15,7 +24,10 @@ import {
 	type RetryPolicy,
 	type SuppressionContext,
 } from "./start-failure-taxonomy.ts";
-import { STOP_DEADLINE_MS } from "./start-lifecycle-timing.ts";
+import {
+	RECONFIGURE_DEADLINE_MS,
+	STOP_DEADLINE_MS,
+} from "./start-lifecycle-timing.ts";
 import { updateStreamLifecycleState } from "./stream-lifecycle-status.ts";
 import {
 	runStartWithRetry,
@@ -55,6 +67,29 @@ export type StreamSessionSnapshot = {
 	readonly generation: number;
 };
 
+/**
+ * The apply-now delta. Deliberately the fields that are baked into the graph at
+ * build time — everything else is a live `reload-config`, not a transaction.
+ */
+export type StreamConfigChangeDelta = {
+	readonly resolution?: string;
+	readonly framerate?: number;
+	readonly video_codec?: string;
+	readonly input_id?: string;
+	readonly pipeline?: string;
+};
+
+export type EngineConfigChangeOutcome = {
+	readonly phase: ConfigChangePhase;
+	readonly reason?: string;
+};
+
+export type ConfigChangePhaseEvent = {
+	readonly attemptId: string;
+	readonly phase: ConfigChangePhase;
+	readonly reason?: string;
+};
+
 export type { StartRetryDiagnostic } from "./stream-start-retry.ts";
 
 export type StreamSessionOrchestratorDeps = {
@@ -69,6 +104,12 @@ export type StreamSessionOrchestratorDeps = {
 		to: LifecycleState,
 	) => void;
 	readonly stopDeadlineMs?: number;
+	readonly reconfigureDeadlineMs?: number;
+	readonly changeRuntimeConfig?: (
+		delta: StreamConfigChangeDelta,
+		attemptId: string,
+	) => Promise<EngineConfigChangeOutcome>;
+	readonly publishConfigChangePhase?: (event: ConfigChangePhaseEvent) => void;
 	readonly scheduleTimeout?: (
 		callback: () => void,
 		delayMs: number,
@@ -98,11 +139,33 @@ type ActiveAttempt = {
 	cancelRetryWait?: () => void;
 };
 
+type ActiveConfigChange = {
+	readonly attemptId: string;
+	settled: boolean;
+	readonly settle: (outcome: EngineConfigChangeOutcome) => void;
+};
+
+type QueuedStop = {
+	readonly promise: Promise<StopResult>;
+	readonly release: (result: StopResult | Promise<StopResult>) => void;
+};
+
 export type StreamSessionOrchestrator = {
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
 	readonly stop: () => Promise<StopResult>;
 	readonly reconcile: () => Promise<LifecycleState>;
 	readonly snapshot: () => StreamSessionSnapshot;
+	readonly changeConfig: (
+		delta: StreamConfigChangeDelta,
+	) => Promise<ConfigChangeResult>;
+	/**
+	 * Terminal-phase events observed on the ENGINE EVENT BUS, fed in so a
+	 * transaction whose RPC never answers (the engine escalated and exited) still
+	 * settles. Without this the `rollback_failed{teardown_timeout}` → engine-exit
+	 * chain leaves the RPC rejecting on a dead socket and the UI stuck in
+	 * `applying` until the outer deadline.
+	 */
+	readonly noteConfigChangePhase: (event: ConfigChangePhaseEvent) => void;
 };
 
 export function createStreamSessionOrchestrator(
@@ -112,7 +175,11 @@ export function createStreamSessionOrchestrator(
 	let generation = 0;
 	let active: ActiveAttempt | undefined;
 	let reconciliationEpoch = 0;
+	let activeChange: ActiveConfigChange | undefined;
+	let queuedStop: QueuedStop | undefined;
 	const stopDeadlineMs = deps.stopDeadlineMs ?? STOP_DEADLINE_MS;
+	const reconfigureDeadlineMs =
+		deps.reconfigureDeadlineMs ?? RECONFIGURE_DEADLINE_MS;
 	const scheduleTimeout =
 		deps.scheduleTimeout ??
 		((callback: () => void, delayMs: number) =>
@@ -264,6 +331,20 @@ export function createStreamSessionOrchestrator(
 	};
 
 	const stop = async (): Promise<StopResult> => {
+		// A change transaction already owns the engine's lifecycle mutex and the
+		// capture hardware. Racing a 12 s stop deadline against it would report a
+		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then
+		// answered against whatever state the transaction actually settled into.
+		if (state === "reconfiguring") {
+			if (queuedStop === undefined) {
+				let release!: (result: StopResult | Promise<StopResult>) => void;
+				const promise = new Promise<StopResult>((resolve) => {
+					release = resolve;
+				});
+				queuedStop = { promise, release };
+			}
+			return queuedStop.promise;
+		}
 		if (state === "idle") return { result: "stopped" };
 		if (state === "reconciling") {
 			reconciliationEpoch += 1;
@@ -315,11 +396,133 @@ export function createStreamSessionOrchestrator(
 		return state;
 	};
 
+	const releaseQueuedStop = (): boolean => {
+		const pending = queuedStop;
+		if (pending === undefined) return false;
+		queuedStop = undefined;
+		pending.release(stop());
+		return true;
+	};
+
+	const noteConfigChangePhase = (event: ConfigChangePhaseEvent): void => {
+		const change = activeChange;
+		// Fence on attempt id: a phase from a superseded transaction must never
+		// settle the current one.
+		if (change === undefined || change.attemptId !== event.attemptId) return;
+		if (!isTerminalConfigChangePhase(event.phase)) return;
+		change.settle(
+			event.reason === undefined
+				? { phase: event.phase }
+				: { phase: event.phase, reason: event.reason },
+		);
+	};
+
+	const settleConfigChangeState = (
+		outcome: EngineConfigChangeOutcome,
+	): LifecycleState => {
+		if (outcome.phase === "applied" || outcome.phase === "reverted") {
+			transition("streaming");
+			deps.setStreamingStatus(true);
+			return "streaming";
+		}
+		if (outcome.reason === CONFIG_CHANGE_REASON_DEADLINE) {
+			// The transaction outlived its own declared bound, so the engine's state
+			// is genuinely unknown to us — adopt its truth rather than assert one.
+			transition("reconciling");
+			return "reconciling";
+		}
+		// Every other rollback_failed is the engine telling us it gave up and went
+		// Idle (the `teardown_timeout` escalation is the canonical case).
+		transition("idle");
+		active = undefined;
+		deps.setStreamingStatus(false);
+		return "idle";
+	};
+
+	const changeConfig = async (
+		delta: StreamConfigChangeDelta,
+	): Promise<ConfigChangeResult> => {
+		const runChange = deps.changeRuntimeConfig;
+		if (runChange === undefined)
+			return { result: "rejected", reason: "change_config_unsupported" };
+		if (state !== "streaming" || activeChange !== undefined)
+			return { result: "busy" };
+
+		const attemptId = deps.createAttemptId();
+		if (!transition("reconfiguring")) return { result: "busy" };
+
+		let settleObserved!: (outcome: EngineConfigChangeOutcome) => void;
+		const observed = new Promise<EngineConfigChangeOutcome>((resolve) => {
+			settleObserved = resolve;
+		});
+		const change: ActiveConfigChange = {
+			attemptId,
+			settled: false,
+			settle: (outcome) => {
+				if (change.settled) return;
+				change.settled = true;
+				settleObserved(outcome);
+			},
+		};
+		activeChange = change;
+		deps.publishConfigChangePhase?.({ attemptId, phase: "applying" });
+
+		let timer: ReturnType<typeof globalThis.setTimeout> | number | undefined;
+		const deadline = new Promise<EngineConfigChangeOutcome>((resolve) => {
+			timer = scheduleTimeout(
+				() =>
+					resolve({
+						phase: "rollback_failed",
+						reason: CONFIG_CHANGE_REASON_DEADLINE,
+					}),
+				reconfigureDeadlineMs,
+			);
+		});
+
+		const dispatched = runChange(delta, attemptId).then(
+			(outcome) => outcome,
+			(error: unknown): EngineConfigChangeOutcome => {
+				// A dead control socket rejects every in-flight call, so a rejection
+				// is NOT authoritative once the bus already reported a terminal phase
+				// — the race below has already picked that honest reason.
+				logger.warn("config change dispatch rejected", { attemptId, error });
+				return classifyDispatchError(error);
+			},
+		);
+
+		let outcome: EngineConfigChangeOutcome;
+		try {
+			outcome = await Promise.race([observed, dispatched, deadline]);
+		} finally {
+			if (timer !== undefined) cancelTimeout(timer);
+			activeChange = undefined;
+		}
+
+		const settled = settleConfigChangeState(outcome);
+		deps.publishConfigChangePhase?.({
+			attemptId,
+			phase: outcome.phase,
+			...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+		});
+
+		const hadQueuedStop = releaseQueuedStop();
+		if (!hadQueuedStop && settled === "reconciling") void reconcile();
+
+		if (outcome.phase === "applied") return { result: "applied", attemptId };
+		return {
+			result: outcome.phase === "reverted" ? "reverted" : "rollback_failed",
+			attemptId,
+			...(outcome.reason === undefined ? {} : { reason: outcome.reason }),
+		};
+	};
+
 	return {
 		start,
 		stop,
 		reconcile,
 		snapshot: () => ({ state, generation }),
+		changeConfig,
+		noteConfigChangePhase,
 	};
 }
 
@@ -348,6 +551,8 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 	suppressionContext: getStartSuppressionContext,
 	reportRetry: reportStartRetry,
 	reportTerminalFailure: reportStartTerminalFailure,
+	changeRuntimeConfig: changeEngineRuntimeConfig,
+	publishConfigChangePhase: broadcastConfigChangePhase,
 });
 
 export function startStreamSession(
@@ -366,4 +571,16 @@ export function reconcileStreamSession(): Promise<LifecycleState> {
 
 export function getStreamSessionSnapshot(): StreamSessionSnapshot {
 	return productionOrchestrator.snapshot();
+}
+
+export function changeStreamSessionConfig(
+	delta: StreamConfigChangeDelta,
+): Promise<ConfigChangeResult> {
+	return productionOrchestrator.changeConfig(delta);
+}
+
+export function noteStreamSessionConfigChangePhase(
+	event: ConfigChangePhaseEvent,
+): void {
+	productionOrchestrator.noteConfigChangePhase(event);
 }

@@ -764,6 +764,25 @@ const en = {
 		},
 		encoder: {
 			appliesNextStart: "Applies on next start",
+			applyChoice: {
+				title: "Apply now or on next start?",
+				description:
+					"Resolution, frame rate and source changes need the stream to restart. The restart is brief, but your viewers will see it.",
+				now: "Apply now (briefly restarts the stream)",
+				nextStart: "Apply on next start",
+			},
+			applyPhase: {
+				applying: "Applying \u2014 restarting the stream\u2026",
+				applied: "New settings are live",
+				reverted:
+					"Couldn't apply \u2014 your previous settings are still running",
+				rollbackFailed: "Couldn't apply, and the stream stopped",
+				reasonTeardownTimeout: "The camera wasn't released in time.",
+				reasonDeadlineExceeded: "The change took longer than expected.",
+				reasonEngineLost: "The device's streaming engine stopped responding.",
+				reasonRejected: "The device couldn't use those settings.",
+				reasonUnknown: "Check Settings \u2192 System Logs for details.",
+			},
 			accelerated: "Hardware",
 			software: "Software",
 			bitrateRangeHint: "Supported range",

@@ -26,3 +26,20 @@ export function appliesOnNextStart(
 ): boolean {
 	return isStreaming && edited && restartRequiredSet.has(field);
 }
+
+/**
+ * True when the operator must be ASKED whether to apply now or on next start.
+ *
+ * Exactly the same condition as the badge above, because they answer the same
+ * question — a restart-required field edited mid-stream. Deriving the choice
+ * from any other predicate would let a badge appear with no choice beside it,
+ * or a restart be offered for an edit that needs none.
+ */
+export function restartChoiceRequired(
+	isStreaming: boolean,
+	editedFields: readonly string[],
+): boolean {
+	return editedFields.some((field) =>
+		appliesOnNextStart(field, isStreaming, true),
+	);
+}

@@ -116,11 +116,19 @@ export type StopResult = z.infer<typeof stopResultSchema>;
  * is the boot/reconnect state where the backend queries the engine's actual
  * runtime state and adopts it; `stop_failed` is a terminal-until-retried state
  * a stop can land in.
+ *
+ * `reconfiguring` (wave-3 Todo 12) is the live stream being RECONFIGURED as one
+ * engine transaction (`change-config`). It is deliberately its own state rather
+ * than a `stopping`/`starting` pair: the stream is still committed to the engine
+ * for the whole transaction, the stop deadline must NOT apply to it (see
+ * `RECONFIGURE_DEADLINE_MS`), and a stop requested during it is QUEUED rather
+ * than raced against a transaction already holding the capture hardware.
  */
 export const LIFECYCLE_STATES = [
 	'idle',
 	'starting',
 	'streaming',
+	'reconfiguring',
 	'stopping',
 	'stop_failed',
 	'reconciling',
@@ -146,6 +154,11 @@ export const LEGAL_LIFECYCLE_TRANSITIONS: ReadonlyArray<readonly [LifecycleState
 		// running
 		['streaming', 'stopping'],
 		['streaming', 'reconciling'], // backend reconnect while streaming
+		['streaming', 'reconfiguring'], // an apply-now config change was admitted
+		// config-change transaction outcomes (wave-3 Todo 12)
+		['reconfiguring', 'streaming'], // applied OR reverted — the stream survived
+		['reconfiguring', 'idle'], // rollback_failed — the engine went Idle and said so
+		['reconfiguring', 'reconciling'], // deadline/unknown — adopt the engine's truth
 		// stopping outcomes
 		['stopping', 'idle'], // stopped
 		['stopping', 'stop_failed'], // stop did not settle within the bound

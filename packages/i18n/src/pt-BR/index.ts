@@ -1547,6 +1547,27 @@ const ptBR = {
 		},
 		encoder: {
 			appliesNextStart: "Aplica-se no próximo início",
+			applyChoice: {
+				title: "Aplicar agora ou no próximo início?",
+				description:
+					"Mudanças de resolução, taxa de quadros e fonte exigem reiniciar a transmissão. O reinício é breve, mas seus espectadores vão notar.",
+				now: "Aplicar agora (reinicia brevemente a transmissão)",
+				nextStart: "Aplicar no próximo início",
+			},
+			applyPhase: {
+				applying: "Aplicando \u2014 reiniciando a transmissão\u2026",
+				applied: "As novas configurações estão ativas",
+				reverted:
+					"Não foi possível aplicar \u2014 suas configurações anteriores continuam ativas",
+				rollbackFailed: "Não foi possível aplicar, e a transmissão parou",
+				reasonTeardownTimeout: "A câmera não foi liberada a tempo.",
+				reasonDeadlineExceeded: "A mudança demorou mais do que o esperado.",
+				reasonEngineLost:
+					"O motor de transmissão do dispositivo parou de responder.",
+				reasonRejected: "O dispositivo não conseguiu usar essas configurações.",
+				reasonUnknown:
+					"Veja Configurações \u2192 Registros do sistema para detalhes.",
+			},
 			accelerated: "Hardware",
 			software: "Software",
 			bitrateRangeHint: "Faixa suportada",

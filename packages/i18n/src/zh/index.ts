@@ -1315,6 +1315,24 @@ const zh = {
 		},
 		encoder: {
 			appliesNextStart: "将在下次启动时应用",
+			applyChoice: {
+				title: "立即应用还是下次启动时应用？",
+				description:
+					"更改分辨率、帧率和信号源需要重启推流。重启很短暂，但观众会察觉到。",
+				now: "立即应用（会短暂重启推流）",
+				nextStart: "下次启动时应用",
+			},
+			applyPhase: {
+				applying: "正在应用 \u2014 正在重启推流\u2026",
+				applied: "新设置已生效",
+				reverted: "无法应用 \u2014 仍在使用你之前的设置",
+				rollbackFailed: "无法应用，推流已停止",
+				reasonTeardownTimeout: "摄像头未能及时释放。",
+				reasonDeadlineExceeded: "此次更改耗时超出预期。",
+				reasonEngineLost: "设备的推流引擎已停止响应。",
+				reasonRejected: "设备无法使用这些设置。",
+				reasonUnknown: "详情请查看 设置 \u2192 系统日志。",
+			},
 			accelerated: "硬件",
 			software: "软件",
 			bitrateRangeHint: "支持范围",

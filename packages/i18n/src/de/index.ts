@@ -784,6 +784,30 @@ const de = {
 		},
 		encoder: {
 			appliesNextStart: "Wird beim nächsten Start übernommen",
+			applyChoice: {
+				title: "Jetzt oder beim nächsten Start anwenden?",
+				description:
+					"Änderungen an Auflösung, Bildrate und Quelle erfordern einen Neustart des Streams. Der Neustart ist kurz, aber für Zuschauer sichtbar.",
+				now: "Jetzt anwenden (startet den Stream kurz neu)",
+				nextStart: "Beim nächsten Start anwenden",
+			},
+			applyPhase: {
+				applying: "Wird angewendet \u2014 Stream startet neu\u2026",
+				applied: "Neue Einstellungen sind aktiv",
+				reverted:
+					"Konnte nicht angewendet werden \u2014 deine bisherigen Einstellungen laufen weiter",
+				rollbackFailed:
+					"Konnte nicht angewendet werden, der Stream wurde beendet",
+				reasonTeardownTimeout:
+					"Die Kamera wurde nicht rechtzeitig freigegeben.",
+				reasonDeadlineExceeded:
+					"Die Änderung hat länger gedauert als erwartet.",
+				reasonEngineLost:
+					"Die Streaming-Engine des Geräts antwortet nicht mehr.",
+				reasonRejected: "Das Gerät konnte diese Einstellungen nicht verwenden.",
+				reasonUnknown:
+					"Details findest du unter Einstellungen \u2192 Systemprotokolle.",
+			},
 			accelerated: "Hardware",
 			software: "Software",
 			bitrateRangeHint: "Unterstützter Bereich",

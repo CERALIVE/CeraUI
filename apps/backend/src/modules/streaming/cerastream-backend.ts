@@ -71,6 +71,8 @@ import {
 	CerastreamConnectionError,
 	CerastreamRpcError,
 	CerastreamTimeoutError,
+	type ChangeConfigParams,
+	type ChangeConfigResult,
 	type ConnectOptions,
 	connect,
 	DEFAULT_BALANCER,
@@ -98,7 +100,11 @@ import {
 	switchAudioResultSchema,
 	writeCerastreamConfig,
 } from "@ceralive/cerastream";
-import type { ActiveEncode, BufferingStatus } from "@ceraui/rpc/schemas";
+import type {
+	ActiveEncode,
+	BufferingStatus,
+	ConfigChangePhase,
+} from "@ceraui/rpc/schemas";
 import { toEngineResolution } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
@@ -194,6 +200,11 @@ export interface CerastreamBackendDeps {
 	// Called at most ONCE per session, when the session's control connection is
 	// PROVEN dead (see the module header). `site` names the call that found it.
 	onSessionConnectionLost: (site: string) => void;
+	onConfigChangePhase?: (event: {
+		attemptId: string;
+		phase: ConfigChangePhase;
+		reason?: string;
+	}) => void;
 }
 
 function defaultBridge(): CerastreamBridge {
@@ -425,6 +436,23 @@ export type StartParamsWithAudioMode = z.infer<
  * Imports are dynamic to keep the session/lifecycle graph off this module's load
  * path (same posture as `defaultBridge`).
  */
+function defaultOnConfigChangePhase(event: {
+	attemptId: string;
+	phase: ConfigChangePhase;
+	reason?: string;
+}): void {
+	void import("./stream-session-orchestrator.ts")
+		.then(({ noteStreamSessionConfigChangePhase }) => {
+			noteStreamSessionConfigChangePhase(event);
+		})
+		.catch((err: unknown) => {
+			defaultLogger.error("cerastream: could not route a config-change phase", {
+				event,
+				err,
+			});
+		});
+}
+
 function defaultOnSessionConnectionLost(site: string): void {
 	void (async () => {
 		try {
@@ -466,6 +494,7 @@ function defaultCerastreamBackendDeps(): CerastreamBackendDeps {
 		scheduleTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
 		cancelTimeout: (timer) => clearTimeout(timer),
 		onSessionConnectionLost: defaultOnSessionConnectionLost,
+		onConfigChangePhase: defaultOnConfigChangePhase,
 	};
 }
 
@@ -899,6 +928,12 @@ export class CerastreamBackend implements StreamingBackend {
 		);
 	}
 
+	async changeConfig(params: ChangeConfigParams): Promise<ChangeConfigResult> {
+		return this.withSessionClient("change-config", (client) =>
+			client.changeConfig(params),
+		);
+	}
+
 	/**
 	 * Device snapshot for the device registry (Todo 17). Returns the engine's
 	 * `list-devices` result ONLY while a control client is live (a stream session
@@ -1032,6 +1067,16 @@ export class CerastreamBackend implements StreamingBackend {
 				break;
 			case "device":
 				this.deps.bridge.broadcastStatus();
+				break;
+			case "config-change":
+				// The BUS, not the RPC reply, is what settles a transaction whose
+				// engine escalates and exits: the reply then rejects on a dead socket
+				// and would otherwise leave the UI stuck in `applying`.
+				this.deps.onConfigChangePhase?.({
+					attemptId: event.attempt_id,
+					phase: event.phase,
+					...(event.reason === undefined ? {} : { reason: event.reason }),
+				});
 				break;
 			case "preview":
 				break;

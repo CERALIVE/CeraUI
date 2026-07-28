@@ -84,6 +84,8 @@ CeraUI/
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
 | Validation constraints (FE adapter) | `apps/frontend/src/lib/components/streaming/ValidationAdapter.ts` |
+| **Apply-now vs apply-on-next-start choice (encoder dialog)** | `apps/frontend/src/main/dialogs/EncoderDialog.svelte` + `apps/frontend/src/lib/streaming/appliesNextStart.ts` (`restartChoiceRequired`) |
+| **Config-change phase fencing + operator copy (frontend)** | `apps/frontend/src/lib/streaming/configChangePhase.ts` + `configChangeCopy.ts` |
 | Validation constants (source of truth) | `packages/rpc/src/schemas/` |
 | Custom UI components | `apps/frontend/src/lib/components/custom/` |
 | shadcn-svelte primitives (bits-ui v2) | `apps/frontend/src/lib/components/ui/` |
@@ -1266,6 +1268,45 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
 | Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) |
 
+## APPLY-NOW CONFIG CHANGE (frontend half) [EXISTS]
+
+Changing resolution/framerate while a stream is LIVE now asks the operator when
+to apply it instead of silently deferring. The backend contract (transaction,
+`reconfiguring` state, queued stop, staged persistence, marker-only crash
+reconciliation) is documented in
+[`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → APPLY-NOW CONFIG CHANGE.
+
+- **One predicate drives the badge AND the choice.** `restartChoiceRequired`
+  (`lib/streaming/appliesNextStart.ts`) is defined in terms of the existing
+  `appliesOnNextStart`, so the `⟳ Applies on next start` badge and the timing
+  choice can never disagree. `EncoderDialog` renders the choice as a fieldset
+  (`data-testid="encoder-apply-choice"`) pre-selected to `nextStart` — the
+  unchanged default, so Save alone never restarts a live broadcast.
+- **`apply_now` is a directive, not config.** It rides `buildEncoderSetConfig`'s
+  payload but is filtered out of `LiveView`'s pending-field lock, because the
+  server never echoes it back.
+- **Phases are fenced on `attemptId`.** `reduceConfigChange`
+  (`lib/streaming/configChangePhase.ts`) drops a terminal phase that contradicts
+  a KNOWN current attempt, but ADOPTS one for an unknown attempt — a client that
+  connected mid-transaction never saw `applying`, and swallowing its only outcome
+  is the "event fired before anyone was listening" defect class. The `applying`
+  banner therefore always clears.
+- **Engine reasons are NEVER rendered raw.** `configChangeReport`
+  (`lib/streaming/configChangeCopy.ts`) maps the machine-stable reason tokens to
+  keyed copy in all 10 locales and falls back to a log pointer, so an unmapped
+  token can never leak an ALSA path or unit name to an operator with no console.
+  `change_rejected` is one of those tokens: an engine that REFUSES the parameters
+  never began the transaction, so it renders as a `reverted` warning naming the
+  refusal — never the `rollback_failed` "and the stream stopped" sentence, which
+  would describe a healthy live stream as dead. Backend contract:
+  [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → "THE ENGINE SPEAKS PIXELS".
+- **Device-UI reachability caveat:** `EncoderDialog` is mounted above the
+  idle/live cockpit switch, but the `open-encoder-dialog` row lives in
+  `IdleCockpit` only. So on the device the choice is reachable when the dialog is
+  already open as the stream goes live, via the federated platform-dashboard
+  mount, or via a direct RPC — `LiveCockpit` has no encoder affordance. Adding
+  one is a deliberate UX decision, not part of this contract.
+
 ## RECEIVER COHERENCE — v2 destination/transport/latency model [EXISTS]
 
 The Live → Receiver/Server dialog is **destination-as-provider, latency-only**.
@@ -1951,6 +1992,8 @@ re-derived from bus-path string matching. Frontend label precedence is
 - Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`GoLiveCard.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
 - Don't re-add per-link RTT/NAK/weight numbers to the WiFi/Cellular/Ethernet per-interface sections — `BondedLinksSection.svelte` is the sole owner of that telemetry on the Network destination.
 - Don't add a device rename affordance (text field, button, or dialog) for ANY device or media type — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` / `ONBOARD_VIDEO_DISPLAY_RULES`); a pluggable audio device gets the read-only `isExternalAudioSource` "External" badge instead.
+- Don't derive the apply-now timing choice from any predicate other than `restartChoiceRequired` — it is defined in terms of the same `appliesOnNextStart` the badge uses so the two can never disagree, and don't default the choice to `now` (a save must never restart a live broadcast by itself).
+- Don't render a raw `config-change` reason token — route it through `configChangeReport`, which maps known reasons to keyed 10-locale copy and otherwise points at the in-app logs.
 - Don't add a fifth fact to the compact HUD strip — the 4-fact scope (lifecycle badge, health dot, bitrate, one temp chip) is deliberate; anything else belongs in the expanded Sheet.
 - Don't add a second QR to `HotspotDialog`, and don't interpolate a raw SSID/password into a `WIFI:` payload — route the credentials through `escapeWifiQrField` in `generateWifiQr` (see HOTSPOT QR SURFACE).
 - Don't key a WiFi adapter (or pin a NetworkManager profile) on the MAC `ifconfig`/`GENERAL.HWADDR` reports — it is the scan-randomized OPERATIONAL address. Use `resolveWifiPermanentMac()`; see `apps/backend/AGENTS.md` → WIFI ADAPTER IDENTITY IS THE PERMANENT MAC.

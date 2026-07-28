@@ -27,7 +27,7 @@
  * Pure (no runes, no RPC, no Svelte) so it can be imported by the view and
  * unit-tested without side effects.
  */
-import type { Pipeline, StreamingConfigInput } from "@ceraui/rpc/schemas";
+import type { Pipeline, StreamingSetConfigInput } from "@ceraui/rpc/schemas";
 
 import type { EncoderConfig } from "$main/dialogs/EncoderDialog.svelte";
 
@@ -66,8 +66,8 @@ export function getOverrideGate(pipeline: Pipeline | undefined): OverrideGate {
 export function buildEncoderSetConfig(
 	draft: EncoderConfig,
 	pipeline: Pipeline | undefined,
-): StreamingConfigInput {
-	const input: StreamingConfigInput = {};
+): StreamingSetConfigInput {
+	const input: StreamingSetConfigInput = {};
 
 	if (draft.source !== undefined) input.pipeline = draft.source;
 	if (draft.bitrateOverlay !== undefined) {
@@ -92,6 +92,11 @@ export function buildEncoderSetConfig(
 	if (gate.framerate && draft.framerate !== undefined) {
 		input.framerate = draft.framerate;
 	}
+
+	// The apply-now directive rides the same payload but is NEVER persisted —
+	// it only chooses whether the already-validated save restarts the stream now
+	// or waits for the next start. Omitted unless the operator explicitly chose it.
+	if (draft.applyNow === true) input.apply_now = true;
 
 	return input;
 }

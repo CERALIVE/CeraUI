@@ -2,6 +2,7 @@
  * Streaming configuration and status Zod schemas
  */
 import { z } from 'zod';
+import { configChangeResultSchema } from './config-change.schema';
 import { startFailureSchema, stopResultSchema } from './streaming-lifecycle.schema';
 import { regulatoryCountrySchema } from './wifi.schema';
 
@@ -249,6 +250,18 @@ export const streamingConfigInputSchema = z.object({
 	recovery_mode: streamRecoveryPreferenceSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
+
+/**
+ * `setConfig` input plus the apply-now DIRECTIVE. `apply_now` is deliberately
+ * NOT a member of `streamingConfigInputSchema`: it is never persisted and never
+ * echoed in `applied`, it only chooses WHEN an already-valid save takes effect.
+ * Absent/false is the unchanged default — persist now, apply on next start —
+ * so no existing caller changes behaviour.
+ */
+export const streamingSetConfigInputSchema = streamingConfigInputSchema.extend({
+	apply_now: z.boolean().optional(),
+});
+export type StreamingSetConfigInput = z.infer<typeof streamingSetConfigInputSchema>;
 
 // Bitrate input schema
 export const bitrateInputSchema = z.object({
@@ -787,6 +800,10 @@ export const streamingSetConfigOutputSchema = z.object({
 	success: z.boolean(),
 	applied: streamingConfigInputSchema.partial().optional(),
 	error: z.string().optional(),
+	// Present ONLY for an apply-now save: the transaction's terminal outcome.
+	// `success` still reports whether the SAVE was accepted, so a `reverted`
+	// change is `success: true` with a `configChange` the UI must render.
+	configChange: configChangeResultSchema.optional(),
 });
 export type StreamingSetConfigOutput = z.infer<typeof streamingSetConfigOutputSchema>;
 

@@ -22,6 +22,7 @@ import {
 	setSourceVisibilityOutputSchema,
 	streamHealthOutputSchema,
 	streamingConfigInputSchema,
+	streamingSetConfigInputSchema,
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
@@ -65,7 +66,7 @@ export const streamingContract = oc.router({
 	/**
 	 * Persist streaming/server configuration without starting the stream.
 	 */
-	setConfig: oc.input(streamingConfigInputSchema).output(streamingSetConfigOutputSchema),
+	setConfig: oc.input(streamingSetConfigInputSchema).output(streamingSetConfigOutputSchema),
 
 	/**
 	 * Persist device-wide source visibility (test-pattern hide) — config-only,

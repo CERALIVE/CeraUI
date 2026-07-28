@@ -1408,6 +1408,25 @@ const ja = {
 		},
 		encoder: {
 			appliesNextStart: "次回の開始時に適用",
+			applyChoice: {
+				title: "今すぐ適用しますか、次回の開始時に適用しますか？",
+				description:
+					"解像度・フレームレート・ソースの変更にはストリームの再起動が必要です。再起動は短時間ですが、視聴者にも見えます。",
+				now: "今すぐ適用（ストリームが短時間再起動します）",
+				nextStart: "次回の開始時に適用",
+			},
+			applyPhase: {
+				applying: "適用中 \u2014 ストリームを再起動しています\u2026",
+				applied: "新しい設定が有効になりました",
+				reverted: "適用できませんでした \u2014 以前の設定のまま動作しています",
+				rollbackFailed: "適用できず、ストリームが停止しました",
+				reasonTeardownTimeout: "カメラを時間内に解放できませんでした。",
+				reasonDeadlineExceeded: "変更に想定より時間がかかりました。",
+				reasonEngineLost:
+					"デバイスのストリーミングエンジンが応答しなくなりました。",
+				reasonRejected: "デバイスはその設定を使用できませんでした。",
+				reasonUnknown: "詳細は 設定 \u2192 システムログ を確認してください。",
+			},
 			accelerated: "ハードウェア",
 			software: "ソフトウェア",
 			bitrateRangeHint: "対応範囲",
