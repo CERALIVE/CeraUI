@@ -32,6 +32,7 @@ import {
 	STOP_WATCHDOG_TIMEOUT_MS,
 	type StopWatchdogDeps,
 } from "./streaming-stop-watchdog";
+import { ingestPulledStatus } from "./subscriptions.svelte";
 
 // ============================================
 // Types
@@ -323,7 +324,6 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		return {
 			pullStatus: async () => {
 				const status = await rpc.status.getStatus();
-				const { ingestPulledStatus } = await import("./subscriptions.svelte");
 				ingestPulledStatus(status);
 				return Boolean(
 					(status as { is_streaming?: unknown } | null | undefined)
@@ -342,7 +342,6 @@ function createReactiveOptimismStore(): ReactiveOptimismStore {
 		return {
 			pullStatus: async () => {
 				const status = await rpc.status.getStatus();
-				const { ingestPulledStatus } = await import("./subscriptions.svelte");
 				ingestPulledStatus(status);
 				return Boolean(
 					(status as { is_streaming?: unknown } | null | undefined)
