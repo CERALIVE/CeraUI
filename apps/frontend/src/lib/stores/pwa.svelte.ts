@@ -1,6 +1,8 @@
 // PWA Installation and Offline Status Store using pure Svelte 5 runes
 // Simplified version without legacy store compatibility
 
+import { toast } from "svelte-sonner";
+
 // ============================================
 // Device Detection
 // ============================================
@@ -163,12 +165,10 @@ if (typeof window !== "undefined") {
 export async function installApp(): Promise<boolean> {
 	if (!deferredPrompt) {
 		// No native prompt available, show manual instructions
-		void import("svelte-sonner").then(({ toast }) => {
-			toast.info("Install App", {
-				description:
-					'Use your browser\'s "Install" or "Add to Home Screen" option in the menu.',
-				duration: 5000,
-			});
+		toast.info("Install App", {
+			description:
+				'Use your browser\'s "Install" or "Add to Home Screen" option in the menu.',
+			duration: 5000,
 		});
 		return false;
 	}
