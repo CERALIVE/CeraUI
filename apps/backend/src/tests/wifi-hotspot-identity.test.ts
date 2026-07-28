@@ -18,9 +18,14 @@
 */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 import {
 	getHotspotCredentials,
+	initHotspotCredentials,
+	PREVIOUS_CONNS_LIMIT,
 	rememberHotspotCredentials,
 	resetHotspotCredentialsForTest,
 } from "../modules/wifi/hotspot-credentials.ts";
@@ -553,6 +558,16 @@ describe("pruneDuplicateHotspotConns", () => {
 
 	test("removes superseded generated profiles and keeps the active one", async () => {
 		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
+		// Both orphans are profiles this adapter itself carried and replaced, so
+		// the store holds POSITIVE ownership evidence for each — the only thing
+		// that makes a profile deletable.
+		for (const conn of ["orphan-a", "orphan-b", "keep"]) {
+			rememberHotspotCredentials(PERM_MAC, {
+				ssid: "CERALIVE_791c",
+				password: "y",
+				conn,
+			});
+		}
 		const { deps, deleted } = makeProfileDeps([
 			{
 				uuid: "keep",
@@ -647,5 +662,234 @@ describe("pruneDuplicateHotspotConns", () => {
 		await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
 
 		expect(deleted).toEqual([]);
+	});
+});
+
+// ─── 6. deletion requires POSITIVE ownership evidence (Item D2) ──────────────
+
+/*
+  The rule this section locks: a profile is deletable ONLY when some adapter's
+  persisted identity has positively CLAIMED its uuid — as its current `conn` or
+  in its bounded `previousConns` history — and no adapter currently carries it.
+
+  Absence is never evidence. The retired rule deleted any generated-name AP
+  profile "bound to an address no currently-present adapter owns", which is
+  precisely what a temporarily-unplugged adapter's profile looks like: the
+  cleanup destroyed the SSID/password an operator's phone already knew.
+*/
+
+const OWNED_SSID = "CERALIVE_791c";
+
+function rememberConn(macAddress: string, conn: string) {
+	rememberHotspotCredentials(macAddress, {
+		ssid: OWNED_SSID,
+		password: "y",
+		conn,
+	});
+}
+
+describe("pruneDuplicateHotspotConns — ownership evidence", () => {
+	afterEach(() => {
+		removeWifiInterface(PERM_MAC);
+		removeWifiInterface(SECOND_PERM_MAC);
+	});
+
+	test("a profile bound to a temporarily-ABSENT adapter is preserved", async () => {
+		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
+		rememberConn(PERM_MAC, "keep");
+		const { deps, deleted } = makeProfileDeps([
+			{
+				uuid: "keep",
+				name: "Hotspot",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+			{
+				uuid: "absent-adapter",
+				name: "Hotspot-1",
+				mode: "ap",
+				ssid: "CERALIVE_bbcc",
+				psk: "y",
+				mac: SECOND_PERM_MAC,
+			},
+		]);
+
+		const removed = await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+
+		expect(removed).toEqual([]);
+		expect(deleted).toEqual([]);
+	});
+
+	test("a user-created profile that merely LOOKS like ours is preserved", async () => {
+		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
+		rememberConn(PERM_MAC, "keep");
+		const { deps, deleted } = makeProfileDeps([
+			{
+				uuid: "keep",
+				name: "Hotspot",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+			{
+				uuid: "operator-made",
+				name: "Hotspot-2",
+				mode: "ap",
+				ssid: "CERALIVE_field",
+				psk: "y",
+				mac: PERM_MAC,
+			},
+		]);
+
+		const removed = await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+
+		expect(removed).toEqual([]);
+		expect(deleted).toEqual([]);
+	});
+
+	test("a genuine superseded duplicate recorded in previousConns IS removed", async () => {
+		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
+		rememberConn(PERM_MAC, "superseded");
+		rememberConn(PERM_MAC, "keep");
+
+		expect(getHotspotCredentials(PERM_MAC)?.previousConns).toEqual([
+			"superseded",
+		]);
+
+		const { deps, deleted } = makeProfileDeps([
+			{
+				uuid: "keep",
+				name: "Hotspot",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+			{
+				uuid: "superseded",
+				name: "Hotspot-1",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+		]);
+
+		const removed = await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+
+		expect(removed).toEqual(["superseded"]);
+		expect(deleted).toEqual(["superseded"]);
+	});
+
+	test("an ABSENT adapter's current profile outranks another adapter's history", async () => {
+		addWifiInterface(PERM_MAC, makeHotspotIface({ hotspotConn: "keep" }));
+		rememberConn(PERM_MAC, "shared");
+		rememberConn(PERM_MAC, "keep");
+		rememberConn(SECOND_PERM_MAC, "shared");
+
+		const { deps, deleted } = makeProfileDeps([
+			{
+				uuid: "keep",
+				name: "Hotspot",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+			{
+				uuid: "shared",
+				name: "Hotspot-1",
+				mode: "ap",
+				ssid: OWNED_SSID,
+				psk: "y",
+				mac: PERM_MAC,
+			},
+		]);
+
+		const removed = await pruneDuplicateHotspotConns(PERM_MAC, "keep", deps);
+
+		expect(removed).toEqual([]);
+		expect(deleted).toEqual([]);
+	});
+});
+
+// ─── 7. the owned-UUID history is bounded and drops oldest ───────────────────
+
+describe("previousConns history", () => {
+	test("records only a genuine replacement, newest last", () => {
+		rememberConn(PERM_MAC, "a");
+		rememberConn(PERM_MAC, "a");
+		rememberConn(PERM_MAC, "b");
+
+		expect(getHotspotCredentials(PERM_MAC)?.previousConns).toEqual(["a"]);
+	});
+
+	test("is capped, dropping the oldest entry", () => {
+		const total = PREVIOUS_CONNS_LIMIT + 3;
+		for (let i = 0; i < total; i++) rememberConn(PERM_MAC, `conn-${i}`);
+
+		const history = getHotspotCredentials(PERM_MAC)?.previousConns ?? [];
+		expect(history).toHaveLength(PREVIOUS_CONNS_LIMIT);
+		expect(history[0]).toBe(`conn-${total - 1 - PREVIOUS_CONNS_LIMIT}`);
+		expect(history.at(-1)).toBe(`conn-${total - 2}`);
+	});
+});
+
+// ─── 8. on-disk schema migration (version 1 → 2) ─────────────────────────────
+
+describe("hotspot credentials store — version-1 migration", () => {
+	let dir: string;
+
+	beforeEach(() => {
+		dir = fs.mkdtempSync(path.join(os.tmpdir(), "hotspot-creds-"));
+	});
+
+	afterEach(() => {
+		resetHotspotCredentialsForTest();
+		fs.rmSync(dir, { recursive: true, force: true });
+	});
+
+	test("a version-1 file loads clean and gains previousConns", async () => {
+		const file = path.join(dir, "hotspot_credentials.json");
+		const key = normalizeMacAddress(PERM_MAC) ?? PERM_MAC;
+		fs.writeFileSync(
+			file,
+			JSON.stringify({
+				version: 1,
+				adapters: {
+					[key]: {
+						ssid: OWNED_SSID,
+						password: "secret",
+						conn: "old",
+						channel: "auto",
+						updatedAt: 1,
+					},
+				},
+			}),
+		);
+
+		await initHotspotCredentials(file);
+
+		const loaded = getHotspotCredentials(PERM_MAC);
+		expect(loaded?.ssid).toBe(OWNED_SSID);
+		expect(loaded?.password).toBe("secret");
+		expect(loaded?.conn).toBe("old");
+		expect(loaded?.channel).toBe("auto");
+		expect(loaded?.previousConns).toEqual([]);
+
+		rememberHotspotCredentials(PERM_MAC, {
+			ssid: OWNED_SSID,
+			password: "secret",
+			conn: "new",
+			channel: "auto",
+		});
+
+		const written = JSON.parse(fs.readFileSync(file, "utf8"));
+		expect(written.version).toBe(2);
+		expect(written.adapters[key].conn).toBe("new");
+		expect(written.adapters[key].previousConns).toEqual(["old"]);
 	});
 });
