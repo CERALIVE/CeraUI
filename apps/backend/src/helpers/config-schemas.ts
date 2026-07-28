@@ -171,6 +171,13 @@ export const lastSeenDeviceSchema = z.object({
 	// absent. Lets a re-enumerated device (video1→video2) migrate its row instead
 	// of leaving a stuck `lost` row (Todo 34).
 	stableId: z.string().optional(),
+	// Node paths this same physical device previously answered to, most recent
+	// first. Written only when two snapshots are folded onto one stable identity
+	// (a libuvc camera renumbers `/dev/videoN` on every open/close cycle), so the
+	// id→identity lookup that `resolveSourceIdentity` needs survives the fold —
+	// without it, deduping the list would strand a `config.source` still holding
+	// a retired path. Additive + optional: an older config parses unchanged.
+	previousIds: z.array(z.string()).optional(),
 });
 
 export type LastSeenDevice = z.infer<typeof lastSeenDeviceSchema>;
