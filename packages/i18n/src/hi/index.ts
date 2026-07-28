@@ -1356,6 +1356,8 @@ const hi = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"जुड़ा हुआ कैमरा इन सेटिंग्स पर रिकॉर्ड नहीं कर सकता। कोई समर्थित रिज़ॉल्यूशन और फ़्रेम दर चुनें, फिर दोबारा सहेजें।",
 			axisSelected: "चयनित",
 			axisDeviceMax: "डिवाइस अधिकतम",
 			fpsAvailableAt: "{fps} fps {resolution} पर उपलब्ध",
@@ -1443,6 +1445,8 @@ const hi = {
 		streamHealthDegraded: "स्ट्रीम स्थिति घट गई",
 		streamHealthDead: "स्ट्रीम बंद है",
 		streamHealthRecovered: "स्ट्रीम स्थिति बहाल हुई",
+		encoderModeClamped:
+			"आपकी सहेजी गई एन्कोडर सेटिंग्स जुड़े हुए कैमरे द्वारा समर्थित नहीं थीं, इसलिए उन्हें {resolution} पर {framerate} fps में बदल दिया गया है।",
 		streamHealthNoVideo:
 			"आपकी स्ट्रीम तक कोई वीडियो नहीं पहुँच रहा। जाँचें कि आपका कैमरा या HDMI स्रोत चालू है और केबल दोनों सिरों पर ठीक से लगी है।",
 		streamHealthLinksDegraded:

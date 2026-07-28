@@ -3,4 +3,5 @@
  * cerastream capability contract into the UI-facing `OfferedSet`.
  */
 export * from './audio';
+export * from './device-mode-truth';
 export * from './intersect-caps';

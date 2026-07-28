@@ -1493,6 +1493,8 @@ const ar = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"لا يمكن للكاميرا المتصلة التسجيل بهذه الإعدادات. اختر دقة ومعدل إطارات تدعمهما ثم احفظ مرة أخرى.",
 			axisSelected: "المحدد",
 			axisDeviceMax: "الحد الأقصى للجهاز",
 			fpsAvailableAt: "{fps} إطار/ث متاح على {resolution}",
@@ -1581,6 +1583,8 @@ const ar = {
 		streamHealthDegraded: "تدهورت حالة البث",
 		streamHealthDead: "البث متوقف",
 		streamHealthRecovered: "تمت استعادة حالة البث",
+		encoderModeClamped:
+			"لم تكن إعدادات المُشفِّر المحفوظة مدعومة من الكاميرا المتصلة، وتم ضبطها على {resolution} بمعدل {framerate} إطارًا في الثانية.",
 		streamHealthNoVideo:
 			"لا يصل أي فيديو إلى بثك. تأكد من أن الكاميرا أو مصدر HDMI يعمل ومن أن الكابل مثبت جيداً من الطرفين.",
 		streamHealthLinksDegraded:

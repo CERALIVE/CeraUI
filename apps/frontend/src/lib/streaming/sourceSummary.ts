@@ -334,6 +334,25 @@ export interface CapabilitySummary {
  * then the configured pipeline. Returns `undefined` when neither resolves to a
  * reported source — the summary then falls back to platform maxima.
  */
+/**
+ * The ACTIVE row in the unified `sources` broadcast — the one that owns the mode
+ * ladder the summary may read. Resolution order mirrors
+ * {@link resolveActiveSourceCap}: the persisted `source` id, then the pinned
+ * capture input, then the pipeline. Anything unmatched yields `undefined`, so the
+ * caller falls back to the platform ceiling instead of inventing one.
+ */
+function resolveActiveStreamSource(
+	streamSources: readonly StreamSource[] | undefined,
+	config: ConfigMessage | undefined,
+): StreamSource | undefined {
+	if (!streamSources) return undefined;
+	return (
+		findSourceById(config?.source, streamSources) ??
+		findSourceById(config?.selected_video_input, streamSources) ??
+		findSourceById(config?.pipeline, streamSources)
+	);
+}
+
 function resolveActiveSourceCap(
 	sources: readonly VideoSourceCap[],
 	config: ConfigMessage | undefined,
@@ -368,10 +387,19 @@ function resolveActiveSourceCap(
  * negotiates (see `resolveActiveMediaType`), so a device advertising several
  * media types reports the ceiling of the ladder in play, not a cross-format
  * maximum no single format can reach.
+ *
+ * `streamSources` is the unified `sources` broadcast. It is what carries the
+ * ACTIVE DEVICE's own mode ladder, and passing it is what keeps this chip honest:
+ * the coarse `capabilities.device_modes` map this used to read had no per-device
+ * answer when no input was pinned, so the old code unioned every kind-matched
+ * device's ladder — the exact invention cerastream ADR-0008 §10 forbids. With it
+ * omitted (or no row matching), the summary degrades to the platform-intersected
+ * ceiling rather than guessing.
  */
 export function deriveCapabilitySummary(
 	caps: CapabilitiesMessage | undefined,
 	config?: ConfigMessage | undefined,
+	streamSources?: readonly StreamSource[] | undefined,
 ): CapabilitySummary | undefined {
 	if (!caps) return undefined;
 
@@ -382,17 +410,10 @@ export function deriveCapabilitySummary(
 	const activeSource = resolveActiveSourceCap(sources, config);
 
 	if (activeSource) {
-		const activeMediaType = resolveActiveMediaType(
-			caps.device_modes,
-			config?.pipeline,
-			config?.selected_video_input,
-		);
+		const activeStreamSource = resolveActiveStreamSource(streamSources, config);
+		const activeMediaType = resolveActiveMediaType(activeStreamSource);
 		const deviceModes = scopeModesToMediaType(
-			resolveDeviceModes(
-				caps.device_modes,
-				config?.pipeline,
-				config?.selected_video_input,
-			),
+			resolveDeviceModes(activeStreamSource),
 			activeMediaType,
 		);
 		const offered = intersectCaps(

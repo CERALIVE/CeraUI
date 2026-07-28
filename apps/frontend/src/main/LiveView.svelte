@@ -92,6 +92,7 @@ import {
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
+import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
@@ -531,8 +532,12 @@ async function handleEncoderSave(saved: EncoderConfig) {
 	const fields = Object.entries(input);
 	for (const [field, value] of fields) markPending(field, value);
 	try {
-		await rpc.streaming.setConfig(input);
-		toast.success($LL.notifications.saved());
+		// A refusal RESOLVES with `{success:false}` — it does not throw. Reporting
+		// success without reading that flag is how a device-rejected combo used to
+		// toast "Saved" over a config the device never accepted.
+		const result = await rpc.streaming.setConfig(input);
+		if (result.success) toast.success($LL.notifications.saved());
+		else toast.error(encoderSaveErrorMessage(result.error, $LL));
 	} catch {
 		toast.error($LL.notifications.saveFailed());
 	} finally {

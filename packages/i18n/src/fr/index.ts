@@ -1560,6 +1560,8 @@ const fr = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"La cam\u00e9ra connect\u00e9e ne peut pas filmer avec ces r\u00e9glages. Choisissez une r\u00e9solution et une fr\u00e9quence d'images prises en charge, puis enregistrez \u00e0 nouveau.",
 			axisSelected: "Sélectionné",
 			axisDeviceMax: "Maximum de l'appareil",
 			fpsAvailableAt: "{fps} fps disponible en {resolution}",
@@ -1648,6 +1650,8 @@ const fr = {
 		streamHealthDegraded: "État du flux dégradé",
 		streamHealthDead: "Le flux est interrompu",
 		streamHealthRecovered: "État du flux rétabli",
+		encoderModeClamped:
+			"Vos r\u00e9glages d'encodeur enregistr\u00e9s n'\u00e9taient pas pris en charge par la cam\u00e9ra connect\u00e9e ; ils ont \u00e9t\u00e9 ajust\u00e9s \u00e0 {resolution} \u00e0 {framerate} ips.",
 		streamHealthNoVideo:
 			"Aucune vidéo n'arrive dans votre direct. Vérifiez que votre caméra ou source HDMI est allumée et que le câble est bien enfoncé aux deux extrémités.",
 		streamHealthLinksDegraded:

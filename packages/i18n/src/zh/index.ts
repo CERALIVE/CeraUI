@@ -1306,6 +1306,8 @@ const zh = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"已连接的摄像头无法以这些设置进行拍摄。请选择它支持的分辨率和帧率，然后重新保存。",
 			axisSelected: "已选",
 			axisDeviceMax: "设备上限",
 			fpsAvailableAt: "{fps} fps 在 {resolution} 可用",
@@ -1393,6 +1395,8 @@ const zh = {
 		streamHealthDegraded: "推流状态已降级",
 		streamHealthDead: "推流已中断",
 		streamHealthRecovered: "推流状态已恢复",
+		encoderModeClamped:
+			"已连接的摄像头不支持你保存的编码器设置，已调整为 {resolution} / {framerate} fps。",
 		streamHealthNoVideo:
 			"没有画面进入你的直播。请确认摄像机或 HDMI 信号源已开机，并且线缆两端都插紧。",
 		streamHealthLinksDegraded:

@@ -62,105 +62,153 @@ const DEVICE_MODES: Record<string, DeviceModeGroup> = {
 	},
 };
 
+// Each DEVICE_MODES entry as the StreamSource row the backend actually
+// broadcasts — the ONLY shape the adapter reads now that the union path is gone.
+function captureSourceOf(
+	id: string,
+	pipelineId: string,
+	kind: CaptureStreamSource["kind"],
+	modes: readonly DeviceMode[],
+): CaptureStreamSource {
+	return {
+		origin: "capture",
+		id,
+		pipelineId,
+		kind,
+		displayName: id,
+		devicePath: id,
+		modes: [...modes],
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		defaultResolution: "1080p",
+		defaultFramerate: 30,
+		audioKind: "selectable",
+		available: true,
+	};
+}
+
+const HDMI_DEVICE_SOURCE = captureSourceOf(
+	"/dev/video0",
+	"hdmi",
+	"hdmi",
+	DEVICE_MODES["/dev/video0"]?.modes ?? [],
+);
+const UVC_DEVICE_SOURCE = captureSourceOf(
+	"/dev/video1",
+	"libuvch264",
+	"uvc_h264",
+	DEVICE_MODES["/dev/video1"]?.modes ?? [],
+);
+
+/** A source that reports no ladder at all (coarse/virtual/network, or unprobed). */
+function modelessSource(id: string, pipelineId: string): CoarseStreamSource {
+	return {
+		origin: "coarse",
+		id,
+		pipelineId,
+		labelKey: `settings.sources.${id}`,
+		modes: [],
+		supportsAudio: true,
+		supportsResolutionOverride: true,
+		supportsFramerateOverride: true,
+		defaultResolution: "1080p",
+		defaultFramerate: 30,
+		audioKind: "selectable",
+		available: true,
+	};
+}
+
 describe("resolveDeviceModes", () => {
-	it("returns undefined when the engine broadcasts no device_modes (coarse)", () => {
-		expect(resolveDeviceModes(undefined, "hdmi", undefined)).toBeUndefined();
+	it("reads the ACTIVE source's own modes — the single lookup", () => {
+		expect(resolveDeviceModes(UVC_DEVICE_SOURCE)).toBe(UVC_DEVICE_SOURCE.modes);
 	});
 
-	it("narrows to the explicitly selected device's modes (device selection wins)", () => {
-		const modes = resolveDeviceModes(DEVICE_MODES, "hdmi", "/dev/video1");
-		// Selected video1 even though the pipeline is hdmi — the operator's device
-		// choice overrides the kind→pipeline union.
-		expect(modes).toBe(DEVICE_MODES["/dev/video1"].modes);
+	it("falls back to coarse for a source with no modes (never empty)", () => {
+		expect(resolveDeviceModes(modelessSource("hdmi", "hdmi"))).toBeUndefined();
 	});
 
-	it("falls back to coarse when the selected device id is unknown (never empty)", () => {
-		expect(
-			resolveDeviceModes(DEVICE_MODES, "hdmi", "/dev/does-not-exist"),
-		).toBeUndefined();
+	it("falls back to coarse for no source at all", () => {
+		expect(resolveDeviceModes(undefined)).toBeUndefined();
 	});
+});
 
-	it("falls back to coarse when the selected device advertises no modes", () => {
-		const modes: Record<string, DeviceModeGroup> = {
-			"/dev/video0": { kind: "hdmi", modes: [] },
-		};
-		expect(resolveDeviceModes(modes, "hdmi", "/dev/video0")).toBeUndefined();
-	});
-
-	it("unions the modes of every kind-matched device when no device is selected", () => {
-		expect(resolveDeviceModes(DEVICE_MODES, "hdmi", undefined)).toEqual(
-			DEVICE_MODES["/dev/video0"].modes,
+/*
+ * UNION-REMOVAL REGRESSION (device-quality-wave3 todo 11c).
+ *
+ * The retired `resolveDeviceModes(device_modes, pipelineId, selectedVideoInput)`
+ * overload answered a pipeline with NO pinned input by unioning every
+ * kind-matched device's ladder. cerastream ADR-0008 §10 forbids exactly that
+ * ("the UI and the save path may never invent or union"), and it is the #244
+ * defect: the union yields a resolution/framerate pair no single device can
+ * deliver, and the leg fails `not-negotiated`.
+ *
+ * These cases assert the union CANNOT COME BACK — not merely that the current
+ * path is source-keyed. If someone re-adds a pipeline-keyed overload, the first
+ * case goes red because a modeless coarse row would start reporting a ladder it
+ * does not own.
+ */
+describe("union-removal regression — a pipeline NEVER inherits a device's ladder", () => {
+	it("a coarse row sharing a pipeline id with a live device reports NO ladder", () => {
+		// `hdmi` is exactly the pipeline `/dev/video0`'s kind bridges to. Under the
+		// old union this returned that device's 1080p/2160p ladder.
+		const axes = offeredAxes("rk3588", modelessSource("hdmi", "hdmi"));
+		expect(resolveDeviceModes(modelessSource("hdmi", "hdmi"))).toBeUndefined();
+		expect(axes.deviceModes).toBeUndefined();
+		expect(axes.offered).toEqual(
+			offeredEncoderCaps("rk3588", "hdmi", makePipeline()),
 		);
-		expect(resolveDeviceModes(DEVICE_MODES, "libuvch264", undefined)).toEqual(
-			DEVICE_MODES["/dev/video1"].modes,
-		);
 	});
 
-	it("unions modes across MULTIPLE devices of the same kind", () => {
-		const modes: Record<string, DeviceModeGroup> = {
-			a: {
-				kind: "hdmi",
-				modes: [{ width: 1920, height: 1080, framerates: [30] }],
-			},
-			b: {
-				kind: "hdmi",
-				modes: [{ width: 3840, height: 2160, framerates: [30] }],
-			},
-		};
-		const union = resolveDeviceModes(modes, "hdmi", undefined);
-		expect(union).toHaveLength(2);
+	it("two devices of the SAME kind never pool their rungs", () => {
+		// Both are enumerated MENUS (two rungs each), so neither collapses into the
+		// single-signal ceiling branch — this isolates the pooling property alone.
+		const a = captureSourceOf("a", "hdmi", "hdmi", [
+			{ width: 1280, height: 720, framerates: [30] },
+			{ width: 1920, height: 1080, framerates: [30] },
+		]);
+		const b = captureSourceOf("b", "hdmi", "hdmi", [
+			{ width: 2560, height: 1440, framerates: [30] },
+			{ width: 3840, height: 2160, framerates: [30] },
+		]);
+		// Each answers with ITS OWN two rungs — never the 4-rung pool the union
+		// produced for the pipeline they share.
+		expect(offeredAxes("rk3588", a).offered.resolutions).toEqual([
+			"720p",
+			"1080p",
+		]);
+		expect(offeredAxes("rk3588", b).offered.resolutions).toEqual([
+			"1440p",
+			"2160p",
+		]);
 	});
 
-	it("returns coarse for a non-device pipeline (rtmp/srt/test) — zero kind-matched", () => {
-		expect(resolveDeviceModes(DEVICE_MODES, "rtmp", undefined)).toBeUndefined();
-		expect(resolveDeviceModes(DEVICE_MODES, "srt", undefined)).toBeUndefined();
-		expect(resolveDeviceModes(DEVICE_MODES, "test", undefined)).toBeUndefined();
-	});
-
-	it("returns coarse when no pipeline is selected and no device is pinned", () => {
-		expect(
-			resolveDeviceModes(DEVICE_MODES, undefined, undefined),
-		).toBeUndefined();
+	it("`resolveDeviceModes` accepts ONE argument — the legacy triple is gone", () => {
+		// `.length` counts declared params before the first default, so the
+		// source-keyed `offeredAxes(hardware, source, mode = STREAMING_MODE)` is 2.
+		expect(resolveDeviceModes.length).toBe(1);
+		expect(offeredAxes.length).toBe(2);
 	});
 });
 
 describe("offeredAxes — device-mode narrowing", () => {
-	it("narrows resolutions + framerates to the kind-matched device union", () => {
-		// rk3588 (2160p, H.265, hw accel) + hdmi source; the hdmi device does
-		// 1080p@[30,60] + 2160p@[30], so the offered set is that union.
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			DEVICE_MODES,
-			undefined,
-		);
+	it("narrows resolutions + framerates to the ACTIVE device's own modes", () => {
+		// rk3588 (2160p, H.265, hw accel); the hdmi device does 1080p@[30,60] +
+		// 2160p@[30], so the offered set is exactly that device's ladder.
+		const axes = offeredAxes("rk3588", HDMI_DEVICE_SOURCE);
 		expect(axes.offered.resolutions).toEqual(["1080p", "2160p"]);
 		expect(axes.offered.framerates).toEqual([30, 60]);
-		expect(axes.deviceModes).toEqual(DEVICE_MODES["/dev/video0"].modes);
+		expect(axes.deviceModes).toEqual(HDMI_DEVICE_SOURCE.modes);
 	});
 
-	it("narrows to the pinned device's modes when selected_video_input is set", () => {
-		// Pin the UVC device while the pipeline is hdmi: axes follow the device.
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			DEVICE_MODES,
-			"/dev/video1",
-		);
+	it("follows the pinned device when a different one is selected", () => {
+		const axes = offeredAxes("rk3588", UVC_DEVICE_SOURCE);
 		expect(axes.offered.resolutions).toEqual(["720p", "1080p"]);
 		expect(axes.offered.framerates).toEqual([30, 60]);
 	});
 
-	it("uses the coarse offering for a non-device pipeline even with device_modes present", () => {
-		const axes = offeredAxes(
-			"rk3588",
-			"rtmp",
-			makePipeline(),
-			DEVICE_MODES,
-			undefined,
-		);
+	it("uses the coarse offering for a modeless network source", () => {
+		const axes = offeredAxes("rk3588", modelessSource("rtmp", "rtmp"));
 		const coarse = offeredEncoderCaps("rk3588", "rtmp", makePipeline());
 		expect(axes.offered).toEqual(coarse);
 		expect(axes.deviceModes).toBeUndefined();
@@ -169,13 +217,7 @@ describe("offeredAxes — device-mode narrowing", () => {
 
 describe("offeredAxes — no-caps fallback (byte-identical to today)", () => {
 	it("is byte-identical to offeredEncoderCaps when device_modes is absent (with pipeline)", () => {
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			undefined,
-			undefined,
-		);
+		const axes = offeredAxes("rk3588", modelessSource("hdmi", "hdmi"));
 		expect(axes.offered).toEqual(
 			offeredEncoderCaps("rk3588", "hdmi", makePipeline()),
 		);
@@ -183,13 +225,7 @@ describe("offeredAxes — no-caps fallback (byte-identical to today)", () => {
 	});
 
 	it("is permissive (full ladder) with no pipeline AND no device_modes — minimal floor", () => {
-		const axes = offeredAxes(
-			"generic",
-			undefined,
-			undefined,
-			undefined,
-			undefined,
-		);
+		const axes = offeredAxes("generic", undefined);
 		expect(axes.offered).toEqual(
 			offeredEncoderCaps("generic", undefined, undefined),
 		);
@@ -207,26 +243,14 @@ describe("offeredAxes — no-caps fallback (byte-identical to today)", () => {
 
 describe("framerateOptionsForResolution — per-resolution gating", () => {
 	it("keeps both rates at a resolution the device drives at 30 AND 60", () => {
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			DEVICE_MODES,
-			undefined,
-		);
+		const axes = offeredAxes("rk3588", HDMI_DEVICE_SOURCE);
 		const at1080 = framerateOptionsForResolution(axes, "1080p");
 		expect(at1080.find((o) => o.value === 30)?.supported).toBe(true);
 		expect(at1080.find((o) => o.value === 60)?.supported).toBe(true);
 	});
 
 	it("disables 60 at a resolution the device only drives at 30 — with the resolution reason", () => {
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			DEVICE_MODES,
-			undefined,
-		);
+		const axes = offeredAxes("rk3588", HDMI_DEVICE_SOURCE);
 		const at2160 = framerateOptionsForResolution(axes, "2160p");
 		expect(at2160.find((o) => o.value === 30)?.supported).toBe(true);
 		const sixty = at2160.find((o) => o.value === 60);
@@ -235,20 +259,15 @@ describe("framerateOptionsForResolution — per-resolution gating", () => {
 	});
 
 	it("attributes a not-offered rate to the source/platform reason, not the resolution reason", () => {
-		// A single 30-only device: 60 is not in the offered union at all, so the
+		// A single 30-only device: 60 is not in the offered set at all, so the
 		// reason is the coarse source/platform ceiling, NOT the per-resolution one.
-		const modes: Record<string, DeviceModeGroup> = {
-			"/dev/video0": {
-				kind: "hdmi",
-				modes: [{ width: 1920, height: 1080, framerates: [30] }],
-			},
-		};
+		// Two rungs keep it an enumerated MENU rather than a single-signal ceiling.
 		const axes = offeredAxes(
 			"rk3588",
-			"hdmi",
-			makePipeline(),
-			modes,
-			undefined,
+			captureSourceOf("/dev/video0", "hdmi", "hdmi", [
+				{ width: 1920, height: 1080, framerates: [30] },
+				{ width: 1280, height: 720, framerates: [30] },
+			]),
 		);
 		const sixty = framerateOptionsForResolution(axes, "1080p").find(
 			(o) => o.value === 60,
@@ -258,26 +277,18 @@ describe("framerateOptionsForResolution — per-resolution gating", () => {
 	});
 
 	it("falls back to coarse framerateOptions when there are no device modes", () => {
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			undefined,
-			undefined,
-		);
+		const axes = offeredAxes("rk3588", modelessSource("hdmi", "hdmi"));
 		expect(framerateOptionsForResolution(axes, "1080p")).toEqual(
 			framerateOptions(axes.offered),
 		);
 	});
 
 	it("keeps a source-pinned framerate reason coarse (fixedBySource) with no device modes", () => {
-		const axes = offeredAxes(
-			"rk3588",
-			"libuvch264",
-			makePipeline({ supportsFramerateOverride: false, defaultFramerate: 30 }),
-			undefined,
-			undefined,
-		);
+		const axes = offeredAxes("rk3588", {
+			...modelessSource("libuvch264", "libuvch264"),
+			supportsFramerateOverride: false,
+			defaultFramerate: 30,
+		});
 		const sixty = framerateOptionsForResolution(axes, "1080p").find(
 			(o) => o.value === 60,
 		);
@@ -291,37 +302,19 @@ describe("axisCeiling — current-vs-device-max summary source", () => {
 		// hdmi drives 1080p@[30,60] + 2160p@[30]. The highest rung is 2160p and it
 		// runs at 30 ONLY, so the truthful device-max is 2160p/30 — never the
 		// independent-axes lie 2160p/60 (60 lives at 1080p, not at 4K).
-		const axes = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			DEVICE_MODES,
-			undefined,
-		);
+		const axes = offeredAxes("rk3588", HDMI_DEVICE_SOURCE);
 		expect(axisCeiling(axes)).toEqual({ resolution: "2160p", framerate: 30 });
 	});
 
 	it("reports the achievable pair (1080p / 30) for a 1080p@[30] + 720p@[30,60] device", () => {
 		// The multi-rate-divergence fixture (mirrors fixture-factory usb): the top
 		// rung 1080p runs at 30 only, so the device-max is 1080p/30 — not 1080p/60.
-		const axes = offeredAxes(
-			"rk3588",
-			"libuvch264",
-			makePipeline(),
-			DEVICE_MODES,
-			"/dev/video1",
-		);
+		const axes = offeredAxes("rk3588", UVC_DEVICE_SOURCE);
 		expect(axisCeiling(axes)).toEqual({ resolution: "1080p", framerate: 30 });
 	});
 
 	it("reports the coarse platform ceiling when no device modes narrow it", () => {
-		const axes = offeredAxes(
-			"generic",
-			"hdmi",
-			makePipeline(),
-			undefined,
-			undefined,
-		);
+		const axes = offeredAxes("generic", modelessSource("hdmi", "hdmi"));
 		// generic tops out at 1080p; framerate ceiling is the full 60.
 		expect(axisCeiling(axes)).toEqual({ resolution: "1080p", framerate: 60 });
 	});
@@ -346,13 +339,7 @@ describe("axisCeiling — current-vs-device-max summary source", () => {
 
 describe("framerateAvailableAt — per-option available-elsewhere hint", () => {
 	// The 1080p@[30] + 720p@[30,60] fixture: 60 is offered ONLY at 720p, 50 nowhere.
-	const usbAxes = offeredAxes(
-		"rk3588",
-		"libuvch264",
-		makePipeline(),
-		DEVICE_MODES,
-		"/dev/video1",
-	);
+	const usbAxes = offeredAxes("rk3588", UVC_DEVICE_SOURCE);
 
 	it("finds the other rung that drives a rate disabled at the current one (60 → 720p)", () => {
 		expect(framerateAvailableAt(usbAxes, 60, "1080p")).toBe("720p");
@@ -363,13 +350,7 @@ describe("framerateAvailableAt — per-option available-elsewhere hint", () => {
 	});
 
 	it("returns undefined on the coarse path (no device modes to hint at)", () => {
-		const coarse = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			undefined,
-			undefined,
-		);
+		const coarse = offeredAxes("rk3588", modelessSource("hdmi", "hdmi"));
 		expect(framerateAvailableAt(coarse, 60, "1080p")).toBeUndefined();
 	});
 });
@@ -377,13 +358,7 @@ describe("framerateAvailableAt — per-option available-elsewhere hint", () => {
 describe("framerateOptionsForResolution — per-option hint attachment", () => {
 	// 1080p@[30] + 720p@[30,60]: at 1080p, 60 is disabled (offered elsewhere) and
 	// 50 is disabled (offered nowhere). Only 60 carries a hint.
-	const usbAxes = offeredAxes(
-		"rk3588",
-		"libuvch264",
-		makePipeline(),
-		DEVICE_MODES,
-		"/dev/video1",
-	);
+	const usbAxes = offeredAxes("rk3588", UVC_DEVICE_SOURCE);
 
 	it("attaches a 720p hint to 60 disabled at 1080p (offered elsewhere)", () => {
 		const sixty = framerateOptionsForResolution(usbAxes, "1080p").find(
@@ -925,59 +900,32 @@ describe("offeredAxes — disjoint per-media-type ladders stay disjoint", () => 
 	});
 });
 
-describe("resolveActiveMediaType — legacy device_modes form", () => {
-	const DUAL_FORMAT_GROUPS: Record<string, DeviceModeGroup> = {
-		"/dev/video0": { kind: "mjpeg", modes: [...DUAL_FORMAT_MODES] },
-		"/dev/video1": { kind: "uvc_h264", modes: [...DUAL_FORMAT_MODES] },
-		"/dev/video2": { kind: "uvc_h265", modes: [...DUAL_FORMAT_MODES] },
-	};
-
-	it("follows the PINNED device's own kind", () => {
-		expect(
-			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "hdmi", "/dev/video1"),
-		).toBe("video/x-h264");
-		expect(
-			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "hdmi", "/dev/video0"),
-		).toBe("image/jpeg");
-	});
-
-	it("narrows nothing for a pipeline that bridges two kinds at once", () => {
-		// `libuvch264` bridges BOTH uvc_h264 and uvc_h265, so the kind-matched
-		// union has no single governing format — the permissive union stands.
-		expect(
-			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "libuvch264", undefined),
-		).toBeUndefined();
-	});
-
-	it("narrows nothing with no device_modes, no pipeline, or an unknown pin", () => {
-		expect(
-			resolveActiveMediaType(undefined, "hdmi", undefined),
-		).toBeUndefined();
-		expect(
-			resolveActiveMediaType(DUAL_FORMAT_GROUPS, undefined, undefined),
-		).toBeUndefined();
-		expect(
-			resolveActiveMediaType(DUAL_FORMAT_GROUPS, "hdmi", "/dev/nope"),
-		).toBeUndefined();
-	});
-
-	it("reads a StreamSource's own kind in the source-keyed form", () => {
+describe("resolveActiveMediaType — the source's own kind names its format", () => {
+	it("follows the ACTIVE source's own kind", () => {
+		expect(resolveActiveMediaType(makeDualFormatSource("uvc_h264"))).toBe(
+			"video/x-h264",
+		);
 		expect(resolveActiveMediaType(makeDualFormatSource("mjpeg"))).toBe(
 			"image/jpeg",
 		);
+	});
+
+	it("narrows nothing for a kind naming none of the advertised formats", () => {
+		// The fixture advertises image/jpeg + video/x-h264 only. A uvc_h265 source
+		// matches neither, so it must narrow NOTHING rather than guess a ladder.
+		expect(
+			resolveActiveMediaType(makeDualFormatSource("uvc_h265")),
+		).toBeUndefined();
+	});
+
+	it("narrows nothing for a single-format source, a coarse row, or no source", () => {
 		expect(resolveActiveMediaType(RODE_CAPTURE_SOURCE)).toBeUndefined();
 		expect(resolveActiveMediaType(COARSE_HDMI_SOURCE)).toBeUndefined();
 		expect(resolveActiveMediaType(undefined)).toBeUndefined();
 	});
 
-	it("gates the legacy axes path on the pinned device's format", () => {
-		const pinned = offeredAxes(
-			"rk3588",
-			"hdmi",
-			makePipeline(),
-			DUAL_FORMAT_GROUPS,
-			"/dev/video1",
-		);
+	it("gates the axes on the ACTIVE source's format", () => {
+		const pinned = offeredAxes("rk3588", makeDualFormatSource("uvc_h264"));
 		expect(pinned.activeMediaType).toBe("video/x-h264");
 		expect(pinned.offered.resolutions).toEqual(["720p", "1080p"]);
 		expect(

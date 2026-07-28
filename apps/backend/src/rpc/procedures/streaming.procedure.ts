@@ -66,6 +66,10 @@ import {
 } from "../../modules/streaming/auto-audio.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
+import {
+	DEVICE_MODE_UNSUPPORTED_ERROR,
+	verifySaveDeviceMode,
+} from "../../modules/streaming/device-mode-guard.ts";
 import { deviceRegistry } from "../../modules/streaming/devices.ts";
 import { clampBitrate } from "../../modules/streaming/encoder.ts";
 import { isGatewayActive } from "../../modules/streaming/gateway-availability.ts";
@@ -531,6 +535,38 @@ export const setConfigProcedure = authedProcedure
 					}
 					throw err;
 				}
+			}
+		}
+
+		// Three orderings here are load-bearing (ADR-0008 §10 / todo 11a). It runs
+		// BEFORE the first config mutation, so a refusal leaves disk byte-identical
+		// — the class being killed is a PERSISTED 1080p60 on a 30-fps H.264 ladder,
+		// re-sent on every start. Both axes resolve input-then-persisted, because a
+		// half-save is still a full pairing against the hardware. And the source is
+		// the one being SAVED: checking the persisted one waves through exactly the
+		// ladder switch that makes the combo illegal.
+		if (input.resolution !== undefined || input.framerate !== undefined) {
+			const verdict = verifySaveDeviceMode(
+				{
+					sourceId: input.source ?? config.source,
+					resolution: input.resolution ?? config.resolution,
+					framerate: input.framerate ?? config.framerate,
+				},
+				{ lastSeenDevices: config.last_seen_devices },
+			);
+			if (!verdict.supported) {
+				logger.warn("setConfig: device cannot deliver the requested mode", {
+					module: "streaming",
+					source: input.source ?? config.source,
+					resolution: input.resolution ?? config.resolution,
+					framerate: input.framerate ?? config.framerate,
+					reason: verdict.reason,
+				});
+				return {
+					success: false,
+					error: DEVICE_MODE_UNSUPPORTED_ERROR,
+					applied: {},
+				};
 			}
 		}
 

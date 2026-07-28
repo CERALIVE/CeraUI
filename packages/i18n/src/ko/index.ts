@@ -1373,6 +1373,8 @@ const ko = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"연결된 카메라는 이 설정으로 촬영할 수 없습니다. 지원되는 해상도와 프레임 레이트를 선택한 뒤 다시 저장하세요.",
 			axisSelected: "선택됨",
 			axisDeviceMax: "장치 최대",
 			fpsAvailableAt: "{fps} fps는 {resolution}에서 사용 가능",
@@ -1461,6 +1463,8 @@ const ko = {
 		streamHealthDegraded: "스트림 상태가 저하되었습니다",
 		streamHealthDead: "스트림이 중단되었습니다",
 		streamHealthRecovered: "스트림 상태가 복구되었습니다",
+		encoderModeClamped:
+			"저장된 인코더 설정을 연결된 카메라가 지원하지 않아 {resolution} / {framerate} fps로 조정했습니다.",
 		streamHealthNoVideo:
 			"스트림에 영상이 들어오지 않습니다. 카메라 또는 HDMI 소스의 전원이 켜져 있는지, 케이블이 양쪽 끝에 제대로 꽂혀 있는지 확인하세요.",
 		streamHealthLinksDegraded:

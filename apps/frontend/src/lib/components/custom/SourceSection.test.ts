@@ -930,20 +930,22 @@ describe("SourceSection — capability summary (kept)", () => {
 					default_framerate: 60,
 				},
 			],
-			device_modes: {
-				"/dev/video1": {
-					kind: "uvc_h264",
-					modes: [
-						{ width: 1920, height: 1080, framerates: [30] },
-						{ width: 1280, height: 720, framerates: [30, 60] },
-					],
-				},
-			},
+		};
+		// The ladder rides the SELECTED source's own `modes` (device-quality-wave3
+		// todo 11c). It used to be looked up from `capabilities.device_modes` +
+		// `selected_video_input`; that path is retired because resolving a ladder
+		// from anything but the active row is what let two devices' rungs pool.
+		const CROSSMODE_DEVICE: CaptureStreamSource = {
+			...RODE,
+			modes: [
+				{ width: 1920, height: 1080, framerates: [30] },
+				{ width: 1280, height: 720, framerates: [30, 60] },
+			],
 		};
 		const { container } = mount({
-			sources: sourcesMsg([RODE]),
+			sources: sourcesMsg([CROSSMODE_DEVICE]),
 			capabilities: CAPS_CROSSMODE,
-			config: { pipeline: "usb", selected_video_input: "/dev/video1" },
+			config: { source: CROSSMODE_DEVICE.id, pipeline: "usb" },
 		});
 		const caps = container.querySelector<HTMLElement>(
 			'[data-testid="source-capabilities"]',

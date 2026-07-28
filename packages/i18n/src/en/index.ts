@@ -776,6 +776,8 @@ const en = {
 			codecAutoResolvedH265: "Auto — H.265 on this device",
 			codecAutoResolvedH264: "Auto — H.264 on this device",
 			codecH265Unavailable: "H.265 isn't available on this device's encoder",
+			deviceModeUnsupported:
+				"The connected camera can't record at these settings. Pick a resolution and frame rate it supports, then save again.",
 			axisSelected: "Selected",
 			axisDeviceMax: "Device max",
 			fpsAvailableAt: "{fps:number} fps available at {resolution:string}",
@@ -869,6 +871,8 @@ const en = {
 		streamHealthDegraded: "Stream health degraded",
 		streamHealthDead: "Stream is down",
 		streamHealthRecovered: "Stream health recovered",
+		encoderModeClamped:
+			"Your saved encoder settings weren't supported by the connected camera and have been adjusted to {resolution:string} at {framerate:number} fps.",
 		streamHealthNoVideo:
 			"No video is reaching your stream. Check that your camera or HDMI source is powered on and its cable is seated at both ends.",
 		streamHealthLinksDegraded:
