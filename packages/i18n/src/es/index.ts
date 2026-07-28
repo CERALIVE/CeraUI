@@ -694,6 +694,12 @@ const es = {
 			noSignalTitle: "Sin señal en esta entrada",
 			noSignalBody:
 				"Esta entrada está presente y funciona, pero ahora mismo no llega nada por ella: el dispositivo del otro extremo del cable no está enviando imagen. Comprueba que esté encendido y que el cable esté bien conectado por ambos extremos. Puedes seleccionar esta fuente igualmente: empezará a funcionar en cuanto haya señal.",
+			audioAmbiguousTitle: "Varios dispositivos de audio en esta cámara",
+			audioAmbiguousBody:
+				"Esta cámara informa de más de un dispositivo de audio propio, así que no vamos a adivinar cuál quieres. Elige el correcto abajo.",
+			audioNoSameDeviceTitle: "Esta cámara no tiene audio propio",
+			audioNoSameDeviceBody:
+				"Nada en el hardware de esta cámara transporta audio, y nunca tomamos prestado el micrófono de otro dispositivo. Elige una fuente de audio abajo.",
 			mjpegTitle: "¿Por qué MJPEG?",
 			mjpegBody:
 				"Se trata de un dispositivo USB Video Class (UVC) estándar que produce Motion-JPEG: su propia descripción de hardware USB solo declara vídeo sin comprimir y Motion-JPEG (MJPEG) — sin codificación H.264/H.265 por hardware a través de USB y sin ningún canal de fabricante oculto para ello —, así que el codificador captura su vídeo MJPEG y lo vuelve a codificar al códec que elijas. Es una descripción precisa del hardware, no un fallo.",

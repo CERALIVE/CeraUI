@@ -64,14 +64,10 @@ import { getIsStreaming } from "./streaming.ts";
 
 /** The ALSA card ids the deterministic rules key off (the resolver's contract). */
 const HDMI_CARD_ID = "rockchiphdmiin";
-const ANALOG_CARD_ID = "rockchipes8388";
 const CAMLINK_CARD_ID = "C4K";
-const USB_AUDIO_CARD_ID = "usbaudio";
 
-/** The two pseudo-source asrcKeys — pipeline sentinels, not real ALSA cards. */
+/** The pipeline-default pseudo-source asrcKey — a sentinel, not a real ALSA card. */
 const PIPELINE_DEFAULT_ASRC = "Pipeline default";
-const NO_AUDIO_ASRC = "No audio";
-const PSEUDO_CARD_IDS = new Set<string>([NO_AUDIO_ASRC, PIPELINE_DEFAULT_ASRC]);
 
 /** Video device kinds that share a chassis with a USB/UVC audio card. */
 const USB_VIDEO_KINDS = new Set<string>([
@@ -81,9 +77,6 @@ const USB_VIDEO_KINDS = new Set<string>([
 	"mjpeg",
 ]);
 
-/** Minimum shared display-name prefix for the same-device USB join (rule 5i). */
-const MIN_COMMON_PREFIX = 4;
-
 export interface AutoAsrcResolution {
 	/** The wire string for `asrcProbe`/status/`getAudioSrcId`; null for embedded. */
 	asrcKey: string | null;
@@ -91,6 +84,12 @@ export interface AutoAsrcResolution {
 	cardId: string | null;
 	/** Which rule fired — the status discriminator (Oracle R9-1). */
 	reason: ResolvedAsrcReason;
+	/**
+	 * The same-physical-device asrcKeys behind an `ambiguous-same-device-audio`
+	 * reason — the exact set the UI must offer for manual selection. Present ONLY
+	 * on that reason; every other resolution omits it.
+	 */
+	candidates?: string[];
 }
 
 export interface ResolveAutoAsrcInput {
@@ -104,41 +103,25 @@ export interface ResolveAutoAsrcInput {
 	networkEmbeddedAudio: boolean | undefined;
 }
 
-/** Case-insensitive length of the shared leading prefix of two strings. */
-function commonPrefixLength(a: string, b: string): number {
-	const x = a.toLowerCase();
-	const y = b.toLowerCase();
-	const limit = Math.min(x.length, y.length);
-	let i = 0;
-	while (i < limit && x[i] === y[i]) i++;
-	return i;
-}
-
 /**
- * Every name the engine gives for ONE audio card, for the rule-5(i) prefix join.
+ * The TypeScript mirror of cerastream's `same_physical_group` (ADR-0008 §6).
  *
- * `display_name` alone is not enough, and the DJI Osmo Pocket 3 is the proof: the
- * engine reports its audio card as the ALSA LONGNAME
- * `"DJI DJIPocket3 at usb-fc880000.usb-1, high speed"` while the same chassis'
- * video device is the V4L2 card name `"DJIPocket3: OsmoPocket3"`. Those share only
- * `"DJI"` — 3 characters, one short of {@link MIN_COMMON_PREFIX} — so the join
- * missed and Auto fell through to whatever generic `usbaudio` card happened to be
- * enumerated, i.e. a DIFFERENT physical device's microphone. The manufacturer
- * prefix the kernel puts on the longname is exactly what breaks the alignment.
- *
- * `product_name` (`"DJIPocket3"`) and `alsa_card_id` (`"DJIPocket3"`) do not carry
- * it, so they align with the video name from the first character. Both are already
- * on the wire; nothing new is asked of the engine.
- *
- * Order is irrelevant — the caller takes the longest match — but every candidate
- * must be a NAME the hardware chose. Do not add the asrc key or a CeraUI alias:
- * those are our own strings and would join a card to a device it shares nothing
- * with.
+ * Two devices share a physical group IF AND ONLY IF both carry a group key and
+ * the keys are equal. An ABSENT group NEVER matches — not another absent group,
+ * not itself — because `None` means "this device has no USB topology to key on"
+ * (HDMI-RX, onboard audio, Bluetooth, test sources), not "unknown, might be the
+ * same". A bare `a === b` would silently pair every group-less card with every
+ * group-less camera, which is precisely the cross-device guess this rule exists
+ * to remove. An empty string is treated as absent: the wire carries the key as an
+ * optional string, and `""` is no topology token.
  */
-function engineAudioJoinNames(entry: EngineAudioDevice): string[] {
-	return [entry.product_name, entry.alsa_card_id, entry.display_name].filter(
-		(name): name is string => name !== undefined && name.length > 0,
-	);
+function samePhysicalGroup(
+	a: string | undefined,
+	b: string | undefined,
+): boolean {
+	if (a === undefined || a === "") return false;
+	if (b === undefined || b === "") return false;
+	return a === b;
 }
 
 /** The first asrcKey whose card-id VALUE equals `cardId` (dual-space join). */
@@ -152,16 +135,29 @@ function findAsrcKeyByCardId(
 	return undefined;
 }
 
-/** The first enumerated non-pseudo, non-HDMI, non-analog device card (rule 5iii). */
-function firstDeviceEntry(
+/**
+ * Every ENUMERATED audio card belonging to the SAME physical device as the
+ * camera, in engine-list order. A candidate must clear three gates: the engine
+ * gave it an `alsa_card_id` (no join key, no candidate), it shares the camera's
+ * physical group, and CeraUI itself enumerates that card (a card the engine sees
+ * but this device cannot open is not selectable). Deduped by asrcKey — two engine
+ * rows can resolve to one card.
+ */
+function sameDeviceAudioCandidates(
+	cameraGroup: string | undefined,
 	audioDevices: Record<string, string>,
-): { asrcKey: string; cardId: string } | undefined {
-	for (const [asrcKey, cardId] of Object.entries(audioDevices)) {
-		if (PSEUDO_CARD_IDS.has(cardId)) continue;
-		if (cardId === HDMI_CARD_ID || cardId === ANALOG_CARD_ID) continue;
-		return { asrcKey, cardId };
+	engineAudio: readonly EngineAudioDevice[],
+): { asrcKey: string; cardId: string }[] {
+	const found = new Map<string, { asrcKey: string; cardId: string }>();
+	for (const entry of engineAudio) {
+		if (entry.alsa_card_id === undefined) continue;
+		if (!samePhysicalGroup(cameraGroup, entry.physical_group_id)) continue;
+		const asrcKey = findAsrcKeyByCardId(audioDevices, entry.alsa_card_id);
+		if (asrcKey === undefined) continue;
+		if (found.has(asrcKey)) continue;
+		found.set(asrcKey, { asrcKey, cardId: entry.alsa_card_id });
 	}
-	return undefined;
+	return [...found.values()];
 }
 
 /** The rule-6 fallback: the pipeline-default pseudo source (no ALSA card). */
@@ -181,14 +177,21 @@ function pipelineDefault(): AutoAsrcResolution {
  *   2. network w/o cap, OR the virtual (test-pattern) source → pipeline default.
  *   3. HDMI capture → the `rockchiphdmiin` card, when it is enumerated.
  *   4. Cam Link capture → the `C4K` card, when it is enumerated.
- *   5. USB/UVC capture →
- *        (i)  the engine audio entry whose BEST engine-given name (`product_name`
- *             / `alsa_card_id` / `display_name`) shares the longest >=4-char
- *             prefix with the video device, AND whose `alsa_card_id` is
- *             enumerated here (same device);
- *        (ii) else the generic `usbaudio` card, when enumerated;
- *        (iii) else the first enumerated non-HDMI / non-analog device card.
+ *   5. USB/UVC capture → the camera's OWN audio, identified by `physical_group_id`
+ *      equality (cerastream ADR-0008), and NOTHING else:
+ *        exactly one same-group card  → that card (`usb-same-device`);
+ *        several same-group cards     → `ambiguous-same-device-audio`, NO pick;
+ *        none, or a group-less camera → `no-same-device-audio`, NO pick.
  *   6. nothing matched → the pipeline-default pseudo source.
+ *
+ * Rule 5 NEVER names a card on a different physical device. The retired
+ * longest-shared-display-name-prefix join did exactly that: a DJI Osmo Pocket 3
+ * reports its audio as the ALSA longname `"DJI DJIPocket3 at usb-…"` against a
+ * V4L2 video name of `"DJIPocket3: OsmoPocket3"`, which share only `"DJI"`, so
+ * the join missed and "Auto" served a still-enumerated RØDE's microphone — a
+ * DIFFERENT device's mic, presented as the camera's own. Name similarity is not
+ * evidence of shared hardware; USB topology is. The two typed non-resolutions are
+ * the honest answers, and the UI turns each into a manual-selection prompt.
  */
 export function resolveAutoAsrc(
 	input: ResolveAutoAsrcInput,
@@ -224,61 +227,34 @@ export function resolveAutoAsrc(
 			}
 		}
 
-		// Rule 5 — the USB/UVC camera family.
+		// Rule 5 — the USB/UVC camera family: the camera's OWN audio, or nothing.
 		if (USB_VIDEO_KINDS.has(source.kind)) {
-			// (i) same-device join: an engine audio entry ANY of whose engine-given
-			//     names shares a >=4-char prefix with the video device AND whose
-			//     card is enumerated here. The BEST match across the whole list
-			//     wins, not the first: several cards can clear the 4-char floor
-			//     (`DJI…` vs `DJIPocket3`), and taking whichever the engine
-			//     happened to list first is the coin-flip this rule exists to
-			//     remove. Falls through gracefully when `alsa_card_id` is absent
-			//     (pre-T18 pin).
-			const cardValues = new Set(Object.values(audioDevices));
-			let best: { asrcKey: string; cardId: string; score: number } | undefined;
-			for (const entry of engineAudio) {
-				if (entry.alsa_card_id === undefined) continue;
-				if (!cardValues.has(entry.alsa_card_id)) continue;
-				const asrcKey = findAsrcKeyByCardId(audioDevices, entry.alsa_card_id);
-				if (asrcKey === undefined) continue;
-				const score = Math.max(
-					...engineAudioJoinNames(entry).map((name) =>
-						commonPrefixLength(name, source.displayName),
-					),
-					0,
-				);
-				if (score < MIN_COMMON_PREFIX) continue;
-				if (best === undefined || score > best.score) {
-					best = { asrcKey, cardId: entry.alsa_card_id, score };
-				}
-			}
-			if (best !== undefined) {
+			const candidates = sameDeviceAudioCandidates(
+				source.physicalGroupId,
+				audioDevices,
+				engineAudio,
+			);
+			const only = candidates[0];
+			if (candidates.length === 1 && only !== undefined) {
 				return {
-					asrcKey: best.asrcKey,
-					cardId: best.cardId,
+					asrcKey: only.asrcKey,
+					cardId: only.cardId,
 					reason: "usb-same-device",
 				};
 			}
-
-			// (ii) the generic USB audio card alias, when enumerated.
-			const usbAsrcKey = findAsrcKeyByCardId(audioDevices, USB_AUDIO_CARD_ID);
-			if (usbAsrcKey !== undefined) {
+			if (candidates.length > 1) {
 				return {
-					asrcKey: usbAsrcKey,
-					cardId: USB_AUDIO_CARD_ID,
-					reason: "usb-alias",
+					asrcKey: null,
+					cardId: null,
+					reason: "ambiguous-same-device-audio",
+					candidates: candidates.map((c) => c.asrcKey),
 				};
 			}
-
-			// (iii) the first enumerated non-HDMI / non-analog device card.
-			const first = firstDeviceEntry(audioDevices);
-			if (first !== undefined) {
-				return {
-					asrcKey: first.asrcKey,
-					cardId: first.cardId,
-					reason: "first-device",
-				};
-			}
+			return {
+				asrcKey: null,
+				cardId: null,
+				reason: "no-same-device-audio",
+			};
 		}
 	}
 
@@ -338,12 +314,14 @@ export function resolveAutoAsrcFromLiveState(): AutoAsrcResolution {
 
 let resolvedAsrc: string | null = null;
 let resolvedAsrcReason: ResolvedAsrcReason | null = null;
+let resolvedAsrcCandidates: string[] | null = null;
 let pendingAudioFollowAsrc: string | null = null;
 
-/** The status update the emitters broadcast; the three T5 fields only. */
+/** The status update the emitters broadcast; the four resolution fields only. */
 interface AutoAudioStatusUpdate {
 	resolved_asrc?: string | null;
 	resolved_asrc_reason?: ResolvedAsrcReason | null;
+	resolved_asrc_candidates?: string[] | null;
 	pending_audio_follow_asrc?: string | null;
 }
 
@@ -371,6 +349,14 @@ export function getResolvedAsrcReason(): ResolvedAsrcReason | null {
 	return resolvedAsrcReason;
 }
 
+/**
+ * The same-physical-device audio candidates the operator must choose between
+ * (null unless the reason is `ambiguous-same-device-audio`).
+ */
+export function getResolvedAsrcCandidates(): string[] | null {
+	return resolvedAsrcCandidates;
+}
+
 /** The target a deferred live follow will apply at next start (null = none). */
 export function getPendingAudioFollowAsrc(): string | null {
 	return pendingAudioFollowAsrc;
@@ -384,13 +370,16 @@ export function getPendingAudioFollowAsrc(): string | null {
 export function setResolvedAsrcFromStart(
 	asrcKey: string | null,
 	reason: ResolvedAsrcReason,
+	candidates?: readonly string[],
 ): void {
 	resolvedAsrc = asrcKey;
 	resolvedAsrcReason = reason;
+	resolvedAsrcCandidates = candidates === undefined ? null : [...candidates];
 	pendingAudioFollowAsrc = null;
 	broadcaster({
 		resolved_asrc: resolvedAsrc,
 		resolved_asrc_reason: resolvedAsrcReason,
+		resolved_asrc_candidates: resolvedAsrcCandidates,
 		pending_audio_follow_asrc: null,
 	});
 }
@@ -408,9 +397,11 @@ export function refreshResolvedAsrcPreview(): void {
 	const resolution = resolveAutoAsrcFromLiveState();
 	resolvedAsrc = resolution.asrcKey;
 	resolvedAsrcReason = resolution.reason;
+	resolvedAsrcCandidates = resolution.candidates ?? null;
 	broadcaster({
 		resolved_asrc: resolvedAsrc,
 		resolved_asrc_reason: resolvedAsrcReason,
+		resolved_asrc_candidates: resolvedAsrcCandidates,
 	});
 }
 
@@ -428,5 +419,6 @@ export function setPendingAudioFollowAsrc(value: string | null): void {
 export function resetAutoAudioState(): void {
 	resolvedAsrc = null;
 	resolvedAsrcReason = null;
+	resolvedAsrcCandidates = null;
 	pendingAudioFollowAsrc = null;
 }

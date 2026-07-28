@@ -81,6 +81,10 @@ export const captureSourceSchema = streamSourceBase.extend({
 	// Reboot-stable hardware identity (cerastream `stable_id`). Lets routing
 	// self-heal a persisted selection whose node id went stale after a replug.
 	stableId: z.string().optional(),
+	// `usb:<topology-token>` shared by every row of ONE physical device
+	// (cerastream ADR-0008) — what binds an "Auto" audio pick to the camera's own
+	// microphone. An ABSENT group never matches, not even another absent one.
+	physicalGroupId: z.string().optional(),
 	// Whether this present device is carrying a usable signal (see
 	// `sourceSignalSchema`). ADDITIVE-OPTIONAL: absent on a legacy backend, which
 	// a consumer must read as `unknown` — never as a negative.

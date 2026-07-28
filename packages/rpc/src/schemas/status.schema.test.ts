@@ -121,8 +121,8 @@ describe('resolved_asrc Auto-resolution fields (T1 — additive)', () => {
 			'hdmi',
 			'camlink',
 			'usb-same-device',
-			'usb-alias',
-			'first-device',
+			'ambiguous-same-device-audio',
+			'no-same-device-audio',
 			'pipeline-default',
 		]) {
 			expect(

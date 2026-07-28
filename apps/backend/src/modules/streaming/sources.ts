@@ -275,6 +275,10 @@ function buildCaptureEntry(
 		...(device.stable_id !== undefined && device.stable_id !== ""
 			? { stableId: device.stable_id }
 			: {}),
+		...(device.physical_group_id !== undefined &&
+		device.physical_group_id !== ""
+			? { physicalGroupId: device.physical_group_id }
+			: {}),
 	};
 }
 
@@ -837,6 +841,7 @@ async function probeEngineDevices(
 				kind: d.kind,
 				caps: d.caps,
 				stable_id: d.stable_id,
+				physical_group_id: d.physical_group_id,
 			}),
 		);
 		rememberEngineVideoDevices(devices);
@@ -855,6 +860,7 @@ async function probeEngineDevices(
 						product_name?: string;
 						transport?: EngineAudioDevice["transport"];
 						stable_id?: string;
+						physical_group_id?: string;
 					};
 					return {
 						input_id: d.input_id,
@@ -870,6 +876,9 @@ async function probeEngineDevices(
 							: {}),
 						...(extra.stable_id !== undefined
 							? { stable_id: extra.stable_id }
+							: {}),
+						...(extra.physical_group_id !== undefined
+							? { physical_group_id: extra.physical_group_id }
 							: {}),
 					};
 				}),

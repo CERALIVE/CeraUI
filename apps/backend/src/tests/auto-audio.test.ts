@@ -25,6 +25,9 @@ import { setup } from "../modules/setup.ts";
 import {
 	deriveAudioSources,
 	getAudioDevices,
+	getAudioSrcId,
+	reconcileConfiguredAudioIdentity,
+	resolveAudioMode,
 	setMockAudioDevicesProvider,
 	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
@@ -79,6 +82,7 @@ function captureSource(
 	kind: string,
 	displayName: string,
 	id = displayName,
+	physicalGroupId?: string,
 ): StreamSource {
 	return {
 		id,
@@ -93,6 +97,7 @@ function captureSource(
 		kind: kind as StreamSource extends { kind: infer K } ? K : never,
 		displayName,
 		devicePath: "/dev/video0",
+		...(physicalGroupId !== undefined ? { physicalGroupId } : {}),
 	} as StreamSource;
 }
 
@@ -132,11 +137,15 @@ function engineAudio(
 	displayName: string,
 	alsaCardId?: string,
 	inputId = displayName,
+	physicalGroupId?: string,
 ): EngineAudioDevice {
 	return {
 		input_id: inputId,
 		display_name: displayName,
 		...(alsaCardId !== undefined ? { alsa_card_id: alsaCardId } : {}),
+		...(physicalGroupId !== undefined
+			? { physical_group_id: physicalGroupId }
+			: {}),
 	};
 }
 
@@ -245,17 +254,26 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 		});
 	});
 
-	test("Rule 5i: USB capture + same-device engine audio join → that card", () => {
+	test("Rule 5: exactly ONE same-group audio candidate → auto-pick, usb-same-device", () => {
 		expect(
 			resolveAutoAsrc({
-				source: captureSource("uvc_h264", "RØDE Streamer X"),
+				source: captureSource(
+					"uvc_h264",
+					"RØDE Streamer X",
+					"RØDE Streamer X",
+					"usb:10-1",
+				),
 				audioDevices: {
 					"RØDE Streamer Audio": "rodecard",
 					"USB audio": "usbaudio",
 					"No audio": "No audio",
 					"Pipeline default": "Pipeline default",
 				},
-				engineAudio: [engineAudio("RØDE Streamer Mic", "rodecard")],
+				engineAudio: [
+					engineAudio("RØDE Streamer Mic", "rodecard", undefined, "usb:10-1"),
+					// A separately-plugged USB mic on a DIFFERENT physical device.
+					engineAudio("Some Other Mic", "usbaudio", undefined, "usb:3-2"),
+				],
 				networkEmbeddedAudio: undefined,
 			}),
 		).toEqual({
@@ -265,47 +283,157 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 		});
 	});
 
-	test("Rule 5i degradation: engine audio WITHOUT alsa_card_id → usb-alias tier", () => {
+	test("Rule 5: MORE THAN ONE same-group candidate → ambiguous, NO auto-pick", () => {
 		expect(
 			resolveAutoAsrc({
-				source: captureSource("uvc_h264", "RØDE Streamer X"),
-				audioDevices: USB_MAP,
-				// Current cerastream pin strips alsa_card_id → the join key is absent.
-				engineAudio: [engineAudio("RØDE Streamer Mic", undefined)],
-				networkEmbeddedAudio: undefined,
-			}),
-		).toEqual({
-			asrcKey: "USB audio",
-			cardId: "usbaudio",
-			reason: "usb-alias",
-		});
-	});
-
-	test("Rule 5i miss (short prefix) falls to usb-alias, not same-device", () => {
-		expect(
-			resolveAutoAsrc({
-				source: captureSource("mjpeg", "Logitech Cam"),
+				source: captureSource(
+					"uvc_h264",
+					"Composite Capture",
+					"Composite Capture",
+					"usb:5-1",
+				),
 				audioDevices: {
-					"Some Mic": "somecard",
-					"USB audio": "usbaudio",
+					"Capture A": "capa",
+					"Capture B": "capb",
 					"No audio": "No audio",
 					"Pipeline default": "Pipeline default",
 				},
-				engineAudio: [engineAudio("Blue Yeti", "somecard")],
+				engineAudio: [
+					engineAudio("Capture A", "capa", undefined, "usb:5-1"),
+					engineAudio("Capture B", "capb", undefined, "usb:5-1"),
+				],
 				networkEmbeddedAudio: undefined,
 			}),
 		).toEqual({
-			asrcKey: "USB audio",
-			cardId: "usbaudio",
-			reason: "usb-alias",
+			asrcKey: null,
+			cardId: null,
+			reason: "ambiguous-same-device-audio",
+			candidates: ["Capture A", "Capture B"],
 		});
 	});
 
-	// The exact payload a Rock 5B+ reports with a DJI Osmo Pocket 3 and a RØDE
-	// HDMI-to-USB-C attached. The Osmo's engine audio `display_name` is the ALSA
-	// LONGNAME, whose manufacturer prefix leaves only "DJI" (3 chars) in common
-	// with the V4L2 video card name — one short of the 4-char floor — so the
-	// same-device join missed and Auto served the RØDE's microphone instead.
+	test("Rule 5: ZERO same-group candidates → no-same-device-audio, NEVER a cross-device guess", () => {
+		const r = resolveAutoAsrc({
+			source: captureSource(
+				"uvc_h264",
+				"RØDE Streamer X",
+				"RØDE Streamer X",
+				"usb:10-1",
+			),
+			audioDevices: {
+				"Some Other Mic": "usbaudio",
+				"No audio": "No audio",
+				"Pipeline default": "Pipeline default",
+			},
+			engineAudio: [
+				engineAudio("Some Other Mic", "usbaudio", undefined, "usb:3-2"),
+			],
+			networkEmbeddedAudio: undefined,
+		});
+		expect(r).toEqual({
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
+		});
+		// The negative control: the other device's microphone is never adopted.
+		expect(r.asrcKey).not.toBe("Some Other Mic");
+	});
+
+	test("Rule 5: a camera with NO group never matches — not even another group-less card (ADR-0008 §6)", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", "Legacy Cam"),
+				audioDevices: {
+					"Onboard Audio": "rockchipes8388x",
+					"No audio": "No audio",
+					"Pipeline default": "Pipeline default",
+				},
+				engineAudio: [engineAudio("Onboard Audio", "rockchipes8388x")],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
+		});
+	});
+
+	test("Rule 5: a group-less AUDIO card never matches a grouped camera", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("usb", "Generic USB Cam", "cam", "usb:1-1"),
+				audioDevices: {
+					"Onboard Audio": "rockchipes8388x",
+					"No audio": "No audio",
+					"Pipeline default": "Pipeline default",
+				},
+				engineAudio: [engineAudio("Onboard Audio", "rockchipes8388x")],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
+		});
+	});
+
+	test("Rule 5: an EMPTY-STRING group is an absent group on both sides", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("usb", "Generic USB Cam", "cam", ""),
+				audioDevices: {
+					"Some Mic": "somecard",
+					"No audio": "No audio",
+					"Pipeline default": "Pipeline default",
+				},
+				engineAudio: [engineAudio("Some Mic", "somecard", undefined, "")],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
+		});
+	});
+
+	test("Rule 5: a same-group card CeraUI does not enumerate is no candidate at all", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", "Osmo", "osmo", "usb:5-1"),
+				audioDevices: {
+					"No audio": "No audio",
+					"Pipeline default": "Pipeline default",
+				},
+				engineAudio: [
+					engineAudio("Osmo Mic", "DJIPocket3", undefined, "usb:5-1"),
+				],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
+		});
+	});
+
+	test("Rule 5: an engine audio entry with NO alsa_card_id can never be a candidate", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("uvc_h264", "Osmo", "osmo", "usb:5-1"),
+				audioDevices: USB_MAP,
+				engineAudio: [engineAudio("Osmo Mic", undefined, undefined, "usb:5-1")],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
+		});
+	});
+
+	// The exact board topology a Rock 5B+ reports (todo 8 board proof): the Osmo
+	// Pocket 3's video and audio rows BOTH carry `usb:5-1`, the RØDE's both carry
+	// `usb:10-1`, and the HDMI-RX carries no group key at all.
 	const OSMO_VIDEO_NAME = "DJIPocket3: OsmoPocket3";
 	const OSMO_AUDIO_LONGNAME =
 		"DJI DJIPocket3 at usb-fc880000.usb-1, high speed";
@@ -318,26 +446,34 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 		"No audio": "No audio",
 		"Pipeline default": "Pipeline default",
 	};
+	const OSMO_BOARD_ENGINE_AUDIO: EngineAudioDevice[] = [
+		{
+			input_id: OSMO_AUDIO_LONGNAME,
+			display_name: OSMO_AUDIO_LONGNAME,
+			alsa_card_id: "DJIPocket3",
+			product_name: "DJIPocket3",
+			physical_group_id: "usb:5-1",
+		},
+		{
+			input_id: RODE_AUDIO_LONGNAME,
+			display_name: RODE_AUDIO_LONGNAME,
+			alsa_card_id: "usbaudio",
+			product_name: "usbaudio",
+			physical_group_id: "usb:10-1",
+		},
+	];
 
-	test("Rule 5i: the engine product_name joins when the longname display_name cannot", () => {
+	test("Board: Osmo cam + Auto → the Osmo's OWN audio, by group", () => {
 		expect(
 			resolveAutoAsrc({
-				source: captureSource("uvc_h264", OSMO_VIDEO_NAME),
+				source: captureSource(
+					"uvc_h264",
+					OSMO_VIDEO_NAME,
+					OSMO_VIDEO_NAME,
+					"usb:5-1",
+				),
 				audioDevices: OSMO_BOARD_MAP,
-				engineAudio: [
-					{
-						input_id: OSMO_AUDIO_LONGNAME,
-						display_name: OSMO_AUDIO_LONGNAME,
-						alsa_card_id: "DJIPocket3",
-						product_name: "DJIPocket3",
-					},
-					{
-						input_id: RODE_AUDIO_LONGNAME,
-						display_name: RODE_AUDIO_LONGNAME,
-						alsa_card_id: "usbaudio",
-						product_name: "usbaudio",
-					},
-				],
+				engineAudio: OSMO_BOARD_ENGINE_AUDIO,
 				networkEmbeddedAudio: undefined,
 			}),
 		).toEqual({
@@ -347,85 +483,25 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 		});
 	});
 
-	test("Rule 5i: the alsa_card_id joins even with no product_name at all", () => {
+	test("Board: RØDE cam + Auto → the RØDE's OWN audio, by group", () => {
 		expect(
 			resolveAutoAsrc({
-				source: captureSource("uvc_h264", OSMO_VIDEO_NAME),
+				source: captureSource("uvc_h264", "RØDE HDMI", "rode", "usb:10-1"),
 				audioDevices: OSMO_BOARD_MAP,
-				engineAudio: [engineAudio(OSMO_AUDIO_LONGNAME, "DJIPocket3")],
-				networkEmbeddedAudio: undefined,
-			}),
-		).toEqual({
-			asrcKey: "DJIPocket3",
-			cardId: "DJIPocket3",
-			reason: "usb-same-device",
-		});
-	});
-
-	test("Rule 5i: the LONGEST-prefix card wins, not the first the engine listed", () => {
-		// Both clear the 4-char floor against "DJIPocket3: OsmoPocket3": the decoy
-		// shares "DJIP" (4), the real card shares all 10. Listing the decoy FIRST
-		// is what a first-match-wins scan would take.
-		expect(
-			resolveAutoAsrc({
-				source: captureSource("uvc_h264", OSMO_VIDEO_NAME),
-				audioDevices: {
-					...OSMO_BOARD_MAP,
-					DJIPro: "DJIPro",
-				},
-				engineAudio: [
-					engineAudio("DJIPro Headset", "DJIPro"),
-					engineAudio(OSMO_AUDIO_LONGNAME, "DJIPocket3"),
-				],
-				networkEmbeddedAudio: undefined,
-			}),
-		).toEqual({
-			asrcKey: "DJIPocket3",
-			cardId: "DJIPocket3",
-			reason: "usb-same-device",
-		});
-	});
-
-	test("Rule 5ii: USB capture + usbaudio present → USB audio card", () => {
-		expect(
-			resolveAutoAsrc({
-				source: captureSource("usb", "Generic USB Cam"),
-				audioDevices: USB_MAP,
-				engineAudio: [],
+				engineAudio: OSMO_BOARD_ENGINE_AUDIO,
 				networkEmbeddedAudio: undefined,
 			}),
 		).toEqual({
 			asrcKey: "USB audio",
 			cardId: "usbaudio",
-			reason: "usb-alias",
+			reason: "usb-same-device",
 		});
 	});
 
-	test("Rule 5iii: USB capture, no usbaudio, a device card present → first-device", () => {
+	test("Rule 6 (QA failure): USB capture + ZERO audio cards → no-same-device-audio", () => {
 		expect(
 			resolveAutoAsrc({
-				source: captureSource("usb", "Generic USB Cam"),
-				audioDevices: {
-					HDMI: "rockchiphdmiin",
-					"Analog in": "rockchipes8388",
-					"Some Card": "somecard",
-					"No audio": "No audio",
-					"Pipeline default": "Pipeline default",
-				},
-				engineAudio: [],
-				networkEmbeddedAudio: undefined,
-			}),
-		).toEqual({
-			asrcKey: "Some Card",
-			cardId: "somecard",
-			reason: "first-device",
-		});
-	});
-
-	test("Rule 6 (QA failure): USB capture + ZERO audio cards → pipeline default", () => {
-		expect(
-			resolveAutoAsrc({
-				source: captureSource("usb", "Generic USB Cam"),
+				source: captureSource("usb", "Generic USB Cam", "cam", "usb:1-1"),
 				audioDevices: {
 					"No audio": "No audio",
 					"Pipeline default": "Pipeline default",
@@ -434,9 +510,9 @@ describe("resolveAutoAsrc — deterministic rules", () => {
 				networkEmbeddedAudio: undefined,
 			}),
 		).toEqual({
-			asrcKey: "Pipeline default",
+			asrcKey: null,
 			cardId: null,
-			reason: "pipeline-default",
+			reason: "no-same-device-audio",
 		});
 	});
 
@@ -492,14 +568,19 @@ describe("source×audio mixture matrix (M1–M6)", () => {
 		});
 	});
 
-	test("M3: USB cam + second USB mic → Auto resolves to the cam's OWN audio (same-device prefix join); both offered with distinct real labels", () => {
+	test("M3: USB cam + second USB mic → Auto resolves to the cam's OWN audio (same physical group); both offered with distinct real labels", () => {
 		const engine = [
-			engineAudio("RØDE Streamer Mic", "rode_card"),
-			engineAudio("Elgato Wave:3", "elgato_wave3"),
+			engineAudio("RØDE Streamer Mic", "rode_card", undefined, "usb:10-1"),
+			engineAudio("Elgato Wave:3", "elgato_wave3", undefined, "usb:3-2"),
 		];
 		expect(
 			resolveAutoAsrc({
-				source: captureSource("uvc_h264", "RØDE Streamer X"),
+				source: captureSource(
+					"uvc_h264",
+					"RØDE Streamer X",
+					"RØDE Streamer X",
+					"usb:10-1",
+				),
 				audioDevices: DUAL_USB_MAP,
 				engineAudio: engine,
 				networkEmbeddedAudio: undefined,
@@ -529,7 +610,7 @@ describe("source×audio mixture matrix (M1–M6)", () => {
 		).toEqual({ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" });
 	});
 
-	test("M5: the resolved audio card disappears → Auto falls through to the next rule; the input map is NOT mutated", () => {
+	test("M5: the resolved audio card disappears → Auto reports no-same-device-audio; the input map is NOT mutated", () => {
 		const afterUnplug: Record<string, string> = {
 			"Some Card": "somecard",
 			"No audio": "No audio",
@@ -537,15 +618,15 @@ describe("source×audio mixture matrix (M1–M6)", () => {
 		};
 		const snapshot = structuredClone(afterUnplug);
 		const r = resolveAutoAsrc({
-			source: captureSource("usb", "Generic USB Cam"),
+			source: captureSource("usb", "Generic USB Cam", "cam", "usb:1-1"),
 			audioDevices: afterUnplug,
 			engineAudio: [],
 			networkEmbeddedAudio: undefined,
 		});
 		expect(r).toEqual({
-			asrcKey: "Some Card",
-			cardId: "somecard",
-			reason: "first-device",
+			asrcKey: null,
+			cardId: null,
+			reason: "no-same-device-audio",
 		});
 		expect(afterUnplug).toEqual(snapshot);
 	});
@@ -581,11 +662,13 @@ describe("resolveAutoAsrc — dual-space invariants (asrcKey ≠ cardId)", () =>
 		expect(r.asrcKey).not.toBe(r.cardId);
 	});
 
-	test("USB → { asrcKey: 'USB audio', cardId: 'usbaudio' }", () => {
+	test("USB same-device → { asrcKey: 'USB audio', cardId: 'usbaudio' }", () => {
 		const r = resolveAutoAsrc({
-			source: captureSource("usb", "Generic USB Cam"),
+			source: captureSource("usb", "Generic USB Cam", "cam", "usb:3-2"),
 			audioDevices: USB_MAP,
-			engineAudio: [],
+			engineAudio: [
+				engineAudio("Generic USB Cam Mic", "usbaudio", undefined, "usb:3-2"),
+			],
 			networkEmbeddedAudio: undefined,
 		});
 		expect(r.asrcKey).toBe("USB audio");
@@ -689,6 +772,7 @@ describe("emitters — two-function API + pending slot", () => {
 			{
 				resolved_asrc: "HDMI",
 				resolved_asrc_reason: "hdmi",
+				resolved_asrc_candidates: null,
 				pending_audio_follow_asrc: null,
 			},
 		]);
@@ -710,6 +794,7 @@ describe("emitters — two-function API + pending slot", () => {
 			{
 				resolved_asrc: "HDMI",
 				resolved_asrc_reason: "hdmi",
+				resolved_asrc_candidates: null,
 				pending_audio_follow_asrc: null,
 			},
 		]);
@@ -1053,6 +1138,7 @@ async function seedUvcCaptureSource(): Promise<void> {
 						display_name: "USB Streamer",
 						media_class: "video",
 						kind: "uvc_h264",
+						physical_group_id: "usb:10-1",
 					},
 					{
 						input_id: "usb-audio-1",
@@ -1061,6 +1147,7 @@ async function seedUvcCaptureSource(): Promise<void> {
 						media_class: "audio",
 						kind: "audio",
 						alsa_card_id: "Micro",
+						physical_group_id: "usb:10-1",
 					},
 				],
 			}) as unknown as ListDevicesResult,
@@ -1076,7 +1163,7 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 		clearCapabilitiesCache();
 		resetEngineDeviceCache();
 		await seedUvcCaptureSource();
-		setMockAudioDevicesProvider(() => ({ "USB audio": "usbaudio" }));
+		setMockAudioDevicesProvider(() => ({ "RØDE AI-Micro": "Micro" }));
 		broadcasts = [];
 		setAutoAudioBroadcaster((u) =>
 			broadcasts.push(u as Record<string, unknown>),
@@ -1093,23 +1180,27 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 		delete getConfig().source;
 	});
 
-	test("resolveAutoAsrcFromLiveState resolves the persisted source (USB → USB audio)", () => {
+	test("resolveAutoAsrcFromLiveState resolves the persisted source to its OWN card", () => {
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 		getConfig().source = "usb-cam-1";
 		const r = resolveAutoAsrcFromLiveState();
-		expect(r.asrcKey).toBe("USB audio");
-		expect(r.cardId).toBe("usbaudio");
-		expect(r.reason).toBe("usb-alias");
+		expect(r.asrcKey).toBe("RØDE AI-Micro");
+		expect(r.cardId).toBe("Micro");
+		expect(r.reason).toBe("usb-same-device");
 	});
 
 	test("Freshness: a source change while Auto+idle re-broadcasts resolved_asrc immediately", () => {
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 		getConfig().source = "usb-cam-1";
 		refreshResolvedAsrcPreview();
-		expect(getResolvedAsrc()).toBe("USB audio");
-		expect(getResolvedAsrcReason()).toBe("usb-alias");
+		expect(getResolvedAsrc()).toBe("RØDE AI-Micro");
+		expect(getResolvedAsrcReason()).toBe("usb-same-device");
 		expect(broadcasts).toEqual([
-			{ resolved_asrc: "USB audio", resolved_asrc_reason: "usb-alias" },
+			{
+				resolved_asrc: "RØDE AI-Micro",
+				resolved_asrc_reason: "usb-same-device",
+				resolved_asrc_candidates: null,
+			},
 		]);
 	});
 
@@ -1124,8 +1215,8 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 		refreshResolvedAsrcPreview();
 
 		const snapshot = buildInitialStatus();
-		expect(snapshot.status.resolved_asrc).toBe("USB audio");
-		expect(snapshot.status.resolved_asrc_reason).toBe("usb-alias");
+		expect(snapshot.status.resolved_asrc).toBe("RØDE AI-Micro");
+		expect(snapshot.status.resolved_asrc_reason).toBe("usb-same-device");
 		expect(snapshot.status.pending_audio_follow_asrc).toBeNull();
 		sshHolder.ssh_user = savedSshUser;
 	});
@@ -1135,7 +1226,7 @@ describe("refreshResolvedAsrcPreview — live-state freshness + reload hydration
 		getConfig().source = "usb-cam-1";
 		const resolution = resolveAutoAsrcFromLiveState();
 		const launch = buildAutoLaunchConfig(getConfig(), resolution);
-		expect(launch.asrc).toBe("USB audio");
+		expect(launch.asrc).toBe("RØDE AI-Micro");
 		// config.json / getConfig().asrc is STILL "Auto" after resolution.
 		expect(getConfig().asrc).toBe(AUDIO_SOURCE_AUTO);
 	});
@@ -1216,5 +1307,81 @@ describe("updateAudioDevices re-enumeration while streaming (Oracle R10-1)", () 
 		expect(getResolvedAsrc()).toBe("HDMI");
 		expect(getResolvedAsrcReason()).toBe("hdmi");
 		expect(broadcasts).toEqual([]);
+	});
+});
+
+// ─── Manual precedence + saved-selection migration (todo 13) ─────────────────
+
+describe("manual asrc always wins over the same-device resolver", () => {
+	beforeEach(async () => {
+		resetAutoAudioState();
+		updateStatus(false);
+		clearCapabilitiesCache();
+		resetEngineDeviceCache();
+		await seedUvcCaptureSource();
+		setMockAudioDevicesProvider(() => ({
+			"RØDE AI-Micro": "Micro",
+			"Elgato Wave:3": "elgato_wave3",
+		}));
+	});
+	afterEach(() => {
+		setAutoAudioBroadcaster(undefined);
+		setMockAudioDevicesProvider(undefined);
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		resetAutoAudioState();
+		updateStatus(false);
+		delete getConfig().asrc;
+		delete getConfig().source;
+	});
+
+	test("a manual pick is never overwritten by the preview resolver", () => {
+		const broadcasts: Array<Record<string, unknown>> = [];
+		setAutoAudioBroadcaster((u) =>
+			broadcasts.push(u as Record<string, unknown>),
+		);
+		getConfig().asrc = "Elgato Wave:3";
+		getConfig().source = "usb-cam-1";
+
+		refreshResolvedAsrcPreview();
+
+		expect(getConfig().asrc).toBe("Elgato Wave:3");
+		expect(getResolvedAsrc()).toBeNull();
+		expect(getResolvedAsrcReason()).toBeNull();
+		expect(broadcasts).toEqual([]);
+	});
+
+	test("a manual pick survives an AMBIGUOUS same-group situation untouched", () => {
+		getConfig().asrc = "Elgato Wave:3";
+		const ambiguous = resolveAutoAsrc({
+			source: captureSource("uvc_h264", "Composite", "composite", "usb:5-1"),
+			audioDevices: { "Capture A": "capa", "Capture B": "capb" },
+			engineAudio: [
+				engineAudio("Capture A", "capa", undefined, "usb:5-1"),
+				engineAudio("Capture B", "capb", undefined, "usb:5-1"),
+			],
+			networkEmbeddedAudio: undefined,
+		});
+		expect(ambiguous.reason).toBe("ambiguous-same-device-audio");
+		expect(getConfig().asrc).toBe("Elgato Wave:3");
+	});
+
+	test("migration: a saved manual asrc still routes through the unchanged card path", () => {
+		getConfig().asrc = "RØDE AI-Micro";
+		expect(resolveAudioMode("RØDE AI-Micro", false)).toEqual({
+			mode: "device",
+			device: `hw:CARD=${getAudioSrcId("RØDE AI-Micro")}`,
+		});
+	});
+
+	test("migration: a saved manual asrc renumbered across a replug follows its stable identity", () => {
+		getConfig().asrc = "Old Card Name";
+		const migrated = reconcileConfiguredAudioIdentity(
+			new Map([["RØDE AI-Micro", { stable_id: "card:Micro" }]]),
+			{ "RØDE AI-Micro": "Micro" },
+			new Map([["Old Card Name", "card:Micro"]]),
+		);
+		expect(migrated).toBe(true);
+		expect(getConfig().asrc).toBe("RØDE AI-Micro");
 	});
 });

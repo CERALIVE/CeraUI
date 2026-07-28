@@ -203,30 +203,67 @@ steady state costs one string compare and broadcasts nothing.
 `setEngineAudioChangeHandler()` is the test seam. Coverage:
 `tests/lost-device-retention.test.ts`.
 
-## "AUTO" AUDIO — THE SAME-DEVICE JOIN [EXISTS]
+## "AUTO" AUDIO — SAME PHYSICAL DEVICE ONLY [EXISTS]
 
-`resolveAutoAsrc` rule 5(i) (`modules/streaming/auto-audio.ts`) picks the audio card
-belonging to the SAME chassis as the selected USB/UVC camera, by matching names with
-a `MIN_COMMON_PREFIX` (4-character) shared-prefix floor.
+`resolveAutoAsrc` rule 5 (`modules/streaming/auto-audio.ts`) binds "Auto" to the
+audio card on the SAME PHYSICAL DEVICE as the selected USB/UVC camera, decided by
+`physical_group_id` equality (cerastream ADR-0008), and to nothing else.
 
-**It must compare EVERY engine-given name, not `display_name` alone.** cerastream
-sets an audio entry's `display_name` to the ALSA longname verbatim, and the kernel
-puts the manufacturer on the front of that string. The DJI Osmo Pocket 3 is the
-worked example: audio `"DJI DJIPocket3 at usb-fc880000.usb-1, high speed"` vs video
-`"DJIPocket3: OsmoPocket3"` share only `"DJI"` — 3 characters, ONE short of the
-floor. The join missed, rule 5(ii) fired, and "Auto" served the generic `usbaudio`
-card, i.e. a **different physical device's microphone** (a still-enumerated RØDE
-whose video interface had already died). `engineAudioJoinNames()` therefore also
-offers `product_name` and `alsa_card_id` (both `"DJIPocket3"`, both already on the
-wire), which carry no manufacturer prefix and align from the first character.
+**Name similarity is not evidence of shared hardware.** The retired matcher scored
+a shared leading display-name prefix against a 4-character floor. The DJI Osmo
+Pocket 3 is why it had to go: audio `"DJI DJIPocket3 at usb-fc880000.usb-1, high
+speed"` vs video `"DJIPocket3: OsmoPocket3"` share only `"DJI"` — one character
+short — so the join missed and Auto served a still-enumerated RØDE's microphone,
+i.e. a **different physical device's mic** presented as the camera's own. Widening
+the candidate names only moved the coin-flip. USB topology answers the question the
+strings could only approximate. `MIN_COMMON_PREFIX`, `commonPrefixLength`, and
+`engineAudioJoinNames` are DELETED; `grep commonPrefixLength` must stay empty.
 
-**The BEST match wins, not the first.** Several cards can clear a 4-character floor
-(`DJIPro` vs `DJIPocket3`), and taking whichever the engine happened to list first is
-exactly the coin-flip this rule exists to remove.
+**Three typed outcomes, and two of them pick nothing:**
 
-Do NOT add the asrc key or any CeraUI-side alias to the candidate list — those are
-our own strings, not names the hardware chose, and would join a card to a device it
-shares nothing with. Coverage: `tests/auto-audio.test.ts`.
+| Same-group cards | Resolution |
+|---|---|
+| exactly 1 | that card, `reason: usb-same-device` |
+| more than 1 | `ambiguous-same-device-audio` + `candidates[]` — NO auto-pick |
+| 0, or a group-less camera | `no-same-device-audio` — NO auto-pick |
+
+The generic `usb-alias` and `first-device` fallbacks are GONE, from the code AND
+from `resolvedAsrcReasonSchema`: each could only ever name a card on a different
+physical device, which is precisely the defect. Both non-resolutions ride `status`
+(`resolved_asrc_reason` + `resolved_asrc_candidates`) and the UI turns each into a
+manual-selection prompt (`SourceSection.svelte` bands `audio-same-device-ambiguous`
+/ `audio-no-same-device`) rather than a silent em-dash.
+
+**An ABSENT group never matches — not even another absent group.** `samePhysicalGroup()`
+is the TS mirror of cerastream's helper (ADR-0008 §6): a match requires BOTH sides to
+carry a key AND the keys to be equal. `None` means "no USB topology to key on" (HDMI-RX,
+onboard audio, Bluetooth, test sources), not "unknown, might be the same" — and on the
+wire the key is simply ABSENT for those, which is treated identically to an empty string.
+A bare `a === b` would pair every group-less card with every group-less camera. Do NOT
+"simplify" it back.
+
+**A candidate must clear three gates**, not just the group: the engine gave it an
+`alsa_card_id` (no join key, no candidate), it shares the camera's group, and CeraUI
+itself enumerates that card — a card the engine lists but this device cannot open is
+not selectable, so it is not offered.
+
+**Auto re-resolution stays launch-only.** `refreshResolvedAsrcPreview` still returns
+early while streaming, so an ambiguous or absent verdict can never disturb a running
+stream; it is computed at start and on idle preview.
+
+**Manual selections are untouched.** A concrete `config.asrc` short-circuits every
+Auto path (`resolveLaunchConfig`, `refreshResolvedAsrcPreview`, `applySwitchInputFollow`),
+still resolves through the unchanged alias/card lookup, and still migrates by stable
+identity via `reconcileConfiguredAudioIdentity`.
+
+The field is threaded verbatim from the engine: `fromEngineDevice` → `CaptureDevice.physical_group_id`
+→ `StreamSource.physicalGroupId` (video) and `probeEngineDevices` → `EngineAudioDevice.physical_group_id`
+(audio). It is deliberately NOT restored from `lastEngineVideoDevices` — a group id is a
+same-moment topology relation, not a durable identity like `stable_id`.
+
+Coverage: `tests/auto-audio.test.ts` (the matcher table: 1 / N⇒ambiguous / 0 / group-less
+camera / group-less card / empty-string group / un-enumerated card / no join key, the two
+board topologies, manual precedence, and the saved-selection migration).
 
 **An unavailable selected input fails the start ONCE, as itself.** `asrcProbe()`
 polls for `AUDIO_PROBE_TIMEOUT_MS` (15 s) — a deliberate "give the device a moment
@@ -2349,7 +2386,7 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't multiplex the control channel onto the BCRPT relay socket — the two channels are independent by design (different token audiences, different endpoints, different authority models).
 - Don't add secret-bearing event types to `RELAYABLE_TYPES` — the no-secrets contract test will catch it.
 - Don't delete the `devices`/`pipelines` broadcasts or the `capabilities.device_modes` field yet — they're deprecation shims kept for one release (`TD-legacy-source-broadcasts`); route new consumers through `getSources()`/the `sources` broadcast instead.
-- Don't resolve the rule-5(i) same-device join from `display_name` alone — it is the ALSA longname, and the manufacturer prefix the kernel puts on it can push the shared prefix under the 4-character floor for a device whose `product_name`/`alsa_card_id` match perfectly. Route through `engineAudioJoinNames()`, and don't feed it CeraUI-side strings.
+- Don't resolve the "Auto" audio pick from device NAMES — name similarity is not evidence of shared hardware, and the prefix matcher it replaced served a different device's microphone as the camera's own. Route through `samePhysicalGroup()` on `physical_group_id`, and don't collapse it to `a === b`: an ABSENT group must never match another absent group (ADR-0008 §6). Don't re-add a `usb-alias`/`first-device`-style fallback either — with no same-group card the honest answer is the typed `no-same-device-audio`, and with several it is `ambiguous-same-device-audio` with NO auto-pick.
 - Don't assume the audio label/identity maps are fresh because a hotplug ran — the ENGINE's audio list arrives later and separately, so `commitEngineDevices` must keep firing the re-resolve on a changed list. And don't "simplify" that handler into a full `updateAudioDevices()` call: the sysfs scan has not changed, so it would raise a spurious lost verdict and blink the meter.
 - Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
