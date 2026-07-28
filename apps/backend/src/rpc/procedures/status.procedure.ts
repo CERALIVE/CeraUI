@@ -43,6 +43,7 @@ import {
 	getUpdateState,
 } from "../../modules/system/software-updates.ts";
 import { getCachedSshStatus, getSshStatus } from "../../modules/system/ssh.ts";
+import { getPersistentNotifications } from "../../modules/ui/notifications.ts";
 import { wifiBuildMsg } from "../../modules/wifi/wifi.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -136,4 +137,18 @@ export function buildInitialStatus() {
 		sources: getSourcesMessage(),
 		capabilities: getLastCapabilities(),
 	};
+}
+
+/**
+ * The persistent notification set, for the post-auth initial push.
+ *
+ * A notification raised ONCE at boot — the load-time encoder-mode clamp is the
+ * only one today — fires strictly before any browser can be connected, so
+ * without this replay it is stored, returned by `notifications.getPersistent`,
+ * and never rendered: the panel reads the push cache. Every other persistent
+ * notification is raised by a loop that re-evaluates, which is why the gap went
+ * unnoticed until a board proof used a genuinely one-shot one.
+ */
+export function buildInitialNotifications() {
+	return getPersistentNotifications(true);
 }

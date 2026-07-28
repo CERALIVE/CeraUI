@@ -18,7 +18,10 @@ import {
 import { createContext, initSocketData } from "./context.ts";
 import { extractValidationDetails } from "./error-enrichment.ts";
 import { addClient, removeClient, sendToClient } from "./events.ts";
-import { buildInitialStatus } from "./procedures/status.procedure.ts";
+import {
+	buildInitialNotifications,
+	buildInitialStatus,
+} from "./procedures/status.procedure.ts";
 import { appRouter } from "./router.ts";
 import { instrumentRpcCall } from "./rpc-logging.ts";
 import { getPasswordHash } from "./state/password.ts";
@@ -195,6 +198,12 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	// forever. Seed the current rollup so the HUD shows the truthful idle/live
 	// verdict on load.
 	sendToClient(ws, HEALTH_EVENT_TYPE, getStreamHealth());
+	// Same shape of problem, one layer over: the notifications panel reads the
+	// PUSH cache, so a persistent notification raised before this client existed
+	// is invisible to it. Only a one-shot one actually breaks — every other is
+	// re-raised by its own loop — and the boot-time encoder-mode clamp is exactly
+	// that. The legacy relay path has always replayed these.
+	sendToClient(ws, "notification", buildInitialNotifications());
 }
 
 /**
