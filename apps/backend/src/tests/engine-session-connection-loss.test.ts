@@ -179,6 +179,7 @@ function makeHarness(): Harness {
 		bridge: {
 			notify: () => undefined,
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus: () => {
 				broadcasts += 1;
 			},

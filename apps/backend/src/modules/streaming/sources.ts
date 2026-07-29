@@ -67,6 +67,7 @@ import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
 import { getConfig, saveConfig } from "../config.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
+import { clearHdmiSignalErrorOnRecovery } from "../system/hdmi-signal-notification.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import {
 	defaultFetchEngineDevices,
@@ -990,6 +991,10 @@ function commitEngineDevices(
 		engineAudioDeviceCache = [...audio];
 	}
 	recordObservedDevices(engineDeviceCache);
+	// Deliberately on EVERY commit, not only a changed one: a transient
+	// `timing is invalid` dmesg line raises the notification while the engine's
+	// own view never varies, so a change-gated hook would never retract it.
+	clearHdmiSignalErrorOnRecovery(engineDeviceCache);
 	if (audioChanged) engineAudioChangeHandler();
 }
 

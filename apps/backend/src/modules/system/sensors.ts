@@ -39,6 +39,10 @@ import {
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { getHardwareKindCached } from "./hardware-kind.ts";
+import {
+	HDMI_ERROR_NOTIFICATION,
+	HDMI_NO_SIGNAL_MSG,
+} from "./hdmi-signal-notification.ts";
 
 const bootconfigService = "ceralive-firstboot-bootconfig";
 
@@ -262,23 +266,29 @@ export function initHardwareMonitoring() {
 						"Try to move any modems away from the HDMI cable and the encoder. " +
 						"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
 					notificationBroadcast(
-						"hdmi_error",
+						HDMI_ERROR_NOTIFICATION,
 						"error",
 						msg,
 						8,
 						true,
-						false,
+						true,
 						true,
 						"notifications.hdmiError",
 					);
 				}
 
 				if (data.match("hdmirx-controller: Err, timing is invalid")) {
-					const hdmiNotif = notificationExists("hdmi_error");
-					const msg = "No HDMI signal detected";
+					const hdmiNotif = notificationExists(HDMI_ERROR_NOTIFICATION);
 
-					if (!hdmiNotif || hdmiNotif.msg === msg) {
-						notificationBroadcast("hdmi_error", "error", msg, 3, true, false);
+					if (!hdmiNotif || hdmiNotif.msg === HDMI_NO_SIGNAL_MSG) {
+						notificationBroadcast(
+							HDMI_ERROR_NOTIFICATION,
+							"error",
+							HDMI_NO_SIGNAL_MSG,
+							3,
+							true,
+							true,
+						);
 					}
 				}
 			});

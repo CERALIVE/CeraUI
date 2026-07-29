@@ -66,6 +66,7 @@ function makeBackend(): BackendHarness {
 				notifications.push({ name, type, msg });
 			},
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus: () => {},
 			broadcastBuffering: () => {},
 		},

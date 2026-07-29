@@ -245,6 +245,7 @@ async function dispatchStartParams(
 		bridge: {
 			notify: () => {},
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus: () => {},
 			broadcastBuffering: () => {},
 		},

@@ -911,6 +911,7 @@ async function startParamsFor(
 		bridge: {
 			notify: () => {},
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus: () => {},
 			broadcastBuffering: () => {},
 		},

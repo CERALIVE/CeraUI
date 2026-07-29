@@ -126,6 +126,7 @@ function makeBackend(
 		bridge: {
 			notify: () => {},
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus: () => {},
 			broadcastBuffering: () => {},
 		},
