@@ -143,6 +143,8 @@ CeraUI/
 | **Capability-truthfulness regression e2e gate** | `apps/frontend/tests/e2e/truthfulness.spec.ts` |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `apps/backend/src/modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **StreamSetupChain (readiness + config rows + Start, one always-visible 3-row card — no collapse; mounted in `IdleCockpit`; `GoLiveCard.svelte` is now an unmounted migration shim, see `TD-unmounted-source-shims`)** | `apps/frontend/src/main/live/StreamSetupChain.svelte` |
+| **Preview disclosure (the preview `<details>` + `PreviewCanvas`; mounted by BOTH cockpits so preview is reachable idle AND mid-stream)** | `apps/frontend/src/main/live/PreviewDisclosure.svelte` |
+| **Preview `input_id` stable-identity resolution (the preview leg's `start` frame, unified with `streaming.start`'s routing)** | `apps/backend/src/modules/ui/preview-proxy.ts` (`resolvePreviewStartFrame`) |
 | **Idle/Live cockpit split (LiveView switches on the optimistic streaming edge)** | `apps/frontend/src/main/live/IdleCockpit.svelte` + `apps/frontend/src/main/live/LiveCockpit.svelte` |
 | **Pure Go-Live readiness derivation (source/network/destination/engine gates — consumed byte-unchanged by StreamSetupChain)** | `apps/frontend/src/lib/streaming/go-live-readiness.ts` (`deriveGoLiveReadiness`) |
 | **Unified device-first source list (unified `<ul>`, single audio surface, selected-row-only network publish instructions, operator-disabled-row filtering)** | `apps/frontend/src/lib/components/custom/SourceSection.svelte` |

@@ -691,6 +691,37 @@ divergence between dev and prod dial targets.
   identical URL/token flow. `PREVIEW_CLOSE_UPSTREAM_DOWN = 4502` (loopback
   unreachable), `PREVIEW_CLOSE_UPSTREAM_UNAVAILABLE = 4503` (preview
   unbound/disabled). Close-code constants live once in `@ceraui/rpc/schemas`.
+- **`start` frames resolve their `input_id` by STABLE IDENTITY (Todo 19a):** the
+  ONE frame that is not a byte-for-byte passthrough. `streaming.start` resolves
+  the persisted `config.source` through `resolveSourceRouting` →
+  `resolveSourceIdentity` before dispatching, but PREVIEW had no such step —
+  `PreviewCanvas` puts the applied `config.source` on its `{action:"start"}`
+  frame verbatim and this proxy forwarded it unchanged. So a device that
+  re-enumerated under a new node path streamed fine and would not preview.
+  Confirmed live: de-authorizing the RØDE renumbered the Osmo `/dev/video3` →
+  `/dev/video2`, the UI still showed it "Selected" (it matches by stable id), and
+  preview answered `SourceUnavailable` **0/5**.
+  `resolvePreviewStartFrame(frame, resolveInputId)` closes it at the proxy —
+  the choke point EVERY preview start frame crosses, whichever client sent it —
+  so the rule lives at one seam instead of in each client. The injected
+  `PreviewProxyDeps.resolvePreviewInputId` defaults to the SAME
+  `resolveSourceIdentity` the stream path runs, against `getSourcesMessage()` +
+  `config.last_seen_devices`. **It resolves, it never rejects:** an id with no
+  live stable-identity match (a TRUE unplug, or a different device that merely
+  took the freed node) passes through UNCHANGED, so the engine still answers its
+  own typed `source-unavailable` and the `lost` row is untouched. Do NOT
+  "harden" this into a `resolveSourceRouting` call — that one refuses
+  lost/unavailable sources and would replace the engine's typed reason with a
+  silent drop. An unchanged id returns the ORIGINAL frame object (no
+  reserialization), and anything that is not a well-formed `start` frame with a
+  non-empty string `input_id` — binary access units, WebRTC signaling, `stop`,
+  malformed JSON, a coarse-source start that omits `input_id` — is untouched.
+  The resolver is FAIL-OPEN: any throw yields the original id. Config self-heal
+  is unchanged and still persists the migration via
+  `reconcileConfiguredSourceIdentity` on the `sources` broadcast.
+  Coverage: `tests/source-renumber-dedup.test.ts` → "preview start — resolves to
+  the CURRENT node, not the saved one" (the renumber fixture, the self-heal
+  assertion, the true-unplug + wrong-device negatives, and the passthrough table).
 - **Backpressure — bounded drop-oldest (Todo 14):** frames are a transparent
   passthrough BOTH ways (text control frames + binary access units). The
   downstream (browser) leg is backpressure-aware — when the client's
@@ -2391,6 +2422,7 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't re-add an operator audio-device rename/alias surface (RPC, contract entry, or config field) — device naming is code-level only (`ONBOARD_AUDIO_DISPLAY_RULES` + `cleanAudioDeviceName`); the #206 alias layer was removed in #207 by product decision. The same holds for VIDEO (`ONBOARD_VIDEO_DISPLAY_RULES`) — no rename affordance for any device, of any media type.
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
+- Don't dispatch an `input_id` to the engine from ANY path without resolving it by stable identity first — the preview leg was the one that skipped it, and a renumbered device streamed while refusing to preview. And don't "upgrade" `resolvePreviewStartFrame` to `resolveSourceRouting`: preview must RESOLVE without REJECTING, or a true unplug loses the engine's typed `source-unavailable` reason to a silent drop.
 - Don't validate an encode target against a device ladder with a second, local copy of the rule — `@ceraui/rpc` `capabilities/device-mode-truth.ts` is shared with the frontend precisely so the offering and the save path cannot disagree. And don't turn its fail-open guards (no ladder, coarse source, un-normalizable payload) into refusals: blocking a save the hardware can honour is the same dishonesty as allowing one it cannot.
 - Don't report a `streaming.setConfig` result without reading `result.success` — a device-truth refusal RESOLVES, it does not throw, so a bare try/catch toasts "Saved" over a config the device rejected.
 - Don't add a country→channel table anywhere — the hotspot channel set is DERIVED by applying `iw reg set <CC>` and parsing `iw phy` back out (`regdomain.ts`), because the legal set depends on the kernel's regdb version, the radio, and self-managed adapters. And don't validate a channel with `isWifiChannelName` alone: that is a SHAPE check, and legality is `isChannelOffered` against the runtime-derived set.
