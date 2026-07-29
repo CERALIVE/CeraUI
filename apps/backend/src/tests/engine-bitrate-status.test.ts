@@ -47,6 +47,7 @@ function makeBackend(): CerastreamBackend {
 	const bridge: CerastreamBackendDeps["bridge"] = {
 		notify: () => {},
 		notificationExists: () => false,
+		removeNotification: () => {},
 		broadcastStatus: () => {},
 		broadcastBuffering: () => {},
 	};

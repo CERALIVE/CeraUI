@@ -109,8 +109,10 @@ import { setup } from "../setup.ts";
 import {
 	notificationBroadcast,
 	notificationExists,
+	notificationRemove,
 } from "../ui/notifications.ts";
 import { type AudioMode, resolveAudioMode } from "./audio.ts";
+import type { ResolvedCerastreamError } from "./cerastream-error-mapping.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
 import { deviceRegistry } from "./devices.ts";
@@ -128,8 +130,18 @@ import type {
 	StreamingBackend,
 	StreamRunOptions,
 } from "./streaming-backend.ts";
+import { PROCESS_ERROR_CODES } from "./streamloop/process-error-patterns.ts";
 
 const CERASTREAM_PIPELINE_PATH = "/tmp/cerastream-pipeline.txt";
+
+/**
+ * Engine error codes a healthy session boundary PROVES are history. Membership
+ * requires an engine-authored recovery signal that contradicts the error's own
+ * claim — not merely that the error looks transient.
+ */
+const ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION: ReadonlySet<string> = new Set([
+	PROCESS_ERROR_CODES.CAPTURE_VIDEO_ERROR,
+]);
 
 /** The status/notification surface the backend bridges engine events onto. */
 export interface CerastreamBridge {
@@ -142,6 +154,7 @@ export interface CerastreamBridge {
 		isDismissable: boolean,
 	): void;
 	notificationExists(name: string): boolean;
+	removeNotification(name: string): void;
 	broadcastStatus(): void;
 	broadcastBuffering(payload: BufferingStatus): void;
 }
@@ -187,6 +200,9 @@ function defaultBridge(): CerastreamBridge {
 	return {
 		notify: notificationBroadcast,
 		notificationExists: (name) => Boolean(notificationExists(name)),
+		removeNotification: (name) => {
+			notificationRemove(name);
+		},
 		broadcastStatus: () => {
 			// Lazy import keeps the websocket/streaming graph out of this module's
 			// import cycle; the nudge fires long after boot so a dynamic import is fine.
@@ -544,6 +560,11 @@ export class CerastreamBackend implements StreamingBackend {
 	private subscription: Subscription | undefined;
 	private active = false;
 	private telemetry: EngineTelemetry | null = null;
+	// The engine error currently occupying the shared `cerastream` notification
+	// slot. Tracked because that slot is shared by every non-srtla engine error,
+	// so a blind remove-by-name would retract whichever error happens to be
+	// standing rather than the one the recovery signal actually falsifies.
+	private standingEngineError: ResolvedCerastreamError | undefined;
 	// Serializes non-stop IPC ops; stop interrupts a pending start through its client.
 	private queue: Promise<void> = Promise.resolve();
 	private interrupt: Promise<void> = Promise.resolve();
@@ -594,6 +615,7 @@ export class CerastreamBackend implements StreamingBackend {
 		transaction?: LaunchTransaction,
 	): Promise<void> {
 		this.active = true;
+		this.clearRecoveredEngineError();
 		const params = this.buildStartParams(config, opts);
 		const launchTransaction =
 			transaction ?? createLaunchTransaction("backend-start");
@@ -965,6 +987,11 @@ export class CerastreamBackend implements StreamingBackend {
 				this.deps.bridge.broadcastStatus();
 				break;
 			case "status": {
+				if (
+					classifyRuntimeState(event.state, event.streaming) === "streaming"
+				) {
+					this.clearRecoveredEngineError();
+				}
 				const buffering = extractBufferingStatus(event);
 				const activeEncode = extractActiveEncode(event);
 				// A partial mid-stream frame keeps the last known encode, but an
@@ -1027,14 +1054,34 @@ export class CerastreamBackend implements StreamingBackend {
 				resolved.message,
 				5,
 				true,
-				false,
+				true,
 			);
+			this.standingEngineError = resolved;
 		}
 
 		const raw = `cerastream ${event.source} error [${event.code}]${
 			event.reason ? `: ${event.reason}` : ""
 		}`;
 		for (const listener of this.errorListeners) listener(raw);
+	}
+
+	/**
+	 * Retract a standing engine error the current session boundary falsifies.
+	 *
+	 * `capture_video_error` claims the capture card failed and that no restart is
+	 * scheduled — a claim about ONE session. Two engine-authored events prove it is
+	 * history, and neither is a timer: a concordant `streaming` status frame (the
+	 * engine is delivering video right now), and the start of a NEW session (which
+	 * must not inherit the previous one's failure — the same session-boundary rule
+	 * `active_encode` follows). Codes whose recovery signal has not been
+	 * established are deliberately absent from the table and stay latched.
+	 */
+	private clearRecoveredEngineError(): void {
+		const standing = this.standingEngineError;
+		if (standing === undefined) return;
+		if (!ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION.has(standing.code)) return;
+		this.standingEngineError = undefined;
+		this.deps.bridge.removeNotification(standing.channel);
 	}
 
 	private enqueue(op: () => Promise<void>, label: string): Promise<void> {

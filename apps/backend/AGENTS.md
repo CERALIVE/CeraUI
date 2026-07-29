@@ -70,6 +70,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Regulatory domain + kernel-derived hotspot channels (`iw reg set` / `iw phy` parser, regdb precheck, armed restore timer) | `modules/wifi/regdomain.ts` (`applyRegulatoryDomain`, `deriveApChannels`, `checkWirelessRegdbSupport`, `buildRegdomainRestoreCommand`) |
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
+| Retracting the `hdmi_error` "No HDMI signal detected" notification once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
+| Retracting the `cerastream` `capture_video_error` notification at a healthy session boundary | `modules/streaming/cerastream-backend.ts` (`standingEngineError`, `clearRecoveredEngineError`, `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION`) |
 | **Device-truth save guard + persisted-mode clamp (ADR-0008 §10)** | `modules/streaming/device-mode-guard.ts` (`verifySaveDeviceMode`, `clampPersistedDeviceMode`) + `modules/streaming/persisted-mode-clamp.ts` (`reconcilePersistedDeviceMode`); the RULE itself is `@ceraui/rpc` `capabilities/device-mode-truth.ts`, shared with the frontend |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **Which capture kinds release their kernel v4l2 node while the engine holds them (libuvc)** | `modules/streaming/held-devices.ts` (`releasesV4l2Node`) — CeraUI-side mirror of cerastream `engine::held_devices` |
@@ -2068,8 +2070,105 @@ operator action, a fresh start dials a NEW client and works, reconciliation stop
 re-affirming the phantom session, and the orchestrator re-admits a start; the RPC
 error and operator-stop negatives are the controls, green on both trees).
 
+## A PERSISTENT NOTIFICATION MUST BE RETRACTABLE [EXISTS]
+
+The third instance of the same latched-stale class as `policy_route_missing` (a
+flag raised but never lowered) and `active_encode` (engine truth that outlived its
+session). Here the mechanism is blunter: `notificationRemaining()`
+(`modules/ui/notification-liveness.ts`) returns `NOTIFICATION_LIVES_FOREVER` for
+EVERY persistent notification by deliberate design — `duration` does not apply to
+one — so a raise site with no matching retraction is **permanent by
+construction**. `duration: 3` on the raise reads like an expiry and is not one.
+
+Two notifications shipped that way, and both were confirmed on a board.
+
+| Notification | Raised by | Why it could never clear |
+|---|---|---|
+| `hdmi_error` / "No HDMI signal detected" | `modules/system/sensors.ts`, off the RK3588 dmesg line `hdmirx-controller: Err, timing is invalid` | the kernel logs the failure and prints NOTHING when the link relocks, so the only event the watcher can see is the bad one |
+| the `cerastream` channel carrying `capture_video_error` | `cerastream-backend.ts` `handleErrorEvent()` | the engine reports the Tier-2 error and never revokes it; the condition cleared and the engine returned to idle/healthy with the error still on screen |
+
+**The retraction runs on the same evidence the source list already trusts, never
+on a timer.** A timeout would hide a genuinely-still-broken condition exactly as
+readily as it clears a resolved one, which is a worse bug than the one being
+fixed. Both retractions therefore demand a POSITIVE, engine-authored statement
+that contradicts the notification's own claim; every other outcome — an
+unreachable engine, a fallback v4l2 row, an idle engine — leaves the notification
+standing.
+
+**`hdmi_error` retracts on `signal: "present"` for an HDMI-RX capture device**
+(`modules/system/hdmi-signal-notification.ts`
+`clearHdmiSignalErrorOnRecovery`). That verdict is stamped at `fromEngineDevice`
+— the one seam that knows the ENGINE authored the row (see "THREE capture-row
+states") — so it is the engine's own `VIDIOC_QUERY_DV_TIMINGS` projection saying
+the port carries a picture. A row with `signal` unset reads `unknown` and proves
+nothing. Four properties are load-bearing:
+
+- **It hangs off `commitEngineDevices` (`sources.ts`), not off a broadcast.** That
+  is the ONE seam every engine-authored device view flows through — the 5 s
+  `recheckSourceSignals` tick, the hotplug refresh, the boot seed, the reconnect
+  heal — so no path can commit a recovery the notification does not see. It runs
+  on EVERY commit, deliberately NOT gated on a changed payload: a transient
+  `timing is invalid` line raises the notification while the engine's own view
+  never varies, and a change-gated hook would then never fire at all.
+- **Scoped to `kind === "hdmi"`.** The kind heuristic tests usb/uvc BEFORE hdmi
+  precisely so a "RØDE HDMI to USB-C" dongle is not mislabelled, so a working
+  webcam can never retract a claim about the board's HDMI-RX port.
+- **Scoped to the EXACT message.** The name `hdmi_error` is SHARED with the
+  EMI/cable-quality advisory ("HDMI signal issues detected…"), which describes a
+  different condition a relocked link does not falsify — the raise site already
+  keys on the same string to avoid overwriting it. Retracting by name alone would
+  silently drop it.
+- **Idempotent.** `notificationExists` answers `undefined` once it is gone, so the
+  healthy steady state costs one map lookup and broadcasts nothing.
+
+**`capture_video_error` retracts at a healthy SESSION boundary** — a concordant
+`state:"streaming" + streaming:true` status frame (the engine is delivering video
+right now), or the start of a new session, which must not inherit the previous
+one's failure. That second rule is the same session-boundary discipline
+`active_encode` follows in `startStream()`. An IDLE engine is deliberately NOT
+proof: idle means "not streaming", not "the capture card works".
+`ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION` is the membership table and holds
+`capture_video_error` alone — `capture_audio_error`, `pipeline_stall` and the two
+SRT codes stay latched until each has an established recovery signal of its own.
+The table is required because `resolved.channel` (`"cerastream"`) is ONE
+notification slot shared by every non-srtla engine error, so
+`standingEngineError` records which code currently occupies it; a blind
+remove-by-name would retract whichever error happened to be standing.
+
+**Both are now `isDismissable: true`, and that is a safety net, not the fix.**
+`active_encode`'s precedent argues for leaving a status signal non-dismissable
+when its automatic clear is reliable, and the automatic clears above ARE the
+primary mechanism. But each depends on the engine being reachable and speaking:
+`hdmi_error` needs cerastream to enumerate the HDMI-RX node, and
+`capture_video_error` needs a later status frame or a new session. A masked or
+crashed engine emits neither, and the pre-existing `isDismissable: false` left the
+operator with no escape at all from a notification the device could no longer
+retract. The manual affordance costs nothing when the automatic path works and is
+the only recourse when it cannot run.
+
+Coverage: `tests/notification-recovery-clearing.test.ts` (the pure verdict, the
+persists-while-severed and unreachable-engine controls, the real `remove` frame
+pushed to a connected client, the EMI-advisory and foreign-device negatives, the
+idle-is-not-proof and shared-slot negatives, and the repeat-heartbeat idempotence)
+plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.test.ts`
+(the `remove` frame drops the entry from the persistent panel).
+
 ## ANTI-PATTERNS
 
+- Don't add a persistent notification without a retraction path — `duration` does
+  NOT expire one (`notificationRemaining()` returns "lives forever" for every
+  persistent notification by design), so a raise-only site latches for the whole
+  session. And don't "fix" a latched one with a timeout: that hides a
+  still-broken condition just as readily as it clears a resolved one. Find the
+  authoritative recovery signal (see A PERSISTENT NOTIFICATION MUST BE RETRACTABLE).
+- Don't retract a notification whose NAME is shared by more than one claim without
+  discriminating WHICH claim is standing — `hdmi_error` carries both the no-signal
+  and the EMI/cable advisory, and the `cerastream` channel carries every non-srtla
+  engine error. Key on the message (`HDMI_NO_SIGNAL_MSG`) or on the recorded code
+  (`standingEngineError`), never on the bare name.
+- Don't move the HDMI recovery hook off `commitEngineDevices` or gate it on a
+  changed payload — it must see every engine-authored device view, including the
+  ones that are byte-identical to the last.
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't re-serialise the DNS health check ahead of the caller's query in `dnsCacheResolve`, and don't share one `Resolver` between them — the check only GATES the answer, and a shared c-ares channel's `cancel()` would abort the sibling leg. Both legs sit inside the per-attempt launch deadline (see DNS ON THE STREAM-START CRITICAL PATH).

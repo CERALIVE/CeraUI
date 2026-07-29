@@ -283,6 +283,7 @@ function makeBridge(): BridgeHarness {
 				notifications.push({ name, msg });
 			},
 			notificationExists: (name) => name === "srtla" && srtlaNotified.value,
+			removeNotification: () => undefined,
 			broadcastStatus: () => {
 				broadcasts.count += 1;
 			},

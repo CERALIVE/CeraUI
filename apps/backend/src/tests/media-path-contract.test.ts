@@ -105,6 +105,7 @@ function makeCerastreamHarness(): {
 		bridge: {
 			notify() {},
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus() {},
 			broadcastBuffering() {},
 		},

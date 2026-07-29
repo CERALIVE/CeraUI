@@ -35,6 +35,7 @@ function makeBridge(): BridgeHarness {
 		bridge: {
 			notify: () => {},
 			notificationExists: () => false,
+			removeNotification: () => {},
 			broadcastStatus: () => {
 				statusBroadcasts.count += 1;
 			},
