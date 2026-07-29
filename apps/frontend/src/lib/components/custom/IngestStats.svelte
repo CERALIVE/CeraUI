@@ -42,6 +42,12 @@ import { cn } from '$lib/utils';
 interface Props {
 	telemetry: LinkTelemetryMessage | null | undefined;
 	isStreaming?: boolean | undefined;
+	/**
+	 * The bitrate the engine is APPLYING, kbps — sampled once per telemetry tick
+	 * into the session peak/avg rollup. Never the configured ceiling: that value
+	 * is constant for a session, so peak and avg would both restate the setting
+	 * instead of reporting what the bond actually carried.
+	 */
 	bitrateKbps?: number | undefined;
 	class?: string;
 }
