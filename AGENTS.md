@@ -1963,10 +1963,20 @@ the RØDE could watch the meter report the DJI Mic Mini — or "Meter unavailabl
 no way to correct it. `config.asrc` is now resolved by `resolveMeterPreference()` and
 pushed to the engine as `reload-config` `audio.meter_device` over the always-idle
 `audio-meter-bridge` connection (schema ≥ 0.9.0; an older engine is sent nothing and
-keeps auto-picking). "Auto" sends an explicit `null`, handing selection back to the
-engine. It is a PREFERENCE, not a pin — cerastream still demotes a selected card that
-delivers no samples, so a powered-off receiver can never leave the meter dead. Full
-contract: `apps/backend/AGENTS.md` → IDLE AUDIO-METER DEVICE PREFERENCE.
+keeps auto-picking). It is a PREFERENCE, not a pin — cerastream still demotes a selected
+card that delivers no samples, so a powered-off receiver can never leave the meter dead.
+
+**"Auto" is resolved, NOT handed back.** It used to send an explicit `null` ("engine, you
+choose"), which was right while `"Auto"` meant that and wrong the moment `resolveAutoAsrc`
+made it deterministic. `resolveEffectiveAudioPick()` now maps the sentinel through the SAME
+rule the start path uses, so the meter prefers the card a launch would actually open. The
+old shortcut was doubly invisible: `null` made the engine auto-pick AND disarmed the
+foreign-card gate, so on a Rock 5B+ the HDMI source with `"Audio source: Auto"` drew the
+RØDE USB card's real, moving bars — for an HDMI audio half with NO capture PCM, i.e. for a
+pick whose own start fails `audio-device-unavailable`. Because the resolved card depends on
+the selected VIDEO source and on the engine's audio list, a `source` change and an
+engine-list change re-push the preference too. Full contract:
+`apps/backend/AGENTS.md` → IDLE AUDIO-METER DEVICE PREFERENCE.
 
 **There is NO operator rename.** #206 briefly shipped an alias/rename UI backed by
 `config.audio_device_aliases`; #207 removed it in full — UI, `setAudioDeviceAlias`

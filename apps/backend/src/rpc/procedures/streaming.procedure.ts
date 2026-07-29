@@ -785,8 +785,14 @@ export const setConfigProcedure = authedProcedure
 			refreshResolvedAsrcPreview();
 		}
 		// A new audio pick must reach the ALWAYS-IDLE level meter too, or the meter
-		// keeps reporting whichever card the engine chose for itself.
-		if (input.asrc !== undefined) {
+		// keeps reporting whichever card the engine chose for itself. A VIDEO source
+		// change counts: under "Auto" the audio pick is a FUNCTION of the video
+		// source, so switching camera → HDMI moves the resolved card with `asrc`
+		// untouched. Re-pushing an UNCHANGED pick is free — the bridge dedupes on
+		// the (silenced, preference) pair — but skipping a changed one is not:
+		// the engine's `set_preferred_device` early-returns on an unchanged value,
+		// so nothing later corrects it.
+		if (input.asrc !== undefined || input.source !== undefined) {
 			syncAudioMeterPreference();
 		}
 

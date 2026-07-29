@@ -331,21 +331,54 @@ engine's candidate list is ordered by enumeration and `"DJI Technology…"` sort
 
 - **`resolveMeterPreference(asrc)`** (`modules/streaming/audio.ts`) turns the picker
   value into the ALSA device the meter should prefer, or `null` for "engine, choose for
-  yourself". `null` covers `AUDIO_SOURCE_AUTO`, both pipeline pseudo-sources
-  (`"No audio"` / `"Pipeline default"`), an unset `asrc`, and anything that resolves to
-  no card. It reuses the SAME `audioDevices` map + alias reverse-lookup + `hw:CARD=`
-  wrapping that `resolveAudioMode` uses for `start`, so the meter and the program leg
-  can never disagree about which card a pick names. It is deliberately NOT
-  `resolveAudioMode`: this is the IDLE meter, which has no notion of network-embedded
-  program audio and must keep following the card the picker is showing.
+  yourself". `null` covers both pipeline pseudo-sources (`"No audio"` /
+  `"Pipeline default"`), an unset `asrc`, an `"Auto"` that resolves to no single card,
+  and anything that resolves to no card. It reuses the SAME `audioDevices` map + alias
+  reverse-lookup + `hw:CARD=` wrapping that `resolveAudioMode` uses for `start`, so the
+  meter and the program leg can never disagree about which card a pick names. It is
+  deliberately NOT `resolveAudioMode`: this is the IDLE meter, which has no notion of
+  network-embedded program audio and must keep following the card the picker is showing.
+- **`"Auto"` is NOT a hand-back — it is resolved, by the SAME rule the start path uses.**
+  `resolveEffectiveAudioPick(asrc)` maps the sentinel through
+  `resolveAutoAsrcFromLiveState()` (`auto-audio.ts`) and hands the resulting picker key
+  to both `resolveMeterPreference` and `isMeterPreferenceDevicePresent`; every other pick
+  passes through verbatim. This is a CORRECTION, not an addition: `"Auto"` short-circuited
+  to `null` back when it really did mean "engine, you choose", and `resolveAutoAsrc` ended
+  that by making it deterministic (an HDMI video source follows `rockchiphdmiin` by rule 3,
+  a USB camera follows its `physical_group_id` sibling by rule 5). While the meter kept the
+  old reading, the sentence directly above it — the meter and the program leg can never
+  disagree about which card a pick names — was FALSE for the single most common pick on the
+  device. Found live on a Rock 5B+: HDMI selected with `"Audio source: Auto"` drew the RØDE
+  USB card's real, MOVING bars, because (a) a `null` preference told the engine to auto-pick
+  and it picked the only card it could open, and (b) `isForeignCardLevel` needs BOTH sides to
+  name a card, so `null` also disarmed the gate that exists to refuse exactly that reading.
+  The HDMI-RX audio half owns NO capture PCM, so the very pick the meter was decorating with
+  another device's audio is one whose own `start` fails `audio-device-unavailable`. An `"Auto"`
+  that resolves to no single card (`embedded` / `pipeline-default` /
+  `ambiguous-same-device-audio` / `no-same-device-audio`) still answers `null` — those are the
+  outcomes the UI turns into their own prompts, and pinning them would leave the meter dead.
+  The resolver is a PARAMETER on both functions (defaulted to the live-state one) because it
+  reads `config.source` + the sources list + the engine audio list; a test must be able to pin
+  one resolution without assembling that graph. It is FAIL-OPEN: a throw yields `undefined`,
+  i.e. the engine's own pick, because this runs on every broadcast.
 - **The `audio-meter-bridge` delivers it**, because it already holds the ONE long-lived
   IDLE connection to the engine (`cerastream-backend.ts`'s client only exists while
   streaming). `pushPreference()` sends `reload-config` with
   `{ audio: { meter_device } }`.
-- **`syncAudioMeterPreference()`** re-pushes on change. Three call sites: the bridge's
-  own `runAttempt` (every fresh connect — the engine holds NO preference across a
-  restart), `streaming.setConfig` when `input.asrc` changed, and `updateAudioDevices`
-  (a re-enumeration can change which card an UNCHANGED pick resolves to).
+- **`syncAudioMeterPreference()`** re-pushes on change. FOUR call sites, and the last
+  three exist because an UNCHANGED pick can still resolve to a different card: the
+  bridge's own `runAttempt` (every fresh connect — the engine holds NO preference across
+  a restart), `streaming.setConfig` when `input.asrc` **or `input.source`** changed,
+  `updateAudioDevices` (a re-enumeration), and `reresolveAudioForEngineChange` (a changed
+  engine audio list). The `input.source` and engine-list sites are BOTH consequences of
+  `"Auto"` being resolved rather than handed back: rule 3 keys on the selected VIDEO
+  source and rule 5 joins through the ENGINE's audio list, so switching camera → HDMI, or
+  the engine's audio enumeration landing seconds after a hotplug, each move the resolved
+  card with `config.asrc` untouched. Re-pushing an unchanged pick is free — the bridge
+  dedupes on the `(silenced, preference)` PAIR, so it broadcasts no gap — but SKIPPING a
+  changed one is not: the engine's `set_preferred_device` early-returns on an unchanged
+  value, so nothing later corrects it and the meter reports the previous device
+  indefinitely.
 
 **Why `reload-config` and not `switch-audio`.** `switch-audio` is stream-only — it
 answers `-32001 cerastream.state.not_streaming` while idle, which is exactly when the
@@ -387,9 +420,14 @@ sides to the bare card id (mirroring cerastream's own `alsa_card_key`), so
 `hw:CARD=x` / `plughw:CARD=x,DEV=0` / `card:x` all compare equal.
 
 **It can only ever suppress a reading PROVEN foreign.** `isForeignCardLevel` returns
-false unless BOTH sides name a card: an `Auto` pick (`null`) hands selection to the
-engine by design, and an engine that reports no identity cannot be shown to mismatch.
-An engine-sent `unavailable` passes through with its OWN reason. Do NOT "simplify" this
+false unless BOTH sides name a card: a `null` preference has genuinely delegated the
+choice, and an engine that reports no identity cannot be shown to mismatch. Note what
+this means in the other direction — a preference that is wrongly `null` does not merely
+fail to be pushed, it DISARMS this gate, so the two halves of the `"Auto"` defect above
+compound instead of one covering for the other. A resolved `"Auto"` reaches here as a
+real card and is gated exactly like a manual pick; only the `"Auto"` outcomes that name
+no single card still arrive as `null`. An engine-sent `unavailable` passes through with
+its OWN reason. Do NOT "simplify" this
 by gating on the video-side `signal` field — audio and video are separate device lists
 with no shared identifier (see "THREE capture-row states"), and the audio card's own
 absence is the direct, device-agnostic evidence.
@@ -458,11 +496,14 @@ moved. `AudioLevelMeter` needed no change — it already indexes
 `$LL.live.preview.audioUnavailableReason[reason]()`.
 
 **"No audio" is NOT "Auto", and only the picker value can tell them apart.**
-`resolveMeterPreference` answers `null` for both, and `null` on the wire means
+`resolveMeterPreference` answered `null` for both, and `null` on the wire means
 "engine, choose for yourself" — so the one pick that means *meter nothing* made the
 engine auto-pick a card AND left `isForeignCardLevel` unarmed (it returns `false` for
 a `null` preference by design). The meter therefore rendered another card's real,
-moving audio under an "Audio source: No audio" label. Found live in Wave H QA; it read
+moving audio under an "Audio source: No audio" label. (`"Auto"` no longer shares that
+`null` — see the resolution bullet above — but `"No audio"` still resolves to one, so
+this distinction remains load-bearing and is still the FIRST branch `projectLevel`
+applies. The two defects are the same shape reached by different picks.) Found live in Wave H QA; it read
 as a transient "few seconds of green bars" only because PR #232's frozen-content
 watchdog happened to age the bars out once that card's content stopped changing.
 `isMeterSilencedByPick(asrc)` (`audio.ts`, true for `NO_AUDIO_ID` alone) is the
@@ -471,8 +512,9 @@ engine's own `unavailable` reason, because the operator's explicit silence outra
 whatever gap the engine is reporting. It reuses the existing `mode_none` reason
 (`resolveAudioMode("No audio")` is literally `{mode:"none"}`), so no schema or locale
 change was needed. `DEFAULT_AUDIO_ID` and `AUDIO_SOURCE_AUTO` are deliberately NOT
-silenced — both hand sourcing to the engine, so whatever it picks IS the operator's
-meter.
+silenced: the pipeline default really does hand sourcing to the engine, and `"Auto"` is
+resolved to a concrete card instead (so it is gated on THAT card, never silenced).
+Neither means "meter nothing".
 
 **A pick change retires the level already on screen, without waiting for a frame.**
 Every gate above acts on the NEXT event the engine sends, and the engine needs a
@@ -2397,7 +2439,9 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
-- Don't infer "the operator wants no meter" from a `null` meter preference — `null` is ALSO "Auto", which legitimately meters whatever the engine picks. Ask `isMeterSilencedByPick()`, key the selection-change detection on the `(silenced, preference)` PAIR, and don't let an engine-sent `unavailable` reason outrank an explicit "No audio".
+- Don't infer "the operator wants no meter" from a `null` meter preference — `null` also covers the pipeline default and an "Auto" that resolves to no single card, each of which legitimately meters whatever the engine picks. Ask `isMeterSilencedByPick()`, key the selection-change detection on the `(silenced, preference)` PAIR, and don't let an engine-sent `unavailable` reason outrank an explicit "No audio".
+- Don't short-circuit `AUDIO_SOURCE_AUTO` to a `null` meter preference — "Auto" is a DETERMINISTIC resolution (`resolveAutoAsrc`), not a hand-back, so route it through `resolveEffectiveAudioPick()` and let the meter prefer the same card the start path would use. Getting this wrong is doubly invisible: `null` makes the engine auto-pick AND disarms `isForeignCardLevel`, so the meter draws a different device's real moving bars for a pick whose own start fails. And don't ask `isMeterPreferenceDevicePresent()` about the raw sentinel — `audioDevices["Auto"]` is undefined, so every Auto pick would report `no_device` and a genuine mismatch on a healthy card would lose its `not_selected_device` reason.
+- Don't re-push the meter preference only when `asrc` changed — under "Auto" the resolved card is a function of the selected VIDEO source (rule 3) and of the ENGINE's audio list (rule 5), so `input.source` changes and `reresolveAudioForEngineChange` must re-push too. An unchanged pick is deduped by the bridge and costs nothing; a missed changed one is permanent, because `set_preferred_device` early-returns on an unchanged value.
 - Don't leave a pick change to be corrected by the next engine frame — the level already broadcast belongs to the previous pick, so `noteMeterSelection()` must retire it immediately (and must stay silent on an unchanged pick, or every re-enumeration blinks the meter).
 - Don't fold `active_encode` into telemetry preserve-on-omission past the end of a session, and don't let `stop()` rely on a final engine status frame to clear it — a crashed engine sends none, and the stale encode then renders the stopped session under a "Live" badge.
 - Don't clear the raw bridge's `cachedLiveness`/`cachedPassthrough` from its own socket `close`/`error` — that is a CONNECTION blip, not a session boundary, and wiping there hands `collectRealLiveness()` an `undefined` it can only read as a cold start, so a dead stream reports `healthy` off raw process liveness. Let `FRAMES_FRESHNESS_MS` age the retained reading out instead.

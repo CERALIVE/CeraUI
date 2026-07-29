@@ -43,7 +43,11 @@ import {
 	type AudioDeviceWatcher,
 	createAudioDeviceWatcher,
 } from "./audio-watcher.ts";
-import { refreshResolvedAsrcPreview } from "./auto-audio.ts";
+import {
+	type AutoAsrcResolution,
+	refreshResolvedAsrcPreview,
+	resolveAutoAsrcFromLiveState,
+} from "./auto-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
 import { getEngineAudioDevices } from "./sources.ts";
@@ -98,22 +102,58 @@ export function resolveAudioMode(
 }
 
 /**
+ * The effective audio PICKER KEY behind a selection: "Auto" resolved through the
+ * SAME rules the start path uses, every other pick verbatim. `undefined` means
+ * "no single card is named", i.e. hand selection to the engine.
+ *
+ * "Auto" was once a synonym for that hand-back, so resolving it to `null` was
+ * correct; `resolveAutoAsrc` ended that by making it deterministic (HDMI video
+ * follows `rockchiphdmiin` by rule 3). Keeping the meter on the old reading broke
+ * this preference's core invariant — the meter and the program leg must never
+ * disagree about which card a pick names — and because `isForeignCardLevel` needs
+ * BOTH sides to name a card, a `null` preference also disarmed the gate that would
+ * have refused the mismatch. Live on a Rock 5B+ that drew the RØDE's real moving
+ * bars for an HDMI port whose audio half has NO capture PCM, i.e. for a pick whose
+ * own start fails `audio-device-unavailable`.
+ *
+ * The resolver is a PARAMETER, not a module seam: it reads live state, and a test
+ * must be able to pin one resolution without assembling that whole graph.
+ */
+export function resolveEffectiveAudioPick(
+	asrc: string | undefined,
+	resolveAuto: () => AutoAsrcResolution = resolveAutoAsrcFromLiveState,
+): string | undefined {
+	if (asrc !== AUDIO_SOURCE_AUTO) return asrc;
+	try {
+		return resolveAuto().asrcKey ?? undefined;
+	} catch {
+		// FAIL-OPEN to the engine's own pick: an unresolvable "Auto" must never
+		// leave the meter dead, and this runs on every broadcast.
+		return undefined;
+	}
+}
+
+/**
  * The ALSA capture device the engine's ALWAYS-IDLE level meter should prefer,
  * derived from the operator's audio-source pick — or `null` for "let the engine
  * choose", which is the pre-0.9.0 behaviour.
  *
- * `null` covers every selection that names no single real card: "Auto" (the
- * explicit hand-back), both pipeline pseudo-sources, and a selection that
- * resolves to nothing. Deliberately independent of `resolveAudioMode`: this is
- * the IDLE meter, so it has no notion of network-embedded program audio and must
- * keep following the card the picker is showing.
+ * `null` covers every selection that names no single real card: both pipeline
+ * pseudo-sources, an unset pick, an "Auto" that resolves to no single card (the
+ * embedded / pipeline-default / ambiguous / no-same-device outcomes, each of which
+ * the UI turns into its own prompt), and a selection that resolves to nothing.
+ * Deliberately independent of `resolveAudioMode`: this is the IDLE meter, so it
+ * has no notion of network-embedded program audio and must keep following the card
+ * the picker is showing.
  */
 export function resolveMeterPreference(
 	asrc: string | undefined,
+	resolveAuto: () => AutoAsrcResolution = resolveAutoAsrcFromLiveState,
 ): string | null {
-	if (asrc === undefined || asrc === AUDIO_SOURCE_AUTO) return null;
-	if (isPseudoAudioSource(asrc)) return null;
-	const cardId = audioDevices[asrc] ?? getAudioSrcId(asrc);
+	const pick = resolveEffectiveAudioPick(asrc, resolveAuto);
+	if (pick === undefined) return null;
+	if (isPseudoAudioSource(pick)) return null;
+	const cardId = audioDevices[pick] ?? getAudioSrcId(pick);
 	if (cardId.trim() === "") return null;
 	return toAlsaCaptureDevice(cardId);
 }
@@ -166,14 +206,19 @@ export function hasCapturePcmNode(entries: readonly string[]): boolean {
  *
  * Deliberately keyed on the picker value, not the resolved ALSA string — a pick
  * that is not a device-map key resolves through the alias fallback to a card
- * CeraUI cannot vouch for, and must not claim presence.
+ * CeraUI cannot vouch for, and must not claim presence. For "Auto" that picker
+ * value is the RESOLVED key, not the sentinel: `audioDevices["Auto"]` is
+ * undefined, so asking about the sentinel reports every Auto pick absent and
+ * would relabel a genuine mismatch on a healthy card as `no_device`.
  */
 export function isMeterPreferenceDevicePresent(
 	asrc: string | undefined = getConfig().asrc,
+	resolveAuto: () => AutoAsrcResolution = resolveAutoAsrcFromLiveState,
 ): boolean {
-	if (asrc === undefined) return false;
-	if (resolveMeterPreference(asrc) === null) return false;
-	const cardId = audioDevices[asrc];
+	const pick = resolveEffectiveAudioPick(asrc, resolveAuto);
+	if (pick === undefined) return false;
+	if (resolveMeterPreference(pick) === null) return false;
+	const cardId = audioDevices[pick];
 	if (cardId === undefined) return false;
 	return audioCaptureCardIds.has(cardId);
 }
@@ -434,12 +479,17 @@ export async function broadcastAudioSources(): Promise<void> {
  * a spurious lost-device verdict and re-blink the meter through
  * `noteMeterSelection`. What genuinely goes stale is the engine JOIN — the
  * label/identity maps and what "Auto" resolves to — so only those are redone.
- * `syncAudioMeterPreference()` is likewise skipped: the meter preference resolves
- * from the sysfs card map, which this change cannot have touched.
+ *
+ * The meter preference IS one of those: "Auto" rule 5 joins the camera to its
+ * same-`physical_group_id` audio card out of this very engine list, so a changed
+ * list can move the resolved card without any sysfs change. Re-pushing costs
+ * nothing when it did not — the bridge dedupes on the (silenced, preference) pair,
+ * so an unchanged pick broadcasts no gap.
  */
 export async function reresolveAudioForEngineChange(): Promise<void> {
 	await broadcastAudioSources();
 	refreshResolvedAsrcPreview();
+	syncAudioMeterPreference();
 }
 
 // A card can disappear mid-scan (hotplug); an unreadable card simply reports no
