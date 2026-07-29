@@ -37,6 +37,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: () => "connected",
 	getIsConnected: () => true,
 	getCapabilities: () => undefined,
+	getConfigChange: () => undefined,
 	getNetif: () => ({}),
 	getRelays: () => undefined,
 	getManagedIngestAccounts: () => [],

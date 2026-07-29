@@ -23,6 +23,7 @@ import {
 	type StartFailurePhase,
 	type StartResult,
 	type StreamingConfigInput,
+	type StreamingSetConfigInput,
 	SWITCH_AUDIO_ERRORS,
 	type SwitchInputOutput,
 	setMockDeviceAttachedInputSchema,
@@ -33,6 +34,7 @@ import {
 	setSourceVisibilityOutputSchema,
 	streamHealthOutputSchema,
 	streamingConfigInputSchema,
+	streamingSetConfigInputSchema,
 	streamingSetConfigOutputSchema,
 	streamingStartOutputSchemaExtended,
 	streamingStopOutputSchema,
@@ -42,6 +44,7 @@ import {
 	switchInputOutputSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
+import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import {
 	getMockState,
@@ -65,6 +68,15 @@ import {
 	setPendingAudioFollowAsrc,
 } from "../../modules/streaming/auto-audio.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
+import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
+import {
+	abandonStagedConfigChange,
+	commitStagedConfigChange,
+} from "../../modules/streaming/config-change-persistence.ts";
+import {
+	type StagedConfigFields,
+	stageConfigChange,
+} from "../../modules/streaming/config-change-staging.ts";
 import { validatePersistedPipeline } from "../../modules/streaming/config-migration.ts";
 import {
 	DEVICE_MODE_UNSUPPORTED_ERROR,
@@ -95,6 +107,7 @@ import {
 } from "../../modules/streaming/sources.ts";
 import {
 	classifyStartFailure,
+	newAttemptId,
 	StreamStartFailure,
 	typedStartFailure,
 } from "../../modules/streaming/start-failure-taxonomy.ts";
@@ -480,10 +493,77 @@ export const getConfigProcedure = authedProcedure
  * updateConfig, minus the DNS resolution and pipeline requirements that only
  * apply when actually launching a stream.
  */
+const APPLY_NOW_FIELDS = [
+	"source",
+	"resolution",
+	"framerate",
+	"video_codec",
+] as const;
+
+/**
+ * Move the restart-requiring fields off `input` and into a staged marker,
+ * returning `undefined` when this save is an ordinary "apply on next start".
+ *
+ * It MUTATES `input` on purpose: deleting the fields is what makes the existing
+ * merge block below skip them, so there is exactly one place that decides
+ * whether a value is persisted now — no parallel write path to drift.
+ */
+function stageApplyNowFields(
+	input: StreamingSetConfigInput,
+	config: RuntimeConfig,
+	sourceRouting: Extract<ResolveSourceRoutingResult, { ok: true }> | undefined,
+): StagedConfigFields | undefined {
+	if (input.apply_now !== true) return undefined;
+	if (!APPLY_NOW_FIELDS.some((field) => input[field] !== undefined))
+		return undefined;
+	if (!getApplyNowGate().isStreamLive()) return undefined;
+
+	const candidate: StagedConfigFields = {
+		...(input.source === undefined ? {} : { source: input.source }),
+		...(input.resolution === undefined ? {} : { resolution: input.resolution }),
+		...(input.framerate === undefined ? {} : { framerate: input.framerate }),
+		...(input.video_codec === undefined
+			? {}
+			: { video_codec: input.video_codec }),
+		...(sourceRouting?.pipeline === undefined
+			? {}
+			: { pipeline: sourceRouting.pipeline }),
+		...(sourceRouting?.selected_video_input === undefined
+			? {}
+			: { selected_video_input: sourceRouting.selected_video_input }),
+	};
+	const previous: StagedConfigFields = {
+		...(config.source === undefined ? {} : { source: config.source }),
+		...(config.resolution === undefined
+			? {}
+			: { resolution: config.resolution }),
+		...(config.framerate === undefined ? {} : { framerate: config.framerate }),
+		...(config.video_codec === undefined
+			? {}
+			: { video_codec: config.video_codec }),
+		...(config.pipeline === undefined ? {} : { pipeline: config.pipeline }),
+		...(config.selected_video_input === undefined
+			? {}
+			: { selected_video_input: config.selected_video_input }),
+	};
+
+	stageConfigChange({
+		attemptId: newAttemptId(),
+		startedAt: Date.now(),
+		candidate,
+		previous,
+	});
+
+	for (const field of APPLY_NOW_FIELDS) delete input[field];
+	if (sourceRouting !== undefined) delete input.pipeline;
+
+	return candidate;
+}
+
 export const setConfigProcedure = authedProcedure
-	.input(streamingConfigInputSchema)
+	.input(streamingSetConfigInputSchema)
 	.output(streamingSetConfigOutputSchema)
-	.handler(({ input }) => {
+	.handler(async ({ input }) => {
 		const config = getConfig();
 
 		// Device-first source selection (T3). Resolve at the PROCEDURE, BEFORE any
@@ -569,6 +649,13 @@ export const setConfigProcedure = authedProcedure
 				};
 			}
 		}
+
+		// Apply-now splits the save in two: the restart-requiring fields are held
+		// back (staged, never written) so `config.json` keeps describing what the
+		// engine is ACTUALLY running until the transaction says `applied`. Every
+		// other field in the same save persists immediately, exactly as before.
+		const staged = stageApplyNowFields(input, config, sourceRouting);
+		if (staged !== undefined) sourceRouting = undefined;
 
 		if (input.srt_latency !== undefined)
 			config.srt_latency = Math.max(input.srt_latency, SRTLA_MIN_LATENCY_MS);
@@ -702,7 +789,51 @@ export const setConfigProcedure = authedProcedure
 		if (input.asrc !== undefined) {
 			syncAudioMeterPreference();
 		}
-		return { success: true, applied };
+
+		if (staged === undefined) return { success: true, applied };
+
+		const outcome = await getApplyNowGate().dispatch({
+			...(staged.resolution === undefined
+				? {}
+				: { resolution: staged.resolution }),
+			...(staged.framerate === undefined
+				? {}
+				: { framerate: staged.framerate }),
+			...(staged.video_codec === undefined
+				? {}
+				: { video_codec: staged.video_codec }),
+			...(staged.selected_video_input === undefined
+				? {}
+				: { input_id: staged.selected_video_input }),
+			...(staged.pipeline === undefined ? {} : { pipeline: staged.pipeline }),
+		});
+
+		if (outcome.result !== "applied") {
+			// reverted / rollback_failed / busy / rejected all leave the persisted
+			// values alone — they are still the ones the engine last ran.
+			abandonStagedConfigChange();
+			return {
+				success: outcome.result === "reverted",
+				applied,
+				configChange: outcome,
+			};
+		}
+
+		commitStagedConfigChange();
+		const persisted = getConfig();
+		broadcastMsg("config", persisted);
+		// Post-clamp echo for the staged half, same rule as the merge above.
+		if (staged.resolution !== undefined)
+			applied.resolution = persisted.resolution;
+		if (staged.framerate !== undefined) applied.framerate = persisted.framerate;
+		if (staged.video_codec !== undefined)
+			applied.video_codec = persisted.video_codec;
+		if (staged.source !== undefined) {
+			applied.source = persisted.source;
+			applied.pipeline = persisted.pipeline;
+			applied.selected_video_input = persisted.selected_video_input;
+		}
+		return { success: true, applied, configChange: outcome };
 	});
 
 /**

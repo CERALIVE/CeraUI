@@ -788,6 +788,27 @@ const es = {
 		},
 		encoder: {
 			appliesNextStart: "Se aplica al próximo inicio",
+			applyChoice: {
+				title: "¿Aplicar ahora o en el próximo inicio?",
+				description:
+					"Los cambios de resolución, frecuencia de fotogramas y fuente requieren reiniciar la transmisión. El reinicio es breve, pero tus espectadores lo notarán.",
+				now: "Aplicar ahora (reinicia brevemente la transmisión)",
+				nextStart: "Aplicar en el próximo inicio",
+			},
+			applyPhase: {
+				applying: "Aplicando \u2014 reiniciando la transmisión\u2026",
+				applied: "La nueva configuración está activa",
+				reverted:
+					"No se pudo aplicar \u2014 tu configuración anterior sigue activa",
+				rollbackFailed: "No se pudo aplicar y la transmisión se detuvo",
+				reasonTeardownTimeout: "La cámara no se liberó a tiempo.",
+				reasonDeadlineExceeded: "El cambio tardó más de lo esperado.",
+				reasonEngineLost:
+					"El motor de transmisión del dispositivo dejó de responder.",
+				reasonRejected: "El dispositivo no pudo usar esos ajustes.",
+				reasonUnknown:
+					"Consulta Ajustes \u2192 Registros del sistema para más detalles.",
+			},
 			accelerated: "Hardware",
 			software: "Software",
 			bitrateRangeHint: "Rango admitido",

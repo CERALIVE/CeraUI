@@ -150,9 +150,17 @@ describe('StopResult wire union — stopping → stopped | stop_failed', () => {
 });
 
 describe('lifecycle state set + legal transitions', () => {
-	test('the state set is exactly the six documented states', () => {
+	test('the state set is exactly the seven documented states', () => {
 		expect([...LIFECYCLE_STATES].sort()).toEqual(
-			['idle', 'reconciling', 'starting', 'stop_failed', 'stopping', 'streaming'].sort(),
+			[
+				'idle',
+				'reconciling',
+				'reconfiguring',
+				'starting',
+				'stop_failed',
+				'stopping',
+				'streaming',
+			].sort(),
 		);
 	});
 
@@ -187,6 +195,23 @@ describe('lifecycle state set + legal transitions', () => {
 
 	test('an illegal jump is rejected (idle→streaming skips starting)', () => {
 		expect(isLegalLifecycleTransition('idle', 'streaming')).toBe(false);
+	});
+
+	test('reconfiguring is entered only from a live stream', () => {
+		expect(isLegalLifecycleTransition('streaming', 'reconfiguring')).toBe(true);
+		expect(isLegalLifecycleTransition('idle', 'reconfiguring')).toBe(false);
+		expect(isLegalLifecycleTransition('starting', 'reconfiguring')).toBe(false);
+		expect(isLegalLifecycleTransition('stopping', 'reconfiguring')).toBe(false);
+	});
+
+	test('every config-change outcome leaves reconfiguring (never a stuck applying state)', () => {
+		expect(isLegalLifecycleTransition('reconfiguring', 'streaming')).toBe(true);
+		expect(isLegalLifecycleTransition('reconfiguring', 'idle')).toBe(true);
+		expect(isLegalLifecycleTransition('reconfiguring', 'reconciling')).toBe(true);
+	});
+
+	test('a stop during reconfiguring is queued, never a direct transition', () => {
+		expect(isLegalLifecycleTransition('reconfiguring', 'stopping')).toBe(false);
 	});
 
 	test('a self-loop is not a transition', () => {

@@ -54,6 +54,10 @@ export interface EncoderConfig {
 	// Same-codec passthrough policy (auto/force/off). Optional so a seed without
 	// it stays valid; the dialog defaults it to `auto` on open.
 	passthrough?: VideoPassthrough;
+	// The operator's EXPLICIT apply-now choice for a restart-requiring edit made
+	// mid-stream. Absent/false is the unchanged "apply on next start" default —
+	// a mid-broadcast restart is never implied by the save alone.
+	applyNow?: boolean;
 }
 </script>
 
@@ -100,7 +104,7 @@ import {
 	getPipelines,
 	getSources,
 } from '$lib/rpc/subscriptions.svelte';
-import { appliesOnNextStart } from '$lib/streaming/appliesNextStart';
+import { appliesOnNextStart, restartChoiceRequired } from '$lib/streaming/appliesNextStart';
 import {
 	captureModeCodecs,
 	resolvePassthroughMode,
@@ -355,6 +359,19 @@ const framerateAppliesNextStart = $derived(
 	appliesOnNextStart('framerate', isStreaming, localFramerate !== seededFramerate),
 );
 
+// A restart-requiring edit while live is the ONLY case that gets a choice. The
+// default stays 'nextStart' so a save can never surprise a live broadcast.
+const choiceRequired = $derived(
+	restartChoiceRequired(isStreaming, [
+		...(localResolution !== seededResolution ? ['resolution'] : []),
+		...(localFramerate !== seededFramerate ? ['framerate'] : []),
+	]),
+);
+let applyMode = $state<'nextStart' | 'now'>('nextStart');
+$effect(() => {
+	if (!choiceRequired) applyMode = 'nextStart';
+});
+
 // Capability-gated axes: platform ∩ active source ∩ that source's Tier-2 device
 // modes (source-keyed — T16). The StreamSource carries its own `modes`, so a
 // selected/kind-matched capture device narrows Resolution/Framerate; a coarse /
@@ -452,6 +469,7 @@ function handleSave() {
 		bitrateOverlay: localOverlay,
 		codec: localCodec,
 		passthrough: localPassthrough,
+		applyNow: choiceRequired && applyMode === 'now',
 	};
 	config = next;
 
@@ -900,6 +918,45 @@ function handleSave() {
 			<p class="text-destructive text-sm" data-testid="encoder-save-blocked" role="alert">
 				{axisSaveError}
 			</p>
+		{/if}
+
+		<!-- Explicit apply-timing choice. Only rendered for a restart-requiring
+		     edit made mid-stream, and pre-selected to the existing next-start
+		     behaviour so Save can never restart a live broadcast by surprise. -->
+		{#if choiceRequired}
+			<fieldset
+				class="space-y-2 rounded-lg border p-3"
+				data-testid="encoder-apply-choice"
+			>
+				<legend class="px-1 text-sm font-medium">
+					{$LL.live.encoder.applyChoice.title()}
+				</legend>
+				<p class="text-muted-foreground text-xs">
+					{$LL.live.encoder.applyChoice.description()}
+				</p>
+				<label class="flex cursor-pointer items-start gap-2 text-sm">
+					<input
+						bind:group={applyMode}
+						class="mt-0.5"
+						data-testid="encoder-apply-next-start"
+						name="encoder-apply-mode"
+						type="radio"
+						value="nextStart"
+					/>
+					<span>{$LL.live.encoder.applyChoice.nextStart()}</span>
+				</label>
+				<label class="flex cursor-pointer items-start gap-2 text-sm">
+					<input
+						bind:group={applyMode}
+						class="mt-0.5"
+						data-testid="encoder-apply-now"
+						name="encoder-apply-mode"
+						type="radio"
+						value="now"
+					/>
+					<span>{$LL.live.encoder.applyChoice.now()}</span>
+				</label>
+			</fieldset>
 		{/if}
 	</div>
 </AppDialog>

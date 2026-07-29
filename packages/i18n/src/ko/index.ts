@@ -1383,6 +1383,24 @@ const ko = {
 		},
 		encoder: {
 			appliesNextStart: "다음 시작 시 적용",
+			applyChoice: {
+				title: "지금 적용할까요, 다음 시작 시 적용할까요?",
+				description:
+					"해상도, 프레임 속도, 소스를 변경하려면 스트림을 다시 시작해야 합니다. 잠깐이지만 시청자에게도 보입니다.",
+				now: "지금 적용 (스트림이 잠시 다시 시작됩니다)",
+				nextStart: "다음 시작 시 적용",
+			},
+			applyPhase: {
+				applying: "적용 중 \u2014 스트림을 다시 시작하는 중\u2026",
+				applied: "새 설정이 적용되었습니다",
+				reverted: "적용하지 못했습니다 \u2014 이전 설정이 계속 실행 중입니다",
+				rollbackFailed: "적용하지 못했고 스트림이 중지되었습니다",
+				reasonTeardownTimeout: "카메라가 제때 해제되지 않았습니다.",
+				reasonDeadlineExceeded: "변경에 예상보다 오래 걸렸습니다.",
+				reasonEngineLost: "장치의 스트리밍 엔진이 응답하지 않습니다.",
+				reasonRejected: "장치가 해당 설정을 사용할 수 없습니다.",
+				reasonUnknown: "자세한 내용은 설정 \u2192 시스템 로그를 확인하세요.",
+			},
 			accelerated: "하드웨어",
 			software: "소프트웨어",
 			bitrateRangeHint: "지원 범위",

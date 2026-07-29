@@ -11,7 +11,7 @@ import {
 	SWITCH_AUDIO_ERRORS,
 	SWITCH_INPUT_ERRORS,
 } from '@ceraui/rpc/schemas';
-import { Cpu, Server } from '@lucide/svelte';
+import { Cpu, Loader2, Server } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
@@ -63,6 +63,7 @@ import { navElements } from '$lib/config';
 import {
 	getActiveInput,
 	getCapabilities,
+	getConfigChange,
 	getConfig,
 	getConnectionState,
 	getIsConnected,
@@ -93,6 +94,8 @@ import { deriveBitrateReading } from '$lib/stores/hud/derive';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
+import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
+import { configChangeReport } from '$lib/streaming/configChangeCopy';
 import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
@@ -142,6 +145,8 @@ const stopStuckBanner = $derived(getStopStuckBannerVisible());
 const optimisticIsStreaming = $derived(
 	isStreaming || streamingOptimismState === 'starting',
 );
+
+const configChangeApplying = $derived(isConfigChangeInFlight(getConfigChange()));
 
 // Reconcile optimism to authoritative is_streaming broadcast.
 $effect(() => {
@@ -530,14 +535,24 @@ async function handleEncoderSave(saved: EncoderConfig) {
 	// server echo of the old value can't revert the optimistic edit; release
 	// after the RPC settles (resolve or reject) to avoid a permanent lock.
 	const input = buildEncoderSetConfig(saved, effectivePipelineData);
-	const fields = Object.entries(input);
+	// `apply_now` is a directive, not a config field — locking it would leave a
+	// pending field the server never echoes back.
+	const fields = Object.entries(input).filter(([field]) => field !== 'apply_now');
 	for (const [field, value] of fields) markPending(field, value);
 	try {
 		// A refusal RESOLVES with `{success:false}` — it does not throw. Reporting
 		// success without reading that flag is how a device-rejected combo used to
 		// toast "Saved" over a config the device never accepted.
 		const result = await rpc.streaming.setConfig(input);
-		if (result.success) toast.success($LL.notifications.saved());
+		// An apply-now save reports the TRANSACTION outcome, not just the save:
+		// a `reverted` change is an accepted save whose stream never changed, so
+		// "Saved" alone would be a lie.
+		if (result.configChange !== undefined) {
+			const report = configChangeReport(result.configChange, $LL);
+			if (report.level === 'success') toast.success(report.message);
+			else if (report.level === 'warning') toast.warning(report.message);
+			else toast.error(report.message);
+		} else if (result.success) toast.success($LL.notifications.saved());
 		else toast.error(encoderSaveErrorMessage(result.error, $LL));
 	} catch {
 		toast.error($LL.notifications.saveFailed());
@@ -915,6 +930,21 @@ const configRows = $derived<ConfigRow[]>([
 	<!-- Capability-tier state: calm banner when the engine is offline/starting or
 	     reports a schema mismatch. Renders nothing in the normal tier. -->
 	<CapabilityTierBanner caps={getCapabilities()} />
+
+	<!-- Apply-now progress. Driven by the attempt-id-fenced `config-change` push,
+	     so a phase from a superseded transaction can never strand this banner on
+	     screen; every terminal phase clears it. -->
+	{#if configChangeApplying}
+		<div
+			role="status"
+			aria-live="polite"
+			data-testid="config-change-applying"
+			class="flex items-center gap-3 rounded-lg border border-status-info/40 bg-status-info/10 px-4 py-3 text-sm text-status-info"
+		>
+			<Loader2 class="size-4 shrink-0 animate-spin" />
+			<span>{$LL.live.encoder.applyPhase.applying()}</span>
+		</div>
+	{/if}
 
 	{#if stopStuckBanner}
 		<!-- Truthful bounded stop-stuck banner (T0): the stopping watchdog pulled +

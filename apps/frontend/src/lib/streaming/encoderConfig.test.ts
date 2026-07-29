@@ -240,3 +240,46 @@ describe("getOverrideGate — capability gating (Task 28)", () => {
 		expect("framerate" in out).toBe(false);
 	});
 });
+
+describe("apply-now directive (wave-3 todo 12)", () => {
+	it("omits apply_now by default — an ordinary save never restarts the stream", () => {
+		const input = buildEncoderSetConfig(
+			{
+				resolution: "1080p",
+				framerate: 30,
+				bitrate: 5000,
+				bitrateOverlay: false,
+			},
+			bothOverrides,
+		);
+		expect(input.apply_now).toBeUndefined();
+	});
+
+	it("omits apply_now when the operator explicitly chose next-start", () => {
+		const input = buildEncoderSetConfig(
+			{
+				resolution: "1080p",
+				framerate: 30,
+				bitrate: 5000,
+				bitrateOverlay: false,
+				applyNow: false,
+			},
+			bothOverrides,
+		);
+		expect(input.apply_now).toBeUndefined();
+	});
+
+	it("forwards apply_now ONLY on the explicit apply-now choice", () => {
+		const input = buildEncoderSetConfig(
+			{
+				resolution: "2160p",
+				framerate: 30,
+				bitrate: 5000,
+				bitrateOverlay: false,
+				applyNow: true,
+			},
+			bothOverrides,
+		);
+		expect(input.apply_now).toBe(true);
+	});
+});

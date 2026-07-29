@@ -1571,6 +1571,27 @@ const fr = {
 		},
 		encoder: {
 			appliesNextStart: "Appliqué au prochain démarrage",
+			applyChoice: {
+				title: "Appliquer maintenant ou au prochain démarrage ?",
+				description:
+					"Les changements de résolution, de fréquence d'images et de source nécessitent un redémarrage du flux. Le redémarrage est bref, mais vos spectateurs le verront.",
+				now: "Appliquer maintenant (redémarre brièvement le flux)",
+				nextStart: "Appliquer au prochain démarrage",
+			},
+			applyPhase: {
+				applying: "Application \u2014 redémarrage du flux\u2026",
+				applied: "Les nouveaux réglages sont actifs",
+				reverted:
+					"Impossible d'appliquer \u2014 vos réglages précédents sont toujours actifs",
+				rollbackFailed: "Impossible d'appliquer, et le flux s'est arrêté",
+				reasonTeardownTimeout: "La caméra n'a pas été libérée à temps.",
+				reasonDeadlineExceeded: "Le changement a pris plus de temps que prévu.",
+				reasonEngineLost:
+					"Le moteur de diffusion de l'appareil ne répond plus.",
+				reasonRejected: "L'appareil n'a pas pu utiliser ces réglages.",
+				reasonUnknown:
+					"Consultez Paramètres \u2192 Journaux système pour plus de détails.",
+			},
 			accelerated: "Matériel",
 			software: "Logiciel",
 			bitrateRangeHint: "Plage prise en charge",
