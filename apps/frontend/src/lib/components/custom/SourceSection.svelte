@@ -958,13 +958,48 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			<!-- Resolved-audio preview (T6): while Auto is the active selection and the
 			     source is NOT embedded, show what Auto resolved to ("Auto → device"),
 			     or an em-dash when genuinely unresolved (old backend). -->
-			{#if audioIsAuto && !showEmbedded}
+			{#if audioIsAuto && !showEmbedded && resolvedAudio.sameDeviceState === undefined}
 				<p
 					class="text-muted-foreground font-mono text-xs"
 					data-testid="audio-source-auto-resolved"
 				>
 					{resolvedAudio.current ?? '\u2014'}
 				</p>
+			{/if}
+
+			<!-- Auto found several, or no, audio devices on the camera's OWN physical
+			     device. It deliberately does not guess across devices, so the operator
+			     is told which state they are in and asked to pick. -->
+			{#if audioIsAuto && !showEmbedded && resolvedAudio.sameDeviceState !== undefined}
+				<div
+					class="border-status-warning/60 bg-status-warning/10 space-y-1 rounded-lg border px-3 py-2"
+					data-testid={resolvedAudio.sameDeviceState === 'ambiguous'
+						? 'audio-same-device-ambiguous'
+						: 'audio-no-same-device'}
+					role="status"
+				>
+					<p class="text-sm font-medium">
+						{resolvedAudio.sameDeviceState === 'ambiguous'
+							? $LL.live.source.audioAmbiguousTitle()
+							: $LL.live.source.audioNoSameDeviceTitle()}
+					</p>
+					<p class="text-muted-foreground text-xs">
+						{resolvedAudio.sameDeviceState === 'ambiguous'
+							? $LL.live.source.audioAmbiguousBody()
+							: $LL.live.source.audioNoSameDeviceBody()}
+					</p>
+					{#if resolvedAudio.sameDeviceCandidates.length > 0}
+						<ul class="flex flex-wrap gap-1.5" data-testid="audio-same-device-candidates">
+							{#each resolvedAudio.sameDeviceCandidates as candidate (candidate)}
+								<li
+									class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-xs"
+								>
+									{candidate}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
 			{/if}
 			{#if resolvedAudio.pending !== undefined}
 				<p class="text-status-info text-xs" data-testid="audio-follow-pending">

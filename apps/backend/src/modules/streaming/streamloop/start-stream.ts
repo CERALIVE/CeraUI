@@ -110,7 +110,11 @@ export async function maybeProbeAudioSource(
 function resolveLaunchConfig(config: RuntimeConfig): RuntimeConfig {
 	if (config.asrc !== AUDIO_SOURCE_AUTO) return config;
 	const resolution = resolveAutoAsrcFromLiveState();
-	setResolvedAsrcFromStart(resolution.asrcKey, resolution.reason);
+	setResolvedAsrcFromStart(
+		resolution.asrcKey,
+		resolution.reason,
+		resolution.candidates,
+	);
 	return buildAutoLaunchConfig(config, resolution);
 }
 

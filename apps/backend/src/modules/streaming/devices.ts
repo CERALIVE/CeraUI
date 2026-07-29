@@ -173,6 +173,9 @@ export interface EngineCaptureDevice {
 	// verbatim so sources reconciliation can migrate a re-enumerated device by
 	// stable identity rather than node path (Todo 34).
 	stable_id?: string | undefined;
+	// `usb:<topology-token>` shared by every row of ONE physical device
+	// (cerastream ADR-0008) — the join key the "Auto" audio resolver matches on.
+	physical_group_id?: string | undefined;
 }
 
 /** Map one engine device onto a CeraUI {@link CaptureDevice}: ids are carried
@@ -196,6 +199,9 @@ export function fromEngineDevice(device: EngineCaptureDevice): CaptureDevice {
 		kind: mapEngineDeviceKind(device.kind, device.display_name),
 		...(device.caps !== undefined ? { caps: device.caps } : {}),
 		...(device.stable_id !== undefined ? { stable_id: device.stable_id } : {}),
+		...(device.physical_group_id !== undefined
+			? { physical_group_id: device.physical_group_id }
+			: {}),
 		signal: engineSignal(device),
 	};
 }

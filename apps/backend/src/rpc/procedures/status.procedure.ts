@@ -25,6 +25,7 @@ import {
 import {
 	getPendingAudioFollowAsrc,
 	getResolvedAsrc,
+	getResolvedAsrcCandidates,
 	getResolvedAsrcReason,
 } from "../../modules/streaming/auto-audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
@@ -81,6 +82,7 @@ export const getStatusProcedure = authedProcedure
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
 			resolved_asrc_reason: getResolvedAsrcReason(),
+			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
@@ -124,6 +126,7 @@ export function buildInitialStatus() {
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
 			resolved_asrc_reason: getResolvedAsrcReason(),
+			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),

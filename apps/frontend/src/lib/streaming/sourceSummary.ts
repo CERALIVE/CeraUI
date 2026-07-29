@@ -244,8 +244,18 @@ export function withAutoAudioEntry(
 export interface ResolvedAudioStatus {
 	resolved_asrc?: string | null;
 	resolved_asrc_reason?: ResolvedAsrcReason | null;
+	resolved_asrc_candidates?: string[] | null;
 	pending_audio_follow_asrc?: string | null;
 }
+
+/**
+ * The two typed NON-resolutions Auto can report for a USB/UVC camera: several
+ * audio devices on the camera's own physical device, or none at all. Both REQUIRE
+ * a manual pick — the device deliberately refuses to guess across physical
+ * devices (cerastream ADR-0008 §6), so the UI must say so rather than render a
+ * silent em-dash that reads as "still resolving".
+ */
+export type SameDeviceAudioState = "ambiguous" | "none";
 
 /** The single resolved-audio display model every consuming surface renders from. */
 export interface ResolvedAudioDisplay {
@@ -260,6 +270,14 @@ export interface ResolvedAudioDisplay {
 	pending: string | undefined;
 	/** `true` when the resolution reason is `embedded` (network-ingest muxed audio). */
 	embedded: boolean;
+	/**
+	 * The typed same-device non-resolution, when Auto reported one. `undefined`
+	 * whenever Auto is not the active selection (the same stale-value gate that
+	 * governs `current`), so a leftover broadcast can never band a manual pick.
+	 */
+	sameDeviceState: SameDeviceAudioState | undefined;
+	/** Labels of the same-device candidates behind an `ambiguous` state. */
+	sameDeviceCandidates: string[];
 }
 
 /**
@@ -299,14 +317,38 @@ export function resolvedAudioLabel(
 	const pending = pendingId ? labelFor(pendingId) : undefined;
 
 	if (config?.asrc !== AUDIO_SOURCE_AUTO) {
-		return { current: undefined, pending, embedded };
+		return {
+			current: undefined,
+			pending,
+			embedded,
+			sameDeviceState: undefined,
+			sameDeviceCandidates: [],
+		};
 	}
+
+	const reason = status?.resolved_asrc_reason;
+	const sameDeviceState: SameDeviceAudioState | undefined =
+		reason === "ambiguous-same-device-audio"
+			? "ambiguous"
+			: reason === "no-same-device-audio"
+				? "none"
+				: undefined;
+	const sameDeviceCandidates =
+		sameDeviceState === "ambiguous"
+			? (status?.resolved_asrc_candidates ?? []).map(labelFor)
+			: [];
 
 	const resolved = status?.resolved_asrc;
 	const current = resolved
 		? `${t("live.summary.autoPrefix")} ${t("live.summary.autoResolvedSep")} ${labelFor(resolved)}`
 		: undefined;
-	return { current, pending, embedded };
+	return {
+		current,
+		pending,
+		embedded,
+		sameDeviceState,
+		sameDeviceCandidates,
+	};
 }
 
 /** Compact, structured capability summary for the ACTIVE source (Todo 11). */

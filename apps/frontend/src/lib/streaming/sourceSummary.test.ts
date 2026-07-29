@@ -958,6 +958,8 @@ describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () =
 			current: undefined,
 			pending: undefined,
 			embedded: false,
+			sameDeviceState: undefined,
+			sameDeviceCandidates: [],
 		});
 	});
 

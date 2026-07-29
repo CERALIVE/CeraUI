@@ -87,7 +87,7 @@ export function audioCodecAllowedForTransport(codec: AudioCodec, protocol: Relay
 // back-compat. Additive + optional everywhere it is carried.
 // Sentinel `asrc` wire value selecting the "Auto" audio source — the T5 resolver
 // picks the concrete device at start/idle-preview (embedded → HDMI → Cam Link →
-// USB → first-device → pipeline-default). Additive: the constant is the EXACT wire
+// USB same-physical-device → pipeline-default). Additive: the constant is the EXACT wire
 // string, so `config.asrc === AUDIO_SOURCE_AUTO` opts into auto resolution.
 export const AUDIO_SOURCE_AUTO = 'Auto';
 
@@ -952,6 +952,11 @@ export const captureDeviceSchema = z.object({
 	// changed, video1→video2) on this, not `input_id`, so a rename migrates the
 	// row instead of orphaning a stale `lost:true` one (Todo 34).
 	stable_id: z.string().optional(),
+	// `usb:<topology-token>` shared by every row of ONE physical device
+	// (cerastream ADR-0008). Additive + optional: absent on non-USB devices and
+	// legacy producers, and an ABSENT group never matches — not even another
+	// absent one (ADR-0008 §6).
+	physical_group_id: z.string().optional(),
 	lost: z.boolean().optional(),
 	// Set ONLY by `fromEngineDevice` — the seam that knows the engine answered
 	// for this device. Absent everywhere else, which reads as `unknown`.

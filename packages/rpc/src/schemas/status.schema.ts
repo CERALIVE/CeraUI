@@ -36,13 +36,18 @@ export const availableUpdatesFieldSchema = z.union([
 // an "Auto" audio selection. Without it, `resolved_asrc: null` conflates "embedded
 // audio" with "genuinely unresolved / old backend", so the UI can't render the
 // embedded state truthfully. The exact literals are a T4/T5/T6/T7 contract.
+// `ambiguous-same-device-audio` and `no-same-device-audio` are the two typed
+// NON-resolutions: Auto found either several or no audio devices on the camera's
+// own physical device, and CeraLive refuses to guess across devices (ADR-0008 §6).
+// They REPLACE the retired `usb-alias` / `first-device` fallbacks, both of which
+// could only ever name a DIFFERENT physical device's microphone.
 export const resolvedAsrcReasonSchema = z.enum([
 	'embedded',
 	'hdmi',
 	'camlink',
 	'usb-same-device',
-	'usb-alias',
-	'first-device',
+	'ambiguous-same-device-audio',
+	'no-same-device-audio',
 	'pipeline-default',
 ]);
 export type ResolvedAsrcReason = z.infer<typeof resolvedAsrcReasonSchema>;
@@ -67,6 +72,10 @@ export const statusMessageSchema = z.object({
 	// nullable + optional — null/absent = no Auto resolution / old backend.
 	resolved_asrc: z.string().nullable().optional(),
 	resolved_asrc_reason: resolvedAsrcReasonSchema.nullable().optional(),
+	// The same-physical-device audio candidates behind an
+	// `ambiguous-same-device-audio` reason — the exact list the UI must offer for
+	// manual selection. Null/absent for every other reason.
+	resolved_asrc_candidates: z.array(z.string()).nullable().optional(),
 	pending_audio_follow_asrc: z.string().nullable().optional(),
 	modems: modemListSchema,
 });
@@ -227,6 +236,7 @@ export const statusResponseSchema = z.object({
 	// contract as on statusMessageSchema above.
 	resolved_asrc: z.string().nullable().optional(),
 	resolved_asrc_reason: resolvedAsrcReasonSchema.nullable().optional(),
+	resolved_asrc_candidates: z.array(z.string()).nullable().optional(),
 	pending_audio_follow_asrc: z.string().nullable().optional(),
 	set_password: z.boolean().optional(),
 	remote: remoteStatusSchema.optional(),

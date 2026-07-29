@@ -1348,6 +1348,49 @@ describe("SourceSection — Auto resolved preview (T6)", () => {
 		).toBeNull();
 	});
 
+	it("renders the AMBIGUOUS same-device band with its candidates, and no auto-pick line", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio", "HDMI"],
+			audioStatus: {
+				resolved_asrc: null,
+				resolved_asrc_reason: "ambiguous-same-device-audio",
+				resolved_asrc_candidates: ["USB audio", "HDMI"],
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="audio-same-device-ambiguous"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelectorAll(
+				'[data-testid="audio-same-device-candidates"] li',
+			),
+		).toHaveLength(2);
+		expect(
+			container.querySelector('[data-testid="audio-source-auto-resolved"]'),
+		).toBeNull();
+	});
+
+	it("renders the NO-SAME-DEVICE band instead of a silent em-dash", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["USB audio"],
+			audioStatus: {
+				resolved_asrc: null,
+				resolved_asrc_reason: "no-same-device-audio",
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="audio-no-same-device"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-auto-resolved"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-same-device-candidates"]'),
+		).toBeNull();
+	});
+
 	it("STALE-VALUE GATE: an explicit pick shows NO Auto-resolved line despite a stale resolved_asrc", () => {
 		const { container } = mount({
 			config: { asrc: "USB audio" },

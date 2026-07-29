@@ -34,6 +34,7 @@ import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
 import {
 	getPendingAudioFollowAsrc,
 	getResolvedAsrc,
+	getResolvedAsrcCandidates,
 	getResolvedAsrcReason,
 } from "../streaming/auto-audio.ts";
 import { getEngineBitrateStatus } from "../streaming/engine-bitrate-status.ts";
@@ -71,6 +72,7 @@ export type StatusResponseMessage = {
 	audio_sources?: AudioSource[];
 	resolved_asrc?: string | null;
 	resolved_asrc_reason?: ResolvedAsrcReason | null;
+	resolved_asrc_candidates?: string[] | null;
 	pending_audio_follow_asrc?: string | null;
 	set_password?: boolean;
 	remote?: true | { error: string };
@@ -98,6 +100,7 @@ export function sendStatus(conn: WebSocket) {
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
 			resolved_asrc_reason: getResolvedAsrcReason(),
+			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			linkTelemetry: buildLinkTelemetry(),
 			network_ingest: getNetworkIngestInfo(),

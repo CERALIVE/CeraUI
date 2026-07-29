@@ -126,6 +126,7 @@ async function seedUsbCaptureSource(): Promise<void> {
 						display_name: "USB Streamer",
 						media_class: "video",
 						kind: "uvc_h264",
+						physical_group_id: "usb:10-1",
 					},
 					{
 						input_id: "usb-audio-1",
@@ -134,6 +135,7 @@ async function seedUsbCaptureSource(): Promise<void> {
 						media_class: "audio",
 						kind: "audio",
 						alsa_card_id: "Micro",
+						physical_group_id: "usb:10-1",
 					},
 				],
 			}) as unknown as ListDevicesResult,
@@ -159,7 +161,7 @@ describe("applySwitchInputFollow — durable switch + deferred auto-audio follow
 		clearCapabilitiesCache();
 		resetEngineDeviceCache();
 		await seedUsbCaptureSource();
-		setMockAudioDevicesProvider(() => ({ "USB audio": "usbaudio" }));
+		setMockAudioDevicesProvider(() => ({ "USB audio": "Micro" }));
 		broadcasts = [];
 		setAutoAudioBroadcaster((u) =>
 			broadcasts.push(u as Record<string, unknown>),
@@ -230,7 +232,7 @@ describe("applySwitchInputFollow — durable switch + deferred auto-audio follow
 
 		expect(launch.asrc).toBe("USB audio");
 		expect(getResolvedAsrc()).toBe("USB audio");
-		expect(getResolvedAsrcReason()).toBe("usb-alias");
+		expect(getResolvedAsrcReason()).toBe("usb-same-device");
 		expect(getPendingAudioFollowAsrc()).toBeNull();
 		// The persisted config keeps the "Auto" sentinel by construction.
 		expect(getConfig().asrc).toBe(AUDIO_SOURCE_AUTO);
@@ -256,7 +258,7 @@ describe("applySwitchInputFollow — durable switch + deferred auto-audio follow
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 		getConfig().source = "hdmi";
 		// The running stream is ALREADY on USB audio.
-		setResolvedAsrcFromStart("USB audio", "usb-alias");
+		setResolvedAsrcFromStart("USB audio", "usb-same-device");
 		broadcasts = [];
 
 		const out = applySwitchInputFollow("usb-cam-1", switchOk("usb-cam-1"));
