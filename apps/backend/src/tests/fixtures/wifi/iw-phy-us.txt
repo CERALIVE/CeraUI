@@ -1,0 +1,86 @@
+Wiphy phy0
+	wiphy index: 0
+	max # scan SSIDs: 4
+	max scan IEs length: 2257 bytes
+	Supported interface modes:
+		 * IBSS
+		 * managed
+		 * AP
+		 * AP/VLAN
+		 * monitor
+	Band 1:
+		Capabilities: 0x1062
+			HT20/HT40
+		Frequencies:
+			* 2412.0 MHz [1] (30.0 dBm)
+			* 2417.0 MHz [2] (30.0 dBm)
+			* 2422.0 MHz [3] (30.0 dBm)
+			* 2427.0 MHz [4] (30.0 dBm)
+			* 2432.0 MHz [5] (30.0 dBm)
+			* 2437.0 MHz [6] (30.0 dBm)
+			* 2442.0 MHz [7] (30.0 dBm)
+			* 2447.0 MHz [8] (30.0 dBm)
+			* 2452.0 MHz [9] (30.0 dBm)
+			* 2457.0 MHz [10] (30.0 dBm)
+			* 2462.0 MHz [11] (30.0 dBm)
+			* 2467.0 MHz [12] (30.0 dBm) (no IR)
+			* 2472.0 MHz [13] (30.0 dBm) (no IR)
+			* 2484.0 MHz [14] (disabled)
+	Band 2:
+		Capabilities: 0x1062
+			HT20/HT40
+		Frequencies:
+			* 5180.0 MHz [36] (23.0 dBm)
+			* 5200.0 MHz [40] (23.0 dBm)
+			* 5220.0 MHz [44] (23.0 dBm)
+			* 5240.0 MHz [48] (23.0 dBm)
+			* 5260.0 MHz [52] (23.0 dBm) (radar detection)
+			* 5280.0 MHz [56] (23.0 dBm) (radar detection)
+			* 5300.0 MHz [60] (23.0 dBm) (radar detection)
+			* 5320.0 MHz [64] (23.0 dBm) (radar detection)
+			* 5500.0 MHz [100] (23.0 dBm) (radar detection)
+			* 5520.0 MHz [104] (23.0 dBm) (radar detection)
+			* 5540.0 MHz [108] (23.0 dBm) (radar detection)
+			* 5560.0 MHz [112] (23.0 dBm) (radar detection)
+			* 5580.0 MHz [116] (23.0 dBm) (radar detection)
+			* 5600.0 MHz [120] (23.0 dBm) (radar detection)
+			* 5620.0 MHz [124] (23.0 dBm) (radar detection)
+			* 5640.0 MHz [128] (23.0 dBm) (radar detection)
+			* 5660.0 MHz [132] (23.0 dBm) (radar detection)
+			* 5680.0 MHz [136] (23.0 dBm) (radar detection)
+			* 5700.0 MHz [140] (23.0 dBm) (radar detection)
+			* 5720.0 MHz [144] (23.0 dBm) (radar detection)
+			* 5745.0 MHz [149] (30.0 dBm)
+			* 5765.0 MHz [153] (30.0 dBm)
+			* 5785.0 MHz [157] (30.0 dBm)
+			* 5805.0 MHz [161] (30.0 dBm)
+			* 5825.0 MHz [165] (30.0 dBm)
+	Supported commands:
+		 * new_interface
+		 * set_interface
+Wiphy phy1
+	wiphy index: 1
+	max # scan SSIDs: 4
+	Supported interface modes:
+		 * managed
+		 * AP
+	Band 1:
+		Capabilities: 0x1062
+			HT20/HT40
+		Frequencies:
+			* 2412.0 MHz [1] (20.0 dBm)
+			* 2417.0 MHz [2] (20.0 dBm)
+			* 2422.0 MHz [3] (20.0 dBm)
+			* 2427.0 MHz [4] (20.0 dBm)
+			* 2432.0 MHz [5] (20.0 dBm)
+			* 2437.0 MHz [6] (20.0 dBm)
+			* 2442.0 MHz [7] (20.0 dBm)
+			* 2447.0 MHz [8] (20.0 dBm)
+			* 2452.0 MHz [9] (20.0 dBm)
+			* 2457.0 MHz [10] (20.0 dBm)
+			* 2462.0 MHz [11] (20.0 dBm)
+			* 2467.0 MHz [12] (20.0 dBm) (no IR)
+			* 2472.0 MHz [13] (20.0 dBm) (no IR)
+	Supported commands:
+		 * new_interface
+		 * set_interface

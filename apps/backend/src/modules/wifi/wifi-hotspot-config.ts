@@ -27,7 +27,13 @@ import { withDeviceLock } from "../network/state/device-lock.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
-import { isWifiChannelName, wifiChannels } from "./wifi-channels.ts";
+import {
+	type DerivedApChannel,
+	isChannelOffered,
+	isWifiChannelName,
+	nmSettingsForChannel,
+	type WifiChannel,
+} from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	wifiRescan,
@@ -105,16 +111,18 @@ function nmConnSetHotspotFields(
 	name: string,
 	password: string,
 	channel: string,
+	derived: readonly DerivedApChannel[],
 ) {
-	// Validate the requested channel
-	if (!isWifiChannelName(channel)) return;
+	// An underived channel has no band/number mapping BY CONSTRUCTION, so an
+	// illegal channel can never reach nmcli even if validation were bypassed.
+	const nmSettings = nmSettingsForChannel(channel, derived);
+	if (!nmSettings) return;
 
-	const newChannel = wifiChannels[channel];
 	const settingsToChange = {
 		"802-11-wireless.ssid": name,
 		"802-11-wireless-security.psk": password,
-		"802-11-wireless.band": newChannel.nmBand,
-		"802-11-wireless.channel": newChannel.nmChannel,
+		"802-11-wireless.band": nmSettings.nmBand,
+		"802-11-wireless.channel": nmSettings.nmChannel,
 	};
 
 	return nmConnSetFields(uuid, settingsToChange);
@@ -180,10 +188,12 @@ export async function wifiHotspotConfig(
 		return;
 	}
 
+	// The offered set is DERIVED from the live regulatory domain, so this rejects
+	// a channel that is merely well-formed as well as one that is illegal here.
 	if (
 		msg.channel === undefined ||
 		typeof msg.channel !== "string" ||
-		!isWifiChannelName(msg.channel)
+		!isChannelOffered(msg.channel, wifiInterface.hotspot.availableChannels)
 	) {
 		conn.send(
 			buildMsg(
@@ -242,6 +252,32 @@ export async function wifiHotspotConfig(
 	);
 }
 
+/**
+ * Restart one hotspot onto `channel` after a regulatory-domain change, through
+ * the SAME path a manual channel change takes — a domain change must not reach
+ * the radio by a second, less-tested route.
+ */
+export async function reconfigureHotspotForRegdomain(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	channel: WifiChannel,
+): Promise<boolean> {
+	const { name, password } = wifiInterface.hotspot;
+	if (!name || !password) return false;
+
+	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+		reconfigureHotspotLocked(
+			macAddress,
+			wifiInterface,
+			name,
+			password,
+			channel,
+		),
+	);
+
+	return lock.success && lock.result === "ok";
+}
+
 type ReconfigureResult = "ok" | "saving" | "activating";
 
 async function reconfigureHotspotLocked(
@@ -251,6 +287,8 @@ async function reconfigureHotspotLocked(
 	password: string,
 	channel: string,
 ): Promise<ReconfigureResult> {
+	const derived = wifiInterface.hotspot.derivedChannels ?? [];
+
 	// Update the NM connection
 	if (
 		wifiInterface.hotspot.conn &&
@@ -259,6 +297,7 @@ async function reconfigureHotspotLocked(
 			name,
 			password,
 			channel,
+			derived,
 		))
 	) {
 		return "saving";
@@ -278,6 +317,7 @@ async function reconfigureHotspotLocked(
 			wifiInterface.hotspot.name,
 			wifiInterface.hotspot.password,
 			wifiInterface.hotspot.channel,
+			derived,
 		);
 
 		await nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);

@@ -1114,6 +1114,9 @@ const es = {
 			updatesDesc: "Busca e instala actualizaciones de paquetes disponibles",
 			power: "Reiniciar / Apagar",
 			powerDesc: "Reinicia o apaga el dispositivo",
+			wifiCountry: "País de WiFi",
+			wifiCountryDesc:
+				"Define el dominio regulatorio que determina qué canales de punto de acceso son legales",
 			versions: "Versiones del dispositivo",
 			versionsDesc: "Ver versiones de componentes y firmware instalados",
 			autostart: "Inicio automático de transmisión",
@@ -1151,6 +1154,26 @@ const es = {
 				"El dispositivo sigue respondiendo tras la ventana de reinicio. Puede que no se haya reiniciado: inténtalo de nuevo o descártalo para seguir usándolo.",
 			rebootRecoveryRetry: "Reiniciar de nuevo",
 			rebootRecoveryDismiss: "Descartar",
+			wifiCountry: {
+				title: "País de WiFi",
+				description:
+					"Tu país determina en qué canales WiFi puede emitir este dispositivo. La lista de canales se vuelve a leer de la radio después de aplicar el país.",
+				label: "País",
+				placeholder: "Selecciona un país",
+				search: "Buscar países",
+				world: "Mundial (más restrictivo)",
+				apply: "Aplicar",
+				applying: "Aplicando…",
+				applied: "Dominio regulatorio actualizado.",
+				failed: "No se pudo aplicar el dominio regulatorio.",
+				unavailable:
+					"Cambiar el dominio regulatorio no está disponible en modo emulado.",
+				effectiveLabel: "La radio informa",
+				restartNotice:
+					"Un punto de acceso activo se reinicia para adoptar el nuevo dominio. Los dispositivos conectados se reconectan solos.",
+				mismatchWarning:
+					"La radio sigue informando un dominio distinto, así que la lista de canales no ha cambiado.",
+			},
 			sources: {
 				title: "Fuentes",
 				description:

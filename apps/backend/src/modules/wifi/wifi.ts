@@ -227,6 +227,7 @@ export function wifiBuildMsg() {
 					: {}),
 				available_channels: getWifiChannelMap(
 					wifiInterface.hotspot.availableChannels,
+					wifiInterface.hotspot.derivedChannels ?? [],
 				),
 				...(wifiInterface.hotspot.channel !== undefined
 					? { channel: wifiInterface.hotspot.channel }

@@ -1099,6 +1099,9 @@ const de = {
 			updatesDesc: "Verfügbare Paket-Updates suchen und installieren",
 			power: "Neustart / Ausschalten",
 			powerDesc: "Das Gerät neu starten oder herunterfahren",
+			wifiCountry: "WLAN-Land",
+			wifiCountryDesc:
+				"Legt die Regulierungsdomäne fest, die bestimmt, welche Hotspot-Kanäle zulässig sind",
 			versions: "Geräteversionen",
 			versionsDesc: "Installierte Komponenten- und Firmware-Versionen anzeigen",
 			autostart: "Streaming automatisch starten",
@@ -1136,6 +1139,26 @@ const de = {
 				"Das Gerät antwortet nach dem Neustartfenster noch. Möglicherweise wurde es nicht neu gestartet – versuchen Sie es erneut oder schließen Sie, um es weiter zu verwenden.",
 			rebootRecoveryRetry: "Erneut neu starten",
 			rebootRecoveryDismiss: "Schließen",
+			wifiCountry: {
+				title: "WLAN-Land",
+				description:
+					"Ihr Land bestimmt, auf welchen WLAN-Kanälen dieses Gerät senden darf. Die Kanalliste wird nach dem Anwenden des Landes vom Funkmodul zurückgelesen.",
+				label: "Land",
+				placeholder: "Land auswählen",
+				search: "Länder suchen",
+				world: "Weltweit (am restriktivsten)",
+				apply: "Anwenden",
+				applying: "Wird angewendet…",
+				applied: "Regulierungsdomäne aktualisiert.",
+				failed: "Die Regulierungsdomäne konnte nicht angewendet werden.",
+				unavailable:
+					"Das Ändern der Regulierungsdomäne ist im emulierten Modus nicht verfügbar.",
+				effectiveLabel: "Funkmodul meldet",
+				restartNotice:
+					"Ein aktiver Hotspot startet neu, um die neue Domäne zu übernehmen. Verbundene Geräte verbinden sich selbst neu.",
+				mismatchWarning:
+					"Das Funkmodul meldet weiterhin eine andere Domäne, daher hat sich die Kanalliste nicht geändert.",
+			},
 			sources: {
 				title: "Quellen",
 				description:

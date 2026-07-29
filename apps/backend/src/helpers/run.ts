@@ -126,6 +126,10 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"passwd",
 	"reboot",
 	"dmesg",
+	// Regulatory domain get/set + the AP-channel enumeration read back from it.
+	"iw",
+	// Arms the transient restore timer that reverts an unattended regdomain change.
+	"systemd-run",
 ]);
 
 /**

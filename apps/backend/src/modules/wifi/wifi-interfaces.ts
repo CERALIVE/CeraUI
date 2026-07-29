@@ -17,7 +17,6 @@
 
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
-
 import {
 	getNetworkInterfaces,
 	NETIF_ERR_HOTSPOT,
@@ -38,6 +37,7 @@ import {
 	parseFail,
 	parseOk,
 } from "../system/cli-parse.ts";
+import { getDerivedApChannels, refreshHotspotChannels } from "./regdomain.ts";
 import {
 	broadcastWifiState,
 	type WifiNetwork,
@@ -328,6 +328,8 @@ export async function wifiUpdateDevices() {
 					if (parsedProps.value.supports2Ghz) {
 						hotspot.availableChannels.push("auto_24");
 					}
+					// Fold in the concrete channels the kernel currently permits.
+					refreshHotspotChannels(hotspot, getDerivedApChannels());
 					(newInterface as WifiInterfaceWithHotspot).hotspot = hotspot;
 				}
 				newDevices = true;

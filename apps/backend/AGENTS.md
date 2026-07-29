@@ -67,6 +67,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s) | `modules/network/network-interfaces.ts` (`computeInterfaceRate`, `processIfconfigOutput`) |
 | WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
+| Regulatory domain + kernel-derived hotspot channels (`iw reg set` / `iw phy` parser, regdb precheck, armed restore timer) | `modules/wifi/regdomain.ts` (`applyRegulatoryDomain`, `deriveApChannels`, `checkWirelessRegdbSupport`, `buildRegdomainRestoreCommand`) |
+| Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | **Device-truth save guard + persisted-mode clamp (ADR-0008 §10)** | `modules/streaming/device-mode-guard.ts` (`verifySaveDeviceMode`, `clampPersistedDeviceMode`) + `modules/streaming/persisted-mode-clamp.ts` (`reconcilePersistedDeviceMode`); the RULE itself is `@ceraui/rpc` `capabilities/device-mode-truth.ts`, shared with the frontend |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
@@ -1756,6 +1758,76 @@ Frontend half: `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts`
 
 Coverage: `tests/wifi-ap-mode-classification.test.ts`.
 
+## HOTSPOT CHANNELS ARE DERIVED FROM THE KERNEL, NEVER FROM A TABLE [EXISTS]
+
+`modules/wifi/regdomain.ts` turns an operator-declared country into the set of
+channels the hotspot may actually use. **It contains no country→channel table and
+must never gain one.**
+
+The reason is that such a table is wrong the moment it is written: which channels
+a country permits depends on the kernel's `wireless-regdb` version, the radio's
+own capabilities, and whether the adapter is self-managed (carrying its own
+regulatory rules that override the global domain). So the flow is
+apply-then-read-back: `iw reg set <CC>` hands the country to the kernel, the
+kernel rewrites every wiphy's per-frequency flags, and `iw phy` is parsed to
+enumerate what is left. A table would be a second, silently-diverging opinion
+about the same question.
+
+**What "AP-usable" excludes, and why none of it is optional:**
+
+| Flag | Why an access point may not use it |
+|------|-----------------------------------|
+| `disabled` | not permitted at all |
+| `no IR` | NO_INITIATING_RADIATION — the radio may listen but not transmit first, which is exactly what starting an AP does |
+| `radar detection` | DFS; legal for an AP only with a full radar-detection + channel-availability-check implementation, which CeraLive does not have |
+| 6 GHz | NetworkManager's `802-11-wireless.band` has no value for it, and AP operation there additionally requires WPA3-SAE |
+
+`no IR`'s pre-NO_IR spellings (`passive scanning`, `no IBSS`) are treated
+identically — an older kernel expresses the same restriction with different words,
+and excluding a channel is the conservative direction.
+
+- **Radios are kept APART.** `parseIwPhyChannels` returns a per-wiphy map and
+  `deriveApChannels` takes ONE radio (the first, absent a name). A dual-radio
+  board's wiphys can differ, so unioning them would offer one radio a channel only
+  the other can host — the same class of defect as the retired device-mode union
+  (ADR-0008 §10).
+- **`ch_<n>` is the channel id** (`wifi-channels.ts`). Shape validation
+  (`isWifiChannelName`) answers "could this name a channel"; **legality is
+  `isChannelOffered`**, which tests the runtime-derived set. `wifiHotspotConfig`
+  uses the latter, so a well-formed-but-underived channel is rejected.
+- **An underived channel has no NetworkManager mapping BY CONSTRUCTION.**
+  `nmSettingsForChannel` resolves the band/number pair out of the derived list, so
+  even if validation were bypassed an illegal channel cannot reach `nmcli`.
+- **`refreshHotspotChannels` drops the previous explicit channels first.** Keeping
+  them would carry an old domain's now-illegal channels into the new set; the
+  adapter's own band capability is recovered from its auto entries, so the fold is
+  idempotent.
+- **A live AP is RESTARTED, not updated in place** (`planHotspotRegdomainChange` →
+  `reconfigureHotspotForRegdomain`). NetworkManager bakes the band/channel into the
+  activation. A channel the new domain retired is clamped to `auto` — not to the
+  band-matching auto, because a domain change can withdraw the whole band. Two
+  refusals are deliberate: an INACTIVE AP is left alone (the next start picks the
+  new set up), and an EMPTY derivation never clamps a live AP off the air, because
+  a failed `iw phy` probe proves nothing about legality.
+- **The image must ship BOTH `wireless-regdb` and `iw`.**
+  `checkWirelessRegdbSupport` probes `/lib/firmware/regulatory.db` (modern) and
+  `/usr/lib/crda/regulatory.bin` (legacy), fails closed, and warns at boot when
+  neither is present — without a database the kernel keeps the world domain and
+  `iw reg set` is inert. The `iw` binary gap is separately real: `wireless-tools`
+  ships only the legacy WEXT `iwconfig`/`iwlist` binaries, NOT `iw` (see
+  `image-building-pipeline/AGENTS.md` → "`iw` in `shared.list`").
+- **Board safety.** `buildRegdomainRestoreCommand` constructs a `systemd-run
+  --unit=dqw3-net-restore --on-active=10min … iw reg set <pre-state>` timer, armed
+  BEFORE any mutation so a drill that loses its operator still returns the radio to
+  a known domain. Argv-only (no `sh -c`), and a malformed pre-state THROWS rather
+  than arming a timer that would do nothing.
+
+Every effectful call routes through `setRegdomainRunner` (the `set<Name>Runner`
+convention shared with `ssh.ts` / `software-updates.ts`), so no test can move the
+host's own regulatory domain. Coverage: `tests/wifi-regdomain-channels.test.ts`,
+driven by real-shaped `iw phy` transcripts in `tests/fixtures/wifi/` (world / ES /
+US / legacy-flag / 6 GHz).
+
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
@@ -2036,6 +2108,8 @@ error and operator-stop negatives are the controls, green on both trees).
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
 - Don't validate an encode target against a device ladder with a second, local copy of the rule — `@ceraui/rpc` `capabilities/device-mode-truth.ts` is shared with the frontend precisely so the offering and the save path cannot disagree. And don't turn its fail-open guards (no ladder, coarse source, un-normalizable payload) into refusals: blocking a save the hardware can honour is the same dishonesty as allowing one it cannot.
 - Don't report a `streaming.setConfig` result without reading `result.success` — a device-truth refusal RESOLVES, it does not throw, so a bare try/catch toasts "Saved" over a config the device rejected.
+- Don't add a country→channel table anywhere — the hotspot channel set is DERIVED by applying `iw reg set <CC>` and parsing `iw phy` back out (`regdomain.ts`), because the legal set depends on the kernel's regdb version, the radio, and self-managed adapters. And don't validate a channel with `isWifiChannelName` alone: that is a SHAPE check, and legality is `isChannelOffered` against the runtime-derived set.
+- Don't union two wiphys' channel lists, and don't clamp a live AP off the air on an EMPTY derivation — a failed `iw phy` probe proves nothing about legality (see HOTSPOT CHANNELS ARE DERIVED FROM THE KERNEL).
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.

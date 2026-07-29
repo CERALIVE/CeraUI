@@ -14,6 +14,7 @@ import {
 	Blocks,
 	ChevronRight,
 	Cloud,
+	Globe,
 	Info,
 	KeyRound,
 	Languages,
@@ -52,6 +53,7 @@ import RemoteControlStatus from './settings/RemoteControlStatus.svelte';
 import SshDialog from './dialogs/SshDialog.svelte';
 import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
 import VersionsDialog from './dialogs/VersionsDialog.svelte';
+import WifiCountryDialog from './dialogs/WifiCountryDialog.svelte';
 
 interface Entry {
 	key: string;
@@ -138,7 +140,10 @@ const groups = $derived<Group[]>([
 	{
 		id: 'system',
 		label: t.groups.system(),
-		entries: [{ key: 'devicePassword', title: t.devicePassword(), desc: t.devicePasswordDesc(), icon: KeyRound }],
+		entries: [
+			{ key: 'devicePassword', title: t.devicePassword(), desc: t.devicePasswordDesc(), icon: KeyRound },
+			{ key: 'wifiCountry', title: t.wifiCountry(), desc: t.wifiCountryDesc(), icon: Globe },
+		],
 	},
 	{
 		id: 'streaming',
@@ -195,6 +200,7 @@ let powerOpen = $state(false);
 let versionsOpen = $state(false);
 let displayOpen = $state(false);
 let addonsOpen = $state(false);
+let wifiCountryOpen = $state(false);
 
 // Fallback placeholder dialog for any not-yet-wired entries.
 let open = $state(false);
@@ -231,6 +237,9 @@ function openEntry(entry: Entry) {
 			return;
 		case 'addons':
 			addonsOpen = true;
+			return;
+		case 'wifiCountry':
+			wifiCountryOpen = true;
 			return;
 		default:
 			active = entry;
@@ -405,3 +414,4 @@ $effect(() => {
 <VersionsDialog bind:open={versionsOpen} />
 <OnDeviceDisplaySection bind:open={displayOpen} />
 <AddonsSection bind:open={addonsOpen} />
+<WifiCountryDialog bind:open={wifiCountryOpen} />
