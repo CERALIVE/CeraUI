@@ -27,6 +27,7 @@ import {
 	nmcliParseSep,
 } from "../network/network-manager.ts";
 import {
+	getAllHotspotCredentials,
 	getHotspotCredentials,
 	type HotspotCredentials,
 	rememberHotspotCredentials,
@@ -353,63 +354,77 @@ function collectConnsInUse(): Set<ConnectionUUID> {
 	return inUse;
 }
 
-/** UUIDs another present adapter has claimed as its own hotspot identity. */
-function collectConnsReservedByOtherAdapters(
-	macAddress: MacAddress,
+/**
+ * The UUIDs cleanup is allowed to consider: every profile some adapter's
+ * persisted identity has POSITIVELY claimed — as its current `conn` or in its
+ * bounded `previousConns` history — minus every adapter's CURRENT profile.
+ *
+ * Absence is deliberately not part of this: a profile no persisted identity
+ * names is simply unknown, and an unknown profile always survives. The retired
+ * rule deleted any generated-name AP profile "bound to an address no present
+ * adapter owns", which is exactly what a temporarily-unplugged adapter's own
+ * hotspot looks like — so a cleanup could destroy the SSID and password an
+ * operator's phone already knew.
+ */
+export function collectSupersededHotspotConns(
+	identities: readonly HotspotCredentials[],
 ): Set<ConnectionUUID> {
-	const reserved = new Set<ConnectionUUID>();
-	for (const mac of Object.keys(getWifiInterfacesByMacAddress())) {
-		if (mac === macAddress) continue;
-		const conn = getHotspotCredentials(mac)?.conn;
-		if (conn) reserved.add(conn);
+	const owned = new Set<ConnectionUUID>();
+	const current = new Set<ConnectionUUID>();
+
+	for (const identity of identities) {
+		if (identity.conn) {
+			owned.add(identity.conn);
+			current.add(identity.conn);
+		}
+		for (const uuid of identity.previousConns ?? []) owned.add(uuid);
 	}
-	return reserved;
+
+	for (const uuid of current) owned.delete(uuid);
+	return owned;
 }
 
 /**
  * Delete superseded hotspot profiles so exactly one survives per adapter. Best
- * effort — a failure here never fails a hotspot start.
+ * effort — a failure here never fails a hotspot start, and it is never promoted
+ * to a blocking step (`wifi-hotspot-activation.ts` fires it and forgets it).
  *
- * A profile is only removed when it is provably THIS adapter's leftover: bound
- * to this adapter's permanent address, or bound to an address no present adapter
- * has (the randomized bindings that produced the duplicates in the first place).
- * A profile bound to another present adapter — or claimed by another adapter's
- * persisted identity — is always left alone, so a multi-radio device cannot lose
- * its second hotspot to the first one's cleanup.
+ * A profile is removed ONLY when it carries ownership evidence
+ * ({@link collectSupersededHotspotConns}), no adapter is currently using it, and
+ * it is still a `nmcli`-generated AP profile. The generated-id name match is a
+ * narrowing filter, NEVER evidence by itself — an operator who ran
+ * `nmcli device wifi hotspot` gets the same name and the same `CERALIVE_`-shaped
+ * SSID, and their profile is not ours to delete.
  */
 export async function pruneDuplicateHotspotConns(
 	macAddress: MacAddress,
 	keepUuid: ConnectionUUID,
 	deps: HotspotProfileDeps = defaultHotspotProfileDeps,
 ): Promise<ConnectionUUID[]> {
+	const deletable = collectSupersededHotspotConns(getAllHotspotCredentials());
+	deletable.delete(keepUuid);
+	for (const uuid of collectConnsInUse()) deletable.delete(uuid);
+	if (deletable.size === 0) return [];
+
 	const rows = await listWirelessConns("uuid,type,name", deps);
 	if (!rows) return [];
 
-	const inUse = collectConnsInUse();
-	const reserved = collectConnsReservedByOtherAdapters(macAddress);
-	const presentAdapters = new Set(Object.keys(getWifiInterfacesByMacAddress()));
 	const removed: ConnectionUUID[] = [];
 
 	for (const [uuid, type, name] of rows) {
-		if (!uuid || type !== "802-11-wireless" || uuid === keepUuid) continue;
+		if (!uuid || type !== "802-11-wireless") continue;
+		if (!deletable.has(uuid)) continue;
 		if (!name || !GENERATED_HOTSPOT_ID_RE.test(name)) continue;
-		if (inUse.has(uuid) || reserved.has(uuid)) continue;
 
 		const profile = await readApProfile(uuid, deps);
 		if (!profile) continue;
-		if (
-			profile.macAddress !== macAddress &&
-			presentAdapters.has(profile.macAddress)
-		) {
-			continue;
-		}
 
 		if (await deps.deleteConnection(uuid)) removed.push(uuid);
 	}
 
 	if (removed.length > 0) {
 		logger.info(
-			`Removed ${removed.length} superseded hotspot connection profile(s)`,
+			`Removed ${removed.length} superseded hotspot connection profile(s) after starting ${macAddress}`,
 		);
 	}
 	return removed;

@@ -1906,14 +1906,46 @@ adoption (`handleHotspotConn`), and on operator rename
 generated pair). Writes are inert until `initHotspotCredentials()` runs, so a
 unit test that never opts in cannot litter the working directory.
 
-**Duplicate consolidation is deliberately narrow.**
-`pruneDuplicateHotspotConns()` runs best-effort after a successful start (never
-blocking or failing it) and only deletes a profile that is AP mode, carries the
-nmcli-generated id (`Hotspot`, `Hotspot-N`), is used by no adapter, is claimed by
-no other adapter's persisted identity, and is bound either to THIS adapter or to
-an address no present adapter has. A profile bound to another present radio is
-always kept, so a multi-radio device cannot lose its second hotspot to the
-first's cleanup.
+**Duplicate consolidation requires POSITIVE ownership evidence, and ABSENCE is
+never evidence.** `pruneDuplicateHotspotConns()` runs best-effort after a
+successful start (never blocking or failing it) and deletes a profile only when
+ALL of the following hold: its uuid is one the credential store positively
+claims, no adapter is currently using it, and it is still an AP-mode profile
+carrying the nmcli-generated id (`Hotspot`, `Hotspot-N`).
+
+The claim is computed by `collectSupersededHotspotConns()` — the union of every
+adapter's current `conn` and its `previousConns` history, MINUS every adapter's
+current `conn`. So a profile that is some adapter's live identity is protected
+even when that adapter also appears in another's history, and a uuid the store
+has never seen is simply unknown and always survives.
+
+The retired rule also deleted a generated-name AP profile "bound to an address
+no present adapter has". That reads absence as abandonment, and a temporarily
+unplugged (or not-yet-enumerated) radio looks exactly like it — so the cleanup
+could destroy the SSID and password an operator's phone already knew, with the
+credential backstop above powerless to help because the profile it points at was
+the thing deleted. There is now no code path in which a profile is deleted
+because something is missing.
+
+**The name pattern is a narrowing filter, never evidence.** An operator who runs
+`nmcli device wifi hotspot` themselves gets the same `Hotspot-N` id and can pick
+the same `CERALIVE_`-shaped SSID. Neither is ours to delete, and neither appears
+in the store.
+
+**This is why the store keeps a history at all.** It holds ONE current `conn` per
+adapter, so a profile that CeraUI itself superseded would otherwise carry no
+evidence and become permanently undeletable. `previousConns` (`string[]`, oldest
+first, capped at `PREVIOUS_CONNS_LIMIT` = 8, drop-oldest) records the retired
+uuid whenever `conn` is REPLACED — one known uuid giving way to a different known
+one. Every other write leaves it untouched, so the failure direction is
+forgetting evidence (the profile becomes unknown, hence undeletable) rather than
+inventing it. It is maintained by the store; a value passed to
+`rememberHotspotCredentials` is ignored.
+
+**Schema migration is version 1 → 2.** A v1 file (no `previousConns`) loads
+unchanged and gains an empty history at load (`migrateEntry`); saves write
+`version: 2`. The reader accepts both versions, so a downgrade mid-rollout still
+parses.
 
 **Side effect worth knowing:** with the binding correct, `autoconnect=yes` +
 `autoconnect-priority=999` finally work, so a hotspot left on now survives a
@@ -2212,6 +2244,7 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.
+- Don't delete a hotspot profile because nothing claims the address it is bound to — a temporarily unplugged radio looks identical to an abandoned profile, and the deletion destroys the very credentials the backstop exists to preserve. Deletion needs POSITIVE evidence from the credential store (`collectSupersededHotspotConns`), and the `Hotspot-N` name pattern is a narrowing filter, never evidence: an operator's own `nmcli device wifi hotspot` profile carries the same id. Don't stop maintaining `previousConns` either — it is the ONLY record that a superseded profile was ever ours, and without it a real duplicate becomes permanently undeletable.
 - Don't render `netif.tp` as a rate — it is a byte delta over an unstated window. Use `tx_bps`/`rx_bps`.
 - Don't let a `list-devices` probe decide device MEMBERSHIP on the hotplug path, and don't drop the generation fence — a probe that answers can still be stale or out of order, and both have already stranded a real device on a board. Membership comes from the registry's observation (`mergeObservedWithProbe`); the probe supplies metadata. The ONE exemption is a kind that `releasesV4l2Node()` — for a libuvc-driven camera the `/dev` scan is not an observation at all (see LIBUVC-HELD DEVICES). Don't widen that exemption to any other kind, and don't "simplify" it into a blanket probe-wins membership rule.
 - Don't key a REMEMBERED device (`last_seen_devices`, the session-seen snapshot map) on its node path — a libuvc camera renumbers on every open/close cycle, so that appends a new entry per cycle and renders one camera as N rows with N `lost` candidates. Route through `identityKey()`. And when folding, don't drop the retired paths: `resolveSourceIdentity` resolves a stale `config.source` THROUGH `last_seen_devices`, so a fold that forgets them strands the operator's selection — that is what `previousIds` is for.

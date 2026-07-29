@@ -48,6 +48,19 @@ import { normalizeMacAddress } from "./wifi-permanent-mac.ts";
 /** Default on-disk location, relative to the backend's working directory. */
 export const HOTSPOT_CREDENTIALS_FILE = "hotspot_credentials.json";
 
+/**
+ * How many retired UUIDs an adapter remembers. Bounded because a profile that
+ * is recreated on every start would otherwise grow the file without limit; 8 is
+ * far beyond the duplicate counts ever observed on a real device (six).
+ */
+export const PREVIOUS_CONNS_LIMIT = 8;
+
+/**
+ * Written on every save. Version 1 files carry no `previousConns`; they load
+ * unchanged and gain an empty history (see {@link migrateEntry}).
+ */
+const STORE_VERSION = 2;
+
 /** The identity of one adapter's hotspot, reused for the life of the adapter. */
 export type HotspotCredentials = {
 	/** Broadcast SSID. Stable once generated. */
@@ -62,6 +75,16 @@ export type HotspotCredentials = {
 	conn?: string;
 	/** Last configured channel selection. */
 	channel?: WifiChannel;
+	/**
+	 * UUIDs this adapter previously carried as `conn`, oldest first. This is the
+	 * ONLY record that a superseded profile was ever ours, and profile cleanup
+	 * refuses to delete anything it cannot find here (`wifi-hotspot-discovery.ts`
+	 * `collectSupersededHotspotConns`).
+	 *
+	 * READ-ONLY: the store maintains it whenever `conn` is replaced. A value
+	 * passed to {@link rememberHotspotCredentials} is ignored.
+	 */
+	previousConns?: readonly string[];
 };
 
 const entrySchema = z.object({
@@ -69,11 +92,12 @@ const entrySchema = z.object({
 	password: z.string().min(1),
 	conn: z.string().min(1).optional(),
 	channel: z.string().min(1).optional(),
+	previousConns: z.array(z.string().min(1)).optional(),
 	updatedAt: z.number().optional(),
 });
 
 const fileSchema = z.object({
-	version: z.literal(1).optional(),
+	version: z.union([z.literal(1), z.literal(2)]).optional(),
 	adapters: z.record(z.string(), entrySchema).optional(),
 });
 
@@ -100,7 +124,37 @@ function toCredentials(entry: StoredEntry): HotspotCredentials {
 		...(entry.channel !== undefined && isWifiChannelName(entry.channel)
 			? { channel: entry.channel }
 			: {}),
+		previousConns: entry.previousConns ?? [],
 	};
+}
+
+/** Bring a stored entry up to the current shape. A v1 entry gains an empty history. */
+function migrateEntry(entry: StoredEntry): StoredEntry {
+	return { ...entry, previousConns: boundHistory(entry.previousConns ?? []) };
+}
+
+/** Newest-last, de-duplicated, capped at {@link PREVIOUS_CONNS_LIMIT}. */
+function boundHistory(history: readonly string[]): string[] {
+	return [...new Set(history)].slice(-PREVIOUS_CONNS_LIMIT);
+}
+
+/**
+ * The history an entry carries after this write. A uuid is recorded ONLY when a
+ * real replacement retires it — one known uuid giving way to a different known
+ * one. Anything else leaves the history untouched, so the failure direction is
+ * forgetting evidence (which makes a profile unknown, hence undeletable) rather
+ * than inventing it.
+ */
+function nextHistory(
+	previous: StoredEntry | undefined,
+	nextConn: string | undefined,
+): string[] {
+	const history = previous?.previousConns ?? [];
+	const retired = previous?.conn;
+	if (!retired || !nextConn || retired === nextConn) {
+		return boundHistory(history);
+	}
+	return boundHistory([...history.filter((uuid) => uuid !== retired), retired]);
 }
 
 function persist(): void {
@@ -108,7 +162,7 @@ function persist(): void {
 	try {
 		writeFileAtomicSync(
 			filePath,
-			JSON.stringify({ version: 1, adapters: entries }),
+			JSON.stringify({ version: STORE_VERSION, adapters: entries }),
 		);
 	} catch (err) {
 		// A hotspot must never fail to start because its credential backstop could
@@ -127,7 +181,12 @@ export async function initHotspotCredentials(
 ): Promise<void> {
 	filePath = path;
 	const data = await loadCacheFile(path, fileSchema, {});
-	entries = { ...(data.adapters ?? {}) };
+	entries = Object.fromEntries(
+		Object.entries(data.adapters ?? {}).map(([key, entry]) => [
+			key,
+			migrateEntry(entry),
+		]),
+	);
 	initialized = true;
 	const count = Object.keys(entries).length;
 	if (count > 0) {
@@ -145,9 +204,16 @@ export function getHotspotCredentials(
 	return entry ? toCredentials(entry) : undefined;
 }
 
+/** Every adapter's persisted identity — the ownership evidence profile cleanup reads. */
+export function getAllHotspotCredentials(): HotspotCredentials[] {
+	return Object.values(entries).map(toCredentials);
+}
+
 /**
  * Record (or update) an adapter's hotspot identity. Writes only on a real
  * change, so the routine re-assertions made on every hotspot start cost no I/O.
+ * A replaced `conn` is retired into `previousConns`; a caller-supplied history
+ * is ignored.
  */
 export function rememberHotspotCredentials(
 	macAddress: string,
@@ -164,6 +230,7 @@ export function rememberHotspotCredentials(
 		...(credentials.channel !== undefined
 			? { channel: credentials.channel }
 			: {}),
+		previousConns: nextHistory(previous, credentials.conn),
 		updatedAt: Date.now(),
 	};
 
