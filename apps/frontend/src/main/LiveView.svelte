@@ -89,6 +89,7 @@ import {
 	revertStreamingOptimism,
 	revertStreamingOptimismFailure,
 } from '$lib/rpc/streaming-optimism.svelte';
+import { deriveBitrateReading } from '$lib/stores/hud/derive';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
@@ -614,6 +615,26 @@ function findSensor(predicate: (name: string) => boolean): string | undefined {
 const tempSensor = $derived(findSensor((n) => n.includes('temp')));
 const uptimeSensor = $derived(findSensor((n) => n.includes('uptime')));
 
+// The bitrate the engine is ACTUALLY applying, split from the ceiling the
+// operator configured — the SAME `deriveBitrateReading` rule the HUD uses, not a
+// second data path. The live stats card used to render `config.max_br`, so an
+// adaptive reduction was invisible: it showed the request, never the result, and
+// read identically to the Adjust-Bitrate selector right below it (which is
+// correct there — that control EDITS the target). With no `engine_bitrate` on the
+// wire (pre-first-sample, or an older engine) this falls back to the configured
+// value exactly as before, and never claims throttling it cannot prove.
+const liveBitrate = $derived.by(() => {
+	const engineBitrate = getStatus()?.engine_bitrate;
+	const configured = config?.max_br ?? null;
+	return {
+		...deriveBitrateReading(engineBitrate, configured),
+		// The ceiling the reading was judged against — the engine's own when it
+		// reports one (a config the engine has not adopted yet is not the limit it
+		// is honouring), else the persisted config.
+		ceilingKbps: engineBitrate?.ceiling_kbps ?? configured,
+	};
+});
+
 // ── Bitrate hot-adjust (the ONLY field changeable mid-stream) ──────────────
 // Practical slider window seeded from the canonical schema constants.
 const BITRATE_STEP = 250;
@@ -934,7 +955,10 @@ const configRows = $derived<ConfigRow[]>([
 			{activeInput}
 			{switchingInput}
 			onSwitch={handleSwitchInput}
-			bitrate={formatBitrate(config?.max_br)}
+			bitrate={formatBitrate(liveBitrate.effectiveKbps ?? undefined)}
+			bitrateLimit={liveBitrate.belowCeiling
+				? formatBitrate(liveBitrate.ceilingKbps ?? undefined)
+				: undefined}
 			{tempSensor}
 			{uptimeSensor}
 			{bitrateDraft}
@@ -954,7 +978,7 @@ const configRows = $derived<ConfigRow[]>([
 				commitBitrate(v);
 			}}
 			telemetry={linkTelemetry}
-			bitrateKbps={config?.max_br}
+			bitrateKbps={liveBitrate.effectiveKbps ?? undefined}
 			{audioSourceLost}
 			{videoSignalLost}
 			{isStreaming}

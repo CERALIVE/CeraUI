@@ -2,10 +2,11 @@
  * Per-session ingest rollup — device-local only.
  *
  * Folds the live `status.linkTelemetry` feed (already broadcast by the backend,
- * no new collector) plus the live configured bitrate into a single end-of-stream
- * summary: peak/avg bitrate, per-link uptime %, and a bond drop-event count. The
- * IngestStats panel samples one {@link SessionSample} per telemetry tick while
- * streaming, then calls {@link computeSessionRollup} on the streaming→idle edge.
+ * no new collector) plus the bitrate the engine is APPLYING into a single
+ * end-of-stream summary: peak/avg bitrate, per-link uptime %, and a bond
+ * drop-event count. The IngestStats panel samples one {@link SessionSample} per
+ * telemetry tick while streaming, then calls {@link computeSessionRollup} on the
+ * streaming→idle edge.
  *
  * Everything here is pure and rune-free so it is fully unit-testable and carries
  * NO network surface — there is no cloud/platform call anywhere in this module or
@@ -30,7 +31,7 @@ export interface SessionSampleLink {
 
 /** One sampled instant of a streaming session. */
 export interface SessionSample {
-	/** Configured bitrate at sample time, in kbps. */
+	/** Applied bitrate at sample time, in kbps (what the engine encoded, not the ceiling). */
 	bitrateKbps: number;
 	/** Wall-clock instant the sample was taken, ms epoch (drives duration). */
 	capturedAt: number;
@@ -55,9 +56,9 @@ export interface SessionLinkRollup {
 export interface SessionRollup {
 	/** Number of telemetry samples folded into this rollup. */
 	sampleCount: number;
-	/** Highest configured bitrate observed during the session, kbps. */
+	/** Highest applied bitrate observed during the session, kbps. */
 	peakBitrateKbps: number;
-	/** Mean configured bitrate across the session, kbps (rounded). */
+	/** Mean applied bitrate across the session, kbps (rounded). */
 	avgBitrateKbps: number;
 	/**
 	 * Bond drop events: each time any link transitioned from up (present + fresh)
@@ -78,7 +79,7 @@ function asCount(value: unknown): number {
 }
 
 /**
- * Build a {@link SessionSample} from the live bitrate and a telemetry frame's
+ * Build a {@link SessionSample} from the applied bitrate and a telemetry frame's
  * links. `undefined`/invalid bitrate collapses to 0; only `iface` + `stale` are
  * retained (RTT/NAK/weight are live-only and not part of the session summary).
  */
@@ -116,7 +117,7 @@ function isUp(sample: SessionSample, iface: string): boolean {
 /**
  * Reduce a session's samples into a {@link SessionRollup}. An empty session
  * yields zeroed metrics and no links (never throws). Bitrate peak/avg are over
- * the configured bitrate; uptime and drops are derived purely from per-link
+ * the applied bitrate; uptime and drops are derived purely from per-link
  * presence + staleness across the sample sequence.
  */
 export function computeSessionRollup(

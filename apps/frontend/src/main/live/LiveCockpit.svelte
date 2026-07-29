@@ -59,7 +59,10 @@ interface Props {
 	switchingInput?: string | undefined;
 	onSwitch?: (id: string) => void;
 	// ── StreamTelemetryStrip ────────────────────────────────────────────────────
+	/** The rate the engine is APPLYING (already formatted), not the configured ceiling. */
 	bitrate: string;
+	/** The configured ceiling, supplied ONLY while the engine is proven to be below it. */
+	bitrateLimit?: string | undefined;
 	tempSensor?: string;
 	uptimeSensor?: string;
 	// ── BitrateAdjuster (live hot-adjust) ──────────────────────────────────────
@@ -75,6 +78,7 @@ interface Props {
 	onSliderCommit: (value: number) => void;
 	// ── IngestStats ─────────────────────────────────────────────────────────────
 	telemetry: LinkTelemetryMessage | null | undefined;
+	/** APPLIED bitrate in kbps — folded into the session peak/avg rollup. */
 	bitrateKbps?: number;
 	// ── Mid-stream lifecycle banners ───────────────────────────────────────────
 	// The selected audio device vanished mid-stream (LiveView derives it from the
@@ -113,6 +117,7 @@ const {
 	switchingInput = undefined,
 	onSwitch = undefined,
 	bitrate,
+	bitrateLimit = undefined,
 	tempSensor,
 	uptimeSensor,
 	bitrateDraft,
@@ -262,7 +267,7 @@ const showVideoSignalLost = $derived(
 			sourceLost={activeSourceLost}
 		/>
 
-		<StreamTelemetryStrip {bitrate} {tempSensor} {uptimeSensor} />
+		<StreamTelemetryStrip {bitrate} {bitrateLimit} {tempSensor} {uptimeSensor} />
 
 		<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->
 		<BitrateAdjuster
