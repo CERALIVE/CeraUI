@@ -47,7 +47,7 @@ import type {
 	Subscription,
 } from "@ceralive/cerastream";
 import { connect as defaultConnect } from "@ceralive/cerastream";
-import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
+import type { AudioLevelMessage, LifecycleState } from "@ceraui/rpc/schemas";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
@@ -58,6 +58,7 @@ import {
 	resolveMeterPreference,
 } from "./audio.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
+import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
 
 /** Backoff bounds for the initial-connect retry. Mirrors `engine-reconnect.ts`. */
 export const AUDIO_METER_CONNECT_BASE_MS = 2_000;
@@ -106,6 +107,12 @@ export interface AudioMeterBridgeDeps {
 	 * yourself" and the engine has no "meter nothing" value.
 	 */
 	meterSilenced: () => boolean;
+	/**
+	 * Whether a stream launch is currently acquiring the audio card. A launch
+	 * RELEASES the idle meter on purpose, so the level feed stopping is the
+	 * handoff working — not the fault either watchdog exists to recover.
+	 */
+	launchInFlight: () => boolean;
 	logger: AudioMeterBridgeLogger;
 	random: () => number;
 	now: () => number;
@@ -183,6 +190,18 @@ export function toAudioLevelMessage(
 	};
 }
 
+/**
+ * `starting` is the ONE lifecycle state in which the launch — not the idle meter
+ * — owns the audio card. It is also the only one that is BOUNDED by the launch
+ * phase deadlines, so deferring here can never become a permanent suppression:
+ * a successful launch leaves for `streaming`, a failed one for `idle`, and the
+ * watchdog is live again in both. `reconfiguring` is deliberately NOT included —
+ * it runs from `streaming`, where the meter is not holding the card anyway.
+ */
+export function launchIsAcquiringAudio(lifecycle: LifecycleState): boolean {
+	return lifecycle === "starting";
+}
+
 function defaultDeps(): AudioMeterBridgeDeps {
 	return {
 		connect: defaultConnect,
@@ -199,6 +218,7 @@ function defaultDeps(): AudioMeterBridgeDeps {
 		meterPreference: () => resolveMeterPreference(getConfig().asrc),
 		meterPreferencePresent: () => isMeterPreferenceDevicePresent(),
 		meterSilenced: () => isMeterSilencedByPick(getConfig().asrc),
+		launchInFlight: () => launchIsAcquiringAudio(getStreamLifecycleState()),
 		logger: defaultLogger,
 		random: Math.random,
 		now: Date.now,
@@ -277,6 +297,26 @@ function foreignCardReason(
  * that is simply permanent — a selected card with no capture PCM — costs one
  * cheap pair of reloads per interval and never a loop.
  */
+/**
+ * Both watchdogs re-assert through the SAME `reassertPreference`, which re-OPENS
+ * the selected card. While a launch is acquiring that card the re-assert is not a
+ * recovery, it is a competing acquisition — the engine's own bounded self-release
+ * retry cannot win against a peer actively taking the device back, so the start
+ * fails `audio-device-unavailable … not_retriable` (board, 2026-07-30, 2/6 starts).
+ *
+ * Checked immediately before `lastReassertAt` is stamped, so a deferred window
+ * never spends the 30 s floor: the instant the launch resolves the next window
+ * re-asserts for real. The watchdog is already re-armed by then, so this defers
+ * the recovery, it never disables it.
+ */
+function deferReassertToLaunch(deps: AudioMeterBridgeDeps): boolean {
+	if (!deps.launchInFlight()) return false;
+	deps.logger.debug(
+		"audio-meter bridge: a stream launch is acquiring the audio card — deferring the idle-meter re-assert until it resolves",
+	);
+	return true;
+}
+
 function noteForeignCardLevel(deps: AudioMeterBridgeDeps): void {
 	if (!state || state.stopped) return;
 	const now = deps.now();
@@ -294,6 +334,7 @@ function noteForeignCardLevel(deps: AudioMeterBridgeDeps): void {
 	) {
 		return;
 	}
+	if (deferReassertToLaunch(deps)) return;
 	state.lastReassertAt = now;
 	void reassertPreference("a sustained foreign-card reading");
 }
@@ -355,6 +396,7 @@ function noteFrameAbsence(): void {
 	) {
 		return;
 	}
+	if (deferReassertToLaunch(deps)) return;
 	state.lastReassertAt = now;
 	deps.logger.warn(
 		`audio-meter bridge: no audio level for ${AUDIO_METER_FRAME_ABSENCE_MS} ms while ${meter_device} is selected — re-asserting the preference`,

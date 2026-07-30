@@ -536,6 +536,53 @@ un-retracted state lives in the ENGINE's meter sidecar.
 - **A missing client is the one case that does NOT re-arm** — there is nothing to
   re-assert against, and the next connect's first frame arms it again.
   `stopAudioMeterBridge` clears it.
+- **It yields to a stream LAUNCH** (`launchInFlight()`), and so does the
+  content watchdog — see the section below.
+
+**A RE-ASSERT IS AN ACQUISITION, SO IT MUST NEVER RACE A LAUNCH.** Both watchdogs
+recover through the same `reassertPreference`, which re-OPENS the selected card.
+A launch RELEASES the idle meter on purpose (`audio_meter_begin_stream()`), so
+levels legitimately stop — and `noteFrameAbsence` read those ~12 missed frames as
+a stuck feed and grabbed the card back while the start's pre-flight was still
+opening it. Measured on a Rock 5B+ with a DJI Osmo Pocket 3:
+
+```
+20:03:22.466  streaming.start issued
+20:03:25.024  audio-meter bridge: no audio level for 2500 ms … re-asserting
+20:03:25.026  audio-meter bridge: re-asserted the preference hw:CARD=DJIPocket3
+20:03:27.142  audio-device-unavailable: ALSA capture device 'hw:CARD=DJIPocket3'
+              is busy or unavailable   class=start_invalid retry=not_retriable
+```
+
+`deferReassertToLaunch()` gates both watchdogs on
+`launchIsAcquiringAudio(getStreamLifecycleState())` — the lifecycle the
+orchestrator already publishes, NOT a parallel signal. Three properties are
+load-bearing:
+
+- **`starting` is the ONLY gated state.** A successful launch leaves for
+  `streaming` and a failed one for `idle`, so BOTH outcomes re-arm the watchdog
+  immediately, and the state is bounded by the launch phase deadlines — the
+  deferral can never become a permanent suppression. `reconfiguring` is excluded
+  because it runs from `streaming`, where the idle meter does not hold the card.
+- **The gate sits immediately BEFORE `lastReassertAt` is stamped**, so a deferred
+  window does not spend the 30 s floor. Moving it one line later silently turns a
+  deferral into half a minute of real suppression after the launch resolved.
+- **The re-arm still happens above every gate** (unchanged), so a genuinely dead
+  feed is watched throughout the launch and recovers on the very next window.
+
+**This is necessary but NOT sufficient, and the remainder is engine-side.** It
+removes ONE of two acquirers. The other is the idle meter's ordinary hold:
+`syncAudioMeterPreference` pushes the preference on a source/`asrc` change, the
+engine opens the card for the idle meter, and a launch seconds later needs that
+same card. Board measurement with the watchdog gated and cerastream's bounded
+1.5 s self-release retry deployed: 0/5 clean starts when the source is re-selected
+just before starting, 2/5 when it is not — the same rate as before the gate. CeraUI
+cannot close it: the engine has no "meter nothing" value (`meter_device: null`
+means *auto-pick*, which re-opens a card rather than releasing one), so the
+idle-meter → stream handoff can only be made atomic inside cerastream. Do NOT
+"fix" the remainder by widening this gate to `streaming`, and do NOT delete the
+gate because the start still fails — the watchdog re-acquisition is a real,
+separately-proven racer.
 
 **"No audio" is NOT "Auto", and only the picker value can tell them apart.**
 `resolveMeterPreference` answered `null` for both, and `null` on the wire means
@@ -2490,6 +2537,7 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't re-push the meter preference only when `asrc` changed — under "Auto" the resolved card is a function of the selected VIDEO source (rule 3) and of the ENGINE's audio list (rule 5), so `input.source` changes and `reresolveAudioForEngineChange` must re-push too. An unchanged pick is deduped by the bridge and costs nothing; a missed changed one is permanent, because `set_preferred_device` early-returns on an unchanged value.
 - Don't leave a pick change to be corrected by the next engine frame — the level already broadcast belongs to the previous pick, so `noteMeterSelection()` must retire it immediately (and must stay silent on an unchanged pick, or every re-enumeration blinks the meter).
 - Don't let the meter's ONLY recovery path be driven by arriving frames — that gates the retraction on the very signal whose absence IS the failure, and a feed that stops leaves a bare `Meter unavailable` forever. Keep BOTH watchdogs: `noteForeignCardLevel` for frame CONTENT and `armFrameAbsenceWatchdog`/`noteFrameAbsence` for frame ABSENCE. And don't "simplify" the absence one into a poll that compares `now()` against a last-frame stamp: the debounce-on-arrival shape is what makes expiry *proof* of absence and an unarmed watchdog *proof* that no baseline frame has arrived yet — a poll needs a second flag for the first-connect case and gets it wrong. Don't move the re-arm below the silenced/Auto gates either (a silenced feed would stop being watched and never resume), and don't give it its own reassert cadence — it shares `lastReassertAt` so the two triggers can never double up.
+- Don't let either audio-meter watchdog re-assert while a stream launch is in flight — a re-assert is an ACQUISITION of the selected card, and the engine's bounded self-release retry cannot beat a peer that is actively taking the device back (the start dies `audio-device-unavailable … not_retriable`). Gate both on `launchInFlight()`, keep the check immediately BEFORE `lastReassertAt` is stamped (or a deferral silently becomes 30 s of suppression), and keep the re-arm above every gate. Don't widen the gate past `starting` either: `streaming`/`idle` are where a genuinely dead feed must still be recovered.
 - Don't fold `active_encode` into telemetry preserve-on-omission past the end of a session, and don't let `stop()` rely on a final engine status frame to clear it — a crashed engine sends none, and the stale encode then renders the stopped session under a "Live" badge.
 - Don't clear the raw bridge's `cachedLiveness`/`cachedPassthrough` from its own socket `close`/`error` — that is a CONNECTION blip, not a session boundary, and wiping there hands `collectRealLiveness()` an `undefined` it can only read as a cold start, so a dead stream reports `healthy` off raw process liveness. Let `FRAMES_FRESHNESS_MS` age the retained reading out instead.
 - Don't apply that same rule to the SESSION-scoped control client — it is the inverse case. Losing `cerastream-backend.ts`'s `this.client` retires the session (the published client cannot reconnect and a restarted engine has no session to resume), so route every session RPC through `withSessionClient` and never swallow a `CerastreamConnectionError` without calling `noteConnectionLoss`. And don't treat `this.client !== undefined` as evidence the engine is reachable — that is exactly how `reconcileRuntimeState()` re-affirmed a phantom "streaming" state off stale telemetry until the backend was restarted.
