@@ -32,7 +32,14 @@
 // unreachable engine, a fallback v4l2 scan row (`signal` unset ⇒ `unknown`), and
 // a still-severed link all fail the test and leave the notification standing.
 
+import { deviceKindToPipelineId } from "@ceraui/rpc";
 import { notificationExists, notificationRemove } from "../ui/notifications.ts";
+
+/** The engine's typed capture kind for a board HDMI receiver. */
+const HDMI_DEVICE_KIND = "hdmi";
+
+/** The coarse source id every HDMI-kind device bridges to. */
+const HDMI_PIPELINE_ID = deviceKindToPipelineId(HDMI_DEVICE_KIND);
 
 /** Persistent-notification name shared by both `sensors.ts` HDMI raise sites. */
 export const HDMI_ERROR_NOTIFICATION = "hdmi_error";
@@ -66,6 +73,91 @@ export function provesHdmiSignalRecovered(
 	devices: readonly HdmiSignalObservation[],
 ): boolean {
 	return devices.some((d) => d.kind === "hdmi" && d.signal === "present");
+}
+
+// ─── The RAISE half: the same scoping, applied symmetrically ─────────────────
+//
+// The recovery above is scoped to `kind === "hdmi"`. The raise was scoped to
+// nothing but the board being an rk3588 — not to `config.source`, not to the
+// active capture source, not to the pipeline, not to `status.active_encode`. The
+// pair was asymmetric, and that asymmetry is reachable in ordinary use.
+//
+// Measured on a board (2026-07-30, `192.168.78.131`): a `streaming.start`
+// attempt PROBES EVERY CAPTURE INPUT, which opens `/dev/video0` in passing. On a
+// board whose HDMI-RX has no cable — the normal state for an operator streaming
+// a USB camera — that probe makes the kernel print `hdmirx-controller: Err,
+// timing is invalid`, and the watcher raised "No HDMI signal detected" at an
+// operator who was not using HDMI at all and had asked nothing about it. The
+// journal names the driver exactly: `no capture input reached PLAYING
+// (signal-less: /dev/video0, /dev/video1)`. The statement is TRUE about the
+// HDMI-RX port; it is simply not addressed to anyone.
+//
+// The gate below is deliberately a SUPPRESSION-ONLY test, mirroring the audio
+// meter's foreign-card rule: it can only ever withhold a raise PROVEN
+// irrelevant. Both sides must be known — the selection must resolve to a row,
+// and that row's own engine-authored `kind` (or coarse source id) must be
+// something other than HDMI. An unset selection, a selection that resolves to
+// nothing, and any HDMI-bearing selection all leave the raise armed, because
+// none of them proves the operator is not watching the HDMI port. A genuine
+// no-signal on a selected HDMI input is reported exactly as before.
+
+/** The selection fields the raise gate reads; `StreamSource` satisfies it. */
+export interface HdmiSelectionObservation {
+	id: string;
+	origin: string;
+	pipelineId: string;
+	kind?: string | undefined;
+	previousIds?: readonly string[] | undefined;
+}
+
+/** A persisted device snapshot; `LastSeenDevice` satisfies it. */
+export interface HdmiRememberedDevice {
+	id: string;
+	kind: string;
+	previousIds?: readonly string[] | undefined;
+}
+
+/**
+ * Does this candidate answer to `id`, currently or under a retired node path?
+ * A libuvc camera renumbers `/dev/videoN` on every open/close cycle, so an id
+ * match alone would lose the selection exactly when the probe sweep runs.
+ */
+function answersTo(
+	candidate: { id: string; previousIds?: readonly string[] | undefined },
+	id: string,
+): boolean {
+	return candidate.id === id || (candidate.previousIds?.includes(id) ?? false);
+}
+
+/**
+ * Is the operator's selected source PROVABLY not an HDMI input?
+ *
+ * The live source list decides when it can; otherwise the persisted
+ * `last_seen_devices` snapshot does, because `kind` is a durable property of the
+ * hardware and the one moment this is asked — mid stream-start sweep — is
+ * precisely when the live row may be transiently degraded by the libuvc rebind
+ * the same sweep triggers.
+ */
+export function provesSelectionIsNotHdmi(
+	selectedId: string | undefined,
+	sources: readonly HdmiSelectionObservation[],
+	remembered: readonly HdmiRememberedDevice[] = [],
+): boolean {
+	if (selectedId === undefined || selectedId === "") return false;
+
+	const live = sources.find((s) => answersTo(s, selectedId));
+	if (live !== undefined) {
+		if (live.origin !== "capture") return live.pipelineId !== HDMI_PIPELINE_ID;
+		return (
+			live.kind !== undefined &&
+			live.kind !== "" &&
+			live.kind !== HDMI_DEVICE_KIND
+		);
+	}
+
+	const snapshot = remembered.find((d) => answersTo(d, selectedId));
+	if (snapshot === undefined) return false;
+	return snapshot.kind !== "" && snapshot.kind !== HDMI_DEVICE_KIND;
 }
 
 /** Injected effectful surface (defaults wire the real notification store). */
