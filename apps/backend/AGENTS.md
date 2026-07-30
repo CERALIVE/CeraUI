@@ -24,7 +24,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
 | Structured engine error → notification (Task-7 table swap, no regex); `mapCerastreamError()` maps a `RuntimeErrorEvent` to a Tier-2 code string (T16) | `modules/streaming/cerastream-error-mapping.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
-| srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
+| srtla per-link telemetry → `status.linkTelemetry` (incl. the MEASURED `bitrate_bps` per link + the summed `measured_bps` — the only honest live bitrate; `engine_bitrate.applied_kbps` is a setpoint) | `modules/streaming/link-telemetry.ts` (`buildLinkTelemetry`) |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | **Apply-now config change (transaction seam, `reconfiguring` state, queued stop)** | `modules/streaming/stream-session-orchestrator.ts` (`changeConfig`, `noteConfigChangePhase`) + `modules/streaming/config-change-bridge.ts` |
@@ -74,10 +74,12 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | Retracting the `hdmi_error` "No HDMI signal detected" notification once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
+| Scoping the `hdmi_error` "No HDMI signal detected" RAISE to a relevant selection | `modules/system/hdmi-signal-notification.ts` (`provesSelectionIsNotHdmi`) + `modules/system/sensors.ts` (`handleRk3588HdmiDmesg`); contract below → …AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION |
 | Retracting the `cerastream` `capture_video_error` notification at a healthy session boundary | `modules/streaming/cerastream-backend.ts` (`standingEngineError`, `clearRecoveredEngineError`, `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION`) |
 | **Device-truth save guard + persisted-mode clamp (ADR-0008 §10)** | `modules/streaming/device-mode-guard.ts` (`verifySaveDeviceMode`, `clampPersistedDeviceMode`) + `modules/streaming/persisted-mode-clamp.ts` (`reconcilePersistedDeviceMode`); the RULE itself is `@ceraui/rpc` `capabilities/device-mode-truth.ts`, shared with the frontend |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **Which capture kinds release their kernel v4l2 node while the engine holds them (libuvc)** | `modules/streaming/held-devices.ts` (`releasesV4l2Node`) — CeraUI-side mirror of cerastream `engine::held_devices` |
+| **Absence GRACE on the selected capture source (the libuvc release window)** | `modules/streaming/capture-presence.ts` (`resolveSelectedSourceWithGrace`, `CAPTURE_ABSENCE_GRACE_MS`), read by `auto-audio.ts` `resolveAutoAsrcFromLiveState`; contract below → A DEBOUNCE IS NOT AN ABSENCE GRACE |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
 | **Audio-naming resolution (4-tier: static onboard rule → engine join → ALSA longname → generic alias) + name cleaning + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
 | **Static onboard AUDIO display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
@@ -1300,6 +1302,103 @@ at a hold — the engine already tracks the hold authoritatively and reports it;
 CeraUI's job is only to stop overruling that answer with a scan that cannot see
 the device. Coverage: `tests/source-renumber-dedup.test.ts`.
 
+## A DEBOUNCE IS NOT AN ABSENCE GRACE [EXISTS]
+
+The section above fixes the HOLD. The same rebind has a second half — the
+RELEASE — and nothing in the chain absorbed it.
+
+Measured on a Rock 5B+ (2026-07-30, DJI Osmo Pocket 3 `2ca3:0023` on `usb5`/EHCI)
+by polling cerastream's `list-devices` and the kernel together across one
+ordinary preview open/close. The rebind is emphatically NOT a device reset:
+`devnum` never changes, only interfaces `1.0`/`1.1` move `uvcvideo → usbfs →
+uvcvideo`, the camera's ALSA card stays bound with its PCM node inode unchanged,
+and `/proc/asound/card5/pcm0c/sub0/status` reads `RUNNING` throughout. During the
+HOLD, `held_devices.rs` reports `/dev/video1` with its `physical_group_id`
+intact — no UI impact, exactly as designed. **On RELEASE the engine drops the
+held record BEFORE it rediscovers the re-registered node**: `list-devices`
+answers with 2 devices instead of 3 while the kernel node already exists again.
+Measured at ≈400 ms, bounded above by the 2.0 s close→node-back re-registration,
+and observed firing spontaneously twice more within 30 s of the preview closing —
+so this is hit in ordinary operation, not only on operator action.
+
+**Every existing defence in the chain is an EVENT DEBOUNCE, and that is a
+different thing.** The `/dev` watch waits 200 ms for quiet before re-reading, the
+audio scan 500 ms, cerastream's registry debounces adds/removes by 250 ms. Those
+are all *wait-for-quiet-before-re-reading*. None of them is
+*wait-before-believing-it-is-gone*, so a hole of any length propagates straight
+to a verdict. Auto-audio resolution had no hysteresis at all
+(`auto-audio.ts`), and `lifecycle-indicators.ts` still flips `bad` the instant a
+selected id is missing from a non-empty scan.
+
+The operator-visible result was a derived-state artifact, not an audio fault.
+With `config.asrc = "Auto"`, `resolveAutoAsrcFromLiveState()` looks the VIDEO
+source up first and rule 5 joins it to its own card on `physical_group_id`. In
+the window that join has nothing to match, so Auto resolved
+`no-same-device-audio`, `resolveMeterPreference` returned `null`,
+`isMeterPreferenceDevicePresent` returned `false`, and the meter rendered
+**"Meter unavailable · No audio device"** for a microphone that was bound,
+enumerated and streaming into cerastream the entire time.
+
+`modules/streaming/capture-presence.ts` `resolveSelectedSourceWithGrace()` is the
+hysteresis, and it is deliberately NARROW — it is read by
+`resolveAutoAsrcFromLiveState()` and nothing else. The `sources` broadcast, the
+`lost` row, `resolveSourceRouting`, and the picker are all untouched.
+
+- **It is hysteresis on the VERDICT, not on the sampling.** Distinct from every
+  debounce above by construction: nothing here changes when the device list is
+  read or what it contains, only how long a degraded view is tolerated before it
+  is believed.
+- **There are TWO windows, and they are not interchangeable.** The board proved
+  why. `CAPTURE_ABSENCE_GRACE_MS` (2 000 ms) governs a row that is ABSENT or
+  `lost` — a real presence question, kept short because a genuine unplug must not
+  be held longer than the transient it absorbs. `CAPTURE_METADATA_GRACE_MS`
+  governs a row that is PRESENT but has lost its `physical_group_id`, which is
+  NOT a presence claim at all: CeraUI's own scan sees the node and the engine
+  listed it, so holding the remembered join key there **cannot** mask a
+  device-gone failure — the row's own presence is the positive evidence.
+- **`CAPTURE_METADATA_GRACE_MS` is DERIVED, not chosen**:
+  `VIDEO_SIGNAL_RECHECK_INTERVAL_MS + 1 500`. Nothing refills that field until
+  the next engine-authored commit, and while idle the only thing that produces
+  one is the `recheckSourceSignals` tick — so CeraUI's VIEW can stay
+  under-identified for a full recheck interval even though the engine's own hole
+  was ≈400 ms. Measured across three preview cycles on the board: 434 ms, 258 ms
+  and **5 077 ms**, the last being one interval plus a 77 ms probe round-trip. A
+  window sized from the engine-side measurement alone (2 000 ms) demonstrably
+  broke through on that third cycle — do not "simplify" the two constants back
+  into one, and do not re-derive this one from the engine-side gap.
+- **The clock starts at the FIRST DEGRADED OBSERVATION, never at the last healthy
+  one.** Our knowledge of the device is refreshed on someone else's cadence (the
+  5 s signal recheck, a hotplug tick), so a window measured from the memory's
+  AGE would be expired in steady state and would never fire when it is needed.
+  "How long we have tolerated a degraded view" is the quantity that matters.
+  Do NOT rewrite this as a staleness check on the remembered value.
+- **"Is the row there" is NOT the question.** `degradationOf()` answers `absent`
+  (row gone, or a `lost` placeholder) or `under-identified` (row present, join key
+  gone). The second is the one the window actually produces on this board — when
+  the `/dev` scan sees the node return first, the hotplug merge restores the row
+  through `withKnownEngineMetadata`, which restores durable IDENTITY
+  (`kind`/`stable_id`) and deliberately refuses to re-assert a same-moment
+  topology relation. That refusal is correct and must not be "fixed"; the row is
+  simply useless to rule 5, and the grace is what covers it.
+- **Bounded and self-clearing, with no renewal path.** After the applicable window
+  of UNINTERRUPTED degradation the memory is dropped and the live view is
+  reported verbatim — a true unplug reads exactly as it did before this module
+  existed. Only a genuinely healthy observation resets the run, so polling the
+  window at the meter's 5 Hz cadence extends nothing.
+- **Stable identity OUTRANKS the node path, in BOTH directions.** Two rows that
+  both carry a `stableId` settle the question outright: equal proves the renumber
+  (a libuvc camera renumbers on every cycle — the very cycle this exists for),
+  UNEQUAL proves a different device took the freed node and the memory is dropped
+  on the spot. A borrowed `physical_group_id` must never bind Auto audio to the
+  microphone of a device the operator is no longer pointing at. Only when the
+  evidence runs out does the node path decide.
+
+Coverage: `tests/capture-absence-grace.test.ts` — the real live-state resolver
+driven across the window with both degraded shapes, plus the negative controls
+that matter: a sustained absence resolving honestly again, a repeatedly-observed
+absence failing to renew the window, the boundary millisecond, a `lost` row, a
+substituted device, a renumber, and the coarse/unset selections.
+
 ## BROADCAST EVENTS
 
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
@@ -2451,6 +2550,65 @@ idle-is-not-proof and shared-slot negatives, and the repeat-heartbeat idempotenc
 plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.test.ts`
 (the `remove` frame drops the entry from the persistent panel).
 
+## …AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION [EXISTS]
+
+The retraction above is scoped to `kind === "hdmi"`. The RAISE was scoped to
+nothing but the board resolving as `rk3588` — not to `config.source`, not to the
+active capture source, not to the pipeline, not to `status.active_encode`. The
+pair was asymmetric, and the asymmetry is reachable in ordinary use.
+
+Measured on a board (2026-07-30): **a `streaming.start` attempt probes EVERY
+capture input**, so it opens `/dev/video0` in passing. On a board whose HDMI-RX
+carries no cable — the normal state for an operator streaming a USB camera — that
+probe makes the kernel print `hdmirx-controller: Err, timing is invalid`, and the
+watcher raised "No HDMI signal detected" at an operator who was using a UVC camera
+and had asked nothing about HDMI. The CeraUI journal names the driver of the sweep
+exactly: `no capture input reached PLAYING (signal-less: /dev/video0,
+/dev/video1)`. The claim is TRUE about the HDMI-RX port; it is simply not addressed
+to anyone. And because a persistent notification never expires on a timer, the
+`duration: 3` on that raise buys nothing — it stands until something retracts it,
+which on a cable-less port is never.
+
+`provesSelectionIsNotHdmi()` is the gate, and it is a **SUPPRESSION-ONLY** test —
+the same discipline as the audio meter's foreign-card rule, for the same reason.
+It can only ever withhold a raise PROVEN irrelevant:
+
+| Selected source | Raise |
+|---|---|
+| a capture row whose engine-authored `kind` is not `hdmi` | SUPPRESSED |
+| a coarse/virtual/network row that is not the `hdmi` source | SUPPRESSED |
+| a capture row of `kind: "hdmi"`, or the coarse `hdmi` source | RAISED |
+| nothing selected, or a selection that resolves to no row at all | RAISED |
+
+- **Absence is never evidence.** An unset selection and an unresolvable one both
+  leave the raise armed, because neither proves the operator is not watching the
+  HDMI port. Do NOT "harden" this into a fail-closed check — that would silently
+  drop a genuine no-signal report, which is the exact fault the notification
+  exists for.
+- **It reads the persisted `kind` when the live row is missing.**
+  `last_seen_devices` is consulted as a fallback because the ONE moment this is
+  asked — mid stream-start sweep — is precisely when the live row may be
+  transiently degraded by the libuvc rebind the same sweep triggers (see A
+  DEBOUNCE IS NOT AN ABSENCE GRACE). `kind` is a durable hardware property, so
+  the snapshot can answer it; a live row always outranks the snapshot.
+- **A renumbered camera is still recognised**, through the `previousIds` aliases
+  the successor publishes — otherwise a libuvc camera would lose its own
+  selection on exactly the cycle that matters.
+- **The EMI/cable advisory is deliberately UNGATED.** Its two kernel lines are
+  emitted only while the receiver is actually locking or clocking a link, so they
+  already describe work somebody asked for. Do not extend this gate to it.
+- **`hdmiNoSignalRaiseAllowed()` (the production wiring in `sensors.ts`) is
+  FAIL-OPEN.** A throw reading config or the sources list is not evidence about
+  the operator, so it must never be the reason a real fault goes unreported.
+
+The dmesg callback was extracted to the exported `handleRk3588HdmiDmesg(data,
+deps)` so both raise conditions are drivable without a `dmesg -w` process.
+Coverage: `tests/hdmi-raise-scope.test.ts` (the pure verdict table incl. the
+coarse/renumber/persisted-fallback arms, the sweep raising nothing, and the
+negative controls: a selected HDMI input with no cable still raises, the EMI
+advisory still raises under the same gate, and the standing-advisory
+non-overwrite is unchanged).
+
 ## ANTI-PATTERNS
 
 - Don't add a persistent notification without a retraction path — `duration` does
@@ -2467,6 +2625,25 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't move the HDMI recovery hook off `commitEngineDevices` or gate it on a
   changed payload — it must see every engine-authored device view, including the
   ones that are byte-identical to the last.
+- Don't raise the `hdmi_error` NO-SIGNAL notification off the kernel line alone —
+  a stream-start attempt probes every capture input, so `/dev/video0` gets opened
+  on an operator's behalf who never asked about HDMI. Route it through
+  `provesSelectionIsNotHdmi()`, and don't turn that suppression-only test into a
+  fail-closed one: absence of evidence is not evidence, and refusing to raise on
+  an unset/unresolvable selection would drop a genuine no-signal report. The
+  EMI/cable advisory stays UNGATED.
+- Don't answer "is the selected capture device present" with a bare
+  `sources.find(...)` on the Auto-audio path — the engine's device view has a
+  real, NORMAL hole on every libuvc release (≈400 ms, up to 2 s), and resolving
+  it literally reported a bound, streaming microphone as "No audio device". Route
+  through `resolveSelectedSourceWithGrace()` (see A DEBOUNCE IS NOT AN ABSENCE
+  GRACE). And don't confuse that grace with the existing debounces: those wait
+  for quiet before RE-READING, this waits before BELIEVING. Don't re-measure the
+  window from the memory's age instead of from the first degraded observation
+  (it would be expired in steady state), don't let anything but a genuinely
+  healthy observation reset the run, and don't widen it past `physical_group_id`
+  absence into re-asserting a remembered `caps`/`signal` — that is the latch
+  `withKnownEngineMetadata` already refuses for good reason.
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't re-serialise the DNS health check ahead of the caller's query in `dnsCacheResolve`, and don't share one `Resolver` between them — the check only GATES the answer, and a shared c-ares channel's `cancel()` would abort the sibling leg. Both legs sit inside the per-attempt launch deadline (see DNS ON THE STREAM-START CRITICAL PATH).
