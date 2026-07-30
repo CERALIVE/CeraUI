@@ -31,6 +31,7 @@ function makeDeps(
 		getEngineDevices: async () => null,
 		getSelectedVideoInput: () => undefined,
 		clearSelectedVideoInput: () => undefined,
+		getRememberedDeviceKind: () => undefined,
 		notify: () => undefined,
 		broadcast: () => undefined,
 		onDevicesChanged: () => undefined,
@@ -263,5 +264,99 @@ describe("device registry", () => {
 			activeSourceId: "/dev/video63",
 			presentSourceIds: ["/dev/video0"],
 		});
+	});
+});
+
+describe("reconcileSelectedInput — the libuvc release gap is not a disconnect", () => {
+	const OSMO = {
+		input_id: "/dev/video1",
+		device_path: "/dev/video1",
+		display_name: "DJIPocket3: OsmoPocket3",
+		kind: "uvc_h264",
+		media_class: "video",
+	} as const;
+
+	// The engine answers `null` (unreachable) and then a list, reproducing the
+	// unreachable→reachable edge every stream start/stop crosses when the
+	// session's control socket closes.
+	function engineSequence(lists: (readonly unknown[] | null)[]) {
+		let i = 0;
+		return async () => {
+			const next = lists[Math.min(i, lists.length - 1)];
+			i += 1;
+			return next as never;
+		};
+	}
+
+	test("a uvc_h264 selection absent for ONE observation is NOT cleared", async () => {
+		const clearSelectedVideoInput = mock(() => undefined);
+		const notify = mock(() => undefined);
+		const registry = createDeviceRegistry(
+			makeDeps({
+				getEngineDevices: engineSequence([null, []]),
+				getSelectedVideoInput: () => "/dev/video1",
+				getRememberedDeviceKind: () => "uvc_h264",
+				clearSelectedVideoInput,
+				notify,
+			}),
+		);
+
+		await registry.rescan(); // engine unreachable
+		await registry.rescan(); // reachable, camera still in its release gap
+
+		expect(clearSelectedVideoInput).not.toHaveBeenCalled();
+		expect(notify).not.toHaveBeenCalled();
+	});
+
+	test("a uvc_h264 selection that comes BACK clears the pending absence", async () => {
+		const clearSelectedVideoInput = mock(() => undefined);
+		const registry = createDeviceRegistry(
+			makeDeps({
+				getEngineDevices: engineSequence([null, [], null, [OSMO], null, []]),
+				getSelectedVideoInput: () => "/dev/video1",
+				getRememberedDeviceKind: () => "uvc_h264",
+				clearSelectedVideoInput,
+			}),
+		);
+
+		for (let i = 0; i < 6; i += 1) await registry.rescan();
+
+		expect(clearSelectedVideoInput).not.toHaveBeenCalled();
+	});
+
+	test("a uvc_h264 selection absent across TWO consecutive edges is cleared", async () => {
+		const clearSelectedVideoInput = mock(() => undefined);
+		const notify = mock(() => undefined);
+		const registry = createDeviceRegistry(
+			makeDeps({
+				getEngineDevices: engineSequence([null, [], null, []]),
+				getSelectedVideoInput: () => "/dev/video1",
+				getRememberedDeviceKind: () => "uvc_h264",
+				clearSelectedVideoInput,
+				notify,
+			}),
+		);
+
+		for (let i = 0; i < 4; i += 1) await registry.rescan();
+
+		expect(clearSelectedVideoInput).toHaveBeenCalledTimes(1);
+		expect(notify).toHaveBeenCalledTimes(1);
+	});
+
+	test("a v4l2-driven kind still clears on the FIRST absence (control)", async () => {
+		const clearSelectedVideoInput = mock(() => undefined);
+		const registry = createDeviceRegistry(
+			makeDeps({
+				getEngineDevices: engineSequence([null, []]),
+				getSelectedVideoInput: () => "/dev/video0",
+				getRememberedDeviceKind: () => "hdmi",
+				clearSelectedVideoInput,
+			}),
+		);
+
+		await registry.rescan();
+		await registry.rescan();
+
+		expect(clearSelectedVideoInput).toHaveBeenCalledTimes(1);
 	});
 });
