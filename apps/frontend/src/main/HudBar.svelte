@@ -89,6 +89,11 @@ const bitrateText = $derived(
 	primaryBitrateKbps != null ? formatBitrate(loc)(primaryBitrateKbps) : '—',
 );
 const bitrateHeading = $derived(isBitrateMeasured ? $LL.hud.bitrate() : $LL.hud.bitrateTarget());
+// Marks an unmeasured headline as the setpoint for text surfaces (accessible
+// name, live region) whose heading cannot carry that distinction visually.
+const targetQualifierSuffix = $derived(
+	!isBitrateMeasured && primaryBitrateKbps != null ? ` (${$LL.hud.bitrateTarget()})` : '',
+);
 const bitrateHint = $derived(
 	isBitrateMeasured ? $LL.hud.bitrateMeasuredHint() : $LL.hud.bitrateTargetHint(),
 );
@@ -196,7 +201,7 @@ const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
 const telemetrySummary = $derived(
 	[
 		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
-		`${bitrateHeading}: ${bitrateText}`,
+		`${$LL.hud.bitrate()}: ${bitrateText}${targetQualifierSuffix}`,
 		`${$LL.hud.network()}: ${hud.links.length}`,
 	].join(' · '),
 );
@@ -213,8 +218,13 @@ $effect(() => {
 // staleness ("Stale") so assistive tech reads the same degradation the sighted
 // dimming conveys — never a fresh-sounding value for an aged reading.
 const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
+// The accessible name ALWAYS leads with "Bitrate", even when the visual heading
+// reads "Target": a bare "Target: 4.1 Mbps" tells a screen-reader user nothing
+// about what is being targeted. The measured-vs-target distinction rides as a
+// qualifier instead, so the fact stays identifiable and the nuance survives.
 const bitrateLabel = $derived(
-	`${bitrateHeading}: ${primaryBitrateKbps != null ? bitrateText : $LL.hud.noData()}` +
+	`${$LL.hud.bitrate()}: ${primaryBitrateKbps != null ? bitrateText : $LL.hud.noData()}` +
+		`${targetQualifierSuffix}` +
 		`${showTargetQualifier ? `, ${$LL.hud.bitrateTarget()} ${bitrateTargetText}` : ''}` +
 		`${bitrateBelowLimit ? `, ${$LL.hud.bitrateLimit()} ${bitrateLimitText}` : ''}${staleSuffix(bitrateDimmed)}`,
 );

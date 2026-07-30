@@ -218,6 +218,33 @@ describe("HudBar bitrate — measured takes the headline, setpoint is 'Target'",
 		);
 	});
 
+	// The visual heading may read "Target", but a bare "Target: 4.1 Mbps" tells a
+	// screen-reader user nothing about WHAT is targeted — and two e2e specs pin
+	// the chip by its accessible name (`getByRole('img', {name: /bitrate/i})`).
+	// The name therefore always leads with "Bitrate" and carries the distinction
+	// as a qualifier.
+	it("keeps 'Bitrate' in the accessible name even when the heading says Target", () => {
+		state.hud = makeHud({
+			isStreaming: true,
+			bitrateKbps: 4100,
+			measuredBitrateKbps: null,
+		});
+		render(HudBar);
+
+		const label = stripBitrate().getAttribute("aria-label") ?? "";
+		expect(label).toMatch(/^Bitrate:/);
+		expect(label).toContain("Target");
+	});
+
+	it("does not call an absent value a Target", () => {
+		state.hud = makeHud({ isStreaming: false });
+		render(HudBar);
+
+		const label = stripBitrate().getAttribute("aria-label") ?? "";
+		expect(label).toMatch(/^Bitrate:/);
+		expect(label).not.toContain("Target");
+	});
+
 	it("clears the measured figure on stop — never a rate from the last session", () => {
 		state.hud = makeHud({
 			isStreaming: false,
