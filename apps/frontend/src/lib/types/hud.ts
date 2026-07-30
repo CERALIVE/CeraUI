@@ -11,6 +11,7 @@
 import type {
 	ConfigMessage,
 	EngineBitrate,
+	LinkTelemetryMessage,
 	ModemList,
 	NetifMessage,
 	SensorsStatus,
@@ -78,11 +79,21 @@ export interface HudState {
 	isStreaming: boolean;
 	isStreamingStale: boolean;
 	/**
-	 * The bitrate actually in effect, kbps: the engine's APPLIED encoder rate
+	 * The engine's TARGET bitrate, kbps: the adaptive controller's applied rate
 	 * (`status.engine_bitrate.applied_kbps`) when it reports one, else the
 	 * configured ceiling as the pre-`engine_bitrate` fallback.
+	 *
+	 * A setpoint, NOT a measurement — it holds steady even when nothing is
+	 * flowing. Render it labelled "Target"; `measuredBitrateKbps` is the figure
+	 * that answers "what am I actually sending".
 	 */
 	bitrateKbps: number | null;
+	/**
+	 * The bond's MEASURED wire throughput, kbps, summed across srtla_send's
+	 * per-link `bitrate_bps`. `null` when unknown (no telemetry, or every link
+	 * stale) — never a fabricated zero, because zero is itself a real reading.
+	 */
+	measuredBitrateKbps: number | null;
 	/** The operator's configured ceiling (`config.max_br`), kbps, or `null`. */
 	bitrateCeilingKbps: number | null;
 	/**
@@ -146,6 +157,12 @@ export interface HudSources {
 	 * reports one — both fall back to the configured ceiling.
 	 */
 	engineBitrate?: EngineBitrate | null;
+	/**
+	 * Per-link srtla_send telemetry (`status.linkTelemetry`) — the source of the
+	 * measured bitrate. Tri-state upstream: `undefined` pre-first-status, `null`
+	 * delivered-empty/stopped; both mean "unknown" here.
+	 */
+	linkTelemetry?: LinkTelemetryMessage | null;
 }
 
 /**

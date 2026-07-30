@@ -77,12 +77,20 @@ export interface LinkTelemetryEntry {
 	rtt_ms: number;
 	nak_count: number;
 	weight_percent: number;
+	/**
+	 * MEASURED wire throughput for this link, bits/s (ADR-001 `bitrate_bps`:
+	 * wire bytes × 8, protocol overhead and retransmits included). The only
+	 * bitrate on the wire that is an observation rather than a setpoint.
+	 */
+	bitrate_bps: number;
 	/** True when the underlying snapshot is stale/absent but links are known. */
 	stale: boolean;
 }
 
 export interface LinkTelemetryMessage {
 	links: Array<LinkTelemetryEntry>;
+	/** Sum of every link's `bitrate_bps` — the bond's measured total, bits/s. */
+	measured_bps: number;
 	/**
 	 * CeraUI-side wall-clock ms of the last SUCCESSFUL read — derived here, not
 	 * from the frozen srtla snapshot. Advances on a fresh tick, freezes when reads
@@ -477,6 +485,13 @@ export function isLinkTelemetryActive(): boolean {
 	return hasActiveTelemetrySource();
 }
 
+/** One unreadable link contributes 0 rather than making the whole sum `NaN`. */
+function asMeasuredBps(value: number | undefined): number {
+	return typeof value === "number" && Number.isFinite(value) && value > 0
+		? value
+		: 0;
+}
+
 /**
  * Derive the WS `linkTelemetry` payload.
  *
@@ -493,15 +508,18 @@ export function buildLinkTelemetry(): LinkTelemetryMessage | null {
 	if (lastSnapshot === null) return null;
 
 	const stale = !lastTickFresh;
+	const links = lastSnapshot.connections.map((c) => ({
+		conn_id: c.conn_id,
+		iface: resolveIface(c.conn_id),
+		rtt_ms: c.rtt_ms,
+		nak_count: c.nak_count,
+		weight_percent: c.weight_percent,
+		bitrate_bps: asMeasuredBps(c.bitrate_bps),
+		stale,
+	}));
 	return {
-		links: lastSnapshot.connections.map((c) => ({
-			conn_id: c.conn_id,
-			iface: resolveIface(c.conn_id),
-			rtt_ms: c.rtt_ms,
-			nak_count: c.nak_count,
-			weight_percent: c.weight_percent,
-			stale,
-		})),
+		links,
+		measured_bps: links.reduce((total, link) => total + link.bitrate_bps, 0),
 		lastReadMs,
 	};
 }

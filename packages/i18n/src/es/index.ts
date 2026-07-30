@@ -272,6 +272,11 @@ const es = {
 		bitrateAdapting: "Adaptando",
 		bitrateBelowLimitHint:
 			"Codificando por debajo de tu límite configurado: el motor reduce la tasa cuando la red no puede transportar la cantidad completa.",
+		bitrateTarget: "Objetivo",
+		bitrateMeasuredHint:
+			"Medido en tus enlaces agrupados: lo que realmente salió del dispositivo, incluida la sobrecarga del protocolo.",
+		bitrateTargetHint:
+			"La tasa que el codificador intenta alcanzar. Es un ajuste que el motor modifica, no una medición de lo que se envía.",
 		temperature: "Temperatura",
 		network: "Red",
 		uptime: "Tiempo activo",

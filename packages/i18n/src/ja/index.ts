@@ -898,6 +898,11 @@ const ja = {
 		bitrateAdapting: "調整中",
 		bitrateBelowLimitHint:
 			"設定した上限を下回ってエンコード中です。ネットワークが全量を運べない場合、エンジンがレートを下げます。",
+		bitrateTarget: "目標",
+		bitrateMeasuredHint:
+			"ボンディングされた回線で実測した値です。プロトコルのオーバーヘッドを含め、実際に端末から送出された量を示します。",
+		bitrateTargetHint:
+			"エンコーダーが目指すレートです。エンジンが調整する設定値であり、実際の送出量の測定値ではありません。",
 		temperature: "温度",
 		network: "ネットワーク",
 		uptime: "稼働時間",

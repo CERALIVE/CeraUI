@@ -60,8 +60,12 @@ interface Props {
 	switchingInput?: string | undefined;
 	onSwitch?: (id: string) => void;
 	// ── StreamTelemetryStrip ────────────────────────────────────────────────────
-	/** The rate the engine is APPLYING (already formatted), not the configured ceiling. */
+	/** The headline rate (already formatted): MEASURED throughput, else the target. */
 	bitrate: string;
+	/** Whether `bitrate` is a real measurement rather than the engine's setpoint. */
+	bitrateMeasured?: boolean;
+	/** The engine's target, supplied ONLY when the measurement took the headline. */
+	bitrateTarget?: string | undefined;
 	/** The configured ceiling, supplied ONLY while the engine is proven to be below it. */
 	bitrateLimit?: string | undefined;
 	tempSensor?: string;
@@ -118,6 +122,8 @@ const {
 	switchingInput = undefined,
 	onSwitch = undefined,
 	bitrate,
+	bitrateMeasured = false,
+	bitrateTarget = undefined,
 	bitrateLimit = undefined,
 	tempSensor,
 	uptimeSensor,
@@ -274,7 +280,14 @@ const showVideoSignalLost = $derived(
 		     component, same single-use-token proxy dial, still off until opened. -->
 		<PreviewDisclosure streaming={true} />
 
-		<StreamTelemetryStrip {bitrate} {bitrateLimit} {tempSensor} {uptimeSensor} />
+		<StreamTelemetryStrip
+			{bitrate}
+			{bitrateMeasured}
+			{bitrateTarget}
+			{bitrateLimit}
+			{tempSensor}
+			{uptimeSensor}
+		/>
 
 		<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->
 		<BitrateAdjuster

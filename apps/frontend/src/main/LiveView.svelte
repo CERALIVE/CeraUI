@@ -90,7 +90,7 @@ import {
 	revertStreamingOptimism,
 	revertStreamingOptimismFailure,
 } from '$lib/rpc/streaming-optimism.svelte';
-import { deriveBitrateReading } from '$lib/stores/hud/derive';
+import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
@@ -630,22 +630,32 @@ function findSensor(predicate: (name: string) => boolean): string | undefined {
 const tempSensor = $derived(findSensor((n) => n.includes('temp')));
 const uptimeSensor = $derived(findSensor((n) => n.includes('uptime')));
 
-// The bitrate the engine is ACTUALLY applying, split from the ceiling the
-// operator configured — the SAME `deriveBitrateReading` rule the HUD uses, not a
-// second data path. The live stats card used to render `config.max_br`, so an
-// adaptive reduction was invisible: it showed the request, never the result, and
-// read identically to the Adjust-Bitrate selector right below it (which is
-// correct there — that control EDITS the target). With no `engine_bitrate` on the
-// wire (pre-first-sample, or an older engine) this falls back to the configured
-// value exactly as before, and never claims throttling it cannot prove.
+// The live bitrate, split three ways — the SAME rules the HUD uses, not a second
+// data path.
+//
+//   measuredKbps — what actually left the device, summed across srtla_send's
+//                  per-link `bitrate_bps`. The only observation of the three.
+//   targetKbps   — the adaptive controller's setpoint (`applied_kbps`), or the
+//                  configured value when the engine reports nothing.
+//   ceilingKbps  — the limit the target was judged against: the engine's own
+//                  when it reports one (a config the engine has not adopted yet
+//                  is not the limit it is honouring), else the persisted config.
+//
+// The headline prefers the measurement, because the setpoint cannot tell
+// "streaming at 4.1 Mbps" from "streaming nothing" — a board session proved
+// exactly that. With no telemetry the target takes the headline and the card
+// says so by relabelling itself, rather than passing a setpoint off as a reading.
 const liveBitrate = $derived.by(() => {
 	const engineBitrate = getStatus()?.engine_bitrate;
 	const configured = config?.max_br ?? null;
+	const reading = deriveBitrateReading(engineBitrate, configured);
+	const measuredKbps = deriveMeasuredBitrateKbps(isStreaming ? linkTelemetry : null);
 	return {
-		...deriveBitrateReading(engineBitrate, configured),
-		// The ceiling the reading was judged against — the engine's own when it
-		// reports one (a config the engine has not adopted yet is not the limit it
-		// is honouring), else the persisted config.
+		measuredKbps,
+		isMeasured: measuredKbps != null,
+		primaryKbps: measuredKbps ?? reading.effectiveKbps,
+		targetKbps: reading.effectiveKbps,
+		belowCeiling: reading.belowCeiling,
 		ceilingKbps: engineBitrate?.ceiling_kbps ?? configured,
 	};
 });
@@ -985,7 +995,11 @@ const configRows = $derived<ConfigRow[]>([
 			{activeInput}
 			{switchingInput}
 			onSwitch={handleSwitchInput}
-			bitrate={formatBitrate(liveBitrate.effectiveKbps ?? undefined)}
+			bitrate={formatBitrate(liveBitrate.primaryKbps ?? undefined)}
+			bitrateMeasured={liveBitrate.isMeasured}
+			bitrateTarget={liveBitrate.isMeasured && liveBitrate.targetKbps != null
+				? formatBitrate(liveBitrate.targetKbps)
+				: undefined}
 			bitrateLimit={liveBitrate.belowCeiling
 				? formatBitrate(liveBitrate.ceilingKbps ?? undefined)
 				: undefined}
@@ -1008,7 +1022,7 @@ const configRows = $derived<ConfigRow[]>([
 				commitBitrate(v);
 			}}
 			telemetry={linkTelemetry}
-			bitrateKbps={liveBitrate.effectiveKbps ?? undefined}
+			bitrateKbps={liveBitrate.primaryKbps ?? undefined}
 			{audioSourceLost}
 			{videoSignalLost}
 			{isStreaming}

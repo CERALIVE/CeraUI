@@ -3,10 +3,22 @@ import { LL } from '@ceraui/i18n/svelte';
 
 interface Props {
 	/**
-	 * The rate the engine is CURRENTLY applying (already formatted). Under
-	 * adaptive bitrate this sits below the configured ceiling — see `bitrateLimit`.
+	 * The headline rate, already formatted: the MEASURED bond throughput when
+	 * `bitrateMeasured` is true, otherwise the engine's target.
 	 */
 	bitrate: string;
+	/**
+	 * Whether `bitrate` is a real measurement. Drives the heading, because a
+	 * setpoint rendered under a "Bitrate" label is the lie this card exists to
+	 * stop telling — it reads the same whether media is flowing or not.
+	 */
+	bitrateMeasured?: boolean;
+	/**
+	 * The engine's target, formatted — supplied ONLY when the measurement has
+	 * taken the headline, so the setpoint stays visible as context instead of
+	 * masquerading as the reading.
+	 */
+	bitrateTarget?: string | undefined;
 	/**
 	 * The configured ceiling, formatted — supplied ONLY while the engine is
 	 * proven to be encoding below it, so the operator can see their setting was
@@ -17,7 +29,14 @@ interface Props {
 	uptimeSensor?: string;
 }
 
-const { bitrate, bitrateLimit, tempSensor, uptimeSensor }: Props = $props();
+const {
+	bitrate,
+	bitrateMeasured = false,
+	bitrateTarget,
+	bitrateLimit,
+	tempSensor,
+	uptimeSensor,
+}: Props = $props();
 </script>
 
 <!-- Live telemetry strip — only meaningful while streaming -->
@@ -26,11 +45,24 @@ const { bitrate, bitrateLimit, tempSensor, uptimeSensor }: Props = $props();
 	class="bg-card flex flex-wrap items-center gap-x-10 gap-y-4 rounded-xl border px-5 py-4"
 >
 	<div class="space-y-1">
-		<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-			{$LL.hud.bitrate()}
+		<p
+			class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+			data-testid="telemetry-bitrate-heading"
+			title={bitrateMeasured ? $LL.hud.bitrateMeasuredHint() : $LL.hud.bitrateTargetHint()}
+		>
+			{bitrateMeasured ? $LL.hud.bitrate() : $LL.hud.bitrateTarget()}
 		</p>
 		<p class="flex items-baseline gap-1.5 font-mono text-lg font-semibold">
 			<span data-testid="telemetry-bitrate" style="color: var(--status-live);">{bitrate}</span>
+			{#if bitrateTarget}
+				<span
+					class="text-muted-foreground/70 text-xs font-normal"
+					data-testid="telemetry-bitrate-target"
+					title={$LL.hud.bitrateTargetHint()}
+				>
+					{$LL.hud.bitrateTarget()} {bitrateTarget}
+				</span>
+			{/if}
 			{#if bitrateLimit}
 				<span
 					class="text-muted-foreground/70 text-xs font-normal"
