@@ -50,6 +50,7 @@ import {
 	VIDEO_HOTPLUG_POLL_INTERVAL_MS,
 	VIDEO_SIGNAL_RECHECK_INTERVAL_MS,
 } from "./constants.ts";
+import { releasesV4l2Node } from "./held-devices.ts";
 import { reportActiveVideoSource } from "./lifecycle-indicators.ts";
 import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
 import { getConfiguredEngine } from "./streaming-engine.ts";
@@ -78,6 +79,11 @@ export interface DeviceRegistryDeps {
 	// engine-up reconciliation stays unit-testable without config singletons.
 	getSelectedVideoInput: () => string | undefined;
 	clearSelectedVideoInput: () => void;
+	// The KIND `last_seen_devices` remembers for a persisted selection, matched
+	// by current id or by a retired `previousIds` path. It is the only way to
+	// ask whether an id that is ABSENT from the engine list is one whose absence
+	// can even be evidence — see `reconcileSelectedInput`.
+	getRememberedDeviceKind: (inputId: string) => DeviceKind | undefined;
 	notify: (
 		name: string,
 		type: "success" | "warning" | "error",
@@ -310,6 +316,13 @@ function defaultClearSelectedVideoInput(): void {
 	);
 }
 
+function defaultRememberedDeviceKind(inputId: string): DeviceKind | undefined {
+	const remembered = getConfig().last_seen_devices?.find(
+		(d) => d.id === inputId || d.previousIds?.includes(inputId),
+	);
+	return remembered?.kind;
+}
+
 function defaultDeps(): DeviceRegistryDeps {
 	return {
 		listVideoCards: () => readdir(VIDEO_DIR).catch(() => []),
@@ -321,6 +334,7 @@ function defaultDeps(): DeviceRegistryDeps {
 		getEngineDevices: defaultGetEngineDevices,
 		getSelectedVideoInput: () => getConfig().selected_video_input,
 		clearSelectedVideoInput: defaultClearSelectedVideoInput,
+		getRememberedDeviceKind: defaultRememberedDeviceKind,
 		notify: notificationBroadcast,
 		broadcast: (type, data) => {
 			void import("../ui/websocket-server.ts").then(({ broadcastMsg }) =>
@@ -362,6 +376,7 @@ export function createDeviceRegistry(
 	let devWatcher: fs.FSWatcher | undefined;
 	let stopped = false;
 	let engineWasReachable = false;
+	let unconfirmedAbsentSelection: string | undefined;
 
 	async function v4l2Scan(): Promise<CaptureDevice[]> {
 		const cards = (await deps.listVideoCards()).sort();
@@ -377,10 +392,39 @@ export function createDeviceRegistry(
 	// A persisted operator selection that the engine's freshly-reported device
 	// list no longer contains is stale; clear it (never keep an invalid stale
 	// selection silently) and surface a broadcast + user-facing notification.
+	//
+	// EXCEPT for a kind that RELEASES its v4l2 node. This runs on the
+	// unreachable→reachable EDGE, and for a libuvc-driven camera that edge IS the
+	// engine letting go of the device: the session's control socket closes, and
+	// the node is re-registered only after libuvc reattaches `uvcvideo` (measured
+	// 0.4-2.0 s). The first list the engine answers with in that window
+	// truthfully omits a camera that is perfectly healthy — so clearing on it
+	// DESTROYS a working selection, and the operator is then locked out with
+	// "your selected video input is no longer available" plus a start that can
+	// never succeed. Observed on the board after every failed start.
+	//
+	// Absence at this edge is therefore not evidence for such a kind; it takes a
+	// SECOND consecutive engine-authored observation to become one. Every other
+	// kind keeps the byte-identical clear-on-first-absence behaviour, because for
+	// them a missing node genuinely is a disconnect.
 	function reconcileSelectedInput(engineDevices: CaptureDevice[]): void {
 		const selected = deps.getSelectedVideoInput();
 		if (!selected) return;
-		if (engineDevices.some((d) => d.input_id === selected)) return;
+		if (engineDevices.some((d) => d.input_id === selected)) {
+			unconfirmedAbsentSelection = undefined;
+			return;
+		}
+		if (releasesV4l2Node(deps.getRememberedDeviceKind(selected))) {
+			if (unconfirmedAbsentSelection !== selected) {
+				unconfirmedAbsentSelection = selected;
+				deps.logger.debug(
+					"device discovery: selected input absent while the engine may still be releasing it — awaiting confirmation before clearing",
+					{ selected },
+				);
+				return;
+			}
+		}
+		unconfirmedAbsentSelection = undefined;
 		deps.clearSelectedVideoInput();
 		deps.logger.warn(
 			"device discovery: persisted selected_video_input is absent from the engine device list — clearing stale selection",
