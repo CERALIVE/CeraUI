@@ -495,6 +495,48 @@ than the preference is still dropped. Only the reason string and the retry behav
 moved. `AudioLevelMeter` needed no change — it already indexes
 `$LL.live.preview.audioUnavailableReason[reason]()`.
 
+**THE RECOVERY PATH MUST NOT BE GATED ON THE SIGNAL WHOSE ABSENCE IS THE FAILURE.**
+`noteForeignCardLevel` watches frame CONTENT, so it can only ever run while frames
+arrive — and the meter's worst failure is that they STOP. Confirmed live on a Rock
+5B+: a changed pick published its `handoff` gap and the engine's level feed went
+silent 2 ms later (last `audio-level` broadcast `23:34:27.615Z`, board clock
+`23:48:25Z`), so the gap was the last thing the frontend was ever told and the meter
+read a bare `Meter unavailable` — no reason suffix, because no frame was reaching
+the browser at all — for 14 minutes with no operator action. With ZERO frames there
+are no foreign readings to accumulate, the 5 s grace window never elapses, the
+re-assert never fires, and every documented sync trigger (`asrc`/`source` change,
+`updateAudioDevices`, `reresolveAudioForEngineChange`, bridge reconnect) is
+EDGE-triggered on things that had all gone still. Same raise-but-never-retract family
+as `policy_route_missing` and `active_encode` on stop; the difference is that the
+un-retracted state lives in the ENGINE's meter sidecar.
+
+`AUDIO_METER_FRAME_ABSENCE_MS` (2 500 ms) + `armFrameAbsenceWatchdog` /
+`noteFrameAbsence` are the frame-ABSENCE half, sitting beside the content half:
+
+- **It is a DEBOUNCE on arrival, not a poll.** Every `audio-level` event re-arms the
+  deadline (ahead of the broadcast, so a throwing consumer cannot leave the feed
+  unwatched), so expiry is ITSELF the proof that no frame arrived — no clock compare
+  — and an UNARMED watchdog is exactly a connection that has not delivered a frame
+  yet. That is how the "never fire before the first frame of a fresh connect" rule is
+  satisfied by construction rather than by a second flag, mirroring
+  `noteMeterSelection`'s first-connect silence.
+- **2 500 ms is ~12 missed frames** at the sidecar's 5 Hz cadence — beyond event-loop
+  jitter, a GC pause, or one re-subscribe on the binding's `autoReconnect`.
+  Deliberately SHORTER than the 5 s content grace: absence is unambiguous, where a
+  foreign reading deserves time to be corrected by the next frame.
+- **ONE escape hatch, two triggers.** It calls the same `reassertPreference()`
+  (through `null`) and shares `lastReassertAt`, so the two watchdogs cannot double up
+  and a permanently-dead card still costs one cheap reload pair per
+  `AUDIO_METER_REASSERT_INTERVAL_MS`. `reassertPreference(cause)` names which
+  watchdog asked, so the log distinguishes a wrong card from a dead feed.
+- **It never fires for a silenced pick** (`meterSilenced()` — the operator asked for
+  silence) **nor for `null`** (Auto: the engine owns that selection). Both gates run
+  AFTER the re-arm, so a feed that is silent for a reason we refuse to act on today
+  is still being watched when that reason changes.
+- **A missing client is the one case that does NOT re-arm** — there is nothing to
+  re-assert against, and the next connect's first frame arms it again.
+  `stopAudioMeterBridge` clears it.
+
 **"No audio" is NOT "Auto", and only the picker value can tell them apart.**
 `resolveMeterPreference` answered `null` for both, and `null` on the wire means
 "engine, choose for yourself" — so the one pick that means *meter nothing* made the
@@ -545,7 +587,11 @@ no-op while down, the schema gate, plus the foreign-card gate: suppressed mismat
 untouched match, never-gated Auto/identity-less, passthrough `unavailable`, the
 `alsaCardKey`/`isForeignCardLevel` unit table, and the reason/re-assert behaviour:
 `not_selected_device` vs `no_device`, the grace window, the interval floor, and the
-run reset) and `tests/audio-sources.test.ts` (`resolveMeterPreference` — alias,
+run reset; plus the frame-absence watchdog: the feed that simply stops, the shared
+interval floor, the shared floor ACROSS both watchdogs, exactly one armed watchdog
+per feed, no fire before the first frame of a fresh connect, the silenced and Auto
+negatives, `stop()` disarming it, and a refused re-assert leaving levels flowing)
+and `tests/audio-sources.test.ts` (`resolveMeterPreference` — alias,
 no-alias, every `null` case, selector passthrough; plus `hasCapturePcmNode` and the
 capture-PCM presence rule: a listed card with zero capture PCM is absent, a card that
 owns one is present, the same card flips once its capture PCM appears, and an unlisted
@@ -2443,6 +2489,7 @@ plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.
 - Don't short-circuit `AUDIO_SOURCE_AUTO` to a `null` meter preference — "Auto" is a DETERMINISTIC resolution (`resolveAutoAsrc`), not a hand-back, so route it through `resolveEffectiveAudioPick()` and let the meter prefer the same card the start path would use. Getting this wrong is doubly invisible: `null` makes the engine auto-pick AND disarms `isForeignCardLevel`, so the meter draws a different device's real moving bars for a pick whose own start fails. And don't ask `isMeterPreferenceDevicePresent()` about the raw sentinel — `audioDevices["Auto"]` is undefined, so every Auto pick would report `no_device` and a genuine mismatch on a healthy card would lose its `not_selected_device` reason.
 - Don't re-push the meter preference only when `asrc` changed — under "Auto" the resolved card is a function of the selected VIDEO source (rule 3) and of the ENGINE's audio list (rule 5), so `input.source` changes and `reresolveAudioForEngineChange` must re-push too. An unchanged pick is deduped by the bridge and costs nothing; a missed changed one is permanent, because `set_preferred_device` early-returns on an unchanged value.
 - Don't leave a pick change to be corrected by the next engine frame — the level already broadcast belongs to the previous pick, so `noteMeterSelection()` must retire it immediately (and must stay silent on an unchanged pick, or every re-enumeration blinks the meter).
+- Don't let the meter's ONLY recovery path be driven by arriving frames — that gates the retraction on the very signal whose absence IS the failure, and a feed that stops leaves a bare `Meter unavailable` forever. Keep BOTH watchdogs: `noteForeignCardLevel` for frame CONTENT and `armFrameAbsenceWatchdog`/`noteFrameAbsence` for frame ABSENCE. And don't "simplify" the absence one into a poll that compares `now()` against a last-frame stamp: the debounce-on-arrival shape is what makes expiry *proof* of absence and an unarmed watchdog *proof* that no baseline frame has arrived yet — a poll needs a second flag for the first-connect case and gets it wrong. Don't move the re-arm below the silenced/Auto gates either (a silenced feed would stop being watched and never resume), and don't give it its own reassert cadence — it shares `lastReassertAt` so the two triggers can never double up.
 - Don't fold `active_encode` into telemetry preserve-on-omission past the end of a session, and don't let `stop()` rely on a final engine status frame to clear it — a crashed engine sends none, and the stale encode then renders the stopped session under a "Live" badge.
 - Don't clear the raw bridge's `cachedLiveness`/`cachedPassthrough` from its own socket `close`/`error` — that is a CONNECTION blip, not a session boundary, and wiping there hands `collectRealLiveness()` an `undefined` it can only read as a cold start, so a dead stream reports `healthy` off raw process liveness. Let `FRAMES_FRESHNESS_MS` age the retained reading out instead.
 - Don't apply that same rule to the SESSION-scoped control client — it is the inverse case. Losing `cerastream-backend.ts`'s `this.client` retires the session (the published client cannot reconnect and a restarted engine has no session to resume), so route every session RPC through `withSessionClient` and never swallow a `CerastreamConnectionError` without calling `noteConnectionLoss`. And don't treat `this.client !== undefined` as evidence the engine is reachable — that is exactly how `reconcileRuntimeState()` re-affirmed a phantom "streaming" state off stale telemetry until the backend was restarted.

@@ -1288,9 +1288,14 @@ const ja = {
 			sourceMax: "ソースの上限",
 			activeLive: "ライブ",
 			activeConfigured: "設定済み",
-			lostTitle: "デバイスが切断されました",
 			lostBody:
 				"デバイスを再接続して、このソースからの配信を再開してください。",
+			lostBannerTitleOne: "{name} が切断されました",
+			lostBannerTitleMany: "{count} 台のデバイスが切断されました",
+			lostBannerBodyOne:
+				"{name} は接続されていません。ソースとして再び使うには接続し直してください。このリストの他のソースには影響ありません。",
+			lostBannerBodyMany:
+				"次のデバイスは接続されていません: {names}。ソースとして再び使うには接続し直してください。このリストの他のソースには影響ありません。",
 			lostStreamingTitle: "ライブソースが切断されました",
 			lostStreamingBody:
 				"配信中のソースが失われました。再接続するか、別のソースに切り替えて配信を維持してください。",

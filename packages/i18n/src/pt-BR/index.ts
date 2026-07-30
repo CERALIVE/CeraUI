@@ -1427,9 +1427,14 @@ const ptBR = {
 			sourceMax: "Máximo da fonte",
 			activeLive: "Ao vivo",
 			activeConfigured: "Configurado",
-			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Reconecte o dispositivo para retomar a transmissão desta fonte.",
+			lostBannerTitleOne: "{name} desconectado",
+			lostBannerTitleMany: "{count} dispositivos desconectados",
+			lostBannerBodyOne:
+				"{name} não está mais conectado. Reconecte-o para usá-lo novamente como fonte — nenhuma outra fonte desta lista é afetada.",
+			lostBannerBodyMany:
+				"Estes dispositivos não estão mais conectados: {names}. Reconecte-os para usá-los novamente como fontes — nenhuma outra fonte desta lista é afetada.",
 			lostStreamingTitle: "Fonte ao vivo desconectada",
 			lostStreamingBody:
 				"A fonte que você está transmitindo foi perdida. Reconecte-a ou troque de fonte para manter sua transmissão ativa.",

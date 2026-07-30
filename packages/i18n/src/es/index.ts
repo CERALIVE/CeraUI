@@ -667,9 +667,14 @@ const es = {
 			sourceMax: "Máximo de la fuente",
 			activeLive: "En vivo",
 			activeConfigured: "Configurado",
-			lostTitle: "Dispositivo desconectado",
 			lostBody:
 				"Vuelve a conectar el dispositivo para reanudar la transmisión desde esta fuente.",
+			lostBannerTitleOne: "{name} desconectado",
+			lostBannerTitleMany: "{count} dispositivos desconectados",
+			lostBannerBodyOne:
+				"{name} ya no está conectado. Vuelve a conectarlo para usarlo de nuevo como fuente: ninguna otra fuente de esta lista está afectada.",
+			lostBannerBodyMany:
+				"Estos dispositivos ya no están conectados: {names}. Vuelve a conectarlos para usarlos de nuevo como fuentes: ninguna otra fuente de esta lista está afectada.",
 			lostStreamingTitle: "Fuente en directo desconectada",
 			lostStreamingBody:
 				"Se perdió la fuente que estás transmitiendo. Vuelve a conectarla o cambia de fuente para mantener el directo.",

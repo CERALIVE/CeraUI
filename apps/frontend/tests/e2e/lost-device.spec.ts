@@ -222,6 +222,12 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		await expect(page.getByTestId("source-lost-banner")).toBeVisible({
 			timeout: 15_000,
 		});
+		// The band NAMES what went (F13a): device-anonymous copy above the list read
+		// as a claim about whatever row was selected, which is a lie whenever the
+		// lost device is not the selected one.
+		await expect(page.getByTestId("source-lost-banner")).toContainText(
+			RODE_DISPLAY_NAME,
+		);
 
 		// EXACTLY ONE row for the input — the Metis-9 no-duplicate lock: the lost
 		// capture row, and NO coarse-base `libuvch264` duplicate beside it.

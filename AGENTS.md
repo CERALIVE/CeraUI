@@ -1978,6 +1978,16 @@ the selected VIDEO source and on the engine's audio list, a `source` change and 
 engine-list change re-push the preference too. Full contract:
 `apps/backend/AGENTS.md` → IDLE AUDIO-METER DEVICE PREFERENCE.
 
+**A feed that STOPS recovers itself.** The bridge's original recovery path watched frame
+CONTENT (a sustained foreign-card run), so it could only run while frames arrived — and
+the meter's worst failure is that they stop. Confirmed live: the engine's level feed went
+silent 2 ms after a changed pick published its `handoff` gap, and the meter read a bare
+`Meter unavailable` (no reason suffix — nothing was reaching the browser) for 14 minutes
+with no operator action. A frame-ABSENCE watchdog now sits beside the content one and
+re-asserts the preference through the SAME `null` escape hatch on the SAME once-per-30 s
+floor. Full contract: `apps/backend/AGENTS.md` → "THE RECOVERY PATH MUST NOT BE GATED ON
+THE SIGNAL WHOSE ABSENCE IS THE FAILURE".
+
 **There is NO operator rename.** #206 briefly shipped an alias/rename UI backed by
 `config.audio_device_aliases`; #207 removed it in full — UI, `setAudioDeviceAlias`
 RPC, oRPC contract entry, `audio-aliases.schema.ts`, and the config field — by

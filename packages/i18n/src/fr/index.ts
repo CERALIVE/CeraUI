@@ -1451,9 +1451,14 @@ const fr = {
 			sourceMax: "Maximum de la source",
 			activeLive: "En direct",
 			activeConfigured: "Configuré",
-			lostTitle: "Appareil déconnecté",
 			lostBody:
 				"Reconnectez l'appareil pour reprendre la diffusion depuis cette source.",
+			lostBannerTitleOne: "{name} déconnecté",
+			lostBannerTitleMany: "{count} appareils déconnectés",
+			lostBannerBodyOne:
+				"{name} n'est plus connecté. Reconnectez-le pour l'utiliser à nouveau comme source — aucune autre source de cette liste n'est affectée.",
+			lostBannerBodyMany:
+				"Ces appareils ne sont plus connectés : {names}. Reconnectez-les pour les utiliser à nouveau comme sources — aucune autre source de cette liste n'est affectée.",
 			lostStreamingTitle: "Source en direct déconnectée",
 			lostStreamingBody:
 				"La source que vous diffusez a été perdue. Reconnectez-la ou changez de source pour garder votre direct actif.",

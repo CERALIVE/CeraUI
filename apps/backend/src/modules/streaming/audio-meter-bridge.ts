@@ -33,10 +33,12 @@
 // meter can render its `unavailable` state per the ADR contract.
 //
 // Resilience: the `@ceralive/cerastream` client's `autoReconnect` re-subscribes on
-// a dropped socket, so once connected the bridge self-heals. The only gap it must
-// cover itself is the INITIAL connect when the engine is not up yet (a systemd
-// ordering race) — a bounded backoff retry, mirroring `engine-reconnect.ts`. It
-// NEVER throws and NEVER blocks boot; every collaborator is injected for tests.
+// a dropped socket, so once connected the bridge self-heals. Two gaps it must cover
+// itself: the INITIAL connect when the engine is not up yet (a systemd ordering
+// race) — a bounded backoff retry, mirroring `engine-reconnect.ts` — and a socket
+// that stays UP while the engine's meter stops publishing, which no reconnect can
+// see (`armFrameAbsenceWatchdog`). It NEVER throws and NEVER blocks boot; every
+// collaborator is injected for tests.
 
 import type {
 	CerastreamClient,
@@ -65,6 +67,18 @@ export const AUDIO_METER_CONNECT_MAX_MS = 30_000;
 export const AUDIO_METER_MISMATCH_GRACE_MS = 5_000;
 /** Floor between two re-assertions, so a permanent mismatch stays cheap. */
 export const AUDIO_METER_REASSERT_INTERVAL_MS = 30_000;
+/**
+ * How long the level feed may fall SILENT before the preference is re-asserted.
+ *
+ * The engine's always-on meter publishes at 5 Hz (ADR-0007), i.e. one frame every
+ * 200 ms, so 2 500 ms is ~12 consecutive missed frames — far beyond event-loop
+ * jitter, a GC pause, or one re-subscribe on the binding's `autoReconnect`, yet
+ * short enough that an operator watching the meter sees it recover in seconds.
+ * Deliberately SHORTER than `AUDIO_METER_MISMATCH_GRACE_MS`: absence is
+ * unambiguous, where a foreign reading has to be given time to be corrected by
+ * the next frame.
+ */
+export const AUDIO_METER_FRAME_ABSENCE_MS = 2_500;
 
 type TimerHandle = ReturnType<typeof setTimeout>;
 
@@ -208,6 +222,12 @@ interface BridgeState {
 	mismatchSince: number | undefined;
 	mismatchLogged: boolean;
 	lastReassertAt: number | undefined;
+	/**
+	 * Frame-ABSENCE watchdog. Armed by an arriving level and re-armed by every one
+	 * after it, so its expiry PROVES no frame arrived inside the window — and its
+	 * mere existence proves at least one frame already has.
+	 */
+	absenceTimer: TimerHandle | undefined;
 	/** Selection the last broadcast level was attributable to (see `noteMeterSelection`). */
 	lastSelection: string | undefined;
 }
@@ -275,13 +295,77 @@ function noteForeignCardLevel(deps: AudioMeterBridgeDeps): void {
 		return;
 	}
 	state.lastReassertAt = now;
-	void reassertPreference();
+	void reassertPreference("a sustained foreign-card reading");
 }
 
 function clearForeignCardRun(): void {
 	if (!state) return;
 	state.mismatchSince = undefined;
 	state.mismatchLogged = false;
+}
+
+/**
+ * The FRAME-ABSENCE half of the recovery pair above.
+ *
+ * `noteForeignCardLevel` watches frame CONTENT, so it can only run while frames
+ * arrive — and the meter's worst failure is that they stop. Found live: a changed
+ * pick published its `handoff` gap, the engine's level feed went silent 2 ms
+ * later, and 14 minutes on the meter still read a bare `Meter unavailable` with no
+ * operator action. There were no foreign readings to accumulate, so the grace
+ * window never elapsed and the re-assert never fired; every documented sync
+ * trigger (`asrc`/`source` change, `updateAudioDevices`,
+ * `reresolveAudioForEngineChange`, bridge reconnect) is edge-triggered on things
+ * that had all gone still, so a steady-state board never recovered.
+ *
+ * It is a DEBOUNCE on arrival, not a poll: every level re-arms the deadline, so
+ * expiry is itself the proof that none arrived — no clock comparison needed, and
+ * no baseline is ever assumed, because an unarmed watchdog is exactly a connection
+ * that has not delivered a frame yet (mirroring `noteMeterSelection`'s
+ * first-connect silence).
+ *
+ * It re-asserts through the SAME `null` escape hatch on the SAME once-per-interval
+ * floor, sharing `lastReassertAt` with the content watchdog: one recovery path with
+ * two triggers, never two competing paths.
+ */
+function armFrameAbsenceWatchdog(deps: AudioMeterBridgeDeps): void {
+	if (!state || state.stopped) return;
+	if (state.absenceTimer !== undefined) deps.clearTimer(state.absenceTimer);
+	state.absenceTimer = deps.setTimer(
+		noteFrameAbsence,
+		AUDIO_METER_FRAME_ABSENCE_MS,
+	);
+}
+
+function noteFrameAbsence(): void {
+	if (!state || state.stopped) return;
+	const { deps } = state;
+	state.absenceTimer = undefined;
+	// Nothing to re-assert against, and the next connect's first frame re-arms.
+	if (state.client === undefined) return;
+	// Re-armed BEFORE every gate below, so a feed that is silent for a reason we
+	// refuse to act on today is still being watched when that reason changes.
+	armFrameAbsenceWatchdog(deps);
+	if (deps.meterSilenced()) return;
+	const meter_device = deps.meterPreference();
+	if (meter_device === null) return;
+	const now = deps.now();
+	if (
+		state.lastReassertAt !== undefined &&
+		now - state.lastReassertAt < AUDIO_METER_REASSERT_INTERVAL_MS
+	) {
+		return;
+	}
+	state.lastReassertAt = now;
+	deps.logger.warn(
+		`audio-meter bridge: no audio level for ${AUDIO_METER_FRAME_ABSENCE_MS} ms while ${meter_device} is selected — re-asserting the preference`,
+	);
+	void reassertPreference("a silent level feed");
+}
+
+function clearFrameAbsenceWatchdog(s: BridgeState): void {
+	if (s.absenceTimer === undefined) return;
+	s.deps.clearTimer(s.absenceTimer);
+	s.absenceTimer = undefined;
 }
 
 function projectLevel(
@@ -312,6 +396,8 @@ function projectLevel(
 function handleEvent(event: EventParams): void {
 	if (!state || state.stopped) return;
 	if (event.type !== "audio-level") return;
+	// Ahead of the broadcast, so a throwing consumer cannot leave the feed unwatched.
+	armFrameAbsenceWatchdog(state.deps);
 	try {
 		state.deps.broadcast(projectLevel(event, state.deps));
 	} catch (err) {
@@ -412,9 +498,10 @@ function sendMeterDevice(
 /**
  * Clear the engine's preference, then re-apply it — see `noteForeignCardLevel`
  * for why the intermediate `null` is the whole point. Never throws, and a failed
- * half leaves the meter exactly where it already was.
+ * half leaves the meter exactly where it already was. `cause` names which of the
+ * two watchdogs asked, so the log distinguishes a wrong card from a dead feed.
  */
-async function reassertPreference(): Promise<void> {
+async function reassertPreference(cause: string): Promise<void> {
 	const client = state?.stopped === false ? state.client : undefined;
 	if (client === undefined || !state) return;
 	const { deps } = state;
@@ -425,7 +512,7 @@ async function reassertPreference(): Promise<void> {
 		await sendMeterDevice(client, null);
 		await sendMeterDevice(client, meter_device);
 		deps.logger.info(
-			`audio-meter bridge: re-asserted the idle-meter preference ${meter_device} after a sustained foreign-card reading`,
+			`audio-meter bridge: re-asserted the idle-meter preference ${meter_device} after ${cause}`,
 		);
 	} catch (err) {
 		deps.logger.warn(
@@ -533,6 +620,7 @@ export function initAudioMeterBridge(
 		mismatchSince: undefined,
 		mismatchLogged: false,
 		lastReassertAt: undefined,
+		absenceTimer: undefined,
 		lastSelection: undefined,
 	};
 	state.inflight = tick();
@@ -549,6 +637,7 @@ export function stopAudioMeterBridge(): void {
 	const s = state;
 	s.stopped = true;
 	if (s.timer !== undefined) s.deps.clearTimer(s.timer);
+	clearFrameAbsenceWatchdog(s);
 	s.subscription?.close();
 	void s.client?.close().catch(() => undefined);
 	state = undefined;

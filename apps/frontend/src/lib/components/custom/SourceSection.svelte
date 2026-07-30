@@ -247,6 +247,15 @@ const hasSources = $derived(visibleSources.length > 0);
 // Lost-device explanation: any reported capture device that vanished mid-session.
 const lostCaptures = $derived(captureSources.filter((s) => s.lost === true));
 const hasLostDevice = $derived(lostCaptures.length > 0);
+// The predicate above is deliberately GLOBAL — a lost non-selected device is still
+// worth surfacing — so the banner's SENTENCE must name what actually went. Singular,
+// device-anonymous copy ("Device disconnected · Reconnect the device to resume
+// streaming from this source") rendered ABOVE the list reads as a header for the
+// card, i.e. as a claim about the SELECTED row. Live QA hit exactly that: the Osmo
+// was present, selected and healthy while only a RØDE had gone, and the operator
+// read the band as an accusation against the Osmo. `lostCaptures` already carries
+// the devices, so the truthful sentence needs no new data.
+const lostNames = $derived(lostCaptures.map((s) => s.displayName).join(', '));
 
 // The THIRD negative state: the device is PRESENT and bound, but the backend
 // explicitly reported zero usable capture modes (an idle HDMI-RX port with
@@ -546,8 +555,16 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			>
 				<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
 				<div class="min-w-0 space-y-0.5">
-					<p class="text-destructive text-sm font-medium">{$LL.live.source.lostTitle()}</p>
-					<p class="text-muted-foreground text-xs">{$LL.live.source.lostBody()}</p>
+					<p class="text-destructive text-sm font-medium" data-testid="source-lost-banner-title">
+						{lostCaptures.length === 1
+							? $LL.live.source.lostBannerTitleOne({ name: lostNames })
+							: $LL.live.source.lostBannerTitleMany({ count: lostCaptures.length })}
+					</p>
+					<p class="text-muted-foreground text-xs">
+						{lostCaptures.length === 1
+							? $LL.live.source.lostBannerBodyOne({ name: lostNames })
+							: $LL.live.source.lostBannerBodyMany({ names: lostNames })}
+					</p>
 				</div>
 			</div>
 		{/if}
