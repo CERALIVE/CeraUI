@@ -30,8 +30,10 @@ import {
 	shouldMockSensors,
 } from "../../mocks/providers/sensors.ts";
 
+import { getConfig } from "../config.ts";
 import { getRTMPIngestStats } from "../ingest/rtmp.ts";
 import { getSRTIngestStats } from "../ingest/srt.ts";
+import { getSourcesMessage } from "../streaming/sources.ts";
 import {
 	notificationBroadcast,
 	notificationExists,
@@ -42,6 +44,7 @@ import { getHardwareKindCached } from "./hardware-kind.ts";
 import {
 	HDMI_ERROR_NOTIFICATION,
 	HDMI_NO_SIGNAL_MSG,
+	provesSelectionIsNotHdmi,
 } from "./hdmi-signal-notification.ts";
 
 const bootconfigService = "ceralive-firstboot-bootconfig";
@@ -170,6 +173,97 @@ export function stopDmesgWatchers(): void {
 	for (const watcher of dmesgWatchers.splice(0)) watcher.abort();
 }
 
+/** The effectful surface the RK3588 HDMI dmesg handler drives. */
+export interface HdmiDmesgDeps {
+	peek: (name: string) => { msg: string } | undefined;
+	raise: (
+		name: string,
+		type: "error",
+		msg: string,
+		duration: number,
+		isPersistent: boolean,
+		isDismissable: boolean,
+		authedOnly?: boolean,
+		key?: string,
+	) => void;
+	noSignalRaiseAllowed: () => boolean;
+}
+
+const EMI_ADVISORY_MSG =
+	"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
+	"Try to move any modems away from the HDMI cable and the encoder. " +
+	"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
+
+/**
+ * FAIL-OPEN by construction: only a selection this device can positively read
+ * AND positively identify as non-HDMI withholds the raise. A throw here (config
+ * not loaded, sources not yet built) is not evidence about the operator, so it
+ * must never be the reason a real no-signal fault goes unreported.
+ */
+function hdmiNoSignalRaiseAllowed(): boolean {
+	try {
+		const config = getConfig();
+		return !provesSelectionIsNotHdmi(
+			config.source,
+			getSourcesMessage().sources,
+			config.last_seen_devices ?? [],
+		);
+	} catch (err) {
+		logger.debug("sensors: HDMI raise scope unreadable — raising", { err });
+		return true;
+	}
+}
+
+const defaultHdmiDmesgDeps: HdmiDmesgDeps = {
+	peek: notificationExists,
+	raise: notificationBroadcast,
+	noSignalRaiseAllowed: hdmiNoSignalRaiseAllowed,
+};
+
+/**
+ * The RK3588 kernel-log HDMI handler, driving two INDEPENDENT notifications off
+ * the same watcher. Extracted from the watcher callback so the raise conditions
+ * are drivable without a `dmesg -w` process.
+ */
+export function handleRk3588HdmiDmesg(
+	data: string,
+	deps: HdmiDmesgDeps = defaultHdmiDmesgDeps,
+): void {
+	// The EMI/cable advisory is deliberately UNGATED: the kernel emits these two
+	// lines only while the receiver is actually locking or clocking a link, so
+	// they already describe work somebody asked for.
+	if (
+		data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
+		data.match("hdmirx_delayed_work_audio: audio underflow")
+	) {
+		deps.raise(
+			HDMI_ERROR_NOTIFICATION,
+			"error",
+			EMI_ADVISORY_MSG,
+			8,
+			true,
+			true,
+			true,
+			"notifications.hdmiError",
+		);
+	}
+
+	if (data.match("hdmirx-controller: Err, timing is invalid")) {
+		if (!deps.noSignalRaiseAllowed()) return;
+		const hdmiNotif = deps.peek(HDMI_ERROR_NOTIFICATION);
+		if (!hdmiNotif || hdmiNotif.msg === HDMI_NO_SIGNAL_MSG) {
+			deps.raise(
+				HDMI_ERROR_NOTIFICATION,
+				"error",
+				HDMI_NO_SIGNAL_MSG,
+				3,
+				true,
+				true,
+			);
+		}
+	}
+}
+
 export function initHardwareMonitoring() {
 	// Use mock sensors in development mode
 	if (shouldMockSensors()) {
@@ -256,42 +350,7 @@ export function initHardwareMonitoring() {
 		}
 
 		case "rk3588": {
-			startDmesgWatcher((data) => {
-				if (
-					data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
-					data.match("hdmirx_delayed_work_audio: audio underflow")
-				) {
-					const msg =
-						"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
-						"Try to move any modems away from the HDMI cable and the encoder. " +
-						"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
-					notificationBroadcast(
-						HDMI_ERROR_NOTIFICATION,
-						"error",
-						msg,
-						8,
-						true,
-						true,
-						true,
-						"notifications.hdmiError",
-					);
-				}
-
-				if (data.match("hdmirx-controller: Err, timing is invalid")) {
-					const hdmiNotif = notificationExists(HDMI_ERROR_NOTIFICATION);
-
-					if (!hdmiNotif || hdmiNotif.msg === HDMI_NO_SIGNAL_MSG) {
-						notificationBroadcast(
-							HDMI_ERROR_NOTIFICATION,
-							"error",
-							HDMI_NO_SIGNAL_MSG,
-							3,
-							true,
-							true,
-						);
-					}
-				}
-			});
+			startDmesgWatcher((data) => handleRk3588HdmiDmesg(data));
 			break;
 		}
 	}

@@ -57,6 +57,10 @@ import { broadcastMsg } from "../ui/websocket-server.ts";
 import { getAudioDevices } from "./audio.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import { getLastCapabilities } from "./capabilities.ts";
+import {
+	resetCapturePresence,
+	resolveSelectedSourceWithGrace,
+} from "./capture-presence.ts";
 import { getEngineAudioDevices, getSourcesMessage } from "./sources.ts";
 import { getIsStreaming } from "./streaming.ts";
 
@@ -294,14 +298,24 @@ export function buildAutoLaunchConfig(
 	return { ...config, asrc: launchAsrc };
 }
 
-/** Gather live state and resolve — the shared start-path / preview resolver. */
+/**
+ * Gather live state and resolve — the shared start-path / preview resolver.
+ *
+ * The selected source is resolved through an ABSENCE GRACE WINDOW rather than a
+ * plain `find`, because the device view this reads has a real, normal hole in it.
+ * libuvc's reattach guard rebinds the camera's USB interfaces around every
+ * open/close, and on RELEASE the engine drops its held record before the
+ * successor node is rediscovered — for up to 2 s the camera's video row is
+ * missing, or present but stripped of the `physical_group_id` rule 5 joins on.
+ * Resolving that window literally reported a bound, streaming microphone as "no
+ * audio device". Only the VERDICT is held; the device list, the `lost` row and
+ * routing are untouched, and a sustained absence still resolves honestly.
+ * Contract: `capture-presence.ts`.
+ */
 export function resolveAutoAsrcFromLiveState(): AutoAsrcResolution {
 	const config = getConfig();
 	const sources = getSourcesMessage().sources;
-	const source =
-		config.source !== undefined
-			? sources.find((s) => s.id === config.source)
-			: undefined;
+	const source = resolveSelectedSourceWithGrace(config.source, sources);
 	return resolveAutoAsrc({
 		source,
 		audioDevices: getAudioDevices(),
@@ -421,4 +435,5 @@ export function resetAutoAudioState(): void {
 	resolvedAsrcReason = null;
 	resolvedAsrcCandidates = null;
 	pendingAudioFollowAsrc = null;
+	resetCapturePresence();
 }

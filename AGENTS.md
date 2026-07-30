@@ -1988,6 +1988,24 @@ re-asserts the preference through the SAME `null` escape hatch on the SAME once-
 floor. Full contract: `apps/backend/AGENTS.md` → "THE RECOVERY PATH MUST NOT BE GATED ON
 THE SIGNAL WHOSE ABSENCE IS THE FAILURE".
 
+**A momentary "No audio device" during a NORMAL libuvc rebind is a derived-state
+artifact, and it is now absorbed.** Opening a UVC-H.264 camera detaches `uvcvideo`
+from its USB interfaces (see LIBUVC-HELD DEVICES) — necessary, and no USB device
+reset is involved: measured on a board, `devnum` never changes and the camera's ALSA
+card and PCM node inode survive untouched. But on RELEASE the engine drops its held
+record ≈400 ms (up to 2 s) before it rediscovers the re-registered node, and "Auto"
+resolves audio by looking the VIDEO source up first. For that window the join key was
+gone, Auto answered `no-same-device-audio`, and the meter read "Meter unavailable ·
+No audio device" for a microphone that never moved. `resolveAutoAsrcFromLiveState()`
+now resolves the selection through a strictly-bounded absence grace
+(`capture-presence.ts`, 2 000 ms, keyed on stable identity) — a hysteresis on the
+VERDICT only. Nothing else changes: the `sources` payload, the `lost` row and routing
+are untouched, and a sustained absence still reports honestly. In the same window the
+`hdmi_error` no-signal RAISE is now scoped like its retraction, so a stream-start's
+incidental `/dev/video0` probe no longer shows HDMI text to a USB-camera session.
+Full contracts: `apps/backend/AGENTS.md` → "A DEBOUNCE IS NOT AN ABSENCE GRACE" and
+"…AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION".
+
 **There is NO operator rename.** #206 briefly shipped an alias/rename UI backed by
 `config.audio_device_aliases`; #207 removed it in full — UI, `setAudioDeviceAlias`
 RPC, oRPC contract entry, `audio-aliases.schema.ts`, and the config field — by
