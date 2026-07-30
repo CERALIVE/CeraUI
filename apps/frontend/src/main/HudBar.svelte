@@ -73,13 +73,37 @@ const lifecycle = $derived<HudLifecycle>(isOffline ? 'offline' : isLive ? 'live'
 // Dimming is reserved for aging-while-streaming (live + stale) and NEVER
 // applies to an idle/offline absence.
 const bitrateDimmed = $derived(isLive && hud.isBitrateStale);
-const bitrateText = $derived(isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—');
 
-// `hud.bitrateKbps` is the rate the engine has APPLIED; `bitrateCeilingKbps` is
-// what the operator configured. They differ whenever the adaptive controller has
-// throttled down, and showing only the ceiling is what made a protective
-// reduction look like the device ignoring the setting. The ceiling is rendered
-// as a qualifier ON the existing bitrate fact, not as a fifth HUD fact.
+// The headline number is the MEASURED bond throughput when srtla_send reports
+// one, and only otherwise the engine's target. `hud.bitrateKbps` is a
+// control-loop SETPOINT: a board session held it at a steady 4.1 Mbps while the
+// engine's own watchdog logged "frames-not-advancing" and nothing left the
+// device — so it can state "streaming at 4.1 Mbps" and "streaming nothing"
+// identically. The measured figure cannot. The target stays on screen as a
+// labelled qualifier because it is genuinely useful context, just not the
+// answer to "what am I sending".
+const measuredKbps = $derived(isLive ? hud.measuredBitrateKbps : null);
+const isBitrateMeasured = $derived(measuredKbps != null);
+const primaryBitrateKbps = $derived(measuredKbps ?? (isLive ? hud.bitrateKbps : null));
+const bitrateText = $derived(
+	primaryBitrateKbps != null ? formatBitrate(loc)(primaryBitrateKbps) : '—',
+);
+const bitrateHeading = $derived(isBitrateMeasured ? $LL.hud.bitrate() : $LL.hud.bitrateTarget());
+const bitrateHint = $derived(
+	isBitrateMeasured ? $LL.hud.bitrateMeasuredHint() : $LL.hud.bitrateTargetHint(),
+);
+
+// Shown only when the measured figure has taken the headline — otherwise the
+// target IS the headline and repeating it would be noise.
+const showTargetQualifier = $derived(isBitrateMeasured && hud.bitrateKbps != null);
+const bitrateTargetText = $derived(
+	hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : '—',
+);
+
+// `bitrateCeilingKbps` is what the operator configured; it differs from the
+// target whenever the adaptive controller has throttled down, and showing only
+// the ceiling is what made a protective reduction look like the device ignoring
+// the setting. It qualifies the TARGET, never the measurement.
 const bitrateBelowLimit = $derived(isLive && hud.isBitrateBelowCeiling);
 const bitrateLimitText = $derived(hud.bitrateCeilingKbps != null ? formatBitrate(loc)(hud.bitrateCeilingKbps) : '—');
 
@@ -172,7 +196,7 @@ const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
 const telemetrySummary = $derived(
 	[
 		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
-		`${$LL.hud.bitrate()}: ${bitrateText}`,
+		`${bitrateHeading}: ${bitrateText}`,
 		`${$LL.hud.network()}: ${hud.links.length}`,
 	].join(' · '),
 );
@@ -190,7 +214,8 @@ $effect(() => {
 // dimming conveys — never a fresh-sounding value for an aged reading.
 const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
 const bitrateLabel = $derived(
-	`${$LL.hud.bitrate()}: ${isLive && hud.bitrateKbps != null ? formatBitrate(loc)(hud.bitrateKbps) : $LL.hud.noData()}` +
+	`${bitrateHeading}: ${primaryBitrateKbps != null ? bitrateText : $LL.hud.noData()}` +
+		`${showTargetQualifier ? `, ${$LL.hud.bitrateTarget()} ${bitrateTargetText}` : ''}` +
 		`${bitrateBelowLimit ? `, ${$LL.hud.bitrateLimit()} ${bitrateLimitText}` : ''}${staleSuffix(bitrateDimmed)}`,
 );
 // The compact strip now shows a single temperature chip; the aria name carries
@@ -342,21 +367,31 @@ $effect(() => {
 				<span class="bg-border h-5 w-px shrink-0" aria-hidden="true"></span>
 
 				<!-- Bitrate — live-only; renders "—" when idle/offline (never a dimmed stale number).
-				     While the engine is throttled below the configured limit, that limit rides
-				     along as a muted qualifier so the operator sees their setting was honoured
-				     as a ceiling, not ignored. -->
+				     The headline is the MEASURED bond throughput; the engine's target rides
+				     along as a labelled qualifier (and, while throttled, the configured limit
+				     after it) so the operator can see the aim beside the actual. -->
 				<span
 					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', bitrateDimmed && 'opacity-50')}
 					role="img"
 					aria-label={bitrateLabel}
-					title={bitrateBelowLimit ? $LL.hud.bitrateBelowLimitHint() : $LL.hud.bitrate()}
+					title={bitrateBelowLimit ? $LL.hud.bitrateBelowLimitHint() : bitrateHint}
 					data-testid="hud-bitrate"
 					data-below-limit={bitrateBelowLimit ? 'true' : undefined}
+					data-measured={isBitrateMeasured ? 'true' : undefined}
 				>
 					{#if bitrateDimmed}
 						<ClockIcon class="size-3 shrink-0" aria-hidden="true" />
 					{/if}
 					{bitrateText}
+					{#if showTargetQualifier}
+						<span
+							class="text-muted-foreground/70 text-[0.7rem]"
+							data-testid="hud-bitrate-target"
+							title={$LL.hud.bitrateTargetHint()}
+						>
+							{$LL.hud.bitrateTarget()} {bitrateTargetText}
+						</span>
+					{/if}
 					{#if bitrateBelowLimit}
 						<span class="text-muted-foreground/70 text-[0.7rem]" data-testid="hud-bitrate-limit">
 							/ {bitrateLimitText}
@@ -545,16 +580,33 @@ $effect(() => {
 					<p class="text-muted-foreground/70 text-xs" data-testid="stream-health-rollup-empty">{$LL.hud.noData()}</p>
 				{/if}
 
-				<!-- 4. Single bitrate row (Task 8 behavior) -->
-				<div class={cn('flex items-center justify-between gap-3 border-b py-2', bitrateDimmed && 'opacity-50')}>
+				<!-- 4. Bitrate: the measured headline, then the engine's target beneath it. -->
+				<div
+					class={cn('flex items-center justify-between gap-3 border-b py-2', bitrateDimmed && 'opacity-50')}
+					data-testid="hud-bitrate-row"
+					data-measured={isBitrateMeasured ? 'true' : undefined}
+				>
 					<span class="text-muted-foreground flex items-center gap-2">
 						{#if bitrateDimmed}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
-						{$LL.hud.bitrate()}
+						{bitrateHeading}
 					</span>
 					<span class="font-mono tabular-nums">
 						{bitrateText}
 					</span>
 				</div>
+				<p class="text-muted-foreground/70 py-2 text-xs" data-testid="hud-bitrate-source-hint">
+					{bitrateHint}
+				</p>
+
+				{#if showTargetQualifier}
+					<div class="flex items-center justify-between gap-3 border-b py-2" data-testid="hud-bitrate-target-row">
+						<span class="text-muted-foreground flex items-center gap-2">
+							<InfoIcon class="size-3.5 shrink-0" aria-hidden="true" />
+							{$LL.hud.bitrateTarget()}
+						</span>
+						<span class="font-mono tabular-nums">{bitrateTargetText}</span>
+					</div>
+				{/if}
 
 				<!-- The configured ceiling, shown ONLY once the engine has proved it is
 				     encoding below it. The sheet has room for the explanation the compact

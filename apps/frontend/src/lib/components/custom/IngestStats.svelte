@@ -43,10 +43,11 @@ interface Props {
 	telemetry: LinkTelemetryMessage | null | undefined;
 	isStreaming?: boolean | undefined;
 	/**
-	 * The bitrate the engine is APPLYING, kbps — sampled once per telemetry tick
-	 * into the session peak/avg rollup. Never the configured ceiling: that value
-	 * is constant for a session, so peak and avg would both restate the setting
-	 * instead of reporting what the bond actually carried.
+	 * The live bitrate headline, kbps — the MEASURED bond throughput when
+	 * srtla_send reports one, else the engine's target. Sampled once per
+	 * telemetry tick into the session peak/avg rollup. Never the configured
+	 * ceiling: that value is constant for a session, so peak and avg would both
+	 * restate the setting instead of reporting what the bond actually carried.
 	 */
 	bitrateKbps?: number | undefined;
 	class?: string;

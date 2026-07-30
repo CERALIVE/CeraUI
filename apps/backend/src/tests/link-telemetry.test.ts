@@ -252,7 +252,11 @@ describe("ingestion + mapping + payload shape", () => {
 		const w = captureWatch();
 		setIfaceResolverForTest(() => "usb0");
 		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], { watch: w.watch });
-		w.emit(snapshot([{ conn_id: "0", rtt_ms: 5, nak_count: 2 }]));
+		w.emit(
+			snapshot([
+				{ conn_id: "0", rtt_ms: 5, nak_count: 2, bitrate_bps: 2_500_000 },
+			]),
+		);
 
 		const link = buildLinkTelemetry()?.links[0];
 		expect(link).toEqual({
@@ -261,6 +265,7 @@ describe("ingestion + mapping + payload shape", () => {
 			rtt_ms: 5,
 			nak_count: 2,
 			weight_percent: 100,
+			bitrate_bps: 2_500_000,
 			stale: false,
 		});
 	});
@@ -349,6 +354,87 @@ describe("stale propagation", () => {
 	});
 });
 
+// The live "bitrate" the operator reads used to be `engine_bitrate.applied_kbps`
+// — the adaptive controller's own SETPOINT. Proven on a board: a steady 4100
+// while the engine's watchdog logged "frames-not-advancing" and /proc/net/dev
+// showed 48-85 kbps of SSH/WS traffic and no media at all. srtla_send has always
+// published a real per-link measurement (ADR-001 `bitrate_bps`, wire bytes × 8)
+// and this module silently discarded it. These tests pin that it now flows.
+describe("measured wire bitrate (ADR-001 bitrate_bps)", () => {
+	function liveWith(connections: Array<Record<string, number | string>>) {
+		const w = captureWatch();
+		setIfaceResolverForTest((ip) => (ip === "10.0.0.1" ? "usb0" : "wlan0"));
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1", "10.0.0.2"], {
+			watch: w.watch,
+		});
+		w.emit(snapshot(connections));
+		return w;
+	}
+
+	test("carries each link's measured bitrate through to the payload", () => {
+		liveWith([
+			{ conn_id: "0", bitrate_bps: 2_500_000 },
+			{ conn_id: "1", bitrate_bps: 1_000_000 },
+		]);
+
+		const links = buildLinkTelemetry()?.links;
+		expect(links?.[0]?.bitrate_bps).toBe(2_500_000);
+		expect(links?.[1]?.bitrate_bps).toBe(1_000_000);
+	});
+
+	test("aggregates the bond total as the sum across links", () => {
+		liveWith([
+			{ conn_id: "0", bitrate_bps: 2_500_000 },
+			{ conn_id: "1", bitrate_bps: 1_000_000 },
+		]);
+
+		expect(buildLinkTelemetry()?.measured_bps).toBe(3_500_000);
+	});
+
+	test("a bond carrying nothing measures ZERO — the setpoint's blind spot", () => {
+		liveWith([
+			{ conn_id: "0", bitrate_bps: 0 },
+			{ conn_id: "1", bitrate_bps: 0 },
+		]);
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.measured_bps).toBe(0);
+		expect(payload?.links.every((l) => l.bitrate_bps === 0)).toBe(true);
+	});
+
+	test("an unreadable link contributes 0 instead of NaN-ing the whole bond", () => {
+		liveWith([
+			{ conn_id: "0", bitrate_bps: Number.NaN },
+			{ conn_id: "1", bitrate_bps: 1_000_000 },
+		]);
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.links[0]?.bitrate_bps).toBe(0);
+		expect(payload?.measured_bps).toBe(1_000_000);
+	});
+
+	test("an idle-but-running bond reports a zero total, not an absent one", () => {
+		const w = captureWatch();
+		setIfaceResolverForTest(() => undefined);
+		startLinkTelemetry("/tmp/stats.json", [], { watch: w.watch });
+		w.emit(snapshot([]));
+
+		expect(buildLinkTelemetry()?.measured_bps).toBe(0);
+	});
+
+	test("a stale tick retains the last measured values beside stale:true", () => {
+		const w = liveWith([
+			{ conn_id: "0", bitrate_bps: 2_000_000 },
+			{ conn_id: "1", bitrate_bps: 500_000 },
+		]);
+		w.emit(null);
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.measured_bps).toBe(2_500_000);
+		expect(payload?.links.every((l) => l.stale)).toBe(true);
+	});
+});
+
 describe("garbage input (corrupt stats file)", () => {
 	test("a corrupt file leaves the backend alive; payload degrades to null/stale", async () => {
 		const path = `/tmp/ceralive-link-telemetry-garbage-${process.pid}.json`;
@@ -432,7 +518,11 @@ describe("control-socket subscription cutover + airtight file-poll fallback", ()
 		expect(w.stopped).toBe(1);
 		expect(isLinkTelemetryActive()).toBe(true);
 
-		fake.emit(snapshot([{ conn_id: "0", rtt_ms: 7, nak_count: 4 }]));
+		fake.emit(
+			snapshot([
+				{ conn_id: "0", rtt_ms: 7, nak_count: 4, bitrate_bps: 1_800_000 },
+			]),
+		);
 		const payload = buildLinkTelemetry();
 		expect(payload?.links).toEqual([
 			{
@@ -441,9 +531,11 @@ describe("control-socket subscription cutover + airtight file-poll fallback", ()
 				rtt_ms: 7,
 				nak_count: 4,
 				weight_percent: 100,
+				bitrate_bps: 1_800_000,
 				stale: false,
 			},
 		]);
+		expect(payload?.measured_bps).toBe(1_800_000);
 		expect(typeof payload?.lastReadMs).toBe("number");
 	});
 

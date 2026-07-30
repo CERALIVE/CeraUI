@@ -828,6 +828,11 @@ const zh = {
 		bitrateAdapting: "自适应中",
 		bitrateBelowLimitHint:
 			"当前编码低于你配置的上限——当网络无法承载全部码率时，引擎会自动降低码率。",
+		bitrateTarget: "目标",
+		bitrateMeasuredHint:
+			"在你的聚合链路上实测所得——设备实际发出的数据量，包含协议开销。",
+		bitrateTargetHint:
+			"编码器所要达到的码率。这是引擎会调整的设定值，而非实际发送量的测量值。",
 		temperature: "温度",
 		network: "网络",
 		uptime: "运行时间",

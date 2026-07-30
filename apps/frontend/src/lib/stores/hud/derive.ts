@@ -9,6 +9,7 @@
 
 import type {
 	EngineBitrate,
+	LinkTelemetryMessage,
 	SensorsStatus,
 	UpdatingStatus,
 } from "@ceraui/rpc/schemas";
@@ -64,6 +65,32 @@ export function deriveBitrateReading(
 }
 
 /**
+ * The bond's MEASURED wire throughput in kbps, or `null` when it cannot be
+ * vouched for.
+ *
+ * This is the only bitrate on the wire that is an observation. `deriveBitrateReading`
+ * above answers what the engine is AIMING at; a board session proved the two are
+ * not interchangeable — the setpoint held a steady 4100 kbps through 30 s that
+ * carried no media whatsoever, which this figure would have reported as ~0.
+ *
+ * Zero is a real reading, not an absence, so it is returned as such. Two cases
+ * genuinely are unknown and must not be rendered as a number: no aggregate on
+ * the wire (a sender predating ADR-001 telemetry), and a snapshot whose every
+ * link is stale — frozen counters are the exact class of lie this replaces.
+ */
+export function deriveMeasuredBitrateKbps(
+	telemetry: LinkTelemetryMessage | null | undefined,
+): number | null {
+	if (!telemetry) return null;
+	const bps = telemetry.measured_bps;
+	if (typeof bps !== "number" || !Number.isFinite(bps) || bps < 0) return null;
+	if (telemetry.links.length > 0 && telemetry.links.every((l) => l.stale)) {
+		return null;
+	}
+	return Math.round(bps / 1000);
+}
+
+/**
  * Pure derivation: turn a point-in-time {@link HudSources} snapshot plus
  * {@link HudTimestamps} and a clock value into a complete {@link HudState}.
  *
@@ -104,6 +131,9 @@ export function deriveHudState(
 		// Live-Data Discipline (T6): bitrate is a live streaming value, so it must
 		// not persist a stale number from the last session once the stream stops.
 		bitrateKbps: sources.isStreaming ? bitrate.effectiveKbps : null,
+		measuredBitrateKbps: sources.isStreaming
+			? deriveMeasuredBitrateKbps(sources.linkTelemetry)
+			: null,
 		bitrateCeilingKbps: sources.isStreaming ? ceilingKbps : null,
 		isBitrateBelowCeiling: sources.isStreaming && bitrate.belowCeiling,
 		isBitrateStale: streamingStale,

@@ -233,9 +233,11 @@ describe("media-path backend contracts", () => {
 					rtt_ms: 42,
 					nak_count: 3,
 					weight_percent: 100,
+					bitrate_bps: 1_000_000,
 					stale: false,
 				},
 			]);
+			expect(buildLinkTelemetry()?.measured_bps).toBe(1_000_000);
 		} finally {
 			stopLinkTelemetry();
 			setControlClientFactoryForTest(null);

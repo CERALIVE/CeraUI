@@ -77,6 +77,7 @@ function makeHud(overrides: Partial<HudState> = {}): HudState {
 		isStreaming: false,
 		isStreamingStale: false,
 		bitrateKbps: null,
+		measuredBitrateKbps: null,
 		isBitrateStale: false,
 		links: [],
 		staleInterfaces: new Set<string>(),
@@ -114,8 +115,9 @@ async function openSheet(): Promise<HTMLElement> {
 }
 
 function stripBitrate(): HTMLElement {
-	// The strip badge is the only element carrying title="Bitrate".
-	const el = document.querySelector<HTMLElement>('[title="Bitrate"]');
+	// Keyed on the testid, not on a title/label — the heading now switches
+	// between "Bitrate" and "Target" depending on whether the figure is measured.
+	const el = document.querySelector<HTMLElement>('[data-testid="hud-bitrate"]');
 	if (!el) throw new Error("strip bitrate badge not rendered");
 	return el;
 }
@@ -157,6 +159,78 @@ describe("HudBar bitrate honesty — absence renders as absence", () => {
 	});
 });
 
+// A board session held the engine's setpoint at a steady 4.1 Mbps while zero
+// frames reached the network: the number an operator reads as "the bitrate"
+// could not distinguish streaming from streaming nothing. The measured bond
+// throughput can, so it takes the headline and the setpoint is labelled Target.
+describe("HudBar bitrate — measured takes the headline, setpoint is 'Target'", () => {
+	it("headlines the MEASURED figure and demotes the setpoint to a Target chip", () => {
+		state.hud = makeHud({
+			isStreaming: true,
+			bitrateKbps: 4100,
+			measuredBitrateKbps: 3200,
+		});
+		render(HudBar);
+
+		const badge = stripBitrate();
+		expect(badge.getAttribute("data-measured")).toBe("true");
+		expect(badge.textContent).toContain("3.2");
+		expect(badge.textContent).not.toContain("4.1 Mbps Mbps");
+
+		const target = screen.getByTestId("hud-bitrate-target");
+		expect(target.textContent).toContain("Target");
+		expect(target.textContent).toContain("4.1");
+	});
+
+	it("relabels the heading 'Target' when no measurement is available", async () => {
+		state.hud = makeHud({
+			isStreaming: true,
+			bitrateKbps: 4100,
+			measuredBitrateKbps: null,
+		});
+		render(HudBar);
+
+		expect(stripBitrate().getAttribute("data-measured")).toBeNull();
+		expect(screen.queryByTestId("hud-bitrate-target")).toBeNull();
+
+		const dialog = await openSheet();
+		const row = within(dialog).getByTestId("hud-bitrate-row");
+		expect(row.textContent).toContain("Target");
+		expect(row.textContent).not.toContain("Bitrate");
+	});
+
+	it("a measured ZERO is reported as zero, never masked by the setpoint", () => {
+		// The exact board fixture: setpoint steady at 4100, nothing on the wire.
+		state.hud = makeHud({
+			isStreaming: true,
+			bitrateKbps: 4100,
+			measuredBitrateKbps: 0,
+		});
+		render(HudBar);
+
+		const badge = stripBitrate();
+		expect(badge.getAttribute("data-measured")).toBe("true");
+		// The HEADLINE leads with the measurement; 4100 may only appear after it,
+		// inside the Target chip.
+		expect(badge.textContent?.trim().startsWith("0")).toBe(true);
+		expect(screen.getByTestId("hud-bitrate-target").textContent).toContain(
+			"4.1",
+		);
+	});
+
+	it("clears the measured figure on stop — never a rate from the last session", () => {
+		state.hud = makeHud({
+			isStreaming: false,
+			bitrateKbps: null,
+			measuredBitrateKbps: null,
+		});
+		render(HudBar);
+
+		expect(stripBitrate().textContent?.trim()).toBe("—");
+		expect(screen.queryByTestId("hud-bitrate-target")).toBeNull();
+	});
+});
+
 describe("HudBar sheet — three explicit lifecycle states", () => {
 	it("idle: subtitle data-state=idle, verdict says 'Idle', bitrate row is '—' (undimmed)", async () => {
 		state.hud = makeHud({ isStreaming: false, bitrateKbps: null });
@@ -172,9 +246,9 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		// Exactly ONE status-wording node in the sheet.
 		expect(within(dialog).getAllByText("Idle")).toHaveLength(1);
 
-		const bitrateRow = within(dialog).getByText("Bitrate").closest("div");
-		expect(bitrateRow?.textContent).toContain("—");
-		expect(bitrateRow?.className).not.toContain("opacity-50");
+		const bitrateRow = within(dialog).getByTestId("hud-bitrate-row");
+		expect(bitrateRow.textContent).toContain("—");
+		expect(bitrateRow.className).not.toContain("opacity-50");
 	});
 
 	it("offline: subtitle data-state=offline, verdict says 'No signal' + last seen line", async () => {
@@ -196,9 +270,9 @@ describe("HudBar sheet — three explicit lifecycle states", () => {
 		expect(within(dialog).getAllByText("No signal")).toHaveLength(1);
 		expect(within(dialog).getByTestId("hud-last-seen")).toBeTruthy();
 
-		const bitrateRow = within(dialog).getByText("Bitrate").closest("div");
-		expect(bitrateRow?.textContent).toContain("—");
-		expect(bitrateRow?.className).not.toContain("opacity-50");
+		const bitrateRow = within(dialog).getByTestId("hud-bitrate-row");
+		expect(bitrateRow.textContent).toContain("—");
+		expect(bitrateRow.className).not.toContain("opacity-50");
 	});
 
 	it("live: subtitle data-state=live, verdict is the health rollup (not a lifecycle word)", async () => {
