@@ -5,7 +5,7 @@ import type {
 	EventParams,
 	Subscription,
 } from "@ceralive/cerastream";
-import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
+import { type AudioLevelMessage, LIFECYCLE_STATES } from "@ceraui/rpc/schemas";
 import {
 	AUDIO_METER_FRAME_ABSENCE_MS,
 	AUDIO_METER_MISMATCH_GRACE_MS,
@@ -15,6 +15,7 @@ import {
 	alsaCardKey,
 	initAudioMeterBridge,
 	isForeignCardLevel,
+	launchIsAcquiringAudio,
 	settleAudioMeterBridge,
 	stopAudioMeterBridge,
 	syncAudioMeterPreference,
@@ -55,6 +56,7 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 	let preference: string | null = "hw:CARD=usbaudio";
 	let preferencePresent = false;
 	let silenced = false;
+	let launching = false;
 	let clock = 1_000;
 	let reloadRejects = false;
 
@@ -95,6 +97,7 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		meterPreference: () => preference,
 		meterPreferencePresent: () => preferencePresent,
 		meterSilenced: () => silenced,
+		launchInFlight: () => launching,
 		logger: silent,
 		random: () => 0.5,
 		now: () => clock,
@@ -133,6 +136,9 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		},
 		setSilenced: (next: boolean) => {
 			silenced = next;
+		},
+		setLaunching: (next: boolean) => {
+			launching = next;
 		},
 		advance: async (ms: number) => {
 			clock += ms;
@@ -671,6 +677,144 @@ describe("audio-meter bridge — a feed that STOPS is re-asserted, not left dead
 
 		h.emit(levelEvent);
 		expect(h.broadcasts.at(-1)).toEqual(toAudioLevelMessage(levelEvent));
+	});
+});
+
+// The board race (live QA, 2026-07-30, Rock 5B+ / DJI Osmo Pocket 3). A stream
+// start releases the idle meter ON PURPOSE, so levels legitimately stop — and the
+// frame-absence watchdog read that as a stuck feed and re-opened the very card the
+// launch was mid-way through acquiring:
+//
+//   20:03:22.466  streaming.start issued
+//   20:03:25.024  audio-meter bridge: no audio level for 2500 ms … re-asserting
+//   20:03:25.026  audio-meter bridge: re-asserted the preference hw:CARD=DJIPocket3
+//   20:03:27.142  audio-device-unavailable … 'hw:CARD=DJIPocket3' is busy … not_retriable
+//
+// cerastream's own bounded 1.5 s self-release retry (b6f40ea) cannot win that —
+// it is not racing a lagging release, it is racing a PEER that is actively
+// re-acquiring. 2/6 starts still failed with the retry in place. The ordering has
+// to be fixed here: absence of levels is not evidence of a stuck feed while a
+// launch is in flight, because the launch is precisely what silenced them.
+describe("audio-meter bridge — a launch owns the card; the watchdog yields to it", () => {
+	async function connectedAndMetering() {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=DJIPocket3");
+		h.setPreferencePresent(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+		h.reloads.length = 0;
+		return h;
+	}
+
+	test("never re-asserts while a launch is acquiring the card", async () => {
+		const h = await connectedAndMetering();
+
+		// `streaming.start` issued: the idle meter is released for the handoff, so
+		// the level feed goes quiet for a reason that is CORRECT, not broken.
+		h.setLaunching(true);
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+	});
+
+	test("stays ARMED while suppressed — a launch defers the watchdog, never disables it", async () => {
+		const h = await connectedAndMetering();
+		h.setLaunching(true);
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.pendingTimers()).toBe(1);
+	});
+
+	// The whole point of deferring rather than dropping: a feed that is genuinely
+	// dead must still be recovered the moment the launch stops owning the card.
+	test("re-asserts on the very next window once the launch resolves", async () => {
+		const h = await connectedAndMetering();
+		h.setLaunching(true);
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+		expect(h.reloads).toEqual([]);
+
+		// Launch settled (either way) and no frame has arrived — now it IS a fault.
+		h.setLaunching(false);
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([
+			{ audio: { meter_device: null } },
+			{ audio: { meter_device: "hw:CARD=DJIPocket3" } },
+		]);
+	});
+
+	// A suppressed window must not consume the 30 s floor: that would convert a
+	// deferral into a half-minute of real suppression AFTER the launch resolved.
+	test("a suppressed window does not spend the re-assert interval floor", async () => {
+		const h = await connectedAndMetering();
+		h.setLaunching(true);
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		h.setLaunching(false);
+		// Deliberately well inside AUDIO_METER_REASSERT_INTERVAL_MS of the
+		// suppressed window — if that window had stamped `lastReassertAt`, this
+		// would be floored out and the meter would stay dead.
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toHaveLength(2);
+	});
+
+	// The content watchdog shares `reassertPreference`, so it re-opens the same
+	// card by the same path and carries the identical risk.
+	test("the foreign-card watchdog yields to a launch too", async () => {
+		const h = await connectedAndMetering();
+		const foreign = {
+			...levelEvent,
+			source: { identity: "card:Rx", owner: "sidecar" as const },
+		};
+
+		h.setLaunching(true);
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS);
+		h.emit(foreign);
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+
+		// And it recovers on the next foreign frame once the launch is done.
+		h.setLaunching(false);
+		h.emit(foreign);
+		await h.advance(0);
+
+		expect(h.reloads).toHaveLength(2);
+	});
+});
+
+// The production binding of the gate. "Resolves" must mean BOTH outcomes: a
+// successful launch lands in `streaming`, a failed one in `idle`, and the
+// watchdog has to be live again in each. Only the launch window itself defers.
+describe("audio-meter bridge — launchIsAcquiringAudio maps the lifecycle", () => {
+	test("defers during `starting` and in NO other lifecycle state", () => {
+		const deferred = LIFECYCLE_STATES.filter((s) => launchIsAcquiringAudio(s));
+
+		expect(deferred).toEqual(["starting"]);
+	});
+
+	test("a resolved launch — success OR failure — re-arms the watchdog", () => {
+		expect(launchIsAcquiringAudio("streaming")).toBe(false);
+		expect(launchIsAcquiringAudio("idle")).toBe(false);
 	});
 });
 
