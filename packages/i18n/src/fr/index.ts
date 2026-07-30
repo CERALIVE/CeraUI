@@ -1058,6 +1058,11 @@ const fr = {
 		bitrateAdapting: "Adaptation",
 		bitrateBelowLimitHint:
 			"Encodage sous votre limite configurée — le moteur réduit le débit lorsque le réseau ne peut pas tout transporter.",
+		bitrateTarget: "Cible",
+		bitrateMeasuredHint:
+			"Mesuré sur vos liens agrégés — ce qui a réellement quitté l'appareil, surcharge du protocole comprise.",
+		bitrateTargetHint:
+			"Le débit visé par l'encodeur. C'est un réglage que le moteur ajuste, pas une mesure de ce qui est envoyé.",
 		temperature: "Température",
 		network: "Réseau",
 		uptime: "Temps de fonctionnement",

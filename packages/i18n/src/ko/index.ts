@@ -880,6 +880,11 @@ const ko = {
 		bitrateAdapting: "조정 중",
 		bitrateBelowLimitHint:
 			"설정한 상한보다 낮게 인코딩 중입니다. 네트워크가 전량을 감당하지 못하면 엔진이 비트레이트를 낮춥니다.",
+		bitrateTarget: "목표",
+		bitrateMeasuredHint:
+			"본딩된 링크에서 실제로 측정한 값입니다. 프로토콜 오버헤드를 포함해 기기에서 실제로 나간 양입니다.",
+		bitrateTargetHint:
+			"인코더가 목표로 하는 비트레이트입니다. 엔진이 조정하는 설정값이며, 실제 전송량의 측정값이 아닙니다.",
 		temperature: "온도",
 		network: "네트워크",
 		uptime: "가동 시간",

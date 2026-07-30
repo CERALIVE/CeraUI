@@ -29,6 +29,10 @@ const state = vi.hoisted(() => ({
 		| { applied_kbps: number; ceiling_kbps: number }
 		| null
 		| undefined,
+	linkTelemetry: null as {
+		links: Array<Record<string, unknown>>;
+		measured_bps?: number;
+	} | null,
 	maxBr: 5000 as number | undefined,
 	isStreaming: true,
 }));
@@ -49,7 +53,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getDevices: () => [],
 	getIsConnected: () => true,
 	getIsStreaming: () => state.isStreaming,
-	getLinkTelemetry: () => null,
+	getLinkTelemetry: () => state.linkTelemetry,
 	getManagedIngestAccounts: () => [],
 	getNetif: () => ({}),
 	getPipelines: () => ({ pipelines: {} }),
@@ -117,6 +121,7 @@ import LiveView from "../main/LiveView.svelte";
 afterEach(() => {
 	cleanup();
 	state.engineBitrate = undefined;
+	state.linkTelemetry = null;
 	state.maxBr = CONFIGURED_KBPS;
 	state.isStreaming = true;
 });
@@ -201,5 +206,111 @@ describe("live stats card — applied vs configured bitrate", () => {
 		expect(
 			getByTestId("ingest-stats-probe").getAttribute("data-bitrate-kbps"),
 		).toBe(String(APPLIED_KBPS));
+	});
+});
+
+// Every case above runs with NO srtla telemetry, which is exactly why the card
+// could report the engine's setpoint under a "Bitrate" heading and look right.
+// A board session proved it is not: the setpoint held a steady 4.1 Mbps for 30 s
+// while the engine's own watchdog logged "frames-not-advancing" and nothing left
+// the device. srtla_send measures the real thing; these tests pin that the
+// measurement takes the headline and the setpoint is labelled honestly.
+describe("live stats card — measured throughput vs the engine's target", () => {
+	const MEASURED_KBPS = 2800;
+
+	function withMeasured(bps: number) {
+		state.engineBitrate = {
+			applied_kbps: APPLIED_KBPS,
+			ceiling_kbps: CONFIGURED_KBPS,
+		};
+		state.linkTelemetry = {
+			links: [
+				{
+					conn_id: "0",
+					iface: "usb0",
+					rtt_ms: 20,
+					nak_count: 0,
+					weight_percent: 100,
+					bitrate_bps: bps,
+					stale: false,
+				},
+			],
+			measured_bps: bps,
+		};
+	}
+
+	it("headlines the MEASURED figure, not the engine's setpoint", async () => {
+		withMeasured(MEASURED_KBPS * 1000);
+
+		const { getByTestId } = await mount();
+
+		expect(getByTestId("telemetry-bitrate").textContent?.trim()).toBe(
+			`2.8 ${en.units.mbps}`,
+		);
+		expect(getByTestId("telemetry-bitrate-heading").textContent?.trim()).toBe(
+			en.hud.bitrate,
+		);
+	});
+
+	it("keeps the setpoint visible as labelled 'Target' context", async () => {
+		withMeasured(MEASURED_KBPS * 1000);
+
+		const { getByTestId } = await mount();
+
+		const target = getByTestId("telemetry-bitrate-target");
+		expect(target.textContent).toContain(en.hud.bitrateTarget);
+		expect(target.textContent).toContain(`3 ${en.units.mbps}`);
+	});
+
+	it("reports a bond carrying NOTHING as 0, not as the 4.1 Mbps setpoint", async () => {
+		state.engineBitrate = { applied_kbps: 4100, ceiling_kbps: 4500 };
+		state.linkTelemetry = {
+			links: [
+				{
+					conn_id: "0",
+					iface: "usb0",
+					rtt_ms: 20,
+					nak_count: 0,
+					weight_percent: 100,
+					bitrate_bps: 0,
+					stale: false,
+				},
+			],
+			measured_bps: 0,
+		};
+
+		const { getByTestId } = await mount();
+
+		expect(getByTestId("telemetry-bitrate").textContent?.trim()).toBe(
+			`0 ${en.units.kbps}`,
+		);
+		expect(getByTestId("telemetry-bitrate-target").textContent).toContain(
+			`4.1 ${en.units.mbps}`,
+		);
+	});
+
+	it("relabels the card 'Target' when no measurement exists, rather than lying", async () => {
+		state.engineBitrate = {
+			applied_kbps: APPLIED_KBPS,
+			ceiling_kbps: CONFIGURED_KBPS,
+		};
+		state.linkTelemetry = null;
+
+		const { getByTestId, queryByTestId } = await mount();
+
+		expect(getByTestId("telemetry-bitrate-heading").textContent?.trim()).toBe(
+			en.hud.bitrateTarget,
+		);
+		expect(queryByTestId("telemetry-bitrate-target")).toBeNull();
+	});
+
+	it("folds the MEASURED rate into the IngestStats session rollup", async () => {
+		withMeasured(MEASURED_KBPS * 1000);
+
+		const { getByTestId } = await mount();
+
+		expect(
+			getByTestId("ingest-stats-probe").getAttribute("data-bitrate-kbps"),
+		).toBe(String(MEASURED_KBPS));
 	});
 });

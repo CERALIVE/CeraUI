@@ -262,6 +262,11 @@ const en = {
 		bitrateAdapting: "Adapting",
 		bitrateBelowLimitHint:
 			"Encoding below your configured limit — the engine lowers the rate when the network can't carry the full amount.",
+		bitrateTarget: "Target",
+		bitrateMeasuredHint:
+			"Measured across your bonded links — what actually left the device, including protocol overhead.",
+		bitrateTargetHint:
+			"The rate the encoder is aiming for. It's a setting the engine adjusts, not a measurement of what's being sent.",
 		temperature: "Temperature",
 		network: "Network",
 		uptime: "Uptime",

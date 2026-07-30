@@ -444,12 +444,21 @@ export function buildMockLinkTelemetry(): LinkTelemetryMessage | null {
 	});
 	const totalWeight = rawLinks.reduce((sum, link) => sum + link.rawWeight, 0);
 
+	// Split by weight share, so per-link rows sum to the aggregate as they do on
+	// real srtla_send telemetry.
+	const bondBps = Math.round(4_000_000 + 400_000 * Math.sin(now / 7000));
+
 	const links = rawLinks.map(({ rawWeight, ...entry }) => ({
 		...entry,
 		weight_percent: Math.round((rawWeight / totalWeight) * 100),
+		bitrate_bps: Math.round((rawWeight / totalWeight) * bondBps),
 	}));
 
-	return { links, lastReadMs: now };
+	return {
+		links,
+		measured_bps: links.reduce((sum, link) => sum + link.bitrate_bps, 0),
+		lastReadMs: now,
+	};
 }
 
 /**

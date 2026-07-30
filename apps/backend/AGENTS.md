@@ -24,7 +24,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Cerastream engine backend (structured IPC, `@ceralive/cerastream`) | `modules/streaming/cerastream-backend.ts` |
 | Structured engine error → notification (Task-7 table swap, no regex); `mapCerastreamError()` maps a `RuntimeErrorEvent` to a Tier-2 code string (T16) | `modules/streaming/cerastream-error-mapping.ts` |
 | srtla binding calls (flux — check `../../../srtla/AGENTS.md` first) | `modules/streaming/srtla.ts` |
-| srtla per-link telemetry → `status.linkTelemetry` | `modules/streaming/link-telemetry.ts` |
+| srtla per-link telemetry → `status.linkTelemetry` (incl. the MEASURED `bitrate_bps` per link + the summed `measured_bps` — the only honest live bitrate; `engine_bitrate.applied_kbps` is a setpoint) | `modules/streaming/link-telemetry.ts` (`buildLinkTelemetry`) |
 | Stream lifecycle (spawn supervision, start/stop, autostart, exec paths) | `modules/streaming/streamloop/` (barrel: `modules/streaming/streamloop.ts`) |
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | **Apply-now config change (transaction seam, `reconfiguring` state, queued stop)** | `modules/streaming/stream-session-orchestrator.ts` (`changeConfig`, `noteConfigChangePhase`) + `modules/streaming/config-change-bridge.ts` |

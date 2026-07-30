@@ -98,12 +98,26 @@ export const linkTelemetryEntrySchema = z.object({
 	rtt_ms: z.number(),
 	nak_count: z.number(),
 	weight_percent: z.number(),
+	/**
+	 * MEASURED wire throughput for this uplink, bits/s — srtla_send's ADR-001
+	 * `bitrate_bps` (wire bytes × 8), so SRT/SRTLA headers, ACKs and
+	 * retransmits are INCLUDED and this is not the pre-transport payload rate.
+	 * Unlike `engine_bitrate.applied_kbps` (a setpoint) it reads ~0 when
+	 * nothing is flowing. Additive + optional: absent means UNKNOWN, not zero.
+	 */
+	bitrate_bps: z.number().nonnegative().optional(),
 	stale: z.boolean(),
 });
 export type LinkTelemetryEntry = z.infer<typeof linkTelemetryEntrySchema>;
 
 export const linkTelemetryMessageSchema = z.object({
 	links: z.array(linkTelemetryEntrySchema),
+	/**
+	 * Sum of every link's `bitrate_bps` — the bond's total measured wire
+	 * throughput, bits/s. Summed once on the backend so consumers cannot
+	 * disagree about which links count. Absent means UNKNOWN, not zero.
+	 */
+	measured_bps: z.number().nonnegative().optional(),
 });
 export type LinkTelemetryMessage = z.infer<typeof linkTelemetryMessageSchema>;
 
@@ -135,8 +149,11 @@ export type BufferingStatus = z.infer<typeof bufferingStatusSchema>;
 // the ceiling and reported the request as if it were the result.
 //
 // `applied_kbps` is an ENCODER TARGET, not a measurement of bytes on the wire.
-// Measured wire throughput lives elsewhere (`netif.tx_bps`, and srtla_send's
-// per-link `bitrate_bps`); do not relabel this as "measured".
+// It is the adaptive controller's own setpoint, so it holds a steady number even
+// when ZERO frames are reaching the network — proven on a board reading 4100
+// through a 30 s session that carried no media at all. Measured throughput is
+// `linkTelemetry.measured_bps` (and `netif.tx_bps` for the whole interface);
+// render this one as "Target", never as "the bitrate".
 //
 // Unlike `buffering` / `active_encode` this is NOT a verbatim pass-through of a
 // `status` frame field — it is assembled from a separate event topic, so the

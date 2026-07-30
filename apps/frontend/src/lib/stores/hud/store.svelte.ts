@@ -15,6 +15,7 @@ import {
 	getConnectionState,
 	getIsConnected,
 	getIsStreaming,
+	getLinkTelemetry,
 	getModems,
 	getNetif,
 	getSensors,
@@ -76,6 +77,7 @@ function readSources(): HudSources {
 		sensors: getSensors(),
 		updating: getUpdating(),
 		engineBitrate: getStatus()?.engine_bitrate ?? null,
+		linkTelemetry: getLinkTelemetry() ?? null,
 	};
 }
 
