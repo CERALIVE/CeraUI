@@ -7,6 +7,7 @@ import type {
 } from "@ceralive/cerastream";
 import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
 import {
+	AUDIO_METER_FRAME_ABSENCE_MS,
 	AUDIO_METER_MISMATCH_GRACE_MS,
 	AUDIO_METER_REASSERT_INTERVAL_MS,
 	type AudioMeterBridgeDeps,
@@ -37,7 +38,12 @@ const drainMicrotasks = () => new Promise<void>((r) => setTimeout(r, 0));
 // `subscribeEvents` captures the handler so the test can push events by hand. The
 // manual timer queue drives the boot-retry loop with no real time.
 function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
-	const timers: Array<{ fn: () => void }> = [];
+	// A real `clearTimeout` un-schedules; the queue therefore has to drop a cleared
+	// entry too. The frame-absence watchdog RE-ARMS on every level (it is a debounce
+	// on arrival), so a queue that kept cleared handles would let `fireNextTimer`
+	// run a superseded watchdog and report an absence that never happened.
+	const timers = new Map<number, () => void>();
+	let nextTimerId = 1;
 	let idx = 0;
 	let handler: EventHandler | undefined;
 	let subscriptionClosed = false;
@@ -93,10 +99,13 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		random: () => 0.5,
 		now: () => clock,
 		setTimer: (fn: () => void, _ms: number): TimerHandle => {
-			timers.push({ fn });
-			return timers.length as unknown as TimerHandle;
+			const id = nextTimerId++;
+			timers.set(id, fn);
+			return id as unknown as TimerHandle;
 		},
-		clearTimer: () => {},
+		clearTimer: (timer) => {
+			timers.delete(timer as unknown as number);
+		},
 		baseDelayMs: 1,
 		maxDelayMs: 4,
 	};
@@ -106,11 +115,15 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		broadcasts,
 		emit: (event: EventParams) => handler?.(event),
 		fireNextTimer: async () => {
-			const next = timers.shift();
-			next?.fn();
+			const id = timers.keys().next().value;
+			if (id !== undefined) {
+				const fn = timers.get(id);
+				timers.delete(id);
+				fn?.();
+			}
 			await settleAudioMeterBridge();
 		},
-		pendingTimers: () => timers.length,
+		pendingTimers: () => timers.size,
 		reloads,
 		setPreference: (next: string | null) => {
 			preference = next;
@@ -500,6 +513,164 @@ describe("audio-meter bridge — a stuck preference is re-asserted, bounded", ()
 		h.setPreference("hw:CARD=Rx");
 		h.emit(foreign);
 		expect(h.broadcasts.at(-1)).toEqual(toAudioLevelMessage(foreign));
+	});
+});
+
+// The board bug (live QA, 2026-07-29): the idle meter sat on a bare
+// `Meter unavailable` for 14 minutes with no operator action. The engine's level
+// feed had simply STOPPED (last `audio-level` 23:34:27Z, board clock 23:48:25Z)
+// 2 ms after a changed pick published its `handoff` gap, so the gap was the last
+// thing the frontend was ever told. The re-assert above could not rescue it: it is
+// driven ENTIRELY by arriving frames, so with zero frames there are no foreign
+// readings to accumulate, the grace window never elapses, and every other sync
+// trigger is edge-triggered on things that had gone still. Same
+// raise-but-never-retract family as `policy_route_missing` and `active_encode` on
+// stop — the difference is that the un-retracted state lives in the ENGINE's meter
+// sidecar and CeraUI's retraction was gated on the very signal whose absence IS
+// the failure.
+describe("audio-meter bridge — a feed that STOPS is re-asserted, not left dead", () => {
+	async function connectedAndMetering() {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		h.setPreferencePresent(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		// One real frame: the baseline that makes a later silence an ABSENCE rather
+		// than a connection that has never delivered anything.
+		h.emit(levelEvent);
+		h.reloads.length = 0;
+		return h;
+	}
+
+	test("re-asserts through null when the level feed simply stops", async () => {
+		const h = await connectedAndMetering();
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([
+			{ audio: { meter_device: null } },
+			{ audio: { meter_device: "hw:CARD=usbaudio" } },
+		]);
+	});
+
+	test("holds the interval floor rather than re-asserting every absence window", async () => {
+		const h = await connectedAndMetering();
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(2);
+
+		// A still-silent feed keeps the watchdog armed, but the floor blocks it — so
+		// a permanently-dead card costs one cheap reload pair per interval, never a loop.
+		await h.advance(AUDIO_METER_REASSERT_INTERVAL_MS - 1);
+		await h.fireNextTimer();
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(2);
+
+		await h.advance(2);
+		await h.fireNextTimer();
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(4);
+	});
+
+	test("shares the floor with the foreign-card re-assert — one escape hatch, not two", async () => {
+		const h = await connectedAndMetering();
+		const foreign = {
+			...levelEvent,
+			source: { identity: "card:Rx", owner: "sidecar" as const },
+		};
+
+		h.emit(foreign);
+		await h.advance(AUDIO_METER_MISMATCH_GRACE_MS);
+		h.emit(foreign);
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(2);
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+		expect(h.reloads).toHaveLength(2);
+	});
+
+	test("keeps exactly ONE watchdog armed however many frames arrive", async () => {
+		const h = await connectedAndMetering();
+
+		for (let i = 0; i < 5; i++) h.emit(levelEvent);
+
+		expect(h.pendingTimers()).toBe(1);
+	});
+
+	test("never fires before the first frame of a fresh connect", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		h.setPreferencePresent(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.reloads.length = 0;
+
+		expect(h.pendingTimers()).toBe(0);
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS * 4);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+	});
+
+	// A non-null preference isolates the silence gate: with a `null` one the Auto
+	// gate below would refuse the re-assert anyway and prove nothing.
+	test("never re-asserts for a silenced pick — the operator asked for silence", async () => {
+		const h = harness([true]);
+		h.setPreference("hw:CARD=usbaudio");
+		h.setPreferencePresent(true);
+		h.setSilenced(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+		h.reloads.length = 0;
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+	});
+
+	test("never re-asserts for Auto — the engine owns that selection", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+		h.reloads.length = 0;
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
+	});
+
+	test("stop() disarms the watchdog", async () => {
+		const h = await connectedAndMetering();
+
+		stopAudioMeterBridge();
+
+		expect(h.pendingTimers()).toBe(0);
+	});
+
+	test("a refused re-assert leaves levels flowing, never a thrown bridge", async () => {
+		const h = await connectedAndMetering();
+		h.failReloads();
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		h.emit(levelEvent);
+		expect(h.broadcasts.at(-1)).toEqual(toAudioLevelMessage(levelEvent));
 	});
 });
 

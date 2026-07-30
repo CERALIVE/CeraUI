@@ -647,8 +647,13 @@ const en = {
 			sourceMax: "Source max",
 			activeLive: "Live",
 			activeConfigured: "Configured",
-			lostTitle: "Device disconnected",
 			lostBody: "Reconnect the device to resume streaming from this source.",
+			lostBannerTitleOne: "{name:string} disconnected",
+			lostBannerTitleMany: "{count:number} devices disconnected",
+			lostBannerBodyOne:
+				"{name:string} is no longer connected. Reconnect it to use it as a source again — every other source in this list is unaffected.",
+			lostBannerBodyMany:
+				"These devices are no longer connected: {names:string}. Reconnect them to use them as sources again — every other source in this list is unaffected.",
 			lostStreamingTitle: "Live source disconnected",
 			lostStreamingBody:
 				"The source you're streaming was lost. Reconnect it, or switch to another source to keep your stream alive.",

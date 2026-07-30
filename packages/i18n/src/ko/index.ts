@@ -1265,8 +1265,13 @@ const ko = {
 			sourceMax: "소스 최대값",
 			activeLive: "라이브",
 			activeConfigured: "구성됨",
-			lostTitle: "장치 연결 끊김",
 			lostBody: "장치를 다시 연결하여 이 소스에서 스트리밍을 재개하세요.",
+			lostBannerTitleOne: "{name} 연결 끊김",
+			lostBannerTitleMany: "장치 {count}대 연결 끊김",
+			lostBannerBodyOne:
+				"{name}이(가) 더 이상 연결되어 있지 않습니다. 다시 연결하면 소스로 사용할 수 있습니다 — 이 목록의 다른 소스는 영향을 받지 않습니다.",
+			lostBannerBodyMany:
+				"다음 장치가 더 이상 연결되어 있지 않습니다: {names}. 다시 연결하면 소스로 사용할 수 있습니다 — 이 목록의 다른 소스는 영향을 받지 않습니다.",
 			lostStreamingTitle: "라이브 소스 연결 끊김",
 			lostStreamingBody:
 				"스트리밍 중인 소스가 끊겼습니다. 다시 연결하거나 다른 소스로 전환하여 스트림을 유지하세요.",

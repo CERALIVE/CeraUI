@@ -978,6 +978,84 @@ describe("SourceSection — lost device explanation (from source.lost)", () => {
 			container.querySelector('[data-testid="source-lost-banner"]'),
 		).toBeNull();
 	});
+
+	// The board bug (live QA, 2026-07-29 — device-quality-wave3 F13a): the operator
+	// had the Osmo selected, present and healthy (`✓ Selected`, green, no Lost
+	// badge) while a DIFFERENT device (a RØDE) was genuinely gone. Every individual
+	// verdict on screen was true, but the banner directly ABOVE the list said
+	// "Device disconnected — Reconnect the device to resume streaming from this
+	// source", which reads as a header for the card — i.e. as an accusation against
+	// the selected device. The predicate is deliberately global (a lost non-selected
+	// device IS worth surfacing); the SENTENCE has to name what actually went.
+	it("names the LOST device and never implicates the selected, healthy one", () => {
+		const lostRode: CaptureStreamSource = {
+			...RODE,
+			lost: true,
+			available: false,
+		};
+		const { container } = mount({
+			sources: sourcesMsg([HDMI_CAPTURE, lostRode]),
+			config: { source: HDMI_CAPTURE.id },
+		});
+		const banner = container.querySelector<HTMLElement>(
+			'[data-testid="source-lost-banner"]',
+		);
+		if (!banner) throw new Error("lost banner not rendered");
+		expect(banner.textContent).toContain(lostRode.displayName);
+		// The selected device is healthy — the banner must not name it, and must not
+		// speak about "this source" (which resolves to the selected row below it).
+		expect(banner.textContent).not.toContain(HDMI_CAPTURE.displayName);
+		expect(banner.textContent).not.toMatch(/this source/i);
+	});
+
+	it("counts and names every lost device when more than one is gone", () => {
+		const lostRode: CaptureStreamSource = {
+			...RODE,
+			lost: true,
+			available: false,
+		};
+		const lostDual: CaptureStreamSource = {
+			...DUAL_CODEC,
+			lost: true,
+			available: false,
+		};
+		const { container } = mount({
+			sources: sourcesMsg([HDMI_CAPTURE, lostRode, lostDual]),
+			config: { source: HDMI_CAPTURE.id },
+		});
+		const banner = container.querySelector<HTMLElement>(
+			'[data-testid="source-lost-banner"]',
+		);
+		if (!banner) throw new Error("lost banner not rendered");
+		expect(banner.textContent).toContain("2");
+		expect(banner.textContent).toContain(lostRode.displayName);
+		expect(banner.textContent).toContain(lostDual.displayName);
+		expect(banner.textContent).not.toContain(HDMI_CAPTURE.displayName);
+	});
+
+	// The per-row badges are independent and were always correct — the fix must not
+	// touch them (the lost row keeps its Lost pill, the selected row its Selected
+	// affirmation).
+	it("leaves the per-row Selected / Lost badges untouched", () => {
+		const lostRode: CaptureStreamSource = {
+			...RODE,
+			lost: true,
+			available: false,
+		};
+		const { container } = mount({
+			sources: sourcesMsg([HDMI_CAPTURE, lostRode]),
+			config: { source: HDMI_CAPTURE.id },
+		});
+		expect(
+			container.querySelector(`[data-testid="source-row-${lostRode.id}"]`)
+				?.textContent,
+		).toMatch(/lost/i);
+		expect(
+			container.querySelector(
+				`[data-testid="source-selected-${HDMI_CAPTURE.id}"]`,
+			),
+		).not.toBeNull();
+	});
 });
 
 describe("SourceSection — present-but-signal-less capture row (source.signal)", () => {

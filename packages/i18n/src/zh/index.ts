@@ -1197,8 +1197,13 @@ const zh = {
 			sourceMax: "源上限",
 			activeLive: "直播中",
 			activeConfigured: "已配置",
-			lostTitle: "设备已断开",
 			lostBody: "重新连接设备以从此来源恢复推流。",
+			lostBannerTitleOne: "{name} 已断开",
+			lostBannerTitleMany: "{count} 台设备已断开",
+			lostBannerBodyOne:
+				"{name} 已不再连接。重新接上即可再次作为来源使用 — 此列表中的其他来源均未受影响。",
+			lostBannerBodyMany:
+				"以下设备已不再连接：{names}。重新接上即可再次作为来源使用 — 此列表中的其他来源均未受影响。",
 			lostStreamingTitle: "直播源已断开",
 			lostStreamingBody:
 				"您正在推流的源已丢失。请重新连接或切换到其他源以保持直播。",

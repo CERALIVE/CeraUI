@@ -665,9 +665,14 @@ const de = {
 			sourceMax: "Quellen-Maximum",
 			activeLive: "Live",
 			activeConfigured: "Konfiguriert",
-			lostTitle: "Gerät getrennt",
 			lostBody:
 				"Schließen Sie das Gerät wieder an, um das Streaming von dieser Quelle fortzusetzen.",
+			lostBannerTitleOne: "{name} getrennt",
+			lostBannerTitleMany: "{count} Geräte getrennt",
+			lostBannerBodyOne:
+				"{name} ist nicht mehr verbunden. Schließe es wieder an, um es erneut als Quelle zu nutzen — jede andere Quelle in dieser Liste ist unberührt.",
+			lostBannerBodyMany:
+				"Diese Geräte sind nicht mehr verbunden: {names}. Schließe sie wieder an, um sie erneut als Quellen zu nutzen — jede andere Quelle in dieser Liste ist unberührt.",
 			lostStreamingTitle: "Live-Quelle getrennt",
 			lostStreamingBody:
 				"Die gestreamte Quelle ging verloren. Schließe sie wieder an oder wechsle die Quelle, um den Stream aufrechtzuerhalten.",

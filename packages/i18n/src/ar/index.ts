@@ -1385,8 +1385,13 @@ const ar = {
 			sourceMax: "الحد الأقصى للمصدر",
 			activeLive: "مباشر",
 			activeConfigured: "مُهيأ",
-			lostTitle: "الجهاز غير متصل",
 			lostBody: "أعد توصيل الجهاز لاستئناف البث من هذا المصدر.",
+			lostBannerTitleOne: "{name} غير متصل",
+			lostBannerTitleMany: "{count} أجهزة غير متصلة",
+			lostBannerBodyOne:
+				"لم يعد {name} متصلاً. أعد توصيله لاستخدامه كمصدر مرة أخرى — لا يتأثر أي مصدر آخر في هذه القائمة.",
+			lostBannerBodyMany:
+				"لم تعد هذه الأجهزة متصلة: {names}. أعد توصيلها لاستخدامها كمصادر مرة أخرى — لا يتأثر أي مصدر آخر في هذه القائمة.",
 			lostStreamingTitle: "انقطع اتصال المصدر المباشر",
 			lostStreamingBody:
 				"فُقد المصدر الذي تبثه. أعد توصيله أو بدّل إلى مصدر آخر لإبقاء البث مستمراً.",
