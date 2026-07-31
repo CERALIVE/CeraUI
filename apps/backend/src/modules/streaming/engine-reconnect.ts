@@ -64,6 +64,7 @@ import {
 	type CapabilitiesServiceDeps,
 	getLastCapabilities,
 } from "./capabilities.ts";
+import { runInflightConfigChangeReconciliation } from "./config-change-reconcile-wiring.ts";
 import { reportEngineState } from "./lifecycle-indicators.ts";
 import { getPipelinesMessage, initPipelines } from "./pipelines.ts";
 import {
@@ -162,7 +163,15 @@ function buildDefaultBroadcastEngineState(
 		await (sourcesOverride
 			? refreshAndBroadcastSources(sourcesOverride)
 			: refreshAndBroadcastSources());
-		if (sourcesOverride === undefined) await reconcileStreamSession();
+		if (sourcesOverride === undefined) {
+			await reconcileStreamSession();
+			// The engine just became reachable, which is exactly the moment a
+			// marker that DEFERRED at boot (no decisive engine answer yet) can be
+			// re-judged. Fire-and-forget: the heal broadcast above must settle on
+			// its own schedule, and the reconciliation is self-serialising, so a
+			// loop that re-fires can never double-apply.
+			void runInflightConfigChangeReconciliation();
+		}
 	};
 }
 
