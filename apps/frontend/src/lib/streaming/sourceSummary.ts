@@ -249,13 +249,23 @@ export interface ResolvedAudioStatus {
 }
 
 /**
- * The two typed NON-resolutions Auto can report for a USB/UVC camera: several
- * audio devices on the camera's own physical device, or none at all. Both REQUIRE
- * a manual pick — the device deliberately refuses to guess across physical
- * devices (cerastream ADR-0008 §6), so the UI must say so rather than render a
- * silent em-dash that reads as "still resolving".
+ * The typed states Auto reports INSTEAD of naming a usable device.
+ *
+ * `ambiguous` / `none` are the USB/UVC same-device pair: several audio devices on
+ * the camera's own physical device, or none at all. Both REQUIRE a manual pick —
+ * the device deliberately refuses to guess across physical devices (cerastream
+ * ADR-0008 §6).
+ *
+ * `no-capture` is the HDMI/Cam Link refusal (`no-capture-audio`): the port's own
+ * audio card is enumerated but owns no capture PCM, so there is no audio to be
+ * had from it and Auto has fallen back to an explicit video-only stream. It is
+ * NOT a prompt — nothing the operator picks makes that card record — so its band
+ * explains rather than asks.
+ *
+ * All three must band. The one thing none of them may do is fall through to the
+ * `current` em-dash, which reads as "still resolving".
  */
-export type SameDeviceAudioState = "ambiguous" | "none";
+export type SameDeviceAudioState = "ambiguous" | "none" | "no-capture";
 
 /** The single resolved-audio display model every consuming surface renders from. */
 export interface ResolvedAudioDisplay {
@@ -332,7 +342,9 @@ export function resolvedAudioLabel(
 			? "ambiguous"
 			: reason === "no-same-device-audio"
 				? "none"
-				: undefined;
+				: reason === "no-capture-audio"
+					? "no-capture"
+					: undefined;
 	const sameDeviceCandidates =
 		sameDeviceState === "ambiguous"
 			? (status?.resolved_asrc_candidates ?? []).map(labelFor)

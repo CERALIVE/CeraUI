@@ -211,6 +211,18 @@ export function hasCapturePcmNode(entries: readonly string[]): boolean {
  * undefined, so asking about the sentinel reports every Auto pick absent and
  * would relabel a genuine mismatch on a healthy card as `no_device`.
  */
+/**
+ * The scanned ALSA cards owning at least one CAPTURE PCM.
+ *
+ * Read by `resolveAutoAsrcFromLiveState` so "Auto" cannot bind a card that
+ * cannot be recorded from. It is produced by the SAME `updateAudioDevices` pass
+ * that fills `audioDevices`, so a card present in one is answered authoritatively
+ * by the other — never a stale pairing.
+ */
+export function getAudioCaptureCardIds(): ReadonlySet<string> {
+	return audioCaptureCardIds;
+}
+
 export function isMeterPreferenceDevicePresent(
 	asrc: string | undefined = getConfig().asrc,
 	resolveAuto: () => AutoAsrcResolution = resolveAutoAsrcFromLiveState,

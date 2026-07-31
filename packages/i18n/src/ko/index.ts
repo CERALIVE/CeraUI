@@ -1307,6 +1307,9 @@ const ko = {
 			audioNoSameDeviceTitle: "이 카메라에는 자체 오디오가 없습니다",
 			audioNoSameDeviceBody:
 				"이 카메라의 하드웨어에는 오디오를 전달하는 장치가 없으며, 다른 기기의 마이크를 빌려 쓰지 않습니다. 아래에서 오디오 소스를 선택하세요.",
+			audioNoCaptureTitle: "이 입력은 오디오를 전달하지 않습니다",
+			audioNoCaptureBody:
+				"이 포트의 오디오 카드는 있지만 녹음할 수 없어 캡처할 것이 없습니다. 스트리밍은 오디오 없이 계속됩니다. 소리를 추가하려면 아래에서 오디오 소스를 선택하세요.",
 			mjpegTitle: "왜 MJPEG인가요?",
 			mjpegBody:
 				"이 장치는 Motion-JPEG를 출력하는 표준 USB Video Class(UVC) 장치입니다. USB 하드웨어 설명자에는 비압축 및 Motion-JPEG(MJPEG) 영상만 표시되어 있으며, USB를 통한 하드웨어 H.264/H.265 인코딩도, 이를 위한 숨겨진 공급업체 채널도 없습니다. 그래서 인코더가 해당 장치의 MJPEG 영상을 캡처한 뒤 선택한 코덱으로 다시 인코딩합니다. 이는 하드웨어에 대한 정확한 설명이며 결함이 아닙니다.",

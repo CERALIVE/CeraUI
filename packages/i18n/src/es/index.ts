@@ -710,6 +710,9 @@ const es = {
 			audioNoSameDeviceTitle: "Esta cámara no tiene audio propio",
 			audioNoSameDeviceBody:
 				"Nada en el hardware de esta cámara transporta audio, y nunca tomamos prestado el micrófono de otro dispositivo. Elige una fuente de audio abajo.",
+			audioNoCaptureTitle: "Esta entrada no transporta audio",
+			audioNoCaptureBody:
+				"La tarjeta de audio de este puerto está presente pero no se puede grabar de ella, así que no hay nada que capturar. La transmisión continúa sin audio: elige una fuente de audio abajo para añadir sonido.",
 			mjpegTitle: "¿Por qué MJPEG?",
 			mjpegBody:
 				"Se trata de un dispositivo USB Video Class (UVC) estándar que produce Motion-JPEG: su propia descripción de hardware USB solo declara vídeo sin comprimir y Motion-JPEG (MJPEG) — sin codificación H.264/H.265 por hardware a través de USB y sin ningún canal de fabricante oculto para ello —, así que el codificador captura su vídeo MJPEG y lo vuelve a codificar al códec que elijas. Es una descripción precisa del hardware, no un fallo.",

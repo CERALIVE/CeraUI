@@ -1494,6 +1494,9 @@ const fr = {
 			audioNoSameDeviceTitle: "Cette caméra n'a pas d'audio propre",
 			audioNoSameDeviceBody:
 				"Rien sur le matériel de cette caméra ne transporte d'audio, et nous n'empruntons jamais le microphone d'un autre appareil. Choisissez une source audio ci-dessous.",
+			audioNoCaptureTitle: "Cette entrée ne transporte pas d'audio",
+			audioNoCaptureBody:
+				"La carte audio de ce port est présente mais ne peut pas être enregistrée, il n'y a donc rien à capturer. La diffusion continue sans audio — choisissez une source audio ci-dessous pour en ajouter une.",
 			mjpegTitle: "Pourquoi MJPEG ?",
 			mjpegBody:
 				"C'est un appareil USB Video Class (UVC) standard qui produit du Motion-JPEG : sa propre description matérielle USB n'annonce que de la vidéo non compressée et du Motion-JPEG (MJPEG) — aucun encodage matériel H.264/H.265 via USB ni canal constructeur caché pour cela —, l'encodeur capture donc sa vidéo MJPEG et la réencode dans le codec que vous choisissez. C'est une description exacte du matériel, pas un défaut.",

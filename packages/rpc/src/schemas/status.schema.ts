@@ -41,6 +41,10 @@ export const availableUpdatesFieldSchema = z.union([
 // own physical device, and CeraLive refuses to guess across devices (ADR-0008 §6).
 // They REPLACE the retired `usb-alias` / `first-device` fallbacks, both of which
 // could only ever name a DIFFERENT physical device's microphone.
+// `no-capture-audio` is the rule-3/4 refusal: the source's fixed audio card IS
+// enumerated but owns NO capture PCM (the RK3588 HDMI-RX, even with a locked
+// signal), so Auto resolves to an explicit video-only stream rather than binding
+// a card whose every start dies `audio-device-unavailable`.
 export const resolvedAsrcReasonSchema = z.enum([
 	'embedded',
 	'hdmi',
@@ -48,6 +52,7 @@ export const resolvedAsrcReasonSchema = z.enum([
 	'usb-same-device',
 	'ambiguous-same-device-audio',
 	'no-same-device-audio',
+	'no-capture-audio',
 	'pipeline-default',
 ]);
 export type ResolvedAsrcReason = z.infer<typeof resolvedAsrcReasonSchema>;

@@ -1385,3 +1385,247 @@ describe("manual asrc always wins over the same-device resolver", () => {
 		expect(getConfig().asrc).toBe("RØDE AI-Micro");
 	});
 });
+
+// ─── W4A4-F1: a bound card must be able to CAPTURE ───────────────────────────
+//
+// Found on a Rock 5B+ during wave-4 board QA (task-4 §5b). With a LOCKED
+// 1080p59.94 signal on the HDMI-RX port, rule 3 bound "Auto" to
+// `rockchiphdmiin` because the card is ENUMERATED — and that card owns no
+// capture PCM substream at all:
+//
+//   /proc/asound/cards  3 [rockchiphdmiin ]: rockchip_hdmiin - rockchip,hdmiin
+//   /proc/asound/pcm    03-00: rockchip,hdmiin i2s-hifi-0 :      <-- no `capture N`
+//   arecord -l          card 4 only
+//
+// So EVERY `asrc: "Auto"` start on the HDMI source died with
+// `-32602 audio-device-unavailable: ALSA capture device 'hw:CARD=rockchiphdmiin'
+// is busy or unavailable`, classified `start_invalid` / `not_retriable`. The
+// capture-PCM presence set already existed in-repo (`hasCapturePcmNode` /
+// `audioCaptureCardIds`, consumed by the audio meter) — rule 3 simply never
+// consulted it.
+describe("resolveAutoAsrc — a bound card must be able to CAPTURE (W4A4-F1)", () => {
+	const CAPTURE_CAPABLE = new Set(["usbaudio", "rockchipes8316"]);
+
+	test("Rule 3: the HDMI card is enumerated but owns NO capture PCM → no pick", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: HDMI_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: CAPTURE_CAPABLE,
+			}),
+		).toEqual({
+			asrcKey: "No audio",
+			cardId: null,
+			reason: "no-capture-audio",
+		});
+	});
+
+	test("Rule 3 control: the same card WITH a capture PCM still binds (unchanged)", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: HDMI_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: new Set(["rockchiphdmiin"]),
+			}),
+		).toEqual({ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" });
+	});
+
+	test("fail-open: an UNKNOWN capture set never suppresses a bind", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: HDMI_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" });
+	});
+
+	test("Rule 4: a Cam Link card with no capture PCM gets the same refusal", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("camlink", "Cam Link 4K"),
+				audioDevices: CAMLINK_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: CAPTURE_CAPABLE,
+			}),
+		).toEqual({
+			asrcKey: "No audio",
+			cardId: null,
+			reason: "no-capture-audio",
+		});
+	});
+
+	test("an UN-ENUMERATED HDMI card still falls to pipeline default (unchanged)", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: {
+					"No audio": "No audio",
+					"Pipeline default": "Pipeline default",
+				},
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: CAPTURE_CAPABLE,
+			}),
+		).toEqual({
+			asrcKey: "Pipeline default",
+			cardId: null,
+			reason: "pipeline-default",
+		});
+	});
+
+	// The whole point: the launch copy must ask the engine for an explicit
+	// video-only stream instead of a dead ALSA card. `audio.mode: "none"` is what
+	// makes the start SUCCEED where the board recorded `audio-device-unavailable`.
+	test("the launch copy asks the engine for mode:none, never the dead card", () => {
+		const resolution = resolveAutoAsrc({
+			source: captureSource("hdmi", "HDMI Input"),
+			audioDevices: HDMI_MAP,
+			engineAudio: [],
+			networkEmbeddedAudio: undefined,
+			captureCapableCardIds: CAPTURE_CAPABLE,
+		});
+		const launch = buildAutoLaunchConfig(
+			{
+				asrc: AUDIO_SOURCE_AUTO,
+				pipeline: "hdmi",
+				max_br: 5000,
+			} as RuntimeConfig,
+			resolution,
+		);
+		expect(launch.asrc).toBe("No audio");
+		expect(resolveAudioMode(launch.asrc ?? "", false)).toEqual({
+			mode: "none",
+		});
+	});
+});
+
+/** The board's own HDMI-RX row: `rk_hdmirx` on `/dev/video0`, kind `hdmi`. */
+async function seedHdmiCaptureSource(): Promise<void> {
+	await getCapabilities({
+		fetchEngineCapabilities: async () => ({
+			caps: {
+				platform: {
+					supports_h265: true,
+					hardware_accelerated: true,
+					max_resolution: "1080p",
+				},
+				encoder: {
+					codecs: ["h264"],
+					bitrate_range: { min: 500, max: 20000, unit: "kbps" },
+				},
+				sources: [
+					{
+						id: "hdmi",
+						supports_audio: true,
+						supports_resolution_override: true,
+						supports_framerate_override: true,
+						default_resolution: "1080p",
+						default_framerate: 30,
+					},
+				],
+			},
+			schemaVersion: SCHEMA_VERSION,
+		}),
+		fetchEngineDevices: async () => ({ devices: [] }),
+	});
+	await refreshEngineDeviceCache({
+		fetchEngineDevices: async () =>
+			({
+				devices: [
+					{
+						input_id: "/dev/video0",
+						device_path: "/dev/video0",
+						display_name: "rk_hdmirx",
+						media_class: "video",
+						kind: "hdmi",
+						stable_id: "port:fdee0000.hdmirx-controller",
+						caps: [
+							{
+								media_type: "video/x-raw",
+								width: 1920,
+								height: 1080,
+								framerate: "60000/1001",
+							},
+						],
+					},
+				],
+			}) as unknown as ListDevicesResult,
+	});
+}
+
+// The pure table above proves the RULE; this proves the WIRING — the live-state
+// resolver must actually feed it the scan's capture-PCM set. A board-shaped
+// sysfs fixture is the only honest input: `audioDevices` and the capture set are
+// produced by the SAME `updateAudioDevices` pass, so a fixture that lists the
+// card without a `pcmC3D0c` node reproduces the board exactly.
+describe("Auto on the board's real HDMI topology (W4A4-F1 wiring)", () => {
+	let audioRoot: string | undefined;
+
+	async function scanCards(
+		cards: Array<{ dir: string; id: string; entries?: string[] }>,
+	): Promise<void> {
+		if (audioRoot !== undefined)
+			rmSync(audioRoot, { recursive: true, force: true });
+		audioRoot = mkdtempSync(join(tmpdir(), "w4a4f1-audio-"));
+		for (const card of cards) {
+			const dir = join(audioRoot, card.dir);
+			mkdirSync(dir);
+			writeFileSync(join(dir, "id"), `${card.id}\n`);
+			for (const entry of card.entries ?? []) mkdirSync(join(dir, entry));
+		}
+		await updateAudioDevices(audioRoot);
+	}
+
+	beforeEach(async () => {
+		resetAutoAudioState();
+		updateStatus(false);
+		clearCapabilitiesCache();
+		resetEngineDeviceCache();
+		await seedHdmiCaptureSource();
+		getConfig().asrc = AUDIO_SOURCE_AUTO;
+		getConfig().source = "/dev/video0";
+	});
+	afterEach(async () => {
+		if (audioRoot !== undefined) {
+			rmSync(audioRoot, { recursive: true, force: true });
+			audioRoot = undefined;
+		}
+		await updateAudioDevices("/nonexistent-audio-root");
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		resetAutoAudioState();
+		updateStatus(false);
+		delete getConfig().asrc;
+		delete getConfig().source;
+	});
+
+	test("the enumerated-but-capture-less HDMI card is refused, not bound", async () => {
+		// Exactly the board: card3 lists, owns no PCM node at all.
+		await scanCards([
+			{ dir: "card3", id: "rockchiphdmiin" },
+			{ dir: "card5", id: "usbaudio", entries: ["pcmC5D0c"] },
+		]);
+		expect(getAudioDevices()).toHaveProperty("HDMI", "rockchiphdmiin");
+
+		const r = resolveAutoAsrcFromLiveState();
+		expect(r.reason).toBe("no-capture-audio");
+		expect(r.cardId).toBeNull();
+		expect(r.asrcKey).toBe("No audio");
+	});
+
+	test("once the card DOES own a capture PCM, rule 3 binds it again", async () => {
+		await scanCards([
+			{ dir: "card3", id: "rockchiphdmiin", entries: ["pcmC3D0c"] },
+		]);
+		const r = resolveAutoAsrcFromLiveState();
+		expect(r.reason).toBe("hdmi");
+		expect(r.cardId).toBe("rockchiphdmiin");
+	});
+});

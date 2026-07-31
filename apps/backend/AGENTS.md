@@ -229,6 +229,58 @@ strings could only approximate. `MIN_COMMON_PREFIX`, `commonPrefixLength`, and
 | more than 1 | `ambiguous-same-device-audio` + `candidates[]` — NO auto-pick |
 | 0, or a group-less camera | `no-same-device-audio` — NO auto-pick |
 
+**LISTED IS NOT RECORDABLE — rules 3 and 4 are gated on a CAPTURE PCM.** Rules 3/4
+bind a FIXED card id (`rockchiphdmiin` / `C4K`) on the strength of CeraUI's own
+sysfs scan ENUMERATING it, and enumeration is a different question from "can this
+be recorded from". The RK3588 HDMI-RX is the counter-example, and it is not
+theoretical: measured on a Rock 5B+ **with a locked 1080p59.94 signal on the port**,
+`/proc/asound/cards` lists card 3, `/proc/asound/pcm` carries
+`03-00: rockchip,hdmiin i2s-hifi-0 :` with NO `capture N` field, `/sys/class/sound/card3`
+has no `pcmC3D0c`, and `arecord -l` never shows it. Rule 3 bound it anyway, so
+**every** `asrc: "Auto"` start on the HDMI source died:
+
+```
+BCAST {"status":{"resolved_asrc":"HDMI","resolved_asrc_reason":"hdmi"}}
+RECV  {"success":false,"error":"start_invalid",
+       "failure":{"phase":"start-rpc","code":-32602,
+         "message":"invalid params: audio-device-unavailable: ALSA capture device
+                    'hw:CARD=rockchiphdmiin' is busy or unavailable",
+         "retriable":false}}
+```
+
+An operator whose camera was working could not go live at all. The capture-PCM
+presence set already existed in this file (`hasCapturePcmNode` / `audioCaptureCardIds`,
+built by `updateAudioDevices` and consumed by the audio meter) — rule 3 simply never
+consulted it. It now does, via `getAudioCaptureCardIds()` threaded onto the resolver
+input as `captureCapableCardIds`.
+
+- **The refusal is `no-capture-audio` → the `"No audio"` pseudo-source**, i.e. the
+  engine's `audio.mode: "none"`, so the start SUCCEEDS as an explicit video-only
+  stream. Board-proven: the same source, in the same minute, went `streaming` in
+  2.774 s under that value. Do NOT "simplify" it to a `null` asrcKey — that OMITS
+  `asrc` from the launch copy and hands the engine its own legacy inference over the
+  very port that cannot deliver.
+- **FAIL-OPEN.** `captureCapableCardIds` is OPTIONAL; `undefined` means the question
+  was never asked, and an unasked question is not evidence — the rules then bind
+  byte-identically to before the gate existed. Only a scan that positively lists the
+  cards AND omits this one withholds.
+- **The card stays in the PICKER**, unchanged — same rule as the meter's presence
+  gate. The operator selected that PORT; only claims that it can DELIVER audio are
+  gated.
+- **Rule 5 deliberately does NOT carry this gate.** Its candidates must each carry an
+  `alsa_card_id` from the ENGINE's `list-devices`, and a card with no capture PCM
+  never appears there at all — the engine has already answered the question. Adding
+  a fourth gate there would be redundant, not safer.
+
+Wire contract: `resolvedAsrcReasonSchema` (`@ceraui/rpc`) gains `no-capture-audio`;
+the frontend bands it as `audio-no-capture` (`live.source.audioNoCapture*`, 10
+locales) rather than letting it fall through to the em-dash. Coverage:
+`tests/auto-audio.test.ts` → "a bound card must be able to CAPTURE (W4A4-F1)" (the
+pure table incl. the fail-open and un-enumerated controls, the launch copy asserting
+`{mode:"none"}`) + "Auto on the board's real HDMI topology (W4A4-F1 wiring)" (a real
+sysfs fixture reproducing `card3`-without-`pcmC3D0c`, driven through
+`resolveAutoAsrcFromLiveState`, with the capture-PCM-appears control).
+
 The generic `usb-alias` and `first-device` fallbacks are GONE, from the code AND
 from `resolvedAsrcReasonSchema`: each could only ever name a card on a different
 physical device, which is precisely the defect. Both non-resolutions ride `status`
@@ -2865,6 +2917,7 @@ control, the post-save genuine-renumber control, and the F10b claimant table).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
+- Don't let Auto rule 3/4 bind their FIXED card on enumeration alone — that is the same "listed ≠ recordable" confusion one layer up, and it made every `asrc: "Auto"` start on the board's HDMI source die `audio-device-unavailable … not_retriable` even with a locked signal. Pass `captureCapableCardIds` and refuse with `no-capture-audio`. Keep the refusal FAIL-OPEN (an absent set binds exactly as before), keep it resolving to the `"No audio"` pseudo-source rather than a `null` asrcKey (a `null` OMITS `asrc` and hands the engine its legacy inference over the port that cannot deliver), and don't extend the gate to rule 5 — its candidates already come from the engine's `list-devices`, which never lists a capture-less card.
 - Don't infer "the operator wants no meter" from a `null` meter preference — `null` also covers the pipeline default and an "Auto" that resolves to no single card, each of which legitimately meters whatever the engine picks. Ask `isMeterSilencedByPick()`, key the selection-change detection on the `(silenced, preference)` PAIR, and don't let an engine-sent `unavailable` reason outrank an explicit "No audio".
 - Don't short-circuit `AUDIO_SOURCE_AUTO` to a `null` meter preference — "Auto" is a DETERMINISTIC resolution (`resolveAutoAsrc`), not a hand-back, so route it through `resolveEffectiveAudioPick()` and let the meter prefer the same card the start path would use. Getting this wrong is doubly invisible: `null` makes the engine auto-pick AND disarms `isForeignCardLevel`, so the meter draws a different device's real moving bars for a pick whose own start fails. And don't ask `isMeterPreferenceDevicePresent()` about the raw sentinel — `audioDevices["Auto"]` is undefined, so every Auto pick would report `no_device` and a genuine mismatch on a healthy card would lose its `not_selected_device` reason.
 - Don't re-push the meter preference only when `asrc` changed — under "Auto" the resolved card is a function of the selected VIDEO source (rule 3) and of the ENGINE's audio list (rule 5), so `input.source` changes and `reresolveAudioForEngineChange` must re-push too. An unchanged pick is deduped by the bridge and costs nothing; a missed changed one is permanent, because `set_preferred_device` early-returns on an unchanged value.

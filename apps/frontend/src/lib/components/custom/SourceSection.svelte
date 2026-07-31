@@ -992,18 +992,24 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					class="border-status-warning/60 bg-status-warning/10 space-y-1 rounded-lg border px-3 py-2"
 					data-testid={resolvedAudio.sameDeviceState === 'ambiguous'
 						? 'audio-same-device-ambiguous'
-						: 'audio-no-same-device'}
+						: resolvedAudio.sameDeviceState === 'no-capture'
+							? 'audio-no-capture'
+							: 'audio-no-same-device'}
 					role="status"
 				>
 					<p class="text-sm font-medium">
 						{resolvedAudio.sameDeviceState === 'ambiguous'
 							? $LL.live.source.audioAmbiguousTitle()
-							: $LL.live.source.audioNoSameDeviceTitle()}
+							: resolvedAudio.sameDeviceState === 'no-capture'
+								? $LL.live.source.audioNoCaptureTitle()
+								: $LL.live.source.audioNoSameDeviceTitle()}
 					</p>
 					<p class="text-muted-foreground text-xs">
 						{resolvedAudio.sameDeviceState === 'ambiguous'
 							? $LL.live.source.audioAmbiguousBody()
-							: $LL.live.source.audioNoSameDeviceBody()}
+							: resolvedAudio.sameDeviceState === 'no-capture'
+								? $LL.live.source.audioNoCaptureBody()
+								: $LL.live.source.audioNoSameDeviceBody()}
 					</p>
 					{#if resolvedAudio.sameDeviceCandidates.length > 0}
 						<ul class="flex flex-wrap gap-1.5" data-testid="audio-same-device-candidates">

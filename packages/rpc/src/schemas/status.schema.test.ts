@@ -123,6 +123,7 @@ describe('resolved_asrc Auto-resolution fields (T1 — additive)', () => {
 			'usb-same-device',
 			'ambiguous-same-device-audio',
 			'no-same-device-audio',
+			'no-capture-audio',
 			'pipeline-default',
 		]) {
 			expect(
