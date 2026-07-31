@@ -1180,6 +1180,8 @@ const ptBR = {
 				"A fonte selecionada foi desconectada. Reconecte-a ou escolha outra fonte e tente novamente.",
 			source_unavailable:
 				"A fonte selecionada não está disponível no momento. Escolha outra fonte ou verifique suas configurações e tente novamente.",
+			source_taken_over:
+				"Outro dispositivo agora ocupa a conexão da câmera selecionada. Reconecte essa câmera ou escolha a que você quer e tente novamente.",
 		},
 		startFailure: {
 			class: {

@@ -418,6 +418,8 @@ const es = {
 				"La fuente seleccionada se desconectó. Vuelve a conectarla o elige otra fuente e inténtalo de nuevo.",
 			source_unavailable:
 				"La fuente seleccionada no está disponible ahora mismo. Elige otra fuente o comprueba su configuración e inténtalo de nuevo.",
+			source_taken_over:
+				"Otro dispositivo ocupa ahora la conexión que tenía la cámara seleccionada. Vuelve a conectar esa cámara o elige la que quieras e inténtalo de nuevo.",
 		},
 		startFailure: {
 			class: {

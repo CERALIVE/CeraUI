@@ -233,6 +233,7 @@ const STREAM_START_ERROR_KEYS = [
 	'audio_codec_unsupported_transport',
 	'source_lost',
 	'source_unavailable',
+	'source_taken_over',
 ] as const;
 type StreamStartErrorKey = (typeof STREAM_START_ERROR_KEYS)[number];
 

@@ -244,7 +244,7 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	if (params.source !== undefined) {
 		config.source = params.source;
 		config.selected_video_input = params.selected_video_input;
-		noteSourceSelectionWrite();
+		noteSourceSelectionWrite(params.source);
 	}
 
 	if (pipeline.supportsAudio && params.acodec) {
