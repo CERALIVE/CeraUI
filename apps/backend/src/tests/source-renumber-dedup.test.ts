@@ -195,6 +195,74 @@ describe("last_seen_devices — one entry per physical device", () => {
 		);
 	});
 
+	it("two devices that took turns on one node path do not both claim it", async () => {
+		// The live board's state, verbatim: the DJI and the RØDE each occupied
+		// /dev/video1 at some point, so folding by stable identity (correctly)
+		// keeps two rows — and both went on claiming the same id.
+		getConfig().last_seen_devices = [
+			{
+				...osmoSnapshot("/dev/video1"),
+				previousIds: ["/dev/video2", "/dev/video3"],
+			},
+			{
+				id: "/dev/video1",
+				displayName: "RØDE HDMI to USB-C: RØDE HDMI",
+				kind: "mjpeg",
+				pipelineId: "usb_mjpeg",
+				devicePath: "/dev/video1",
+				stableId: RODE_STABLE_ID,
+				previousIds: ["/dev/video4", "/dev/video3"],
+			},
+		];
+
+		// Only the DJI is plugged in, and it holds /dev/video1.
+		await observe([engineDevice("/dev/video1", "uvc_h264", OSMO_STABLE_ID)]);
+
+		const persisted = getConfig().last_seen_devices ?? [];
+		const ids = persisted.map((d) => d.id);
+		expect(new Set(ids).size).toBe(ids.length);
+
+		// Both devices are still remembered — this is a path handover, not an
+		// eviction — and the absent one keeps the path as a retired alias.
+		const osmo = persisted.find((d) => d.stableId === OSMO_STABLE_ID);
+		const rode = persisted.find((d) => d.stableId === RODE_STABLE_ID);
+		expect(osmo?.id).toBe("/dev/video1");
+		expect(rode).toBeDefined();
+		expect(rode?.id).not.toBe("/dev/video1");
+		expect(rode?.previousIds).toContain("/dev/video1");
+	});
+
+	it("a stale config.source resolves to the device that HOLDS the path, not one that retired it", async () => {
+		// The operator selected the DJI at /dev/video1. It is now unplugged, and
+		// the RØDE — which once held /dev/video1 too — is live on a new path.
+		const sources = buildSources({
+			sources: capSources(),
+			devices: [captureDevice("/dev/video5", "mjpeg", RODE_STABLE_ID)],
+			networkIngest: NO_INGEST,
+		});
+		// The RØDE row is listed FIRST, so a first-match lookup adopts its stable
+		// identity and silently re-points the operator's selection at the wrong
+		// camera. Only the DJI actually holds /dev/video1.
+		const persisted: LastSeenDevice[] = [
+			{
+				id: RODE_STABLE_ID,
+				displayName: "RØDE HDMI to USB-C: RØDE HDMI",
+				kind: "mjpeg",
+				pipelineId: "usb_mjpeg",
+				devicePath: "/dev/video5",
+				stableId: RODE_STABLE_ID,
+				previousIds: ["/dev/video1"],
+			},
+			osmoSnapshot("/dev/video1"),
+		];
+
+		// The selected camera is absent, so the selection fails closed rather
+		// than being handed to a different device.
+		expect(resolveSourceIdentity("/dev/video1", sources, persisted)).toBe(
+			"/dev/video1",
+		);
+	});
+
 	it("previousIds round-trips through the persisted config schema", () => {
 		const config = {
 			...runtimeConfigSchema.parse({}),
