@@ -48,6 +48,7 @@ import { getSupportedTransports } from "./capabilities.ts";
 import { validateBitrate } from "./encoder.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines, validatePipelineOverrides } from "./pipelines.ts";
+import { noteSourceSelectionWrite } from "./sources.ts";
 import { resolveSrtla } from "./srtla.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
@@ -243,6 +244,7 @@ export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
 	if (params.source !== undefined) {
 		config.source = params.source;
 		config.selected_video_input = params.selected_video_input;
+		noteSourceSelectionWrite();
 	}
 
 	if (pipeline.supportsAudio && params.acodec) {

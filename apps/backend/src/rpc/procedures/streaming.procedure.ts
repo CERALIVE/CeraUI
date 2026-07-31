@@ -102,6 +102,7 @@ import {
 import {
 	broadcastSources,
 	getSourcesMessage,
+	noteSourceSelectionWrite,
 	type ResolveSourceRoutingResult,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
@@ -681,6 +682,7 @@ export const setConfigProcedure = authedProcedure
 		if (sourceRouting !== undefined) {
 			config.source = input.source;
 			config.selected_video_input = sourceRouting.selected_video_input;
+			noteSourceSelectionWrite();
 		}
 		if (input.bitrate_overlay !== undefined)
 			config.bitrate_overlay = input.bitrate_overlay;
@@ -994,6 +996,7 @@ export function applySwitchInputFollow(
 	config.source = inputId;
 	config.pipeline = routed.pipeline;
 	config.selected_video_input = routed.selected_video_input;
+	noteSourceSelectionWrite();
 	saveConfig();
 	broadcastMsg("config", config);
 

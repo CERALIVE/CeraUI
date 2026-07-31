@@ -376,6 +376,39 @@ function findRememberingId(
 	);
 }
 
+function remembersNodePath(device: LastSeenDevice, id: string): boolean {
+	return device.id === id || device.previousIds?.includes(id) === true;
+}
+
+/**
+ * The ONE stable hardware identity a node path names, or `undefined` when the
+ * path cannot be pinned to a single physical device.
+ *
+ * `/dev/videoN` is recycled, so several remembered devices can legitimately
+ * answer to the same path — one holding it outright, another remembering it as a
+ * retired alias. `findRememberingId` breaks that tie by PREFERENCE (holder wins),
+ * which is the right rule for rendering a lost row and the wrong one for deciding
+ * what hardware an operator's saved selection means: the board's own
+ * `last_seen_devices` carried the HDMI-RX and a DJI Osmo Pocket 3 both answering
+ * to `/dev/video3`, and the preference silently handed the Osmo's selection to
+ * the HDMI-RX. A migration that re-points a selection at a different camera is
+ * strictly worse than one that does not fire, so ambiguity refuses.
+ *
+ * Duplicate SNAPSHOTS of one device are not ambiguity — they fold to a single
+ * identity key, so a `config.json` predating the identity fold still migrates
+ * (and still self-heals on the next observation).
+ */
+function unambiguousStableId(
+	devices: readonly LastSeenDevice[],
+	id: string,
+): string | undefined {
+	const claimants = devices.filter((d) => remembersNodePath(d, id));
+	const identities = new Set(claimants.map(identityKey));
+	if (identities.size !== 1) return undefined;
+	const stableId = claimants[0]?.stableId;
+	return stableId === undefined || stableId === "" ? undefined : stableId;
+}
+
 /**
  * How many retired node paths one remembered device carries. A libuvc camera
  * renumbers on every open/close cycle, so this is unbounded churn without a cap;
@@ -618,14 +651,19 @@ export type ResolveSourceRoutingResult =
 // return the id unchanged (no over-matching: a genuinely different device is
 // never silently adopted). Mirrors the audio `resolveAudioSelection` stable-id
 // join, adapted to the id→stableId indirection video persists.
+//
+// The identity must be UNAMBIGUOUS, which is stricter than "remembered". Node
+// paths are recycled, so a path several devices answer to identifies none of
+// them, and resolving it by preference re-points the selection at whichever
+// hardware the tie-break happened to reach — see `unambiguousStableId`.
 export function resolveSourceIdentity(
 	sourceId: string,
 	sources: readonly StreamSource[],
 	lastSeenDevices?: readonly LastSeenDevice[],
 ): string {
 	if (sources.some((s) => s.id === sourceId)) return sourceId;
-	const stableId = findRememberingId(lastSeenDevices ?? [], sourceId)?.stableId;
-	if (stableId === undefined || stableId === "") return sourceId;
+	const stableId = unambiguousStableId(lastSeenDevices ?? [], sourceId);
+	if (stableId === undefined) return sourceId;
 	const successor = sources.find(
 		(s) => s.origin === "capture" && s.stableId === stableId,
 	);
@@ -656,6 +694,56 @@ export function resolveSourceRouting(
 		ok: true,
 		pipeline: routing.pipeline,
 		selected_video_input: routing.selected_video_input,
+	};
+}
+
+// ─── Selection write token (F10a) ───────────────────────────────────────────
+//
+// A monotonic stamp on the operator's stated intent, so a cache-driven
+// reconciliation can never overwrite a selection that is NEWER than the evidence
+// it is reasoning from.
+//
+// The reconciler decides against the engine-device cache, and that cache is
+// deliberately RETAINED across a failed `list-devices` — the right contract for
+// a device LIST (a transient outage must not erase the world), and the wrong one
+// for authorizing a config MUTATION. Confirmed on a board during a ~5 minute
+// cerastream outage: the cache was minutes old, and it overwrote an operator
+// `setConfig({source})` 7 ms after it landed. "Device is no longer live", drawn
+// from a view known not to have been refreshed, is not a verdict.
+//
+// `sourceSelectionToken` advances on every OPERATOR write of `config.source`
+// (never on the reconciler's own write — that would make the mechanism refuse
+// itself forever). `engineViewSelectionToken` records the token that was current
+// when the evidence behind the CURRENT view was REQUESTED — captured before the
+// probe's round-trip, not after it, so a probe that was already in flight when
+// the operator saved cannot authorize a migration either. The compare-and-set is
+// therefore exact: equal means nothing the operator did is newer than what the
+// engine was asked.
+//
+// A failing probe commits nothing, so the stamp simply stops advancing and the
+// reconciler stands down until the engine answers again — which is the
+// engine-freshness gate this defect needed, without a wall-clock bound to tune.
+let sourceSelectionToken = 0;
+let engineViewSelectionToken = 0;
+
+/**
+ * Record that the OPERATOR has just written `config.source`. Every call site
+ * that persists a stated selection — `streaming.setConfig`, the `start` path's
+ * `updateConfig`, and the durable live `switchInput` follow — must call this, or
+ * the reconciler may still overrule that selection from a stale view.
+ */
+export function noteSourceSelectionWrite(): void {
+	sourceSelectionToken += 1;
+}
+
+/** Test seam: the current operator-write / committed-view token pair. */
+export function getSourceSelectionTokens(): {
+	selection: number;
+	engineView: number;
+} {
+	return {
+		selection: sourceSelectionToken,
+		engineView: engineViewSelectionToken,
 	};
 }
 
@@ -869,6 +957,10 @@ export function getEngineAudioDevices(): EngineAudioDevice[] {
 interface EngineDeviceProbe {
 	devices: CaptureDevice[];
 	audio: EngineAudioDevice[];
+	// The operator-write token as it stood when this probe was DISPATCHED, so a
+	// round-trip that was already in flight when a selection was saved commits a
+	// view that is correctly marked older than that selection.
+	selectionToken: number;
 }
 
 /**
@@ -881,6 +973,7 @@ interface EngineDeviceProbe {
 async function probeEngineDevices(
 	deps: EngineDeviceCacheDeps,
 ): Promise<EngineDeviceProbe | undefined> {
+	const selectionToken = sourceSelectionToken;
 	try {
 		const result = await deps.fetchEngineDevices();
 		const devices = result.devices.map((d) =>
@@ -898,6 +991,7 @@ async function probeEngineDevices(
 		rememberEngineVideoDevices(devices);
 		return {
 			devices,
+			selectionToken,
 			// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
 			// that PRESERVES the `alsa_card_id` join key verbatim. It is read
 			// defensively (the pre-T18 binding schema strips it → `undefined`; the
@@ -1042,8 +1136,10 @@ export function setEngineAudioChangeHandler(
 function commitEngineDevices(
 	devices: readonly CaptureDevice[],
 	audio?: readonly EngineAudioDevice[],
+	viewSelectionToken: number = sourceSelectionToken,
 ): void {
 	engineDeviceCache = [...devices];
+	engineViewSelectionToken = viewSelectionToken;
 	let audioChanged = false;
 	if (audio !== undefined) {
 		const next = JSON.stringify(audio);
@@ -1071,7 +1167,7 @@ export async function tryRefreshEngineDeviceCache(
 ): Promise<boolean> {
 	const probe = await probeEngineDevices(deps);
 	if (probe === undefined) return false;
-	commitEngineDevices(probe.devices, probe.audio);
+	commitEngineDevices(probe.devices, probe.audio, probe.selectionToken);
 	return true;
 }
 
@@ -1096,6 +1192,8 @@ export function resetEngineDeviceCache(): void {
 	sessionSeenDeviceSnapshots.clear();
 	lastEngineVideoDevices.clear();
 	lastBroadcastSources = undefined;
+	sourceSelectionToken = 0;
+	engineViewSelectionToken = 0;
 }
 
 /**
@@ -1168,6 +1266,13 @@ export function getSourcesMessage(): SourcesMessage {
  * Only a STABLE-IDENTITY match migrates (never a name or a slot guess), so a
  * genuinely different device is never adopted, and a real unplug keeps its
  * `lost` row and is left untouched. Returns whether the config changed.
+ *
+ * And only an engine view at least as new as the operator's own last word may
+ * decide it. This is an INFERENCE about hardware; a saved selection is a stated
+ * intent, and an inference drawn from evidence the operator has already
+ * superseded must lose (F10a — see "Selection write token"). The refusal is not
+ * terminal: the next answered probe re-stamps the view, and a migration that is
+ * still true then still fires.
  */
 export function reconcileConfiguredSourceIdentity(
 	sources: readonly StreamSource[],
@@ -1181,6 +1286,13 @@ export function reconcileConfiguredSourceIdentity(
 		config.last_seen_devices,
 	);
 	if (successor === configured) return false;
+	if (engineViewSelectionToken !== sourceSelectionToken) {
+		logger.debug(
+			"sources: declining to migrate the configured source — the engine view predates the operator's selection",
+			{ configured, successor },
+		);
+		return false;
+	}
 
 	config.source = successor;
 	if (config.selected_video_input === configured) {
@@ -1355,6 +1467,7 @@ export async function refreshSourcesForHotplug(
 	commitEngineDevices(
 		mergeObservedWithProbe(observed, probe.devices),
 		probe.audio,
+		probe.selectionToken,
 	);
 	broadcastSources();
 }
@@ -1418,6 +1531,7 @@ async function runSignalRecheck(
 	commitEngineDevices(
 		mergeObservedWithProbe(observed, probe.devices),
 		probe.audio,
+		probe.selectionToken,
 	);
 	broadcastSourcesIfChanged();
 }
