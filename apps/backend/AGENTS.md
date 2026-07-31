@@ -2688,6 +2688,81 @@ negative controls: a selected HDMI input with no cable still raises, the EMI
 advisory still raises under the same gate, and the standing-advisory
 non-overwrite is unchanged).
 
+## AN INFERENCE MAY NOT OUTRANK THE OPERATOR, AND A SHARED NODE PATH NAMES NOBODY [EXISTS]
+
+`reconcileConfiguredSourceIdentity` self-heals a persisted `config.source` across
+a re-enumeration, and it is right to. But it is an INFERENCE about hardware
+written into the same field an operator writes their INTENT into, and it had no
+rule for what happens when the two disagree. Both failure directions were
+confirmed on a board (192.168.78.131).
+
+**A stale engine view may not overwrite a newer operator write.** The reconciler
+decides against `getSourcesMessage()`, built from the engine-device cache that
+`tryRefreshEngineDeviceCache` deliberately RETAINS across a failed fetch. During a
+~5 minute cerastream outage every `list-devices` timed out, so the cache was
+minutes old — and it still authorized a config MUTATION 7 ms after an operator
+`setConfig({source})` saved a different, correct id:
+
+```
+20:05:47.125 debug sources: engine device fetch failed; retaining last-known device cache
+20:05:47.132 info  sources: configured source re-enumerated under a new node path
+                         — migrated by stable identity {"from":"/dev/video0","to":"/dev/video3"}
+```
+
+Retain-on-failure is the right contract for a device LIST and the wrong one for a
+config write: "this device is no longer live", drawn from a view known not to have
+been refreshed, is not a verdict. The fix is a compare-and-set on a monotonic
+**selection token** (`sources.ts`, "Selection write token"):
+
+- `noteSourceSelectionWrite()` advances `sourceSelectionToken` at every site that
+  persists a STATED selection — `streaming.setConfig`, the `start` path's
+  `updateConfig` (`streaming.ts`), and the durable live `switchInput` follow. Miss
+  one and the reconciler can still overrule that selection.
+- `engineViewSelectionToken` records the token as it stood when the evidence
+  behind the current view was **REQUESTED**. It is captured inside
+  `probeEngineDevices` BEFORE the round-trip and carried on the probe to
+  `commitEngineDevices` — not sampled at commit — so a probe already in flight
+  when the operator saved cannot authorize a migration either.
+- The reconciler writes only while the two are equal.
+
+The reconciler's OWN write deliberately does not advance the token (it would
+refuse itself forever), and a failing probe commits nothing — so the stamp simply
+stops advancing and the reconciler stands down until the engine answers again.
+That IS the engine-freshness gate this defect needed, with no wall-clock bound to
+tune and no permanent suppression: the next answered probe re-authorizes it, and
+a migration still true then still fires.
+
+**A node path several devices answer to identifies none of them.**
+`findRememberingId` breaks that tie by PREFERENCE — whoever holds the path
+outright beats whoever merely retired it — which is correct for choosing a lost
+row and wrong for deciding what hardware a saved selection means. The board's own
+`last_seen_devices` had FOUR entries answering to `/dev/video3` (the HDMI-RX and
+the Osmo both remembering it as a retired alias, plus a pre-`stableId` snapshot
+holding it outright), so the preference alone decided which camera the operator
+had picked. `resolveSourceIdentity` now resolves through `unambiguousStableId`,
+which requires the claimants of a path to fold to exactly ONE identity key.
+
+- **Duplicate SNAPSHOTS are not ambiguity** — they share an identity key, so a
+  `config.json` predating the identity fold still migrates and still self-heals.
+- **It is suppression-only.** A refusal leaves the literal id standing, which the
+  engine then answers about honestly (`resolveSourceRouting` fails closed;
+  `resolvePreviewStartFrame` passes it through to the engine's typed
+  `source-unavailable`). It never adopts anything new.
+- `findRememberingId` is UNCHANGED and still owns `collectLostCandidates` — the
+  two rules answer different questions and must not be merged.
+
+Board proof (same board, same drill, before/after the fix): an ambiguous path
+(`/dev/video9`, claimed by the HDMI-RX AND the Osmo) was silently re-pointed to
+`/dev/video0` and persisted by the pre-fix binary, and left byte-identical by the
+fixed one; an UNAMBIGUOUS retired alias (`/dev/video8`, one claimant) still
+migrated to its live successor, so genuine renumber is unweakened. An operator
+save during a real engine outage then survived 45 s of reconcile ticks AND the
+engine's return with `config.json` byte-identical.
+
+Coverage: `tests/source-selection-stale-cache.test.ts` (the F10a repro driving the
+REAL `setConfig` procedure against a pre-save engine view, the re-authorization
+control, the post-save genuine-renumber control, and the F10b claimant table).
+
 ## ANTI-PATTERNS
 
 - Don't add a persistent notification without a retraction path — `duration` does
@@ -2786,6 +2861,8 @@ non-overwrite is unchanged).
 - Don't key a REMEMBERED device (`last_seen_devices`, the session-seen snapshot map) on its node path — a libuvc camera renumbers on every open/close cycle, so that appends a new entry per cycle and renders one camera as N rows with N `lost` candidates. Route through `identityKey()`. And when folding, don't drop the retired paths: `resolveSourceIdentity` resolves a stale `config.source` THROUGH `last_seen_devices`, so a fold that forgets them strands the operator's selection — that is what `previousIds` is for.
 - Don't record a device's `stable_id` into `liveStableIds` before the bridge check in `buildSources` — an unbridged device renders no row, so letting it suppress the remembered `lost` row erases the device from the list entirely.
 - Don't leave a re-enumerated `config.source`/`config.asrc` unrepaired, and don't repair either by name, slot, or "whichever id resolves" — migration is by STABLE IDENTITY only (`reconcileConfiguredSourceIdentity` / `reconcileConfiguredAudioIdentity`), and the retired id must be published as `previousIds` so consumers can tell MOVED from GONE.
+- Don't let that repair write from an engine view older than the operator's own last word, and don't add a `config.source` write site without `noteSourceSelectionWrite()` — the retained-on-failure device cache is minutes old during an outage and will overwrite a just-saved selection (see AN INFERENCE MAY NOT OUTRANK THE OPERATOR). Sample the token BEFORE the probe's round-trip, not at commit, or a probe already in flight still wins; and never advance it from the reconciler's own write, which would make the gate refuse itself forever.
+- Don't resolve a persisted selection through a node path more than one remembered device answers to — `findRememberingId`'s holder-beats-alias preference picks a camera rather than proving one. Use `unambiguousStableId`, keep the refusal suppression-only (the literal id must still reach the engine), and don't "unify" it with `findRememberingId`, which correctly keeps that preference for `collectLostCandidates`.
 - Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one. And don't widen that restore past IDENTITY (`kind`/`stable_id`) back onto the remembered `caps`/`signal` — re-asserting a past probe's verdict is how a device that loses its signal keeps claiming it has one, forever.
 - Don't let the periodic signal recheck start a second probe while its own is still out (`signalRecheckInFlight`) — a fixed-interval loop whose probe outlives its interval supersedes ITSELF on every tick and publishes nothing at all, and a link-losing receiver is exactly what makes an enumeration slow.
 - Don't assert a GLOBAL call count on a process-wide seam like `helpers/run.ts` — `bun test` loads every file into ONE process, and background work started by an earlier file keeps issuing OS commands. `wifiUpdateDevices()` is the known offender: while any Wi-Fi adapter reads unavailable it re-arms itself every 3 s for a five-minute budget (`modules/wifi/wifi-interfaces.ts`), firing several `run("nmcli", …)` calls per pass. Filter the spy's calls to the binary under test instead (`logs-injection.test.ts`), which asserts the same property and cannot be flipped by a foreign command.
