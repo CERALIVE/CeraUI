@@ -963,6 +963,18 @@ describe("resolvedAudioLabel — single-owner resolved-audio display (T6)", () =
 		});
 	});
 
+	it("maps no-capture-audio onto its own banded state, not the same-device one", () => {
+		const r = resolvedAudioLabel(
+			{ asrc: AUDIO_SOURCE_AUTO },
+			{ resolved_asrc: "No audio", resolved_asrc_reason: "no-capture-audio" },
+			ENTRIES,
+			t,
+		);
+		expect(r.sameDeviceState).toBe("no-capture");
+		expect(r.sameDeviceCandidates).toEqual([]);
+		expect(r.embedded).toBe(false);
+	});
+
 	it("surfaces the pending live-follow label whenever present (T7 slot)", () => {
 		const r = resolvedAudioLabel(
 			{ asrc: AUDIO_SOURCE_AUTO },

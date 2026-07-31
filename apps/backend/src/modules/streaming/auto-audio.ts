@@ -54,7 +54,7 @@ import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { getConfig } from "../config.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
-import { getAudioDevices } from "./audio.ts";
+import { getAudioCaptureCardIds, getAudioDevices } from "./audio.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 import {
@@ -72,6 +72,13 @@ const CAMLINK_CARD_ID = "C4K";
 
 /** The pipeline-default pseudo-source asrcKey — a sentinel, not a real ALSA card. */
 const PIPELINE_DEFAULT_ASRC = "Pipeline default";
+
+/**
+ * The no-audio pseudo-source asrcKey (`audio.ts` `NO_AUDIO_ID`), spelled locally
+ * for the same reason `PIPELINE_DEFAULT_ASRC` is: `audio.ts` imports this module,
+ * so a top-level import of its const would evaluate in the cycle's TDZ.
+ */
+const NO_AUDIO_ASRC = "No audio";
 
 /** Video device kinds that share a chassis with a USB/UVC audio card. */
 const USB_VIDEO_KINDS = new Set<string>([
@@ -105,6 +112,13 @@ export interface ResolveAutoAsrcInput {
 	engineAudio: readonly EngineAudioDevice[];
 	/** Whether the engine routes muxed network-ingest audio (embedded path). */
 	networkEmbeddedAudio: boolean | undefined;
+	/**
+	 * The scanned cards owning at least one CAPTURE PCM (`audio.ts`
+	 * `getAudioCaptureCardIds`). OPTIONAL and FAIL-OPEN: `undefined` means the
+	 * capture-PCM question has not been asked, and an unasked question is never
+	 * evidence — the rules bind exactly as they did before this gate existed.
+	 */
+	captureCapableCardIds?: ReadonlySet<string>;
 }
 
 /**
@@ -174,6 +188,46 @@ function pipelineDefault(): AutoAsrcResolution {
 }
 
 /**
+ * LISTED IS NOT RECORDABLE — the rule-3/4 refusal (`W4A4-F1`).
+ *
+ * Rules 3 and 4 bind a FIXED card id on the strength of CeraUI's own sysfs scan
+ * ENUMERATING it, and enumeration is not the same question as "can this be
+ * recorded from". The RK3588 HDMI-RX proves the gap: card 3 lists permanently,
+ * yet `/proc/asound/pcm` carries `03-00: rockchip,hdmiin i2s-hifi-0 :` with NO
+ * `capture N` field and `arecord -l` never shows it — measured on a Rock 5B+
+ * with a LOCKED 1080p59.94 signal on the port, so this is not the no-cable case.
+ * Binding it made EVERY `asrc: "Auto"` start on the HDMI source die with
+ * `audio-device-unavailable … not_retriable`: an operator whose camera was
+ * working could not go live at all.
+ *
+ * The honest answer is an explicit video-only stream, not a dead card and not a
+ * silent omission — `NO_AUDIO_ASRC` resolves to the engine's `audio.mode: "none"`,
+ * so the start SUCCEEDS, while `no-capture-audio` tells the UI exactly why there
+ * is no audio. Omitting `asrc` instead would hand the engine its own legacy
+ * inference over the very port that cannot deliver.
+ *
+ * Rule 5 deliberately does NOT need this gate: its candidates must each carry an
+ * `alsa_card_id` from the ENGINE's `list-devices`, and a card with no capture PCM
+ * never appears there at all — the engine has already answered the question.
+ */
+function noCaptureAudio(): AutoAsrcResolution {
+	return {
+		asrcKey: NO_AUDIO_ASRC,
+		cardId: null,
+		reason: "no-capture-audio",
+	};
+}
+
+/** Has the scan PROVEN this card cannot capture? An unasked question has not. */
+function provenIncapableOfCapture(
+	cardId: string,
+	captureCapableCardIds: ReadonlySet<string> | undefined,
+): boolean {
+	if (captureCapableCardIds === undefined) return false;
+	return !captureCapableCardIds.has(cardId);
+}
+
+/**
  * Resolve `config.asrc === "Auto"` to a concrete audio target via the SIX
  * deterministic rules, in order. PURE — no I/O, no module state, no side effects.
  *
@@ -200,7 +254,13 @@ function pipelineDefault(): AutoAsrcResolution {
 export function resolveAutoAsrc(
 	input: ResolveAutoAsrcInput,
 ): AutoAsrcResolution {
-	const { source, audioDevices, engineAudio, networkEmbeddedAudio } = input;
+	const {
+		source,
+		audioDevices,
+		engineAudio,
+		networkEmbeddedAudio,
+		captureCapableCardIds,
+	} = input;
 
 	// Rule 1 — a network source whose muxed audio the engine can route itself.
 	if (source?.origin === "network" && networkEmbeddedAudio === true) {
@@ -215,18 +275,24 @@ export function resolveAutoAsrc(
 
 	// Rules 3-5 apply only to a concrete capture device.
 	if (source?.origin === "capture") {
-		// Rule 3 — HDMI capture follows the HDMI audio card, when present.
+		// Rule 3 — HDMI capture follows the HDMI audio card, when it can capture.
 		if (source.kind === "hdmi") {
 			const asrcKey = findAsrcKeyByCardId(audioDevices, HDMI_CARD_ID);
 			if (asrcKey !== undefined) {
+				if (provenIncapableOfCapture(HDMI_CARD_ID, captureCapableCardIds)) {
+					return noCaptureAudio();
+				}
 				return { asrcKey, cardId: HDMI_CARD_ID, reason: "hdmi" };
 			}
 		}
 
-		// Rule 4 — Cam Link capture follows the C4K audio card, when present.
+		// Rule 4 — Cam Link capture follows the C4K audio card, same gate.
 		if (source.kind === "camlink") {
 			const asrcKey = findAsrcKeyByCardId(audioDevices, CAMLINK_CARD_ID);
 			if (asrcKey !== undefined) {
+				if (provenIncapableOfCapture(CAMLINK_CARD_ID, captureCapableCardIds)) {
+					return noCaptureAudio();
+				}
 				return { asrcKey, cardId: CAMLINK_CARD_ID, reason: "camlink" };
 			}
 		}
@@ -321,6 +387,7 @@ export function resolveAutoAsrcFromLiveState(): AutoAsrcResolution {
 		audioDevices: getAudioDevices(),
 		engineAudio: getEngineAudioDevices(),
 		networkEmbeddedAudio: getLastCapabilities()?.network_embedded_audio,
+		captureCapableCardIds: getAudioCaptureCardIds(),
 	});
 }
 

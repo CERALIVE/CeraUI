@@ -1469,6 +1469,33 @@ describe("SourceSection — Auto resolved preview (T6)", () => {
 		).toBeNull();
 	});
 
+	// W4A4-F1: the HDMI-RX audio card enumerates but owns no capture PCM, so Auto
+	// falls back to an explicit video-only stream. The operator must be told WHY
+	// there is no audio — an "Auto → No audio" line alone reads like a choice
+	// somebody made, and an em-dash reads as "still resolving".
+	it("renders the NO-CAPTURE band for an input whose audio card cannot record", () => {
+		const { container } = mount({
+			config: { asrc: AUDIO_SOURCE_AUTO },
+			audioSources: ["HDMI"],
+			audioStatus: {
+				resolved_asrc: "No audio",
+				resolved_asrc_reason: "no-capture-audio",
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="audio-no-capture"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-no-same-device"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-auto-resolved"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-same-device-candidates"]'),
+		).toBeNull();
+	});
+
 	it("STALE-VALUE GATE: an explicit pick shows NO Auto-resolved line despite a stale resolved_asrc", () => {
 		const { container } = mount({
 			config: { asrc: "USB audio" },
