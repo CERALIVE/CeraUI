@@ -1203,6 +1203,8 @@ const fr = {
 				"La source sélectionnée a été déconnectée. Reconnectez-la ou choisissez une autre source, puis réessayez.",
 			source_unavailable:
 				"La source sélectionnée n'est pas disponible pour le moment. Choisissez une autre source ou vérifiez ses réglages, puis réessayez.",
+			source_taken_over:
+				"Un autre appareil occupe désormais la connexion de la caméra sélectionnée. Rebranchez cette caméra ou choisissez celle que vous voulez, puis réessayez.",
 		},
 		startFailure: {
 			class: {

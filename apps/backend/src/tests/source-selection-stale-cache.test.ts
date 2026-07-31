@@ -244,6 +244,7 @@ describe("F10a — stale-cache-after-save", () => {
 		realSources.resetEngineDeviceCache();
 		const config = getConfig();
 		config.source = undefined;
+		config.source_stable_id = undefined;
 		config.selected_video_input = undefined;
 		config.last_seen_devices = [];
 	});
@@ -252,6 +253,7 @@ describe("F10a — stale-cache-after-save", () => {
 		realSources.resetEngineDeviceCache();
 		const config = getConfig();
 		config.source = undefined;
+		config.source_stable_id = undefined;
 		config.selected_video_input = undefined;
 		config.last_seen_devices = [];
 	});
@@ -390,6 +392,7 @@ describe("F10b — renumber-to-different-device", () => {
 		realSources.resetEngineDeviceCache();
 		const config = getConfig();
 		config.source = undefined;
+		config.source_stable_id = undefined;
 		config.selected_video_input = undefined;
 		config.last_seen_devices = [];
 	});
@@ -398,6 +401,7 @@ describe("F10b — renumber-to-different-device", () => {
 		realSources.resetEngineDeviceCache();
 		const config = getConfig();
 		config.source = undefined;
+		config.source_stable_id = undefined;
 		config.selected_video_input = undefined;
 		config.last_seen_devices = [];
 	});

@@ -403,6 +403,8 @@ const en = {
 				"The selected source was disconnected. Reconnect it or choose another source, then try again.",
 			source_unavailable:
 				"The selected source isn't available right now. Choose another source or check its settings, then try again.",
+			source_taken_over:
+				"Another device is now using the connection your selected camera had. Reconnect that camera or pick the one you want, then try again.",
 		},
 		startFailure: {
 			class: {

@@ -249,6 +249,13 @@ export const runtimeConfigSchema = z.object({
 	// at the procedure layer (T3). A legacy config without it back-derives `source`
 	// via `coerceLegacySource` at load time.
 	source: z.string().optional(),
+	// The stable hardware identity of the selection above, captured at the moment
+	// the operator stated it (W4A4-F5). `source` is a NODE PATH, and the kernel
+	// recycles those: a crossed drop/replug of two cameras hands `/dev/video3` to
+	// a DIFFERENT physical device, and nothing in `last_seen_devices` records which
+	// one the operator meant. Additive-optional — absent means a legacy/anchorless
+	// selection, which resolves exactly as it did before this field existed.
+	source_stable_id: z.string().optional(),
 	// Operator-ordered video-source preference (input_id list, most-preferred
 	// first). Persisted so a device-first reorder survives reload; setConfig
 	// writes it, getConfig echoes it. Additive-optional.

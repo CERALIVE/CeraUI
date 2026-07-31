@@ -418,6 +418,8 @@ const de = {
 				"Die ausgewählte Quelle wurde getrennt. Schließe sie wieder an oder wähle eine andere Quelle und versuche es erneut.",
 			source_unavailable:
 				"Die ausgewählte Quelle ist derzeit nicht verfügbar. Wähle eine andere Quelle oder überprüfe ihre Einstellungen und versuche es erneut.",
+			source_taken_over:
+				"Ein anderes Gerät belegt jetzt den Anschluss deiner ausgewählten Kamera. Schließe diese Kamera wieder an oder wähle die gewünschte aus und versuche es erneut.",
 		},
 		startFailure: {
 			class: {

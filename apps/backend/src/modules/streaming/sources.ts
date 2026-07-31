@@ -619,6 +619,11 @@ export const SOURCE_LOST_ERROR = "source_lost";
 // the operator's `sources_visibility.hide_test_pattern` declutter preference,
 // which hides it from the picker but must NOT block routing.
 export const SOURCE_UNAVAILABLE_ERROR = "source_unavailable";
+// The persisted node path is LIVE, but a DIFFERENT physical device now holds it
+// and the anchored one is gone (W4A4-F5). Distinct from `source_lost`: the path
+// resolves fine, it just no longer names the operator's camera — so the honest
+// answer is a refusal, never the inheritor.
+export const SOURCE_TAKEN_OVER_ERROR = "source_taken_over";
 
 export type ResolveSourceRoutingResult =
 	| { ok: true; pipeline: string; selected_video_input: string | undefined }
@@ -627,7 +632,8 @@ export type ResolveSourceRoutingResult =
 			error:
 				| typeof UNKNOWN_SOURCE_ERROR
 				| typeof SOURCE_LOST_ERROR
-				| typeof SOURCE_UNAVAILABLE_ERROR;
+				| typeof SOURCE_UNAVAILABLE_ERROR
+				| typeof SOURCE_TAKEN_OVER_ERROR;
 	  };
 
 // Procedure-layer wrapper over deriveEngineRouting. Reads the CURRENT sources
@@ -660,22 +666,94 @@ export function resolveSourceIdentity(
 	sourceId: string,
 	sources: readonly StreamSource[],
 	lastSeenDevices?: readonly LastSeenDevice[],
+	anchorStableId?: string,
 ): string {
-	if (sources.some((s) => s.id === sourceId)) return sourceId;
-	const stableId = unambiguousStableId(lastSeenDevices ?? [], sourceId);
-	if (stableId === undefined) return sourceId;
-	const successor = sources.find(
-		(s) => s.origin === "capture" && s.stableId === stableId,
-	);
-	return successor?.id ?? sourceId;
+	return resolveSourceIdentityDetailed(
+		sourceId,
+		sources,
+		lastSeenDevices,
+		anchorStableId,
+	).id;
+}
+
+/** The one live capture row carrying a given stable identity, if any. */
+function findByStableId(
+	sources: readonly StreamSource[],
+	stableId: string,
+): StreamSource | undefined {
+	return sources.find((s) => s.origin === "capture" && s.stableId === stableId);
+}
+
+export interface SourceIdentityResolution {
+	id: string;
+	/**
+	 * The persisted node path IS live, but the device holding it is not the one
+	 * the operator anchored — and the anchored device is nowhere in the current
+	 * enumeration. Routing `id` here would open a camera nobody chose.
+	 */
+	takenOver: boolean;
+}
+
+/**
+ * The identity-aware form of {@link resolveSourceIdentity}, which additionally
+ * reports the one outcome a bare id cannot express: the operator's node path was
+ * TAKEN OVER by different hardware (W4A4-F5).
+ *
+ * The short-circuit this replaces asked only whether the persisted path was
+ * still live, never WHICH device answered to it — so a crossed drop/replug of
+ * two cameras silently re-pointed a saved selection at the wrong one, and the
+ * preview looked perfectly healthy while doing it. `anchorStableId` is the
+ * identity captured when the selection was WRITTEN, which is the only evidence
+ * that survives the fold (afterwards several remembered devices legitimately
+ * claim the same path, so `unambiguousStableId` refuses — correctly — to guess).
+ *
+ * Suppression is impossible without positive proof: an absent anchor, a
+ * non-capture row, and a live row the engine gave no `stableId` for all resolve
+ * exactly as they did before this parameter existed.
+ */
+export function resolveSourceIdentityDetailed(
+	sourceId: string,
+	sources: readonly StreamSource[],
+	lastSeenDevices?: readonly LastSeenDevice[],
+	anchorStableId?: string,
+): SourceIdentityResolution {
+	const live = sources.find((s) => s.id === sourceId);
+	if (live !== undefined) {
+		if (anchorStableId === undefined) return { id: sourceId, takenOver: false };
+		const liveStableId = live.origin === "capture" ? live.stableId : undefined;
+		if (liveStableId === undefined || liveStableId === anchorStableId) {
+			return { id: sourceId, takenOver: false };
+		}
+		const anchored = findByStableId(sources, anchorStableId);
+		if (anchored !== undefined) return { id: anchored.id, takenOver: false };
+		return { id: sourceId, takenOver: true };
+	}
+	// The anchor is the operator's own word, so it outranks the retroactive
+	// `last_seen_devices` inference — which is also the only thing that still
+	// works once a recycled path has several remembered claimants.
+	const stableId =
+		anchorStableId ?? unambiguousStableId(lastSeenDevices ?? [], sourceId);
+	if (stableId === undefined) return { id: sourceId, takenOver: false };
+	const successor = findByStableId(sources, stableId);
+	return { id: successor?.id ?? sourceId, takenOver: false };
 }
 
 export function resolveSourceRouting(
 	sourceId: string,
 	sources: readonly StreamSource[],
 	lastSeenDevices?: readonly LastSeenDevice[],
+	anchorStableId?: string,
 ): ResolveSourceRoutingResult {
-	const effectiveId = resolveSourceIdentity(sourceId, sources, lastSeenDevices);
+	const resolution = resolveSourceIdentityDetailed(
+		sourceId,
+		sources,
+		lastSeenDevices,
+		anchorStableId,
+	);
+	if (resolution.takenOver) {
+		return { ok: false, error: SOURCE_TAKEN_OVER_ERROR };
+	}
+	const effectiveId = resolution.id;
 	const source = sources.find((s) => s.id === effectiveId);
 	if (source === undefined) {
 		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
@@ -732,8 +810,48 @@ let engineViewSelectionToken = 0;
  * `updateConfig`, and the durable live `switchInput` follow — must call this, or
  * the reconciler may still overrule that selection from a stale view.
  */
-export function noteSourceSelectionWrite(): void {
+export function noteSourceSelectionWrite(
+	sourceId?: string,
+	sources?: readonly StreamSource[],
+): void {
 	sourceSelectionToken += 1;
+	if (sourceId === undefined) return;
+	// A selection with no stable identity writes `undefined`, which CLEARS the
+	// previous device's anchor — leaving it would let a retired camera govern the
+	// resolution of a pick it has nothing to do with.
+	getConfig().source_stable_id = resolveSelectionAnchor(
+		sourceId,
+		sources ?? getSourcesMessage().sources,
+	);
+}
+
+/**
+ * The stable hardware identity to persist beside a stated selection, or
+ * `undefined` when the pick names no single physical device (a coarse, virtual
+ * or network row, or a capture row the engine cannot vouch for).
+ */
+export function resolveSelectionAnchor(
+	sourceId: string,
+	sources: readonly StreamSource[],
+): string | undefined {
+	const source = sources.find((s) => s.id === sourceId);
+	if (source === undefined || source.origin !== "capture") return undefined;
+	const stableId = source.stableId;
+	return stableId === undefined || stableId === "" ? undefined : stableId;
+}
+
+/**
+ * The anchor governing `sourceId`, or `undefined` when it is not the PERSISTED
+ * selection. A freshly stated pick carries no anchor yet — the operator is
+ * choosing from the list in front of them, so the row they tapped is what they
+ * mean, whatever it was called before.
+ */
+export function configuredSelectionAnchor(
+	sourceId: string,
+): string | undefined {
+	const config = getConfig();
+	if (config.source !== sourceId) return undefined;
+	return config.source_stable_id;
 }
 
 /** Test seam: the current operator-write / committed-view token pair. */
@@ -1284,6 +1402,7 @@ export function reconcileConfiguredSourceIdentity(
 		configured,
 		sources,
 		config.last_seen_devices,
+		config.source_stable_id,
 	);
 	if (successor === configured) return false;
 	if (engineViewSelectionToken !== sourceSelectionToken) {
@@ -1343,7 +1462,19 @@ function clampPersistedModeAndEcho(sources: readonly StreamSource[]): void {
 }
 
 function broadcastSourcesIfChanged(): void {
-	const message = getSourcesMessage();
+	// This runs the reconciler for the same reason the tick exists at all: it is
+	// the ONLY periodic re-poke, and the one transition the hotplug path can miss
+	// is an anchored device RETURNING after its node was taken over. Measured on
+	// a board (W4A4-F5, 2026-07-31): the hotplug refresh fired at 20:49:00.661
+	// with only the inheritor present — correctly refusing to migrate — the
+	// anchored camera re-enumerated seconds later, and no further device-SET
+	// change ever fired, so `config.source` stayed pointed at the wrong camera
+	// with the right one sitting in the very same list. Reconciling here bounds
+	// that self-heal to one recheck interval instead of leaving it to chance.
+	const built = getSourcesMessage();
+	const message = reconcileConfiguredSourceIdentity(built.sources)
+		? getSourcesMessage()
+		: built;
 	const serialized = JSON.stringify(message);
 	if (serialized === lastBroadcastSources) return;
 	lastBroadcastSources = serialized;

@@ -65,8 +65,9 @@ import type { PreviewSocketData, ServerSocketData } from "../../rpc/types.ts";
 import { getConfig } from "../config.ts";
 import { getLastCapabilities } from "../streaming/capabilities.ts";
 import {
+	configuredSelectionAnchor,
 	getSourcesMessage,
-	resolveSourceIdentity,
+	resolveSourceIdentityDetailed,
 } from "../streaming/sources.ts";
 import { BoundedDropOldestQueue } from "./preview-frame-queue.ts";
 import { consumePreviewToken } from "./preview-token.ts";
@@ -194,11 +195,25 @@ export function createPreviewQueue(): BoundedDropOldestQueue<Frame> {
  * `resolveSourceRouting` — that refuses lost sources, replacing the engine's
  * typed reason with a silent drop. An unchanged id returns the ORIGINAL frame,
  * so every non-renumber case stays a byte-identical passthrough.
+ *
+ * The ONE refusal (`null`) is the case the engine cannot answer honestly on our
+ * behalf: the persisted node path is live, but a DIFFERENT camera holds it and
+ * the operator's own is gone (W4A4-F5). Forwarding then previews the inheritor —
+ * measured on a board as 45 frames of healthy-looking video from a device nobody
+ * chose. The caller answers the client with the typed `source-unavailable`
+ * instead, which is what that state actually is.
  */
+// The typed band CeraUI already renders for "the selected source is gone" — the
+// honest answer for a node path a different camera has taken over.
+export const PREVIEW_SOURCE_TAKEN_OVER_FRAME = JSON.stringify({
+	type: "preview-error",
+	reason: "source-unavailable",
+});
+
 export function resolvePreviewStartFrame(
 	frame: Frame,
-	resolveInputId: (inputId: string) => string,
-): Frame {
+	resolveInputId: (inputId: string) => string | null,
+): Frame | null {
 	if (typeof frame !== "string") {
 		return frame;
 	}
@@ -220,6 +235,13 @@ export function resolvePreviewStartFrame(
 		return frame;
 	}
 	const resolved = resolveInputId(inputId);
+	if (resolved === null) {
+		logger.warn(
+			"preview proxy: refusing a start whose node path was taken over by another device",
+			{ input_id: inputId },
+		);
+		return null;
+	}
 	if (resolved === inputId) {
 		return frame;
 	}
@@ -232,13 +254,15 @@ export function resolvePreviewStartFrame(
 
 // FAIL-OPEN: a throw here (cold engine cache, capabilities unfetched) must
 // degrade to the pre-existing passthrough, never break the preview.
-function defaultResolvePreviewInputId(inputId: string): string {
+function defaultResolvePreviewInputId(inputId: string): string | null {
 	try {
-		return resolveSourceIdentity(
+		const resolution = resolveSourceIdentityDetailed(
 			inputId,
 			getSourcesMessage().sources,
 			getConfig().last_seen_devices,
+			configuredSelectionAnchor(inputId),
 		);
+		return resolution.takenOver ? null : resolution.id;
 	} catch (error) {
 		logger.debug(
 			`preview proxy: input-id identity resolution failed: ${error}`,
@@ -253,8 +277,11 @@ export interface PreviewProxyDeps {
 	consumeToken: (token: string) => boolean;
 	/** Resolve the engine/mock loopback preview URL, or `null` when unavailable. */
 	resolveUpstreamUrl: () => string | null;
-	/** Map a preview `start` frame's `input_id` onto the CURRENT node path. */
-	resolvePreviewInputId: (inputId: string) => string;
+	/**
+	 * Map a preview `start` frame's `input_id` onto the CURRENT node path, or
+	 * `null` to refuse the start because that path is now a different device.
+	 */
+	resolvePreviewInputId: (inputId: string) => string | null;
 }
 
 function defaultResolveUpstreamUrl(): string | null {
@@ -451,6 +478,14 @@ export function createPreviewWebSocketHandler(
 				toFrame(data),
 				deps.resolvePreviewInputId,
 			);
+			if (frame === null) {
+				try {
+					ws.send(PREVIEW_SOURCE_TAKEN_OVER_FRAME);
+				} catch {
+					// downstream dropped; its close handler tears the pair down
+				}
+				return;
+			}
 			if (state.upstreamOpen) {
 				try {
 					state.upstream.send(frame);
