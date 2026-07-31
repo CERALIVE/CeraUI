@@ -1967,7 +1967,56 @@ values; transitional/unreachable/neither ⇒ write NOTHING and KEEP the marker f
 the next reconnect. Guessing in either direction persists a config the operator
 never got or discards one they did.
 
-Coverage: `tests/config-change-orchestrator.test.ts` (admission, the four typed
+**AND IT IS ARMED — `config-change-reconcile-wiring.ts` is what calls it.** For
+one wave the paragraph above described behaviour that could not happen: the only
+importer of `reconcileInflightConfigChange` was its own unit test, so a marker
+left by a process that died mid transaction was never judged, the staged
+candidate was lost, and the marker file leaked. The reconciler was correct and
+simply unreachable, which is why the regression lock is on the CALL SITES.
+
+There are TWO seams, and both are needed:
+
+- **boot** (`main.ts`, immediately after `reconcileStreamSession()`) — the first
+  moment the persisted config and the engine's own session are both known; and
+- **engine reconnect** (`engine-reconnect.ts` `buildDefaultBroadcastEngineState`,
+  after the same call) — where a marker that DEFERRED at boot is re-judged.
+
+Four properties are load-bearing:
+
+- **Marker-only is enforced BY CONSTRUCTION, not by convention.** The runner
+  reads the marker FIRST and, finding none, returns `no_marker` without ever
+  asking the engine anything. That is asserted directly (`h.asked === 0`) — a
+  behavioural test, not a comment.
+- **The snapshot speaks CONFIG space.** `judgeInflightMarker` compares
+  `config.json` values with `===`, and the engine speaks PIXELS (`"3840x2160"`)
+  and exact rates (`29.97`) — the read-side twin of the apply-now dispatch bug in
+  "THE ENGINE SPEAKS PIXELS". `buildEngineEncodeSnapshot` normalizes at the one
+  seam that knows it is talking to the engine, and `judgeInflightMarker` folds
+  BOTH sides onto the rung ladder as a backstop (so a persisted `"4k"` matches a
+  reported `"3840x2160"`), literal equality first so an unplaceable token never
+  widens silently.
+- **A NON-ANSWER IS NOT "NOT STREAMING".** The lifecycle comes from the
+  orchestrator, never the bare `is_streaming` flag — that flag is false both for a
+  genuinely idle engine AND for one reconciliation has not reached yet. Only
+  `idle` is decisive; `reconciling`/`starting`/`stopping` yield `undefined`, which
+  the judge answers with `wait`. Reading the flag would retain the previous values
+  off a non-answer, discarding a change the operator DID get.
+- **Bounded, and idempotent two ways.** With a marker it polls
+  `INFLIGHT_RECONCILE_DEADLINE_MS` (15 s) at `INFLIGHT_RECONCILE_POLL_MS` (1 s),
+  because the frame evidence (`frames_emitted` / `pipeline_playing`) rides the raw
+  `active_encode` bridge, whose first status frame lands a second or two after
+  boot reaches this point. Expiry defers, which KEEPS the marker. A decisive
+  verdict retires the marker, so a repeat call is a plain no-op; and concurrent
+  callers (boot racing a heal) share ONE in-flight run rather than judging in
+  parallel. Both hooks are fire-and-forget and the runner never throws, so neither
+  boot nor the heal broadcast can be delayed or broken by it.
+
+Coverage: `tests/config-change-reconcile-wiring.test.ts` (a REAL on-disk marker
+through the REAL writer and REAL `config.json`: persist-candidate, retain-previous,
+the undecided-then-decisive re-ask, the never-decisive defer that keeps the marker,
+the no-marker zero-side-effect case, double-apply, the overlapping-run join, the
+config-space normalization table, and the two call-site locks),
+`tests/config-change-orchestrator.test.ts` (admission, the four typed
 outcomes, stop-during-applying, stop-during-rollback, the teardown_timeout →
 engine-exit escalation chain, attempt fencing, deadline reconcile, and the
 deadline-sizing assertion), `tests/config-change-staging.test.ts` (the pure
@@ -2834,6 +2883,8 @@ control, the post-save genuine-renumber control, and the F10b claimant table).
 - Don't collapse every rejected `change-config` dispatch into `rollback_failed{engine_connection_lost}` — a `CerastreamRpcError` means the transaction never began and the stream is untouched (`reverted{change_rejected}`). Keep `rollback_failed` as the DEFAULT for every other rejection, so an unrecognised failure can never claim a possibly-dead stream is fine.
 - Don't persist an apply-now candidate before the transaction says `applied`, and don't add a `reverted`-specific write — until then `config.json` still describes the session the engine is actually running.
 - Don't reconcile a params-vs-config mismatch without the in-flight marker — that mismatch is normally a legitimate "apply on next start" intent, and reconciling it overwrites the operator's choice on every boot.
+- Don't remove either `runInflightConfigChangeReconciliation()` call site (boot in `main.ts`, the heal in `engine-reconnect.ts`) — for a whole wave the crash-window reconciler existed, was correct, and was called by nothing but its own test, so a leaked marker was the observable behaviour while the docs claimed the safety net was armed. And don't hand the judge the ENGINE's own vocabulary: it compares `config.json` values, so a raw `"3840x2160"`/`29.97` reads as "neither params set" — an eternal `wait` that never retires the marker. Route it through `buildEngineEncodeSnapshot`.
+- Don't decide "the engine is not streaming" from `is_streaming` on the reconciliation path — that flag is false for an idle engine AND for one reconciliation has not reached yet, so it turns a NON-ANSWER into `retain_previous` and discards a change the operator actually got. Only a lifecycle of `idle` is decisive.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured
   codes mapped via `cerastream-error-mapping.ts`.
 - Don't wire `@ceralive/cerastream` as a sibling `link:` or vendored `.tgz` — it

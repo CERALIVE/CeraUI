@@ -1,5 +1,9 @@
 import fs from "node:fs";
 
+import {
+	normalizeFramerateToRung,
+	normalizeResolutionToRung,
+} from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
 import { writeFileAtomicSync } from "../../helpers/config-loader.ts";
@@ -115,6 +119,57 @@ export type ReconciliationVerdict =
 	| { readonly action: "retain_previous" }
 	| { readonly action: "wait" };
 
+const matches = (
+	candidate: string | number | undefined,
+	actual: string | number | undefined,
+): boolean => candidate === undefined || candidate === actual;
+
+/**
+ * The two axes where the marker and the engine can be RIGHT and still not be
+ * `===`. `config.json` holds ladder rungs (`"2160p"`, `30`); the engine reports
+ * pixels (`"3840x2160"`) and exact rates (`29.97` from `30000/1001`) — the same
+ * vocabulary gap that made every apply-now resolution change fail on the dispatch
+ * side (config-change-bridge.ts, "THE ENGINE SPEAKS PIXELS"). Here it would have
+ * been quieter and worse: a false mismatch reads as "neither params set", i.e. an
+ * eternal `wait` that never retires the marker.
+ *
+ * Both sides are folded onto the rung ladder, so `"4k"` vs `"3840x2160"` and
+ * `30` vs `30.0` compare equal while a genuine difference still does not. Literal
+ * equality is honoured first, so a value the ladder cannot place (an engine token
+ * this build does not know) still matches itself and never silently widens.
+ */
+const resolutionMatches = (
+	candidate: string | undefined,
+	actual: string | undefined,
+): boolean => {
+	if (matches(candidate, actual)) return true;
+	if (candidate === undefined || actual === undefined) return false;
+	const rung = normalizeResolutionToRung(candidate);
+	return rung !== undefined && rung === normalizeResolutionToRung(actual);
+};
+
+const framerateMatches = (
+	candidate: number | undefined,
+	actual: number | undefined,
+): boolean => {
+	if (matches(candidate, actual)) return true;
+	if (candidate === undefined || actual === undefined) return false;
+	const rung = normalizeFramerateToRung(candidate);
+	return rung !== undefined && rung === normalizeFramerateToRung(actual);
+};
+
+function paramsMatch(
+	fields: StagedConfigFields,
+	engine: EngineEncodeSnapshot,
+): boolean {
+	return (
+		resolutionMatches(fields.resolution, engine.resolution) &&
+		framerateMatches(fields.framerate, engine.framerate) &&
+		matches(fields.video_codec, engine.codec) &&
+		matches(fields.selected_video_input, engine.activeInput)
+	);
+}
+
 /**
  * Decide what a marker found at boot means. PURE — the caller owns the writes.
  *
@@ -134,24 +189,10 @@ export function judgeInflightMarker(
 		engine.pipelinePlaying !== false && (engine.framesEmitted ?? 0) > 0;
 	if (!gateSatisfied) return { action: "wait" };
 
-	const matches = (
-		candidate: string | number | undefined,
-		actual: string | number | undefined,
-	): boolean => candidate === undefined || candidate === actual;
-
-	const onCandidate =
-		matches(marker.candidate.resolution, engine.resolution) &&
-		matches(marker.candidate.framerate, engine.framerate) &&
-		matches(marker.candidate.video_codec, engine.codec) &&
-		matches(marker.candidate.selected_video_input, engine.activeInput);
-
+	const onCandidate = paramsMatch(marker.candidate, engine);
 	if (onCandidate) return { action: "persist_candidate" };
 
-	const onPrevious =
-		matches(marker.previous.resolution, engine.resolution) &&
-		matches(marker.previous.framerate, engine.framerate) &&
-		matches(marker.previous.video_codec, engine.codec) &&
-		matches(marker.previous.selected_video_input, engine.activeInput);
+	const onPrevious = paramsMatch(marker.previous, engine);
 
 	return onPrevious ? { action: "retain_previous" } : { action: "wait" };
 }

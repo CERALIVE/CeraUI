@@ -80,6 +80,7 @@ import {
 import { initAudioMeterBridge } from "./modules/streaming/audio-meter-bridge.ts";
 import { checkCamlinkUsb2 } from "./modules/streaming/camlink.ts";
 import { checkEngineCompatibilityOnStartup } from "./modules/streaming/cerastream-backend.ts";
+import { runInflightConfigChangeReconciliation } from "./modules/streaming/config-change-reconcile-wiring.ts";
 import { reconcilePersistedPipeline } from "./modules/streaming/config-migration.ts";
 import { startDeviceDiscovery } from "./modules/streaming/devices.ts";
 import { initEngineConnection } from "./modules/streaming/engine-reconnect.ts";
@@ -250,6 +251,13 @@ if (!shouldUseMocks()) {
 	await guardNonCritical("stream-session-reconcile", async () => {
 		await reconcileStreamSession();
 	});
+	// The first point at which the persisted config and the engine's own session
+	// are both known — so it is where a `config.inflight.json` left by a process
+	// that died mid transaction can finally be judged. Fire-and-forget: with a
+	// marker it polls a bounded window for the decisive engine answer (the raw
+	// active_encode bridge started further down supplies the frame evidence a
+	// second or two from now), and that must not delay the rest of boot.
+	void runInflightConfigChangeReconciliation();
 }
 
 // Resolve the runtime hardware kind (engine → device-tree → setup.hw → generic)
