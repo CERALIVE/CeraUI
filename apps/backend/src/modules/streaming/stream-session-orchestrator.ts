@@ -148,7 +148,15 @@ type ActiveConfigChange = {
 type QueuedStop = {
 	readonly promise: Promise<StopResult>;
 	readonly release: (result: StopResult | Promise<StopResult>) => void;
+	readonly cancelDeadline: () => void;
 };
+
+/**
+ * A stop that waited out the whole transaction budget and still had nothing to
+ * answer it. Distinct from `stop_timeout`, which means the engine was asked and
+ * did not finish.
+ */
+export const RECONFIGURE_STOP_TIMEOUT_REASON = "reconfigure_stop_timeout";
 
 export type StreamSessionOrchestrator = {
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
@@ -330,19 +338,61 @@ export function createStreamSessionOrchestrator(
 		return { result: "started", attemptId };
 	};
 
+	/**
+	 * A parked stop is released by the settling transaction and by NOTHING else,
+	 * so the wait is bounded by that transaction's own declared budget: its full
+	 * bound, plus the one stop bound the released stop still gets afterwards.
+	 * That is by construction the latest instant a healthy queued stop can
+	 * answer, so this deadline can only ever fire on a transaction that broke
+	 * its own contract — never on slow-but-working hardware.
+	 *
+	 * Measured on a live board (2026-07-31): an operator Stop parked here sat
+	 * unanswered while the lifecycle stayed frozen on `reconfiguring` and the
+	 * journal carried not one line about it. Unbounded and unlogged, that
+	 * silence had no ceiling at all.
+	 */
+	const parkStop = (): QueuedStop => {
+		let release!: (result: StopResult | Promise<StopResult>) => void;
+		const promise = new Promise<StopResult>((resolve) => {
+			release = resolve;
+		});
+		const attemptId = activeChange?.attemptId;
+		const budgetMs = reconfigureDeadlineMs + stopDeadlineMs;
+
+		const timer = scheduleTimeout(() => {
+			if (queuedStop?.promise !== promise) return;
+			queuedStop = undefined;
+			logger.error(
+				"stream stop parked behind a config change was never released",
+				{
+					attemptId,
+					budgetMs,
+					state,
+				},
+			);
+			// The transaction outlived every bound it declared, so the engine's
+			// real state is unknown to us — adopt its truth rather than assert one.
+			if (transition("reconciling")) void reconcile();
+			release({
+				result: "stop_failed",
+				reason: RECONFIGURE_STOP_TIMEOUT_REASON,
+			});
+		}, budgetMs);
+
+		logger.warn("stream stop parked behind an in-flight config change", {
+			attemptId,
+			budgetMs,
+		});
+		return { promise, release, cancelDeadline: () => cancelTimeout(timer) };
+	};
+
 	const stop = async (): Promise<StopResult> => {
 		// A change transaction already owns the engine's lifecycle mutex and the
 		// capture hardware. Racing a 12 s stop deadline against it would report a
 		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then
 		// answered against whatever state the transaction actually settled into.
 		if (state === "reconfiguring") {
-			if (queuedStop === undefined) {
-				let release!: (result: StopResult | Promise<StopResult>) => void;
-				const promise = new Promise<StopResult>((resolve) => {
-					release = resolve;
-				});
-				queuedStop = { promise, release };
-			}
+			if (queuedStop === undefined) queuedStop = parkStop();
 			return queuedStop.promise;
 		}
 		if (state === "idle") return { result: "stopped" };
@@ -376,10 +426,13 @@ export function createStreamSessionOrchestrator(
 			return { result: "stopped" };
 		} catch (error) {
 			transition("stop_failed");
-			return {
-				result: "stop_failed",
-				reason: error instanceof Error ? error.message : "stop_failed",
-			};
+			const reason = error instanceof Error ? error.message : "stop_failed";
+			logger.error("stream stop did not settle within its deadline", {
+				generation: stoppedGeneration,
+				deadlineMs: stopDeadlineMs,
+				reason,
+			});
+			return { result: "stop_failed", reason };
 		}
 	};
 
@@ -409,6 +462,7 @@ export function createStreamSessionOrchestrator(
 		const pending = queuedStop;
 		if (pending === undefined) return false;
 		queuedStop = undefined;
+		pending.cancelDeadline();
 		pending.release(stop());
 		return true;
 	};

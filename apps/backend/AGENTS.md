@@ -1873,6 +1873,38 @@ transaction reports healthy hardware as `stop_failed`. `stop()` therefore return
 a deferred promise while `reconfiguring` and is answered against whatever state
 the transaction settled into. Concurrent stops share one queued resolution.
 
+**But QUEUED is not UNBOUNDED, and it is never silent.** Only a settling
+transaction releases a parked stop, so a transaction that breaks its own contract
+strands the operator's Stop with nothing left to answer it. Measured on a Rock
+5B+ (2026-07-31): a stop fired 0.7 s into an apply-now change sat **3.5–4.4 s**
+unanswered while `stream_lifecycle` stayed frozen on `reconfiguring`, an
+independent probe RPC on the same socket answered in 2–5 ms throughout, and
+`journalctl -u ceralive` carried **not one line** about the stop for the whole
+window — the exact "RPC never answered, nothing logged, event loop fine"
+signature a previous investigation could not place. Unbounded, that silence had
+no ceiling at all.
+
+`parkStop()` therefore gives the wait its own deadline of
+`RECONFIGURE_DEADLINE_MS + STOP_DEADLINE_MS` (89 s). That total is DERIVED, not
+tuned: it is the transaction's full declared bound plus the one stop bound the
+released stop still gets afterwards, i.e. by construction the latest instant a
+healthy queued stop can answer — so it can only ever fire on a transaction that
+already broke its contract, never on slow-but-working hardware. On expiry the
+orchestrator logs, transitions `reconfiguring → reconciling` and adopts the
+engine's truth (the same rule `settleConfigChangeState` applies to the
+transaction's own deadline — the engine's state is unknown, so ask rather than
+assert), and answers `stop_failed` with the distinct
+`RECONFIGURE_STOP_TIMEOUT_REASON` (`reconfigure_stop_timeout`) — distinct from
+`stop_timeout`, which means the engine WAS asked and did not finish.
+
+Parking is announced at `warn` with the attempt id and the budget, and a release
+cancels the deadline so a late tick can never overwrite the honest answer. `warn`
+is deliberate: the production console transport runs at `warn`, so an `info` line
+reaches the log FILE but never the journal the in-app Logs dialog downloads — an
+`info` here would have been invisible in exactly the investigation that needed it.
+The ordinary stop's `stop_failed` catch logs for the same reason; a 12 s
+`stop_timeout` used to produce zero journal output.
+
 **The BUS settles the transaction, not only the RPC.** When the engine publishes
 `rollback_failed{teardown_timeout}` and then exits, the in-flight RPC rejects on
 a dead control socket. `noteStreamSessionConfigChangePhase` (fed from
@@ -2719,6 +2751,8 @@ non-overwrite is unchanged).
 - Don't clear the raw bridge's `cachedLiveness`/`cachedPassthrough` from its own socket `close`/`error` — that is a CONNECTION blip, not a session boundary, and wiping there hands `collectRealLiveness()` an `undefined` it can only read as a cold start, so a dead stream reports `healthy` off raw process liveness. Let `FRAMES_FRESHNESS_MS` age the retained reading out instead.
 - Don't apply that same rule to the SESSION-scoped control client — it is the inverse case. Losing `cerastream-backend.ts`'s `this.client` retires the session (the published client cannot reconnect and a restarted engine has no session to resume), so route every session RPC through `withSessionClient` and never swallow a `CerastreamConnectionError` without calling `noteConnectionLoss`. And don't treat `this.client !== undefined` as evidence the engine is reachable — that is exactly how `reconcileRuntimeState()` re-affirmed a phantom "streaming" state off stale telemetry until the backend was restarted.
 - Don't apply `STOP_DEADLINE_MS` to a config-change transaction, and don't "simplify" the queued-stop branch in `stop()` into the normal stop path — a 12 s deadline against a 65 s worst-case change reports healthy hardware as `stop_failed`. Size anything bounding a change from `RECONFIGURE_DEADLINE_MS`.
+- Don't drop `parkStop()`'s deadline or its `warn`, and don't demote that `warn` to `info` — only a settling transaction can release a parked stop, so without the deadline a broken transaction strands the operator's Stop with no ceiling and no journal line, and the production console transport hides `info` (see "But QUEUED is not UNBOUNDED"). Board-measured pre-fix: 4.4 s of an unanswered Stop with a frozen lifecycle and an empty journal.
+- Don't measure a board stop/start cycle with a WebSocket client that stays silent between RPC calls — `pruneStaleClients()` closes any socket with no INBOUND frame for `HEARTBEAT_STALE_THRESHOLD_MS` (15 s, swept every 5 s), and the pending call then resolves as a phantom "the backend hung". Reproduced exactly: 1 apparent hang in 5 cycles with a silent harness, 0 in 10 with the same harness answering `ping` with `pong`, same binary and same trigger. Answer the heartbeat, and assert on `socketClosed` before believing a hang.
 - Don't hardcode `65000` (or `60000`) anywhere — the bound is DERIVED in `@ceraui/rpc` `config-change.schema.ts` from cerastream `docs/adr/schema.md` §11's phase table, so a shrunken engine budget fails a test instead of silently invalidating the number. The published bindings deliberately do NOT ship this constant.
 - Don't delete `handleEvent`'s `config-change` case as a duplicate of the RPC return path — it is the ONLY thing that settles a transaction whose engine escalates and then exits (the RPC then rejects on a dead socket), and dropping it strands the UI in `applying`.
 - Don't send a UI resolution rung on the apply-now path — the engine speaks `WxH` pixels and rejects `'720p'` outright. Route it through `toEngineResolution`, the same map the START path uses, and don't "simplify" the unknown-token branch into dropping the axis.

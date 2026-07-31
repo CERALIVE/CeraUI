@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	mock,
+	spyOn,
+	test,
+} from "bun:test";
 import { CerastreamRpcError } from "@ceralive/cerastream";
 import {
 	CHANGE_CONFIG_WORST_CASE_BOUND_MS,
@@ -6,8 +14,10 @@ import {
 	CONFIG_CHANGE_REASON_REJECTED,
 	CONFIG_CHANGE_REASON_TEARDOWN_TIMEOUT,
 	type LifecycleState,
+	type StopResult,
 } from "@ceraui/rpc/schemas";
 
+import { logger } from "../helpers/logger.ts";
 import {
 	RECONFIGURE_DEADLINE_MS,
 	STOP_DEADLINE_MS,
@@ -16,6 +26,7 @@ import {
 	type ConfigChangePhaseEvent,
 	createStreamSessionOrchestrator,
 	type EngineConfigChangeOutcome,
+	RECONFIGURE_STOP_TIMEOUT_REASON,
 	type StreamSessionOrchestrator,
 } from "../modules/streaming/stream-session-orchestrator.ts";
 
@@ -79,6 +90,7 @@ type Harness = {
 	rejectChange: (error: unknown) => void;
 	readonly changeCalls: string[];
 	runtimeState: "idle" | "streaming" | "unknown";
+	stopRuntimeSettles: boolean;
 };
 
 function harness(): Harness {
@@ -98,6 +110,7 @@ function harness(): Harness {
 		streamingStatus,
 		changeCalls,
 		runtimeState: "idle",
+		stopRuntimeSettles: true,
 		settleChange: () => {},
 		rejectChange: () => {},
 		orchestrator: undefined as unknown as StreamSessionOrchestrator,
@@ -108,6 +121,7 @@ function harness(): Harness {
 		setStreamingStatus: (streaming) => streamingStatus.push(streaming),
 		stopRuntime: async (generation) => {
 			stopCalls.push(generation);
+			if (!state.stopRuntimeSettles) await new Promise<void>(() => {});
 		},
 		queryRuntime: async () => state.runtimeState,
 		setLifecycleState: (next) => lifecycle.push(next),
@@ -376,6 +390,124 @@ describe("stop during a config-change transaction", () => {
 		expect(await first).toEqual({ result: "stopped" });
 		expect(await second).toEqual({ result: "stopped" });
 		expect(h.stopCalls).toHaveLength(1);
+	});
+});
+
+describe("a parked stop is bounded and announced", () => {
+	let h: Harness;
+	let warns: Array<[string, unknown]>;
+	let errors: Array<[string, unknown]>;
+
+	beforeEach(() => {
+		h = harness();
+		warns = [];
+		errors = [];
+		spyOn(logger, "warn").mockImplementation((message, meta) => {
+			warns.push([String(message), meta]);
+			return logger;
+		});
+		spyOn(logger, "error").mockImplementation((message, meta) => {
+			errors.push([String(message), meta]);
+			return logger;
+		});
+	});
+
+	afterEach(() => {
+		mock.restore();
+	});
+
+	test("a transaction that never settles no longer strands the stop forever", async () => {
+		// Given a live stream, a change in flight, and an operator stop parked
+		// behind it.
+		await bringToStreaming(h);
+		void h.orchestrator.changeConfig({ resolution: "3840x2160" });
+		await settleMicrotasks();
+		let settled: StopResult | undefined;
+		const stop = h.orchestrator.stop().then((result) => {
+			settled = result;
+			return result;
+		});
+		await settleMicrotasks();
+		expect(settled).toBeUndefined();
+
+		// When the transaction breaks every bound it declared and never settles.
+		expect(
+			h.clock.fire(RECONFIGURE_DEADLINE_MS + STOP_DEADLINE_MS),
+		).toBeGreaterThan(0);
+		await settleMicrotasks();
+
+		// Then the operator gets a truthful answer instead of silence, and the
+		// orchestrator asks the engine what is actually true rather than
+		// asserting a state of its own.
+		expect(await stop).toEqual({
+			result: "stop_failed",
+			reason: RECONFIGURE_STOP_TIMEOUT_REASON,
+		});
+		expect(h.lifecycle).toContain("reconciling");
+	});
+
+	test("parking a stop is written to the log — the pre-fix path said nothing at all", async () => {
+		// Given a live stream mid-change.
+		await bringToStreaming(h);
+		void h.orchestrator.changeConfig({ framerate: 30 });
+		await settleMicrotasks();
+
+		// When a stop is parked behind the transaction.
+		void h.orchestrator.stop();
+		await settleMicrotasks();
+
+		// Then the wait is named, with the budget it is allowed.
+		const parked = warns.find(([message]) =>
+			message.includes("parked behind an in-flight config change"),
+		);
+		expect(parked).toBeDefined();
+		expect(parked?.[1]).toMatchObject({
+			budgetMs: RECONFIGURE_DEADLINE_MS + STOP_DEADLINE_MS,
+		});
+	});
+
+	test("a released stop disarms its deadline so a late tick cannot overwrite the answer", async () => {
+		// Given a stop parked behind a change that then applies.
+		await bringToStreaming(h);
+		const change = h.orchestrator.changeConfig({ framerate: 30 });
+		await settleMicrotasks();
+		const stop = h.orchestrator.stop();
+		await settleMicrotasks();
+		h.settleChange({ phase: "applied" });
+		await change;
+		await settleMicrotasks();
+		expect(await stop).toEqual({ result: "stopped" });
+
+		// When the parked stop's deadline would have fired.
+		expect(h.clock.fire(RECONFIGURE_DEADLINE_MS + STOP_DEADLINE_MS)).toBe(0);
+		await settleMicrotasks();
+
+		// Then nothing was reported and the honest answer stands.
+		expect(h.orchestrator.snapshot().state).toBe("idle");
+		expect(
+			errors.filter(([message]) => message.includes("parked behind")),
+		).toEqual([]);
+	});
+
+	test("a stop that misses its own deadline is logged — it used to fail in silence", async () => {
+		// Given a live stream whose runtime stop never completes.
+		const stuck = harness();
+		stuck.stopRuntimeSettles = false;
+		await bringToStreaming(stuck);
+		const stop = stuck.orchestrator.stop();
+		await settleMicrotasks();
+
+		// When the stop deadline expires.
+		expect(stuck.clock.fire(STOP_DEADLINE_MS)).toBeGreaterThan(0);
+		await settleMicrotasks();
+
+		// Then the failure is both returned AND recorded.
+		expect((await stop).result).toBe("stop_failed");
+		expect(
+			errors.some(([message]) =>
+				message.includes("stream stop did not settle within its deadline"),
+			),
+		).toBe(true);
 	});
 });
 
