@@ -360,9 +360,20 @@ function identityKey(device: LastSeenDevice): string {
 		: `id:${device.id}`;
 }
 
-/** Does this remembered device answer to `id`, currently or under a retired path? */
-function remembersId(device: LastSeenDevice, id: string): boolean {
-	return device.id === id || (device.previousIds?.includes(id) ?? false);
+/**
+ * Resolve `id` against remembered devices, preferring whoever CURRENTLY holds
+ * the node path over anyone who merely retired it. `/dev/videoN` is reused
+ * across replugs, so several devices can legitimately remember the same path —
+ * a retired alias is only trustworthy when nobody holds the path outright.
+ */
+function findRememberingId(
+	devices: readonly LastSeenDevice[],
+	id: string,
+): LastSeenDevice | undefined {
+	return (
+		devices.find((d) => d.id === id) ??
+		devices.find((d) => d.previousIds?.includes(id) === true)
+	);
 }
 
 /**
@@ -414,8 +425,9 @@ function collectLostCandidates(input: BuildSourcesInput): LastSeenDevice[] {
 	}
 	const configSource = input.configSource;
 	if (configSource !== undefined) {
-		const persisted = (input.lastSeenDevices ?? []).find((d) =>
-			remembersId(d, configSource),
+		const persisted = findRememberingId(
+			input.lastSeenDevices ?? [],
+			configSource,
 		);
 		if (persisted !== undefined && !candidates.has(identityKey(persisted)))
 			candidates.set(identityKey(persisted), persisted);
@@ -612,9 +624,7 @@ export function resolveSourceIdentity(
 	lastSeenDevices?: readonly LastSeenDevice[],
 ): string {
 	if (sources.some((s) => s.id === sourceId)) return sourceId;
-	const stableId = (lastSeenDevices ?? []).find((d) =>
-		remembersId(d, sourceId),
-	)?.stableId;
+	const stableId = findRememberingId(lastSeenDevices ?? [], sourceId)?.stableId;
 	if (stableId === undefined || stableId === "") return sourceId;
 	const successor = sources.find(
 		(s) => s.origin === "capture" && s.stableId === stableId,
@@ -735,6 +745,45 @@ function dedupeByIdentity(
 }
 
 /**
+ * Give every node path exactly ONE owner, freshest-first-wins.
+ *
+ * Identity folding deliberately keeps two physically different devices as two
+ * rows — but each may have occupied `/dev/videoN` at different times, and both
+ * then go on claiming it as their current `id`. Every consumer resolving a
+ * persisted `config.source` takes the first row answering to that id, so the
+ * operator's selected camera can silently become whichever device was seen
+ * most recently.
+ *
+ * The first claimant (the freshest, since observations lead the merge) keeps
+ * the path; a later one demotes it to a retired alias so it stays resolvable
+ * once nobody holds it outright. A row with no stable identity has no other
+ * name to fall back on, so it is dropped rather than left ambiguous.
+ */
+function claimNodePathsOnce(
+	devices: readonly LastSeenDevice[],
+): LastSeenDevice[] {
+	const claimed = new Set<string>();
+	const kept: LastSeenDevice[] = [];
+	for (const device of devices) {
+		if (!claimed.has(device.id)) {
+			claimed.add(device.id);
+			kept.push(device);
+			continue;
+		}
+		if (device.stableId === undefined || device.stableId === "") continue;
+		claimed.add(device.stableId);
+		kept.push({
+			...device,
+			id: device.stableId,
+			previousIds: [
+				...new Set([device.id, ...(device.previousIds ?? [])]),
+			].slice(0, RETIRED_ID_MEMORY),
+		});
+	}
+	return kept;
+}
+
+/**
  * LRU-merge freshly-observed snapshots into the persisted last-seen list:
  * most-recently-observed first, then prior entries whose device was not
  * re-observed. Over the cap, evict least-recent from the tail — EXCEPT the
@@ -746,7 +795,9 @@ function mergeLastSeenLru(
 	observed: readonly LastSeenDevice[],
 	configSource: string | undefined,
 ): LastSeenDevice[] {
-	const ordered = dedupeByIdentity([...observed, ...current]);
+	const ordered = claimNodePathsOnce(
+		dedupeByIdentity([...observed, ...current]),
+	);
 	if (ordered.length <= LAST_SEEN_DEVICES_CAP) return ordered;
 
 	const configuredIndex =

@@ -384,7 +384,16 @@ export function createStreamSessionOrchestrator(
 	};
 
 	const reconcile = async (): Promise<LifecycleState> => {
-		if (state !== "idle" && state !== "streaming" && state !== "reconciling")
+		// `stop_failed` is included deliberately: a stop we could not confirm
+		// leaves the engine's real state UNKNOWN to us, and adopting its truth is
+		// the only way out. Without this the state latches — `start` refuses while
+		// the stale streaming status stands, and every later cycle is lost.
+		if (
+			state !== "idle" &&
+			state !== "streaming" &&
+			state !== "reconciling" &&
+			state !== "stop_failed"
+		)
 			return state;
 		if (state !== "reconciling") transition("reconciling");
 		const epoch = ++reconciliationEpoch;
