@@ -128,6 +128,7 @@ import {
 	createLaunchTransaction,
 	type LaunchTransaction,
 } from "./launch-transaction.ts";
+import { ENGINE_CLOSE_DEADLINE_MS } from "./start-lifecycle-timing.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
@@ -724,6 +725,28 @@ export class CerastreamBackend implements StreamingBackend {
 		return client.start(params as StartParams);
 	}
 
+	// A close that never answers is no more informative than one that rejects —
+	// which this path already treats as "proceed" — so bound it and let the stop
+	// complete either way rather than stranding the session.
+	private closeWithinDeadline(
+		client: CerastreamClient | undefined,
+	): Promise<void> {
+		if (client === undefined) return Promise.resolve();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const bound = new Promise<void>((resolve) => {
+			timer = this.deps.scheduleTimeout(() => {
+				this.deps.logger.warn(
+					"cerastream: the engine did not close its control socket within the bound; completing the stop anyway",
+					{ deadlineMs: ENGINE_CLOSE_DEADLINE_MS },
+				);
+				resolve();
+			}, ENGINE_CLOSE_DEADLINE_MS);
+		});
+		return Promise.race([client.close(), bound]).finally(() => {
+			if (timer !== undefined) this.deps.cancelTimeout(timer);
+		});
+	}
+
 	stop(onStopped: () => void): boolean {
 		if (!this.active) return false;
 		this.active = false;
@@ -740,7 +763,7 @@ export class CerastreamBackend implements StreamingBackend {
 				});
 			});
 			try {
-				await client?.close();
+				await this.closeWithinDeadline(client);
 			} catch {
 				// already closing
 			} finally {

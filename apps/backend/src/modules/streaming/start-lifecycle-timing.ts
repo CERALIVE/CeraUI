@@ -21,6 +21,15 @@ export const START_PHASE_DEADLINES_MS: Readonly<
 export const STOP_DEADLINE_MS = 12_000;
 
 /**
+ * Bound on the engine control-socket `close()` the stop path awaits. An engine
+ * still handing `/dev/videoN` back to `uvcvideo` can leave that close pending
+ * forever, and the callback that clears the session runs in its `finally` — so
+ * unbounded, one such stop never completes. Kept well inside `STOP_DEADLINE_MS`
+ * so a slow-but-alive engine still stops normally rather than `stop_failed`.
+ */
+export const ENGINE_CLOSE_DEADLINE_MS = 5_000;
+
+/**
  * Outer bound on `reconfiguring`: the engine's declared worst-case transaction
  * PLUS one stop bound, because a stop requested mid-transaction queues behind it
  * and must still get its own full deadline afterwards. Never apply

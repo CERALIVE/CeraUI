@@ -165,6 +165,7 @@ export const LEGAL_LIFECYCLE_TRANSITIONS: ReadonlyArray<readonly [LifecycleState
 		// stop recovery
 		['stop_failed', 'stopping'], // retry the stop
 		['stop_failed', 'idle'], // reconciled/abandoned to idle
+		['stop_failed', 'reconciling'], // ask the engine what is actually true
 		// reconcile outcomes — adopt the engine truth
 		['reconciling', 'streaming'],
 		['reconciling', 'idle'],
