@@ -165,6 +165,24 @@ export function deviceKindToPipelineId(kind: string | undefined): string | undef
 }
 
 /**
+ * The pipeline ONE mode family of a device is opened through — the mode-aware
+ * sibling of {@link deviceKindToPipelineId}.
+ *
+ * That function bridges a device's SCALAR kind, i.e. its highest-precedence mode
+ * alone. A dual-format camera has more than one, and they do NOT share a
+ * pipeline: the same physical camera reaches the engine through `libuvch264` in
+ * H.264 mode and through `usb_mjpeg` in MJPEG mode. Routing an operator's MJPEG
+ * pick down the H.264 pipeline would hand the engine a graph built for the
+ * format it was told not to use.
+ *
+ * `undefined` for a mode that names no direct video pipeline, so a caller can
+ * DROP a family it could not route rather than offering one it cannot honour.
+ */
+export function pipelineIdForInputMode(inputMode: string | undefined): string | undefined {
+	return deviceKindToPipelineId(inputMode);
+}
+
+/**
  * Resolve a concrete capture format to the `Resolution` rung it advertises.
  *
  * None-cap (permissive) policy: when `width` or `height` is absent the format

@@ -201,6 +201,7 @@ describe("streaming.setConfig — device-truth validation (todo 11a)", () => {
 		config.resolution = undefined;
 		config.framerate = undefined;
 		config.selected_video_input = undefined;
+		config.input_mode = undefined;
 	});
 	afterEach(() => {
 		const config = getConfig();

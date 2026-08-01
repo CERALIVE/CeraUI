@@ -86,22 +86,18 @@ function activeIngest(): NetworkIngest {
 }
 
 describe("buildSources — caps-first base + device overlay", () => {
-	it("emits a coarse entry per non-device capability source with ids identical to the pipeline registry (golden fixture)", () => {
+	it("emits a coarse entry per non-device capability source, USB-capture placeholders excluded (golden fixture)", () => {
 		const sources = buildSources({
 			sources: goldenCapSources(),
 			devices: [],
 			networkIngest: activeIngest(),
 		});
 
-		// ids identical to today's pipeline registry, same order.
-		expect(sources.map((s) => s.id)).toEqual([...GOLDEN_SOURCE_IDS]);
+		// Registry order preserved, minus the USB-capture placeholders (todo 21a).
+		expect(sources.map((s) => s.id)).toEqual(["hdmi", "rtmp", "srt", "test"]);
 
 		const byId = new Map(sources.map((s) => [s.id, s]));
 		expect(byId.get("hdmi")?.origin).toBe("coarse");
-		expect(byId.get("usb_mjpeg")?.origin).toBe("coarse");
-		expect(byId.get("v4l_mjpeg")?.origin).toBe("coarse");
-		expect(byId.get("camlink")?.origin).toBe("coarse");
-		expect(byId.get("libuvch264")?.origin).toBe("coarse");
 		expect(byId.get("rtmp")?.origin).toBe("network");
 		expect(byId.get("srt")?.origin).toBe("network");
 		expect(byId.get("test")?.origin).toBe("virtual");
@@ -112,7 +108,7 @@ describe("buildSources — caps-first base + device overlay", () => {
 		}
 	});
 
-	it("legacy engine (no devices) yields exactly today's coarse pipeline ids", () => {
+	it("legacy engine (no devices) yields only the coarse rows that name a real port", () => {
 		const sources = buildSources({
 			sources: goldenCapSources(),
 			devices: [],
@@ -121,13 +117,7 @@ describe("buildSources — caps-first base + device overlay", () => {
 		const coarseIds = sources
 			.filter((s) => s.origin === "coarse")
 			.map((s) => s.id);
-		expect(coarseIds).toEqual([
-			"hdmi",
-			"usb_mjpeg",
-			"v4l_mjpeg",
-			"camlink",
-			"libuvch264",
-		]);
+		expect(coarseIds).toEqual(["hdmi"]);
 	});
 
 	it("replaces the hdmi coarse entry with two capture entries for two same-kind HDMI dongles", () => {
@@ -167,10 +157,11 @@ describe("buildSources — caps-first base + device overlay", () => {
 			(s) => s.origin === "coarse" && s.id === "hdmi",
 		);
 		expect(hdmiCoarse).toBeUndefined();
-		// no other coarse entry was lost.
+		// no other coarse entry was lost — and the USB-capture placeholders that
+		// used to sit beside it are gone in this state too (todo 21a).
 		expect(
 			sources.filter((s) => s.origin === "coarse").map((s) => s.id),
-		).toEqual(["usb_mjpeg", "v4l_mjpeg", "camlink", "libuvch264"]);
+		).toEqual([]);
 	});
 
 	it("inherits facet flags from the replaced coarse entry onto capture entries", () => {
@@ -211,10 +202,10 @@ describe("buildSources — caps-first base + device overlay", () => {
 
 		// no capture entry was produced for the unbridged usb device.
 		expect(sources.some((s) => s.origin === "capture")).toBe(false);
-		// every coarse entry survives, including hdmi.
+		// hdmi survives; the USB-capture placeholders do not, in this state either.
 		expect(
 			sources.filter((s) => s.origin === "coarse").map((s) => s.id),
-		).toEqual(["hdmi", "usb_mjpeg", "v4l_mjpeg", "camlink", "libuvch264"]);
+		).toEqual(["hdmi"]);
 	});
 
 	it("ignores audio-class devices in the overlay", () => {

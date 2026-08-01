@@ -15,6 +15,7 @@ import {
 	GATEWAY_INACTIVE_ERROR,
 	getEngineOutputSchema,
 	getMockHardwareOutputSchema,
+	type InputMode,
 	listDevicesOutputSchema,
 	pipelinesMessageSchema,
 	reloadAudioDelayInputSchema,
@@ -24,6 +25,7 @@ import {
 	type StartResult,
 	type StreamingConfigInput,
 	type StreamingSetConfigInput,
+	type StreamSource,
 	SWITCH_AUDIO_ERRORS,
 	type SwitchInputOutput,
 	setMockDeviceAttachedInputSchema,
@@ -105,6 +107,8 @@ import {
 	getSourcesMessage,
 	noteSourceSelectionWrite,
 	type ResolveSourceRoutingResult,
+	resolveSelectionAnchor,
+	resolveSourceIdentity,
 	resolveSourceRouting,
 } from "../../modules/streaming/sources.ts";
 import {
@@ -503,6 +507,7 @@ const APPLY_NOW_FIELDS = [
 	"resolution",
 	"framerate",
 	"video_codec",
+	"input_mode",
 ] as const;
 
 /**
@@ -530,6 +535,7 @@ function stageApplyNowFields(
 		...(input.video_codec === undefined
 			? {}
 			: { video_codec: input.video_codec }),
+		...(input.input_mode === undefined ? {} : { input_mode: input.input_mode }),
 		...(sourceRouting?.pipeline === undefined
 			? {}
 			: { pipeline: sourceRouting.pipeline }),
@@ -546,6 +552,9 @@ function stageApplyNowFields(
 		...(config.video_codec === undefined
 			? {}
 			: { video_codec: config.video_codec }),
+		...(config.input_mode === undefined
+			? {}
+			: { input_mode: config.input_mode }),
 		...(config.pipeline === undefined ? {} : { pipeline: config.pipeline }),
 		...(config.selected_video_input === undefined
 			? {}
@@ -565,6 +574,87 @@ function stageApplyNowFields(
 	return candidate;
 }
 
+/**
+ * The typed refusal for an `input_mode` the selected device does not advertise.
+ * A stable wire value — the picker keys its honest rejection copy on it.
+ */
+export const INPUT_MODE_UNSUPPORTED_ERROR = "input_mode_unsupported";
+
+type InputModeChoice =
+	| { ok: true; inputMode: InputMode | undefined }
+	| { ok: false; error: typeof INPUT_MODE_UNSUPPORTED_ERROR };
+
+/**
+ * Which capture format this save lands on, and whether the device can honour it.
+ *
+ * Two asymmetries are load-bearing.
+ *
+ * A mode is scoped to the HARDWARE it was chosen for, decided by stable identity
+ * rather than node path — the kernel recycles `/dev/videoN`, so a path match
+ * proves nothing about which camera is being pointed at. Selecting a different
+ * device therefore DROPS the mode instead of carrying it over; falling back to
+ * the engine's own precedence (H.264 first) is always safe, whereas inheriting
+ * MJPEG onto a camera that only does H.264 is not.
+ *
+ * And an EXPLICIT pick the device does not advertise is REFUSED, while a merely
+ * CARRIED one is silently dropped. A refusal answers the operator's own action
+ * honestly; applying the same refusal to a value they are not touching would let
+ * a device that stopped advertising a mode block every unrelated save.
+ */
+function resolveInputModeChoice(
+	input: StreamingSetConfigInput,
+	config: RuntimeConfig,
+	sources: readonly StreamSource[],
+): InputModeChoice {
+	const sourceId = input.source ?? config.source;
+	const source =
+		sourceId === undefined
+			? undefined
+			: sources.find(
+					(entry) =>
+						entry.id ===
+						resolveSourceIdentity(
+							sourceId,
+							sources,
+							config.last_seen_devices,
+							input.source === undefined
+								? configuredSelectionAnchor(sourceId)
+								: undefined,
+						),
+				);
+
+	const carried = staysOnTheSameDevice(input, config, sources)
+		? config.input_mode
+		: undefined;
+	const requested = input.input_mode ?? carried;
+	if (requested === undefined) return { ok: true, inputMode: undefined };
+
+	const offered = source?.origin === "capture" ? source.inputModes : undefined;
+	// No advertised split is an ABSENCE of truth, not evidence against the pick —
+	// the same none-cap policy the device-mode rule follows.
+	if (offered === undefined || offered.length === 0) {
+		return { ok: true, inputMode: requested };
+	}
+	if (offered.some((mode) => mode.inputMode === requested)) {
+		return { ok: true, inputMode: requested };
+	}
+	if (input.input_mode !== undefined) {
+		return { ok: false, error: INPUT_MODE_UNSUPPORTED_ERROR };
+	}
+	return { ok: true, inputMode: undefined };
+}
+
+/** Whether this save keeps pointing at the SAME physical device as the last one. */
+function staysOnTheSameDevice(
+	input: StreamingSetConfigInput,
+	config: RuntimeConfig,
+	sources: readonly StreamSource[],
+): boolean {
+	if (input.source === undefined) return true;
+	const anchor = resolveSelectionAnchor(input.source, sources);
+	return anchor !== undefined && anchor === config.source_stable_id;
+}
+
 export const setConfigProcedure = authedProcedure
 	.input(streamingSetConfigInputSchema)
 	.output(streamingSetConfigOutputSchema)
@@ -576,19 +666,59 @@ export const setConfigProcedure = authedProcedure
 		// its derived pipeline into `input` so the override-validation + merge below
 		// see it. selected_video_input is recomputed on EVERY source write (persisted
 		// further down) — the capture input_id, or cleared for a non-capture source.
+		const sourcesSnapshot = getSourcesMessage().sources;
+
+		// A mode belongs to ONE device, so it is resolved BEFORE routing: the mode
+		// decides which pipeline the device is opened through, and a pick carried
+		// over from different hardware must be dropped rather than applied to a
+		// camera that never advertised it.
+		const modeChoice = resolveInputModeChoice(input, config, sourcesSnapshot);
+		if (!modeChoice.ok) {
+			logger.warn("setConfig: the device does not offer the requested mode", {
+				module: "streaming",
+				source: input.source ?? config.source,
+				input_mode: input.input_mode,
+			});
+			return { success: false, error: modeChoice.error, applied: {} };
+		}
+		const effectiveInputMode = modeChoice.inputMode;
+
 		let sourceRouting:
 			| Extract<ResolveSourceRoutingResult, { ok: true }>
 			| undefined;
 		if (input.source !== undefined) {
 			const routed = resolveSourceRouting(
 				input.source,
-				getSourcesMessage().sources,
-				getConfig().last_seen_devices,
+				sourcesSnapshot,
+				config.last_seen_devices,
+				undefined,
+				effectiveInputMode,
 			);
 			if (!routed.ok) {
 				return { success: false, error: routed.error, applied: {} };
 			}
 			sourceRouting = routed;
+			input.pipeline = routed.pipeline;
+		} else if (
+			effectiveInputMode !== config.input_mode &&
+			config.source !== undefined
+		) {
+			// A mode-only save still moves the pipeline — a dual-format camera is
+			// `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode — so the
+			// PERSISTED selection is re-routed under the new mode. It resolves
+			// through the persisted anchor, exactly as the start path does, and
+			// deliberately does NOT set `sourceRouting`: nothing about the operator's
+			// source SELECTION changed, so `config.source` must not be rewritten.
+			const routed = resolveSourceRouting(
+				config.source,
+				sourcesSnapshot,
+				config.last_seen_devices,
+				configuredSelectionAnchor(config.source),
+				effectiveInputMode,
+			);
+			if (!routed.ok) {
+				return { success: false, error: routed.error, applied: {} };
+			}
 			input.pipeline = routed.pipeline;
 		}
 
@@ -630,14 +760,22 @@ export const setConfigProcedure = authedProcedure
 		// half-save is still a full pairing against the hardware. And the source is
 		// the one being SAVED: checking the persisted one waves through exactly the
 		// ladder switch that makes the combo illegal.
-		if (input.resolution !== undefined || input.framerate !== undefined) {
+		if (
+			input.resolution !== undefined ||
+			input.framerate !== undefined ||
+			effectiveInputMode !== config.input_mode
+		) {
 			const verdict = verifySaveDeviceMode(
 				{
 					sourceId: input.source ?? config.source,
 					resolution: input.resolution ?? config.resolution,
 					framerate: input.framerate ?? config.framerate,
+					// A mode SWITCH re-validates the persisted axes against the ladder
+					// they will now be negotiated on: the very point of the per-media_type
+					// split is that 1080p60 on H.264 says nothing about MJPEG.
+					inputMode: effectiveInputMode,
 				},
-				{ lastSeenDevices: config.last_seen_devices },
+				{ sources: sourcesSnapshot, lastSeenDevices: config.last_seen_devices },
 			);
 			if (!verdict.supported) {
 				logger.warn("setConfig: device cannot deliver the requested mode", {
@@ -688,6 +826,9 @@ export const setConfigProcedure = authedProcedure
 			config.selected_video_input = sourceRouting.selected_video_input;
 			noteSourceSelectionWrite(input.source);
 		}
+		// Written even when it resolves to `undefined`: that is the CLEAR, and it is
+		// what stops a mode chosen for one camera governing the next one.
+		config.input_mode = effectiveInputMode;
 		if (input.bitrate_overlay !== undefined)
 			config.bitrate_overlay = input.bitrate_overlay;
 
@@ -770,6 +911,10 @@ export const setConfigProcedure = authedProcedure
 			applied.pipeline = config.pipeline;
 			applied.selected_video_input = config.selected_video_input;
 		}
+		if (input.input_mode !== undefined) {
+			applied.input_mode = config.input_mode;
+			applied.pipeline = config.pipeline;
+		}
 
 		if (shouldUseMocks()) {
 			setMockEncoderConfig({
@@ -818,6 +963,9 @@ export const setConfigProcedure = authedProcedure
 				? {}
 				: { input_id: staged.selected_video_input }),
 			...(staged.pipeline === undefined ? {} : { pipeline: staged.pipeline }),
+			...(staged.input_mode === undefined
+				? {}
+				: { input_mode: staged.input_mode }),
 		});
 
 		if (outcome.result !== "applied") {

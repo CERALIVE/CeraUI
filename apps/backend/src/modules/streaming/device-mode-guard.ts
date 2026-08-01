@@ -30,6 +30,7 @@ import {
 	type DeviceModeVerdict,
 	evaluateDeviceMode,
 	type Framerate,
+	type InputMode,
 	nearestDeliverableMode,
 	type Resolution,
 	type SourceModeCeiling,
@@ -61,6 +62,7 @@ function governingLadder(
 	sourceId: string | undefined,
 	sources: readonly StreamSource[],
 	lastSeenDevices: readonly LastSeenDevice[] | undefined,
+	inputMode: InputMode | undefined,
 ): GoverningLadder | undefined {
 	if (sourceId === undefined) return undefined;
 	const effectiveId = resolveSourceIdentity(sourceId, sources, lastSeenDevices);
@@ -68,8 +70,37 @@ function governingLadder(
 	if (source === undefined || source.modes.length === 0) return undefined;
 	return {
 		modes: source.modes,
-		kind: source.origin === "capture" ? source.kind : undefined,
+		// The shared rule scopes a ladder by the media type the KIND names, so
+		// handing it the SELECTED mode instead of the device's scalar kind is the
+		// whole of mode-awareness: the same evaluator, pointed at the ladder the
+		// leg will actually negotiate. Validating a dual-format camera against its
+		// H.264 ladder while MJPEG is selected refuses a mode the device can
+		// deliver, and permits one it cannot — the union lie in both directions.
+		kind: governingKind(source, inputMode),
 	};
+}
+
+/**
+ * The kind whose media type governs, honouring the operator's mode pick.
+ *
+ * The pick is only trusted while the device still ADVERTISES it: a mode carried
+ * over from other hardware must not narrow a ladder it has nothing to do with.
+ * A non-capture source has no mode to speak of, so it keeps answering
+ * `undefined` and nothing narrows — the unchanged none-cap policy.
+ */
+function governingKind(
+	source: StreamSource,
+	inputMode: InputMode | undefined,
+): string | undefined {
+	if (source.origin !== "capture") return undefined;
+	const selected = inputMode ?? source.selectedInputMode;
+	if (
+		selected !== undefined &&
+		source.inputModes?.some((mode) => mode.inputMode === selected) === true
+	) {
+		return selected;
+	}
+	return source.kind;
 }
 
 /** The encode target being checked, as the caller knows it. */
@@ -78,6 +109,8 @@ export interface DeviceModeTarget {
 	sourceId: string | undefined;
 	resolution: Resolution | undefined;
 	framerate: Framerate | undefined;
+	/** The mode being saved. Absent → the source's own selected/scalar mode. */
+	inputMode?: InputMode | undefined;
 }
 
 /** Injected state, so the load-time clamp can be driven without the singletons. */
@@ -110,7 +143,12 @@ export function verifySaveDeviceMode(
 	deps?: DeviceModeGuardDeps,
 ): DeviceModeVerdict {
 	const { sources, lastSeenDevices } = resolveDeps(deps);
-	const ladder = governingLadder(target.sourceId, sources, lastSeenDevices);
+	const ladder = governingLadder(
+		target.sourceId,
+		sources,
+		lastSeenDevices,
+		target.inputMode,
+	);
 	if (ladder === undefined) return { supported: true };
 	return evaluateDeviceMode({
 		modes: ladder.modes,
@@ -131,7 +169,12 @@ export function clampPersistedDeviceMode(
 	deps?: DeviceModeGuardDeps,
 ): SourceModeCeiling | undefined {
 	const { sources, lastSeenDevices } = resolveDeps(deps);
-	const ladder = governingLadder(target.sourceId, sources, lastSeenDevices);
+	const ladder = governingLadder(
+		target.sourceId,
+		sources,
+		lastSeenDevices,
+		target.inputMode,
+	);
 	if (ladder === undefined) return undefined;
 	const query = {
 		modes: ladder.modes,

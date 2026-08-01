@@ -47,6 +47,7 @@ import {
 	type DetectionMethod,
 	detectionMethodSchema,
 	deviceKindSchema,
+	inputModeSchema,
 	isNamespacedRelayId,
 	kioskDisplaySchema,
 	kioskPerformanceSchema,
@@ -256,6 +257,13 @@ export const runtimeConfigSchema = z.object({
 	// one the operator meant. Additive-optional — absent means a legacy/anchorless
 	// selection, which resolves exactly as it did before this field existed.
 	source_stable_id: z.string().optional(),
+	// Which capture format the selected device is opened under, for a device that
+	// exposes more than one. Scoped to `source_stable_id`: an operator pick that
+	// moves to DIFFERENT hardware clears it, so a mode chosen for one camera can
+	// never govern another. Additive-optional — absent hands the choice back to
+	// the engine's own precedence (H.264 first), which is what every device did
+	// before this field existed.
+	input_mode: inputModeSchema.optional(),
 	// Operator-ordered video-source preference (input_id list, most-preferred
 	// first). Persisted so a device-first reorder survives reload; setConfig
 	// writes it, getConfig echoes it. Additive-optional.
