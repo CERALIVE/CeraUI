@@ -117,6 +117,8 @@ CeraUI/
 | **Device-detection override helper (tests)** | `apps/backend/src/modules/system/device-detection.ts` — `withDeviceType()` |
 | **Ingest sparkline memoization** | `apps/frontend/src/lib/components/custom/ingest-link-view.ts` |
 | **Ingest visual/UX + @visual spec** | `apps/frontend/src/lib/components/custom/IngestStats.svelte` + `tests/e2e/visual/ingest-states.visual.spec.ts` |
+| **Device/component versions (kernel + live cerastream engine read)** | `apps/backend/src/modules/system/revisions.ts` (`refreshEngineRevision`, `ENGINE_UNREACHABLE_REVISION`) |
+| **Versions row presentation (version promoted, build metadata demoted)** | `apps/frontend/src/lib/system/version-display.ts` (`splitVersionValue`) → `apps/frontend/src/main/dialogs/VersionsDialog.svelte` |
 | Design rules | `.impeccable.md` |
 | **Receiver-kind model + Scope-B plain-SRT contract** | `docs/RECEIVER_MODEL.md` |
 | **ServerDialog protocol-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |

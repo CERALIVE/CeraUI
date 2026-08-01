@@ -13,11 +13,19 @@ export const sensorsStatusSchema = z.object({
 });
 export type SensorsStatus = z.infer<typeof sensorsStatusSchema>;
 
-// Revisions schema
+// Revisions schema.
+//
+// `kernel` (the board's running `uname -r`) and `cerastream` (the engine version
+// read live off the IPC `hello` handshake) are additive-optional: a status
+// snapshot taken before the first engine probe resolves carries neither, and the
+// dialog renders only the rows it was actually given rather than inventing a
+// placeholder for a value the device has not established.
 export const revisionsSchema = z.object({
 	ceralive: z.string(),
 	srtla: z.string(),
 	bun: z.string(),
+	kernel: z.string().optional(),
+	cerastream: z.string().optional(),
 	'CERALIVE image': z.string().optional(),
 });
 export type Revisions = z.infer<typeof revisionsSchema>;

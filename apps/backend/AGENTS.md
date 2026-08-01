@@ -1107,6 +1107,42 @@ without a real `passwd`/`/etc/shadow` (and without persisting to disk).
 - Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock-hardware paths. `shouldUseMocks()` requires both `isDevelopment()` AND `mockState.initialized`.
 - **Frontend store-ownership mirror [EXISTS]:** the frontend's legacy `websocket-store.svelte.ts` wrapper is deleted; `rpc/procedures/auth.procedure.ts` (`auth.login`/`auth.setPassword`/`auth.logout`) is now called exclusively through the frontend's `lib/stores/auth-status.svelte.ts` (`authenticate`/`createPassword`), and every other push event is consumed exclusively through `lib/rpc/subscriptions.svelte.ts`'s single `rpcClient.onMessage` handler. Don't casually rename/reshape these procedure signatures or add a second push-consumption path on the frontend side — see `apps/frontend/AGENTS.md` → CONVENTIONS (store ownership).
 
+## A VERSION AN OPERATOR READS MUST BE A LIVE READ [EXISTS]
+
+`modules/system/revisions.ts` feeds Settings → Versions. It gained two rows the
+operator previously could not see — the board's running kernel and the cerastream
+engine version — and one contract that is easy to break from either side.
+
+- **`revisions.kernel` is `os.release()`** (`node:os`, kept per the Bun-native
+  policy: fully supported, no Bun gain), i.e. the running `uname -r`. It is a
+  boot-time read because a kernel cannot change without a reboot.
+- **`revisions.cerastream` is NOT.** cerastream is systemd-owned (ADR-0005): it
+  can be stopped, crash, or be apt-upgraded underneath a running backend, and
+  CeraUI connects to it rather than owning it. A version observed once is
+  therefore not something the device can still vouch for, so
+  `refreshEngineRevision()` RE-READS it and an unreachable engine publishes
+  `ENGINE_UNREACHABLE_REVISION` instead of retaining the last-known value. A
+  cached-forever version would keep naming a build that may no longer be
+  installed — the same latched-stale family as `policy_route_missing` and
+  `active_encode`.
+- **The read costs no new IPC.** `engine_version` has always ridden the `hello`
+  handshake; it was simply never surfaced. The default probe is the SAME
+  short-lived connect → `hello` → close that `checkEngineCompatibilityOnStartup`
+  uses (`cerastreamBackend.probeEngine()`), so no connection is held open for a
+  version string and the systemd-owned engine is never spawned or stopped. The
+  import is lazy, mirroring `capabilities.ts`'s `setup.ts` import, so this
+  module's load path does not pull the streaming graph.
+- **`getRevisionsProcedure` is `async` and re-probes before answering.** The
+  login-time `revisions` push is a snapshot: an engine that came up (or was
+  upgraded) after the operator logged in would otherwise be reported unreachable
+  for the rest of the session. The push and the pull are both kept — the push
+  seeds the dialog instantly, the pull corrects it.
+- `setEngineVersionProbe(probe | null)` is the test seam (the `set*Runner`
+  convention). Coverage: `tests/revisions-kernel-engine.test.ts`.
+
+Board-proven on a Rock 5B+ across a full engine stop/start with NO backend
+restart: `2026.7.2` → `engine unreachable` → `2026.7.2`.
+
 ## TERMINATION CLEANUP [EXISTS]
 
 `helpers/shutdown.ts` owns the process-level `SIGTERM`/`SIGINT` lifecycle. The first
@@ -3000,6 +3036,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't re-serialise the DNS health check ahead of the caller's query in `dnsCacheResolve`, and don't share one `Resolver` between them — the check only GATES the answer, and a shared c-ares channel's `cancel()` would abort the sibling leg. Both legs sit inside the per-attempt launch deadline (see DNS ON THE STREAM-START CRITICAL PATH).
 - Don't use `process.exit` directly — use `invariant` from `helpers/invariant.ts`.
+- Don't serve `revisions.cerastream` from a cache, and don't retain the last-known value when the engine is unreachable — the engine is a separate systemd-owned process that can be restarted or upgraded mid-session, so a retained version keeps naming a build that may not be installed. Re-probe (`refreshEngineRevision`) and report `ENGINE_UNREACHABLE_REVISION` honestly.
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
 - Don't drive the engine directly — route through `getStreamingBackend()`, never
   the `cerastreamBackend` singleton.
