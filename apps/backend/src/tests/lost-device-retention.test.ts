@@ -1,12 +1,24 @@
 /*
- * C7 — lost-device retention + persisted last-seen metadata (Todo 11).
+ * Last-streamed-config retention: the device of the LAST-STREAMED configuration
+ * is the ONLY one remembered as a `lost` row while it is absent. Starting a
+ * stream with a different configuration SUPERSEDES that slot; a device that was
+ * merely enumerated leaves the list once it is live-absent, keeping only its
+ * invisible `last_seen_devices` entry for identity migration.
  *
- * `buildSources` synthesizes a `lost` capture row for a remembered device absent
- * from the current engine list: one seen THIS session (uncapped in-memory session
- * map), or the CONFIGURED device across a restart (persisted, capped,
- * config.source-exempt LRU). The lost row REPLACES its coarse base slot, so a
- * remembered input is EXACTLY one row — never a coarse+lost duplicate. A device
- * neither configured nor session-seen synthesizes NOTHING (no zombie list growth).
+ * POLICY CHANGE — the expectations this file previously held for in-session
+ * retention were REPLACED, not weakened (Rule E). The retired rule remembered
+ * every device the process had ever enumerated, uncapped, for the lifetime of
+ * the backend: an accessory unplugged once and taken away kept a permanent
+ * unavailable row in the picker. Merely having been SEEN is not evidence that
+ * anyone wants a device back — going live with it is. The replaced assertions
+ * asserted the old rule directly (a session-seen non-configured device
+ * synthesizing a lost row), so there was no way to state the new policy without
+ * contradicting them. Every property that was not about WHICH devices are
+ * remembered — one row per remembered input, no coarse duplicate, the persisted
+ * LRU cap, the hotplug/probe ordering rules — is still asserted below.
+ *
+ * The state-transition table this policy is defined by has one dedicated test
+ * per row, under "the state-transition table".
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
@@ -41,12 +53,15 @@ import {
 	getSessionSeenDeviceSnapshots,
 	getSourcesMessage,
 	mergeObservedWithProbe,
+	noteStreamedSourceCommitted,
 	refreshAndBroadcastSources,
 	refreshEngineDeviceCache,
 	refreshSourcesForHotplug,
 	resetEngineDeviceCache,
 	setEngineAudioChangeHandler,
 } from "../modules/streaming/sources.ts";
+import { StreamStartFailure } from "../modules/streaming/start-failure-taxonomy.ts";
+import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 
@@ -94,6 +109,9 @@ function captureDevice(
 		media_class: overrides.media_class ?? "video",
 		kind,
 		...(overrides.caps !== undefined ? { caps: overrides.caps } : {}),
+		...(overrides.stable_id !== undefined
+			? { stable_id: overrides.stable_id }
+			: {}),
 	};
 }
 
@@ -109,13 +127,13 @@ function lastSeen(
 		kind,
 		pipelineId,
 		devicePath: overrides.devicePath ?? `/dev/${id}`,
+		...(overrides.stableId !== undefined
+			? { stableId: overrides.stableId }
+			: {}),
+		...(overrides.previousIds !== undefined
+			? { previousIds: overrides.previousIds }
+			: {}),
 	};
-}
-
-function sessionMap(
-	...snapshots: LastSeenDevice[]
-): Map<string, LastSeenDevice> {
-	return new Map(snapshots.map((s) => [s.id, s]));
 }
 
 const NO_INGEST: NetworkIngest = { rtmp: null, srt: null };
@@ -134,10 +152,19 @@ function engineDevice(
 	};
 }
 
-// ─── (1) unplug: exactly one lost row, no coarse duplicate ────────────────────
+function clearRetentionConfig(): void {
+	const config = getConfig();
+	config.last_seen_devices = [];
+	delete config.source;
+	delete config.source_stable_id;
+	delete config.last_streamed_source;
+	delete config.last_streamed_source_stable_id;
+}
 
-describe("buildSources — lost-device synthesis (pure)", () => {
-	it("(1) unplug of the configured device → EXACTLY one row (lost, unavailable, named from snapshot), no coarse duplicate", () => {
+// ─── the projection: only the remembered device becomes a row ─────────────────
+
+describe("buildSources — only the LAST-STREAMED device is remembered", () => {
+	it("the remembered device, absent → EXACTLY one row (lost, unavailable, named from its snapshot), no coarse duplicate", () => {
 		const snapshot = lastSeen("video0", "hdmi", "hdmi", {
 			displayName: "Magewell HDMI Capture",
 		});
@@ -145,9 +172,8 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 			sources: goldenCapSources(),
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
+			lastStreamedSource: "video0",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: sessionMap(snapshot),
 		});
 
 		const rows = sources.filter((s) => s.id === "video0");
@@ -166,14 +192,44 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 		expect(sources.some((s) => s.origin === "coarse" && s.id === "hdmi")).toBe(
 			false,
 		);
-		// the USB-capture placeholders that used to sit beside it are suppressed
-		// in every state now (todo 21a), so no coarse row survives this build.
 		expect(
 			sources.filter((s) => s.origin === "coarse").map((s) => s.id),
 		).toEqual([]);
 	});
 
-	it("(2) replug → the lost row is replaced by the live row in one rebuild", () => {
+	it("a device that was SEEN but never streamed, absent → NO row at all", () => {
+		// The whole point of the policy. Both devices are remembered in
+		// `last_seen_devices` and both are live-absent; only the streamed one is a
+		// row, and the other's metadata stays for identity migration.
+		const streamed = lastSeen("video0", "hdmi", "hdmi");
+		const merelySeen = lastSeen("video2", "hdmi", "hdmi", {
+			displayName: "Session Cam",
+		});
+		const sources = buildSources({
+			sources: goldenCapSources(),
+			devices: [],
+			networkIngest: NO_INGEST,
+			lastStreamedSource: "video0",
+			lastSeenDevices: [streamed, merelySeen],
+		});
+
+		expect(sources.find((s) => s.id === "video0")?.lost).toBe(true);
+		expect(sources.some((s) => s.id === "video2")).toBe(false);
+	});
+
+	it("the operator's CURRENT selection is not the anchor — a never-streamed selection yields no row", () => {
+		// `config.source` moves freely on a save-only edit; the slot does not, and
+		// this is the projection half of that separation.
+		const sources = buildSources({
+			sources: goldenCapSources(),
+			devices: [],
+			networkIngest: NO_INGEST,
+			lastSeenDevices: [lastSeen("video0", "hdmi", "hdmi")],
+		});
+		expect(sources.some((s) => s.id === "video0")).toBe(false);
+	});
+
+	it("replug → the lost row is replaced by the live row in one rebuild", () => {
 		const snapshot = lastSeen("video0", "hdmi", "hdmi", {
 			displayName: "Magewell HDMI Capture",
 		});
@@ -185,9 +241,8 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 				}),
 			],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
+			lastStreamedSource: "video0",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: sessionMap(snapshot),
 		});
 
 		const rows = sources.filter((s) => s.id === "video0");
@@ -197,87 +252,34 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 		expect(rows[0]?.lost).toBeUndefined();
 	});
 
-	it("(3) restart: only the CONFIGURED id's last_seen entry becomes a lost row (session map empty)", () => {
-		const sources = buildSources({
-			sources: goldenCapSources(),
-			devices: [],
-			networkIngest: NO_INGEST,
-			configSource: "video0",
-			lastSeenDevices: [
-				lastSeen("video0", "hdmi", "hdmi", { displayName: "Configured HDMI" }),
-				lastSeen("video1", "hdmi", "hdmi", { displayName: "Other HDMI" }),
-			],
-			sessionSnapshots: sessionMap(),
-		});
-
-		const video0 = sources.find((s) => s.id === "video0");
-		expect(video0?.lost).toBe(true);
-		if (video0?.origin === "capture")
-			expect(video0.displayName).toBe("Configured HDMI");
-		// the non-configured last_seen entry does NOT synthesize a row across a restart.
-		expect(sources.some((s) => s.id === "video1")).toBe(false);
-	});
-
-	it("(5) session-seen non-configured device → lost row present; after restart (session reset) → NO lost row", () => {
-		const seen = lastSeen("video2", "hdmi", "hdmi", {
-			displayName: "Session Cam",
-		});
-		// A: seen this session, NOT config.source, then detached.
-		const inSession = buildSources({
-			sources: goldenCapSources(),
-			devices: [],
-			networkIngest: NO_INGEST,
-			configSource: "video0",
-			lastSeenDevices: [seen],
-			sessionSnapshots: sessionMap(seen),
-		});
-		const sessionRow = inSession.find((s) => s.id === "video2");
-		expect(sessionRow?.lost).toBe(true);
-
-		// B: simulated restart — session map reset, video2 NOT the configured id.
-		const afterRestart = buildSources({
-			sources: goldenCapSources(),
-			devices: [],
-			networkIngest: NO_INGEST,
-			configSource: "video0",
-			lastSeenDevices: [seen],
-			sessionSnapshots: sessionMap(),
-		});
-		expect(afterRestart.some((s) => s.id === "video2")).toBe(false);
-	});
-
-	it("(8) a snapshot whose pipelineId is absent from the current coarse set synthesizes NO row", () => {
+	it("a snapshot whose pipelineId is absent from the current coarse set synthesizes NO row", () => {
 		const snapshot = lastSeen("video0", "hdmi", "hdmi");
 		const sources = buildSources({
 			// hdmi is NOT offered this build (caps changed), so nothing bridges to it.
 			sources: [capSource("usb_mjpeg"), capSource("test")],
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
+			lastStreamedSource: "video0",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: sessionMap(snapshot),
 		});
 		expect(sources.some((s) => s.id === "video0")).toBe(false);
 		// `usb_mjpeg` is a suppressed USB-capture placeholder, so only the virtual
-		// test-pattern row remains (todo 21a).
+		// test-pattern row remains.
 		expect(sources.map((s) => s.id)).toEqual(["test"]);
 	});
 
-	it("(QA) device absent AND not configured AND not session-seen → NO lost row (no zombie)", () => {
+	it("a slot pointing at a device no longer remembered at all synthesizes NO row (no zombie)", () => {
 		const sources = buildSources({
 			sources: goldenCapSources(),
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
-			// video9 is remembered ONLY in persisted last_seen, and it is NOT the
-			// configured id and NOT session-seen → it must stay a zombie-free ghost.
-			lastSeenDevices: [lastSeen("video9", "hdmi", "hdmi")],
-			sessionSnapshots: sessionMap(),
+			lastStreamedSource: "video9",
+			lastSeenDevices: [lastSeen("video0", "hdmi", "hdmi")],
 		});
 		expect(sources.some((s) => s.id === "video9")).toBe(false);
 	});
 
-	it("(11) every synthesized lost row parses under streamSourceSchema with devicePath present", () => {
+	it("every synthesized lost row parses under streamSourceSchema with devicePath present", () => {
 		const snapshot = lastSeen("video0", "hdmi", "hdmi", {
 			displayName: "Elgato Cam Link 4K",
 			devicePath: "/dev/video7",
@@ -286,9 +288,8 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 			sources: goldenCapSources(),
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
+			lastStreamedSource: "video0",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: sessionMap(snapshot),
 		});
 		for (const source of sources) {
 			expect(() => streamSourceSchema.parse(source)).not.toThrow();
@@ -300,12 +301,70 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 			expect(lost.lost).toBe(true);
 		}
 	});
+
+	it("an anchored IDENTITY outranks the node path, and a path another device inherited never resolves", () => {
+		// `/dev/video1` is now held outright by a different camera's snapshot, which
+		// `findRememberingId` would prefer. Remembering THAT device would put a
+		// stranger's row in the picker under the operator's own retention slot.
+		const anchored = lastSeen("video4", "uvc_h264", "libuvch264", {
+			displayName: "DJI Osmo Pocket 3",
+			stableId: "usb:2ca3:0023:SN-A",
+			previousIds: ["video1"],
+		});
+		const inheritor = lastSeen("video1", "mjpeg", "usb_mjpeg", {
+			displayName: "Some Other Camera",
+			stableId: "usb:19f7:0080:SN-B",
+		});
+
+		const byIdentity = buildSources({
+			sources: goldenCapSources(),
+			devices: [],
+			networkIngest: NO_INGEST,
+			lastStreamedSource: "video1",
+			lastStreamedStableId: "usb:2ca3:0023:SN-A",
+			lastSeenDevices: [inheritor, anchored],
+		}).filter((s) => s.lost === true);
+
+		expect(byIdentity).toHaveLength(1);
+		expect(byIdentity[0]?.id).toBe("video4");
+	});
 });
 
-// ─── (4) schema: additive key, default [], required devicePath ────────────────
+// ─── schema: additive, and DISTINCT from config.source ────────────────────────
+
+describe("runtimeConfigSchema — the retention slot", () => {
+	it("parses an old config that has never streamed (no last_streamed_source)", () => {
+		const parsed = runtimeConfigSchema.safeParse({
+			max_br: 5000,
+			srt_latency: 2000,
+		});
+		expect(parsed.success).toBe(true);
+		if (parsed.success) {
+			expect(parsed.data.last_streamed_source).toBeUndefined();
+			expect(parsed.data.last_streamed_source_stable_id).toBeUndefined();
+		}
+	});
+
+	it("round-trips a slot that DIFFERS from the operator's current selection", () => {
+		const parsed = runtimeConfigSchema.safeParse({
+			source: "/dev/video0",
+			source_stable_id: "usb:hdmi",
+			last_streamed_source: "/dev/video3",
+			last_streamed_source_stable_id: "usb:2ca3:0023:SN-A",
+		});
+		expect(parsed.success).toBe(true);
+		if (parsed.success) {
+			expect(parsed.data.source).toBe("/dev/video0");
+			expect(parsed.data.last_streamed_source).toBe("/dev/video3");
+			expect(parsed.data.last_streamed_source_stable_id).toBe(
+				"usb:2ca3:0023:SN-A",
+			);
+		}
+	});
+});
 
 describe("runtimeConfigSchema — last_seen_devices additive key", () => {
-	it("(4) parses an old config with no last_seen_devices key (optional)", () => {
+	it("parses an old config with no last_seen_devices key (optional)", () => {
 		const parsed = runtimeConfigSchema.safeParse({
 			max_br: 5000,
 			srt_latency: 2000,
@@ -314,7 +373,7 @@ describe("runtimeConfigSchema — last_seen_devices additive key", () => {
 		if (parsed.success) expect(parsed.data.last_seen_devices).toBeUndefined();
 	});
 
-	it("(4) defaults to [] via RUNTIME_CONFIG_DEFAULTS", () => {
+	it("defaults to [] via RUNTIME_CONFIG_DEFAULTS", () => {
 		expect(RUNTIME_CONFIG_DEFAULTS.last_seen_devices).toEqual([]);
 	});
 
@@ -351,113 +410,7 @@ describe("runtimeConfigSchema — last_seen_devices additive key", () => {
 	});
 });
 
-// ─── (6,7,10) recording + persistence + LRU integration ───────────────────────
-
-describe("session recording + persisted LRU (integration)", () => {
-	beforeEach(() => {
-		resetEngineDeviceCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
-	});
-
-	afterEach(() => {
-		resetEngineDeviceCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
-	});
-
-	it("(6) an empty list-devices result does NOT clear the session map (lost rows survive a zero-device blip)", async () => {
-		await refreshEngineDeviceCache({
-			fetchEngineDevices: async () => ({ devices: [engineDevice("video0")] }),
-		});
-		expect(getSessionSeenDeviceSnapshots().has("video0")).toBe(true);
-
-		// engine restart briefly reports zero devices (a reachable, empty list).
-		await refreshEngineDeviceCache({
-			fetchEngineDevices: async () => ({ devices: [] }),
-		});
-		expect(getEngineDeviceCache()).toHaveLength(0);
-		// the session memory is monotonic — the id is NOT dropped.
-		expect(getSessionSeenDeviceSnapshots().has("video0")).toBe(true);
-
-		const sources = buildSources({
-			sources: goldenCapSources(),
-			devices: getEngineDeviceCache(),
-			networkIngest: NO_INGEST,
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
-		});
-		expect(sources.find((s) => s.id === "video0")?.lost).toBe(true);
-	});
-
-	it("(7) LRU churn of 14 other devices never evicts the configured id's snapshot", async () => {
-		getConfig().source = "video0";
-		await refreshEngineDeviceCache({
-			fetchEngineDevices: async () => ({ devices: [engineDevice("video0")] }),
-		});
-		for (let i = 1; i <= 14; i++) {
-			await refreshEngineDeviceCache({
-				fetchEngineDevices: async () => ({
-					devices: [engineDevice(`churn${i}`)],
-				}),
-			});
-		}
-
-		const persisted = getConfig().last_seen_devices ?? [];
-		expect(persisted).toHaveLength(12);
-		expect(persisted.some((d) => d.id === "video0")).toBe(true);
-		// the uncapped session map keeps ALL 15 observed ids.
-		expect(getSessionSeenDeviceSnapshots().size).toBe(15);
-	});
-
-	it("(10) a non-configured session-seen device evicted from the persisted LRU still synthesizes a full lost row in-session", async () => {
-		getConfig().source = "video-config";
-		await refreshEngineDeviceCache({
-			fetchEngineDevices: async () => ({
-				devices: [engineDevice("video-config")],
-			}),
-		});
-		await refreshEngineDeviceCache({
-			fetchEngineDevices: async () => ({
-				devices: [engineDevice("videoX", "Roaming Cam")],
-			}),
-		});
-		for (let i = 1; i <= 13; i++) {
-			await refreshEngineDeviceCache({
-				fetchEngineDevices: async () => ({
-					devices: [engineDevice(`churn${i}`)],
-				}),
-			});
-		}
-
-		const persisted = getConfig().last_seen_devices ?? [];
-		// videoX was evicted from the capped persisted list…
-		expect(persisted.some((d) => d.id === "videoX")).toBe(false);
-		// …but survives in the uncapped session map (metadata intact).
-		expect(getSessionSeenDeviceSnapshots().has("videoX")).toBe(true);
-
-		const sources = buildSources({
-			sources: goldenCapSources(),
-			devices: [],
-			networkIngest: NO_INGEST,
-			configSource: getConfig().source,
-			lastSeenDevices: persisted,
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
-		});
-		const lost = sources.find((s) => s.id === "videoX");
-		expect(lost?.lost).toBe(true);
-		if (lost?.origin === "capture")
-			expect(lost.displayName).toBe("Roaming Cam");
-	});
-});
-
-// ─── (9) registry-driven combined transition (no second fetch) ────────────────
-
-function recordingClient(sink: string[]): AppWebSocket {
-	return {
-		data: { isAuthenticated: true, lastActive: Date.now() },
-		send: (message: string) => sink.push(message),
-	} as unknown as AppWebSocket;
-}
+// ─── the state-transition table (one test per row) ────────────────────────────
 
 async function seedHdmiCaps(): Promise<void> {
 	await getCapabilities({
@@ -489,24 +442,420 @@ async function seedHdmiCaps(): Promise<void> {
 	});
 }
 
-describe("applyObservedDevicesAndBroadcast — combined hotplug transition (C7)", () => {
+describe("the state-transition table", () => {
 	beforeEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	afterEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
-	it("(9) a device removed via the observed list rebroadcasts BOTH devices and sources, sources carrying the lost row — no second fetch", async () => {
+	/** Make `deviceId` a live, engine-authored HDMI device and select it. */
+	async function selectLiveDevice(deviceId: string): Promise<void> {
+		await seedHdmiCaps();
+		applyObservedEngineDevices([
+			captureDevice(deviceId, "hdmi", { display_name: `Camera ${deviceId}` }),
+		]);
+		getConfig().source = deviceId;
+	}
+
+	/** One orchestrator whose launch outcome the caller decides. */
+	function orchestratorWithCommitSpy(commits: string[]) {
+		return createStreamSessionOrchestrator({
+			createAttemptId: () => "attempt-1",
+			setStreamingStatus: () => {},
+			stopRuntime: async () => {},
+			queryRuntime: async () => "idle",
+			retryPolicy: {
+				maxAttempts: 1,
+				totalBudgetMs: 60_000,
+				baseDelayMs: 1,
+				maxDelayMs: 1,
+			},
+			// The production hook, plus a record of when it fired — so these tests
+			// assert the real write, never a stand-in for it.
+			onStreamCommitted: () => {
+				commits.push(getConfig().source ?? "");
+				noteStreamedSourceCommitted();
+			},
+		});
+	}
+
+	it("SAVE-ONLY config change → the slot is UNCHANGED while config.source moves", async () => {
+		await selectLiveDevice("video0");
+		noteStreamedSourceCommitted();
+		expect(getConfig().last_streamed_source).toBe("video0");
+
+		// A save-only edit rewrites the operator's selection and nothing else.
+		getConfig().source = "video1";
+		expect(getConfig().last_streamed_source).toBe("video0");
+	});
+
+	it("a start that FAILS the outcome gate → the slot is UNCHANGED (the hook never fires)", async () => {
+		await selectLiveDevice("video0");
+		const commits: string[] = [];
+		const orchestrator = orchestratorWithCommitSpy(commits);
+
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async ({ attemptId }) => {
+				// Exactly what an expired `playing-wait` phase throws: the graph may
+				// well have reached PLAYING, but the engine never confirmed a really
+				// streaming session, so the launch never resolves.
+				throw new StreamStartFailure({
+					attemptId,
+					phase: "playing-wait",
+					class: "start_timeout",
+					retriable: false,
+				});
+			},
+		});
+
+		expect(result.result).toBe("failed");
+		expect(commits).toEqual([]);
+		expect(getConfig().last_streamed_source).toBeUndefined();
+	});
+
+	it("a start that SATISFIES the outcome gate → the slot MOVES to that configuration's device", async () => {
+		await selectLiveDevice("video0");
+		const commits: string[] = [];
+		const orchestrator = orchestratorWithCommitSpy(commits);
+
+		const result = await orchestrator.start({
+			origin: "ui",
+			launch: async () => {},
+		});
+
+		expect(result.result).toBe("started");
+		expect(commits).toEqual(["video0"]);
+	});
+
+	it("the slot records the STABLE IDENTITY of the committed device, not just its node path", async () => {
+		await seedHdmiCaps();
+		applyObservedEngineDevices([
+			captureDevice("video3", "hdmi", { stable_id: "usb:2ca3:0023:SN-A" }),
+		]);
+		getConfig().source = "video3";
+
+		expect(noteStreamedSourceCommitted()).toBe(true);
+		expect(getConfig().last_streamed_source).toBe("video3");
+		expect(getConfig().last_streamed_source_stable_id).toBe(
+			"usb:2ca3:0023:SN-A",
+		);
+	});
+
+	it("a committed start on a NON-camera source SUPERSEDES the remembered camera", async () => {
+		await seedHdmiCaps();
+		applyObservedEngineDevices([
+			captureDevice("video3", "hdmi", { stable_id: "usb:2ca3:0023:SN-A" }),
+		]);
+		getConfig().source = "video3";
+		noteStreamedSourceCommitted();
+		applyObservedEngineDevices([]);
+		expect(
+			getSourcesMessage().sources.find((s) => s.id === "video3")?.lost,
+		).toBe(true);
+
+		// The operator switches to the network ingest and goes live with it.
+		getConfig().source = "rtmp";
+		expect(noteStreamedSourceCommitted()).toBe(true);
+		expect(getConfig().last_streamed_source).toBe("rtmp");
+		expect(getConfig().last_streamed_source_stable_id).toBeUndefined();
+		expect(getSourcesMessage().sources.some((s) => s.id === "video3")).toBe(
+			false,
+		);
+	});
+
+	it("STOP → the slot is UNCHANGED (only a start ever moves it)", async () => {
+		await selectLiveDevice("video0");
+		const commits: string[] = [];
+		const orchestrator = orchestratorWithCommitSpy(commits);
+		await orchestrator.start({ origin: "ui", launch: async () => {} });
+		expect(commits).toHaveLength(1);
+
+		const stopped = await orchestrator.stop();
+		expect(stopped.result).toBe("stopped");
+		expect(commits).toHaveLength(1);
+		expect(getConfig().last_streamed_source).toBe("video0");
+	});
+
+	it("a device RENUMBER → the slot follows the stable identity, not the node path", async () => {
+		await seedHdmiCaps();
+		getConfig().last_streamed_source = "video1";
+		getConfig().last_streamed_source_stable_id = "usb:2ca3:0023:SN-A";
+		getConfig().last_seen_devices = [
+			lastSeen("video7", "hdmi", "hdmi", {
+				displayName: "DJI Osmo Pocket 3",
+				stableId: "usb:2ca3:0023:SN-A",
+				previousIds: ["video1"],
+			}),
+		];
+
+		// Absent under its CURRENT node path — the slot still names the old one.
+		const lost = getSourcesMessage().sources.filter((s) => s.lost === true);
+		expect(lost).toHaveLength(1);
+		expect(lost[0]?.id).toBe("video7");
+	});
+
+	it("a restoration re-commit of the SAME configuration NEVER moves the slot (and writes nothing)", async () => {
+		await selectLiveDevice("video0");
+		expect(noteStreamedSourceCommitted()).toBe(true);
+		const after = getConfig().last_streamed_source;
+
+		// A restoration re-runs the configuration that was already live, so there is
+		// nothing to move; the false return is the "no config write" guarantee.
+		expect(noteStreamedSourceCommitted()).toBe(false);
+		expect(noteStreamedSourceCommitted()).toBe(false);
+		expect(getConfig().last_streamed_source).toBe(after);
+	});
+
+	it("a REPLUG while physically present is always listed — presence beats retention", async () => {
+		await seedHdmiCaps();
+		getConfig().last_streamed_source = "video0";
+		getConfig().last_seen_devices = [lastSeen("video0", "hdmi", "hdmi")];
+
+		applyObservedEngineDevices([]);
+		expect(
+			getSourcesMessage().sources.find((s) => s.id === "video0")?.lost,
+		).toBe(true);
+
+		applyObservedEngineDevices([captureDevice("video0", "hdmi")]);
+		const back = getSourcesMessage().sources.find((s) => s.id === "video0");
+		expect(back?.lost).toBeUndefined();
+		expect(back?.available).toBe(true);
+	});
+
+	it("a BACKEND RESTART restores the slot from config, not from anything in memory", async () => {
+		await seedHdmiCaps();
+		getConfig().last_streamed_source = "video0";
+		getConfig().last_seen_devices = [
+			lastSeen("video0", "hdmi", "hdmi", { displayName: "Studio HDMI" }),
+		];
+
+		// resetEngineDeviceCache() is the restart simulation: every in-memory
+		// device memory is dropped and only config.json survives.
+		resetEngineDeviceCache();
+		expect(getSessionSeenDeviceSnapshots().size).toBe(0);
+		expect(getEngineDeviceCache()).toHaveLength(0);
+
+		const restored = getSourcesMessage().sources.find((s) => s.id === "video0");
+		expect(restored?.lost).toBe(true);
+		if (restored?.origin === "capture")
+			expect(restored.displayName).toBe("Studio HDMI");
+	});
+
+	it("NEGATIVE CONTROL — a 2-second blip on a never-streamed device never makes it unpickable", async () => {
+		await seedHdmiCaps();
+		getConfig().last_streamed_source = "video0";
+		getConfig().last_seen_devices = [lastSeen("video0", "hdmi", "hdmi")];
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi"),
+			captureDevice("video1", "hdmi", { display_name: "Borrowed Cam" }),
+		]);
+		expect(
+			getSourcesMessage().sources.find((s) => s.id === "video1")?.available,
+		).toBe(true);
+
+		// The blip: gone for one observation. It is not the remembered device, so it
+		// leaves the list entirely rather than lingering as an unusable row.
+		applyObservedEngineDevices([captureDevice("video0", "hdmi")]);
+		expect(getSourcesMessage().sources.some((s) => s.id === "video1")).toBe(
+			false,
+		);
+
+		// …and it is a fully selectable row again the moment it is back.
+		applyObservedEngineDevices([
+			captureDevice("video0", "hdmi"),
+			captureDevice("video1", "hdmi", { display_name: "Borrowed Cam" }),
+		]);
+		const back = getSourcesMessage().sources.find((s) => s.id === "video1");
+		expect(back?.available).toBe(true);
+		expect(back?.lost).toBeUndefined();
+	});
+});
+
+// ─── recording + persistence + LRU integration ────────────────────────────────
+
+describe("session recording + persisted LRU (integration)", () => {
+	beforeEach(() => {
+		resetEngineDeviceCache();
+		clearRetentionConfig();
+	});
+
+	afterEach(() => {
+		resetEngineDeviceCache();
+		clearRetentionConfig();
+	});
+
+	it("an empty list-devices result does NOT clear the remembered slot's row (survives a zero-device blip)", async () => {
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({ devices: [engineDevice("video0")] }),
+		});
+		getConfig().last_streamed_source = "video0";
+
+		// engine restart briefly reports zero devices (a reachable, empty list).
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({ devices: [] }),
+		});
+		expect(getEngineDeviceCache()).toHaveLength(0);
+
+		const sources = buildSources({
+			sources: goldenCapSources(),
+			devices: getEngineDeviceCache(),
+			networkIngest: NO_INGEST,
+			lastStreamedSource: "video0",
+			lastSeenDevices: getConfig().last_seen_devices ?? [],
+		});
+		expect(sources.find((s) => s.id === "video0")?.lost).toBe(true);
+	});
+
+	it("LRU churn of 14 other devices never evicts the configured id's snapshot", async () => {
+		getConfig().source = "video0";
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({ devices: [engineDevice("video0")] }),
+		});
+		for (let i = 1; i <= 14; i++) {
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice(`churn${i}`)],
+				}),
+			});
+		}
+
+		const persisted = getConfig().last_seen_devices ?? [];
+		expect(persisted).toHaveLength(12);
+		expect(persisted.some((d) => d.id === "video0")).toBe(true);
+		// the uncapped session record keeps ALL 15 observed ids.
+		expect(getSessionSeenDeviceSnapshots().size).toBe(15);
+	});
+
+	it("LRU churn never evicts the LAST-STREAMED snapshot either, even once the selection has moved on", async () => {
+		// The two exemptions come apart exactly here: a save-only edit left
+		// `config.source` on a different device, so only the second one protects
+		// the snapshot the retention slot is rendered from.
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({
+				devices: [engineDevice("video0", "Streamed Cam")],
+			}),
+		});
+		getConfig().last_streamed_source = "video0";
+		getConfig().source = "churn1";
+		for (let i = 1; i <= 14; i++) {
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice(`churn${i}`)],
+				}),
+			});
+		}
+
+		const persisted = getConfig().last_seen_devices ?? [];
+		expect(persisted).toHaveLength(12);
+		expect(persisted.some((d) => d.id === "video0")).toBe(true);
+
+		const lost = buildSources({
+			sources: goldenCapSources(),
+			devices: [],
+			networkIngest: NO_INGEST,
+			lastStreamedSource: "video0",
+			lastSeenDevices: persisted,
+		}).filter((s) => s.lost === true);
+		expect(lost).toHaveLength(1);
+		expect(lost[0]?.id).toBe("video0");
+	});
+
+	it("a churned-out device that was never streamed keeps NO row, in-session or otherwise", async () => {
+		getConfig().source = "video-config";
+		getConfig().last_streamed_source = "video-config";
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({
+				devices: [engineDevice("video-config")],
+			}),
+		});
+		await refreshEngineDeviceCache({
+			fetchEngineDevices: async () => ({
+				devices: [engineDevice("videoX", "Roaming Cam")],
+			}),
+		});
+		for (let i = 1; i <= 13; i++) {
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [engineDevice(`churn${i}`)],
+				}),
+			});
+		}
+
+		const persisted = getConfig().last_seen_devices ?? [];
+		expect(persisted.some((d) => d.id === "videoX")).toBe(false);
+		// The session record still holds it — invisible, for identity migration.
+		expect(getSessionSeenDeviceSnapshots().has("videoX")).toBe(true);
+
+		const sources = buildSources({
+			sources: goldenCapSources(),
+			devices: [],
+			networkIngest: NO_INGEST,
+			lastStreamedSource: getConfig().last_streamed_source,
+			lastSeenDevices: persisted,
+		});
+		expect(sources.some((s) => s.id === "videoX")).toBe(false);
+		expect(sources.find((s) => s.id === "video-config")?.lost).toBe(true);
+	});
+
+	it("the persisted retired-path memory is still capped at 8", async () => {
+		const stableId = "usb:2ca3:0023:SN-A";
+		for (let i = 0; i <= 12; i++) {
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [
+						{
+							input_id: `video${i}`,
+							device_path: `/dev/video${i}`,
+							display_name: "DJI Osmo Pocket 3",
+							media_class: "video",
+							kind: "hdmi",
+							stable_id: stableId,
+						},
+					],
+				}),
+			});
+		}
+
+		const persisted = getConfig().last_seen_devices ?? [];
+		expect(persisted).toHaveLength(1);
+		expect(persisted[0]?.previousIds?.length).toBe(8);
+	});
+});
+
+// ─── registry-driven combined transition (no second fetch) ────────────────────
+
+function recordingClient(sink: string[]): AppWebSocket {
+	return {
+		data: { isAuthenticated: true, lastActive: Date.now() },
+		send: (message: string) => sink.push(message),
+	} as unknown as AppWebSocket;
+}
+
+describe("applyObservedDevicesAndBroadcast — combined hotplug transition", () => {
+	beforeEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		clearRetentionConfig();
+	});
+
+	afterEach(() => {
+		resetEngineDeviceCache();
+		clearCapabilitiesCache();
+		clearRetentionConfig();
+	});
+
+	it("a device removed via the observed list rebroadcasts BOTH devices and sources, sources carrying the lost row — no second fetch", async () => {
 		await seedHdmiCaps();
 		getConfig().source = "video0";
+		getConfig().last_streamed_source = "video0";
 		// The registry first observed the device present (records the snapshot).
 		applyObservedEngineDevices([
 			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
@@ -563,20 +912,19 @@ describe("refreshSourcesForHotplug — a failing engine probe never masks a remo
 	beforeEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	afterEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	async function seedPresentDevice(): Promise<void> {
 		await seedHdmiCaps();
 		getConfig().source = "video0";
+		getConfig().last_streamed_source = "video0";
 		applyObservedEngineDevices([
 			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
 		]);
@@ -663,15 +1011,13 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 	beforeEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	afterEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	function captureBroadcast(
@@ -698,10 +1044,11 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 		).sources.find((s) => s.id === id);
 	}
 
-	/** The device was seen, then unplugged — so it currently renders `lost`. */
+	/** The device was streamed, then unplugged — so it currently renders `lost`. */
 	async function seedLostDevice(): Promise<void> {
 		await seedHdmiCaps();
 		getConfig().source = "video0";
+		getConfig().last_streamed_source = "video0";
 		applyObservedEngineDevices([
 			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
 		]);
@@ -733,6 +1080,7 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 	it("a removal the local scan observed is NOT resurrected by a probe still answering with the pre-removal list", async () => {
 		await seedHdmiCaps();
 		getConfig().source = "video0";
+		getConfig().last_streamed_source = "video0";
 		applyObservedEngineDevices([
 			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
 		]);
@@ -879,6 +1227,7 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 	it("an OLDER hotplug refresh answering late never clobbers a NEWER one's result", async () => {
 		await seedHdmiCaps();
 		getConfig().source = "video0";
+		getConfig().last_streamed_source = "video0";
 		applyObservedEngineDevices([
 			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
 		]);
@@ -918,6 +1267,7 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 	it("an OLDER refresh whose probe FAILS late does not fall back over a NEWER result", async () => {
 		await seedHdmiCaps();
 		getConfig().source = "video0";
+		getConfig().last_streamed_source = "video0";
 		applyObservedEngineDevices([
 			captureDevice("video0", "hdmi", { display_name: "Studio HDMI" }),
 		]);
@@ -942,20 +1292,19 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 		failStaleProbe(new Error("engine unavailable"));
 		await older;
 
-		// The PR #214 observed-fallback is still correct — it just belongs to the
-		// generation that owns the current view, not to a superseded one.
+		// The observed-fallback is still correct — it just belongs to the generation
+		// that owns the current view, not to a superseded one.
 		expect(getEngineDeviceCache().map((d) => d.input_id)).toEqual(["video0"]);
 	});
 });
 
 // ─── replug: a probe that cannot speak for the device must not DEGRADE it ─────
 //
-// The live RØDE reconnect regression. #214/#215 made the replugged device stay
-// PRESENT; this is about it staying ITSELF. The local scan can only guess a kind
-// from the card name (`deriveKind`), and for a UVC dongle the guess is `usb` —
-// which bridges to NO pipeline, so `buildSources` drops the row entirely and the
-// coarse `usb_mjpeg` slot renders "USB MJPEG / not connected" instead. It is
-// permanent for the same reason #215 was: nothing re-pokes a stable device set.
+// The live RØDE reconnect regression. The local scan can only guess a kind from
+// the card name (`deriveKind`), and for a UVC dongle the guess is `usb` — which
+// bridges to NO pipeline, so `buildSources` drops the row entirely and the coarse
+// `usb_mjpeg` slot renders "USB MJPEG / not connected" instead. It is permanent
+// because nothing re-pokes a stable device set.
 
 describe("refreshSourcesForHotplug — a replug the probe has not caught up with keeps its engine identity", () => {
 	// Byte-exact strings from the bug hardware (Rock 5B+). The v4l2 card name
@@ -967,15 +1316,13 @@ describe("refreshSourcesForHotplug — a replug the probe has not caught up with
 	beforeEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	afterEach(() => {
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
-		getConfig().last_seen_devices = [];
-		delete getConfig().source;
+		clearRetentionConfig();
 	});
 
 	function engineHdmiRx(): ListDevicesResult["devices"][number] {
@@ -1045,6 +1392,7 @@ describe("refreshSourcesForHotplug — a replug the probe has not caught up with
 	async function seedThenUnplugRode(): Promise<void> {
 		await seedHdmiAndMjpegCaps();
 		getConfig().source = "/dev/video1";
+		getConfig().last_streamed_source = "/dev/video1";
 		await refreshEngineDeviceCache({
 			fetchEngineDevices: async () => ({
 				devices: [engineHdmiRx(), engineRode()],
@@ -1084,7 +1432,7 @@ describe("refreshSourcesForHotplug — a replug the probe has not caught up with
 		).toBe(false);
 	});
 
-	it("the same restoration applies when the probe FAILS outright (the #214 observed-fallback branch)", async () => {
+	it("the same restoration applies when the probe FAILS outright (the observed-fallback branch)", async () => {
 		await seedThenUnplugRode();
 
 		await refreshSourcesForHotplug([scannedHdmiRx(), scannedRode()], {

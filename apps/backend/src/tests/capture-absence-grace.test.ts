@@ -154,6 +154,7 @@ describe("Auto audio — absence hysteresis across a libuvc interface rebind", (
 		setMockAudioDevicesProvider(() => ({ "DJI DJIPocket3": "DJIPocket3" }));
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 		getConfig().source = CAMERA_ID;
+		getConfig().last_streamed_source = CAMERA_ID;
 	});
 
 	afterEach(() => {
@@ -165,6 +166,7 @@ describe("Auto audio — absence hysteresis across a libuvc interface rebind", (
 		updateStatus(false);
 		delete getConfig().asrc;
 		delete getConfig().source;
+		delete getConfig().last_streamed_source;
 		delete getConfig().last_seen_devices;
 	});
 

@@ -171,7 +171,7 @@ describe("sources broadcast — the row the operator actually sees", () => {
 			sources: [HDMI_CAP],
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "/dev/video0",
+			lastStreamedSource: "/dev/video0",
 			lastSeenDevices: lastSeen,
 		});
 

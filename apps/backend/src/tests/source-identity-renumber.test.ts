@@ -103,9 +103,8 @@ function sourcesAfterReplug(successor: CaptureDevice): StreamSource[] {
 		sources: goldenCapSources(),
 		devices: [captureDevice("/dev/video0", "hdmi"), successor],
 		networkIngest: NO_INGEST,
-		configSource: "/dev/video1",
+		lastStreamedSource: "/dev/video1",
 		lastSeenDevices: [snapshot],
-		sessionSnapshots: new Map([[snapshot.id, snapshot]]),
 	});
 }
 
@@ -152,9 +151,8 @@ describe("buildSources — a re-enumerated device never leaves a hole", () => {
 			sources: goldenCapSources(),
 			devices: [captureDevice("/dev/video0", "hdmi")],
 			networkIngest: NO_INGEST,
-			configSource: "/dev/video1",
+			lastStreamedSource: "/dev/video1",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: new Map([[snapshot.id, snapshot]]),
 		});
 
 		expect(sources.find((s) => s.id === "/dev/video1")?.lost).toBe(true);
@@ -222,9 +220,8 @@ describe("reconcileConfiguredSourceIdentity — the migration is PERSISTED", () 
 				}),
 			],
 			networkIngest: NO_INGEST,
-			configSource: "/dev/video1",
+			lastStreamedSource: "/dev/video1",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: new Map([[snapshot.id, snapshot]]),
 		});
 
 		expect(reconcileConfiguredSourceIdentity(sources)).toBe(false);
@@ -251,7 +248,6 @@ describe("reconcileConfiguredSourceIdentity — the migration is PERSISTED", () 
 			],
 			networkIngest: NO_INGEST,
 			lastSeenDevices: [],
-			sessionSnapshots: new Map(),
 		});
 
 		expect(reconcileConfiguredSourceIdentity(sources)).toBe(false);

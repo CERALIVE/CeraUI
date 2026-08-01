@@ -128,16 +128,15 @@ function lastSeen(
 /** Build the `sources` view the reconciler is handed, from a given device list. */
 function sourcesFrom(
 	devices: readonly CaptureDevice[],
-	configSource: string,
+	lastStreamedSource: string,
 	lastSeenDevices: readonly LastSeenDevice[],
 ): StreamSource[] {
 	return realSources.buildSources({
 		sources: goldenCapSources(),
 		devices,
 		networkIngest: NO_INGEST,
-		configSource,
+		lastStreamedSource,
 		lastSeenDevices,
-		sessionSnapshots: realSources.getSessionSeenDeviceSnapshots(),
 	});
 }
 

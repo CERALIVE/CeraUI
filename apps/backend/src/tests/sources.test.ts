@@ -399,7 +399,7 @@ describe("buildSources — capture signal state (present / absent / unknown)", (
 			sources: [capSource("hdmi")],
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video9",
+			lastStreamedSource: "video9",
 			lastSeenDevices: [snapshot],
 		});
 		const lost = sources.find((s) => s.id === "video9");
@@ -513,9 +513,8 @@ describe("resolveSourceRouting — availability gate (C7)", () => {
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
+			lastStreamedSource: "video0",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: new Map([[snapshot.id, snapshot]]),
 		});
 		const lost = sources.find((s) => s.id === "video0");
 		expect(lost?.lost).toBe(true);
@@ -545,9 +544,8 @@ describe("resolveSourceRouting — availability gate (C7)", () => {
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [captureDevice("video0", "hdmi")],
 			networkIngest: NO_INGEST,
-			configSource: "video0",
+			lastStreamedSource: "video0",
 			lastSeenDevices: [snapshot],
-			sessionSnapshots: new Map([[snapshot.id, snapshot]]),
 		});
 		const live = sources.find((s) => s.id === "video0");
 		expect(live?.available).toBe(true);
@@ -758,9 +756,8 @@ describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () 
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [hotplugDevice("video2", STABLE_A)],
 			networkIngest: NO_INGEST,
-			configSource: "video1",
+			lastStreamedSource: "video1",
 			lastSeenDevices: [video1],
-			sessionSnapshots: new Map([[video1.id, video1]]),
 		});
 
 		expect(lostRows(sources)).toHaveLength(0);
@@ -777,9 +774,8 @@ describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () 
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [],
 			networkIngest: NO_INGEST,
-			configSource: "video1",
+			lastStreamedSource: "video1",
 			lastSeenDevices: [video1],
-			sessionSnapshots: new Map([[video1.id, video1]]),
 		});
 
 		const lost = lostRows(sources);
@@ -797,12 +793,8 @@ describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () 
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [hotplugDevice("video3", STABLE_A)],
 			networkIngest: NO_INGEST,
-			configSource: "video1",
+			lastStreamedSource: "video1",
 			lastSeenDevices: [video1, video2],
-			sessionSnapshots: new Map([
-				[video1.id, video1],
-				[video2.id, video2],
-			]),
 		});
 
 		expect(lostRows(sources)).toHaveLength(0);
@@ -820,9 +812,8 @@ describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () 
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [hotplugDevice("video2", STABLE_B)],
 			networkIngest: NO_INGEST,
-			configSource: "video1",
+			lastStreamedSource: "video1",
 			lastSeenDevices: [video1],
-			sessionSnapshots: new Map([[video1.id, video1]]),
 		});
 
 		const lost = lostRows(sources);
@@ -842,9 +833,8 @@ describe("buildSources — hotplug re-enumeration reconciliation (Todo 34)", () 
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [hotplugDevice("video2", undefined)],
 			networkIngest: NO_INGEST,
-			configSource: "video1",
+			lastStreamedSource: "video1",
 			lastSeenDevices: [video1],
-			sessionSnapshots: new Map([[video1.id, video1]]),
 		});
 
 		expect(lostRows(sources)).toHaveLength(1);
@@ -873,9 +863,8 @@ describe("resolveSourceRouting — renumbered-replug self-heal (Todo 36)", () =>
 			sources: [capSource("hdmi"), capSource("test")],
 			devices: [captureDevice("video2", "hdmi", { stable_id: STABLE_A })],
 			networkIngest: NO_INGEST,
-			configSource: "video1",
+			lastStreamedSource: "video1",
 			lastSeenDevices: [video1],
-			sessionSnapshots: new Map([[video1.id, video1]]),
 		});
 		// Todo 34 already suppressed the stale video1 Lost row; the persisted
 		// config.source "video1" is now absent from the live list.

@@ -235,17 +235,25 @@ test.describe("input picker mock negative coverage (Task 34)", () => {
 		});
 	});
 
-	test("a just-unplugged device remains visible as a disabled live-switch entry", async ({
+	test("a just-unplugged device that was never streamed leaves the live-switch list", async ({
 		backendRpc,
 		page,
 	}) => {
+		// Under last-streamed-config retention only the device of the last
+		// configuration that actually went live is remembered while it is absent.
+		// This one has never been on air, so it leaves the list rather than
+		// lingering as a permanently unusable entry — and an entry that is gone is
+		// no more switchable than a disabled one, so the property this guards (an
+		// unplugged device is never a live-switch target) is unchanged. The
+		// remembered device's stays-but-disabled arm is covered by
+		// `lost-device.spec.ts`.
 		await setDeviceAttached(backendRpc, "usb", true);
 		const row = deviceRow(page, "usb");
 		await expect(row).toBeVisible({ timeout: 8000 });
 		await expect(row.locator("[data-switch-input]")).toBeEnabled();
 
 		await setDeviceAttached(backendRpc, "usb", false);
-		await expect(row.locator("[data-switch-input]")).toBeDisabled({ timeout: 8000 });
+		await expect(row).toHaveCount(0, { timeout: 8000 });
 	});
 });
 

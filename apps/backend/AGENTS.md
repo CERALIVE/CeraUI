@@ -77,6 +77,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Scoping the `hdmi_error` "No HDMI signal detected" RAISE to a relevant selection | `modules/system/hdmi-signal-notification.ts` (`provesSelectionIsNotHdmi`) + `modules/system/sensors.ts` (`handleRk3588HdmiDmesg`); contract below → …AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION |
 | Retracting the `cerastream` `capture_video_error` notification at a healthy session boundary | `modules/streaming/cerastream-backend.ts` (`standingEngineError`, `clearRecoveredEngineError`, `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION`) |
 | **One row per physical camera + per-device mode ladders (`inputModes`, `selectedInputMode`, coarse USB placeholder suppression)** | `modules/streaming/sources.ts` (`SUPPRESSED_COARSE_PIPELINE_IDS`, `buildInputModes`, `resolveSelectedInputMode`, mode-aware `deriveEngineRouting`) |
+| **Last-streamed-config retention (the ONE remembered `lost` device)** | `modules/streaming/sources.ts` (`collectLostCandidates`, `noteStreamedSourceCommitted`) + `config.last_streamed_source` in `helpers/config-schemas.ts`; commit hook wired at `stream-session-orchestrator.ts` `onStreamCommitted` |
 | **Degraded-SELECTED capture snapshot (`capture_video_error` + `selected:true`)** | `modules/streaming/capture-degraded.ts`; raised/retracted in `modules/streaming/cerastream-backend.ts` (`clearRecoveredEngineError` is the ONLY clearing seam) |
 | **Device-truth save guard + persisted-mode clamp (ADR-0008 §10)** | `modules/streaming/device-mode-guard.ts` (`verifySaveDeviceMode`, `clampPersistedDeviceMode`) + `modules/streaming/persisted-mode-clamp.ts` (`reconcilePersistedDeviceMode`); the RULE itself is `@ceraui/rpc` `capabilities/device-mode-truth.ts`, shared with the frontend |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
@@ -1993,6 +1994,72 @@ every unrelated save.
 
 Coverage: `tests/one-row-per-camera.test.ts`.
 
+## LAST-STREAMED-CONFIG RETENTION — ONE REMEMBERED DEVICE [EXISTS]
+
+An absent capture device is worth an unavailable `lost` row only if somebody
+wants it back. The retired rule inferred that from ENUMERATION: every device the
+process had ever seen became a lost candidate, uncapped, for the whole backend
+lifetime. So a colleague's webcam plugged in once, or a dongle moved to another
+machine, left a permanent unusable row in the operator's picker with no way to
+clear it short of a restart.
+
+**Exactly ONE device is remembered: the one an outcome-gated start last committed
+to.** Going live with a device is the evidence that was missing; merely seeing it
+is not. Everything else leaves the list the moment it is live-absent — its
+`last_seen_devices` entry stays, invisible, because identity migration still needs
+it.
+
+- **`config.last_streamed_source` (+ `_stable_id`) is the slot**, and it is
+  DELIBERATELY DISTINCT from `config.source`. A save-only edit moves the
+  operator's selection freely and must not move the slot; a restart restores the
+  row from the slot, never from the selection.
+- **`noteStreamedSourceCommitted()` (`sources.ts`) is the only writer.** It is
+  idempotent — a start landing on the SAME source writes nothing at all, which is
+  what keeps an automatic restoration of an interrupted session from disturbing
+  it — and it resolves the persisted id through `resolveSourceIdentity` first, so
+  the slot names the hardware that actually went live rather than a node path the
+  device has since left behind.
+- **The commit signal is the ORCHESTRATOR's `transition("streaming")`, not
+  `PLAYING`.** `onStreamCommitted` fires only after `runStartWithRetry` resolves,
+  i.e. downstream of the `playing-wait` phase, which is satisfied by a direct
+  `state:"streaming"` reply or a concordant `state:"streaming"` + `streaming:true`
+  heartbeat. A graph reaching PLAYING says a pipeline was built, not that it
+  delivered — moving the slot there would move it for attempts that then fail.
+  `reconcile()` deliberately does NOT fire it: adopting a session the engine was
+  already running is not a new commitment.
+- **It is wired as a LAZY `import()`.** `stream-session-orchestrator.ts` is
+  already reachable from the source graph, so a static edge back into
+  `sources.ts` reorders module initialisation and leaves the boot-time source
+  build reading a half-initialised module — observed as an EMPTY device list at
+  boot, i.e. every capture row silently missing. Same hazard, same fix, as the
+  engine-audio-change handler in `sources.ts`.
+- **A non-camera source SUPERSEDES by taking the slot EMPTY.** A coarse, virtual
+  or network source has no `resolveSelectionAnchor` identity, so nothing resolves
+  to a remembered snapshot and the previously-held camera stops being remembered.
+  Superseding and clearing are one operation; there is no separate clear path.
+- **PRESENCE ALWAYS BEATS RETENTION.** The lost loop is unchanged: a remembered
+  device that is live by node path or by stable identity renders as a normal
+  selectable row. A device unplugged for two seconds and back is never
+  unpickable — it is simply absent from the list while it is absent from the
+  hardware.
+- **`mergeLastSeenLru` retains TWO ids, not one.** `config.source` was always
+  exempt from eviction; `config.last_streamed_source` now is too, because its
+  snapshot IS the lost row. The two are usually the same id and come apart on a
+  save-only edit — without the second exemption a dozen devices of churn could
+  evict the very snapshot the slot points at. The LRU cap (12) and the
+  `previousIds` cap (8) are untouched.
+- **The session-seen snapshot map is no longer a lost-row source.** It survives as
+  the process's own observation record (it is what proves a renumbering camera
+  folded onto ONE identity instead of accumulating a row per node path) and as
+  `resetEngineDeviceCache()`'s test-isolation surface. Nothing renders from it.
+
+Coverage: `tests/lost-device-retention.test.ts` — one dedicated test per row of
+the policy's state-transition table (save-only, failed gate, committed start,
+non-camera supersede, stop, renumber, restoration re-commit, replug, restart)
+plus the blip negative control and both LRU exemptions. Frontend half:
+`apps/frontend/tests/e2e/lost-device.spec.ts` (a source must be STREAMED before
+it can be lost).
+
 ## THE DEGRADED-SELECTED CAPTURE SNAPSHOT [EXISTS]
 
 `capture_degraded` is NOT a wire event — `grep capture_degraded` across the
@@ -3141,7 +3208,9 @@ config, an anchored path still held by its own device, and a live row with no
   `withKnownEngineMetadata` already refuses for good reason.
 - Don't re-add a coarse USB-capture placeholder row (`usb_mjpeg`, `v4l_mjpeg`, `libuvch264`, `camlink`) — a pipeline is not a device, the row is unactionable in every state, and one dual-format camera answers to two of them. And don't extend `SUPPRESSED_COARSE_PIPELINE_IDS` to `hdmi`/`rtmp`/`srt`/`test`: each names a real always-present board capability, so its coarse row is truthful with nothing plugged in.
 - Don't publish a device mode family whose pipeline the engine does not offer — the pick dies at `pipeline_not_in_offered_set` AFTER the operator committed to it. Gate `buildInputModes` on the coarse capability set, and don't union two media types' ladders (ADR-0008 §10).
-- Don't key `config.input_mode` per device in a map, and don't let it survive a move to different hardware — it is a single field SCOPED to `config.source_stable_id`, cleared when the stable identity changes. A map needs a retention policy (todo 22's territory) and silently evicts a stated operator intent.
+- Don't key `config.input_mode` per device in a map, and don't let it survive a move to different hardware — it is a single field SCOPED to `config.source_stable_id`, cleared when the stable identity changes. A map needs its own retention policy and silently evicts a stated operator intent.
+- Don't remember a device as `lost` because it was SEEN — only the device of the LAST-STREAMED configuration is remembered while absent, and `config.last_streamed_source` is that slot. Don't anchor it on `config.source` (a save-only edit moves that freely and must not move the slot), don't move it on `PLAYING` or on `reconcile()`'s adoption of an existing session (only the orchestrator's confirmed `transition("streaming")` is a commitment), and don't static-import `sources.ts` into `stream-session-orchestrator.ts` to wire it — that reorders module initialisation and empties the boot-time device list.
+- Don't drop `config.last_streamed_source` from `mergeLastSeenLru`'s retained set — its snapshot IS the lost row, and the two exemptions come apart on exactly the save-only edit this policy exists to tolerate.
 - Don't send `input_mode` when the operator never chose one — absent hands the format choice back to the engine's own precedence (H.264 first), which is the unchanged behaviour for every device and every existing caller.
 - Don't route a mode pick down the scalar kind's pipeline — the same camera is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode. Use `pipelineIdForInputMode`.
 - Don't fork a mode-aware copy of the device-mode rule — `device-mode-truth.ts` already scopes by "the media type the KIND names", so pointing it at the SELECTED mode is the entire change (`governingKind`). And don't turn the carried-mode drop into a refusal: only an EXPLICIT pick the device does not advertise may be refused.

@@ -174,6 +174,7 @@ describe("A. the absence grace holds the VERDICT and nothing else", () => {
 		setMockAudioDevicesProvider(() => ({ DJIPocket3: "DJIPocket3" }));
 		getConfig().asrc = AUDIO_SOURCE_AUTO;
 		getConfig().source = "/dev/video1";
+		getConfig().last_streamed_source = "/dev/video1";
 	});
 	afterEach(() => {
 		setMockAudioDevicesProvider(undefined);
@@ -183,6 +184,7 @@ describe("A. the absence grace holds the VERDICT and nothing else", () => {
 		updateStatus(false);
 		delete getConfig().asrc;
 		delete getConfig().source;
+		delete getConfig().last_streamed_source;
 	});
 
 	test("baseline: the healthy view resolves the camera to its OWN card", async () => {
@@ -241,6 +243,7 @@ describe("B. the PRODUCTION no-signal raise predicate, with no injected seam", (
 		resetEngineDeviceCache();
 		clearCapabilitiesCache();
 		delete getConfig().source;
+		delete getConfig().last_streamed_source;
 	});
 
 	function standingHdmiMessage(): string | undefined {
@@ -275,6 +278,7 @@ describe("B. the PRODUCTION no-signal raise predicate, with no injected seam", (
 	test("no selection at all is not evidence, so the raise stands", async () => {
 		await observeDevices([OSMO_VIDEO, HDMI_RX]);
 		delete getConfig().source;
+		delete getConfig().last_streamed_source;
 
 		handleRk3588HdmiDmesg(NO_SIGNAL_LINE);
 
