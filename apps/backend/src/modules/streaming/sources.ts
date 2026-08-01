@@ -47,21 +47,28 @@ import type {
 	GetCapabilitiesResult,
 	ListDevicesResult,
 } from "@ceralive/cerastream";
-import { deviceKindToPipelineId } from "@ceraui/rpc";
+import { deviceKindToPipelineId, pipelineIdForInputMode } from "@ceraui/rpc";
 import type {
 	CaptureDevice,
+	CaptureInputMode,
 	DevicesMessage,
 	Framerate,
+	InputMode,
 	NetworkIngest,
 	PipelineAudioKind,
 	RequiresGateway,
 	Resolution,
+	SourceDegraded,
 	SourcesMessage,
 	SourcesVisibility,
 	StreamSource,
 	StreamSourceBase,
 } from "@ceraui/rpc/schemas";
-import { framerateSchema, resolutionSchema } from "@ceraui/rpc/schemas";
+import {
+	framerateSchema,
+	inputModeSchema,
+	resolutionSchema,
+} from "@ceraui/rpc/schemas";
 import type { LastSeenDevice } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
@@ -74,6 +81,10 @@ import {
 	getLastCapabilities,
 	groupDeviceCaps,
 } from "./capabilities.ts";
+import {
+	type CaptureDegradedSnapshot,
+	getSelectedCaptureDegraded,
+} from "./capture-degraded.ts";
 import { fromEngineDevice } from "./devices.ts";
 import { releasesV4l2Node } from "./held-devices.ts";
 import { applyOnboardVideoDisplayRule } from "./onboard-display-names.ts";
@@ -92,6 +103,36 @@ const NETWORK_SOURCE_IDS: Record<string, RequiresGateway> = {
 
 /** The single virtual source id (the test pattern). */
 const VIRTUAL_SOURCE_ID = "test";
+
+/**
+ * The coarse capability sources that describe a USB CAPTURE PIPELINE rather than
+ * a port an operator can point at.
+ *
+ * These rows are phantoms and always were: `usb_mjpeg` renders permanently as
+ * "USB MJPEG · not connected" whether or not any camera is attached, because a
+ * pipeline is not a device. Worse, one physical dual-format camera answers to
+ * TWO of them, so the coarse layer alone could show a single Osmo Pocket 3 as
+ * two selectable rows. The device-first model already publishes exactly one
+ * concrete row per physical camera, with its formats carried as `inputModes`,
+ * so the coarse row adds nothing an operator can act on.
+ *
+ * They are suppressed in EVERY state, not merely when a device bridges to them —
+ * a permanent phantom is exactly what the locked one-row-per-camera decision
+ * removes. The no-devices empty state is the picker's single generic message.
+ *
+ * `v4l_mjpeg` is the starkest case: NO device kind bridges to it at all, so it
+ * can never be replaced by a concrete row and is a phantom by construction.
+ *
+ * HDMI, network ingest and the test pattern are deliberately NOT here: each
+ * names a real, always-present port or capability of the board itself, so a
+ * coarse row for it is truthful even with nothing plugged in.
+ */
+const SUPPRESSED_COARSE_PIPELINE_IDS: ReadonlySet<string> = new Set([
+	"libuvch264",
+	"usb_mjpeg",
+	"v4l_mjpeg",
+	"camlink",
+]);
 
 /**
  * CeraUI-side fallback that keeps the virtual test-pattern source audio-
@@ -244,16 +285,114 @@ function buildBaseEntry(
 	return { ...base, origin: "coarse", labelKey: sourceLabelKey(cap.id) };
 }
 
+/** Everything a capture row needs beyond the device itself and its coarse slot. */
+interface CaptureEntryContext {
+	/** Pipeline ids the engine currently advertises as coarse capability sources. */
+	offeredPipelineIds: ReadonlySet<string>;
+	/** The operator's persisted `config.input_mode`, if any. */
+	persistedInputMode: InputMode | undefined;
+	/** The standing degraded-selected snapshot, if any. */
+	degraded: CaptureDegradedSnapshot | undefined;
+}
+
+/**
+ * Stamp the degraded snapshot onto the ONE row it is about.
+ *
+ * Matched by stable identity first: the snapshot is taken at stream start and a
+ * libuvc camera renumbers on the very next release, so a node-path-only match
+ * would lose the row it describes. The node path is the fallback for a device
+ * the engine gives no stable identity for.
+ */
+function degradedFor(
+	device: CaptureDevice,
+	snapshot: CaptureDegradedSnapshot | undefined,
+): { degraded: SourceDegraded } | undefined {
+	if (snapshot === undefined) return undefined;
+	const matchesIdentity =
+		snapshot.stableId !== undefined &&
+		snapshot.stableId !== "" &&
+		snapshot.stableId === device.stable_id;
+	if (!matchesIdentity && snapshot.sourceId !== device.input_id)
+		return undefined;
+	return { degraded: snapshot.state };
+}
+
+/**
+ * The mode families this device exposes that the board can ACTUALLY open.
+ *
+ * A family is published only when its `pipeline_kind` bridges to a pipeline the
+ * engine currently advertises as a coarse capability source — exactly the rule
+ * `buildSources` already applies to a whole device. Without it a camera could
+ * offer the operator an MJPEG mode on a board whose engine never offered
+ * `usb_mjpeg`, and the pick would die at `pipeline_not_in_offered_set` after
+ * they had already committed to it.
+ *
+ * Each family carries its OWN ladder, projected through the same `groupDeviceCaps`
+ * the flat list uses, so the two can never disagree about a rung.
+ */
+function buildInputModes(
+	device: CaptureDevice,
+	offeredPipelineIds: ReadonlySet<string>,
+): CaptureInputMode[] {
+	const out: CaptureInputMode[] = [];
+	for (const mode of device.modes ?? []) {
+		const pipelineId = pipelineIdForInputMode(mode.pipeline_kind);
+		if (pipelineId === undefined || !offeredPipelineIds.has(pipelineId))
+			continue;
+		out.push({
+			inputMode: mode.pipeline_kind,
+			mediaType: mode.media_type,
+			pipelineId,
+			modes: groupDeviceCaps(mode.caps),
+		});
+	}
+	return out;
+}
+
+/**
+ * The format this device's leg will be opened under.
+ *
+ * The operator's persisted pick wins only while this device still advertises it
+ * — a mode that disappeared (a different camera, a firmware change) must not
+ * keep governing. Otherwise the answer is the engine's own scalar `kind`, which
+ * IS its highest-precedence mode, so an operator who never chose gets H.264 on a
+ * dual-format camera exactly as they did before modes existed.
+ */
+function resolveSelectedInputMode(
+	device: CaptureDevice,
+	inputModes: readonly CaptureInputMode[],
+	persisted: InputMode | undefined,
+): InputMode | undefined {
+	if (
+		persisted !== undefined &&
+		inputModes.some((mode) => mode.inputMode === persisted)
+	) {
+		return persisted;
+	}
+	const parsed = inputModeSchema.safeParse(device.kind);
+	return parsed.success ? parsed.data : undefined;
+}
+
 /** Build one concrete `capture` entry, inheriting facets from its coarse entry. */
 function buildCaptureEntry(
 	device: CaptureDevice,
 	pipelineId: string,
 	coarse: StreamSource,
+	context: CaptureEntryContext,
 ): StreamSource {
+	const inputModes = buildInputModes(device, context.offeredPipelineIds);
+	const selectedInputMode = resolveSelectedInputMode(
+		device,
+		inputModes,
+		context.persistedInputMode,
+	);
 	return {
 		id: device.input_id,
 		pipelineId,
 		modes: device.caps !== undefined ? groupDeviceCaps(device.caps) : [],
+		...(inputModes.length > 0 ? { inputModes } : {}),
+		...(selectedInputMode !== undefined ? { selectedInputMode } : {}),
+		...(degradedFor(device, context.degraded) ?? {}),
 		// Stamped by `fromEngineDevice` (the only seam that knows the engine
 		// authored the row); anything else is honestly `unknown`.
 		signal: device.signal ?? "unknown",
@@ -337,6 +476,10 @@ export interface BuildSourcesInput {
 	/** In-memory session snapshots; the metadata source for in-session lost rows
 	 *  (uncapped, so LRU churn never orphans a session-seen id). */
 	sessionSnapshots?: ReadonlyMap<string, LastSeenDevice>;
+	/** The operator's persisted `config.input_mode`. Absent → engine precedence. */
+	inputMode?: InputMode;
+	/** The standing degraded-selected snapshot. Absent → no row is degraded. */
+	degraded?: CaptureDegradedSnapshot;
 }
 
 /**
@@ -490,6 +633,14 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 		if (entry.origin === "coarse")
 			coarseByPipeline.set(entry.pipelineId, entry);
 	}
+	// Built from the COARSE set, before any suppression: a suppressed placeholder
+	// still proves the engine offers that pipeline, which is exactly the question
+	// a mode family has to answer to be publishable.
+	const captureContext: CaptureEntryContext = {
+		offeredPipelineIds: new Set(coarseByPipeline.keys()),
+		persistedInputMode: input.inputMode,
+		degraded: input.degraded,
+	};
 
 	const capturesByPipeline = new Map<string, StreamSource[]>();
 	// Live capture rows indexed by stable identity, so a remembered id the loop
@@ -517,7 +668,7 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 		if (bridged === undefined) continue;
 		const coarse = coarseByPipeline.get(bridged);
 		if (coarse === undefined) continue;
-		const entry = buildCaptureEntry(device, bridged, coarse);
+		const entry = buildCaptureEntry(device, bridged, coarse, captureContext);
 		if (device.stable_id !== undefined && device.stable_id !== "") {
 			liveStableIds.add(device.stable_id);
 			const byIdentity = capturesByStableId.get(device.stable_id) ?? [];
@@ -575,6 +726,10 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 				out.push(...captures, ...lost);
 				continue;
 			}
+			// The bridged-device case above already replaced this slot; what is left
+			// is the placeholder, and for a USB capture pipeline that placeholder is
+			// a phantom in every state (see SUPPRESSED_COARSE_PIPELINE_IDS).
+			if (SUPPRESSED_COARSE_PIPELINE_IDS.has(entry.pipelineId)) continue;
 		}
 		out.push(entry);
 	}
@@ -599,11 +754,23 @@ export interface EngineRouting {
 export function deriveEngineRouting(
 	sourceId: string,
 	sources: readonly StreamSource[],
+	inputMode?: InputMode,
 ): EngineRouting | undefined {
 	const source = sources.find((s) => s.id === sourceId);
 	if (source === undefined) return undefined;
 	if (source.origin === "capture") {
-		return { pipeline: source.pipelineId, selected_video_input: source.id };
+		// A dual-format camera does not reach the engine through ONE pipeline: the
+		// same hardware is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode.
+		// The row's own `pipelineId` is bridged from the device's SCALAR kind, so a
+		// selected mode has to re-answer the question — and only against a family
+		// this device actually publishes, which `buildInputModes` has already proven
+		// is offered. An unrecognised mode falls back and never redirects.
+		const selected = inputMode ?? source.selectedInputMode;
+		const family = source.inputModes?.find((m) => m.inputMode === selected);
+		return {
+			pipeline: family?.pipelineId ?? source.pipelineId,
+			selected_video_input: source.id,
+		};
 	}
 	return { pipeline: source.pipelineId, selected_video_input: undefined };
 }
@@ -743,6 +910,7 @@ export function resolveSourceRouting(
 	sources: readonly StreamSource[],
 	lastSeenDevices?: readonly LastSeenDevice[],
 	anchorStableId?: string,
+	inputMode?: InputMode,
 ): ResolveSourceRoutingResult {
 	const resolution = resolveSourceIdentityDetailed(
 		sourceId,
@@ -764,7 +932,7 @@ export function resolveSourceRouting(
 	if (source.origin === "network" && source.available === false) {
 		return { ok: false, error: SOURCE_UNAVAILABLE_ERROR };
 	}
-	const routing = deriveEngineRouting(effectiveId, sources);
+	const routing = deriveEngineRouting(effectiveId, sources, inputMode);
 	if (routing === undefined) {
 		return { ok: false, error: UNKNOWN_SOURCE_ERROR };
 	}
@@ -1355,6 +1523,7 @@ export function getSourcesMessage(): SourcesMessage {
 	const caps = getLastCapabilities();
 	const config = getConfig();
 	const sourcesVisibility = config.sources_visibility;
+	const degraded = getSelectedCaptureDegraded();
 	const sources = buildSources({
 		sources: caps?.sources ?? [],
 		devices: getEngineDeviceCache(),
@@ -1363,8 +1532,16 @@ export function getSourcesMessage(): SourcesMessage {
 		...(config.source !== undefined ? { configSource: config.source } : {}),
 		lastSeenDevices: config.last_seen_devices ?? [],
 		sessionSnapshots: sessionSeenDeviceSnapshots,
+		...(config.input_mode !== undefined
+			? { inputMode: config.input_mode }
+			: {}),
+		...(degraded !== undefined ? { degraded } : {}),
 	});
-	return { hardware: getEffectiveHardware(), sources };
+	return {
+		hardware: getEffectiveHardware(),
+		sources,
+		...(degraded !== undefined ? { degradedSelected: degraded.state } : {}),
+	};
 }
 
 /**

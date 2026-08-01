@@ -166,10 +166,11 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 		expect(sources.some((s) => s.origin === "coarse" && s.id === "hdmi")).toBe(
 			false,
 		);
-		// the other coarse entries are untouched.
+		// the USB-capture placeholders that used to sit beside it are suppressed
+		// in every state now (todo 21a), so no coarse row survives this build.
 		expect(
 			sources.filter((s) => s.origin === "coarse").map((s) => s.id),
-		).toEqual(["usb_mjpeg", "v4l_mjpeg", "camlink", "libuvch264"]);
+		).toEqual([]);
 	});
 
 	it("(2) replug → the lost row is replaced by the live row in one rebuild", () => {
@@ -257,7 +258,9 @@ describe("buildSources — lost-device synthesis (pure)", () => {
 			sessionSnapshots: sessionMap(snapshot),
 		});
 		expect(sources.some((s) => s.id === "video0")).toBe(false);
-		expect(sources.map((s) => s.id)).toEqual(["usb_mjpeg", "test"]);
+		// `usb_mjpeg` is a suppressed USB-capture placeholder, so only the virtual
+		// test-pattern row remains (todo 21a).
+		expect(sources.map((s) => s.id)).toEqual(["test"]);
 	});
 
 	it("(QA) device absent AND not configured AND not session-seen → NO lost row (no zombie)", () => {

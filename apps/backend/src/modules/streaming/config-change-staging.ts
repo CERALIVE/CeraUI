@@ -1,6 +1,7 @@
 import fs from "node:fs";
 
 import {
+	inputModeSchema,
 	normalizeFramerateToRung,
 	normalizeResolutionToRung,
 } from "@ceraui/rpc/schemas";
@@ -18,6 +19,9 @@ const stagedFieldsSchema = z.object({
 	resolution: z.string().optional(),
 	framerate: z.number().optional(),
 	video_codec: z.string().optional(),
+	// Switching a dual-format camera between H.264 and MJPEG rebuilds the capture
+	// leg, so it is a transaction like the axes above — never a live reload.
+	input_mode: inputModeSchema.optional(),
 });
 export type StagedConfigFields = z.infer<typeof stagedFieldsSchema>;
 

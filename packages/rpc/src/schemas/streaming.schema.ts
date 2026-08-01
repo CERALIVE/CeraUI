@@ -50,6 +50,24 @@ export const PORT_MAX = 65535;
 export const audioCodecSchema = z.enum(['opus', 'aac']);
 export type AudioCodec = z.infer<typeof audioCodecSchema>;
 
+// WHICH capture format a device's leg negotiates (cerastream schema 0.11.0
+// `input_mode`). Deliberately NOT `deviceKindSchema`: that enum also carries
+// CeraUI's own coarse `usb`/`other` guesses from the v4l2 display-name
+// heuristic, which name no engine `InputKind` and would be refused as invalid
+// params. Typed against exactly what the engine accepts. Declared this early
+// because `streamingConfigInputSchema` references it.
+export const inputModeSchema = z.enum([
+	'audio',
+	'hdmi',
+	'uvc_h264',
+	'uvc_h265',
+	'mjpeg',
+	'camlink',
+	'test',
+	'network',
+]);
+export type InputMode = z.infer<typeof inputModeSchema>;
+
 // Alias for frontend compatibility
 export type AudioCodecs = 'aac' | 'opus';
 
@@ -248,6 +266,11 @@ export const streamingConfigInputSchema = z.object({
 	// (bandwidth-saver) receiver listener. Both additive-optional.
 	fec_enabled: z.boolean().optional(),
 	recovery_mode: streamRecoveryPreferenceSchema.optional(),
+	// Which capture format the SELECTED device's leg is opened under, for a
+	// device that exposes more than one (see `inputModeSchema`). Additive-optional;
+	// absent hands the choice back to the engine's own precedence, which is H.264
+	// first — the unchanged behaviour for every device and every existing caller.
+	input_mode: inputModeSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -759,6 +782,9 @@ export const configMessageSchema = z.object({
 	// Device-first operator source selection, echoed back so the UI reflects the
 	// saved source on reload (T3/T13). Additive-optional.
 	source: z.string().optional(),
+	// The capture format the selected device is opened under, echoed so the
+	// picker reflects the saved mode on reload. Additive-optional.
+	input_mode: inputModeSchema.optional(),
 	// SRT receive-profile tuning, echoed back so the card reflects the saved
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),
@@ -937,6 +963,17 @@ export type CaptureCap = z.infer<typeof captureCapSchema>;
 export const sourceSignalSchema = z.enum(['present', 'absent', 'unknown']);
 export type SourceSignal = z.infer<typeof sourceSignalSchema>;
 
+// One mode FAMILY a capture device exposes, mirroring cerastream's
+// `captureModeSchema`. Each family carries its OWN `caps` ladder: a resolution
+// offered under `video/x-h264` says nothing about what `image/jpeg` offers on
+// the same device, so the two are never unioned (ADR-0008 §10).
+export const captureModeSchema = z.object({
+	media_type: z.string(),
+	pipeline_kind: inputModeSchema,
+	caps: z.array(captureCapSchema),
+});
+export type CaptureMode = z.infer<typeof captureModeSchema>;
+
 // Mirrors the cerastream `captureDeviceSchema` plus three CeraUI-owned UI facets:
 // `kind` for grouping, `lost` for the unplugged-during-session grace state, and
 // `signal` for the present-but-nothing-arriving state.
@@ -947,6 +984,10 @@ export const captureDeviceSchema = z.object({
 	media_class: deviceMediaClassSchema,
 	kind: deviceKindSchema,
 	caps: z.array(captureCapSchema).optional(),
+	// Every mode family this ONE device exposes, each with its own ladder
+	// (cerastream schema 0.11.0). ADDITIVE-OPTIONAL: absent on an older engine,
+	// which reads as "no ladder split reported" — never as "no modes".
+	modes: z.array(captureModeSchema).optional(),
 	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). Additive +
 	// optional. Sources reconciliation keys a re-enumerated device (node path
 	// changed, video1→video2) on this, not `input_id`, so a rename migrates the

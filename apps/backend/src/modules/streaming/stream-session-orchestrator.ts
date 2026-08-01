@@ -2,6 +2,7 @@ import {
 	CONFIG_CHANGE_REASON_DEADLINE,
 	type ConfigChangePhase,
 	type ConfigChangeResult,
+	type InputMode,
 	isLegalLifecycleTransition,
 	isTerminalConfigChangePhase,
 	type LifecycleState,
@@ -77,6 +78,11 @@ export type StreamConfigChangeDelta = {
 	readonly video_codec?: string;
 	readonly input_id?: string;
 	readonly pipeline?: string;
+	// The ENGINE owns the libuvc-release → re-enumeration-barrier → open
+	// transaction a live mode switch needs, and rolls it back honestly. This
+	// field is only how the operator's choice reaches it — never a second
+	// transaction of CeraUI's own.
+	readonly input_mode?: InputMode;
 };
 
 export type EngineConfigChangeOutcome = {

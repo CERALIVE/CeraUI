@@ -118,6 +118,10 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { type AudioMode, resolveAudioMode } from "./audio.ts";
+import {
+	clearSelectedCaptureDegraded,
+	noteSelectedCaptureDegraded,
+} from "./capture-degraded.ts";
 import type { ResolvedCerastreamError } from "./cerastream-error-mapping.ts";
 import { resolveCerastreamError } from "./cerastream-error-mapping.ts";
 import { SRTLA_LISTEN_PORT } from "./constants.ts";
@@ -753,6 +757,11 @@ export class CerastreamBackend implements StreamingBackend {
 		// A crashed or already-gone engine sends no final idle status, so the
 		// stop itself has to be the clearing signal.
 		this.clearSessionScopedTelemetry();
+		// Same rule, same reason: a `capture_video_error` is a claim about ONE
+		// session, and this ends it. Routed through the one clearing seam so the
+		// snapshot and the notification can never disagree about whether the
+		// session's failure is still current.
+		this.clearRecoveredEngineError();
 		const client = this.client;
 		const subscription = this.subscription;
 		const operation = (async () => {
@@ -1107,6 +1116,7 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	private handleErrorEvent(event: RuntimeErrorEvent): void {
+		this.noteDegradedSelectedCapture(event);
 		const resolved = resolveCerastreamError(
 			event.code,
 			event.source,
@@ -1145,11 +1155,42 @@ export class CerastreamBackend implements StreamingBackend {
 	 * established are deliberately absent from the table and stay latched.
 	 */
 	private clearRecoveredEngineError(): void {
+		// The degraded-selected snapshot describes the SAME session this boundary
+		// falsifies, so it retracts HERE and nowhere else — it deliberately has no
+		// clearing path of its own to drift from this one. It is dropped ahead of
+		// the standing-error gate rather than behind it because the `cerastream`
+		// notification slot is SHARED: a later unrelated error occupying it would
+		// otherwise return early and latch a capture claim the boundary disproved.
+		clearSelectedCaptureDegraded();
 		const standing = this.standingEngineError;
 		if (standing === undefined) return;
 		if (!ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION.has(standing.code)) return;
 		this.standingEngineError = undefined;
 		this.deps.bridge.removeNotification(standing.channel);
+	}
+
+	/**
+	 * Record that the OPERATOR'S OWN selected capture leg came up degraded.
+	 *
+	 * `capture_degraded` is not a wire event: cerastream reports this as the
+	 * EXISTING `capture_video_error` additionally carrying `selected: true`, so
+	 * that pair is the whole signal and no other code may raise it. Scoping it to
+	 * the one code in {@link ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION} is what
+	 * makes the retraction above sufficient — a code with no established recovery
+	 * signal would latch forever.
+	 */
+	private noteDegradedSelectedCapture(event: RuntimeErrorEvent): void {
+		if (event.code !== PROCESS_ERROR_CODES.CAPTURE_VIDEO_ERROR) return;
+		if (event.selected !== true) return;
+		const config = this.deps.getConfig();
+		noteSelectedCaptureDegraded({
+			sourceId: config.selected_video_input ?? config.source,
+			stableId: config.source_stable_id,
+			state: {
+				code: event.code,
+				...(event.reason === undefined ? {} : { reason: event.reason }),
+			},
+		});
 	}
 
 	private enqueue(op: () => Promise<void>, label: string): Promise<void> {
@@ -1285,6 +1326,12 @@ export class CerastreamBackend implements StreamingBackend {
 				: {}),
 			...(config.framerate !== undefined
 				? { framerate: config.framerate }
+				: {}),
+			// Absent hands the format choice back to the engine's own precedence,
+			// which is H.264 first — byte-identical to every start before modes
+			// existed. Only an operator who explicitly picked a mode sends one.
+			...(config.input_mode !== undefined
+				? { input_mode: config.input_mode }
 				: {}),
 			...(Object.keys(audio).length > 0 ? { audio } : {}),
 		};

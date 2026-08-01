@@ -30,6 +30,8 @@ import { readdir } from "node:fs/promises";
 import {
 	type CaptureCap,
 	type CaptureDevice,
+	type CaptureMode,
+	captureModeSchema,
 	type DeviceKind,
 	type DeviceMediaClass,
 	type DevicesMessage,
@@ -175,6 +177,10 @@ export interface EngineCaptureDevice {
 	media_class: DeviceMediaClass;
 	kind?: string | undefined;
 	caps?: CaptureCap[] | undefined;
+	// Per-mode-family ladders (cerastream schema 0.11.0). Typed loosely so an
+	// engine that reports a family this build does not know about is dropped by
+	// the parse below rather than rejecting the whole device.
+	modes?: readonly unknown[] | undefined;
 	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). Carried
 	// verbatim so sources reconciliation can migrate a re-enumerated device by
 	// stable identity rather than node path (Todo 34).
@@ -204,6 +210,7 @@ export function fromEngineDevice(device: EngineCaptureDevice): CaptureDevice {
 		media_class: device.media_class,
 		kind: mapEngineDeviceKind(device.kind, device.display_name),
 		...(device.caps !== undefined ? { caps: device.caps } : {}),
+		...(engineModes(device.modes) ?? {}),
 		...(device.stable_id !== undefined ? { stable_id: device.stable_id } : {}),
 		...(device.physical_group_id !== undefined
 			? { physical_group_id: device.physical_group_id }
@@ -228,6 +235,26 @@ export function fromEngineDevice(device: EngineCaptureDevice): CaptureDevice {
  */
 function engineSignal(device: EngineCaptureDevice): SourceSignal {
 	return (device.caps?.length ?? 0) > 0 ? "present" : "absent";
+}
+
+/**
+ * The mode families this build can actually route, parsed one at a time.
+ *
+ * Per-family rather than per-device on purpose: cerastream may add an
+ * `InputKind` before CeraUI knows it, and refusing the whole device over one
+ * unrecognised family would lose the camera entirely — the none-cap policy the
+ * capability layer already follows. An entirely absent or entirely unparseable
+ * list omits the field, which reads as "no split reported".
+ */
+function engineModes(
+	modes: readonly unknown[] | undefined,
+): { modes: CaptureMode[] } | undefined {
+	if (modes === undefined) return undefined;
+	const parsed = modes
+		.map((mode) => captureModeSchema.safeParse(mode))
+		.filter((result) => result.success)
+		.map((result) => result.data);
+	return parsed.length > 0 ? { modes: parsed } : undefined;
 }
 
 /** Pure: collapse a v4l2 scan + audio map into the deduped device list. */
@@ -295,6 +322,7 @@ async function defaultGetEngineDevices(): Promise<CaptureDevice[] | null> {
 				media_class: d.media_class,
 				kind: d.kind,
 				caps: d.caps,
+				modes: d.modes,
 				stable_id: d.stable_id,
 			}),
 		);

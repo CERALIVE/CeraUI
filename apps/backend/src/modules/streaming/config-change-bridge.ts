@@ -28,6 +28,7 @@ type ChangeConfigCapableBackend = {
 		codec?: string;
 		input_id?: string;
 		pipeline?: string;
+		input_mode?: string;
 	}) => Promise<{
 		attempt_id: string;
 		phase: ConfigChangePhase;
@@ -81,6 +82,7 @@ export async function changeEngineRuntimeConfig(
 		...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
 		...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
 		...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
+		...(delta.input_mode === undefined ? {} : { input_mode: delta.input_mode }),
 	});
 
 	logger.info("config change transaction settled", {

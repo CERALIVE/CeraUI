@@ -76,6 +76,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Retracting the `hdmi_error` "No HDMI signal detected" notification once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
 | Scoping the `hdmi_error` "No HDMI signal detected" RAISE to a relevant selection | `modules/system/hdmi-signal-notification.ts` (`provesSelectionIsNotHdmi`) + `modules/system/sensors.ts` (`handleRk3588HdmiDmesg`); contract below → …AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION |
 | Retracting the `cerastream` `capture_video_error` notification at a healthy session boundary | `modules/streaming/cerastream-backend.ts` (`standingEngineError`, `clearRecoveredEngineError`, `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION`) |
+| **One row per physical camera + per-device mode ladders (`inputModes`, `selectedInputMode`, coarse USB placeholder suppression)** | `modules/streaming/sources.ts` (`SUPPRESSED_COARSE_PIPELINE_IDS`, `buildInputModes`, `resolveSelectedInputMode`, mode-aware `deriveEngineRouting`) |
+| **Degraded-SELECTED capture snapshot (`capture_video_error` + `selected:true`)** | `modules/streaming/capture-degraded.ts`; raised/retracted in `modules/streaming/cerastream-backend.ts` (`clearRecoveredEngineError` is the ONLY clearing seam) |
 | **Device-truth save guard + persisted-mode clamp (ADR-0008 §10)** | `modules/streaming/device-mode-guard.ts` (`verifySaveDeviceMode`, `clampPersistedDeviceMode`) + `modules/streaming/persisted-mode-clamp.ts` (`reconcilePersistedDeviceMode`); the RULE itself is `@ceraui/rpc` `capabilities/device-mode-truth.ts`, shared with the frontend |
 | **Unified device-first `sources` builder + engine-device cache + `config.source` routing seam** | `modules/streaming/sources.ts` (`buildSources`, `getSourcesMessage`, `deriveEngineRouting`, `resolveSourceRouting`) |
 | **Which capture kinds release their kernel v4l2 node while the engine holds them (libuvc)** | `modules/streaming/held-devices.ts` (`releasesV4l2Node`) — CeraUI-side mirror of cerastream `engine::held_devices` |
@@ -1924,6 +1926,111 @@ table driven through the REAL procedure, the persistence-untouched guarantee, an
 the fail-open negatives) + `tests/capability-truth-clamp.test.ts` (the Osmo
 1080p60-on-H.264 migration, the one-time notification, and the never-clamp cases).
 
+## ONE ROW PER PHYSICAL CAMERA + PER-DEVICE MODE SELECTION [EXISTS]
+
+A capability source is a PIPELINE; an operator points at a DEVICE. Conflating the
+two put a permanent, unactionable row in the picker — `usb_mjpeg` rendered as
+"USB MJPEG · not connected" forever — and let ONE dual-format camera answer to
+TWO coarse rows at once.
+
+**`SUPPRESSED_COARSE_PIPELINE_IDS` (`sources.ts`) drops the USB-capture coarse
+rows in EVERY state**, not merely when a device bridges to them: `libuvch264`,
+`usb_mjpeg`, `v4l_mjpeg`, `camlink`. `v4l_mjpeg` is the starkest case — NO device
+kind bridges to it at all, so it can never be replaced by a concrete row and is a
+phantom by construction. `hdmi` / `rtmp` / `srt` / `test` are deliberately NOT in
+the set: each names a real, always-present port or capability of the board, so a
+coarse row for it is truthful with nothing plugged in. The empty state is the
+picker's single generic message, never a per-pipeline phantom. Board-proven A/B on
+a Rock 5B+: 6 rows → 5, the phantom `libuvch264` gone, the other five byte-identical.
+
+**A capture row carries every format the device advertises, each with its OWN
+ladder.** `captureDevice.modes[]` (cerastream schema `0.11.0`) is threaded verbatim
+through `fromEngineDevice` — the one engine-authored seam — and projected onto the
+row as `inputModes[]`. Three properties are load-bearing:
+
+- **A family is published only when its pipeline is OFFERED.** `buildInputModes`
+  gates on the coarse capability set, exactly the rule `buildSources` already
+  applies to a whole device. Without it a camera offers MJPEG on a board whose
+  engine never advertised `usb_mjpeg`, and the pick dies at
+  `pipeline_not_in_offered_set` AFTER the operator committed to it.
+- **The ladders are never unioned** (ADR-0008 §10). Each family projects its own
+  `caps` through the same `groupDeviceCaps` the flat list uses.
+- **Parsing is per-FAMILY, not per-device.** An engine that reports an `InputKind`
+  this build does not know drops that family; refusing the whole device would lose
+  the camera.
+
+**`config.input_mode` is a single field SCOPED to `config.source_stable_id`, not a
+map.** "Per device" is satisfied by scoping: an operator pick that lands on
+DIFFERENT hardware (compared by stable identity — node paths are recycled) CLEARS
+the mode, so a choice made for one camera can never govern another. A keyed map
+would need its own retention/eviction policy and would silently evict a stated
+intent. Absent ⇒ the engine's own precedence, which is H.264 first — byte-identical
+to every start before modes existed. Only an operator who explicitly picked a mode
+sends one.
+
+**Routing is mode-aware, because the two formats are two pipelines.** The same
+camera reaches the engine through `libuvch264` in H.264 mode and `usb_mjpeg` in
+MJPEG mode, so `deriveEngineRouting` re-answers the pipeline question against the
+selected family (`pipelineIdForInputMode`, the mode-aware sibling of
+`deviceKindToPipelineId`). A mode-only `setConfig` therefore re-routes the
+PERSISTED selection without rewriting `config.source`.
+
+**A mode switch mid-stream rides the EXISTING apply-now transaction.**
+`input_mode` is an `APPLY_NOW_FIELDS` member and a `StreamConfigChangeDelta` field;
+the engine owns the libuvc-release → re-enumeration-barrier → open transaction and
+rolls it back honestly. Do NOT build a second transaction in CeraUI.
+
+**Save-time validation intersects the SELECTED mode's ladder only.** This is ONE
+substitution, not a fork: `@ceraui/rpc` `device-mode-truth.ts` already scopes a
+ladder by "the media type the KIND names", so `device-mode-guard.ts`
+`governingKind()` hands it the selected mode instead of the device's scalar kind.
+`capabilities.ts`'s per-`media_type` split is untouched. The pick is trusted only
+while the device still ADVERTISES it. An EXPLICIT `input_mode` the device does not
+offer is REFUSED (`input_mode_unsupported`); a merely CARRIED one is silently
+dropped — a refusal answers the operator's own action, but applying it to a value
+they are not touching would let a device that stopped advertising a mode block
+every unrelated save.
+
+Coverage: `tests/one-row-per-camera.test.ts`.
+
+## THE DEGRADED-SELECTED CAPTURE SNAPSHOT [EXISTS]
+
+`capture_degraded` is NOT a wire event — `grep capture_degraded` across the
+published `@ceralive/cerastream` bindings returns nothing. cerastream reports it as
+the EXISTING `capture_video_error` runtime error additionally carrying
+`selected: true`. That pair IS the signal, and no other code may raise it.
+
+`modules/streaming/capture-degraded.ts` holds it as a persistent SNAPSHOT rather
+than a one-shot notification, because CeraUI otherwise maps engine errors only onto
+notifications and a client that connects afterwards never sees them — a backend
+restart or a frontend reconnect must not lose the state. It rides the `sources`
+payload: `degraded` on the row it is about, plus `degradedSelected` mirrored at the
+top level so the state survives the row (a device that degrades and is THEN
+unplugged has no row left to hang it on). The row is matched by stable identity
+first — the snapshot is taken at stream start and a libuvc camera renumbers on the
+very next release.
+
+**It inherits `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION`'s retraction and has NO
+clearing path of its own.** `clearSelectedCaptureDegraded()` is called from
+`clearRecoveredEngineError()` and nowhere else; `stop()` was added as a third call
+site of that SAME seam (it already treats a stop as a session boundary for
+`active_encode`). Three boundaries clear it: a concordant `streaming` status frame
+(rejoin), an operator stop, and a new session start.
+
+**It is dropped AHEAD of the standing-error gate, and that ordering is
+load-bearing.** `resolved.channel` is ONE notification slot shared by every
+non-srtla engine error, so `capture_video_error{selected}` → `srt_connection_lost`
+→ healthy session would return EARLY (the srt code is not in the membership table)
+and latch a capture claim the boundary disproved. The notification stays behind the
+gate, unchanged.
+
+**The re-publisher lives in `capture-degraded.ts`, not in the backend that raises
+it.** `cerastream-backend.ts` is pinned by a regression test to never name
+`./sources.ts` — the start choke point stays isolated from the source builder — and
+the import is dynamic because `sources.ts` imports this module statically.
+
+Coverage: `tests/one-row-per-camera.test.ts`.
+
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
 Resolution, framerate, codec and source are baked into the engine graph at build
@@ -3032,6 +3139,13 @@ config, an anchored path still held by its own device, and a live row with no
   healthy observation reset the run, and don't widen it past `physical_group_id`
   absence into re-asserting a remembered `caps`/`signal` — that is the latch
   `withKnownEngineMetadata` already refuses for good reason.
+- Don't re-add a coarse USB-capture placeholder row (`usb_mjpeg`, `v4l_mjpeg`, `libuvch264`, `camlink`) — a pipeline is not a device, the row is unactionable in every state, and one dual-format camera answers to two of them. And don't extend `SUPPRESSED_COARSE_PIPELINE_IDS` to `hdmi`/`rtmp`/`srt`/`test`: each names a real always-present board capability, so its coarse row is truthful with nothing plugged in.
+- Don't publish a device mode family whose pipeline the engine does not offer — the pick dies at `pipeline_not_in_offered_set` AFTER the operator committed to it. Gate `buildInputModes` on the coarse capability set, and don't union two media types' ladders (ADR-0008 §10).
+- Don't key `config.input_mode` per device in a map, and don't let it survive a move to different hardware — it is a single field SCOPED to `config.source_stable_id`, cleared when the stable identity changes. A map needs a retention policy (todo 22's territory) and silently evicts a stated operator intent.
+- Don't send `input_mode` when the operator never chose one — absent hands the format choice back to the engine's own precedence (H.264 first), which is the unchanged behaviour for every device and every existing caller.
+- Don't route a mode pick down the scalar kind's pipeline — the same camera is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode. Use `pipelineIdForInputMode`.
+- Don't fork a mode-aware copy of the device-mode rule — `device-mode-truth.ts` already scopes by "the media type the KIND names", so pointing it at the SELECTED mode is the entire change (`governingKind`). And don't turn the carried-mode drop into a refusal: only an EXPLICIT pick the device does not advertise may be refused.
+- Don't handle a `capture_degraded` event — there is no such event. Key on `capture_video_error` + `selected === true`. Don't give the snapshot a clearing path of its own (it inherits `clearRecoveredEngineError`), and don't move its clear BEHIND the standing-error gate: the `cerastream` notification slot is shared, so a later unrelated error would latch a capture claim the boundary disproved.
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't re-serialise the DNS health check ahead of the caller's query in `dnsCacheResolve`, and don't share one `Resolver` between them — the check only GATES the answer, and a shared c-ares channel's `cancel()` would abort the sibling leg. Both legs sit inside the per-attempt launch deadline (see DNS ON THE STREAM-START CRITICAL PATH).

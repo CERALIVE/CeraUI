@@ -35,11 +35,46 @@ import {
 	deviceModeSchema,
 	framerateSchema,
 	hardwareTypeSchema,
+	inputModeSchema,
 	pipelineAudioKindSchema,
 	requiresGatewaySchema,
 	resolutionSchema,
 	sourceSignalSchema,
 } from './streaming.schema';
+
+/**
+ * ONE capture format a device advertises, carrying the ladder that belongs to
+ * THAT format alone (cerastream ADR-0008 §10 — per-`media_type` ladders are the
+ * only truth and may never be unioned).
+ *
+ * `pipelineId` is the coarse capability source this mode family routes through,
+ * resolved at build time and PROVEN to be offered: a mode whose pipeline the
+ * engine does not advertise is never published, exactly as an unbridged device
+ * is never published. So a consumer can route any listed mode without asking a
+ * second question.
+ */
+export const captureInputModeSchema = z.object({
+	inputMode: inputModeSchema,
+	mediaType: z.string(),
+	pipelineId: z.string(),
+	modes: z.array(deviceModeSchema),
+});
+export type CaptureInputMode = z.infer<typeof captureInputModeSchema>;
+
+/**
+ * A degraded SELECTED capture leg, as a persistent SNAPSHOT rather than a
+ * one-shot event — a backend or frontend reconnect must not lose the state.
+ *
+ * It is not its own wire event: the engine reports it as the EXISTING
+ * `capture_video_error` runtime error additionally carrying `selected: true`.
+ * It therefore inherits that code's recovery signal verbatim and has no
+ * clearing path of its own.
+ */
+export const sourceDegradedSchema = z.object({
+	code: z.string(),
+	reason: z.string().optional(),
+});
+export type SourceDegraded = z.infer<typeof sourceDegradedSchema>;
 
 /** The four StreamSource origins (the discriminated-union discriminator). */
 export const sourceOriginSchema = z.enum(['capture', 'coarse', 'virtual', 'network']);
@@ -95,6 +130,16 @@ export const captureSourceSchema = streamSourceBase.extend({
 	// these as aliases, or a device that merely moved reads as one that vanished.
 	// The backend publishes it only on a proven migration — never as a guess.
 	previousIds: z.array(z.string()).optional(),
+	// Every capture format this ONE physical device advertises, each with its own
+	// ladder. ADDITIVE-OPTIONAL: absent on a pre-0.11.0 engine, which a consumer
+	// must read as "no ladder split was reported", never as "no modes".
+	inputModes: z.array(captureInputModeSchema).optional(),
+	// The format the leg will actually be opened under: the operator's persisted
+	// pick when this device still advertises it, else the engine's own scalar
+	// `kind`, which IS its highest-precedence mode.
+	selectedInputMode: inputModeSchema.optional(),
+	// Present only while the engine reports THIS row's capture leg degraded.
+	degraded: sourceDegradedSchema.optional(),
 });
 export type CaptureStreamSource = z.infer<typeof captureSourceSchema>;
 
@@ -134,5 +179,10 @@ export type StreamSource = z.infer<typeof streamSourceSchema>;
 export const sourcesMessageSchema = z.object({
 	hardware: hardwareTypeSchema,
 	sources: z.array(streamSourceSchema),
+	// The same standing snapshot the selected row carries, mirrored at the top
+	// level so it survives the row: a device that degrades and is then unplugged
+	// has no row left to hang the state on, and a client that reconnects in that
+	// window would otherwise be told nothing is wrong. Additive-optional.
+	degradedSelected: sourceDegradedSchema.optional(),
 });
 export type SourcesMessage = z.infer<typeof sourcesMessageSchema>;
