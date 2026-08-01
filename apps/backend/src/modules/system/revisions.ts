@@ -17,12 +17,67 @@
 */
 
 /* Read the revision numbers */
+import { release } from "node:os";
+
 import { logger } from "../../helpers/logger.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
 
 import { srtlaSendExec } from "../streaming/streamloop.ts";
 
+/**
+ * Published for the cerastream row when the engine cannot be reached.
+ *
+ * cerastream is systemd-owned (ADR-0005): it can be stopped, crash, or be
+ * upgraded underneath a running backend. A version we observed once is therefore
+ * not something the device can still vouch for, so an unreachable engine reports
+ * this rather than retaining the last-known value — a cached-forever version
+ * would keep naming a build that may no longer be installed.
+ */
+export const ENGINE_UNREACHABLE_REVISION = "engine unreachable";
+
 const revisions: Record<string, string> = {};
+
+type EngineVersionProbe = () => Promise<string | undefined>;
+
+/**
+ * Default probe: the SAME short-lived connect → `hello` → close handshake
+ * `checkEngineCompatibilityOnStartup` uses. `hello` already carries
+ * `engine_version`, so this needs no new IPC method and holds no connection —
+ * `probeEngine()` never throws and never respawns the systemd-owned engine.
+ *
+ * The import is lazy so this module's load path does not pull the whole
+ * streaming graph (the same shape `capabilities.ts` uses for `setup.ts`).
+ */
+const defaultEngineVersionProbe: EngineVersionProbe = async () => {
+	const { cerastreamBackend } = await import(
+		"../streaming/cerastream-backend.ts"
+	);
+	const probe = await cerastreamBackend.probeEngine();
+	return probe.status === "compatible" ? probe.engineVersion : undefined;
+};
+
+let engineVersionProbe: EngineVersionProbe = defaultEngineVersionProbe;
+
+/** Test seam (mirrors the `set*Runner` convention). `null` restores the default. */
+export function setEngineVersionProbe(probe: EngineVersionProbe | null): void {
+	engineVersionProbe = probe ?? defaultEngineVersionProbe;
+}
+
+/**
+ * Re-read the engine version and publish it on the revisions record. Called at
+ * boot and again whenever the Versions surface is pulled, so the row tracks a
+ * mid-session engine restart instead of latching the first value it ever saw.
+ */
+export async function refreshEngineRevision(): Promise<string> {
+	let version: string | undefined;
+	try {
+		version = await engineVersionProbe();
+	} catch (err) {
+		logger.debug("revisions: cerastream version probe failed", { err });
+	}
+	revisions.cerastream = version ?? ENGINE_UNREACHABLE_REVISION;
+	return revisions.cerastream;
+}
 
 function readRevision(cmd: string) {
 	try {
@@ -48,6 +103,8 @@ export async function initRevisions() {
 
 	revisions.srtla = readRevision(`${srtlaSendExec} -v`);
 	revisions.bun = Bun.version;
+	revisions.kernel = release();
+	await refreshEngineRevision();
 
 	// Only show a CERALIVE image version if it exists
 	try {

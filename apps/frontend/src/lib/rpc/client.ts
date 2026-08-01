@@ -37,6 +37,7 @@ import type {
 	ReloadAudioDelayInput,
 	ReloadAudioDelayOutput,
 	RemoteConfigInput,
+	Revisions,
 	SetIngestEnabledInput,
 	SetIngestEnabledOutput,
 	SetPasswordInput,
@@ -606,7 +607,7 @@ export interface TypedRPC {
 		) => Promise<SetIngestEnabledOutput>;
 	};
 	system: {
-		getRevisions: () => Promise<unknown>;
+		getRevisions: () => Promise<Revisions>;
 		getSensors: () => Promise<unknown>;
 		getLog: () => Promise<unknown>;
 		getSyslog: () => Promise<unknown>;

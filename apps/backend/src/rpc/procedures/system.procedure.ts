@@ -43,7 +43,10 @@ import {
 	resolveActiveKioskDeps,
 } from "../../modules/system/kiosk.ts";
 import { getLog } from "../../modules/system/logs.ts";
-import { getRevisions } from "../../modules/system/revisions.ts";
+import {
+	getRevisions,
+	refreshEngineRevision,
+} from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
 	aptUpdatesEnabled,
@@ -68,7 +71,11 @@ const authedProcedure = baseProcedure.use(authMiddleware);
  */
 export const getRevisionsProcedure = authedProcedure
 	.output(revisionsSchema)
-	.handler(() => {
+	.handler(async () => {
+		// The engine is a separate systemd-owned process that can be restarted or
+		// upgraded mid-session, so this pull re-reads its version over a
+		// short-lived probe instead of serving whatever was observed at boot.
+		await refreshEngineRevision();
 		return revisionsSchema.parse(getRevisions());
 	});
 
