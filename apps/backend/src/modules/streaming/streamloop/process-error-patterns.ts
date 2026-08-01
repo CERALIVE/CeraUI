@@ -36,6 +36,7 @@ export const PROCESS_ERROR_CODES = {
 	PIPELINE_STALL: "pipeline_stall",
 	SRT_CONNECT_FAILED: "srt_connect_failed",
 	SRT_CONNECTION_LOST: "srt_connection_lost",
+	CAPTURE_UNRECOVERABLE: "capture_unrecoverable",
 } as const;
 
 export type ProcessErrorCode =
@@ -92,6 +93,11 @@ export const PROCESS_ERROR_MESSAGES: Record<
 	[PROCESS_ERROR_CODES.SRT_CONNECTION_LOST]: {
 		message: "The SRT connection failed. No automatic reconnect is scheduled.",
 		suppressIfSrtlaNotified: true,
+	},
+	[PROCESS_ERROR_CODES.CAPTURE_UNRECOVERABLE]: {
+		message:
+			"The capture device stopped responding and could not be recovered. Reconnect it, then start the stream again.",
+		suppressIfSrtlaNotified: false,
 	},
 };
 
