@@ -99,6 +99,9 @@ describe("setMockDeviceAttached seam (C7)", () => {
 		getConfig().last_seen_devices = [];
 		delete getConfig().source;
 		await seedCapsAndDevices();
+		// Only the last-streamed device is remembered when absent, so the detach
+		// seam is exercised against the one state in which a lost row exists.
+		getConfig().last_streamed_source = USB_INPUT_ID;
 	});
 	afterEach(() => {
 		setStreamingState(false);
@@ -106,6 +109,7 @@ describe("setMockDeviceAttached seam (C7)", () => {
 		resetEngineDeviceCache();
 		getConfig().last_seen_devices = [];
 		delete getConfig().source;
+		delete getConfig().last_streamed_source;
 		resetMockState();
 	});
 	afterAll(() => {

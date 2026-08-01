@@ -139,6 +139,7 @@ describe("recheckSourceSignals — a signal that arrives after the first probe",
 		clearCapabilitiesCache();
 		getConfig().last_seen_devices = [];
 		delete getConfig().source;
+		delete getConfig().last_streamed_source;
 	});
 
 	afterEach(() => {
@@ -380,6 +381,7 @@ describe("recheckSourceSignals — a signal that arrives after the first probe",
 	test("membership still comes from the caller's observation, so a stale answer cannot resurrect an unplugged device", async () => {
 		await seedHdmiCaps();
 		getConfig().source = HDMI_RX_ID;
+		getConfig().last_streamed_source = HDMI_RX_ID;
 		applyObservedEngineDevices([
 			{
 				input_id: HDMI_RX_ID,

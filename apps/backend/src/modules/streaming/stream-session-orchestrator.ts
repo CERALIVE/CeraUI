@@ -136,6 +136,13 @@ export type StreamSessionOrchestratorDeps = {
 	readonly suppressionContext?: () => SuppressionContext;
 	readonly reportRetry?: (diagnostic: StartRetryDiagnostic) => void;
 	readonly reportTerminalFailure?: (diagnostic: StartRetryDiagnostic) => void;
+	/**
+	 * Called once a launch has cleared the engine's outcome gate — the single
+	 * moment a start is known to have really delivered, for every origin. It is
+	 * deliberately NOT called from `reconcile()`: adopting a session the engine
+	 * was already running is not a new commitment to anything.
+	 */
+	readonly onStreamCommitted?: () => void;
 };
 
 type ActiveAttempt = {
@@ -341,6 +348,13 @@ export function createStreamSessionOrchestrator(
 		}
 		transition("streaming");
 		deps.setStreamingStatus(true);
+		// Never let a bookkeeping failure turn a stream that IS live into a
+		// reported start failure.
+		try {
+			deps.onStreamCommitted?.();
+		} catch (error) {
+			logger.warn("stream commit bookkeeping failed", { attemptId, error });
+		}
 		return { result: "started", attemptId };
 	};
 
@@ -622,6 +636,17 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 	reportTerminalFailure: reportStartTerminalFailure,
 	changeRuntimeConfig: changeEngineRuntimeConfig,
 	publishConfigChangePhase: broadcastConfigChangePhase,
+	// Lazily imported for the reason `sources.ts` states about its own audio
+	// handler: this module is already reachable FROM the source graph, so a
+	// static edge back into it reorders module initialisation and leaves the
+	// boot-time source build reading a half-initialised module.
+	onStreamCommitted: () => {
+		void import("./sources.ts")
+			.then(({ noteStreamedSourceCommitted }) => noteStreamedSourceCommitted())
+			.catch((error) =>
+				logger.warn("stream commit bookkeeping failed", { error }),
+			);
+	},
 });
 
 export function startStreamSession(

@@ -294,8 +294,10 @@ describe("lost rows — a renumbered camera is one candidate, not one per path",
 			sources: capSources(),
 			devices: [],
 			networkIngest: NO_INGEST,
+			// Anchored on the FIRST node it ever answered to, so this also proves the
+			// retired path still resolves through `previousIds` after the fold.
+			lastStreamedSource: "/dev/video1",
 			lastSeenDevices: getConfig().last_seen_devices ?? [],
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
 		});
 
 		const osmoRows = sources.filter(
@@ -306,21 +308,31 @@ describe("lost rows — a renumbered camera is one candidate, not one per path",
 		expect(osmoRows[0]?.id).toBe("/dev/video3");
 	});
 
-	it("NEGATIVE CONTROL — two genuinely different cameras still yield two lost rows", async () => {
+	it("NEGATIVE CONTROL — two genuinely different cameras are not folded into one, so each anchors its OWN row", async () => {
 		await observe([
 			engineDevice("/dev/video1", "uvc_h264", OSMO_STABLE_ID),
 			engineDevice("/dev/video4", "mjpeg", RODE_STABLE_ID),
 		]);
 
-		const sources = buildSources({
-			sources: capSources(),
-			devices: [],
-			networkIngest: NO_INGEST,
-			lastSeenDevices: getConfig().last_seen_devices ?? [],
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
-		});
+		const lostUnder = (anchor: string) =>
+			buildSources({
+				sources: capSources(),
+				devices: [],
+				networkIngest: NO_INGEST,
+				lastStreamedSource: anchor,
+				lastSeenDevices: getConfig().last_seen_devices ?? [],
+			}).filter((s) => s.lost === true);
 
-		expect(sources.filter((s) => s.lost === true)).toHaveLength(2);
+		// Under last-streamed-config retention at most ONE device is remembered, so
+		// over-collapse is caught by asking each camera separately: a fold would
+		// make both anchors resolve to the same row.
+		const osmo = lostUnder("/dev/video1");
+		expect(osmo).toHaveLength(1);
+		expect(osmo[0]?.id).toBe("/dev/video1");
+
+		const rode = lostUnder("/dev/video4");
+		expect(rode).toHaveLength(1);
+		expect(rode[0]?.id).toBe("/dev/video4");
 	});
 });
 
@@ -354,7 +366,6 @@ describe("preview start — resolves to the CURRENT node, not the saved one", ()
 			devices: [captureDevice("/dev/video2", "uvc_h264", OSMO_STABLE_ID)],
 			networkIngest: NO_INGEST,
 			lastSeenDevices: getConfig().last_seen_devices ?? [],
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
 		});
 	}
 
@@ -395,8 +406,8 @@ describe("preview start — resolves to the CURRENT node, not the saved one", ()
 			sources: capSources(),
 			devices: [captureDevice("/dev/video0", "hdmi")],
 			networkIngest: NO_INGEST,
+			lastStreamedSource: "/dev/video1",
 			lastSeenDevices: getConfig().last_seen_devices ?? [],
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
 		});
 
 		expect(sources.find((s) => s.id === "/dev/video1")?.lost).toBe(true);
@@ -511,8 +522,10 @@ describe("held devices — the /dev scan is not a presence oracle for a libuvc c
 			sources: capSources(),
 			devices: getEngineDeviceCache(),
 			networkIngest: NO_INGEST,
+			// It is also the remembered device, so a `lost` row is the outcome this
+			// asserts against rather than one the fixture cannot reach.
+			lastStreamedSource: "/dev/video1",
 			lastSeenDevices: getConfig().last_seen_devices ?? [],
-			sessionSnapshots: getSessionSeenDeviceSnapshots(),
 		});
 
 		const osmo = sources.find((s) => s.id === "/dev/video1");

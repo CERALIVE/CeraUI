@@ -150,6 +150,36 @@ async function setConfig(
 	await rpc.call(["streaming", "setConfig"], fields);
 }
 
+/**
+ * Take `source` live once and stop again, over the REAL start/stop RPCs.
+ *
+ * Only the device of the LAST-STREAMED configuration is remembered when it goes
+ * absent, so a source that has never been on air has no lost row to render. This
+ * is the operator sequence that earns one — selecting a device is not enough, and
+ * deliberately so: an accessory that was merely picked and unplugged should leave
+ * the list rather than linger in it.
+ */
+async function streamOnce(
+	page: Page,
+	rpc: PageRpc,
+	source: string,
+): Promise<void> {
+	const started = (await rpc.call(["streaming", "start"], {
+		source,
+	})) as StartResult;
+	expect(started.success).toBe(true);
+	await rpc.call(["streaming", "stop"], {});
+	// A finished stream hands the operator its session summary, and the idle
+	// cockpit — which carries the source surface every later assertion reads —
+	// is not mounted until they dismiss it.
+	const done = page.getByRole("button", { name: /^done$/i });
+	await expect(done).toBeVisible({ timeout: 15_000 });
+	await done.click();
+	await expect(
+		page.getByRole("button", { name: /start stream/i }),
+	).toBeVisible({ timeout: 15_000 });
+}
+
 test.describe("lost-device lifecycle (real seam)", () => {
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -209,6 +239,9 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		await expect(usbRow).toHaveAttribute("data-selected", "true", {
 			timeout: 15_000,
 		});
+		// Take the RØDE live once: only the LAST-STREAMED device is remembered when
+		// it goes absent, so this is what earns it a lost row in step 2.
+		await streamOnce(page, pageRpc, "usb");
 
 		// Audio block (todo 18) is visible once an effective source exists.
 		await expect(page.getByTestId("source-audio")).toBeVisible();
@@ -290,16 +323,22 @@ test.describe("lost-device lifecycle (real seam)", () => {
 		page,
 	}) => {
 		if (!pageRpc) throw new Error("page RPC is not installed");
-		// Select `usb`, then detach it (real seam). The SAME per-worker backend keeps
-		// BOTH the persisted config.source and the detached mock state across a
-		// browser reload — so this exercises the across-restart retention path
-		// (todo 11(c): the lost row is rebuilt from config.last_seen_devices).
+		// Stream `usb` once, then detach it (real seam). The SAME per-worker backend
+		// keeps BOTH the persisted retention slot and the detached mock state across
+		// a browser reload — so this exercises the across-restart retention path
+		// (the lost row is rebuilt from config.last_seen_devices on boot).
 		const usbRow = page.getByTestId("source-row-usb");
 		await expect(usbRow).toBeVisible({ timeout: 15_000 });
+		await setConfig(pageRpc, {
+			srtla_addr: "127.0.0.1",
+			srtla_port: 5000,
+			srt_streamid: "e2e",
+		});
 		await page.getByTestId("source-select-usb").click();
 		await expect(usbRow).toHaveAttribute("data-selected", "true", {
 			timeout: 15_000,
 		});
+		await streamOnce(page, pageRpc, "usb");
 		expect((await setDeviceAttached(pageRpc, "usb", false)).success).toBe(true);
 		await expect(page.getByTestId("source-lost-banner")).toBeVisible({
 			timeout: 15_000,

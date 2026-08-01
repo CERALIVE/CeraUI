@@ -257,6 +257,24 @@ export const runtimeConfigSchema = z.object({
 	// one the operator meant. Additive-optional — absent means a legacy/anchorless
 	// selection, which resolves exactly as it did before this field existed.
 	source_stable_id: z.string().optional(),
+	// The source of the last configuration that actually WENT LIVE — the ONE
+	// device remembered as a `lost` row while it is absent (the
+	// last-streamed-config retention policy). Deliberately DISTINCT from
+	// `source`: a
+	// save-only edit moves the operator's selection freely, and a selection that
+	// was never streamed is not something the device should keep advertising once
+	// the hardware is gone. It moves only when a start satisfies the engine's
+	// outcome gate, so a failed attempt and a stop both leave it standing.
+	// Additive-optional — an existing config simply remembers nothing until its
+	// first committed start.
+	last_streamed_source: z.string().optional(),
+	// The stable hardware identity of the slot above, captured at the same instant
+	// for the same reason `source_stable_id` exists: `last_streamed_source` is a
+	// NODE PATH and the kernel recycles those, so a path the remembered camera no
+	// longer holds may since have been inherited by a different device. Present
+	// only when the engine vouched for an identity; absent for a coarse, virtual
+	// or network source, which names no single piece of hardware.
+	last_streamed_source_stable_id: z.string().optional(),
 	// Which capture format the selected device is opened under, for a device that
 	// exposes more than one. Scoped to `source_stable_id`: an operator pick that
 	// moves to DIFFERENT hardware clears it, so a mode chosen for one camera can

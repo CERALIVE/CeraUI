@@ -467,15 +467,16 @@ export interface BuildSourcesInput {
 	networkIngest: NetworkIngest;
 	/** Device-wide source visibility (Todo 6). Absent → every source visible. */
 	sourcesVisibility?: SourcesVisibility;
-	/** The operator's persisted `config.source` id; drives the across-restart
-	 *  lost row for the configured device. Absent → no config-driven lost row. */
-	configSource?: string;
-	/** Persisted `config.last_seen_devices`; the metadata source for the
-	 *  across-restart configured-device lost row. Absent → treated as empty. */
+	/** Persisted `config.last_streamed_source`: the device of the last
+	 *  configuration that went live, and the ONLY one remembered while absent.
+	 *  Absent → no lost row at all. */
+	lastStreamedSource?: string;
+	/** Persisted `config.last_streamed_source_stable_id`: the identity that slot
+	 *  was anchored to. Absent → the slot resolves by node path. */
+	lastStreamedStableId?: string;
+	/** Persisted `config.last_seen_devices`; the metadata the remembered slot is
+	 *  rendered from. Absent → treated as empty. */
 	lastSeenDevices?: readonly LastSeenDevice[];
-	/** In-memory session snapshots; the metadata source for in-session lost rows
-	 *  (uncapped, so LRU churn never orphans a session-seen id). */
-	sessionSnapshots?: ReadonlyMap<string, LastSeenDevice>;
 	/** The operator's persisted `config.input_mode`. Absent → engine precedence. */
 	inputMode?: InputMode;
 	/** The standing degraded-selected snapshot. Absent → no row is degraded. */
@@ -583,32 +584,38 @@ function foldIdentity(
 }
 
 /**
- * The remembered snapshots eligible to become a lost row: every in-session
- * snapshot, plus the configured id's persisted snapshot across a restart (the
- * session map is empty then).
+ * The ONE remembered snapshot eligible to become a lost row: the device of the
+ * LAST-STREAMED configuration, and nothing else.
  *
- * Deduped by IDENTITY, not by id. Within the session map (which is keyed by
- * `input_id` and deliberately monotonic) the LAST entry for an identity wins —
- * insertion order makes that the freshest node path. The persisted snapshot is
- * still only consulted when the identity is not already represented, so a
- * session snapshot keeps winning over its persisted twin.
+ * The retired rule remembered every device the process had ever ENUMERATED, so
+ * an unplugged accessory the operator had never streamed from — a colleague's
+ * webcam, a dongle moved to another machine — kept a permanent unavailable row,
+ * uncapped, for the lifetime of the backend. Merely having been seen is not
+ * evidence that anyone wants it back; going live with it is. So exactly one
+ * device is held: the one an outcome-gated start last committed to, which is
+ * also the only one whose absence is worth interrupting an operator about.
+ *
+ * IDENTITY OUTRANKS THE PATH, AND REPLACES IT. When the slot carries a stable
+ * id, that is the only thing matched: `last_streamed_source` is a node path, the
+ * kernel recycles those, and `findRememberingId` deliberately resolves a
+ * contested path by PREFERENCE (holder beats alias) — which is the right rule
+ * for rendering a row and the wrong one for deciding which camera an operator
+ * streamed. Falling back to the path there would remember whichever device had
+ * since inherited it, the same mistake `resolveSourceIdentityDetailed` refuses
+ * to make at the routing seam. A slot with no identity (a coarse, virtual or
+ * network source, or an engine that vouches for none) resolves by path exactly
+ * as the configured-device row always did.
  */
 function collectLostCandidates(input: BuildSourcesInput): LastSeenDevice[] {
-	const candidates = new Map<string, LastSeenDevice>();
-	if (input.sessionSnapshots !== undefined) {
-		for (const snapshot of input.sessionSnapshots.values())
-			candidates.set(identityKey(snapshot), snapshot);
-	}
-	const configSource = input.configSource;
-	if (configSource !== undefined) {
-		const persisted = findRememberingId(
-			input.lastSeenDevices ?? [],
-			configSource,
-		);
-		if (persisted !== undefined && !candidates.has(identityKey(persisted)))
-			candidates.set(identityKey(persisted), persisted);
-	}
-	return [...candidates.values()];
+	const anchorId = input.lastStreamedSource;
+	if (anchorId === undefined) return [];
+	const remembered = input.lastSeenDevices ?? [];
+	const anchorStableId = input.lastStreamedStableId;
+	const anchored =
+		anchorStableId !== undefined && anchorStableId !== ""
+			? remembered.find((d) => d.stableId === anchorStableId)
+			: findRememberingId(remembered, anchorId);
+	return anchored === undefined ? [] : [anchored];
 }
 
 /**
@@ -1022,6 +1029,65 @@ export function configuredSelectionAnchor(
 	return config.source_stable_id;
 }
 
+/**
+ * Move the remembered-lost slot onto the source a start has just PROVEN it can
+ * deliver from, superseding whatever was remembered before.
+ *
+ * The commit signal is deliberately the engine's outcome gate — a session the
+ * orchestrator has confirmed is really streaming — and NOT the pipeline reaching
+ * PLAYING, which happens earlier and says only that a graph was built. A slot
+ * moved on PLAYING would be moved by attempts that then fail, which is the one
+ * thing the "a failed start changes nothing" rule forbids.
+ *
+ * A start that lands on the SAME source writes nothing at all. That is what
+ * keeps an automatic restoration of an interrupted session from disturbing the
+ * slot: a restoration re-commits the configuration that was already live, so
+ * there is nothing to move and no config write to make.
+ *
+ * A source that names no single piece of hardware — coarse, virtual, network —
+ * still takes the slot, and takes it EMPTY: `resolveSelectionAnchor` gives it no
+ * identity, so nothing resolves to a remembered snapshot and the previously-held
+ * camera simply stops being remembered. Superseding and clearing are the same
+ * operation here, which is why there is no separate clear path.
+ */
+export function noteStreamedSourceCommitted(): boolean {
+	const config = getConfig();
+	const configured = config.source;
+	if (configured === undefined) return false;
+
+	const sources = getSourcesMessage().sources;
+	// The same resolution the start path routed with, for the same reason: the
+	// persisted id can be a node path the device has since left behind, and the
+	// slot must name the hardware that actually went live.
+	const sourceId = resolveSourceIdentity(
+		configured,
+		sources,
+		config.last_seen_devices,
+		configuredSelectionAnchor(configured),
+	);
+	const stableId = resolveSelectionAnchor(sourceId, sources);
+	if (
+		config.last_streamed_source === sourceId &&
+		config.last_streamed_source_stable_id === stableId
+	) {
+		return false;
+	}
+
+	config.last_streamed_source = sourceId;
+	if (stableId === undefined) {
+		delete config.last_streamed_source_stable_id;
+	} else {
+		config.last_streamed_source_stable_id = stableId;
+	}
+	saveConfig();
+	logger.info("sources: last-streamed source committed", {
+		source: sourceId,
+		stableId,
+	});
+	broadcastSourcesIfChanged();
+	return true;
+}
+
 /** Test seam: the current operator-write / committed-view token pair. */
 export function getSourceSelectionTokens(): {
 	selection: number;
@@ -1069,12 +1135,18 @@ const lastEngineVideoDevices = new Map<string, CaptureDevice>();
  *  exempt from eviction, so the configured device's snapshot survives churn. */
 const LAST_SEEN_DEVICES_CAP = 12;
 
-// The IN-MEMORY session-seen snapshot map (C7): every bridgeable video input_id
-// ever returned by a successful `list-devices` this process lifetime, keyed to its
+// The IN-MEMORY session-seen snapshot map: every bridgeable video input_id ever
+// returned by a successful `list-devices` this process lifetime, keyed to its
 // snapshot. UNCAPPED and monotonic — an empty list never clears it (distinct from
 // the replaceable engineDeviceCache), and only `resetEngineDeviceCache()` drops it
-// (test isolation). It is the metadata source for IN-SESSION lost rows, so LRU
-// churn on the persisted cap can never orphan a session-seen id.
+// (test isolation).
+//
+// It is NO LONGER a lost-row candidate source. Under last-streamed-config
+// retention a device that was merely SEEN is not remembered when it goes absent,
+// so feeding this map to `collectLostCandidates` is precisely the uncapped
+// behaviour that policy retires. What survives is its original job: the process's
+// own record of what it has observed, which is what proves a renumbering camera
+// folded onto ONE identity instead of accumulating a row per node path.
 const sessionSeenDeviceSnapshots = new Map<string, LastSeenDevice>();
 
 /** A bridgeable-video snapshot for a device, or `undefined` for a non-candidate
@@ -1161,31 +1233,39 @@ function claimNodePathsOnce(
  * LRU-merge freshly-observed snapshots into the persisted last-seen list:
  * most-recently-observed first, then prior entries whose device was not
  * re-observed. Over the cap, evict least-recent from the tail — EXCEPT the
- * configured id, which is pulled out and always kept so the configured device's
- * snapshot survives any churn.
+ * entries named in `retained`, which are kept at their own position however
+ * stale they are.
+ *
+ * TWO ids are retained, not one, and the second is load-bearing. The operator's
+ * current selection has always been exempt; the LAST-STREAMED device now is too,
+ * because its snapshot IS the lost row. The two are the same id most of the
+ * time and deliberately come apart on a save-only edit — so without the second
+ * exemption a dozen devices of churn could evict the very snapshot the retention
+ * slot still points at, and the remembered device would go quietly missing from
+ * the list instead of showing as absent. The CAP itself is untouched.
  */
 function mergeLastSeenLru(
 	current: readonly LastSeenDevice[],
 	observed: readonly LastSeenDevice[],
-	configSource: string | undefined,
+	retained: ReadonlySet<string>,
 ): LastSeenDevice[] {
 	const ordered = claimNodePathsOnce(
 		dedupeByIdentity([...observed, ...current]),
 	);
 	if (ordered.length <= LAST_SEEN_DEVICES_CAP) return ordered;
 
-	const configuredIndex =
-		configSource === undefined
-			? -1
-			: ordered.findIndex((d) => d.id === configSource);
-	const configured =
-		configuredIndex === -1 ? undefined : ordered[configuredIndex];
-	if (configured === undefined) return ordered.slice(0, LAST_SEEN_DEVICES_CAP);
-
-	const rest = ordered.filter((_, i) => i !== configuredIndex);
-	const kept = rest.slice(0, LAST_SEEN_DEVICES_CAP - 1);
-	kept.splice(Math.min(configuredIndex, kept.length), 0, configured);
-	return kept;
+	const kept = new Set<number>();
+	ordered.forEach((device, index) => {
+		if (retained.has(device.id)) kept.add(index);
+	});
+	for (
+		let index = 0;
+		index < ordered.length && kept.size < LAST_SEEN_DEVICES_CAP;
+		index++
+	) {
+		kept.add(index);
+	}
+	return ordered.filter((_, index) => kept.has(index));
 }
 
 // Record a successful device observation into BOTH the uncapped session map and
@@ -1205,14 +1285,19 @@ function recordObservedDevices(devices: readonly CaptureDevice[]): void {
 
 	const config = getConfig();
 	const current = config.last_seen_devices ?? [];
-	const next = mergeLastSeenLru(current, snapshots, config.source);
+	const retained = new Set(
+		[config.source, config.last_streamed_source].filter(
+			(id): id is string => id !== undefined,
+		),
+	);
+	const next = mergeLastSeenLru(current, snapshots, retained);
 	if (JSON.stringify(current) === JSON.stringify(next)) return;
 	config.last_seen_devices = next;
 	saveConfig();
 }
 
-/** The in-memory session-seen snapshots (C7): the metadata source for in-session
- *  lost rows. Read by `getSourcesMessage`; exposed for wiring and tests. */
+/** The in-memory record of every bridgeable video device observed this process
+ *  lifetime. Exposed for wiring and tests; it renders no rows. */
 export function getSessionSeenDeviceSnapshots(): ReadonlyMap<
 	string,
 	LastSeenDevice
@@ -1529,9 +1614,13 @@ export function getSourcesMessage(): SourcesMessage {
 		devices: getEngineDeviceCache(),
 		networkIngest: getNetworkIngestInfo(),
 		...(sourcesVisibility !== undefined ? { sourcesVisibility } : {}),
-		...(config.source !== undefined ? { configSource: config.source } : {}),
+		...(config.last_streamed_source !== undefined
+			? { lastStreamedSource: config.last_streamed_source }
+			: {}),
+		...(config.last_streamed_source_stable_id !== undefined
+			? { lastStreamedStableId: config.last_streamed_source_stable_id }
+			: {}),
 		lastSeenDevices: config.last_seen_devices ?? [],
-		sessionSnapshots: sessionSeenDeviceSnapshots,
 		...(config.input_mode !== undefined
 			? { inputMode: config.input_mode }
 			: {}),

@@ -145,11 +145,13 @@ describe("streaming source availability rejection (C7)", () => {
 		resetEngineDeviceCache();
 		getConfig().pipeline = undefined;
 		getConfig().source = undefined;
+		delete getConfig().last_streamed_source;
 		getConfig().last_seen_devices = [];
 	});
 	afterEach(() => {
 		getConfig().source = priorSource;
 		getConfig().pipeline = priorPipeline;
+		delete getConfig().last_streamed_source;
 		getConfig().last_seen_devices = priorLastSeen;
 		resetEngineDeviceCache();
 		setStreamingState(false);
@@ -166,9 +168,14 @@ describe("streaming source availability rejection (C7)", () => {
 		else process.env.NODE_ENV = savedNodeEnv;
 	});
 
-	/** Observe a device then unplug it, so its CURRENT row is a `lost` capture. */
+	/**
+	 * Observe a device then unplug it, so its CURRENT row is a `lost` capture.
+	 * It has to be the LAST-STREAMED device to be remembered at all — that is the
+	 * only state in which a `lost` row exists for the routing seam to refuse.
+	 */
 	function makeSourceLost(inputId: string): void {
 		applyObservedEngineDevices([captureDevice(inputId, "hdmi", "Studio HDMI")]);
+		getConfig().last_streamed_source = inputId;
 		applyObservedEngineDevices([]);
 	}
 
