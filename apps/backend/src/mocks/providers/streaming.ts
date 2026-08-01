@@ -691,6 +691,7 @@ const TIER2_ERROR_SOURCE: Record<ProcessErrorCode, ProcessErrorSource> = {
 	srtla_no_connections: "srtla",
 	capture_audio_error: "engine",
 	capture_video_error: "engine",
+	capture_unrecoverable: "engine",
 	pipeline_stall: "engine",
 	srt_connect_failed: "engine",
 	srt_connection_lost: "engine",

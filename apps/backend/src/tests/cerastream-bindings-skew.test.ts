@@ -122,16 +122,18 @@ describe("cerastream bindings version-skew guard", () => {
 		);
 		// Tier 2 must map 1:1 onto CeraUI's PROCESS_ERROR_CODES (the table swap).
 		expect(processErrorCodeSchema.options).toContain("srt_connection_lost");
-		expect(processErrorCodeSchema.options.length).toBe(7);
+		expect(processErrorCodeSchema.options).toContain("capture_unrecoverable");
+		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.10.0", () => {
-		// device-quality-wave3 Todo 10: the 2026.7.4 pin ships schema 0.10.0 (the
-		// additive ADR-0008 identity + Todo 9 config-change batch), superseding the
-		// 0.8.0 the prior pin shipped. This value must equal what the on-device
-		// engine reports in `hello` — capabilities.ts raises the advisory
-		// `schemaVersionMismatch` banner off exactly that comparison.
-		expect(SCHEMA_VERSION).toBe("0.10.0");
+	test("SCHEMA_VERSION is pinned to 0.11.0", () => {
+		// device-platform-wave4 Todo 20: the 2026.7.5 pin ships schema 0.11.0 (the
+		// per-device `modes[]`/`input_mode` ladder, `capture_degraded.selected`, and
+		// the new terminal `capture_unrecoverable` error), superseding the 0.10.0 the
+		// prior pin shipped. This value must equal what the on-device engine reports
+		// in `hello` — capabilities.ts raises the advisory `schemaVersionMismatch`
+		// banner off exactly that comparison.
+		expect(SCHEMA_VERSION).toBe("0.11.0");
 	});
 
 	test("audio-level topic + connect-error codes are on the surface (Todo 22)", () => {
