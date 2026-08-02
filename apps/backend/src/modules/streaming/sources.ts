@@ -1347,18 +1347,27 @@ async function probeEngineDevices(
 	const selectionToken = sourceSelectionToken;
 	try {
 		const result = await deps.fetchEngineDevices();
-		const devices = result.devices.map((d) =>
-			fromEngineDevice({
+		const devices = result.devices.map((d) => {
+			// `modes[]` is read defensively, exactly like the audio join keys below:
+			// this whitelist copy is the ONE seam a real engine payload crosses, and
+			// an unlisted field is DROPPED silently. It was, which made todo 21's
+			// per-format mode families reachable only from a hand-built fixture —
+			// every dual-format camera published `selectedInputMode` with no
+			// `inputModes` beside it, so the picker had nothing to offer and the
+			// encoder ladder fell back to the device's unioned flat list.
+			const extra = d as { modes?: readonly unknown[] };
+			return fromEngineDevice({
 				input_id: d.input_id,
 				device_path: d.device_path,
 				display_name: d.display_name,
 				media_class: d.media_class,
 				kind: d.kind,
 				caps: d.caps,
+				...(extra.modes !== undefined ? { modes: extra.modes } : {}),
 				stable_id: d.stable_id,
 				physical_group_id: d.physical_group_id,
-			}),
-		);
+			});
+		});
 		rememberEngineVideoDevices(devices);
 		return {
 			devices,

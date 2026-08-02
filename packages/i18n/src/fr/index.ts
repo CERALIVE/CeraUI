@@ -1510,6 +1510,24 @@ const fr = {
 			coarseSuggestionMany:
 				"Vouliez-vous dire l'un de ces appareils connectés ?",
 			coarseSuggestionAction: "Basculer vers {name}",
+			modeLabel: "Format de capture",
+			modeHint:
+				"Cette caméra peut envoyer plusieurs formats vidéo, et chacun propose ses propres résolutions et fréquences d'images. Choisissez le format dans lequel capturer — les réglages de l'encodeur s'adaptent.",
+			modeLadderHint:
+				"Les résolutions et fréquences d'images ci-dessous sont celles qu'offre ce format de capture.",
+			modeApplyNote:
+				"Changer de format relance la capture au moment de passer en direct.",
+			modeSwitchFailed: "Impossible de changer le format de capture",
+			degradedBadge: "Dégradée",
+			degradedTitle: "Cette source rencontre un problème",
+			degradedBody:
+				"L'appareil est toujours connecté, mais l'encodeur signale un problème de lecture. Vérifiez le câble et l'appareil lui-même ; si cela persiste, essayez un autre format ou une autre source.",
+			degradedReason: "Signalé : {reason}",
+			emptyTitle: "Aucune entrée détectée",
+			emptyBody:
+				"Branchez une caméra ou une source HDMI sur cet appareil et elle apparaîtra ici automatiquement. Rien n'a besoin d'être configuré au préalable.",
+			lostBannerRemembered:
+				"Il reste listé parce que c'est l'appareil qu'a utilisé votre dernier direct.",
 		},
 		summary: {
 			nowStreaming: "En direct",

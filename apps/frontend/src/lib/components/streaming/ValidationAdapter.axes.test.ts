@@ -183,11 +183,21 @@ describe("union-removal regression — a pipeline NEVER inherits a device's ladd
 		]);
 	});
 
-	it("`resolveDeviceModes` accepts ONE argument — the legacy triple is gone", () => {
+	it("the legacy pipeline-keyed triple is gone — the 2nd arg only ever NARROWS", () => {
 		// `.length` counts declared params before the first default, so the
-		// source-keyed `offeredAxes(hardware, source, mode = STREAMING_MODE)` is 2.
-		expect(resolveDeviceModes.length).toBe(1);
+		// source-keyed `offeredAxes(hardware, source, mode = STREAMING_MODE, …)` is 2.
+		// `resolveDeviceModes` is 2 because of the todo-23 `inputMode` scope — that
+		// param is the OPPOSITE of the retired overload: it selects ONE of the
+		// device's own advertised ladders, where the triple pooled several devices'.
+		expect(resolveDeviceModes.length).toBe(2);
 		expect(offeredAxes.length).toBe(2);
+
+		// Behavioural half of the lock, which no arity count can express: a value
+		// that is not one of THIS device's advertised formats must narrow nothing
+		// and can never widen the ladder.
+		const rode = RODE_CAPTURE_SOURCE;
+		expect(resolveDeviceModes(rode, "camlink")).toBe(resolveDeviceModes(rode));
+		expect(resolveDeviceModes(COARSE_HDMI_SOURCE, "uvc_h264")).toBeUndefined();
 	});
 });
 
@@ -932,5 +942,165 @@ describe("resolveActiveMediaType — the source's own kind names its format", ()
 			framerateOptionsForResolution(pinned, "1080p").find((o) => o.value === 60)
 				?.supported,
 		).toBe(false);
+	});
+});
+
+// The SELECTED format outranks the collapsed scalar `kind` (todo 23). This is the
+// same rule the backend save path applies (`device-mode-guard.ts` governingKind),
+// and the two MUST agree by construction: an offering the save path would reject
+// is a lie told to the operator, and a save the offering would have disabled is a
+// bypass. A device carries its per-format ladders on `inputModes[]`.
+const H264_FAMILY_MODES: readonly DeviceMode[] = [
+	{
+		width: 1280,
+		height: 720,
+		framerates: [30, 60],
+		media_type: "video/x-h264",
+	},
+	{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h264" },
+];
+const MJPEG_FAMILY_MODES: readonly DeviceMode[] = [
+	{ width: 1920, height: 1080, framerates: [30, 60], media_type: "image/jpeg" },
+	{ width: 3840, height: 2160, framerates: [30], media_type: "image/jpeg" },
+];
+
+function makeModeAwareSource(
+	selectedInputMode: "uvc_h264" | "mjpeg" | undefined,
+): CaptureStreamSource {
+	return {
+		...RODE_CAPTURE_SOURCE,
+		id: "usb-modes",
+		kind: "uvc_h264",
+		modes: [...DUAL_FORMAT_MODES],
+		inputModes: [
+			{
+				inputMode: "uvc_h264",
+				mediaType: "video/x-h264",
+				pipelineId: "libuvch264",
+				modes: [...H264_FAMILY_MODES],
+			},
+			{
+				inputMode: "mjpeg",
+				mediaType: "image/jpeg",
+				pipelineId: "usb_mjpeg",
+				modes: [...MJPEG_FAMILY_MODES],
+			},
+		],
+		...(selectedInputMode !== undefined ? { selectedInputMode } : {}),
+	};
+}
+
+describe("mode-scoped axes — the SELECTED format governs the ladder (todo 23)", () => {
+	it("follows the engine's selectedInputMode with no explicit pick", () => {
+		const axes = offeredAxes("rk3588", makeModeAwareSource("mjpeg"));
+		expect(axes.activeMediaType).toBe("image/jpeg");
+		expect(axes.deviceModes).toEqual(MJPEG_FAMILY_MODES);
+	});
+
+	it("an explicit inputMode overrides the engine's selection", () => {
+		const axes = offeredAxes(
+			"rk3588",
+			makeModeAwareSource("mjpeg"),
+			undefined,
+			"uvc_h264",
+		);
+		expect(axes.activeMediaType).toBe("video/x-h264");
+		expect(axes.deviceModes).toEqual(H264_FAMILY_MODES);
+	});
+
+	it("re-offers a DIFFERENT ladder per format — never their union", () => {
+		const h264 = offeredAxes(
+			"rk3588",
+			makeModeAwareSource("uvc_h264"),
+			undefined,
+			"uvc_h264",
+		);
+		const mjpeg = offeredAxes(
+			"rk3588",
+			makeModeAwareSource("uvc_h264"),
+			undefined,
+			"mjpeg",
+		);
+
+		// 1080p60 is an MJPEG-only pairing on this device. Offering it under H.264
+		// is the #244 defect one level down: the leg fails `not-negotiated`.
+		expect(
+			framerateOptionsForResolution(h264, "1080p").find((o) => o.value === 60)
+				?.supported,
+		).toBe(false);
+		expect(
+			framerateOptionsForResolution(mjpeg, "1080p").find((o) => o.value === 60)
+				?.supported,
+		).toBe(true);
+
+		// And the resolution axis moves with it: 720p is H.264-only here.
+		expect(h264.offered.resolutions).toContain("720p");
+		expect(mjpeg.offered.resolutions).not.toContain("720p");
+	});
+
+	it("the achievable ceiling follows the selected format too", () => {
+		// H.264 tops out at 1080p30 on this device; MJPEG reaches 4K30. Both are
+		// pairings the SELECTED format can actually deliver — never a cross-format
+		// maximum assembled from the higher rung of each axis.
+		expect(
+			axisCeiling(
+				offeredAxes(
+					"rk3588",
+					makeModeAwareSource("uvc_h264"),
+					undefined,
+					"uvc_h264",
+				),
+			),
+		).toEqual({ resolution: "1080p", framerate: 30 });
+		expect(
+			axisCeiling(
+				offeredAxes(
+					"rk3588",
+					makeModeAwareSource("uvc_h264"),
+					undefined,
+					"mjpeg",
+				),
+			),
+		).toEqual({ resolution: "2160p", framerate: 30 });
+	});
+
+	it("REFUSES a mode the device does not advertise, keeping the engine's answer", () => {
+		const axes = offeredAxes(
+			"rk3588",
+			makeModeAwareSource("mjpeg"),
+			undefined,
+			"camlink",
+		);
+		expect(axes.activeMediaType).toBe("image/jpeg");
+		expect(axes.deviceModes).toEqual(MJPEG_FAMILY_MODES);
+	});
+
+	it("a device that reported NO split is byte-identical to the pre-mode path", () => {
+		const legacy = makeDualFormatSource("uvc_h264");
+		const before = offeredAxes("rk3588", legacy);
+		const after = offeredAxes("rk3588", legacy, undefined, "mjpeg");
+		// No `inputModes` means no split was reported, so an explicit mode has
+		// nothing to scope to and must narrow NOTHING — an unknown never subtracts.
+		expect(after.activeMediaType).toBe(before.activeMediaType);
+		expect(after.deviceModes).toEqual(before.deviceModes);
+	});
+
+	it("an EMPTY family ladder falls back to the flat list (fail-open)", () => {
+		const source = makeModeAwareSource("uvc_h264");
+		source.inputModes = [
+			{
+				inputMode: "uvc_h264",
+				mediaType: "video/x-h264",
+				pipelineId: "libuvch264",
+				modes: [],
+			},
+			{
+				inputMode: "mjpeg",
+				mediaType: "image/jpeg",
+				pipelineId: "usb_mjpeg",
+				modes: [...MJPEG_FAMILY_MODES],
+			},
+		];
+		expect(resolveDeviceModes(source, "uvc_h264")).toEqual(DUAL_FORMAT_MODES);
 	});
 });

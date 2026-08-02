@@ -1254,6 +1254,21 @@ const zh = {
 			coarseSuggestionOne: "你是想选择 {name} 吗？",
 			coarseSuggestionMany: "你是想选择这些已连接设备中的一个吗？",
 			coarseSuggestionAction: "切换到 {name}",
+			modeLabel: "采集格式",
+			modeHint:
+				"这台相机可以输出多种视频格式，每种格式支持的分辨率和帧率各不相同。选择你想采集的格式，编码器设置会随之更新。",
+			modeLadderHint: "下面的分辨率和帧率是此采集格式所提供的。",
+			modeApplyNote: "更改格式后，开始直播时会重新启动采集。",
+			modeSwitchFailed: "无法更改采集格式",
+			degradedBadge: "已降级",
+			degradedTitle: "此信号源出现问题",
+			degradedBody:
+				"设备仍处于连接状态，但编码器报告读取时出现问题。请检查线缆和设备本身；如果问题持续，请尝试其他格式或其他信号源。",
+			degradedReason: "报告内容：{reason}",
+			emptyTitle: "未检测到输入",
+			emptyBody:
+				"将相机或 HDMI 信号源接入本设备后，它会自动出现在这里。无需事先做任何配置。",
+			lostBannerRemembered: "它仍在列表中，因为这是你上次直播所使用的设备。",
 		},
 		summary: {
 			nowStreaming: "正在直播",

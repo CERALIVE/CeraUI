@@ -1610,3 +1610,270 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		expect(readonly?.textContent).toContain("Source default (engine decides)");
 	});
 });
+
+// ── todo 23: capture-format selector, degraded rendering, empty state ────────
+
+// A dual-format camera (the DJI Osmo Pocket 3 shape): ONE physical device the
+// engine collapsed to a single scalar `kind`, whose two ladders are DISJOINT.
+const DUAL_FORMAT: CaptureStreamSource = {
+	origin: "capture",
+	id: "usb-modes",
+	pipelineId: "libuvch264",
+	kind: "uvc_h264",
+	displayName: "DJIPocket3: OsmoPocket3",
+	devicePath: "/dev/video2",
+	modes: [],
+	inputModes: [
+		{
+			inputMode: "uvc_h264",
+			mediaType: "video/x-h264",
+			pipelineId: "libuvch264",
+			modes: [
+				{
+					width: 1920,
+					height: 1080,
+					framerates: [30],
+					media_type: "video/x-h264",
+				},
+			],
+		},
+		{
+			inputMode: "mjpeg",
+			mediaType: "image/jpeg",
+			pipelineId: "usb_mjpeg",
+			modes: [
+				{
+					width: 1920,
+					height: 1080,
+					framerates: [30, 60],
+					media_type: "image/jpeg",
+				},
+			],
+		},
+	],
+	selectedInputMode: "uvc_h264",
+	supportsAudio: true,
+	supportsResolutionOverride: true,
+	supportsFramerateOverride: true,
+	audioKind: "selectable",
+	available: true,
+};
+
+describe("SourceSection — capture-format selector (todo 23)", () => {
+	afterEach(() => {
+		setConfig.mockClear();
+		destroyFieldSyncState();
+	});
+
+	it("renders one option per advertised format, H.264 pre-selected", () => {
+		const { container } = mount({
+			sources: sourcesMsg([DUAL_FORMAT]),
+			config: { source: DUAL_FORMAT.id },
+		});
+		const group = container.querySelector<HTMLElement>(
+			'[data-testid="source-modes-usb-modes"]',
+		);
+		if (!group) throw new Error("mode selector not rendered");
+
+		const h264 = container.querySelector<HTMLElement>(
+			'[data-testid="source-mode-usb-modes-uvc_h264"]',
+		);
+		const mjpeg = container.querySelector<HTMLElement>(
+			'[data-testid="source-mode-usb-modes-mjpeg"]',
+		);
+		expect(h264?.dataset.active).toBe("true");
+		expect(mjpeg?.dataset.active).toBe("false");
+		// Labels resolve through the EXISTING per-kind key family — never a literal.
+		expect(h264?.textContent?.trim()).toBe("UVC H.264");
+		expect(mjpeg?.textContent?.trim()).toBe("UVC \u00b7 MJPEG");
+	});
+
+	it("does NOT render a selector for a single-format device", () => {
+		const { container } = mount({
+			sources: sourcesMsg([RODE]),
+			config: { source: RODE.id },
+		});
+		expect(
+			container.querySelector('[data-testid="source-modes-usb"]'),
+		).toBeNull();
+	});
+
+	it("picking MJPEG persists input_mode through the field-sync lock", async () => {
+		setConfig.mockImplementationOnce(
+			async () =>
+				({ success: true, applied: { input_mode: "mjpeg" } }) as unknown,
+		);
+		const { container } = mount({
+			sources: sourcesMsg([DUAL_FORMAT]),
+			config: { source: DUAL_FORMAT.id },
+		});
+		const mjpeg = container.querySelector<HTMLElement>(
+			'[data-testid="source-mode-usb-modes-mjpeg"]',
+		);
+		if (!mjpeg) throw new Error("MJPEG option not rendered");
+
+		await fireEvent.click(mjpeg);
+		await waitFor(() =>
+			expect(setConfig).toHaveBeenCalledWith({ input_mode: "mjpeg" }),
+		);
+		await waitFor(() => expect(getFieldState("input_mode")).toBe("applied"));
+	});
+
+	it("a rejected format change surfaces a calm error and reverts the lock", async () => {
+		setConfig.mockImplementationOnce(
+			async () =>
+				({ success: false, error: "input_mode_unsupported" }) as unknown,
+		);
+		const { container } = mount({
+			sources: sourcesMsg([DUAL_FORMAT]),
+			config: { source: DUAL_FORMAT.id, input_mode: "uvc_h264" },
+		});
+		await fireEvent.click(
+			container.querySelector<HTMLElement>(
+				'[data-testid="source-mode-usb-modes-mjpeg"]',
+			) as HTMLElement,
+		);
+		await waitFor(() => expect(toastError).toHaveBeenCalled());
+		await waitFor(() => expect(getFieldState("input_mode")).toBe("failed"));
+	});
+
+	it("locks the selector while streaming — the format is baked into the graph", () => {
+		const { container } = mount({
+			sources: sourcesMsg([DUAL_FORMAT]),
+			config: { source: DUAL_FORMAT.id },
+			isStreaming: true,
+		});
+		const mjpeg = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-mode-usb-modes-mjpeg"]',
+		);
+		expect(mjpeg?.disabled).toBe(true);
+	});
+});
+
+describe("SourceSection — degraded SELECTED leg (todo 23)", () => {
+	const DEGRADED: CaptureStreamSource = {
+		...DUAL_FORMAT,
+		degraded: { code: "capture_video_error", reason: "v4l2 read timeout" },
+	};
+
+	it("renders a degraded band with the engine's reason as a diagnostic detail", () => {
+		const { container } = mount({
+			sources: sourcesMsg([DEGRADED]),
+			config: { source: DEGRADED.id },
+		});
+		const band = container.querySelector<HTMLElement>(
+			'[data-testid="source-degraded-banner"]',
+		);
+		if (!band) throw new Error("degraded band not rendered");
+		expect(band.dataset.degradedCode).toBe("capture_video_error");
+		expect(
+			container.querySelector('[data-testid="source-degraded-reason"]')
+				?.textContent,
+		).toContain("v4l2 read timeout");
+	});
+
+	it("is VISUALLY DISTINCT from Lost — different testid, colour AND glyph", () => {
+		const { container } = mount({
+			sources: sourcesMsg([DEGRADED]),
+			config: { source: DEGRADED.id },
+		});
+		const degradedBadge = container.querySelector<HTMLElement>(
+			'[data-testid="source-degraded-usb-modes"]',
+		);
+		if (!degradedBadge) throw new Error("degraded badge not rendered");
+		// Amber warning register, never the destructive red the Lost badge owns —
+		// the two call for opposite operator actions and must never be confusable.
+		expect(degradedBadge.className).toContain("status-warning");
+		expect(degradedBadge.className).not.toContain("destructive");
+		// No Lost badge and no Lost band on a device that is merely struggling.
+		expect(
+			container.querySelector('[data-testid="source-lost-usb-modes"]'),
+		).toBeNull();
+		expect(
+			container.querySelector('[data-testid="source-lost-banner"]'),
+		).toBeNull();
+
+		const lost = mount({
+			sources: sourcesMsg([{ ...DUAL_FORMAT, lost: true }]),
+			config: { source: DUAL_FORMAT.id },
+		});
+		const lostBadge = lost.container.querySelector<HTMLElement>(
+			'[data-testid="source-lost-usb-modes"]',
+		);
+		if (!lostBadge) throw new Error("lost badge not rendered");
+		expect(lostBadge.className).toContain("destructive");
+		expect(lostBadge.className).not.toContain("status-warning");
+		// Colour is reinforcement, never the sole signal: the glyphs differ too.
+		expect(lostBadge.querySelector("svg")?.outerHTML).not.toBe(
+			degradedBadge.querySelector("svg")?.outerHTML,
+		);
+	});
+
+	it("renders the TOP-LEVEL mirror when the degraded row has disappeared", () => {
+		// A device that degrades and is THEN unplugged has no row left to hang the
+		// state on; `degradedSelected` is what makes it survive the row.
+		const { container } = mount({
+			sources: {
+				hardware: "rk3588",
+				sources: [HDMI_CAPTURE],
+				degradedSelected: { code: "capture_video_error", reason: "gone" },
+			},
+			config: { source: HDMI_CAPTURE.id },
+		});
+		expect(
+			container.querySelector('[data-testid="source-degraded-banner"]'),
+		).not.toBeNull();
+	});
+
+	it("renders NOTHING when no degraded state is reported (absent ≠ error)", () => {
+		const { container } = mount({
+			sources: sourcesMsg([DUAL_FORMAT]),
+			config: { source: DUAL_FORMAT.id },
+		});
+		expect(
+			container.querySelector('[data-testid="source-degraded-banner"]'),
+		).toBeNull();
+	});
+});
+
+describe("SourceSection — empty state + lost-banner scoping (todo 23)", () => {
+	it("renders ONE generic empty state, not per-pipeline placeholder rows", () => {
+		const { container } = mount({ sources: sourcesMsg([]) });
+		const empty = container.querySelector<HTMLElement>(
+			'[data-testid="source-empty"]',
+		);
+		if (!empty) throw new Error("empty state not rendered");
+		expect(empty.textContent).toMatch(/no inputs detected/i);
+		expect(container.querySelectorAll("[data-origin]")).toHaveLength(0);
+		expect(container.querySelector('[data-testid="source-list"]')).toBeNull();
+		// A device that was never streamed produces no row (todo 22), so an empty
+		// list must never carry a lost banner either.
+		expect(
+			container.querySelector('[data-testid="source-lost-banner"]'),
+		).toBeNull();
+	});
+
+	it("says NOTHING before the sources snapshot arrives", () => {
+		// `undefined` is "we do not know yet", which is not the same claim as
+		// "there are no inputs" — rendering the empty state here would be a lie.
+		const { container } = mount({ sources: undefined });
+		expect(container.querySelector('[data-testid="source-empty"]')).toBeNull();
+	});
+
+	it("names the remembered-device relationship on the lost banner", () => {
+		const { container } = mount({
+			sources: sourcesMsg([{ ...RODE, lost: true }]),
+		});
+		expect(
+			container.querySelector('[data-testid="source-lost-banner-remembered"]')
+				?.textContent,
+		).toMatch(/last stream/i);
+	});
+
+	it("renders no lost banner when every listed device is present", () => {
+		const { container } = mount({ sources: sourcesMsg([RODE, HDMI_CAPTURE]) });
+		expect(
+			container.querySelector('[data-testid="source-lost-banner-remembered"]'),
+		).toBeNull();
+	});
+});

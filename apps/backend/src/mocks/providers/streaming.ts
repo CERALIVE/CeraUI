@@ -13,7 +13,14 @@ import {
 	type RuntimeErrorEvent,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
-import type { ActiveEncode, RequiresGateway } from "@ceraui/rpc/schemas";
+import { mediaTypeToSourceKind } from "@ceraui/rpc";
+import type {
+	ActiveEncode,
+	CaptureMode,
+	DeviceMode,
+	RequiresGateway,
+} from "@ceraui/rpc/schemas";
+import { inputModeSchema } from "@ceraui/rpc/schemas";
 import { getConfig } from "../../modules/config.ts";
 import { readIngestDesired } from "../../modules/network/network-ingest-control.ts";
 import {
@@ -84,6 +91,19 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 			supports_resolution_override: true,
 			supports_framerate_override: true,
 			default_resolution: "1920x1080",
+			default_framerate: 30,
+		},
+		{
+			// The SECOND pipeline a dual-format UVC camera routes through: the same
+			// hardware is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode, so
+			// without this entry `buildInputModes` gates the MJPEG family out and the
+			// mock can never exercise mode selection. It adds NO row of its own —
+			// `usb_mjpeg` is a suppressed coarse placeholder in every state (todo 21).
+			id: "usb_mjpeg",
+			supports_audio: true,
+			supports_resolution_override: true,
+			supports_framerate_override: true,
+			default_resolution: "1280x720",
 			default_framerate: 30,
 		},
 		{
@@ -201,30 +221,82 @@ function framerateToFraction(fps: number): string {
 // Expand a folded `device_modes` map back into a `list-devices` result: each mode's
 // {width,height} × its rung framerates becomes the CaptureCap cross-product the
 // engine emits, so the capability service's fold reproduces the exact source map.
+// A fixture mode's media type back to the engine `InputKind` whose pipeline that
+// family routes through. `mediaTypeToSourceKind` is the shared table and stays the
+// single source of truth for the three it classifies; `image/jpeg` is the one token
+// it deliberately leaves unclassified (see `@ceraui/rpc` intersect-caps), so MJPEG
+// is named here rather than by widening a shared helper for a test fixture.
+function pipelineKindForMediaType(
+	mediaType: string | undefined,
+	inputId: string,
+): string | undefined {
+	if (mediaType === "image/jpeg") return "mjpeg";
+	return mediaTypeToSourceKind(mediaType, inputId);
+}
+
+// Group a fixture's flat rungs into the per-`media_type` FAMILIES cerastream emits
+// as `captureDevice.modes[]` (schema 0.11.0), each carrying its own ladder. Never
+// union two families: which formats a device offers, and what each one can drive,
+// are separate answers (ADR-0008 §10).
+function buildCaptureModeFamilies(
+	inputId: string,
+	group: { modes: readonly DeviceMode[] },
+): CaptureMode[] {
+	const families = new Map<string, CaptureMode>();
+	for (const mode of group.modes) {
+		const mediaType = mode.media_type;
+		if (mediaType === undefined) continue;
+		const pipelineKind = pipelineKindForMediaType(mediaType, inputId);
+		const parsed = inputModeSchema.safeParse(pipelineKind);
+		if (!parsed.success) continue;
+		let family = families.get(mediaType);
+		if (family === undefined) {
+			family = { media_type: mediaType, pipeline_kind: parsed.data, caps: [] };
+			families.set(mediaType, family);
+		}
+		for (const fps of mode.framerates) {
+			family.caps.push({
+				width: mode.width,
+				height: mode.height,
+				framerate: framerateToFraction(fps),
+				media_type: mediaType,
+			});
+		}
+	}
+	return [...families.values()];
+}
+
 function expandDeviceModes(
 	modes: MockDeviceModes,
 	displayNames: Record<string, string> = {},
 	audioDevices: Record<string, string> = {},
 ): ListDevicesResult {
-	const devices = Object.entries(modes).map(([inputId, group], index) => ({
-		input_id: inputId,
-		device_path: `/dev/video${index}`,
-		display_name: displayNames[inputId] ?? `${inputId} capture`,
-		media_class: "video" as const,
-		...(group.kind !== undefined
-			? { kind: group.kind as CaptureDeviceKind }
-			: {}),
-		caps: group.modes.flatMap((mode) =>
-			mode.framerates.map((fps) => ({
-				width: mode.width,
-				height: mode.height,
-				framerate: framerateToFraction(fps),
-				...(mode.media_type !== undefined
-					? { media_type: mode.media_type }
-					: {}),
-			})),
-		),
-	}));
+	const devices = Object.entries(modes).map(([inputId, group], index) => {
+		const families = buildCaptureModeFamilies(inputId, group);
+		return {
+			input_id: inputId,
+			device_path: `/dev/video${index}`,
+			display_name: displayNames[inputId] ?? `${inputId} capture`,
+			media_class: "video" as const,
+			...(group.kind !== undefined
+				? { kind: group.kind as CaptureDeviceKind }
+				: {}),
+			// Only a device with a real split carries `modes[]`; a single-family
+			// device stays byte-identical to the pre-0.11.0 payload, so the
+			// old-engine fallback path is still the one every other fixture drives.
+			...(families.length >= 2 ? { modes: families } : {}),
+			caps: group.modes.flatMap((mode) =>
+				mode.framerates.map((fps) => ({
+					width: mode.width,
+					height: mode.height,
+					framerate: framerateToFraction(fps),
+					...(mode.media_type !== undefined
+						? { media_type: mode.media_type }
+						: {}),
+				})),
+			),
+		};
+	});
 
 	// Add audio entries for each ALSA card in the fixture. Each audio device
 	// carries alsa_card_id (the join key for T4's engine-join tier) and

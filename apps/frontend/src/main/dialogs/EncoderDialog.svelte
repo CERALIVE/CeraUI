@@ -82,8 +82,14 @@ import {
 	platformCapsForHardware,
 	resolutionOptions,
 	seededAxisSelection,
+	STREAMING_MODE,
 	summarizeProbedCaps,
 } from '$lib/components/streaming/ValidationAdapter';
+import {
+	captureModeOptions,
+	governingInputMode,
+	inputModeLabelKey,
+} from '$lib/streaming/capture-modes';
 import { normalizeValue, updateMaxBitrate } from '$lib/components/streaming/StreamingUtils';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
@@ -377,7 +383,12 @@ $effect(() => {
 // selected/kind-matched capture device narrows Resolution/Framerate; a coarse /
 // modeless source (or no source at all) degrades to the platform offering. Every
 // incompatible rung is shown disabled with a reason — never hidden (house rule).
-const axes = $derived(offeredAxes(hardware, activeSource));
+// The format the ladder below belongs to. It is the ENGINE's own answer for the
+// applied source (`selectedInputMode`), never a local draft — the mode is picked
+// in the Source section, so a change arrives here as a fresh `sources` broadcast
+// and re-derives both this chip and the axes from the SAME value.
+const activeInputMode = $derived(governingInputMode(activeSource));
+const axes = $derived(offeredAxes(hardware, activeSource, STREAMING_MODE, activeInputMode));
 const offered = $derived(axes.offered);
 const resolutionChoices = $derived(resolutionOptions(offered));
 // Framerate options are gated per selected resolution: a rate the device+mode
@@ -528,6 +539,19 @@ function handleSave() {
 							{sourceKindLabel(activeSource)}
 						</span>
 					</div>
+					<!-- Multi-format devices ONLY: for a single-format source the kind line
+					     above already names it, and repeating it reads as a choice that
+					     does not exist. Chosen in the Source section, never here. -->
+					{#if activeInputMode && captureModeOptions(activeSource).length > 0}
+						<span
+							class="bg-primary/10 text-primary ms-auto shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
+							data-input-mode={activeInputMode}
+							data-testid="encoder-active-input-mode"
+							title={$LL.live.source.modeLadderHint()}
+						>
+							{t(inputModeLabelKey(activeInputMode))}
+						</span>
+					{/if}
 				</div>
 			{/if}
 			{#if uvcH265Sources.length > 0}

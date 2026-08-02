@@ -703,6 +703,24 @@ const en = {
 			coarseSuggestionOne: "Did you mean {name:string}?",
 			coarseSuggestionMany: "Did you mean one of these connected devices?",
 			coarseSuggestionAction: "Switch to {name:string}",
+			modeLabel: "Capture format",
+			modeHint:
+				"This camera can send more than one video format, and each one offers its own resolutions and frame rates. Pick the format you want to capture in — the encoder settings update to match.",
+			modeLadderHint:
+				"The resolutions and frame rates below are the ones this capture format offers.",
+			modeApplyNote:
+				"Changing the format restarts the capture when you go live.",
+			modeSwitchFailed: "Couldn't change the capture format",
+			degradedBadge: "Degraded",
+			degradedTitle: "This source is having trouble",
+			degradedBody:
+				"The device is still connected, but the encoder reported a problem reading from it. Check the cable and the device itself — if it keeps happening, try another format or another source.",
+			degradedReason: "Reported: {reason:string}",
+			emptyTitle: "No inputs detected",
+			emptyBody:
+				"Connect a camera or an HDMI source to this device and it appears here automatically. Nothing needs to be configured first.",
+			lostBannerRemembered:
+				"It's still listed because it's the device your last stream used.",
 		},
 		summary: {
 			nowStreaming: "Now streaming",

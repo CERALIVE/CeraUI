@@ -1322,6 +1322,23 @@ const ko = {
 			coarseSuggestionOne: "{name}을(를) 말씀하신 건가요?",
 			coarseSuggestionMany: "연결된 이 장치들 중 하나를 말씀하신 건가요?",
 			coarseSuggestionAction: "{name}(으)로 전환",
+			modeLabel: "캡처 형식",
+			modeHint:
+				"이 카메라는 여러 영상 형식을 보낼 수 있으며, 형식마다 사용할 수 있는 해상도와 프레임 레이트가 다릅니다. 캡처할 형식을 고르면 인코더 설정도 그에 맞게 갱신됩니다.",
+			modeLadderHint:
+				"아래 해상도와 프레임 레이트는 이 캡처 형식이 제공하는 값입니다.",
+			modeApplyNote: "형식을 바꾸면 방송을 시작할 때 캡처가 다시 시작됩니다.",
+			modeSwitchFailed: "캡처 형식을 바꾸지 못했습니다",
+			degradedBadge: "성능 저하",
+			degradedTitle: "이 소스에 문제가 있습니다",
+			degradedBody:
+				"장치는 여전히 연결되어 있지만, 인코더가 읽기 문제를 보고했습니다. 케이블과 장치를 확인하세요. 계속 발생하면 다른 형식이나 다른 소스를 사용해 보세요.",
+			degradedReason: "보고된 내용: {reason}",
+			emptyTitle: "입력이 감지되지 않았습니다",
+			emptyBody:
+				"이 기기에 카메라나 HDMI 소스를 연결하면 자동으로 여기에 표시됩니다. 미리 설정할 것은 없습니다.",
+			lostBannerRemembered:
+				"마지막 방송에서 사용한 장치라서 목록에 남아 있습니다.",
 		},
 		summary: {
 			nowStreaming: "스트리밍 중",

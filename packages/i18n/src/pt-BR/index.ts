@@ -1486,6 +1486,24 @@ const ptBR = {
 			coarseSuggestionMany:
 				"Você quis dizer um destes dispositivos conectados?",
 			coarseSuggestionAction: "Mudar para {name}",
+			modeLabel: "Formato de captura",
+			modeHint:
+				"Esta câmera pode enviar mais de um formato de vídeo, e cada um oferece suas próprias resoluções e taxas de quadros. Escolha o formato em que quer capturar — as configurações do codificador se ajustam a ele.",
+			modeLadderHint:
+				"As resoluções e taxas de quadros abaixo são as que este formato de captura oferece.",
+			modeApplyNote:
+				"Mudar o formato reinicia a captura quando você entrar ao vivo.",
+			modeSwitchFailed: "Não foi possível mudar o formato de captura",
+			degradedBadge: "Degradada",
+			degradedTitle: "Esta fonte está com problemas",
+			degradedBody:
+				"O dispositivo continua conectado, mas o codificador relatou um problema ao ler dele. Verifique o cabo e o próprio dispositivo — se continuar, tente outro formato ou outra fonte.",
+			degradedReason: "Relatado: {reason}",
+			emptyTitle: "Nenhuma entrada detectada",
+			emptyBody:
+				"Conecte uma câmera ou uma fonte HDMI a este dispositivo e ela aparece aqui automaticamente. Nada precisa ser configurado antes.",
+			lostBannerRemembered:
+				"Ele continua na lista porque é o dispositivo usado pela sua última transmissão.",
 		},
 		summary: {
 			nowStreaming: "Transmitindo agora",
