@@ -31,7 +31,8 @@ type Props = {
 	 * Optional async guard run ONLY before a DISABLE toggle. Resolve `false`
 	 * to abort (the switch stays in its current state); resolve `true` to
 	 * proceed with `rpc.network.configure`. Used by Ethernet to surface a
-	 * management-interruption confirm before pulling a wired link from the bond.
+	 * bandwidth-loss confirm before pulling a wired link from the bond. The
+	 * toggle only changes BOND MEMBERSHIP — the interface itself stays up.
 	 */
 	onBeforeDisable?: () => boolean | Promise<boolean>;
 	class?: string;

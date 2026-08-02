@@ -1191,8 +1191,9 @@ const es = {
 		},
 
 		dialogs: {
-			enableInterface: "Habilitar interfaz",
-			enableInterfaceDesc: "Usa esta interfaz para transmisión combinada.",
+			enableInterface: "Usar para agregación",
+			enableInterfaceDesc:
+				"Incluye esta interfaz en la transmisión agregada. Desactivarla no la desconecta: la administración y SSH siguen funcionando.",
 			staticIp: "Dirección IP estática",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint:
@@ -1426,14 +1427,14 @@ const es = {
 			comingSoon: "{feature} llegará en una actualización futura",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "En agregación",
+			excluded: "Excluida",
+			enableBond: "Incluir en agregación",
+			disableBond: "Excluir de agregación",
+			lastActiveError: "No se puede desactivar la única conexión activa",
+			wiredDisableTitle: "¿Excluir Ethernet de la agregación?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"Esto solo quita el enlace del grupo de agregación. La interfaz sigue conectada: la administración del dispositivo, SSH y el acceso a la LAN siguen funcionando. Si hay una transmisión en curso, se reduce su ancho de banda disponible.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

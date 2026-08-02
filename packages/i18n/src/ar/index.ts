@@ -402,8 +402,9 @@ const ar = {
 		},
 
 		dialogs: {
-			enableInterface: "تفعيل الواجهة",
-			enableInterfaceDesc: "استخدم هذه الواجهة للبث المجمّع.",
+			enableInterface: "استخدامها في التجميع",
+			enableInterfaceDesc:
+				"تضمين هذه الواجهة في البث المجمّع. إيقاف الخيار لا يفصل الواجهة \u2014 تبقى الإدارة وSSH تعملان.",
 			staticIp: "عنوان IP ثابت",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "اتركه فارغاً لاستخدام DHCP (العنونة التلقائية).",
@@ -622,14 +623,14 @@ const ar = {
 			comingSoon: "{feature} قادمة في تحديث مستقبلي",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "ضمن التجميع",
+			excluded: "مستبعدة",
+			enableBond: "إضافة إلى التجميع",
+			disableBond: "إزالة من التجميع",
+			lastActiveError: "لا يمكن تعطيل الاتصال النشط الوحيد",
+			wiredDisableTitle: "استبعاد إيثرنت من التجميع؟",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"هذا يزيل الوصلة من مجموعة التجميع فقط. تبقى الواجهة متصلة \u2014 وتستمر إدارة الجهاز وSSH والوصول إلى الشبكة المحلية في العمل. وإذا كان هناك بث جارٍ، فسينخفض عرض النطاق المتاح له.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

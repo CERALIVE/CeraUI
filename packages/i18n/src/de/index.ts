@@ -1178,9 +1178,9 @@ const de = {
 		},
 
 		dialogs: {
-			enableInterface: "Schnittstelle aktivieren",
+			enableInterface: "Für Bonding verwenden",
 			enableInterfaceDesc:
-				"Diese Schnittstelle für gebündeltes Streaming verwenden.",
+				"Bindet diese Schnittstelle in den gebündelten Stream ein. Das Ausschalten trennt sie nicht \u2013 Verwaltung und SSH funktionieren weiterhin.",
 			staticIp: "Statische IP-Adresse",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint:
@@ -1410,14 +1410,15 @@ const de = {
 			comingSoon: "{feature} kommt in einem zukünftigen Update",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "Im Bond",
+			excluded: "Ausgeschlossen",
+			enableBond: "Zum Bond hinzufügen",
+			disableBond: "Aus Bond entfernen",
+			lastActiveError:
+				"Die einzige aktive Verbindung kann nicht deaktiviert werden",
+			wiredDisableTitle: "Ethernet aus dem Bonding ausschließen?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"Damit wird die Verbindung nur aus dem Bonding-Pool entfernt. Die Schnittstelle bleibt verbunden \u2013 Geräteverwaltung, SSH und LAN-Zugriff funktionieren weiterhin. Läuft gerade ein Stream, sinkt dessen verfügbare Bandbreite.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

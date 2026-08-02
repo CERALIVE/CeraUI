@@ -432,9 +432,9 @@ const fr = {
 		},
 
 		dialogs: {
-			enableInterface: "Activer l'interface",
+			enableInterface: "Utiliser pour l'agrégation",
 			enableInterfaceDesc:
-				"Utiliser cette interface pour la diffusion agrégée.",
+				"Inclut cette interface dans le flux agrégé. La désactiver ne la déconnecte pas : la gestion et SSH continuent de fonctionner.",
 			staticIp: "Adresse IP statique",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Laissez vide pour utiliser DHCP (adressage automatique).",
@@ -662,14 +662,14 @@ const fr = {
 			comingSoon: "{feature} arrive dans une future mise à jour",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "Dans l'agrégation",
+			excluded: "Exclue",
+			enableBond: "Ajouter à l'agrégation",
+			disableBond: "Retirer de l'agrégation",
+			lastActiveError: "Impossible de désactiver la seule connexion active",
+			wiredDisableTitle: "Exclure Ethernet de l'agrégation ?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"Cela retire uniquement le lien du pool d'agrégation. L'interface reste connectée : la gestion de l'appareil, SSH et l'accès au réseau local continuent de fonctionner. Si un flux est en cours, sa bande passante disponible diminue.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

@@ -256,8 +256,9 @@ const zh = {
 		},
 
 		dialogs: {
-			enableInterface: "启用接口",
-			enableInterfaceDesc: "将此接口用于绑定流媒体传输。",
+			enableInterface: "用于绑定",
+			enableInterfaceDesc:
+				"将此接口加入绑定推流。关闭它不会断开连接——设备管理和 SSH 仍可正常使用。",
 			staticIp: "静态 IP 地址",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "留空以使用 DHCP（自动分配地址）。",
@@ -470,14 +471,14 @@ const zh = {
 			comingSoon: "{feature} 将在未来更新中提供",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "已绑定",
+			excluded: "已排除",
+			enableBond: "加入绑定",
+			disableBond: "移出绑定",
+			lastActiveError: "无法停用唯一的活动连接",
+			wiredDisableTitle: "将以太网移出绑定？",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"这只会把该链路移出绑定池。接口仍保持连接——设备管理、SSH 和局域网访问不受影响。如果正在推流，可用带宽会下降。",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

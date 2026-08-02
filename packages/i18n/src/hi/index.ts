@@ -263,8 +263,9 @@ const hi = {
 		},
 
 		dialogs: {
-			enableInterface: "इंटरफेस सक्षम करें",
-			enableInterfaceDesc: "बॉन्डेड स्ट्रीमिंग के लिए इस इंटरफेस का उपयोग करें।",
+			enableInterface: "बॉन्डिंग के लिए उपयोग करें",
+			enableInterfaceDesc:
+				"इस इंटरफ़ेस को बॉन्डेड स्ट्रीम में शामिल करें। इसे बंद करने से यह डिस्कनेक्ट नहीं होता \u2014 प्रबंधन और SSH काम करते रहते हैं।",
 			staticIp: "स्टैटिक IP पता",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP (स्वचालित एड्रेसिंग) का उपयोग करने के लिए खाली छोड़ें।",
@@ -484,14 +485,14 @@ const hi = {
 			comingSoon: "{feature} भविष्य के अपडेट में आ रहा है",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "बॉन्ड में",
+			excluded: "बाहर",
+			enableBond: "बॉन्ड में जोड़ें",
+			disableBond: "बॉन्ड से हटाएँ",
+			lastActiveError: "एकमात्र सक्रिय कनेक्शन को अक्षम नहीं किया जा सकता",
+			wiredDisableTitle: "ईथरनेट को बॉन्डिंग से हटाएँ?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"इससे लिंक केवल बॉन्डिंग पूल से हटता है। इंटरफ़ेस जुड़ा रहता है \u2014 डिवाइस प्रबंधन, SSH और LAN एक्सेस काम करते रहते हैं। यदि कोई स्ट्रीम चल रही है, तो उसकी उपलब्ध बैंडविड्थ घट जाएगी।",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",
