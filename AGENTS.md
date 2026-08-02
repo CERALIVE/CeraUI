@@ -1960,6 +1960,22 @@ path, just the caps the engine's own `VIDIOC_QUERY_DV_TIMINGS` result projected.
 Full contract: `apps/backend/AGENTS.md` → "A SIGNAL change is invisible to every
 hotplug detector".
 
+**A real audio device is never silently absent from the picker.** The card list is
+CeraUI's own `/sys/class/sound` scan, and it reads `setup.sound_device_dir` — a
+static value packaged into the separately-versioned `ceralive-device` `.deb`. A
+value naming any other layout yields ZERO cards, so `audio_sources` collapses to
+its two pipeline pseudo-sources and looks exactly like a board with no sound
+hardware. Board-confirmed on a Rock 5B+ whose packaged `setup.json` still carried
+the pre-#166 `"sound_device_dir": "/dev/snd"`: that directory holds ALSA's device
+NODES and no `cardN` directory at all, so a connected, capture-ready RØDE
+HDMI-to-USB-C was missing from the picker entirely while the ENGINE had been
+reporting it correctly the whole time. `resolveConfiguredAlsaCards` reconciles the
+configured directory against the kernel's own on positive evidence only, and
+`isPlaybackOnlyCard` drops a card the kernel proves is an OUTPUT structurally
+rather than by card id (`rockchiphdmi0` and `hdmi0` are the same block under two
+vocabularies). Full contract: `apps/backend/AGENTS.md` → "…AND NEITHER IS A LIVE
+AUDIO CARD".
+
 **The idle level meter follows the picker.** Selecting an audio source used to change
 nothing about the meter: cerastream chose its own idle card, so an operator who picked
 the RØDE could watch the meter report the DJI Mic Mini — or "Meter unavailable" — with
