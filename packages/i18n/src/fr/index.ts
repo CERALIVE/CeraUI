@@ -1677,6 +1677,10 @@ const fr = {
 		bitrateRange: "Le débit doit être compris entre 2000 et 12000 Kbps",
 	},
 	notifications: {
+		streamRecovered:
+			"Le flux a été rétabli automatiquement après le redémarrage du moteur de diffusion.",
+		streamRecoveryFailed:
+			"Le flux n'a pas pu être rétabli après le redémarrage du moteur de diffusion. Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamAutostartNoLinksFailed:
 			"Échec du démarrage automatique : aucun lien réseau après {attempt}/{maxAttempts} vérifications. Ouvrez Paramètres → Journaux système pour plus de détails.",
 		streamStartEngineUnavailableRetrying:

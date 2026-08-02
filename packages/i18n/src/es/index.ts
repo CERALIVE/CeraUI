@@ -894,6 +894,10 @@ const es = {
 		bitrateRange: "El bitrate debe estar entre 2000 y 12000 Kbps",
 	},
 	notifications: {
+		streamRecovered:
+			"La transmisión se restauró automáticamente tras reiniciarse el motor de streaming.",
+		streamRecoveryFailed:
+			"No se pudo restaurar la transmisión tras reiniciarse el motor de streaming. Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamAutostartNoLinksFailed:
 			"El inicio automático falló: no hubo enlaces de red tras {attempt}/{maxAttempts} comprobaciones. Abre Ajustes → Registros del sistema para ver los detalles.",
 		streamStartEngineUnavailableRetrying:

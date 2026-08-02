@@ -329,7 +329,7 @@ describe("stop during a config-change transaction", () => {
 
 		// When a stop is requested mid-transaction.
 		let stopSettled = false;
-		const stop = h.orchestrator.stop().then((result) => {
+		const stop = h.orchestrator.stop("operator").then((result) => {
 			stopSettled = true;
 			return result;
 		});
@@ -354,7 +354,7 @@ describe("stop during a config-change transaction", () => {
 		await bringToStreaming(h);
 		const change = h.orchestrator.changeConfig({ framerate: 60 });
 		await settleMicrotasks();
-		const stop = h.orchestrator.stop();
+		const stop = h.orchestrator.stop("operator");
 		await settleMicrotasks();
 
 		// When the engine's rollback also fails, right at the declared bound.
@@ -377,8 +377,8 @@ describe("stop during a config-change transaction", () => {
 		await bringToStreaming(h);
 		const change = h.orchestrator.changeConfig({ framerate: 30 });
 		await settleMicrotasks();
-		const first = h.orchestrator.stop();
-		const second = h.orchestrator.stop();
+		const first = h.orchestrator.stop("operator");
+		const second = h.orchestrator.stop("operator");
 		await settleMicrotasks();
 
 		// When the transaction applies.
@@ -423,7 +423,7 @@ describe("a parked stop is bounded and announced", () => {
 		void h.orchestrator.changeConfig({ resolution: "3840x2160" });
 		await settleMicrotasks();
 		let settled: StopResult | undefined;
-		const stop = h.orchestrator.stop().then((result) => {
+		const stop = h.orchestrator.stop("operator").then((result) => {
 			settled = result;
 			return result;
 		});
@@ -453,7 +453,7 @@ describe("a parked stop is bounded and announced", () => {
 		await settleMicrotasks();
 
 		// When a stop is parked behind the transaction.
-		void h.orchestrator.stop();
+		void h.orchestrator.stop("operator");
 		await settleMicrotasks();
 
 		// Then the wait is named, with the budget it is allowed.
@@ -471,7 +471,7 @@ describe("a parked stop is bounded and announced", () => {
 		await bringToStreaming(h);
 		const change = h.orchestrator.changeConfig({ framerate: 30 });
 		await settleMicrotasks();
-		const stop = h.orchestrator.stop();
+		const stop = h.orchestrator.stop("operator");
 		await settleMicrotasks();
 		h.settleChange({ phase: "applied" });
 		await change;
@@ -494,7 +494,7 @@ describe("a parked stop is bounded and announced", () => {
 		const stuck = harness();
 		stuck.stopRuntimeSettles = false;
 		await bringToStreaming(stuck);
-		const stop = stuck.orchestrator.stop();
+		const stop = stuck.orchestrator.stop("operator");
 		await settleMicrotasks();
 
 		// When the stop deadline expires.
@@ -522,7 +522,7 @@ describe("engine escalation during reconfiguring", () => {
 		await bringToStreaming(h);
 		const change = h.orchestrator.changeConfig({ resolution: "3840x2160" });
 		await settleMicrotasks();
-		const stop = h.orchestrator.stop();
+		const stop = h.orchestrator.stop("operator");
 		await settleMicrotasks();
 		expect(h.orchestrator.snapshot().state).toBe("reconfiguring");
 		const attemptId = changeAttemptId(h);

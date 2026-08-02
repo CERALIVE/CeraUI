@@ -436,7 +436,7 @@ describe("stream session orchestrator", () => {
 		await Promise.resolve();
 
 		// When stop interrupts the pending backoff.
-		expect(await orchestrator.stop()).toEqual({ result: "stopped" });
+		expect(await orchestrator.stop("operator")).toEqual({ result: "stopped" });
 		const result = await start;
 
 		// Then no stale timer launches again and cancellation notifies nothing.
@@ -540,7 +540,7 @@ describe("stream session orchestrator", () => {
 		});
 
 		// When stop races the in-flight launch and the old launch completes late.
-		const stopResult = await orchestrator.stop();
+		const stopResult = await orchestrator.stop("operator");
 		engineConfirmed.resolve();
 		const startResult = await start;
 
@@ -568,7 +568,7 @@ describe("stream session orchestrator", () => {
 		).toMatchObject({ result: "started" });
 
 		// When the confirmed stream is stopped.
-		const result = await orchestrator.stop();
+		const result = await orchestrator.stop("operator");
 
 		// Then no late start completion is required to settle the lifecycle.
 		expect(result).toEqual({ result: "stopped" });
@@ -592,7 +592,7 @@ describe("stream session orchestrator", () => {
 		});
 		await orchestrator.start({ origin: "ui", launch: async () => {} });
 
-		const stopping = orchestrator.stop();
+		const stopping = orchestrator.stop("operator");
 		deadlineCallback?.();
 
 		expect(await stopping).toEqual({
@@ -615,7 +615,7 @@ describe("stream session orchestrator", () => {
 			origin: "ui",
 			launch: async () => firstBarrier.promise,
 		});
-		await orchestrator.stop();
+		await orchestrator.stop("operator");
 		firstBarrier.resolve();
 		expect(await first).toEqual({
 			result: "cancelled",

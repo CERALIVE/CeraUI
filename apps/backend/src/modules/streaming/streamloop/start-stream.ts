@@ -118,6 +118,14 @@ function resolveLaunchConfig(config: RuntimeConfig): RuntimeConfig {
 	return buildAutoLaunchConfig(config, resolution);
 }
 
+/**
+ * `configOverride` exists for ONE caller: the engine-death restoration, which
+ * must relaunch the configuration the engine was actually RUNNING. `config.json`
+ * is not that — a save with no `apply_now` persists a restart-requiring field
+ * while the live session keeps encoding the previous one, so restoring from disk
+ * would apply an edit the operator deferred to their next start. Absent (every
+ * other caller), the live config is read exactly as before.
+ */
 export async function startStream(
 	pipeline: Pipeline,
 	srtlaAddr: string,
@@ -125,8 +133,12 @@ export async function startStream(
 	streamid: string,
 	audioDeps: AudioProbeDeps = {},
 	attemptId = "legacy-start",
+	configOverride?: Partial<RuntimeConfig>,
 ): Promise<StartStreamResult> {
-	const config = getConfig();
+	const config =
+		configOverride === undefined
+			? getConfig()
+			: ({ ...getConfig(), ...configOverride } as RuntimeConfig);
 	const launchConfig = resolveLaunchConfig(config);
 	getStreamingBackend().setBitrate(launchConfig);
 

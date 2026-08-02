@@ -92,6 +92,7 @@ import {
 } from "./modules/streaming/link-telemetry.ts";
 import { getPipelineList } from "./modules/streaming/pipelines.ts";
 import { refreshAndBroadcastSources } from "./modules/streaming/sources.ts";
+import { runStreamRestoration } from "./modules/streaming/stream-restoration.ts";
 import { reconcileStreamSession } from "./modules/streaming/stream-session-orchestrator.ts";
 import {
 	getStreamingProcesses,
@@ -258,6 +259,11 @@ if (!shouldUseMocks()) {
 	// active_encode bridge started further down supplies the frame evidence a
 	// second or two from now), and that must not delay the rest of boot.
 	void runInflightConfigChangeReconciliation();
+	// The backend-restart half of restoration. `reconcileStreamSession()` above
+	// has already adopted an engine session that outlived this process, so the
+	// run sees `streaming` and correctly declines — a backend-only restart can
+	// never produce a second session.
+	void runStreamRestoration();
 }
 
 // Resolve the runtime hardware kind (engine → device-tree → setup.hw → generic)

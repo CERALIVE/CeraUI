@@ -63,7 +63,10 @@ function projectCaps(): SetProfileCaps {
 
 async function reconnect(): Promise<void> {
 	if (!getIsStreaming()) return;
-	const stopped = await stopStreamSession();
+	// `reconfigure`, not `operator`: this stop is the first half of a restart the
+	// platform asked for, so the armed-stream marker must survive it. Clearing it
+	// here would silently disarm restoration for the rest of the session.
+	const stopped = await stopStreamSession("reconfigure");
 	if (stopped.result !== "stopped") {
 		logger.warn(
 			"set-profile: stream stop failed; persisted config applies on next start",

@@ -31,6 +31,7 @@ import {
 	getCloudProviders,
 	setRemoteConfig,
 } from "../../modules/remote/remote.ts";
+import { notePlannedShutdown } from "../../modules/streaming/armed-stream-marker.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
 import { setAutostart } from "../../modules/streaming/streamloop.ts";
 import {
@@ -155,6 +156,7 @@ export const poweroffProcedure = authedProcedure
 			return { success: false };
 		}
 		logger.info("System: poweroff requested");
+		notePlannedShutdown("poweroff");
 		powerCommandRunner("poweroff");
 		return { success: true };
 	});
@@ -175,6 +177,10 @@ export const rebootProcedure = authedProcedure
 			return { success: false };
 		}
 		logger.info("System: reboot requested");
+		// Belt and braces: a reboot changes the boot id, which already blocks
+		// restoration. This also covers the window between the request and the
+		// kernel actually going down, where the backend can still be restarted.
+		notePlannedShutdown("reboot");
 		powerCommandRunner("reboot");
 		return { success: true };
 	});

@@ -29,12 +29,14 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Authoritative stream-session lifecycle (UI/autostart/remote arbitration, cancellation generations, boot adoption) | `modules/streaming/stream-session-orchestrator.ts` |
 | **Apply-now config change (transaction seam, `reconfiguring` state, queued stop)** | `modules/streaming/stream-session-orchestrator.ts` (`changeConfig`, `noteConfigChangePhase`) + `modules/streaming/config-change-bridge.ts` |
 | **Apply-now staged persistence + marker-only crash reconciliation** | `modules/streaming/config-change-staging.ts` (pure) + `modules/streaming/config-change-persistence.ts` (writes) |
+| **One-shot stream restoration after engine death (armed marker + boot-scoped gate table)** | `modules/streaming/armed-stream-marker.ts` (pure gate + persistence + `StreamStopCause`) + `modules/streaming/stream-restoration.ts` (`armStreamRestoration`, `runStreamRestoration`) |
 | **Derived `reconfiguring` deadline (65 000 engine bound + 12 000 stop bound)** | `modules/streaming/start-lifecycle-timing.ts` (`RECONFIGURE_DEADLINE_MS`) ← `@ceraui/rpc` `config-change.schema.ts` |
 | Transactional launch cleanup + phase/stop deadlines | `modules/streaming/launch-transaction.ts`, `start-lifecycle-timing.ts`, `streamloop/start-stream.ts`; contract in `../../docs/START-LIFECYCLE.md` |
 | Bounded start retry + suppression + diagnostics | `modules/streaming/stream-start-retry.ts`, `stream-start-retry-reporting.ts` |
 | Pre-engine gate deadline deferral (`pendingGateRemainingMs` ← `asrcProbeRemainingMs`) | `modules/streaming/stream-start-retry.ts` + `modules/streaming/audio.ts`; contract in `../../AGENTS.md` → STREAMING BACKEND QUALITY |
 | Raw `active_encode` bridge (passthrough + frame-liveness the typed client strips) | `modules/streaming/active-passthrough.ts`; cache-lifetime contract below → RAW `active_encode` BRIDGE |
 | Engine restarted mid-session (session control connection dropped → retire the session so the next start works) | `modules/streaming/cerastream-backend.ts` (`noteConnectionLoss`, `withSessionClient`, `onSessionConnectionLost`); contract below → SESSION CONTROL CONNECTION |
+| …and then RESTORE that stream, once, within the same boot | `modules/streaming/stream-restoration.ts` (`runStreamRestoration`); contract below → ONE-SHOT STREAM RESTORATION AFTER ENGINE DEATH |
 | Stream health rollup (`frames.advancing` freshness window, idle/dead/degraded/healthy) | `modules/streaming/health.ts` (`collectRealLiveness`, `deriveFramesAdvancing`, `FRAMES_FRESHNESS_MS`) |
 | WebSocket server wiring | `modules/ui/websocket-server.ts` + `rpc/server.ts` |
 | Auth token logic | `modules/ui/auth.ts` + `rpc/middleware/auth.middleware.ts` |
@@ -2286,6 +2288,129 @@ marker/judgement table), `tests/config-change-persistence.test.ts` (the REAL
 procedure: applied-writes vs reverted/rollback_failed-don't, the delta contents,
 both apply-now fallbacks, and marker-present vs marker-absent reconciliation).
 
+## ONE-SHOT STREAM RESTORATION AFTER ENGINE DEATH [EXISTS]
+
+`noteConnectionLoss` retires a session whose control connection died (see SESSION
+CONTROL CONNECTION above) and, until now, that was the end of it: systemd
+restarted `cerastream`, nothing tried again, and wave3 measured **0/6**
+stream-level resumptions after a SIGKILL. `modules/streaming/armed-stream-marker.ts`
+(the durable state + the PURE gate table) and `modules/streaming/stream-restoration.ts`
+(the wiring + the runner) close that, with a deliberately narrow guarantee:
+**exactly one restart attempt, scoped to the current boot.**
+
+**The ARMED-STREAM MARKER is `stream.armed.json`**, written at the orchestrator's
+`transition("streaming")` outcome gate — the SAME commit point todo 22's
+`noteStreamedSourceCommitted` hooks, through a second dep (`onStreamArmed`)
+rather than more work inside the first, because the two answer different
+questions and each has to be provable alone. It carries the stream-defining
+config snapshot plus the current `boot_id`, and nothing else that matters.
+
+- **The snapshot is the RUNNING config, not `config.json`.** A save with no
+  `apply_now` persists a restart-requiring field while the live session keeps
+  encoding the previous one, so restoring from disk would apply an edit the
+  operator explicitly deferred to their next start. `startStream` therefore takes
+  an optional `configOverride` (absent for every other caller — byte-identical
+  behaviour) and restoration passes the snapshot.
+- **It is schema-parsed on WRITE, not only on read.** The snapshot is built by
+  copying from the runtime config, which also holds `password_hash`, `ssh_pass`
+  and `remote_key`; Zod strips everything outside the declared shape so a future
+  copy-loop mistake cannot put a credential on disk. Do NOT "simplify" the
+  write-path `parse()` away — it is the credential barrier, and a test asserts it.
+- **The engine session id is DIAGNOSTIC ONLY and can never be a gate.** Four
+  facts, each re-verified against current code rather than inherited: the
+  adoption seam answers `"streaming" | "idle" | "unknown"` and nothing else
+  (`streaming-backend.ts` `EngineRuntimeState`); `CerastreamBackend.start()`
+  parses the engine's `StartResult` for its `state` alone and drops the
+  `session_id` it really does carry (`grep session_id` across the backend hits
+  test fixtures only); the engine's `Event::Status` carries no session identity
+  (only the unrelated `Event::Preview` does); and the engine's ids are
+  process-local counters (`format!("cs-{}", inner.counter)`), so a restarted
+  engine re-issues `cs-1` for a DIFFERENT session — comparing them would be worse
+  than not comparing them.
+
+**ADOPTION WINS, UNCONDITIONALLY AND FIRST.** The runtime-state check runs ahead
+of every marker gate and short-circuits: if the engine reports ANY streaming
+session it is adopted via the existing `reconcile()` path and restoration does
+not happen. This is what makes a backend-only restart safe — a marker survives a
+backend restart exactly as it survives an engine death, and only the engine can
+say which occurred. Asking about the marker first is how a device ends up with
+two sessions.
+
+**Restoration fires only when ALL of these hold**, and each is independently
+blocking (one test per condition, each proven load-bearing by neutering it):
+marker present ∧ engine authoritatively IDLE ∧ `marker.bootId === current boot_id`
+∧ not cleared by an operator stop ∧ no planned-shutdown stamp ∧ no prior attempt.
+
+**STOP-CAUSE PLUMBING.** The engine-loss path calls the SAME
+`stopStreamSession()` as an operator Stop, so the stop now carries an explicit
+`StreamStopCause` and the orchestrator reports it from the INTENT, ahead of the
+outcome (an operator who pressed Stop meant it whether or not the engine
+answered, and a stop parked behind a config-change transaction must not leave the
+marker armed for the minute it waits). `operator` CLEARS the marker;
+`engine_loss` and `reconfigure` PRESERVE it. A parked stop replays its own
+recorded cause on release.
+
+**`boot_id` fails CLOSED.** An unreadable `/proc/sys/kernel/random/boot_id` is
+treated exactly like a mismatch, and a start that cannot read one arms nothing at
+all. Failing closed costs a restoration; failing open auto-restarts a stream
+across a power cycle, which is a separate product decision and out of scope.
+
+**The planned-shutdown flag is stamped ONTO the marker**, not kept as a
+standalone file, so it can never outlive what it suppresses: no armed stream
+means nothing to write, and the next armed stream starts from a clean marker. A
+separate flag needs its own clearing rule, and getting that wrong disables
+restoration permanently and silently. Written by `startSoftwareUpdate()` and the
+`system.reboot`/`system.poweroff` procedures. The update case is the real one: an
+apt update restarts `ceralive` WITHOUT changing the boot id, so a stream armed
+before an engine crash earlier in the same boot would otherwise be restored by
+the post-update backend.
+
+**`unknown` triggers NEITHER, with a declared sub-deadline.** The engine answers
+`unknown` both while it is down and while a probe is transitional, so the runner
+polls at `RESTORATION_POLL_MS` (1 s) for up to `RESTORATION_UNKNOWN_DEADLINE_MS`
+(10 s). Resolving to `idle` proceeds to eligibility, resolving to `streaming`
+adopts, and expiry writes a terminal `stream_recovery_failed{runtime_state_unknown}`
+that does NOT re-arm on a later restart. A busy LIFECYCLE (a config-change
+transaction settling, a stop finishing) waits the same way rather than racing it.
+
+**ONE-SHOT IS THE FEATURE.** Both outcomes write a terminal attempted-state onto
+the marker, so the answer to "what happens on the next backend restart" is always
+"nothing". There is no retry and no backoff; a device that cannot restore lands in
+an honest `idle` with a published reason. Typed events:
+`stream_recovered` / `stream_recovery_failed` (keyed operator copy in all 10
+locales; the machine-readable `reason` rides `params` and is never interpolated
+into operator text).
+
+**DECLARED RESTORATION BOUND: 30 s** (`RESTORATION_BOUND_MS`) from the reconnect
+event, RECORDED per attempt (`elapsedMs` + `withinBound`) rather than enforced as
+a second deadline — the launch already owns its own bounded retry machinery, and
+racing a competing timer against it would report a healthy-but-slow start as a
+failure.
+
+**THREE TRIGGERS, ONE SELF-SERIALISING RUN**: the engine-loss retirement
+(`cerastream-backend.ts` — the only seam that sees a SIGKILLed engine come back,
+because `engine-reconnect.ts` settles at boot and never re-arms), backend boot
+(`main.ts`, immediately AFTER `reconcileStreamSession()` so adoption has already
+happened), and the engine-reconnect heal. A second caller JOINS the in-flight run.
+
+**It does NOT move todo 22's `last_streamed_source` slot.** Restoration re-runs
+the configuration that was already live, and `noteStreamedSourceCommitted` is
+idempotent on the same source — so the slot is untouched by construction rather
+than by a special case. Restoration deliberately goes through the ordinary commit
+hook so that stays true.
+
+**The two markers coexist and neither reads the other.** `config.inflight.json`
+(apply-now transaction) and `stream.armed.json` (a stream was live) are different
+files with different lifetimes; an engine that died mid-transaction legitimately
+leaves both, and each is judged on its own.
+
+Coverage: `tests/stream-restoration.test.ts` — the pure gate table with one case
+per independently-blocking condition, the adopt/restore/neither discrimination
+table driven through the REAL runner against REAL on-disk markers, the stop-cause
+table, one-attempt-only in both outcome directions, planned-shutdown suppression,
+boot_id mismatch, the credential-barrier assertion, the two-marker coexistence
+pair, and the orchestrator commit/stop seams.
+
 ## DEVICE-FIRST SOURCE MODEL [EXISTS]
 
 `modules/streaming/sources.ts` is the single builder behind the `sources`
@@ -3255,6 +3380,16 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't collapse every rejected `change-config` dispatch into `rollback_failed{engine_connection_lost}` — a `CerastreamRpcError` means the transaction never began and the stream is untouched (`reverted{change_rejected}`). Keep `rollback_failed` as the DEFAULT for every other rejection, so an unrecognised failure can never claim a possibly-dead stream is fine.
 - Don't persist an apply-now candidate before the transaction says `applied`, and don't add a `reverted`-specific write — until then `config.json` still describes the session the engine is actually running.
 - Don't reconcile a params-vs-config mismatch without the in-flight marker — that mismatch is normally a legitimate "apply on next start" intent, and reconciling it overwrites the operator's choice on every boot.
+- Don't ask the armed-stream marker anything before asking the ENGINE whether it is streaming — a marker survives a backend restart exactly as it survives an engine death, and only the engine can tell the two apart. Adoption short-circuits ahead of every marker gate; invert that order and a backend-only restart launches a SECOND session.
+- Don't gate restoration on an engine session id, and don't "upgrade" `diagnostics.engineSessionId` into one — the adoption seam never carries it, `start()` drops the one the engine does return, status events have none, and the engine's ids are process-local counters that collide across restarts (a restarted engine re-issues `cs-1`).
+- Don't call `stopStreamSession()` without stating a cause, and don't default it — the engine-loss path and an operator Stop reach the identical function, so an implicit cause either forgets every crash or restarts a stream the operator deliberately ended. `operator` clears the marker; `engine_loss`/`reconfigure` preserve it.
+- Don't restore across a `boot_id` mismatch, and don't treat an UNREADABLE boot id as a match — both fail closed on purpose. A device reboot never auto-restarts a stream; that is a separate product decision, not an oversight.
+- Don't turn the one-shot into a retry loop. BOTH outcomes write a terminal attempted-state before anything else, and that is the whole guarantee — an attempted marker is never attempted again, in either direction.
+- Don't move the planned-shutdown suppression into its own flag file — stamped onto the marker it dies with the thing it suppresses; as a standalone file it needs a clearing rule whose failure mode is restoration silently dead forever.
+- Don't drop the write-path `armedStreamMarkerSchema.parse()` as redundant with the read-path one — the snapshot is copied out of the runtime config, which also holds `password_hash`/`ssh_pass`/`remote_key`, so that parse is the credential barrier.
+- Don't let a restoration launch read `getConfig()` — pass the marker's snapshot through `startStream`'s `configOverride`, or a deferred (non-`apply_now`) edit gets applied by a restart the operator never asked for.
+- Don't give restoration a private commit path around `onStreamCommitted` — routing it through the ordinary idempotent hook is exactly what keeps todo 22's `last_streamed_source` slot from moving.
+- Don't add a second deadline racing the launch's own retry machinery for the 30 s restoration bound — it is RECORDED per attempt (`elapsedMs`/`withinBound`), not enforced, so a healthy-but-slow start is never reported as a failure.
 - Don't remove either `runInflightConfigChangeReconciliation()` call site (boot in `main.ts`, the heal in `engine-reconnect.ts`) — for a whole wave the crash-window reconciler existed, was correct, and was called by nothing but its own test, so a leaked marker was the observable behaviour while the docs claimed the safety net was armed. And don't hand the judge the ENGINE's own vocabulary: it compares `config.json` values, so a raw `"3840x2160"`/`29.97` reads as "neither params set" — an eternal `wait` that never retires the marker. Route it through `buildEngineEncodeSnapshot`.
 - Don't decide "the engine is not streaming" from `is_streaming` on the reconciliation path — that flag is false for an idle engine AND for one reconciliation has not reached yet, so it turns a NON-ANSWER into `retain_previous` and discards a change the operator actually got. Only a lifecycle of `idle` is decisive.
 - Don't re-add stderr regex on the cerastream path — engine errors are structured

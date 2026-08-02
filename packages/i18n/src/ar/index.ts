@@ -1606,6 +1606,9 @@ const ar = {
 		bitrateRange: "يجب أن يكون معدل البت بين 2000 و12000 كيلوبت/ثانية",
 	},
 	notifications: {
+		streamRecovered: "تمت استعادة البث تلقائيًا بعد إعادة تشغيل محرك البث.",
+		streamRecoveryFailed:
+			"تعذّرت استعادة البث بعد إعادة تشغيل محرك البث. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamAutostartNoLinksFailed:
 			"فشل بدء البث التلقائي: لم تتوفر روابط شبكة بعد {attempt}/{maxAttempts} فحوصات. افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 		streamStartEngineUnavailableRetrying:

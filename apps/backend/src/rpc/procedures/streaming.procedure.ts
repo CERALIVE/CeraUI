@@ -374,7 +374,7 @@ export const streamingStopProcedure = authedProcedure
 			setPendingAudioFollowAsrc(null);
 			setStreamingState(false);
 		}
-		const result = await stopStreamSession();
+		const result = await stopStreamSession("operator");
 		return { ...result, success: result.result !== "stop_failed" };
 	});
 
