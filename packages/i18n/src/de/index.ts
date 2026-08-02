@@ -723,6 +723,24 @@ const de = {
 			coarseSuggestionOne: "Meintest du {name}?",
 			coarseSuggestionMany: "Meintest du eines dieser verbundenen Geräte?",
 			coarseSuggestionAction: "Zu {name} wechseln",
+			modeLabel: "Aufnahmeformat",
+			modeHint:
+				"Diese Kamera kann mehr als ein Videoformat liefern, und jedes bietet eigene Auflösungen und Bildraten. Wähle das Format, in dem du aufnehmen willst — die Encoder-Einstellungen passen sich an.",
+			modeLadderHint:
+				"Die Auflösungen und Bildraten unten sind die, die dieses Aufnahmeformat bietet.",
+			modeApplyNote:
+				"Ein Formatwechsel startet die Aufnahme beim nächsten Livegang neu.",
+			modeSwitchFailed: "Aufnahmeformat konnte nicht gewechselt werden",
+			degradedBadge: "Beeinträchtigt",
+			degradedTitle: "Diese Quelle hat Probleme",
+			degradedBody:
+				"Das Gerät ist noch verbunden, aber der Encoder meldet ein Problem beim Lesen. Prüfe das Kabel und das Gerät selbst — wenn es weiter auftritt, probiere ein anderes Format oder eine andere Quelle.",
+			degradedReason: "Gemeldet: {reason}",
+			emptyTitle: "Keine Eingänge erkannt",
+			emptyBody:
+				"Schließe eine Kamera oder eine HDMI-Quelle an dieses Gerät an — sie erscheint dann automatisch hier. Vorher muss nichts konfiguriert werden.",
+			lostBannerRemembered:
+				"Es wird noch angezeigt, weil es das Gerät deines letzten Streams ist.",
 		},
 		summary: {
 			nowStreaming: "Jetzt live",

@@ -479,6 +479,9 @@ export const getConfigProcedure = authedProcedure
 			video_passthrough: config.video_passthrough,
 			selected_video_input: config.selected_video_input,
 			source: config.source,
+			// Travels with the `source` it is scoped to: `setConfig` and the
+			// broadcast both carry it, and this PULL path used to omit it.
+			input_mode: config.input_mode,
 			source_preference: config.source_preference,
 			sources_visibility: config.sources_visibility,
 			srtla_addr: config.srtla_addr,

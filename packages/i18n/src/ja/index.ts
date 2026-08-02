@@ -1346,6 +1346,23 @@ const ja = {
 			coarseSuggestionOne: "{name} のことですか？",
 			coarseSuggestionMany: "接続済みのこれらのデバイスのことですか？",
 			coarseSuggestionAction: "{name} に切り替える",
+			modeLabel: "キャプチャ形式",
+			modeHint:
+				"このカメラは複数の映像形式を送出でき、形式ごとに使える解像度とフレームレートが異なります。キャプチャしたい形式を選んでください。エンコーダー設定もそれに合わせて更新されます。",
+			modeLadderHint:
+				"下に表示される解像度とフレームレートは、このキャプチャ形式が提供するものです。",
+			modeApplyNote: "形式を変更すると、配信開始時にキャプチャが再起動します。",
+			modeSwitchFailed: "キャプチャ形式を変更できませんでした",
+			degradedBadge: "劣化",
+			degradedTitle: "このソースに問題が発生しています",
+			degradedBody:
+				"デバイスは接続されたままですが、エンコーダーが読み取りの問題を報告しました。ケーブルとデバイス本体を確認してください。改善しない場合は、別の形式か別のソースをお試しください。",
+			degradedReason: "報告内容: {reason}",
+			emptyTitle: "入力が検出されていません",
+			emptyBody:
+				"この機器にカメラまたは HDMI ソースを接続すると、自動的にここに表示されます。事前の設定は不要です。",
+			lostBannerRemembered:
+				"前回の配信で使用したデバイスのため、一覧に残っています。",
 		},
 		summary: {
 			nowStreaming: "配信中",

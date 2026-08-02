@@ -177,3 +177,49 @@ describe("MOCK_SCENARIO=engine-starting — minimal floor", () => {
 		expect(sources[0]?.origin).toBe("virtual");
 	});
 });
+
+// The dev/CI mock must be able to exercise capture-format selection end to end,
+// which needs a device that genuinely advertises TWO families whose pipelines the
+// engine also offers. Both halves are easy to break independently and neither
+// fails loudly: drop `modes[]` from the mock `list-devices` expansion, or drop
+// `usb_mjpeg` from the capability sources, and the picker silently renders no
+// selector at all while every other assertion in the suite stays green.
+describe("mock dual-format camera — the picker's mode selector has something to show", () => {
+	test("the RØDE fixture publishes BOTH families, each with its own ladder", async () => {
+		await bootLikeMain("multi-modem-wifi");
+		const usb = captureOf(getSourcesMessage().sources, RODE_NAME);
+		expect(usb).toBeDefined();
+		if (usb?.origin !== "capture") throw new Error("usb is not a capture row");
+
+		expect(usb.inputModes?.map((m) => m.inputMode)).toEqual([
+			"uvc_h264",
+			"mjpeg",
+		]);
+		// Each family routes through its OWN pipeline — the same hardware is
+		// `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode.
+		expect(usb.inputModes?.map((m) => m.pipelineId)).toEqual([
+			"libuvch264",
+			"usb_mjpeg",
+		]);
+		// Absent an operator pick the engine's own precedence governs: H.264 first.
+		expect(usb.selectedInputMode).toBe("uvc_h264");
+
+		// The ladders are DISJOINT, which is what makes the frontend's scoping
+		// observable: 1080p60 exists only under MJPEG on this device.
+		const h264 = usb.inputModes?.find((m) => m.inputMode === "uvc_h264")?.modes;
+		const mjpeg = usb.inputModes?.find((m) => m.inputMode === "mjpeg")?.modes;
+		expect(
+			h264?.some((m) => m.height === 1080 && m.framerates.includes(60)),
+		).toBe(false);
+		expect(
+			mjpeg?.some((m) => m.height === 1080 && m.framerates.includes(60)),
+		).toBe(true);
+	});
+
+	test("the suppressed usb_mjpeg capability adds NO row of its own", async () => {
+		await bootLikeMain("multi-modem-wifi");
+		const ids = getSourcesMessage().sources.map((s) => s.id);
+		expect(ids).not.toContain("usb_mjpeg");
+		expect(ids).not.toContain("libuvch264");
+	});
+});

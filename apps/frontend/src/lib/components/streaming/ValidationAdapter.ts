@@ -33,6 +33,7 @@ import {
 	HOTSPOT_NAME_MIN,
 	HOTSPOT_PASSWORD_MAX,
 	HOTSPOT_PASSWORD_MIN,
+	type InputMode,
 	normalizeFramerateToRung,
 	normalizeResolutionToRung,
 	type Pipeline,
@@ -119,6 +120,12 @@ export {
 	pipelineAvailability,
 	pipelineViews,
 } from "$lib/streaming/pipelineAvailability";
+
+import {
+	governingInputMode,
+	ladderForInputMode,
+	mediaTypeForInputMode,
+} from "$lib/streaming/capture-modes";
 
 /**
  * Bridge the `HardwareType` the pipelines broadcast already carries to the
@@ -347,10 +354,20 @@ export interface OfferedAxes {
  * A `[]` modes list (coarse/virtual/network, or a capture device whose modes the
  * engine has not enumerated) falls back to the coarse offering (`undefined`) — an
  * empty match must NEVER collapse an axis to nothing.
+ *
+ * A device that advertises SEVERAL formats (todo 21 `inputModes`) narrows one
+ * step further: the ladder of the GOVERNING format alone. `source.modes` is the
+ * device's flat list across every format it exposes, so offering from it would
+ * union two disjoint ladders — the same ADR-0008 §10 violation one level down.
+ * `inputMode` lets a caller preview an unsaved pick; absent, the engine's own
+ * `selectedInputMode` governs, and a device that reported no split is untouched.
  */
 export function resolveDeviceModes(
 	source: StreamSource | undefined,
+	inputMode?: InputMode | undefined,
 ): readonly DeviceMode[] | undefined {
+	const family = ladderForInputMode(source, inputMode);
+	if (family !== undefined) return family;
 	return source && source.modes.length > 0 ? source.modes : undefined;
 }
 
@@ -435,6 +452,11 @@ function axesFromResolvedModes(
 	mode: string,
 	resolvedModes: readonly DeviceMode[] | undefined,
 	activeKind: string | undefined,
+	// The media type the ENGINE declared for an already-scoped ladder. Required
+	// because that ladder carries a single media type, and the shared rule below
+	// deliberately narrows nothing below two — so re-inferring it from the rungs
+	// that survived would answer `undefined` for a format we positively know.
+	declaredMediaType?: string | undefined,
 ): OfferedAxes {
 	const ceiling = singleModeSourceCeiling(resolvedModes);
 	if (ceiling) {
@@ -446,7 +468,8 @@ function axesFromResolvedModes(
 			deviceModes: undefined,
 		};
 	}
-	const activeMediaType = activeMediaTypeForModes(resolvedModes, activeKind);
+	const activeMediaType =
+		declaredMediaType ?? activeMediaTypeForModes(resolvedModes, activeKind);
 	const scopedModes = scopeModesToMediaType(resolvedModes, activeMediaType);
 	return {
 		offered: intersectCaps(platform, source, mode, scopedModes),
@@ -463,11 +486,16 @@ function axesFromResolvedModes(
  * {@link axesFromResolvedModes}); per-resolution framerate refinement is
  * {@link framerateOptionsForResolution}'s job. With `source.modes` empty the
  * result is byte-identical to the coarse {@link offeredEncoderCaps} offering.
+ *
+ * `inputMode` scopes both the ladder and the governing media type to ONE of the
+ * device's advertised formats (todo 23). Absent, the engine's own
+ * `selectedInputMode` governs; a device that reported no split is untouched.
  */
 export function offeredAxes(
 	hardware: HardwareType | undefined,
 	source: StreamSource | undefined,
 	mode: string = STREAMING_MODE,
+	inputMode?: InputMode | undefined,
 ): OfferedAxes {
 	const platform = platformCapsForHardware(hardware);
 	const cap = source ? videoSourceCapFromStreamSource(source) : undefined;
@@ -475,8 +503,9 @@ export function offeredAxes(
 		platform,
 		cap,
 		mode,
-		resolveDeviceModes(source),
-		activeCaptureKind(source),
+		resolveDeviceModes(source, inputMode),
+		activeCaptureKind(source, inputMode),
+		mediaTypeForInputMode(source, inputMode),
 	);
 }
 
@@ -505,11 +534,22 @@ export function offeredAxes(
 // the frontend's single constraint-import surface.
 export { activeMediaTypeForModes, scopeModesToMediaType };
 
-/** The capture `kind` an active {@link StreamSource} commands, if any. */
+/**
+ * The capture `kind` an active {@link StreamSource} commands, if any.
+ *
+ * A multi-format device's SELECTED mode outranks the engine's collapsed scalar
+ * `kind`: the shared rule scopes a ladder by "the media type the KIND names", so
+ * handing it the selected mode is the whole of mode-awareness — the same
+ * evaluator, pointed at the format the leg will actually negotiate. This mirrors
+ * the backend's `device-mode-guard.ts` `governingKind()` exactly, because an
+ * offering the save path would reject is a lie told to the operator.
+ */
 function activeCaptureKind(
 	source: StreamSource | undefined,
+	inputMode?: InputMode | undefined,
 ): string | undefined {
-	return source?.origin === "capture" ? source.kind : undefined;
+	if (source?.origin !== "capture") return undefined;
+	return governingInputMode(source, inputMode) ?? source.kind;
 }
 
 /**
@@ -518,10 +558,14 @@ function activeCaptureKind(
  */
 export function resolveActiveMediaType(
 	source: StreamSource | undefined,
+	inputMode?: InputMode | undefined,
 ): string | undefined {
-	return activeMediaTypeForModes(
-		resolveDeviceModes(source),
-		activeCaptureKind(source),
+	return (
+		mediaTypeForInputMode(source, inputMode) ??
+		activeMediaTypeForModes(
+			resolveDeviceModes(source, inputMode),
+			activeCaptureKind(source, inputMode),
+		)
 	);
 }
 

@@ -38,11 +38,14 @@ import type {
 	CaptureStreamSource,
 	ConfigMessage,
 	DeviceKind,
+	InputMode,
 	NetworkStreamSource,
+	SourceDegraded,
 	SourcesMessage,
 	StreamSource,
 } from '@ceraui/rpc/schemas';
 import {
+	Activity,
 	Cable,
 	Check,
 	ChevronRight,
@@ -51,6 +54,7 @@ import {
 	Pencil,
 	QrCode,
 	Radio,
+	SignalZero,
 	TriangleAlert,
 	Unplug,
 	Usb,
@@ -68,6 +72,11 @@ import * as Select from '$lib/components/ui/select';
 import { copyToClipboard } from '$lib/helpers/clipboard';
 import { generateDeviceAccessQr } from '$lib/helpers/NetworkHelper';
 import { rpc } from '$lib/rpc';
+import {
+	captureModeOptions,
+	governingInputMode,
+	inputModeLabelKey,
+} from '$lib/streaming/capture-modes';
 import { deriveCoarseUnboundState } from '$lib/streaming/coarse-source-hint';
 import {
 	beginFieldSync,
@@ -209,6 +218,12 @@ const captureSources = $derived(
 	),
 );
 const orderedSources = $derived(sources?.sources ?? []);
+// The row `config.source` names. Declared here rather than beside its audio
+// consumers because the degraded-state and capture-format derivations below read
+// it too, and a `$derived` may not reference a binding declared after it.
+const activeSource = $derived(
+	config?.source ? orderedSources.find((s) => s.id === config.source) : undefined,
+);
 
 // ── Audio-surface visibility gate (C1) ─────────────────────────────────────
 // The one audio surface renders ONLY when an effective source exists — an
@@ -256,6 +271,78 @@ const hasLostDevice = $derived(lostCaptures.length > 0);
 // read the band as an accusation against the Osmo. `lostCaptures` already carries
 // the devices, so the truthful sentence needs no new data.
 const lostNames = $derived(lostCaptures.map((s) => s.displayName).join(', '));
+// A device earns a lost row ONLY by having been STREAMED (todo 22): the backend
+// anchors retention on `config.last_streamed_source`, so a device merely seen and
+// unplugged leaves the list entirely and there is nothing here to render a banner
+// for. That makes every lost row the remembered device BY CONSTRUCTION — the
+// frontend applies no policy of its own, it just names the relationship the
+// operator cannot otherwise see (one device listed while others vanished). The
+// predicate above stays GLOBAL and unscoped: re-deriving retention here would be
+// a second opinion that can only drift from the backend's.
+
+// ── Degraded SELECTED capture leg (todo 21d) ────────────────────────────────
+// The engine reports a failing capture leg as `capture_video_error` carrying
+// `selected: true`; the backend holds it as a standing SNAPSHOT on the row AND
+// mirrors it top-level, so the state survives the row disappearing and survives a
+// reconnect. Read the row first (it can be rendered in place), then the mirror —
+// a device that degraded and was THEN unplugged has no row left to hang it on.
+const selectedDegraded = $derived<SourceDegraded | undefined>(
+	(activeSource?.origin === 'capture' ? activeSource.degraded : undefined) ??
+		sources?.degradedSelected,
+);
+// Absent means "nothing to render", never an error state — every field on this
+// path is additive-optional, so an older backend simply shows nothing.
+const degradedReason = $derived(selectedDegraded?.reason?.trim());
+// The engine's own code is a machine token (`capture_video_error`), never operator
+// copy — it is rendered as a diagnostic detail beside plain-language copy, exactly
+// like an audio device's raw `detail` string, never as the headline.
+const degradedDetail = $derived(
+	degradedReason !== undefined && degradedReason.length > 0
+		? degradedReason
+		: selectedDegraded?.code,
+);
+
+// ── Capture-format (mode) selection ─────────────────────────────────────────
+// A dual-format camera is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG
+// mode, so the pick re-routes the pipeline as well as the ladder. The write is
+// the standard per-field-sync lock, releasing to the SERVER-applied value.
+const INPUT_MODE_FIELD = 'input_mode';
+let pendingInputMode = $state<InputMode | undefined>(undefined);
+function modeOptionsFor(source: StreamSource): readonly { inputMode: InputMode }[] {
+	return captureModeOptions(source);
+}
+function selectedModeFor(source: StreamSource): InputMode | undefined {
+	// An in-flight pick renders immediately, but ONLY for the row the operator is
+	// on: an optimistic value must never decorate a different device's row.
+	const draft = source.id === config?.source ? pendingInputMode : undefined;
+	return governingInputMode(source, draft);
+}
+async function handleSelectMode(source: StreamSource, mode: InputMode): Promise<void> {
+	if (isStreaming || selectedModeFor(source) === mode) return;
+	// The mode is SCOPED to the selected source, so picking a format on a row that
+	// is not selected has to select it too — otherwise the backend would apply the
+	// mode to whichever device `config.source` still names.
+	if (source.id !== config?.source) await handleSelectSource(source);
+	pendingInputMode = mode;
+	beginFieldSync(INPUT_MODE_FIELD, mode);
+	markFieldApplying(INPUT_MODE_FIELD);
+	try {
+		const result = await rpc.streaming.setConfig({ input_mode: mode });
+		if (result.success && result.applied?.input_mode !== undefined) {
+			markFieldApplied(INPUT_MODE_FIELD, result.applied.input_mode);
+		} else {
+			markFieldFailed(INPUT_MODE_FIELD, config?.input_mode);
+			toast.error($LL.live.source.modeSwitchFailed());
+		}
+	} catch {
+		markFieldFailed(INPUT_MODE_FIELD, config?.input_mode);
+		toast.error($LL.live.source.modeSwitchFailed());
+	} finally {
+		// Release the optimistic latch either way: the authoritative answer is the
+		// next `sources` broadcast's own `selectedInputMode`.
+		pendingInputMode = undefined;
+	}
+}
 
 // The THIRD negative state: the device is PRESENT and bound, but the backend
 // explicitly reported zero usable capture modes (an idle HDMI-RX port with
@@ -461,9 +548,6 @@ const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
 // stream). The engine only ROUTES it with the `network_embedded_audio` capability —
 // with it, the audio source is read-only "Embedded audio"; without it, the legacy
 // ALSA picker stays (the calm ComingSoon pill lives in IdleCockpit's roadmap, T12).
-const activeSource = $derived(
-	config?.source ? sources?.sources.find((s) => s.id === config.source) : undefined,
-);
 const audioEmbeddedActive = $derived(
 	activeSource?.audioKind === 'embedded' && capabilities?.network_embedded_audio === true,
 );
@@ -565,6 +649,46 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							? $LL.live.source.lostBannerBodyOne({ name: lostNames })
 							: $LL.live.source.lostBannerBodyMany({ names: lostNames })}
 					</p>
+					<p
+						class="text-muted-foreground text-xs"
+						data-testid="source-lost-banner-remembered"
+					>
+						{$LL.live.source.lostBannerRemembered()}
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Degraded SELECTED leg: the device is PRESENT and the operator is pointed
+		     at it, but the encoder cannot read from it cleanly. Deliberately the calm
+		     amber warning register, NOT the destructive red `lost` treatment one band
+		     above — the two must never be confusable, because they call for opposite
+		     actions (reconnect a device that is gone vs. check a device that is here).
+		     Distinct glyph too, so colour is never the sole signal. -->
+		{#if selectedDegraded}
+			<div
+				class="border-status-warning/50 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3"
+				data-degraded-code={selectedDegraded.code}
+				data-testid="source-degraded-banner"
+				role="status"
+			>
+				<Activity aria-hidden={true} class="text-status-warning mt-0.5 size-4 shrink-0" />
+				<div class="min-w-0 space-y-0.5">
+					<p
+						class="text-status-warning text-sm font-medium"
+						data-testid="source-degraded-banner-title"
+					>
+						{$LL.live.source.degradedTitle()}
+					</p>
+					<p class="text-muted-foreground text-xs">{$LL.live.source.degradedBody()}</p>
+					{#if degradedDetail}
+						<p
+							class="text-muted-foreground font-mono text-xs break-words"
+							data-testid="source-degraded-reason"
+						>
+							{$LL.live.source.degradedReason({ reason: degradedDetail })}
+						</p>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -650,9 +774,24 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											{#if source.lost}
 												<span
 													class="bg-destructive/15 text-destructive inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+													data-testid={`source-lost-${source.id}`}
 												>
-													<TriangleAlert aria-hidden={true} class="size-3" />
+													<Unplug aria-hidden={true} class="size-3" />
 													{$LL.live.inputPicker.lost()}
+												</span>
+											{:else if source.degraded}
+												<!-- A THIRD state beside Lost and No signal, and the row is
+												     still selectable: the device is here and the encoder is
+												     merely struggling to read it. Amber + its own glyph, so it
+												     can never be read as the red "device is gone" badge —
+												     colour is reinforcement, never the sole signal. -->
+												<span
+													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
+													data-testid={`source-degraded-${source.id}`}
+													title={source.degraded.reason ?? source.degraded.code}
+												>
+													<Activity aria-hidden={true} class="size-3" />
+													{$LL.live.source.degradedBadge()}
 												</span>
 											{:else if hasNoSignal(source)}
 												<!-- Calm amber, NOT the destructive red `lost` treatment: the
@@ -662,7 +801,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													class="border-status-warning/60 bg-status-warning/10 text-status-warning inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium"
 													data-testid={`source-no-signal-${source.id}`}
 												>
-													<TriangleAlert aria-hidden={true} class="size-3" />
+													<SignalZero aria-hidden={true} class="size-3" />
 													{$LL.live.source.noSignal()}
 												</span>
 											{/if}
@@ -772,6 +911,54 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									/>
 								{/if}
 							</div>
+
+							<!-- Multi-format devices ONLY: a single-format device has no choice to
+							     offer, and a control on every row turns the picker into a form.
+							     Locked while streaming — the format is baked into the graph. -->
+							{#if modeOptionsFor(source).length > 0}
+								{@const activeMode = selectedModeFor(source)}
+								<div class="mt-2 space-y-1.5" data-testid={`source-modes-${source.id}`}>
+									<div class="flex items-center gap-1">
+										<span
+											class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
+										>
+											{$LL.live.source.modeLabel()}
+										</span>
+										<InfoPopover
+											body={$LL.live.source.modeHint()}
+											testId={`source-mode-info-${source.id}`}
+											title={$LL.live.source.modeLabel()}
+										/>
+									</div>
+									<div
+										aria-label={$LL.live.source.modeLabel()}
+										class="flex flex-wrap gap-1.5"
+										role="radiogroup"
+									>
+										{#each modeOptionsFor(source) as option (option.inputMode)}
+											{@const active = option.inputMode === activeMode}
+											<button
+												aria-checked={active}
+												class="min-h-11 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors {active
+													? 'border-primary bg-primary/10 text-primary'
+													: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+												data-active={active}
+												data-input-mode={option.inputMode}
+												data-testid={`source-mode-${source.id}-${option.inputMode}`}
+												disabled={isStreaming || rowDisabled(source)}
+												onclick={() => handleSelectMode(source, option.inputMode)}
+												role="radio"
+												type="button"
+											>
+												{t(inputModeLabelKey(option.inputMode))}
+											</button>
+										{/each}
+									</div>
+									<p class="text-muted-foreground text-xs">
+										{$LL.live.source.modeApplyNote()}
+									</p>
+								</div>
+							{/if}
 
 							<!-- Selected-but-unbound coarse row: the honest "Not connected" pill
 							     above stays, and this band makes the consequence impossible to
@@ -931,6 +1118,28 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					{/each}
 				</ul>
 			</div>
+		{:else}
+			<!-- ONE generic message, not a per-pipeline placeholder row. The coarse
+			     USB-capture placeholders were retired (todo 21) precisely because a
+			     row for a pipeline nothing is plugged into is unactionable, so their
+			     absence must not read as a broken picker. `sources` UNDEFINED is a
+			     different state — the snapshot has not arrived — and gets nothing,
+			     because "no inputs" is a claim we cannot yet make. -->
+			{#if sources !== undefined}
+				<div
+					class="bg-muted/30 flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center"
+					data-testid="source-empty"
+					role="status"
+				>
+					<Unplug aria-hidden={true} class="text-muted-foreground size-6 shrink-0" />
+					<p class="text-sm font-medium" data-testid="source-empty-title">
+						{$LL.live.source.emptyTitle()}
+					</p>
+					<p class="text-muted-foreground max-w-sm text-xs leading-relaxed">
+						{$LL.live.source.emptyBody()}
+					</p>
+				</div>
+			{/if}
 		{/if}
 
 		<!-- Audio source — THE one audio surface (T11): inline picker + a "Codec &

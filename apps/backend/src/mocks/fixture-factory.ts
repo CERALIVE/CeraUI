@@ -139,6 +139,13 @@ const DEFAULT_DEVICE_MODES = {
 			},
 		],
 	},
+	// A DUAL-FORMAT camera, like the DJI Osmo Pocket 3 the board carries: the same
+	// hardware advertises hardware H.264 AND raw MJPEG, and the two ladders are
+	// deliberately DISJOINT (MJPEG reaches 1080p60 and 4K30, H.264 does not) so a
+	// consumer that unions them offers a pairing no single format can deliver —
+	// the ADR-0008 §10 violation the mode-scoping exists to prevent. The engine
+	// collapses this device to ONE scalar `kind`, so `uvc_h264` is correct here
+	// and the MJPEG family is only visible through `modes[]`.
 	usb: {
 		kind: "uvc_h264",
 		modes: [
@@ -153,6 +160,24 @@ const DEFAULT_DEVICE_MODES = {
 				height: 1080,
 				framerates: [30],
 				media_type: "video/x-h264",
+			},
+			{
+				width: 1280,
+				height: 720,
+				framerates: [30, 60],
+				media_type: "image/jpeg",
+			},
+			{
+				width: 1920,
+				height: 1080,
+				framerates: [30, 60],
+				media_type: "image/jpeg",
+			},
+			{
+				width: 3840,
+				height: 2160,
+				framerates: [30],
+				media_type: "image/jpeg",
 			},
 		],
 	},
