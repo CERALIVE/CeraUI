@@ -1163,8 +1163,9 @@ const en = {
 			unavailable: "Kiosk mode is only available on a physical device.",
 		},
 		dialogs: {
-			enableInterface: "Enable interface",
-			enableInterfaceDesc: "Use this interface for bonded streaming.",
+			enableInterface: "Use for bonding",
+			enableInterfaceDesc:
+				"Include this interface in the bonded stream. Turning it off doesn't disconnect it \u2014 management and SSH keep working.",
 			staticIp: "Static IP address",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Leave blank to use DHCP (automatic addressing).",
@@ -1398,9 +1399,9 @@ const en = {
 			enableBond: "Enable Bond",
 			disableBond: "Disable Bond",
 			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			wiredDisableTitle: "Exclude Ethernet from bonding?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"This only removes the link from the bonding pool. The interface stays connected \u2014 device management, SSH and LAN access keep working. If a stream is running, its available bandwidth drops.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

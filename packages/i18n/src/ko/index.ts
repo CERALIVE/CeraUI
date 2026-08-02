@@ -268,8 +268,9 @@ const ko = {
 		},
 
 		dialogs: {
-			enableInterface: "인터페이스 활성화",
-			enableInterfaceDesc: "이 인터페이스를 본딩 스트리밍에 사용합니다.",
+			enableInterface: "본딩에 사용",
+			enableInterfaceDesc:
+				"이 인터페이스를 본딩 스트리밍에 포함합니다. 꺼도 연결이 끊기지 않으며 관리와 SSH는 계속 동작합니다.",
 			staticIp: "고정 IP 주소",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP(자동 주소 할당)를 사용하려면 비워 두세요.",
@@ -493,14 +494,14 @@ const ko = {
 			comingSoon: "{feature}은(는) 향후 업데이트에서 제공됩니다",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "본딩 사용 중",
+			excluded: "제외됨",
+			enableBond: "본딩에 추가",
+			disableBond: "본딩에서 제외",
+			lastActiveError: "유일한 활성 연결은 비활성화할 수 없습니다",
+			wiredDisableTitle: "이더넷을 본딩에서 제외할까요?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"이 링크를 본딩 대상에서만 제외합니다. 인터페이스는 계속 연결되어 있어 기기 관리, SSH, LAN 접속은 그대로 동작합니다. 스트리밍 중이라면 사용 가능한 대역폭이 줄어듭니다.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

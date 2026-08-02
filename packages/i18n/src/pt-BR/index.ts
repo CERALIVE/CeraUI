@@ -430,8 +430,9 @@ const ptBR = {
 		},
 
 		dialogs: {
-			enableInterface: "Ativar interface",
-			enableInterfaceDesc: "Use esta interface para transmissão agregada.",
+			enableInterface: "Usar na agregação",
+			enableInterfaceDesc:
+				"Inclui esta interface na transmissão agregada. Desativá-la não a desconecta \u2014 o gerenciamento e o SSH continuam funcionando.",
 			staticIp: "Endereço IP estático",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "Deixe em branco para usar DHCP (endereçamento automático).",
@@ -661,14 +662,14 @@ const ptBR = {
 			comingSoon: "{feature} chegará em uma atualização futura",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "Na agregação",
+			excluded: "Excluída",
+			enableBond: "Incluir na agregação",
+			disableBond: "Remover da agregação",
+			lastActiveError: "Não é possível desativar a única conexão ativa",
+			wiredDisableTitle: "Remover a Ethernet da agregação?",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"Isso apenas remove o link do grupo de agregação. A interface continua conectada \u2014 o gerenciamento do dispositivo, o SSH e o acesso à rede local continuam funcionando. Se houver uma transmissão em andamento, a largura de banda disponível diminui.",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",

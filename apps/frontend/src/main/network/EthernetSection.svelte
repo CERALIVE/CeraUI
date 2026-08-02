@@ -21,10 +21,13 @@ interface Props {
 
 const { wiredEntries, isFullyStale, staleInterfaces, onConfigure }: Props = $props();
 
-// Ethernet footgun guard: disabling a wired link can drop the operator's
-// management / SSH / LAN path, so the BondToggle's disable action is gated
-// behind a confirm. One dialog instance serves every row via a pending
-// promise resolver — BondToggle awaits `confirmDisable()` before mutating.
+// Bandwidth footgun guard: the wired link is usually the fattest member of the
+// bond, so excluding it can gut an in-flight stream's throughput — hence the
+// confirm on the BondToggle's disable action. It does NOT touch the interface
+// itself (the backend `enabled` flag only filters `genSrtlaIpList()`), so
+// management / SSH / LAN over eth0 are unaffected and the copy must not claim
+// otherwise. One dialog instance serves every row via a pending promise
+// resolver — BondToggle awaits `confirmDisable()` before mutating.
 let confirmOpen = $state(false);
 let pendingName = $state('');
 let resolveConfirm: ((proceed: boolean) => void) | null = null;
@@ -114,7 +117,7 @@ function settle(proceed: boolean) {
 	</div>
 </section>
 
-<!-- Management-interruption confirm: gates BondToggle disable on wired links. -->
+<!-- Bond-exclusion confirm: gates BondToggle disable on wired links. -->
 <AlertDialog.Root bind:open={confirmOpen} onOpenChange={(open) => !open && settle(false)}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>

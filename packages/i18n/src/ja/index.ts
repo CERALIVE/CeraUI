@@ -275,9 +275,9 @@ const ja = {
 		},
 
 		dialogs: {
-			enableInterface: "インターフェースを有効化",
+			enableInterface: "ボンディングに使用",
 			enableInterfaceDesc:
-				"このインターフェースをボンディングストリーミングに使用します。",
+				"このインターフェースをボンディング配信に含めます。オフにしても切断はされず、管理と SSH は引き続き利用できます。",
 			staticIp: "静的IPアドレス",
 			ipPlaceholder: "192.168.1.50",
 			dhcpHint: "DHCP（自動アドレス割り当て）を使用する場合は空欄にします。",
@@ -504,14 +504,14 @@ const ja = {
 			comingSoon: "{feature}は今後のアップデートで提供されます",
 			speed: "Speed",
 			totalBandwidth: "Total Bandwidth",
-			inBond: "In Bond",
-			excluded: "Excluded",
-			enableBond: "Enable Bond",
-			disableBond: "Disable Bond",
-			lastActiveError: "Cannot disable the only active connection",
-			wiredDisableTitle: "Disable Ethernet?",
+			inBond: "ボンディング中",
+			excluded: "除外中",
+			enableBond: "ボンディングに追加",
+			disableBond: "ボンディングから除外",
+			lastActiveError: "唯一のアクティブな接続は無効にできません",
+			wiredDisableTitle: "イーサネットをボンディングから除外しますか？",
 			wiredDisableBody:
-				"Disabling Ethernet may interrupt device management and SSH access.",
+				"リンクをボンディングの対象から外すだけです。インターフェースは接続されたままなので、デバイス管理・SSH・LAN アクセスは引き続き利用できます。配信中の場合は利用可能な帯域が減少します。",
 			modemModel: "Model",
 			modemManufacturer: "Manufacturer",
 			switchToHotspot: "Switch to Hotspot",
