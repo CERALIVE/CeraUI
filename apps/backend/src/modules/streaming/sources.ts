@@ -162,6 +162,9 @@ const GATEWAY_INACTIVE_REASON = "live.education.reason.gatewayInactive";
 /** The i18n reason surfaced when the operator disabled the protocol in Settings. */
 const DISABLED_IN_SETTINGS_REASON = "live.education.reason.disabledInSettings";
 
+/** The i18n reason surfaced when the engine does not offer a device's pipeline. */
+const PIPELINE_NOT_OFFERED_REASON = "live.education.reason.pipelineNotOffered";
+
 /** The `settings.sources.<id>` i18n key family PipelineHelper already resolves. */
 function sourceLabelKey(id: string): string {
 	return `settings.sources.${id}`;
@@ -429,6 +432,56 @@ function buildCaptureEntry(
  * unplugged grace state (`live.source.lostBody`) and a start/setConfig is refused
  * by the todo-12 gate.
  */
+/**
+ * A capture row for a live device whose pipeline this engine does not offer.
+ *
+ * The device→coarse fold intersects two INDEPENDENTLY-VERSIONED vocabularies —
+ * the engine's `capabilities.sources[]` ids and CeraUI's
+ * `DEVICE_KIND_TO_PIPELINE_ID` bridge — so when they disagree EVERY camera
+ * disappears at once. Board-confirmed on a Rock 5B+: an engine advertising the
+ * retired `camlink`/`v4l_mjpeg` ids produced an empty intersection, and a
+ * connected 1080p59.94 HDMI-RX input and a connected USB camera both vanished
+ * with nothing to distinguish it from "no hardware attached".
+ *
+ * Rendering it `available: false` with a reason is the same FAIL-CLOSED-AND-VISIBLE
+ * rule `networkAvailability` applies to an inactive gateway. It stays
+ * non-selectable because the pipeline really is not offered — a start would fail
+ * at `pipeline_not_in_offered_set`.
+ *
+ * Scoped to kinds that DO name a video pipeline: `audio`/`network` and the SoC
+ * codec/scaler nodes still drop, as they are not capture inputs. Facets are
+ * conservative because the capability entry that would supply them is precisely
+ * what is missing.
+ */
+function buildUnofferedCaptureEntry(
+	device: CaptureDevice,
+	pipelineId: string,
+): StreamSource {
+	return {
+		id: device.input_id,
+		pipelineId,
+		modes: [],
+		supportsAudio: false,
+		supportsResolutionOverride: false,
+		supportsFramerateOverride: false,
+		audioKind: "none",
+		available: false,
+		unavailableReason: PIPELINE_NOT_OFFERED_REASON,
+		signal: device.signal ?? "unknown",
+		origin: "capture",
+		kind: device.kind,
+		displayName: device.display_name,
+		devicePath: device.device_path,
+		...(device.stable_id !== undefined && device.stable_id !== ""
+			? { stableId: device.stable_id }
+			: {}),
+		...(device.physical_group_id !== undefined &&
+		device.physical_group_id !== ""
+			? { physicalGroupId: device.physical_group_id }
+			: {}),
+	};
+}
+
 function buildLostEntry(
 	snapshot: LastSeenDevice,
 	coarse: StreamSource,
@@ -650,6 +703,8 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	};
 
 	const capturesByPipeline = new Map<string, StreamSource[]>();
+	const basePipelineIds = new Set(base.map((entry) => entry.pipelineId));
+	const unofferedCaptures: StreamSource[] = [];
 	// Live capture rows indexed by stable identity, so a remembered id the loop
 	// below decides has MIGRATED can be published as an alias on its successor.
 	const capturesByStableId = new Map<string, StreamSource[]>();
@@ -674,7 +729,16 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 		const bridged = deviceKindToPipelineId(device.kind);
 		if (bridged === undefined) continue;
 		const coarse = coarseByPipeline.get(bridged);
-		if (coarse === undefined) continue;
+		if (coarse === undefined) {
+			// Dropping an engine-classified capture device here is what made a real,
+			// connected camera vanish with no operator-visible reason — but only when
+			// NOTHING in the catalog speaks for its pipeline. A `test`-kind device
+			// bridges to the VIRTUAL test-pattern row, which already represents it.
+			if (!basePipelineIds.has(bridged)) {
+				unofferedCaptures.push(buildUnofferedCaptureEntry(device, bridged));
+			}
+			continue;
+		}
 		const entry = buildCaptureEntry(device, bridged, coarse, captureContext);
 		if (device.stable_id !== undefined && device.stable_id !== "") {
 			liveStableIds.add(device.stable_id);
@@ -740,6 +804,9 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 		}
 		out.push(entry);
 	}
+	// Appended last, and only ever ADDITIVE: these devices bridged to no offered
+	// coarse slot, so they displaced nothing above and cannot reorder it.
+	out.push(...unofferedCaptures);
 	return out;
 }
 

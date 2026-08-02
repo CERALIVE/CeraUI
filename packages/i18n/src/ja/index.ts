@@ -1392,6 +1392,8 @@ const ja = {
 				fixedBySource: "選択したソースによって固定されています",
 				unsupportedAtResolution: "この解像度では利用できません",
 				gatewayInactive: "ネットワーク受信ゲートウェイが実行されていません",
+				pipelineNotOffered:
+					"現在のストリーミングエンジンではサポートされていません",
 				disabledInSettings: "設定で無効化されています",
 				gatewayNoAddress:
 					"到達可能な LAN またはホットスポットのアドレスがありません",

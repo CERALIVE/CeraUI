@@ -1489,6 +1489,7 @@ const ar = {
 				fixedBySource: "محدد بواسطة المصدر المختار",
 				unsupportedAtResolution: "غير متاح بهذه الدقة",
 				gatewayInactive: "بوابة استقبال الشبكة غير قيد التشغيل",
+				pipelineNotOffered: "غير مدعوم من محرك البث الحالي",
 				disabledInSettings: "معطّل في الإعدادات",
 				gatewayNoAddress:
 					"لا يوجد عنوان شبكة محلية أو نقطة اتصال يمكن الوصول إليه",

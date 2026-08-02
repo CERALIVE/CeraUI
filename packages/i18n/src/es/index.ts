@@ -774,6 +774,7 @@ const es = {
 				unsupportedAtResolution: "No disponible en esta resolución",
 				gatewayInactive:
 					"La puerta de enlace de ingesta de red no está en ejecución",
+				pipelineNotOffered: "No compatible con el motor de streaming actual",
 				disabledInSettings: "Desactivado en Ajustes",
 				gatewayNoAddress: "Sin dirección de LAN o punto de acceso accesible",
 			},

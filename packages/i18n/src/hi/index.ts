@@ -1353,6 +1353,7 @@ const hi = {
 				fixedBySource: "चयनित स्रोत द्वारा निर्धारित",
 				unsupportedAtResolution: "इस रिज़ॉल्यूशन पर उपलब्ध नहीं",
 				gatewayInactive: "नेटवर्क इंजेस्ट गेटवे नहीं चल रहा है",
+				pipelineNotOffered: "वर्तमान स्ट्रीमिंग इंजन द्वारा समर्थित नहीं",
 				disabledInSettings: "सेटिंग्स में अक्षम",
 				gatewayNoAddress: "कोई पहुँच योग्य LAN या हॉटस्पॉट पता नहीं",
 			},

@@ -350,10 +350,19 @@ Live source list AND in the "Configured" summary line above it.
 `modules/streaming/onboard-display-names.ts` is the video counterpart of the audio
 tier-0 rule and shares its key folding: `normalizeOnboardKey` lives there and
 `audio-naming.ts` imports it, so both media types key their rules identically.
-`ONBOARD_VIDEO_DISPLAY_RULES` maps `rkhdmirx` / `rockchiphdmirx` /
-`rockchiphdmirxcontroller` → `HDMI Input` — deliberately the SAME name the audio
-ladder gives `rockchip,hdmiin`, because the two are the video and audio halves of
-ONE physical port. Like the audio rule it is code-level only: no UI, no RPC, no
+`ONBOARD_VIDEO_DISPLAY_RULES` maps `rkhdmirx` / `streamhdmirx` / `snpshdmirx` /
+`rockchiphdmirx` / `rockchiphdmirxcontroller` → `HDMI Input` — deliberately the
+SAME name the audio ladder gives `rockchip,hdmiin`, because the two are the video
+and audio halves of ONE physical port.
+
+**One node has SEVERAL spellings, and which one arrives depends on the engine
+build.** The v4l2 CARD TYPE and the v4l2 DRIVER name are different strings for the
+same block: a Rock 5B+ HDMI-RX reports card type `stream_hdmirx` but driver
+`snps_hdmirx` (Synopsys DesignWare HDMI-RX — the IP Rockchip licenses).
+Board-confirmed: after the engine moved to naming the node after its driver, the
+raw `snps_hdmirx` rendered verbatim in the operator's source picker. Keying the
+rule on the IP block rather than on a node path or board model is what makes it
+work on every board carrying the same receiver. Like the audio rule it is code-level only: no UI, no RPC, no
 config field. Adding a board is a code change.
 
 **It is applied at the device-construction seam, not at each render site.** The
@@ -1929,6 +1938,56 @@ table driven through the REAL procedure, the persistence-untouched guarantee, an
 the fail-open negatives) + `tests/capability-truth-clamp.test.ts` (the Osmo
 1080p60-on-H.264 migration, the one-time notification, and the never-clamp cases).
 
+## A LIVE CAPTURE DEVICE IS NEVER SILENTLY DROPPED [EXISTS]
+
+`buildSources` folds each device into the coarse capability entry its kind bridges
+to. That is an INTERSECTION of two INDEPENDENTLY-VERSIONED vocabularies — the
+engine's `capabilities.sources[]` ids and `DEVICE_KIND_TO_PIPELINE_ID` — and when
+they disagree the intersection is EMPTY, so EVERY camera disappears at once.
+
+Board-confirmed on a Rock 5B+ (operator-reported): the device ran the released
+cerastream `2026.7.2` (commit `5544fe3`, `SCHEMA_VERSION 0.4.0`), whose catalog
+advertises the retired `camlink` / `v4l_mjpeg` ids, against a CeraUI that bridges
+`hdmi` / `usb_mjpeg`. A connected, locked **1920x1080@59.94** HDMI-RX input and a
+connected RØDE USB camera BOTH vanished, and because `SUPPRESSED_COARSE_PIPELINE_IDS`
+drops the legacy coarse rows unconditionally, the picker collapsed to the single
+virtual test pattern — indistinguishable from "no hardware attached".
+
+Diagnostic note worth keeping: the engine's `devices` list was CORRECT throughout
+(`/dev/video1`, `kind: "hdmi"`), and `v4l2-ctl --query-dv-timings` reported the real
+signal. The loss was entirely in this projection. The USB camera disappearing
+alongside the HDMI one is what rules out any kernel/HDMI-RX explanation — a
+receiver fault cannot unlist a USB webcam.
+
+`buildUnofferedCaptureEntry` renders such a device `available: false` with
+`live.education.reason.pipelineNotOffered` instead of `continue`-ing past it. This
+is the same FAIL-CLOSED-AND-VISIBLE rule `networkAvailability` already applies to an
+inactive gateway ("still emitted, just unavailable, never dropped") and the house
+rule that an unsupported option is disabled-with-a-reason, never hidden.
+
+Three scoping rules are load-bearing:
+
+- **Only when NOTHING in the catalog speaks for the pipeline** (`basePipelineIds`).
+  A `test`-kind device bridges to `test`, which exists as the VIRTUAL row and
+  already represents it; without this check that row doubles. A regression test
+  caught exactly this.
+- **Only for kinds that DO name a video pipeline.** An unrecognised engine kind
+  collapses to `"other"` in `mapEngineDeviceKind`, which is the SAME bucket as the
+  SoC codec/scaler nodes (`rockchip-rga`, the `hantro-vpu` dec/enc/av1 nodes), so
+  CeraUI cannot tell an unknown camera from a non-camera there. Rendering them all
+  would put four codec blocks in the operator's picker. Dropping stays correct —
+  this is a KNOWN, accepted boundary, not an oversight.
+- **Appended last, never interleaved**, so it displaces and reorders nothing.
+
+It is a SAFETY NET, not a substitute for a current engine: the row is deliberately
+not selectable, because the pipeline really is not offered and a start would fail at
+`pipeline_not_in_offered_set`.
+
+Coverage: `tests/unoffered-capture-visibility.test.ts` (the real board payload, the
+`test`-only regression lock, the conservative-facet and wire-schema assertions, and
+the four negatives: codec nodes, audio class, the virtual/network double-render, and
+row-order stability).
+
 ## ONE ROW PER PHYSICAL CAMERA + PER-DEVICE MODE SELECTION [EXISTS]
 
 A capability source is a PIPELINE; an operator points at a DEVICE. Conflating the
@@ -3331,6 +3390,9 @@ config, an anchored path still held by its own device, and a live row with no
   healthy observation reset the run, and don't widen it past `physical_group_id`
   absence into re-asserting a remembered `caps`/`signal` — that is the latch
   `withKnownEngineMetadata` already refuses for good reason.
+- **Don't `continue` past a live capture device whose pipeline the engine does not offer** — that intersection couples two independently-versioned vocabularies, and when they disagree EVERY camera vanishes at once behind a picker that looks exactly like "no hardware attached" (board-confirmed: a locked 1080p59.94 HDMI input and a USB camera both gone, `test` the only row). Route it through `buildUnofferedCaptureEntry` so it renders disabled-with-a-reason. Don't drop the `basePipelineIds` guard either — a `test`-kind device is already the virtual row and would double — and don't widen the fallback to kinds that bridge to nothing: `mapEngineDeviceKind` collapses an unrecognised kind onto the same `"other"` as the SoC codec/scaler nodes, so widening puts `rockchip-rga` and three `hantro-vpu` blocks in the picker.
+- Don't assume a missing HDMI row is a kernel/HDMI-RX fault before checking whether OTHER capture devices vanished too — a receiver fault cannot unlist a USB webcam, and the engine's own `devices` list (`kind: "hdmi"`) plus `v4l2-ctl --query-dv-timings` will both still be correct while the projection is what dropped it.
+- Don't add only ONE spelling of an onboard node to `ONBOARD_VIDEO_DISPLAY_RULES` — the v4l2 card type (`stream_hdmirx`) and driver name (`snps_hdmirx`) are different strings for the same block, and which one reaches CeraUI depends on the engine build.
 - Don't re-add a coarse USB-capture placeholder row (`usb_mjpeg`, `v4l_mjpeg`, `libuvch264`, `camlink`) — a pipeline is not a device, the row is unactionable in every state, and one dual-format camera answers to two of them. And don't extend `SUPPRESSED_COARSE_PIPELINE_IDS` to `hdmi`/`rtmp`/`srt`/`test`: each names a real always-present board capability, so its coarse row is truthful with nothing plugged in.
 - Don't publish a device mode family whose pipeline the engine does not offer — the pick dies at `pipeline_not_in_offered_set` AFTER the operator committed to it. Gate `buildInputModes` on the coarse capability set, and don't union two media types' ladders (ADR-0008 §10).
 - **Don't add a field to `captureDeviceSchema` without adding it to `probeEngineDevices`'s whitelist copy too.** That copy (`sources.ts`) is the ONE seam a real `list-devices` payload crosses, and an unlisted field is DROPPED SILENTLY — no error, no warning. `modes[]` was unlisted for a whole wave, so todo 21's per-format families never reached the wire on real hardware: every dual-format camera published `selectedInputMode` with no `inputModes` beside it, the picker had nothing to offer, and the encoder ladder fell back to the device's UNIONED flat list (the exact ADR-0008 §10 defect the scoping exists to prevent). Read the field defensively (`const extra = d as {…}`), like the audio join keys beside it. And cover it with a test that drives the MOCK PROVIDER through the real boot path (`tests/mock-sources-parity.test.ts` `bootLikeMain`) — a test that hands `buildSources` a hand-built device literal bypasses this seam entirely, which is exactly why todo 21's 36-case suite stayed green while the feature was dead on the board.

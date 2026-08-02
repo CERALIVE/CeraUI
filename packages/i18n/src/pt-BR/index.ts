@@ -1534,6 +1534,7 @@ const ptBR = {
 				fixedBySource: "Fixado pela fonte selecionada",
 				unsupportedAtResolution: "Indisponível nesta resolução",
 				gatewayInactive: "O gateway de ingestão de rede não está em execução",
+				pipelineNotOffered: "Sem suporte no motor de streaming atual",
 				disabledInSettings: "Desativado nas Configurações",
 				gatewayNoAddress: "Nenhum endereço de LAN ou ponto de acesso acessível",
 			},

@@ -770,6 +770,8 @@ const de = {
 				fixedBySource: "Durch die gewählte Quelle festgelegt",
 				unsupportedAtResolution: "Bei dieser Auflösung nicht verfügbar",
 				gatewayInactive: "Netzwerk-Ingest-Gateway läuft nicht",
+				pipelineNotOffered:
+					"Von der aktuellen Streaming-Engine nicht unterstützt",
 				disabledInSettings: "In den Einstellungen deaktiviert",
 				gatewayNoAddress: "Keine erreichbare LAN- oder Hotspot-Adresse",
 			},
