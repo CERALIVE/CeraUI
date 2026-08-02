@@ -32,9 +32,21 @@
  * `normalizeOnboardKey` folds punctuation and case, so ONE entry matches every
  * spelling of the same block — `rk_hdmirx` (the engine `display_name`),
  * `stream_hdmirx` (the sysfs `Card type` the engine-down v4l2 scan reads on a
- * ROCK 5B+), `rockchip,hdmirx-controller` (the device-tree compatible), and the
+ * ROCK 5B+), `snps_hdmirx` (the v4l2 DRIVER name of the same node),
+ * `rockchip,hdmirx-controller` (the device-tree compatible), and the
  * ALSA card id `rockchiphdmiin` alike. It is shared with the audio ladder's
  * `ONBOARD_AUDIO_DISPLAY_RULES` so both media types fold keys identically.
+ *
+ * WHY a node needs several spellings: the CARD TYPE and the DRIVER name are two
+ * different v4l2 strings for one block, and which of them reaches CeraUI depends
+ * on the engine build. A Rock 5B+ HDMI-RX reports card type `stream_hdmirx` but
+ * driver `snps_hdmirx` (Synopsys DesignWare HDMI-RX — the IP block Rockchip
+ * licenses), so an engine that names the node after its driver publishes a raw
+ * `snps_hdmirx` the operator then reads in the source picker. Board-confirmed on
+ * a Rock 5B+ after the engine moved to the driver name. Both keys map to the one
+ * name because they are the one port; keying on the IP block rather than on a
+ * node path or board model is what makes this rule work on every board carrying
+ * the same receiver.
  */
 
 /** Fold a raw hardware string to its rule key: letters + digits, lowercased. */
@@ -54,6 +66,7 @@ export function normalizeOnboardKey(value: string): string {
 const ONBOARD_VIDEO_DISPLAY_RULES: ReadonlyMap<string, string> = new Map([
 	["rkhdmirx", "HDMI Input"],
 	["streamhdmirx", "HDMI Input"],
+	["snpshdmirx", "HDMI Input"],
 	["rockchiphdmirx", "HDMI Input"],
 	["rockchiphdmirxcontroller", "HDMI Input"],
 ]);

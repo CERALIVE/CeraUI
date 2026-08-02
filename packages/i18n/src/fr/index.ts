@@ -1557,6 +1557,8 @@ const fr = {
 				fixedBySource: "Fixé par la source sélectionnée",
 				unsupportedAtResolution: "Indisponible à cette résolution",
 				gatewayInactive: "La passerelle d'ingestion réseau n'est pas active",
+				pipelineNotOffered:
+					"Non pris en charge par le moteur de streaming actuel",
 				disabledInSettings: "Désactivé dans les paramètres",
 				gatewayNoAddress: "Aucune adresse LAN ou point d'accès joignable",
 			},

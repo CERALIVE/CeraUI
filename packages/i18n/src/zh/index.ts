@@ -1299,6 +1299,7 @@ const zh = {
 				fixedBySource: "由所选来源固定",
 				unsupportedAtResolution: "此分辨率下不可用",
 				gatewayInactive: "网络接入网关未运行",
+				pipelineNotOffered: "当前流媒体引擎不支持",
 				disabledInSettings: "已在设置中禁用",
 				gatewayNoAddress: "无可达的局域网或热点地址",
 			},

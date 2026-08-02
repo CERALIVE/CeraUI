@@ -750,6 +750,7 @@ const en = {
 				fixedBySource: "Fixed by the selected source",
 				unsupportedAtResolution: "Not available at this resolution",
 				gatewayInactive: "Network ingest gateway is not running",
+				pipelineNotOffered: "Not supported by the current streaming engine",
 				disabledInSettings: "Disabled in Settings",
 				gatewayNoAddress: "No reachable LAN or hotspot address",
 			},

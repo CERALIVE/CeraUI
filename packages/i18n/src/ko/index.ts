@@ -1369,6 +1369,7 @@ const ko = {
 				fixedBySource: "선택한 소스에 의해 고정됨",
 				unsupportedAtResolution: "이 해상도에서는 사용할 수 없음",
 				gatewayInactive: "네트워크 인제스트 게이트웨이가 실행 중이 아닙니다",
+				pipelineNotOffered: "현재 스트리밍 엔진에서 지원되지 않습니다",
 				disabledInSettings: "설정에서 비활성화됨",
 				gatewayNoAddress: "연결 가능한 LAN 또는 핫스팟 주소 없음",
 			},
