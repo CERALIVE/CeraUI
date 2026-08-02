@@ -578,7 +578,7 @@ describe("the state-transition table", () => {
 		await orchestrator.start({ origin: "ui", launch: async () => {} });
 		expect(commits).toHaveLength(1);
 
-		const stopped = await orchestrator.stop();
+		const stopped = await orchestrator.stop("operator");
 		expect(stopped.result).toBe("stopped");
 		expect(commits).toHaveLength(1);
 		expect(getConfig().last_streamed_source).toBe("video0");

@@ -1485,6 +1485,10 @@ const ko = {
 		bitrateRange: "비트레이트는 2000에서 12000 Kbps 사이여야 합니다",
 	},
 	notifications: {
+		streamRecovered:
+			"스트리밍 엔진이 다시 시작된 뒤 스트림이 자동으로 복구되었습니다.",
+		streamRecoveryFailed:
+			"스트리밍 엔진이 다시 시작된 뒤 스트림을 복구하지 못했습니다. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamAutostartNoLinksFailed:
 			"자동 스트림 시작에 실패했습니다: {attempt}/{maxAttempts}회 확인 후에도 네트워크 링크가 없습니다. 자세한 내용은 설정 → 시스템 로그를 열어 확인하세요.",
 		streamStartEngineUnavailableRetrying:

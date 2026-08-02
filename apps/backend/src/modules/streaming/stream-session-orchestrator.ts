@@ -12,6 +12,10 @@ import {
 
 import { logger } from "../../helpers/logger.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
+import {
+	noteStreamStopped,
+	type StreamStopCause,
+} from "./armed-stream-marker.ts";
 import { asrcProbeRemainingMs } from "./audio.ts";
 import {
 	broadcastConfigChangePhase,
@@ -48,6 +52,9 @@ export const STREAM_LAUNCH_ORIGINS = [
 	"autostart",
 	"set-profile",
 	"remote-control",
+	// Its own origin so the one-shot engine-death restoration is admitted through
+	// the SAME mutex every other origin uses, never a private path around it.
+	"restoration",
 ] as const;
 export type StreamLaunchOrigin = (typeof STREAM_LAUNCH_ORIGINS)[number];
 
@@ -143,6 +150,22 @@ export type StreamSessionOrchestratorDeps = {
 	 * was already running is not a new commitment to anything.
 	 */
 	readonly onStreamCommitted?: () => void;
+	/**
+	 * Called at that same commit point to ARM the restoration marker. It is a
+	 * second hook rather than more work inside `onStreamCommitted` because the
+	 * two answer different questions — one remembers which DEVICE went live, the
+	 * other remembers that a stream WAS live — and each has to be provable on its
+	 * own.
+	 */
+	readonly onStreamArmed?: () => void;
+	/**
+	 * Called with the operator-or-machine CAUSE of every stop, before the stop
+	 * itself runs. The engine-loss path and an operator Stop reach the identical
+	 * `stop()`, so without an explicit cause the marker cannot tell "the operator
+	 * is done" from "the engine died" — and would either forget every crash or
+	 * restart a stream the operator deliberately ended.
+	 */
+	readonly onStreamStopped?: (cause: StreamStopCause) => void;
 };
 
 type ActiveAttempt = {
@@ -160,6 +183,7 @@ type ActiveConfigChange = {
 
 type QueuedStop = {
 	readonly promise: Promise<StopResult>;
+	readonly cause: StreamStopCause;
 	readonly release: (result: StopResult | Promise<StopResult>) => void;
 	readonly cancelDeadline: () => void;
 };
@@ -173,7 +197,7 @@ export const RECONFIGURE_STOP_TIMEOUT_REASON = "reconfigure_stop_timeout";
 
 export type StreamSessionOrchestrator = {
 	readonly start: (request: StreamStartRequest) => Promise<StartResult>;
-	readonly stop: () => Promise<StopResult>;
+	readonly stop: (cause: StreamStopCause) => Promise<StopResult>;
 	readonly reconcile: () => Promise<LifecycleState>;
 	readonly snapshot: () => StreamSessionSnapshot;
 	readonly changeConfig: (
@@ -355,6 +379,11 @@ export function createStreamSessionOrchestrator(
 		} catch (error) {
 			logger.warn("stream commit bookkeeping failed", { attemptId, error });
 		}
+		try {
+			deps.onStreamArmed?.();
+		} catch (error) {
+			logger.warn("stream restoration arming failed", { attemptId, error });
+		}
 		return { result: "started", attemptId };
 	};
 
@@ -371,7 +400,7 @@ export function createStreamSessionOrchestrator(
 	 * journal carried not one line about it. Unbounded and unlogged, that
 	 * silence had no ceiling at all.
 	 */
-	const parkStop = (): QueuedStop => {
+	const parkStop = (cause: StreamStopCause): QueuedStop => {
 		let release!: (result: StopResult | Promise<StopResult>) => void;
 		const promise = new Promise<StopResult>((resolve) => {
 			release = resolve;
@@ -403,16 +432,26 @@ export function createStreamSessionOrchestrator(
 			attemptId,
 			budgetMs,
 		});
-		return { promise, release, cancelDeadline: () => cancelTimeout(timer) };
+		return {
+			promise,
+			cause,
+			release,
+			cancelDeadline: () => cancelTimeout(timer),
+		};
 	};
 
-	const stop = async (): Promise<StopResult> => {
+	const stop = async (cause: StreamStopCause): Promise<StopResult> => {
+		// The cause is reported from the INTENT, ahead of the outcome. An operator
+		// who pressed Stop meant it whether or not the engine answered, and a stop
+		// that parks behind a transaction must not leave the marker armed for the
+		// minute it waits.
+		deps.onStreamStopped?.(cause);
 		// A change transaction already owns the engine's lifecycle mutex and the
 		// capture hardware. Racing a 12 s stop deadline against it would report a
 		// healthy 65 s transaction as `stop_failed`, so the stop WAITS and is then
 		// answered against whatever state the transaction actually settled into.
 		if (state === "reconfiguring") {
-			if (queuedStop === undefined) queuedStop = parkStop();
+			if (queuedStop === undefined) queuedStop = parkStop(cause);
 			return queuedStop.promise;
 		}
 		if (state === "idle") return { result: "stopped" };
@@ -483,7 +522,7 @@ export function createStreamSessionOrchestrator(
 		if (pending === undefined) return false;
 		queuedStop = undefined;
 		pending.cancelDeadline();
-		pending.release(stop());
+		pending.release(stop(pending.cause));
 		return true;
 	};
 
@@ -647,6 +686,21 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 				logger.warn("stream commit bookkeeping failed", { error }),
 			);
 	},
+	// Lazily imported for the same module-ordering reason as the hook above:
+	// `stream-restoration.ts` reaches the streamloop and the source graph, both
+	// of which already point back at this module.
+	onStreamArmed: () => {
+		void import("./stream-restoration.ts")
+			.then(({ armStreamRestoration }) => armStreamRestoration())
+			.catch((error) =>
+				logger.warn("stream restoration arming failed", { error }),
+			);
+	},
+	// Statically imported, unlike the arming hook: `armed-stream-marker.ts` holds
+	// no streaming-graph edges, and a SYNCHRONOUS clear is what guarantees an
+	// operator Stop has disarmed restoration before anything else can read the
+	// marker.
+	onStreamStopped: noteStreamStopped,
 });
 
 export function startStreamSession(
@@ -655,8 +709,8 @@ export function startStreamSession(
 	return productionOrchestrator.start(request);
 }
 
-export function stopStreamSession(): Promise<StopResult> {
-	return productionOrchestrator.stop();
+export function stopStreamSession(cause: StreamStopCause): Promise<StopResult> {
+	return productionOrchestrator.stop(cause);
 }
 
 export function reconcileStreamSession(): Promise<LifecycleState> {

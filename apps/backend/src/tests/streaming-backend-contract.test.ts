@@ -533,7 +533,7 @@ describe("CerastreamBackend behavioural contract", () => {
 			generation: 3,
 		});
 
-		await orchestrator.stop();
+		await orchestrator.stop("operator");
 		await backend.settle();
 	});
 

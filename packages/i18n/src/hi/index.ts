@@ -1467,6 +1467,10 @@ const hi = {
 		bitrateRange: "बिटरेट 2000 और 12000 Kbps के बीच होना चाहिए",
 	},
 	notifications: {
+		streamRecovered:
+			"स्ट्रीमिंग इंजन के पुनः आरंभ होने के बाद स्ट्रीम स्वचालित रूप से बहाल हो गई।",
+		streamRecoveryFailed:
+			"स्ट्रीमिंग इंजन के पुनः आरंभ होने के बाद स्ट्रीम बहाल नहीं हो सकी। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamAutostartNoLinksFailed:
 			"स्वचालित स्ट्रीम शुरू नहीं हुई: {attempt}/{maxAttempts} जाँचों के बाद कोई नेटवर्क लिंक उपलब्ध नहीं था। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 		streamStartEngineUnavailableRetrying:

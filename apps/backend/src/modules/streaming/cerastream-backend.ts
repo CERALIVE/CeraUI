@@ -468,11 +468,21 @@ function defaultOnSessionConnectionLost(site: string): void {
 					import("./streaming.ts"),
 				]);
 			reportEngineState({ isStreaming: getIsStreaming(), reachable: false });
-			const stopped = await stopStreamSession();
+			// `engine_loss` is what keeps this path distinguishable from an operator
+			// Stop, which reaches the very same `stopStreamSession`. The cause is
+			// the ONLY thing that tells the armed-stream marker to survive.
+			const stopped = await stopStreamSession("engine_loss");
 			defaultLogger.warn(
 				"cerastream: engine session retired after a control-connection loss",
 				{ site, stop: stopped.result },
 			);
+			// The engine-loss retirement IS the reconnect event for a SIGKILLed
+			// engine: the reconnect loop settled at boot and never re-arms, so
+			// nothing else notices systemd bringing cerastream back. The run polls
+			// for an authoritative runtime state and is self-serialising, so a
+			// second loss cannot start a second one.
+			const { runStreamRestoration } = await import("./stream-restoration.ts");
+			void runStreamRestoration();
 		} catch (err) {
 			defaultLogger.error(
 				"cerastream: could not retire the session after a control-connection loss",

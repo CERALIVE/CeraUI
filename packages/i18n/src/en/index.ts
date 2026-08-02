@@ -868,6 +868,10 @@ const en = {
 		bitrateRange: "Bitrate must be between 2000 and 12000 Kbps",
 	},
 	notifications: {
+		streamRecovered:
+			"The stream was restored automatically after the streaming engine restarted.",
+		streamRecoveryFailed:
+			"The stream could not be restored after the streaming engine restarted. Open Settings → System Logs for details.",
 		streamAutostartNoLinksFailed:
 			"Automatic stream start failed: no network links became available after {attempt:number}/{maxAttempts:number} checks. Open Settings → System Logs for details.",
 		streamStartEngineUnavailableRetrying:

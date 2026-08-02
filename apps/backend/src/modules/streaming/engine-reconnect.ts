@@ -71,6 +71,7 @@ import {
 	type EngineDeviceCacheDeps,
 	refreshAndBroadcastSources,
 } from "./sources.ts";
+import { runStreamRestoration } from "./stream-restoration.ts";
 import { reconcileStreamSession } from "./stream-session-orchestrator.ts";
 import { getIsStreaming } from "./streaming.ts";
 
@@ -171,6 +172,10 @@ function buildDefaultBroadcastEngineState(
 			// its own schedule, and the reconciliation is self-serialising, so a
 			// loop that re-fires can never double-apply.
 			void runInflightConfigChangeReconciliation();
+			// The boot-race half of restoration: an engine that was still down when
+			// this process started could not be asked anything at boot. Same
+			// fire-and-forget, self-serialising posture as the line above.
+			void runStreamRestoration();
 		}
 	};
 }

@@ -86,6 +86,7 @@ CeraUI/
 | Validation constraints (FE adapter) | `apps/frontend/src/lib/components/streaming/ValidationAdapter.ts` |
 | **Apply-now vs apply-on-next-start choice (encoder dialog)** | `apps/frontend/src/main/dialogs/EncoderDialog.svelte` + `apps/frontend/src/lib/streaming/appliesNextStart.ts` (`restartChoiceRequired`) |
 | **Config-change phase fencing + operator copy (frontend)** | `apps/frontend/src/lib/streaming/configChangePhase.ts` + `configChangeCopy.ts` |
+| **One-shot, boot-scoped stream restoration after an engine death (armed marker, adopt-before-restore, explicit stop causes)** | `apps/backend/src/modules/streaming/armed-stream-marker.ts` + `stream-restoration.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → ONE-SHOT STREAM RESTORATION AFTER ENGINE DEATH |
 | Validation constants (source of truth) | `packages/rpc/src/schemas/` |
 | Custom UI components | `apps/frontend/src/lib/components/custom/` |
 | shadcn-svelte primitives (bits-ui v2) | `apps/frontend/src/lib/components/ui/` |

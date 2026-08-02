@@ -25,6 +25,7 @@ import { isDevelopment } from "../../mocks/mock-config.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
 import { queueUpdateGw } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
+import { notePlannedShutdown } from "../streaming/armed-stream-marker.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
 import {
 	notificationBroadcast,
@@ -822,6 +823,12 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
 	if (getIsStreaming()) return refuseUpdateStart("streaming");
 	if (isUpdating()) return refuseUpdateStart("already_updating");
+
+	// An update restarts `ceralive` (and usually reboots) WITHOUT changing the
+	// boot id, so a stream armed before an engine crash earlier in this same boot
+	// would otherwise be restored by the post-update backend. Suppress it here,
+	// where the update is known to be going ahead.
+	notePlannedShutdown("software_update");
 
 	// A fresh install supersedes any prior terminal outcome (Todo 24).
 	currentUpdateIdentity = availableIdentity;

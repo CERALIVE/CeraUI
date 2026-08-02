@@ -1414,6 +1414,9 @@ const zh = {
 		bitrateRange: "比特率必须在 2000 到 12000 Kbps 之间",
 	},
 	notifications: {
+		streamRecovered: "流媒体引擎重启后，直播流已自动恢复。",
+		streamRecoveryFailed:
+			"流媒体引擎重启后无法恢复直播流。打开 设置 → 系统日志 查看详情。",
 		streamAutostartNoLinksFailed:
 			"自动流启动失败：检查 {attempt}/{maxAttempts} 次后仍无可用网络链路。打开 设置 → 系统日志 查看详情。",
 		streamStartEngineUnavailableRetrying:

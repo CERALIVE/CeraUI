@@ -328,7 +328,7 @@ describe("engine restart mid-session — the session control connection is the s
 
 		// The production hook routes into exactly this stop; drive it here so the
 		// assertion is on the orchestrator's own recovery, not on the wiring.
-		await orchestrator.stop();
+		await orchestrator.stop("engine_loss");
 		expect(streaming).toBe(false);
 		expect(orchestrator.snapshot().state).toBe("idle");
 

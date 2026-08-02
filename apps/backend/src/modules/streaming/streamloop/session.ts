@@ -284,6 +284,6 @@ export function stop(): void {
 	setPendingAudioFollowAsrc(null);
 	if (isAsrcProbeRejectResolved()) clearAsrcProbeReject();
 	void import("../stream-session-orchestrator.ts").then(
-		({ stopStreamSession }) => stopStreamSession(),
+		({ stopStreamSession }) => stopStreamSession("operator"),
 	);
 }

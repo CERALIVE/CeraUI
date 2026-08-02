@@ -1653,6 +1653,10 @@ const ptBR = {
 		bitrateRange: "A taxa de bits deve estar entre 2000 e 12000 Kbps",
 	},
 	notifications: {
+		streamRecovered:
+			"A transmissão foi restaurada automaticamente após o motor de streaming reiniciar.",
+		streamRecoveryFailed:
+			"Não foi possível restaurar a transmissão após o motor de streaming reiniciar. Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamAutostartNoLinksFailed:
 			"Falha no início automático: nenhum link de rede após {attempt}/{maxAttempts} verificações. Abra Configurações → Logs do sistema para ver os detalhes.",
 		streamStartEngineUnavailableRetrying:

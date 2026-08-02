@@ -1511,6 +1511,9 @@ const ja = {
 		bitrateRange: "ビットレートは2000から12000 Kbpsの間でなければなりません",
 	},
 	notifications: {
+		streamRecovered: "配信エンジンの再起動後、配信が自動的に復旧しました。",
+		streamRecoveryFailed:
+			"配信エンジンの再起動後、配信を復旧できませんでした。詳細は 設定 → システムログ を開いてください。",
 		streamAutostartNoLinksFailed:
 			"自動配信を開始できませんでした：{attempt}/{maxAttempts} 回確認してもネットワークリンクを利用できません。詳細は 設定 → システムログ を開いてください。",
 		streamStartEngineUnavailableRetrying:

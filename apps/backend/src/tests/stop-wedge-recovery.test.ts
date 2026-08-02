@@ -155,7 +155,7 @@ describe("a stop that never settles must not poison the session", () => {
 		await orchestrator.start({ origin: "ui", launch: async () => {} });
 		expect(streamingStatus).toBe(true);
 
-		const stopping = orchestrator.stop();
+		const stopping = orchestrator.stop("operator");
 		deadlineCallback?.();
 		expect(await stopping).toEqual({
 			result: "stop_failed",
