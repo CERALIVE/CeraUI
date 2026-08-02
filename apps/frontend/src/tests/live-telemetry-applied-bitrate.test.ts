@@ -154,9 +154,13 @@ describe("live stats card — applied vs configured bitrate", () => {
 
 		const { getByTestId } = await mount();
 
-		expect(getByTestId("telemetry-bitrate-limit").textContent).toContain(
-			`5 ${en.units.mbps}`,
-		);
+		const limit = getByTestId("telemetry-bitrate-limit");
+		expect(limit.textContent).toContain(`5 ${en.units.mbps}`);
+		// Named, not a bare "/ 4.5 Mbps". An operator read the slash form as a
+		// fraction and asked what the third number counted; every figure in this
+		// card is a bitrate, so none of them may travel without its own label.
+		expect(limit.textContent).toContain(en.hud.bitrateLimit);
+		expect(limit.textContent).not.toContain("/");
 	});
 
 	it("shows no ceiling qualifier when the engine is running at its ceiling", async () => {
@@ -247,8 +251,10 @@ describe("live stats card — measured throughput vs the engine's target", () =>
 		expect(getByTestId("telemetry-bitrate").textContent?.trim()).toBe(
 			`2.8 ${en.units.mbps}`,
 		);
+		// "Bitrate" cannot be the heading: the target and the ceiling beneath it are
+		// bitrates too. The heading names WHICH ONE the big number is.
 		expect(getByTestId("telemetry-bitrate-heading").textContent?.trim()).toBe(
-			en.hud.bitrate,
+			en.hud.bitrateSending,
 		);
 	});
 

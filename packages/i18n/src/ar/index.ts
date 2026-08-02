@@ -1003,6 +1003,7 @@ const ar = {
 	},
 	hud: {
 		bitrate: "معدل البت",
+		bitrateSending: "قيد الإرسال",
 		bitrateLimit: "الحد المُعد",
 		bitrateAdapting: "يتكيف",
 		bitrateBelowLimitHint:

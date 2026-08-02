@@ -1032,6 +1032,7 @@ const ptBR = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateSending: "Enviando",
 		bitrateLimit: "Limite configurado",
 		bitrateAdapting: "Adaptando",
 		bitrateBelowLimitHint:

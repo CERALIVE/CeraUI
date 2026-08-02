@@ -825,6 +825,7 @@ const zh = {
 	},
 	hud: {
 		bitrate: "比特率",
+		bitrateSending: "发送中",
 		bitrateLimit: "配置上限",
 		bitrateAdapting: "自适应中",
 		bitrateBelowLimitHint:

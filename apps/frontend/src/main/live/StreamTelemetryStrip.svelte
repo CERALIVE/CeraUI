@@ -25,6 +25,13 @@ interface Props {
 	 * honoured as a limit rather than ignored. Absent otherwise.
 	 */
 	bitrateLimit?: string | undefined;
+	// Every value above is a bitrate, which is exactly why NONE of them may be
+	// rendered as a bare number beside another. An operator reported reading
+	// "1.8 Mbps  Target 1.6 Mbps / 4.5 Mbps" as one figure plus a fraction, and
+	// asked what the third number counted. So each carries its own word label,
+	// the headline says WHICH KIND of bitrate it is ("Sending" vs "Target"), and
+	// the two qualifiers drop to their own line rather than sharing the
+	// headline's baseline.
 	tempSensor?: string;
 	uptimeSensor?: string;
 }
@@ -50,29 +57,30 @@ const {
 			data-testid="telemetry-bitrate-heading"
 			title={bitrateMeasured ? $LL.hud.bitrateMeasuredHint() : $LL.hud.bitrateTargetHint()}
 		>
-			{bitrateMeasured ? $LL.hud.bitrate() : $LL.hud.bitrateTarget()}
+			{bitrateMeasured ? $LL.hud.bitrateSending() : $LL.hud.bitrateTarget()}
 		</p>
-		<p class="flex items-baseline gap-1.5 font-mono text-lg font-semibold">
+		<p class="font-mono text-lg font-semibold">
 			<span data-testid="telemetry-bitrate" style="color: var(--status-live);">{bitrate}</span>
-			{#if bitrateTarget}
-				<span
-					class="text-muted-foreground/70 text-xs font-normal"
-					data-testid="telemetry-bitrate-target"
-					title={$LL.hud.bitrateTargetHint()}
-				>
-					{$LL.hud.bitrateTarget()} {bitrateTarget}
-				</span>
-			{/if}
-			{#if bitrateLimit}
-				<span
-					class="text-muted-foreground/70 text-xs font-normal"
-					data-testid="telemetry-bitrate-limit"
-					title={$LL.hud.bitrateBelowLimitHint()}
-				>
-					/ {bitrateLimit}
-				</span>
-			{/if}
 		</p>
+		{#if bitrateTarget || bitrateLimit}
+			<p class="text-muted-foreground/70 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
+				{#if bitrateTarget}
+					<span data-testid="telemetry-bitrate-target" title={$LL.hud.bitrateTargetHint()}>
+						{$LL.hud.bitrateTarget()}
+						<span class="font-mono">{bitrateTarget}</span>
+					</span>
+				{/if}
+				{#if bitrateTarget && bitrateLimit}
+					<span aria-hidden="true" class="text-muted-foreground/40">·</span>
+				{/if}
+				{#if bitrateLimit}
+					<span data-testid="telemetry-bitrate-limit" title={$LL.hud.bitrateBelowLimitHint()}>
+						{$LL.hud.bitrateLimit()}
+						<span class="font-mono">{bitrateLimit}</span>
+					</span>
+				{/if}
+			</p>
+		{/if}
 	</div>
 	{#if tempSensor}
 		<div class="space-y-1">
