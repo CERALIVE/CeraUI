@@ -865,6 +865,7 @@ const hi = {
 	},
 	hud: {
 		bitrate: "बिटरेट",
+		bitrateSending: "भेजा जा रहा है",
 		bitrateLimit: "कॉन्फ़िगर की गई सीमा",
 		bitrateAdapting: "अनुकूलन",
 		bitrateBelowLimitHint:

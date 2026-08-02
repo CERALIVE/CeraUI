@@ -268,6 +268,7 @@ const de = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateSending: "Senden",
 		bitrateLimit: "Konfiguriertes Limit",
 		bitrateAdapting: "Passt an",
 		bitrateBelowLimitHint:

@@ -894,6 +894,7 @@ const ja = {
 	},
 	hud: {
 		bitrate: "ビットレート",
+		bitrateSending: "送信中",
 		bitrateLimit: "設定した上限",
 		bitrateAdapting: "調整中",
 		bitrateBelowLimitHint:

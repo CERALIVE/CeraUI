@@ -877,6 +877,7 @@ const ko = {
 	},
 	hud: {
 		bitrate: "비트레이트",
+		bitrateSending: "전송 중",
 		bitrateLimit: "설정한 상한",
 		bitrateAdapting: "조정 중",
 		bitrateBelowLimitHint:

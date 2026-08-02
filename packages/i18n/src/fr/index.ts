@@ -1054,6 +1054,7 @@ const fr = {
 	},
 	hud: {
 		bitrate: "Bitrate",
+		bitrateSending: "Envoi",
 		bitrateLimit: "Limite configurée",
 		bitrateAdapting: "Adaptation",
 		bitrateBelowLimitHint:
