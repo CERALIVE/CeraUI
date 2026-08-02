@@ -18,7 +18,6 @@
 
 import type { AudioSource } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
-import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";
 import { AUDIO_SOURCE_POLL_DELAY } from "../../helpers/timing-constants.ts";
@@ -29,6 +28,11 @@ import { isRealDevice } from "../system/device-detection.ts";
 import { getHardwareKindCached } from "../system/hardware-kind.ts";
 import { notificationBroadcast } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	CANONICAL_SOUND_CLASS_DIR,
+	resolveConfiguredAlsaCards,
+	scanAlsaCards,
+} from "./alsa-card-scan.ts";
 import { syncAudioMeterPreference } from "./audio-meter-bridge.ts";
 import type {
 	AudioDeviceDisplay,
@@ -53,7 +57,7 @@ import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
 import { getEngineAudioDevices } from "./sources.ts";
 import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
-const deviceDir = setup.sound_device_dir ?? "/sys/class/sound";
+const deviceDir = setup.sound_device_dir ?? CANONICAL_SOUND_CLASS_DIR;
 const PROC_ASOUND_CARDS = "/proc/asound/cards";
 
 const NO_AUDIO_ID = "No audio";
@@ -191,6 +195,33 @@ export function isMeterSilencedByPick(
  */
 export function hasCapturePcmNode(entries: readonly string[]): boolean {
 	return entries.some((entry) => /^pcmC\d+D\d+c$/.test(entry));
+}
+
+/**
+ * Is this card PROVEN to be an output, i.e. something no operator could ever
+ * pick as an audio INPUT?
+ *
+ * The hand-maintained `exclude` list in `updateAudioDevices` has always meant
+ * exactly this — `rockchipdp0`, `rockchiphdmi0/1/2` are the SoC's DisplayPort
+ * and HDMI PLAYBACK cards. But a card-id list is a vocabulary, and the kernel's
+ * is not the same one: the RK3588 board this was written for now names those
+ * same blocks `hdmi0` / `hdmi1` (simple-card), so the list matches nothing and
+ * two output-only cards would render as selectable microphones the moment the
+ * scan starts finding cards at all.
+ *
+ * The direction is structural, so ask the structure. ALSA names a substream
+ * `pcmC<card>D<device><p|c>`; a card owning at least one `p` node and NO `c`
+ * node has told the kernel it plays and does not record.
+ *
+ * The zero-PCM case is deliberately NOT output — it is the RK3588 HDMI-RX, an
+ * INPUT that enumerates permanently and exposes no substream at all until a
+ * cable locks (see `getAudioCaptureCardIds`). Absence of evidence is not
+ * evidence: a card that has claimed no direction keeps its picker row, exactly
+ * as before, and only `audioCaptureCardIds` gates claims about it.
+ */
+export function isPlaybackOnlyCard(entries: readonly string[]): boolean {
+	if (hasCapturePcmNode(entries)) return false;
+	return entries.some((entry) => /^pcmC\d+D\d+p$/.test(entry));
 }
 
 /**
@@ -504,17 +535,17 @@ export async function reresolveAudioForEngineChange(): Promise<void> {
 	syncAudioMeterPreference();
 }
 
-// A card can disappear mid-scan (hotplug); an unreadable card simply reports no
-// capture PCM rather than aborting the whole audio refresh.
-async function readCardEntries(path: string): Promise<string[]> {
-	try {
-		return await readdirP(path);
-	} catch {
-		return [];
-	}
-}
-
-export async function updateAudioDevices(dir: string = deviceDir) {
+/**
+ * Rebuild the audio-source list from the board's ALSA cards.
+ *
+ * `dir` is the TEST SEAM and is honoured verbatim; only the omitted (production)
+ * argument is reconciled against the kernel by `resolveConfiguredAlsaCards`. The
+ * drift that reconciliation exists for is between `setup.sound_device_dir` and
+ * the kernel, so a caller that names a directory has already stated the answer —
+ * second-guessing it would make every sysfs-shaped fixture report the HOST's own
+ * sound cards instead.
+ */
+export async function updateAudioDevices(dir?: string) {
 	// Ignore the onboard audio cards
 	const exclude = [
 		"tegrahda",
@@ -535,31 +566,22 @@ export async function updateAudioDevices(dir: string = deviceDir) {
 		"usbaudio",
 	];
 
-	let devices: string[];
-	try {
-		devices = await readdirP(dir);
-	} catch (error) {
-		if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
-			throw error;
-		devices = [];
-	}
+	const cards =
+		dir === undefined
+			? await resolveConfiguredAlsaCards(deviceDir)
+			: await scanAlsaCards(dir);
+
 	const list: Record<string, true> = {};
 	const captureCards = new Set<string>();
 
-	for (const d of devices) {
-		// Only inspect cards
-		if (!d.match(/^card/)) continue;
+	for (const card of cards) {
+		// Skip over the IDs known not to be valid audio inputs, and over any card
+		// the kernel proves is an output whatever the board happens to call it.
+		if (exclude.includes(card.id)) continue;
+		if (isPlaybackOnlyCard(card.entries)) continue;
 
-		// Get the card's ID
-		const id = ((await readTextFile(`${dir}/${d}/id`)) ?? "").trim();
-
-		// Skip over the IDs known not to be valid audio inputs
-		if (exclude.includes(id)) continue;
-
-		list[id] = true;
-		if (hasCapturePcmNode(await readCardEntries(`${dir}/${d}`))) {
-			captureCards.add(id);
-		}
+		list[card.id] = true;
+		if (hasCapturePcmNode(card.entries)) captureCards.add(card.id);
 	}
 	// First add any priority cards found
 	const sortedList = {};

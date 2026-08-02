@@ -87,6 +87,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Absence GRACE on the selected capture source (the libuvc release window)** | `modules/streaming/capture-presence.ts` (`resolveSelectedSourceWithGrace`, `CAPTURE_ABSENCE_GRACE_MS`), read by `auto-audio.ts` `resolveAutoAsrcFromLiveState`; contract below → A DEBOUNCE IS NOT AN ABSENCE GRACE |
 | **`config.source` legacy coercion (pipeline/selected_video_input → source, idempotent)** | `helpers/config-schemas.ts` (`coerceLegacySource`) |
 | **Audio-naming resolution (4-tier: static onboard rule → engine join → ALSA longname → generic alias) + name cleaning + tier-3 diagnostic** | `modules/streaming/audio-naming.ts` |
+| **ALSA card scan + `setup.sound_device_dir` ↔ kernel reconciliation** | `modules/streaming/alsa-card-scan.ts` (`scanAlsaCards`, `resolveConfiguredAlsaCards`, `getResolvedAlsaCardDir`) + `modules/streaming/audio.ts` (`isPlaybackOnlyCard`); contract below → …AND NEITHER IS A LIVE AUDIO CARD |
 | **Static onboard AUDIO display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
 | **Static onboard VIDEO display-name rules (`rk_hdmirx` → `HDMI Input`) + the shared key folding** | `modules/streaming/onboard-display-names.ts` (`ONBOARD_VIDEO_DISPLAY_RULES`, `applyOnboardVideoDisplayRule`, `normalizeOnboardKey`) |
 | Mock hardware data | `mocks/providers/` |
@@ -1988,6 +1989,85 @@ Coverage: `tests/unoffered-capture-visibility.test.ts` (the real board payload, 
 the four negatives: codec nodes, audio class, the virtual/network double-render, and
 row-order stability).
 
+## …AND NEITHER IS A LIVE AUDIO CARD [EXISTS]
+
+The section above is about VIDEO, and its cause was two independently-versioned
+vocabularies disagreeing. The audio list has the same shape of defect from a
+different pair, and it is worse: it loses EVERY card at once with no row left to
+render a reason on.
+
+`updateAudioDevices` reads `setup.sound_device_dir` as a sysfs CLASS directory
+(`cardN/id`, `cardN/pcmC<N>D<M>c`). `setup.json` is a STATIC value packaged
+verbatim into the `ceralive-device` `.deb` — the same drifting artifact
+`warnOnHardwareIdentityDrift` exists for — so a value naming any other layout
+yields ZERO cards and `audio_sources` collapses to its two pipeline
+pseudo-sources, indistinguishable from a board with no sound hardware.
+
+Board-confirmed on a Rock 5B+ running current CeraUI against `ceralive-device
+2026.7.2-20260719T181141`, whose packaged `setup.json` still carries the pre-#166
+`"sound_device_dir": "/dev/snd"`. That directory holds ALSA's DEVICE NODES
+(`controlC0`, `pcmC0D0c`, `timer`) and NO `cardN` directory at all, so a
+connected, capture-ready RØDE HDMI-to-USB-C —
+`0 [usbaudio]: USB-Audio - RØDE HDMI to USB-C`, `00-00: USB Audio : capture 1` —
+was absent from the picker entirely. `debug.log` recorded the whole story in one
+line: `audio devices: {"No audio":…,"Pipeline default":…}`.
+
+Diagnostic note worth keeping: the ENGINE's audio enumeration was correct
+throughout (the fixed board's `audio_sources` carries `transport: "usb"` and
+`stable_id: "card:usbaudio"`, both of which come from the engine join), so this
+was never an engine gap. And fixing `setup.json` — PR #166 already did — only
+reaches a device on the NEXT full `.deb` upgrade, so the code has to survive the
+disagreement in the meantime.
+
+**`resolveConfiguredAlsaCards` (`alsa-card-scan.ts`) is the reconciliation, and
+it is POSITIVE-EVIDENCE-ONLY.** A configured directory naming at least one card
+answers unreconciled; a configured directory that IS the canonical one has
+nothing to fall back to; otherwise it read cleanly and named no card, which is a
+statement about the PATH and never about the hardware, so
+`/sys/class/sound` is asked and answers only if IT names cards. A board that
+genuinely has none is byte-identical to before. The rescue scan can never throw —
+it exists to recover from a bad configuration, not to turn one fault into another.
+
+**The `dir` argument of `updateAudioDevices` is honoured VERBATIM, and that is
+load-bearing.** Only the OMITTED (production) argument reconciles. The drift is
+between `setup.sound_device_dir` and the kernel, so a caller that names a
+directory has already stated the answer — and second-guessing it would make every
+sysfs-shaped test fixture report the HOST's own sound cards instead of the
+fixture's. `getResolvedAlsaCardDir()` is what proves the production path really
+routes through the resolver rather than around it.
+
+**A card the kernel proves is an OUTPUT is dropped structurally, not by name.**
+The hand-maintained `exclude` list has always meant exactly this —
+`rockchipdp0`, `rockchiphdmi0/1/2` are the SoC's DisplayPort and HDMI PLAYBACK
+cards — but a card-id list is itself a vocabulary, and the kernel's is not the
+same one: this board names those blocks `hdmi0` / `hdmi1` (simple-card), which
+the list does not match. So the moment the scan started finding cards again, two
+speakers would have rendered as selectable microphones. `isPlaybackOnlyCard`
+(`audio.ts`) asks the structure instead: ALSA names a substream
+`pcmC<card>D<device><p|c>`, and a card owning at least one `p` node and NO `c`
+node has told the kernel it plays and does not record. The list is KEPT as a
+back-stop; it is simply no longer the only defence.
+
+**The zero-PCM case is deliberately NOT an output.** That is the RK3588 HDMI-RX —
+an INPUT that enumerates permanently and exposes no substream at all until a
+cable locks (see "LISTED IS NOT RECORDABLE" above). Absence of evidence is not
+evidence: a card that has claimed no direction keeps its picker row exactly as
+before, and only `audioCaptureCardIds` gates claims about what it can deliver.
+Inverting this would silently delete the HDMI-RX row, so do NOT "simplify"
+`isPlaybackOnlyCard` into `!hasCapturePcmNode`.
+
+`rk3588es8316` joins `ONBOARD_AUDIO_DISPLAY_RULES` as `Onboard Audio` for the
+same reason PR #274 added `snps_hdmirx` to the video rules: the board's onboard
+codec has no human string to clean, and the fix is what made its row reachable.
+
+Coverage: `tests/audio-card-scan-drift.test.ts` (the board repro driven through
+the real resolver, the `isPlaybackOnlyCard` table, the board's own card tree
+through the real scan, the wiring lock, and the negatives that matter: a
+configured directory that DOES name cards is never second-guessed, a genuinely
+card-less board stays empty, the rescue scan cannot throw, a non-ENOENT error on
+the configured directory still rejects, and a signal-less capture card keeps its
+row).
+
 ## ONE ROW PER PHYSICAL CAMERA + PER-DEVICE MODE SELECTION [EXISTS]
 
 A capability source is a PIPELINE; an operator points at a DEVICE. Conflating the
@@ -3391,6 +3471,8 @@ config, an anchored path still held by its own device, and a live row with no
   absence into re-asserting a remembered `caps`/`signal` — that is the latch
   `withKnownEngineMetadata` already refuses for good reason.
 - **Don't `continue` past a live capture device whose pipeline the engine does not offer** — that intersection couples two independently-versioned vocabularies, and when they disagree EVERY camera vanishes at once behind a picker that looks exactly like "no hardware attached" (board-confirmed: a locked 1080p59.94 HDMI input and a USB camera both gone, `test` the only row). Route it through `buildUnofferedCaptureEntry` so it renders disabled-with-a-reason. Don't drop the `basePipelineIds` guard either — a `test`-kind device is already the virtual row and would double — and don't widen the fallback to kinds that bridge to nothing: `mapEngineDeviceKind` collapses an unrecognised kind onto the same `"other"` as the SoC codec/scaler nodes, so widening puts `rockchip-rga` and three `hantro-vpu` blocks in the picker.
+- **Don't read `setup.sound_device_dir` as if it were guaranteed to be the kernel's card directory** — it is a static value packaged into a separately-versioned `.deb`, and a value naming any other layout yields ZERO cards, so the picker collapses to its two pseudo-sources and a connected, capture-ready microphone is simply absent with nothing to say why (board-confirmed: `/dev/snd`, which has no `cardN` directory at all). Route the production scan through `resolveConfiguredAlsaCards`, keep the fallback positive-evidence-only (a configured directory that names cards is never second-guessed; a genuinely card-less board still answers empty), and keep the rescue scan unable to throw. Don't reconcile an EXPLICITLY-passed directory either — every sysfs-shaped fixture would then report the HOST's real sound cards.
+- Don't decide a sound card's DIRECTION from its card id — `rockchiphdmi0`/`rockchiphdmi1` and `hdmi0`/`hdmi1` are the same two HDMI output blocks under two kernel vocabularies, so a name list alone puts speakers in the microphone picker. Ask `isPlaybackOnlyCard`. And don't "simplify" that to `!hasCapturePcmNode`: a card with NO PCM node has claimed no direction, and it is the signal-less HDMI-RX INPUT — dropping it deletes a row the operator legitimately picked.
 - Don't assume a missing HDMI row is a kernel/HDMI-RX fault before checking whether OTHER capture devices vanished too — a receiver fault cannot unlist a USB webcam, and the engine's own `devices` list (`kind: "hdmi"`) plus `v4l2-ctl --query-dv-timings` will both still be correct while the projection is what dropped it.
 - Don't add only ONE spelling of an onboard node to `ONBOARD_VIDEO_DISPLAY_RULES` — the v4l2 card type (`stream_hdmirx`) and driver name (`snps_hdmirx`) are different strings for the same block, and which one reaches CeraUI depends on the engine build.
 - Don't re-add a coarse USB-capture placeholder row (`usb_mjpeg`, `v4l_mjpeg`, `libuvch264`, `camlink`) — a pipeline is not a device, the row is unactionable in every state, and one dual-format camera answers to two of them. And don't extend `SUPPRESSED_COARSE_PIPELINE_IDS` to `hdmi`/`rtmp`/`srt`/`test`: each names a real always-present board capability, so its coarse row is truthful with nothing plugged in.
