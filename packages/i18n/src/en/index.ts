@@ -482,6 +482,7 @@ const en = {
 			peak: "Peak",
 			avg: "Avg",
 			drops: "Drops",
+			transferred: "Transferred",
 			uptime: "Uptime",
 			exportJson: "Export JSON",
 			exportCsv: "Export CSV",

@@ -499,6 +499,7 @@ const es = {
 			peak: "Pico",
 			avg: "Prom",
 			drops: "Caídas",
+			transferred: "Transferido",
 			uptime: "Disponibilidad",
 			exportJson: "Exportar JSON",
 			exportCsv: "Exportar CSV",

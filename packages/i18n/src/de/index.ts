@@ -499,6 +499,7 @@ const de = {
 			peak: "Spitze",
 			avg: "Ø",
 			drops: "Abbrüche",
+			transferred: "Übertragen",
 			uptime: "Verfügbarkeit",
 			exportJson: "JSON exportieren",
 			exportCsv: "CSV exportieren",

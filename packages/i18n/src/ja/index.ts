@@ -1122,6 +1122,7 @@ const ja = {
 			peak: "ピーク",
 			avg: "平均",
 			drops: "ドロップ",
+			transferred: "転送量",
 			uptime: "稼働率",
 			exportJson: "JSONをエクスポート",
 			exportCsv: "CSVをエクスポート",

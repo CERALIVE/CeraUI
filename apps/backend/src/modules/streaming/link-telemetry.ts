@@ -83,6 +83,12 @@ export interface LinkTelemetryEntry {
 	 * bitrate on the wire that is an observation rather than a setpoint.
 	 */
 	bitrate_bps: number;
+	/**
+	 * Cumulative wire BYTES this uplink has sent this session (srtla_send
+	 * ADR-002). Bytes, not bits — no ×8, unlike `bitrate_bps` directly above.
+	 * Absent when the sender predates ADR-002: UNKNOWN, never zero.
+	 */
+	bytes_sent_total?: number;
 	/** True when the underlying snapshot is stale/absent but links are known. */
 	stale: boolean;
 }
@@ -91,6 +97,14 @@ export interface LinkTelemetryMessage {
 	links: Array<LinkTelemetryEntry>;
 	/** Sum of every link's `bitrate_bps` — the bond's measured total, bits/s. */
 	measured_bps: number;
+	/**
+	 * Cumulative wire BYTES the whole bond has sent this session — the operator's
+	 * "total transferred" figure. Forwarded VERBATIM from the sender, which keeps
+	 * it monotonic across per-link reconnects and IP-list reloads; it is NOT the
+	 * sum of `links[].bytes_sent_total`, which regresses when a link is dropped.
+	 * Absent when the sender predates ADR-002: UNKNOWN, never zero.
+	 */
+	bytes_sent_total?: number;
 	/**
 	 * CeraUI-side wall-clock ms of the last SUCCESSFUL read — derived here, not
 	 * from the frozen srtla snapshot. Advances on a fresh tick, freezes when reads
@@ -493,6 +507,26 @@ function asMeasuredBps(value: number | undefined): number {
 }
 
 /**
+ * Read the additive ADR-002 cumulative byte count off a snapshot.
+ *
+ * Read defensively (like the audio join keys in `sources.ts`) because the pinned
+ * `@ceralive/srtla-send` build predates the field and its Zod reader STRIPS
+ * unknown keys — so this is `undefined` on today's binding and lights up the
+ * moment the binding is republished, with no further change here.
+ *
+ * Anything that is not a whole non-negative count yields `undefined` rather than
+ * 0: a byte total is the one figure an operator may act on, so guessing is worse
+ * than admitting it is unknown.
+ */
+function asCumulativeBytes(source: unknown): number | undefined {
+	const value = (source as { bytes_sent_total?: unknown } | null | undefined)
+		?.bytes_sent_total;
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+		? value
+		: undefined;
+}
+
+/**
  * Derive the WS `linkTelemetry` payload.
  *
  *   - not watching (srtla_send not running)      -> null
@@ -508,18 +542,30 @@ export function buildLinkTelemetry(): LinkTelemetryMessage | null {
 	if (lastSnapshot === null) return null;
 
 	const stale = !lastTickFresh;
-	const links = lastSnapshot.connections.map((c) => ({
-		conn_id: c.conn_id,
-		iface: resolveIface(c.conn_id),
-		rtt_ms: c.rtt_ms,
-		nak_count: c.nak_count,
-		weight_percent: c.weight_percent,
-		bitrate_bps: asMeasuredBps(c.bitrate_bps),
-		stale,
-	}));
+	const links = lastSnapshot.connections.map((c) => {
+		const bytesSentTotal = asCumulativeBytes(c);
+		return {
+			conn_id: c.conn_id,
+			iface: resolveIface(c.conn_id),
+			rtt_ms: c.rtt_ms,
+			nak_count: c.nak_count,
+			weight_percent: c.weight_percent,
+			bitrate_bps: asMeasuredBps(c.bitrate_bps),
+			...(bytesSentTotal === undefined
+				? {}
+				: { bytes_sent_total: bytesSentTotal }),
+			stale,
+		};
+	});
+	// Forwarded verbatim, never summed from `links`: the sender's accumulator is
+	// what stays monotonic across a reconnect or an IP-list reload.
+	const bondBytesSentTotal = asCumulativeBytes(lastSnapshot);
 	return {
 		links,
 		measured_bps: links.reduce((total, link) => total + link.bitrate_bps, 0),
+		...(bondBytesSentTotal === undefined
+			? {}
+			: { bytes_sent_total: bondBytesSentTotal }),
 		lastReadMs,
 	};
 }

@@ -35,6 +35,16 @@ export interface SessionSample {
 	bitrateKbps: number;
 	/** Wall-clock instant the sample was taken, ms epoch (drives duration). */
 	capturedAt: number;
+	/**
+	 * The sender's cumulative wire-byte counter at sample time (bytes).
+	 *
+	 * Carried through VERBATIM, never integrated from `bitrateKbps` — a rate
+	 * integrated on this side loses every byte sent during a missed tick, a
+	 * reload, or a reconnect, which is exactly what makes a client-side estimate
+	 * unusable as a "total transferred". `undefined` means the sender did not
+	 * report one (pre-ADR-002): UNKNOWN, never zero.
+	 */
+	bytesSentTotal?: number;
 	/** Per-link telemetry at sample time. */
 	links: ReadonlyArray<SessionSampleLink>;
 }
@@ -67,6 +77,13 @@ export interface SessionRollup {
 	dropCount: number;
 	/** Session wall-clock span (last − first sample instant), ms (≥ 0). */
 	durationMs: number;
+	/**
+	 * Total wire bytes the bond sent this session — the sender's own cumulative
+	 * counter, taken as the MAXIMUM across samples. The counter is monotonic, so
+	 * the max IS the final value while also being immune to a last sample that
+	 * arrived stale or without the field. `undefined` when no sample reported it.
+	 */
+	bytesSentTotal?: number;
 	/** Per-link uptime + diagnostics, in first-seen interface order. */
 	links: SessionLinkRollup[];
 }
@@ -78,10 +95,20 @@ function asCount(value: unknown): number {
 		: 0;
 }
 
+/** A cumulative byte counter, or `undefined` when it is genuinely unknown. */
+function asCumulativeBytes(value: unknown): number | undefined {
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+		? value
+		: undefined;
+}
+
 /**
  * Build a {@link SessionSample} from the applied bitrate and a telemetry frame's
  * links. `undefined`/invalid bitrate collapses to 0; only `iface` + `stale` are
  * retained (RTT/NAK/weight are live-only and not part of the session summary).
+ *
+ * `bytesSentTotal` is the ONE field that must not collapse to 0 on absence: a
+ * zero would be reported to the operator as "you transferred nothing".
  */
 export function createSample(
 	bitrateKbps: number | undefined,
@@ -94,10 +121,13 @@ export function createSample(
 		  >
 		| undefined,
 	capturedAt: number = Date.now(),
+	bytesSentTotal?: number,
 ): SessionSample {
+	const cumulative = asCumulativeBytes(bytesSentTotal);
 	return {
 		bitrateKbps: asCount(bitrateKbps),
 		capturedAt,
+		...(cumulative === undefined ? {} : { bytesSentTotal: cumulative }),
 		links: (links ?? []).map((l) => ({
 			iface: l.iface,
 			stale: l.stale === true,
@@ -137,10 +167,15 @@ export function computeSessionRollup(
 
 	let peak = 0;
 	let sum = 0;
+	let bytesSentTotal: number | undefined;
 	for (const s of samples) {
 		const br = asCount(s.bitrateKbps);
 		if (br > peak) peak = br;
 		sum += br;
+		const cumulative = asCumulativeBytes(s.bytesSentTotal);
+		if (cumulative !== undefined && (bytesSentTotal ?? -1) < cumulative) {
+			bytesSentTotal = cumulative;
+		}
 	}
 
 	const first = samples[0];
@@ -203,6 +238,7 @@ export function computeSessionRollup(
 		avgBitrateKbps: Math.round(sum / sampleCount),
 		dropCount,
 		durationMs,
+		...(bytesSentTotal === undefined ? {} : { bytesSentTotal }),
 		links,
 	};
 }
@@ -231,6 +267,7 @@ export function rollupToCsv(rollup: SessionRollup): string {
 		`drop_count,${csvField(rollup.dropCount)}`,
 		`sample_count,${csvField(rollup.sampleCount)}`,
 		`duration_ms,${csvField(rollup.durationMs)}`,
+		`bytes_sent_total,${csvField(rollup.bytesSentTotal ?? "")}`,
 		"",
 		"iface,uptime_percent,contribution_percent,nak_total,avg_rtt_ms",
 		...rollup.links.map(

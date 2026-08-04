@@ -1284,6 +1284,7 @@ const fr = {
 			peak: "Pic",
 			avg: "Moy",
 			drops: "Pertes",
+			transferred: "Transféré",
 			uptime: "Disponibilité",
 			exportJson: "Exporter JSON",
 			exportCsv: "Exporter CSV",

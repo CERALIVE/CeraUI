@@ -1088,6 +1088,7 @@ const hi = {
 			peak: "शिखर",
 			avg: "औसत",
 			drops: "ड्रॉप",
+			transferred: "स्थानांतरित",
 			uptime: "अपटाइम",
 			exportJson: "JSON निर्यात करें",
 			exportCsv: "CSV निर्यात करें",

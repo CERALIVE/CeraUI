@@ -997,3 +997,159 @@ describe("IngestStats — export failure handling (Task 18)", () => {
 		).toBeNull();
 	});
 });
+
+/**
+ * Cumulative session bytes (srtla_send ADR-002 `bytes_sent_total`).
+ *
+ * The operator-facing "how much have I transferred?" figure. It is the sender's
+ * own counter, rendered with the shared `formatBytes` helper — never summed
+ * from the live links and never integrated from the bitrate.
+ */
+describe("IngestStats — cumulative session bytes", () => {
+	function withBytes(
+		bondBytes: number | undefined,
+		perLink?: [number, number],
+	): LinkTelemetryMessage {
+		return {
+			links: TWO_LINKS.links.map((l, i) => ({
+				...l,
+				...(perLink === undefined ? {} : { bytes_sent_total: perLink[i] ?? 0 }),
+			})),
+			...(bondBytes === undefined ? {} : { bytes_sent_total: bondBytes }),
+		};
+	}
+
+	function totalBytesOf(panel: HTMLElement): string {
+		return (
+			panel
+				.querySelector('[data-testid="ingest-total-bytes"]')
+				?.textContent?.trim() ?? ""
+		);
+	}
+
+	it("renders the bond total as human-readable bytes", () => {
+		const { container } = render(IngestStats, {
+			props: { telemetry: withBytes(1_610_612_736) },
+		});
+
+		expect(totalBytesOf(panelOf(container))).toBe("1.5 GB");
+	});
+
+	it("renders the SENDER's total, never the sum of the live links", () => {
+		// The post-teardown state: the survivors sum to 300, the sender has banked
+		// 9000. Summing here would report a total that ran backwards.
+		const { container } = render(IngestStats, {
+			props: { telemetry: withBytes(9_000, [100, 200]) },
+		});
+
+		expect(totalBytesOf(panelOf(container))).toBe("8.8 KB");
+	});
+
+	it("shows UNKNOWN, not 0 B, when the sender reports no counter", () => {
+		const { container } = render(IngestStats, {
+			props: { telemetry: TWO_LINKS },
+		});
+
+		const rendered = totalBytesOf(panelOf(container));
+		expect(rendered).toBe("\u2014");
+		expect(rendered).not.toContain("0 B");
+	});
+
+	it("leaves the existing NAK/weight TOTAL row untouched", () => {
+		// The bytes figure is an over-time total and lives on its own row; the
+		// current-frame NAK/weight summary above it must be unaffected.
+		const { container } = render(IngestStats, {
+			props: { telemetry: withBytes(2048) },
+		});
+		const panel = panelOf(container);
+
+		expect(
+			panel
+				.querySelector('[data-testid="ingest-total-nak"]')
+				?.textContent?.trim(),
+		).toBe("7");
+		expect(
+			panel
+				.querySelector('[data-testid="ingest-total-weight"]')
+				?.textContent?.trim(),
+		).toBe("100%");
+		expect(totalBytesOf(panel)).toBe("2 KB");
+	});
+
+	it("carries the total into the post-stop session summary", () => {
+		const { container, rerender } = render(IngestStats, {
+			props: {
+				telemetry: withBytes(1_000),
+				isStreaming: true,
+				bitrateKbps: 4000,
+			},
+		});
+		flushSync();
+		rerender({
+			telemetry: withBytes(2_048_000),
+			isStreaming: true,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+		rerender({
+			telemetry: { links: [] },
+			isStreaming: false,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+
+		const panel = panelOf(container);
+		expect(
+			panel
+				.querySelector('[data-testid="ingest-summary-transferred"]')
+				?.textContent?.trim(),
+		).toBe("2 MB");
+	});
+
+	it("starts a NEW session's total over instead of inheriting the last one", () => {
+		const { container, rerender } = render(IngestStats, {
+			props: {
+				telemetry: withBytes(900_000_000),
+				isStreaming: true,
+				bitrateKbps: 4000,
+			},
+		});
+		flushSync();
+		rerender({
+			telemetry: { links: [] },
+			isStreaming: false,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+
+		// A fresh stream: the sender restarted, so its counter restarts too.
+		rerender({
+			telemetry: withBytes(4_096),
+			isStreaming: true,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+		rerender({
+			telemetry: { links: [] },
+			isStreaming: false,
+			bitrateKbps: 4000,
+		});
+		flushSync();
+
+		expect(
+			panelOf(container)
+				.querySelector('[data-testid="ingest-summary-transferred"]')
+				?.textContent?.trim(),
+		).toBe("4 KB");
+	});
+
+	it("shows UNKNOWN in the summary when no sample ever carried a counter", () => {
+		const panel = runMockSession();
+
+		expect(
+			panel
+				.querySelector('[data-testid="ingest-summary-transferred"]')
+				?.textContent?.trim(),
+		).toBe("\u2014");
+	});
+});

@@ -1262,6 +1262,7 @@ const ptBR = {
 			peak: "Pico",
 			avg: "Méd",
 			drops: "Quedas",
+			transferred: "Transferido",
 			uptime: "Disponibilidade",
 			exportJson: "Exportar JSON",
 			exportCsv: "Exportar CSV",
