@@ -1641,10 +1641,30 @@ linkTelemetry: {
     rtt_ms: number;        // sender reports 0 (RTT is receiver-side)
     nak_count: number;
     weight_percent: number; // link's normalized share of total selection weight (0-100, active links sum to ~100; lone link = 100). Source: srtla-send-rs src/telemetry_file.rs weight_share_percent
+    bytes_sent_total?: number; // CUMULATIVE wire BYTES this uplink sent this session (srtla_send ADR-002). Absent = UNKNOWN.
     stale: boolean;
   }>;
+  bytes_sent_total?: number;   // CUMULATIVE wire BYTES the whole bond sent this session. Absent = UNKNOWN.
 } | null
 ```
+
+**`bytes_sent_total` is BYTES and is NOT summed here.** It sits beside
+`bitrate_bps` (bits/s, ×8) and carries no multiplication — a count, not a rate.
+The bond-level value is **forwarded verbatim** from the sender's own session
+accumulator: a link torn down by a SIGHUP IP-list reload leaves `connections[]`
+while its bytes stay banked, so summing the live links would make an operator's
+"total transferred" run **backwards**. It survives a per-link reconnect and a
+backend restart that re-adopts a running stream (the sender owns the counter, not
+CeraUI), and restarts at 0 only on a genuinely new stream — `srtla_send` is
+spawned once per session, so process lifetime IS session lifetime. Full contract:
+`srtla-send-rs/docs/adr/ADR-002-session-bytes-telemetry.md`.
+
+**It reads `undefined` until `@ceralive/srtla-send` is republished**, and that is
+expected, not a bug: the pinned binding's Zod reader strips unknown keys, so
+`asCumulativeBytes` (which reads the field defensively, like the audio join keys
+in `sources.ts`) finds nothing. Absent means UNKNOWN, never zero — the same
+convention `bitrate_bps` already uses. Coverage:
+`tests/link-telemetry.test.ts` → "cumulative session bytes".
 
 Three observable states: `srtla_send` not running (or no fresh snapshot yet) →
 `null`; last read stale/absent while running → cached links flagged `stale: true`;

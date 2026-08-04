@@ -14,9 +14,10 @@
   rtt_ms=0 and weight_percent=100 are valid sender constants, rendered as-is.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { formatBytes } from '@ceraui/i18n/formatters';
+import { LL, locale } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage } from '@ceraui/rpc/schemas';
-import { Activity, AlertTriangle, Clock, Download, TrendingUp } from '@lucide/svelte';
+import { Activity, AlertTriangle, Clock, Download, TrendingUp, Upload } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
 import Badge from '$lib/components/custom/Badge.svelte';
@@ -66,6 +67,18 @@ const hasLinks = $derived(links.length > 0);
 // Bond-level rollups across every reported uplink.
 const totalNak = $derived(links.reduce((sum, link) => sum + link.nak_count, 0));
 const totalWeight = $derived(links.reduce((sum, link) => sum + link.weight_percent, 0));
+
+// The sender's own cumulative byte counter, NOT a sum over `links` — a link
+// dropped by an IP-list reload leaves the array while its bytes stay counted,
+// so summing here would make the operator's total run backwards. `undefined`
+// (a sender predating the field) renders as unknown, never as "0 B".
+const EM_DASH = '\u2014';
+const loc = $derived($locale);
+const transferred = $derived(
+	telemetry?.bytes_sent_total === undefined
+		? EM_DASH
+		: formatBytes(loc)(telemetry.bytes_sent_total),
+);
 
 // Shared 4-column track so header, rows, and totals stay aligned on any width.
 const COLS = 'grid grid-cols-[minmax(0,1.4fr)_1fr_1fr_1fr] gap-x-3';
@@ -129,13 +142,14 @@ $effect(() => {
 	// Touch the live feed + bitrate so the effect re-runs on each telemetry tick.
 	const frameLinks = telemetry?.links;
 	const br = bitrateKbps;
+	const cumulativeBytes = telemetry?.bytes_sent_total;
 
 	if (streaming && !wasStreaming) {
 		sessionSamples = [];
 		rollup = null;
 	}
 	if (streaming) {
-		sessionSamples.push(createSample(br, frameLinks));
+		sessionSamples.push(createSample(br, frameLinks, Date.now(), cumulativeBytes));
 	}
 	if (!streaming && wasStreaming) {
 		rollup = sessionSamples.length > 0 ? computeSessionRollup(sessionSamples) : null;
@@ -159,6 +173,10 @@ function formatDuration(ms: number): string {
 // The completed-session summary wins over a lingering stale telemetry frame once
 // the stream has stopped; while streaming, rollup is null so the live table shows.
 const showSummary = $derived(rollup !== null && isStreaming !== true);
+
+const summaryTransferred = $derived(
+	rollup?.bytesSentTotal === undefined ? EM_DASH : formatBytes(loc)(rollup.bytesSentTotal),
+);
 
 function formatBitrate(kbps: number): string {
 	if (kbps >= 1000) {
@@ -253,7 +271,7 @@ function exportCsv(): void {
 	{#if showSummary && rollup}
 		<!-- Per-session summary: peak/avg bitrate, drops, then per-link uptime. -->
 		<div data-testid="ingest-summary">
-			<div class="grid grid-cols-4 gap-3">
+			<div class="grid grid-cols-5 gap-3">
 				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
 					<div
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
@@ -313,6 +331,20 @@ function exportCsv(): void {
 						class="text-foreground font-mono text-sm font-semibold tabular-nums"
 					>
 						{formatDuration(rollup.durationMs)}
+					</div>
+				</div>
+				<div class="bg-secondary/40 flex flex-col gap-1.5 rounded-lg p-3">
+					<div
+						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
+					>
+						<Upload aria-hidden="true" class="size-3 shrink-0" />
+						<span class="truncate">{$LL.live.ingest.transferred()}</span>
+					</div>
+					<div
+						data-testid="ingest-summary-transferred"
+						class="text-foreground font-mono text-sm font-semibold tabular-nums"
+					>
+						{summaryTransferred}
 					</div>
 				</div>
 			</div>
@@ -556,6 +588,24 @@ function exportCsv(): void {
 				class="text-foreground text-end font-mono font-bold tabular-nums"
 			>
 				{totalWeight}%
+			</span>
+		</div>
+
+		<!--
+			Cumulative session bytes. Its own row rather than a fifth column: the
+			totals grid above sums the CURRENT frame's per-link values, while this
+			is an over-time total from the sender's own counter — different kind of
+			number, so it does not belong on that baseline.
+		-->
+		<div class="mt-2 flex items-baseline justify-between gap-3 border-t pt-2 text-xs">
+			<span class="text-muted-foreground ps-4 uppercase tracking-wide">
+				{$LL.live.ingest.transferred()}
+			</span>
+			<span
+				data-testid="ingest-total-bytes"
+				class="text-foreground font-mono font-bold tabular-nums"
+			>
+				{transferred}
 			</span>
 		</div>
 	{/if}

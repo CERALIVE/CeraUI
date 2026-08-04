@@ -1102,6 +1102,7 @@ const ko = {
 			peak: "최고",
 			avg: "평균",
 			drops: "드롭",
+			transferred: "전송량",
 			uptime: "가동 시간",
 			exportJson: "JSON 내보내기",
 			exportCsv: "CSV 내보내기",

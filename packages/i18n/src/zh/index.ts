@@ -1038,6 +1038,7 @@ const zh = {
 			peak: "峰值",
 			avg: "平均",
 			drops: "丢弃",
+			transferred: "已传输",
 			uptime: "在线率",
 			exportJson: "导出 JSON",
 			exportCsv: "导出 CSV",

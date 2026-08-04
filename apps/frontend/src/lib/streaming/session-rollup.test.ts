@@ -477,3 +477,102 @@ describe("device-local guarantee — no cloud/platform calls", () => {
 		}
 	});
 });
+
+/**
+ * Cumulative session bytes (srtla_send ADR-002 `bytes_sent_total`).
+ *
+ * The rollup CARRIES the sender's own counter; it never integrates
+ * `bitrateKbps` into one. Integrating on this side loses every byte sent during
+ * a missed tick, a page reload, or a link reconnect — precisely why the counter
+ * was added to the sender rather than derived here.
+ */
+describe("computeSessionRollup — cumulative session bytes", () => {
+	function byteSample(
+		capturedAt: number,
+		bytesSentTotal?: number,
+	): SessionSample {
+		return {
+			bitrateKbps: 4000,
+			capturedAt,
+			...(bytesSentTotal === undefined ? {} : { bytesSentTotal }),
+			links: [link("eth0", false, 10, 0, 100)],
+		};
+	}
+
+	it("reports the final value of the monotonic counter", () => {
+		const rollup = computeSessionRollup([
+			byteSample(0, 1_000),
+			byteSample(5000, 6_000),
+			byteSample(10000, 11_000),
+		]);
+
+		expect(rollup.bytesSentTotal).toBe(11_000);
+	});
+
+	it("survives a last sample that arrived without the counter", () => {
+		// The max is taken rather than the last value precisely so a final stale
+		// or pre-ADR-002 frame cannot erase a total the operator already saw.
+		const rollup = computeSessionRollup([
+			byteSample(0, 1_000),
+			byteSample(5000, 9_000),
+			byteSample(10000, undefined),
+		]);
+
+		expect(rollup.bytesSentTotal).toBe(9_000);
+	});
+
+	it("stays UNKNOWN when no sample ever reported one — never 0", () => {
+		const rollup = computeSessionRollup([byteSample(0), byteSample(5000)]);
+
+		expect(rollup.bytesSentTotal).toBeUndefined();
+		// A zero here would tell the operator they transferred nothing.
+		expect(rollup.bytesSentTotal).not.toBe(0);
+	});
+
+	it("never regresses on a counter that went backwards", () => {
+		const rollup = computeSessionRollup([
+			byteSample(0, 9_000),
+			byteSample(5000, 10),
+		]);
+
+		expect(rollup.bytesSentTotal).toBe(9_000);
+	});
+
+	it("is CARRIED from the sender, not integrated from the bitrate", () => {
+		// A session that sent bytes at a known rate but reported no counter must
+		// answer UNKNOWN — proof no client-side integration was reintroduced.
+		const rollup = computeSessionRollup([
+			sample(8000, 0, [link("eth0", false, 10, 0, 100)]),
+			sample(8000, 10_000, [link("eth0", false, 10, 0, 100)]),
+		]);
+
+		expect(rollup.avgBitrateKbps).toBe(8000);
+		expect(rollup.bytesSentTotal).toBeUndefined();
+	});
+
+	it("createSample rejects a malformed counter instead of coercing it to 0", () => {
+		expect(
+			createSample(4000, [], 0, Number.NaN).bytesSentTotal,
+		).toBeUndefined();
+		expect(createSample(4000, [], 0, -1).bytesSentTotal).toBeUndefined();
+		expect(createSample(4000, [], 0, 1.5).bytesSentTotal).toBeUndefined();
+		expect(createSample(4000, [], 0, 4_096).bytesSentTotal).toBe(4_096);
+	});
+
+	it("exports the counter in both JSON and CSV", () => {
+		const rollup = computeSessionRollup([
+			byteSample(0, 1),
+			byteSample(1, 2048),
+		]);
+
+		expect(JSON.parse(rollupToJson(rollup)).bytesSentTotal).toBe(2048);
+		expect(rollupToCsv(rollup)).toContain("bytes_sent_total,2048");
+	});
+
+	it("exports an EMPTY CSV cell when the counter is unknown", () => {
+		const rollup = computeSessionRollup([byteSample(0)]);
+
+		expect(rollupToCsv(rollup)).toContain("bytes_sent_total,\n");
+		expect(rollupToCsv(rollup)).not.toContain("bytes_sent_total,0");
+	});
+});

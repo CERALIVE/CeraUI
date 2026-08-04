@@ -23,10 +23,23 @@ import {
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 
+// The pinned @ceralive/srtla-send build predates srtla_send ADR-002, so its
+// `Telemetry` type carries no `bytes_sent_total`. Widen it here so fixtures can
+// model a post-ADR-002 sender; the production reader is defensive for the same
+// reason (see `asCumulativeBytes`).
+type SenderConnection = Telemetry["connections"][number] & {
+	bytes_sent_total?: number;
+};
+type SenderSnapshot = Omit<Telemetry, "connections"> & {
+	connections: Array<SenderConnection>;
+	bytes_sent_total?: number;
+};
+
 function snapshot(
-	connections: Array<Partial<Telemetry["connections"][number]>>,
+	connections: Array<Partial<SenderConnection>>,
+	bondBytesSentTotal?: number,
 ): Telemetry {
-	return {
+	const snap: SenderSnapshot = {
 		last_updated_ms: Date.now(),
 		connections: connections.map((c, i) => ({
 			conn_id: String(i),
@@ -38,7 +51,11 @@ function snapshot(
 			bitrate_bps: 0,
 			...c,
 		})),
+		...(bondBytesSentTotal === undefined
+			? {}
+			: { bytes_sent_total: bondBytesSentTotal }),
 	};
+	return snap as Telemetry;
 }
 
 // A watch double that captures the callback so the test drives ticks directly,
@@ -432,6 +449,109 @@ describe("measured wire bitrate (ADR-001 bitrate_bps)", () => {
 		const payload = buildLinkTelemetry();
 		expect(payload?.measured_bps).toBe(2_500_000);
 		expect(payload?.links.every((l) => l.stale)).toBe(true);
+	});
+});
+
+describe("cumulative session bytes (srtla_send ADR-002 bytes_sent_total)", () => {
+	function liveWith(
+		connections: Array<Record<string, number | string>>,
+		bondBytes?: number,
+	) {
+		const w = captureWatch();
+		setIfaceResolverForTest((ip) => (ip === "10.0.0.1" ? "usb0" : "wlan0"));
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1", "10.0.0.2"], {
+			watch: w.watch,
+		});
+		w.emit(snapshot(connections, bondBytes));
+		return w;
+	}
+
+	test("forwards the per-link and bond counters as BYTES, with no x8", () => {
+		liveWith(
+			[
+				{ conn_id: "0", bitrate_bps: 2_500_000, bytes_sent_total: 812_000_000 },
+				{ conn_id: "1", bitrate_bps: 1_000_000, bytes_sent_total: 808_000_000 },
+			],
+			1_620_000_000,
+		);
+
+		const payload = buildLinkTelemetry();
+		// The rate keeps its x8; the count beside it must not acquire one.
+		expect(payload?.measured_bps).toBe(3_500_000);
+		expect(payload?.links[0]?.bytes_sent_total).toBe(812_000_000);
+		expect(payload?.links[1]?.bytes_sent_total).toBe(808_000_000);
+		expect(payload?.bytes_sent_total).toBe(1_620_000_000);
+	});
+
+	test("the bond total is FORWARDED, never re-summed from the live links", () => {
+		// The post-teardown state: a link the sender dropped is gone from
+		// `connections` while its bytes stay banked in the bond counter. Summing
+		// the survivors here would report a total that ran backwards.
+		liveWith([{ conn_id: "0", bytes_sent_total: 100 }], 9_000);
+
+		expect(buildLinkTelemetry()?.bytes_sent_total).toBe(9_000);
+	});
+
+	test("a sender predating ADR-002 leaves it UNKNOWN, never zero", () => {
+		liveWith([
+			{ conn_id: "0", bitrate_bps: 2_500_000 },
+			{ conn_id: "1", bitrate_bps: 1_000_000 },
+		]);
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.bytes_sent_total).toBeUndefined();
+		expect(payload?.links[0]?.bytes_sent_total).toBeUndefined();
+		// The rest of the payload is unaffected — the change is additive.
+		expect(payload?.measured_bps).toBe(3_500_000);
+	});
+
+	test("a malformed counter reads UNKNOWN rather than a fabricated number", () => {
+		liveWith(
+			[
+				{ conn_id: "0", bytes_sent_total: Number.NaN },
+				{ conn_id: "1", bytes_sent_total: -1 },
+			],
+			Number.NaN,
+		);
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.links[0]?.bytes_sent_total).toBeUndefined();
+		expect(payload?.links[1]?.bytes_sent_total).toBeUndefined();
+		expect(payload?.bytes_sent_total).toBeUndefined();
+	});
+
+	test("a running-but-idle bond still reports what it already sent", () => {
+		const w = captureWatch();
+		setIfaceResolverForTest(() => undefined);
+		startLinkTelemetry("/tmp/stats.json", [], { watch: w.watch });
+		w.emit(snapshot([], 4_096));
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.links).toHaveLength(0);
+		expect(payload?.bytes_sent_total).toBe(4_096);
+	});
+
+	test("a stale tick keeps the last known total instead of dropping it", () => {
+		const w = liveWith([{ conn_id: "0", bytes_sent_total: 500 }], 500);
+		w.emit(null);
+
+		const payload = buildLinkTelemetry();
+		expect(payload?.bytes_sent_total).toBe(500);
+		expect(payload?.links.every((l) => l.stale)).toBe(true);
+	});
+
+	test("a new stream starts the total over, never inheriting the last one", () => {
+		liveWith([{ conn_id: "0", bytes_sent_total: 900 }], 900);
+		expect(buildLinkTelemetry()?.bytes_sent_total).toBe(900);
+
+		stopLinkTelemetry();
+		expect(buildLinkTelemetry()).toBeNull();
+
+		const w = captureWatch();
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], { watch: w.watch });
+		w.emit(snapshot([{ conn_id: "0", bytes_sent_total: 12 }], 12));
+
+		expect(buildLinkTelemetry()?.bytes_sent_total).toBe(12);
 	});
 });
 

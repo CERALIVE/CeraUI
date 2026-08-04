@@ -1226,6 +1226,7 @@ const ar = {
 			peak: "الذروة",
 			avg: "المتوسط",
 			drops: "حالات الانقطاع",
+			transferred: "المنقول",
 			uptime: "مدة التشغيل",
 			exportJson: "تصدير JSON",
 			exportCsv: "تصدير CSV",

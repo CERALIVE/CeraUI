@@ -111,6 +111,15 @@ export const linkTelemetryEntrySchema = z.object({
 	 * nothing is flowing. Additive + optional: absent means UNKNOWN, not zero.
 	 */
 	bitrate_bps: z.number().nonnegative().optional(),
+	/**
+	 * CUMULATIVE wire BYTES this uplink has sent this session — srtla_send's
+	 * ADR-002 `bytes_sent_total`. Deliberately NOT the same kind of number as
+	 * `bitrate_bps` directly above: that is bits per second and carries a
+	 * mandatory ×8, this is a byte COUNT and carries none. Same accounting
+	 * otherwise (SRT/SRTLA framing and retransmits included, control frames not).
+	 * Additive + optional: absent means UNKNOWN, not zero.
+	 */
+	bytes_sent_total: z.number().int().nonnegative().optional(),
 	stale: z.boolean(),
 });
 export type LinkTelemetryEntry = z.infer<typeof linkTelemetryEntrySchema>;
@@ -123,6 +132,20 @@ export const linkTelemetryMessageSchema = z.object({
 	 * disagree about which links count. Absent means UNKNOWN, not zero.
 	 */
 	measured_bps: z.number().nonnegative().optional(),
+	/**
+	 * CUMULATIVE wire BYTES the whole bond has sent this session — the operator's
+	 * "total transferred" figure, in bytes.
+	 *
+	 * Unlike `measured_bps` this is NOT summed from `links[]`: it is the sender's
+	 * own session accumulator, forwarded verbatim, because a link torn down by an
+	 * IP-list reload leaves `links[]` while its bytes stay counted. Summing the
+	 * live links would make an operator's total run backwards.
+	 *
+	 * It survives a per-link reconnect and a backend restart that re-adopts a
+	 * running stream (the sender owns the counter, not CeraUI); it restarts at 0
+	 * only on a genuinely new stream. Absent means UNKNOWN, not zero.
+	 */
+	bytes_sent_total: z.number().int().nonnegative().optional(),
 });
 export type LinkTelemetryMessage = z.infer<typeof linkTelemetryMessageSchema>;
 
