@@ -5,9 +5,9 @@
  * Four of these assertions are about ABSENCE, and each is a different kind:
  * a signal that has never arrived (skeleton, not a zero), a collector that
  * degraded to null (an em-dash labelled Unavailable, not a flat line), a board
- * that provably lacks a sensor (a sentence, not an em-dash), and a per-core
- * encoder signal that exists on the kernel but has no collector yet (a calm
- * coming-soon slot bound to an OPEN debt entry).
+ * that provably lacks a sensor (a sentence, not an em-dash), and a board whose
+ * encoder-load collector probed both kernel interfaces and found neither (a
+ * hardware statement, NOT a roadmap promise).
  *
  * The fifth is the one this panel was redesigned around: an `active`-only core
  * must render as a BINARY mark with no figure and no percent sign, visually
@@ -217,7 +217,10 @@ describe("per-signal states", () => {
 });
 
 describe("encoder load — three states, three vocabularies", () => {
-	it("uninstrumented says so and binds an OPEN debt entry", () => {
+	it("uninstrumented states a hardware fact — NOT a roadmap promise", () => {
+		// The collector ships, so a device reporting nothing has PROBED both kernel
+		// interfaces and found neither. That is a fact about this board, not work
+		// pending, so the calm sentence stays and the coming-soon affordance goes.
 		open();
 		expect(byTestId("encoder-cores").dataset.precision).toBe("none");
 		expect(byTestId("encoder-cores-not-instrumented").textContent).toContain(
@@ -225,7 +228,8 @@ describe("encoder load — three states, three vocabularies", () => {
 		);
 		expect(
 			document.querySelector('[data-debt-id="TD-encoder-load-telemetry"]'),
-		).not.toBeNull();
+		).toBeNull();
+		expect(document.querySelector("[data-comingsoon]")).toBeNull();
 	});
 
 	it("a measured percentage renders a figure per core", () => {

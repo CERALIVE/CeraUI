@@ -1145,9 +1145,7 @@ const en = {
 				binaryNote:
 					"This board reports each encoder core as busy or idle only — no percentage exists.",
 				notInstrumented:
-					"This device does not report encoder core load to CeraUI yet.",
-				roadmap:
-					"Per-core encoder load will appear here once the device collector ships.",
+					"This board does not report encoder core load to CeraUI.",
 				simulated: "Simulated",
 			},
 			power: {

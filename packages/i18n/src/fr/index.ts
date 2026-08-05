@@ -357,9 +357,7 @@ const fr = {
 				binaryNote:
 					"Cette carte indique seulement si chaque cœur d'encodage est occupé ou inactif — aucun pourcentage n'existe.",
 				notInstrumented:
-					"Cet appareil ne communique pas encore la charge des cœurs d'encodage à CeraUI.",
-				roadmap:
-					"La charge par cœur apparaîtra ici dès la publication du collecteur de l'appareil.",
+					"Cette carte ne communique pas la charge des cœurs d'encodage à CeraUI.",
 				simulated: "Simulé",
 			},
 			power: {

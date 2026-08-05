@@ -108,6 +108,7 @@ import {
 	warnOnHardwareIdentityDrift,
 } from "./modules/system/device-detection.ts";
 import { initDeviceStats } from "./modules/system/device-stats.ts";
+import { initEncoderLoad } from "./modules/system/encoder-load.ts";
 import { getHardwareKind } from "./modules/system/hardware-kind.ts";
 import { initRevisions } from "./modules/system/revisions.ts";
 import {
@@ -313,6 +314,7 @@ await guardNonCritical("mock-preview", () => {
 void initRevisions();
 initHardwareMonitoring();
 initDeviceStats();
+await guardNonCritical("encoder-load", initEncoderLoad);
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
 await guardNonCritical("srt-ingest", initSRTIngest);
 // Raw passthrough event bridge: the typed cerastream binding strips

@@ -1123,9 +1123,7 @@ const es = {
 				binaryNote:
 					"Esta placa solo indica si cada núcleo del codificador está ocupado o inactivo; no existe ningún porcentaje.",
 				notInstrumented:
-					"Este dispositivo todavía no informa a CeraUI de la carga de los núcleos del codificador.",
-				roadmap:
-					"La carga por núcleo aparecerá aquí cuando se publique el colector del dispositivo.",
+					"Esta placa no informa a CeraUI de la carga de los núcleos del codificador.",
 				simulated: "Simulado",
 			},
 			power: {

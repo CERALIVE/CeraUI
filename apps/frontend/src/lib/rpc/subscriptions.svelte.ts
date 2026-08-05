@@ -13,6 +13,7 @@ import type {
 	ConfigMessage,
 	DeviceStats,
 	DevicesMessage,
+	EncoderLoad,
 	KioskStatus,
 	LinkTelemetryMessage,
 	ModemList,
@@ -130,6 +131,11 @@ let configChangeState = $state<ConfigChangeView>(undefined);
 
 // System state
 let deviceStatsState = $state<DeviceStats | undefined>(undefined);
+// Per-core encoder load, from the device's own privileged collector. `undefined`
+// means no frame has arrived yet (a dev host never publishes this at all) — it is
+// NOT the same as a delivered reading whose cores are all unavailable, which is a
+// real device saying it has no readable interface.
+let encoderLoadState = $state<EncoderLoad | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
@@ -247,6 +253,10 @@ export function getSensors() {
 
 export function getDeviceStats() {
 	return deviceStatsState;
+}
+
+export function getEncoderLoadSnapshot() {
+	return encoderLoadState;
 }
 
 export function getRevisions() {
@@ -580,6 +590,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			deviceStatsState = data as DeviceStats;
 			break;
 
+		case "encoder-load":
+			encoderLoadState = data as EncoderLoad;
+			break;
+
 		case "revisions":
 			revisionsState = data as Revisions;
 			break;
@@ -891,6 +905,7 @@ export function resetState(): void {
 	configChangeState = undefined;
 	sensorsState = undefined;
 	deviceStatsState = undefined;
+	encoderLoadState = undefined;
 	revisionsState = undefined;
 	pipelinesState = undefined;
 	capabilitiesState = undefined;

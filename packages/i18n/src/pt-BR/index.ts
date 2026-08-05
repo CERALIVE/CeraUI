@@ -359,9 +359,7 @@ const ptBR = {
 				binaryNote:
 					"Esta placa informa cada núcleo do codificador apenas como ocupado ou ocioso — não existe porcentagem.",
 				notInstrumented:
-					"Este dispositivo ainda não informa a carga dos núcleos do codificador ao CeraUI.",
-				roadmap:
-					"A carga por núcleo aparecerá aqui quando o coletor do dispositivo for publicado.",
+					"Esta placa não informa a carga dos núcleos do codificador ao CeraUI.",
 				simulated: "Simulado",
 			},
 			power: {

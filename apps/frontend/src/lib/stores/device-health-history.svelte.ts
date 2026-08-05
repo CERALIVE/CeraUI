@@ -2,7 +2,8 @@
  * Device-Health history — the only rune-bearing module behind the panel.
  *
  * Holds two timestamped rings (SoC temperature, 1-minute load average) plus the
- * 1 s playhead clock, and folds the dev-only encoder-load fixture in. All trace
+ * 1 s playhead clock, and resolves per-core encoder load — the device's own
+ * `encoder-load` broadcast on hardware, the dev-only fixture otherwise. All trace
  * math lives in the pure, rune-free `lib/components/custom/health-trace-view.ts`
  * sibling, mirroring the `hud/` derivation split.
  *
@@ -37,6 +38,7 @@ import {
 } from "$lib/components/custom/health-trace-view";
 import {
 	getDeviceStats,
+	getEncoderLoadSnapshot,
 	getIsStreaming,
 	getSensors,
 } from "$lib/rpc/subscriptions.svelte";
@@ -198,10 +200,18 @@ function createDeviceHealthHistoryStore(): DeviceHealthHistoryStore {
 				nowTick,
 				DEVICE_STATS_STALE_MS,
 			),
-		getEncoderLoad: () =>
-			mockFlavor === undefined
+		getEncoderLoad: () => {
+			// A device that has published a reading has ALWAYS said the truer thing —
+			// including when what it read was "neither interface exists". The backend
+			// collector is `isRealDevice()`-gated, so this is `undefined` on a dev host
+			// and the fixture below is reached only there. That absence IS the seam;
+			// there is deliberately no build-flag branch choosing between the two.
+			const live = getEncoderLoadSnapshot();
+			if (live !== undefined) return live;
+			return mockFlavor === undefined
 				? ENCODER_LOAD_UNAVAILABLE
-				: mockEncoderLoadAt(mockFlavor, nowTick, getIsStreaming()),
+				: mockEncoderLoadAt(mockFlavor, nowTick, getIsStreaming());
+		},
 		getClockTick: () => nowTick,
 		acquireClock: () => {
 			clockHolders++;
@@ -254,10 +264,10 @@ export function getLoadStatus(): LaneSignalStatus {
 }
 
 /**
- * Per-core encoder load. On real hardware this is the honest unavailable
- * reading until a privileged backend collector lands
- * (`TD-encoder-load-telemetry`); in dev it is the `?health-mock=` fixture, and
- * every fixture reading carries `simulated: true`.
+ * Per-core encoder load. On hardware this is the device's own privileged
+ * collector (`apps/backend/src/modules/system/encoder-load.ts`), reporting real
+ * percentages on the vendor kernel and busy/idle on mainline; in dev it is the
+ * `?health-mock=` fixture, and every fixture reading carries `simulated: true`.
  */
 export function getEncoderLoad(): EncoderLoadReading {
 	return store().getEncoderLoad();

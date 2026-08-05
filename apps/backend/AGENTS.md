@@ -14,6 +14,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 
 | Task | Location |
 |------|----------|
+| Per-core encoder load (two kernel realities, probed at runtime; `encoder-load` broadcast) | `modules/system/encoder-load.ts` (`collectEncoderLoad`, `parseMppLoad`, `initEncoderLoad`); contract below → PER-CORE ENCODER LOAD |
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
@@ -888,6 +889,72 @@ spinner, no result and no error for 11 s while `debug.log` recorded
 Coverage: `tests/software-updates-check-visibility.test.ts` + the frontend half in
 `apps/frontend/src/main/dialogs/UpdatesDialog.check.test.ts`.
 
+## PER-CORE ENCODER LOAD — TWO KERNELS, AND ONE OF THEM HAS NO NUMBER [EXISTS]
+
+`modules/system/encoder-load.ts` reads the RK3588's two VEPU580 encoder cores and
+publishes its own `encoder-load` broadcast. It is the producer half of the
+three-state model the Device Health panel renders
+(`apps/frontend/src/lib/streaming/encoder-load.ts` — that module is the CONTRACT,
+and this collector conforms to it, never the other way around).
+
+**The two kernels CeraLive ships report this incomparably**, and both were
+re-verified live on the bench board rather than assumed:
+
+| Kernel | Interface | What it reports |
+|---|---|---|
+| vendor 6.1 BSP | `/proc/mpp_service/load` | a REAL per-core percentage — but only once `load_interval` is armed |
+| mainline / edge 7.1 | `/sys/kernel/debug/clk/clk_rkvenc{0,1}_core/clk_enable_count` | the core's clock ENABLE STATE — a busy/idle bit, and nothing more |
+
+- **Which one is live is PROBED, never inferred.** No `uname` test, no board-id
+  test, no hardware-kind lookup: a device can be moved between the two kernels by
+  swapping boot media (the bench board has been, repeatedly), so the only honest
+  question is which interface answers right now. Probe order is richest-first, and
+  **a reality only wins when it produced a usable core reading** — a vendor `load`
+  file that exists but parses to nothing (the driver prints
+  `please set load_interval first!!!` until it is armed) still falls through to the
+  busy/idle bit rather than reporting an instrumented-but-empty device.
+- **THE INVARIANT: a `clk_enable_count` is never turned into a percentage.** It is
+  a reference count, not a magnitude — the measured 2-and-1 under four concurrent
+  sessions does not mean "core 0 is twice as busy". There is deliberately no code
+  path from an enable count to a number, and `tests/encoder-load.test.ts` pins that
+  absence the same way the frontend contract test does.
+- **`load_interval` is armed ONCE, idempotently, and only when it is off.** The
+  vendor driver reports nothing until it is non-zero, but arming it is a WRITE into
+  `/proc`, so the current value is READ first and an already-armed device is left
+  exactly as found. A refused write never breaks the read.
+- **Ordering is derived from the block's base ADDRESS, not from file order or a
+  hardcoded address table.** The addresses are the SoC memory map, so ascending
+  address IS hardware order (`fdbd0000` = core 0, `fdbe0000` = core 1), and
+  deriving it keeps the parser off a specific board's addresses. Only
+  `rkvenc-core` rows are encoder cores — the decoders, JPEG unit and RGA share the
+  same file and must be ignored.
+- **Privilege: none is escalated.** The backend runs as root
+  (`deployment/ceralive.service` `User=root`), so both reads use the same plain
+  `Bun.file()` seam as the `sensors.ts` `/sys/class/thermal` read. Do not introduce
+  a helper, a `sudo`, or a capability for this.
+- **Degradation follows `sensors.ts`/`device-stats.ts`:** every read is wrapped in
+  its own try/catch, one unreadable core degrades only that core, and a device
+  where neither interface answers reports the honest unavailable floor
+  (`source: null`, no cores) rather than a shaped guess.
+- **It is its OWN broadcast, NOT a sixth `device-stats` field** — that payload is
+  frozen by the S1 lock, and this reading is structured per core rather than a
+  scalar. It is likewise not foldable into `sensors`, which is a flat
+  `Record<string, string>` of display strings. Wire schema: `@ceraui/rpc`
+  `encoderLoadSchema`. Cadence 2 s, coalesced at 2 s, and seeded into the
+  post-auth initial-state push so a fresh client does not sit on the unavailable
+  band waiting for the first tick.
+- **`initEncoderLoad` is `isRealDevice()`-gated.** A dev/emulated host has no
+  VEPU580, so it publishes NOTHING rather than a synthetic reading — and that
+  silence is precisely what keeps the frontend's dev-only `?health-mock=` fixture
+  the single mocking mechanism for this signal. A backend mock provider here would
+  be a parallel mechanism, not the established one.
+
+Coverage: `tests/encoder-load.test.ts` (both realities, the arming contract, the
+address ordering, the fall-through, the emulated-host gate, and the
+never-a-number regression lock) + the frontend halves
+`apps/frontend/src/tests/encoder-load-source-precedence.test.ts` and
+`apps/frontend/src/main/dialogs/DeviceHealthDialog.test.ts`.
+
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
 Opt-in boot auto-unlock for a PIN-locked SIM. Two modules under `modules/modems/`:
@@ -1610,6 +1677,7 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 |------------|----------|--------|
 | `netif` | 5 s | `modules/network/network-interfaces.ts` |
 | `sensors` | 1 s | `modules/system/sensors.ts` |
+| `encoder-load` | 2 s | `modules/system/encoder-load.ts` (real devices only — `isRealDevice()`-gated) |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
 | `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry`, `network_ingest`, and the typed `audio_sources` beside legacy `asrcs` |

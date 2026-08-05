@@ -318,3 +318,52 @@ export const deviceStatsSchema = z.object({
 	raucSlot: z.string(),
 });
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
+
+// =============================================================================
+// Per-core encoder load broadcast (`encoder-load` event)
+// =============================================================================
+//
+// This is its OWN broadcast, deliberately NOT a sixth `device-stats` field: the
+// S1 lock above is a frozen five-signal contract, and encoder load is structured
+// per core rather than a scalar. It is also not foldable into `sensors`, which
+// is a flat `Record<string, string>` of display strings — encoding a three-state
+// per-core reading as prose would force the consumer to re-parse it, which is
+// exactly what the three-state model exists to prevent.
+//
+// The shape mirrors `apps/frontend/src/lib/streaming/encoder-load.ts`
+// (`EncoderLoadReading` / `EncoderCoreReading`) FIELD FOR FIELD. That module is
+// the contract; this schema conforms to it, never the other way around.
+//
+// The two RK3588 kernels report VEPU580 load incomparably — the vendor 6.1 BSP
+// exposes real per-core percentages via `/proc/mpp_service`, mainline/edge 7.1
+// exposes only the cores' clock enable-state (a busy/idle bit) — so a core is
+// `percent`, `active`, or `unavailable`, and NOTHING may turn an `active`
+// reading into a number.
+export const encoderLoadSourceSchema = z.enum(['mpp-service', 'clk-enable-count']);
+export type EncoderLoadSource = z.infer<typeof encoderLoadSourceSchema>;
+
+export const encoderCoreReadingSchema = z.discriminatedUnion('kind', [
+	z.object({
+		core: z.string(),
+		kind: z.literal('percent'),
+		percent: z.number(),
+	}),
+	z.object({
+		core: z.string(),
+		kind: z.literal('active'),
+		active: z.boolean(),
+	}),
+	z.object({ core: z.string(), kind: z.literal('unavailable') }),
+]);
+export type EncoderCoreReading = z.infer<typeof encoderCoreReadingSchema>;
+
+export const encoderLoadSchema = z.object({
+	/** `null` ⇒ neither kernel interface was readable on this device. */
+	source: encoderLoadSourceSchema.nullable(),
+	cores: z.array(encoderCoreReadingSchema),
+	/** Epoch ms of the sample; `null` when nothing has ever been read. */
+	updatedAt: z.number().nullable(),
+	/** Always `false` on the wire — the device never publishes a synthetic read. */
+	simulated: z.boolean(),
+});
+export type EncoderLoad = z.infer<typeof encoderLoadSchema>;

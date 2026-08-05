@@ -54,7 +54,8 @@ CeraUI/
 │           │   ├── config-loader.ts       # loadJsonConfig + writeFileAtomicSync (E3)
 │           │   └── config-schemas.ts      # runtimeConfigSchema — addons key lives here
 │           ├── modules/system/
-│           │   ├── device-stats.ts        # 5-signal device stats (S1 lock)
+│           │           ├── device-stats.ts        # 5-signal device stats (S1 lock)
+│           ├── encoder-load.ts        # per-core VEPU580 load; probes BOTH kernel realities
 │           │   ├── device-detection.ts    # isRealDevice() — gates all add-on ops
 │           │   ├── kiosk.ts               # Kiosk DC-2 state machine; toggle runs the cog-display add-on via the manager
 │           │   └── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
@@ -82,6 +83,7 @@ CeraUI/
 | Config dialogs (15 focused dialogs) | `apps/frontend/src/main/dialogs/` |
 | **Device Health instrument (strip recorder, per-core encoder load)** | `apps/frontend/src/main/dialogs/DeviceHealthDialog.svelte` (shell) + `main/dialogs/device-health/DeviceHealthPanel.svelte` (instrument) + `lib/components/custom/health-trace-view.ts` (pure geometry) + `lib/stores/device-health-history.svelte.ts` (rings + playhead) |
 | **Per-core encoder-load three-state model (percent / active / unavailable)** | `apps/frontend/src/lib/streaming/encoder-load.ts` + dev fixture `encoder-load-mock.ts` |
+| **Per-core encoder-load COLLECTOR (two kernel realities, probed at runtime)** | `apps/backend/src/modules/system/encoder-load.ts` → `encoder-load` broadcast |
 | Shared dialog chrome (AppDialog) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
@@ -304,9 +306,11 @@ as their first step (`ADDON_UNAVAILABLE_ERROR`).
 
 A read-only Settings instrument (Settings → Device, beside Power and Versions)
 showing SoC temperature and the 1-minute load average **over time**, plus the
-encoder's condition. It adds **no broadcast, no RPC, and no contract change** —
-every signal is already on the wire and reaching the frontend store layer, and
-the `device-stats` 5-signal broadcast (S1 lock) is untouched.
+encoder's condition. Its thermal/load lanes add **no RPC and no contract change**
+— those signals were already on the wire — and the `device-stats` 5-signal
+broadcast (S1 lock) is untouched. Per-core encoder load is the one signal that
+needed a producer, and it got its OWN `encoder-load` broadcast rather than a
+sixth `device-stats` field (see below).
 
 Two rules carry it, both documented in full in
 [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md):
@@ -323,14 +327,20 @@ Two rules carry it, both documented in full in
   Rendering busy/idle as a percentage would fabricate a denominator the driver
   never produced.
 
-**This pass ships UI + a dev-only fixture; there is no backend collector.** Both
-real reads (`/proc/mpp_service` and the encoder clock enable-state) are root-only,
-the same privileged class as the existing `sensors.ts` collector, and the two
-kernels need different collectors plus honest degradation when neither interface
-is present. On hardware the panel therefore reports encoder load as unavailable
-and says so. Tracked as `TD-encoder-load-telemetry` in
-[`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md) — scoped as "no collector wired
-yet", NOT "no signal exists".
+**The per-core collector now EXISTS** (`apps/backend/src/modules/system/encoder-load.ts`,
+`TD-encoder-load-telemetry` resolved 2026-08-05). Both reads are root-only — the
+same privileged class as the `sensors.ts` thermal read, using the same plain
+`Bun.file()` seam, since the backend runs as root — and which kernel interface is
+live is **probed at runtime**, never inferred from `uname` or a board id, because
+a device can be moved between the two kernels by swapping boot media. It publishes
+its own `encoder-load` broadcast; the full contract is in
+[`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → PER-CORE ENCODER LOAD.
+
+The collector is `isRealDevice()`-gated, so a dev host publishes NOTHING for this
+signal and the frontend's dev-only `?health-mock=` fixture stays the single
+mocking mechanism for it. That absence IS the real-vs-mock seam — there is no
+build-flag branch choosing between them, and a device reading always wins,
+**including when what it read was "neither interface exists"**.
 
 ## MOCK SUBSYSTEM [EXISTS]
 
