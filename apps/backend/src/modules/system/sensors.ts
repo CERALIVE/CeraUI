@@ -42,6 +42,7 @@ import {
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { getHardwareKindCached } from "./hardware-kind.ts";
 import {
+	EMI_ADVISORY_MSG,
 	HDMI_ERROR_NOTIFICATION,
 	HDMI_NO_SIGNAL_MSG,
 	provesSelectionIsNotHdmi,
@@ -189,11 +190,6 @@ export interface HdmiDmesgDeps {
 	noSignalRaiseAllowed: () => boolean;
 }
 
-const EMI_ADVISORY_MSG =
-	"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
-	"Try to move any modems away from the HDMI cable and the encoder. " +
-	"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
-
 /**
  * FAIL-OPEN by construction: only a selection this device can positively read
  * AND positively identify as non-HDMI withholds the raise. A throw here (config
@@ -229,23 +225,29 @@ export function handleRk3588HdmiDmesg(
 	data: string,
 	deps: HdmiDmesgDeps = defaultHdmiDmesgDeps,
 ): void {
-	// The EMI/cable advisory is deliberately UNGATED: the kernel emits these two
-	// lines only while the receiver is actually locking or clocking a link, so
-	// they already describe work somebody asked for.
+	// The EMI/cable advisory keeps its own TRIGGER — it is not subject to the
+	// selection gate below, because the kernel emits these two lines only while
+	// the receiver is actually locking or clocking a link, so they already
+	// describe work somebody asked for. What it does NOT get is a free re-raise:
+	// a link that is merely settling prints them repeatedly, and each raise is a
+	// fresh toast. Refusing while ANYTHING stands on the shared channel gives the
+	// dedup and the "don't clobber the no-signal claim" symmetry in one test.
 	if (
 		data.match("hdmirx_wait_lock_and_get_timing signal not lock") ||
 		data.match("hdmirx_delayed_work_audio: audio underflow")
 	) {
-		deps.raise(
-			HDMI_ERROR_NOTIFICATION,
-			"error",
-			EMI_ADVISORY_MSG,
-			8,
-			true,
-			true,
-			true,
-			"notifications.hdmiError",
-		);
+		if (deps.peek(HDMI_ERROR_NOTIFICATION) === undefined) {
+			deps.raise(
+				HDMI_ERROR_NOTIFICATION,
+				"error",
+				EMI_ADVISORY_MSG,
+				8,
+				true,
+				true,
+				true,
+				"notifications.hdmiError",
+			);
+		}
 	}
 
 	if (data.match("hdmirx-controller: Err, timing is invalid")) {
