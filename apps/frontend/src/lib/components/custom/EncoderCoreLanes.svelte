@@ -24,7 +24,6 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { FlaskConical, Square, SquareCheckBig } from '@lucide/svelte';
 
-import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import {
 	encoderLoadPrecision,
 	type EncoderLoadReading,
@@ -59,17 +58,16 @@ const precision = $derived(encoderLoadPrecision(reading));
 
 	{#if !instrumented}
 		<!--
-			No collector reads /proc/mpp_service or the clock enable-state yet, so the
-			panel says so rather than drawing a shape. Calm informational register,
-			never the amber disabled-with-reason treatment.
-			data-debt-id="TD-encoder-load-telemetry"
+			The collector probed both kernel interfaces and neither answered, so the
+			panel says so rather than drawing a shape. This is a hardware/kernel fact
+			about THIS board, not a roadmap item — hence the calm informational
+			register, and no "coming soon" affordance.
 		-->
 		<div
-			class="bg-muted/50 text-muted-foreground flex items-start justify-between gap-3 rounded-lg px-3 py-2.5"
+			class="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2.5"
 			data-testid="encoder-cores-not-instrumented"
 		>
 			<p class="text-xs leading-relaxed">{t.cores.notInstrumented()}</p>
-			<ComingSoon class="shrink-0" debtId="TD-encoder-load-telemetry" hint={t.cores.roadmap()} />
 		</div>
 	{:else}
 		<ul class="space-y-1.5">

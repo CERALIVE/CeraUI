@@ -23,6 +23,11 @@ export const DEVICE_STATS_EVENT = "device-stats" as const;
 // (it owns the `broadcastMsg(ADDON_EVENT, …)` push); re-exported here so the RPC
 // layer resolves the channel name from the events surface like every other event.
 export { ADDON_EVENT } from "../modules/addons/manager.ts";
+// Per-core encoder-load broadcast. Its OWN channel, NOT a sixth device-stats
+// field — that payload is frozen by the S1 lock. The emitter owns the name (like
+// ADDON_EVENT below) so the initial-state push can resolve it without importing
+// this RPC-layer module from `modules/ui`.
+export { ENCODER_LOAD_EVENT } from "../modules/system/encoder-load.ts";
 
 /**
  * Simple event emitter for internal broadcasts

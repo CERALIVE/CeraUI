@@ -36,6 +36,7 @@ import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getSourcesMessage } from "../../modules/streaming/sources.ts";
 import { getStreamLifecycleState } from "../../modules/streaming/stream-lifecycle-status.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import { getEncoderLoad } from "../../modules/system/encoder-load.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
 import {
@@ -134,6 +135,7 @@ export function buildInitialStatus() {
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),
+		encoderLoad: getEncoderLoad(),
 		revisions: getRevisions(),
 		acodecs: AUDIO_CODECS,
 		devices: getDevicesMessage(),

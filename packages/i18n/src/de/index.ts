@@ -1110,10 +1110,7 @@ const de = {
 				percentNote: "Gemessene Auslastung, pro Encoder-Kern gelesen.",
 				binaryNote:
 					"Diese Platine meldet je Encoder-Kern nur aktiv oder inaktiv — einen Prozentwert gibt es nicht.",
-				notInstrumented:
-					"Dieses Gerät meldet CeraUI noch keine Encoder-Kernlast.",
-				roadmap:
-					"Die Last pro Kern erscheint hier, sobald der Gerätekollektor ausgeliefert wird.",
+				notInstrumented: "Diese Platine meldet CeraUI keine Encoder-Kernlast.",
 				simulated: "Simuliert",
 			},
 			power: {

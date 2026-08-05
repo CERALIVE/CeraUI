@@ -189,8 +189,7 @@ const zh = {
 				percentNote: "按编码器核心读取的实测占用率。",
 				binaryNote:
 					"此主板只报告每个编码器核心处于忙碌或空闲状态，没有百分比数据。",
-				notInstrumented: "此设备尚未向 CeraUI 报告编码器核心负载。",
-				roadmap: "设备采集器发布后，此处将显示各核心负载。",
+				notInstrumented: "此主板不会向 CeraUI 报告编码器核心负载。",
 				simulated: "模拟",
 			},
 			power: {
