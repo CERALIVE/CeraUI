@@ -38,11 +38,12 @@ import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
  * that has said nothing NEW for this long has stopped telling us anything —
  * whether its frames stopped or merely stopped changing. Comfortably above the
  * cadence so a normal gap never trips it.
+ *
+ * `LiveAudioMeter` arms exactly ONE timer for this long each time the content
+ * changes, re-arming on the next change — so the deadline is also the WORST-CASE
+ * detection delay, with no perpetual background tick to round it up to.
  */
 export const AUDIO_METER_STALE_MS = 2_000;
-
-/** How often the watchdog clock re-evaluates, so staleness resolves with no frame. */
-export const AUDIO_METER_TICK_MS = 500;
 
 /**
  * dBFS at or below which a channel reads as empty. MUST match
@@ -202,6 +203,12 @@ export function isLevelSuperseded(
  * Has the meter gone quiet — no NEW information for `staleMs`? False until the
  * first frame has ever landed (`lastChangedAt === 0`), which is the distinct
  * `pending` state the component renders instead.
+ *
+ * This is the deadline stated as a comparison, and it is what the pure tests
+ * assert `trackMeterFreshness` against. `LiveAudioMeter` states the SAME
+ * deadline as a re-armed timer instead of polling this predicate on a clock —
+ * a timer that survives to fire IS "no new information for `staleMs`", and
+ * asking at a tick boundary could only ever answer late.
  */
 export function isMeterStale(
 	freshness: MeterFreshness,
