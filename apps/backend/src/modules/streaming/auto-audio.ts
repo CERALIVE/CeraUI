@@ -66,8 +66,41 @@ import { getIsStreaming } from "./streaming.ts";
 
 // ─── Resolver contract ───────────────────────────────────────────────────────
 
-/** The ALSA card ids the deterministic rules key off (the resolver's contract). */
-const HDMI_CARD_ID = "rockchiphdmiin";
+/**
+ * The HDMI-RX capture card, in EVERY spelling the kernel gives it.
+ *
+ * Which spelling a board reports is decided by the KERNEL TRACK it runs, not by
+ * the hardware. The Rockchip vendor 6.1 BSP registers the card as
+ * `rockchiphdmiin`; the mainline / Armbian `edge` 7.1 tree drives the same
+ * physical port through the Synopsys `snps_hdmirx` receiver and a first-party
+ * `simple-audio-card` DT node, which names it `hdmirx`. Board-proven on a Rock
+ * 5B+ running `7.1.5-ceralive-rk3588`: `/proc/asound/cards` reads
+ * `2 [hdmirx] : simple-card - hdmirx`, `/proc/asound/pcm` gives it a real
+ * `capture 1` substream, and a live capture through `hw:2,0` recorded genuinely
+ * non-silent audio (mean volume −29.0 dB). With ONE spelling hardcoded, rule 3
+ * looked `rockchiphdmiin` up, found nothing, and fell silently through — so
+ * "Auto" NEVER bound HDMI audio on that kernel, for hardware that demonstrably
+ * captures.
+ *
+ * This is the same one-block-many-names problem the VIDEO half already carries
+ * (`ONBOARD_VIDEO_DISPLAY_RULES` lists `rkhdmirx` / `snpshdmirx` / …) and it has
+ * the same answer: key on the IP BLOCK, never on a board model or kernel version.
+ *
+ * It stays a NAME LIST deliberately. cerastream's `capture_card_ids()` finds
+ * capture-capable cards generically, with no names at all — but that answers
+ * "can this card record", which CeraUI already asks separately via
+ * `captureCapableCardIds` (see `provenIncapableOfCapture`). Rule 3's question is
+ * "WHICH card is this port's audio half", and answering it by capability would
+ * bind an HDMI source to whatever unrelated microphone happened to be plugged
+ * in — precisely the cross-device guess rule 5 was rewritten to remove.
+ *
+ * ORDER IS THE CONTRACT: the first spelling this device ENUMERATES wins, so a
+ * board reporting more than one resolves deterministically and a vendor-6.1
+ * board behaves byte-identically to before this list existed.
+ */
+const HDMI_CARD_IDS: readonly string[] = ["rockchiphdmiin", "hdmirx"];
+
+/** The ALSA card id rule 4 keys off (the resolver's contract). */
 const CAMLINK_CARD_ID = "C4K";
 
 /** The pipeline-default pseudo-source asrcKey — a sentinel, not a real ALSA card. */
@@ -154,6 +187,23 @@ function findAsrcKeyByCardId(
 }
 
 /**
+ * The first of `cardIds` this device ENUMERATES, paired with the asrcKey it is
+ * known by — the multi-spelling form of {@link findAsrcKeyByCardId}. Returns
+ * `undefined` when none of the spellings is enumerated, which is the unchanged
+ * "fall through to the next rule" answer.
+ */
+function findEnumeratedCard(
+	audioDevices: Record<string, string>,
+	cardIds: readonly string[],
+): { asrcKey: string; cardId: string } | undefined {
+	for (const cardId of cardIds) {
+		const asrcKey = findAsrcKeyByCardId(audioDevices, cardId);
+		if (asrcKey !== undefined) return { asrcKey, cardId };
+	}
+	return undefined;
+}
+
+/**
  * Every ENUMERATED audio card belonging to the SAME physical device as the
  * camera, in engine-list order. A candidate must clear three gates: the engine
  * gave it an `alsa_card_id` (no join key, no candidate), it shares the camera's
@@ -190,11 +240,12 @@ function pipelineDefault(): AutoAsrcResolution {
 /**
  * LISTED IS NOT RECORDABLE — the rule-3/4 refusal (`W4A4-F1`).
  *
- * Rules 3 and 4 bind a FIXED card id on the strength of CeraUI's own sysfs scan
- * ENUMERATING it, and enumeration is not the same question as "can this be
- * recorded from". The RK3588 HDMI-RX proves the gap: card 3 lists permanently,
- * yet `/proc/asound/pcm` carries `03-00: rockchip,hdmiin i2s-hifi-0 :` with NO
- * `capture N` field and `arecord -l` never shows it — measured on a Rock 5B+
+ * Rules 3 and 4 bind a card named by a FIXED id list on the strength of CeraUI's
+ * own sysfs scan ENUMERATING it, and enumeration is not the same question as
+ * "can this be recorded from". The RK3588 HDMI-RX proves the gap: card 3 lists
+ * permanently, yet `/proc/asound/pcm` carries
+ * `03-00: rockchip,hdmiin i2s-hifi-0 :` with NO `capture N` field and
+ * `arecord -l` never shows it — measured on a Rock 5B+
  * with a LOCKED 1080p59.94 signal on the port, so this is not the no-cable case.
  * Binding it made EVERY `asrc: "Auto"` start on the HDMI source die with
  * `audio-device-unavailable … not_retriable`: an operator whose camera was
@@ -205,6 +256,12 @@ function pipelineDefault(): AutoAsrcResolution {
  * so the start SUCCEEDS, while `no-capture-audio` tells the UI exactly why there
  * is no audio. Omitting `asrc` instead would hand the engine its own legacy
  * inference over the very port that cannot deliver.
+ *
+ * The gate is asked about the spelling that MATCHED, never about a canonical
+ * one: the HDMI-RX enumerates under a different card id per kernel track
+ * (`HDMI_CARD_IDS`), and either spelling can list without a capture PCM — the
+ * mainline `hdmirx` card is registered by a DT sound node that exists whether or
+ * not a cable is locked, exactly like its vendor counterpart.
  *
  * Rule 5 deliberately does NOT need this gate: its candidates must each carry an
  * `alsa_card_id` from the ENGINE's `list-devices`, and a card with no capture PCM
@@ -233,7 +290,8 @@ function provenIncapableOfCapture(
  *
  *   1. network origin + embedded cap → embedded (engine omits `audio.device`).
  *   2. network w/o cap, OR the virtual (test-pattern) source → pipeline default.
- *   3. HDMI capture → the `rockchiphdmiin` card, when it is enumerated.
+ *   3. HDMI capture → the HDMI-RX audio card, when it is enumerated, under
+ *      whichever of its kernel-track spellings this board reports.
  *   4. Cam Link capture → the `C4K` card, when it is enumerated.
  *   5. USB/UVC capture → the camera's OWN audio, identified by `physical_group_id`
  *      equality (cerastream ADR-0008), and NOTHING else:
@@ -276,13 +334,15 @@ export function resolveAutoAsrc(
 	// Rules 3-5 apply only to a concrete capture device.
 	if (source?.origin === "capture") {
 		// Rule 3 — HDMI capture follows the HDMI audio card, when it can capture.
+		// The capture gate is asked about the spelling that actually MATCHED, so a
+		// listed-but-unrecordable card is refused under either kernel's name.
 		if (source.kind === "hdmi") {
-			const asrcKey = findAsrcKeyByCardId(audioDevices, HDMI_CARD_ID);
-			if (asrcKey !== undefined) {
-				if (provenIncapableOfCapture(HDMI_CARD_ID, captureCapableCardIds)) {
+			const hdmi = findEnumeratedCard(audioDevices, HDMI_CARD_IDS);
+			if (hdmi !== undefined) {
+				if (provenIncapableOfCapture(hdmi.cardId, captureCapableCardIds)) {
 					return noCaptureAudio();
 				}
-				return { asrcKey, cardId: HDMI_CARD_ID, reason: "hdmi" };
+				return { asrcKey: hdmi.asrcKey, cardId: hdmi.cardId, reason: "hdmi" };
 			}
 		}
 

@@ -15,7 +15,9 @@
 
   The staleness watchdog keys on CONTENT, not arrival — see
   `audio-meter-liveness.ts` for why a frame landing is not evidence the audio path
-  behind it is alive. The same module owns the selection gate that retires a
+  behind it is alive. Its clock is a single deadline re-armed on each genuinely
+  new reading, not a poll, so staleness lands exactly `AUDIO_METER_STALE_MS` after
+  the content last moved. The same module owns the selection gate that retires a
   reading the moment the operator picks a different audio source, so the previous
   device's bars never render under the new pick's label.
 -->
@@ -24,11 +26,10 @@ import { untrack } from 'svelte';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {
-	AUDIO_METER_TICK_MS,
+	AUDIO_METER_STALE_MS,
 	INITIAL_METER_FRESHNESS,
 	INITIAL_METER_SELECTION_GATE,
 	isLevelSuperseded,
-	isMeterStale,
 	type MeterFreshness,
 	type MeterSelectionGate,
 	trackMeterFreshness,
@@ -48,7 +49,7 @@ const selection = $derived(getConfig()?.asrc);
 
 let freshness = $state<MeterFreshness>(INITIAL_METER_FRESHNESS);
 let selectionGate = $state<MeterSelectionGate>(INITIAL_METER_SELECTION_GATE);
-let now = $state(0);
+let stale = $state(false);
 
 // Advance the liveness clock on new INFORMATION, never on arrival. Every
 // broadcast is a fresh object, so stamping here on each event proved only that
@@ -73,16 +74,23 @@ $effect(() => {
 	});
 });
 
-// Independent clock so staleness resolves even while no frame arrives.
+// ONE deadline, re-armed on each genuinely new reading — never a background
+// poll. `freshness` moves only when the content does, so this effect re-runs
+// exactly when the meter says something new: the pending timer is cleared and a
+// fresh one armed. A timer that survives to fire IS "nothing new for
+// AUDIO_METER_STALE_MS", so staleness resolves at the deadline itself rather
+// than at the next tick after it, and an idle meter costs no work at all.
 $effect(() => {
-	now = Date.now();
-	const id = setInterval(() => {
-		now = Date.now();
-	}, AUDIO_METER_TICK_MS);
-	return () => clearInterval(id);
+	// `0` is "no frame has ever landed" — the distinct `pending` state, which
+	// has no deadline to arm because there is no reading to age out.
+	if (freshness.lastChangedAt === 0) return;
+	stale = false;
+	const id = setTimeout(() => {
+		stale = true;
+	}, AUDIO_METER_STALE_MS);
+	return () => clearTimeout(id);
 });
 
-const stale = $derived(isMeterStale(freshness, now));
 // No frame has EVER arrived (engine down, bridge not up yet). Distinct from
 // `stale`, and from an engine-sent `unavailable` marker that carries a reason.
 const pending = $derived(level === undefined);

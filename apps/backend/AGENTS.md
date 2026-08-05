@@ -162,6 +162,15 @@ probes the card id first, then the raw hardware string. Only cards that can
 actually REACH the picker are listed — `updateAudioDevices` already excludes the
 HDMI-output and codec-playback cards. Adding a board is a code change.
 
+**Punctuation folding is not enough for the HDMI-RX — it has TWO card ids.**
+Which one a board reports is decided by the KERNEL TRACK, not the hardware: the
+vendor 6.1 BSP registers the port's audio half as `rockchiphdmiin`, while
+mainline / Armbian `edge` 7.1 registers the SAME port as `hdmirx` (the
+first-party `simple-audio-card` DT node over the Synopsys receiver). They do not
+fold onto one key, so BOTH are listed — the audio twin of the several-spellings
+rule `ONBOARD_VIDEO_DISPLAY_RULES` already carries for the video half, and of
+`auto-audio.ts`'s `HDMI_CARD_IDS`.
+
 **The raw string is moved, never deleted.** It rides `AudioSource.detail`
 (diagnostic-only: a tooltip on the picker rows and the read-only source line) so
 the bus path, link speed, full legal manufacturer name, and the raw driver id a
@@ -236,11 +245,11 @@ strings could only approximate. `MIN_COMMON_PREFIX`, `commonPrefixLength`, and
 | 0, or a group-less camera | `no-same-device-audio` — NO auto-pick |
 
 **LISTED IS NOT RECORDABLE — rules 3 and 4 are gated on a CAPTURE PCM.** Rules 3/4
-bind a FIXED card id (`rockchiphdmiin` / `C4K`) on the strength of CeraUI's own
-sysfs scan ENUMERATING it, and enumeration is a different question from "can this
-be recorded from". The RK3588 HDMI-RX is the counter-example, and it is not
-theoretical: measured on a Rock 5B+ **with a locked 1080p59.94 signal on the port**,
-`/proc/asound/cards` lists card 3, `/proc/asound/pcm` carries
+bind a card named by a FIXED id list (`HDMI_CARD_IDS` / `C4K`) on the strength of
+CeraUI's own sysfs scan ENUMERATING it, and enumeration is a different question
+from "can this be recorded from". The RK3588 HDMI-RX is the counter-example, and
+it is not theoretical: measured on a Rock 5B+ **with a locked 1080p59.94 signal
+on the port**, `/proc/asound/cards` lists card 3, `/proc/asound/pcm` carries
 `03-00: rockchip,hdmiin i2s-hifi-0 :` with NO `capture N` field, `/sys/class/sound/card3`
 has no `pcmC3D0c`, and `arecord -l` never shows it. Rule 3 bound it anyway, so
 **every** `asrc: "Auto"` start on the HDMI source died:
@@ -278,6 +287,46 @@ input as `captureCapableCardIds`.
   never appears there at all — the engine has already answered the question. Adding
   a fourth gate there would be redundant, not safer.
 
+**AND THE HDMI-RX CARD HAS TWO NAMES — the KERNEL TRACK picks which.** Rule 3's
+id was a single hardcoded `"rockchiphdmiin"`, which is what the Rockchip vendor
+6.1 BSP calls the port's audio half. The mainline / Armbian `edge` 7.1 tree
+registers the SAME physical port as `hdmirx` — the Synopsys `snps_hdmirx`
+receiver plus a first-party `simple-audio-card` DT node — so
+`findAsrcKeyByCardId(audioDevices, "rockchiphdmiin")` answered `undefined`, rule
+3 fell silently through, and "Auto" NEVER bound HDMI audio on that kernel. Not a
+degenerate case: board-proven on a Rock 5B+ running `7.1.5-ceralive-rk3588` with
+`rk3588-kernel-patches` PR #2 applied, `/proc/asound/cards` reads
+`2 [hdmirx] : simple-card - hdmirx`, `/proc/asound/pcm` gives it
+`fddf8000.i2s-i2s-hifi … : capture 1`, and a live `ffmpeg` capture through
+`hw:2,0` recorded `mean_volume: -29.0 dB` — real, non-silent audio.
+
+- **`HDMI_CARD_IDS` (`auto-audio.ts`) is the ordered list**, and ORDER IS THE
+  CONTRACT: the first spelling the device ENUMERATES wins, so a board reporting
+  more than one resolves deterministically and a vendor-6.1 board is
+  byte-identical to before. `findEnumeratedCard()` is the multi-spelling form of
+  `findAsrcKeyByCardId`.
+- **The capture gate is asked about the spelling that MATCHED**, never a
+  canonical one — a listed-but-unrecordable `hdmirx` is refused with
+  `no-capture-audio` exactly as `rockchiphdmiin` is, and the mainline card is
+  registered by a DT node that exists whether or not a cable is locked. Widening
+  rule 3's id list did NOT weaken its gate.
+- **It stays a NAME LIST, and that is the decision, not an omission.**
+  cerastream's `capture_card_ids()` (`alsa_hotplug.rs`) detects capture-capable
+  cards generically with no names at all — but that answers "can this card
+  record", which CeraUI already asks separately via `captureCapableCardIds`. Rule
+  3's question is "WHICH card is this port's audio half", and answering THAT by
+  capability would bind an HDMI source to whatever unrelated microphone happened
+  to be plugged in, i.e. exactly the cross-device guess rule 5 was rewritten to
+  remove. Key on the IP block, never on a board model or kernel version — the
+  same rule `ONBOARD_VIDEO_DISPLAY_RULES` already follows for the video half.
+- **`RK3588_AUDIO_SRC_ALIASES` (`audio.ts`) is deliberately NOT dual-named.**
+  `getAudioSrcReverseAliases()` inverts that table, so two card ids sharing the
+  label `"HDMI"` would make `getAudioSrcId("HDMI")` answer with whichever was
+  declared last — resolving a vendor board's pick to `hw:CARD=hdmirx`, a card it
+  does not have. Rule 3 needs no alias (it joins by card-id VALUE), the tier-0
+  display rule gives the edge-7.1 card the same `HDMI Input` label, and the
+  `priority` list carries `hdmirx` so the port keeps its top placement.
+
 Wire contract: `resolvedAsrcReasonSchema` (`@ceraui/rpc`) gains `no-capture-audio`;
 the frontend bands it as `audio-no-capture` (`live.source.audioNoCapture*`, 10
 locales) rather than letting it fall through to the em-dash. Coverage:
@@ -285,7 +334,11 @@ locales) rather than letting it fall through to the em-dash. Coverage:
 pure table incl. the fail-open and un-enumerated controls, the launch copy asserting
 `{mode:"none"}`) + "Auto on the board's real HDMI topology (W4A4-F1 wiring)" (a real
 sysfs fixture reproducing `card3`-without-`pcmC3D0c`, driven through
-`resolveAutoAsrcFromLiveState`, with the capture-PCM-appears control).
+`resolveAutoAsrcFromLiveState`, with the capture-PCM-appears control) +
+"the HDMI-RX card under BOTH kernel spellings" (the `hdmirx` bind, its own
+capture-PCM refusal and `{mode:"none"}` launch copy, the fail-open control, the
+both-listed ordering contract, the unchanged vendor bind, and the non-HDMI-source
+negative) — plus the two `hdmirx` sysfs fixtures added to the wiring describe.
 
 The generic `usb-alias` and `first-device` fallbacks are GONE, from the code AND
 from `resolvedAsrcReasonSchema`: each could only ever name a card on a different
@@ -3525,6 +3578,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
+- Don't identify the HDMI-RX audio card by ONE card id — the vendor 6.1 BSP calls it `rockchiphdmiin` and mainline/edge 7.1 calls the same physical port `hdmirx`, so a single hardcoded string makes rule 3 miss, fall through in silence, and never bind HDMI audio at all on the other kernel (board-proven: that card captures real, non-silent audio). Add every spelling to `HDMI_CARD_IDS` and to `ONBOARD_AUDIO_DISPLAY_RULES`, keep the first-enumerated-wins ordering, and ask the capture gate about the spelling that MATCHED. Don't "generalise" it into "bind whichever card can capture" either — that answers capability, not identity, and would hand an HDMI source somebody else's microphone. And don't add the second id to `RK3588_AUDIO_SRC_ALIASES`: that table is inverted by `getAudioSrcReverseAliases()`, so two ids under one label break the vendor board's `getAudioSrcId("HDMI")`.
 - Don't let Auto rule 3/4 bind their FIXED card on enumeration alone — that is the same "listed ≠ recordable" confusion one layer up, and it made every `asrc: "Auto"` start on the board's HDMI source die `audio-device-unavailable … not_retriable` even with a locked signal. Pass `captureCapableCardIds` and refuse with `no-capture-audio`. Keep the refusal FAIL-OPEN (an absent set binds exactly as before), keep it resolving to the `"No audio"` pseudo-source rather than a `null` asrcKey (a `null` OMITS `asrc` and hands the engine its legacy inference over the port that cannot deliver), and don't extend the gate to rule 5 — its candidates already come from the engine's `list-devices`, which never lists a capture-less card.
 - Don't infer "the operator wants no meter" from a `null` meter preference — `null` also covers the pipeline default and an "Auto" that resolves to no single card, each of which legitimately meters whatever the engine picks. Ask `isMeterSilencedByPick()`, key the selection-change detection on the `(silenced, preference)` PAIR, and don't let an engine-sent `unavailable` reason outrank an explicit "No audio".
 - Don't short-circuit `AUDIO_SOURCE_AUTO` to a `null` meter preference — "Auto" is a DETERMINISTIC resolution (`resolveAutoAsrc`), not a hand-back, so route it through `resolveEffectiveAudioPick()` and let the meter prefer the same card the start path would use. Getting this wrong is doubly invisible: `null` makes the engine auto-pick AND disarms `isForeignCardLevel`, so the meter draws a different device's real moving bars for a pick whose own start fails. And don't ask `isMeterPreferenceDevicePresent()` about the raw sentinel — `audioDevices["Auto"]` is undefined, so every Auto pick would report `no_device` and a genuine mismatch on a healthy card would lose its `not_selected_device` reason.

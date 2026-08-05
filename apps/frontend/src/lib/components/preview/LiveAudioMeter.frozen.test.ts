@@ -28,6 +28,7 @@ vi.mock(
 );
 
 import { setAudioLevel } from "./__fixtures__/audio-level-source.svelte";
+import { AUDIO_METER_STALE_MS } from "./audio-meter-liveness";
 import LiveAudioMeter from "./LiveAudioMeter.svelte";
 
 const FROZEN: AudioLevelMessage = {
@@ -105,6 +106,24 @@ describe("LiveAudioMeter — a frozen feed is a DEAD feed", () => {
 		expect(meter(container)?.getAttribute("data-stale")).toBe("false");
 
 		pump(4, () => FROZEN); // 2.6 s total — past it
+		expect(meter(container)?.getAttribute("data-stale")).toBe("true");
+	});
+
+	it("resolves AT the deadline, with no polling slack after it", () => {
+		// The watchdog arms one timer per genuinely new reading rather than
+		// re-evaluating on a clock, so the deadline IS the worst-case detection
+		// delay. Polling on a 500 ms tick could only answer at the next boundary
+		// after it, stretching this to as much as 2.5 s.
+		setAudioLevel(structuredClone(FROZEN));
+		const { container } = render(LiveAudioMeter);
+		flushSync();
+
+		vi.advanceTimersByTime(AUDIO_METER_STALE_MS - 1);
+		flushSync();
+		expect(meter(container)?.getAttribute("data-stale")).toBe("false");
+
+		vi.advanceTimersByTime(1);
+		flushSync();
 		expect(meter(container)?.getAttribute("data-stale")).toBe("true");
 	});
 
