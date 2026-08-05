@@ -253,6 +253,12 @@ export function cleanAudioDeviceName(raw: string): CleanedAudioName {
  *
  * Keys are `normalizeOnboardKey`d, so one entry covers every punctuation spelling
  * of the same block (card id `rockchiphdmiin`, longname `rockchip,hdmiin`, …).
+ * Punctuation folding is NOT enough for the HDMI-RX, though: the vendor 6.1 BSP
+ * and the mainline/edge 7.1 tree register the same physical port under two
+ * genuinely different card ids (`rockchiphdmiin` vs `hdmirx`, the latter from the
+ * first-party `simple-audio-card` DT node), so BOTH are listed — the audio twin
+ * of the several-spellings rule the video half already carries, and of
+ * `auto-audio.ts`'s `HDMI_CARD_IDS`.
  * The same folding backs the VIDEO half of this port
  * (`onboard-display-names.ts`), so both media types key their rules identically.
  * Only cards that can REACH the picker are listed — `updateAudioDevices` already
@@ -261,6 +267,7 @@ export function cleanAudioDeviceName(raw: string): CleanedAudioName {
 const ONBOARD_AUDIO_DISPLAY_RULES: ReadonlyMap<string, string> = new Map([
 	["rockchiphdmiin", "HDMI Input"],
 	["rockchiphdmiind", "HDMI Input"],
+	["hdmirx", "HDMI Input"],
 	["rockchipes8388", "Onboard Audio"],
 	["rk3588es8316", "Onboard Audio"],
 ]);

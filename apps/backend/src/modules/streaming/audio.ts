@@ -280,6 +280,14 @@ const BASE_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	C4K: "Cam Link 4K",
 	usbaudio: "USB audio",
 };
+// One label per card id, and never the reverse: `getAudioSrcReverseAliases()`
+// inverts this table, so giving two card ids the same label makes the reverse
+// lookup answer with whichever was declared last. Listing the edge-7.1 `hdmirx`
+// spelling here as a second "HDMI" would therefore resolve a vendor board's
+// "HDMI" pick to `hw:CARD=hdmirx` — a card it does not have. The HDMI-RX's
+// several spellings are reconciled where the join is by card-id VALUE
+// (auto-audio.ts `HDMI_CARD_IDS`) and where the key is folded
+// (audio-naming.ts `ONBOARD_AUDIO_DISPLAY_RULES`), not here.
 const RK3588_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	rockchiphdmiin: "HDMI",
 	rockchipes8388: "Analog in",
@@ -557,10 +565,14 @@ export async function updateAudioDevices(dir?: string) {
 		"rockchiphdmiind",
 		"rockchipes8316",
 	];
-	// Devices to show at the top of the list
+	// Devices to show at the top of the list. `hdmirx` is the mainline/edge-7.1
+	// spelling of the same HDMI-RX capture card `rockchiphdmiin` names on the
+	// vendor 6.1 BSP (see auto-audio.ts `HDMI_CARD_IDS`), so the port keeps its
+	// top placement on either kernel track.
 	const priority = [
 		"HDMI",
 		"rockchiphdmiin",
+		"hdmirx",
 		"rockchipes8388",
 		"C4K",
 		"usbaudio",

@@ -155,6 +155,16 @@ const HDMI_MAP: Record<string, string> = {
 	"No audio": "No audio",
 	"Pipeline default": "Pipeline default",
 };
+/**
+ * The SAME HDMI-RX capture card as `HDMI_MAP`, as the mainline / Armbian `edge`
+ * 7.1 kernel registers it: card id `hdmirx` (the first-party `simple-audio-card`
+ * DT node over the Synopsys receiver), with no alias, so the asrcKey IS the id.
+ */
+const HDMIRX_MAP: Record<string, string> = {
+	hdmirx: "hdmirx",
+	"No audio": "No audio",
+	"Pipeline default": "Pipeline default",
+};
 const USB_MAP: Record<string, string> = {
 	"USB audio": "usbaudio",
 	"No audio": "No audio",
@@ -1506,6 +1516,132 @@ describe("resolveAutoAsrc — a bound card must be able to CAPTURE (W4A4-F1)", (
 	});
 });
 
+// ─── The HDMI-RX card under BOTH kernel-track spellings ──────────────────────
+//
+// The hardware does not choose which card id it gets — the KERNEL TRACK does.
+// The Rockchip vendor 6.1 BSP registers the HDMI-RX audio half as
+// `rockchiphdmiin`; the mainline / Armbian `edge` 7.1 tree registers the SAME
+// physical port as `hdmirx`, through the Synopsys receiver plus a first-party
+// `simple-audio-card` DT node. Board-proven on a Rock 5B+ running
+// `7.1.5-ceralive-rk3588` with kernel-patches PR #2 applied:
+//
+//   /proc/asound/cards  2 [hdmirx] : simple-card - hdmirx
+//   /proc/asound/pcm    fddf8000.i2s-i2s-hifi … : capture 1
+//   ffmpeg hw:2,0       mean_volume: -29.0 dB       <-- real, non-silent audio
+//
+// With one spelling hardcoded, rule 3's lookup missed, fell silently through,
+// and "Auto" NEVER bound HDMI audio on that kernel — for hardware that
+// demonstrably captures.
+describe("resolveAutoAsrc — the HDMI-RX card under BOTH kernel spellings", () => {
+	test("Rule 3: the mainline `hdmirx` card binds exactly like `rockchiphdmiin`", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: HDMIRX_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: new Set(["hdmirx"]),
+			}),
+		).toEqual({ asrcKey: "hdmirx", cardId: "hdmirx", reason: "hdmi" });
+	});
+
+	test("fail-open on `hdmirx` too: an UNKNOWN capture set never suppresses the bind", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: HDMIRX_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+			}),
+		).toEqual({ asrcKey: "hdmirx", cardId: "hdmirx", reason: "hdmi" });
+	});
+
+	// The gate is NOT weakened by the second spelling: it is asked about whichever
+	// card id matched, so a listed-but-unrecordable `hdmirx` is refused exactly as
+	// the listed-but-unrecordable `rockchiphdmiin` above it.
+	test("Rule 3: an enumerated `hdmirx` owning NO capture PCM is refused, not bound", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: HDMIRX_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: new Set(["usbaudio"]),
+			}),
+		).toEqual({
+			asrcKey: "No audio",
+			cardId: null,
+			reason: "no-capture-audio",
+		});
+	});
+
+	test("a refused `hdmirx` launches as an explicit video-only stream (mode:none)", () => {
+		const resolution = resolveAutoAsrc({
+			source: captureSource("hdmi", "HDMI Input"),
+			audioDevices: HDMIRX_MAP,
+			engineAudio: [],
+			networkEmbeddedAudio: undefined,
+			captureCapableCardIds: new Set(["usbaudio"]),
+		});
+		const launch = buildAutoLaunchConfig(
+			{
+				asrc: AUDIO_SOURCE_AUTO,
+				pipeline: "hdmi",
+				max_br: 5000,
+			} as RuntimeConfig,
+			resolution,
+		);
+		expect(launch.asrc).toBe("No audio");
+		expect(resolveAudioMode(launch.asrc ?? "", false)).toEqual({
+			mode: "none",
+		});
+	});
+
+	// Order is the resolver's contract, so a board that somehow listed both never
+	// depends on device-map iteration order.
+	test("a board listing BOTH spellings resolves deterministically to the vendor one", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI Input"),
+				audioDevices: { ...HDMIRX_MAP, ...HDMI_MAP },
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: new Set(["rockchiphdmiin", "hdmirx"]),
+			}),
+		).toEqual({ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" });
+	});
+
+	test("the vendor board is untouched: `rockchiphdmiin` still binds with no `hdmirx` in sight", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("hdmi", "HDMI capture"),
+				audioDevices: HDMI_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: new Set(["rockchiphdmiin"]),
+			}),
+		).toEqual({ asrcKey: "HDMI", cardId: "rockchiphdmiin", reason: "hdmi" });
+	});
+
+	// The negative control: widening rule 3's id list must not widen which SOURCES
+	// it answers for. A Cam Link with only the HDMI-RX card present picks nothing.
+	test("a non-HDMI source is never bound to the `hdmirx` card", () => {
+		expect(
+			resolveAutoAsrc({
+				source: captureSource("camlink", "Cam Link 4K"),
+				audioDevices: HDMIRX_MAP,
+				engineAudio: [],
+				networkEmbeddedAudio: undefined,
+				captureCapableCardIds: new Set(["hdmirx"]),
+			}),
+		).toEqual({
+			asrcKey: "Pipeline default",
+			cardId: null,
+			reason: "pipeline-default",
+		});
+	});
+});
+
 /** The board's own HDMI-RX row: `rk_hdmirx` on `/dev/video0`, kind `hdmi`. */
 async function seedHdmiCaptureSource(): Promise<void> {
 	await getCapabilities({
@@ -1627,5 +1763,35 @@ describe("Auto on the board's real HDMI topology (W4A4-F1 wiring)", () => {
 		const r = resolveAutoAsrcFromLiveState();
 		expect(r.reason).toBe("hdmi");
 		expect(r.cardId).toBe("rockchiphdmiin");
+	});
+
+	// The same two states on the mainline / edge-7.1 kernel, whose card tree the
+	// board actually reports as `2 [hdmirx]` with a live `capture 1` substream.
+	// The video half of the fixture is unchanged — it is one physical port, and
+	// only the AUDIO card id moved.
+	test("the edge-7.1 `hdmirx` card with a capture PCM binds through the live resolver", async () => {
+		await scanCards([
+			{ dir: "card2", id: "hdmirx", entries: ["pcmC2D0c"] },
+			{ dir: "card0", id: "usbaudio", entries: ["pcmC0D0c"] },
+		]);
+		expect(getAudioDevices()).toHaveProperty("hdmirx", "hdmirx");
+
+		const r = resolveAutoAsrcFromLiveState();
+		expect(r.reason).toBe("hdmi");
+		expect(r.cardId).toBe("hdmirx");
+		expect(r.asrcKey).toBe("hdmirx");
+	});
+
+	test("an enumerated `hdmirx` with NO capture PCM is refused, exactly like the vendor card", async () => {
+		await scanCards([
+			{ dir: "card2", id: "hdmirx" },
+			{ dir: "card0", id: "usbaudio", entries: ["pcmC0D0c"] },
+		]);
+		expect(getAudioDevices()).toHaveProperty("hdmirx", "hdmirx");
+
+		const r = resolveAutoAsrcFromLiveState();
+		expect(r.reason).toBe("no-capture-audio");
+		expect(r.cardId).toBeNull();
+		expect(r.asrcKey).toBe("No audio");
 	});
 });
