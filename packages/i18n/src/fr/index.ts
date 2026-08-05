@@ -318,6 +318,57 @@ const fr = {
 				"Moins de 512 Mio libres sur /data. Libérez de l'espace pour que l'enregistrement, les journaux et les mises à jour continuent de fonctionner.",
 			lowDiskAction: "Voir les journaux",
 		},
+		deviceHealth: {
+			title: "Santé de l'appareil",
+			description:
+				"Température, charge et état de l'encodeur sur les 5 dernières minutes",
+			lane: {
+				temp: "Température du SoC",
+				load: "Charge moyenne · 1 min · tous les processus",
+			},
+			nowStrip: {
+				temperature: "Température du SoC",
+				load: "Charge moyenne",
+				encoder: "Encodeur",
+			},
+			axis: { now: "maintenant", minutesAgo: "−{n} min" },
+			waiting: "En attente de la première mesure",
+			gap: "Aucune mesure sur cette période",
+			unavailable: "Indisponible",
+			delta: "Δ {value} sur 5 min",
+			peak: "pic {value}",
+			traceLabel: "Enregistreur cinq minutes — {summary}",
+			traceGaps: "{n} interruptions",
+			encoder: {
+				title: "Encodeur",
+				idle: "Inactif · pas d'encodage",
+				active: "Encodage · {summary}",
+				engineStarting: "Le moteur de streaming démarre",
+				engineUnavailable: "Le moteur de streaming est injoignable",
+				framesAdvancing: "Les images avancent",
+				framesStalled: "Les images n'avancent plus",
+				framesUnknown: "Aucune télémétrie d'images sur cette période",
+			},
+			cores: {
+				title: "Cœurs d'encodage",
+				busy: "Occupé",
+				idle: "Inactif",
+				percentNote: "Cycle d'utilisation mesuré, lu par cœur d'encodage.",
+				binaryNote:
+					"Cette carte indique seulement si chaque cœur d'encodage est occupé ou inactif — aucun pourcentage n'existe.",
+				notInstrumented:
+					"Cet appareil ne communique pas encore la charge des cœurs d'encodage à CeraUI.",
+				roadmap:
+					"La charge par cœur apparaîtra ici dès la publication du collecteur de l'appareil.",
+				simulated: "Simulé",
+			},
+			power: {
+				title: "Rails d'alimentation",
+				notInstrumented:
+					"Cette carte ne communique ni tension ni courant à CeraUI.",
+				noReading: "Aucune mesure",
+			},
+		},
 		networkIngest: {
 			title: "Ingestion réseau",
 			desc: "Autorisez un téléphone ou un encodeur de ce réseau à publier vers l'appareil",
@@ -421,6 +472,9 @@ const fr = {
 			wifiCountry: "Pays Wi-Fi",
 			wifiCountryDesc:
 				"Définit le domaine réglementaire qui détermine les canaux de point d'accès autorisés",
+			deviceHealth: "Santé de l'appareil",
+			deviceHealthDesc:
+				"Température, charge et état de l'encodeur au fil du temps",
 			versions: "Versions de l'appareil",
 			versionsDesc:
 				"Afficher les versions des composants et du firmware installés",

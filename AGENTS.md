@@ -79,7 +79,9 @@ CeraUI/
 | Network destination (links/WiFi/modems) | `apps/frontend/src/main/NetworkView.svelte` |
 | Settings destination (config entry points) | `apps/frontend/src/main/SettingsView.svelte` |
 | Persistent HUD bar | `apps/frontend/src/main/HudBar.svelte` + `apps/frontend/src/lib/stores/hud.svelte.ts` |
-| Config dialogs (14 focused dialogs) | `apps/frontend/src/main/dialogs/` |
+| Config dialogs (15 focused dialogs) | `apps/frontend/src/main/dialogs/` |
+| **Device Health instrument (strip recorder, per-core encoder load)** | `apps/frontend/src/main/dialogs/DeviceHealthDialog.svelte` (shell) + `main/dialogs/device-health/DeviceHealthPanel.svelte` (instrument) + `lib/components/custom/health-trace-view.ts` (pure geometry) + `lib/stores/device-health-history.svelte.ts` (rings + playhead) |
+| **Per-core encoder-load three-state model (percent / active / unavailable)** | `apps/frontend/src/lib/streaming/encoder-load.ts` + dev fixture `encoder-load-mock.ts` |
 | Shared dialog chrome (AppDialog) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
@@ -297,6 +299,38 @@ All add-on operations (install, enable, disable, refresh) MUST call
 `systemd-sysext` or `systemctl`. Read-only status queries are NOT gated. The
 manager's `enableAddon`/`disableAddon`/`pollAddonCrashLoop` all enforce this gate
 as their first step (`ADDON_UNAVAILABLE_ERROR`).
+
+## DEVICE HEALTH PANEL [EXISTS]
+
+A read-only Settings instrument (Settings → Device, beside Power and Versions)
+showing SoC temperature and the 1-minute load average **over time**, plus the
+encoder's condition. It adds **no broadcast, no RPC, and no contract change** —
+every signal is already on the wire and reaching the frontend store layer, and
+the `device-stats` 5-signal broadcast (S1 lock) is untouched.
+
+Two rules carry it, both documented in full in
+[`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md):
+
+- **The trace's right edge is wall-clock `now`, never the last sample.** A feed
+  that stops does not freeze — it falls behind the playhead and leaves a widening
+  void, so staleness is geometry rather than a badge. Hand-rolled SVG + GSAP, no
+  chart library.
+- **Per-core encoder load has THREE states, and two of them are not numbers.**
+  The vendor 6.1 and mainline edge-7.1 kernels report VEPU580 load
+  incomparably — real percentages via `mpp_service` on one, only the cores' clock
+  enable-state (busy/idle, no percentage anywhere) on the other — so a core is
+  `percent` | `active` | `unavailable`, each with its own visual vocabulary.
+  Rendering busy/idle as a percentage would fabricate a denominator the driver
+  never produced.
+
+**This pass ships UI + a dev-only fixture; there is no backend collector.** Both
+real reads (`/proc/mpp_service` and the encoder clock enable-state) are root-only,
+the same privileged class as the existing `sensors.ts` collector, and the two
+kernels need different collectors plus honest degradation when neither interface
+is present. On hardware the panel therefore reports encoder load as unavailable
+and says so. Tracked as `TD-encoder-load-telemetry` in
+[`docs/TECHNICAL_DEBT.md`](docs/TECHNICAL_DEBT.md) — scoped as "no collector wired
+yet", NOT "no signal exists".
 
 ## MOCK SUBSYSTEM [EXISTS]
 

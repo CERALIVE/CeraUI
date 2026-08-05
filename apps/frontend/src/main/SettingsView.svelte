@@ -14,6 +14,7 @@ import {
 	Blocks,
 	ChevronRight,
 	Cloud,
+	Gauge,
 	Globe,
 	Info,
 	KeyRound,
@@ -42,6 +43,7 @@ import { clearRequestedDialog, getRequestedDialog } from '$lib/stores/dialog-req
 import { cn } from '$lib/utils';
 
 import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
+import DeviceHealthDialog from './dialogs/DeviceHealthDialog.svelte';
 import LogsDialog from './dialogs/LogsDialog.svelte';
 import NetworkIngestDialog from './dialogs/NetworkIngestDialog.svelte';
 import PasswordDialog from './dialogs/PasswordDialog.svelte';
@@ -183,6 +185,12 @@ const groups = $derived<Group[]>([
 		id: 'device',
 		label: t.groups.device(),
 		entries: [
+			{
+				key: 'deviceHealth',
+				title: t.deviceHealth(),
+				desc: t.deviceHealthDesc(),
+				icon: Gauge,
+			},
 			{ key: 'power', title: t.power(), desc: t.powerDesc(), icon: Power, destructive: true },
 			{ key: 'versions', title: t.versions(), desc: t.versionsDesc(), icon: Info },
 		],
@@ -198,6 +206,7 @@ let logsOpen = $state(false);
 let updatesOpen = $state(false);
 let powerOpen = $state(false);
 let versionsOpen = $state(false);
+let deviceHealthOpen = $state(false);
 let displayOpen = $state(false);
 let addonsOpen = $state(false);
 let wifiCountryOpen = $state(false);
@@ -231,6 +240,9 @@ function openEntry(entry: Entry) {
 			return;
 		case 'versions':
 			versionsOpen = true;
+			return;
+		case 'deviceHealth':
+			deviceHealthOpen = true;
 			return;
 		case 'onDeviceDisplay':
 			displayOpen = true;
@@ -412,6 +424,7 @@ $effect(() => {
 <UpdatesDialog bind:open={updatesOpen} />
 <PowerDialog bind:open={powerOpen} />
 <VersionsDialog bind:open={versionsOpen} />
+<DeviceHealthDialog bind:open={deviceHealthOpen} />
 <OnDeviceDisplaySection bind:open={displayOpen} />
 <AddonsSection bind:open={addonsOpen} />
 <WifiCountryDialog bind:open={wifiCountryOpen} />

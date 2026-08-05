@@ -165,6 +165,55 @@ const ja = {
 				"/data の空き容量が 512 MiB 未満です。録画・ログ・更新が動作し続けるよう空き容量を確保してください。",
 			lowDiskAction: "ログを表示",
 		},
+		deviceHealth: {
+			title: "デバイスの健全性",
+			description: "直近 5 分間の温度・負荷・エンコーダーの状態",
+			lane: {
+				temp: "SoC 温度",
+				load: "ロードアベレージ · 1 分 · 全プロセス",
+			},
+			nowStrip: {
+				temperature: "SoC 温度",
+				load: "ロードアベレージ",
+				encoder: "エンコーダー",
+			},
+			axis: { now: "現在", minutesAgo: "−{n} 分" },
+			waiting: "最初の測定値を待機中",
+			gap: "この期間の測定値はありません",
+			unavailable: "利用不可",
+			delta: "Δ {value}（5 分間）",
+			peak: "ピーク {value}",
+			traceLabel: "5 分レコーダー — {summary}",
+			traceGaps: "{n} 件の欠落",
+			encoder: {
+				title: "エンコーダー",
+				idle: "アイドル · エンコードしていません",
+				active: "エンコード中 · {summary}",
+				engineStarting: "配信エンジンを起動しています",
+				engineUnavailable: "配信エンジンに接続できません",
+				framesAdvancing: "フレームは進行中",
+				framesStalled: "フレームが進んでいません",
+				framesUnknown: "この期間のフレームテレメトリはありません",
+			},
+			cores: {
+				title: "エンコーダーコア",
+				busy: "稼働中",
+				idle: "アイドル",
+				percentNote: "エンコーダーコアごとに実測した稼働率。",
+				binaryNote:
+					"このボードは各エンコーダーコアの稼働／アイドルのみを報告し、パーセンテージは存在しません。",
+				notInstrumented:
+					"このデバイスはまだエンコーダーコアの負荷を CeraUI に報告しません。",
+				roadmap:
+					"デバイス側のコレクターが提供されると、コアごとの負荷がここに表示されます。",
+				simulated: "シミュレーション",
+			},
+			power: {
+				title: "電源レール",
+				notInstrumented: "このボードは電圧や電流を CeraUI に報告しません。",
+				noReading: "測定値なし",
+			},
+		},
 		networkIngest: {
 			title: "ネットワーク取り込み",
 			desc: "同じネットワーク上のスマホやエンコーダーからこのデバイスへ配信できるようにします",
@@ -265,6 +314,8 @@ const ja = {
 			wifiCountry: "Wi-Fi の国",
 			wifiCountryDesc:
 				"ホットスポットで使用できるチャンネルを決める規制ドメインを設定します",
+			deviceHealth: "デバイスの健全性",
+			deviceHealthDesc: "時間経過による温度・負荷・エンコーダーの状態",
 			versions: "デバイスバージョン",
 			versionsDesc:
 				"インストール済みコンポーネントとファームウェアのバージョンを表示します",

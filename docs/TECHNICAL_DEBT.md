@@ -181,6 +181,22 @@ unblock: A network-ingest (rtmp/srt) publish carries its own muxed audio, but th
 ```
 
 ```debt
+id: TD-encoder-load-telemetry
+title: Per-core VEPU580 encoder-load collector
+track: 1
+status: open
+exit_criteria: `bun run --filter backend test -- encoder-load.test.ts`
+owner: ceraui-team
+registered_at: 2026-08-05
+resolved_at: null
+unblock: A REAL per-core encoder-load signal exists on the hardware — this debt is that CeraUI has no backend collector reading it yet, NOT that the signal is missing. Verified live on a Rock 5B+: the vendor 6.1 kernel exposes true per-core percentages via /proc/mpp_service (idle 0.00/0.00, one 1080p30 H.265 session 11.34/0.00, four concurrent 45.53/0.00), while the mainline edge-7.1 kernel has no percentage interface at all and offers only the encoder cores' clock enable-state, a coarse busy/idle bit (idle 0/0, four concurrent sessions 2/1 — that driver DOES dispatch across both cores). Both reads are root-only, the same privileged class as the existing sensors collector, and the two kernels need different collectors plus honest degradation when neither interface is present. The Device Health panel already models all three per-core states (percent / active / unavailable) and renders each in its own visual vocabulary; it currently reads unavailable on hardware and shows this calm coming-soon affordance (data-debt-id="TD-encoder-load-telemetry") in EncoderCoreLanes.svelte, with a dev-only ?health-mock= fixture exercising the percent and busy/idle branches. When a backend collector publishes real per-core readings, remove the affordance and flip this entry to resolved. A collector must NEVER synthesise a percentage from the clock enable-state.
+```
+
+Per-core encoder load is modelled but not collected. See
+`apps/frontend/src/lib/streaming/encoder-load.ts` for the three-state contract and
+the live measurement table behind it.
+
+```debt
 id: TD-live-audio-follow
 title: Live device-keyed audio follow on a mid-stream input switch
 track: 2

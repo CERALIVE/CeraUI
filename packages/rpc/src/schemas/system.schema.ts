@@ -30,6 +30,13 @@ export const revisionsSchema = z.object({
 });
 export type Revisions = z.infer<typeof revisionsSchema>;
 
+// The value the backend publishes for `cerastream` when the engine cannot be
+// reached. It is PROSE, not a version, so a consumer that renders it in a
+// version slot presents "engine unreachable" as though it were a build number.
+// Shared here rather than kept backend-local precisely because both sides need
+// to agree on it — the producer writes it and every consumer must recognise it.
+export const ENGINE_UNREACHABLE_REVISION = 'engine unreachable';
+
 // SSH status schema
 export const sshStatusSchema = z.object({
 	user: z.string(),

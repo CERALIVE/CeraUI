@@ -41,3 +41,20 @@ export const DESKTOP_CHROME_QUERY =
  * extra coordination.
  */
 export const WIDE_DESKTOP_QUERY = "(min-width: 1024px)";
+
+/**
+ * The Device Health panel's dense band — narrow OR short.
+ *
+ * It drives three coordinated adaptations that must agree or the panel scrolls
+ * on the 1024x600 kiosk touchscreen, which is a hard product requirement it must
+ * not do: the recorder's shorter two-lane geometry, the now strip collapsing its
+ * secondary lines into ` · ` fragments, and AppDialog's footer being dropped
+ * (the panel is a reading instrument with zero actions, so the header's close
+ * button — already lifted to the 44px touch target by app.css under
+ * `data-layout-mode='touch'` — is the whole affordance).
+ *
+ * Measured on the real surface at 1024x600: 510px of dialog, 81px header, 77px
+ * footer, leaving 352px of body for 451px of content. The footer alone is 77 of
+ * the 99px overflow.
+ */
+export const HEALTH_COMPACT_QUERY = "(max-width: 1024px), (max-height: 700px)";

@@ -1084,6 +1084,8 @@ const en = {
 			wifiCountry: "WiFi Country",
 			wifiCountryDesc:
 				"Set the regulatory domain that decides which hotspot channels are legal",
+			deviceHealth: "Device Health",
+			deviceHealthDesc: "Thermal, load, and encoder condition over time",
 			versions: "Device Versions",
 			versionsDesc: "View installed component and firmware versions",
 			autostart: "Autostart streaming",
@@ -1103,6 +1105,57 @@ const en = {
 			lowDiskBody:
 				"Less than 512 MiB free on /data. Free up space so recording, logs, and updates keep working.",
 			lowDiskAction: "View logs",
+		},
+		deviceHealth: {
+			title: "Device Health",
+			description:
+				"Thermal, load, and encoder condition over the last 5 minutes",
+			lane: {
+				temp: "SoC temperature",
+				load: "Load average · 1 min · all processes",
+			},
+			nowStrip: {
+				temperature: "SoC temperature",
+				load: "Load average",
+				encoder: "Encoder",
+			},
+			axis: { now: "now", minutesAgo: "−{n:number} min" },
+			waiting: "Waiting for first reading",
+			gap: "No readings in this period",
+			unavailable: "Unavailable",
+			delta: "Δ {value:string} over 5 min",
+			peak: "peak {value:string}",
+			traceLabel: "Five-minute recorder — {summary:string}",
+			traceGaps: "{n:number} gaps",
+			encoder: {
+				title: "Encoder",
+				idle: "Idle · not encoding",
+				active: "Encoding · {summary:string}",
+				engineStarting: "Streaming engine is starting",
+				engineUnavailable: "Streaming engine is unreachable",
+				framesAdvancing: "Frames advancing",
+				framesStalled: "Frames not advancing",
+				framesUnknown: "No frame telemetry this period",
+			},
+			cores: {
+				title: "Encoder cores",
+				busy: "Busy",
+				idle: "Idle",
+				percentNote: "Measured duty cycle, read per encoder core.",
+				binaryNote:
+					"This board reports each encoder core as busy or idle only — no percentage exists.",
+				notInstrumented:
+					"This device does not report encoder core load to CeraUI yet.",
+				roadmap:
+					"Per-core encoder load will appear here once the device collector ships.",
+				simulated: "Simulated",
+			},
+			power: {
+				title: "Power rails",
+				notInstrumented:
+					"This board does not report voltage or current to CeraUI.",
+				noReading: "No reading",
+			},
 		},
 		networkIngest: {
 			title: "Network ingest",
