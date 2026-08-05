@@ -9,6 +9,7 @@ import App from "./App.svelte";
 import { initSubscriptions } from "./lib/rpc";
 import { initAsyncOperations } from "./lib/rpc/async-operation.svelte";
 import { initFieldSyncState } from "./lib/rpc/field-sync-state.svelte";
+import { initDeviceHealthHistory } from "./lib/stores/device-health-history.svelte";
 import { setStoredVersion } from "./lib/stores/version.svelte";
 
 // Feeds the HUD's `subscriptions.svelte` getters from the same shared socket the
@@ -23,6 +24,11 @@ initFieldSyncState();
 // reason: its reactive root must not be first instantiated mid-render, or
 // later external transitions (begin/confirm/reconcile) never reach the surface.
 initAsyncOperations();
+
+// Start filling the Device Health rings at app start, NOT on dialog open: a ring
+// that only began filling when the panel opened would present a blank instrument
+// at the exact moment the operator needs history. Costs ~400 numbers.
+initDeviceHealthHistory();
 
 // Register the Service Worker for PWA auto-update. There is deliberately NO
 // onNeedRefresh notification (Todo 24): the SW is registerType:"autoUpdate" with

@@ -19,6 +19,8 @@
 /* Read the revision numbers */
 import { release } from "node:os";
 
+import { ENGINE_UNREACHABLE_REVISION } from "@ceraui/rpc/schemas";
+
 import { logger } from "../../helpers/logger.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
 
@@ -32,8 +34,12 @@ import { srtlaSendExec } from "../streaming/streamloop.ts";
  * not something the device can still vouch for, so an unreachable engine reports
  * this rather than retaining the last-known value — a cached-forever version
  * would keep naming a build that may no longer be installed.
+ *
+ * The value itself lives in `@ceraui/rpc` because it crosses the wire: the
+ * frontend must recognise the sentinel to avoid rendering prose as a version.
+ * Re-exported here so this module stays the backend's import surface for it.
  */
-export const ENGINE_UNREACHABLE_REVISION = "engine unreachable";
+export { ENGINE_UNREACHABLE_REVISION };
 
 const revisions: Record<string, string> = {};
 

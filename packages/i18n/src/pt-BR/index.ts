@@ -319,6 +319,58 @@ const ptBR = {
 				"Menos de 512 MiB livres em /data. Libere espaço para que gravação, logs e atualizações continuem funcionando.",
 			lowDiskAction: "Ver logs",
 		},
+		deviceHealth: {
+			title: "Saúde do dispositivo",
+			description:
+				"Temperatura, carga e condição do codificador nos últimos 5 minutos",
+			lane: {
+				temp: "Temperatura do SoC",
+				load: "Carga média · 1 min · todos os processos",
+			},
+			nowStrip: {
+				temperature: "Temperatura do SoC",
+				load: "Carga média",
+				encoder: "Codificador",
+			},
+			axis: { now: "agora", minutesAgo: "−{n} min" },
+			waiting: "Aguardando a primeira leitura",
+			gap: "Sem leituras neste período",
+			unavailable: "Indisponível",
+			delta: "Δ {value} em 5 min",
+			peak: "pico {value}",
+			traceLabel: "Registrador de cinco minutos — {summary}",
+			traceGaps: "{n} lacunas",
+			encoder: {
+				title: "Codificador",
+				idle: "Ocioso · sem codificar",
+				active: "Codificando · {summary}",
+				engineStarting: "O motor de streaming está iniciando",
+				engineUnavailable: "O motor de streaming está inacessível",
+				framesAdvancing: "Quadros avançando",
+				framesStalled: "Quadros não avançam",
+				framesUnknown: "Sem telemetria de quadros neste período",
+			},
+			cores: {
+				title: "Núcleos do codificador",
+				busy: "Ocupado",
+				idle: "Ocioso",
+				percentNote:
+					"Ciclo de trabalho medido, lido por núcleo do codificador.",
+				binaryNote:
+					"Esta placa informa cada núcleo do codificador apenas como ocupado ou ocioso — não existe porcentagem.",
+				notInstrumented:
+					"Este dispositivo ainda não informa a carga dos núcleos do codificador ao CeraUI.",
+				roadmap:
+					"A carga por núcleo aparecerá aqui quando o coletor do dispositivo for publicado.",
+				simulated: "Simulado",
+			},
+			power: {
+				title: "Trilhos de alimentação",
+				notInstrumented:
+					"Esta placa não informa tensão nem corrente ao CeraUI.",
+				noReading: "Sem leitura",
+			},
+		},
 		networkIngest: {
 			title: "Ingestão de rede",
 			desc: "Permita que um telefone ou codificador desta rede publique no dispositivo",
@@ -420,6 +472,9 @@ const ptBR = {
 			wifiCountry: "País do Wi-Fi",
 			wifiCountryDesc:
 				"Define o domínio regulatório que determina quais canais de hotspot são permitidos",
+			deviceHealth: "Saúde do dispositivo",
+			deviceHealthDesc:
+				"Temperatura, carga e condição do codificador ao longo do tempo",
 			versions: "Versões do dispositivo",
 			versionsDesc: "Veja as versões de componentes e firmware instalados",
 			autostart: "Iniciar transmissão automaticamente",

@@ -1083,6 +1083,58 @@ const es = {
 				"Menos de 512 MiB libres en /data. Libera espacio para que la grabación, los registros y las actualizaciones sigan funcionando.",
 			lowDiskAction: "Ver registros",
 		},
+		deviceHealth: {
+			title: "Salud del dispositivo",
+			description:
+				"Temperatura, carga y estado del codificador en los últimos 5 minutos",
+			lane: {
+				temp: "Temperatura del SoC",
+				load: "Carga media · 1 min · todos los procesos",
+			},
+			nowStrip: {
+				temperature: "Temperatura del SoC",
+				load: "Carga media",
+				encoder: "Codificador",
+			},
+			axis: { now: "ahora", minutesAgo: "−{n} min" },
+			waiting: "Esperando la primera lectura",
+			gap: "Sin lecturas en este periodo",
+			unavailable: "No disponible",
+			delta: "Δ {value} en 5 min",
+			peak: "máx. {value}",
+			traceLabel: "Registrador de cinco minutos — {summary}",
+			traceGaps: "{n} huecos",
+			encoder: {
+				title: "Codificador",
+				idle: "Inactivo · sin codificar",
+				active: "Codificando · {summary}",
+				engineStarting: "El motor de streaming se está iniciando",
+				engineUnavailable: "El motor de streaming no responde",
+				framesAdvancing: "Los fotogramas avanzan",
+				framesStalled: "Los fotogramas no avanzan",
+				framesUnknown: "Sin telemetría de fotogramas en este periodo",
+			},
+			cores: {
+				title: "Núcleos del codificador",
+				busy: "Ocupado",
+				idle: "Inactivo",
+				percentNote:
+					"Ciclo de trabajo medido, leído por núcleo del codificador.",
+				binaryNote:
+					"Esta placa solo indica si cada núcleo del codificador está ocupado o inactivo; no existe ningún porcentaje.",
+				notInstrumented:
+					"Este dispositivo todavía no informa a CeraUI de la carga de los núcleos del codificador.",
+				roadmap:
+					"La carga por núcleo aparecerá aquí cuando se publique el colector del dispositivo.",
+				simulated: "Simulado",
+			},
+			power: {
+				title: "Raíles de alimentación",
+				notInstrumented:
+					"Esta placa no informa a CeraUI del voltaje ni de la corriente.",
+				noReading: "Sin lectura",
+			},
+		},
 		networkIngest: {
 			title: "Ingesta de red",
 			desc: "Permite que un teléfono o codificador de esta red publique al dispositivo",
@@ -1184,6 +1236,9 @@ const es = {
 			wifiCountry: "País de WiFi",
 			wifiCountryDesc:
 				"Define el dominio regulatorio que determina qué canales de punto de acceso son legales",
+			deviceHealth: "Salud del dispositivo",
+			deviceHealthDesc:
+				"Temperatura, carga y estado del codificador a lo largo del tiempo",
 			versions: "Versiones del dispositivo",
 			versionsDesc: "Ver versiones de componentes y firmware instalados",
 			autostart: "Inicio automático de transmisión",

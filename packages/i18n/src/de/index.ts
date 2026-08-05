@@ -1073,6 +1073,56 @@ const de = {
 				"Weniger als 512 MiB frei auf /data. Geben Sie Speicher frei, damit Aufnahme, Protokolle und Updates weiter funktionieren.",
 			lowDiskAction: "Protokolle anzeigen",
 		},
+		deviceHealth: {
+			title: "Gerätezustand",
+			description: "Temperatur, Last und Encoder-Zustand der letzten 5 Minuten",
+			lane: {
+				temp: "SoC-Temperatur",
+				load: "Lastdurchschnitt · 1 Min · alle Prozesse",
+			},
+			nowStrip: {
+				temperature: "SoC-Temperatur",
+				load: "Lastdurchschnitt",
+				encoder: "Encoder",
+			},
+			axis: { now: "jetzt", minutesAgo: "−{n} Min" },
+			waiting: "Warte auf erste Messung",
+			gap: "Keine Messwerte in diesem Zeitraum",
+			unavailable: "Nicht verfügbar",
+			delta: "Δ {value} über 5 Min",
+			peak: "Spitze {value}",
+			traceLabel: "Fünf-Minuten-Schreiber — {summary}",
+			traceGaps: "{n} Lücken",
+			encoder: {
+				title: "Encoder",
+				idle: "Inaktiv · kodiert nicht",
+				active: "Kodiert · {summary}",
+				engineStarting: "Die Streaming-Engine startet",
+				engineUnavailable: "Die Streaming-Engine ist nicht erreichbar",
+				framesAdvancing: "Frames laufen",
+				framesStalled: "Frames laufen nicht",
+				framesUnknown: "Keine Frame-Telemetrie in diesem Zeitraum",
+			},
+			cores: {
+				title: "Encoder-Kerne",
+				busy: "Aktiv",
+				idle: "Inaktiv",
+				percentNote: "Gemessene Auslastung, pro Encoder-Kern gelesen.",
+				binaryNote:
+					"Diese Platine meldet je Encoder-Kern nur aktiv oder inaktiv — einen Prozentwert gibt es nicht.",
+				notInstrumented:
+					"Dieses Gerät meldet CeraUI noch keine Encoder-Kernlast.",
+				roadmap:
+					"Die Last pro Kern erscheint hier, sobald der Gerätekollektor ausgeliefert wird.",
+				simulated: "Simuliert",
+			},
+			power: {
+				title: "Spannungsschienen",
+				notInstrumented:
+					"Diese Platine meldet CeraUI weder Spannung noch Strom.",
+				noReading: "Keine Messung",
+			},
+		},
 		networkIngest: {
 			title: "Netzwerk-Ingest",
 			desc: "Erlaube einem Telefon oder Encoder in diesem Netzwerk, an das Gerät zu senden",
@@ -1173,6 +1223,8 @@ const de = {
 			wifiCountry: "WLAN-Land",
 			wifiCountryDesc:
 				"Legt die Regulierungsdomäne fest, die bestimmt, welche Hotspot-Kanäle zulässig sind",
+			deviceHealth: "Gerätezustand",
+			deviceHealthDesc: "Temperatur, Last und Encoder-Zustand im Zeitverlauf",
 			versions: "Geräteversionen",
 			versionsDesc: "Installierte Komponenten- und Firmware-Versionen anzeigen",
 			autostart: "Streaming automatisch starten",

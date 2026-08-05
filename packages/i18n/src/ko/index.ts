@@ -161,6 +161,55 @@ const ko = {
 				"/data의 여유 공간이 512 MiB 미만입니다. 녹화, 로그, 업데이트가 계속 작동하도록 공간을 확보하세요.",
 			lowDiskAction: "로그 보기",
 		},
+		deviceHealth: {
+			title: "장치 상태",
+			description: "최근 5분간의 온도, 부하, 인코더 상태",
+			lane: {
+				temp: "SoC 온도",
+				load: "부하 평균 · 1분 · 전체 프로세스",
+			},
+			nowStrip: {
+				temperature: "SoC 온도",
+				load: "부하 평균",
+				encoder: "인코더",
+			},
+			axis: { now: "지금", minutesAgo: "−{n}분" },
+			waiting: "첫 측정값을 기다리는 중",
+			gap: "이 구간에는 측정값이 없습니다",
+			unavailable: "사용 불가",
+			delta: "Δ {value} (5분)",
+			peak: "최고 {value}",
+			traceLabel: "5분 기록계 — {summary}",
+			traceGaps: "끊김 {n}회",
+			encoder: {
+				title: "인코더",
+				idle: "대기 · 인코딩 안 함",
+				active: "인코딩 중 · {summary}",
+				engineStarting: "스트리밍 엔진을 시작하는 중",
+				engineUnavailable: "스트리밍 엔진에 연결할 수 없음",
+				framesAdvancing: "프레임 진행 중",
+				framesStalled: "프레임이 진행되지 않음",
+				framesUnknown: "이 구간의 프레임 텔레메트리 없음",
+			},
+			cores: {
+				title: "인코더 코어",
+				busy: "사용 중",
+				idle: "대기",
+				percentNote: "인코더 코어별로 측정한 사용률입니다.",
+				binaryNote:
+					"이 보드는 각 인코더 코어의 사용 중/대기 여부만 보고하며 백분율은 존재하지 않습니다.",
+				notInstrumented:
+					"이 장치는 아직 인코더 코어 부하를 CeraUI에 보고하지 않습니다.",
+				roadmap: "장치 수집기가 배포되면 코어별 부하가 여기에 표시됩니다.",
+				simulated: "시뮬레이션",
+			},
+			power: {
+				title: "전원 레일",
+				notInstrumented:
+					"이 보드는 전압이나 전류를 CeraUI에 보고하지 않습니다.",
+				noReading: "측정값 없음",
+			},
+		},
 		networkIngest: {
 			title: "네트워크 인제스트",
 			desc: "같은 네트워크의 휴대폰이나 인코더가 이 장치로 송출하도록 허용",
@@ -260,6 +309,8 @@ const ko = {
 			wifiCountry: "Wi-Fi 국가",
 			wifiCountryDesc:
 				"핫스팟에서 사용할 수 있는 채널을 결정하는 규제 도메인을 설정합니다",
+			deviceHealth: "장치 상태",
+			deviceHealthDesc: "시간에 따른 온도, 부하, 인코더 상태",
 			versions: "기기 버전",
 			versionsDesc: "설치된 구성 요소 및 펌웨어 버전을 확인합니다",
 			autostart: "자동 스트리밍 시작",
