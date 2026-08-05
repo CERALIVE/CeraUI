@@ -41,6 +41,7 @@ import {
 	resetEngineDeviceCache,
 } from "../modules/streaming/sources.ts";
 import {
+	EMI_ADVISORY_MSG,
 	HDMI_ERROR_NOTIFICATION,
 	HDMI_NO_SIGNAL_MSG,
 	provesHdmiSignalRecovered,
@@ -54,9 +55,6 @@ import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 
 const HDMI_RX_ID = "/dev/video0";
-
-const EMI_ADVISORY_MSG =
-	"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable.";
 
 const LOCKED_1080P5994: ListDevicesResult["devices"][number]["caps"] = [
 	{ width: 1920, height: 1080, framerate: "60000/1001" },
@@ -175,6 +173,20 @@ function raiseNoHdmiSignal(): void {
 	);
 }
 
+/** The OTHER claim on the same channel, raised exactly as `sensors.ts` raises it. */
+function raiseEmiAdvisory(): void {
+	notificationBroadcast(
+		HDMI_ERROR_NOTIFICATION,
+		"error",
+		EMI_ADVISORY_MSG,
+		8,
+		true,
+		true,
+		true,
+		"notifications.hdmiError",
+	);
+}
+
 function probe(
 	devices: ListDevicesResult["devices"],
 ): Promise<void> | ReturnType<typeof recheckSourceSignals> {
@@ -274,23 +286,51 @@ describe("hdmi_error clears when the HDMI link relocks", () => {
 		expect(notificationExists(HDMI_ERROR_NOTIFICATION)).toBeDefined();
 	});
 
-	test("the EMI/cable advisory sharing the name is left alone — it is a different claim", async () => {
-		notificationBroadcast(
-			HDMI_ERROR_NOTIFICATION,
-			"error",
-			EMI_ADVISORY_MSG,
-			8,
-			true,
-			true,
-			true,
-			"notifications.hdmiError",
-		);
+	/*
+	 * DELIBERATE POLICY CHANGE — this test previously asserted the opposite
+	 * ("the EMI/cable advisory sharing the name is left alone — it is a different
+	 * claim"). The advisory was exempted from retraction on the reading that it
+	 * describes CABLE QUALITY, which a relocked link does not falsify.
+	 *
+	 * Operators reported the consequence: "an infinite notification for something
+	 * that is already corrected". The two kernel lines behind the advisory
+	 * (`hdmirx_wait_lock_and_get_timing signal not lock`, `hdmirx_delayed_work_audio:
+	 * audio underflow`) are printed during ORDINARY link locking — a plain
+	 * unplug/replug cycle emits them — not only during a sustained fault. With no
+	 * retraction path and no timer expiry, a routine cable swap left the advisory
+	 * standing for the rest of the session.
+	 *
+	 * An engine-authored `signal: "present"` on the HDMI-RX port is a positive
+	 * statement that the port is carrying a picture, and that falsifies BOTH claims
+	 * on this channel equally. The retraction is therefore symmetric now.
+	 */
+	test("the EMI/cable advisory sharing the name is retracted by the same evidence", async () => {
+		raiseEmiAdvisory();
 
 		const frames = await captureFrames(() =>
 			Promise.resolve(probe([hdmiRxEntry(LOCKED_1080P5994)])),
 		);
 
-		expect(removedIds(frames)).not.toContain(HDMI_ERROR_NOTIFICATION);
+		expect(removedIds(frames)).toContain(HDMI_ERROR_NOTIFICATION);
+		expect(notificationExists(HDMI_ERROR_NOTIFICATION)).toBeUndefined();
+	});
+
+	test("a severed link leaves the advisory standing, exactly like the no-signal claim", async () => {
+		raiseEmiAdvisory();
+
+		await probe([hdmiRxEntry()]);
+		await probe([hdmiRxEntry()]);
+
+		expect(notificationExists(HDMI_ERROR_NOTIFICATION)?.msg).toBe(
+			EMI_ADVISORY_MSG,
+		);
+	});
+
+	test("a different device's picture never retracts the advisory either", async () => {
+		raiseEmiAdvisory();
+
+		await probe([hdmiRxEntry(), usbDongleEntry()]);
+
 		expect(notificationExists(HDMI_ERROR_NOTIFICATION)?.msg).toBe(
 			EMI_ADVISORY_MSG,
 		);

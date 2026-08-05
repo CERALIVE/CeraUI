@@ -15,22 +15,27 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// The retraction half of the `hdmi_error` "No HDMI signal detected" notification.
+// The retraction half of the `hdmi_error` notification channel, and the home of
+// BOTH messages `sensors.ts`'s RK3588 dmesg watcher raises onto it.
 //
-// `sensors.ts`'s RK3588 dmesg watcher RAISES it off the kernel line
-// `hdmirx-controller: Err, timing is invalid`. The kernel prints nothing when
-// the link comes back, and a persistent notification never expires on a timer
-// (`notification-liveness.ts`), so the raise was permanent: the operator read
-// "No HDMI signal detected" for a port that had relocked minutes earlier.
+// The watcher RAISES "No HDMI signal detected" off `hdmirx-controller: Err,
+// timing is invalid`, and the EMI/cable advisory off `hdmirx_wait_lock_and_get_timing
+// signal not lock` / `hdmirx_delayed_work_audio: audio underflow`. The kernel
+// prints nothing when the link comes back, and a persistent notification never
+// expires on a timer (`notification-liveness.ts`), so a raise with no retraction
+// is permanent: the operator read a stale HDMI complaint for a port that had
+// relocked minutes earlier.
 //
 // The recovery evidence is the SAME one the source list already trusts: the
 // engine's own `VIDIOC_QUERY_DV_TIMINGS` projection, stamped as
 // `CaptureDevice.signal` at `fromEngineDevice` — the one seam that knows the
 // ENGINE authored the row. `signal: "present"` on an HDMI-RX capture device is a
-// positive, engine-authored statement that the port is carrying a picture, which
-// is precisely the claim the notification denies. NOTHING here is a timer: an
-// unreachable engine, a fallback v4l2 scan row (`signal` unset ⇒ `unknown`), and
-// a still-severed link all fail the test and leave the notification standing.
+// positive, engine-authored statement that the port is carrying a picture, and
+// that falsifies BOTH claims: neither "there is no signal" nor "the link is too
+// impaired to carry one" survives the port delivering a locked picture. NOTHING
+// here is a timer: an unreachable engine, a fallback v4l2 scan row (`signal`
+// unset ⇒ `unknown`), and a still-severed link all fail the test and leave the
+// notification standing.
 
 import { deviceKindToPipelineId } from "@ceraui/rpc";
 import { notificationExists, notificationRemove } from "../ui/notifications.ts";
@@ -44,15 +49,26 @@ const HDMI_PIPELINE_ID = deviceKindToPipelineId(HDMI_DEVICE_KIND);
 /** Persistent-notification name shared by both `sensors.ts` HDMI raise sites. */
 export const HDMI_ERROR_NOTIFICATION = "hdmi_error";
 
-/**
- * The EXACT wire message of the no-signal raise. It is the discriminator, not
- * decoration: the name `hdmi_error` is shared with the EMI/cable-quality advisory
- * ("HDMI signal issues detected…"), which describes a DIFFERENT condition that a
- * relocked link does not falsify — the raise site already keys on this same
- * string to avoid overwriting that advisory. Retracting on anything less
- * specific would silently drop it.
- */
+/** The EXACT wire message of the no-signal raise. */
 export const HDMI_NO_SIGNAL_MSG = "No HDMI signal detected";
+
+/** The EXACT wire message of the EMI/cable-quality advisory raise. */
+export const EMI_ADVISORY_MSG =
+	"HDMI signal issues detected. This is usually caused either by EMI or a by a faulty cable. " +
+	"Try to move any modems away from the HDMI cable and the encoder. " +
+	"If that fails, try out a different HDMI cable or to manually set a lower HDMI resolution/framerate on your camera";
+
+/**
+ * The claims a locked HDMI signal falsifies, and the discriminator the retraction
+ * keys on. `hdmi_error` is ONE notification slot shared by two raise sites, so a
+ * blind remove-by-name would retract whatever happened to be standing — including
+ * a future third claim this evidence says nothing about. Membership is explicit
+ * for the same reason `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION` is.
+ */
+const HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL: readonly string[] = [
+	HDMI_NO_SIGNAL_MSG,
+	EMI_ADVISORY_MSG,
+];
 
 /** The two device fields the verdict reads; `CaptureDevice` satisfies it. */
 export interface HdmiSignalObservation {
@@ -180,9 +196,15 @@ export function setHdmiSignalRecoveryDepsForTest(
 }
 
 /**
- * Retract the standing "No HDMI signal detected" notification once an HDMI
- * receiver reports a locked signal again. Returns whether a removal was emitted,
- * so a caller (and a test) can assert the edge without inspecting the broadcast.
+ * Retract the standing `hdmi_error` notification once an HDMI receiver reports a
+ * locked signal again. Returns whether a removal was emitted, so a caller (and a
+ * test) can assert the edge without inspecting the broadcast.
+ *
+ * Both claims the channel carries are retracted, because the evidence falsifies
+ * both. The EMI/cable advisory was previously exempt, on the reading that it is
+ * about cable QUALITY rather than presence — but its kernel lines fire during
+ * ordinary link locking, so a routine replug raised an advisory that nothing
+ * could ever take back.
  *
  * Idempotent by construction: `notificationExists` answers `undefined` once the
  * notification is gone, so a steady stream of healthy device commits costs one
@@ -194,7 +216,8 @@ export function clearHdmiSignalErrorOnRecovery(
 ): boolean {
 	if (!provesHdmiSignalRecovered(devices)) return false;
 	const standing = deps.peek(HDMI_ERROR_NOTIFICATION);
-	if (standing?.msg !== HDMI_NO_SIGNAL_MSG) return false;
+	if (standing === undefined) return false;
+	if (!HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL.includes(standing.msg)) return false;
 	deps.remove(HDMI_ERROR_NOTIFICATION);
 	return true;
 }

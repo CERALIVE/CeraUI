@@ -75,8 +75,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Regulatory domain + kernel-derived hotspot channels (`iw reg set` / `iw phy` parser, regdb precheck, armed restore timer) | `modules/wifi/regdomain.ts` (`applyRegulatoryDomain`, `deriveApChannels`, `checkWirelessRegdbSupport`, `buildRegdomainRestoreCommand`) |
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | Policy-route self-check for bonded wifi/modem interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
-| Retracting the `hdmi_error` "No HDMI signal detected" notification once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
-| Scoping the `hdmi_error` "No HDMI signal detected" RAISE to a relevant selection | `modules/system/hdmi-signal-notification.ts` (`provesSelectionIsNotHdmi`) + `modules/system/sensors.ts` (`handleRk3588HdmiDmesg`); contract below → …AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION |
+| Retracting the `hdmi_error` notification (BOTH the no-signal message and the EMI/cable advisory) once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, `HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
+| Scoping the `hdmi_error` "No HDMI signal detected" RAISE to a relevant selection, and dedup-guarding the EMI/cable advisory's raise | `modules/system/hdmi-signal-notification.ts` (`provesSelectionIsNotHdmi`) + `modules/system/sensors.ts` (`handleRk3588HdmiDmesg`); contract below → …AND ITS RAISE MUST BE SCOPED LIKE ITS RETRACTION |
 | Retracting the `cerastream` `capture_video_error` notification at a healthy session boundary | `modules/streaming/cerastream-backend.ts` (`standingEngineError`, `clearRecoveredEngineError`, `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION`) |
 | **One row per physical camera + per-device mode ladders (`inputModes`, `selectedInputMode`, coarse USB placeholder suppression)** | `modules/streaming/sources.ts` (`SUPPRESSED_COARSE_PIPELINE_IDS`, `buildInputModes`, `resolveSelectedInputMode`, mode-aware `deriveEngineRouting`) |
 | **Last-streamed-config retention (the ONE remembered `lost` device)** | `modules/streaming/sources.ts` (`collectLostCandidates`, `noteStreamedSourceCommitted`) + `config.last_streamed_source` in `helpers/config-schemas.ts`; commit hook wired at `stream-session-orchestrator.ts` `onStreamCommitted` |
@@ -3208,7 +3208,7 @@ Two notifications shipped that way, and both were confirmed on a board.
 
 | Notification | Raised by | Why it could never clear |
 |---|---|---|
-| `hdmi_error` / "No HDMI signal detected" | `modules/system/sensors.ts`, off the RK3588 dmesg line `hdmirx-controller: Err, timing is invalid` | the kernel logs the failure and prints NOTHING when the link relocks, so the only event the watcher can see is the bad one |
+| `hdmi_error` — BOTH "No HDMI signal detected" and the EMI/cable advisory | `modules/system/sensors.ts`, off the RK3588 dmesg lines `hdmirx-controller: Err, timing is invalid` (no-signal) and `hdmirx_wait_lock_and_get_timing signal not lock` / `hdmirx_delayed_work_audio: audio underflow` (advisory) | the kernel logs the failure and prints NOTHING when the link relocks, so the only event the watcher can see is the bad one |
 | the `cerastream` channel carrying `capture_video_error` | `cerastream-backend.ts` `handleErrorEvent()` | the engine reports the Tier-2 error and never revokes it; the condition cleared and the engine returned to idle/healthy with the error still on screen |
 
 **The retraction runs on the same evidence the source list already trusts, never
@@ -3237,11 +3237,23 @@ nothing. Four properties are load-bearing:
 - **Scoped to `kind === "hdmi"`.** The kind heuristic tests usb/uvc BEFORE hdmi
   precisely so a "RØDE HDMI to USB-C" dongle is not mislabelled, so a working
   webcam can never retract a claim about the board's HDMI-RX port.
-- **Scoped to the EXACT message.** The name `hdmi_error` is SHARED with the
-  EMI/cable-quality advisory ("HDMI signal issues detected…"), which describes a
-  different condition a relocked link does not falsify — the raise site already
-  keys on the same string to avoid overwriting it. Retracting by name alone would
-  silently drop it.
+- **Scoped to a KNOWN message, and BOTH of them qualify.** The name `hdmi_error`
+  is ONE slot shared by two claims — "No HDMI signal detected" and the
+  EMI/cable-quality advisory ("HDMI signal issues detected…") — so
+  `HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL` is the membership table, exactly as
+  `ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION` is for the engine channel. A blind
+  remove-by-name would retract a future third claim this evidence says nothing
+  about.
+
+  **The advisory used to be EXEMPT, and that was the bug.** It was read as a claim
+  about cable QUALITY, which a relocked link does not falsify. Operators reported
+  the consequence — *"an infinite notification for something that is already
+  corrected"* — and the board agrees with them: the two kernel lines behind it fire
+  during ORDINARY link locking, so a plain unplug/replug raised an advisory with no
+  retraction path at all, which then stood for the rest of the session. An
+  engine-authored "this port is carrying a picture" falsifies both claims equally,
+  so there is no longer any reason to treat them differently for RETRACTION. They
+  are still different for RAISING: each keeps its own trigger.
 - **Idempotent.** `notificationExists` answers `undefined` once it is gone, so the
   healthy steady state costs one map lookup and broadcasts nothing.
 
@@ -3272,8 +3284,9 @@ the only recourse when it cannot run.
 
 Coverage: `tests/notification-recovery-clearing.test.ts` (the pure verdict, the
 persists-while-severed and unreachable-engine controls, the real `remove` frame
-pushed to a connected client, the EMI-advisory and foreign-device negatives, the
-idle-is-not-proof and shared-slot negatives, and the repeat-heartbeat idempotence)
+pushed to a connected client, the SAME three assertions repeated for the EMI
+advisory, the foreign-device negatives, the idle-is-not-proof and shared-slot
+negatives, and the repeat-heartbeat idempotence)
 plus the frontend half `apps/frontend/src/tests/notification-recovery-ingestion.test.ts`
 (the `remove` frame drops the entry from the persistent panel).
 
@@ -3321,20 +3334,35 @@ It can only ever withhold a raise PROVEN irrelevant:
 - **A renumbered camera is still recognised**, through the `previousIds` aliases
   the successor publishes — otherwise a libuvc camera would lose its own
   selection on exactly the cycle that matters.
-- **The EMI/cable advisory is deliberately UNGATED.** Its two kernel lines are
-  emitted only while the receiver is actually locking or clocking a link, so they
-  already describe work somebody asked for. Do not extend this gate to it.
+- **The EMI/cable advisory does not take this SELECTION gate.** Its two kernel
+  lines are emitted only while the receiver is actually locking or clocking a
+  link, so they already describe work somebody asked for. Do not extend
+  `provesSelectionIsNotHdmi` to it.
 - **`hdmiNoSignalRaiseAllowed()` (the production wiring in `sensors.ts`) is
   FAIL-OPEN.** A throw reading config or the sources list is not evidence about
   the operator, so it must never be the reason a real fault goes unreported.
 
+**The advisory DOES take a DEDUP guard, which is a different question.** Its raise
+was unconditional — every matching kernel line called `raise()`, and a link that is
+merely settling prints them repeatedly, so one replug cycle could re-fire the toast
+several times over and could also overwrite a standing "No HDMI signal detected" on
+the slot the two share. Both properties are fixed by ONE check: it raises only when
+`peek(HDMI_ERROR_NOTIFICATION)` is `undefined`, i.e. only onto a free channel.
+
+Note the deliberate asymmetry with the sibling no-signal raise, which DOES re-raise
+over its own standing notification (`!hdmiNotif || hdmiNotif.msg === HDMI_NO_SIGNAL_MSG`).
+That one re-asserts a condition the operator is being asked to act on; the advisory
+is one-shot guidance about the physical link, and repeating it teaches nothing new.
+
 The dmesg callback was extracted to the exported `handleRk3588HdmiDmesg(data,
 deps)` so both raise conditions are drivable without a `dmesg -w` process.
 Coverage: `tests/hdmi-raise-scope.test.ts` (the pure verdict table incl. the
-coarse/renumber/persisted-fallback arms, the sweep raising nothing, and the
-negative controls: a selected HDMI input with no cable still raises, the EMI
-advisory still raises under the same gate, and the standing-advisory
-non-overwrite is unchanged).
+coarse/renumber/persisted-fallback arms, the sweep raising nothing, the advisory's
+dedup guard — free channel raises, own-advisory and no-signal standing both refuse,
+a five-line settling burst costs exactly one raise, and the audio-underflow trigger
+under the same guard — and the negative controls: a selected HDMI input with no
+cable still raises, the advisory still raises past the selection gate, and the
+no-signal raise's own standing-advisory non-overwrite is unchanged).
 
 ## AN INFERENCE MAY NOT OUTRANK THE OPERATOR, AND A SHARED NODE PATH NAMES NOBODY [EXISTS]
 
@@ -3518,9 +3546,15 @@ config, an anchored path still held by its own device, and a live row with no
   authoritative recovery signal (see A PERSISTENT NOTIFICATION MUST BE RETRACTABLE).
 - Don't retract a notification whose NAME is shared by more than one claim without
   discriminating WHICH claim is standing — `hdmi_error` carries both the no-signal
-  and the EMI/cable advisory, and the `cerastream` channel carries every non-srtla
-  engine error. Key on the message (`HDMI_NO_SIGNAL_MSG`) or on the recorded code
-  (`standingEngineError`), never on the bare name.
+  message and the EMI/cable advisory, and the `cerastream` channel carries every
+  non-srtla engine error. Key on an explicit membership table
+  (`HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL`) or on the recorded code
+  (`standingEngineError`), never on the bare name. Note that membership is a
+  question about the EVIDENCE, not about how the claim was raised: a locked HDMI
+  signal falsifies BOTH `hdmi_error` messages, so both are in that table. Don't
+  re-exempt the advisory — it has no other retraction path, and its kernel lines
+  fire during ordinary link locking, which is how it became the operator-reported
+  "infinite notification for something that is already corrected".
 - Don't move the HDMI recovery hook off `commitEngineDevices` or gate it on a
   changed payload — it must see every engine-authored device view, including the
   ones that are byte-identical to the last.
@@ -3530,7 +3564,14 @@ config, an anchored path still held by its own device, and a live row with no
   `provesSelectionIsNotHdmi()`, and don't turn that suppression-only test into a
   fail-closed one: absence of evidence is not evidence, and refusing to raise on
   an unset/unresolvable selection would drop a genuine no-signal report. The
-  EMI/cable advisory stays UNGATED.
+  EMI/cable advisory keeps its own trigger and does NOT take that selection gate.
+- Don't raise the EMI/cable advisory onto an occupied `hdmi_error` channel — its
+  kernel lines repeat while a link merely settles, so an unconditional raise
+  re-fires a fresh toast per line and can overwrite a standing no-signal claim.
+  Raise only when `peek(HDMI_ERROR_NOTIFICATION)` is `undefined`. And don't
+  "unify" that with the no-signal guard's `|| msg === HDMI_NO_SIGNAL_MSG` arm:
+  the no-signal raise re-asserting itself is deliberate, the advisory doing so is
+  the defect.
 - Don't answer "is the selected capture device present" with a bare
   `sources.find(...)` on the Auto-audio path — the engine's device view has a
   real, NORMAL hole on every libuvc release (≈400 ms, up to 2 s), and resolving
