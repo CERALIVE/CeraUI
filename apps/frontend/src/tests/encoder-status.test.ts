@@ -379,13 +379,60 @@ describe("activity tone — colour reinforces the word, never replaces it", () =
 		);
 		for (const core of ["rkvenc0", "rkvenc1"]) {
 			const row = byTestId(`encoder-core-${core}`);
-			const pips = row.querySelectorAll("[aria-hidden='true']");
+			const pips = row.querySelectorAll("[data-marker='pip']");
 			expect(pips).toHaveLength(1);
+			// LEADS with it: the marker is the row's first element, not merely
+			// somewhere inside it.
+			expect(row.firstElementChild).toBe(pips[0]);
 			// Sized and lifted in `em`, so density changes the scale and never the
 			// shape — the same declaration serves the 18px strip and the 12px row.
 			expect(pips[0]?.className).toContain("size-[0.5em]");
 			expect(pips[0]?.className).toContain("-translate-y-[0.1em]");
+			expect(pips[0]?.getAttribute("aria-hidden")).toBe("true");
 			expect(row.querySelector("svg")).toBeNull();
+		}
+	});
+
+	/**
+	 * A RAIL IS A MAGNITUDE; A LEADER IS NOT. Only a `percent` core published a
+	 * denominator, so only it may draw a filled track. The other two vocabularies
+	 * get a dotted leader in that slot — which carries no fill and no
+	 * `inline-size`, so it states "no scale here" while still walking the eye
+	 * from the core id to its word. Leaving the slot EMPTY is what this replaced:
+	 * on the full-width Device Stats band it opened a ~350px void mid-row that
+	 * read as a broken layout rather than as an absent scale.
+	 */
+	it.each(DENSITIES)("%s — only a measured core draws a rail", (density) => {
+		mount(
+			reading([percent("rkvenc0", 45.53), unavailable("rkvenc1")]),
+			density,
+		);
+		const measured = byTestId("encoder-core-rkvenc0");
+		expect(measured.querySelector("[data-marker='rail']")).not.toBeNull();
+		expect(measured.querySelector("[data-marker='leader']")).toBeNull();
+
+		const unreadable = byTestId("encoder-core-rkvenc1");
+		expect(unreadable.querySelector("[data-marker='rail']")).toBeNull();
+		const leader = unreadable.querySelector("[data-marker='leader']");
+		expect(leader).not.toBeNull();
+		// The leader is decoration only, and carries no fraction of anything.
+		expect(leader?.getAttribute("aria-hidden")).toBe("true");
+		expect(leader?.getAttribute("style")).toBeNull();
+	});
+
+	it.each(
+		DENSITIES,
+	)("%s — a clock enable-bit gets a leader, never a rail", (density) => {
+		mount(
+			reading([active("rkvenc0", true), active("rkvenc1", false)], {
+				source: "clk-enable-count",
+			}),
+			density,
+		);
+		for (const core of ["rkvenc0", "rkvenc1"]) {
+			const row = byTestId(`encoder-core-${core}`);
+			expect(row.querySelector("[data-marker='rail']")).toBeNull();
+			expect(row.querySelector("[data-marker='leader']")).not.toBeNull();
 		}
 	});
 

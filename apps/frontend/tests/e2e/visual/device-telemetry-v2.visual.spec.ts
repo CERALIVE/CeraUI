@@ -125,6 +125,63 @@ test.describe("@visual device telemetry v2", () => {
 		await page.getByTestId(testId).screenshot({ path: path.join(EVIDENCE_DIR, name) });
 	}
 
+	/**
+	 * The two encoder cores are a LIST, and a list reads DOWN. Side by side they
+	 * were flung to opposite ends of their frame with their bars starting at
+	 * different x positions, so the one comparison the widget exists to support —
+	 * core 0 against core 1 — was the one it made hardest; inline they collapsed
+	 * into a flat `rkvenc0 45.53% rkvenc1 0.00%` string on one line.
+	 *
+	 * Asserted on the REAL rendered boxes rather than on a class name: the
+	 * regression this guards against is a CSS one (a flex-direction or grid-cols
+	 * change), and a class assertion would pass right through it.
+	 */
+	async function expectCoresStackVertically(page: Page, scope: string): Promise<void> {
+		const box = async (core: string) =>
+			page
+				.getByTestId(scope)
+				.getByTestId(`encoder-core-${core}`)
+				.evaluate((el) => {
+					const r = el.getBoundingClientRect();
+					return { top: r.top, bottom: r.bottom, left: r.left };
+				});
+		const first = await box("rkvenc0");
+		const second = await box("rkvenc1");
+		expect(
+			second.top,
+			`${scope}: rkvenc1 must sit BELOW rkvenc0, not beside it`,
+		).toBeGreaterThanOrEqual(first.bottom - 1);
+		// Stacked rows share a left edge — that shared edge is what makes the two
+		// readings comparable at a glance.
+		expect(second.left, `${scope}: stacked cores must share a left edge`).toBeCloseTo(
+			first.left,
+			0,
+		);
+	}
+
+	/**
+	 * A RAIL IS A MAGNITUDE; A LEADER IS NOT. Only a `percent` core published a
+	 * denominator, so only it may draw a filled track — mainline reports a clock
+	 * enable-bit, and a full or empty track there would read as 100 % / 0 %.
+	 */
+	async function expectRailOnlyWhereMeasured(
+		page: Page,
+		scope: string,
+		expected: "rail" | "leader",
+	): Promise<void> {
+		for (const core of ["rkvenc0", "rkvenc1"]) {
+			const row = page.getByTestId(scope).getByTestId(`encoder-core-${core}`);
+			await expect(
+				row.locator(`[data-marker="${expected}"]`),
+				`${scope} ${core}: expected a ${expected}`,
+			).toHaveCount(1);
+			await expect(
+				row.locator(`[data-marker="${expected === "rail" ? "leader" : "rail"}"]`),
+				`${scope} ${core}: must not carry the other marker`,
+			).toHaveCount(0);
+		}
+	}
+
 	/** No horizontal clip: the box must not be wider than the space it has. */
 	async function expectNoHorizontalOverflow(page: Page, testId: string): Promise<void> {
 		const overflow = await page.getByTestId(testId).evaluate((el) => ({
@@ -182,6 +239,10 @@ test.describe("@visual device telemetry v2", () => {
 				"data-precision",
 				"percent",
 			);
+			// Both densities stack, so the widget reads as ONE element across the
+			// two surfaces rather than two components that share a file.
+			await expectCoresStackVertically(page, "device-health");
+			await expectRailOnlyWhereMeasured(page, "device-health", "rail");
 			await shot(page, "device-health", `telemetry-v2-health-percent-${label}.png`);
 
 			await push(page, { "encoder-load": ENCODER_IDLE });
@@ -208,6 +269,7 @@ test.describe("@visual device telemetry v2", () => {
 				"data-core-tone",
 				"quiet",
 			);
+			await expectRailOnlyWhereMeasured(page, "device-health", "leader");
 			await shot(page, "device-health", `telemetry-v2-health-binary-${label}.png`);
 
 			await push(page, { "encoder-load": ENCODER_BINARY_IDLE });
@@ -281,8 +343,20 @@ test.describe("@visual device telemetry v2", () => {
 			);
 			await expect(encoderTile.getByTestId("encoder-core-rkvenc0")).toBeVisible();
 			await expect(encoderTile.getByTestId("encoder-core-rkvenc1")).toBeVisible();
+			// The operator's complaint, pinned: the cores stack, at BOTH viewports.
+			await expectCoresStackVertically(page, "device-stat-encoder");
+			await expectRailOnlyWhereMeasured(page, "device-stat-encoder", "rail");
 			await encoderTile.screenshot({
 				path: path.join(EVIDENCE_DIR, `telemetry-v2-stats-encoder-encoding-${label}.png`),
+			});
+
+			// Mainline's clock enable-bit publishes no denominator, so the rail slot
+			// carries a leader instead — never a track that would read as 0/100 %.
+			await push(page, { "encoder-load": ENCODER_BINARY });
+			await expectCoresStackVertically(page, "device-stat-encoder");
+			await expectRailOnlyWhereMeasured(page, "device-stat-encoder", "leader");
+			await encoderTile.screenshot({
+				path: path.join(EVIDENCE_DIR, `telemetry-v2-stats-encoder-binary-${label}.png`),
 			});
 
 			await push(page, { "encoder-load": ENCODER_IDLE });
@@ -335,6 +409,8 @@ test.describe("@visual device telemetry v2", () => {
 			// Both cores are always printed, always separately — never averaged.
 			await expect(cell.getByTestId("encoder-core-rkvenc0")).toBeVisible();
 			await expect(cell.getByTestId("encoder-core-rkvenc1")).toBeVisible();
+			// The narrowest of the three mount sites, and it stacks like the others.
+			await expectCoresStackVertically(page, "telemetry-encoder");
 
 			const strip = page.locator('section:has([data-testid="telemetry-encoder"])');
 			await strip.screenshot({
