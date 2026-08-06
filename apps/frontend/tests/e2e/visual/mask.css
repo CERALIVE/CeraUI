@@ -43,7 +43,16 @@
  * in the baseline while neutralising the live churn. visibility:hidden (not
  * display:none) preserves each right-aligned shrink-0 cell's box so the rows
  * never reflow between baseline and comparison runs.
+ *
+ * The tier-1 tiles added a proportional bar for the two signals that have a real
+ * 0-100 denominator (fan duty, disk used). Its FILL width tracks the same live
+ * churn as the value beside it, so the fill is masked too — the track itself is
+ * stable chrome and stays visible.
  */
 [data-testid^='device-stat-'][data-testid$='-value'] {
+	visibility: hidden !important;
+}
+
+[data-testid^='device-stat-'][data-testid$='-bar'] > span {
 	visibility: hidden !important;
 }

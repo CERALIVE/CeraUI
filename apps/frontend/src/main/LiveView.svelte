@@ -90,6 +90,7 @@ import {
 	revertStreamingOptimism,
 	revertStreamingOptimismFailure,
 } from '$lib/rpc/streaming-optimism.svelte';
+import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
@@ -631,6 +632,12 @@ function findSensor(predicate: (name: string) => boolean): string | undefined {
 const tempSensor = $derived(findSensor((n) => n.includes('temp')));
 const uptimeSensor = $derived(findSensor((n) => n.includes('uptime')));
 
+// Per-core encoder load for the cockpit's ENCODER cell. No new subscription and
+// no new RPC: this store is initialised app-wide from main.ts and reads the
+// existing `encoder-load` broadcast. Derived HERE so LiveCockpit stays a pure
+// prop pass-through, per its own state-ownership contract.
+const encoderLoad = $derived(getEncoderLoad());
+
 // The live bitrate, split three ways — the SAME rules the HUD uses, not a second
 // data path.
 //
@@ -1006,6 +1013,7 @@ const configRows = $derived<ConfigRow[]>([
 				: undefined}
 			{tempSensor}
 			{uptimeSensor}
+			{encoderLoad}
 			{bitrateDraft}
 			bitrateLabel={formatBitrate(bitrateDraft)}
 			bitrateMax={BITRATE_MAX}

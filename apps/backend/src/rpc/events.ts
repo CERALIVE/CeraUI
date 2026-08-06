@@ -28,6 +28,10 @@ export { ADDON_EVENT } from "../modules/addons/manager.ts";
 // ADDON_EVENT below) so the initial-state push can resolve it without importing
 // this RPC-layer module from `modules/ui`.
 export { ENCODER_LOAD_EVENT } from "../modules/system/encoder-load.ts";
+// Fan presence + PWM duty-cycle broadcast. Its OWN channel for the same reason
+// `encoder-load` has one — the `device-stats` payload is frozen by the S1 lock —
+// and the emitter owns the name so the initial-state push can resolve it.
+export { FAN_EVENT } from "../modules/system/fan.ts";
 
 /**
  * Simple event emitter for internal broadcasts

@@ -295,6 +295,13 @@ const ar = {
 			lowDiskBody:
 				"أقل من 512 ميبي‌بايت متاحة على /data. حرّر مساحة حتى يستمر التسجيل والسجلات والتحديثات في العمل.",
 			lowDiskAction: "عرض السجلات",
+			fan: "المروحة",
+			fanCooling: "تبريد",
+			fanOff: "متوقفة",
+			fanAbsent: "لا توجد مروحة",
+			fanAbsentBody: "لا تحتوي هذه اللوحة على مروحة قابلة للتحكم.",
+			fanHint:
+				"دورة التشغيل — نسبة الطاقة الكاملة التي تُشغَّل بها المروحة. لا تُبلِّغ هذه المروحة عن أي سرعة.",
 		},
 		deviceHealth: {
 			title: "صحة الجهاز",
@@ -317,7 +324,6 @@ const ar = {
 			traceLabel: "مسجّل خمس دقائق — {summary}",
 			traceGaps: "{n} فجوات",
 			encoder: {
-				title: "المُرمِّز",
 				idle: "خامل · لا يُرمِّز",
 				active: "يُرمِّز · {summary}",
 				engineStarting: "محرك البث قيد التشغيل",
@@ -335,6 +341,10 @@ const ar = {
 					"تُبلِّغ هذه اللوحة عن كل نواة ترميز كمشغولة أو خاملة فقط — لا توجد نسبة مئوية.",
 				notInstrumented: "لا تُبلِّغ هذه اللوحة CeraUI بحِمل أنوية المُرمِّز.",
 				simulated: "محاكاة",
+				headlineEncoding: "يُرمِّز",
+				headlineIdle: "خامل",
+				headlineUnreported: "غير مُبلَّغ عنه",
+				engineLabel: "المحرّك",
 			},
 			power: {
 				title: "خطوط الطاقة",
@@ -1052,6 +1062,7 @@ const ar = {
 	hud: {
 		bitrate: "معدل البت",
 		bitrateSending: "قيد الإرسال",
+		encoder: "المُرمِّز",
 		bitrateLimit: "الحد المُعد",
 		bitrateAdapting: "يتكيف",
 		bitrateBelowLimitHint:

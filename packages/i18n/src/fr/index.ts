@@ -317,6 +317,13 @@ const fr = {
 			lowDiskBody:
 				"Moins de 512 Mio libres sur /data. Libérez de l'espace pour que l'enregistrement, les journaux et les mises à jour continuent de fonctionner.",
 			lowDiskAction: "Voir les journaux",
+			fan: "Ventilateur",
+			fanCooling: "Refroidissement",
+			fanOff: "À l'arrêt",
+			fanAbsent: "Aucun ventilateur",
+			fanAbsentBody: "Cette carte n'a pas de ventilateur contrôlable.",
+			fanHint:
+				"Rapport cyclique — la part de la puissance maximale à laquelle la carte pilote le ventilateur. Ce ventilateur ne communique aucune vitesse.",
 		},
 		deviceHealth: {
 			title: "Santé de l'appareil",
@@ -340,7 +347,6 @@ const fr = {
 			traceLabel: "Enregistreur cinq minutes — {summary}",
 			traceGaps: "{n} interruptions",
 			encoder: {
-				title: "Encodeur",
 				idle: "Inactif · pas d'encodage",
 				active: "Encodage · {summary}",
 				engineStarting: "Le moteur de streaming démarre",
@@ -359,6 +365,10 @@ const fr = {
 				notInstrumented:
 					"Cette carte ne communique pas la charge des cœurs d'encodage à CeraUI.",
 				simulated: "Simulé",
+				headlineEncoding: "Encodage",
+				headlineIdle: "Inactif",
+				headlineUnreported: "Non communiqué",
+				engineLabel: "Moteur",
 			},
 			power: {
 				title: "Rails d'alimentation",
@@ -1107,6 +1117,7 @@ const fr = {
 	hud: {
 		bitrate: "Bitrate",
 		bitrateSending: "Envoi",
+		encoder: "Encodeur",
 		bitrateLimit: "Limite configurée",
 		bitrateAdapting: "Adaptation",
 		bitrateBelowLimitHint:

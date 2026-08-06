@@ -50,7 +50,11 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConfig: () => ({ max_br: state.maxBr, pipeline: "hdmi" }),
 	getConfigChange: () => undefined,
 	getConnectionState: () => "connected",
+	getDeviceStats: () => undefined,
 	getDevices: () => [],
+	// The cockpit's ENCODER cell reads this through device-health-history, whose
+	// lazy singleton also fills the temperature/load rings — hence getDeviceStats.
+	getEncoderLoadSnapshot: () => undefined,
 	getIsConnected: () => true,
 	getIsStreaming: () => state.isStreaming,
 	getLinkTelemetry: () => state.linkTelemetry,

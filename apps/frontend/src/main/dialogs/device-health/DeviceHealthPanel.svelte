@@ -39,7 +39,7 @@ import { ENGINE_UNREACHABLE_REVISION } from '@ceraui/rpc/schemas';
 import { Activity, Clock, Cpu, Thermometer, Zap } from '@lucide/svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
-import EncoderCoreLanes from '$lib/components/custom/EncoderCoreLanes.svelte';
+import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
 import HealthTraceField, {
 	type RenderLane,
 } from '$lib/components/custom/HealthTraceField.svelte';
@@ -55,6 +55,7 @@ import {
 } from '$lib/components/custom/health-trace-view';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { HEALTH_COMPACT_QUERY } from '$lib/layout';
+import { deriveEncoderActivity } from '$lib/streaming/encoder-load';
 import { getCapabilities, getRevisions, getSources, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	acquireHealthClock,
@@ -193,11 +194,21 @@ const traceSummary = $derived.by(() => {
 	return parts.length === 0 ? t.waiting() : parts.join(' \u00b7 ');
 });
 
+// The widget's headline is real text, not colour, and it belongs in the panel's
+// EXISTING polite region rather than a second one competing with it.
+const encoderHeadline = $derived.by(() => {
+	const activity = deriveEncoderActivity(encoderLoad);
+	if (activity === 'encoding') return t.cores.headlineEncoding();
+	if (activity === 'idle') return t.cores.headlineIdle();
+	return t.cores.headlineUnreported();
+});
+
 const announcement = $derived(
 	[
 		tempStatus.value === null ? null : formatTemp(tempStatus.value),
 		loadStatus.value === null ? null : formatLoad(loadStatus.value),
 		encoderCondition,
+		`${t.cores.title()} ${encoderHeadline}`,
 	]
 		.filter((part): part is string => part !== null)
 		.join(' \u00b7 '),
@@ -214,6 +225,25 @@ $effect(() => {
 	return () => clearTimeout(handle);
 });
 </script>
+
+<!-- Metadata ABOUT the cores, not a fact of its own. As a bare figure pinned to
+     the header's far right it read as an orphaned number; naming and enclosing
+     it demotes it to the provenance chip it is. -->
+{#snippet engineRevisionChip()}
+	{#if engineRevision}
+		<span
+			class="border-border/60 bg-muted/40 ms-auto inline-flex min-w-0 shrink items-baseline gap-1.5 rounded-full border px-2 py-0.5"
+			data-testid="device-health-engine-revision"
+		>
+			<span class="text-muted-foreground/70 shrink-0 text-[0.625rem] font-medium tracking-wide">
+				{t.cores.engineLabel()}
+			</span>
+			<span class="text-muted-foreground min-w-0 truncate font-mono text-[11px] tabular-nums">
+				{engineRevision}
+			</span>
+		</span>
+	{/if}
+{/snippet}
 
 {#snippet fact(
 	label: string,
@@ -316,20 +346,20 @@ $effect(() => {
 		waitingLabel={t.waiting()}
 	/>
 
-	<!-- Band 3 — encoder condition and per-core load. -->
-	<section class="space-y-2.5" data-testid="device-health-encoder">
-		<div class="flex items-baseline justify-between gap-3">
-			<h3 class="text-sm font-semibold">{t.encoder.title()}</h3>
-			{#if engineRevision}
-				<span class="text-muted-foreground truncate font-mono text-[11px]">{engineRevision}</span>
-			{/if}
-		</div>
-		<EncoderCoreLanes reading={encoderLoad} />
+	<!-- Band 3 — the unified encoder widget. Its own header replaces this band's
+	     former <h3>, so the word "Encoder" is printed once rather than twice. -->
+	<section data-testid="device-health-encoder">
+		<EncoderStatus
+			compact={isCompact.current}
+			density="panel"
+			headerAside={engineRevisionChip}
+			reading={encoderLoad}
+		/>
 	</section>
 
 	<!-- Band 4 — power rails: a provable statement, never an em-dash. -->
 	<section
-		class="flex items-start gap-2.5 border-t pt-3"
+		class="flex items-start gap-2.5 border-t pt-4"
 		data-testid="device-health-power"
 		data-power-state={powerRails.kind}
 	>

@@ -152,3 +152,22 @@ export function anyCoreBusy(reading: EncoderLoadReading): boolean {
 			(core.kind === "active" && core.active),
 	);
 }
+
+export type EncoderActivity = "encoding" | "idle" | "unreported";
+
+/**
+ * The at-a-glance verdict, as a WORD — never a number.
+ *
+ * A qualitative OR over the cores (`anyCoreBusy`): `percent > 0` and
+ * `active === true` are the same CLAIM, and their magnitudes are never
+ * compared. The two kinds are incomparable measurements (module header), so
+ * averaging or summing them would invent a scale on which they could be added.
+ * There is deliberately no variant returning a figure or a fraction, and
+ * `encoder-status.test.ts` pins that absence.
+ */
+export function deriveEncoderActivity(
+	reading: EncoderLoadReading,
+): EncoderActivity {
+	if (!isEncoderLoadInstrumented(reading)) return "unreported";
+	return anyCoreBusy(reading) ? "encoding" : "idle";
+}

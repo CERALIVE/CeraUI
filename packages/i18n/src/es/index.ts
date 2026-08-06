@@ -269,6 +269,7 @@ const es = {
 	hud: {
 		bitrate: "Bitrate",
 		bitrateSending: "Enviando",
+		encoder: "Codificador",
 		bitrateLimit: "Límite configurado",
 		bitrateAdapting: "Adaptando",
 		bitrateBelowLimitHint:
@@ -1082,6 +1083,13 @@ const es = {
 			lowDiskBody:
 				"Menos de 512 MiB libres en /data. Libera espacio para que la grabación, los registros y las actualizaciones sigan funcionando.",
 			lowDiskAction: "Ver registros",
+			fan: "Ventilador",
+			fanCooling: "Enfriando",
+			fanOff: "Detenido",
+			fanAbsent: "Sin ventilador",
+			fanAbsentBody: "Esta placa no tiene un ventilador controlable.",
+			fanHint:
+				"Ciclo de trabajo — la fracción de la potencia máxima con la que la placa acciona el ventilador. Este ventilador no informa ninguna velocidad.",
 		},
 		deviceHealth: {
 			title: "Salud del dispositivo",
@@ -1105,7 +1113,6 @@ const es = {
 			traceLabel: "Registrador de cinco minutos — {summary}",
 			traceGaps: "{n} huecos",
 			encoder: {
-				title: "Codificador",
 				idle: "Inactivo · sin codificar",
 				active: "Codificando · {summary}",
 				engineStarting: "El motor de streaming se está iniciando",
@@ -1125,6 +1132,10 @@ const es = {
 				notInstrumented:
 					"Esta placa no informa a CeraUI de la carga de los núcleos del codificador.",
 				simulated: "Simulado",
+				headlineEncoding: "Codificando",
+				headlineIdle: "Inactivo",
+				headlineUnreported: "No informado",
+				engineLabel: "Motor",
 			},
 			power: {
 				title: "Raíles de alimentación",

@@ -164,6 +164,13 @@ const ja = {
 			lowDiskBody:
 				"/data の空き容量が 512 MiB 未満です。録画・ログ・更新が動作し続けるよう空き容量を確保してください。",
 			lowDiskAction: "ログを表示",
+			fan: "ファン",
+			fanCooling: "冷却中",
+			fanOff: "停止中",
+			fanAbsent: "ファンなし",
+			fanAbsentBody: "このボードには制御可能なファンがありません。",
+			fanHint:
+				"デューティ比 — ボードがファンを駆動している最大出力に対する割合です。このファンは速度を報告しません。",
 		},
 		deviceHealth: {
 			title: "デバイスの健全性",
@@ -186,7 +193,6 @@ const ja = {
 			traceLabel: "5 分レコーダー — {summary}",
 			traceGaps: "{n} 件の欠落",
 			encoder: {
-				title: "エンコーダー",
 				idle: "アイドル · エンコードしていません",
 				active: "エンコード中 · {summary}",
 				engineStarting: "配信エンジンを起動しています",
@@ -205,6 +211,10 @@ const ja = {
 				notInstrumented:
 					"このボードはエンコーダーコアの負荷を CeraUI に報告しません。",
 				simulated: "シミュレーション",
+				headlineEncoding: "エンコード中",
+				headlineIdle: "アイドル",
+				headlineUnreported: "報告なし",
+				engineLabel: "エンジン",
 			},
 			power: {
 				title: "電源レール",
@@ -944,6 +954,7 @@ const ja = {
 	hud: {
 		bitrate: "ビットレート",
 		bitrateSending: "送信中",
+		encoder: "エンコーダー",
 		bitrateLimit: "設定した上限",
 		bitrateAdapting: "調整中",
 		bitrateBelowLimitHint:

@@ -160,6 +160,13 @@ const ko = {
 			lowDiskBody:
 				"/data의 여유 공간이 512 MiB 미만입니다. 녹화, 로그, 업데이트가 계속 작동하도록 공간을 확보하세요.",
 			lowDiskAction: "로그 보기",
+			fan: "팬",
+			fanCooling: "냉각 중",
+			fanOff: "정지 상태",
+			fanAbsent: "팬 없음",
+			fanAbsentBody: "이 보드에는 제어 가능한 팬이 없습니다.",
+			fanHint:
+				"듀티 사이클 — 보드가 팬을 구동하는 최대 출력 대비 비율입니다. 이 팬은 속도를 보고하지 않습니다.",
 		},
 		deviceHealth: {
 			title: "장치 상태",
@@ -182,7 +189,6 @@ const ko = {
 			traceLabel: "5분 기록계 — {summary}",
 			traceGaps: "끊김 {n}회",
 			encoder: {
-				title: "인코더",
 				idle: "대기 · 인코딩 안 함",
 				active: "인코딩 중 · {summary}",
 				engineStarting: "스트리밍 엔진을 시작하는 중",
@@ -201,6 +207,10 @@ const ko = {
 				notInstrumented:
 					"이 보드는 인코더 코어 부하를 CeraUI에 보고하지 않습니다.",
 				simulated: "시뮬레이션",
+				headlineEncoding: "인코딩 중",
+				headlineIdle: "대기",
+				headlineUnreported: "보고되지 않음",
+				engineLabel: "엔진",
 			},
 			power: {
 				title: "전원 레일",
@@ -928,6 +938,7 @@ const ko = {
 	hud: {
 		bitrate: "비트레이트",
 		bitrateSending: "전송 중",
+		encoder: "인코더",
 		bitrateLimit: "설정한 상한",
 		bitrateAdapting: "조정 중",
 		bitrateBelowLimitHint:

@@ -1,6 +1,9 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 
+import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
+import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
+
 interface Props {
 	/**
 	 * The headline rate, already formatted: the MEASURED bond throughput when
@@ -34,6 +37,13 @@ interface Props {
 	// headline's baseline.
 	tempSensor?: string;
 	uptimeSensor?: string;
+	/**
+	 * Per-core encoder load — the TYPED reading, not a formatted string.
+	 * Pre-formatting it in LiveView would flatten the three-state model into
+	 * text and let the two densities drift apart; the strip stays store-free and
+	 * hands the reading straight to the same widget Settings renders.
+	 */
+	encoderLoad?: EncoderLoadReading | undefined;
 }
 
 const {
@@ -43,6 +53,7 @@ const {
 	bitrateLimit,
 	tempSensor,
 	uptimeSensor,
+	encoderLoad,
 }: Props = $props();
 </script>
 
@@ -96,6 +107,21 @@ const {
 				{$LL.hud.uptime()}
 			</p>
 			<p class="font-mono text-lg font-semibold">{uptimeSensor}</p>
+		</div>
+	{/if}
+	{#if encoderLoad}
+		<!--
+			The encoder cell lives HERE, in the cockpit body, and never in HudBar or
+			its expanded Sheet: the persistent strip is capped at four facts, and the
+			Sheet is that cap's overflow rather than a general telemetry drawer.
+			This container already wraps, so the fourth cell degrades by wrapping
+			instead of overflowing the 1024x600 kiosk viewport.
+		-->
+		<div class="min-w-0 space-y-1" data-testid="telemetry-encoder">
+			<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+				{$LL.hud.encoder()}
+			</p>
+			<EncoderStatus density="inline" reading={encoderLoad} />
 		</div>
 	{/if}
 </section>

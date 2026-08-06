@@ -156,6 +156,13 @@ const hi = {
 			lowDiskBody:
 				"/data पर 512 MiB से कम खाली है। रिकॉर्डिंग, लॉग और अपडेट चलते रहें इसके लिए स्थान खाली करें।",
 			lowDiskAction: "लॉग देखें",
+			fan: "पंखा",
+			fanCooling: "ठंडा कर रहा है",
+			fanOff: "नहीं घूम रहा",
+			fanAbsent: "कोई पंखा नहीं",
+			fanAbsentBody: "इस बोर्ड में कोई नियंत्रित करने योग्य पंखा नहीं है।",
+			fanHint:
+				"ड्यूटी साइकल — पूरी शक्ति का वह हिस्सा जिस पर बोर्ड पंखा चला रहा है। यह पंखा कोई गति नहीं बताता।",
 		},
 		deviceHealth: {
 			title: "डिवाइस स्वास्थ्य",
@@ -178,7 +185,6 @@ const hi = {
 			traceLabel: "पाँच-मिनट रिकॉर्डर — {summary}",
 			traceGaps: "{n} अंतराल",
 			encoder: {
-				title: "एन्कोडर",
 				idle: "निष्क्रिय · एन्कोड नहीं कर रहा",
 				active: "एन्कोडिंग · {summary}",
 				engineStarting: "स्ट्रीमिंग इंजन शुरू हो रहा है",
@@ -196,6 +202,10 @@ const hi = {
 					"यह बोर्ड प्रत्येक एन्कोडर कोर को केवल व्यस्त या निष्क्रिय बताता है — कोई प्रतिशत मौजूद नहीं है।",
 				notInstrumented: "यह बोर्ड CeraUI को एन्कोडर कोर लोड नहीं बताता।",
 				simulated: "सिम्युलेटेड",
+				headlineEncoding: "एन्कोडिंग",
+				headlineIdle: "निष्क्रिय",
+				headlineUnreported: "रिपोर्ट नहीं किया गया",
+				engineLabel: "इंजन",
 			},
 			power: {
 				title: "पावर रेल",
@@ -914,6 +924,7 @@ const hi = {
 	hud: {
 		bitrate: "बिटरेट",
 		bitrateSending: "भेजा जा रहा है",
+		encoder: "एन्कोडर",
 		bitrateLimit: "कॉन्फ़िगर की गई सीमा",
 		bitrateAdapting: "अनुकूलन",
 		bitrateBelowLimitHint:

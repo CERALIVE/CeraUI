@@ -269,6 +269,7 @@ const de = {
 	hud: {
 		bitrate: "Bitrate",
 		bitrateSending: "Senden",
+		encoder: "Encoder",
 		bitrateLimit: "Konfiguriertes Limit",
 		bitrateAdapting: "Passt an",
 		bitrateBelowLimitHint:
@@ -1072,6 +1073,13 @@ const de = {
 			lowDiskBody:
 				"Weniger als 512 MiB frei auf /data. Geben Sie Speicher frei, damit Aufnahme, Protokolle und Updates weiter funktionieren.",
 			lowDiskAction: "Protokolle anzeigen",
+			fan: "Lüfter",
+			fanCooling: "Kühlt",
+			fanOff: "Dreht nicht",
+			fanAbsent: "Kein Lüfter",
+			fanAbsentBody: "Diese Platine hat keinen steuerbaren Lüfter.",
+			fanHint:
+				"Tastverhältnis — der Anteil der vollen Leistung, mit dem die Platine den Lüfter ansteuert. Dieser Lüfter meldet keine Drehzahl.",
 		},
 		deviceHealth: {
 			title: "Gerätezustand",
@@ -1094,7 +1102,6 @@ const de = {
 			traceLabel: "Fünf-Minuten-Schreiber — {summary}",
 			traceGaps: "{n} Lücken",
 			encoder: {
-				title: "Encoder",
 				idle: "Inaktiv · kodiert nicht",
 				active: "Kodiert · {summary}",
 				engineStarting: "Die Streaming-Engine startet",
@@ -1112,6 +1119,10 @@ const de = {
 					"Diese Platine meldet je Encoder-Kern nur aktiv oder inaktiv — einen Prozentwert gibt es nicht.",
 				notInstrumented: "Diese Platine meldet CeraUI keine Encoder-Kernlast.",
 				simulated: "Simuliert",
+				headlineEncoding: "Encodiert",
+				headlineIdle: "Inaktiv",
+				headlineUnreported: "Nicht gemeldet",
+				engineLabel: "Engine",
 			},
 			power: {
 				title: "Spannungsschienen",

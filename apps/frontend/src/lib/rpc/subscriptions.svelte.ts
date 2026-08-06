@@ -14,6 +14,7 @@ import type {
 	DeviceStats,
 	DevicesMessage,
 	EncoderLoad,
+	FanReading,
 	KioskStatus,
 	LinkTelemetryMessage,
 	ModemList,
@@ -136,6 +137,11 @@ let deviceStatsState = $state<DeviceStats | undefined>(undefined);
 // NOT the same as a delivered reading whose cores are all unavailable, which is a
 // real device saying it has no readable interface.
 let encoderLoadState = $state<EncoderLoad | undefined>(undefined);
+// Fan presence + PWM duty cycle, on its OWN broadcast (the `device-stats`
+// payload is frozen by the S1 lock). `undefined` is the honest `unknown` state —
+// a dev host is `isRealDevice()`-gated silent, and that silence IS the
+// real-vs-mock seam, exactly as it is for `encoder-load`.
+let fanState = $state<FanReading | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
@@ -257,6 +263,10 @@ export function getDeviceStats() {
 
 export function getEncoderLoadSnapshot() {
 	return encoderLoadState;
+}
+
+export function getFanSnapshot() {
+	return fanState;
 }
 
 export function getRevisions() {
@@ -594,6 +604,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			encoderLoadState = data as EncoderLoad;
 			break;
 
+		case "fan":
+			fanState = data as FanReading;
+			break;
+
 		case "revisions":
 			revisionsState = data as Revisions;
 			break;
@@ -906,6 +920,7 @@ export function resetState(): void {
 	sensorsState = undefined;
 	deviceStatsState = undefined;
 	encoderLoadState = undefined;
+	fanState = undefined;
 	revisionsState = undefined;
 	pipelinesState = undefined;
 	capabilitiesState = undefined;

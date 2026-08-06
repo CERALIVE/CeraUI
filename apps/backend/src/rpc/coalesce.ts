@@ -38,6 +38,7 @@ export type CoalesceState = Map<string, CoalesceEntry>;
  * - modems      30000ms (`modem-update-loop.ts`)
  * - device-stats 5000ms (`device-stats.ts`)
  * - encoder-load 2000ms (`encoder-load.ts`)
+ * - fan          5000ms (`fan.ts`)
  *
  * Types not listed here are never coalesced (window resolves to 0).
  */
@@ -48,6 +49,7 @@ export const COALESCE_WINDOW_MS: Record<string, number> = {
 	modems: 30000,
 	"device-stats": 5000,
 	"encoder-load": 2000,
+	fan: 5000,
 };
 
 /**

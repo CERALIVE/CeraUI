@@ -259,6 +259,7 @@ const en = {
 	hud: {
 		bitrate: "Bitrate",
 		bitrateSending: "Sending",
+		encoder: "Encoder",
 		bitrateLimit: "Configured limit",
 		bitrateAdapting: "Adapting",
 		bitrateBelowLimitHint:
@@ -1105,6 +1106,13 @@ const en = {
 			lowDiskBody:
 				"Less than 512 MiB free on /data. Free up space so recording, logs, and updates keep working.",
 			lowDiskAction: "View logs",
+			fan: "Fan",
+			fanCooling: "Cooling",
+			fanOff: "Not spinning",
+			fanAbsent: "No fan",
+			fanAbsentBody: "This board has no controllable fan.",
+			fanHint:
+				"Duty cycle — the share of full power the board is driving the fan at. This fan reports no speed.",
 		},
 		deviceHealth: {
 			title: "Device Health",
@@ -1128,7 +1136,6 @@ const en = {
 			traceLabel: "Five-minute recorder — {summary:string}",
 			traceGaps: "{n:number} gaps",
 			encoder: {
-				title: "Encoder",
 				idle: "Idle · not encoding",
 				active: "Encoding · {summary:string}",
 				engineStarting: "Streaming engine is starting",
@@ -1147,6 +1154,10 @@ const en = {
 				notInstrumented:
 					"This board does not report encoder core load to CeraUI.",
 				simulated: "Simulated",
+				headlineEncoding: "Encoding",
+				headlineIdle: "Idle",
+				headlineUnreported: "Not reported",
+				engineLabel: "Engine",
 			},
 			power: {
 				title: "Power rails",

@@ -4,7 +4,7 @@
  *
  * Four of these assertions are about ABSENCE, and each is a different kind:
  * a signal that has never arrived (skeleton, not a zero), a collector that
- * degraded to null (an em-dash labelled Unavailable, not a flat line), a board
+ * degraded to null (the WORD "Unavailable", not a flat line and not a bare mark), a board
  * that provably lacks a sensor (a sentence, not an em-dash), and a board whose
  * encoder-load collector probed both kernel interfaces and found neither (a
  * hardware statement, NOT a roadmap promise).
@@ -295,7 +295,7 @@ describe("encoder load — three states, three vocabularies", () => {
 		expect(row.querySelector('[style*="inline-size"]')).toBeNull();
 	});
 
-	it("a per-core unavailable inside an instrumented reading is an em-dash", () => {
+	it("a per-core unavailable inside an instrumented reading says so in WORDS", () => {
 		state.encoder = {
 			source: "mpp-service",
 			cores: [
@@ -307,8 +307,11 @@ describe("encoder load — three states, three vocabularies", () => {
 		};
 		open();
 		const value = byTestId("encoder-core-value-rkvenc1");
-		expect(value.getAttribute("aria-label")).toBe(t.unavailable);
-		expect(value.textContent?.trim()).toBe("\u2014");
+		// Was an em-dash carrying its meaning in a hover-only `title`. Operator
+		// feedback from the deployed board: a mark you have to decode is not
+		// information, least of all on a touchscreen that cannot hover.
+		expect(value.textContent?.trim()).toBe(t.unavailable);
+		expect(value.textContent).not.toContain("\u2014");
 	});
 
 	it("a synthetic reading declares itself", () => {

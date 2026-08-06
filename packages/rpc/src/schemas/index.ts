@@ -10,6 +10,7 @@ export * from './common.schema';
 export * from './config-change.schema';
 export * from './dev.schema';
 export * from './envelope.schema';
+export * from './fan.schema';
 export * from './heartbeat.schema';
 export * from './modems.schema';
 export * from './network.schema';
