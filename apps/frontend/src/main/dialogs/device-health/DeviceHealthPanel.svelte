@@ -226,9 +226,22 @@ $effect(() => {
 });
 </script>
 
+<!-- Metadata ABOUT the cores, not a fact of its own. As a bare figure pinned to
+     the header's far right it read as an orphaned number; naming and enclosing
+     it demotes it to the provenance chip it is. -->
 {#snippet engineRevisionChip()}
 	{#if engineRevision}
-		<span class="text-muted-foreground ms-auto truncate font-mono text-[11px]">{engineRevision}</span>
+		<span
+			class="border-border/60 bg-muted/40 ms-auto inline-flex min-w-0 shrink items-baseline gap-1.5 rounded-full border px-2 py-0.5"
+			data-testid="device-health-engine-revision"
+		>
+			<span class="text-muted-foreground/70 shrink-0 text-[0.625rem] font-medium tracking-wide">
+				{t.cores.engineLabel()}
+			</span>
+			<span class="text-muted-foreground min-w-0 truncate font-mono text-[11px] tabular-nums">
+				{engineRevision}
+			</span>
+		</span>
 	{/if}
 {/snippet}
 
@@ -346,7 +359,7 @@ $effect(() => {
 
 	<!-- Band 4 — power rails: a provable statement, never an em-dash. -->
 	<section
-		class="flex items-start gap-2.5 border-t pt-3"
+		class="flex items-start gap-2.5 border-t pt-4"
 		data-testid="device-health-power"
 		data-power-state={powerRails.kind}
 	>

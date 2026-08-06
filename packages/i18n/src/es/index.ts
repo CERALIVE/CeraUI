@@ -1135,6 +1135,7 @@ const es = {
 				headlineEncoding: "Codificando",
 				headlineIdle: "Inactivo",
 				headlineUnreported: "No informado",
+				engineLabel: "Motor",
 			},
 			power: {
 				title: "Raíles de alimentación",

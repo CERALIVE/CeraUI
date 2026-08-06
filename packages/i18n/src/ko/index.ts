@@ -210,6 +210,7 @@ const ko = {
 				headlineEncoding: "인코딩 중",
 				headlineIdle: "대기",
 				headlineUnreported: "보고되지 않음",
+				engineLabel: "엔진",
 			},
 			power: {
 				title: "전원 레일",

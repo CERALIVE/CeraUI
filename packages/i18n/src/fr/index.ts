@@ -368,6 +368,7 @@ const fr = {
 				headlineEncoding: "Encodage",
 				headlineIdle: "Inactif",
 				headlineUnreported: "Non communiqué",
+				engineLabel: "Moteur",
 			},
 			power: {
 				title: "Rails d'alimentation",

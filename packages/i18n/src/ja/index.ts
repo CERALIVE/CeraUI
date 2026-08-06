@@ -214,6 +214,7 @@ const ja = {
 				headlineEncoding: "エンコード中",
 				headlineIdle: "アイドル",
 				headlineUnreported: "報告なし",
+				engineLabel: "エンジン",
 			},
 			power: {
 				title: "電源レール",

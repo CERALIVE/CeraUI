@@ -306,6 +306,101 @@ describe("compact inline — the Device Stats grid tile", () => {
 	});
 });
 
+/**
+ * The colour pass. Two properties matter and they pull against each other: the
+ * state must be readable from colour at a glance, AND it must survive an
+ * operator who cannot see the colour at all. So every assertion below comes in
+ * pairs — a machine-readable tone, and the word that outranks it.
+ */
+describe("activity tone — colour reinforces the word, never replaces it", () => {
+	const HEADLINE_TONES: [string, EncoderLoadReading, string, string][] = [
+		[
+			"encoding",
+			reading([percent("rkvenc0", 45.53), percent("rkvenc1", 0)]),
+			"live",
+			t.cores.headlineEncoding,
+		],
+		[
+			"idle",
+			reading([percent("rkvenc0", 0), percent("rkvenc1", 0)]),
+			"quiet",
+			t.cores.headlineIdle,
+		],
+		["unreported", reading([]), "absent", t.cores.headlineUnreported],
+	];
+
+	it.each(
+		HEADLINE_TONES,
+	)("headline %s carries a tone AND its word", (_label, value, tone, word) => {
+		for (const density of DENSITIES) {
+			mount(value, density);
+			const headline = byTestId("encoder-status-headline");
+			expect(headline.dataset.tone).toBe(tone);
+			expect(headline.textContent).toContain(word);
+			document.body.innerHTML = "";
+		}
+	});
+
+	/**
+	 * A measured 0.00 % and a `false` enable-bit are REAL observations of no
+	 * work, and must not look like a core that answered nothing at all — hence
+	 * `quiet` and `absent` are distinct tones rather than one "not busy" state.
+	 */
+	it.each([
+		["a loaded percent core", "live", percent("rkvenc0", 11.34)],
+		["a measured zero", "quiet", percent("rkvenc0", 0)],
+		["a busy enable-bit", "live", active("rkvenc0", true)],
+		["an idle enable-bit", "quiet", active("rkvenc0", false)],
+		["an unreadable core", "absent", unavailable("rkvenc0")],
+	])("%s is %s in both densities", (_label, tone, core) => {
+		for (const density of DENSITIES) {
+			// The companion core keeps the reading INSTRUMENTED — an all-unavailable
+			// reading is `unreported` and draws no grid at all.
+			mount(reading([core, percent("rkvenc1", 5)]), density);
+			expect(byTestId("encoder-core-rkvenc0").dataset.coreTone).toBe(tone);
+			document.body.innerHTML = "";
+		}
+	});
+
+	/**
+	 * ONE marker language. The former lucide SQUARE existed in `panel` only, so
+	 * the two densities disagreed about what a per-core activity mark even looks
+	 * like — and a hollow square on a surface with nothing to check read as an
+	 * unticked checkbox.
+	 */
+	it.each(
+		DENSITIES,
+	)("%s — every core leads with the same em-scaled pip, and no checkbox glyph", (density) => {
+		mount(
+			reading([active("rkvenc0", true), active("rkvenc1", false)], {
+				source: "clk-enable-count",
+			}),
+			density,
+		);
+		for (const core of ["rkvenc0", "rkvenc1"]) {
+			const row = byTestId(`encoder-core-${core}`);
+			const pips = row.querySelectorAll("[aria-hidden='true']");
+			expect(pips).toHaveLength(1);
+			// Sized and lifted in `em`, so density changes the scale and never the
+			// shape — the same declaration serves the 18px strip and the 12px row.
+			expect(pips[0]?.className).toContain("size-[0.5em]");
+			expect(pips[0]?.className).toContain("-translate-y-[0.1em]");
+			expect(row.querySelector("svg")).toBeNull();
+		}
+	});
+
+	it("the headline pip is the SAME marker as the core pip", () => {
+		mount(reading([active("rkvenc0", true)], { source: "clk-enable-count" }));
+		const headlinePip = byTestId("encoder-status-headline").querySelector(
+			"[aria-hidden='true']",
+		);
+		const corePip = byTestId("encoder-core-rkvenc0").querySelector(
+			"[aria-hidden='true']",
+		);
+		expect(headlinePip?.className).toBe(corePip?.className);
+	});
+});
+
 describe("REGRESSION LOCK — an `active` core never renders a digit", () => {
 	it.each(DENSITIES)("%s", (density) => {
 		mount(

@@ -1157,6 +1157,7 @@ const en = {
 				headlineEncoding: "Encoding",
 				headlineIdle: "Idle",
 				headlineUnreported: "Not reported",
+				engineLabel: "Engine",
 			},
 			power: {
 				title: "Power rails",

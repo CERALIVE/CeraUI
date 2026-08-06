@@ -1122,6 +1122,7 @@ const de = {
 				headlineEncoding: "Encodiert",
 				headlineIdle: "Inaktiv",
 				headlineUnreported: "Nicht gemeldet",
+				engineLabel: "Engine",
 			},
 			power: {
 				title: "Spannungsschienen",

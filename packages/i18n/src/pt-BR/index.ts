@@ -370,6 +370,7 @@ const ptBR = {
 				headlineEncoding: "Codificando",
 				headlineIdle: "Ocioso",
 				headlineUnreported: "Não informado",
+				engineLabel: "Motor",
 			},
 			power: {
 				title: "Trilhos de alimentação",

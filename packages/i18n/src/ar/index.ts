@@ -344,6 +344,7 @@ const ar = {
 				headlineEncoding: "يُرمِّز",
 				headlineIdle: "خامل",
 				headlineUnreported: "غير مُبلَّغ عنه",
+				engineLabel: "المحرّك",
 			},
 			power: {
 				title: "خطوط الطاقة",

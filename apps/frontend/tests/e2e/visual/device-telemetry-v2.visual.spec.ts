@@ -61,6 +61,28 @@ const ENCODER_BINARY = {
 	simulated: false,
 };
 
+/** Captured beside the busy states on purpose: a colour treatment evidenced only
+ *  in the state the board happened to be in is not evidence. */
+const ENCODER_IDLE = {
+	source: "mpp-service",
+	cores: [
+		{ core: "rkvenc0", kind: "percent", percent: 0 },
+		{ core: "rkvenc1", kind: "percent", percent: 0 },
+	],
+	updatedAt: Date.now(),
+	simulated: false,
+};
+
+const ENCODER_BINARY_IDLE = {
+	source: "clk-enable-count",
+	cores: [
+		{ core: "rkvenc0", kind: "active", active: false },
+		{ core: "rkvenc1", kind: "active", active: false },
+	],
+	updatedAt: Date.now(),
+	simulated: false,
+};
+
 test.describe("@visual device telemetry v2", () => {
 	let pageWs: WebSocketRoute | null;
 	let streaming = false;
@@ -136,6 +158,14 @@ test.describe("@visual device telemetry v2", () => {
 			// testid legitimately matches two nodes.
 			const panel = page.getByTestId("device-health");
 
+			// The engine revision is the card header's trailing chip. Pushed rather
+			// than assumed: with no `revisions` frame it renders nothing at all, and
+			// an absent chip would silently pass for a well-placed one.
+			await push(page, { revisions: { cerastream: "2026.7.2" } });
+			await expect(panel.getByTestId("device-health-engine-revision")).toContainText(
+				"2026.7.2",
+			);
+
 			await push(page, { "encoder-load": ENCODER_UNREPORTED });
 			await expect(panel.getByTestId("encoder-status-headline")).toHaveAttribute(
 				"data-activity",
@@ -154,12 +184,34 @@ test.describe("@visual device telemetry v2", () => {
 			);
 			await shot(page, "device-health", `telemetry-v2-health-percent-${label}.png`);
 
+			await push(page, { "encoder-load": ENCODER_IDLE });
+			await expect(panel.getByTestId("encoder-status-headline")).toHaveAttribute(
+				"data-activity",
+				"idle",
+			);
+			await expect(panel.getByTestId("encoder-status-headline")).toHaveAttribute(
+				"data-tone",
+				"quiet",
+			);
+			await shot(page, "device-health", `telemetry-v2-health-idle-${label}.png`);
+
 			await push(page, { "encoder-load": ENCODER_BINARY });
 			await expect(panel.getByTestId("encoder-cores")).toHaveAttribute(
 				"data-precision",
 				"binary",
 			);
+			await expect(panel.getByTestId("encoder-core-rkvenc0")).toHaveAttribute(
+				"data-core-tone",
+				"live",
+			);
+			await expect(panel.getByTestId("encoder-core-rkvenc1")).toHaveAttribute(
+				"data-core-tone",
+				"quiet",
+			);
 			await shot(page, "device-health", `telemetry-v2-health-binary-${label}.png`);
+
+			await push(page, { "encoder-load": ENCODER_BINARY_IDLE });
+			await shot(page, "device-health", `telemetry-v2-health-binary-idle-${label}.png`);
 
 			// C5 — the panel must not scroll on the kiosk touchscreen. This is the
 			// documented three-way pivot, re-checked rather than assumed.
@@ -229,6 +281,18 @@ test.describe("@visual device telemetry v2", () => {
 			);
 			await expect(encoderTile.getByTestId("encoder-core-rkvenc0")).toBeVisible();
 			await expect(encoderTile.getByTestId("encoder-core-rkvenc1")).toBeVisible();
+			await encoderTile.screenshot({
+				path: path.join(EVIDENCE_DIR, `telemetry-v2-stats-encoder-encoding-${label}.png`),
+			});
+
+			await push(page, { "encoder-load": ENCODER_IDLE });
+			await expect(encoderTile.getByTestId("encoder-status-headline")).toHaveAttribute(
+				"data-activity",
+				"idle",
+			);
+			await encoderTile.screenshot({
+				path: path.join(EVIDENCE_DIR, `telemetry-v2-stats-encoder-idle-${label}.png`),
+			});
 
 			for (const [state, frame] of fanStates) {
 				await push(page, { fan: frame });
@@ -292,7 +356,7 @@ test.describe("@visual device telemetry v2", () => {
 			);
 
 			// An `active` core prints a word and never a digit — the inline density
-			// drops the square, so the string shape is the only carrier left.
+			// drops the bar, so the string shape is the only carrier left.
 			await push(page, { "encoder-load": ENCODER_BINARY });
 			await expect(cell.getByTestId("encoder-cores")).toHaveAttribute(
 				"data-precision",
@@ -305,6 +369,71 @@ test.describe("@visual device telemetry v2", () => {
 			await strip.screenshot({
 				path: path.join(EVIDENCE_DIR, `telemetry-v2-live-strip-binary-${label}.png`),
 			});
+
+			await push(page, { "encoder-load": ENCODER_IDLE });
+			await expect(cell.getByTestId("encoder-status-headline")).toHaveAttribute(
+				"data-activity",
+				"idle",
+			);
+			await strip.screenshot({
+				path: path.join(EVIDENCE_DIR, `telemetry-v2-live-strip-idle-${label}.png`),
+			});
+		}
+	});
+
+	/**
+	 * Dark graphite is the HERO theme (`.impeccable.md` → Dark-First Hero), and
+	 * the encoder widget's activity state is now carried partly by colour — so
+	 * evidence captured only in light mode photographs the register the operator
+	 * is least likely to be looking at. Scoped deliberately to the two encoder
+	 * surfaces: the thermal trace and the fan tile did not change, and paying for
+	 * a full second pass of them buys nothing.
+	 */
+	test("encoder colour — the dark hero theme, idle and encoding", { tag: "@visual" }, async ({
+		page,
+	}) => {
+		await page.emulateMedia({ colorScheme: "dark" });
+		await page.reload();
+		await ensureAuthenticated(page);
+
+		for (const [label, viewport] of [
+			["kiosk-1024x600", KIOSK],
+			["mobile-375", MOBILE],
+		] as const) {
+			await page.setViewportSize(viewport);
+			await openDeviceHealth(page);
+			const panel = page.getByTestId("device-health");
+			await push(page, { revisions: { cerastream: "2026.7.2" } });
+
+			for (const [state, frame] of [
+				["idle", ENCODER_IDLE],
+				["encoding", ENCODER_PERCENT],
+				["binary", ENCODER_BINARY],
+				["unreported", ENCODER_UNREPORTED],
+			] as const) {
+				await push(page, { "encoder-load": frame });
+				await expect(panel.getByTestId("encoder-status-headline")).toBeVisible();
+				await shot(page, "device-health", `telemetry-v2-dark-health-${state}-${label}.png`);
+			}
+			await expectNoHorizontalOverflow(page, "device-health");
+			await page.keyboard.press("Escape");
+
+			// The Device Stats tile is the SAME widget at `inline compact`. Both are
+			// captured so the two densities can be compared side by side — reading
+			// as one element across them is the whole point of the treatment.
+			await navigateTo(page, "settings");
+			const tile = page.getByTestId("device-stat-encoder");
+			await expect(tile).toBeVisible({ timeout: 15_000 });
+			for (const [state, frame] of [
+				["idle", ENCODER_IDLE],
+				["encoding", ENCODER_PERCENT],
+				["binary", ENCODER_BINARY],
+			] as const) {
+				await push(page, { "encoder-load": frame });
+				await tile.screenshot({
+					path: path.join(EVIDENCE_DIR, `telemetry-v2-dark-stats-encoder-${state}-${label}.png`),
+				});
+			}
 		}
 	});
 });

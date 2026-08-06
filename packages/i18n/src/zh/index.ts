@@ -199,6 +199,7 @@ const zh = {
 				headlineEncoding: "编码中",
 				headlineIdle: "空闲",
 				headlineUnreported: "未报告",
+				engineLabel: "引擎",
 			},
 			power: {
 				title: "供电轨",

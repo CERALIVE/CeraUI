@@ -205,6 +205,7 @@ const hi = {
 				headlineEncoding: "एन्कोडिंग",
 				headlineIdle: "निष्क्रिय",
 				headlineUnreported: "रिपोर्ट नहीं किया गया",
+				engineLabel: "इंजन",
 			},
 			power: {
 				title: "पावर रेल",
