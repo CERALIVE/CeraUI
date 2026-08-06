@@ -84,6 +84,7 @@ CeraUI/
 | **Device Health instrument (strip recorder, per-core encoder load)** | `apps/frontend/src/main/dialogs/DeviceHealthDialog.svelte` (shell) + `main/dialogs/device-health/DeviceHealthPanel.svelte` (instrument) + `lib/components/custom/health-trace-view.ts` (pure geometry) + `lib/stores/device-health-history.svelte.ts` (rings + playhead) |
 | **Per-core encoder-load three-state model (percent / active / unavailable)** | `apps/frontend/src/lib/streaming/encoder-load.ts` + dev fixture `encoder-load-mock.ts` |
 | **Per-core encoder-load COLLECTOR (two kernel realities, probed at runtime)** | `apps/backend/src/modules/system/encoder-load.ts` → `encoder-load` broadcast |
+| **Fan presence + PWM duty-cycle COLLECTOR (`pwm-fan` found by type string, never an index; `pwm1/255` only, never RPM)** | `apps/backend/src/modules/system/fan.ts` → `fan` broadcast |
 | Shared dialog chrome (AppDialog) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
@@ -454,6 +455,19 @@ on a `device-stats` event every 5 seconds (S1 lock):
 Adding a sixth field is a deliberate contract change, not a tweak. Every collector
 wraps its read in its own `try/catch` and degrades to `null` on failure — a missing
 `/sys` path or absent `rauc` binary must never crash the sampling loop.
+
+**A new device signal therefore gets its OWN broadcast**, exactly as `encoder-load`
+did. The fan is the second one: `apps/backend/src/modules/system/fan.ts` publishes
+a `fan` event (5 s, `isRealDevice()`-gated) reporting fan PRESENCE plus a PWM duty
+cycle derived from `pwm1 / 255` — never an RPM (the board's fan is 2-wire and has
+no tachometer) and never `cur_state / max_state` (an index into a devicetree table,
+not a fraction of airflow). The `pwm-fan` cooling device is discovered by its `type`
+string, never by a `cooling_deviceN`/`hwmonN` index — both were measured shifting
+across a reboot on the reference board. On the mainline/edge kernel that cooling
+device carries NO `device` backlink at all, so the collector also correlates by
+the `hwmon<N>/name == "pwmfan"` string; that fallback is gated on a confirmed
+`pwm-fan` cdev and reports `unknown` rather than guessing when two hwmons match.
+Full contract: [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → FAN.
 
 ## DEVICE DETECTION + KIOSK EMULATION SAFETY
 

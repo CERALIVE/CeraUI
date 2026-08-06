@@ -15,6 +15,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Task | Location |
 |------|----------|
 | Per-core encoder load (two kernel realities, probed at runtime; `encoder-load` broadcast) | `modules/system/encoder-load.ts` (`collectEncoderLoad`, `parseMppLoad`, `initEncoderLoad`); contract below → PER-CORE ENCODER LOAD |
+| Fan presence + PWM duty cycle (`pwm-fan` discovered by TYPE string, never an index; `fan` broadcast) | `modules/system/fan.ts` (`discoverPwmFanCoolingDevice`, `parsePwmDuty`, `collectFan`, `initFan`); contract below → FAN |
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
@@ -955,6 +956,93 @@ never-a-number regression lock) + the frontend halves
 `apps/frontend/src/tests/encoder-load-source-precedence.test.ts` and
 `apps/frontend/src/main/dialogs/DeviceHealthDialog.test.ts`.
 
+## FAN — A DUTY CYCLE, AND THE FILES NAMING IT MOVE [EXISTS]
+
+`modules/system/fan.ts` reports whether the board has a controllable fan at all
+and, if it does, what duty cycle it is being driven at. It publishes its own
+`fan` broadcast on a 5 s cadence (coalesced at 5 s, seeded into the post-auth
+initial-state push). Wire schema: `@ceraui/rpc` `fanSchema`.
+
+- **It is its OWN broadcast, NOT a sixth `device-stats` field** — that payload is
+  frozen by the S1 lock, so extending it is a deliberate contract change rather
+  than a tweak. Same decision, same reason, as `encoder-load`. It is likewise not
+  foldable into `sensors`, a flat `Record<string, string>` of display strings
+  that cannot express present-vs-absent.
+- **DISCOVERY IS BY TYPE STRING, NEVER BY INDEX.** The scan reads every
+  `/sys/class/thermal/cooling_device<N>/type` and keeps the one that reads
+  exactly `pwm-fan`, then follows that device's `device` symlink to the platform
+  device that owns it and reads `pwm1` from the hwmon listed underneath. Both
+  index spaces are registration-order artefacts: the reference Rock 5B+ was
+  measured at `hwmon8` = `pwmfan` bound to `cooling_device4`, and BOTH indices
+  SHIFTED across a reboot in the same session. A hardcoded `cooling_deviceN` or
+  `hwmonN` is how a working reading silently starts reporting an unrelated
+  device. This is the same algorithm the shipped `ceralive-fan-curve` service
+  already uses (`image-building-pipeline/v2/mkosi/runtime/ceralive-fan-curve.sh`),
+  in TypeScript. Kernel ABI: `Documentation/ABI/testing/sysfs-class-thermal`.
+- **…AND THAT `device` BACKLINK DOES NOT EXIST ON EVERY KERNEL.** Board-confirmed
+  on the reference Rock 5B+ running `7.1.5-ceralive-rk3588` (mainline/edge, NOT
+  the vendor 6.1 BSP): `cooling_device4` lists `cur_state max_state power/
+  subsystem type uevent` and NO `device` entry at all (nor `of_node`), because
+  that driver's `thermal_cooling_device_register()` sets no parent `struct
+  device`, so the class-device machinery never creates the backlink. The FORWARD
+  link is fine — `/sys/devices/platform/pwm-fan/hwmon/hwmon8` exists and
+  `hwmon8/device -> ../../../pwm-fan` — it is only the cdev→device direction that
+  is missing. The first shipped collector therefore reported `unknown` forever on
+  a board whose fan was present, running and measurable at `pwm1=120`. So a THIRD
+  step exists: when the cooling device carries no `device` entry of its own, scan
+  `/sys/class/hwmon/hwmon<N>/name` for the exact string `pwmfan` and read `pwm1`
+  from the single hwmon that matches. Note the two strings are spelled
+  DIFFERENTLY (`pwm-fan` cdev type vs `pwmfan` hwmon name) — neither may be
+  derived from the other. Three scoping rules are load-bearing:
+  - it is GATED on an already-confirmed `pwm-fan` cooling device, so it never
+    becomes a "find any fan on the system" mechanism;
+  - it fires ONLY when the backlink is ABSENT. A backlink that exists but whose
+    `pwm1` read failed reports `unknown` — starting a class-wide scan there could
+    adopt a different fan on a multi-fan board;
+  - MORE THAN ONE `pwmfan` hwmon is genuinely ambiguous and reports `unknown`
+    rather than resolving by order.
+- **THE INVARIANT: the only sanctioned magnitude is `pwm1 / 255`.** That is a
+  real fraction with a real denominator — the register's own 8-bit full scale.
+  Two derivations are banned outright:
+  - **RPM.** The reference fan is 2-wire: its hwmon exposes `pwm1` and
+    `pwm1_enable` and NO `fan1_input`, so there is no tachometer and no speed to
+    report. No field, log line, or comment here names one.
+  - **`cur_state / max_state`.** Those levels are an INDEX into the devicetree
+    `cooling-levels = <0 120 150 180 210 240 255>` table, not a linear scale of
+    airflow, so `2 / 6 = 33 %` fabricates a denominator the hardware never
+    produced — the exact sin the three-state encoder-load model forbids for a
+    busy/idle core. The collector does not read those nodes AT ALL, which is the
+    cheapest way to keep the derivation unreachable, and a test pins that.
+- **FOUR states, and `absent` is a positive claim.** `running` (duty > 0), `off`
+  (a MEASURED zero — a real reading, never a gap), `absent` (this board has no
+  `pwm-fan` cooling device: a real shipping configuration, cf. x86-minipc), and
+  `unknown` (a fan is present but its duty could not be read this tick). A shape
+  that cannot tell `absent` from `unknown` is the whole defect this signal exists
+  to avoid, so the two are never collapsed: a MISSING `/sys/class/thermal`
+  (ENOENT) is a statement about the BOARD and reports `absent`, while any other
+  read failure is a statement about the READ and reports `unknown`.
+- **`initFan` is `isRealDevice()`-gated.** A dev/emulated host publishes NOTHING
+  — not even `absent`, which would be a claim about hardware it does not have.
+  The frontend renders `unknown` for a broadcast that never arrives, and that
+  silence IS the real-vs-mock seam (same rule as `encoder-load`; do not add a
+  backend mock provider or a build-flag branch for this signal).
+- **Degradation follows `device-stats.ts`/`encoder-load.ts`:** every sysfs read
+  is in its own try/catch, one unreadable candidate falls through to the next,
+  and a tick can never throw. Privilege: none is escalated — these are sysfs
+  nodes read through the same plain `Bun.file()` seam as `sensors.ts`.
+
+Coverage: `tests/fan.test.ts` — every fixture tree deliberately numbers its
+cooling device and hwmon DIFFERENTLY from the reference board (and two of them
+number the same board differently from each other), so a collector that hardcoded
+an index could not pass. Plus the four states, the ENOENT-vs-EACCES split, the
+per-read degradation, the emulated-host gate, and the negative locks that no
+export or code path names an RPM or touches `cur_state`/`max_state`. The
+backlink-less kernel has its own describe block driven by a fixture that OMITS
+the `device` entry from the cooling device's listing exactly as the kernel omits
+it (never merely made to throw), with the three negatives that matter: a
+differently-named hwmon is not adopted, two `pwmfan` hwmons are ambiguous, and a
+backlink that EXISTS but failed its `pwm1` read does not start the scan.
+
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
 Opt-in boot auto-unlock for a PIN-locked SIM. Two modules under `modules/modems/`:
@@ -1678,6 +1766,7 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `netif` | 5 s | `modules/network/network-interfaces.ts` |
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `encoder-load` | 2 s | `modules/system/encoder-load.ts` (real devices only — `isRealDevice()`-gated) |
+| `fan` | 5 s | `modules/system/fan.ts` (real devices only — `isRealDevice()`-gated) |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
 | `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry`, `network_ingest`, and the typed `audio_sources` beside legacy `asrcs` |
@@ -3668,6 +3757,9 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't route a mode pick down the scalar kind's pipeline — the same camera is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode. Use `pipelineIdForInputMode`.
 - Don't fork a mode-aware copy of the device-mode rule — `device-mode-truth.ts` already scopes by "the media type the KIND names", so pointing it at the SELECTED mode is the entire change (`governingKind`). And don't turn the carried-mode drop into a refusal: only an EXPLICIT pick the device does not advertise may be refused.
 - Don't handle a `capture_degraded` event — there is no such event. Key on `capture_video_error` + `selected === true`. Don't give the snapshot a clearing path of its own (it inherits `clearRecoveredEngineError`), and don't move its clear BEHIND the standing-error gate: the `cerastream` notification slot is shared, so a later unrelated error would latch a capture claim the boundary disproved.
+- Don't hardcode a `cooling_deviceN` or `hwmonN` index to reach the fan — both index spaces are registration-order artefacts and were measured SHIFTING across a reboot on the reference board, so a hardcoded one silently starts reporting an unrelated device. Discover by the exact `type` string `pwm-fan` (see FAN), and don't collapse "no thermal class at all" (provable `absent`) into "the read failed" (`unknown`).
+- Don't assume a cooling device has a `device` backlink — on `7.1.5-ceralive-rk3588` the `pwm-fan` cdev has none at all, which made the first shipped collector report `unknown` on a board whose fan was running at `pwm1=120`. The `hwmon<N>/name == "pwmfan"` correlation covers it, and its three gates are not optional: it requires an already-confirmed `pwm-fan` cooling device, it fires ONLY when the backlink is absent (never merely because a `pwm1` read under an existing one failed — that could adopt a different fan on a multi-fan board), and two matching hwmons report `unknown` rather than a guess. Don't widen it into a general "find any fan" scan.
+- Don't derive a fan percentage from `cur_state / max_state`, and don't report or infer an RPM anywhere — the levels index a devicetree `cooling-levels` table rather than scaling airflow, and the reference fan is 2-wire with no `fan1_input` at all. `pwm1 / 255` is the ONLY sanctioned duty-cycle source, and the collector deliberately never reads the cooling-level nodes so the division is unreachable.
 - Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't re-serialise the DNS health check ahead of the caller's query in `dnsCacheResolve`, and don't share one `Resolver` between them — the check only GATES the answer, and a shared c-ares channel's `cancel()` would abort the sibling leg. Both legs sit inside the per-attempt launch deadline (see DNS ON THE STREAM-START CRITICAL PATH).
