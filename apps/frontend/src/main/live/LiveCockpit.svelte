@@ -35,6 +35,7 @@ import { TriangleAlert } from '@lucide/svelte';
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
 import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
 
@@ -70,6 +71,12 @@ interface Props {
 	bitrateLimit?: string | undefined;
 	tempSensor?: string;
 	uptimeSensor?: string;
+	/**
+	 * Per-core encoder load, derived in LiveView and passed straight through —
+	 * this component reads no store, so the typed reading travels as a prop like
+	 * every other datum here.
+	 */
+	encoderLoad?: EncoderLoadReading | undefined;
 	// ── BitrateAdjuster (live hot-adjust) ──────────────────────────────────────
 	bitrateDraft: number;
 	bitrateLabel: string;
@@ -127,6 +134,7 @@ const {
 	bitrateLimit = undefined,
 	tempSensor,
 	uptimeSensor,
+	encoderLoad = undefined,
 	bitrateDraft,
 	bitrateLabel,
 	bitrateMin,
@@ -287,6 +295,7 @@ const showVideoSignalLost = $derived(
 			{bitrateLimit}
 			{tempSensor}
 			{uptimeSensor}
+			{encoderLoad}
 		/>
 
 		<!-- Bitrate hot-adjust — the only field changeable mid-stream (setBitrate). -->

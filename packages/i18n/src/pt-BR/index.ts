@@ -318,6 +318,13 @@ const ptBR = {
 			lowDiskBody:
 				"Menos de 512 MiB livres em /data. Libere espaço para que gravação, logs e atualizações continuem funcionando.",
 			lowDiskAction: "Ver logs",
+			fan: "Ventoinha",
+			fanCooling: "Resfriando",
+			fanOff: "Parada",
+			fanAbsent: "Sem ventoinha",
+			fanAbsentBody: "Esta placa não tem ventoinha controlável.",
+			fanHint:
+				"Ciclo de trabalho — a fração da potência total com que a placa aciona a ventoinha. Esta ventoinha não informa nenhuma velocidade.",
 		},
 		deviceHealth: {
 			title: "Saúde do dispositivo",
@@ -341,7 +348,6 @@ const ptBR = {
 			traceLabel: "Registrador de cinco minutos — {summary}",
 			traceGaps: "{n} lacunas",
 			encoder: {
-				title: "Codificador",
 				idle: "Ocioso · sem codificar",
 				active: "Codificando · {summary}",
 				engineStarting: "O motor de streaming está iniciando",
@@ -361,6 +367,9 @@ const ptBR = {
 				notInstrumented:
 					"Esta placa não informa a carga dos núcleos do codificador ao CeraUI.",
 				simulated: "Simulado",
+				headlineEncoding: "Codificando",
+				headlineIdle: "Ocioso",
+				headlineUnreported: "Não informado",
 			},
 			power: {
 				title: "Trilhos de alimentação",
@@ -1086,6 +1095,7 @@ const ptBR = {
 	hud: {
 		bitrate: "Bitrate",
 		bitrateSending: "Enviando",
+		encoder: "Codificador",
 		bitrateLimit: "Limite configurado",
 		bitrateAdapting: "Adaptando",
 		bitrateBelowLimitHint:

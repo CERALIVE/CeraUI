@@ -151,6 +151,12 @@ const zh = {
 			lowDiskBody:
 				"/data 可用空间不足 512 MiB。请释放空间，以保证录制、日志和更新正常运行。",
 			lowDiskAction: "查看日志",
+			fan: "风扇",
+			fanCooling: "散热中",
+			fanOff: "未转动",
+			fanAbsent: "无风扇",
+			fanAbsentBody: "此主板没有可控风扇。",
+			fanHint: "占空比 — 主板驱动风扇所用的满功率占比。此风扇不报告任何转速。",
 		},
 		deviceHealth: {
 			title: "设备健康",
@@ -173,7 +179,6 @@ const zh = {
 			traceLabel: "五分钟记录仪 — {summary}",
 			traceGaps: "{n} 处中断",
 			encoder: {
-				title: "编码器",
 				idle: "空闲 · 未编码",
 				active: "编码中 · {summary}",
 				engineStarting: "推流引擎正在启动",
@@ -191,6 +196,9 @@ const zh = {
 					"此主板只报告每个编码器核心处于忙碌或空闲状态，没有百分比数据。",
 				notInstrumented: "此主板不会向 CeraUI 报告编码器核心负载。",
 				simulated: "模拟",
+				headlineEncoding: "编码中",
+				headlineIdle: "空闲",
+				headlineUnreported: "未报告",
 			},
 			power: {
 				title: "供电轨",
@@ -874,6 +882,7 @@ const zh = {
 	hud: {
 		bitrate: "比特率",
 		bitrateSending: "发送中",
+		encoder: "编码器",
 		bitrateLimit: "配置上限",
 		bitrateAdapting: "自适应中",
 		bitrateBelowLimitHint:
