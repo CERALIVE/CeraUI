@@ -27,13 +27,19 @@ import type { HudSources, HudTimestamps } from "$lib/types/hud";
 
 import {
 	deriveConnectionUx,
+	hasOutlastedBannerGrace,
 	initialReconnectState,
 	MAX_RECONNECT_ATTEMPTS,
+	RECONNECT_BANNER_GRACE_MS,
 	type ReconnectState,
 	reduceConnection,
 	shouldExpireSession,
+	shouldRunBannerGraceClock,
 } from "./connection-ux.svelte";
 import { deriveHudState, STALE_THRESHOLD_MS } from "./hud.svelte";
+
+/** Fixed epoch so the injected-time assertions read as offsets, not wall-clock. */
+const CONN_T0 = 1_700_000_000_000;
 
 // ============================================
 // reduceConnection
@@ -41,7 +47,7 @@ import { deriveHudState, STALE_THRESHOLD_MS } from "./hud.svelte";
 
 describe("reduceConnection", () => {
 	it("does not count the very first connecting as a reconnect attempt", () => {
-		const s = reduceConnection(initialReconnectState(), "connecting");
+		const s = reduceConnection(initialReconnectState(), "connecting", CONN_T0);
 		expect(s.attempts).toBe(0);
 		expect(s.hasConnected).toBe(false);
 	});
@@ -51,20 +57,26 @@ describe("reduceConnection", () => {
 			attempts: 4,
 			hasConnected: true,
 			rebooting: true,
+			disconnectedSince: CONN_T0,
 		};
-		const s = reduceConnection(prev, "connected");
-		expect(s).toEqual({ attempts: 0, hasConnected: true, rebooting: false });
+		const s = reduceConnection(prev, "connected", CONN_T0 + 100);
+		expect(s).toEqual({
+			attempts: 0,
+			hasConnected: true,
+			rebooting: false,
+			disconnectedSince: null,
+		});
 	});
 
 	it("counts each reconnect attempt after the first successful connection", () => {
 		// connect → drop → connecting (attempt 1) → drop → connecting (attempt 2)
-		let s = reduceConnection(initialReconnectState(), "connecting");
-		s = reduceConnection(s, "connected");
-		s = reduceConnection(s, "disconnected");
-		s = reduceConnection(s, "connecting");
+		let s = reduceConnection(initialReconnectState(), "connecting", CONN_T0);
+		s = reduceConnection(s, "connected", CONN_T0 + 1);
+		s = reduceConnection(s, "disconnected", CONN_T0 + 2);
+		s = reduceConnection(s, "connecting", CONN_T0 + 3);
 		expect(s.attempts).toBe(1);
-		s = reduceConnection(s, "disconnected");
-		s = reduceConnection(s, "connecting");
+		s = reduceConnection(s, "disconnected", CONN_T0 + 4);
+		s = reduceConnection(s, "connecting", CONN_T0 + 5);
 		expect(s.attempts).toBe(2);
 	});
 
@@ -73,9 +85,80 @@ describe("reduceConnection", () => {
 			attempts: 3,
 			hasConnected: true,
 			rebooting: true,
+			disconnectedSince: CONN_T0,
 		};
-		expect(reduceConnection(prev, "disconnected")).toEqual(prev);
-		expect(reduceConnection(prev, "error")).toEqual(prev);
+		expect(reduceConnection(prev, "disconnected", CONN_T0 + 50)).toEqual(prev);
+		expect(reduceConnection(prev, "error", CONN_T0 + 50)).toEqual(prev);
+	});
+
+	it("stamps the disconnect start once and never refreshes it mid-drop", () => {
+		let s = reduceConnection(initialReconnectState(), "connected", CONN_T0);
+		expect(s.disconnectedSince).toBeNull();
+
+		s = reduceConnection(s, "disconnected", CONN_T0 + 100);
+		expect(s.disconnectedSince).toBe(CONN_T0 + 100);
+
+		// Every retry inside the same drop keeps the ORIGINAL stamp — re-stamping
+		// would restart the grace window and the banner could never appear.
+		s = reduceConnection(s, "connecting", CONN_T0 + 900);
+		s = reduceConnection(s, "disconnected", CONN_T0 + 1800);
+		s = reduceConnection(s, "connecting", CONN_T0 + 2700);
+		expect(s.disconnectedSince).toBe(CONN_T0 + 100);
+
+		s = reduceConnection(s, "connected", CONN_T0 + 3000);
+		expect(s.disconnectedSince).toBeNull();
+	});
+
+	it("stamps a drop that surfaces as a bare connecting event", () => {
+		let s = reduceConnection(initialReconnectState(), "connected", CONN_T0);
+		s = reduceConnection(s, "connecting", CONN_T0 + 40);
+		expect(s.disconnectedSince).toBe(CONN_T0 + 40);
+	});
+});
+
+// ============================================
+// Reconnect-banner grace period
+// ============================================
+
+describe("hasOutlastedBannerGrace", () => {
+	it("is false for a drop still inside the grace window", () => {
+		expect(
+			hasOutlastedBannerGrace(CONN_T0, CONN_T0 + RECONNECT_BANNER_GRACE_MS - 1),
+		).toBe(false);
+	});
+
+	it("is true exactly at the grace boundary", () => {
+		expect(
+			hasOutlastedBannerGrace(CONN_T0, CONN_T0 + RECONNECT_BANNER_GRACE_MS),
+		).toBe(true);
+	});
+
+	it("fails closed when no disconnect has been stamped", () => {
+		expect(
+			hasOutlastedBannerGrace(null, CONN_T0 + 10 * RECONNECT_BANNER_GRACE_MS),
+		).toBe(false);
+	});
+});
+
+describe("shouldRunBannerGraceClock", () => {
+	it("never runs while connected", () => {
+		expect(shouldRunBannerGraceClock(null, CONN_T0)).toBe(false);
+	});
+
+	it("runs while the drop is inside the grace window", () => {
+		expect(shouldRunBannerGraceClock(CONN_T0, CONN_T0)).toBe(true);
+		expect(
+			shouldRunBannerGraceClock(
+				CONN_T0,
+				CONN_T0 + RECONNECT_BANNER_GRACE_MS - 1,
+			),
+		).toBe(true);
+	});
+
+	it("stops once the grace window has elapsed", () => {
+		expect(
+			shouldRunBannerGraceClock(CONN_T0, CONN_T0 + RECONNECT_BANNER_GRACE_MS),
+		).toBe(false);
 	});
 });
 
@@ -90,69 +173,101 @@ const baseInput = {
 	showOfflinePage: false,
 	reconnectAttempts: 0,
 	rebooting: false,
+	disconnectedSince: null,
 };
+
+const droppedInput = {
+	...baseInput,
+	isConnected: false,
+	connectionState: "disconnected" as const,
+	disconnectedSince: CONN_T0,
+};
+const AFTER_GRACE = CONN_T0 + RECONNECT_BANNER_GRACE_MS;
 
 describe("deriveConnectionUx", () => {
 	it("shows nothing while connected", () => {
-		expect(deriveConnectionUx(baseInput)).toEqual({
+		expect(deriveConnectionUx(baseInput, CONN_T0)).toEqual({
 			mode: "connected",
 			showBanner: false,
 		});
 	});
 
 	it("shows the reconnecting banner when WS is down but the browser is online", () => {
-		const ux = deriveConnectionUx({
-			...baseInput,
-			isConnected: false,
-			connectionState: "disconnected",
-		});
+		const ux = deriveConnectionUx(droppedInput, AFTER_GRACE);
 		expect(ux).toEqual({ mode: "reconnecting", showBanner: true });
 	});
 
 	it("escalates to a hard failure once the retry budget is exhausted", () => {
-		const ux = deriveConnectionUx({
-			...baseInput,
-			isConnected: false,
-			connectionState: "disconnected",
-			reconnectAttempts: MAX_RECONNECT_ATTEMPTS,
-		});
+		const ux = deriveConnectionUx(
+			{ ...droppedInput, reconnectAttempts: MAX_RECONNECT_ATTEMPTS },
+			AFTER_GRACE,
+		);
 		expect(ux).toEqual({ mode: "failed", showBanner: true });
 	});
 
 	it("shows the rebooting treatment even before the socket actually drops", () => {
-		const ux = deriveConnectionUx({ ...baseInput, rebooting: true });
+		const ux = deriveConnectionUx({ ...baseInput, rebooting: true }, CONN_T0);
 		expect(ux).toEqual({ mode: "rebooting", showBanner: true });
 	});
 
 	it("keeps the rebooting treatment while disconnected after a reboot", () => {
-		const ux = deriveConnectionUx({
-			...baseInput,
-			isConnected: false,
-			connectionState: "disconnected",
-			rebooting: true,
-			reconnectAttempts: MAX_RECONNECT_ATTEMPTS, // would otherwise be "failed"
-		});
+		const ux = deriveConnectionUx(
+			{
+				...droppedInput,
+				rebooting: true,
+				reconnectAttempts: MAX_RECONNECT_ATTEMPTS, // would otherwise be "failed"
+			},
+			AFTER_GRACE,
+		);
 		expect(ux).toEqual({ mode: "rebooting", showBanner: true });
 	});
 
 	it("defers to the browser-offline page (never doubles up the banner)", () => {
-		const ux = deriveConnectionUx({
-			...baseInput,
-			isConnected: false,
-			connectionState: "disconnected",
-			showOfflinePage: true,
-		});
+		const ux = deriveConnectionUx(
+			{ ...droppedInput, showOfflinePage: true },
+			AFTER_GRACE,
+		);
 		expect(ux.showBanner).toBe(false);
 	});
 
 	it("suppresses the banner when the browser itself went offline", () => {
-		const ux = deriveConnectionUx({
-			...baseInput,
-			isConnected: false,
-			connectionState: "disconnected",
-			browserOnline: false,
-		});
+		const ux = deriveConnectionUx(
+			{ ...droppedInput, browserOnline: false },
+			AFTER_GRACE,
+		);
 		expect(ux.showBanner).toBe(false);
+	});
+
+	it("stays silent through a drop that heals inside the grace window", () => {
+		for (const elapsed of [0, 1, 500, RECONNECT_BANNER_GRACE_MS - 1]) {
+			expect(deriveConnectionUx(droppedInput, CONN_T0 + elapsed)).toEqual({
+				mode: "reconnecting",
+				showBanner: false,
+			});
+		}
+	});
+
+	it("surfaces the banner once the drop outlasts the grace window", () => {
+		expect(deriveConnectionUx(droppedInput, AFTER_GRACE)).toEqual({
+			mode: "reconnecting",
+			showBanner: true,
+		});
+		expect(deriveConnectionUx(droppedInput, AFTER_GRACE + 60_000)).toEqual({
+			mode: "reconnecting",
+			showBanner: true,
+		});
+	});
+
+	it("never debounces the rebooting or failed treatments", () => {
+		expect(
+			deriveConnectionUx({ ...droppedInput, rebooting: true }, CONN_T0),
+		).toEqual({ mode: "rebooting", showBanner: true });
+		expect(
+			deriveConnectionUx(
+				{ ...droppedInput, reconnectAttempts: MAX_RECONNECT_ATTEMPTS },
+				CONN_T0,
+			),
+		).toEqual({ mode: "failed", showBanner: true });
 	});
 });
 

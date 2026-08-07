@@ -8,6 +8,8 @@ import { Button } from '$lib/components/ui/button';
 import { getConnectionState, getIsConnected } from '$lib/rpc/subscriptions.svelte';
 import {
 	deriveConnectionUx,
+	getDisconnectedSince,
+	getGraceNow,
 	getIsRebooting,
 	getReconnectAttempts,
 	retryConnection,
@@ -18,16 +20,21 @@ import { getIsOnline } from '$lib/stores/pwa.svelte';
 // Distinct from the browser-offline PWA page: this banner is the WS-down /
 // reconnecting / rebooting treatment while the *browser* still has network.
 // Reads the same `getIsConnected()` surface the HUD uses, so the banner and the
-// HUD staleness model never disagree.
+// HUD staleness model never disagree. `getGraceNow()` is what re-derives this
+// while a drop sits inside its grace window — no other event fires there.
 const ux = $derived(
-	deriveConnectionUx({
-		isConnected: getIsConnected(),
-		connectionState: getConnectionState(),
-		browserOnline: getIsOnline(),
-		showOfflinePage: getShouldShowOfflinePage(),
-		reconnectAttempts: getReconnectAttempts(),
-		rebooting: getIsRebooting(),
-	}),
+	deriveConnectionUx(
+		{
+			isConnected: getIsConnected(),
+			connectionState: getConnectionState(),
+			browserOnline: getIsOnline(),
+			showOfflinePage: getShouldShowOfflinePage(),
+			reconnectAttempts: getReconnectAttempts(),
+			rebooting: getIsRebooting(),
+			disconnectedSince: getDisconnectedSince(),
+		},
+		getGraceNow(),
+	),
 );
 </script>
 
