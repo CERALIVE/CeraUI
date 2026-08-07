@@ -1113,6 +1113,14 @@ const en = {
 			fanAbsentBody: "This board has no controllable fan.",
 			fanHint:
 				"Duty cycle — the share of full power the board is driving the fan at. This fan reports no speed.",
+			cpuLoadLight: "Light",
+			cpuLoadModerate: "Moderate",
+			cpuLoadHeavy: "Heavy",
+			cpuLoadRaw: "load {load:string}",
+			cpuLoadHint:
+				"Share of total CPU capacity — the 1-minute load average across {cores:number} cores.",
+			cpuLoadHintNoCores:
+				"1-minute load average. This device did not report its core count, so it cannot be shown as a share of capacity.",
 		},
 		deviceHealth: {
 			title: "Device Health",

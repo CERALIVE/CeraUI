@@ -1090,6 +1090,14 @@ const es = {
 			fanAbsentBody: "Esta placa no tiene un ventilador controlable.",
 			fanHint:
 				"Ciclo de trabajo — la fracción de la potencia máxima con la que la placa acciona el ventilador. Este ventilador no informa ninguna velocidad.",
+			cpuLoadLight: "Baja",
+			cpuLoadModerate: "Moderada",
+			cpuLoadHeavy: "Alta",
+			cpuLoadRaw: "carga {load}",
+			cpuLoadHint:
+				"Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre {cores} núcleos.",
+			cpuLoadHintNoCores:
+				"Carga media de 1 minuto. Este dispositivo no informó su número de núcleos, así que no puede mostrarse como proporción de la capacidad.",
 		},
 		deviceHealth: {
 			title: "Salud del dispositivo",

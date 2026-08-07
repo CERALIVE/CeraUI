@@ -46,12 +46,17 @@ import {
 } from '@lucide/svelte';
 
 import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
-import { getDeviceStats, getFanSnapshot } from '$lib/rpc/subscriptions.svelte';
+import { getCpuInfo, getDeviceStats, getFanSnapshot } from '$lib/rpc/subscriptions.svelte';
 import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
+import { type CpuLoadBand, deriveCpuLoad } from '$lib/system/cpu-load';
 import { deriveFanState, fanDutyFraction } from '$lib/system/fan-status';
 import { cn } from '$lib/utils';
 
-import { type DeviceStatSignal, partitionSignals } from './device-stats-model';
+import {
+	type DeviceStatBarTone,
+	type DeviceStatSignal,
+	partitionSignals,
+} from './device-stats-model';
 
 const t = $derived($LL.settings.deviceStats);
 // The encoder's label already exists, translated, one namespace over. A second
@@ -60,6 +65,12 @@ const encoderLabel = $derived($LL.settings.deviceHealth.nowStrip.encoder());
 
 // Sentinel the backend emits for the boot slot when `rauc` is absent.
 const RAUC_UNAVAILABLE = 'unavailable';
+
+const BAR_TONE: Record<DeviceStatBarTone, string> = {
+	primary: 'bg-primary',
+	warning: 'bg-status-warning',
+	critical: 'bg-destructive',
+};
 
 // Humanize a byte count to a decimal-SI string ("58.2 GB"). Sub-KB stays whole.
 function humanBytes(n: number): string {
@@ -87,6 +98,7 @@ function humanRate(n: number): string {
 
 const stats = $derived(getDeviceStats());
 const fan = $derived(getFanSnapshot());
+const cpu = $derived(getCpuInfo());
 // The SAME read path the Live cockpit and the Device Health panel use — it
 // prefers the device's `encoder-load` broadcast and falls back to the dev-only
 // `?health-mock=` fixture. No second subscription, no second precedence rule.
@@ -111,6 +123,48 @@ const fanSignal = $derived.by<DeviceStatSignal>(() => {
 		value: `${Math.round(fraction * 100)} %`,
 		fraction,
 		sub: state === 'running' ? t.fanCooling() : t.fanOff(),
+		hint: t.fanHint(),
+	};
+});
+
+// Colour REINFORCES the band word; it never carries it alone.
+const CPU_BAND_TONE: Record<CpuLoadBand, DeviceStatBarTone> = {
+	light: 'primary',
+	moderate: 'warning',
+	heavy: 'critical',
+};
+
+const cpuLoadSignal = $derived.by<DeviceStatSignal>(() => {
+	const base = {
+		key: 'cpuLoad',
+		icon: Cpu,
+		label: t.cpuLoad(),
+		tier: 'primary' as const,
+	};
+	const reading = deriveCpuLoad(stats?.cpuLoad1, cpu?.cores);
+	if (reading === null) return { ...base, value: null };
+
+	const load = reading.load1.toFixed(2);
+	const cores = reading.cores;
+	// No core count on the wire ⇒ no honest denominator, so the raw load average
+	// stays the headline rather than being divided by an assumed one.
+	if (reading.percent === null || reading.fraction === null || cores === null) {
+		return { ...base, value: load, hint: t.cpuLoadHintNoCores() };
+	}
+	const band = reading.band ?? 'light';
+	const bandLabel = {
+		light: t.cpuLoadLight(),
+		moderate: t.cpuLoadModerate(),
+		heavy: t.cpuLoadHeavy(),
+	}[band];
+	return {
+		...base,
+		value: `${reading.percent} %`,
+		fraction: reading.fraction,
+		barTone: CPU_BAND_TONE[band],
+		sub: `${bandLabel} \u00b7 ${t.cpuLoadRaw({ load })}`,
+		hint: t.cpuLoadHint({ cores }),
+		attrs: { 'data-cpu-band': band },
 	};
 });
 
@@ -129,15 +183,7 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 			value: s && s.socTemp != null ? `${s.socTemp.toFixed(1)} \u00b0C` : null,
 			tier: 'primary',
 		},
-		{
-			key: 'cpuLoad',
-			icon: Cpu,
-			label: t.cpuLoad(),
-			// No bar: converting a load average needs the device's core count,
-			// which the frontend does not have.
-			value: s && s.cpuLoad1 != null ? s.cpuLoad1.toFixed(2) : null,
-			tier: 'primary',
-		},
+		cpuLoadSignal,
 		fanSignal,
 		{
 			key: 'disk',
@@ -241,7 +287,7 @@ const tiers = $derived(partitionSignals(signals));
 								signal.prose ? '' : 'font-mono tabular-nums',
 							)}
 							data-testid={`device-stat-${signal.key}-value`}
-							title={signal.key === 'fan' ? t.fanHint() : undefined}
+							title={signal.hint}
 						>
 							{signal.value}
 						</span>
@@ -250,10 +296,11 @@ const tiers = $derived(partitionSignals(signals));
 						<span
 							aria-hidden="true"
 							class="bg-secondary relative block h-1.5 w-full overflow-hidden rounded-full"
+							data-bar-tone={signal.barTone ?? 'primary'}
 							data-testid={`device-stat-${signal.key}-bar`}
 						>
 							<span
-								class="bg-primary absolute inset-y-0 start-0 rounded-full"
+								class={cn('absolute inset-y-0 start-0 rounded-full', BAR_TONE[signal.barTone ?? 'primary'])}
 								style="inline-size: {Math.min(100, Math.max(0, signal.fraction * 100))}%"
 							></span>
 						</span>

@@ -85,6 +85,7 @@ CeraUI/
 | **Per-core encoder-load three-state model (percent / active / unavailable)** | `apps/frontend/src/lib/streaming/encoder-load.ts` + dev fixture `encoder-load-mock.ts` |
 | **Per-core encoder-load COLLECTOR (two kernel realities, probed at runtime)** | `apps/backend/src/modules/system/encoder-load.ts` → `encoder-load` broadcast |
 | **Fan presence + PWM duty-cycle COLLECTOR (`pwm-fan` found by type string, never an index; `pwm1/255` only, never RPM)** | `apps/backend/src/modules/system/fan.ts` → `fan` broadcast |
+| **CPU core count (`nproc`-equivalent) — the denominator that makes `cpuLoad1` readable** | `apps/backend/src/modules/system/cpu.ts` → `cpu` broadcast; render side `apps/frontend/src/lib/system/cpu-load.ts` (`deriveCpuLoad`) |
 | Shared dialog chrome (AppDialog) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
@@ -457,7 +458,20 @@ wraps its read in its own `try/catch` and degrades to `null` on failure — a mi
 `/sys` path or absent `rauc` binary must never crash the sampling loop.
 
 **A new device signal therefore gets its OWN broadcast**, exactly as `encoder-load`
-did. The fan is the second one: `apps/backend/src/modules/system/fan.ts` publishes
+did. The CPU core count is the third one, and it exists because `cpuLoad1` above is
+UNREADABLE without it: a load average is a count of runnable tasks, so `1.00` on an
+8-core RK3588 is about an eighth of the board while reading as saturation to anyone
+who does not already know the core count (the operator report that produced it).
+`apps/backend/src/modules/system/cpu.ts` publishes a `cpu` event carrying
+`{ cores: number | null }` — a BOOT FACT resolved once and re-served from the
+post-auth initial-state push, not a sample, since core count cannot change without
+a reboot. It is deliberately NOT `isRealDevice()`-gated (every host has CPUs, so
+gating it would leave dev and CI rendering the bare load average the fix replaced),
+and `cores` is nullable so a host that cannot report its topology degrades to the
+raw figure rather than having a denominator invented for it. Full contract:
+[`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → CPU TOPOLOGY.
+
+The fan is the second one: `apps/backend/src/modules/system/fan.ts` publishes
 a `fan` event (5 s, `isRealDevice()`-gated) reporting fan PRESENCE plus a PWM duty
 cycle derived from `pwm1 / 255` — never an RPM (the board's fan is 2-wire and has
 no tachometer) and never `cur_state / max_state` (an index into a devicetree table,

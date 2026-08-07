@@ -11,6 +11,7 @@ import {
 	getStreamHealth,
 	HEALTH_EVENT_TYPE,
 } from "../modules/streaming/health.ts";
+import { CPU_EVENT } from "../modules/system/cpu.ts";
 import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
@@ -186,6 +187,7 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	sendToClient(ws, "status", initialStatus.status);
 	sendToClient(ws, "netif", initialStatus.netif);
 	sendToClient(ws, "sensors", initialStatus.sensors);
+	sendToClient(ws, CPU_EVENT, initialStatus.cpu);
 	sendToClient(ws, "revisions", initialStatus.revisions);
 	sendToClient(ws, "acodecs", initialStatus.acodecs);
 	sendToClient(ws, "devices", initialStatus.devices);

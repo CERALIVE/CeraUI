@@ -1080,6 +1080,14 @@ const de = {
 			fanAbsentBody: "Diese Platine hat keinen steuerbaren Lüfter.",
 			fanHint:
 				"Tastverhältnis — der Anteil der vollen Leistung, mit dem die Platine den Lüfter ansteuert. Dieser Lüfter meldet keine Drehzahl.",
+			cpuLoadLight: "Niedrig",
+			cpuLoadModerate: "Mittel",
+			cpuLoadHeavy: "Hoch",
+			cpuLoadRaw: "Last {load}",
+			cpuLoadHint:
+				"Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne.",
+			cpuLoadHintNoCores:
+				"1-Minuten-Lastdurchschnitt. Dieses Gerät hat seine Kernanzahl nicht gemeldet, daher kann kein Kapazitätsanteil angezeigt werden.",
 		},
 		deviceHealth: {
 			title: "Gerätezustand",

@@ -47,6 +47,7 @@ import { getPipelinesMessage } from "../streaming/pipelines.ts";
 import { getSourcesMessage } from "../streaming/sources.ts";
 import { getStreamLifecycleState } from "../streaming/stream-lifecycle-status.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
+import { CPU_EVENT, getCpuInfo } from "../system/cpu.ts";
 import { ENCODER_LOAD_EVENT, getEncoderLoad } from "../system/encoder-load.ts";
 import { FAN_EVENT, getFan } from "../system/fan.ts";
 import { getRevisions } from "../system/revisions.ts";
@@ -123,6 +124,7 @@ export function sendInitialStatus(conn: WebSocket) {
 	conn.send(buildMsg("sensors", getSensors()));
 	conn.send(buildMsg(ENCODER_LOAD_EVENT, getEncoderLoad()));
 	conn.send(buildMsg(FAN_EVENT, getFan()));
+	conn.send(buildMsg(CPU_EVENT, getCpuInfo()));
 	conn.send(buildMsg("revisions", getRevisions()));
 	conn.send(buildMsg("acodecs", AUDIO_CODECS));
 	notificationSendPersistent(conn, true);

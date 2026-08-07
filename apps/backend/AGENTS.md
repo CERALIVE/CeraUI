@@ -15,6 +15,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Task | Location |
 |------|----------|
 | Per-core encoder load (two kernel realities, probed at runtime; `encoder-load` broadcast) | `modules/system/encoder-load.ts` (`collectEncoderLoad`, `parseMppLoad`, `initEncoderLoad`); contract below → PER-CORE ENCODER LOAD |
+| CPU core count — the denominator `device-stats.cpuLoad1` needs to be readable (`cpu` broadcast) | `modules/system/cpu.ts` (`collectCpuInfo`, `getCpuInfo`, `initCpu`); contract below → CPU TOPOLOGY |
 | Fan presence + PWM duty cycle (`pwm-fan` discovered by TYPE string, never an index; `fan` broadcast) | `modules/system/fan.ts` (`discoverPwmFanCoolingDevice`, `parsePwmDuty`, `collectFan`, `initFan`); contract below → FAN |
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
@@ -956,6 +957,44 @@ never-a-number regression lock) + the frontend halves
 `apps/frontend/src/tests/encoder-load-source-precedence.test.ts` and
 `apps/frontend/src/main/dialogs/DeviceHealthDialog.test.ts`.
 
+## CPU TOPOLOGY — THE DENOMINATOR `cpuLoad1` WAS MISSING [EXISTS]
+
+`modules/system/cpu.ts` publishes a `cpu` event carrying `{ cores: number | null }`
+— the online CPU count, `nproc`-equivalent, read from `os.cpus().length` through
+an injected `CpuDeps.cpuCount` seam.
+
+It exists because a 1-minute load average is a count of RUNNABLE TASKS, so it says
+nothing on its own. On an 8-core RK3588 a reported `1.00` is roughly an eighth of
+the board, but it reads as saturation to an operator who does not already know the
+core count — reported live while a single software (non-accelerated) encode pegged
+one core.
+
+- **ITS OWN BROADCAST, not a sixth `device-stats` field.** That payload is frozen
+  by the S1 lock and THREE tests assert its keys EXACTLY, so this follows the
+  precedent `encoder-load` and `fan` already set. It is likewise not foldable into
+  `sensors`, a flat `Record<string, string>` of display strings.
+- **A BOOT FACT, not a sample.** Core count cannot change without a reboot on this
+  hardware, so it is resolved ONCE in `initCpu()` and re-served from the post-auth
+  initial-state push (`sendInitialStatus`) — the same treatment `revisions.kernel`
+  gets, for the same reason. There is deliberately no polling loop and no coalesce
+  entry.
+- **NOT `isRealDevice()`-gated**, unlike `fan`/`encoder-load`. Those read
+  board-specific sysfs nodes a dev host genuinely does not have; every host has
+  CPUs, so gating this one would leave the dev and CI paths rendering the bare load
+  average the signal exists to replace. For the same reason it needs no mock
+  provider — the real reader already works everywhere.
+- **NEVER ASSUMED.** A count that is not a positive integer — a throwing reader, a
+  zero-length list, a non-integral value — degrades to `cores: null`, and the UI
+  then falls back to the raw load average. Substituting a plausible count would
+  fabricate the very denominator the signal exists to supply, which is the same
+  class of lie as rendering a busy/idle encoder core as a percentage. Do NOT
+  hardcode 8, and do NOT derive it from the board kind.
+
+Frontend half: `apps/frontend/AGENTS.md` → "CPU load is a SHARE OF CAPACITY".
+Coverage: `tests/cpu.test.ts` (the read, every unusable-count degradation, the
+never-throws contract, and a no-seam case proving the shipped wiring resolves a
+real count rather than only the injected double).
+
 ## FAN — A DUTY CYCLE, AND THE FILES NAMING IT MOVE [EXISTS]
 
 `modules/system/fan.ts` reports whether the board has a controllable fan at all
@@ -1767,6 +1806,7 @@ The backend pushes typed events to all connected clients via `rpc/events.ts`. Ea
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `encoder-load` | 2 s | `modules/system/encoder-load.ts` (real devices only — `isRealDevice()`-gated) |
 | `fan` | 5 s | `modules/system/fan.ts` (real devices only — `isRealDevice()`-gated) |
+| `cpu` | boot + initial-state push | `modules/system/cpu.ts` (core count; NOT gated — every host has CPUs) |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
 | `status` | on-change + 5 s | streaming state transitions; carries `linkTelemetry`, `network_ingest`, and the typed `audio_sources` beside legacy `asrcs` |

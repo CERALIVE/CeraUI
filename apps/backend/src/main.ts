@@ -102,6 +102,7 @@ import {
 	checkAutoStartStream,
 	srtlaSendExec,
 } from "./modules/streaming/streamloop.ts";
+import { initCpu } from "./modules/system/cpu.ts";
 import {
 	detectHardwareKindFromDeviceTree,
 	isRealDevice,
@@ -315,6 +316,7 @@ await guardNonCritical("mock-preview", () => {
 void initRevisions();
 initHardwareMonitoring();
 initDeviceStats();
+initCpu();
 await guardNonCritical("encoder-load", initEncoderLoad);
 await guardNonCritical("fan", initFan);
 await guardNonCritical("rtmp-ingest", initRTMPIngestStats);
