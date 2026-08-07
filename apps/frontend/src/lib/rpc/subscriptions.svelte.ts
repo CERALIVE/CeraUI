@@ -11,6 +11,7 @@ import type {
 	CapabilitiesMessage,
 	CaptureDevice,
 	ConfigMessage,
+	CpuInfo,
 	DeviceStats,
 	DevicesMessage,
 	EncoderLoad,
@@ -142,6 +143,12 @@ let encoderLoadState = $state<EncoderLoad | undefined>(undefined);
 // a dev host is `isRealDevice()`-gated silent, and that silence IS the
 // real-vs-mock seam, exactly as it is for `encoder-load`.
 let fanState = $state<FanReading | undefined>(undefined);
+// CPU topology — the denominator `deviceStats.cpuLoad1` is unreadable without.
+// A boot fact rather than a sample, so it arrives once and is re-served by the
+// post-auth initial-state push. `undefined` and a delivered `cores: null` mean
+// the same thing to a consumer (no denominator), which is why the derivation
+// takes `number | null | undefined` and degrades to the raw load average.
+let cpuInfoState = $state<CpuInfo | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
@@ -267,6 +274,10 @@ export function getEncoderLoadSnapshot() {
 
 export function getFanSnapshot() {
 	return fanState;
+}
+
+export function getCpuInfo() {
+	return cpuInfoState;
 }
 
 export function getRevisions() {
@@ -608,6 +619,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			fanState = data as FanReading;
 			break;
 
+		case "cpu":
+			cpuInfoState = data as CpuInfo;
+			break;
+
 		case "revisions":
 			revisionsState = data as Revisions;
 			break;
@@ -921,6 +936,7 @@ export function resetState(): void {
 	deviceStatsState = undefined;
 	encoderLoadState = undefined;
 	fanState = undefined;
+	cpuInfoState = undefined;
 	revisionsState = undefined;
 	pipelinesState = undefined;
 	capabilitiesState = undefined;

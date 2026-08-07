@@ -320,6 +320,32 @@ export const deviceStatsSchema = z.object({
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
 
 // =============================================================================
+// CPU topology broadcast (`cpu` event)
+// =============================================================================
+//
+// The DENOMINATOR for `device-stats.cpuLoad1`, and its OWN broadcast for the
+// same reason `encoder-load` and `fan` have one: the five-signal payload above
+// is frozen by the S1 lock and three backend tests assert those keys EXACTLY.
+//
+// It exists because a bare 1-minute load average is unreadable without it. On an
+// 8-core RK3588 a reported `1.00` means roughly an eighth of the board is in
+// use, but the figure reads as "fully loaded" to anyone who does not already
+// know the core count — which was the operator report that produced this signal.
+//
+// It is a BOOT FACT, not a sample: core count cannot change without a reboot on
+// this hardware, so it is resolved once and re-served from the post-auth
+// initial-state push (the same treatment `revisions.kernel` gets).
+//
+// `cores` is nullable and MUST stay nullable: a host that cannot report its CPU
+// topology has to degrade to the raw load average rather than have a
+// denominator invented for it.
+export const cpuInfoSchema = z.object({
+	/** Online CPU count (`nproc`-equivalent). `null` ⇒ unknown, never assumed. */
+	cores: z.number().nullable(),
+});
+export type CpuInfo = z.infer<typeof cpuInfoSchema>;
+
+// =============================================================================
 // Per-core encoder load broadcast (`encoder-load` event)
 // =============================================================================
 //

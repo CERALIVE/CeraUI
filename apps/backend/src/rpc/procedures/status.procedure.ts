@@ -36,6 +36,7 @@ import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getSourcesMessage } from "../../modules/streaming/sources.ts";
 import { getStreamLifecycleState } from "../../modules/streaming/stream-lifecycle-status.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
+import { getCpuInfo } from "../../modules/system/cpu.ts";
 import { getEncoderLoad } from "../../modules/system/encoder-load.ts";
 import { getRevisions } from "../../modules/system/revisions.ts";
 import { getSensors } from "../../modules/system/sensors.ts";
@@ -136,6 +137,9 @@ export function buildInitialStatus() {
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),
 		encoderLoad: getEncoderLoad(),
+		// A BOOT FACT with no periodic loop behind it, so the initial push is the
+		// ONLY way a client ever learns the core count `cpuLoad1` is divided by.
+		cpu: getCpuInfo(),
 		revisions: getRevisions(),
 		acodecs: AUDIO_CODECS,
 		devices: getDevicesMessage(),

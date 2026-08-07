@@ -24,6 +24,8 @@ import type { Component, Snippet } from "svelte";
 
 export type DeviceStatTier = "primary" | "secondary";
 
+export type DeviceStatBarTone = "primary" | "warning" | "critical";
+
 export interface DeviceStatSignal {
 	/** Drives `data-testid="device-stat-<key>"` in either tier. */
 	key: string;
@@ -34,12 +36,21 @@ export interface DeviceStatSignal {
 	value: string | null;
 	tier: DeviceStatTier;
 	/**
-	 * 0-1. Set ONLY when the signal has a REAL denominator — fan duty and
-	 * disk-used qualify; SoC temperature and a load average do not, and drawing
-	 * a bar for them would fabricate a scale (the same discipline the encoder
-	 * `percent`-vs-`active` split enforces).
+	 * 0-1. Set ONLY when the signal has a REAL denominator — fan duty, disk-used,
+	 * and CPU load against the device's REPORTED core count qualify. SoC
+	 * temperature has none, and neither does a load average on a device that did
+	 * not report its topology; drawing a bar for either would fabricate a scale
+	 * (the same discipline the encoder `percent`-vs-`active` split enforces).
 	 */
 	fraction?: number;
+	/**
+	 * Recolours the `fraction` bar for a signal whose magnitude carries a
+	 * threshold an operator acts on. Defaults to `primary`, so every existing
+	 * tile is unchanged. It is REINFORCEMENT ONLY — a signal using it must also
+	 * state its band in words (the `EncoderStatus` colour rule), because a tone
+	 * alone is unreadable to a colour-blind or e-ink operator.
+	 */
+	barTone?: DeviceStatBarTone;
 	/**
 	 * The value is a WORD, not a measurement, so it renders in the UI face rather
 	 * than the tabular mono one. "No fan" set in a numeric face reads like a
@@ -56,6 +67,13 @@ export interface DeviceStatSignal {
 	body?: Snippet;
 	/** Spans the whole grid row — for a `body` that needs more than a tile. */
 	fullWidth?: boolean;
+	/**
+	 * Explanatory `title` on the value — for a figure whose DERIVATION is not
+	 * self-evident (the fan's duty cycle, the CPU's share-of-capacity). It may
+	 * never carry a STATE: a touchscreen operator cannot hover to read it, so
+	 * anything the tile is asserting has to be on screen in words.
+	 */
+	hint?: string;
 	/** State-specific DOM hooks, e.g. `data-fan-state`. */
 	attrs?: Record<string, string>;
 }

@@ -325,6 +325,14 @@ const ptBR = {
 			fanAbsentBody: "Esta placa não tem ventoinha controlável.",
 			fanHint:
 				"Ciclo de trabalho — a fração da potência total com que a placa aciona a ventoinha. Esta ventoinha não informa nenhuma velocidade.",
+			cpuLoadLight: "Baixa",
+			cpuLoadModerate: "Moderada",
+			cpuLoadHeavy: "Alta",
+			cpuLoadRaw: "carga {load}",
+			cpuLoadHint:
+				"Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por {cores} núcleos.",
+			cpuLoadHintNoCores:
+				"Carga média de 1 minuto. Este dispositivo não informou a contagem de núcleos, portanto não pode ser exibida como proporção da capacidade.",
 		},
 		deviceHealth: {
 			title: "Saúde do dispositivo",

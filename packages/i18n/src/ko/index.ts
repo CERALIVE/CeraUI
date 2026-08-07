@@ -167,6 +167,14 @@ const ko = {
 			fanAbsentBody: "이 보드에는 제어 가능한 팬이 없습니다.",
 			fanHint:
 				"듀티 사이클 — 보드가 팬을 구동하는 최대 출력 대비 비율입니다. 이 팬은 속도를 보고하지 않습니다.",
+			cpuLoadLight: "낮음",
+			cpuLoadModerate: "보통",
+			cpuLoadHeavy: "높음",
+			cpuLoadRaw: "부하 {load}",
+			cpuLoadHint:
+				"전체 CPU 용량 대비 비율 — {cores}개 코어에 대한 1분 평균 부하입니다.",
+			cpuLoadHintNoCores:
+				"1분 평균 부하입니다. 이 장치가 코어 수를 보고하지 않아 용량 대비 비율로 표시할 수 없습니다.",
 		},
 		deviceHealth: {
 			title: "장치 상태",

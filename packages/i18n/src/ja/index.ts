@@ -171,6 +171,14 @@ const ja = {
 			fanAbsentBody: "このボードには制御可能なファンがありません。",
 			fanHint:
 				"デューティ比 — ボードがファンを駆動している最大出力に対する割合です。このファンは速度を報告しません。",
+			cpuLoadLight: "低",
+			cpuLoadModerate: "中",
+			cpuLoadHeavy: "高",
+			cpuLoadRaw: "ロードアベレージ {load}",
+			cpuLoadHint:
+				"CPU 全体の容量に対する割合 — {cores} コアに対する 1 分間のロードアベレージです。",
+			cpuLoadHintNoCores:
+				"1 分間のロードアベレージです。このデバイスはコア数を報告しなかったため、容量に対する割合として表示できません。",
 		},
 		deviceHealth: {
 			title: "デバイスの健全性",

@@ -324,6 +324,14 @@ const fr = {
 			fanAbsentBody: "Cette carte n'a pas de ventilateur contrôlable.",
 			fanHint:
 				"Rapport cyclique — la part de la puissance maximale à laquelle la carte pilote le ventilateur. Ce ventilateur ne communique aucune vitesse.",
+			cpuLoadLight: "Faible",
+			cpuLoadModerate: "Modérée",
+			cpuLoadHeavy: "Élevée",
+			cpuLoadRaw: "charge {load}",
+			cpuLoadHint:
+				"Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",
+			cpuLoadHintNoCores:
+				"Charge moyenne sur 1 minute. Cet appareil n'a pas indiqué son nombre de cœurs, elle ne peut donc pas être affichée en part de capacité.",
 		},
 		deviceHealth: {
 			title: "Santé de l'appareil",

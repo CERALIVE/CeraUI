@@ -157,6 +157,13 @@ const zh = {
 			fanAbsent: "无风扇",
 			fanAbsentBody: "此主板没有可控风扇。",
 			fanHint: "占空比 — 主板驱动风扇所用的满功率占比。此风扇不报告任何转速。",
+			cpuLoadLight: "低",
+			cpuLoadModerate: "中",
+			cpuLoadHeavy: "高",
+			cpuLoadRaw: "负载 {load}",
+			cpuLoadHint: "占 CPU 总容量的比例 — {cores} 个核心上的 1 分钟平均负载。",
+			cpuLoadHintNoCores:
+				"1 分钟平均负载。此设备未报告核心数，因此无法显示为容量占比。",
 		},
 		deviceHealth: {
 			title: "设备健康",

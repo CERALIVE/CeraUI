@@ -23,6 +23,10 @@ export const DEVICE_STATS_EVENT = "device-stats" as const;
 // (it owns the `broadcastMsg(ADDON_EVENT, …)` push); re-exported here so the RPC
 // layer resolves the channel name from the events surface like every other event.
 export { ADDON_EVENT } from "../modules/addons/manager.ts";
+// CPU topology (core count) — the denominator `device-stats.cpuLoad1` needs to
+// be readable as a share of capacity. Its OWN channel for the same S1-lock
+// reason as the two above; the emitter owns the name.
+export { CPU_EVENT } from "../modules/system/cpu.ts";
 // Per-core encoder-load broadcast. Its OWN channel, NOT a sixth device-stats
 // field — that payload is frozen by the S1 lock. The emitter owns the name (like
 // ADDON_EVENT below) so the initial-state push can resolve it without importing
