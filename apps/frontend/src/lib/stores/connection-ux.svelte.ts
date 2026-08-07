@@ -18,6 +18,14 @@
  * and is the only place that touches Svelte runes — the unit tests never
  * execute it.
  *
+ * Reconnect-banner grace period
+ * -----------------------------
+ * The "reconnecting" treatment is debounced by {@link RECONNECT_BANNER_GRACE_MS}
+ * so a drop that heals inside that window is invisible to the operator. Time is
+ * injected (`disconnectedSince` + an explicit `now`) rather than read inside the
+ * pure functions, and a self-gating clock in the reactive layer advances `now`
+ * only while a drop is still inside its window.
+ *
  * Connection source of truth
  * --------------------------
  * Reconnect tracking is driven by `rpcClient.onConnectionChange`, the
@@ -28,6 +36,7 @@
  */
 import type { ConnectionState } from "$lib/rpc/client";
 import { rpcClient } from "$lib/rpc/client";
+import { createStalenessClock } from "./hud/staleness";
 
 // ============================================
 // Constants
@@ -42,6 +51,28 @@ import { rpcClient } from "$lib/rpc/client";
  * continues. Failed-UI state and transport state are independent.
  */
 export const MAX_RECONNECT_ATTEMPTS = 5;
+
+/**
+ * How long a WS drop must PERSIST before the "reconnecting" banner is allowed on
+ * screen. A drop that heals inside this window is completely silent.
+ *
+ * WHY: the half-open-socket detector (`heartbeat.ts`) deliberately tears down and
+ * re-dials a socket that has gone quiet, and the transport re-dials on any drop.
+ * Most of those cycles heal in well under a second, so an undebounced banner
+ * flashed "Connection lost" at the operator for every one of them — read as
+ * sustained instability on a device whose transport was in fact recovering every
+ * single time. This is a PRESENTATION delay only: the transport is untouched and
+ * keeps reconnecting exactly as before.
+ */
+export const RECONNECT_BANNER_GRACE_MS = 3000;
+
+/**
+ * How often the grace clock re-evaluates while a disconnect is inside its window.
+ * Bounds how far past {@link RECONNECT_BANNER_GRACE_MS} the banner can appear —
+ * a disconnect with no further connection events fires no state change of its
+ * own, so something has to advance `now` for the grace to elapse at all.
+ */
+export const RECONNECT_BANNER_TICK_MS = 500;
 
 // ============================================
 // Types
@@ -73,6 +104,11 @@ export interface ConnectionUxInput {
 	reconnectAttempts: number;
 	/** A reboot/poweroff was triggered and we're waiting for the device to return. */
 	rebooting: boolean;
+	/**
+	 * When the current disconnect started (`null` while connected). Drives the
+	 * {@link RECONNECT_BANNER_GRACE_MS} debounce; see {@link ReconnectState}.
+	 */
+	disconnectedSince: number | null;
 }
 
 /** Internal reconnect bookkeeping, reduced from raw connection events. */
@@ -83,6 +119,13 @@ export interface ReconnectState {
 	hasConnected: boolean;
 	/** Reboot-in-progress latch; cleared automatically once we reconnect. */
 	rebooting: boolean;
+	/**
+	 * When the socket left the connected state, or `null` while connected. Stamped
+	 * once at the START of a drop and never refreshed while it lasts, so it ages
+	 * out deterministically — the same property that makes `connectionLostAt` safe
+	 * to gate the HUD staleness clock on.
+	 */
+	disconnectedSince: number | null;
 }
 
 // ============================================
@@ -91,33 +134,53 @@ export interface ReconnectState {
 
 /** The neutral starting point for {@link reduceConnection}. */
 export function initialReconnectState(): ReconnectState {
-	return { attempts: 0, hasConnected: false, rebooting: false };
+	return {
+		attempts: 0,
+		hasConnected: false,
+		rebooting: false,
+		disconnectedSince: null,
+	};
 }
 
 /**
  * Fold a raw connection-state transition into {@link ReconnectState}.
  *
- * - `connected`   → success: reset attempts, clear any reboot latch.
+ * - `connected`   → success: reset attempts, clear any reboot latch, and clear
+ *                   the disconnect stamp.
  * - `connecting`  → counts as a *reconnect* attempt only once we have connected
  *                   at least once (the very first connect must not look like a
  *                   retry).
- * - `disconnected`/`error` → no change (the following `connecting` is what we
- *                   count); reboot latch is preserved across the drop.
+ * - `disconnected`/`error` → no attempt change (the following `connecting` is
+ *                   what we count); reboot latch is preserved across the drop.
+ *
+ * Every non-connected state stamps `disconnectedSince` when it is not already
+ * set, so the grace window starts at whichever event actually left the connected
+ * state — a bare `disconnected`, or a `connecting` that arrived without one.
+ * Re-stamping mid-drop would restart the window on every retry and the banner
+ * would never appear.
  */
 export function reduceConnection(
 	prev: ReconnectState,
 	state: ConnectionState,
+	now: number,
 ): ReconnectState {
-	switch (state) {
-		case "connected":
-			return { attempts: 0, hasConnected: true, rebooting: false };
-		case "connecting":
-			return prev.hasConnected
-				? { ...prev, attempts: prev.attempts + 1 }
-				: prev;
-		default:
-			return prev;
+	if (state === "connected") {
+		return {
+			attempts: 0,
+			hasConnected: true,
+			rebooting: false,
+			disconnectedSince: null,
+		};
 	}
+
+	const dropped: ReconnectState =
+		prev.disconnectedSince === null
+			? { ...prev, disconnectedSince: now }
+			: prev;
+
+	return state === "connecting" && dropped.hasConnected
+		? { ...dropped, attempts: dropped.attempts + 1 }
+		: dropped;
 }
 
 /**
@@ -132,14 +195,24 @@ export function reduceConnection(
  *    the retry budget is exhausted.
  * 5. WS down because the *browser* went offline (but the offline page hasn't
  *    taken over yet) → suppress the banner; the offline page will appear.
+ *
+ * Only step 4's "reconnecting" treatment is debounced by
+ * {@link RECONNECT_BANNER_GRACE_MS}. "rebooting" is an explicit operator action
+ * that must surface immediately, and "failed" already implies
+ * {@link MAX_RECONNECT_ATTEMPTS} backoff cycles have elapsed — delaying either
+ * would hide something the operator already knows about or has waited out.
  */
-export function deriveConnectionUx(input: ConnectionUxInput): ConnectionUx {
+export function deriveConnectionUx(
+	input: ConnectionUxInput,
+	now: number,
+): ConnectionUx {
 	const {
 		isConnected,
 		browserOnline,
 		showOfflinePage,
 		reconnectAttempts,
 		rebooting,
+		disconnectedSince,
 	} = input;
 
 	if (showOfflinePage) {
@@ -170,7 +243,37 @@ export function deriveConnectionUx(input: ConnectionUxInput): ConnectionUx {
 		return { mode: "failed", showBanner: true };
 	}
 
-	return { mode: "reconnecting", showBanner: true };
+	return {
+		mode: "reconnecting",
+		showBanner: hasOutlastedBannerGrace(disconnectedSince, now),
+	};
+}
+
+/**
+ * Whether a drop has persisted long enough to be worth telling the operator
+ * about. An unstamped disconnect is treated as brand new rather than as
+ * indefinitely old — a missing stamp must never be the reason a banner appears.
+ */
+export function hasOutlastedBannerGrace(
+	disconnectedSince: number | null,
+	now: number,
+): boolean {
+	if (disconnectedSince === null) return false;
+	return now - disconnectedSince >= RECONNECT_BANNER_GRACE_MS;
+}
+
+/**
+ * Whether the grace clock still needs to tick. It runs ONLY inside the grace
+ * window: before it, nothing can transition; after it, the banner is already up
+ * and no further tick can change anything. Mirrors `isClockTickNeeded`'s
+ * ages-out-deterministically gate rather than adding a second always-on timer.
+ */
+export function shouldRunBannerGraceClock(
+	disconnectedSince: number | null,
+	now: number,
+): boolean {
+	if (disconnectedSince === null) return false;
+	return now - disconnectedSince < RECONNECT_BANNER_GRACE_MS;
 }
 
 /**
@@ -209,6 +312,9 @@ interface ConnectionUxStore {
 	getReconnectAttempts(): number;
 	getIsRebooting(): boolean;
 	getSessionExpired(): boolean;
+	getDisconnectedSince(): number | null;
+	getGraceNow(): number;
+	isGraceClockRunning(): boolean;
 	markRebooting(): void;
 	clearRebooting(): void;
 	markSessionExpired(): void;
@@ -220,16 +326,33 @@ interface ConnectionUxStore {
 function createConnectionUxStore(): ConnectionUxStore {
 	let reconnect = $state<ReconnectState>(initialReconnectState());
 	let sessionExpired = $state(false);
+	let graceNow = $state(Date.now());
+
+	// A drop fires no further connection events of its own, so without a tick the
+	// grace window could never elapse and the banner would never appear.
+	const graceClock = createStalenessClock(
+		() => shouldRunBannerGraceClock(reconnect.disconnectedSince, Date.now()),
+		() => {
+			graceNow = Date.now();
+		},
+		RECONNECT_BANNER_TICK_MS,
+	);
 
 	// Client-level handler: survives socket replacement across reconnect cycles.
 	const off = rpcClient.onConnectionChange((state) => {
-		reconnect = reduceConnection(reconnect, state);
+		const now = Date.now();
+		reconnect = reduceConnection(reconnect, state, now);
+		graceNow = now;
+		graceClock.sync();
 	});
 
 	return {
 		getReconnectAttempts: () => reconnect.attempts,
 		getIsRebooting: () => reconnect.rebooting,
 		getSessionExpired: () => sessionExpired,
+		getDisconnectedSince: () => reconnect.disconnectedSince,
+		getGraceNow: () => graceNow,
+		isGraceClockRunning: () => graceClock.isRunning(),
 		markRebooting: () => {
 			reconnect = { ...reconnect, rebooting: true };
 		},
@@ -249,6 +372,7 @@ function createConnectionUxStore(): ConnectionUxStore {
 		},
 		destroy: () => {
 			off();
+			graceClock.stop();
 		},
 	};
 }
@@ -285,6 +409,21 @@ export function getIsRebooting(): boolean {
 /** Whether the session expired mid-session and re-authentication is required. */
 export function getSessionExpired(): boolean {
 	return store().getSessionExpired();
+}
+
+/** When the current disconnect started, or `null` while connected. */
+export function getDisconnectedSince(): number | null {
+	return store().getDisconnectedSince();
+}
+
+/** The grace clock's current reading — advances only while a drop is inside its window. */
+export function getGraceNow(): number {
+	return store().getGraceNow();
+}
+
+/** Whether the grace clock is ticking. Exposed for tests; it must never run while connected. */
+export function isGraceClockRunning(): boolean {
+	return store().isGraceClockRunning();
 }
 
 /** Flag that a reboot/poweroff was triggered — drives the "Rebooting…" banner. */

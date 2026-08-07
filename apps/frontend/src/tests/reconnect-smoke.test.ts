@@ -12,6 +12,10 @@
  * banner shows, budget escalates to the failed banner, a manual retry re-dials
  * the transport and rehydrates the budget, and a successful reconnect resets the
  * reconnect budget to zero exactly once (state rehydrates once, no double-count).
+ *
+ * It also covers the reconnect-banner grace period: a drop that heals inside
+ * `RECONNECT_BANNER_GRACE_MS` is silent, and the self-gating grace clock runs
+ * only for the length of that window.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -53,23 +57,41 @@ async function loadConnUx(): Promise<ConnUxModule> {
 /**
  * Mirror `DisconnectedBanner.svelte`'s derivation wiring: `isConnected` tracks the
  * socket the same way `subscriptions.svelte` does (a "connected" transition → true,
- * anything else → false), while `reconnectAttempts` / `rebooting` come from the
- * live connection-ux selectors.
+ * anything else → false), while `reconnectAttempts` / `rebooting` /
+ * `disconnectedSince` come from the live connection-ux selectors.
+ *
+ * `disconnectedForMs` stands in for the grace clock the reactive store runs in the
+ * browser: it offsets `now` from the store's own disconnect stamp, and defaults
+ * past the grace period so a caller asking "what does the banner look like during
+ * this drop" gets the settled answer rather than the first-instant one.
  */
 function bannerFor(
 	mod: ConnUxModule,
 	isConnected: boolean,
-	opts: { browserOnline?: boolean; showOfflinePage?: boolean } = {},
+	opts: {
+		browserOnline?: boolean;
+		showOfflinePage?: boolean;
+		disconnectedForMs?: number;
+	} = {},
 ): ConnectionUx {
-	const { browserOnline = true, showOfflinePage = false } = opts;
-	return mod.deriveConnectionUx({
-		isConnected,
-		connectionState: isConnected ? "connected" : "disconnected",
-		browserOnline,
-		showOfflinePage,
-		reconnectAttempts: mod.getReconnectAttempts(),
-		rebooting: mod.getIsRebooting(),
-	});
+	const {
+		browserOnline = true,
+		showOfflinePage = false,
+		disconnectedForMs = mod.RECONNECT_BANNER_GRACE_MS,
+	} = opts;
+	const disconnectedSince = mod.getDisconnectedSince();
+	return mod.deriveConnectionUx(
+		{
+			isConnected,
+			connectionState: isConnected ? "connected" : "disconnected",
+			browserOnline,
+			showOfflinePage,
+			reconnectAttempts: mod.getReconnectAttempts(),
+			rebooting: mod.getIsRebooting(),
+			disconnectedSince,
+		},
+		(disconnectedSince ?? Date.now()) + disconnectedForMs,
+	);
 }
 
 beforeEach(() => {
@@ -135,6 +157,60 @@ describe("reconnect smoke: DisconnectedBanner ↔ connection-ux", () => {
 			mode: "connected",
 			showBanner: false,
 		});
+	});
+
+	it("stays silent through a drop that heals inside the grace window", async () => {
+		const mod = await loadConnUx();
+		capturedHandler?.("connected");
+
+		// The whole heartbeat-triggered re-dial cycle, start to finish, inside the
+		// grace window: the operator must see nothing at any point in it.
+		capturedHandler?.("disconnected");
+		expect(bannerFor(mod, false, { disconnectedForMs: 0 })).toEqual({
+			mode: "reconnecting",
+			showBanner: false,
+		});
+
+		capturedHandler?.("connecting");
+		expect(
+			bannerFor(mod, false, {
+				disconnectedForMs: mod.RECONNECT_BANNER_GRACE_MS - 1,
+			}),
+		).toEqual({ mode: "reconnecting", showBanner: false });
+
+		capturedHandler?.("connected");
+		expect(mod.getDisconnectedSince()).toBeNull();
+		expect(bannerFor(mod, true)).toEqual({
+			mode: "connected",
+			showBanner: false,
+		});
+	});
+
+	it("runs the grace clock only for the length of the grace window", async () => {
+		vi.useFakeTimers();
+		try {
+			const mod = await loadConnUx();
+			capturedHandler?.("connected");
+			expect(mod.isGraceClockRunning()).toBe(false);
+
+			capturedHandler?.("disconnected");
+			expect(mod.isGraceClockRunning()).toBe(true);
+
+			// The clock exists solely to advance `now` past the grace, then stop —
+			// a drop fires no further events, so nothing else could re-derive.
+			vi.advanceTimersByTime(
+				mod.RECONNECT_BANNER_GRACE_MS + mod.RECONNECT_BANNER_TICK_MS,
+			);
+			expect(mod.isGraceClockRunning()).toBe(false);
+			expect(
+				mod.getGraceNow() - (mod.getDisconnectedSince() ?? 0),
+			).toBeGreaterThanOrEqual(mod.RECONNECT_BANNER_GRACE_MS);
+
+			capturedHandler?.("connected");
+			expect(mod.isGraceClockRunning()).toBe(false);
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("holds the rebooting treatment across the drop and clears the latch on reconnect", async () => {
