@@ -350,6 +350,23 @@ export const ddrStatsSchema = z.object({
 });
 export type DdrStats = z.infer<typeof ddrStatsSchema>;
 
+// The GPU, read from whichever of TWO interfaces the board publishes: a Mali
+// `kbase` utilisation node, or a `*.gpu` devfreq device. Both are PROBED, not
+// known — the paths come from vendor trees and the device tree respectively and
+// are pending confirmation on real hardware. An ABSENT `gpu` key means "this
+// kernel publishes no GPU load interface", never "the GPU is idle".
+//
+// `loadPercent` is 0-100 and is the reading itself. The frequencies are Hz
+// (devfreq's unit, NOT `cpuFreq`'s kHz) and are INDEPENDENTLY optional: the
+// kbase path structurally cannot report them, so a load with no frequency beside
+// it is an ordinary reading here rather than a partial one.
+export const gpuStatsSchema = z.object({
+	loadPercent: z.number(),
+	curFreqHz: z.number().optional(),
+	maxFreqHz: z.number().optional(),
+});
+export type GpuStats = z.infer<typeof gpuStatsSchema>;
+
 export const deviceStatsSchema = z.object({
 	disk: diskStatSchema.nullable(),
 	cpuLoad1: z.number().nullable(),
@@ -369,6 +386,9 @@ export const deviceStatsSchema = z.object({
 	// DDR-bus load — ABSENT when no memory-controller devfreq device answered
 	// (the expected mainline shape), present in full when one did.
 	ddr: ddrStatsSchema.optional(),
+	// GPU load — ABSENT when neither the Mali kbase node nor a `*.gpu` devfreq
+	// device answered; the frequencies inside it are optional in their own right.
+	gpu: gpuStatsSchema.optional(),
 });
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
 

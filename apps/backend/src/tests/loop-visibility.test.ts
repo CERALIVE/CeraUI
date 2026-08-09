@@ -86,8 +86,11 @@ const CPUFREQ_POLICIES = ["policy0", "policy4"];
 
 // A healthy host's devfreq tree — same reasoning again: the ddr collector WARNs
 // when the devfreq class directory cannot be enumerated.
+// The GPU device is listed alongside it so the gpu collector's devfreq path
+// answers too — a "healthy host" stub that made it fall through would report a
+// measurable signal as unmeasured.
 const DEVFREQ_DIR = "/sys/class/devfreq";
-const DEVFREQ_DEVICES = ["dmc"];
+const DEVFREQ_DEVICES = ["dmc", "fb000000.gpu"];
 
 function healthyDeps(
 	overrides: Partial<DeviceStatsDeps> = {},
@@ -153,6 +156,7 @@ describe("loop visibility — device-stats", () => {
 					"memory",
 					"cpuFreq",
 					"ddr",
+					"gpu",
 				].sort(),
 			);
 			expect(signals.disk).toBe("ok");

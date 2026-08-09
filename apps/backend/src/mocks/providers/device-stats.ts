@@ -3,7 +3,7 @@
 
 	Dev/emulated-mode stand-in for the `device-stats` collector deps — the five
 	always-present signals plus the optional memory/swap, per-policy CPU
-	frequency, and DDR-bus fields.
+	frequency, DDR-bus, and GPU fields.
 
 	On a dev box (no Rockchip hardware, no `rauc` binary, empty sensors map) the
 	production `defaultDeviceStatsDeps` degrade almost every signal to `null`:
@@ -77,6 +77,9 @@ export const MOCK_DEVICE_STATS = {
 	// DDR bus at 528 MHz against a 1.56 GHz ceiling. Hz here, unlike cpuFreq's
 	// kHz — the two collectors report the unit their sysfs class uses.
 	ddr: { loadPercent: 37, curFreqHz: 528_000_000, maxFreqHz: 1_560_000_000 },
+	// GPU at 300 MHz against a 1 GHz ceiling — Hz again, and served through the
+	// devfreq path (the one that carries frequencies at all).
+	gpu: { loadPercent: 61, curFreqHz: 300_000_000, maxFreqHz: 1_000_000_000 },
 } satisfies MockDeviceStats;
 
 // ─── raw-output serializers (fixture → the bytes each real collector parses) ──
@@ -157,6 +160,9 @@ function buildCpuFreq(policies: MockDeviceStats["cpuFreq"]): {
 	return { dir: [...policies.map((p) => p.id), "boost"], files };
 }
 
+/** The `*.gpu` devfreq entry both collectors see — the DDR probe's negative case. */
+const DEVFREQ_GPU_DEVICE = "fb000000.gpu";
+
 /**
  * Reproduce a `/sys/class/devfreq` memory-controller device for the DDR fixture,
  * so the REAL `collectDdr` probes and parses it back into the fixture reading.
@@ -165,7 +171,7 @@ function buildCpuFreq(policies: MockDeviceStats["cpuFreq"]): {
  * probes — not because a board has been observed using that name (the node name
  * is a hardware-open question; see collectors/ddr.ts). `load` is written in the
  * vendor `"N@FkHz"` form so the mock exercises that parse branch rather than the
- * simpler bare-integer one, and a GPU devfreq device is listed alongside it so
+ * simpler bare-integer one, and the GPU devfreq device is listed alongside it so
  * the candidate filter is exercised instead of bypassed.
  */
 function buildDdr(ddr: MockDeviceStats["ddr"]): {
@@ -181,7 +187,25 @@ function buildDdr(ddr: MockDeviceStats["ddr"]): {
 		[`${DEVFREQ_DIR}/${device}/cur_freq`, `${ddr.curFreqHz}\n`],
 		[`${DEVFREQ_DIR}/${device}/max_freq`, `${ddr.maxFreqHz}\n`],
 	]);
-	return { dir: [device, "fb000000.gpu"], files };
+	return { dir: [device, DEVFREQ_GPU_DEVICE], files };
+}
+
+/**
+ * Reproduce the devfreq GPU device for the GPU fixture, so the REAL `collectGpu`
+ * probes and parses it back into the fixture reading.
+ *
+ * The Mali kbase candidates are deliberately NOT served: they are probed first
+ * and fall through here (their reads reject like any other unknown path), so the
+ * mock exercises the dual-path ORDER rather than only the winning branch. `load`
+ * is written as a bare integer — the other of the two documented devfreq forms
+ * from the one `buildDdr` uses — so between them both branches are covered.
+ */
+function buildGpu(gpu: MockDeviceStats["gpu"]): Map<string, string> {
+	return new Map<string, string>([
+		[`${DEVFREQ_DIR}/${DEVFREQ_GPU_DEVICE}/load`, `${gpu.loadPercent}\n`],
+		[`${DEVFREQ_DIR}/${DEVFREQ_GPU_DEVICE}/cur_freq`, `${gpu.curFreqHz}\n`],
+		[`${DEVFREQ_DIR}/${DEVFREQ_GPU_DEVICE}/max_freq`, `${gpu.maxFreqHz}\n`],
+	]);
 }
 
 /** Reproduce a single-interface `/proc/net/dev` snapshot (rx field 0, tx field 8). */
@@ -222,6 +246,7 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 	const meminfo = buildMeminfo(MOCK_DEVICE_STATS);
 	const cpufreq = buildCpuFreq(MOCK_DEVICE_STATS.cpuFreq);
 	const ddr = buildDdr(MOCK_DEVICE_STATS.ddr);
+	const gpu = buildGpu(MOCK_DEVICE_STATS.gpu);
 
 	// One tick counter, advanced only by the netdev read. `now()` reads the
 	// current tick's time BEFORE the read increments it, so the snapshot time and
@@ -245,7 +270,8 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 			if (path === "/proc/meminfo") {
 				return meminfo;
 			}
-			const sysfsNode = cpufreq.files.get(path) ?? ddr.files.get(path);
+			const sysfsNode =
+				cpufreq.files.get(path) ?? ddr.files.get(path) ?? gpu.get(path);
 			if (sysfsNode !== undefined) {
 				return sysfsNode;
 			}

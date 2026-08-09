@@ -114,6 +114,15 @@ const DDR_FILES = {
 };
 const DDR_DIRS = { [DEVFREQ_DIR]: ["dmc", "fb000000.gpu"] };
 
+// The GPU leg of that same devfreq tree. Its `load` is a BARE integer (the other
+// documented form) and no Mali kbase node is served, so the composed tick
+// exercises the dual-path FALLTHROUGH rather than only the winning branch.
+const GPU_FILES = {
+	[`${DEVFREQ_DIR}/fb000000.gpu/load`]: "61\n",
+	[`${DEVFREQ_DIR}/fb000000.gpu/cur_freq`]: "300000000\n",
+	[`${DEVFREQ_DIR}/fb000000.gpu/max_freq`]: "1000000000\n",
+};
+
 const NETDEV = (rx: number, tx: number) =>
 	`Inter-|   Receive                                                |  Transmit\n` +
 	` face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets\n` +
@@ -207,6 +216,7 @@ describe("collectDeviceStats — payload key contract", () => {
 					"/sys/block/mmcblk0/queue/rotational": "0\n",
 					...CPUFREQ_FILES,
 					...DDR_FILES,
+					...GPU_FILES,
 				},
 				dirs: { ...CPUFREQ_DIRS, ...DDR_DIRS },
 				exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
@@ -231,6 +241,7 @@ describe("collectDeviceStats — payload key contract", () => {
 				"swapFreeBytes",
 				"cpuFreq",
 				"ddr",
+				"gpu",
 			].sort(),
 		);
 		expect(payload.disk).toEqual({
@@ -258,6 +269,57 @@ describe("collectDeviceStats — payload key contract", () => {
 			curFreqHz: 528_000_000,
 			maxFreqHz: 1_560_000_000,
 		});
+		// The devfreq GPU shape: load plus both frequencies, reached only after
+		// the Mali kbase candidates failed to answer.
+		expect(payload.gpu).toEqual({
+			loadPercent: 61,
+			curFreqHz: 300_000_000,
+			maxFreqHz: 1_000_000_000,
+		});
+	});
+
+	test("a Mali kbase node WINS over the devfreq GPU device (probe order, composed)", async () => {
+		const { deps } = makeDeps({
+			files: {
+				"/proc/loadavg": "0.5 0.4 0.3 1/10 11\n",
+				"/proc/net/dev": NETDEV(1, 1),
+				"/proc/meminfo": MEMINFO,
+				"/sys/block/mmcblk0/queue/rotational": "0\n",
+				"/sys/class/misc/mali0/device/utilisation": "42\n",
+				...CPUFREQ_FILES,
+				...DDR_FILES,
+				...GPU_FILES,
+			},
+			dirs: { ...CPUFREQ_DIRS, ...DDR_DIRS },
+			exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
+			socTemp: "44.0 °C",
+		});
+		const payload = await collectDeviceStats(deps, createDeviceStatsState());
+
+		// kbase publishes a percentage and nothing else — the devfreq frequencies
+		// sitting right there are NOT merged in, because they were never read.
+		expect(payload.gpu).toEqual({ loadPercent: 42 });
+	});
+
+	test("neither GPU path present omits the gpu key — never a fabricated 0%", async () => {
+		const { deps } = makeDeps({
+			files: {
+				"/proc/loadavg": "0.5 0.4 0.3 1/10 11\n",
+				"/proc/net/dev": NETDEV(1, 1),
+				"/proc/meminfo": MEMINFO,
+				"/sys/block/mmcblk0/queue/rotational": "0\n",
+				...CPUFREQ_FILES,
+				...DDR_FILES,
+			},
+			// devfreq carries the memory controller but no `*.gpu` device.
+			dirs: { ...CPUFREQ_DIRS, [DEVFREQ_DIR]: ["dmc"] },
+			exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
+			socTemp: "44.0 °C",
+		});
+		const payload = await collectDeviceStats(deps, createDeviceStatsState());
+
+		expect("gpu" in payload).toBe(false);
+		expect(payload.ddr).toBeDefined();
 	});
 
 	test("an absent cpufreq/devfreq tree omits those keys — the memory keys are untouched", async () => {

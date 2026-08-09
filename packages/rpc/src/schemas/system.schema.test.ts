@@ -88,6 +88,48 @@ describe('deviceStatsSchema — additive growth', () => {
 		expect(parsed.ddr?.loadPercent).toBe(0);
 	});
 
+	test('a payload carrying the devfreq-shaped GPU reading parses it through', () => {
+		const parsed = deviceStatsSchema.parse({
+			...LEGACY_PAYLOAD,
+			gpu: { loadPercent: 63, curFreqHz: 300000000, maxFreqHz: 1000000000 },
+		});
+		expect(parsed.gpu?.loadPercent).toBe(63);
+		// Hz like `ddr`, NOT the kHz `cpuFreq` carries.
+		expect(parsed.gpu?.maxFreqHz).toBe(1000000000);
+	});
+
+	test('a kbase-shaped GPU reading (load ONLY) parses — the frequencies are optional in their own right', () => {
+		const parsed = deviceStatsSchema.parse({
+			...LEGACY_PAYLOAD,
+			gpu: { loadPercent: 42 },
+		});
+		expect(parsed.gpu?.loadPercent).toBe(42);
+		expect(parsed.gpu?.curFreqHz).toBeUndefined();
+		expect(parsed.gpu?.maxFreqHz).toBeUndefined();
+	});
+
+	test('a pre-gpu payload still parses (the field is absent, not zero-filled)', () => {
+		const parsed = deviceStatsSchema.parse(LEGACY_PAYLOAD);
+		expect(parsed.gpu).toBeUndefined();
+	});
+
+	test('a measured 0% GPU load survives — it is not dropped as falsy', () => {
+		const parsed = deviceStatsSchema.parse({
+			...LEGACY_PAYLOAD,
+			gpu: { loadPercent: 0 },
+		});
+		expect(parsed.gpu?.loadPercent).toBe(0);
+	});
+
+	test('a GPU reading with NO load is rejected — load is the reading itself', () => {
+		expect(
+			deviceStatsSchema.safeParse({
+				...LEGACY_PAYLOAD,
+				gpu: { curFreqHz: 300000000 },
+			}).success,
+		).toBe(false);
+	});
+
 	test('the five always-present keys stay REQUIRED', () => {
 		for (const key of ['disk', 'cpuLoad1', 'socTemp', 'ifaceRxTx', 'raucSlot'] as const) {
 			const { [key]: _dropped, ...withoutKey } = LEGACY_PAYLOAD;

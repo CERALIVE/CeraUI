@@ -306,6 +306,16 @@ export const mockDeviceStatsSchema = z.object({
 		curFreqHz: z.number().int().positive(),
 		maxFreqHz: z.number().int().positive(),
 	}),
+	// GPU load. Required HERE for the same reason as the fields above. The
+	// frequencies are required in the FIXTURE (dev mode renders them) even though
+	// the wire schema leaves them optional — a board answering through the Mali
+	// kbase node reports a load with no frequency at all, and the mock serializes
+	// the devfreq shape, which is the one that carries all three.
+	gpu: z.object({
+		loadPercent: z.number().int().min(0).max(100),
+		curFreqHz: z.number().int().positive(),
+		maxFreqHz: z.number().int().positive(),
+	}),
 });
 export type MockDeviceStats = z.infer<typeof mockDeviceStatsSchema>;
 
