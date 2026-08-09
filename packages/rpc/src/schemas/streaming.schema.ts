@@ -520,6 +520,13 @@ export const capabilitiesMessageSchema = z.object({
 			enabled: z.boolean(),
 			port: z.number().int().min(PORT_MIN).max(PORT_MAX).optional(),
 			bound: z.boolean(),
+			// Whether this BOARD publishes a hardware preview encoder — a platform
+			// fact the engine stamps from its HAL descriptor, true whether or not a
+			// session exists, so it is readable while idle. Absent is NOT `false`:
+			// absent means a legacy engine never stated a capability, `false` means
+			// the board publishes none. Gate the hardware-preview control on
+			// `=== true` only; both other readings hide it, for different reasons.
+			preview_hw_capability: z.boolean().optional(),
 		})
 		.optional(),
 	// Picture-in-picture / compositing capability flag. Additive + optional —

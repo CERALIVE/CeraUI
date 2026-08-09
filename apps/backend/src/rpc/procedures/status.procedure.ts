@@ -33,6 +33,7 @@ import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { getEngineBitrateStatus } from "../../modules/streaming/engine-bitrate-status.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
+import { getPreviewEncoderRealizedStatus } from "../../modules/streaming/preview-encoder-status.ts";
 import { getSourcesMessage } from "../../modules/streaming/sources.ts";
 import { getStreamLifecycleState } from "../../modules/streaming/stream-lifecycle-status.ts";
 import { getIsStreaming } from "../../modules/streaming/streaming.ts";
@@ -89,6 +90,7 @@ export const getStatusProcedure = authedProcedure
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),
+			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 		};
 	});
 
@@ -133,6 +135,7 @@ export function buildInitialStatus() {
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),
+			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),
