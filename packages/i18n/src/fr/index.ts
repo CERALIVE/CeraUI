@@ -332,6 +332,20 @@ const fr = {
 				"Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",
 			cpuLoadHintNoCores:
 				"Charge moyenne sur 1 minute. Cet appareil n'a pas indiqué son nombre de cœurs, elle ne peut donc pas être affichée en part de capacité.",
+			memory: "Mémoire",
+			memoryHint:
+				"Part de la RAM utilisée. Mesurée par rapport à MemAvailable, afin que le cache de pages récupérable ne compte pas comme utilisé.",
+			swap: "Swap",
+			swapNone: "Aucun",
+			cpuFreq: "Fréquence CPU",
+			cpuFreqHint:
+				"Fréquence actuelle face au plafond matériel, par politique cpufreq. Un nom de politique est un répertoire sysfs, pas un cluster de cœurs.",
+			ddr: "Bus DDR",
+			ddrHint:
+				"Charge du contrôleur mémoire, lue depuis le périphérique devfreq de la carte.",
+			gpu: "GPU",
+			gpuHint:
+				"Charge du GPU, lue depuis l'interface Mali ou devfreq de la carte.",
 		},
 		deviceHealth: {
 			title: "Santé de l'appareil",

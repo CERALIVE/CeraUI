@@ -21,9 +21,18 @@
   itself with a DENSER row instead — an icon-and-label line rather than the old
   36px avatar row. Cheaper than the disclosure it replaced, and always readable.
 
-  MULTI-SOURCE BY DESIGN. `device-stats` is frozen at five signals (S1 lock), so
-  the fan and the encoder arrive on their OWN broadcasts. This container reads
-  all three and is agnostic to how many feed it.
+  MULTI-SOURCE BY DESIGN. `device-stats` keeps five ALWAYS-PRESENT signals (the
+  S1 lock) and carries the later collector signals — memory, per-policy CPU
+  frequency, DDR and GPU — as OPTIONAL keys beside them; the fan and the encoder
+  arrive on their OWN broadcasts. This container reads all three and is agnostic
+  to how many feed it.
+
+  AN OPTIONAL SIGNAL THAT DID NOT ARRIVE HAS NO TILE. That is a different rule
+  from the placeholder below, and the difference is the point. An absent key
+  means the kernel publishes no such interface — this board cannot answer — so
+  there is nothing to label. A `null` value means the signal EXISTS and this
+  sample had no figure, which is worth a line. Rendering the first as the second
+  would invite an operator to wait for a reading that is never coming.
 
   AND NOTHING IS A BARE MARK. A signal with no reading says so in WORDS. The
   em-dash this used to render was a glyph an operator had to decode, and the word
@@ -41,7 +50,12 @@ import {
 	CircuitBoard,
 	Cpu,
 	Fan,
+	Gauge,
 	HardDrive,
+	Layers,
+	MemoryStick,
+	Microchip,
+	Replace,
 	Thermometer,
 } from '@lucide/svelte';
 
@@ -94,6 +108,29 @@ function humanRate(n: number): string {
 		i++;
 	}
 	return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+// Binary GiB, one decimal — the scale `/proc/meminfo` is actually reported in
+// (its "kB" is KiB). `humanBytes` above stays decimal-SI because a disk is SOLD
+// in decimal gigabytes; showing RAM on that scale would misstate every figure by
+// 7 % against every other tool on the box.
+function gibibytes(bytes: number): string {
+	return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}
+
+// TWO frequency formatters, each naming the unit it CONSUMES, because this one
+// payload carries both: cpufreq reports kHz and devfreq reports Hz. A single
+// shared helper would be a silent 1000x error the types cannot catch.
+function ghzFromKhz(khz: number): string {
+	return `${(khz / 1_000_000).toFixed(2)} GHz`;
+}
+
+function mhzFromHz(hz: number): string {
+	return `${Math.round(hz / 1_000_000)} MHz`;
+}
+
+function wholePercent(value: number): string {
+	return `${Math.round(value)} %`;
 }
 
 const stats = $derived(getDeviceStats());
@@ -168,13 +205,127 @@ const cpuLoadSignal = $derived.by<DeviceStatSignal>(() => {
 	};
 });
 
+// Every one of the four below answers `null` for "this board publishes no such
+// interface", and a `null` is dropped from the array rather than tiled.
+
+const memorySignal = $derived.by<DeviceStatSignal | null>(() => {
+	const total = stats?.memTotalBytes;
+	const available = stats?.memAvailableBytes;
+	const percent = stats?.memUsedPercent;
+	if (total === undefined && available === undefined && percent === undefined) {
+		return null;
+	}
+	const used = total !== undefined && available !== undefined ? total - available : undefined;
+	return {
+		key: 'memory',
+		icon: MemoryStick,
+		label: t.memory(),
+		tier: 'primary',
+		value:
+			percent !== undefined
+				? wholePercent(percent)
+				: used !== undefined
+					? gibibytes(used)
+					: null,
+		...(used !== undefined && total !== undefined
+			? { sub: `${gibibytes(used)} / ${gibibytes(total)}` }
+			: total !== undefined
+				? { sub: gibibytes(total) }
+				: {}),
+		// The percent is the ONLY honest denominator here: it is derived against
+		// MemAvailable, so page cache does not read as consumed.
+		...(percent !== undefined ? { fraction: percent / 100 } : {}),
+		hint: t.memoryHint(),
+	};
+});
+
+const swapSignal = $derived.by<DeviceStatSignal | null>(() => {
+	const total = stats?.swapTotalBytes;
+	if (total === undefined) return null;
+	const free = stats?.swapFreeBytes;
+	const used = free !== undefined ? total - free : undefined;
+	return {
+		key: 'swap',
+		icon: Replace,
+		label: t.swap(),
+		tier: 'secondary',
+		// A measured `SwapTotal: 0` is the board ANSWERING "none". Printing it as
+		// "0.0 GiB / 0.0 GiB" would dress a plain fact up as a reading at zero.
+		value:
+			total === 0
+				? t.swapNone()
+				: used !== undefined
+					? `${gibibytes(used)} / ${gibibytes(total)}`
+					: gibibytes(total),
+	};
+});
+
+const cpuFreqPolicies = $derived(stats?.cpuFreq ?? []);
+
+const cpuFreqSignal = $derived.by<DeviceStatSignal | null>(() => {
+	if (cpuFreqPolicies.length === 0) return null;
+	return {
+		key: 'cpuFreq',
+		icon: Gauge,
+		label: t.cpuFreq(),
+		// No `value`: the board runs SEVERAL policies at different clocks, and any
+		// single string would either pick a winner or average incomparable
+		// clusters — the same reason the encoder renders its own body.
+		value: null,
+		body: cpuFreqBody,
+		fullWidth: true,
+		tier: 'primary',
+	};
+});
+
+const ddrSignal = $derived.by<DeviceStatSignal | null>(() => {
+	const ddr = stats?.ddr;
+	if (!ddr) return null;
+	return {
+		key: 'ddr',
+		icon: Layers,
+		label: t.ddr(),
+		value: wholePercent(ddr.loadPercent),
+		fraction: ddr.loadPercent / 100,
+		sub: `${mhzFromHz(ddr.curFreqHz)} / ${mhzFromHz(ddr.maxFreqHz)}`,
+		hint: t.ddrHint(),
+		tier: 'primary',
+	};
+});
+
+const gpuSignal = $derived.by<DeviceStatSignal | null>(() => {
+	const gpu = stats?.gpu;
+	if (!gpu) return null;
+	// The Mali kbase node structurally cannot report a clock, so a load with no
+	// frequency beside it is an ORDINARY reading — not a partial one. Printing
+	// "0 MHz" there would invent a measurement the interface cannot make.
+	const cur = gpu.curFreqHz;
+	const max = gpu.maxFreqHz;
+	const sub =
+		cur !== undefined && max !== undefined
+			? `${mhzFromHz(cur)} / ${mhzFromHz(max)}`
+			: cur !== undefined
+				? mhzFromHz(cur)
+				: undefined;
+	return {
+		key: 'gpu',
+		icon: Microchip,
+		label: t.gpu(),
+		value: wholePercent(gpu.loadPercent),
+		fraction: gpu.loadPercent / 100,
+		...(sub !== undefined ? { sub } : {}),
+		hint: t.gpuHint(),
+		tier: 'primary',
+	};
+});
+
 const signals = $derived.by<DeviceStatSignal[]>(() => {
 	const s = stats;
 	const disk = s?.disk ?? null;
 	const net = s?.ifaceRxTx ?? null;
 	const slot = s?.raucSlot;
 
-	return [
+	const declared: (DeviceStatSignal | null)[] = [
 		{
 			key: 'socTemp',
 			icon: Thermometer,
@@ -184,6 +335,7 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 			tier: 'primary',
 		},
 		cpuLoadSignal,
+		memorySignal,
 		fanSignal,
 		{
 			key: 'disk',
@@ -198,6 +350,12 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 			...(disk && disk.total > 0 ? { fraction: disk.used / disk.total } : {}),
 			tier: 'primary',
 		},
+		gpuSignal,
+		ddrSignal,
+		// The two full-width bands close the primary tier, so the scalar tiles
+		// above them keep filling clean rows rather than being split around a
+		// band that spans the whole grid.
+		cpuFreqSignal,
 		{
 			key: 'encoder',
 			icon: Activity,
@@ -205,13 +363,12 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 			// LAST in the primary order, and full width. No `value`: the encoding
 			// silicon is TWO cores whose readings are incomparable, so no single
 			// string tells the truth about it — it renders its own widget instead.
-			// Placing it last lets the four scalar tiles fill a clean row above it
-			// rather than being split around a band that spans the whole grid.
 			value: null,
 			body: encoderBody,
 			fullWidth: true,
 			tier: 'primary',
 		},
+		swapSignal,
 		{
 			key: 'network',
 			icon: ArrowDownUp,
@@ -234,6 +391,8 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 			tier: 'secondary',
 		},
 	];
+
+	return declared.filter((signal): signal is DeviceStatSignal => signal !== null);
 });
 
 const tiers = $derived(partitionSignals(signals));
@@ -241,6 +400,46 @@ const tiers = $derived(partitionSignals(signals));
 
 {#snippet encoderBody()}
 	<EncoderStatus compact={true} density="inline" reading={encoderLoad} />
+{/snippet}
+
+<!-- One row per cpufreq policy, keyed on the sysfs id. The id is printed AS
+     GIVEN: `policy0`/`policy4`/`policy6` happens to be RK3588's big.LITTLE
+     split, but that is board knowledge this array does not carry, and x86 runs
+     one policy per CPU. The bar's denominator is `maxKhz` — `cpuinfo_max_freq`,
+     the hardware ceiling — so it does not wander when the governor moves. -->
+{#snippet cpuFreqBody()}
+	<div
+		class="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-3"
+		data-testid="cpufreq-policies"
+		title={t.cpuFreqHint()}
+	>
+		{#each cpuFreqPolicies as policy (policy.id)}
+			<div class="min-w-0 space-y-1" data-testid={`cpufreq-policy-${policy.id}`}>
+				<span class="flex items-baseline justify-between gap-2 text-xs">
+					<span class="text-muted-foreground truncate">{policy.id}</span>
+					<span
+						class="text-foreground shrink-0 font-mono tabular-nums"
+						data-testid={`cpufreq-policy-value-${policy.id}`}
+					>{ghzFromKhz(policy.curKhz)} / {ghzFromKhz(policy.maxKhz)}</span>
+				</span>
+				{#if policy.maxKhz > 0}
+					<span
+						aria-hidden="true"
+						class="bg-secondary relative block h-1 w-full overflow-hidden rounded-full"
+						data-testid={`cpufreq-policy-bar-${policy.id}`}
+					>
+						<span
+							class="bg-primary absolute inset-y-0 start-0 rounded-full"
+							style="inline-size: {Math.min(
+								100,
+								Math.max(0, Math.round((policy.curKhz / policy.maxKhz) * 100)),
+							)}%"
+						></span>
+					</span>
+				{/if}
+			</div>
+		{/each}
+	</div>
 {/snippet}
 
 {#snippet placeholder(key: string, sizeClass: string)}

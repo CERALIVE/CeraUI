@@ -1098,6 +1098,20 @@ const es = {
 				"Proporción de la capacidad total de CPU — la carga media de 1 minuto repartida entre {cores} núcleos.",
 			cpuLoadHintNoCores:
 				"Carga media de 1 minuto. Este dispositivo no informó su número de núcleos, así que no puede mostrarse como proporción de la capacidad.",
+			memory: "Memoria",
+			memoryHint:
+				"Proporción de RAM en uso. Se mide contra MemAvailable, así la caché de página recuperable no cuenta como usada.",
+			swap: "Intercambio",
+			swapNone: "Ninguno",
+			cpuFreq: "Frecuencia de CPU",
+			cpuFreqHint:
+				"Reloj actual frente al techo del hardware, por política de cpufreq. Un nombre de política es un directorio de sysfs, no un clúster de núcleos.",
+			ddr: "Bus DDR",
+			ddrHint:
+				"Carga del controlador de memoria, leída del dispositivo devfreq de la placa.",
+			gpu: "GPU",
+			gpuHint:
+				"Carga de la GPU, leída de la interfaz Mali o devfreq de la placa.",
 		},
 		deviceHealth: {
 			title: "Salud del dispositivo",

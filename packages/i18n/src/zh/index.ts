@@ -164,6 +164,18 @@ const zh = {
 			cpuLoadHint: "占 CPU 总容量的比例 — {cores} 个核心上的 1 分钟平均负载。",
 			cpuLoadHintNoCores:
 				"1 分钟平均负载。此设备未报告核心数，因此无法显示为容量占比。",
+			memory: "内存",
+			memoryHint:
+				"已用内存占比。以 MemAvailable 为基准测量，可回收的页缓存不计为已用。",
+			swap: "交换空间",
+			swapNone: "无",
+			cpuFreq: "CPU 频率",
+			cpuFreqHint:
+				"每个 cpufreq 策略的当前频率与硬件上限之比。策略名称是 sysfs 目录名，而非核心簇。",
+			ddr: "DDR 总线",
+			ddrHint: "内存控制器负载，读取自主板的 devfreq 设备。",
+			gpu: "GPU",
+			gpuHint: "GPU 负载，读取自主板的 Mali 或 devfreq 接口。",
 		},
 		deviceHealth: {
 			title: "设备健康",

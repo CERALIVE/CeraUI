@@ -175,6 +175,18 @@ const ko = {
 				"전체 CPU 용량 대비 비율 — {cores}개 코어에 대한 1분 평균 부하입니다.",
 			cpuLoadHintNoCores:
 				"1분 평균 부하입니다. 이 장치가 코어 수를 보고하지 않아 용량 대비 비율로 표시할 수 없습니다.",
+			memory: "메모리",
+			memoryHint:
+				"사용 중인 RAM 비율입니다. MemAvailable을 기준으로 측정하므로 회수 가능한 페이지 캐시는 사용량으로 계산되지 않습니다.",
+			swap: "스왑",
+			swapNone: "없음",
+			cpuFreq: "CPU 주파수",
+			cpuFreqHint:
+				"cpufreq 정책별로 하드웨어 상한 대비 현재 클록입니다. 정책 이름은 sysfs 디렉터리이며 코어 클러스터가 아닙니다.",
+			ddr: "DDR 버스",
+			ddrHint: "보드의 devfreq 장치에서 읽은 메모리 컨트롤러 부하입니다.",
+			gpu: "GPU",
+			gpuHint: "보드의 Mali 또는 devfreq 인터페이스에서 읽은 GPU 부하입니다.",
 		},
 		deviceHealth: {
 			title: "장치 상태",

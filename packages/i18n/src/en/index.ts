@@ -1121,6 +1121,18 @@ const en = {
 				"Share of total CPU capacity — the 1-minute load average across {cores:number} cores.",
 			cpuLoadHintNoCores:
 				"1-minute load average. This device did not report its core count, so it cannot be shown as a share of capacity.",
+			memory: "Memory",
+			memoryHint:
+				"Share of RAM in use. Measured against MemAvailable, so reclaimable page cache is not counted as used.",
+			swap: "Swap",
+			swapNone: "None",
+			cpuFreq: "CPU Frequency",
+			cpuFreqHint:
+				"Current clock against the hardware ceiling, per cpufreq policy. A policy name is a sysfs directory, not a core cluster.",
+			ddr: "DDR Bus",
+			ddrHint: "Memory-controller load, read from the board's devfreq device.",
+			gpu: "GPU",
+			gpuHint: "GPU load, read from the board's Mali or devfreq interface.",
 		},
 		deviceHealth: {
 			title: "Device Health",

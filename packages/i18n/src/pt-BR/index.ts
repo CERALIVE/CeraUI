@@ -333,6 +333,19 @@ const ptBR = {
 				"Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por {cores} núcleos.",
 			cpuLoadHintNoCores:
 				"Carga média de 1 minuto. Este dispositivo não informou a contagem de núcleos, portanto não pode ser exibida como proporção da capacidade.",
+			memory: "Memória",
+			memoryHint:
+				"Proporção da RAM em uso. Medida contra MemAvailable, para que o cache de páginas recuperável não conte como usado.",
+			swap: "Swap",
+			swapNone: "Nenhum",
+			cpuFreq: "Frequência da CPU",
+			cpuFreqHint:
+				"Clock atual em relação ao teto do hardware, por política do cpufreq. O nome da política é um diretório do sysfs, não um cluster de núcleos.",
+			ddr: "Barramento DDR",
+			ddrHint:
+				"Carga do controlador de memória, lida do dispositivo devfreq da placa.",
+			gpu: "GPU",
+			gpuHint: "Carga da GPU, lida da interface Mali ou devfreq da placa.",
 		},
 		deviceHealth: {
 			title: "Saúde do dispositivo",

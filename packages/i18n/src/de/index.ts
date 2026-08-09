@@ -1088,6 +1088,20 @@ const de = {
 				"Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne.",
 			cpuLoadHintNoCores:
 				"1-Minuten-Lastdurchschnitt. Dieses Gerät hat seine Kernanzahl nicht gemeldet, daher kann kein Kapazitätsanteil angezeigt werden.",
+			memory: "Arbeitsspeicher",
+			memoryHint:
+				"Anteil des belegten RAM. Gemessen an MemAvailable, damit wiederverwendbarer Seitencache nicht als belegt zählt.",
+			swap: "Auslagerung",
+			swapNone: "Keine",
+			cpuFreq: "CPU-Takt",
+			cpuFreqHint:
+				"Aktueller Takt gegen die Hardware-Obergrenze, je cpufreq-Policy. Ein Policy-Name ist ein sysfs-Verzeichnis, kein Kern-Cluster.",
+			ddr: "DDR-Bus",
+			ddrHint:
+				"Last des Speichercontrollers, gelesen vom devfreq-Gerät der Platine.",
+			gpu: "GPU",
+			gpuHint:
+				"GPU-Last, gelesen von der Mali- oder devfreq-Schnittstelle der Platine.",
 		},
 		deviceHealth: {
 			title: "Gerätezustand",

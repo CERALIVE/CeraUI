@@ -179,6 +179,20 @@ const ja = {
 				"CPU 全体の容量に対する割合 — {cores} コアに対する 1 分間のロードアベレージです。",
 			cpuLoadHintNoCores:
 				"1 分間のロードアベレージです。このデバイスはコア数を報告しなかったため、容量に対する割合として表示できません。",
+			memory: "メモリ",
+			memoryHint:
+				"使用中の RAM の割合です。MemAvailable を基準に測定するため、再利用可能なページキャッシュは使用済みとして数えません。",
+			swap: "スワップ",
+			swapNone: "なし",
+			cpuFreq: "CPU 周波数",
+			cpuFreqHint:
+				"cpufreq ポリシーごとの、ハードウェア上限に対する現在のクロックです。ポリシー名は sysfs のディレクトリ名であり、コアクラスタではありません。",
+			ddr: "DDR バス",
+			ddrHint:
+				"ボードの devfreq デバイスから読み取ったメモリコントローラの負荷です。",
+			gpu: "GPU",
+			gpuHint:
+				"ボードの Mali または devfreq インターフェースから読み取った GPU 負荷です。",
 		},
 		deviceHealth: {
 			title: "デバイスの健全性",
