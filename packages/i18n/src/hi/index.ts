@@ -189,6 +189,7 @@ const hi = {
 			lane: {
 				temp: "SoC तापमान",
 				load: "लोड औसत · 1 मिनट · सभी प्रक्रियाएँ",
+				memory: "उपयोग की गई मेमोरी · RAM का %",
 			},
 			nowStrip: {
 				temperature: "SoC तापमान",
@@ -225,6 +226,11 @@ const hi = {
 				headlineIdle: "निष्क्रिय",
 				headlineUnreported: "रिपोर्ट नहीं किया गया",
 				engineLabel: "इंजन",
+				decodeTitle: "डिकोडर कोर",
+			},
+			loads: {
+				gpu: "GPU लोड",
+				ddr: "मेमोरी बस लोड",
 			},
 			power: {
 				title: "पावर रेल",

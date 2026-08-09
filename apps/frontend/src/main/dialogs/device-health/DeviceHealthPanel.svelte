@@ -2,9 +2,11 @@
   DeviceHealthPanel.svelte — the instrument itself.
 
   Four horizontal bands, no columns, no nested cards:
-    1. now strip    — the three current facts, and the accessible primary
-    2. trace field  — the strip recorder (HealthTraceField)
-    3. encoder      — engine condition + per-core load in its honest state
+    1. now strip    — the current facts, and the accessible primary. Three
+                      always (temperature, load, encoder) plus GPU and DDR load
+                      on the boards that report them
+    2. trace field  — the strip recorder (HealthTraceField), three channels
+    3. encoder      — engine condition + per-core encode/decode load, honestly
     4. power rails  — a provable statement, not an em-dash
 
   It is deliberately SEPARATE from `DeviceHealthDialog.svelte`, which is a thin
@@ -36,7 +38,7 @@
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
 import { ENGINE_UNREACHABLE_REVISION } from '@ceraui/rpc/schemas';
-import { Activity, Clock, Cpu, Thermometer, Zap } from '@lucide/svelte';
+import { Activity, Clock, Cpu, Gauge, MemoryStick, Thermometer, Zap } from '@lucide/svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
@@ -47,6 +49,8 @@ import {
 	type LaneSignalStatus,
 	LOAD_DOMAIN_MIN_CEILING,
 	LOAD_GAP_MS,
+	MEMORY_DOMAIN,
+	MEMORY_GAP_MS,
 	TEMP_BUCKET_MS,
 	TEMP_DOMAIN,
 	TEMP_GAP_MS,
@@ -56,13 +60,21 @@ import {
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { HEALTH_COMPACT_QUERY } from '$lib/layout';
 import { deriveEncoderActivity } from '$lib/streaming/encoder-load';
-import { getCapabilities, getRevisions, getSources, getStatus } from '$lib/rpc/subscriptions.svelte';
+import {
+	getCapabilities,
+	getDeviceStats,
+	getRevisions,
+	getSources,
+	getStatus,
+} from '$lib/rpc/subscriptions.svelte';
 import {
 	acquireHealthClock,
 	getEncoderLoad,
 	getHealthClockTick,
 	getLoadSamples,
 	getLoadStatus,
+	getMemorySamples,
+	getMemoryStatus,
 	getTemperatureSamples,
 	getTemperatureStatus,
 } from '$lib/stores/device-health-history.svelte';
@@ -86,12 +98,15 @@ $effect(() => acquireHealthClock());
 const now = $derived(getHealthClockTick());
 const tempSamples = $derived(getTemperatureSamples());
 const loadSamples = $derived(getLoadSamples());
+const memorySamples = $derived(getMemorySamples());
 const tempStatus = $derived(getTemperatureStatus());
 const loadStatus = $derived(getLoadStatus());
+const memoryStatus = $derived(getMemoryStatus());
 const encoderLoad = $derived(getEncoderLoad());
 
 const tempStats = $derived(windowStats(trimWindow(tempSamples, now)));
 const loadStats = $derived(windowStats(trimWindow(loadSamples, now)));
+const memoryStats = $derived(windowStats(trimWindow(memorySamples, now)));
 
 function formatTemp(value: number): string {
 	return `${value.toFixed(1)} \u00b0C`;
@@ -107,6 +122,21 @@ function formatLoadScale(value: number): string {
 }
 function formatSigned(value: number, digits: number): string {
 	return `${value >= 0 ? '+' : '\u2212'}${Math.abs(value).toFixed(digits)}`;
+}
+function formatPercent(value: number): string {
+	return `${value.toFixed(0)}%`;
+}
+function formatPercentScale(value: number): string {
+	return `${value}%`;
+}
+
+// devfreq publishes Hz, and `cpuFreq` publishes kHz — the two must never meet in
+// one formatter, so this one takes Hz and says so in its name.
+function formatHz(hz: number): string {
+	if (hz >= 1_000_000_000) return `${(hz / 1_000_000_000).toFixed(2)} GHz`;
+	if (hz >= 1_000_000) return `${Math.round(hz / 1_000_000)} MHz`;
+	if (hz >= 1_000) return `${Math.round(hz / 1_000)} kHz`;
+	return `${hz} Hz`;
 }
 
 const lanes = $derived<RenderLane[]>([
@@ -130,7 +160,44 @@ const lanes = $derived<RenderLane[]>([
 		degraded: loadStatus.state === 'aging' || loadStatus.state === 'unavailable',
 		formatScale: formatLoadScale,
 	},
+	// Memory is the ONLY new trace: it is a share of a denominator the device
+	// itself published, so it plots against a fixed scale with no disclosure
+	// needed. GPU and DDR load are readouts in the band below instead — they are
+	// hardware-gated on the vendor kernel and absent on mainline, and a lane that
+	// is empty on half the fleet is a worse instrument than a row that simply
+	// does not appear. Promoting either to a lane is a follow-up, not this pass.
+	{
+		id: 'memory',
+		label: t.lane.memory(),
+		samples: memorySamples,
+		domain: MEMORY_DOMAIN,
+		gapMs: MEMORY_GAP_MS,
+		degraded: memoryStatus.state === 'aging' || memoryStatus.state === 'unavailable',
+		formatScale: formatPercentScale,
+	},
 ]);
+
+// ABSENT is never 0 % and never "idle": a mainline kernel publishes no DDR
+// devfreq device and may publish no GPU load interface at all, so a missing key
+// means "this kernel does not report it". The two are INDEPENDENT probes — one
+// can answer while the other does not — so each row is gated on its own key.
+const deviceStats = $derived(getDeviceStats());
+const gpu = $derived(deviceStats?.gpu);
+const ddr = $derived(deviceStats?.ddr);
+
+// The kbase path structurally cannot report a frequency, so a GPU load with no
+// frequency beside it is an ordinary reading — never draw "0 Hz" for it.
+const gpuDetail = $derived.by(() => {
+	const cur = gpu?.curFreqHz;
+	const max = gpu?.maxFreqHz;
+	if (cur !== undefined && max !== undefined) return `${formatHz(cur)} / ${formatHz(max)}`;
+	if (cur !== undefined) return formatHz(cur);
+	if (max !== undefined) return formatHz(max);
+	return null;
+});
+const ddrDetail = $derived(
+	ddr === undefined ? null : `${formatHz(ddr.curFreqHz)} / ${formatHz(ddr.maxFreqHz)}`,
+);
 
 const caps = $derived(getCapabilities());
 const activeEncode = $derived(getStatus()?.active_encode);
@@ -189,6 +256,11 @@ const traceSummary = $derived.by(() => {
 	if (loadStats !== null) {
 		parts.push(
 			`${t.nowStrip.load()} ${formatLoad(loadStats.last)} (${formatLoad(loadStats.min)} – ${formatLoad(loadStats.max)})`,
+		);
+	}
+	if (memoryStats !== null) {
+		parts.push(
+			`${t.lane.memory()} ${formatPercent(memoryStats.last)} (${formatPercent(memoryStats.min)} – ${formatPercent(memoryStats.max)})`,
 		);
 	}
 	return parts.length === 0 ? t.waiting() : parts.join(' \u00b7 ');
@@ -295,7 +367,43 @@ $effect(() => {
 	</div>
 {/snippet}
 
-<div class={cn(isCompact.current ? 'space-y-3' : 'space-y-4')} data-testid="device-health">
+<!-- One dense LINE, not a stacked cell, and no proportional rail.
+     The Device Health panel is forbidden to scroll on the 1024x600 kiosk (C5,
+     pinned by device-telemetry-v2.visual.spec.ts) and measured at EXACTLY its
+     box height before this change, so every pixel these readouts cost had to be
+     found elsewhere in the panel. A stacked cell in the now strip was tried and
+     measured: five columns at 1024px wrap the wordier cells and cost ~40px more
+     than they save. A rail would also have been a lie of emphasis — these are
+     supporting readings beside three traced channels, not a fourth trace. -->
+{#snippet loadReadout(
+	label: string,
+	icon: typeof Gauge,
+	percent: number,
+	detail: string | null,
+	testId: string,
+)}
+	{@const Icon = icon}
+	<span class="flex min-w-0 items-baseline gap-1.5" data-testid={testId}>
+		<Icon aria-hidden={true} class="size-3.5 shrink-0 self-center" />
+		<span class="shrink-0">{label}</span>
+		<span
+			class="text-foreground font-mono tabular-nums"
+			data-testid="{testId}-value"
+		>
+			{formatPercent(percent)}
+		</span>
+		{#if detail !== null}
+			<span
+				class="text-muted-foreground/70 min-w-0 truncate font-mono text-[11px] tabular-nums"
+				data-testid="{testId}-detail"
+			>
+				{detail}
+			</span>
+		{/if}
+	</span>
+{/snippet}
+
+<div class={cn(isCompact.current ? 'space-y-2' : 'space-y-4')} data-testid="device-health">
 	<!-- Band 1 — the now strip. Always mounted: "no strip" must never be
 	     confusable with "no data". It is also the accessible primary, so a
 	     screen-reader user gets the same facts without the trace. -->
@@ -354,17 +462,58 @@ $effect(() => {
 			density="panel"
 			headerAside={engineRevisionChip}
 			reading={encoderLoad}
+			showDecoders={true}
 		/>
 	</section>
 
-	<!-- Band 4 — power rails: a provable statement, never an em-dash. -->
+	<!-- Band 4 — GPU and DDR load. Readouts, never lanes: both are vendor-kernel
+	     signals that are simply ABSENT on mainline, and the whole row disappears
+	     rather than drawing a permanently-empty trace. Each readout is gated on
+	     its OWN key — the two are independent probes, so a board can answer one
+	     and not the other, and a missing key means "this kernel does not report
+	     it", never 0 % and never idle. -->
+	{#if gpu !== undefined || ddr !== undefined}
+		<section
+			class="text-muted-foreground flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t pt-3 text-xs"
+			data-testid="device-health-loads"
+		>
+			{#if gpu !== undefined}
+				{@render loadReadout(t.loads.gpu(), Gauge, gpu.loadPercent, gpuDetail, 'health-load-gpu')}
+			{/if}
+			{#if ddr !== undefined}
+				{@render loadReadout(
+					t.loads.ddr(),
+					MemoryStick,
+					ddr.loadPercent,
+					ddrDetail,
+					'health-load-ddr',
+				)}
+			{/if}
+		</section>
+	{/if}
+
+	<!-- Band 5 — power rails: a provable statement, never an em-dash. The compact
+	     profile prints it on ONE line: the kiosk pays for the memory channel and
+	     these readouts out of exactly this kind of slack, and a two-line label +
+	     value stack says nothing a single line does not. -->
 	<section
-		class="flex items-start gap-2.5 border-t pt-4"
+		class={cn('flex gap-2.5 border-t', isCompact.current ? 'items-baseline pt-3' : 'items-start pt-4')}
 		data-testid="device-health-power"
 		data-power-state={powerRails.kind}
 	>
-		<Zap aria-hidden={true} class="text-muted-foreground mt-0.5 size-3.5 shrink-0" />
-		<div class="min-w-0 space-y-0.5">
+		<Zap
+			aria-hidden={true}
+			class={cn(
+				'text-muted-foreground size-3.5 shrink-0 self-center',
+				!isCompact.current && 'mt-0.5 self-start',
+			)}
+		/>
+		<div
+			class={cn(
+				'min-w-0',
+				isCompact.current ? 'flex flex-wrap items-baseline gap-x-2' : 'space-y-0.5',
+			)}
+		>
 			<span class="block text-xs font-medium">{t.power.title()}</span>
 			<span
 				class={cn(

@@ -1109,6 +1109,7 @@ const de = {
 			lane: {
 				temp: "SoC-Temperatur",
 				load: "Lastdurchschnitt · 1 Min · alle Prozesse",
+				memory: "Speicherbelegung · % des RAM",
 			},
 			nowStrip: {
 				temperature: "SoC-Temperatur",
@@ -1145,6 +1146,11 @@ const de = {
 				headlineIdle: "Inaktiv",
 				headlineUnreported: "Nicht gemeldet",
 				engineLabel: "Engine",
+				decodeTitle: "Decoder-Kerne",
+			},
+			loads: {
+				gpu: "GPU-Auslastung",
+				ddr: "Speicherbus-Auslastung",
 			},
 			power: {
 				title: "Spannungsschienen",

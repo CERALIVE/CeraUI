@@ -200,6 +200,7 @@ const ja = {
 			lane: {
 				temp: "SoC 温度",
 				load: "ロードアベレージ · 1 分 · 全プロセス",
+				memory: "メモリ使用率 · RAM の %",
 			},
 			nowStrip: {
 				temperature: "SoC 温度",
@@ -237,6 +238,11 @@ const ja = {
 				headlineIdle: "アイドル",
 				headlineUnreported: "報告なし",
 				engineLabel: "エンジン",
+				decodeTitle: "デコーダーコア",
+			},
+			loads: {
+				gpu: "GPU 負荷",
+				ddr: "メモリバス負荷",
 			},
 			power: {
 				title: "電源レール",

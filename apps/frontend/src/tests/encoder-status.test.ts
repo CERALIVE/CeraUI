@@ -481,3 +481,75 @@ describe("REGRESSION LOCK — an `active` core never renders a digit", () => {
 		}
 	});
 });
+
+/**
+ * REGRESSION LOCK — decode rows are OPT-IN, and only Device Health opts in.
+ *
+ * `decodeCores` landed on the shared `encoder-load` broadcast, so the reading
+ * that reaches the Device Stats tile and the Live telemetry strip now carries
+ * decoder rows on a vendor-6.1 board whether those surfaces want them or not.
+ * Neither does: the strip is a mid-broadcast glance and the tile is one grid
+ * row. The proof is stronger than "no decoder testid" — each host's markup must
+ * be BYTE-IDENTICAL with the key absent and with it present, so nothing (a
+ * count attribute, a wrapper, a spacing class) can drift in behind the flag.
+ */
+describe("decoder cores never reach the two inline hosts", () => {
+	const DECODE: EncoderCoreReading[] = [
+		{ core: "rkvdec0", kind: "percent", percent: 23.1 },
+		{ core: "rkvdec1", kind: "unavailable" },
+	];
+
+	// The exact prop sets the two other mount sites use:
+	// DeviceStatsSection.svelte:243 and StreamTelemetryStrip.svelte:124.
+	const HOSTS = [
+		["Device Stats tile", { density: "inline", compact: true }],
+		["Live telemetry strip", { density: "inline", compact: false }],
+	] as const;
+
+	function markup(
+		value: EncoderLoadReading,
+		props: { density: "inline"; compact: boolean },
+	): string {
+		document.body.innerHTML = "";
+		render(EncoderStatus, { reading: value, ...props });
+		return byTestId("encoder-cores").outerHTML;
+	}
+
+	it.each(
+		HOSTS,
+	)("%s renders identically with and without decode", (_l, props) => {
+		const cores = [percent("rkvenc0", 11.34), percent("rkvenc1", 0)];
+		const without = markup(reading(cores), props);
+		const withDecode = markup(reading(cores, { decodeCores: DECODE }), props);
+		expect(withDecode).toBe(without);
+		expect(maybe("decoder-cores")).toBeNull();
+		expect(maybe("decoder-core-list")).toBeNull();
+		expect(maybe("decoder-core-rkvdec0")).toBeNull();
+	});
+
+	it("the panel host DOES render them, so the lock is proving a choice", () => {
+		document.body.innerHTML = "";
+		render(EncoderStatus, {
+			reading: reading([percent("rkvenc0", 11.34)], { decodeCores: DECODE }),
+			density: "panel",
+			showDecoders: true,
+		});
+		expect(byTestId("decoder-cores").dataset.decoderCount).toBe("2");
+		expect(byTestId("decoder-core-value-rkvdec0").textContent).toContain(
+			"23.1",
+		);
+		expect(byTestId("decoder-core-value-rkvdec1").textContent).toContain(
+			t.unavailable,
+		);
+	});
+
+	it("opting in with NO decode rows on the wire still renders no section", () => {
+		document.body.innerHTML = "";
+		render(EncoderStatus, {
+			reading: reading([percent("rkvenc0", 11.34)]),
+			density: "panel",
+			showDecoders: true,
+		});
+		expect(maybe("decoder-cores")).toBeNull();
+	});
+});

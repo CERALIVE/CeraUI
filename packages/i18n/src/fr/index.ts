@@ -354,6 +354,7 @@ const fr = {
 			lane: {
 				temp: "Température du SoC",
 				load: "Charge moyenne · 1 min · tous les processus",
+				memory: "Mémoire utilisée · % de la RAM",
 			},
 			nowStrip: {
 				temperature: "Température du SoC",
@@ -391,6 +392,11 @@ const fr = {
 				headlineIdle: "Inactif",
 				headlineUnreported: "Non communiqué",
 				engineLabel: "Moteur",
+				decodeTitle: "Cœurs du décodeur",
+			},
+			loads: {
+				gpu: "Charge du GPU",
+				ddr: "Charge du bus mémoire",
 			},
 			power: {
 				title: "Rails d'alimentation",

@@ -194,6 +194,7 @@ const ko = {
 			lane: {
 				temp: "SoC 온도",
 				load: "부하 평균 · 1분 · 전체 프로세스",
+				memory: "메모리 사용량 · RAM 대비 %",
 			},
 			nowStrip: {
 				temperature: "SoC 온도",
@@ -231,6 +232,11 @@ const ko = {
 				headlineIdle: "대기",
 				headlineUnreported: "보고되지 않음",
 				engineLabel: "엔진",
+				decodeTitle: "디코더 코어",
+			},
+			loads: {
+				gpu: "GPU 부하",
+				ddr: "메모리 버스 부하",
 			},
 			power: {
 				title: "전원 레일",

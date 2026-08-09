@@ -1141,6 +1141,7 @@ const en = {
 			lane: {
 				temp: "SoC temperature",
 				load: "Load average · 1 min · all processes",
+				memory: "Memory used · % of RAM",
 			},
 			nowStrip: {
 				temperature: "SoC temperature",
@@ -1178,6 +1179,11 @@ const en = {
 				headlineIdle: "Idle",
 				headlineUnreported: "Not reported",
 				engineLabel: "Engine",
+				decodeTitle: "Decoder cores",
+			},
+			loads: {
+				gpu: "GPU load",
+				ddr: "Memory bus load",
 			},
 			power: {
 				title: "Power rails",

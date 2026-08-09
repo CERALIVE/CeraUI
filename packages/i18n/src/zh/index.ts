@@ -183,6 +183,7 @@ const zh = {
 			lane: {
 				temp: "SoC 温度",
 				load: "平均负载 · 1 分钟 · 全部进程",
+				memory: "内存占用 · 占 RAM 的 %",
 			},
 			nowStrip: {
 				temperature: "SoC 温度",
@@ -219,6 +220,11 @@ const zh = {
 				headlineIdle: "空闲",
 				headlineUnreported: "未报告",
 				engineLabel: "引擎",
+				decodeTitle: "解码器核心",
+			},
+			loads: {
+				gpu: "GPU 负载",
+				ddr: "内存总线负载",
 			},
 			power: {
 				title: "供电轨",

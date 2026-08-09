@@ -329,6 +329,7 @@ const ar = {
 			lane: {
 				temp: "حرارة المعالج",
 				load: "متوسط الحِمل · دقيقة واحدة · كل العمليات",
+				memory: "الذاكرة المستخدمة · % من الذاكرة",
 			},
 			nowStrip: {
 				temperature: "حرارة المعالج",
@@ -365,6 +366,11 @@ const ar = {
 				headlineIdle: "خامل",
 				headlineUnreported: "غير مُبلَّغ عنه",
 				engineLabel: "المحرّك",
+				decodeTitle: "أنوية فك الترميز",
+			},
+			loads: {
+				gpu: "حِمل وحدة الرسوميات",
+				ddr: "حِمل ناقل الذاكرة",
 			},
 			power: {
 				title: "خطوط الطاقة",

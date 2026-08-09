@@ -12,8 +12,16 @@
  * The fifth is the one this panel was redesigned around: an `active`-only core
  * must render as a BINARY mark with no figure and no percent sign, visually
  * distinct from a measured duty cycle.
+ *
+ * Extended (memory trace + accelerator bands + decoder cores) — ADDITIVELY. The
+ * assertions above are untouched; the new describes below cover the third trace
+ * channel, the GPU/DDR readouts, and the decoder list. All three obey the same
+ * rule as the four absences: an ABSENT key renders NOTHING, never a zero and
+ * never an empty section, because "this kernel does not report it" and "it
+ * measured zero" are different statements about the board.
  */
 
+import type { DeviceStats } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { LaneSignalStatus } from "$lib/components/custom/health-trace-view";
@@ -37,8 +45,16 @@ const state = {
 		lastDeliveryAt: null,
 		ageMs: null,
 	} as LaneSignalStatus,
+	memory: {
+		state: "waiting",
+		value: null,
+		lastDeliveryAt: null,
+		ageMs: null,
+	} as LaneSignalStatus,
 	temperatureSamples: [] as { t: number; v: number }[],
 	loadSamples: [] as { t: number; v: number }[],
+	memorySamples: [] as { t: number; v: number }[],
+	deviceStats: undefined as DeviceStats | undefined,
 	encoder: {
 		source: null,
 		cores: [],
@@ -58,6 +74,8 @@ vi.mock("$lib/stores/device-health-history.svelte", () => ({
 	getHealthClockTick: () => state.now,
 	getLoadSamples: () => state.loadSamples,
 	getLoadStatus: () => state.load,
+	getMemorySamples: () => state.memorySamples,
+	getMemoryStatus: () => state.memory,
 	getTemperatureSamples: () => state.temperatureSamples,
 	getTemperatureStatus: () => state.temperature,
 }));
@@ -67,6 +85,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 		engineStarting: state.engineStarting,
 		engineUnavailable: state.engineUnavailable,
 	}),
+	getDeviceStats: () => state.deviceStats,
 	getRevisions: () => ({ cerastream: "2026.7.5" }),
 	getSources: () =>
 		state.hardware === undefined
@@ -126,8 +145,16 @@ function reset(): void {
 		lastDeliveryAt: null,
 		ageMs: null,
 	};
+	state.memory = {
+		state: "waiting",
+		value: null,
+		lastDeliveryAt: null,
+		ageMs: null,
+	};
 	state.temperatureSamples = [];
 	state.loadSamples = [];
+	state.memorySamples = [];
+	state.deviceStats = undefined;
 	state.encoder = {
 		source: null,
 		cores: [],
@@ -383,6 +410,175 @@ describe("power rails", () => {
 		expect(byTestId("device-health-power").dataset.powerState).toBe(
 			"no-reading",
 		);
+	});
+});
+
+function stats(extra: Partial<DeviceStats> = {}): DeviceStats {
+	return {
+		disk: null,
+		cpuLoad1: null,
+		socTemp: null,
+		ifaceRxTx: null,
+		raucSlot: "A",
+		...extra,
+	};
+}
+
+describe("the memory trace — the third channel, and the only new one", () => {
+	it("prints its own lane against a fixed 0-100 scale", () => {
+		state.memorySamples = [
+			{ t: state.now - 10_000, v: 41 },
+			{ t: state.now - 5_000, v: 43 },
+		];
+		open();
+		expect(byTestId("health-lane-label-memory").textContent).toContain(
+			t.lane.memory,
+		);
+		// Fixed, not self-scaling: a board at 43 % must not draw like a board at
+		// 95 % just because 43 is its own window peak.
+		expect(byTestId("health-lane-scale-memory").textContent).toContain("100%");
+		expect(byTestId("health-trace-field").dataset.points).toBe("2");
+	});
+
+	it("GPU and DDR stay OUT of the recorder — one new trace, not three", () => {
+		state.deviceStats = stats({
+			gpu: { loadPercent: 42 },
+			ddr: {
+				loadPercent: 23,
+				curFreqHz: 528_000_000,
+				maxFreqHz: 2_112_000_000,
+			},
+		});
+		open();
+		expect(maybe("health-lane-label-gpu")).toBeNull();
+		expect(maybe("health-lane-label-ddr")).toBeNull();
+	});
+
+	it("an empty ring draws no lane points and never a synthesised zero", () => {
+		open();
+		expect(maybe("health-lane-label-memory")).not.toBeNull();
+		expect(byTestId("health-trace-field").dataset.points).toBe("0");
+	});
+});
+
+describe("GPU and DDR — readout row, each gated on its OWN key", () => {
+	it("no row at all when neither probe answered", () => {
+		state.deviceStats = stats();
+		open();
+		expect(maybe("device-health-loads")).toBeNull();
+		expect(maybe("health-load-gpu")).toBeNull();
+		expect(maybe("health-load-ddr")).toBeNull();
+	});
+
+	it("an absent device-stats snapshot is not a zero reading", () => {
+		state.deviceStats = undefined;
+		open();
+		expect(maybe("device-health-loads")).toBeNull();
+	});
+
+	it("one probe answering does not conjure the other", () => {
+		state.deviceStats = stats({ gpu: { loadPercent: 42 } });
+		open();
+		expect(byTestId("health-load-gpu-value").textContent).toContain("42%");
+		expect(maybe("health-load-ddr")).toBeNull();
+		// The kbase path structurally cannot report a frequency, so a load with
+		// none beside it is an ordinary reading — never a fabricated "0 Hz".
+		expect(maybe("health-load-gpu-detail")).toBeNull();
+	});
+
+	it("DDR prints Hz as Hz — devfreq's unit, never cpufreq's kHz", () => {
+		state.deviceStats = stats({
+			ddr: {
+				loadPercent: 23,
+				curFreqHz: 528_000_000,
+				maxFreqHz: 2_112_000_000,
+			},
+		});
+		open();
+		expect(byTestId("health-load-ddr-value").textContent).toContain("23%");
+		expect(byTestId("health-load-ddr-detail").textContent).toContain("528 MHz");
+		expect(byTestId("health-load-ddr-detail").textContent).toContain(
+			"2.11 GHz",
+		);
+	});
+
+	it("a measured zero is kept — an idle bus is a measurement", () => {
+		state.deviceStats = stats({ gpu: { loadPercent: 0 } });
+		open();
+		expect(byTestId("health-load-gpu-value").textContent).toContain("0%");
+	});
+});
+
+describe("decoder cores — absent is not empty, and no slot is dropped", () => {
+	const decoding = (
+		decodeCores?: EncoderCoreReading[],
+	): EncoderLoadReading => ({
+		source: "mpp-service",
+		cores: [{ core: "rkvenc0", kind: "percent", percent: 11.34 }],
+		...(decodeCores === undefined ? {} : { decodeCores }),
+		updatedAt: state.now,
+		simulated: false,
+	});
+
+	it("an omitted decodeCores key renders no decoder section at all", () => {
+		state.encoder = decoding();
+		open();
+		expect(maybe("decoder-cores")).toBeNull();
+		expect(maybe("decoder-core-list")).toBeNull();
+		// The encoder half is untouched by decode being unreported.
+		expect(byTestId("encoder-core-value-rkvenc0").textContent).toContain(
+			"11.34%",
+		);
+	});
+
+	it("renders whatever length the board printed, keyed by core id", () => {
+		state.encoder = decoding([
+			{ core: "rkvdec0", kind: "percent", percent: 23.1 },
+			{ core: "rkvdec1", kind: "percent", percent: 0 },
+			{ core: "rkvdec2", kind: "percent", percent: 4.5 },
+		]);
+		open();
+		expect(byTestId("decoder-cores").dataset.decoderCount).toBe("3");
+		expect(byTestId("decoder-core-value-rkvdec0").textContent).toContain(
+			"23.1",
+		);
+		expect(byTestId("decoder-core-value-rkvdec2").textContent).toContain("4.5");
+	});
+
+	it("a single decoder is a whole list — there is no fixed two-slot shape", () => {
+		state.encoder = decoding([
+			{ core: "rkvdec0", kind: "percent", percent: 7.25 },
+		]);
+		open();
+		expect(byTestId("decoder-cores").dataset.decoderCount).toBe("1");
+		expect(maybe("decoder-core-rkvdec1")).toBeNull();
+	});
+
+	it("an `unavailable` decoder KEEPS its slot — dropping it would renumber", () => {
+		state.encoder = decoding([
+			{ core: "rkvdec0", kind: "unavailable" },
+			{ core: "rkvdec1", kind: "percent", percent: 12 },
+		]);
+		open();
+		const rows = document.querySelectorAll(
+			'[data-testid="decoder-core-list"] > li',
+		);
+		expect(rows).toHaveLength(2);
+		expect(rows[0]?.getAttribute("data-testid")).toBe("decoder-core-rkvdec0");
+		expect(byTestId("decoder-core-value-rkvdec0").textContent?.trim()).toBe(
+			t.unavailable,
+		);
+	});
+
+	it("decode rows never move the ENCODER verdict or its precision", () => {
+		state.encoder = decoding([
+			{ core: "rkvdec0", kind: "percent", percent: 99 },
+		]);
+		open();
+		expect(byTestId("encoder-cores").dataset.precision).toBe("percent");
+		expect(byTestId("encoder-cores").dataset.coreCount).toBe("1");
+		const list = byTestId("encoder-core-list");
+		expect(list.querySelectorAll("li")).toHaveLength(1);
 	});
 });
 

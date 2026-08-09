@@ -354,6 +354,7 @@ const ptBR = {
 			lane: {
 				temp: "Temperatura do SoC",
 				load: "Carga média · 1 min · todos os processos",
+				memory: "Memória usada · % da RAM",
 			},
 			nowStrip: {
 				temperature: "Temperatura do SoC",
@@ -392,6 +393,11 @@ const ptBR = {
 				headlineIdle: "Ocioso",
 				headlineUnreported: "Não informado",
 				engineLabel: "Motor",
+				decodeTitle: "Núcleos do decodificador",
+			},
+			loads: {
+				gpu: "Carga da GPU",
+				ddr: "Carga do barramento de memória",
 			},
 			power: {
 				title: "Trilhos de alimentação",
