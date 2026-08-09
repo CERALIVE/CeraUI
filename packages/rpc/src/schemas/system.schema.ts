@@ -288,11 +288,21 @@ export type KioskOskInput = z.infer<typeof kioskOskInputSchema>;
 // Device stats broadcast (T32 — `device-stats` event)
 // =============================================================================
 //
-// S1 lock: exactly these five signals, mirroring the backend emitter
-// (`apps/backend/src/modules/system/device-stats.ts`). Adding a sixth is a
-// deliberate contract change. Every field is independently nullable (raucSlot
-// degrades to the string "unavailable") so one dead source never blanks the
-// whole panel.
+// Five ALWAYS-PRESENT signals plus deliberately added OPTIONAL ones, mirroring
+// the backend emitter (`apps/backend/src/modules/system/device-stats.ts`).
+//
+// The five are frozen: independently nullable (raucSlot degrades to the string
+// "unavailable") so one dead source never blanks the whole panel, and none may
+// be removed or renamed.
+//
+// The optional signals are additive by construction — a payload from a device
+// that predates them still parses, and a consumer that predates them ignores
+// them. Adding one remains a deliberate contract change (schema + mock +
+// key-shape test), never a tweak.
+//
+// OMIT vs ZERO: an optional field is ABSENT when its source could not be read
+// and PRESENT-with-0 when the source measured zero (a swapless board really
+// reports `swapTotalBytes: 0`). Renderers must not collapse the two.
 export const diskTypeSchema = z.enum(['SSD', 'HDD', 'eMMC', 'unknown']);
 export type DiskType = z.infer<typeof diskTypeSchema>;
 
@@ -316,6 +326,13 @@ export const deviceStatsSchema = z.object({
 	socTemp: z.number().nullable(),
 	ifaceRxTx: ifaceRxTxStatSchema.nullable(),
 	raucSlot: z.string(),
+	// Memory/swap — `/proc/meminfo`, converted to BYTES by the collector so no
+	// consumer has to know the file reports KiB under a "kB" label.
+	memTotalBytes: z.number().optional(),
+	memAvailableBytes: z.number().optional(),
+	memUsedPercent: z.number().optional(),
+	swapTotalBytes: z.number().optional(),
+	swapFreeBytes: z.number().optional(),
 });
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
 

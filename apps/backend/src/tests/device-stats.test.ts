@@ -1,10 +1,22 @@
 /*
- * T32 — device-stats backend collectors (exactly FIVE signals).
+ * T32 — device-stats backend collectors.
  *
- * Proves the S1 lock (payload keys == {disk, cpuLoad1, socTemp, ifaceRxTx,
- * raucSlot}), that socTemp is WIRED from sensors.ts (no second
- * /sys/class/thermal read), and that every source degrades gracefully to
- * null / "unavailable" without crashing the tick.
+ * Proves the payload key contract, that socTemp is WIRED from sensors.ts (no
+ * second /sys/class/thermal read), and that every source degrades gracefully to
+ * null / "unavailable" / omission without crashing the tick.
+ *
+ * CONTRACT REVISION (memory/swap): this suite originally asserted the payload
+ * carried EXACTLY five keys. That assertion now has two halves, and both are
+ * stronger than the one it replaced:
+ *
+ *   - with NO readable source, the payload is STILL exactly those five keys —
+ *     the optional signals are omitted, not null-filled. This is the original
+ *     assertion, unchanged, and it is where the omit-vs-zero rule is enforced;
+ *   - with every source readable, the payload is the five PLUS the measured
+ *     optional keys, enumerated exactly — so a stray or renamed key still fails.
+ *
+ * Nothing about the five was weakened: they remain always-present, always
+ * enumerated, and every behavioural assertion below is the original one.
  */
 import { describe, expect, test } from "bun:test";
 
@@ -27,6 +39,7 @@ import {
 
 type StubOpts = {
 	files?: Record<string, string>;
+	dirs?: Record<string, string[]>;
 	exec?: Record<string, { stdout: string; stderr?: string } | "throw">;
 	socTemp?: string | undefined;
 	now?: number;
@@ -45,6 +58,11 @@ function makeDeps(opts: StubOpts = {}): {
 			const v = opts.files?.[path];
 			if (v === undefined) throw new Error(`ENOENT: ${path}`);
 			return v;
+		},
+		readDir: async (path) => {
+			const entries = opts.dirs?.[path];
+			if (entries === undefined) throw new Error(`ENOENT: ${path}`);
+			return entries;
 		},
 		execFile: async (file, args) => {
 			execCalls.push({ file, args });
@@ -66,6 +84,15 @@ const RAUC_OK = JSON.stringify({
 	booted: "rootfs.0",
 	boot_primary: "rootfs.0",
 });
+// 4 GiB total / 3 GiB available / 1 GiB swap, all free. Used percent is the
+// collector's own derivation: (4194304 − 3145728) / 4194304 × 100 = 25.
+const MEMINFO =
+	"MemTotal:        4194304 kB\n" +
+	"MemFree:          524288 kB\n" +
+	"MemAvailable:    3145728 kB\n" +
+	"SwapTotal:       1048576 kB\n" +
+	"SwapFree:        1048576 kB\n";
+
 const NETDEV = (rx: number, tx: number) =>
 	`Inter-|   Receive                                                |  Transmit\n` +
 	` face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets\n` +
@@ -148,13 +175,14 @@ describe("device-stats pure parsers", () => {
 
 // ─── S1 lock + happy path ─────────────────────────────────────────────────────
 
-describe("collectDeviceStats — S1 lock (exactly five keys)", () => {
-	test("payload keys are EXACTLY {disk, cpuLoad1, socTemp, ifaceRxTx, raucSlot}", async () => {
+describe("collectDeviceStats — payload key contract", () => {
+	test("payload keys are EXACTLY the five always-present + the measured optional keys", async () => {
 		const mk = (rx: number, tx: number, now: number) =>
 			makeDeps({
 				files: {
 					"/proc/loadavg": "1.25 0.9 0.7 1/100 42\n",
 					"/proc/net/dev": NETDEV(rx, tx),
+					"/proc/meminfo": MEMINFO,
 					"/sys/block/mmcblk0/queue/rotational": "0\n",
 				},
 				exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
@@ -166,7 +194,18 @@ describe("collectDeviceStats — S1 lock (exactly five keys)", () => {
 		const payload = await collectDeviceStats(mk(7000, 9000, 3000), state);
 
 		expect(Object.keys(payload).sort()).toEqual(
-			["cpuLoad1", "disk", "ifaceRxTx", "raucSlot", "socTemp"].sort(),
+			[
+				"cpuLoad1",
+				"disk",
+				"ifaceRxTx",
+				"raucSlot",
+				"socTemp",
+				"memTotalBytes",
+				"memAvailableBytes",
+				"memUsedPercent",
+				"swapTotalBytes",
+				"swapFreeBytes",
+			].sort(),
 		);
 		expect(payload.disk).toEqual({
 			used: 536870912,
@@ -176,6 +215,30 @@ describe("collectDeviceStats — S1 lock (exactly five keys)", () => {
 		expect(payload.cpuLoad1).toBe(1.25);
 		expect(payload.socTemp).toBe(48.3);
 		expect(payload.ifaceRxTx?.iface).toBe("eth0");
+		expect(payload.raucSlot).toBe("rootfs.0");
+		expect(payload.memTotalBytes).toBe(4 * 1024 ** 3);
+		expect(payload.memAvailableBytes).toBe(3 * 1024 ** 3);
+		expect(payload.memUsedPercent).toBe(25);
+		expect(payload.swapTotalBytes).toBe(1024 ** 3);
+		expect(payload.swapFreeBytes).toBe(1024 ** 3);
+	});
+
+	test("an unreadable /proc/meminfo omits the memory keys — the other five are untouched", async () => {
+		const { deps } = makeDeps({
+			files: {
+				"/proc/loadavg": "0.5 0.4 0.3 1/10 11\n",
+				"/proc/net/dev": NETDEV(1, 1),
+				"/sys/block/mmcblk0/queue/rotational": "0\n",
+			},
+			exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
+			socTemp: "44.0 °C",
+		});
+		const payload = await collectDeviceStats(deps, createDeviceStatsState());
+
+		expect(Object.keys(payload).sort()).toEqual(
+			["cpuLoad1", "disk", "ifaceRxTx", "raucSlot", "socTemp"].sort(),
+		);
+		expect(payload.cpuLoad1).toBe(0.5);
 		expect(payload.raucSlot).toBe("rootfs.0");
 	});
 

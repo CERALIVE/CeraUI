@@ -276,6 +276,16 @@ export const mockDeviceStatsSchema = z.object({
 		txBytesPerSec: z.number().int().nonnegative(),
 	}),
 	raucSlot: z.string().min(1),
+	// Memory/swap. Required HERE (unlike the wire schema, where they are
+	// optional) because a dev fixture must populate every rendered signal —
+	// omission on the wire means "unmeasured", which a mock must never claim.
+	// Byte values must be whole KiB multiples: the provider serializes them back
+	// into a `/proc/meminfo` body, so a non-multiple would not round-trip.
+	memTotalBytes: z.number().int().positive().multipleOf(1024),
+	memAvailableBytes: z.number().int().nonnegative().multipleOf(1024),
+	memUsedPercent: z.number().int().min(0).max(100),
+	swapTotalBytes: z.number().int().nonnegative().multipleOf(1024),
+	swapFreeBytes: z.number().int().nonnegative().multipleOf(1024),
 });
 export type MockDeviceStats = z.infer<typeof mockDeviceStatsSchema>;
 

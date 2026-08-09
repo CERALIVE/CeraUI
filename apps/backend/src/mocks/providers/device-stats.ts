@@ -1,7 +1,8 @@
 /*
 	CeraUI - Device-Stats Mock Provider (T3 — ceraui-experience-hardening)
 
-	Dev/emulated-mode stand-in for the 5-signal `device-stats` collector deps.
+	Dev/emulated-mode stand-in for the `device-stats` collector deps — the five
+	always-present signals plus the optional memory/swap fields.
 
 	On a dev box (no Rockchip hardware, no `rauc` binary, empty sensors map) the
 	production `defaultDeviceStatsDeps` degrade almost every signal to `null`:
@@ -36,7 +37,9 @@ import { shouldUseMocks } from "../mock-service.ts";
 const GIB = 1024 ** 3;
 
 /**
- * Plausible device-stats fixture — ALL five signals populated (no nulls). Zod
+ * Plausible device-stats fixture — EVERY signal populated (no nulls, no
+ * omissions: a mock that omitted a field would be claiming it is unmeasurable
+ * on this host, and dev mode must exercise every rendered element). Zod
  * validated by `mockDeviceStatsSchema` in `validateMockFixtures()` (mock-schemas.ts).
  * This is the single source of truth: {@link getMockDeviceStatsDeps} serializes
  * each field into the raw output its collector parses, so the emitted payload
@@ -53,6 +56,14 @@ export const MOCK_DEVICE_STATS = {
 		txBytesPerSec: 640_000,
 	},
 	raucSlot: "A",
+	memTotalBytes: 8 * GIB,
+	memAvailableBytes: 6 * GIB,
+	// Not an independent fixture value — the collector DERIVES this from the two
+	// above ((8 − 6) / 8 × 100), so a wrong figure here fails the mock round-trip
+	// test rather than silently shipping a mock that disagrees with production.
+	memUsedPercent: 25,
+	swapTotalBytes: 2 * GIB,
+	swapFreeBytes: 2 * GIB,
 } satisfies MockDeviceStats;
 
 // ─── raw-output serializers (fixture → the bytes each real collector parses) ──
@@ -85,6 +96,26 @@ function buildDfOutput(disk: MockDeviceStats["disk"]): string {
 /** Reproduce `rauc status --output-format=json` for the booted-slot fixture. */
 function buildRaucOutput(slot: string): string {
 	return JSON.stringify({ booted: slot, boot_primary: slot });
+}
+
+/**
+ * Reproduce a `/proc/meminfo` body for the memory fixture, so the REAL
+ * `collectMemory` parser reduces it back to exactly those fields — including
+ * the derived `memUsedPercent`, which is never written into the file.
+ *
+ * Values go out in the kernel's own unit (kB meaning KiB); `MemFree` is emitted
+ * alongside `MemAvailable` purely so the fixture looks like a real file (the
+ * collector deliberately ignores it — see collectors/memory.ts).
+ */
+function buildMeminfo(stats: MockDeviceStats): string {
+	const kib = (bytes: number) => bytes / 1024;
+	return (
+		`MemTotal:       ${kib(stats.memTotalBytes)} kB\n` +
+		`MemFree:        ${kib(stats.memAvailableBytes / 2)} kB\n` +
+		`MemAvailable:   ${kib(stats.memAvailableBytes)} kB\n` +
+		`SwapTotal:      ${kib(stats.swapTotalBytes)} kB\n` +
+		`SwapFree:       ${kib(stats.swapFreeBytes)} kB\n`
+	);
 }
 
 /** Reproduce a single-interface `/proc/net/dev` snapshot (rx field 0, tx field 8). */
@@ -122,6 +153,7 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 	const dfOutput = buildDfOutput(disk);
 	const raucOutput = buildRaucOutput(raucSlot);
 	const rotational = rotationalForType(disk.type);
+	const meminfo = buildMeminfo(MOCK_DEVICE_STATS);
 
 	// One tick counter, advanced only by the netdev read. `now()` reads the
 	// current tick's time BEFORE the read increments it, so the snapshot time and
@@ -142,10 +174,19 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 				tick += 1;
 				return out;
 			}
+			if (path === "/proc/meminfo") {
+				return meminfo;
+			}
 			if (path.startsWith("/sys/block/")) {
 				return rotational;
 			}
 			throw new Error(`mock device-stats: unexpected readText(${path})`);
+		},
+		// No mocked collector enumerates a directory yet; the seam still has to be
+		// satisfied, and rejecting is the honest answer for a host with no such
+		// tree — an empty listing would claim the directory exists and is empty.
+		readDir: async (path) => {
+			throw new Error(`mock device-stats: unexpected readDir(${path})`);
 		},
 		execFile: async (file) => {
 			if (file === "df") return { stdout: dfOutput, stderr: "" };

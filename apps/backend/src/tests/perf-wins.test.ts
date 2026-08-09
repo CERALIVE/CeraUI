@@ -115,6 +115,15 @@ const NETDEV =
 	" face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets\n" +
 	"  eth0: 1000 100 0 0 0 0 0 0 500 100 0 0 0 0 0 0\n";
 
+// A healthy host's `/proc/meminfo` — the memory collector WARNs on an
+// unreadable one, so a stub claiming to be healthy has to provide it.
+const MEMINFO =
+	"MemTotal:        4194304 kB\n" +
+	"MemFree:          524288 kB\n" +
+	"MemAvailable:    3145728 kB\n" +
+	"SwapTotal:             0 kB\n" +
+	"SwapFree:              0 kB\n";
+
 function healthyDeps(
 	overrides: Partial<DeviceStatsDeps> = {},
 ): DeviceStatsDeps {
@@ -122,6 +131,7 @@ function healthyDeps(
 		readText: async (path) => {
 			if (path === "/proc/loadavg") return "0.50 0.40 0.30 1/200 1234\n";
 			if (path === "/proc/net/dev") return NETDEV;
+			if (path === "/proc/meminfo") return MEMINFO;
 			if (path.startsWith("/sys/block/")) return "0\n";
 			throw new Error(`unexpected readText: ${path}`);
 		},
@@ -136,6 +146,9 @@ function healthyDeps(
 				return { stdout: JSON.stringify({ booted: "rootfs.0" }), stderr: "" };
 			}
 			throw new Error(`unexpected execFile: ${file}`);
+		},
+		readDir: async (path) => {
+			throw new Error(`unexpected readDir: ${path}`);
 		},
 		getSocTempRaw: () => "45.1 °C",
 		now: () => 1000,

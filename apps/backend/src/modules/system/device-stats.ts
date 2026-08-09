@@ -17,20 +17,49 @@
 */
 
 /*
- * Device stats — exactly FIVE signals, broadcast on a 5s `device-stats` event.
+ * Device stats — the 5s `device-stats` broadcast.
  *
- * S1 lock: this module emits ONLY {disk, cpuLoad1, socTemp, ifaceRxTx, raucSlot}.
- * No per-core freq, GPU util, mem pressure, modem signal, swap, etc. Adding a
- * sixth field is a deliberate contract change, not a tweak.
+ * THE FIVE ALWAYS-PRESENT SIGNALS
  *
- * Design: every collector is a pure parse function over injected I/O
- * (`DeviceStatsDeps`), so the whole payload is unit-testable with no real
- * hardware. `collectDeviceStats` wraps each signal in its own try/catch and
- * degrades to `null` on any failure — a missing /sys path or an absent `rauc`
- * binary must never crash the sampling loop.
+ *   {disk, cpuLoad1, socTemp, ifaceRxTx, raucSlot} are emitted on EVERY tick,
+ *   each independently nullable. That set is still frozen: none of them may be
+ *   removed, renamed, or made conditional.
  *
- * socTemp is WIRED from sensors.ts (already broadcasting "SoC temperature" at
- * 1s) via `getSocTempRaw` — we do NOT read /sys/class/thermal a second time.
+ * …PLUS DELIBERATELY ADDED OPTIONAL SIGNALS
+ *
+ *   The original S1 lock said this module emits those five and NOTHING else —
+ *   "no per-core freq, GPU util, mem pressure, swap". Memory/swap is the first
+ *   deliberate exception to that sentence, taken with eyes open: operators had
+ *   no way to see memory pressure on a board that was visibly struggling, and
+ *   the reading costs one `/proc/meminfo` read on a tick that already runs.
+ *
+ *   The exception is scoped, not a door left open. Added signals are OPTIONAL
+ *   fields — present only when actually measured — so the five-key payload of an
+ *   older device remains a valid payload, and every consumer keeps working
+ *   without them. Adding one is still a contract change: it needs a schema
+ *   update (`packages/rpc` system.schema.ts), a mock that flows through the real
+ *   collector, and a deliberate update to the key-shape test — not a tweak.
+ *
+ *   OMIT vs ZERO is the rule that makes optional fields honest: a source we
+ *   could not read is OMITTED, and a source that answered zero reports `0`. A
+ *   swapless board really has `swapTotalBytes: 0`; a board whose /proc/meminfo
+ *   was unreadable has no `swapTotalBytes` key at all. See collectors/memory.ts.
+ *
+ * DESIGN
+ *
+ *   Every collector is a pure parse function over injected I/O
+ *   (`DeviceStatsDeps`), so the whole payload is unit-testable with no real
+ *   hardware. `collectDeviceStats` wraps each signal in its own try/catch and
+ *   degrades to `null` (or omission) on any failure — a missing /sys path or an
+ *   absent `rauc` binary must never crash the sampling loop.
+ *
+ *   File reads go through the root-aware `CollectorFs` seam (collectors/fs.ts),
+ *   whose production root is `/`; collectors that live in their own module
+ *   (memory, and the cpufreq/DDR/GPU collectors that follow) receive that seam
+ *   and nothing else.
+ *
+ *   socTemp is WIRED from sensors.ts (already broadcasting "SoC temperature" at
+ *   1s) via `getSocTempRaw` — we do NOT read /sys/class/thermal a second time.
  */
 
 import { execFileP } from "../../helpers/exec.ts";
@@ -44,6 +73,8 @@ import {
 import { DEVICE_STATS_EVENT } from "../../rpc/events.ts";
 import { DEVICE_STATS_COLLECTOR_TIMEOUT_MS } from "../streaming/constants.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { type CollectorFs, createCollectorFs } from "./collectors/fs.ts";
+import { collectMemory, type MemoryStats } from "./collectors/memory.ts";
 import { getSensors } from "./sensors.ts";
 
 /** Broadcast cadence for the `device-stats` event. */
@@ -76,9 +107,14 @@ export type IfaceRxTxStat = {
 };
 
 /**
- * The complete device-stats payload. Keys are FROZEN by S1 — exactly five.
- * Every field is independently nullable: an unavailable source reports `null`
- * (or `"unavailable"` for raucSlot) rather than failing the whole tick.
+ * The complete device-stats payload.
+ *
+ * The five ALWAYS-PRESENT keys are frozen and independently nullable: an
+ * unavailable source reports `null` (or `"unavailable"` for raucSlot) rather
+ * than failing the whole tick.
+ *
+ * The intersected collector types (`MemoryStats`, and the cpufreq/DDR/GPU
+ * shapes that follow) contribute OPTIONAL keys — present only when measured.
  */
 export type DeviceStatsPayload = {
 	disk: DiskStat | null;
@@ -86,12 +122,16 @@ export type DeviceStatsPayload = {
 	socTemp: number | null;
 	ifaceRxTx: IfaceRxTxStat | null;
 	raucSlot: string;
-};
+} & MemoryStats;
 
-/** Injected I/O surface — replaced wholesale in tests. */
-export type DeviceStatsDeps = {
-	/** Read a file as text (Bun.file().text() in production). */
-	readText: (path: string) => Promise<string>;
+/**
+ * Injected I/O surface — replaced wholesale in tests.
+ *
+ * `readText`/`readDir` are the shared root-aware collector seam
+ * (`collectors/fs.ts`), so a module collector can be handed the deps object
+ * itself and still see only the filesystem it is allowed to touch.
+ */
+export type DeviceStatsDeps = CollectorFs & {
 	/** argv-only exec (execFileP in production — NO shell). */
 	execFile: (
 		file: string,
@@ -277,7 +317,8 @@ type DeviceStatsSignal =
 	| "cpuLoad1"
 	| "socTemp"
 	| "ifaceRxTx"
-	| "raucSlot";
+	| "raucSlot"
+	| "memory";
 
 function errMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
@@ -401,6 +442,21 @@ async function collectIfaceRxTx(
 	}
 }
 
+/**
+ * Memory/swap, from `collectors/memory.ts`. The module already degrades an
+ * unreadable `/proc/meminfo` to "everything omitted", so this wrapper only
+ * exists to keep the composition symmetrical with the other signals (and to
+ * give `withCollectorTimeout` a fallback of the same shape).
+ */
+async function collectMemoryStats(deps: DeviceStatsDeps): Promise<MemoryStats> {
+	try {
+		return await collectMemory(deps);
+	} catch (err) {
+		warnDegraded("memory", err);
+		return {};
+	}
+}
+
 async function collectRaucSlot(deps: DeviceStatsDeps): Promise<string> {
 	try {
 		const { stdout } = await deps.execFile("rauc", [
@@ -415,16 +471,17 @@ async function collectRaucSlot(deps: DeviceStatsDeps): Promise<string> {
 }
 
 /**
- * Collect all five signals. Each is isolated: one failing source yields a null
- * (or "unavailable") field, never a thrown tick. socTemp is read from the
- * injected sensors value — there is no second /sys/class/thermal read here.
+ * Collect every signal. Each is isolated: one failing source yields a null
+ * (or "unavailable", or an omitted optional field), never a thrown tick.
+ * socTemp is read from the injected sensors value — there is no second
+ * /sys/class/thermal read here.
  */
 export async function collectDeviceStats(
 	deps: DeviceStatsDeps,
 	state: DeviceStatsState,
 	timeoutMs: number = DEVICE_STATS_COLLECTOR_TIMEOUT_MS,
 ): Promise<DeviceStatsPayload> {
-	const [disk, cpuLoad1, ifaceRxTx, raucSlot] = await Promise.all([
+	const [disk, cpuLoad1, ifaceRxTx, raucSlot, memory] = await Promise.all([
 		withCollectorTimeout("disk", null, () => collectDisk(deps), timeoutMs),
 		withCollectorTimeout(
 			"cpuLoad1",
@@ -444,6 +501,12 @@ export async function collectDeviceStats(
 			() => collectRaucSlot(deps),
 			timeoutMs,
 		),
+		withCollectorTimeout<MemoryStats>(
+			"memory",
+			{},
+			() => collectMemoryStats(deps),
+			timeoutMs,
+		),
 	]);
 	const socTemp = collectSocTemp(deps);
 	const payload: DeviceStatsPayload = {
@@ -452,6 +515,7 @@ export async function collectDeviceStats(
 		socTemp,
 		ifaceRxTx,
 		raucSlot,
+		...memory,
 	};
 	logger.debug("device-stats tick", { signals: summarizeSignals(payload) });
 	return payload;
@@ -468,13 +532,15 @@ function summarizeSignals(
 		socTemp: p.socTemp !== null ? "ok" : "null",
 		ifaceRxTx: p.ifaceRxTx !== null ? "ok" : "null",
 		raucSlot: p.raucSlot === "unavailable" ? "unavailable" : "ok",
+		// Optional signal: "null" here means "omitted from the payload".
+		memory: p.memTotalBytes !== undefined ? "ok" : "null",
 	};
 }
 
 // ─── production wiring ───────────────────────────────────────────────────────
 
 export const defaultDeviceStatsDeps: DeviceStatsDeps = {
-	readText: (path) => Bun.file(path).text(),
+	...createCollectorFs(),
 	execFile: (file, args) => execFileP(file, args),
 	getSocTempRaw: () => getSensors()[SOC_TEMP_SENSOR_KEY],
 	now: () => Date.now(),
