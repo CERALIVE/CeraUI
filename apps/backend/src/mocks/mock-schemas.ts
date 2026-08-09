@@ -286,6 +286,18 @@ export const mockDeviceStatsSchema = z.object({
 	memUsedPercent: z.number().int().min(0).max(100),
 	swapTotalBytes: z.number().int().nonnegative().multipleOf(1024),
 	swapFreeBytes: z.number().int().nonnegative().multipleOf(1024),
+	// Per-policy CPU frequency, kHz. Required (and non-empty) HERE for the same
+	// reason as the memory fields: dev mode must render every signal. The ids
+	// are sysfs directory names — `policyN`, never a cluster label.
+	cpuFreq: z
+		.array(
+			z.object({
+				id: z.string().regex(/^policy\d+$/, "cpuFreq id must be policy<N>"),
+				curKhz: z.number().int().nonnegative(),
+				maxKhz: z.number().int().positive(),
+			}),
+		)
+		.min(1),
 });
 export type MockDeviceStats = z.infer<typeof mockDeviceStatsSchema>;
 

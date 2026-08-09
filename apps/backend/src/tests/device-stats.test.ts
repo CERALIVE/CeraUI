@@ -93,6 +93,17 @@ const MEMINFO =
 	"SwapTotal:       1048576 kB\n" +
 	"SwapFree:        1048576 kB\n";
 
+// An RK3588-shaped cpufreq tree: two policies, both nodes readable. kHz values
+// go through the payload untouched — see collectors/cpufreq.ts.
+const CPUFREQ_DIR = "/sys/devices/system/cpu/cpufreq";
+const CPUFREQ_FILES = {
+	[`${CPUFREQ_DIR}/policy0/scaling_cur_freq`]: "1008000\n",
+	[`${CPUFREQ_DIR}/policy0/cpuinfo_max_freq`]: "1800000\n",
+	[`${CPUFREQ_DIR}/policy4/scaling_cur_freq`]: "1416000\n",
+	[`${CPUFREQ_DIR}/policy4/cpuinfo_max_freq`]: "2400000\n",
+};
+const CPUFREQ_DIRS = { [CPUFREQ_DIR]: ["policy0", "policy4"] };
+
 const NETDEV = (rx: number, tx: number) =>
 	`Inter-|   Receive                                                |  Transmit\n` +
 	` face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets\n` +
@@ -184,7 +195,9 @@ describe("collectDeviceStats — payload key contract", () => {
 					"/proc/net/dev": NETDEV(rx, tx),
 					"/proc/meminfo": MEMINFO,
 					"/sys/block/mmcblk0/queue/rotational": "0\n",
+					...CPUFREQ_FILES,
 				},
+				dirs: CPUFREQ_DIRS,
 				exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
 				socTemp: "48.3 °C",
 				now,
@@ -205,6 +218,7 @@ describe("collectDeviceStats — payload key contract", () => {
 				"memUsedPercent",
 				"swapTotalBytes",
 				"swapFreeBytes",
+				"cpuFreq",
 			].sort(),
 		);
 		expect(payload.disk).toEqual({
@@ -221,6 +235,30 @@ describe("collectDeviceStats — payload key contract", () => {
 		expect(payload.memUsedPercent).toBe(25);
 		expect(payload.swapTotalBytes).toBe(1024 ** 3);
 		expect(payload.swapFreeBytes).toBe(1024 ** 3);
+		// kHz straight through — no GHz normalization anywhere in the backend.
+		expect(payload.cpuFreq).toEqual([
+			{ id: "policy0", curKhz: 1_008_000, maxKhz: 1_800_000 },
+			{ id: "policy4", curKhz: 1_416_000, maxKhz: 2_400_000 },
+		]);
+	});
+
+	test("an absent cpufreq tree omits the cpuFreq key — the memory keys are untouched", async () => {
+		// Same stub as the happy path minus the cpufreq nodes: readDir rejects,
+		// so the field is omitted rather than emitted as an empty array.
+		const { deps } = makeDeps({
+			files: {
+				"/proc/loadavg": "0.5 0.4 0.3 1/10 11\n",
+				"/proc/net/dev": NETDEV(1, 1),
+				"/proc/meminfo": MEMINFO,
+				"/sys/block/mmcblk0/queue/rotational": "0\n",
+			},
+			exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
+			socTemp: "44.0 °C",
+		});
+		const payload = await collectDeviceStats(deps, createDeviceStatsState());
+
+		expect("cpuFreq" in payload).toBe(false);
+		expect(payload.memTotalBytes).toBe(4 * 1024 ** 3);
 	});
 
 	test("an unreadable /proc/meminfo omits the memory keys — the other five are untouched", async () => {

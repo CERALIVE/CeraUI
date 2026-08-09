@@ -2,7 +2,8 @@
 	CeraUI - Device-Stats Mock Provider (T3 — ceraui-experience-hardening)
 
 	Dev/emulated-mode stand-in for the `device-stats` collector deps — the five
-	always-present signals plus the optional memory/swap fields.
+	always-present signals plus the optional memory/swap and per-policy CPU
+	frequency fields.
 
 	On a dev box (no Rockchip hardware, no `rauc` binary, empty sensors map) the
 	production `defaultDeviceStatsDeps` degrade almost every signal to `null`:
@@ -29,6 +30,7 @@
 	production.
 */
 
+import { CPUFREQ_DIR } from "../../modules/system/collectors/cpufreq.ts";
 import type { DeviceStatsDeps } from "../../modules/system/device-stats.ts";
 import type { MockDeviceStats } from "../mock-schemas.ts";
 import { shouldUseMocks } from "../mock-service.ts";
@@ -64,6 +66,13 @@ export const MOCK_DEVICE_STATS = {
 	memUsedPercent: 25,
 	swapTotalBytes: 2 * GIB,
 	swapFreeBytes: 2 * GIB,
+	// An RK3588-shaped cpufreq tree: one policy per cluster boundary. The ids are
+	// the sysfs directory names the provider writes back out, nothing more.
+	cpuFreq: [
+		{ id: "policy0", curKhz: 1_008_000, maxKhz: 1_800_000 },
+		{ id: "policy4", curKhz: 1_416_000, maxKhz: 2_400_000 },
+		{ id: "policy6", curKhz: 2_016_000, maxKhz: 2_400_000 },
+	],
 } satisfies MockDeviceStats;
 
 // ─── raw-output serializers (fixture → the bytes each real collector parses) ──
@@ -118,6 +127,32 @@ function buildMeminfo(stats: MockDeviceStats): string {
 	);
 }
 
+/**
+ * Reproduce the `/sys/devices/system/cpu/cpufreq/policy*` tree for the cpufreq
+ * fixture — one integer-bearing file per node, exactly as the kernel exposes
+ * them (kHz, trailing newline) — so the REAL `collectCpuFreq` enumerates and
+ * parses it back into the fixture rows.
+ */
+function buildCpuFreq(policies: MockDeviceStats["cpuFreq"]): {
+	dir: string[];
+	files: Map<string, string>;
+} {
+	const files = new Map<string, string>();
+	for (const policy of policies) {
+		files.set(
+			`${CPUFREQ_DIR}/${policy.id}/scaling_cur_freq`,
+			`${policy.curKhz}\n`,
+		);
+		files.set(
+			`${CPUFREQ_DIR}/${policy.id}/cpuinfo_max_freq`,
+			`${policy.maxKhz}\n`,
+		);
+	}
+	// `boost` is a real sibling of the policy directories on many kernels — it is
+	// listed so the collector's enumeration filter is exercised, not bypassed.
+	return { dir: [...policies.map((p) => p.id), "boost"], files };
+}
+
 /** Reproduce a single-interface `/proc/net/dev` snapshot (rx field 0, tx field 8). */
 function buildNetDev(iface: string, rx: number, tx: number): string {
 	return (
@@ -154,6 +189,7 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 	const raucOutput = buildRaucOutput(raucSlot);
 	const rotational = rotationalForType(disk.type);
 	const meminfo = buildMeminfo(MOCK_DEVICE_STATS);
+	const cpufreq = buildCpuFreq(MOCK_DEVICE_STATS.cpuFreq);
 
 	// One tick counter, advanced only by the netdev read. `now()` reads the
 	// current tick's time BEFORE the read increments it, so the snapshot time and
@@ -177,15 +213,22 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 			if (path === "/proc/meminfo") {
 				return meminfo;
 			}
+			const cpufreqNode = cpufreq.files.get(path);
+			if (cpufreqNode !== undefined) {
+				return cpufreqNode;
+			}
 			if (path.startsWith("/sys/block/")) {
 				return rotational;
 			}
 			throw new Error(`mock device-stats: unexpected readText(${path})`);
 		},
-		// No mocked collector enumerates a directory yet; the seam still has to be
-		// satisfied, and rejecting is the honest answer for a host with no such
-		// tree — an empty listing would claim the directory exists and is empty.
+		// Only the cpufreq tree is enumerable here. Every other path REJECTS —
+		// the honest answer for a host with no such tree, where an empty listing
+		// would instead claim the directory exists and is empty.
 		readDir: async (path) => {
+			if (path === CPUFREQ_DIR) {
+				return cpufreq.dir;
+			}
 			throw new Error(`mock device-stats: unexpected readDir(${path})`);
 		},
 		execFile: async (file) => {

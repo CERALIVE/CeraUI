@@ -44,6 +44,26 @@ describe('deviceStatsSchema — additive growth', () => {
 		expect(parsed.swapFreeBytes).toBe(0);
 	});
 
+	test('a payload carrying the per-policy CPU frequencies parses them through', () => {
+		const parsed = deviceStatsSchema.parse({
+			...LEGACY_PAYLOAD,
+			cpuFreq: [
+				{ id: 'policy0', curKhz: 1008000, maxKhz: 1800000 },
+				{ id: 'policy4', curKhz: 1416000, maxKhz: 2400000 },
+			],
+		});
+		expect(parsed.cpuFreq).toHaveLength(2);
+		// kHz on the wire — a schema that silently accepted GHz would let a
+		// producer ship 1.8 where consumers expect 1800000.
+		expect(parsed.cpuFreq?.[0]?.maxKhz).toBe(1800000);
+		expect(parsed.cpuFreq?.[1]?.id).toBe('policy4');
+	});
+
+	test('a pre-cpuFreq payload still parses (the field is absent, not empty)', () => {
+		const parsed = deviceStatsSchema.parse(LEGACY_PAYLOAD);
+		expect(parsed.cpuFreq).toBeUndefined();
+	});
+
 	test('the five always-present keys stay REQUIRED', () => {
 		for (const key of ['disk', 'cpuLoad1', 'socTemp', 'ifaceRxTx', 'raucSlot'] as const) {
 			const { [key]: _dropped, ...withoutKey } = LEGACY_PAYLOAD;

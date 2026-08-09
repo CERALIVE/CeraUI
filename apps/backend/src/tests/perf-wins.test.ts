@@ -124,6 +124,11 @@ const MEMINFO =
 	"SwapTotal:             0 kB\n" +
 	"SwapFree:              0 kB\n";
 
+// A healthy host's cpufreq tree — same reasoning as MEMINFO above: the cpufreq
+// collector WARNs when the policy directory cannot be enumerated.
+const CPUFREQ_DIR = "/sys/devices/system/cpu/cpufreq";
+const CPUFREQ_POLICIES = ["policy0", "policy4"];
+
 function healthyDeps(
 	overrides: Partial<DeviceStatsDeps> = {},
 ): DeviceStatsDeps {
@@ -132,6 +137,9 @@ function healthyDeps(
 			if (path === "/proc/loadavg") return "0.50 0.40 0.30 1/200 1234\n";
 			if (path === "/proc/net/dev") return NETDEV;
 			if (path === "/proc/meminfo") return MEMINFO;
+			if (path.startsWith(`${CPUFREQ_DIR}/`)) {
+				return path.endsWith("cpuinfo_max_freq") ? "2400000\n" : "1008000\n";
+			}
 			if (path.startsWith("/sys/block/")) return "0\n";
 			throw new Error(`unexpected readText: ${path}`);
 		},
@@ -148,6 +156,7 @@ function healthyDeps(
 			throw new Error(`unexpected execFile: ${file}`);
 		},
 		readDir: async (path) => {
+			if (path === CPUFREQ_DIR) return CPUFREQ_POLICIES;
 			throw new Error(`unexpected readDir: ${path}`);
 		},
 		getSocTempRaw: () => "45.1 °C",

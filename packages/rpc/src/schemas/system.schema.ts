@@ -320,6 +320,20 @@ export const ifaceRxTxStatSchema = z.object({
 });
 export type IfaceRxTxStat = z.infer<typeof ifaceRxTxStatSchema>;
 
+// One cpufreq policy — the kernel's unit of frequency control, whose `id` is the
+// sysfs directory name (`policy0`) and NOTHING more. A policy is not a cluster:
+// it lines up with big.LITTLE on RK3588 and with individual CPUs on x86, so no
+// consumer may infer "big"/"little" from the id or from the list's position.
+//
+// Frequencies are kHz — the unit `scaling_cur_freq` / `cpuinfo_max_freq` report.
+// They are NOT normalized on the wire; a GHz rendering is a display decision.
+export const cpuFreqPolicySchema = z.object({
+	id: z.string(),
+	curKhz: z.number(),
+	maxKhz: z.number(),
+});
+export type CpuFreqPolicy = z.infer<typeof cpuFreqPolicySchema>;
+
 export const deviceStatsSchema = z.object({
 	disk: diskStatSchema.nullable(),
 	cpuLoad1: z.number().nullable(),
@@ -333,6 +347,9 @@ export const deviceStatsSchema = z.object({
 	memUsedPercent: z.number().optional(),
 	swapTotalBytes: z.number().optional(),
 	swapFreeBytes: z.number().optional(),
+	// Per-policy CPU frequency — kHz, unconverted. ABSENT when nothing was
+	// measurable (no cpufreq tree, or no policy answered); NEVER an empty array.
+	cpuFreq: z.array(cpuFreqPolicySchema).optional(),
 });
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
 

@@ -73,6 +73,7 @@ import {
 import { DEVICE_STATS_EVENT } from "../../rpc/events.ts";
 import { DEVICE_STATS_COLLECTOR_TIMEOUT_MS } from "../streaming/constants.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { type CpuFreqStats, collectCpuFreq } from "./collectors/cpufreq.ts";
 import { type CollectorFs, createCollectorFs } from "./collectors/fs.ts";
 import { collectMemory, type MemoryStats } from "./collectors/memory.ts";
 import { getSensors } from "./sensors.ts";
@@ -122,7 +123,8 @@ export type DeviceStatsPayload = {
 	socTemp: number | null;
 	ifaceRxTx: IfaceRxTxStat | null;
 	raucSlot: string;
-} & MemoryStats;
+} & MemoryStats &
+	CpuFreqStats;
 
 /**
  * Injected I/O surface — replaced wholesale in tests.
@@ -318,7 +320,8 @@ type DeviceStatsSignal =
 	| "socTemp"
 	| "ifaceRxTx"
 	| "raucSlot"
-	| "memory";
+	| "memory"
+	| "cpuFreq";
 
 function errMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
@@ -457,6 +460,22 @@ async function collectMemoryStats(deps: DeviceStatsDeps): Promise<MemoryStats> {
 	}
 }
 
+/**
+ * Per-policy CPU frequency, from `collectors/cpufreq.ts`. Like the memory
+ * wrapper this only keeps the composition symmetrical — the module already
+ * degrades an absent cpufreq tree to "field omitted" on its own.
+ */
+async function collectCpuFreqStats(
+	deps: DeviceStatsDeps,
+): Promise<CpuFreqStats> {
+	try {
+		return await collectCpuFreq(deps);
+	} catch (err) {
+		warnDegraded("cpuFreq", err);
+		return {};
+	}
+}
+
 async function collectRaucSlot(deps: DeviceStatsDeps): Promise<string> {
 	try {
 		const { stdout } = await deps.execFile("rauc", [
@@ -481,33 +500,40 @@ export async function collectDeviceStats(
 	state: DeviceStatsState,
 	timeoutMs: number = DEVICE_STATS_COLLECTOR_TIMEOUT_MS,
 ): Promise<DeviceStatsPayload> {
-	const [disk, cpuLoad1, ifaceRxTx, raucSlot, memory] = await Promise.all([
-		withCollectorTimeout("disk", null, () => collectDisk(deps), timeoutMs),
-		withCollectorTimeout(
-			"cpuLoad1",
-			null,
-			() => collectCpuLoad1(deps),
-			timeoutMs,
-		),
-		withCollectorTimeout(
-			"ifaceRxTx",
-			null,
-			() => collectIfaceRxTx(deps, state),
-			timeoutMs,
-		),
-		withCollectorTimeout(
-			"raucSlot",
-			"unavailable",
-			() => collectRaucSlot(deps),
-			timeoutMs,
-		),
-		withCollectorTimeout<MemoryStats>(
-			"memory",
-			{},
-			() => collectMemoryStats(deps),
-			timeoutMs,
-		),
-	]);
+	const [disk, cpuLoad1, ifaceRxTx, raucSlot, memory, cpuFreq] =
+		await Promise.all([
+			withCollectorTimeout("disk", null, () => collectDisk(deps), timeoutMs),
+			withCollectorTimeout(
+				"cpuLoad1",
+				null,
+				() => collectCpuLoad1(deps),
+				timeoutMs,
+			),
+			withCollectorTimeout(
+				"ifaceRxTx",
+				null,
+				() => collectIfaceRxTx(deps, state),
+				timeoutMs,
+			),
+			withCollectorTimeout(
+				"raucSlot",
+				"unavailable",
+				() => collectRaucSlot(deps),
+				timeoutMs,
+			),
+			withCollectorTimeout<MemoryStats>(
+				"memory",
+				{},
+				() => collectMemoryStats(deps),
+				timeoutMs,
+			),
+			withCollectorTimeout<CpuFreqStats>(
+				"cpuFreq",
+				{},
+				() => collectCpuFreqStats(deps),
+				timeoutMs,
+			),
+		]);
 	const socTemp = collectSocTemp(deps);
 	const payload: DeviceStatsPayload = {
 		disk,
@@ -516,6 +542,7 @@ export async function collectDeviceStats(
 		ifaceRxTx,
 		raucSlot,
 		...memory,
+		...cpuFreq,
 	};
 	logger.debug("device-stats tick", { signals: summarizeSignals(payload) });
 	return payload;
@@ -534,6 +561,7 @@ function summarizeSignals(
 		raucSlot: p.raucSlot === "unavailable" ? "unavailable" : "ok",
 		// Optional signal: "null" here means "omitted from the payload".
 		memory: p.memTotalBytes !== undefined ? "ok" : "null",
+		cpuFreq: p.cpuFreq !== undefined ? "ok" : "null",
 	};
 }
 
