@@ -76,6 +76,15 @@ export const ENCODER_LOAD_INTERVAL_MS = 2000;
 export const ENCODER_CORE_IDS = ["rkvenc0", "rkvenc1"] as const;
 export type EncoderCoreId = (typeof ENCODER_CORE_IDS)[number];
 
+/**
+ * Decoder core ids are DERIVED from how many rows the device actually printed,
+ * not declared from a fixed list like the encoders above. The encoder count is
+ * a fixed property of the SoC the UI already draws two slots for; the decoder
+ * rows are whatever `/proc/mpp_service/load` happens to carry on this board, so
+ * inventing absent slots would claim decoders the file never mentioned.
+ */
+const DECODER_CORE_ID_PREFIX = "rkvdec";
+
 const MPP_LOAD_PATH = "/proc/mpp_service/load";
 const MPP_LOAD_INTERVAL_PATH = "/proc/mpp_service/load_interval";
 
@@ -135,6 +144,37 @@ export function parseEnableCount(raw: string): number | null {
 	return n;
 }
 
+/** `fdbd0000.rkvenc-core` — the encoder blocks, and nothing else in the file. */
+const MPP_ENCODE_ROW =
+	/^\s*([0-9a-f]+)\.rkvenc-core\b.*?\bload:\s*([0-9.]+)\s*%/i;
+
+/**
+ * `fdc38100.rkvdec-core` — the RKVDEC blocks. Deliberately tolerant of a
+ * trailing suffix (`rkvdec-core0`, which some vendor trees print) but NOT of
+ * `vdpu`/`vpu`: those are the legacy decoders, a different block with different
+ * accounting, and folding them in would silently mix two hardware units under
+ * one number.
+ */
+const MPP_DECODE_ROW =
+	/^\s*([0-9a-f]+)\.rkvdec[\w-]*\b.*?\bload:\s*([0-9.]+)\s*%/i;
+
+function parseMppLoadRows(text: string, pattern: RegExp): (number | null)[] {
+	const rows: { address: string; percent: number | null }[] = [];
+	for (const line of text.split("\n")) {
+		const match = line.match(pattern);
+		if (!match) continue;
+		const address = match[1];
+		const raw = match[2];
+		if (address === undefined || raw === undefined) continue;
+		rows.push({
+			address: address.toLowerCase(),
+			percent: parseLoadPercent(raw),
+		});
+	}
+	rows.sort((a, b) => a.address.localeCompare(b.address));
+	return rows.map((row) => row.percent);
+}
+
 /**
  * Pull the encoder-core rows out of `/proc/mpp_service/load`, which reports one
  * line per hardware block:
@@ -153,22 +193,37 @@ export function parseEnableCount(raw: string): number | null {
  * depending on a specific board's addresses or on the driver's print order.
  */
 export function parseMppLoad(text: string): (number | null)[] {
-	const rows: { address: string; percent: number | null }[] = [];
-	for (const line of text.split("\n")) {
-		const match = line.match(
-			/^\s*([0-9a-f]+)\.rkvenc-core\b.*?\bload:\s*([0-9.]+)\s*%/i,
-		);
-		if (!match) continue;
-		const address = match[1];
-		const raw = match[2];
-		if (address === undefined || raw === undefined) continue;
-		rows.push({
-			address: address.toLowerCase(),
-			percent: parseLoadPercent(raw),
-		});
-	}
-	rows.sort((a, b) => a.address.localeCompare(b.address));
-	return rows.map((row) => row.percent);
+	return parseMppLoadRows(text, MPP_ENCODE_ROW);
+}
+
+/**
+ * Pull the DECODER-core rows out of the same file, by the same
+ * address-ascending rule:
+ *
+ *   fdc38100.rkvdec-core      load:  23.10% utilization:  22.87%
+ *   fdc40100.rkvdec-core      load:   6.75% utilization:   6.51%
+ *
+ * Separate from `parseMppLoad` rather than a second return value, so the
+ * existing encoder callers are untouched.
+ */
+export function parseMppDecodeLoad(text: string): (number | null)[] {
+	return parseMppLoadRows(text, MPP_DECODE_ROW);
+}
+
+/**
+ * Shape decoder percentages into the SAME three-state reading the encoder cores
+ * use, so a consumer renders both with one code path. A refused percentage keeps
+ * its slot as `unavailable` — dropping it would renumber every decoder after it.
+ */
+export function decodeCoreReadings(
+	percents: readonly (number | null)[],
+): EncoderCoreReading[] {
+	return percents.map((percent, index) => {
+		const core = `${DECODER_CORE_ID_PREFIX}${index}`;
+		return percent === null
+			? { core, kind: "unavailable" }
+			: { core, kind: "percent", percent };
+	});
 }
 
 /** Does this reading say anything at all about at least one core? */
@@ -235,9 +290,17 @@ async function collectFromMppService(
 			: { core, kind: "percent", percent };
 	});
 	if (!hasUsableCore(cores)) return null;
+
+	// Decode rows are reported only when the file actually carries them, and
+	// they never participate in `hasUsableCore` above: whether this kernel
+	// reality wins is an ENCODER question, and a board that prints decoder rows
+	// but no readable encoder row is still an uninstrumented encoder.
+	const decodeCores = decodeCoreReadings(parseMppDecodeLoad(text));
+
 	return {
 		source: "mpp-service",
 		cores,
+		...(decodeCores.length > 0 ? { decodeCores } : {}),
 		updatedAt: deps.now(),
 		simulated: false,
 	};
@@ -266,6 +329,12 @@ async function collectFromClkEnableCount(
 		);
 	}
 	if (!hasUsableCore(cores)) return null;
+	// No `decodeCores` here, ever. Mainline has no `/proc/mpp_service` and no
+	// clock-count analogue for RKVDEC, so the only future source on this kernel
+	// is per-fd `drm` accounting (`/proc/<pid>/fdinfo`), which needs the sibling
+	// plan's kernel work plus an edge image before it exists to read. Until then
+	// this path stays SILENT about decode rather than emitting an empty array a
+	// consumer would draw as "decoders measured at nothing".
 	return {
 		source: "clk-enable-count",
 		cores,

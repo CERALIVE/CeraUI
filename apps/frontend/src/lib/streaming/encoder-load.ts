@@ -63,6 +63,15 @@ export interface EncoderLoadReading {
 	/** `null` ⇒ no interface at all (or no collector wired). */
 	readonly source: EncoderLoadSource | null;
 	readonly cores: readonly EncoderCoreReading[];
+	/**
+	 * Hardware DECODER cores, when the live kernel interface reports them.
+	 *
+	 * ABSENT rather than `[]` when it does not: an empty array would read as
+	 * "the decoders were measured at nothing", a different claim from "this
+	 * kernel has no decode signal". Only the vendor 6.1 `/proc/mpp_service`
+	 * interface carries decoder rows; mainline/edge 7.1 has no equivalent.
+	 */
+	readonly decodeCores?: readonly EncoderCoreReading[];
 	/** Epoch ms of the sample; `null` when nothing has ever been read. */
 	readonly updatedAt: number | null;
 	/**

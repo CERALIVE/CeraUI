@@ -387,6 +387,17 @@ export const encoderLoadSchema = z.object({
 	/** `null` ⇒ neither kernel interface was readable on this device. */
 	source: encoderLoadSourceSchema.nullable(),
 	cores: z.array(encoderCoreReadingSchema),
+	/**
+	 * Hardware DECODER cores, same three-state shape as `cores`.
+	 *
+	 * OPTIONAL and ABSENT — never `[]` — when the live interface said nothing
+	 * about decode: an empty array would read as "the decoders were measured at
+	 * nothing", which is a different claim from "this kernel has no decode
+	 * signal". Only the vendor `/proc/mpp_service` reality reports decoder rows
+	 * today; mainline/edge 7.1 has no equivalent, so a mainline reading omits
+	 * the key entirely.
+	 */
+	decodeCores: z.array(encoderCoreReadingSchema).optional(),
 	/** Epoch ms of the sample; `null` when nothing has ever been read. */
 	updatedAt: z.number().nullable(),
 	/** Always `false` on the wire — the device never publishes a synthetic read. */

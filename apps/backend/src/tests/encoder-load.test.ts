@@ -16,6 +16,7 @@ import { withDeviceType } from "../modules/system/device-detection.ts";
 import {
 	collectEncoderLoad,
 	createEncoderLoadState,
+	decodeCoreReadings,
 	ENCODER_LOAD_UNAVAILABLE,
 	type EncoderLoadDeps,
 	type EncoderLoadState,
@@ -23,6 +24,7 @@ import {
 	initEncoderLoad,
 	parseEnableCount,
 	parseLoadPercent,
+	parseMppDecodeLoad,
 	parseMppLoad,
 } from "../modules/system/encoder-load.ts";
 
@@ -331,5 +333,138 @@ describe("no path converts an enable count into a number", () => {
 			expect(core.kind).toBe("active");
 			expect(JSON.stringify(core)).not.toMatch(/percent/);
 		}
+	});
+});
+
+// ─── decoder rows (vendor 6.1 only) ──────────────────────────────────────────
+
+/**
+ * The same vendor file while a decode session is live. The RK3588's two RKVDEC
+ * cores share `/proc/mpp_service/load` with the encoders, at their own base
+ * addresses (`fdc38100` = decoder 0, `fdc40100` = decoder 1), and the VDPU /
+ * RGA blocks sit alongside both — so this fixture is the honest three-way mix
+ * the parser has to separate.
+ */
+const VENDOR_LOAD_WITH_DECODE = [
+	"fdbd0000.rkvenc-core      load:  11.34% utilization:  11.08%",
+	"fdbe0000.rkvenc-core      load:   0.00% utilization:   0.00%",
+	"fdc38100.rkvdec-core      load:  23.10% utilization:  22.87%",
+	"fdc40100.rkvdec-core      load:   6.75% utilization:   6.51%",
+	"fdb50400.vdpu-core        load:   0.00% utilization:   0.00%",
+	"",
+].join("\n");
+
+describe("parseMppDecodeLoad", () => {
+	test("picks out ONLY the decoder-core rows", () => {
+		expect(parseMppDecodeLoad(VENDOR_LOAD_WITH_DECODE)).toEqual([23.1, 6.75]);
+	});
+
+	test("orders decoders by base ADDRESS, not by print order", () => {
+		const reversed = [
+			"fdc40100.rkvdec-core      load:   6.75% utilization:   6.51%",
+			"fdc38100.rkvdec-core      load:  23.10% utilization:  22.87%",
+		].join("\n");
+		// fdc38100 is decoder 0 — the file's print order must not decide that.
+		expect(parseMppDecodeLoad(reversed)).toEqual([23.1, 6.75]);
+	});
+
+	test("degrades an out-of-range decoder row to null without dropping its slot", () => {
+		const bogus = [
+			"fdc38100.rkvdec-core      load: 900.00% utilization:  22.87%",
+			"fdc40100.rkvdec-core      load:   6.75% utilization:   6.51%",
+		].join("\n");
+		expect(parseMppDecodeLoad(bogus)).toEqual([null, 6.75]);
+	});
+
+	test("a venc-only file yields NO decoder rows at all", () => {
+		// The VDPU row in this fixture is not an RKVDEC core and must not be
+		// promoted into one just because it decodes.
+		expect(parseMppDecodeLoad(VENDOR_LOAD_ONE_SESSION)).toEqual([]);
+	});
+
+	test("the two parsers never steal each other's rows", () => {
+		expect(parseMppLoad(VENDOR_LOAD_WITH_DECODE)).toEqual([11.34, 0]);
+		expect(parseMppDecodeLoad(VENDOR_LOAD_WITH_DECODE)).toEqual([23.1, 6.75]);
+	});
+});
+
+describe("decodeCoreReadings", () => {
+	test("ids decoders by hardware index, in the same shape as encode cores", () => {
+		expect(decodeCoreReadings([23.1, 6.75])).toEqual([
+			{ core: "rkvdec0", kind: "percent", percent: 23.1 },
+			{ core: "rkvdec1", kind: "percent", percent: 6.75 },
+		]);
+	});
+
+	test("a refused row keeps its slot as unavailable", () => {
+		expect(decodeCoreReadings([null, 0])).toEqual([
+			{ core: "rkvdec0", kind: "unavailable" },
+			{ core: "rkvdec1", kind: "percent", percent: 0 },
+		]);
+	});
+});
+
+describe("vendor kernel — decoder rows on the encoder-load topic", () => {
+	test("publishes the decode cores ALONGSIDE the untouched encode cores", async () => {
+		const h = makeHarness({
+			[MPP_INTERVAL]: "1000",
+			[MPP_LOAD]: VENDOR_LOAD_WITH_DECODE,
+		});
+		expect(await collectEncoderLoad(h.deps, h.state)).toEqual({
+			source: "mpp-service",
+			cores: [
+				{ core: "rkvenc0", kind: "percent", percent: 11.34 },
+				{ core: "rkvenc1", kind: "percent", percent: 0 },
+			],
+			decodeCores: [
+				{ core: "rkvdec0", kind: "percent", percent: 23.1 },
+				{ core: "rkvdec1", kind: "percent", percent: 6.75 },
+			],
+			updatedAt: NOW,
+			simulated: false,
+		});
+	});
+
+	test("a venc-only file OMITS the key — never an empty array", async () => {
+		// `[]` would read as "two decoders measured at nothing". The absence of a
+		// decoder row means the device said nothing about decode, so the reading
+		// says nothing either.
+		const h = makeHarness({
+			[MPP_INTERVAL]: "1000",
+			[MPP_LOAD]: VENDOR_LOAD_ONE_SESSION,
+		});
+		const reading = await collectEncoderLoad(h.deps, h.state);
+		expect(reading).not.toHaveProperty("decodeCores");
+	});
+
+	test("decode rows never decide whether the vendor reality wins", async () => {
+		// The encoder rows alone are what make mpp-service usable; a file with
+		// decode rows but no readable encoder row still falls through.
+		const h = makeHarness({
+			[MPP_INTERVAL]: "1000",
+			[MPP_LOAD]:
+				"fdc38100.rkvdec-core      load:  23.10% utilization: 22.87%\n",
+			[CLK0]: "1\n",
+			[CLK1]: "0\n",
+		});
+		const reading = await collectEncoderLoad(h.deps, h.state);
+		expect(reading.source).toBe("clk-enable-count");
+		expect(reading).not.toHaveProperty("decodeCores");
+	});
+});
+
+describe("mainline kernel — no decode signal exists", () => {
+	test("a clk_enable_count reading carries NO decodeCores", async () => {
+		// There is no `/proc/mpp_service` on mainline and no clock-count analogue
+		// for RKVDEC, so this path must stay silent about decode rather than
+		// shape a placeholder.
+		const h = makeHarness({ [CLK0]: "2\n", [CLK1]: "1\n" });
+		expect(await collectEncoderLoad(h.deps, h.state)).not.toHaveProperty(
+			"decodeCores",
+		);
+	});
+
+	test("the unavailable floor claims nothing about decode either", () => {
+		expect(ENCODER_LOAD_UNAVAILABLE).not.toHaveProperty("decodeCores");
 	});
 });
