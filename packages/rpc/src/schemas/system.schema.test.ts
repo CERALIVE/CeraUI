@@ -12,7 +12,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 
-import { deviceStatsSchema } from './system.schema.js';
+import { deviceStatsSchema, encoderLoadSchema } from './system.schema.js';
 
 const LEGACY_PAYLOAD = {
 	disk: { used: 100, total: 200, type: 'eMMC' },
@@ -20,6 +20,23 @@ const LEGACY_PAYLOAD = {
 	socTemp: 48.3,
 	ifaceRxTx: { iface: 'eth0', rxBytesPerSec: 10, txBytesPerSec: 20 },
 	raucSlot: 'rootfs.0',
+};
+
+/** Every field the contract carries today — the removal/rename guard's subject. */
+const FULL_PAYLOAD = {
+	...LEGACY_PAYLOAD,
+	memTotalBytes: 8589934592,
+	memAvailableBytes: 6442450944,
+	memUsedPercent: 25,
+	swapTotalBytes: 2147483648,
+	swapFreeBytes: 2147483648,
+	cpuFreq: [
+		{ id: 'policy0', curKhz: 1008000, maxKhz: 1800000 },
+		{ id: 'policy4', curKhz: 1416000, maxKhz: 2400000 },
+		{ id: 'policy6', curKhz: 2016000, maxKhz: 2400000 },
+	],
+	ddr: { loadPercent: 37, curFreqHz: 528000000, maxFreqHz: 1560000000 },
+	gpu: { loadPercent: 61, curFreqHz: 300000000, maxFreqHz: 1000000000 },
 };
 
 describe('deviceStatsSchema — additive growth', () => {
@@ -135,5 +152,74 @@ describe('deviceStatsSchema — additive growth', () => {
 			const { [key]: _dropped, ...withoutKey } = LEGACY_PAYLOAD;
 			expect(deviceStatsSchema.safeParse(withoutKey).success).toBe(false);
 		}
+	});
+
+	// The whole-payload lock. The per-signal tests above each assert a couple of
+	// representative keys; this one round-trips EVERY field at once, so dropping
+	// or renaming any single one — required or optional, top level or nested —
+	// makes zod strip it and the `toEqual` fail. Growth stays a one-line edit
+	// here; removal cannot be silent.
+	test('every field currently on the contract survives a round trip', () => {
+		expect(deviceStatsSchema.parse(FULL_PAYLOAD)).toEqual(FULL_PAYLOAD);
+	});
+});
+
+const LEGACY_ENCODER_LOAD = {
+	source: 'mpp-service',
+	cores: [
+		{ core: 'rkvenc0', kind: 'percent', percent: 11.34 },
+		{ core: 'rkvenc1', kind: 'percent', percent: 0 },
+	],
+	updatedAt: 1800000000000,
+	simulated: false,
+};
+
+describe('encoderLoadSchema — additive growth', () => {
+	test('a pre-decode payload still parses, and stays absent rather than empty', () => {
+		const parsed = encoderLoadSchema.parse(LEGACY_ENCODER_LOAD);
+		expect(parsed.decodeCores).toBeUndefined();
+		// Not `[]`: a device that said nothing about decode must not be reported
+		// as having measured its decoders at nothing.
+		expect('decodeCores' in parsed).toBe(false);
+	});
+
+	test('a vendor payload carrying decoder rows parses them through', () => {
+		const parsed = encoderLoadSchema.parse({
+			...LEGACY_ENCODER_LOAD,
+			decodeCores: [
+				{ core: 'rkvdec0', kind: 'percent', percent: 23.1 },
+				{ core: 'rkvdec1', kind: 'unavailable' },
+			],
+		});
+		expect(parsed.decodeCores).toHaveLength(2);
+		// The refused row keeps its slot — dropping it would renumber rkvdec1.
+		expect(parsed.decodeCores?.[1]).toEqual({ core: 'rkvdec1', kind: 'unavailable' });
+	});
+
+	test('decoder rows are not limited to the encoder\u2019s two slots', () => {
+		const parsed = encoderLoadSchema.parse({
+			...LEGACY_ENCODER_LOAD,
+			decodeCores: [
+				{ core: 'rkvdec0', kind: 'percent', percent: 1 },
+				{ core: 'rkvdec1', kind: 'percent', percent: 2 },
+				{ core: 'rkvdec2', kind: 'percent', percent: 3 },
+			],
+		});
+		expect(parsed.decodeCores).toHaveLength(3);
+	});
+
+	test('the pre-existing keys stay REQUIRED', () => {
+		for (const key of ['source', 'cores', 'updatedAt', 'simulated'] as const) {
+			const { [key]: _dropped, ...withoutKey } = LEGACY_ENCODER_LOAD;
+			expect(encoderLoadSchema.safeParse(withoutKey).success).toBe(false);
+		}
+	});
+
+	test('every field currently on the contract survives a round trip', () => {
+		const full = {
+			...LEGACY_ENCODER_LOAD,
+			decodeCores: [{ core: 'rkvdec0', kind: 'percent', percent: 23.1 }],
+		};
+		expect(encoderLoadSchema.parse(full)).toEqual(full);
 	});
 });

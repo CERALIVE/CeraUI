@@ -231,3 +231,60 @@ describe("the dev fixture", () => {
 		);
 	});
 });
+
+describe("the dev fixture's decoder rows", () => {
+	it("only the vendor flavour carries them — absent is not empty", () => {
+		expect(mockEncoderLoadAt("vendor", T, true).decodeCores).toBeDefined();
+		// `not.toHaveProperty` rather than `toBeUndefined`: an explicitly-assigned
+		// `decodeCores: undefined` would satisfy the latter while still putting the
+		// key on the wire, which is the very distinction this fixture must keep.
+		expect(mockEncoderLoadAt("mainline", T, true)).not.toHaveProperty(
+			"decodeCores",
+		);
+		expect(mockEncoderLoadAt("unavailable", T, true)).not.toHaveProperty(
+			"decodeCores",
+		);
+	});
+
+	it("uses rkvdec ids derived from row position, not the encoder core ids", () => {
+		const rows = mockEncoderLoadAt("vendor", T, true).decodeCores ?? [];
+		expect(rows.map((row) => row.core)).toEqual(["rkvdec0", "rkvdec1"]);
+	});
+
+	it("keeps a refused figure as an unavailable ROW rather than dropping it", () => {
+		const rows = mockEncoderLoadAt("vendor", T, true).decodeCores ?? [];
+		// Dropping the row would renumber every decoder after it, so the slot
+		// stays and dev mode gets to exercise that render path.
+		expect(rows[1]).toEqual({ core: "rkvdec1", kind: "unavailable" });
+	});
+
+	it("reads zero while idle and a measured-shaped figure while streaming", () => {
+		const idle = mockEncoderLoadAt("vendor", T, false).decodeCores ?? [];
+		expect(idle[0]).toEqual({ core: "rkvdec0", kind: "percent", percent: 0 });
+
+		const busy = mockEncoderLoadAt("vendor", T, true).decodeCores ?? [];
+		const row = busy[0];
+		expect(row?.kind).toBe("percent");
+		if (row?.kind === "percent") {
+			expect(row.percent).toBeGreaterThan(0);
+			expect(row.percent).toBeLessThanOrEqual(100);
+		}
+	});
+
+	it("is deterministic in its inputs, like every other leg of the fixture", () => {
+		expect(mockEncoderLoadAt("vendor", T, true).decodeCores).toEqual(
+			mockEncoderLoadAt("vendor", T, true).decodeCores,
+		);
+	});
+
+	it("does not hardcode two decoder slots", () => {
+		// The length is DERIVED from the fixture row list — a board printing three
+		// decoder rows must not be shaped into the encoder's fixed two-slot list.
+		const source = readFileSync(
+			fileURLToPath(new URL("./encoder-load-mock.ts", import.meta.url)),
+			"utf8",
+		);
+		expect(source).not.toMatch(/ENCODER_CORE_IDS[^\n]*rkvdec/);
+		expect(source).toMatch(/MOCK_DECODE_PERCENTS/);
+	});
+});

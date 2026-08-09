@@ -5,20 +5,24 @@
  * ------------------------------------------------------------------------------
  * The backend mock subsystem exists to feed REAL WIRE CONTRACTS: each provider
  * seeds a payload that a genuine broadcast (`sensors`, `device-stats`, `status`,
- * `sources`, …) then carries. Encoder load has no such contract — `device-stats`
- * is a locked 5-signal broadcast and no new one may be added for this — and
- * minting one is exactly the deferred backend work this pass excludes
- * (`TD-encoder-load-telemetry`). A backend provider with nothing to publish
- * through would be a parallel mocking mechanism, not the established one, so the
- * fixture sits beside the consumer instead and stays dev-gated.
+ * `sources`, …) then carries. There IS now an `encoder-load` broadcast, but its
+ * collector is `isRealDevice()`-gated, so on a dev host it publishes NOTHING —
+ * and that silence is precisely the seam this fixture fills
+ * (`device-health-history.svelte.ts`). Adding a backend provider would mean
+ * ungating the collector or minting a second publisher for it: a parallel
+ * mocking mechanism racing the real one, for a signal whose absence on a dev
+ * host is the honest answer. So the fixture stays beside its consumer, and
+ * stays dev-gated.
  *
  * Everything else the panel draws — SoC temperature and the 1-minute load
  * average — comes from the REAL broadcasts, which the backend mock subsystem
  * already feeds in dev. Only this one signal is synthetic, and it says so:
  * `simulated: true` rides every reading and the UI renders that verbatim.
  *
- * The shapes are the live Rock 5B+ measurements, not invented behaviour — see
- * `encoder-load.ts` for the measurement table.
+ * The ENCODER shapes are the live Rock 5B+ measurements, not invented behaviour
+ * — see `encoder-load.ts` for the measurement table. The DECODER rows are the
+ * one exception and say so at their definition: no decode session was ever
+ * captured, so those figures are illustrative.
  */
 
 import {
@@ -66,6 +70,48 @@ const IDLE_PERCENT = 0;
 /** One 1080p30 H.265 session measured 11.34 % on core 0 and 0.00 % on core 1. */
 const SESSION_PERCENT_CORE0 = 11.34;
 
+/** The `rkvdecN` ids the vendor parser derives from row position. */
+const DECODE_CORE_ID_PREFIX = "rkvdec";
+
+/**
+ * The decoder rows, by ROW POSITION — the length is this list's, never the
+ * encoder's fixed two-slot one, because a board's decoder count comes from the
+ * rows it actually printed.
+ *
+ * Unlike every encoder figure above, these are NOT board measurements: no
+ * decode session was ever captured on the Rock 5B+, and the busy figure is the
+ * illustrative row from the vendor parser's own docstring
+ * (`apps/backend/src/modules/system/encoder-load.ts`). That is acceptable only
+ * because the reading carries `simulated: true` and the UI renders it verbatim —
+ * do not promote these numbers into any document as observed behaviour.
+ *
+ * The `null` slot is deliberate: a figure the parser refuses keeps its row as
+ * `unavailable` rather than vanishing, so dev mode exercises the render path
+ * that a board would otherwise only reach by printing a malformed row.
+ */
+const MOCK_DECODE_PERCENTS: readonly (number | null)[] = [23.1, null];
+
+/**
+ * Decoder rows for the vendor flavour. Emitted ONLY there: `/proc/mpp_service`
+ * is the sole interface that reports decode, so a mainline or unavailable
+ * reading omits the key entirely rather than carrying an empty array — an
+ * empty array would read as "the decoders were measured at nothing".
+ */
+function mockDecodeCoresAt(
+	t: number,
+	streaming: boolean,
+): EncoderCoreReading[] {
+	return MOCK_DECODE_PERCENTS.map((percent, index) => {
+		const core = `${DECODE_CORE_ID_PREFIX}${index}`;
+		if (percent === null) return { core, kind: "unavailable" };
+		return {
+			core,
+			kind: "percent",
+			percent: streaming ? wobble(percent, t) : IDLE_PERCENT,
+		};
+	});
+}
+
 /**
  * A slow, bounded wobble around the measured figure so the trace is legible in
  * dev without ever leaving the range the board actually produced. Deterministic
@@ -101,7 +147,13 @@ export function mockEncoderLoadAt(
 			},
 			{ core: core1, kind: "percent", percent: IDLE_PERCENT },
 		];
-		return { source: "mpp-service", cores, updatedAt: t, simulated: true };
+		return {
+			source: "mpp-service",
+			cores,
+			decodeCores: mockDecodeCoresAt(t, streaming),
+			updatedAt: t,
+			simulated: true,
+		};
 	}
 
 	// Mainline edge-7.1: clock enable state only. Both cores are dispatched to
