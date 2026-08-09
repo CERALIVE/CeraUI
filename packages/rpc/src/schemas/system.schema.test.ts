@@ -64,6 +64,30 @@ describe('deviceStatsSchema — additive growth', () => {
 		expect(parsed.cpuFreq).toBeUndefined();
 	});
 
+	test('a payload carrying the DDR-bus reading parses it through', () => {
+		const parsed = deviceStatsSchema.parse({
+			...LEGACY_PAYLOAD,
+			ddr: { loadPercent: 23, curFreqHz: 528000000, maxFreqHz: 1560000000 },
+		});
+		expect(parsed.ddr?.loadPercent).toBe(23);
+		// Hz, not the kHz `cpuFreq` carries — a schema that accepted either would
+		// let a producer ship a figure 1000x off the consumer's scale.
+		expect(parsed.ddr?.curFreqHz).toBe(528000000);
+	});
+
+	test('a pre-ddr payload still parses (the field is absent, not zero-filled)', () => {
+		const parsed = deviceStatsSchema.parse(LEGACY_PAYLOAD);
+		expect(parsed.ddr).toBeUndefined();
+	});
+
+	test('a measured 0% DDR load survives — it is not dropped as falsy', () => {
+		const parsed = deviceStatsSchema.parse({
+			...LEGACY_PAYLOAD,
+			ddr: { loadPercent: 0, curFreqHz: 528000000, maxFreqHz: 1560000000 },
+		});
+		expect(parsed.ddr?.loadPercent).toBe(0);
+	});
+
 	test('the five always-present keys stay REQUIRED', () => {
 		for (const key of ['disk', 'cpuLoad1', 'socTemp', 'ifaceRxTx', 'raucSlot'] as const) {
 			const { [key]: _dropped, ...withoutKey } = LEGACY_PAYLOAD;

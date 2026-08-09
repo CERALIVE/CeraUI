@@ -129,6 +129,11 @@ const MEMINFO =
 const CPUFREQ_DIR = "/sys/devices/system/cpu/cpufreq";
 const CPUFREQ_POLICIES = ["policy0", "policy4"];
 
+// A healthy host's devfreq tree — same reasoning again: the ddr collector WARNs
+// when the devfreq class directory cannot be enumerated.
+const DEVFREQ_DIR = "/sys/class/devfreq";
+const DEVFREQ_DEVICES = ["dmc"];
+
 function healthyDeps(
 	overrides: Partial<DeviceStatsDeps> = {},
 ): DeviceStatsDeps {
@@ -139,6 +144,10 @@ function healthyDeps(
 			if (path === "/proc/meminfo") return MEMINFO;
 			if (path.startsWith(`${CPUFREQ_DIR}/`)) {
 				return path.endsWith("cpuinfo_max_freq") ? "2400000\n" : "1008000\n";
+			}
+			if (path.startsWith(`${DEVFREQ_DIR}/`)) {
+				if (path.endsWith("/load")) return "37@528000000Hz\n";
+				return path.endsWith("/max_freq") ? "1560000000\n" : "528000000\n";
 			}
 			if (path.startsWith("/sys/block/")) return "0\n";
 			throw new Error(`unexpected readText: ${path}`);
@@ -157,6 +166,7 @@ function healthyDeps(
 		},
 		readDir: async (path) => {
 			if (path === CPUFREQ_DIR) return CPUFREQ_POLICIES;
+			if (path === DEVFREQ_DIR) return DEVFREQ_DEVICES;
 			throw new Error(`unexpected readDir: ${path}`);
 		},
 		getSocTempRaw: () => "45.1 °C",

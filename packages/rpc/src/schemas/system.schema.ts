@@ -334,6 +334,22 @@ export const cpuFreqPolicySchema = z.object({
 });
 export type CpuFreqPolicy = z.infer<typeof cpuFreqPolicySchema>;
 
+// The DDR bus, as published by a memory-controller devfreq device. WHICH device
+// that is — `dmc`, `ff620000.dmc`, `ff630000.dfi`, or none — is PROBED by the
+// backend, not known: the name comes from the board's device tree and is pending
+// confirmation on real hardware. A mainline kernel publishes no such device at
+// all, so an ABSENT `ddr` key means "this kernel reports no memory controller",
+// never "the DDR bus is idle".
+//
+// `loadPercent` is 0-100. Frequencies are Hz — devfreq's unit, and NOT the kHz
+// that `cpuFreq` above carries; the two must not be rendered by the same scale.
+export const ddrStatsSchema = z.object({
+	loadPercent: z.number(),
+	curFreqHz: z.number(),
+	maxFreqHz: z.number(),
+});
+export type DdrStats = z.infer<typeof ddrStatsSchema>;
+
 export const deviceStatsSchema = z.object({
 	disk: diskStatSchema.nullable(),
 	cpuLoad1: z.number().nullable(),
@@ -350,6 +366,9 @@ export const deviceStatsSchema = z.object({
 	// Per-policy CPU frequency — kHz, unconverted. ABSENT when nothing was
 	// measurable (no cpufreq tree, or no policy answered); NEVER an empty array.
 	cpuFreq: z.array(cpuFreqPolicySchema).optional(),
+	// DDR-bus load — ABSENT when no memory-controller devfreq device answered
+	// (the expected mainline shape), present in full when one did.
+	ddr: ddrStatsSchema.optional(),
 });
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
 

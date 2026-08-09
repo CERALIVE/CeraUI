@@ -55,8 +55,8 @@
  *
  *   File reads go through the root-aware `CollectorFs` seam (collectors/fs.ts),
  *   whose production root is `/`; collectors that live in their own module
- *   (memory, and the cpufreq/DDR/GPU collectors that follow) receive that seam
- *   and nothing else.
+ *   (memory, cpufreq, ddr, and the GPU collector that follows) receive that
+ *   seam and nothing else.
  *
  *   socTemp is WIRED from sensors.ts (already broadcasting "SoC temperature" at
  *   1s) via `getSocTempRaw` — we do NOT read /sys/class/thermal a second time.
@@ -74,6 +74,7 @@ import { DEVICE_STATS_EVENT } from "../../rpc/events.ts";
 import { DEVICE_STATS_COLLECTOR_TIMEOUT_MS } from "../streaming/constants.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import { type CpuFreqStats, collectCpuFreq } from "./collectors/cpufreq.ts";
+import { collectDdr, type DdrStats } from "./collectors/ddr.ts";
 import { type CollectorFs, createCollectorFs } from "./collectors/fs.ts";
 import { collectMemory, type MemoryStats } from "./collectors/memory.ts";
 import { getSensors } from "./sensors.ts";
@@ -114,8 +115,9 @@ export type IfaceRxTxStat = {
  * unavailable source reports `null` (or `"unavailable"` for raucSlot) rather
  * than failing the whole tick.
  *
- * The intersected collector types (`MemoryStats`, and the cpufreq/DDR/GPU
- * shapes that follow) contribute OPTIONAL keys — present only when measured.
+ * The intersected collector types (`MemoryStats`, `CpuFreqStats`, `DdrStats`,
+ * and the GPU shape that follows) contribute OPTIONAL keys — present only when
+ * measured.
  */
 export type DeviceStatsPayload = {
 	disk: DiskStat | null;
@@ -124,7 +126,8 @@ export type DeviceStatsPayload = {
 	ifaceRxTx: IfaceRxTxStat | null;
 	raucSlot: string;
 } & MemoryStats &
-	CpuFreqStats;
+	CpuFreqStats &
+	DdrStats;
 
 /**
  * Injected I/O surface — replaced wholesale in tests.
@@ -321,7 +324,8 @@ type DeviceStatsSignal =
 	| "ifaceRxTx"
 	| "raucSlot"
 	| "memory"
-	| "cpuFreq";
+	| "cpuFreq"
+	| "ddr";
 
 function errMessage(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
@@ -476,6 +480,20 @@ async function collectCpuFreqStats(
 	}
 }
 
+/**
+ * DDR-bus load, from `collectors/ddr.ts`. Same symmetry-only wrapper as the two
+ * above — the module already degrades an absent devfreq memory-controller device
+ * (the expected shape on a mainline kernel) to "field omitted" on its own.
+ */
+async function collectDdrStats(deps: DeviceStatsDeps): Promise<DdrStats> {
+	try {
+		return await collectDdr(deps);
+	} catch (err) {
+		warnDegraded("ddr", err);
+		return {};
+	}
+}
+
 async function collectRaucSlot(deps: DeviceStatsDeps): Promise<string> {
 	try {
 		const { stdout } = await deps.execFile("rauc", [
@@ -500,7 +518,7 @@ export async function collectDeviceStats(
 	state: DeviceStatsState,
 	timeoutMs: number = DEVICE_STATS_COLLECTOR_TIMEOUT_MS,
 ): Promise<DeviceStatsPayload> {
-	const [disk, cpuLoad1, ifaceRxTx, raucSlot, memory, cpuFreq] =
+	const [disk, cpuLoad1, ifaceRxTx, raucSlot, memory, cpuFreq, ddr] =
 		await Promise.all([
 			withCollectorTimeout("disk", null, () => collectDisk(deps), timeoutMs),
 			withCollectorTimeout(
@@ -533,6 +551,12 @@ export async function collectDeviceStats(
 				() => collectCpuFreqStats(deps),
 				timeoutMs,
 			),
+			withCollectorTimeout<DdrStats>(
+				"ddr",
+				{},
+				() => collectDdrStats(deps),
+				timeoutMs,
+			),
 		]);
 	const socTemp = collectSocTemp(deps);
 	const payload: DeviceStatsPayload = {
@@ -543,6 +567,7 @@ export async function collectDeviceStats(
 		raucSlot,
 		...memory,
 		...cpuFreq,
+		...ddr,
 	};
 	logger.debug("device-stats tick", { signals: summarizeSignals(payload) });
 	return payload;
@@ -562,6 +587,7 @@ function summarizeSignals(
 		// Optional signal: "null" here means "omitted from the payload".
 		memory: p.memTotalBytes !== undefined ? "ok" : "null",
 		cpuFreq: p.cpuFreq !== undefined ? "ok" : "null",
+		ddr: p.ddr !== undefined ? "ok" : "null",
 	};
 }
 

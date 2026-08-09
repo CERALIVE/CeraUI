@@ -298,6 +298,14 @@ export const mockDeviceStatsSchema = z.object({
 			}),
 		)
 		.min(1),
+	// DDR-bus load. Required HERE for the same reason as the fields above, even
+	// though a real mainline board omits it entirely — dev mode has to render
+	// the panel. Frequencies are Hz (devfreq's unit), NOT the kHz of `cpuFreq`.
+	ddr: z.object({
+		loadPercent: z.number().int().min(0).max(100),
+		curFreqHz: z.number().int().positive(),
+		maxFreqHz: z.number().int().positive(),
+	}),
 });
 export type MockDeviceStats = z.infer<typeof mockDeviceStatsSchema>;
 

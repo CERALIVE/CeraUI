@@ -104,6 +104,16 @@ const CPUFREQ_FILES = {
 };
 const CPUFREQ_DIRS = { [CPUFREQ_DIR]: ["policy0", "policy4"] };
 
+// A devfreq tree carrying a memory-controller device. The `load` node is written
+// in the vendor `"N@FkHz"` form; frequencies are Hz, NOT the kHz above.
+const DEVFREQ_DIR = "/sys/class/devfreq";
+const DDR_FILES = {
+	[`${DEVFREQ_DIR}/dmc/load`]: "37@528000000Hz\n",
+	[`${DEVFREQ_DIR}/dmc/cur_freq`]: "528000000\n",
+	[`${DEVFREQ_DIR}/dmc/max_freq`]: "1560000000\n",
+};
+const DDR_DIRS = { [DEVFREQ_DIR]: ["dmc", "fb000000.gpu"] };
+
 const NETDEV = (rx: number, tx: number) =>
 	`Inter-|   Receive                                                |  Transmit\n` +
 	` face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets\n` +
@@ -196,8 +206,9 @@ describe("collectDeviceStats — payload key contract", () => {
 					"/proc/meminfo": MEMINFO,
 					"/sys/block/mmcblk0/queue/rotational": "0\n",
 					...CPUFREQ_FILES,
+					...DDR_FILES,
 				},
-				dirs: CPUFREQ_DIRS,
+				dirs: { ...CPUFREQ_DIRS, ...DDR_DIRS },
 				exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
 				socTemp: "48.3 °C",
 				now,
@@ -219,6 +230,7 @@ describe("collectDeviceStats — payload key contract", () => {
 				"swapTotalBytes",
 				"swapFreeBytes",
 				"cpuFreq",
+				"ddr",
 			].sort(),
 		);
 		expect(payload.disk).toEqual({
@@ -240,11 +252,18 @@ describe("collectDeviceStats — payload key contract", () => {
 			{ id: "policy0", curKhz: 1_008_000, maxKhz: 1_800_000 },
 			{ id: "policy4", curKhz: 1_416_000, maxKhz: 2_400_000 },
 		]);
+		// Hz straight through, and the vendor "N@FkHz" load form parsed.
+		expect(payload.ddr).toEqual({
+			loadPercent: 37,
+			curFreqHz: 528_000_000,
+			maxFreqHz: 1_560_000_000,
+		});
 	});
 
-	test("an absent cpufreq tree omits the cpuFreq key — the memory keys are untouched", async () => {
-		// Same stub as the happy path minus the cpufreq nodes: readDir rejects,
-		// so the field is omitted rather than emitted as an empty array.
+	test("an absent cpufreq/devfreq tree omits those keys — the memory keys are untouched", async () => {
+		// Same stub as the happy path minus the cpufreq and devfreq nodes:
+		// readDir rejects for both, so each field is omitted rather than emitted
+		// as an empty array (cpuFreq) or a zero-filled reading (ddr).
 		const { deps } = makeDeps({
 			files: {
 				"/proc/loadavg": "0.5 0.4 0.3 1/10 11\n",
@@ -258,7 +277,32 @@ describe("collectDeviceStats — payload key contract", () => {
 		const payload = await collectDeviceStats(deps, createDeviceStatsState());
 
 		expect("cpuFreq" in payload).toBe(false);
+		expect("ddr" in payload).toBe(false);
 		expect(payload.memTotalBytes).toBe(4 * 1024 ** 3);
+	});
+
+	test("a devfreq tree with no memory-controller device omits the ddr key", async () => {
+		// The expected mainline shape: devfreq exists (GPU, NPU) but nothing
+		// there is the DDR bus, so the signal is absent rather than guessed.
+		const { deps } = makeDeps({
+			files: {
+				"/proc/loadavg": "0.5 0.4 0.3 1/10 11\n",
+				"/proc/net/dev": NETDEV(1, 1),
+				"/proc/meminfo": MEMINFO,
+				"/sys/block/mmcblk0/queue/rotational": "0\n",
+				...CPUFREQ_FILES,
+			},
+			dirs: {
+				...CPUFREQ_DIRS,
+				[DEVFREQ_DIR]: ["fb000000.gpu", "fdab0000.npu"],
+			},
+			exec: { df: { stdout: DF_OK }, rauc: { stdout: RAUC_OK } },
+			socTemp: "44.0 °C",
+		});
+		const payload = await collectDeviceStats(deps, createDeviceStatsState());
+
+		expect("ddr" in payload).toBe(false);
+		expect(payload.cpuFreq).toHaveLength(2);
 	});
 
 	test("an unreadable /proc/meminfo omits the memory keys — the other five are untouched", async () => {

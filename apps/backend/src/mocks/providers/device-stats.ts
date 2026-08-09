@@ -2,8 +2,8 @@
 	CeraUI - Device-Stats Mock Provider (T3 — ceraui-experience-hardening)
 
 	Dev/emulated-mode stand-in for the `device-stats` collector deps — the five
-	always-present signals plus the optional memory/swap and per-policy CPU
-	frequency fields.
+	always-present signals plus the optional memory/swap, per-policy CPU
+	frequency, and DDR-bus fields.
 
 	On a dev box (no Rockchip hardware, no `rauc` binary, empty sensors map) the
 	production `defaultDeviceStatsDeps` degrade almost every signal to `null`:
@@ -31,6 +31,7 @@
 */
 
 import { CPUFREQ_DIR } from "../../modules/system/collectors/cpufreq.ts";
+import { DEVFREQ_DIR } from "../../modules/system/collectors/ddr.ts";
 import type { DeviceStatsDeps } from "../../modules/system/device-stats.ts";
 import type { MockDeviceStats } from "../mock-schemas.ts";
 import { shouldUseMocks } from "../mock-service.ts";
@@ -73,6 +74,9 @@ export const MOCK_DEVICE_STATS = {
 		{ id: "policy4", curKhz: 1_416_000, maxKhz: 2_400_000 },
 		{ id: "policy6", curKhz: 2_016_000, maxKhz: 2_400_000 },
 	],
+	// DDR bus at 528 MHz against a 1.56 GHz ceiling. Hz here, unlike cpuFreq's
+	// kHz — the two collectors report the unit their sysfs class uses.
+	ddr: { loadPercent: 37, curFreqHz: 528_000_000, maxFreqHz: 1_560_000_000 },
 } satisfies MockDeviceStats;
 
 // ─── raw-output serializers (fixture → the bytes each real collector parses) ──
@@ -153,6 +157,33 @@ function buildCpuFreq(policies: MockDeviceStats["cpuFreq"]): {
 	return { dir: [...policies.map((p) => p.id), "boost"], files };
 }
 
+/**
+ * Reproduce a `/sys/class/devfreq` memory-controller device for the DDR fixture,
+ * so the REAL `collectDdr` probes and parses it back into the fixture reading.
+ *
+ * The device is called `dmc` because that is the FIRST candidate the collector
+ * probes — not because a board has been observed using that name (the node name
+ * is a hardware-open question; see collectors/ddr.ts). `load` is written in the
+ * vendor `"N@FkHz"` form so the mock exercises that parse branch rather than the
+ * simpler bare-integer one, and a GPU devfreq device is listed alongside it so
+ * the candidate filter is exercised instead of bypassed.
+ */
+function buildDdr(ddr: MockDeviceStats["ddr"]): {
+	dir: string[];
+	files: Map<string, string>;
+} {
+	const device = "dmc";
+	const files = new Map<string, string>([
+		[
+			`${DEVFREQ_DIR}/${device}/load`,
+			`${ddr.loadPercent}@${ddr.curFreqHz}Hz\n`,
+		],
+		[`${DEVFREQ_DIR}/${device}/cur_freq`, `${ddr.curFreqHz}\n`],
+		[`${DEVFREQ_DIR}/${device}/max_freq`, `${ddr.maxFreqHz}\n`],
+	]);
+	return { dir: [device, "fb000000.gpu"], files };
+}
+
 /** Reproduce a single-interface `/proc/net/dev` snapshot (rx field 0, tx field 8). */
 function buildNetDev(iface: string, rx: number, tx: number): string {
 	return (
@@ -190,6 +221,7 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 	const rotational = rotationalForType(disk.type);
 	const meminfo = buildMeminfo(MOCK_DEVICE_STATS);
 	const cpufreq = buildCpuFreq(MOCK_DEVICE_STATS.cpuFreq);
+	const ddr = buildDdr(MOCK_DEVICE_STATS.ddr);
 
 	// One tick counter, advanced only by the netdev read. `now()` reads the
 	// current tick's time BEFORE the read increments it, so the snapshot time and
@@ -213,21 +245,24 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 			if (path === "/proc/meminfo") {
 				return meminfo;
 			}
-			const cpufreqNode = cpufreq.files.get(path);
-			if (cpufreqNode !== undefined) {
-				return cpufreqNode;
+			const sysfsNode = cpufreq.files.get(path) ?? ddr.files.get(path);
+			if (sysfsNode !== undefined) {
+				return sysfsNode;
 			}
 			if (path.startsWith("/sys/block/")) {
 				return rotational;
 			}
 			throw new Error(`mock device-stats: unexpected readText(${path})`);
 		},
-		// Only the cpufreq tree is enumerable here. Every other path REJECTS —
-		// the honest answer for a host with no such tree, where an empty listing
-		// would instead claim the directory exists and is empty.
+		// Only the trees this fixture serves are enumerable. Every other path
+		// REJECTS — the honest answer for a host with no such tree, where an
+		// empty listing would instead claim the directory exists and is empty.
 		readDir: async (path) => {
 			if (path === CPUFREQ_DIR) {
 				return cpufreq.dir;
+			}
+			if (path === DEVFREQ_DIR) {
+				return ddr.dir;
 			}
 			throw new Error(`mock device-stats: unexpected readDir(${path})`);
 		},
