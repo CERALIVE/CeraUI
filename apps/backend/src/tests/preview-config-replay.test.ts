@@ -53,7 +53,11 @@ import {
 	type RuntimeConfig,
 	runtimeConfigSchema,
 } from "../helpers/config-schemas.ts";
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
 import * as linkTelemetryModule from "../modules/streaming/link-telemetry.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
@@ -148,8 +152,10 @@ function acceptingTransport(): void {
 }
 
 let ipsFile: string;
+let configFile: string;
 let tempDir: string;
 let savedIpsFile: string | undefined;
+let savedConfigFile: string;
 let savedConfig: RuntimeConfig;
 
 function makeContext(): RPCContext {
@@ -188,10 +194,18 @@ beforeAll(() => {
 	writeFileSync(ipsFile, "192.0.2.20\n");
 	savedIpsFile = setup.ips_file;
 	setup.ips_file = ipsFile;
+	// The default is a bare `config.json`, resolved against whatever CWD the
+	// suite was invoked from — so the round trip below would rewrite a REAL
+	// config with this file's fixtures. Persist into the temp dir instead; the
+	// round trip reads the same path back, so what it proves is unchanged.
+	configFile = join(tempDir, "config.json");
+	savedConfigFile = getConfigFilePath();
+	setConfigFilePath(configFile);
 });
 
 afterAll(() => {
 	setup.ips_file = savedIpsFile;
+	setConfigFilePath(savedConfigFile);
 	rmSync(tempDir, { recursive: true, force: true });
 	setPreviewEncodeReplayTransport(null);
 	mock.module(
@@ -446,7 +460,7 @@ describe("previewEncode survives the full round trip", () => {
 			// A backend restart is exactly this: the bytes that reached disk, read
 			// back through the schema boot parses them with.
 			const reloaded = runtimeConfigSchema.parse(
-				JSON.parse(await Bun.file("config.json").text()),
+				JSON.parse(await Bun.file(configFile).text()),
 			);
 			expect(reloaded.previewEncode).toBe("hardware");
 		} finally {
