@@ -33,7 +33,26 @@ import { shouldUseMocks } from "../mocks/mock-service.ts";
 import { getPasswordHash, setPasswordHash } from "../rpc/state/password.ts";
 import { getSshPasswordHash, setSshPasswordHash } from "./system/ssh.ts";
 
-const CONFIG_FILE = "config.json";
+/**
+ * Where the runtime config persists.
+ *
+ * Bare and CWD-relative BY DESIGN: the shipped unit pins
+ * `WorkingDirectory=/opt/ceralive/`, so on a device it always resolves under the
+ * service's own state directory. Under a test runner there is no such anchor —
+ * the CWD is wherever the suite happened to be invoked from — and `saveConfig()`
+ * rewrites the file WHOLE, so a suite exercising the real persistence path
+ * against this default overwrites a live `config.json` with its fixtures. Tests
+ * therefore redirect it; see `setConfigFilePath`.
+ */
+let configFile = "config.json";
+
+export function getConfigFilePath(): string {
+	return configFile;
+}
+
+export function setConfigFilePath(filePath: string): void {
+	configFile = filePath;
+}
 
 let config: RuntimeConfig = {};
 
@@ -42,7 +61,7 @@ export async function loadConfig() {
 	// the audio follows the video source, resolved at start/idle-preview. This
 	// subsumes the former static per-board asrc guess.
 	const result = await loadJsonConfig(
-		CONFIG_FILE,
+		configFile,
 		runtimeConfigSchema,
 		RUNTIME_CONFIG_DEFAULTS,
 	);
@@ -80,7 +99,7 @@ export function saveConfig() {
 	// Must stay sync: sync callers (setBitrate/setAutostart) depend on the write
 	// finishing before return. Atomic (temp+fsync+rename) so a crash mid-write
 	// can't corrupt config.json — add-on state lives here too (E3).
-	writeFileAtomicSync(CONFIG_FILE, JSON.stringify(dataToSave));
+	writeFileAtomicSync(configFile, JSON.stringify(dataToSave));
 }
 
 export function getConfig(): RuntimeConfig {

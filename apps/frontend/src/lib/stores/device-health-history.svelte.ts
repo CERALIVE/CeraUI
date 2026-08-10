@@ -1,11 +1,12 @@
 /**
  * Device-Health history — the only rune-bearing module behind the panel.
  *
- * Holds two timestamped rings (SoC temperature, 1-minute load average) plus the
- * 1 s playhead clock, and resolves per-core encoder load — the device's own
- * `encoder-load` broadcast on hardware, the dev-only fixture otherwise. All trace
- * math lives in the pure, rune-free `lib/components/custom/health-trace-view.ts`
- * sibling, mirroring the `hud/` derivation split.
+ * Holds three timestamped rings (SoC temperature, 1-minute load average, memory
+ * used as a share of `MemTotal`) plus the 1 s playhead clock, and resolves
+ * per-core encoder load — the device's own `encoder-load` broadcast on hardware,
+ * the dev-only fixture otherwise. All trace math lives in the pure, rune-free
+ * `lib/components/custom/health-trace-view.ts` sibling, mirroring the `hud/`
+ * derivation split.
  *
  * Hard constraints
  * ----------------
@@ -31,6 +32,7 @@ import {
 	deriveLaneSignalStatus,
 	type LaneSignalStatus,
 	MAX_LOAD_SAMPLES,
+	MAX_MEMORY_SAMPLES,
 	MAX_TEMP_SAMPLES,
 	TEMP_STALE_MS,
 	type TraceSample,
@@ -67,12 +69,18 @@ const IS_DEV: boolean = import.meta.env.DEV;
 interface DeviceHealthHistoryStore {
 	getTemperatureSamples(): readonly TraceSample[];
 	getLoadSamples(): readonly TraceSample[];
+	getMemorySamples(): readonly TraceSample[];
 	getTemperatureStatus(): LaneSignalStatus;
 	getLoadStatus(): LaneSignalStatus;
+	getMemoryStatus(): LaneSignalStatus;
 	getEncoderLoad(): EncoderLoadReading;
 	getClockTick(): number;
 	acquireClock(): () => void;
 	destroy(): void;
+}
+
+function finiteOrNull(raw: number | null | undefined): number | null {
+	return typeof raw === "number" && Number.isFinite(raw) ? raw : null;
 }
 
 function appendSample(
@@ -102,10 +110,13 @@ function resolveMockFlavor(): EncoderLoadMockFlavor {
 function createDeviceHealthHistoryStore(): DeviceHealthHistoryStore {
 	let temperatureSamples = $state<readonly TraceSample[]>([]);
 	let loadSamples = $state<readonly TraceSample[]>([]);
+	let memorySamples = $state<readonly TraceSample[]>([]);
 	let temperatureDeliveredAt = $state<number | null>(null);
 	let loadDeliveredAt = $state<number | null>(null);
+	let memoryDeliveredAt = $state<number | null>(null);
 	let temperatureValue = $state<number | null>(null);
 	let loadValue = $state<number | null>(null);
+	let memoryValue = $state<number | null>(null);
 	let nowTick = $state(Date.now());
 
 	let prevSensors: unknown;
@@ -163,19 +174,31 @@ function createDeviceHealthHistoryStore(): DeviceHealthHistoryStore {
 			if (stats !== prevDeviceStats) {
 				prevDeviceStats = stats;
 				if (stats !== undefined) {
-					const value =
-						typeof stats.cpuLoad1 === "number" &&
-						Number.isFinite(stats.cpuLoad1)
-							? stats.cpuLoad1
-							: null;
+					const load = finiteOrNull(stats.cpuLoad1);
 					loadDeliveredAt = now;
-					loadValue = value;
-					if (value !== null) {
+					loadValue = load;
+					if (load !== null) {
 						loadSamples = appendSample(
 							loadSamples,
-							{ t: now, v: value },
+							{ t: now, v: load },
 							now,
 							MAX_LOAD_SAMPLES,
+						);
+					}
+
+					// Same broadcast, same arrival edge, same ring mechanics — an
+					// ABSENT `memUsedPercent` is a delivery whose memory reading was
+					// not measurable, so it stamps the delivery and appends nothing.
+					// The widening gap in the trace is then the honest record of it.
+					const memory = finiteOrNull(stats.memUsedPercent);
+					memoryDeliveredAt = now;
+					memoryValue = memory;
+					if (memory !== null) {
+						memorySamples = appendSample(
+							memorySamples,
+							{ t: now, v: memory },
+							now,
+							MAX_MEMORY_SAMPLES,
 						);
 					}
 				}
@@ -186,6 +209,7 @@ function createDeviceHealthHistoryStore(): DeviceHealthHistoryStore {
 	return {
 		getTemperatureSamples: () => temperatureSamples,
 		getLoadSamples: () => loadSamples,
+		getMemorySamples: () => memorySamples,
 		getTemperatureStatus: () =>
 			deriveLaneSignalStatus(
 				temperatureDeliveredAt,
@@ -197,6 +221,13 @@ function createDeviceHealthHistoryStore(): DeviceHealthHistoryStore {
 			deriveLaneSignalStatus(
 				loadDeliveredAt,
 				loadValue,
+				nowTick,
+				DEVICE_STATS_STALE_MS,
+			),
+		getMemoryStatus: () =>
+			deriveLaneSignalStatus(
+				memoryDeliveredAt,
+				memoryValue,
 				nowTick,
 				DEVICE_STATS_STALE_MS,
 			),
@@ -255,12 +286,25 @@ export function getLoadSamples(): readonly TraceSample[] {
 	return store().getLoadSamples();
 }
 
+/**
+ * Memory used as a share of the device's own `MemTotal`, so — unlike the load
+ * lane — this one has a denominator the board published and is plotted against
+ * a fixed 0-100 domain.
+ */
+export function getMemorySamples(): readonly TraceSample[] {
+	return store().getMemorySamples();
+}
+
 export function getTemperatureStatus(): LaneSignalStatus {
 	return store().getTemperatureStatus();
 }
 
 export function getLoadStatus(): LaneSignalStatus {
 	return store().getLoadStatus();
+}
+
+export function getMemoryStatus(): LaneSignalStatus {
+	return store().getMemoryStatus();
 }
 
 /**

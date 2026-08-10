@@ -628,6 +628,22 @@ const de = {
 					body: "Die Vorschau wurde nach längerer Nichtbeachtung gestoppt, um Ressourcen zu sparen. Fortsetzen, um sie wieder anzuzeigen.",
 				},
 			},
+			encode: {
+				label: "Hardware-Vorschaukodierung",
+				description:
+					"Die Vorschau mit dem Hardware-Encoder des Boards kodieren.",
+				helper: "Gilt ab dem nächsten Stream.",
+				activeLabel: "Aktiver Vorschau-Encoder",
+				activeNone: "Derzeit wird keine Vorschau kodiert",
+				activeHardware: "{element} \u2014 Hardware",
+				activeSoftware: "{element} \u2014 Software",
+				fallbackTitle: "Hardware-Vorschau ist auf Software zurückgefallen",
+				fallbackFactoryMissing:
+					"Der Hardware-Vorschau-Encoder ist in diesem Image nicht installiert, daher wird die Vorschau in Software kodiert.",
+				fallbackPropertyFailure:
+					"Der Hardware-Vorschau-Encoder hat eine Einstellung abgelehnt, daher wird die Vorschau in Software kodiert.",
+				fallbackPropertyLabel: "Abgelehnte Einstellung",
+			},
 		},
 		inputPicker: {
 			title: "Eingangsquellen",
@@ -1088,6 +1104,20 @@ const de = {
 				"Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne.",
 			cpuLoadHintNoCores:
 				"1-Minuten-Lastdurchschnitt. Dieses Gerät hat seine Kernanzahl nicht gemeldet, daher kann kein Kapazitätsanteil angezeigt werden.",
+			memory: "Arbeitsspeicher",
+			memoryHint:
+				"Anteil des belegten RAM. Gemessen an MemAvailable, damit wiederverwendbarer Seitencache nicht als belegt zählt.",
+			swap: "Auslagerung",
+			swapNone: "Keine",
+			cpuFreq: "CPU-Takt",
+			cpuFreqHint:
+				"Aktueller Takt gegen die Hardware-Obergrenze, je cpufreq-Policy. Ein Policy-Name ist ein sysfs-Verzeichnis, kein Kern-Cluster.",
+			ddr: "DDR-Bus",
+			ddrHint:
+				"Last des Speichercontrollers, gelesen vom devfreq-Gerät der Platine.",
+			gpu: "GPU",
+			gpuHint:
+				"GPU-Last, gelesen von der Mali- oder devfreq-Schnittstelle der Platine.",
 		},
 		deviceHealth: {
 			title: "Gerätezustand",
@@ -1095,6 +1125,7 @@ const de = {
 			lane: {
 				temp: "SoC-Temperatur",
 				load: "Lastdurchschnitt · 1 Min · alle Prozesse",
+				memory: "Speicherbelegung · % des RAM",
 			},
 			nowStrip: {
 				temperature: "SoC-Temperatur",
@@ -1131,6 +1162,11 @@ const de = {
 				headlineIdle: "Inaktiv",
 				headlineUnreported: "Nicht gemeldet",
 				engineLabel: "Engine",
+				decodeTitle: "Decoder-Kerne",
+			},
+			loads: {
+				gpu: "GPU-Auslastung",
+				ddr: "Speicherbus-Auslastung",
 			},
 			power: {
 				title: "Spannungsschienen",

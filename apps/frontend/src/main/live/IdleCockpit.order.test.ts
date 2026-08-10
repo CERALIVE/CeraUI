@@ -3,9 +3,9 @@
  * IdleCockpit — preview-between-source-and-setup DOM order (C4).
  *
  * Hermetic: SourceSection / StreamSetupChain are stubbed to testid-only markers
- * and PreviewCanvas / ComingSoon to Noop, so this asserts ONLY IdleCockpit's own
- * composition — source-section → preview-disclosure → stream-setup-chain →
- * live-roadmap — independent of the heavy child subtrees.
+ * and PreviewCanvas / PreviewEncodeControl / ComingSoon to Noop, so this asserts
+ * ONLY IdleCockpit's own composition — source-section → preview-disclosure →
+ * stream-setup-chain → live-roadmap — independent of the heavy child subtrees.
  */
 import { cleanup, render } from "@testing-library/svelte";
 import type { ComponentProps } from "svelte";
@@ -20,6 +20,9 @@ vi.mock("./StreamSetupChain.svelte", async () => ({
 		.default,
 }));
 vi.mock("$lib/components/preview/PreviewCanvas.svelte", async () => ({
+	default: (await import("../../tests/fixtures/Noop.svelte")).default,
+}));
+vi.mock("./PreviewEncodeControl.svelte", async () => ({
 	default: (await import("../../tests/fixtures/Noop.svelte")).default,
 }));
 vi.mock("$lib/components/custom/ComingSoon.svelte", async () => ({

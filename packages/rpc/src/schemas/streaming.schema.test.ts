@@ -28,6 +28,7 @@ import {
 	normalizeFramerateToRung,
 	normalizeResolutionToRung,
 	pipelineSchema,
+	previewEncodeModeSchema,
 	type Resolution,
 	streamingConfigInputSchema,
 	switchInputOutputSchema,
@@ -594,5 +595,38 @@ describe('TRANSPORT_AUDIO_CODECS + audioCodecAllowedForTransport (C5)', () => {
 
 	test('the unsupported-transport error code is stable', () => {
 		expect(AUDIO_CODEC_UNSUPPORTED_TRANSPORT).toBe('audio_codec_unsupported_transport');
+	});
+});
+
+describe('previewEncode — the persisted operator REQUEST (T18)', () => {
+	test('a setConfig payload written before the field still parses', () => {
+		const legacy = streamingConfigInputSchema.parse({ max_br: 6000, resolution: '1080p' });
+
+		expect(legacy.previewEncode).toBeUndefined();
+		expect(legacy.max_br).toBe(6000);
+	});
+
+	test('a config message written before the field still parses', () => {
+		expect(configMessageSchema.parse({ max_br: 6000 }).previewEncode).toBeUndefined();
+	});
+
+	test('both engine-known modes round-trip on the input and the echo', () => {
+		for (const mode of ['software', 'hardware'] as const) {
+			expect(streamingConfigInputSchema.parse({ previewEncode: mode }).previewEncode).toBe(mode);
+			expect(configMessageSchema.parse({ previewEncode: mode }).previewEncode).toBe(mode);
+		}
+	});
+
+	test('a mode the engine does not know is refused, not silently dropped', () => {
+		expect(streamingConfigInputSchema.safeParse({ previewEncode: 'auto' }).success).toBe(false);
+		expect(configMessageSchema.safeParse({ previewEncode: 'vaapi' }).success).toBe(false);
+	});
+
+	test('the REQUEST and the live REPORT share one vocabulary', () => {
+		// `previewEncoderRealizedSchema.mode` (status.schema.ts) is built from this
+		// very schema. Two independent enums would drift the moment a third mode is
+		// added, and the drift would only surface as a UI that cannot pair the
+		// operator's request against what the engine realized.
+		expect(previewEncodeModeSchema.options).toEqual(['software', 'hardware']);
 	});
 });

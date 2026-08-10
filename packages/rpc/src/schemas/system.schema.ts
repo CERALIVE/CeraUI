@@ -288,11 +288,21 @@ export type KioskOskInput = z.infer<typeof kioskOskInputSchema>;
 // Device stats broadcast (T32 — `device-stats` event)
 // =============================================================================
 //
-// S1 lock: exactly these five signals, mirroring the backend emitter
-// (`apps/backend/src/modules/system/device-stats.ts`). Adding a sixth is a
-// deliberate contract change. Every field is independently nullable (raucSlot
-// degrades to the string "unavailable") so one dead source never blanks the
-// whole panel.
+// Five ALWAYS-PRESENT signals plus deliberately added OPTIONAL ones, mirroring
+// the backend emitter (`apps/backend/src/modules/system/device-stats.ts`).
+//
+// The five are frozen: independently nullable (raucSlot degrades to the string
+// "unavailable") so one dead source never blanks the whole panel, and none may
+// be removed or renamed.
+//
+// The optional signals are additive by construction — a payload from a device
+// that predates them still parses, and a consumer that predates them ignores
+// them. Adding one remains a deliberate contract change (schema + mock +
+// key-shape test), never a tweak.
+//
+// OMIT vs ZERO: an optional field is ABSENT when its source could not be read
+// and PRESENT-with-0 when the source measured zero (a swapless board really
+// reports `swapTotalBytes: 0`). Renderers must not collapse the two.
 export const diskTypeSchema = z.enum(['SSD', 'HDD', 'eMMC', 'unknown']);
 export type DiskType = z.infer<typeof diskTypeSchema>;
 
@@ -310,12 +320,75 @@ export const ifaceRxTxStatSchema = z.object({
 });
 export type IfaceRxTxStat = z.infer<typeof ifaceRxTxStatSchema>;
 
+// One cpufreq policy — the kernel's unit of frequency control, whose `id` is the
+// sysfs directory name (`policy0`) and NOTHING more. A policy is not a cluster:
+// it lines up with big.LITTLE on RK3588 and with individual CPUs on x86, so no
+// consumer may infer "big"/"little" from the id or from the list's position.
+//
+// Frequencies are kHz — the unit `scaling_cur_freq` / `cpuinfo_max_freq` report.
+// They are NOT normalized on the wire; a GHz rendering is a display decision.
+export const cpuFreqPolicySchema = z.object({
+	id: z.string(),
+	curKhz: z.number(),
+	maxKhz: z.number(),
+});
+export type CpuFreqPolicy = z.infer<typeof cpuFreqPolicySchema>;
+
+// The DDR bus, as published by a memory-controller devfreq device. WHICH device
+// that is — `dmc`, `ff620000.dmc`, `ff630000.dfi`, or none — is PROBED by the
+// backend, not known: the name comes from the board's device tree and is pending
+// confirmation on real hardware. A mainline kernel publishes no such device at
+// all, so an ABSENT `ddr` key means "this kernel reports no memory controller",
+// never "the DDR bus is idle".
+//
+// `loadPercent` is 0-100. Frequencies are Hz — devfreq's unit, and NOT the kHz
+// that `cpuFreq` above carries; the two must not be rendered by the same scale.
+export const ddrStatsSchema = z.object({
+	loadPercent: z.number(),
+	curFreqHz: z.number(),
+	maxFreqHz: z.number(),
+});
+export type DdrStats = z.infer<typeof ddrStatsSchema>;
+
+// The GPU, read from whichever of TWO interfaces the board publishes: a Mali
+// `kbase` utilisation node, or a `*.gpu` devfreq device. Both are PROBED, not
+// known — the paths come from vendor trees and the device tree respectively and
+// are pending confirmation on real hardware. An ABSENT `gpu` key means "this
+// kernel publishes no GPU load interface", never "the GPU is idle".
+//
+// `loadPercent` is 0-100 and is the reading itself. The frequencies are Hz
+// (devfreq's unit, NOT `cpuFreq`'s kHz) and are INDEPENDENTLY optional: the
+// kbase path structurally cannot report them, so a load with no frequency beside
+// it is an ordinary reading here rather than a partial one.
+export const gpuStatsSchema = z.object({
+	loadPercent: z.number(),
+	curFreqHz: z.number().optional(),
+	maxFreqHz: z.number().optional(),
+});
+export type GpuStats = z.infer<typeof gpuStatsSchema>;
+
 export const deviceStatsSchema = z.object({
 	disk: diskStatSchema.nullable(),
 	cpuLoad1: z.number().nullable(),
 	socTemp: z.number().nullable(),
 	ifaceRxTx: ifaceRxTxStatSchema.nullable(),
 	raucSlot: z.string(),
+	// Memory/swap — `/proc/meminfo`, converted to BYTES by the collector so no
+	// consumer has to know the file reports KiB under a "kB" label.
+	memTotalBytes: z.number().optional(),
+	memAvailableBytes: z.number().optional(),
+	memUsedPercent: z.number().optional(),
+	swapTotalBytes: z.number().optional(),
+	swapFreeBytes: z.number().optional(),
+	// Per-policy CPU frequency — kHz, unconverted. ABSENT when nothing was
+	// measurable (no cpufreq tree, or no policy answered); NEVER an empty array.
+	cpuFreq: z.array(cpuFreqPolicySchema).optional(),
+	// DDR-bus load — ABSENT when no memory-controller devfreq device answered
+	// (the expected mainline shape), present in full when one did.
+	ddr: ddrStatsSchema.optional(),
+	// GPU load — ABSENT when neither the Mali kbase node nor a `*.gpu` devfreq
+	// device answered; the frequencies inside it are optional in their own right.
+	gpu: gpuStatsSchema.optional(),
 });
 export type DeviceStats = z.infer<typeof deviceStatsSchema>;
 
@@ -387,6 +460,17 @@ export const encoderLoadSchema = z.object({
 	/** `null` ⇒ neither kernel interface was readable on this device. */
 	source: encoderLoadSourceSchema.nullable(),
 	cores: z.array(encoderCoreReadingSchema),
+	/**
+	 * Hardware DECODER cores, same three-state shape as `cores`.
+	 *
+	 * OPTIONAL and ABSENT — never `[]` — when the live interface said nothing
+	 * about decode: an empty array would read as "the decoders were measured at
+	 * nothing", which is a different claim from "this kernel has no decode
+	 * signal". Only the vendor `/proc/mpp_service` reality reports decoder rows
+	 * today; mainline/edge 7.1 has no equivalent, so a mainline reading omits
+	 * the key entirely.
+	 */
+	decodeCores: z.array(encoderCoreReadingSchema).optional(),
 	/** Epoch ms of the sample; `null` when nothing has ever been read. */
 	updatedAt: z.number().nullable(),
 	/** Always `false` on the wire — the device never publishes a synthetic read. */

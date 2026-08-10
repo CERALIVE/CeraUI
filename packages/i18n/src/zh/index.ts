@@ -164,6 +164,18 @@ const zh = {
 			cpuLoadHint: "占 CPU 总容量的比例 — {cores} 个核心上的 1 分钟平均负载。",
 			cpuLoadHintNoCores:
 				"1 分钟平均负载。此设备未报告核心数，因此无法显示为容量占比。",
+			memory: "内存",
+			memoryHint:
+				"已用内存占比。以 MemAvailable 为基准测量，可回收的页缓存不计为已用。",
+			swap: "交换空间",
+			swapNone: "无",
+			cpuFreq: "CPU 频率",
+			cpuFreqHint:
+				"每个 cpufreq 策略的当前频率与硬件上限之比。策略名称是 sysfs 目录名，而非核心簇。",
+			ddr: "DDR 总线",
+			ddrHint: "内存控制器负载，读取自主板的 devfreq 设备。",
+			gpu: "GPU",
+			gpuHint: "GPU 负载，读取自主板的 Mali 或 devfreq 接口。",
 		},
 		deviceHealth: {
 			title: "设备健康",
@@ -171,6 +183,7 @@ const zh = {
 			lane: {
 				temp: "SoC 温度",
 				load: "平均负载 · 1 分钟 · 全部进程",
+				memory: "内存占用 · 占 RAM 的 %",
 			},
 			nowStrip: {
 				temperature: "SoC 温度",
@@ -207,6 +220,11 @@ const zh = {
 				headlineIdle: "空闲",
 				headlineUnreported: "未报告",
 				engineLabel: "引擎",
+				decodeTitle: "解码器核心",
+			},
+			loads: {
+				gpu: "GPU 负载",
+				ddr: "内存总线负载",
 			},
 			power: {
 				title: "供电轨",
@@ -1226,6 +1244,21 @@ const zh = {
 					title: "预览已暂停",
 					body: "预览在长时间无人查看后已停止以节省资源。恢复即可再次查看。",
 				},
+			},
+			encode: {
+				label: "预览硬件编码",
+				description: "使用板载硬件编码器编码预览画面。",
+				helper: "在下次推流时生效。",
+				activeLabel: "当前预览编码器",
+				activeNone: "当前没有正在编码的预览",
+				activeHardware: "{element} \u2014 硬件",
+				activeSoftware: "{element} \u2014 软件",
+				fallbackTitle: "硬件预览已回退到软件",
+				fallbackFactoryMissing:
+					"此镜像未安装硬件预览编码器，因此预览以软件方式编码。",
+				fallbackPropertyFailure:
+					"硬件预览编码器拒绝了某项设置，因此预览以软件方式编码。",
+				fallbackPropertyLabel: "被拒绝的设置",
 			},
 		},
 		inputPicker: {

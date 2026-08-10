@@ -297,12 +297,30 @@ describe("windowStats", () => {
 });
 
 describe("geometry", () => {
-	it("desktop is 132 units and compact is 104 — both keep TWO lanes", () => {
+	// The compact figure moved (104 -> 72 for two lanes) when the recorder gained
+	// its third channel: the kiosk panel may not scroll, so the memory lane was
+	// paid for with a shorter compact plot rather than with a taller panel. The
+	// invariants below — ruler under the last lane, ruler + its height IS the box
+	// — are unchanged and are what this test actually guards.
+	it("desktop is 132 units and compact is 72 — both keep TWO lanes here", () => {
 		expect(traceHeight(DESKTOP_GEOMETRY)).toBe(132);
-		expect(traceHeight(COMPACT_GEOMETRY)).toBe(104);
+		expect(traceHeight(COMPACT_GEOMETRY)).toBe(72);
 		for (const g of [DESKTOP_GEOMETRY, COMPACT_GEOMETRY]) {
 			expect(laneBox(g, 1).baselineY).toBeLessThan(rulerTop(g));
 			expect(rulerTop(g) + g.rulerH).toBe(traceHeight(g));
+		}
+	});
+
+	// The recorder gained a third channel (memory), so the box height is a
+	// function of the lane count. The two-lane figures above are the DEFAULT and
+	// must not move; a third lane adds exactly one lane stride and nothing else.
+	it("a third lane adds one stride and keeps the ruler under every lane", () => {
+		for (const g of [DESKTOP_GEOMETRY, COMPACT_GEOMETRY]) {
+			const stride = g.laneLabelH + g.lanePlotH + g.laneGap;
+			expect(traceHeight(g, 3)).toBe(traceHeight(g, 2) + stride);
+			expect(rulerTop(g, 3)).toBe(rulerTop(g, 2) + stride);
+			expect(laneBox(g, 2).baselineY).toBeLessThan(rulerTop(g, 3));
+			expect(rulerTop(g, 3) + g.rulerH).toBe(traceHeight(g, 3));
 		}
 	});
 

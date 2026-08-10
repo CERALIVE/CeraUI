@@ -104,6 +104,7 @@ import type {
 	ActiveEncode,
 	BufferingStatus,
 	ConfigChangePhase,
+	PreviewEncoderRealized,
 } from "@ceraui/rpc/schemas";
 import { toEngineResolution } from "@ceraui/rpc/schemas";
 import { z } from "zod";
@@ -229,11 +230,13 @@ function defaultBridge(): CerastreamBridge {
 						{ getIsStreaming },
 						{ getActiveEncodeStatus },
 						{ getEngineBitrateStatus },
+						{ getPreviewEncoderRealizedStatus },
 					] = await Promise.all([
 						import("../ui/websocket-server.ts"),
 						import("./streaming.ts"),
 						import("./active-encode-status.ts"),
 						import("./engine-bitrate-status.ts"),
+						import("./preview-encoder-status.ts"),
 					]);
 					// Explicit on every nudge, never by omission: the frontend status
 					// merge deliberately preserves an omitted field, so a value pushed
@@ -242,10 +245,14 @@ function defaultBridge(): CerastreamBridge {
 					// `engine_bitrate` rides the same nudge because the adaptive
 					// controller's own `bitrate` event is what triggers it, so this is
 					// the path by which a throttled rate reaches the operator live.
+					// `preview_encoder_realized` rides it for the retraction half of
+					// that same reason: its fallback text is the most misleading thing
+					// on screen once the session it described is over.
 					broadcastMsg("status", {
 						is_streaming: getIsStreaming(),
 						active_encode: getActiveEncodeStatus(),
 						engine_bitrate: getEngineBitrateStatus(),
+						preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 					});
 				} catch (err) {
 					defaultLogger.debug("cerastream: status broadcast skipped", { err });
@@ -337,6 +344,62 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 			? { passthrough: a.passthrough }
 			: {}),
 	};
+}
+
+/**
+ * Read the additive `preview_encoder_realized` field off a cerastream `status`
+ * event (cerastream 2026.7.6) — what the LIVE session's PREVIEW branch is
+ * actually encoding with, a sibling of `active_encode` rather than a part of it.
+ * Returns `null` when the engine does not report it, which is the normal case for
+ * a session with no preview branch as well as for a pre-2026.7.6 engine — the
+ * same capability gate `extractActiveEncode` applies.
+ *
+ * `realized_element` and `mode` are both required for a usable payload, and a
+ * `mode` outside the known pair is refused outright: a half-read pair would be
+ * indistinguishable from a genuine software realization, which is exactly the
+ * confusion the four-readings rule exists to prevent. `fallback_reason` is copied
+ * only when its discriminant is one the UI can render, and `property-failure`
+ * additionally requires the refused `property` it must name.
+ */
+export function extractPreviewEncoderRealized(
+	event: unknown,
+): PreviewEncoderRealized | null {
+	if (event === null || typeof event !== "object") return null;
+	const raw = (event as Record<string, unknown>).preview_encoder_realized;
+	if (raw === null || typeof raw !== "object") return null;
+	const r = raw as Record<string, unknown>;
+	if (typeof r.realized_element !== "string") return null;
+	if (r.mode !== "software" && r.mode !== "hardware") return null;
+	return {
+		realized_element: r.realized_element,
+		mode: r.mode,
+		...(typeof r.selected_element === "string"
+			? { selected_element: r.selected_element }
+			: {}),
+		...spreadFallbackReason(r.fallback_reason),
+	};
+}
+
+function spreadFallbackReason(raw: unknown): {
+	fallback_reason?: PreviewEncoderRealized["fallback_reason"];
+} {
+	if (raw === null || typeof raw !== "object") return {};
+	const reason = raw as Record<string, unknown>;
+	if (reason.code === "factory-missing") {
+		return { fallback_reason: { code: "factory-missing" } };
+	}
+	if (
+		reason.code === "property-failure" &&
+		typeof reason.property === "string"
+	) {
+		return {
+			fallback_reason: {
+				code: "property-failure",
+				property: reason.property,
+			},
+		};
+	}
+	return {};
 }
 
 /**
@@ -842,19 +905,26 @@ export class CerastreamBackend implements StreamingBackend {
 		return this.telemetry;
 	}
 
-	// `active_encode` and `bitrate` both describe a LIVE session — what the engine
-	// is encoding, and the rate its adaptive controller settled on. Neither may
-	// outlive the session: a retained `bitrate` renders a stopped stream under a
-	// live-looking rate exactly as a retained `active_encode` renders it under a
-	// "Live" badge.
+	// `active_encode`, `bitrate` and `preview_encoder_realized` all describe a LIVE
+	// session — what the engine is encoding, the rate its adaptive controller
+	// settled on, and what the preview branch realized. None may outlive the
+	// session: a retained `bitrate` renders a stopped stream under a live-looking
+	// rate exactly as a retained `active_encode` renders it under a "Live" badge,
+	// and a retained realized pair leaves a fallback reason on screen explaining a
+	// stream that is no longer running.
 	private clearSessionScopedTelemetry(): void {
 		const previous = this.telemetry;
 		if (previous === null) return;
-		if (previous.active_encode === undefined && previous.bitrate === undefined)
+		if (
+			previous.active_encode === undefined &&
+			previous.bitrate === undefined &&
+			previous.preview_encoder_realized === undefined
+		)
 			return;
 		const next = { ...previous };
 		delete next.active_encode;
 		delete next.bitrate;
+		delete next.preview_encoder_realized;
 		this.telemetry = next;
 		this.deps.bridge.broadcastStatus();
 	}
@@ -1084,9 +1154,19 @@ export class CerastreamBackend implements StreamingBackend {
 				const nextBitrate = event.streaming
 					? this.telemetry?.bitrate
 					: undefined;
+				// The realized preview encoder follows `active_encode` exactly: kept
+				// across a partial mid-stream frame, retired the moment the engine says
+				// it is not streaming — so a fallback reason never explains a stream
+				// that has already stopped.
+				const realizedPreview = extractPreviewEncoderRealized(event);
+				const retainedPreview = event.streaming
+					? this.telemetry?.preview_encoder_realized
+					: undefined;
+				const nextPreview = realizedPreview ?? retainedPreview;
 				const carried = { ...this.telemetry };
 				delete carried.active_encode;
 				delete carried.bitrate;
+				delete carried.preview_encoder_realized;
 				this.telemetry = {
 					...carried,
 					state: event.state,
@@ -1095,6 +1175,7 @@ export class CerastreamBackend implements StreamingBackend {
 					...(buffering ? { buffering } : {}),
 					...(nextEncode ? { active_encode: nextEncode } : {}),
 					...(nextBitrate ? { bitrate: nextBitrate } : {}),
+					...(nextPreview ? { preview_encoder_realized: nextPreview } : {}),
 				};
 				this.deps.bridge.broadcastStatus();
 				if (buffering) this.deps.bridge.broadcastBuffering(buffering);

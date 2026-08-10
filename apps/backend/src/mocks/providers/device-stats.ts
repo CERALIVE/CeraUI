@@ -1,7 +1,9 @@
 /*
 	CeraUI - Device-Stats Mock Provider (T3 — ceraui-experience-hardening)
 
-	Dev/emulated-mode stand-in for the 5-signal `device-stats` collector deps.
+	Dev/emulated-mode stand-in for the `device-stats` collector deps — the five
+	always-present signals plus the optional memory/swap, per-policy CPU
+	frequency, DDR-bus, and GPU fields.
 
 	On a dev box (no Rockchip hardware, no `rauc` binary, empty sensors map) the
 	production `defaultDeviceStatsDeps` degrade almost every signal to `null`:
@@ -28,6 +30,8 @@
 	production.
 */
 
+import { CPUFREQ_DIR } from "../../modules/system/collectors/cpufreq.ts";
+import { DEVFREQ_DIR } from "../../modules/system/collectors/ddr.ts";
 import type { DeviceStatsDeps } from "../../modules/system/device-stats.ts";
 import type { MockDeviceStats } from "../mock-schemas.ts";
 import { shouldUseMocks } from "../mock-service.ts";
@@ -36,7 +40,9 @@ import { shouldUseMocks } from "../mock-service.ts";
 const GIB = 1024 ** 3;
 
 /**
- * Plausible device-stats fixture — ALL five signals populated (no nulls). Zod
+ * Plausible device-stats fixture — EVERY signal populated (no nulls, no
+ * omissions: a mock that omitted a field would be claiming it is unmeasurable
+ * on this host, and dev mode must exercise every rendered element). Zod
  * validated by `mockDeviceStatsSchema` in `validateMockFixtures()` (mock-schemas.ts).
  * This is the single source of truth: {@link getMockDeviceStatsDeps} serializes
  * each field into the raw output its collector parses, so the emitted payload
@@ -53,6 +59,27 @@ export const MOCK_DEVICE_STATS = {
 		txBytesPerSec: 640_000,
 	},
 	raucSlot: "A",
+	memTotalBytes: 8 * GIB,
+	memAvailableBytes: 6 * GIB,
+	// Not an independent fixture value — the collector DERIVES this from the two
+	// above ((8 − 6) / 8 × 100), so a wrong figure here fails the mock round-trip
+	// test rather than silently shipping a mock that disagrees with production.
+	memUsedPercent: 25,
+	swapTotalBytes: 2 * GIB,
+	swapFreeBytes: 2 * GIB,
+	// An RK3588-shaped cpufreq tree: one policy per cluster boundary. The ids are
+	// the sysfs directory names the provider writes back out, nothing more.
+	cpuFreq: [
+		{ id: "policy0", curKhz: 1_008_000, maxKhz: 1_800_000 },
+		{ id: "policy4", curKhz: 1_416_000, maxKhz: 2_400_000 },
+		{ id: "policy6", curKhz: 2_016_000, maxKhz: 2_400_000 },
+	],
+	// DDR bus at 528 MHz against a 1.56 GHz ceiling. Hz here, unlike cpuFreq's
+	// kHz — the two collectors report the unit their sysfs class uses.
+	ddr: { loadPercent: 37, curFreqHz: 528_000_000, maxFreqHz: 1_560_000_000 },
+	// GPU at 300 MHz against a 1 GHz ceiling — Hz again, and served through the
+	// devfreq path (the one that carries frequencies at all).
+	gpu: { loadPercent: 61, curFreqHz: 300_000_000, maxFreqHz: 1_000_000_000 },
 } satisfies MockDeviceStats;
 
 // ─── raw-output serializers (fixture → the bytes each real collector parses) ──
@@ -85,6 +112,100 @@ function buildDfOutput(disk: MockDeviceStats["disk"]): string {
 /** Reproduce `rauc status --output-format=json` for the booted-slot fixture. */
 function buildRaucOutput(slot: string): string {
 	return JSON.stringify({ booted: slot, boot_primary: slot });
+}
+
+/**
+ * Reproduce a `/proc/meminfo` body for the memory fixture, so the REAL
+ * `collectMemory` parser reduces it back to exactly those fields — including
+ * the derived `memUsedPercent`, which is never written into the file.
+ *
+ * Values go out in the kernel's own unit (kB meaning KiB); `MemFree` is emitted
+ * alongside `MemAvailable` purely so the fixture looks like a real file (the
+ * collector deliberately ignores it — see collectors/memory.ts).
+ */
+function buildMeminfo(stats: MockDeviceStats): string {
+	const kib = (bytes: number) => bytes / 1024;
+	return (
+		`MemTotal:       ${kib(stats.memTotalBytes)} kB\n` +
+		`MemFree:        ${kib(stats.memAvailableBytes / 2)} kB\n` +
+		`MemAvailable:   ${kib(stats.memAvailableBytes)} kB\n` +
+		`SwapTotal:      ${kib(stats.swapTotalBytes)} kB\n` +
+		`SwapFree:       ${kib(stats.swapFreeBytes)} kB\n`
+	);
+}
+
+/**
+ * Reproduce the `/sys/devices/system/cpu/cpufreq/policy*` tree for the cpufreq
+ * fixture — one integer-bearing file per node, exactly as the kernel exposes
+ * them (kHz, trailing newline) — so the REAL `collectCpuFreq` enumerates and
+ * parses it back into the fixture rows.
+ */
+function buildCpuFreq(policies: MockDeviceStats["cpuFreq"]): {
+	dir: string[];
+	files: Map<string, string>;
+} {
+	const files = new Map<string, string>();
+	for (const policy of policies) {
+		files.set(
+			`${CPUFREQ_DIR}/${policy.id}/scaling_cur_freq`,
+			`${policy.curKhz}\n`,
+		);
+		files.set(
+			`${CPUFREQ_DIR}/${policy.id}/cpuinfo_max_freq`,
+			`${policy.maxKhz}\n`,
+		);
+	}
+	// `boost` is a real sibling of the policy directories on many kernels — it is
+	// listed so the collector's enumeration filter is exercised, not bypassed.
+	return { dir: [...policies.map((p) => p.id), "boost"], files };
+}
+
+/** The `*.gpu` devfreq entry both collectors see — the DDR probe's negative case. */
+const DEVFREQ_GPU_DEVICE = "fb000000.gpu";
+
+/**
+ * Reproduce a `/sys/class/devfreq` memory-controller device for the DDR fixture,
+ * so the REAL `collectDdr` probes and parses it back into the fixture reading.
+ *
+ * The device is called `dmc` because that is the FIRST candidate the collector
+ * probes — not because a board has been observed using that name (the node name
+ * is a hardware-open question; see collectors/ddr.ts). `load` is written in the
+ * vendor `"N@FkHz"` form so the mock exercises that parse branch rather than the
+ * simpler bare-integer one, and the GPU devfreq device is listed alongside it so
+ * the candidate filter is exercised instead of bypassed.
+ */
+function buildDdr(ddr: MockDeviceStats["ddr"]): {
+	dir: string[];
+	files: Map<string, string>;
+} {
+	const device = "dmc";
+	const files = new Map<string, string>([
+		[
+			`${DEVFREQ_DIR}/${device}/load`,
+			`${ddr.loadPercent}@${ddr.curFreqHz}Hz\n`,
+		],
+		[`${DEVFREQ_DIR}/${device}/cur_freq`, `${ddr.curFreqHz}\n`],
+		[`${DEVFREQ_DIR}/${device}/max_freq`, `${ddr.maxFreqHz}\n`],
+	]);
+	return { dir: [device, DEVFREQ_GPU_DEVICE], files };
+}
+
+/**
+ * Reproduce the devfreq GPU device for the GPU fixture, so the REAL `collectGpu`
+ * probes and parses it back into the fixture reading.
+ *
+ * The Mali kbase candidates are deliberately NOT served: they are probed first
+ * and fall through here (their reads reject like any other unknown path), so the
+ * mock exercises the dual-path ORDER rather than only the winning branch. `load`
+ * is written as a bare integer — the other of the two documented devfreq forms
+ * from the one `buildDdr` uses — so between them both branches are covered.
+ */
+function buildGpu(gpu: MockDeviceStats["gpu"]): Map<string, string> {
+	return new Map<string, string>([
+		[`${DEVFREQ_DIR}/${DEVFREQ_GPU_DEVICE}/load`, `${gpu.loadPercent}\n`],
+		[`${DEVFREQ_DIR}/${DEVFREQ_GPU_DEVICE}/cur_freq`, `${gpu.curFreqHz}\n`],
+		[`${DEVFREQ_DIR}/${DEVFREQ_GPU_DEVICE}/max_freq`, `${gpu.maxFreqHz}\n`],
+	]);
 }
 
 /** Reproduce a single-interface `/proc/net/dev` snapshot (rx field 0, tx field 8). */
@@ -122,6 +243,10 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 	const dfOutput = buildDfOutput(disk);
 	const raucOutput = buildRaucOutput(raucSlot);
 	const rotational = rotationalForType(disk.type);
+	const meminfo = buildMeminfo(MOCK_DEVICE_STATS);
+	const cpufreq = buildCpuFreq(MOCK_DEVICE_STATS.cpuFreq);
+	const ddr = buildDdr(MOCK_DEVICE_STATS.ddr);
+	const gpu = buildGpu(MOCK_DEVICE_STATS.gpu);
 
 	// One tick counter, advanced only by the netdev read. `now()` reads the
 	// current tick's time BEFORE the read increments it, so the snapshot time and
@@ -142,10 +267,30 @@ export function getMockDeviceStatsDeps(): DeviceStatsDeps {
 				tick += 1;
 				return out;
 			}
+			if (path === "/proc/meminfo") {
+				return meminfo;
+			}
+			const sysfsNode =
+				cpufreq.files.get(path) ?? ddr.files.get(path) ?? gpu.get(path);
+			if (sysfsNode !== undefined) {
+				return sysfsNode;
+			}
 			if (path.startsWith("/sys/block/")) {
 				return rotational;
 			}
 			throw new Error(`mock device-stats: unexpected readText(${path})`);
+		},
+		// Only the trees this fixture serves are enumerable. Every other path
+		// REJECTS — the honest answer for a host with no such tree, where an
+		// empty listing would instead claim the directory exists and is empty.
+		readDir: async (path) => {
+			if (path === CPUFREQ_DIR) {
+				return cpufreq.dir;
+			}
+			if (path === DEVFREQ_DIR) {
+				return ddr.dir;
+			}
+			throw new Error(`mock device-stats: unexpected readDir(${path})`);
 		},
 		execFile: async (file) => {
 			if (file === "df") return { stdout: dfOutput, stderr: "" };

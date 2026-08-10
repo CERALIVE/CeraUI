@@ -96,6 +96,11 @@
 
   `encoder-status.test.ts` pins the no-digit and no-`inline-size` rules for an
   `active` core in both densities.
+
+  DECODE CORES ARE OPT-IN (`showDecoders`), and only Device Health opts in. The
+  rows share this widget's renderer because the wire shape is the same union, but
+  they are a separate CLAIM under their own heading — and the two inline hosts
+  must keep rendering identically whether or not the device reported any.
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
@@ -146,9 +151,26 @@ interface Props {
 	 * beside that heading — the engine revision — is passed in here.
 	 */
 	headerAside?: Snippet;
+	/**
+	 * Also draw the DECODER cores, when the device reported any.
+	 *
+	 * OPT-IN, and deliberately so: only Settings → Device Health has the room and
+	 * the remit for a second core list. The Device Stats tile and the Live
+	 * telemetry strip mount this widget WITHOUT it and must keep rendering
+	 * exactly as they did before decode rows existed on the wire — a regression
+	 * test pins that their markup is byte-identical whether or not `decodeCores`
+	 * is present on the reading.
+	 */
+	showDecoders?: boolean;
 }
 
-const { reading, density = 'panel', compact = false, headerAside }: Props = $props();
+const {
+	reading,
+	density = 'panel',
+	compact = false,
+	headerAside,
+	showDecoders = false,
+}: Props = $props();
 
 /** Filled lime, filled muted, hollow ring — in that order of loudness. */
 const TONE_PIP: Record<ActivityTone, string> = {
@@ -208,6 +230,22 @@ const headline = $derived(
 const headlineTone = $derived<ActivityTone>(
 	activity === 'encoding' ? 'live' : activity === 'idle' ? 'quiet' : 'absent',
 );
+
+/**
+ * ABSENT is not empty. `decodeCores` is OMITTED when the kernel said nothing
+ * about decode — only the vendor 6.1 `mpp_service` interface carries the rows —
+ * so no key means no section at all. An empty list is treated the same way: a
+ * headed, rowless well would read as "the decoders were measured at nothing".
+ *
+ * Rows are NEVER filtered: an `unavailable` decoder keeps its slot, because
+ * dropping it would silently renumber every decoder after it. The list length is
+ * whatever the board printed — there is no fixed decoder count to assume.
+ */
+const decoderCores = $derived.by(() => {
+	if (!showDecoders) return null;
+	const rows = reading.decodeCores;
+	return rows === undefined || rows.length === 0 ? null : rows;
+});
 </script>
 
 <!--
@@ -293,15 +331,15 @@ const headlineTone = $derived<ActivityTone>(
   right rail in all three vocabularies, so the rows align whether or not a
   magnitude exists.
 -->
-{#snippet coreRows()}
-	<ul class="divide-border min-w-0 divide-y text-xs" data-testid="encoder-core-list">
-		{#each reading.cores as core (core.core)}
+{#snippet coreRows(cores: readonly EncoderCoreReading[], scope: 'encoder' | 'decoder')}
+	<ul class="divide-border min-w-0 divide-y text-xs" data-testid="{scope}-core-list">
+		{#each cores as core (core.core)}
 			{@const tone = coreTone(core)}
 			<li
 				class="flex min-w-0 items-baseline gap-2.5 px-3 py-2"
 				data-core-kind={core.kind}
 				data-core-tone={tone}
-				data-testid="encoder-core-{core.core}"
+				data-testid="{scope}-core-{core.core}"
 			>
 				{@render pip(tone)}
 				<!-- The id is the LABEL and the reading is the VALUE, so they must not
@@ -328,7 +366,7 @@ const headlineTone = $derived<ActivityTone>(
 					</span>
 					<span
 						class={cn('ms-auto shrink-0 font-mono font-medium tabular-nums', TONE_TEXT[tone])}
-						data-testid="encoder-core-value-{core.core}"
+						data-testid="{scope}-core-value-{core.core}"
 					>
 						{core.percent.toFixed(2)}%
 					</span>
@@ -336,7 +374,7 @@ const headlineTone = $derived<ActivityTone>(
 					{@render leader()}
 					<span
 						class={cn('ms-auto min-w-0 truncate font-mono font-medium', TONE_TEXT[tone])}
-						data-testid="encoder-core-value-{core.core}"
+						data-testid="{scope}-core-value-{core.core}"
 					>
 						{core.active ? t.cores.busy() : t.cores.idle()}
 					</span>
@@ -350,7 +388,7 @@ const headlineTone = $derived<ActivityTone>(
 					-->
 					<span
 						class={cn('ms-auto min-w-0 truncate font-mono', TONE_TEXT[tone])}
-						data-testid="encoder-core-value-{core.core}"
+						data-testid="{scope}-core-value-{core.core}"
 					>
 						{t.unavailable()}
 					</span>
@@ -446,15 +484,31 @@ const headlineTone = $derived<ActivityTone>(
 			     under the last core, and leaves each row's own baseline geometry
 			     untouched. -->
 			<div class={cn('min-w-0', banded && 'sm:flex sm:flex-1 sm:flex-col sm:justify-center')}>
-				{@render coreRows()}
+				{@render coreRows(reading.cores, 'encoder')}
 			</div>
 		</div>
 	{:else}
 		<div class={cn(WELL, 'bg-muted/40')}>
-			{@render coreRows()}
+			{@render coreRows(reading.cores, 'encoder')}
 		</div>
 		<p class="text-muted-foreground/80 text-[11px] leading-relaxed" data-testid="encoder-cores-note">
 			{precision === 'percent' ? t.cores.percentNote() : t.cores.binaryNote()}
 		</p>
+	{/if}
+
+	<!-- Decode is a SEPARATE claim, so it gets its own heading and its own well
+	     rather than extra rows in the encoder list — and it sits outside the
+	     instrumented branch above, because a kernel can report decode while the
+	     encode probe finds nothing. Same row renderer, same three vocabularies:
+	     the wire shape is identical to the encode rows by construction. -->
+	{#if decoderCores !== null}
+		<section class="space-y-2.5" data-decoder-count={decoderCores.length} data-testid="decoder-cores">
+			<h3 class="text-muted-foreground min-w-0 text-xs font-medium">
+				{t.cores.decodeTitle()}
+			</h3>
+			<div class={cn(WELL, 'bg-muted/40')}>
+				{@render coreRows(decoderCores, 'decoder')}
+			</div>
+		</section>
 	{/if}
 </div>

@@ -14,7 +14,7 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.7.5"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.7.6"   (public npm, @ceralive scope)
 "@ceralive/srtla-send":  "2026.6.2"   (public npm, @ceralive scope)
 ```
 
@@ -344,6 +344,18 @@ mocking mechanism for it. That absence IS the real-vs-mock seam — there is no
 build-flag branch choosing between them, and a device reading always wins,
 **including when what it read was "neither interface exists"**.
 
+**Decoder rows ride the same `encoder-load` broadcast, additively.** On the
+vendor 6.1 kernel (`mpp-service` interface only — never mainline/edge 7.1),
+`decodeCores` carries one row per `*.rkvdec*` device, using the SAME
+discriminated-union row shape as the encode `cores` array (`percent` |
+`active` | `unavailable`). The key is OMITTED (never `[]`) when the kernel
+publishes no decode load interface, and its length is board-derived rather
+than a fixed two-slot list. `EncoderStatus.svelte`'s `showDecoders?: boolean`
+(default `false`) opts a mount site into rendering the decoder section; only
+Device Health passes `true` today. See leg (ii) of
+[`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md) for the
+outstanding real-decode-load validation.
+
 ## MOCK SUBSYSTEM [EXISTS]
 
 The mock subsystem provides hardware simulation for development and testing. It is
@@ -442,8 +454,10 @@ stream is idle; the override is cleared by `resetMockState()`.
 
 ## DEVICE STATS [EXISTS]
 
-`apps/backend/src/modules/system/device-stats.ts` broadcasts exactly **5 signals**
-on a `device-stats` event every 5 seconds (S1 lock):
+`apps/backend/src/modules/system/device-stats.ts` broadcasts the original **5
+signals** on a `device-stats` event every 5 seconds (S1 lock), plus **four
+additive-optional signals** shipped on top of that lock: `memory`, `cpuFreq`,
+`ddr`, and `gpu`.
 
 | Signal | Description |
 |--------|-------------|
@@ -452,10 +466,21 @@ on a `device-stats` event every 5 seconds (S1 lock):
 | `socTemp` | SoC temperature (wired from `sensors.ts` — no second `/sys/class/thermal` read) |
 | `ifaceRxTx` | Per-interface RX/TX byte counters |
 | `raucSlot` | Active RAUC A/B slot |
+| `memory` (optional) | Parsed `/proc/meminfo` fields (`memTotalBytes`, etc.) — a genuinely-read `0` is kept; an unreadable source omits the keys |
+| `cpuFreq` (optional) | Array of `{id, curKhz, maxKhz}` per `/sys/devices/system/cpu/cpufreq/policy*` directory. `id` is the directory name verbatim — never relabeled "big"/"little" and never used to infer core counts. `maxKhz` is the hardware ceiling (`cpuinfo_max_freq`), not the governor-movable `scaling_max_freq`. Absent when nothing is measurable, never `[]` |
+| `ddr` (optional) | `{loadPercent, curFreqHz, maxFreqHz}` from the DDR devfreq node. All-three-or-nothing. Probed under `/sys/class/devfreq`: a case-insensitive exact `dmc` match first, then any entry matching `/dmc/i` or `/dfi/i` (lexicographically sorted). Hz, not kHz — do not share a formatter with `cpuFreq` |
+| `gpu` (optional) | `{loadPercent, curFreqHz?, maxFreqHz?}`. `loadPercent` required; frequencies independently optional, because the Mali kbase path (`/sys/class/misc/mali0/device/{utilisation,utilization,gpu_busy_percent}`, probed in that order) structurally cannot report a frequency. Falls through to devfreq GPU (`/\.gpu$/i` suffix match under the same `/sys/class/devfreq` directory) when kbase is absent. Hz, not kHz |
 
-Adding a sixth field is a deliberate contract change, not a tweak. Every collector
-wraps its read in its own `try/catch` and degrades to `null` on failure — a missing
-`/sys` path or absent `rauc` binary must never crash the sampling loop.
+Adding a field to the always-present five is a deliberate contract change, not a
+tweak. Every collector wraps its read in its own `try/catch` and degrades to
+`null`/omission on failure — a missing `/sys` path or absent `rauc` binary must
+never crash the sampling loop. The four newer signals are OMITTED (never
+zero-filled or empty-array-filled) when their kernel interface does not exist —
+absence on a given kernel is the expected, honest state, not a gap to paper over.
+**None of the raw sysfs node paths/contents these four probes read have been
+confirmed against a real board yet** — see
+[`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md) leg (i) for
+the outstanding capture step.
 
 **A new device signal therefore gets its OWN broadcast**, exactly as `encoder-load`
 did. The CPU core count is the third one, and it exists because `cpuLoad1` above is
@@ -482,6 +507,46 @@ device carries NO `device` backlink at all, so the collector also correlates by
 the `hwmon<N>/name == "pwmfan"` string; that fallback is gated on a confirmed
 `pwm-fan` cdev and reports `unknown` rather than guessing when two hwmons match.
 Full contract: [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → FAN.
+
+## HARDWARE PREVIEW ENCODE [EXISTS]
+
+RK3588's platform HAL descriptor publishes a preview-hardware-encoder option
+(`mpph264enc`), and CeraUI now exposes it as an operator-facing toggle. Three
+independent facts travel this contract, none of which may be normalized into
+one another (four distinct readings — see `cerastream/AGENTS.md`'s "four
+readings" rule for the full statement):
+
+1. **Capability** (idle-safe, platform fact) — `preview_hw_capability` inside
+   the `capabilities` broadcast's `preview` block. `undefined` (legacy engine)
+   and `false` (board publishes no preview encoder) both hide the toggle, but
+   are not the same fact.
+2. **Requested** — CeraUI's own persisted config, `previewEncode?: "software"
+   | "hardware"` (camelCase; NOT an engine fact). Rides `streaming.setConfig` /
+   `getConfig`. Applies to the NEXT stream session — the preview encoder is
+   fixed at graph-build time, so it can never apply-now to a live session.
+3. **Realized** (session-scoped) — `status.preview_encoder_realized`: `{
+   selected_element?, realized_element, mode: "software"|"hardware",
+   fallback_reason? }`. `mode` is the ACTIVE mode; there is no `requested`
+   field here on purpose.
+
+`apps/frontend/src/main/live/PreviewEncodeControl.svelte`, mounted inside the
+collapsed Preview `<details>` (`PreviewDisclosure.svelte`), renders the toggle
+only when capability is `=== true`. It shows the persisted request above a
+divider and the realized state below it (`preview-encode-active` with
+`data-mode`), plus an honest fallback row (`preview-encode-fallback`) keyed on
+`fallback_reason.code` (`factory-missing` | `property-failure`, the latter
+naming the refused property verbatim). A start-choke-point FENCE
+(`streamloop/start-stream.ts`, the sole `start()` dispatch site) replays the
+persisted `previewEncode` mode to the engine before every stream start —
+stateless, not a dirty flag, so an engine restarted mid-idle by systemd still
+gets re-told the operator's preference on the next start.
+
+**None of this has been validated against a real hardware-preview session on
+board yet.** See leg (iii) of
+[`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md) for the
+outstanding hardware-active / concurrent-utilization / CPU-drop legs, and leg
+(iv) for the fallback-path legs. No leg has passed — this doc records what the
+code does, not what a board has confirmed.
 
 ## DEVICE DETECTION + KIOSK EMULATION SAFETY
 

@@ -93,10 +93,19 @@ export const TEMP_BUCKET_MS = 2_000;
 export const TEMP_GAP_MS = TEMP_BUCKET_MS * 2;
 export const LOAD_GAP_MS = LOAD_CADENCE_MS * 2;
 
+/**
+ * Memory rides the SAME `device-stats` broadcast as load, so it inherits that
+ * lane's cadence exactly. Aliased rather than re-derived: two constants with the
+ * same provenance that could drift apart would be a bug waiting to happen.
+ */
+export const MEMORY_GAP_MS = LOAD_GAP_MS;
+
 /** 5 min / 1 s, hard cap on the temperature ring. */
 export const MAX_TEMP_SAMPLES = 320;
 /** 5 min / 5 s, hard cap on the load ring. */
 export const MAX_LOAD_SAMPLES = 80;
+/** Same feed, same cadence, same cap as load. */
+export const MAX_MEMORY_SAMPLES = MAX_LOAD_SAMPLES;
 
 // ── Domains ──────────────────────────────────────────────────────────────────
 /**
@@ -116,6 +125,14 @@ export const TEMP_DOMAIN: LaneDomain = { min: 20, max: 95 };
  */
 export const LOAD_DOMAIN_MIN_CEILING = 2;
 
+/**
+ * Memory used is a SHARE of a denominator the device itself published
+ * (`MemTotal`), so unlike load it has an honest fixed ceiling and is drawn
+ * against it. Self-scaling here would make a board sitting at 12 % look like a
+ * board sitting at 95 %.
+ */
+export const MEMORY_DOMAIN: LaneDomain = { min: 0, max: 100 };
+
 // ── Geometry ─────────────────────────────────────────────────────────────────
 /**
  * The drawing box. Mirrors the `SPARK_W`/`SPARK_H` export convention in
@@ -134,13 +151,13 @@ export interface TraceGeometry {
 	readonly laneLabelH: number;
 	/** Height of a lane's plot area. */
 	readonly lanePlotH: number;
-	/** Gap under each lane (also separates lane 2 from the axis ruler). */
+	/** Gap under each lane (also separates the last lane from the axis ruler). */
 	readonly laneGap: number;
 	/** Height of the axis ruler strip at the bottom. */
 	readonly rulerH: number;
 }
 
-/** Desktop recorder: two full lanes plus the ruler, 132 user units tall. */
+/** Desktop recorder: 58 user units per lane plus a 16-unit ruler. */
 export const DESKTOP_GEOMETRY: TraceGeometry = {
 	laneLabelH: 12,
 	lanePlotH: 38,
@@ -149,20 +166,35 @@ export const DESKTOP_GEOMETRY: TraceGeometry = {
 };
 
 /**
- * Kiosk/compact recorder (<=1024 px, and the 1024x600 touch panel): still TWO
- * FULL LANES — the panel never drops a signal to fit — just a shorter plot and a
- * denser ruler. 104 user units tall.
+ * Kiosk/compact recorder (<=1024 px, and the 1024x600 touch panel): EVERY lane
+ * stays full — the panel never drops a signal to fit — just a shorter plot and a
+ * denser ruler. 30 user units per lane plus a 12-unit ruler.
+ *
+ * Those numbers were 11/27/7/14 (45 per lane) when the recorder had two
+ * channels. Adding the memory channel had to be paid for in full: the Device
+ * Health panel is FORBIDDEN to scroll on the 1024x600 kiosk (`C5`, pinned by
+ * `device-telemetry-v2.visual.spec.ts`) and measured at exactly its box height
+ * before this change — a third lane at the old stride overflowed by 43 px. The
+ * shorter plot is the deliberate trade: three real signals at a smaller
+ * amplitude beat two at a larger one, because the panel's job is to show WHICH
+ * signal moved, and a channel that is not drawn shows nothing at all.
  */
 export const COMPACT_GEOMETRY: TraceGeometry = {
-	laneLabelH: 11,
-	lanePlotH: 27,
-	laneGap: 7,
-	rulerH: 14,
+	laneLabelH: 10,
+	lanePlotH: 15,
+	laneGap: 5,
+	rulerH: 12,
 };
 
-/** Total height of the drawing box for a geometry (two lanes + ruler). */
-export function traceHeight(g: TraceGeometry): number {
-	return (g.laneLabelH + g.lanePlotH + g.laneGap) * 2 + g.rulerH;
+/**
+ * Total height of the drawing box: `laneCount` lanes plus the ruler.
+ *
+ * The count is a parameter rather than the former hard-coded `2` because the
+ * recorder gained a third channel (memory). It still DEFAULTS to two so the
+ * geometry's documented desktop/compact heights stay the two-lane figures.
+ */
+export function traceHeight(g: TraceGeometry, laneCount = 2): number {
+	return (g.laneLabelH + g.lanePlotH + g.laneGap) * laneCount + g.rulerH;
 }
 
 /** Vertical placement of lane `index` (0 = top) under a geometry. */
@@ -182,9 +214,9 @@ export function laneBox(
 	};
 }
 
-/** Top edge (and rule position) of the axis ruler strip. */
-export function rulerTop(g: TraceGeometry): number {
-	return (g.laneLabelH + g.lanePlotH + g.laneGap) * 2;
+/** Top edge (and rule position) of the axis ruler strip, under `laneCount` lanes. */
+export function rulerTop(g: TraceGeometry, laneCount = 2): number {
+	return (g.laneLabelH + g.lanePlotH + g.laneGap) * laneCount;
 }
 
 /** Horizontal distance one second of wall-clock occupies. */

@@ -332,6 +332,20 @@ const fr = {
 				"Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",
 			cpuLoadHintNoCores:
 				"Charge moyenne sur 1 minute. Cet appareil n'a pas indiqué son nombre de cœurs, elle ne peut donc pas être affichée en part de capacité.",
+			memory: "Mémoire",
+			memoryHint:
+				"Part de la RAM utilisée. Mesurée par rapport à MemAvailable, afin que le cache de pages récupérable ne compte pas comme utilisé.",
+			swap: "Swap",
+			swapNone: "Aucun",
+			cpuFreq: "Fréquence CPU",
+			cpuFreqHint:
+				"Fréquence actuelle face au plafond matériel, par politique cpufreq. Un nom de politique est un répertoire sysfs, pas un cluster de cœurs.",
+			ddr: "Bus DDR",
+			ddrHint:
+				"Charge du contrôleur mémoire, lue depuis le périphérique devfreq de la carte.",
+			gpu: "GPU",
+			gpuHint:
+				"Charge du GPU, lue depuis l'interface Mali ou devfreq de la carte.",
 		},
 		deviceHealth: {
 			title: "Santé de l'appareil",
@@ -340,6 +354,7 @@ const fr = {
 			lane: {
 				temp: "Température du SoC",
 				load: "Charge moyenne · 1 min · tous les processus",
+				memory: "Mémoire utilisée · % de la RAM",
 			},
 			nowStrip: {
 				temperature: "Température du SoC",
@@ -377,6 +392,11 @@ const fr = {
 				headlineIdle: "Inactif",
 				headlineUnreported: "Non communiqué",
 				engineLabel: "Moteur",
+				decodeTitle: "Cœurs du décodeur",
+			},
+			loads: {
+				gpu: "Charge du GPU",
+				ddr: "Charge du bus mémoire",
 			},
 			power: {
 				title: "Rails d'alimentation",
@@ -1483,6 +1503,21 @@ const fr = {
 					title: "Aperçu en pause",
 					body: "L'aperçu s'est arrêté après être resté sans surveillance pour économiser des ressources. Reprenez pour le revoir.",
 				},
+			},
+			encode: {
+				label: "Encodage matériel de l'aperçu",
+				description: "Encoder l'aperçu avec l'encodeur matériel de la carte.",
+				helper: "S'applique au prochain flux.",
+				activeLabel: "Encodeur d'aperçu actif",
+				activeNone: "Aucun aperçu n'est encodé pour l'instant",
+				activeHardware: "{element} \u2014 matériel",
+				activeSoftware: "{element} \u2014 logiciel",
+				fallbackTitle: "L'aperçu matériel est repassé en logiciel",
+				fallbackFactoryMissing:
+					"L'encodeur d'aperçu matériel n'est pas installé dans cette image, l'aperçu est donc encodé en logiciel.",
+				fallbackPropertyFailure:
+					"L'encodeur d'aperçu matériel a refusé un réglage, l'aperçu est donc encodé en logiciel.",
+				fallbackPropertyLabel: "Réglage refusé",
 			},
 		},
 		inputPicker: {

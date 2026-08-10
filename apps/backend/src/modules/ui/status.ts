@@ -21,6 +21,7 @@ import type {
 	BufferingStatus,
 	EngineBitrate,
 	NetworkIngest,
+	PreviewEncoderRealized,
 	ResolvedAsrcReason,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
@@ -44,6 +45,7 @@ import {
 } from "../streaming/link-telemetry.ts";
 import { AUDIO_CODECS } from "../streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../streaming/pipelines.ts";
+import { getPreviewEncoderRealizedStatus } from "../streaming/preview-encoder-status.ts";
 import { getSourcesMessage } from "../streaming/sources.ts";
 import { getStreamLifecycleState } from "../streaming/stream-lifecycle-status.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
@@ -84,6 +86,7 @@ export type StatusResponseMessage = {
 	network_ingest?: NetworkIngest | null;
 	active_encode?: ActiveEncode | null;
 	engine_bitrate?: EngineBitrate | null;
+	preview_encoder_realized?: PreviewEncoderRealized | null;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -109,6 +112,7 @@ export function sendStatus(conn: WebSocket) {
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),
+			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 		} satisfies StatusResponseMessage),
 	);
 }

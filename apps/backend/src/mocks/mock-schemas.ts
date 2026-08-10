@@ -276,6 +276,46 @@ export const mockDeviceStatsSchema = z.object({
 		txBytesPerSec: z.number().int().nonnegative(),
 	}),
 	raucSlot: z.string().min(1),
+	// Memory/swap. Required HERE (unlike the wire schema, where they are
+	// optional) because a dev fixture must populate every rendered signal —
+	// omission on the wire means "unmeasured", which a mock must never claim.
+	// Byte values must be whole KiB multiples: the provider serializes them back
+	// into a `/proc/meminfo` body, so a non-multiple would not round-trip.
+	memTotalBytes: z.number().int().positive().multipleOf(1024),
+	memAvailableBytes: z.number().int().nonnegative().multipleOf(1024),
+	memUsedPercent: z.number().int().min(0).max(100),
+	swapTotalBytes: z.number().int().nonnegative().multipleOf(1024),
+	swapFreeBytes: z.number().int().nonnegative().multipleOf(1024),
+	// Per-policy CPU frequency, kHz. Required (and non-empty) HERE for the same
+	// reason as the memory fields: dev mode must render every signal. The ids
+	// are sysfs directory names — `policyN`, never a cluster label.
+	cpuFreq: z
+		.array(
+			z.object({
+				id: z.string().regex(/^policy\d+$/, "cpuFreq id must be policy<N>"),
+				curKhz: z.number().int().nonnegative(),
+				maxKhz: z.number().int().positive(),
+			}),
+		)
+		.min(1),
+	// DDR-bus load. Required HERE for the same reason as the fields above, even
+	// though a real mainline board omits it entirely — dev mode has to render
+	// the panel. Frequencies are Hz (devfreq's unit), NOT the kHz of `cpuFreq`.
+	ddr: z.object({
+		loadPercent: z.number().int().min(0).max(100),
+		curFreqHz: z.number().int().positive(),
+		maxFreqHz: z.number().int().positive(),
+	}),
+	// GPU load. Required HERE for the same reason as the fields above. The
+	// frequencies are required in the FIXTURE (dev mode renders them) even though
+	// the wire schema leaves them optional — a board answering through the Mali
+	// kbase node reports a load with no frequency at all, and the mock serializes
+	// the devfreq shape, which is the one that carries all three.
+	gpu: z.object({
+		loadPercent: z.number().int().min(0).max(100),
+		curFreqHz: z.number().int().positive(),
+		maxFreqHz: z.number().int().positive(),
+	}),
 });
 export type MockDeviceStats = z.infer<typeof mockDeviceStatsSchema>;
 

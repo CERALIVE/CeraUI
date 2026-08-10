@@ -459,10 +459,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// next heartbeat after stop, but a `{is_streaming:false}` frame that omits
 			// linkTelemetry would otherwise leave a stale bond on the HUD/IngestStats
 			// until that tick. Clearing here defensively closes that gap.
-			// The same edge clears `active_encode` and `engine_bitrate`: both are
-			// engine truth about a LIVE session, and the merge below preserves an
-			// omitted field, so a stop frame that omits them would leave the stopped
-			// session labelled "Live" at the rate it was last encoding at.
+			// The same edge clears `active_encode`, `engine_bitrate` and
+			// `preview_encoder_realized`: all three are engine truth about a LIVE
+			// session, and the merge below preserves an omitted field, so a stop frame
+			// that omits them would leave the stopped session labelled "Live" at the
+			// rate it was last encoding at, still explaining why its preview fell back
+			// to software.
 			const stoppedNow = wasStreaming && isStreamingState === false;
 			if (stoppedNow) {
 				linkTelemetryState = null;
@@ -478,7 +480,13 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				is_streaming: isStreamingState,
 				wifi: wifiState ?? {},
 				modems: modemsState ?? {},
-				...(stoppedNow ? { active_encode: null, engine_bitrate: null } : {}),
+				...(stoppedNow
+					? {
+							active_encode: null,
+							engine_bitrate: null,
+							preview_encoder_realized: null,
+						}
+					: {}),
 			} as typeof statusState;
 			break;
 		}

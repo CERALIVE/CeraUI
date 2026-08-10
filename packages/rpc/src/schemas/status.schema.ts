@@ -4,7 +4,7 @@
 import { z } from 'zod';
 
 import { modemListSchema } from './modems.schema';
-import { audioSourceSchema } from './streaming.schema';
+import { audioSourceSchema, previewEncodeModeSchema } from './streaming.schema';
 import { lifecycleStateSchema } from './streaming-lifecycle.schema';
 import {
 	availableUpdatesSchema,
@@ -218,6 +218,41 @@ export const activeEncodeSchema = z.object({
 });
 export type ActiveEncode = z.infer<typeof activeEncodeSchema>;
 
+// What the LIVE session's PREVIEW branch is actually encoding with (cerastream
+// `PreviewEncoderRealized`, `status.preview_encoder_realized`). A sibling of
+// `active_encode`, never nested inside it: preview and egress are different graph
+// branches and are independently absent.
+//
+// Read `selected_element` and `realized_element` as a PAIR — that pairing is the
+// whole informational content. `selected` absent + software realized means the
+// board publishes no preview encoder at all; `selected` present + software
+// realized with NO `fallback_reason` means the operator chose software on a
+// capable board; the same pair WITH a reason is a genuine fallback.
+//
+// The field being ABSENT is a fourth, distinct reading — "no preview branch, or a
+// legacy engine" — and is NOT `mode: "software"` and NOT
+// `capabilities.preview.preview_hw_capability === false`. None of the four may be
+// defaulted into another: doing so either hides a working control or offers one
+// the board cannot honor. Additive + nullable + optional, so an engine that never
+// reports it surfaces nothing at all.
+export const previewEncodeFallbackSchema = z.discriminatedUnion('code', [
+	z.object({ code: z.literal('factory-missing') }),
+	z.object({ code: z.literal('property-failure'), property: z.string() }),
+]);
+export type PreviewEncodeFallback = z.infer<typeof previewEncodeFallbackSchema>;
+
+export const previewEncoderRealizedSchema = z.object({
+	/** Element the board's HAL descriptor publishes; absent ⇒ it publishes none. */
+	selected_element: z.string().optional(),
+	/** Element actually built into the preview branch, e.g. "x264enc". */
+	realized_element: z.string(),
+	/** The encoder family actually realized — the ACTIVE mode, never the request. */
+	mode: previewEncodeModeSchema,
+	/** Why a hardware request is running in software; absent is the normal case. */
+	fallback_reason: previewEncodeFallbackSchema.optional(),
+});
+export type PreviewEncoderRealized = z.infer<typeof previewEncoderRealizedSchema>;
+
 // The `unavailable_reason` value carried by a protocol whose gateway is running
 // but has no reachable LAN/hotspot address to advertise (e.g. modem-only
 // connectivity). A modem/WWAN IP is NEVER advertised — the ingress firewall drops
@@ -289,6 +324,7 @@ export const statusResponseSchema = z.object({
 	buffering: bufferingStatusSchema.nullable().optional(),
 	active_encode: activeEncodeSchema.nullable().optional(),
 	engine_bitrate: engineBitrateSchema.nullable().optional(),
+	preview_encoder_realized: previewEncoderRealizedSchema.nullable().optional(),
 	network_ingest: networkIngestSchema.nullable().optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;

@@ -10,6 +10,11 @@
  * Exactly one instance is on screen at a time (LiveView renders one cockpit), so
  * there is never a second PreviewCanvas competing for the preview socket.
  *
+ * `PreviewEncodeControl` hangs off this host rather than off the canvas: it is a
+ * config + status surface with no involvement in the socket, the token mint or
+ * the delivery-tier ladder, and it renders nothing at all unless the board
+ * published `preview_hw_capability`.
+ *
  * `PreviewCanvas` is unchanged: it still mints a single-use token over the
  * authenticated RPC socket and dials the backend-origin `/preview` proxy, and it
  * stays fully off (no engine dial) until `open` flips.
@@ -17,6 +22,8 @@
 import { LL } from '@ceraui/i18n/svelte';
 
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
+
+import PreviewEncodeControl from './PreviewEncodeControl.svelte';
 
 interface Props {
 	/** Marks the mid-stream mount so tests and CSS can tell the two apart. */
@@ -39,5 +46,6 @@ let open = $state(false);
 	</summary>
 	<div class="px-4 pb-4">
 		<PreviewCanvas hostActive={open} />
+		<PreviewEncodeControl />
 	</div>
 </details>

@@ -18,6 +18,7 @@ import type {
 	ActiveEncode,
 	CaptureMode,
 	DeviceMode,
+	PreviewEncoderRealized,
 	RequiresGateway,
 } from "@ceraui/rpc/schemas";
 import { inputModeSchema } from "@ceraui/rpc/schemas";
@@ -135,7 +136,19 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 			default_framerate: 30,
 		},
 	],
+	// A full-profile board publishes a hardware PREVIEW encoder alongside its
+	// hardware egress encoder, which is what makes the CeraUI hardware-preview
+	// control reachable in dev/e2e at all. The minimal floor deliberately omits
+	// the whole `preview` block, so the two profiles cover both readings of the
+	// gate: an explicit capability, and an engine that stated none.
+	preview: { enabled: true, bound: true, preview_hw_capability: true },
 };
+
+// The element a full-profile board's HAL descriptor publishes for preview, and
+// the software encoder every fallback lands on. Named here so the realized-status
+// mock and the capability above cannot drift apart.
+const MOCK_PREVIEW_HW_ELEMENT = "mpph264enc";
+const MOCK_PREVIEW_SW_ELEMENT = "x264enc";
 
 // caps-full advertises its bitrate range in the engine's native bps units so the
 // getCapabilities() normalizer converts 500_000-20_000_000 bps → 500-20000 kbps.
@@ -722,6 +735,44 @@ export function getMockActiveEncode(): ActiveEncode | null {
 		};
 	}
 	return { ...FULL_PROFILE_ACTIVE_ENCODE };
+}
+
+/**
+ * Mock REALIZED preview encoder (cerastream `status.preview_encoder_realized`),
+ * null when idle. Session-scoped by construction: the field simply stops arriving
+ * once the stream stops, which is what CeraUI's stop-edge retraction relies on.
+ *
+ * The realization is derived from the two facts the engine derives it from — the
+ * board's published capability and the persisted operator request — rather than
+ * hard-coded, so dev mode stays consistent with whatever the toggle last wrote.
+ * A board with no capability realizes software and reports NO `selected_element`
+ * and NO `fallback_reason`: it never had a hardware encoder to fall back from,
+ * and inventing a fallback there would tell an operator their board failed at
+ * something it never claimed.
+ */
+export function getMockPreviewEncoderRealized(): PreviewEncoderRealized | null {
+	if (!shouldUseMocks()) {
+		return null;
+	}
+	if (!getStreamingStats().isActive) {
+		return null;
+	}
+	const capable = resolveScenarioCapabilities().fullProfile === true;
+	if (!capable) {
+		return { realized_element: MOCK_PREVIEW_SW_ELEMENT, mode: "software" };
+	}
+	if (getConfig().previewEncode !== "hardware") {
+		return {
+			selected_element: MOCK_PREVIEW_HW_ELEMENT,
+			realized_element: MOCK_PREVIEW_SW_ELEMENT,
+			mode: "software",
+		};
+	}
+	return {
+		selected_element: MOCK_PREVIEW_HW_ELEMENT,
+		realized_element: MOCK_PREVIEW_HW_ELEMENT,
+		mode: "hardware",
+	};
 }
 
 /**

@@ -41,6 +41,7 @@ import {
 	getMockAudioDevices,
 	getMockEngineCapabilities,
 	getMockEngineDevices,
+	getMockPreviewEncoderRealized,
 } from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
@@ -91,6 +92,7 @@ import {
 	setMockLinkTelemetryProvider,
 } from "./modules/streaming/link-telemetry.ts";
 import { getPipelineList } from "./modules/streaming/pipelines.ts";
+import { setMockPreviewEncoderRealizedProvider } from "./modules/streaming/preview-encoder-status.ts";
 import { refreshAndBroadcastSources } from "./modules/streaming/sources.ts";
 import { runStreamRestoration } from "./modules/streaming/stream-restoration.ts";
 import { reconcileStreamSession } from "./modules/streaming/stream-session-orchestrator.ts";
@@ -157,6 +159,7 @@ if (isDevelopment()) {
 	initMockService(scenario);
 	setMockLinkTelemetryProvider(buildMockLinkTelemetry);
 	setMockActiveEncodeProvider(getMockActiveEncode);
+	setMockPreviewEncoderRealizedProvider(getMockPreviewEncoderRealized);
 	setMockAudioDevicesProvider(getMockAudioDevices);
 	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
 	logger.info(

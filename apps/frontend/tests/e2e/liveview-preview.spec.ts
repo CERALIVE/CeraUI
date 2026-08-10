@@ -180,7 +180,9 @@ test.describe('LiveView preview placement (#72)', () => {
 		await expect(toggle).toHaveAttribute('aria-pressed', 'true');
 
 		await expect(page.getByTestId('preview-canvas')).toBeVisible();
-		await expect(page.getByTestId('audio-level-meter')).toBeVisible();
+		// Scoped to the preview: SourceSection carries its own always-on
+		// LiveAudioMeter, so an unscoped `audio-level-meter` matches two elements.
+		await expect(preview.getByTestId('audio-level-meter')).toBeVisible();
 	});
 
 	test('no active encode → preview reaches the waiting state with the i18n string', async ({
@@ -195,7 +197,7 @@ test.describe('LiveView preview placement (#72)', () => {
 		// live.preview.waiting === "Waiting for video…" (en base locale).
 		await expect(preview).toContainText('Waiting for video');
 		// Meter still mounts in the waiting state.
-		await expect(page.getByTestId('audio-level-meter')).toBeVisible();
+		await expect(preview.getByTestId('audio-level-meter')).toBeVisible();
 	});
 
 	test('@visual evidence: preview + meter adjacent to the input selector', {
@@ -206,7 +208,7 @@ test.describe('LiveView preview placement (#72)', () => {
 		await expect(page.getByTestId('source-list')).toBeVisible();
 		await page.getByTestId('preview-toggle').click();
 		await expect(page.getByTestId('preview-canvas')).toBeVisible();
-		await expect(page.getByTestId('audio-level-meter')).toBeVisible();
+		await expect(page.getByTestId('preview').getByTestId('audio-level-meter')).toBeVisible();
 
 		await page
 			.getByRole('main')

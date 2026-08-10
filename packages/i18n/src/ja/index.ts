@@ -179,6 +179,20 @@ const ja = {
 				"CPU 全体の容量に対する割合 — {cores} コアに対する 1 分間のロードアベレージです。",
 			cpuLoadHintNoCores:
 				"1 分間のロードアベレージです。このデバイスはコア数を報告しなかったため、容量に対する割合として表示できません。",
+			memory: "メモリ",
+			memoryHint:
+				"使用中の RAM の割合です。MemAvailable を基準に測定するため、再利用可能なページキャッシュは使用済みとして数えません。",
+			swap: "スワップ",
+			swapNone: "なし",
+			cpuFreq: "CPU 周波数",
+			cpuFreqHint:
+				"cpufreq ポリシーごとの、ハードウェア上限に対する現在のクロックです。ポリシー名は sysfs のディレクトリ名であり、コアクラスタではありません。",
+			ddr: "DDR バス",
+			ddrHint:
+				"ボードの devfreq デバイスから読み取ったメモリコントローラの負荷です。",
+			gpu: "GPU",
+			gpuHint:
+				"ボードの Mali または devfreq インターフェースから読み取った GPU 負荷です。",
 		},
 		deviceHealth: {
 			title: "デバイスの健全性",
@@ -186,6 +200,7 @@ const ja = {
 			lane: {
 				temp: "SoC 温度",
 				load: "ロードアベレージ · 1 分 · 全プロセス",
+				memory: "メモリ使用率 · RAM の %",
 			},
 			nowStrip: {
 				temperature: "SoC 温度",
@@ -223,6 +238,11 @@ const ja = {
 				headlineIdle: "アイドル",
 				headlineUnreported: "報告なし",
 				engineLabel: "エンジン",
+				decodeTitle: "デコーダーコア",
+			},
+			loads: {
+				gpu: "GPU 負荷",
+				ddr: "メモリバス負荷",
 			},
 			power: {
 				title: "電源レール",
@@ -1317,6 +1337,22 @@ const ja = {
 					title: "プレビューを一時停止しました",
 					body: "リソースを節約するため、閲覧されない状態が続いてプレビューを停止しました。再開すると再び表示できます。",
 				},
+			},
+			encode: {
+				label: "プレビューのハードウェアエンコード",
+				description:
+					"ボードのハードウェアエンコーダーでプレビュー映像をエンコードします。",
+				helper: "次回のストリームから適用されます。",
+				activeLabel: "現在のプレビューエンコーダー",
+				activeNone: "現在プレビューをエンコードしていません",
+				activeHardware: "{element} \u2014 ハードウェア",
+				activeSoftware: "{element} \u2014 ソフトウェア",
+				fallbackTitle: "ハードウェアプレビューがソフトウェアに切り替わりました",
+				fallbackFactoryMissing:
+					"このイメージにはハードウェアプレビューエンコーダーが含まれていないため、プレビューはソフトウェアでエンコードされています。",
+				fallbackPropertyFailure:
+					"ハードウェアプレビューエンコーダーが設定を拒否したため、プレビューはソフトウェアでエンコードされています。",
+				fallbackPropertyLabel: "拒否された設定",
 			},
 		},
 		inputPicker: {

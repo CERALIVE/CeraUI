@@ -51,6 +51,7 @@ import {
 	stopLinkTelemetry,
 } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
+import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
@@ -63,6 +64,7 @@ export interface AudioProbeDeps {
 
 export const AUDIO_SOURCE_PROBE_FAILED = "audio_source_probe_failed";
 export const IP_LIST_READ_FAILED = "ip_list_read_failed";
+export const PREVIEW_ENCODE_REPLAY_FAILED = "preview_encode_replay_failed";
 
 export type StartStreamResult =
 	| { success: true }
@@ -70,7 +72,14 @@ export type StartStreamResult =
 			success: false;
 			error: string;
 			reason: string;
-			phase: "params" | "spawn-sender";
+			/**
+			 * `connect` is reachable from the preview-encode fence alone: it is the
+			 * only gate here that actually dials the engine, and it does so before
+			 * any start is accepted — which is precisely the phase's meaning, and
+			 * what makes a mid-restart engine a retriable boot race rather than a
+			 * hard refusal.
+			 */
+			phase: "params" | "connect" | "spawn-sender";
 			/**
 			 * Set when this site already knows the taxonomy class. The launch
 			 * wrappers use it verbatim instead of re-deriving a class from the
@@ -135,6 +144,32 @@ export async function startStream(
 	attemptId = "legacy-start",
 	configOverride?: Partial<RuntimeConfig>,
 ): Promise<StartStreamResult> {
+	// The preview-encoder fence, and the reason it lives HERE. The engine fixes
+	// the preview encoder when it builds the main graph, so the operator's mode
+	// has to be in the engine's config BEFORE the `start` below — not racing it.
+	// This function is the single point every start origin funnels through (UI,
+	// autostart, set-profile, and all three restoration sites), and the engine
+	// `start` has exactly one dispatch site, further down this same function. So
+	// awaiting the replay here is what makes "no start of any origin outruns the
+	// replay" true for ALL of them, instead of four call-site checks that the
+	// fifth origin would silently miss.
+	//
+	// It runs before every other side effect on purpose: a refused mode must cost
+	// nothing — no sender spawned, no audio probed, no bitrate written.
+	const previewEncode = await replayPreviewEncodeMode();
+	if (!previewEncode.ok) {
+		return {
+			success: false,
+			error: PREVIEW_ENCODE_REPLAY_FAILED,
+			reason: PREVIEW_ENCODE_REPLAY_FAILED,
+			phase: "connect",
+			failureClass:
+				previewEncode.failure === "unreachable"
+					? "engine_unavailable"
+					: "engine_internal",
+		};
+	}
+
 	const config =
 		configOverride === undefined
 			? getConfig()

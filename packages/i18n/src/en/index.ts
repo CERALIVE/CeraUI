@@ -611,6 +611,22 @@ const en = {
 					body: "Preview stopped after going unwatched to save resources. Resume to view it again.",
 				},
 			},
+			encode: {
+				label: "Hardware preview encoding",
+				description:
+					"Encode the preview feed with the board's hardware encoder.",
+				helper: "Applies to the next stream.",
+				activeLabel: "Active preview encoder",
+				activeNone: "Not encoding a preview right now",
+				activeHardware: "{element:string} \u2014 hardware",
+				activeSoftware: "{element:string} \u2014 software",
+				fallbackTitle: "Hardware preview fell back to software",
+				fallbackFactoryMissing:
+					"The hardware preview encoder isn't installed in this image, so the preview is encoding in software.",
+				fallbackPropertyFailure:
+					"The hardware preview encoder rejected a setting, so the preview is encoding in software.",
+				fallbackPropertyLabel: "Rejected property",
+			},
 		},
 		inputPicker: {
 			title: "Input Sources",
@@ -1121,6 +1137,18 @@ const en = {
 				"Share of total CPU capacity — the 1-minute load average across {cores:number} cores.",
 			cpuLoadHintNoCores:
 				"1-minute load average. This device did not report its core count, so it cannot be shown as a share of capacity.",
+			memory: "Memory",
+			memoryHint:
+				"Share of RAM in use. Measured against MemAvailable, so reclaimable page cache is not counted as used.",
+			swap: "Swap",
+			swapNone: "None",
+			cpuFreq: "CPU Frequency",
+			cpuFreqHint:
+				"Current clock against the hardware ceiling, per cpufreq policy. A policy name is a sysfs directory, not a core cluster.",
+			ddr: "DDR Bus",
+			ddrHint: "Memory-controller load, read from the board's devfreq device.",
+			gpu: "GPU",
+			gpuHint: "GPU load, read from the board's Mali or devfreq interface.",
 		},
 		deviceHealth: {
 			title: "Device Health",
@@ -1129,6 +1157,7 @@ const en = {
 			lane: {
 				temp: "SoC temperature",
 				load: "Load average · 1 min · all processes",
+				memory: "Memory used · % of RAM",
 			},
 			nowStrip: {
 				temperature: "SoC temperature",
@@ -1166,6 +1195,11 @@ const en = {
 				headlineIdle: "Idle",
 				headlineUnreported: "Not reported",
 				engineLabel: "Engine",
+				decodeTitle: "Decoder cores",
+			},
+			loads: {
+				gpu: "GPU load",
+				ddr: "Memory bus load",
 			},
 			power: {
 				title: "Power rails",

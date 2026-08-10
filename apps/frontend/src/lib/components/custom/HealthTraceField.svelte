@@ -1,7 +1,7 @@
 <!--
   HealthTraceField.svelte — the strip-chart recorder.
 
-  A ground-station pen recorder: two signals traced on ONE shared wall-clock time
+  A ground-station pen recorder: every signal traced on ONE shared wall-clock time
   axis whose right edge is *now*. A feed that stops does not freeze — it visibly
   falls behind the playhead and leaves a widening void, so staleness is a
   geometric fact rather than a badge bolted onto a number.
@@ -78,7 +78,7 @@ interface Props {
 	lanes: RenderLane[];
 	/** Wall-clock now — the right edge. Advanced by the 1 s health clock. */
 	now: number;
-	/** Kiosk / narrow layout: shorter lanes, sparser ruler. Still two lanes. */
+	/** Kiosk / narrow layout: shorter lanes, sparser ruler. Never fewer lanes. */
 	compact?: boolean;
 	/** E-ink / mono profile — freeze all motion. */
 	frozen?: boolean;
@@ -107,8 +107,8 @@ let {
 }: Props = $props();
 
 const geometry = $derived(compact ? COMPACT_GEOMETRY : DESKTOP_GEOMETRY);
-const height = $derived(traceHeight(geometry));
-const ruleY = $derived(rulerTop(geometry));
+const height = $derived(traceHeight(geometry, lanes.length));
+const ruleY = $derived(rulerTop(geometry, lanes.length));
 const ticks = $derived(axisTicks(!compact));
 
 const cache = createLaneViewCache();

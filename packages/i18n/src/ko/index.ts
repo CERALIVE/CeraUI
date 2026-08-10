@@ -175,6 +175,18 @@ const ko = {
 				"전체 CPU 용량 대비 비율 — {cores}개 코어에 대한 1분 평균 부하입니다.",
 			cpuLoadHintNoCores:
 				"1분 평균 부하입니다. 이 장치가 코어 수를 보고하지 않아 용량 대비 비율로 표시할 수 없습니다.",
+			memory: "메모리",
+			memoryHint:
+				"사용 중인 RAM 비율입니다. MemAvailable을 기준으로 측정하므로 회수 가능한 페이지 캐시는 사용량으로 계산되지 않습니다.",
+			swap: "스왑",
+			swapNone: "없음",
+			cpuFreq: "CPU 주파수",
+			cpuFreqHint:
+				"cpufreq 정책별로 하드웨어 상한 대비 현재 클록입니다. 정책 이름은 sysfs 디렉터리이며 코어 클러스터가 아닙니다.",
+			ddr: "DDR 버스",
+			ddrHint: "보드의 devfreq 장치에서 읽은 메모리 컨트롤러 부하입니다.",
+			gpu: "GPU",
+			gpuHint: "보드의 Mali 또는 devfreq 인터페이스에서 읽은 GPU 부하입니다.",
 		},
 		deviceHealth: {
 			title: "장치 상태",
@@ -182,6 +194,7 @@ const ko = {
 			lane: {
 				temp: "SoC 온도",
 				load: "부하 평균 · 1분 · 전체 프로세스",
+				memory: "메모리 사용량 · RAM 대비 %",
 			},
 			nowStrip: {
 				temperature: "SoC 온도",
@@ -219,6 +232,11 @@ const ko = {
 				headlineIdle: "대기",
 				headlineUnreported: "보고되지 않음",
 				engineLabel: "엔진",
+				decodeTitle: "디코더 코어",
+			},
+			loads: {
+				gpu: "GPU 부하",
+				ddr: "메모리 버스 부하",
 			},
 			power: {
 				title: "전원 레일",
@@ -1297,6 +1315,21 @@ const ko = {
 					title: "미리보기 일시중지됨",
 					body: "리소스 절약을 위해 보지 않는 동안 미리보기가 중지되었습니다. 다시 보려면 재개하세요.",
 				},
+			},
+			encode: {
+				label: "미리보기 하드웨어 인코딩",
+				description: "보드의 하드웨어 인코더로 미리보기 영상을 인코딩합니다.",
+				helper: "다음 스트림부터 적용됩니다.",
+				activeLabel: "현재 미리보기 인코더",
+				activeNone: "지금은 미리보기를 인코딩하고 있지 않습니다",
+				activeHardware: "{element} \u2014 하드웨어",
+				activeSoftware: "{element} \u2014 소프트웨어",
+				fallbackTitle: "하드웨어 미리보기가 소프트웨어로 전환되었습니다",
+				fallbackFactoryMissing:
+					"이 이미지에는 하드웨어 미리보기 인코더가 설치되어 있지 않아 미리보기를 소프트웨어로 인코딩합니다.",
+				fallbackPropertyFailure:
+					"하드웨어 미리보기 인코더가 설정을 거부하여 미리보기를 소프트웨어로 인코딩합니다.",
+				fallbackPropertyLabel: "거부된 설정",
 			},
 		},
 		inputPicker: {

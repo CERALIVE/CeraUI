@@ -16,9 +16,16 @@
  *               richer owner lives elsewhere in the app. Rendered as a row
  *               inside the collapsed details disclosure.
  *
- * The container is multi-source by construction: `device-stats` is frozen at
- * five signals by the S1 lock, so the fan arrives on its own `fan` broadcast and
- * the model is agnostic to how many broadcasts feed it.
+ * The container is multi-source by construction: `device-stats` keeps five
+ * always-present signals under the S1 lock and carries the later collector
+ * signals as optional keys, the fan arrives on its own `fan` broadcast, and the
+ * model is agnostic to how many broadcasts feed it.
+ *
+ * DECLARED vs NULL-VALUED. A signal only belongs in the array when the device
+ * publishes the interface behind it. "This kernel has no DDR devfreq device" is
+ * answered by declaring NO signal; `value: null` is reserved for a signal that
+ * exists and had no figure this sample. Collapsing the two would put a label and
+ * a waiting-for-data placeholder on screen for hardware that will never answer.
  */
 import type { Component, Snippet } from "svelte";
 
