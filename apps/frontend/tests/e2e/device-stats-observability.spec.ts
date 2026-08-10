@@ -154,16 +154,31 @@ test.describe("device-stats observability — mock parity", () => {
 	});
 });
 
+/**
+ * A 200 on `/@vite/client` proves nothing — Vite's default SPA `appType` answers
+ * every unmatched route with `index.html` at status 200, so `vite preview` also
+ * returns 200 here and a status-only probe reports "dev" everywhere. The content
+ * type is the discriminator: only a real dev server serves it as an ES module.
+ */
+async function isViteDevServer(
+	page: Page,
+	baseURL: string | undefined,
+): Promise<boolean> {
+	const response = await page.request
+		.get(`${baseURL}/@vite/client`)
+		.catch(() => null);
+	if (response === null || !response.ok()) return false;
+	const contentType = response.headers()["content-type"] ?? "";
+	return /^(?:text|application)\/javascript\b/.test(contentType);
+}
+
 test.describe("decoder cores — the dev fixture's rows", () => {
 	test.beforeEach(async ({ page, baseURL }) => {
 		// The `?health-mock=` fixture lives behind `import.meta.env.DEV`, so a
 		// production bundle prunes it entirely. Probing for the Vite dev client is
 		// the honest discriminator; guessing from CI env vars is not.
-		const devClient = await page.request
-			.get(`${baseURL}/@vite/client`)
-			.catch(() => null);
 		test.skip(
-			devClient === null || !devClient.ok(),
+			!(await isViteDevServer(page, baseURL)),
 			"the ?health-mock fixture is pruned from a production bundle (CI serves `vite preview`); the broadcast-driven spec below covers this rendering in every environment",
 		);
 
