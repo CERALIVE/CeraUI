@@ -1338,6 +1338,22 @@ const ja = {
 					body: "リソースを節約するため、閲覧されない状態が続いてプレビューを停止しました。再開すると再び表示できます。",
 				},
 			},
+			encode: {
+				label: "プレビューのハードウェアエンコード",
+				description:
+					"ボードのハードウェアエンコーダーでプレビュー映像をエンコードします。",
+				helper: "次回のストリームから適用されます。",
+				activeLabel: "現在のプレビューエンコーダー",
+				activeNone: "現在プレビューをエンコードしていません",
+				activeHardware: "{element} \u2014 ハードウェア",
+				activeSoftware: "{element} \u2014 ソフトウェア",
+				fallbackTitle: "ハードウェアプレビューがソフトウェアに切り替わりました",
+				fallbackFactoryMissing:
+					"このイメージにはハードウェアプレビューエンコーダーが含まれていないため、プレビューはソフトウェアでエンコードされています。",
+				fallbackPropertyFailure:
+					"ハードウェアプレビューエンコーダーが設定を拒否したため、プレビューはソフトウェアでエンコードされています。",
+				fallbackPropertyLabel: "拒否された設定",
+			},
 		},
 		inputPicker: {
 			title: "入力ソース",

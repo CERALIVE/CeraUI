@@ -1316,6 +1316,21 @@ const ko = {
 					body: "리소스 절약을 위해 보지 않는 동안 미리보기가 중지되었습니다. 다시 보려면 재개하세요.",
 				},
 			},
+			encode: {
+				label: "미리보기 하드웨어 인코딩",
+				description: "보드의 하드웨어 인코더로 미리보기 영상을 인코딩합니다.",
+				helper: "다음 스트림부터 적용됩니다.",
+				activeLabel: "현재 미리보기 인코더",
+				activeNone: "지금은 미리보기를 인코딩하고 있지 않습니다",
+				activeHardware: "{element} \u2014 하드웨어",
+				activeSoftware: "{element} \u2014 소프트웨어",
+				fallbackTitle: "하드웨어 미리보기가 소프트웨어로 전환되었습니다",
+				fallbackFactoryMissing:
+					"이 이미지에는 하드웨어 미리보기 인코더가 설치되어 있지 않아 미리보기를 소프트웨어로 인코딩합니다.",
+				fallbackPropertyFailure:
+					"하드웨어 미리보기 인코더가 설정을 거부하여 미리보기를 소프트웨어로 인코딩합니다.",
+				fallbackPropertyLabel: "거부된 설정",
+			},
 		},
 		inputPicker: {
 			title: "입력 소스",

@@ -611,6 +611,22 @@ const en = {
 					body: "Preview stopped after going unwatched to save resources. Resume to view it again.",
 				},
 			},
+			encode: {
+				label: "Hardware preview encoding",
+				description:
+					"Encode the preview feed with the board's hardware encoder.",
+				helper: "Applies to the next stream.",
+				activeLabel: "Active preview encoder",
+				activeNone: "Not encoding a preview right now",
+				activeHardware: "{element:string} \u2014 hardware",
+				activeSoftware: "{element:string} \u2014 software",
+				fallbackTitle: "Hardware preview fell back to software",
+				fallbackFactoryMissing:
+					"The hardware preview encoder isn't installed in this image, so the preview is encoding in software.",
+				fallbackPropertyFailure:
+					"The hardware preview encoder rejected a setting, so the preview is encoding in software.",
+				fallbackPropertyLabel: "Rejected property",
+			},
 		},
 		inputPicker: {
 			title: "Input Sources",

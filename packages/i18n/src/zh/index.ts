@@ -1245,6 +1245,21 @@ const zh = {
 					body: "预览在长时间无人查看后已停止以节省资源。恢复即可再次查看。",
 				},
 			},
+			encode: {
+				label: "预览硬件编码",
+				description: "使用板载硬件编码器编码预览画面。",
+				helper: "在下次推流时生效。",
+				activeLabel: "当前预览编码器",
+				activeNone: "当前没有正在编码的预览",
+				activeHardware: "{element} \u2014 硬件",
+				activeSoftware: "{element} \u2014 软件",
+				fallbackTitle: "硬件预览已回退到软件",
+				fallbackFactoryMissing:
+					"此镜像未安装硬件预览编码器，因此预览以软件方式编码。",
+				fallbackPropertyFailure:
+					"硬件预览编码器拒绝了某项设置，因此预览以软件方式编码。",
+				fallbackPropertyLabel: "被拒绝的设置",
+			},
 		},
 		inputPicker: {
 			title: "输入来源",

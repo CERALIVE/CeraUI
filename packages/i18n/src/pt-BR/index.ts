@@ -1482,6 +1482,22 @@ const ptBR = {
 					body: "A pré-visualização parou após ficar sem ser vista para poupar recursos. Retome para vê-la novamente.",
 				},
 			},
+			encode: {
+				label: "Codificação de pré-visualização por hardware",
+				description:
+					"Codifique a pré-visualização com o codificador de hardware da placa.",
+				helper: "Vale a partir da próxima transmissão.",
+				activeLabel: "Codificador de pré-visualização ativo",
+				activeNone: "Nenhuma pré-visualização sendo codificada agora",
+				activeHardware: "{element} \u2014 hardware",
+				activeSoftware: "{element} \u2014 software",
+				fallbackTitle: "A pré-visualização por hardware caiu para software",
+				fallbackFactoryMissing:
+					"O codificador de pré-visualização por hardware não está instalado nesta imagem, então a pré-visualização é codificada por software.",
+				fallbackPropertyFailure:
+					"O codificador de pré-visualização por hardware recusou uma configuração, então a pré-visualização é codificada por software.",
+				fallbackPropertyLabel: "Configuração recusada",
+			},
 		},
 		inputPicker: {
 			title: "Fontes de entrada",

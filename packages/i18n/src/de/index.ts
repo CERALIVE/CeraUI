@@ -628,6 +628,22 @@ const de = {
 					body: "Die Vorschau wurde nach längerer Nichtbeachtung gestoppt, um Ressourcen zu sparen. Fortsetzen, um sie wieder anzuzeigen.",
 				},
 			},
+			encode: {
+				label: "Hardware-Vorschaukodierung",
+				description:
+					"Die Vorschau mit dem Hardware-Encoder des Boards kodieren.",
+				helper: "Gilt ab dem nächsten Stream.",
+				activeLabel: "Aktiver Vorschau-Encoder",
+				activeNone: "Derzeit wird keine Vorschau kodiert",
+				activeHardware: "{element} \u2014 Hardware",
+				activeSoftware: "{element} \u2014 Software",
+				fallbackTitle: "Hardware-Vorschau ist auf Software zurückgefallen",
+				fallbackFactoryMissing:
+					"Der Hardware-Vorschau-Encoder ist in diesem Image nicht installiert, daher wird die Vorschau in Software kodiert.",
+				fallbackPropertyFailure:
+					"Der Hardware-Vorschau-Encoder hat eine Einstellung abgelehnt, daher wird die Vorschau in Software kodiert.",
+				fallbackPropertyLabel: "Abgelehnte Einstellung",
+			},
 		},
 		inputPicker: {
 			title: "Eingangsquellen",

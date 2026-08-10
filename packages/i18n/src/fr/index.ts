@@ -1504,6 +1504,21 @@ const fr = {
 					body: "L'aperçu s'est arrêté après être resté sans surveillance pour économiser des ressources. Reprenez pour le revoir.",
 				},
 			},
+			encode: {
+				label: "Encodage matériel de l'aperçu",
+				description: "Encoder l'aperçu avec l'encodeur matériel de la carte.",
+				helper: "S'applique au prochain flux.",
+				activeLabel: "Encodeur d'aperçu actif",
+				activeNone: "Aucun aperçu n'est encodé pour l'instant",
+				activeHardware: "{element} \u2014 matériel",
+				activeSoftware: "{element} \u2014 logiciel",
+				fallbackTitle: "L'aperçu matériel est repassé en logiciel",
+				fallbackFactoryMissing:
+					"L'encodeur d'aperçu matériel n'est pas installé dans cette image, l'aperçu est donc encodé en logiciel.",
+				fallbackPropertyFailure:
+					"L'encodeur d'aperçu matériel a refusé un réglage, l'aperçu est donc encodé en logiciel.",
+				fallbackPropertyLabel: "Réglage refusé",
+			},
 		},
 		inputPicker: {
 			title: "Sources d'entrée",

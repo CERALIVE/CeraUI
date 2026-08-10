@@ -630,6 +630,22 @@ const es = {
 					body: "La vista previa se detuvo tras quedar sin verse para ahorrar recursos. Reanúdala para volver a verla.",
 				},
 			},
+			encode: {
+				label: "Codificación de vista previa por hardware",
+				description:
+					"Codifica la vista previa con el codificador por hardware de la placa.",
+				helper: "Se aplica en la próxima transmisión.",
+				activeLabel: "Codificador de vista previa activo",
+				activeNone: "Ahora mismo no se codifica ninguna vista previa",
+				activeHardware: "{element} \u2014 hardware",
+				activeSoftware: "{element} \u2014 software",
+				fallbackTitle: "La vista previa por hardware pasó a software",
+				fallbackFactoryMissing:
+					"El codificador de vista previa por hardware no está instalado en esta imagen, así que la vista previa se codifica por software.",
+				fallbackPropertyFailure:
+					"El codificador de vista previa por hardware rechazó un ajuste, así que la vista previa se codifica por software.",
+				fallbackPropertyLabel: "Ajuste rechazado",
+			},
 		},
 		inputPicker: {
 			title: "Fuentes de entrada",

@@ -131,3 +131,32 @@ currently bound to. CeraUI sends it verbatim and the engine answers
 `source-unavailable`, which is the honest result: the selected source really has no
 device behind it. The band above is what makes that visible; do NOT silently drop
 the field to paper over it.
+
+## Preview ENCODER identity is outside this machine
+
+The preview encoder — which element encodes the feed, and whether the operator may
+ask for the board's hardware one — is **not** a `PreviewCanvas` concern and is not
+part of either dimension above. It never affects `status`, never sets a band, and
+never changes the dial. It lives in a sibling control mounted by the same host:
+
+| Surface | Where |
+|---|---|
+| The control | `src/main/live/PreviewEncodeControl.svelte`, mounted by `PreviewDisclosure.svelte` beside `PreviewCanvas` |
+| The derivation | `src/main/live/preview-encode-state.ts` (`derivePreviewEncodeView`) |
+| Capability gate | `capabilities.preview.preview_hw_capability` via `isPreviewHardwareEncodeCapable()` (`@ceraui/rpc`) — the control renders only on `=== true` |
+| Persisted request | `config.previewEncode` (`"software"` / `"hardware"`), written with `streaming.setConfig` |
+| Live realization | `status.preview_encoder_realized` — `{selected_element?, realized_element, mode, fallback_reason?}` |
+
+Two facts a reader of this document will otherwise get wrong:
+
+1. **A hardware-preview fallback is NOT a preview failure.** The engine falls back
+   to `x264enc` and the preview keeps working, so there is no band, no close code
+   and no `preview-error` frame — the tier ladder is entirely unaffected. The only
+   report is the control's own warning, keyed on `fallback_reason.code`
+   (`factory-missing` / `property-failure`, the latter naming the refused
+   property). Do not add an availability band for it.
+2. **Capability and realization are different channels and never substitute.**
+   Capability rides the idle-safe `get-capabilities` snapshot and is a PLATFORM
+   fact; realization rides session-scoped `status` and is absent whenever no
+   session is running. An absent realization is not "software", and a live
+   software realization is not "no capability".
