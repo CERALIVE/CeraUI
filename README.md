@@ -45,6 +45,15 @@ A dev-only DevTools destination is available in development builds.
 - **Internationalization**: 10 languages with full RTL support
 - **Touch/kiosk mode**: `?mode=touch` URL flag scales touch targets to 44px minimum
 - **Responsive**: desktop and mobile layouts with a persistent bottom HUD dock on mobile
+- **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
+  GPU load, and (on the vendor kernel) per-core decoder load, alongside the
+  existing SoC temperature and load-average traces. Every signal is omitted
+  rather than fabricated when its kernel interface is absent.
+- **Hardware preview encoding**: on capable boards (RK3588), an operator can
+  toggle the local preview between software and hardware encode, with an
+  honest fallback message when the board's encoder plugin is missing or
+  rejects a setting. See [`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md)
+  for the outstanding board-validation checklist (open, unrun as of writing).
 
 ## Development
 
