@@ -482,6 +482,7 @@ export const getConfigProcedure = authedProcedure
 			// Travels with the `source` it is scoped to: `setConfig` and the
 			// broadcast both carry it, and this PULL path used to omit it.
 			input_mode: config.input_mode,
+			previewEncode: config.previewEncode,
 			source_preference: config.source_preference,
 			sources_visibility: config.sources_visibility,
 			srtla_addr: config.srtla_addr,
@@ -818,6 +819,11 @@ export const setConfigProcedure = authedProcedure
 		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
 		if (input.video_passthrough !== undefined)
 			config.video_passthrough = input.video_passthrough;
+		// Never staged behind `apply_now`: the engine fixes the preview encoder when
+		// it builds the main graph, so this can only ever take effect at the next
+		// start. Persisting immediately is what lets the replay fence read it.
+		if (input.previewEncode !== undefined)
+			config.previewEncode = input.previewEncode;
 		if (input.source_preference !== undefined)
 			config.source_preference = input.source_preference;
 		if (input.selected_video_input !== undefined)
@@ -889,6 +895,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.framerate !== undefined) applied.framerate = config.framerate;
 		if (input.video_codec !== undefined)
 			applied.video_codec = config.video_codec;
+		if (input.previewEncode !== undefined)
+			applied.previewEncode = config.previewEncode;
 		if (input.source_preference !== undefined)
 			applied.source_preference = config.source_preference;
 		if (input.selected_video_input !== undefined)

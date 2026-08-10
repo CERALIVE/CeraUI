@@ -68,6 +68,15 @@ export const inputModeSchema = z.enum([
 ]);
 export type InputMode = z.infer<typeof inputModeSchema>;
 
+// WHICH encoder family the device-local PREVIEW branch is built with (cerastream
+// `PreviewEncodeMode`). The SINGLE declaration of this vocabulary in this
+// package: the persisted operator REQUEST (`previewEncode`, below) and the live
+// engine REPORT (`previewEncoderRealizedSchema.mode`, status.schema.ts) are two
+// different facts that must never drift apart in spelling. Declared here because
+// status.schema.ts already imports from this module — the reverse would cycle.
+export const previewEncodeModeSchema = z.enum(['software', 'hardware']);
+export type PreviewEncodeMode = z.infer<typeof previewEncodeModeSchema>;
+
 // Alias for frontend compatibility
 export type AudioCodecs = 'aac' | 'opus';
 
@@ -271,6 +280,14 @@ export const streamingConfigInputSchema = z.object({
 	// absent hands the choice back to the engine's own precedence, which is H.264
 	// first — the unchanged behaviour for every device and every existing caller.
 	input_mode: inputModeSchema.optional(),
+	// Which encoder family the device-local preview branch is built with. This
+	// persisted value is the SINGLE source of the operator's preference — the
+	// engine reports what it REALIZED (`preview_encoder_realized`) but never what
+	// was asked for. The backend replays it to the engine before the next start;
+	// the engine fixes the preview encoder when it builds the main graph, so a
+	// change NEVER touches a live stream. Additive-optional; absent leaves the
+	// engine's own default (software), which is what every device does today.
+	previewEncode: previewEncodeModeSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -792,6 +809,10 @@ export const configMessageSchema = z.object({
 	// The capture format the selected device is opened under, echoed so the
 	// picker reflects the saved mode on reload. Additive-optional.
 	input_mode: inputModeSchema.optional(),
+	// The persisted preview-encoder request, echoed so the toggle renders the
+	// saved choice on reload and can be paired against the live realized mode.
+	// Additive-optional.
+	previewEncode: previewEncodeModeSchema.optional(),
 	// SRT receive-profile tuning, echoed back so the card reflects the saved
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),

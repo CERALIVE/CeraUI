@@ -54,6 +54,7 @@ import {
 	kioskStateSchema,
 	namespacedRelayId,
 	parseNamespacedRelayId,
+	previewEncodeModeSchema,
 	type RelayProtocol,
 	regulatoryCountrySchema,
 	relayProtocolSchema,
@@ -286,6 +287,14 @@ export const runtimeConfigSchema = z.object({
 	// first). Persisted so a device-first reorder survives reload; setConfig
 	// writes it, getConfig echoes it. Additive-optional.
 	source_preference: z.array(z.string()).optional(),
+	// Which encoder family the device-local preview branch is built with. The
+	// engine holds the same setting in its OWN config, but this copy is the
+	// authority: the engine only ever reports what it realized, never what was
+	// requested, so an operator preference that lived solely engine-side could not
+	// be rendered or re-asserted after an engine restart. `preview-encode-replay`
+	// pushes it down before each start. Additive-optional — absent means the
+	// operator never stated a preference and the engine keeps its default.
+	previewEncode: previewEncodeModeSchema.optional(),
 	// Last-seen capture-device snapshots (C7): deduped-by-id, LRU-capped at 12
 	// with the current `config.source` id eviction-exempt. Serves the
 	// across-restart lost-row case (a configured device unplugged before boot);

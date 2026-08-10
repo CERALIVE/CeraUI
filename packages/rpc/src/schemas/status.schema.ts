@@ -4,7 +4,7 @@
 import { z } from 'zod';
 
 import { modemListSchema } from './modems.schema';
-import { audioSourceSchema } from './streaming.schema';
+import { audioSourceSchema, previewEncodeModeSchema } from './streaming.schema';
 import { lifecycleStateSchema } from './streaming-lifecycle.schema';
 import {
 	availableUpdatesSchema,
@@ -247,7 +247,7 @@ export const previewEncoderRealizedSchema = z.object({
 	/** Element actually built into the preview branch, e.g. "x264enc". */
 	realized_element: z.string(),
 	/** The encoder family actually realized — the ACTIVE mode, never the request. */
-	mode: z.enum(['software', 'hardware']),
+	mode: previewEncodeModeSchema,
 	/** Why a hardware request is running in software; absent is the normal case. */
 	fallback_reason: previewEncodeFallbackSchema.optional(),
 });
