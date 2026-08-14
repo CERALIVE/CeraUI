@@ -402,17 +402,20 @@ describe("streaming.setSourceVisibility RPC — persist + rebroadcast", () => {
 			// A `config` echo frame carrying sources_visibility was broadcast.
 			const configFrame = sink.find((m) => "config" in m);
 			expect(configFrame).toBeDefined();
-			const echoed = (configFrame?.config as Record<string, unknown>)
-				.sources_visibility;
+			const echoed = (
+				configFrame?.config as Record<string, unknown> | undefined
+			)?.sources_visibility;
 			expect(echoed).toEqual({ hide_test_pattern: true });
 
 			// A fresh `sources` frame was broadcast with the hidden virtual row.
 			const sourcesFrame = sink.find((m) => "sources" in m);
 			expect(sourcesFrame).toBeDefined();
 			const broadcastSourcesList = (
-				sourcesFrame?.sources as { sources: Array<Record<string, unknown>> }
-			).sources;
-			const broadcastTest = broadcastSourcesList.find((s) => s.id === "test");
+				sourcesFrame?.sources as
+					| { sources: Array<Record<string, unknown>> }
+					| undefined
+			)?.sources;
+			const broadcastTest = broadcastSourcesList?.find((s) => s.id === "test");
 			expect(broadcastTest?.available).toBe(false);
 			expect(broadcastTest?.unavailableReason).toBe(
 				DISABLED_IN_SETTINGS_REASON,

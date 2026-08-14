@@ -223,19 +223,22 @@ describe("resolveMeterPreference — 'Auto' names the SAME card the start path w
 			"ambiguous same-device audio",
 			{ asrcKey: null, reason: "ambiguous-same-device-audio" },
 		],
-	] as const)("Auto that names no single card stays `null` — engine chooses (%s)", (_label, partial) => {
-		const resolution = {
-			cardId: null,
-			...partial,
-		} as AutoAsrcResolution;
+	] as const)(
+		"Auto that names no single card stays `null` — engine chooses (%s)",
+		(_label, partial) => {
+			const resolution = {
+				cardId: null,
+				...partial,
+			} as AutoAsrcResolution;
 
-		expect(resolveMeterPreference(AUDIO_SOURCE_AUTO, () => resolution)).toBe(
-			null,
-		);
-		expect(
-			isMeterPreferenceDevicePresent(AUDIO_SOURCE_AUTO, () => resolution),
-		).toBe(false);
-	});
+			expect(resolveMeterPreference(AUDIO_SOURCE_AUTO, () => resolution)).toBe(
+				null,
+			);
+			expect(
+				isMeterPreferenceDevicePresent(AUDIO_SOURCE_AUTO, () => resolution),
+			).toBe(false);
+		},
+	);
 
 	// Regression guard: a MANUAL pick never consults the Auto resolver at all.
 	test("a manual pick is byte-unchanged and never calls the Auto resolver", () => {

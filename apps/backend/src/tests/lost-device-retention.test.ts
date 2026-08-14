@@ -889,11 +889,13 @@ describe("applyObservedDevicesAndBroadcast — combined hotplug transition", () 
 		const sourcesFrame = frames.find((f) => "sources" in f);
 		expect(sourcesFrame).toBeDefined();
 		const sourcesList = (
-			sourcesFrame?.sources as {
-				sources: Array<Record<string, unknown>>;
-			}
-		).sources;
-		const video0 = sourcesList.find((s) => s.id === "video0");
+			sourcesFrame?.sources as
+				| {
+						sources: Array<Record<string, unknown>>;
+				  }
+				| undefined
+		)?.sources;
+		const video0 = sourcesList?.find((s) => s.id === "video0");
 		expect(video0?.lost).toBe(true);
 		expect(video0?.available).toBe(false);
 		expect(video0?.displayName).toBe("Studio HDMI");
@@ -961,8 +963,10 @@ describe("refreshSourcesForHotplug — a failing engine probe never masks a remo
 		const sourcesFrame = frames.find((f) => "sources" in f);
 		expect(sourcesFrame).toBeDefined();
 		const video0 = (
-			sourcesFrame?.sources as { sources: Array<Record<string, unknown>> }
-		).sources.find((s) => s.id === "video0");
+			sourcesFrame?.sources as
+				| { sources: Array<Record<string, unknown>> }
+				| undefined
+		)?.sources.find((s) => s.id === "video0");
 		expect(video0?.lost).toBe(true);
 		expect(video0?.available).toBe(false);
 
@@ -1040,8 +1044,8 @@ describe("refreshSourcesForHotplug — a stale successful probe never masks the 
 		const frame = frames.find((f) => "sources" in f);
 		expect(frame).toBeDefined();
 		return (
-			frame?.sources as { sources: Array<Record<string, unknown>> }
-		).sources.find((s) => s.id === id);
+			frame?.sources as { sources: Array<Record<string, unknown>> } | undefined
+		)?.sources.find((s) => s.id === id);
 	}
 
 	/** The device was streamed, then unplugged — so it currently renders `lost`. */

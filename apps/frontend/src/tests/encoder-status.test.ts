@@ -184,36 +184,41 @@ describe("headline states", () => {
 });
 
 describe("per-core vocabularies", () => {
-	it.each(
-		DENSITIES,
-	)("%s — both cores are always named separately", (density) => {
-		mount(reading([percent("rkvenc0", 45.53), percent("rkvenc1", 0)]), density);
-		expect(byTestId("encoder-core-rkvenc0").dataset.coreKind).toBe("percent");
-		expect(byTestId("encoder-core-rkvenc1").dataset.coreKind).toBe("percent");
-		expect(byTestId("encoder-core-value-rkvenc0").textContent).toContain(
-			"45.53%",
-		);
-		expect(byTestId("encoder-core-value-rkvenc1").textContent).toContain(
-			"0.00%",
-		);
-	});
+	it.each(DENSITIES)(
+		"%s — both cores are always named separately",
+		(density) => {
+			mount(
+				reading([percent("rkvenc0", 45.53), percent("rkvenc1", 0)]),
+				density,
+			);
+			expect(byTestId("encoder-core-rkvenc0").dataset.coreKind).toBe("percent");
+			expect(byTestId("encoder-core-rkvenc1").dataset.coreKind).toBe("percent");
+			expect(byTestId("encoder-core-value-rkvenc0").textContent).toContain(
+				"45.53%",
+			);
+			expect(byTestId("encoder-core-value-rkvenc1").textContent).toContain(
+				"0.00%",
+			);
+		},
+	);
 
-	it.each(
-		DENSITIES,
-	)("%s — a mixed reading keeps each cell's own shape", (density) => {
-		mount(
-			reading([percent("rkvenc0", 11.34), unavailable("rkvenc1")]),
-			density,
-		);
-		expect(byTestId("encoder-core-rkvenc0").dataset.coreKind).toBe("percent");
-		expect(byTestId("encoder-core-rkvenc1").dataset.coreKind).toBe(
-			"unavailable",
-		);
-		expect(byTestId("encoder-core-value-rkvenc0").textContent).toContain(
-			"11.34%",
-		);
-		expectUnavailableWord("rkvenc1");
-	});
+	it.each(DENSITIES)(
+		"%s — a mixed reading keeps each cell's own shape",
+		(density) => {
+			mount(
+				reading([percent("rkvenc0", 11.34), unavailable("rkvenc1")]),
+				density,
+			);
+			expect(byTestId("encoder-core-rkvenc0").dataset.coreKind).toBe("percent");
+			expect(byTestId("encoder-core-rkvenc1").dataset.coreKind).toBe(
+				"unavailable",
+			);
+			expect(byTestId("encoder-core-value-rkvenc0").textContent).toContain(
+				"11.34%",
+			);
+			expectUnavailableWord("rkvenc1");
+		},
+	);
 
 	it.each(DENSITIES)("%s — a mixed active + unavailable reading", (density) => {
 		mount(
@@ -329,17 +334,18 @@ describe("activity tone — colour reinforces the word, never replaces it", () =
 		["unreported", reading([]), "absent", t.cores.headlineUnreported],
 	];
 
-	it.each(
-		HEADLINE_TONES,
-	)("headline %s carries a tone AND its word", (_label, value, tone, word) => {
-		for (const density of DENSITIES) {
-			mount(value, density);
-			const headline = byTestId("encoder-status-headline");
-			expect(headline.dataset.tone).toBe(tone);
-			expect(headline.textContent).toContain(word);
-			document.body.innerHTML = "";
-		}
-	});
+	it.each(HEADLINE_TONES)(
+		"headline %s carries a tone AND its word",
+		(_label, value, tone, word) => {
+			for (const density of DENSITIES) {
+				mount(value, density);
+				const headline = byTestId("encoder-status-headline");
+				expect(headline.dataset.tone).toBe(tone);
+				expect(headline.textContent).toContain(word);
+				document.body.innerHTML = "";
+			}
+		},
+	);
 
 	/**
 	 * A measured 0.00 % and a `false` enable-bit are REAL observations of no
@@ -368,30 +374,31 @@ describe("activity tone — colour reinforces the word, never replaces it", () =
 	 * like — and a hollow square on a surface with nothing to check read as an
 	 * unticked checkbox.
 	 */
-	it.each(
-		DENSITIES,
-	)("%s — every core leads with the same em-scaled pip, and no checkbox glyph", (density) => {
-		mount(
-			reading([active("rkvenc0", true), active("rkvenc1", false)], {
-				source: "clk-enable-count",
-			}),
-			density,
-		);
-		for (const core of ["rkvenc0", "rkvenc1"]) {
-			const row = byTestId(`encoder-core-${core}`);
-			const pips = row.querySelectorAll("[data-marker='pip']");
-			expect(pips).toHaveLength(1);
-			// LEADS with it: the marker is the row's first element, not merely
-			// somewhere inside it.
-			expect(row.firstElementChild).toBe(pips[0]);
-			// Sized and lifted in `em`, so density changes the scale and never the
-			// shape — the same declaration serves the 18px strip and the 12px row.
-			expect(pips[0]?.className).toContain("size-[0.5em]");
-			expect(pips[0]?.className).toContain("-translate-y-[0.1em]");
-			expect(pips[0]?.getAttribute("aria-hidden")).toBe("true");
-			expect(row.querySelector("svg")).toBeNull();
-		}
-	});
+	it.each(DENSITIES)(
+		"%s — every core leads with the same em-scaled pip, and no checkbox glyph",
+		(density) => {
+			mount(
+				reading([active("rkvenc0", true), active("rkvenc1", false)], {
+					source: "clk-enable-count",
+				}),
+				density,
+			);
+			for (const core of ["rkvenc0", "rkvenc1"]) {
+				const row = byTestId(`encoder-core-${core}`);
+				const pips = row.querySelectorAll("[data-marker='pip']");
+				expect(pips).toHaveLength(1);
+				// LEADS with it: the marker is the row's first element, not merely
+				// somewhere inside it.
+				expect(row.firstElementChild).toBe(pips[0]);
+				// Sized and lifted in `em`, so density changes the scale and never the
+				// shape — the same declaration serves the 18px strip and the 12px row.
+				expect(pips[0]?.className).toContain("size-[0.5em]");
+				expect(pips[0]?.className).toContain("-translate-y-[0.1em]");
+				expect(pips[0]?.getAttribute("aria-hidden")).toBe("true");
+				expect(row.querySelector("svg")).toBeNull();
+			}
+		},
+	);
 
 	/**
 	 * A RAIL IS A MAGNITUDE; A LEADER IS NOT. Only a `percent` core published a
@@ -420,21 +427,22 @@ describe("activity tone — colour reinforces the word, never replaces it", () =
 		expect(leader?.getAttribute("style")).toBeNull();
 	});
 
-	it.each(
-		DENSITIES,
-	)("%s — a clock enable-bit gets a leader, never a rail", (density) => {
-		mount(
-			reading([active("rkvenc0", true), active("rkvenc1", false)], {
-				source: "clk-enable-count",
-			}),
-			density,
-		);
-		for (const core of ["rkvenc0", "rkvenc1"]) {
-			const row = byTestId(`encoder-core-${core}`);
-			expect(row.querySelector("[data-marker='rail']")).toBeNull();
-			expect(row.querySelector("[data-marker='leader']")).not.toBeNull();
-		}
-	});
+	it.each(DENSITIES)(
+		"%s — a clock enable-bit gets a leader, never a rail",
+		(density) => {
+			mount(
+				reading([active("rkvenc0", true), active("rkvenc1", false)], {
+					source: "clk-enable-count",
+				}),
+				density,
+			);
+			for (const core of ["rkvenc0", "rkvenc1"]) {
+				const row = byTestId(`encoder-core-${core}`);
+				expect(row.querySelector("[data-marker='rail']")).toBeNull();
+				expect(row.querySelector("[data-marker='leader']")).not.toBeNull();
+			}
+		},
+	);
 
 	it("the headline pip is the SAME marker as the core pip", () => {
 		mount(reading([active("rkvenc0", true)], { source: "clk-enable-count" }));
@@ -515,17 +523,18 @@ describe("decoder cores never reach the two inline hosts", () => {
 		return byTestId("encoder-cores").outerHTML;
 	}
 
-	it.each(
-		HOSTS,
-	)("%s renders identically with and without decode", (_l, props) => {
-		const cores = [percent("rkvenc0", 11.34), percent("rkvenc1", 0)];
-		const without = markup(reading(cores), props);
-		const withDecode = markup(reading(cores, { decodeCores: DECODE }), props);
-		expect(withDecode).toBe(without);
-		expect(maybe("decoder-cores")).toBeNull();
-		expect(maybe("decoder-core-list")).toBeNull();
-		expect(maybe("decoder-core-rkvdec0")).toBeNull();
-	});
+	it.each(HOSTS)(
+		"%s renders identically with and without decode",
+		(_l, props) => {
+			const cores = [percent("rkvenc0", 11.34), percent("rkvenc1", 0)];
+			const without = markup(reading(cores), props);
+			const withDecode = markup(reading(cores, { decodeCores: DECODE }), props);
+			expect(withDecode).toBe(without);
+			expect(maybe("decoder-cores")).toBeNull();
+			expect(maybe("decoder-core-list")).toBeNull();
+			expect(maybe("decoder-core-rkvdec0")).toBeNull();
+		},
+	);
 
 	it("the panel host DOES render them, so the lock is proving a choice", () => {
 		document.body.innerHTML = "";
