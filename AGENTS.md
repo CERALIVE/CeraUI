@@ -812,6 +812,29 @@ the functional page backend. Local Vite dev does not enable cookie routing. The
 semantic YAML contract is
 `bun run test:build-check-shape`.
 
+Four further Build Check facts, all landed 2026-08-14:
+
+- **Node 26 is the required runtime** (`NODE_VERSION: "26"`), not a canary lane.
+  The frontend vitest suite was proven green on both Node 24 and 26 first.
+- **`tsgo-canary` is advisory and must stay that way** (`continue-on-error: true`,
+  `gate: perf` in the root manifest). It installs `@typescript/native` — an npm
+  alias onto `typescript@7`, NOT the `@typescript/native-preview` nightly — with
+  `--no-save` beside the workspace TS6 and runs `svelte-check --tsgo`
+  (`scripts/ci/tsgo-canary.sh`, `apps/frontend/tsconfig.tsgo.json`). Plain
+  `--tsgo`, never `--tsgo-experimental-api` (language-tools#3095 fails under Bun).
+- **`setup-e2e` typechecks and measures before it uploads**: `bun run --filter
+  frontend check` gates the build, and `bun scripts/ci/bundle-report.mjs` fails
+  the job when the initial-route JS gzip set exceeds its documented budget.
+- **The e2e exclusion tag list lives in TWO files** — the root `test:e2e` script
+  and the Functional E2E step's `--grep-invert`. Both carry
+  `@visual|@a11y|@gallery|@premigration-upgrade`; change one and you must change
+  the other (and the root `ci-local.manifest.yaml` legs with it).
+
+Any change to this workflow's jobs or run steps also changes the root repo's
+`ci-local.manifest.yaml` — `scripts/ceraui_build_check_manifest_contract_test.py`
+and `scripts/ceraui_build_check_execution_contract_test.py` model the job set and
+per-job run-step digests with SET EQUALITY and fail on anything unmodeled.
+
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
 The backend is fully migrated to Bun-native APIs. Use these patterns for all new backend code:

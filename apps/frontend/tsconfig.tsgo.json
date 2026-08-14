@@ -1,0 +1,14 @@
+{
+  // tsgo-canary only (scripts/ci/tsgo-canary.sh). Identical to tsconfig.app.json
+  // except that project-reference emit is off: svelte-check's generated
+  // .svelte-check/tsconfig.json sets "incremental": false, which tsgo rejects
+  // against a composite project ("Composite projects may not disable
+  // incremental compilation") before checking a single type. The required
+  // frontend gate keeps using tsconfig.app.json.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false
+  }
+}
