@@ -36,7 +36,6 @@
 import { LL } from '@ceraui/i18n/svelte';
 import { Download, Share, WifiOff } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
-import { toast } from 'svelte-sonner';
 
 import { Button } from '$lib/components/ui/button';
 import { push } from '$lib/stores/notifications.svelte';
@@ -60,7 +59,6 @@ onDestroy(unsubscribeConnection);
 
 let showOfflineBanner = $state(false);
 
-let showInstallBanner = $state(false);
 let showIOSBanner = $state(false);
 
 // Reactive derived values for PWA state
@@ -99,10 +97,6 @@ $effect(() => {
 			showOfflineBanner = false;
 		}, 2000);
 	}
-});
-
-$effect(() => {
-	showInstallBanner = getCanInstall();
 });
 
 // Track banner state more carefully

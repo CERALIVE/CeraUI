@@ -91,8 +91,6 @@ interface Props {
 	onOpenSource: () => void;
 	/** Network-row action — navigate to the Network destination. */
 	onGoNetwork: () => void;
-	/** Destination-gate fix + the traffic-light chip — open ServerDialog. */
-	onOpenServer: () => void;
 	/** Bitrate-ceiling chip — open EncoderDialog. */
 	onOpenEncoder: () => void;
 }
@@ -116,7 +114,6 @@ const {
 	onStop,
 	onOpenSource,
 	onGoNetwork,
-	onOpenServer,
 	onOpenEncoder,
 }: Props = $props();
 

@@ -752,26 +752,6 @@ const encoderSummary = $derived.by(() => {
 	// (`serverSummary`) is the ONE idle surface that names the transport.
 	return parts.join(' · ');
 });
-const audioSummary = $derived.by(() => {
-	const parts: string[] = [];
-	if (effectiveAudioCodec) parts.push(String(effectiveAudioCodec).toUpperCase());
-	// Route the source label through the single resolvedAudioLabel owner: an active
-	// Auto selection shows "Auto → device"; an explicit pick shows its own label.
-	const entries = resolveAudioSourceList(audioSourceList, audioSources);
-	const resolved = resolvedAudioLabel(
-		{ ...config, asrc: effectiveAudioSource },
-		getStatus(),
-		entries,
-		t,
-	);
-	if (resolved.current) {
-		parts.push(resolved.current);
-	} else if (effectiveAudioSource) {
-		const entry = entries.find((e) => e.id === effectiveAudioSource);
-		parts.push(entry ? audioSourceLabel(entry, t) : effectiveAudioSource);
-	}
-	return parts.length ? parts.join(' · ') : $LL.general.notConfigured();
-});
 // Kind-aware server config-row summary (T11): reuses the header's `receiverKind`
 // and the live `linkCount` (null while idle → 0, so a disconnected receiver
 // shows no fresh bonding clause).
@@ -1064,7 +1044,6 @@ const configRows = $derived<ConfigRow[]>([
 			onStop={handleStop}
 			onOpenSource={handleOpenSource}
 			onGoNetwork={handleManageLinks}
-			onOpenServer={() => (serverDialogOpen = true)}
 			onOpenEncoder={() => (encoderOpen = true)}
 			{activeInput}
 			{switchingInput}

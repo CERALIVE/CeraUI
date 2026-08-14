@@ -50,12 +50,7 @@
 				"rules": {
 					"correctness": {
 						"noUnusedVariables": "off",
-						"noUnusedImports": "off",
-						"noUnusedFunctionParameters": "off"
-					},
-					"style": {
-						"useImportType": "off",
-						"useConst": "off"
+						"noUnusedImports": "off"
 					}
 				}
 			}

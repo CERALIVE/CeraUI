@@ -70,7 +70,6 @@ interface Props {
 	/** Source-gate fix + sole-camera "Change" — LiveView scrolls/focuses the list. */
 	onOpenSource: () => void;
 	onGoNetwork: () => void;
-	onOpenServer: () => void;
 	onOpenEncoder: () => void;
 	// ── SourceSection: unified device-first source list + audio (Task 13) ──────
 	// The live input switch (streaming-only capture-row affordance) still routes
@@ -110,7 +109,6 @@ const {
 	onStop,
 	onOpenSource,
 	onGoNetwork,
-	onOpenServer,
 	onOpenEncoder,
 	activeInput,
 	switchingInput,
@@ -186,7 +184,6 @@ const audioEmbeddedComingSoon = $derived(
 		{onStop}
 		{onOpenSource}
 		{onGoNetwork}
-		{onOpenServer}
 		{onOpenEncoder}
 	/>
 

@@ -292,8 +292,8 @@ export interface ResolvedAudioDisplay {
 
 /**
  * The ONE owner of the resolved-audio display (Metis F12 + Oracle R5-1/R9-1). Pure;
- * every surface — SourceSection, LiveView `audioSummary`, AudioDialog's read-only
- * line, (later) LiveSummaryStrip — routes through this rather than re-deriving it.
+ * every surface — SourceSection, AudioDialog's read-only line, (later)
+ * LiveSummaryStrip — routes through this rather than re-deriving it.
  *
  * STALE-VALUE GATE (Oracle R11): `current` is ALWAYS `undefined` when
  * `config?.asrc !== AUDIO_SOURCE_AUTO`, REGARDLESS of what `status.resolved_asrc`

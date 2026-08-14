@@ -159,7 +159,8 @@ function disableMobileView(): void {
 
 // Theme-aware screenshot capture
 async function captureScreenshotWithTheme(
-	filename: string,
+	// The caller names the downloaded file; this function only returns the Blob.
+	_filename: string,
 	theme: 'dark' | 'light',
 	useIframe = false,
 ): Promise<Blob> {

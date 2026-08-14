@@ -30,12 +30,7 @@
 -->
 <script lang="ts">
 import { LL } from '@ceraui/i18n/svelte';
-import type {
-	NetworkIngest,
-	Pipelines,
-	RequiresGateway,
-	StreamingSetConfigOutput,
-} from '@ceraui/rpc/schemas';
+import type { NetworkIngest, Pipelines, RequiresGateway } from '@ceraui/rpc/schemas';
 import { VIDEO_SOURCE_LABELS } from '@ceraui/rpc/schemas';
 import { Check, Copy, QrCode, Radio } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
