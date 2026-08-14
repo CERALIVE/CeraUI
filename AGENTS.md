@@ -174,8 +174,9 @@ bun run build         # compile backend binary + frontend static
 bun run test:release-package-contracts   # provenance + release graph + dispatch-input security
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
-bun tsc --noEmit      # type-check backend (run from apps/backend/)
+bun run --filter backend check   # type-check backend (TS 7 via scripts/tsc.mjs) + exec guards
 bun run --filter frontend test   # vitest frontend unit tests
+bun run build:frontend && bun apps/frontend/scripts/check-precache.mjs   # PWA precache-manifest gate
 ```
 
 ## ADD-ON SUBSYSTEM [EXISTS]
@@ -684,23 +685,52 @@ public functions, so existing tests that pass deps explicitly are unaffected.
 
 Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEach`/`afterEach` to pick the branch deterministically on any host.
 
-## DEP BASELINE (as of 2026-07)
+## DEP BASELINE (as of 2026-08)
 
 | Package | Version |
 |---------|---------|
-| `@orpc/*` (client, server, contract) | 1.14.8 |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.27 — EXACT pin, see below |
 | Bun pin (`.bun-version`) | 1.3.14 |
-| `svelte` | 5.56.7 |
+| `svelte` | 5.56.9 |
 | `vitest` | 4.1.10 |
-| `vite` | 8.1.5 |
+| `vite` | 8.2.1 |
+| `jsdom` | 30.0.1 (requires Node ≥ 24.15; `mise.toml` pins Node 24 → 24.19.x) |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
 | `@biomejs/biome` | 2.5.2 |
-| `@playwright/test` | 1.61.1 |
-| `@lucide/svelte` | 1.26.0 |
-| `svelte-check` | 4.7.3 |
-| `@sveltejs/vite-plugin-svelte` | 7.1.3 |
-| `@axe-core/playwright` | 4.12.1 |
-| `@types/node` | 26.1.1 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
+| `@playwright/test` | 1.62.1 |
+| `@lucide/svelte` | 1.31.0 |
+| `svelte-check` | 4.7.6 |
+| `@sveltejs/vite-plugin-svelte` | 7.3.0 |
+| `@axe-core/playwright` | 4.13.0 |
+| `@types/node` | 26.2.0 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
+| `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
+
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.27` would range forward across betas and into stable
+2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
+serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
+WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
+`RPCLink` here. v2 removed `.route()`/`.prefix()`/`.tag()` from the builder (OpenAPI routing moved to
+`openapi()` metadata in `@orpc/openapi`), so the push-only subscription entries in `packages/rpc/src/contracts/`
+are declared as a bare `oc`. Do not reintroduce route metadata — CeraUI serves no OpenAPI surface.
+Reserved router keys in v2 (`then`, `bind`, `valueOf`, `toString`, `toJSON`) must never be used as a
+procedure or child-router key.
+
+### TypeScript: two majors, deliberately
+
+| Scope | Compiler | Why |
+|-------|----------|-----|
+| workspace catalog + `apps/frontend` | **6.0.3** | `svelte-check` refuses to start on TS 7 (`bin/ts-version-check.js`); its peer range is `^5.0.0 \|\| ^6.0.0` |
+| `packages/i18n` bare `typescript` | **6.0.3** | the `typesafe-i18n` generator calls `ts.createProgram`, which TS 7.0 does not ship; on TS 7 the **postinstall** hook dies and `bun install` fails |
+| `apps/backend`, `packages/rpc` | **7.0.2** (direct devDep) | plain `tsc --noEmit`, no compiler-API consumer |
+| `packages/i18n` `check` gate | **7.0.2** via the `typescript-7` npm alias | gives i18n a real TS7 gate without disturbing its TS6 generator |
+
+TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), which is the single root cause
+of both TS6 holdouts above.
+
+Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
+would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
+which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
+selects the alias). `bun tsc` is likewise banned (oven-sh/bun#37152).
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 

@@ -73,5 +73,5 @@ export const wifiContract = oc.router({
 	/**
 	 * Subscribe to WiFi status changes
 	 */
-	onStatusChange: oc.route({ method: 'GET', path: '/wifi/status' }),
+	onStatusChange: oc,
 });

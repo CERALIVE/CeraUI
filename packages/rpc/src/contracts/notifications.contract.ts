@@ -19,5 +19,5 @@ export const notificationsContract = oc.router({
 	/**
 	 * Subscribe to notifications
 	 */
-	onNotification: oc.route({ method: 'GET', path: '/notifications' }),
+	onNotification: oc,
 });

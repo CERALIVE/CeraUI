@@ -25,7 +25,8 @@
 	},
 	"scripts": {
 		"dev": "typesafe-i18n",
-		"build": "typesafe-i18n --no-watch && tsc",
+		"build": "typesafe-i18n --no-watch && bun run check",
+		"check": "node ../../scripts/tsc.mjs --compiler-package typescript-7 --noEmit",
 		"typesafe-i18n": "typesafe-i18n --no-watch",
 		"postinstall": "typesafe-i18n --no-watch",
 		"prepare": "typesafe-i18n --no-watch"
@@ -34,7 +35,8 @@
 		"typesafe-i18n": "^5.27.1"
 	},
 	"devDependencies": {
-		"typescript": "catalog:"
+		"typescript": "catalog:",
+		"typescript-7": "npm:typescript@^7.0.2"
 	},
 	"keywords": [
 		"i18n",

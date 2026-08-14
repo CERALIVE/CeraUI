@@ -125,10 +125,10 @@ export const systemContract = oc.router({
 	/**
 	 * Subscribe to sensor updates
 	 */
-	onSensorsChange: oc.route({ method: 'GET', path: '/system/sensors' }),
+	onSensorsChange: oc,
 
 	/**
 	 * Subscribe to update progress
 	 */
-	onUpdateProgress: oc.route({ method: 'GET', path: '/system/update' }),
+	onUpdateProgress: oc,
 });

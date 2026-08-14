@@ -17,6 +17,14 @@ import { wifiContract } from './wifi.contract';
 /**
  * Root application contract
  * This is the main contract that combines all domain-specific contracts
+ *
+ * The push-only subscription entries across these domain contracts (`onStatusChange`,
+ * `onNotification`, `onSensorsChange`, `onUpdateProgress`) are declared as a bare `oc`:
+ * schemaless contract procedures. They carried `oc.route({ method: 'GET', path: … })`
+ * under oRPC 1, which oRPC 2 removed — OpenAPI routing moved into `openapi()` metadata
+ * from `@orpc/openapi`. CeraUI serves no OpenAPI surface (the device speaks the custom
+ * WS frame protocol in `apps/backend/src/rpc/adapter.ts`), so that route metadata was
+ * never read by anything and is not reintroduced here.
  */
 export const appContract = oc.router({
 	auth: authContract,
