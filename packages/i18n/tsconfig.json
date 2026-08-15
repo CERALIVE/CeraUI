@@ -8,7 +8,12 @@
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"resolveJsonModule": true,
-		"noEmit": true
+		"noEmit": true,
+		// `src/svelte.svelte.ts` is a Svelte 5 rune module: `$state` is an ambient
+		// global declared by `svelte/types/index.d.ts`. The frontend gets it from
+		// svelte-check's svelte2tsx injection; a plain `tsc` gate has to ask for it
+		// explicitly or every rune reads as TS2304 "Cannot find name '$state'".
+		"types": ["svelte"]
 	},
 	"include": ["src/**/*"],
 	"exclude": ["node_modules", "src/**/*.test.ts"]

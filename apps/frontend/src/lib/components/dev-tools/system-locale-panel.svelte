@@ -1,5 +1,5 @@
 <script lang="ts">
-import { type Locales } from '@ceraui/i18n';
+import { type LocaleCode } from '@ceraui/i18n';
 import { m } from '@ceraui/i18n/svelte';
 import { Globe } from '@lucide/svelte';
 
@@ -16,7 +16,7 @@ type LocaleInfo = {
 let {
 	localeInfo,
 	onLanguageClick,
-}: { localeInfo: LocaleInfo; onLanguageClick: (languageCode: Locales) => void } = $props();
+}: { localeInfo: LocaleInfo; onLanguageClick: (languageCode: LocaleCode) => void } = $props();
 </script>
 
 <!-- Locale & Language Information -->
@@ -55,7 +55,7 @@ let {
 							localeInfo.currentLocale
 								? 'bg-primary/10 border-primary/30 text-primary ring-primary/20 ring-1'
 								: 'hover:bg-primary/5 hover:border-primary/20'}"
-							onclick={() => onLanguageClick(supportedLocale.code as Locales)}
+							onclick={() => onLanguageClick(supportedLocale.code as LocaleCode)}
 							aria-label="Switch to {supportedLocale.name}"
 							type="button"
 						>

@@ -58,8 +58,8 @@ interface IndicatorCopy {
 }
 
 /**
- * Per-indicator copy. `*Key` is the typesafe-i18n dotted path the frontend toast
- * host resolves via `$LL`; `*Msg` is the English wire fallback used when no
+ * Per-indicator copy. `*Key` is the dotted message key the frontend toast
+ * host resolves via `m`; `*Msg` is the English wire fallback used when no
  * translation leaf exists. The audio copy deliberately names the SILENCE failover
  * (Todo 17) — the stream keeps running muted, never a beep.
  */

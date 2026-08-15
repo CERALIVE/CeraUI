@@ -46,8 +46,7 @@
 		"svelte": "^5.56.9",
 		"svelte-sonner": "^1.2.1",
 		"tailwind-merge": "^3.6.0",
-		"tailwind-variants": "^3.3.1",
-		"typesafe-i18n": "^5.27.1"
+		"tailwind-variants": "^3.3.1"
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",

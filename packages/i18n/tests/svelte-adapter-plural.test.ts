@@ -19,7 +19,7 @@ import {
 //
 // The legacy Svelte 5 adapter rendered every string through the pure
 // `interpolate()` resolver, so this file proved that resolver byte-matched the
-// typesafe-i18n node runtime. Both are deleted at plan todo 24. What SURVIVES is
+// legacy node runtime. Both are deleted (plan todo 24). What SURVIVES is
 // the claim that mattered: the string an operator sees for a plural key is
 // byte-identical to what the old implementation produced.
 //
@@ -32,12 +32,12 @@ import {
 // separate, separately-reviewed translation PR that updates the fixtures.
 //
 // WHAT REPLACED THE SYNTHETIC-TEMPLATE CASES. The legacy file also drove 17
-// hand-written templates through the resolver to cover typesafe-i18n grammar the
+// hand-written templates through the resolver to cover legacy grammar the
 // dictionaries did not use: the `{{s}}` suffix shorthand, keyed `{{k:a|b}}`,
 // 3-branch `zero|one|other`, and `??` value injection. Those forms have NO
 // representation in the converted catalog — not by omission, but by construction:
-// the converter REJECTS each of them by name (`scripts/message-format.ts`
-// `assertSupportedPlural`), and the todo-19 grammar inventory found zero
+// the converter REJECTED each of them by name (`assertSupportedPlural`, deleted
+// with the converter), and the todo-19 grammar inventory found zero
 // occurrences of any of them across all ten locales. There is therefore no
 // converted message to render them through, and reimplementing the resolver here
 // to keep the old assertions alive would test a deleted implementation.

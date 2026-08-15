@@ -5,10 +5,12 @@ Operator/contributor guide: [`README.md`](README.md) — export map, add-a-key/a
 
 ## OVERVIEW
 
-Ten locales, full RTL. **Mid-migration**: Paraglide is the runtime the frontend is
-moving onto; the legacy `typesafe-i18n` adapter still ships beside it (its codegen
-still runs at install time via `postinstall`) until the call-site codemod and the
-generator retirement land. Never hand-edit generated files.
+Ten locales, full RTL. **Paraglide is the sole i18n runtime** — the legacy
+generator, its Svelte 5 adapter, its plural resolver, and the TypeScript locale
+dictionaries are all deleted. `messages/*.json` are the canonical, hand-editable
+catalogs; `generated/` and `src/paraglide/` are build outputs. Never hand-edit a
+generated file, and never install an install-time hook here: everything is built
+by `generate:i18n`, which runs ahead of every consumer.
 
 ## STRUCTURE
 
@@ -20,17 +22,13 @@ src/paraglide/              # GENERATED, GITIGNORED — Paraglide runtime, one m
 src/
 ├── locale-lifecycle.ts     # LOCALES / RTL_LANGUAGES / startup priority — pure, rune-free
 ├── svelte.svelte.ts        # `/svelte` — Paraglide runes store + the `m` facade
-├── formatters.ts           # standalone Intl formatters (untouched by the migration)
-├── branding.ts             # brand names — not translated, kept separate
-├── en/index.ts             # LEGACY base locale — still the conversion source
-├── {locale}/index.ts       # LEGACY — ar, de, es, fr, hi, ja, ko, pt-BR, zh
-├── i18n-svelte5.svelte.ts  # LEGACY typesafe-i18n Svelte 5 adapter
-├── i18n-node.ts            # LEGACY node adapter (subpath retired; `loadLocale` kept for tests)
-└── i18n-types.ts, i18n-util*.ts   # LEGACY GENERATED — don't edit
+├── formatters.ts           # standalone Intl formatters — imports NO i18n runtime
+└── branding.ts             # brand names — not translated, kept separate
+tests/fixtures/             # IMMUTABLE rendered oracle — not generated, not free-form copy
 scripts/
 ├── compile-messages.ts     # paraglide compile (outputStructure: "message-modules")
 ├── generate-registry.ts    # post-compile barrels + registry generator
-└── convert-catalog.ts      # LEGACY dictionaries -> messages/*.json (retires with them)
+└── module-id.ts            # paraglide safe-module-id mirror + collision pre-flight
 ```
 
 ## IMPORT PATHS
@@ -39,11 +37,10 @@ scripts/
 import { m, setLocale, getLocale } from '@ceraui/i18n/svelte';    // frontend — the facade
 import { formatBytes } from '@ceraui/i18n/formatters';             // anywhere
 import { LOCALES, RTL_LANGUAGES } from '@ceraui/i18n';             // locale constants
-import { LL } from '@ceraui/i18n/i18n-svelte5';                    // LEGACY, being codemodded away
 ```
 
-`m` is keyed on the **verbatim dotted key**: `m["live.setup.title"]()`. There is no
-`/node` subpath — nothing imported it.
+`m` is keyed on the **verbatim dotted key**: `m["live.setup.title"]()`. Those three
+are the whole export map — there is no `/node` subpath and no legacy adapter subpath.
 
 ## GENERATE
 
@@ -52,25 +49,26 @@ bun run --filter @ceraui/i18n generate:i18n   # paraglide compile + registry gen
 bun run --filter @ceraui/i18n test            # runs generate:i18n first, then bun test
 ```
 
-Runs as the first step of the frontend `check` / `test` / `build` /
-`build:federation` chains, so a clean worktree never fails on the gitignored
-generated modules. The legacy generator still runs separately via `typesafe-i18n`
-(`postinstall`).
+Runs as the first step of this package's own `check` / `test` and of the frontend
+`check` / `test` / `build` / `build:federation` chains, so a clean worktree never
+fails on the gitignored generated modules. There is no install-time generation:
+each gate is independently runnable from `bun install` alone.
 
 ## CONVENTIONS + ANTI-PATTERNS
 
-- New keys go into `en` first (legacy `en/index.ts` while it is still the conversion
-  source). Other locales follow; the parity gate fails on a differing key set.
-- **The test suite reads `messages/*.json` and the frozen fixtures, not the legacy
-  runtime.** Shared readers live in `tests/helpers/catalog.ts`. The only files still
-  importing the legacy dictionaries are the three CONVERSION-proof gates
-  (`paraglide-catalog-gate`, `paraglide-reverse-render-gate`, `rendered-oracle-gate`)
-  and the conversion scripts — all of which retire together with that runtime. Do not
-  repoint those three: comparing the catalog against the dictionary IS what they prove.
+- New keys go into `messages/en.json` first — it is the base locale and the SOURCE
+  OF TRUTH, edited by hand. Other locales follow; the parity gate fails on a
+  differing key set.
+- **The test suite reads `messages/*.json` and the frozen fixtures, and imports no
+  message runtime.** Shared readers live in `tests/helpers/catalog.ts`.
+- **Nothing may write `tests/fixtures/*.rendered.json`.** It is the immutable
+  pre-migration oracle; the generator that captured it retired with the runtime it
+  rendered through, and regenerating it from paraglide would overwrite the oracle
+  with the very thing it exists to falsify. A deliberate copy change re-freezes it
+  in its own separately-reviewed PR.
 - `branding.ts` holds brand names that don't get translated — import from there.
 - Svelte 5 store uses runes — don't convert to stores.
-- Don't hand-edit anything under `generated/`, `src/paraglide/`, `i18n-util*.ts`, or
-  `i18n-types.ts`.
+- Don't hand-edit anything under `generated/` or `src/paraglide/`.
 - **Don't import Paraglide's umbrella `paraglide/messages.js`** — it re-exports every
   message eagerly, which collapses the whole catalog into one chunk and makes
   `ensureNamespace()` structurally incapable of splitting anything. Import the facade.
@@ -79,5 +77,9 @@ generated modules. The legacy generator still runs separately via `typesafe-i18n
   the direction source the e2e locale-parity spec is written against.
 - Don't add locale persistence here — the app's `$persist` store owns it, under an
   unchanged key; `initLocale()` takes the saved code as an argument.
-- Don't import locale files directly — use `m` (or the legacy `LL` proxy).
-- Don't use a node adapter in frontend code, or the svelte store in backend code.
+- Don't import a compiled message module directly — use `m`.
+- Don't import the svelte store in backend code; `@ceraui/i18n/formatters` and the
+  root locale constants are the two runtime-free surfaces that are safe there.
+- **`src/svelte.svelte.ts` is a rune module under a plain `tsc` gate**, so
+  `tsconfig.json` carries `"types": ["svelte"]` for the ambient `$state` declaration.
+  Drop it and every rune reads as TS2304 `Cannot find name '$state'`.

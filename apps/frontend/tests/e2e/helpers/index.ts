@@ -12,7 +12,7 @@ import { expect, type Page } from '@playwright/test';
  *   We set BOTH so the persisted preference and the applied class agree.
  * - Locale: the app store persists `locale` as a JSON object; App.svelte reads
  *   `getLocale()?.code`, so a `{ code }` object is sufficient. The <html lang>
- *   attribute is set by typesafe-i18n once that code loads.
+ *   attribute is set by the i18n store once that code loads.
  */
 
 /**

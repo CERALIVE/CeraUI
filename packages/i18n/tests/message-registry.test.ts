@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { namespaceOf } from "../scripts/generate-registry.js";
-import { toSafeModuleId } from "../scripts/message-format.js";
+import { toSafeModuleId } from "../scripts/module-id.js";
 
 // ---------------------------------------------------------------------------
 // FACADE REGISTRY GATE.

@@ -3,9 +3,9 @@
  *
  * These tests used to import the legacy TypeScript dictionaries
  * (`packages/i18n/src/<locale>/index.ts`) purely to read exact strings. Those
- * files are deleted at plan todo 24, so the imports are repointed at
+ * files are deleted (plan todo 24), so the imports read
  * `packages/i18n/messages/<locale>.json` — the catalogs the app compiles and
- * serves.
+ * serves, and the hand-edited source of truth.
  *
  * The catalogs are FLAT (keyed by the verbatim dotted key) while every existing
  * assertion reads a NESTED path (`en.live.startStream`). Re-nesting here keeps

@@ -235,12 +235,6 @@ export default defineConfig(({ mode }) => {
 								return "vendor-media";
 							}
 
-							// Legacy i18n runtime (retires with plan todo 24). The
-							// Paraglide graph is handled by i18nManualChunk above.
-							if (id.includes("typesafe-i18n")) {
-								return "vendor-i18n";
-							}
-
 							// Other vendor dependencies
 							return "vendor-misc";
 						}

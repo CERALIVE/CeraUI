@@ -25,7 +25,7 @@ import {
 
 // osCommand's two feedback collaborators are mocked: `toast` is spied so we can
 // assert the SINGLE failure-feedback path, and the mocked `m` returns a minimal shape
-// so the i18n fallback resolves without booting the typesafe-i18n runtime.
+// so the i18n fallback resolves without booting the message runtime.
 vi.mock("svelte-sonner", () => ({
 	toast: {
 		error: vi.fn(),

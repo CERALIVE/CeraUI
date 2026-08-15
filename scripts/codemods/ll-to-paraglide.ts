@@ -1,5 +1,5 @@
 /**
- * Codemod: typesafe-i18n `$LL` / `getLL()` call sites -> paraglide `m["dotted.key"]()`.
+ * Codemod: legacy `$LL` / `getLL()` call sites -> paraglide `m["dotted.key"]()`.
  *
  * Run:  bun scripts/codemods/ll-to-paraglide.ts [--dry]
  *

@@ -3,17 +3,12 @@
 //
 // This workspace deliberately runs two TypeScript majors side by side. TS 7 is the
 // compiler for every plain `tsc --noEmit` gate (apps/backend, packages/rpc,
-// packages/i18n). TS 6 stays the workspace catalog default because two tools here
-// import the CLASSIC programmatic compiler API, which TS 7.0 does not ship (it is
-// expected in 7.1):
-//
-//   * svelte-check (apps/frontend) — refuses to start outright, see
-//     svelte-check/bin/ts-version-check.js: "TypeScript 7 support currently requires
-//     both TypeScript 7 and TypeScript 6 installed ... and requires using the --tsgo
-//     ... flag".
-//   * typesafe-i18n (packages/i18n generator) — dies with
-//     `TypeError: ts.createProgram is not a function` at generation time, which would
-//     break `bun install` itself since the generator runs from a postinstall hook.
+// packages/i18n). TS 6 stays the workspace catalog default because svelte-check
+// (apps/frontend) imports the CLASSIC programmatic compiler API, which TS 7.0 does
+// not ship (it is expected in 7.1): it refuses to start outright, see
+// svelte-check/bin/ts-version-check.js — "TypeScript 7 support currently requires
+// both TypeScript 7 and TypeScript 6 installed ... and requires using the --tsgo
+// ... flag".
 //
 // A bare `tsc` resolves through PATH, so whichever copy hoisting happened to leave in
 // `node_modules/.bin` wins — silently, and differently on a developer machine than in
@@ -25,9 +20,8 @@
 // ERR_PACKAGE_PATH_NOT_EXPORTED. `./package.json` is exported, and the bin sits beside
 // it.
 //
-// `--compiler-package <name>` selects a differently-named compiler package. packages/i18n
-// needs it: bare `typescript` there MUST stay on 6 so the typesafe-i18n generator keeps
-// working, so its TS 7 copy is installed under the npm alias `typescript-7`.
+// `--compiler-package <name>` selects a differently-named compiler package, for a
+// package that must keep a bare `typescript` on a different major than its gate.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';

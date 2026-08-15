@@ -44,8 +44,8 @@ export const pwaConfig: VitePWAOptions = {
 		globPatterns: ["**/*.{js,css,html,woff2}"],
 
 		// Workbox refuses to precache a single file over 2 MiB by default, and the
-		// main chunk crosses it during the typesafe-i18n -> Paraglide migration
-		// window: a compiled Paraglide message module inlines ALL TEN locales, so
+		// main chunk crosses it under the all-eager Paraglide catalog: a compiled
+		// Paraglide message module inlines ALL TEN locales, so
 		// an all-eager catalog is one indivisible ~2 MB blob (the legacy runtime
 		// lazy-loaded one ~25 KiB dictionary per locale instead). Under rolldown a
 		// statically-reachable chunk cannot be split by name, so the only lever is

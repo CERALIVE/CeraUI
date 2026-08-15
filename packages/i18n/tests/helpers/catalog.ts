@@ -2,18 +2,17 @@
  * Shared readers for the POST-MIGRATION sources of truth.
  *
  * Every gate in this directory used to read the legacy TypeScript dictionaries
- * through the typesafe-i18n runtime. Those retire (plan todo 24), so the gates
- * are repointed at the two things that outlive them:
+ * through the legacy message runtime. Both are gone (plan todo 24), so the gates
+ * read the two things that outlived them:
  *
  *   - `messages/<locale>.json` — the inlang catalogs, keyed by the VERBATIM
- *     dotted key, which become the canonical hand-editable translation source at
- *     the cutover;
+ *     dotted key, and now the canonical hand-editable translation source;
  *   - `tests/fixtures/<locale>.rendered.json` — the IMMUTABLE rendered oracle
  *     frozen from the OLD implementation (plan todo 19). Comparing the new
  *     paraglide renders against it is what makes "old render === new render" a
  *     provable claim after the old renderer is gone.
  *
- * Nothing here imports the legacy runtime, so these helpers survive todo 24.
+ * Nothing here imports a message runtime — only JSON on disk.
  */
 
 import { readFileSync } from "node:fs";

@@ -2,9 +2,10 @@
 
 CeraUI's translation catalogs and runtime. Ten locales, full RTL support.
 
-The package is mid-migration: **Paraglide** is the runtime the frontend is moving
-onto, and the legacy **typesafe-i18n** adapter still ships beside it until the
-call-site codemod and generator retirement land. Both read the same strings.
+**Paraglide is the sole i18n runtime.** The legacy generator, its Svelte 5
+adapter, its plural resolver, and the TypeScript locale dictionaries are gone —
+`messages/*.json` are now the canonical, hand-editable translation source (see
+[Catalogs](#catalogs--the-operator-workflow)).
 
 ---
 
@@ -12,13 +13,12 @@ call-site codemod and generator retirement land. Both read the same strings.
 
 | Import path | What it is |
 |---|---|
-| `@ceraui/i18n` | Locale constants — `LOCALES`, `RTL_LANGUAGES`, `BASE_LOCALE`, `directionFor`, `isSupportedLocale`, `resolveInitialLocale`. Plus the legacy typesafe-i18n surface, which retires with the generator. |
-| `@ceraui/i18n/formatters` | Standalone `Intl` formatters (`formatBytes`, `formatBitrate`, …). **Unchanged by the migration** — no i18n runtime dependency, safe to import anywhere. |
+| `@ceraui/i18n` | Locale constants — `LOCALES`, `RTL_LANGUAGES`, `BASE_LOCALE`, `directionFor`, `isSupportedLocale`, `resolveInitialLocale`. |
+| `@ceraui/i18n/formatters` | Standalone `Intl` formatters (`formatBytes`, `formatBitrate`, …). No i18n runtime dependency at all — safe to import anywhere, backend included. |
 | `@ceraui/i18n/svelte` | The Paraglide runes store and the `m` message facade. The ONE module frontend call sites import. |
-| `@ceraui/i18n/i18n-svelte5` | The legacy typesafe-i18n Svelte 5 adapter (`LL`, `locale`, `setLocale`). Deliberately still reachable; every import of it is removed by the call-site codemod. |
 
-There is no `/node` subpath. Nothing imported it, so it was retired; the one
-symbol still wanted by tests, `loadLocale`, is re-exported from the root.
+There is no `/node` subpath and no legacy adapter subpath — both retired with the
+generator.
 
 ---
 
@@ -163,11 +163,21 @@ message-format plugin reads.
 
 ### Catalog source of truth
 
-`messages/*.json` are still **generated** from the legacy TypeScript dictionaries
-in `src/<locale>/index.ts` by `scripts/convert-catalog.ts`, and a byte-parity gate
-holds the two in lockstep. Until the legacy dictionaries are removed, edit
-**those**; after that the JSON catalogs become the canonical, hand-editable
-source.
+**`messages/<locale>.json` IS the source of truth. Edit it by hand.** Nothing
+generates it, and nothing else holds a second copy of a translated string — the
+TypeScript locale dictionaries it was converted from, and the converter that read
+them, are both deleted.
+
+The only never-hand-edited i18n artifacts are the two build outputs Paraglide and
+the registry generator write, `src/paraglide/` and `generated/`. Both are
+gitignored and both are rebuilt by `generate:i18n`, which runs ahead of every
+`check` / `test` / `build` / `build:federation`.
+
+`tests/fixtures/*.rendered.json` is a third category again: the IMMUTABLE oracle
+frozen from the pre-migration implementation. It is not generated (the generator
+that captured it retired with the runtime it rendered through) and it is not
+hand-editable copy either — a deliberate translation change updates it in its own
+separately-reviewed PR, together with the catalog string it re-freezes.
 
 ---
 
@@ -188,17 +198,17 @@ checkout — several gates render through the generated registry.
 | `server-plural.test.ts` | `live.server.bondedAcross` renders the exact singular/plural English copy. |
 | `translation-quality.test.ts` | The keys added by todos 6/10-13 are real per-locale translations with no interpolation residue. |
 | `backend-labelkey-contract.test.ts` | Every dotted key the backend can emit as data resolves in the `en` catalog. |
-| `paraglide-catalog-gate.test.ts` | The converted catalog carries every key, with no module-id collisions. |
-| `paraglide-reverse-render-gate.test.ts` | Every converted message renders byte-identically to the legacy runtime. |
-| `rendered-oracle-gate.test.ts` | The LEGACY runtime still renders the frozen oracle byte-for-byte (retires with that runtime). |
+| `paraglide-catalog-gate.test.ts` | The catalog carries every key, with no safe-module-id collisions, and paraglide emitted exactly one module per key. |
+| `paraglide-reverse-render-gate.test.ts` | Every compiled message renders byte-identically to the frozen oracle. |
 | `locale-lifecycle.test.ts` | Startup priority, RTL direction, unsupported-locale fallback. |
 | `message-registry.test.ts` | The namespace map matches the emitted modules; `resolveMessageKey`'s fallback semantics. |
 
-The two halves of "old render === new render" are proven against ONE immutable
-fixture set: `rendered-oracle-gate.test.ts` is the OLD side, `plural-parity-gate`
-+ `paraglide-reverse-render-gate` are the NEW side. Shared readers for the
-catalogs and the fixtures live in `tests/helpers/catalog.ts` and import no legacy
-runtime.
+"Old render === new render" is proven against ONE immutable fixture set. Its OLD
+side — `rendered-oracle-gate.test.ts`, which re-rendered through the pre-migration
+runtime — retired with that runtime; what it asserted is preserved in the frozen
+fixtures themselves, which `plural-parity-gate` and `paraglide-reverse-render-gate`
+still diff every compiled message against. Shared readers for the catalogs and the
+fixtures live in `tests/helpers/catalog.ts` and import no message runtime.
 
 Frontend-side, `apps/frontend/src/tests/` adds the locale-store DOM contract, the
 umbrella-import gate, and the lazy-namespace proof. Copy-asserting frontend tests

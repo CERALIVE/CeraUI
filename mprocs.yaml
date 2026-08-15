@@ -11,10 +11,6 @@ procs:
     cwd: "./apps/backend"
     cmd: ["bun", "run", "dev"]
 
-  i18n:
-    cwd: "./packages/i18n"
-    cmd: ["bun", "run", "dev"]
-
   # database:
   #   cwd: "./apps/backend"
   #   cmd: ["bun", "run", "db:dev"]

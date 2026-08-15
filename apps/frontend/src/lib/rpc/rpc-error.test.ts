@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import en from "../../../../../packages/i18n/src/en";
+import { en } from "../../tests/helpers/catalog";
 import {
 	describeRpcError,
 	RpcError,

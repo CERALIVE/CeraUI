@@ -1,5 +1,5 @@
 <script lang="ts">
-import { existingLocales, type Locales } from '@ceraui/i18n';
+import { existingLocales, type LocaleCode } from '@ceraui/i18n';
 import { getLocale, m, setLocale } from '@ceraui/i18n/svelte';
 import { Code } from '@lucide/svelte';
 
@@ -259,7 +259,7 @@ function formatMs(ms: number): string {
 }
 
 // Handle language switching from Dev Tools
-function handleLanguageClick(languageCode: Locales) {
+function handleLanguageClick(languageCode: LocaleCode) {
 	const applied = setLocale(languageCode);
 	const foundLocale = existingLocales.find((l) => l.code === applied);
 	if (foundLocale) {
