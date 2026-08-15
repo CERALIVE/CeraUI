@@ -4,10 +4,13 @@ const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
 const totalShards = expression('env.TOTAL_SHARDS');
-const PLAYWRIGHT_CACHE_KEY = `${expression('runner.os')}-ms-playwright-${expression(
+// `-v2-` retires a cache entry that was missing chromium_headless_shell. Bumping
+// the namespace is what abandons a poisoned entry — actions/cache cannot
+// overwrite one, because it never re-saves on an exact-key hit.
+const PLAYWRIGHT_CACHE_KEY = `${expression('runner.os')}-ms-playwright-v2-${expression(
 	'steps.playwright-version.outputs.version',
 )}`;
-const PLAYWRIGHT_RESTORE_KEY = `${expression('runner.os')}-ms-playwright-`;
+const PLAYWRIGHT_RESTORE_KEY = `${expression('runner.os')}-ms-playwright-v2-`;
 const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v3.2.0';
 const SRTLA_RUNTIME_URL =
 	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb';
@@ -115,12 +118,12 @@ function assertBrowserCache(steps, label) {
 		`${label} browser restore key`,
 	);
 
+	// The install MUST stay unconditional. Guarding it on the cache hit is what
+	// made a cache missing a browser permanently unrepairable: the guard skipped
+	// the only step that could restore it, and the exact-key hit stopped the cache
+	// being re-saved, so all four E2E shards failed at `browserType.launch`.
 	const install = findStep(steps, 'Install Playwright browsers', label);
-	assertExact(
-		install.if,
-		"steps.playwright-cache.outputs.cache-hit != 'true'",
-		`${label} browser install condition`,
-	);
+	assertExact(install.if, undefined, `${label} browser install condition`);
 	assertExact(
 		install.run,
 		'bun run --filter frontend test:e2e:install-browser',

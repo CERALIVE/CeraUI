@@ -205,12 +205,15 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-ms-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-ms-playwright-v2-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
-            ${{ runner.os }}-ms-playwright-
+            ${{ runner.os }}-ms-playwright-v2-
 
+      # Deliberately UNCONDITIONAL: `actions/cache` never re-saves on an exact-key
+      # hit, so a cache that is missing a browser can never repair itself and every
+      # later run skips the install and fails at `browserType.launch`. `playwright
+      # install` is idempotent and near-instant once the binaries are present.
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install-browser
 
@@ -317,12 +320,15 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-ms-playwright-${{ steps.playwright-version.outputs.version }}
+          key: ${{ runner.os }}-ms-playwright-v2-${{ steps.playwright-version.outputs.version }}
           restore-keys: |
-            ${{ runner.os }}-ms-playwright-
+            ${{ runner.os }}-ms-playwright-v2-
 
+      # Deliberately UNCONDITIONAL: `actions/cache` never re-saves on an exact-key
+      # hit, so a cache that is missing a browser can never repair itself and every
+      # later run skips the install and fails at `browserType.launch`. `playwright
+      # install` is idempotent and near-instant once the binaries are present.
       - name: Install Playwright browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: CeraUI
         run: bun run --filter frontend test:e2e:install-browser
 
