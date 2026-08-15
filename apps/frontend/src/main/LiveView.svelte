@@ -96,6 +96,7 @@ import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-hea
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
+import { reconcileStartSource } from '$lib/streaming/effective-source';
 import { configChangeReport } from '$lib/streaming/configChangeCopy';
 import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
@@ -831,18 +832,15 @@ const summaryAudio = $derived.by(() => {
 async function handleStart(overrides: { source?: string } = {}) {
 	if (streamingOptimismState !== 'idle') return;
 
-	// Fold the implicit sole-camera source (T10) into the start base so the FE
-	// pipeline gate passes and the backend re-resolves source → pipeline/input
-	// (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
-	let startBase = config;
-	if (overrides.source !== undefined) {
-		const entry = getSources()?.sources.find((s) => s.id === overrides.source);
-		startBase = {
-			...(config ?? {}),
-			source: overrides.source,
-			...(entry ? { pipeline: entry.pipelineId } : {}),
-		} as typeof config;
-	}
+	// Fold the implicit sole-camera source (T10) in, then reconcile source →
+	// pipeline off the sources snapshot so the FE recognition gate and the
+	// readiness source gate cannot disagree; the backend re-resolves the routing
+	// for itself (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
+	const overridden =
+		overrides.source !== undefined
+			? ({ ...(config ?? {}), source: overrides.source } as typeof config)
+			: config;
+	const startBase = reconcileStartSource(overridden, getSources());
 
 	const result = buildStartConfig(startBase, audioOverride, pipelines);
 	if (!result.ok) {

@@ -180,16 +180,24 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		);
 	});
 
-	// ── A3. Stream start — disabled reason when the pipeline is unrecognized ────
-	test('Stream start: disabled without a usable pipeline carries the cannot-start reason', async ({
+	// ── A3. Stream start — disabled reason when the source is unusable ──────────
+	// The Start gate reads `config.source` resolved against the `sources` snapshot;
+	// the stale `pipeline` beside it pins that a drifted pipeline cannot smuggle a
+	// start past an unusable source. BOTH are stated here rather than inherited:
+	// the seed (`apps/backend/config.json`, gitignored) can carry a persisted
+	// `source` from an earlier run, which would silently un-block the button.
+	test('Stream start: disabled without a usable source carries the cannot-start reason', async ({
 		page,
 	}) => {
 		await attachWs(page, {
 			mutateInbound: (frame) => {
 				const config = frame.config as Frame | undefined;
 				// Keep a server target (hasServer true so the control renders) but
-				// make the pipeline unrecognized → canStart false.
-				if (config) config.pipeline = 'e2e-unknown-pipeline';
+				// make the selected source unresolvable → canStart false.
+				if (config) {
+					config.source = 'e2e-unknown-source';
+					config.pipeline = 'e2e-unknown-pipeline';
+				}
 				const status = frame.status as Frame | undefined;
 				if (status) status.is_streaming = false;
 				return true;
