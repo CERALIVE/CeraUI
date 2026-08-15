@@ -33,7 +33,7 @@
  * holds by construction: the implicit sole-camera id is folded into the Start
  * payload only, never persisted before the operator acts.
  */
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type {
 	CapabilitiesMessage,
 	ConfigMessage,

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { formatBytes } from "@ceraui/i18n/formatters";
-import { LL, locale } from "@ceraui/i18n/svelte";
+import { LL, locale } from "@ceraui/i18n/i18n-svelte5";
 import DatabaseBackupIcon from "@lucide/svelte/icons/database-backup";
 
 import type { BufferingState } from "$lib/stores/buffering.svelte";

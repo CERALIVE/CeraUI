@@ -103,7 +103,7 @@
   must keep rendering identically whether or not the device reported any.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { Snippet } from 'svelte';
 import { FlaskConical } from '@lucide/svelte';
 

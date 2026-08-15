@@ -15,7 +15,7 @@
   got software is told so, and told why.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { PreviewEncodeMode } from '@ceraui/rpc/schemas';
 import { Cpu, TriangleAlert } from '@lucide/svelte';
 

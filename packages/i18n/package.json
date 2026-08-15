@@ -11,12 +11,12 @@
 			"import": "./src/index.ts"
 		},
 		"./svelte": {
+			"types": "./src/svelte.svelte.ts",
+			"import": "./src/svelte.svelte.ts"
+		},
+		"./i18n-svelte5": {
 			"types": "./src/i18n-svelte5.svelte.ts",
 			"import": "./src/i18n-svelte5.svelte.ts"
-		},
-		"./node": {
-			"types": "./src/i18n-node.ts",
-			"import": "./src/i18n-node.ts"
 		},
 		"./formatters": {
 			"types": "./src/formatters.ts",
@@ -31,6 +31,8 @@
 		"fixtures": "bun scripts/generate-fixtures.ts",
 		"convert-catalog": "bun scripts/convert-catalog.ts",
 		"compile-messages": "bun scripts/compile-messages.ts",
+		"generate-registry": "bun scripts/generate-registry.ts",
+		"generate:i18n": "bun scripts/compile-messages.ts && bun scripts/generate-registry.ts",
 		"typesafe-i18n": "typesafe-i18n --no-watch",
 		"postinstall": "typesafe-i18n --no-watch",
 		"prepare": "typesafe-i18n --no-watch"

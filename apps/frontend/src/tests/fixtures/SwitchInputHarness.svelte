@@ -10,7 +10,7 @@
   tested; production code lives in LiveView.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { CaptureDevice } from '@ceraui/rpc/schemas';
 import { SWITCH_INPUT_ERRORS } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';

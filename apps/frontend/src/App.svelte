@@ -1,8 +1,8 @@
 <script lang="ts">
 import './app.css';
 
-import { isLocale, loadLocaleAsync } from '@ceraui/i18n';
-import { setLocale } from '@ceraui/i18n/svelte';
+import { initLocale } from '@ceraui/i18n/svelte';
+import { setLocale as setLegacyLocale } from '@ceraui/i18n/i18n-svelte5';
 import { ModeWatcher, setTheme as setCustomTheme } from 'mode-watcher';
 import { onMount, untrack } from 'svelte';
 
@@ -61,32 +61,15 @@ $effect(() => {
 });
 
 onMount(async () => {
+	// Startup priority: saved preference -> navigator.language -> en. Paraglide
+	// is synchronous (every namespace is eager), so only the legacy adapter still
+	// needs its async dictionary fetch; it coexists until the plan's call-site
+	// codemod lands.
+	const active = initLocale({ saved: getLocale()?.code });
 	try {
-		// Priority: 1. Saved preference, 2. Browser locale, 3. English fallback
-		const savedLocale = getLocale()?.code;
-		const browserLocale = typeof window !== 'undefined' ? (navigator.language.split('-')[0] ?? 'en') : 'en';
-
-		let targetLocale: string;
-		if (savedLocale && isLocale(savedLocale)) {
-			targetLocale = savedLocale;
-		} else if (isLocale(browserLocale)) {
-			targetLocale = browserLocale;
-		} else {
-			targetLocale = 'en';
-		}
-
-		// Load the locale
-		await loadLocaleAsync(targetLocale as Parameters<typeof loadLocaleAsync>[0]);
-		setLocale(targetLocale as Parameters<typeof setLocale>[0]);
+		await setLegacyLocale(active as Parameters<typeof setLegacyLocale>[0]);
 	} catch (error) {
-		console.error('Failed to initialize i18n:', error);
-		// Fallback to English
-		try {
-			await loadLocaleAsync('en');
-			setLocale('en');
-		} catch (fallbackError) {
-			console.error('Critical: Even English fallback failed:', fallbackError);
-		}
+		console.error('Failed to initialize the legacy i18n adapter:', error);
 	}
 });
 </script>

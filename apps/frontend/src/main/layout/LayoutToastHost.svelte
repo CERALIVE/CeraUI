@@ -1,5 +1,5 @@
 <script lang="ts">
-import { getLL } from '@ceraui/i18n/svelte';
+import { getLL } from '@ceraui/i18n/i18n-svelte5';
 import { toast } from 'svelte-sonner';
 
 import { Toaster } from '$lib/components/ui/sonner';

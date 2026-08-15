@@ -43,6 +43,19 @@ export const pwaConfig: VitePWAOptions = {
 		// Simplified precaching - only essential files, avoid duplicates with includeAssets
 		globPatterns: ["**/*.{js,css,html,woff2}"],
 
+		// Workbox refuses to precache a single file over 2 MiB by default, and the
+		// main chunk crosses it during the typesafe-i18n -> Paraglide migration
+		// window: a compiled Paraglide message module inlines ALL TEN locales, so
+		// an all-eager catalog is one indivisible ~2 MB blob (the legacy runtime
+		// lazy-loaded one ~25 KiB dictionary per locale instead). Under rolldown a
+		// statically-reachable chunk cannot be split by name, so the only lever is
+		// flipping namespaces to lazy — which is exactly the mitigation the bundle
+		// gate is there to force. Raising the ceiling keeps the service worker
+		// covering EVERY asset in the meantime; the size itself stays fully
+		// visible to the gzip-based bundle budget, which is what must not be
+		// waived. Lower this back once the initial payload is under 2 MiB.
+		maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+
 		// Navigation fallback for SPA routing
 		navigateFallback: "/index.html",
 		navigateFallbackDenylist: [/^\/api\//],

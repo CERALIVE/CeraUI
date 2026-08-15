@@ -16,7 +16,7 @@
   flow so headless/hidden-tab renders show it without a class-triggered reveal.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { CapabilitiesMessage } from '@ceraui/rpc/schemas';
 import { Info, LoaderCircle, ServerOff } from '@lucide/svelte';
 

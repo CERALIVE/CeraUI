@@ -19,7 +19,7 @@
   the primary (Save) action is disabled.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { Modem } from '@ceraui/rpc/schemas';
 import {
 	Globe,

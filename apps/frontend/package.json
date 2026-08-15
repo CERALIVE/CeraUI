@@ -4,18 +4,18 @@
 	"version": "2026.6.1",
 	"description": "A modern UI built with Svelte + Vite for CeraLive streaming hardware.",
 	"type": "module",
-	"author": "Andrés Cera",
+	"author": "Andr\u00e9s Cera",
 	"license": "GPL-3.0",
 	"scripts": {
 		"dev": "vite",
-		"build": "vite build",
-		"build:federation": "vite build --config vite.federation.config.ts",
+		"build": "bun run generate:i18n && vite build",
+		"build:federation": "bun run generate:i18n && vite build --config vite.federation.config.ts",
 		"preview": "vite preview",
-		"check": "svelte-check --tsconfig ./tsconfig.app.json",
+		"check": "bun run generate:i18n && svelte-check --tsconfig ./tsconfig.app.json",
 		"lint": "echo 'Frontend linting handled by root Biome'",
 		"lint:fix": "echo 'Frontend fixing handled by root Biome'",
 		"fix": "echo 'Frontend fixing handled by root Biome'",
-		"test": "vitest run && bun run test:hardware-preflight",
+		"test": "bun run generate:i18n && vitest run && bun run test:hardware-preflight",
 		"test:hardware-preflight": "node --test ../../scripts/input-picker-hardware-preflight.test.mjs",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",
@@ -25,7 +25,8 @@
 		"test:e2e:install-deps": "playwright install-deps chromium",
 		"test:e2e:install": "playwright install chromium --with-deps",
 		"test:e2e:reset": "rm -f ../backend/auth_tokens.json",
-		"clean": "rm -rf dist node_modules/.vite"
+		"clean": "rm -rf dist node_modules/.vite",
+		"generate:i18n": "bun run --filter @ceraui/i18n generate:i18n"
 	},
 	"dependencies": {
 		"@ceralive/design-tokens": "^2026.6.1",
@@ -50,6 +51,7 @@
 	},
 	"devDependencies": {
 		"@axe-core/playwright": "^4.13.0",
+		"@inlang/paraglide-js": "2.23.2",
 		"@lucide/svelte": "^1.31.0",
 		"@playwright/test": "^1.62.1",
 		"@sveltejs/vite-plugin-svelte": "^7.3.0",

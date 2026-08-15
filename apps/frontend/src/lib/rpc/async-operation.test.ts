@@ -35,7 +35,7 @@ vi.mock("svelte-sonner", () => ({
 	},
 }));
 
-vi.mock("@ceraui/i18n/svelte", () => ({
+vi.mock("@ceraui/i18n/i18n-svelte5", () => ({
 	getLL: () => ({
 		network: { os: { operationFailed: () => "operation_failed" } },
 	}),

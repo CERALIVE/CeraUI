@@ -1,6 +1,6 @@
 <script lang="ts">
 import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
-import { LL, locale, setLocale } from '@ceraui/i18n/svelte';
+import { LL, locale, setLocale } from '@ceraui/i18n/i18n-svelte5';
 import { Code } from '@lucide/svelte';
 
 import SystemBrowserPanel from '$lib/components/dev-tools/system-browser-panel.svelte';

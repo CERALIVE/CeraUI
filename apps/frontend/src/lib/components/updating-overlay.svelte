@@ -11,7 +11,7 @@
 </style>
 
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';

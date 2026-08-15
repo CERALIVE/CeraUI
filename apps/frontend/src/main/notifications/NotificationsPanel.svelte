@@ -12,7 +12,7 @@
   this keeps the runes-side honest so a profile switch can't smear e-paper.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import Bell from '@lucide/svelte/icons/bell';
 import CircleAlert from '@lucide/svelte/icons/circle-alert';
 import CircleCheck from '@lucide/svelte/icons/circle-check';

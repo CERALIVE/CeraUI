@@ -19,7 +19,7 @@
   targeting; the container is `data-testid="live-summary-strip"`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { ArrowRightLeft, Radio, Zap } from '@lucide/svelte';
 
 import LiveAudioMeter from '$lib/components/preview/LiveAudioMeter.svelte';

@@ -41,7 +41,7 @@ import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
 
 import PreviewDisclosure from './PreviewDisclosure.svelte';

@@ -23,7 +23,7 @@
  * State ownership stays in LiveView: EVERY datum and handler here is a prop — this
  * component owns NO `$state`, NO RPC, and writes NO config.
  */
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type {
 	ActiveEncode,
 	ConfigMessage,

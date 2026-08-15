@@ -9,7 +9,7 @@
  * defaults to `en` synchronously). That proves the key resolves in the UI — a
  * missing or typo'd key would fail codegen AND make this assertion throw/diverge.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { render } from "@testing-library/svelte";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 

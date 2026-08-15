@@ -15,7 +15,7 @@
 -->
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';
-import { LL, locale } from '@ceraui/i18n/svelte';
+import { LL, locale } from '@ceraui/i18n/i18n-svelte5';
 import type { LinkTelemetryEntry, LinkTelemetryMessage } from '@ceraui/rpc/schemas';
 import { Activity, AlertTriangle, Clock, Download, TrendingUp, Upload } from '@lucide/svelte';
 import { untrack } from 'svelte';

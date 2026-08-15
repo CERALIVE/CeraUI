@@ -9,7 +9,7 @@
  * the real component against a mocked `rpc.system.*` (the real osCommand runs) and
  * assert in-flight, success, and failure-releases-re-entry per action.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { KIOSK_UNAVAILABLE_ERROR } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';

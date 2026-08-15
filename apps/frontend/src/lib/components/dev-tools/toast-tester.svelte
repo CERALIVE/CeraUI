@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL, locale } from '@ceraui/i18n/svelte';
+import { LL, locale } from '@ceraui/i18n/i18n-svelte5';
 import {
 	AlertCircle,
 	AlertTriangle,

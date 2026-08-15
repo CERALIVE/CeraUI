@@ -1,6 +1,7 @@
 <script lang="ts">
-import { existingLocales, loadLocaleAsync, rtlLanguages } from '@ceraui/i18n';
-import { LL, setLocale } from '@ceraui/i18n/svelte';
+import { loadLocaleAsync } from '@ceraui/i18n';
+import { setLocale as setLegacyLocale } from '@ceraui/i18n/i18n-svelte5';
+import { LOCALES, m, setLocale } from '@ceraui/i18n/svelte';
 import { Check, ChevronDown, Globe } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -13,38 +14,26 @@ const initialLocale = getLocale();
 let selectedLocale: string = $state(initialLocale.code);
 let isOpen = $state(false);
 
-const localeName = $derived.by(
-	() => existingLocales.find((l) => l.code === selectedLocale)?.name ?? 'English',
-);
-const localeFlag = $derived.by(() => existingLocales.find((l) => l.code === selectedLocale)?.flag);
+const localeName = $derived.by(() => LOCALES.find((l) => l.code === selectedLocale)?.name ?? 'English');
+const localeFlag = $derived.by(() => LOCALES.find((l) => l.code === selectedLocale)?.flag);
 
-// Initialize locale in an effect to avoid top-level state updates
-$effect(() => {
-	if (initialLocale.code) {
-		setLocale(initialLocale.code as Parameters<typeof setLocale>[0]);
+const handleLocaleChange = async (value: string) => {
+	// The Paraglide store owns the switch: it applies the runtime locale, drives
+	// the re-render, and syncs <html lang>/<html dir>. Persistence stays with the
+	// frontend's $persist store (unchanged key), and the legacy adapter is still
+	// driven alongside until the call-site codemod retires it.
+	const applied = setLocale(value);
+	selectedLocale = applied;
+	const foundLocale = LOCALES.find((l) => l.code === applied);
+	if (foundLocale) {
+		setLocaleStore(foundLocale);
 	}
-});
-
-// Keep <html lang>/<html dir> in sync with the active locale. Layout.svelte owns
-// this once mounted, but the selector also renders on the pre-auth screen where
-// Layout is absent — so apply it here too (idempotent: both write the same value).
-$effect(() => {
-	document.documentElement.lang = selectedLocale;
-	document.documentElement.dir = rtlLanguages.includes(selectedLocale) ? 'rtl' : 'ltr';
-});
-
-const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
+	isOpen = false;
 	try {
-		await loadLocaleAsync(value);
-		setLocale(value);
-		const foundLocale = existingLocales.find((l) => l.code === value);
-		if (foundLocale) {
-			setLocaleStore(foundLocale);
-		}
-		selectedLocale = String(value);
-		isOpen = false;
+		await loadLocaleAsync(applied);
+		await setLegacyLocale(applied);
 	} catch {
-		// Locale load failed; prior selection remains
+		// Legacy dictionary fetch failed; Paraglide already rendered the switch.
 	}
 };
 </script>
@@ -82,12 +71,12 @@ const handleLocaleChange = async (value: Parameters<typeof setLocale>[0]) => {
 	>
 		<div class="px-2 py-1.5">
 			<h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-				{$LL.locale.selectLanguage()}
+				{m['locale.selectLanguage']()}
 			</h4>
 		</div>
 
 		<div class="max-h-[min(60vh,22rem)] overflow-y-auto pe-0.5">
-			{#each existingLocales as localeOption}
+			{#each LOCALES as localeOption}
 				{@const isActive = selectedLocale === localeOption.code}
 				<DropdownMenu.Item
 					class={cn(

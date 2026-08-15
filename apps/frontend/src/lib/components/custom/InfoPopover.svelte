@@ -23,7 +23,7 @@
   which the e-ink freeze + `prefers-reduced-motion` already neutralise globally.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { CircleHelp, ExternalLink } from '@lucide/svelte';
 
 import * as Popover from '$lib/components/ui/popover';

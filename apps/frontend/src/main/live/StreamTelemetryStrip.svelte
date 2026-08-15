@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 
 import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
 import type { EncoderLoadReading } from '$lib/streaming/encoder-load';

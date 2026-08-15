@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 import type { AudioLevelUnavailableReason } from '@ceraui/rpc/schemas';
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 
 import { cn } from '$lib/utils';
 

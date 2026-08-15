@@ -16,7 +16,7 @@
   nested AppDialog with `destructive` set so its primary button is red.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Power, PowerOff, RotateCcw } from '@lucide/svelte';
 

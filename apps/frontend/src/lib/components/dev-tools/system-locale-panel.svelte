@@ -1,6 +1,6 @@
 <script lang="ts">
 import { type Locales } from '@ceraui/i18n';
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Globe } from '@lucide/svelte';
 
 import SystemCollapsibleSection from '$lib/components/dev-tools/system-collapsible-section.svelte';

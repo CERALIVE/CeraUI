@@ -17,7 +17,7 @@
 <script lang="ts">
 import { onDestroy, untrack } from 'svelte';
 
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import {
 	PREVIEW_CLOSE_UNAUTHORIZED,
 	PREVIEW_CLOSE_UPSTREAM_DOWN,

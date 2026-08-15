@@ -10,7 +10,7 @@
     roadmap: data-debt-id="TD-plain-srt-egress"
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';

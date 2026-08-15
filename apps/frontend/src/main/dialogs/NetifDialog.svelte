@@ -11,7 +11,7 @@
   never clobbered by live telemetry.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { IP_ADDRESS_REGEX, type NetifEntry } from '@ceraui/rpc/schemas';
 import { Info, Network } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';

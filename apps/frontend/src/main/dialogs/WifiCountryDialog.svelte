@@ -12,7 +12,7 @@
   of a silent no-op.
 -->
 <script lang="ts">
-import { LL, locale } from '@ceraui/i18n/svelte';
+import { LL, locale } from '@ceraui/i18n/i18n-svelte5';
 import { WORLD_REGULATORY_DOMAIN } from '@ceraui/rpc/schemas';
 import { Globe, LoaderCircle, Search } from '@lucide/svelte';
 

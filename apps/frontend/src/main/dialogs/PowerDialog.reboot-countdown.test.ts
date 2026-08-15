@@ -11,7 +11,7 @@
  * SUCCESS path (latch clears → dialog closes) needs the reactive store and is
  * proven end-to-end in the e2e spec, not here.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import {
 	afterEach,

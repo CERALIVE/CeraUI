@@ -35,6 +35,8 @@ i18n-usage-analysis.json
 # Paraglide: compiled runtime (regenerated at build) + fetched inlang plugin cache
 packages/i18n/src/paraglide/
 packages/i18n/project.inlang/cache/
+# Paraglide facade: per-namespace barrels + message registry (bun run generate:i18n)
+packages/i18n/generated/
 
 # Cache files
 **/dns_cache.json

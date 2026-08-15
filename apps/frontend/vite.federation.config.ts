@@ -1,10 +1,17 @@
 import { readFileSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
 import { defineConfig } from "vite";
+
+import {
+	PARAGLIDE_OUTDIR,
+	PARAGLIDE_PROJECT,
+	PARAGLIDE_STRATEGY,
+} from "./vite.i18n";
 
 // Federation lib-mode build (Task 39) — emits standalone ES-module bundles for the
 // Encoder/Audio/Server config dialogs so ceralive-platform's web dashboard can load
@@ -47,6 +54,16 @@ export default defineConfig({
 	// Load .env from monorepo root for unified configuration (matches the SPA build).
 	envDir: path.resolve(__dirname, "../.."),
 	plugins: [
+		// The federated dialogs render i18n strings, so their bundles must carry
+		// compiled messages too. `cleanOutdir: false` keeps this build from
+		// wiping an outdir the SPA build may be reading.
+		paraglideVitePlugin({
+			project: PARAGLIDE_PROJECT,
+			outdir: PARAGLIDE_OUTDIR,
+			outputStructure: "message-modules",
+			cleanOutdir: false,
+			strategy: [...PARAGLIDE_STRATEGY],
+		}),
 		persistPlugin(),
 		tailwindcss(),
 		svelte({

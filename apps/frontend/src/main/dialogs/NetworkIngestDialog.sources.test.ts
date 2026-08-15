@@ -15,7 +15,7 @@
  * lands (no optimistic flip on the RPC resolve). rtmp/srt keep their existing
  * non-silent behavior.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
 	afterEach,

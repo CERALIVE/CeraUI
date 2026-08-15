@@ -14,7 +14,7 @@
   live `state` — so a failed unit never reads as "running".
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import {
 	KIOSK_UNAVAILABLE_ERROR,
 	kioskDisplaySchema,

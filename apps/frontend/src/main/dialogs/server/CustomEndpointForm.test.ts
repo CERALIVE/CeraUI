@@ -7,7 +7,7 @@
  * This suite locks that the SRTLA fields render and the removed RIST even-port
  * hint is gone.
  */
-import { LL } from "@ceraui/i18n/svelte";
+import { LL } from "@ceraui/i18n/i18n-svelte5";
 import { render } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { describe, expect, it } from "vitest";

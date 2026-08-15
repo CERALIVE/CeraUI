@@ -13,7 +13,7 @@ import WifiLowIcon from '@lucide/svelte/icons/wifi-low';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import WifiZeroIcon from '@lucide/svelte/icons/wifi-zero';
 
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 
 import { getSignalCategory, linkVisualState, signalTextClass } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';

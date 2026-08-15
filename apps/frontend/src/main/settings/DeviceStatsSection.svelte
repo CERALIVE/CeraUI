@@ -43,7 +43,7 @@
   build has no fan feature".
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import {
 	Activity,
 	ArrowDownUp,

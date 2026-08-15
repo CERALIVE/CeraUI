@@ -36,7 +36,7 @@
   ticker (there is no second pairing surface).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type {
 	CloudProviderEndpoint,
 	ProviderSelection,

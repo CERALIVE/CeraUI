@@ -10,7 +10,7 @@
   deterministically under vitest with no subscription/runtime dependency.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { CaptureDevice, DeviceKind } from '@ceraui/rpc/schemas';
 import { Check, Loader, RadioTower, TriangleAlert } from '@lucide/svelte';
 

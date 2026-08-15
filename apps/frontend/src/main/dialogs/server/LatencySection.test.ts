@@ -6,7 +6,7 @@
  * shows the negotiated label while streaming, and locks while streaming. No FEC /
  * recovery / presets controls exist here.
  */
-import { LL } from "@ceraui/i18n/svelte";
+import { LL } from "@ceraui/i18n/i18n-svelte5";
 import { fireEvent, render } from "@testing-library/svelte";
 import { get } from "svelte/store";
 import { describe, expect, it, vi } from "vitest";

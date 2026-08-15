@@ -6,7 +6,7 @@
  * shows its servers description (or the D6 waiting/none hint); any other managed
  * cloud shows the "add your key" prompt. No nested provider dropdown.
  */
-import { LL } from "@ceraui/i18n/svelte";
+import { LL } from "@ceraui/i18n/i18n-svelte5";
 import type { RelayMessage } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
 import { get } from "svelte/store";

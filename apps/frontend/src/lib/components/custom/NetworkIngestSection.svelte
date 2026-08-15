@@ -29,7 +29,7 @@
   `handleSelectInput`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { NetworkIngest, Pipelines, RequiresGateway } from '@ceraui/rpc/schemas';
 import { VIDEO_SOURCE_LABELS } from '@ceraui/rpc/schemas';
 import { Check, Copy, QrCode, Radio } from '@lucide/svelte';

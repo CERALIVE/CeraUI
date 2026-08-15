@@ -12,7 +12,7 @@
   section only renders the tiles and reports the pick via `onSelect`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Cloud, Plug } from '@lucide/svelte';
 import type { ProviderSelection, RelayMessage } from '@ceraui/rpc/schemas';
 

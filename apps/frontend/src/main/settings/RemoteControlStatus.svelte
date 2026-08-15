@@ -10,7 +10,7 @@
   Provider-agnostic: the row never assumes CeraLive (multi-cloud safe).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Cloud, CloudOff, RadioTower } from '@lucide/svelte';
 
 import { getRemoteControlStatus } from '$lib/stores/pairing.svelte';

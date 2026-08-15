@@ -14,7 +14,7 @@
   e-paper). Touch safety: every control meets the 44px minimum tap target.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Check, ChevronRight, Radio, Rocket, Server, X } from '@lucide/svelte';
 import type { Component } from 'svelte';
 

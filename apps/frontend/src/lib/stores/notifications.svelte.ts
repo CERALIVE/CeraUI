@@ -22,7 +22,7 @@
  * Text resolution (D4/D9/D10)
  * ---------------------------
  * Display text is resolved *once, at push time* via `$LL`
- * (`@ceraui/i18n/svelte`): when `key` is present and exists in the translation
+ * (`@ceraui/i18n/i18n-svelte5`): when `key` is present and exists in the translation
  * tree it is interpolated with `params`; otherwise the raw `msg` is used as the
  * fallback. Resolution is deliberately eager so a later locale change does NOT
  * re-show or re-translate already-active toasts (D10 — stale is accepted).
@@ -32,7 +32,7 @@
  * `duration` is seconds on the wire and is converted to milliseconds with
  * `* 1000` — never `* 2500`.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import type {
 	Notification,
 	NotificationAction,

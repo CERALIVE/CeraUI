@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
 import XIcon from '@lucide/svelte/icons/x';
 

@@ -6,7 +6,7 @@
   pushes a `log` message which the subscription layer turns into a file download.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { AlertTriangle, Download, FileText, Loader2, RefreshCw, ScrollText, Terminal } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';

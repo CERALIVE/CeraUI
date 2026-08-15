@@ -8,7 +8,7 @@
   reset is a one-shot helper call (resetSSHPasword) with its own success toast.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Copy, Eye, EyeOff, RotateCcw, SquareTerminal } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 

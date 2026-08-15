@@ -6,7 +6,7 @@
  * NetworkIngestDialog. This test drives the real SettingsView (heavy children
  * stubbed) and asserts the entry renders and routes clicks to the dialog.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 

@@ -9,7 +9,7 @@
  * `role="status"` band, never an error toast. These tests drive the real
  * component against a mocked `rpc.network.setIngestEnabled` + `getStatus`.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { NETWORK_INGEST_UNAVAILABLE_ERROR } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {

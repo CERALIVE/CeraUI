@@ -24,7 +24,7 @@
   disabled Connect when a secured network's password is shorter than the minimum.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { AvailableWifiNetwork, WifiStatus } from '@ceraui/rpc/schemas';
 import { Wifi } from '@lucide/svelte';
 

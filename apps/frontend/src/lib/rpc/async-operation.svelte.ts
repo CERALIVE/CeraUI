@@ -36,7 +36,7 @@
  * the unit tests) with an `$effect.root` self-sweep.
  */
 
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { toast } from "svelte-sonner";
 
 import type { ConnectionState } from "./client";

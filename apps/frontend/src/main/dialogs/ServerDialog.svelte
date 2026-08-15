@@ -26,7 +26,7 @@
   `buildManagedSlotConfig` and locks every field before the RPC.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Server } from '@lucide/svelte';
 import type { ConfigMessage, RelayProtocol } from '@ceraui/rpc/schemas';
 import { untrack } from 'svelte';

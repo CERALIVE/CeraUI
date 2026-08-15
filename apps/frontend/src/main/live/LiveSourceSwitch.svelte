@@ -31,7 +31,7 @@
   Presentational: owns NO `$state`, NO RPC. `onSwitch` is LiveView's handleSwitchInput.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type {
 	ActiveEncode,
 	CaptureStreamSource,

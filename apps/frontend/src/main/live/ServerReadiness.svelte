@@ -16,7 +16,7 @@
   Motion is CSS-only; no Svelte motion directives.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Link2, Network } from '@lucide/svelte';
 import type { ReceiverKind } from '@ceraui/rpc/schemas';
 

@@ -18,7 +18,7 @@
   an irreversible lockout, so every attempt is an explicit user action.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { Modem, SimPukUnlockOutput, SimUnlockOutput } from '@ceraui/rpc/schemas';
 import { KeyRound, Loader2, ShieldAlert, ShieldX } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';

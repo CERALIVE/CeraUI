@@ -14,7 +14,7 @@
     (WIFI:T:WPA;S:<name>;P:<password>;;) is rendered so phones can join by scan.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
 import { Copy, Eye, EyeOff, Loader2, Power, QrCode, Router, Save, Wifi } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import { render } from "@testing-library/svelte";
 import { describe, expect, it } from "vitest";
 

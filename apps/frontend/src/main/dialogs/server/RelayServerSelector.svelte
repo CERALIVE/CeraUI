@@ -8,7 +8,7 @@
   selector, and the editable Stream ID. Presentational: the container owns state.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { RelayAccount, RelayServer } from '@ceraui/rpc/schemas';
 
 import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';

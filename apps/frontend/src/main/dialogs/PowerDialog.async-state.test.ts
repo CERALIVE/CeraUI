@@ -11,7 +11,7 @@
  *   success    → reboot hands off to the rebooting banner; poweroff closes
  *   failure    → a refused op surfaces an error toast AND releases re-entry
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import {
 	fireEvent,
 	render,

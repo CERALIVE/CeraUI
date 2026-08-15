@@ -8,7 +8,7 @@
  * exercisable under the plain (non-Svelte) vitest environment. The reactive
  * runes wrapper is never executed here.
  *
- * `notifications.svelte.ts` statically imports `@ceraui/i18n/svelte`, whose
+ * `notifications.svelte.ts` statically imports `@ceraui/i18n/i18n-svelte5`, whose
  * module body declares Svelte runes ($state). Mock it so importing the store
  * never evaluates those runes; the pure resolver under test receives an
  * explicit `translations` tree rather than reading the live `$LL`.
@@ -16,11 +16,11 @@
 import type { Notification } from "@ceraui/rpc/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@ceraui/i18n/svelte", () => ({
+vi.mock("@ceraui/i18n/i18n-svelte5", () => ({
 	getLL: vi.fn(() => ({})),
 }));
 
-import { getLL } from "@ceraui/i18n/svelte";
+import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import {
 	type ActiveNotification,
 	clearNotifications,

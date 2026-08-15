@@ -11,7 +11,7 @@
   primary value, with any build metadata demoted to a secondary line.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { Revisions } from '@ceraui/rpc/schemas';
 import { Info } from '@lucide/svelte';
 

@@ -62,7 +62,7 @@ export interface EncoderConfig {
 </script>
 
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
 import { BITRATE_DEFAULT_MIN, type DeviceKind, type StreamSource } from '@ceraui/rpc/schemas';
 

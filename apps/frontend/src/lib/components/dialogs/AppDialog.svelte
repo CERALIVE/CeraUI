@@ -50,7 +50,7 @@
   contentClass?   string     — extra classes merged onto the surface.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Dialog as DialogPrimitive } from 'bits-ui';
 import Loader2 from '@lucide/svelte/icons/loader-2';
 import XIcon from '@lucide/svelte/icons/x';

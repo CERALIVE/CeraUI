@@ -8,7 +8,7 @@
   Presentational: the container owns the validate + save handlers.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { RelayValidateStage } from '@ceraui/rpc/schemas';
 import Check from '@lucide/svelte/icons/check';
 import Circle from '@lucide/svelte/icons/circle';

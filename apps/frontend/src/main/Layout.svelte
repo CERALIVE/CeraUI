@@ -1,6 +1,5 @@
 <script lang="ts">
-import { rtlLanguages } from '@ceraui/i18n';
-import { LL, locale } from '@ceraui/i18n/svelte';
+import { directionFor, getLocale, m } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 
@@ -171,8 +170,9 @@ $effect(() => {
 // Apply <html lang> and dir using runes-style effect
 $effect(() => {
 	// Update document language and direction for RTL support
-	document.documentElement.lang = $locale;
-	document.documentElement.dir = rtlLanguages.includes($locale) ? 'rtl' : 'ltr';
+	const active = getLocale();
+	document.documentElement.lang = active;
+	document.documentElement.dir = directionFor(active);
 });
 </script>
 
@@ -196,7 +196,7 @@ $effect(() => {
 				role="status"
 			>
 				<WifiOffIcon class="text-status-warning size-6 shrink-0" />
-				<span class="font-medium">{$LL.connection.authTimedOut()}</span>
+				<span class="font-medium">{m['connection.authTimedOut']()}</span>
 				<div class="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-center">
 					<Button
 						class="border-status-warning/40 text-status-warning hover:bg-status-warning/10 min-h-[44px]"
@@ -204,7 +204,7 @@ $effect(() => {
 						size="sm"
 						variant="outline"
 					>
-						{$LL.connection.retry()}
+						{m['connection.retry']()}
 					</Button>
 					<Button
 						class="text-muted-foreground hover:text-foreground min-h-[44px]"
@@ -213,7 +213,7 @@ $effect(() => {
 						size="sm"
 						variant="ghost"
 					>
-						{$LL.connection.clearSavedSession()}
+						{m['connection.clearSavedSession']()}
 					</Button>
 				</div>
 			</div>

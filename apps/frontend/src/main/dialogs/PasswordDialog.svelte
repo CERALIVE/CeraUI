@@ -6,7 +6,7 @@
   local state, so there is nothing for a server push to clobber.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Eye, EyeOff, KeyRound } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 

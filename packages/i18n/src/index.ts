@@ -1,19 +1,48 @@
-// Main exports for the i18n package
+/**
+ * `@ceraui/i18n` root — LOCALE CONSTANTS.
+ *
+ * Export map (full contract in README.md):
+ *   `@ceraui/i18n`               locale constants (this file)
+ *   `@ceraui/i18n/formatters`    standalone Intl formatters
+ *   `@ceraui/i18n/svelte`        the Paraglide runes store + `m` facade
+ *   `@ceraui/i18n/i18n-svelte5`  the legacy typesafe-i18n adapter (retires with plan todo 24)
+ */
 
-// Export Node.js-specific integration
-export * from "./i18n-node.js";
-export { getTranslationKeys, hasTranslationKey } from "./i18n-node.js";
+import { LOCALES, RTL_LANGUAGES } from "./locale-lifecycle.js";
+
+export {
+	BASE_LOCALE,
+	directionFor,
+	isSupportedLocale,
+	LOCALES,
+	type LocaleCode,
+	type LocaleDescriptor,
+	RTL_LANGUAGES,
+	resolveInitialLocale,
+} from "./locale-lifecycle.js";
+
+/** @deprecated Legacy alias for {@link LOCALES}; call sites migrate in plan todo 22. */
+export const existingLocales = LOCALES;
+
+/** @deprecated Legacy alias for {@link RTL_LANGUAGES}; call sites migrate in plan todo 22. */
+export const rtlLanguages = RTL_LANGUAGES;
+
+// LEGACY typesafe-i18n surface. Retires wholesale with the generator in plan
+// todo 24; kept here only so the not-yet-codemodded call sites keep resolving.
+// The `/node` SUBPATH is gone (nothing imported it), but `loadLocale` stays
+// reachable from the root as a catalog-reading test helper.
+export { loadLocale } from "./i18n-node.js";
 export type {
 	Svelte5Translation,
 	Svelte5TranslationFunction,
 } from "./i18n-svelte5.svelte.js";
-// Export our Svelte 5 integration (now the default)
 export * from "./i18n-svelte5.svelte.js";
-// Export types
-export type { BaseTranslation, Locales } from "./i18n-types.js";
-// Export async loading utilities
+export type {
+	BaseTranslation,
+	Locales,
+	TranslationFunctions,
+} from "./i18n-types.js";
 export { loadLocaleAsync } from "./i18n-util.async.js";
-// Export the core typesafe-i18n functions
 export {
 	detectLocale,
 	i18n,
@@ -21,24 +50,3 @@ export {
 	loadedLocales,
 	locales,
 } from "./i18n-util.js";
-
-// Available locales configuration
-export const existingLocales = [
-	{ name: "English", code: "en" as const, flag: "🇺🇸" },
-	{ name: "Español", code: "es" as const, flag: "🇪🇸" },
-	{ name: "Português", code: "pt-BR" as const, flag: "🇧🇷" },
-	{ name: "Français", code: "fr" as const, flag: "🇫🇷" },
-	{ name: "Deutsch", code: "de" as const, flag: "🇩🇪" },
-	{ name: "中文", code: "zh" as const, flag: "🇨🇳" },
-	{ name: "العربية", code: "ar" as const, flag: "🇸🇦" },
-	{ name: "日本語", code: "ja" as const, flag: "🇯🇵" },
-	{ name: "한국어", code: "ko" as const, flag: "🇰🇷" },
-	{ name: "हिन्दी", code: "hi" as const, flag: "🇮🇳" },
-];
-
-export const rtlLanguages: string[] = [
-	"ar", // Arabic - most common RTL
-	"he", // Hebrew
-	"fa", // Persian/Farsi
-	"ur", // Urdu
-] as const;

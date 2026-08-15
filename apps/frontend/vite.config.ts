@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { paraglideVitePlugin } from "@inlang/paraglide-js";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import { persistPlugin } from "svelte-persistent-runes/plugins";
@@ -7,6 +8,12 @@ import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
 import { generateUniqueVersion, pwaConfig } from "./pwa.config";
+import {
+	i18nManualChunk,
+	PARAGLIDE_OUTDIR,
+	PARAGLIDE_PROJECT,
+	PARAGLIDE_STRATEGY,
+} from "./vite.i18n";
 import {
 	applyPreviewWebSocketRoute,
 	DEVICE_WS_PROXY_CONTEXT,
@@ -139,6 +146,16 @@ export default defineConfig(({ mode }) => {
 		envDir: path.resolve(__dirname, "../.."),
 		plugins: [
 			previewUpgradeGuard(),
+			// `cleanOutdir: false` because `bun run generate:i18n` is the
+			// authoritative compile and runs first in every script chain; a plugin
+			// instance that wiped the outdir could race the federation build.
+			paraglideVitePlugin({
+				project: PARAGLIDE_PROJECT,
+				outdir: PARAGLIDE_OUTDIR,
+				outputStructure: "message-modules",
+				cleanOutdir: false,
+				strategy: [...PARAGLIDE_STRATEGY],
+			}),
 			persistPlugin(),
 			tailwindcss(),
 			svelte({
@@ -171,6 +188,14 @@ export default defineConfig(({ mode }) => {
 			rollupOptions: {
 				output: {
 					manualChunks: (id) => {
+						// i18n first: the workspace package resolves to a real path
+						// OUTSIDE node_modules, so it would never reach the vendor
+						// branch below.
+						const i18nChunk = i18nManualChunk(id);
+						if (i18nChunk !== undefined) {
+							return i18nChunk;
+						}
+
 						// Vendor chunks for external dependencies
 						if (id.includes("node_modules")) {
 							// Core Svelte framework (largest)
@@ -210,8 +235,9 @@ export default defineConfig(({ mode }) => {
 								return "vendor-media";
 							}
 
-							// i18n system
-							if (id.includes("typesafe-i18n") || id.includes("@ceraui/i18n")) {
+							// Legacy i18n runtime (retires with plan todo 24). The
+							// Paraglide graph is handled by i18nManualChunk above.
+							if (id.includes("typesafe-i18n")) {
 								return "vendor-i18n";
 							}
 

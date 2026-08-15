@@ -11,7 +11,7 @@
   card height never shifts between the empty and populated states.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { LinkTelemetryEntry } from '@ceraui/rpc/schemas';
 
 import Badge from '$lib/components/custom/Badge.svelte';

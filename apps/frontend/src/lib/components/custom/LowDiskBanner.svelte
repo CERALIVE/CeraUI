@@ -8,7 +8,7 @@
   source never raises a false alarm.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { HardDrive, ScrollText } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';

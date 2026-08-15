@@ -8,7 +8,7 @@
   custom endpoint stays available via the destination radiogroup regardless.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { Cloud } from '@lucide/svelte';
 
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';

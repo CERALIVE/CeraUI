@@ -31,7 +31,7 @@
  * action is a callback prop (Task 11 threads the real handlers), so the
  * sole-camera "no premature setConfig" contract holds by construction.
  */
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type {
 	CapabilitiesMessage,
 	ConfigMessage,

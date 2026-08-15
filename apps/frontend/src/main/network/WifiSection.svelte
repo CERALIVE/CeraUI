@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
 import { ChevronRight, Loader2, Router, Settings2, Wifi } from '@lucide/svelte';
 

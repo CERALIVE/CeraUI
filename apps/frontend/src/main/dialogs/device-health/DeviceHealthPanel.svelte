@@ -36,7 +36,7 @@
   `lib/streaming/encoder-load.ts`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { LL } from '@ceraui/i18n/i18n-svelte5';
 import { ENGINE_UNREACHABLE_REVISION } from '@ceraui/rpc/schemas';
 import { Activity, Clock, Cpu, Gauge, MemoryStick, Thermometer, Zap } from '@lucide/svelte';
 import { MediaQuery } from 'svelte/reactivity';
