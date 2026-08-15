@@ -32,6 +32,10 @@ apps/frontend/src/lib/stores/i18n.svelte.ts
 apps/frontend/src/locale/locale.schema.json
 i18n-usage-analysis.json
 
+# Paraglide: compiled runtime (regenerated at build) + fetched inlang plugin cache
+packages/i18n/src/paraglide/
+packages/i18n/project.inlang/cache/
+
 # Cache files
 **/dns_cache.json
 **/gsm_operator_cache.json

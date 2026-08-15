@@ -10,7 +10,8 @@
 			"src/**/*.jsonc",
 			"!src/i18n-types.ts",
 			"!src/i18n-util.ts",
-			"!src/i18n-util.*.ts"
+			"!src/i18n-util.*.ts",
+			"!src/paraglide"
 		]
 	},
 	"linter": {
