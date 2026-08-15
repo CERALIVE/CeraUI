@@ -420,7 +420,25 @@ test.describe("source picker — lost-row scoping + empty state (real seam)", ()
 		page,
 	}) => {
 		if (!pageRpc) throw new Error("page RPC is not installed");
+		await setConfig(pageRpc, {
+			srtla_addr: "127.0.0.1",
+			srtla_port: 5000,
+			srt_streamid: "e2e",
+		});
 		await waitForCaptureRows(page, pageRpc);
+		// ESTABLISH the premise instead of inheriting it. The per-worker backend is
+		// shared with every other spec file, and several of them legitimately take
+		// `usb` live — which commits the retention slot, so a detached `usb` would
+		// render its REMEMBERED lost row here and this negative would fail purely on
+		// file ordering. Taking the virtual test pattern live supersedes the slot: a
+		// non-camera source takes it EMPTY, which is the exact backend rule this test
+		// is the negative half of. Assertions below are unchanged.
+		//
+		// `config.source` is what the commit hook reads — `streaming.start`'s own
+		// `source` argument is not persisted — so it is written first, or the hook
+		// re-commits the value already in the slot and early-returns.
+		await setConfig(pageRpc, { source: "test" });
+		await streamOnce(page, pageRpc, "test");
 		// Select it — but never take it live. Selecting is not a commitment, and
 		// todo 22 exists precisely so a merely-picked accessory does not linger.
 		await page.getByTestId("source-select-usb").click();
