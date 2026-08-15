@@ -75,6 +75,6 @@
 		"workbox-window": "^7.4.1"
 	},
 	"volta": {
-		"node": "24.0.0"
+		"node": "26.0.0"
 	}
 }

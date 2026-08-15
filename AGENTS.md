@@ -694,8 +694,8 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `svelte` | 5.56.9 |
 | `vitest` | 4.1.10 |
 | `vite` | 8.2.1 |
-| `jsdom` | 30.0.1 (requires Node ≥ 24.15; local dev `mise.toml` pins Node 24 → 24.19.x) |
-| CI Node (`build-check.yml`) | 26 — REQUIRED baseline, not a canary (flipped from 24 by todo 18); `publish-deb.yml`/`publish-release.yml` still pin 24 |
+| `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
+| Node | **26 everywhere** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
 | `@biomejs/biome` (via `@ceralive/biome-config@2026.8.0` canon) | 2.5.8 |
 | `@playwright/test` | 1.62.1 |
@@ -703,7 +703,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `svelte-check` | 4.7.6 |
 | `@sveltejs/vite-plugin-svelte` | 7.3.0 |
 | `@axe-core/playwright` | 4.13.0 |
-| `@types/node` | 26.2.0 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
+| `@types/node` | 26.2.0 (matches the Node 26 runtime baseline) |
 | `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
 
 **oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.27` would range forward across betas and into stable
