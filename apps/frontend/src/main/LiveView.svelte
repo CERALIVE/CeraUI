@@ -59,6 +59,7 @@ import {
 	resolveAudioSourceList,
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
+import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
 import { navElements } from '$lib/config';
 import {
 	getActiveInput,
@@ -100,9 +101,11 @@ import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
 import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
-import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
-import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
-import ServerDialog from '$main/dialogs/ServerDialog.svelte';
+// The TYPES stay static — `import type` is erased at compile, so it creates no
+// runtime edge and cannot pull the dialog into the entry chunk. The COMPONENTS
+// load on first open. This split is a bundling change, not an API change.
+import type { AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
+import type { EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
 import CapabilityTierBanner from '$main/live/CapabilityTierBanner.svelte';
 import IdleCockpit from '$main/live/IdleCockpit.svelte';
 import LiveCockpit from '$main/live/LiveCockpit.svelte';
@@ -478,6 +481,18 @@ function handleOpenSource() {
 let serverDialogOpen = $state(false);
 let audioDialogOpen = $state(false);
 let encoderOpen = $state(false);
+
+// The three Live config dialogs are their own chunks, fetched on first open.
+const ServerDialog = lazyDialog(() => import('$main/dialogs/ServerDialog.svelte'));
+const AudioDialog = lazyDialog(() => import('$main/dialogs/AudioDialog.svelte'));
+const EncoderDialog = lazyDialog(() => import('$main/dialogs/EncoderDialog.svelte'));
+
+// EncoderDialog binds `config` as well as `open`, and a rest-spread cannot carry
+// a binding — so it mounts through the registry directly and owns its own
+// request edge instead of going through LazyDialog.
+$effect(() => {
+	if (encoderOpen) EncoderDialog.request();
+});
 
 // Encoder configuration dialog — owns the editable encoder draft; the dialog
 // seeds from the saved device config and writes the selection back here.
@@ -1051,10 +1066,11 @@ const configRows = $derived<ConfigRow[]>([
 	{/if}
 </div>
 
-<ServerDialog bind:open={serverDialogOpen} onSaved={validateSavedDestination} />
+<LazyDialog dialog={ServerDialog} bind:open={serverDialogOpen} onSaved={validateSavedDestination} />
 
 <!-- Audio configuration dialog (opened from the Audio "Edit" row). -->
-<AudioDialog
+<LazyDialog
+	dialog={AudioDialog}
 	bind:open={audioDialogOpen}
 	audioCodec={effectiveAudioCodec}
 	audioDelay={effectiveAudioDelay}
@@ -1065,4 +1081,13 @@ const configRows = $derived<ConfigRow[]>([
 />
 
 <!-- Encoder configuration dialog (opened from the Encoder "Edit" row). -->
-<EncoderDialog bind:open={encoderOpen} bind:config={encoderConfig} onSave={handleEncoderSave} />
+{#if EncoderDialog.current}
+	{@const Encoder = EncoderDialog.current}
+	<Encoder bind:open={encoderOpen} bind:config={encoderConfig} onSave={handleEncoderSave} />
+{:else if EncoderDialog.pending}
+	<LazyDialogFallback
+		bind:open={encoderOpen}
+		failed={EncoderDialog.failed}
+		onRetry={EncoderDialog.retry}
+	/>
+{/if}

@@ -1,4 +1,3 @@
-import { BlobReader, BlobWriter, ZipWriter } from "@zip.js/zip.js";
 import { toast } from "svelte-sonner";
 
 import type { NavElements } from "$lib/config";
@@ -83,8 +82,19 @@ export function getScreenshotCount(): number {
 	return screenshotImagesState.length;
 }
 
-// ZIP download function
+// ZIP download function.
+//
+// The gallery this serves is reachable ONLY from the dev-only DevTools
+// destination, and `@zip.js/zip.js` is ~150 KB of source. A static top-level
+// import kept every byte of it in the SHIPPED entry chunk, because this module's
+// own module-scope runes make it side-effectful and therefore un-shakeable even
+// once its only importer is pruned. The literal below is the same mechanism
+// `lib/config/index.ts` relies on to prune DevTools itself: Vite inlines it to
+// `false` in production, so the branch — and the dynamic import with it — is
+// dropped and the dependency never reaches a device.
 export async function downloadScreenshotsZip(): Promise<boolean> {
+	if (!import.meta.env.DEV) return false;
+
 	const images = screenshotImagesState;
 
 	if (images.length === 0) {
@@ -93,6 +103,9 @@ export async function downloadScreenshotsZip(): Promise<boolean> {
 	}
 
 	try {
+		const { BlobReader, BlobWriter, ZipWriter } = await import(
+			"@zip.js/zip.js"
+		);
 		const zipWriter = new ZipWriter(new BlobWriter("application/zip"));
 
 		for (const img of images) {

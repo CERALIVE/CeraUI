@@ -35,27 +35,30 @@ import AsyncSwitch from '$lib/components/custom/async-switch.svelte';
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
 import LowDiskBanner from '$lib/components/custom/LowDiskBanner.svelte';
 import ModeToggle from '$lib/components/custom/mode-toggle.svelte';
-import { AppDialog } from '$lib/components/dialogs';
+import { AppDialog, LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { getConfig, getKiosk } from '$lib/rpc/subscriptions.svelte';
 import { clearRequestedDialog, getRequestedDialog } from '$lib/stores/dialog-request.svelte';
 import { cn } from '$lib/utils';
 
-import CloudRemoteDialog from './dialogs/CloudRemoteDialog.svelte';
-import DeviceHealthDialog from './dialogs/DeviceHealthDialog.svelte';
-import LogsDialog from './dialogs/LogsDialog.svelte';
-import NetworkIngestDialog from './dialogs/NetworkIngestDialog.svelte';
-import PasswordDialog from './dialogs/PasswordDialog.svelte';
-import PowerDialog from './dialogs/PowerDialog.svelte';
-import AddonsSection from './settings/AddonsSection.svelte';
 import DeviceStatsSection from './settings/DeviceStatsSection.svelte';
-import OnDeviceDisplaySection from './settings/OnDeviceDisplaySection.svelte';
 import RemoteControlStatus from './settings/RemoteControlStatus.svelte';
-import SshDialog from './dialogs/SshDialog.svelte';
-import UpdatesDialog from './dialogs/UpdatesDialog.svelte';
-import VersionsDialog from './dialogs/VersionsDialog.svelte';
-import WifiCountryDialog from './dialogs/WifiCountryDialog.svelte';
+
+// Every settings surface below opens as a dialog, so none of them is on the
+// path to first paint — each is its own chunk, fetched on first open.
+const PasswordDialog = lazyDialog(() => import('./dialogs/PasswordDialog.svelte'));
+const CloudRemoteDialog = lazyDialog(() => import('./dialogs/CloudRemoteDialog.svelte'));
+const NetworkIngestDialog = lazyDialog(() => import('./dialogs/NetworkIngestDialog.svelte'));
+const SshDialog = lazyDialog(() => import('./dialogs/SshDialog.svelte'));
+const LogsDialog = lazyDialog(() => import('./dialogs/LogsDialog.svelte'));
+const UpdatesDialog = lazyDialog(() => import('./dialogs/UpdatesDialog.svelte'));
+const PowerDialog = lazyDialog(() => import('./dialogs/PowerDialog.svelte'));
+const VersionsDialog = lazyDialog(() => import('./dialogs/VersionsDialog.svelte'));
+const DeviceHealthDialog = lazyDialog(() => import('./dialogs/DeviceHealthDialog.svelte'));
+const OnDeviceDisplaySection = lazyDialog(() => import('./settings/OnDeviceDisplaySection.svelte'));
+const AddonsSection = lazyDialog(() => import('./settings/AddonsSection.svelte'));
+const WifiCountryDialog = lazyDialog(() => import('./dialogs/WifiCountryDialog.svelte'));
 
 interface Entry {
 	key: string;
@@ -411,16 +414,16 @@ $effect(() => {
 	</div>
 </AppDialog>
 
-<!-- Wired settings dialogs (Tasks 25-27) -->
-<PasswordDialog bind:open={passwordOpen} />
-<CloudRemoteDialog bind:open={cloudOpen} />
-<NetworkIngestDialog bind:open={networkIngestOpen} />
-<SshDialog bind:open={sshOpen} />
-<LogsDialog bind:open={logsOpen} />
-<UpdatesDialog bind:open={updatesOpen} />
-<PowerDialog bind:open={powerOpen} />
-<VersionsDialog bind:open={versionsOpen} />
-<DeviceHealthDialog bind:open={deviceHealthOpen} />
-<OnDeviceDisplaySection bind:open={displayOpen} />
-<AddonsSection bind:open={addonsOpen} />
-<WifiCountryDialog bind:open={wifiCountryOpen} />
+<!-- Wired settings dialogs (Tasks 25-27) — each in its own chunk -->
+<LazyDialog dialog={PasswordDialog} bind:open={passwordOpen} />
+<LazyDialog dialog={CloudRemoteDialog} bind:open={cloudOpen} />
+<LazyDialog dialog={NetworkIngestDialog} bind:open={networkIngestOpen} />
+<LazyDialog dialog={SshDialog} bind:open={sshOpen} />
+<LazyDialog dialog={LogsDialog} bind:open={logsOpen} />
+<LazyDialog dialog={UpdatesDialog} bind:open={updatesOpen} />
+<LazyDialog dialog={PowerDialog} bind:open={powerOpen} />
+<LazyDialog dialog={VersionsDialog} bind:open={versionsOpen} />
+<LazyDialog dialog={DeviceHealthDialog} bind:open={deviceHealthOpen} />
+<LazyDialog dialog={OnDeviceDisplaySection} bind:open={displayOpen} />
+<LazyDialog dialog={AddonsSection} bind:open={addonsOpen} />
+<LazyDialog dialog={WifiCountryDialog} bind:open={wifiCountryOpen} />
