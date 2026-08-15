@@ -75,7 +75,6 @@ import {
 	bitrateBoundsFromCaps,
 	clampBitrateToBounds,
 	deriveCodecOptions,
-	deriveUvcH265Sources,
 	type FramerateOption,
 	framerateOptionsForResolution,
 	offeredAxes,
@@ -83,7 +82,6 @@ import {
 	resolutionOptions,
 	seededAxisSelection,
 	STREAMING_MODE,
-	summarizeProbedCaps,
 } from '$lib/components/streaming/ValidationAdapter';
 import {
 	captureModeOptions,
@@ -105,11 +103,13 @@ import {
 import {
 	getCapabilities,
 	getConfig,
-	getDevices,
 	getIsStreaming,
-	getPipelines,
 	getSources,
 } from '$lib/rpc/subscriptions.svelte';
+import {
+	probedCapsFromSources,
+	uvcH265SourcesFromSources,
+} from '$lib/streaming/sources-view-model';
 import { appliesOnNextStart, restartChoiceRequired } from '$lib/streaming/appliesNextStart';
 import {
 	captureModeCodecs,
@@ -133,14 +133,13 @@ let { open = $bindable(false), config = $bindable(), onSave }: Props = $props();
 const BITRATE_STEP = 50;
 
 // ── Live data from the non-deprecated subscriptions surface ────────────────────
-const pipelinesMessage = $derived(getPipelines());
-	const hardware = $derived(pipelinesMessage?.hardware);
+const sourcesMessage = $derived(getSources());
+	const hardware = $derived(sourcesMessage?.hardware);
 	const isStreaming = $derived(getIsStreaming());
 	const savedConfig = $derived(getConfig());
 
 // ── Capability contract: per-board bitrate window, codec offers, UVC H.265 ─────
 const capabilities = $derived(getCapabilities());
-const devices = $derived(getDevices());
 const platformCaps = $derived(capabilities?.platform ?? platformCapsForHardware(hardware));
 // Bitrate clamps to the board's real window (encoder.bitrate_range), falling
 // back to the schema-wide range only until the contract arrives.
@@ -155,12 +154,12 @@ const resolvedAutoCodec = $derived<VideoCodec>(
 const h265Option = $derived(codecOptions.find((codec) => codec.value === 'h265'));
 const h265Supported = $derived(h265Option !== undefined);
 const h265SoftwareOnly = $derived(h265Option?.softwareWarning ?? false);
-const uvcH265Sources = $derived(deriveUvcH265Sources(devices));
+const uvcH265Sources = $derived(uvcH265SourcesFromSources(sourcesMessage));
 // ── i18n key resolver (mirrors the legacy EncoderCard helper) ──────────────────
 const t = resolveMessageKey;
 
 // Probed hardware formats (resolution/framerate/media-type) surfaced inline.
-const probedCaps = $derived(summarizeProbedCaps(devices, t));
+const probedCaps = $derived(probedCapsFromSources(sourcesMessage, t));
 
 // A disabled framerate option's title = its capability reason plus its OWN
 // "available elsewhere" hint (per-option: different rates disabled at the same
@@ -271,7 +270,7 @@ $effect(() => {
 // is set (config lacking `source`/`pipeline`, e.g. a federated mount) it is
 // undefined and the axes fall back to the platform-coarse offering — no throw.
 const activeSource = $derived(
-	getSources()?.sources.find((source) => source.id === savedConfig?.source),
+	sourcesMessage?.sources.find((source) => source.id === savedConfig?.source),
 );
 
 // ── Passthrough resolved-mode disclosure (pre-start) ───────────────────────────

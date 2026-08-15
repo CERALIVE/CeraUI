@@ -13,7 +13,7 @@ import type {
 	AudioCodec,
 	CapabilitiesMessage,
 	ConfigMessage,
-	Pipeline,
+	StreamSource,
 } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_AUTO } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen } from "@testing-library/svelte";
@@ -24,7 +24,7 @@ import { audioCodecAllowedForTransport } from "$lib/components/streaming/Validat
 
 // Mutable snapshot the mocked subscriptions read from — each test seeds it.
 const state = vi.hoisted(() => ({
-	pipelines: undefined as unknown,
+	sources: undefined as unknown,
 	capabilities: undefined as unknown,
 	config: undefined as unknown,
 	audioCodecs: undefined as unknown,
@@ -33,7 +33,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
-	getPipelines: () => state.pipelines,
+	getSources: () => state.sources,
 	getCapabilities: () => state.capabilities,
 	getAudioCodecs: () => state.audioCodecs,
 	getIsStreaming: () => state.isStreaming,
@@ -61,14 +61,21 @@ vi.mock("svelte-sonner", () => ({
 
 import AudioDialog from "./AudioDialog.svelte";
 
-const AUDIO_PIPELINE: Pipeline = {
-	name: "HDMI Capture",
-	description: "HDMI capture",
+// The audio gate reads the pipeline registry the dialog projects from the
+// unified `sources` broadcast, so the fixture is a source row, not a pipeline.
+const AUDIO_SOURCE: StreamSource = {
+	origin: "coarse",
+	id: "hdmi",
+	pipelineId: "hdmi",
+	labelKey: "settings.sources.hdmi",
+	modes: [],
 	supportsAudio: true,
 	supportsResolutionOverride: true,
 	supportsFramerateOverride: true,
 	defaultResolution: "1080p",
 	defaultFramerate: 30,
+	audioKind: "selectable",
+	available: true,
 };
 
 function seed(
@@ -79,7 +86,7 @@ function seed(
 		capabilities?: Partial<CapabilitiesMessage>;
 	} = {},
 ) {
-	state.pipelines = { hardware: "rk3588", pipelines: { hdmi: AUDIO_PIPELINE } };
+	state.sources = { hardware: "rk3588", sources: [AUDIO_SOURCE] };
 	state.audioCodecs = { aac: { name: "AAC" }, opus: { name: "Opus" } };
 	state.capabilities = (overrides.capabilities ?? {}) as CapabilitiesMessage;
 	state.isStreaming = overrides.isStreaming ?? false;

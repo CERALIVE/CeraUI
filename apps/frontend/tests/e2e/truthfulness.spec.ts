@@ -1259,6 +1259,9 @@ test.describe("Capability truthfulness (functional)", () => {
 		// enabled (so it opens) and the gate has a transport to evaluate against.
 		serverConfig({ asrc: "USB audio", relay_protocol: "srtla" });
 		send(GENERIC_PIPELINES);
+		// The audio gate reads the pipeline registry CeraUI projects from `sources`,
+		// so the audio-capable `hdmi` pipeline has to arrive on that broadcast.
+		sendSources([SRC_COARSE_HDMI]);
 		sendFullCaps();
 
 		await openConfigDialog(page, "open-audio-dialog");

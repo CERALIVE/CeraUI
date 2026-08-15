@@ -71,7 +71,6 @@ import {
 	getLinkTelemetry,
 	getManagedIngestAccounts,
 	getNetif,
-	getPipelines,
 	getRelays,
 	getSensors,
 	getSources,
@@ -99,6 +98,7 @@ import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
 import { configChangeReport } from '$lib/streaming/configChangeCopy';
 import { encoderSaveErrorMessage } from '$lib/streaming/encoderSaveError';
 import { canLiveSwitchInput, isAudioInputId } from '$lib/streaming/liveAudioSwitch';
+import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { buildStartConfig } from '$lib/streaming/startStreaming';
 import AudioDialog, { type AudioConfigValues } from '$main/dialogs/AudioDialog.svelte';
 import EncoderDialog, { type EncoderConfig } from '$main/dialogs/EncoderDialog.svelte';
@@ -497,10 +497,14 @@ let audioOverride = $state<AudioConfigValues | null>(null);
 // config pipeline is the fallback (mirrors EncoderDialog's own seeding).
 const effectivePipeline = $derived(encoderConfig.source ?? config?.pipeline);
 
+// The pipeline registry, projected from the unified sources snapshot — the
+// single ingestion point for every pipeline-keyed read on this view.
+const pipelines = $derived(pipelinesFromSources(getSources()));
+
 // Pipeline metadata for the effective source — used to capability-gate the
 // resolution/framerate overrides when persisting the encoder draft.
 const effectivePipelineData = $derived(
-	effectivePipeline ? getPipelines()?.pipelines?.[effectivePipeline] : undefined,
+	effectivePipeline ? pipelines?.[effectivePipeline] : undefined,
 );
 
 // i18n key resolver (mirrors EncoderDialog) — passed to PipelineHelper so the
@@ -728,7 +732,7 @@ const encoderSummary = $derived.by(() => {
 	} else if (pipeline) {
 		parts.push(
 			pipelineRecognized
-				? getPipelineDisplayName(pipeline, getPipelines()?.pipelines, t)
+				? getPipelineDisplayName(pipeline, pipelines, t)
 				: m["live.reconfigureRequired"](),
 		);
 	}
@@ -825,7 +829,7 @@ async function handleStart(overrides: { source?: string } = {}) {
 		} as typeof config;
 	}
 
-	const result = buildStartConfig(startBase, audioOverride, getPipelines()?.pipelines);
+	const result = buildStartConfig(startBase, audioOverride, pipelines);
 	if (!result.ok) {
 		toast.error(
 			result.error === 'missingServer'
@@ -1018,7 +1022,7 @@ const configRows = $derived<ConfigRow[]>([
 			{netif}
 			isConnected={getIsConnected()}
 			networkIngest={getStatus()?.network_ingest ?? null}
-			pipelines={getPipelines()?.pipelines}
+			{pipelines}
 			{relays}
 			managedSlots={getManagedIngestAccounts()}
 			{configRows}

@@ -47,6 +47,7 @@ import {
 	resolveAudioSourceList,
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
+import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import AudioDialogContent from './audio/AudioDialogContent.svelte';
@@ -55,7 +56,7 @@ import {
 	getCapabilities,
 	getConfig,
 	getIsStreaming,
-	getPipelines,
+	getSources,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 
@@ -111,7 +112,7 @@ const DELAY_STEP = 5;
 
 // Live device state (non-deprecated subscriptions getters).
 const config = $derived(getConfig());
-const pipelines = $derived(getPipelines()?.pipelines);
+const pipelines = $derived(pipelinesFromSources(getSources()));
 const audioCodecs = $derived(getAudioCodecs());
 const audioSources = $derived(getStatus()?.asrcs ?? []);
 const audioSourceList = $derived(getStatus()?.audio_sources);

@@ -106,6 +106,21 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		page,
 	}) => {
 		const AUDIO_PIPELINE = 'e2e-audio-pipeline';
+		// The audio gate reads the pipeline registry CeraUI projects from the unified
+		// `sources` broadcast, so the synthetic audio-capable pipeline is injected as a
+		// coarse source row — the legacy `pipelines` catalog is no longer consumed.
+		const AUDIO_SOURCE_ROW: Frame = {
+			origin: 'coarse',
+			id: AUDIO_PIPELINE,
+			pipelineId: AUDIO_PIPELINE,
+			labelKey: 'settings.sources.hdmi',
+			modes: [],
+			supportsAudio: true,
+			supportsResolutionOverride: false,
+			supportsFramerateOverride: false,
+			audioKind: 'selectable',
+			available: true,
+		};
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
 				const config = frame.config as Frame | undefined;
@@ -118,19 +133,17 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 					// No saved audio source → draftSource stays undefined → codec locked.
 					delete config.asrc;
 				}
-				// Keep our injected pipeline catalog authoritative.
-				return !('pipelines' in frame);
+				const sources = frame.sources as Frame | undefined;
+				const rows = sources?.sources;
+				if (Array.isArray(rows) && !rows.some((r) => (r as Frame).id === AUDIO_PIPELINE)) {
+					rows.push({ ...AUDIO_SOURCE_ROW });
+				}
+				return true;
 			},
 		});
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
-		ws.push({
-			pipelines: {
-				hardware: 'generic',
-				pipelines: { [AUDIO_PIPELINE]: { name: 'E2E Audio', supportsAudio: true } },
-			},
-		});
 		ws.push({ config: { pipeline: AUDIO_PIPELINE, source: 'hdmi' } });
 
 		await page.getByTestId('open-audio-dialog').click();
