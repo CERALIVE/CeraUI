@@ -23,6 +23,13 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
+# `packages/i18n/generated/` is gitignored codegen (`@ceraui/i18n/eager`,
+# `generated/registry.js`), so a fresh checkout has none of it and svelte-check
+# reports 8 unresolved-module/implicit-any errors that say nothing about tsgo.
+# Every required gate generates it first (`check`/`test`/`build` all chain
+# `generate:i18n`); the canary has to as well or its signal is pure noise.
+bun run --filter @ceraui/i18n generate:i18n
+
 bun add --no-save --cwd apps/frontend "@typescript/native@npm:typescript@7"
 
 cd apps/frontend
