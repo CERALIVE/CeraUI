@@ -17,8 +17,6 @@
 
 /* NetworkManager / nmcli based Wifi Manager */
 
-import type WebSocket from "ws";
-
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
@@ -44,6 +42,7 @@ import {
 	nmcliParseSep,
 	nmDisconnect,
 } from "../network/network-manager.ts";
+import type { MessageSocket } from "../ui/message-socket.ts";
 import {
 	broadcastMsg,
 	buildMsg,
@@ -416,7 +415,7 @@ async function wifiDeleteFailedConns() {
 	}
 }
 
-function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
+function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 	if (!msg.device || !msg.ssid) return;
 
 	const macAddress = getMacAddressForWifiInterface(msg.device);
@@ -447,7 +446,7 @@ function wifiNew(conn: WebSocket, msg: WifiNewMessage["new"]) {
 }
 
 async function runWifiNew(
-	conn: WebSocket,
+	conn: MessageSocket,
 	msg: WifiNewMessage["new"],
 	macAddress: string,
 	args: string[],
@@ -522,7 +521,7 @@ async function runWifiNew(
 	}
 }
 
-async function wifiConnect(conn: WebSocket, uuid: ConnectionUUID) {
+async function wifiConnect(conn: MessageSocket, uuid: ConnectionUUID) {
 	const deviceId = wifiSearchConnection(uuid);
 	if (deviceId === undefined) return;
 
@@ -532,7 +531,11 @@ async function wifiConnect(conn: WebSocket, uuid: ConnectionUUID) {
 	conn.send(buildMsg("wifi", { connect: success, device: deviceId }, senderId));
 }
 
-export function handleWifi(conn: WebSocket, msg: WifiMessage["wifi"]) {
+// `conn` is a MessageSocket, never the `ws` package's WebSocket: the only caller
+// is the oRPC wifi procedure, whose `context.ws` is a Bun ServerWebSocket, and
+// declaring the unrelated `ws` type here is what forced every call site to
+// launder it through `as unknown as WebSocket`.
+export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 	for (const type in msg) {
 		switch (type) {
 			case "connect":

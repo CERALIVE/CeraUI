@@ -44,7 +44,7 @@ export type NetworkType = {
 export type ModemInfo = {
 	"modem.generic.sim": string;
 	"modem.generic.state": string;
-	"modem.generic.ports": string;
+	"modem.generic.ports": Array<string>;
 	"modem.generic.model": string;
 	"modem.generic.current-modes": string;
 	"modem.generic.supported-modes": Array<string>;
@@ -310,6 +310,141 @@ export function parseModemList(
 	return parseOk(list);
 }
 
+type MmcliRecord = Record<string, string | Array<string>>;
+
+function readString(parsed: MmcliRecord, key: string): string {
+	const value = parsed[key];
+	return typeof value === "string" ? value : "";
+}
+
+function readOptionalString(
+	parsed: MmcliRecord,
+	key: string,
+): string | undefined {
+	const value = parsed[key];
+	return typeof value === "string" ? value : undefined;
+}
+
+// mmcli emits a repeated field as `<key>.length` + `<key>.value[N]`, which
+// mmcliParseSep folds into an array; a driver that reports a single value with
+// no `.length` line leaves a bare string, so widen rather than drop it.
+function readStringList(parsed: MmcliRecord, key: string): Array<string> {
+	const value = parsed[key];
+	if (Array.isArray(value)) return value;
+	return typeof value === "string" ? [value] : [];
+}
+
+/**
+ * Build a {@link ModemInfo} from a parsed `mmcli -K -m <id>` record. An absent
+ * key is NOT drift — mmcliParseSep drops every field mmcli prints as `--`,
+ * which is how a SIM-less or unregistered modem legitimately looks — so each
+ * field degrades to its empty value. Only a record with no `modem.` key at all
+ * is rejected; that used to reach the ports loop and throw on `undefined`.
+ */
+export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
+	const keys = Object.keys(parsed);
+	if (!keys.some((key) => key.startsWith("modem."))) {
+		return parseFail(
+			"parseModemInfo",
+			"no modem.* key in the mmcli output",
+			keys.join(", "),
+		);
+	}
+
+	const operatorName = readOptionalString(parsed, "modem.3gpp.operator-name");
+	const registrationState = readOptionalString(
+		parsed,
+		"modem.3gpp.registration-state",
+	);
+
+	return parseOk({
+		"modem.generic.sim": readString(parsed, "modem.generic.sim"),
+		"modem.generic.state": readString(parsed, "modem.generic.state"),
+		"modem.generic.ports": readStringList(parsed, "modem.generic.ports"),
+		"modem.generic.model": readString(parsed, "modem.generic.model"),
+		"modem.generic.current-modes": readString(
+			parsed,
+			"modem.generic.current-modes",
+		),
+		"modem.generic.supported-modes": readStringList(
+			parsed,
+			"modem.generic.supported-modes",
+		),
+		"modem.generic.equipment-identifier": readString(
+			parsed,
+			"modem.generic.equipment-identifier",
+		),
+		"modem.generic.device-identifier": readString(
+			parsed,
+			"modem.generic.device-identifier",
+		),
+		"modem.generic.access-technologies": readStringList(
+			parsed,
+			"modem.generic.access-technologies",
+		),
+		// mmcli renders every `-K` value as text; the declared `number` is honored
+		// here so downstream signal gates read a real number. A non-numeric value
+		// stays NaN rather than rejecting the modem — `modemSignal()` already
+		// drops a non-finite reading, and a bad signal is not a bad modem.
+		"modem.generic.signal-quality.value": Number(
+			readString(parsed, "modem.generic.signal-quality.value"),
+		),
+		...(operatorName !== undefined
+			? { "modem.3gpp.operator-name": operatorName }
+			: {}),
+		...(registrationState !== undefined
+			? { "modem.3gpp.registration-state": registrationState }
+			: {}),
+		...unlockKeys(parsed),
+	});
+}
+
+// buildSimLock reads the raw `modem.generic.unlock-required` / `.unlock-retries`
+// fields off ModemInfo through parseModemUnlockInfo, so they must survive the
+// projection even though the type does not name them.
+function unlockKeys(parsed: MmcliRecord): MmcliRecord {
+	const kept: MmcliRecord = {};
+	for (const [key, value] of Object.entries(parsed)) {
+		if (key.startsWith("modem.generic.unlock")) kept[key] = value;
+	}
+	return kept;
+}
+
+/**
+ * Build a {@link SimInfo} from a parsed `mmcli -K -i <id>` record. Same
+ * tolerance rule as {@link parseModemInfo}: a PIN-locked SIM legitimately
+ * withholds its ICCID, so only a record with no `sim.` key at all is rejected.
+ */
+export function parseSimInfo(parsed: MmcliRecord): ParseResult<SimInfo> {
+	const keys = Object.keys(parsed);
+	if (!keys.some((key) => key.startsWith("sim."))) {
+		return parseFail(
+			"parseSimInfo",
+			"no sim.* key in the mmcli output",
+			keys.join(", "),
+		);
+	}
+
+	const operatorCode = readOptionalString(
+		parsed,
+		"sim.properties.operator-code",
+	);
+	const operatorName = readOptionalString(
+		parsed,
+		"sim.properties.operator-name",
+	);
+
+	return parseOk({
+		"sim.properties.iccid": readString(parsed, "sim.properties.iccid"),
+		...(operatorCode !== undefined
+			? { "sim.properties.operator-code": operatorCode }
+			: {}),
+		...(operatorName !== undefined
+			? { "sim.properties.operator-name": operatorName }
+			: {}),
+	});
+}
+
 export async function mmList() {
 	try {
 		// Check for mock mode
@@ -344,12 +479,22 @@ export async function mmGetModem(id: ModemId) {
 		if (shouldMockModems()) {
 			const mockOutput = handleMmcliCommand(["-K", "-m", String(id)]);
 			if (mockOutput) {
-				return mmcliParseSep(mockOutput) as unknown as ModemInfo;
+				const mocked = parseModemInfo(mmcliParseSep(mockOutput));
+				if (!mocked.ok) {
+					logParseError(mocked);
+					return;
+				}
+				return mocked.value;
 			}
 		}
 
 		const stdout = await run(mmcliBinary, ["-K", "-m", String(id)]);
-		return mmcliParseSep(stdout) as unknown as ModemInfo;
+		const parsed = parseModemInfo(mmcliParseSep(stdout));
+		if (!parsed.ok) {
+			logParseError(parsed);
+			return;
+		}
+		return parsed.value;
 	} catch (err) {
 		logger.error(`mmGetModem err: ${describeCliError(err)}`);
 	}
@@ -362,12 +507,22 @@ export async function mmGetSim(id: number) {
 		if (shouldMockModems()) {
 			const mockOutput = handleMmcliCommand(["-K", "-i", String(id)]);
 			if (mockOutput) {
-				return mmcliParseSep(mockOutput) as unknown as SimInfo;
+				const mocked = parseSimInfo(mmcliParseSep(mockOutput));
+				if (!mocked.ok) {
+					logParseError(mocked);
+					return;
+				}
+				return mocked.value;
 			}
 		}
 
 		const stdout = await run(mmcliBinary, ["-K", "-i", String(id)]);
-		return mmcliParseSep(stdout) as unknown as SimInfo;
+		const parsed = parseSimInfo(mmcliParseSep(stdout));
+		if (!parsed.ok) {
+			logParseError(parsed);
+			return;
+		}
+		return parsed.value;
 	} catch (err) {
 		logger.error(`mmGetSim err: ${describeCliError(err)}`);
 	}

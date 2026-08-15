@@ -133,6 +133,7 @@ import {
 	createLaunchTransaction,
 	type LaunchTransaction,
 } from "./launch-transaction.ts";
+import { asRawRequestClient } from "./raw-request.ts";
 import { ENGINE_CLOSE_DEADLINE_MS } from "./start-lifecycle-timing.ts";
 import type {
 	BackendErrorListener,
@@ -794,10 +795,7 @@ export class CerastreamBackend implements StreamingBackend {
 	): Promise<unknown> {
 		const version = client.hello.schema_version;
 		if (supportsAudioMode(version) || supportsVideoPassthrough(version)) {
-			const raw = client as unknown as {
-				rawRequest(method: string, params?: unknown): Promise<unknown>;
-			};
-			return raw.rawRequest("start", params);
+			return asRawRequestClient(client, "start").rawRequest("start", params);
 		}
 		return client.start(params as StartParams);
 	}
@@ -1077,11 +1075,10 @@ export class CerastreamBackend implements StreamingBackend {
 	async switchAudio(params: SwitchAudioParams): Promise<SwitchAudioResult> {
 		const parsed = switchAudioParamsSchema.parse(params);
 		const raw = await this.withSessionClient("switch-audio", (client) =>
-			(
-				client as unknown as {
-					rawRequest(method: string, params?: unknown): Promise<unknown>;
-				}
-			).rawRequest("switch-audio", parsed),
+			asRawRequestClient(client, "switch-audio").rawRequest(
+				"switch-audio",
+				parsed,
+			),
 		);
 		return switchAudioResultSchema.parse(raw);
 	}
