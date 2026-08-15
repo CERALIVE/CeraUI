@@ -1361,7 +1361,7 @@ without a real `passwd`/`/etc/shadow` (and without persisting to disk).
 ## CONVENTIONS
 
 - Runtime: Bun only. No Node-specific APIs (`fs/promises` ok; `node:cluster` not).
-- Build: `bun build --compile --minify --bytecode --target=bun-linux-{arm64|amd64}` — single binary, no runtime on device.
+- Build: `bun build --compile --minify --sourcemap --target=bun-linux-{arm64|amd64}` — single binary, no runtime on device. `--sourcemap` is deliberate and EMBEDDED in the binary (device stack traces stay symbolicated); the frontend's maps follow the opposite policy — emitted `hidden` and relocated out of the packaged tree, see `apps/frontend/vite.sourcemaps.ts`. **There is no `--bytecode`, and it cannot be added as a flag**: `bun build --bytecode` forces `--format=cjs`, and `main.ts`'s boot ladder is 20 top-level `await`s (`runCritical`/`guardNonCritical` phases), so the build fails outright. Adopting it means restructuring boot away from top-level await first.
 - Tests: `bun test` (not vitest). Files in `src/tests/`.
 - Config files (`config.json`, `setup.json`, `auth_tokens.json`) read/written from working dir — path-sensitive in production.
 - `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev), `modem-pin-locked` (2 modems, modem 0 SIM PIN-locked, fixture PIN `0000` — the `unlockSim`/`unlockSimPuk` RPCs route to the mock SIM state machine). Three additional scenario-seeded capability scenarios: `caps-full`, `engine-starting`, `engine-unavailable` (T5).

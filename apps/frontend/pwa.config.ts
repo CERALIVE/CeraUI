@@ -43,6 +43,13 @@ export const pwaConfig: VitePWAOptions = {
 		// Simplified precaching - only essential files, avoid duplicates with includeAssets
 		globPatterns: ["**/*.{js,css,html,woff2}"],
 
+		// Workbox writes its own `sourceMappingURL` comment into sw.js and
+		// workbox-*.js — a comment the SPA's `hidden` mode does not control. With
+		// maps relocated out of the packaged tree, that comment would point at a
+		// file the device does not serve. The service worker is generated glue with
+		// little debug value, so it opts out of maps entirely instead.
+		sourcemap: false,
+
 		// Workbox's own 2 MiB default, restored. It was briefly raised to 6 MiB
 		// while the Paraglide catalog was all-eager: a compiled message module
 		// inlines all ten locales, so the fused entry chunk crossed 2 MiB and the

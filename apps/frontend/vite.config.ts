@@ -16,6 +16,10 @@ import {
 	PARAGLIDE_STRATEGY,
 } from "./vite.i18n";
 import {
+	SPA_SOURCEMAP_OUT_DIR,
+	spaSourcemapRelocationPlugin,
+} from "./vite.sourcemaps";
+import {
 	applyPreviewWebSocketRoute,
 	DEVICE_WS_PROXY_CONTEXT,
 	previewUpgradeGuard,
@@ -33,6 +37,14 @@ export {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const VERSION = generateUniqueVersion();
+
+// The packaged SPA tree, and the NON-packaged sibling its sourcemaps are moved to.
+const SPA_OUT_DIR = path.resolve(__dirname, "../../dist/public");
+const SPA_MAP_DIR = path.resolve(
+	__dirname,
+	"../../dist",
+	SPA_SOURCEMAP_OUT_DIR,
+);
 
 // Brand configuration (CeraLive-only)
 const BRAND_CONFIG = {
@@ -174,6 +186,11 @@ export default defineConfig(({ mode }) => {
 				},
 			}),
 			VitePWA(pwaConfig),
+			spaSourcemapRelocationPlugin({
+				outDir: SPA_OUT_DIR,
+				mapDir: SPA_MAP_DIR,
+				enabled: mode === "production",
+			}),
 		],
 		define: {
 			__APP_VERSION__: JSON.stringify(VERSION),
@@ -182,10 +199,11 @@ export default defineConfig(({ mode }) => {
 		publicDir: "./src/assets",
 		build: {
 			// Build frontend to root dist/public/ folder using absolute path
-			outDir: path.resolve(__dirname, "../../dist/public"),
+			outDir: SPA_OUT_DIR,
 			emptyOutDir: true,
-			// Enable inline sourcemaps in development only
-			sourcemap: mode !== "production" && "inline",
+			// Production maps are `hidden` (emitted, no sourceMappingURL comment) and
+			// relocated out of the packaged tree by the plugin above; dev stays inline.
+			sourcemap: mode === "production" ? "hidden" : "inline",
 			// Bundle splitting optimization to reduce main chunk size
 			rollupOptions: {
 				output: {
