@@ -321,6 +321,61 @@ describe("the board's own card tree, through the real scan", () => {
 });
 
 /*
+ * Every other card-order assertion in this file reads a REAL temp directory, so
+ * it asserts whatever `readdir` happens to answer on the host — creation order
+ * on this dev box, filename-hash order on an ext4 CI runner, which is how the
+ * board-repro case above passed locally and failed in CI as
+ * `hdmi0, hdmi1, rk3588es8316, usbaudio` (card2, card3, card1, card0). These
+ * drive the listing directly, so the invariant is pinned on every machine.
+ */
+describe("card order is the ALSA card index, never the directory listing's", () => {
+	const listedAs = (entries: readonly string[]): AlsaCardScanDeps => ({
+		readDir: async (path) =>
+			path === "/sys/fake" ? [...entries] : ["id", "controlC0"],
+		readText: async (path) => {
+			const card = path.match(/\/(card\d+)\/id$/)?.[1];
+			return card === undefined ? undefined : `${card}-id\n`;
+		},
+	});
+
+	test("the CI listing order resolves to card-index order", async () => {
+		const cards = await scanAlsaCards(
+			"/sys/fake",
+			listedAs(["card2", "card3", "card1", "card0"]),
+		);
+
+		expect(cards.map((c) => c.id)).toEqual([
+			"card0-id",
+			"card1-id",
+			"card2-id",
+			"card3-id",
+		]);
+	});
+
+	test("two-digit cards sort numerically, not lexicographically", async () => {
+		const cards = await scanAlsaCards(
+			"/sys/fake",
+			listedAs(["card10", "card2", "card1"]),
+		);
+
+		expect(cards.map((c) => c.id)).toEqual([
+			"card1-id",
+			"card2-id",
+			"card10-id",
+		]);
+	});
+
+	test("a non-card entry is still not a card", async () => {
+		const cards = await scanAlsaCards(
+			"/sys/fake",
+			listedAs(["timer", "card1", "controlC0", "card0", "pcmC0D0c"]),
+		);
+
+		expect(cards.map((c) => c.id)).toEqual(["card0-id", "card1-id"]);
+	});
+});
+
+/*
  * The rule above is dead unless the PRODUCTION path routes through it, and the
  * production path is the one nothing hands a directory to. A test that always
  * passes its own fixture directory would never touch the resolver at all.

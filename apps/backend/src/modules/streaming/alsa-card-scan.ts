@@ -49,6 +49,29 @@ const defaultScanDeps: AlsaCardScanDeps = {
 	readText: (path) => readTextFile(path),
 };
 
+/**
+ * The `cardN` entries of a listing, in ALSA CARD-INDEX order.
+ *
+ * `readdir` answers in FILESYSTEM order, which is not an order at all — on ext4
+ * with `dir_index` it is the filename hash, so one tree enumerates differently
+ * on two machines and the card list inherits that. Sorted on the card INDEX
+ * because that is the kernel's own ordering, and NUMERICALLY because a
+ * lexicographic sort puts `card10` before `card2`.
+ */
+function cardEntriesInIndexOrder(entries: readonly string[]): string[] {
+	const cardIndex = (entry: string): number => {
+		const parsed = Number(entry.slice("card".length));
+		return Number.isInteger(parsed) ? parsed : Number.NaN;
+	};
+	return entries
+		.filter((entry) => entry.startsWith("card"))
+		.sort((a, b) => {
+			const [ai, bi] = [cardIndex(a), cardIndex(b)];
+			if (Number.isNaN(ai) || Number.isNaN(bi)) return a.localeCompare(b);
+			return ai - bi;
+		});
+}
+
 // A card can disappear mid-scan (hotplug); an unreadable card directory reports
 // no entries rather than aborting the whole audio refresh.
 async function readCardEntries(
@@ -87,8 +110,7 @@ export async function scanAlsaCards(
 	}
 
 	const cards: ScannedAlsaCard[] = [];
-	for (const entry of entries) {
-		if (!entry.match(/^card/)) continue;
+	for (const entry of cardEntriesInIndexOrder(entries)) {
 		const id = ((await deps.readText(`${dir}/${entry}/id`)) ?? "").trim();
 		if (id === "") continue;
 		cards.push({
