@@ -115,16 +115,29 @@ function caps(
 }
 
 const UVC_H265_DEVICES = {
-	devices: {
-		engine: "cerastream",
-		devices: [
+	sources: {
+		hardware: "rk3588",
+		sources: [
 			{
-				input_id: "usb-h265-0",
-				device_path: "/dev/video9",
-				display_name: "QA H.265 Cam",
-				media_class: "video",
-				kind: "usb",
-				caps: [{ width: 1920, height: 1080, media_type: "video/x-h265" }],
+				origin: "capture",
+				id: "usb-h265-0",
+				pipelineId: "libuvch265",
+				kind: "uvc_h265",
+				displayName: "QA H.265 Cam",
+				devicePath: "/dev/video9",
+				modes: [
+					{
+						width: 1920,
+						height: 1080,
+						media_type: "video/x-h265",
+						framerates: [30],
+					},
+				],
+				supportsAudio: true,
+				supportsResolutionOverride: true,
+				supportsFramerateOverride: true,
+				audioKind: "selectable",
+				available: true,
 			},
 		],
 	},

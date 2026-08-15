@@ -83,6 +83,15 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
 	const desktopTab = page.locator(`#nav-tab-${destination}`);
 	const mobileTab = page.locator(`#mobile-nav-tab-${destination}`);
 
+	// The rail and the dock are mutually exclusive, and BOTH mount after `load` —
+	// so a one-shot isVisible() races the SPA and can pick the layout this viewport
+	// never shows, whose click then blocks until the test times out. Wait for the
+	// layout that actually rendered before choosing.
+	await page
+		.locator(`#nav-tab-${destination}:visible, #mobile-nav-tab-${destination}:visible`)
+		.first()
+		.waitFor({ state: 'visible' });
+
 	const tab = (await desktopTab.isVisible().catch(() => false)) ? desktopTab : mobileTab;
 	// Idempotent: when already on this destination the click is redundant and, on
 	// the mobile bottom dock, can be intercepted by transient toast overlays.
