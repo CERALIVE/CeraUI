@@ -44,14 +44,16 @@ const SPA_BASELINE = {
 // `outputStructure: "locale-modules"`, or dynamic namespace chunks with manifest
 // + signing + CSP coverage on the platform side.
 const FEDERATION_BASELINE = {
-	// Re-derived 2026-08-15: 613,463 B gzip measured from the current federation
-	// build. This shared chunk statically carries the Paraglide catalog because a
-	// hosted federation module is one signed manifest-pinned module graph and
-	// cannot lazy-load the SPA's locale chunks. Keep this exception specific to
-	// toast-host.js; future remedies are (1) Paraglide outputStructure:
-	// "locale-modules", (2) dynamic federation chunks with manifest/signing/CSP
-	// support, or (3) a smaller federation-specific catalog surface. Revisit via
-	// TD-federation-i18n-catalog-size; do not raise the other federation budgets.
+	// ACCEPTED, TRACKED REGRESSION — not an accidental widening. Re-derived
+	// 2026-08-15 from the current federation build; the pre-migration number it
+	// replaced is preserved in FEDERATION_PREMIGRATION_BASELINE below and is
+	// re-stated on every run, so a future engineer sees the +174.4% rather than
+	// inheriting 613,463 as if it had always been the floor. Authorised by
+	// `TD-federation-i18n-catalog-size` in `docs/TECHNICAL_DEBT.md` (status:
+	// open) — read that entry before touching this number. Still bounded: the
+	// budget stays measured x1.1, so any FURTHER growth fails the gate. Keep the
+	// exception specific to toast-host.js; do not raise the other federation
+	// budgets.
 	'toast-host.js': 613_463,
 	'server.js': 26_645,
 	'frontend.css': 24_087,
@@ -59,6 +61,13 @@ const FEDERATION_BASELINE = {
 	'audio.js': 7_009,
 	'InfoPopover.js': 6_104,
 	'input.js': 3_845,
+};
+
+// The baselines a tracked, approved debt retired. Kept so the budget above can
+// never read as "the size it has always been", and reported on every run so the
+// accepted regression stays visible instead of living only in a comment.
+const FEDERATION_PREMIGRATION_BASELINE = {
+	'toast-host.js': { bytes: 223_579, debt: 'TD-federation-i18n-catalog-size' },
 };
 
 const budget = (baseline, ratio, absolute) =>
@@ -205,6 +214,15 @@ if (existsSync(federationDir)) {
 			continue;
 		}
 		check(`federation ${asset.stem}`, asset.gzip, budget(baseline, 1.1, 150 * KIB), baseline);
+
+		const retired = FEDERATION_PREMIGRATION_BASELINE[asset.stem];
+		if (retired !== undefined) {
+			const growth = ((asset.gzip / retired.bytes - 1) * 100).toFixed(1);
+			process.stdout.write(
+				`      ^ tracked debt ${retired.debt} (docs/TECHNICAL_DEBT.md): ` +
+					`pre-migration baseline ${kib(retired.bytes)}, now +${growth}%\n`,
+			);
+		}
 	}
 } else {
 	process.stdout.write(`\nfederation: ${federationDir} absent — skipped\n`);
