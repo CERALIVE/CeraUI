@@ -18,11 +18,12 @@
  * WHAT IT PROVES. An installed pre-migration service worker holds a precache
  * manifest naming assets the post-migration build no longer emits. If the SW did
  * not take the update, a device that had CeraUI open across an OTA would serve a
- * stale shell forever. And because the app now awaits `ensureAllNamespaces()`
- * before `mount()`, `window.__ceraAppMounted` going true WHILE OFFLINE is a
- * direct, non-circumstantial proof that every lazily-imported i18n namespace
- * chunk — the split this migration introduced — was precached and served from
- * the cache. A missing chunk cannot produce a mounted app.
+ * stale shell forever. And because the app now awaits `ensureBootNamespaces()`
+ * before `mount()`, with the first-paint shell and default destination covered
+ * by `BOOT_NAMESPACES` while other destination namespaces activate on
+ * navigation, `window.__ceraAppMounted` going true WHILE OFFLINE is a direct,
+ * non-circumstantial proof that the boot-required i18n chunks were precached
+ * and served from the cache. A missing boot chunk cannot produce a mounted app.
  *
  * It serves both builds from ONE repo-local static server whose document root is
  * swapped between phases, so the origin (and therefore the SW registration and

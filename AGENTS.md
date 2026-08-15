@@ -1879,11 +1879,12 @@ existing bus, no new endpoint). Every row is one of four `origin` variants
 - **Shim policy**: the legacy `pipelines`/`devices` broadcasts and the coarse
   `capabilities.device_modes` field are kept running unmodified as a rollback
   safety net. `EncoderDialog.svelte`, `AudioDialog.svelte`, `LiveView.svelte`,
-  and `StreamingStateManager.svelte.ts` still call `getPipelines`/`getDevices`
-  directly today — only `SourceSection`/`StreamSetupChain` read `getSources()`
-  exclusively. The real exit condition is migrate those four consumers off the
-  legacy getters onto `getSources()`-derived data, THEN ship one release with
-  no rollback needed, THEN delete the producers. Tracked as
+  and `StreamingStateManager.svelte.ts` have migrated off the legacy getters and
+  now use `getSources()`-derived data. The legacy getter definitions and
+  compatibility/comment references remain, but there are no direct consumer
+  call sites in these four files. The producers stay in place for the rollback
+  net; the real exit condition is ship one release with no rollback needed,
+  THEN delete the producers. Tracked as
   `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not delete the
   producers until that entry's exit condition is met.
 
