@@ -229,6 +229,17 @@ async function defaultFetchEngineCapabilities(): Promise<EngineCapabilitiesSnaps
  * no stream is active, so a fresh probe is the only idle-safe path.
  */
 export async function defaultFetchEngineDevices(): Promise<ListDevicesResult> {
+	// Under MOCK_SCENARIO there is no engine socket, so this probe can only fail —
+	// and the callers reaching it through DEFAULT deps (the hotplug refresh, the
+	// 5 s signal recheck) then fall back to the dev HOST's own v4l2/ALSA scan,
+	// wiping the scenario's devices out of `sources`. The scenario IS the hardware
+	// truth in that mode. Lazy import keeps the mock graph off the load path.
+	if ((await import("../../mocks/mock-service.ts")).shouldUseMocks()) {
+		const { getMockEngineDevices } = await import(
+			"../../mocks/providers/streaming.ts"
+		);
+		return getMockEngineDevices();
+	}
 	const { setup } = await import("../setup.ts");
 	const connectOptions: ConnectOptions = setup.cerastream_socket
 		? { socketPath: setup.cerastream_socket }

@@ -1243,6 +1243,35 @@ classified from the oRPC wrapper message then the error code. Issue paths are sc
 field names (safe); messages are scrubbed through `logRedact`. Returns `undefined`
 when the error has no issue list.
 
+### The scenario is the ENGINE-DEVICE truth on EVERY path, not just the injected two
+
+`main.ts` injects `getMockEngineDevices()` into the capability fold and the boot
+`sources` seed. That is not sufficient, and the gap is silent: every OTHER
+engine-device reader takes DEFAULT deps — the device registry's own poll
+(`devices.ts` `defaultGetEngineDevices`), the hotplug refresh it fires
+(`sources.ts` `refreshSourcesForHotplug`), and the 5 s signal recheck
+(`recheckSourceSignals`) — and those dial a cerastream control socket that cannot
+exist under `MOCK_SCENARIO`. A failing probe then hands over to the observation,
+which in dev is the HOST's own `/sys/class/video4linux` + ALSA scan, i.e. hardware
+the scenario says nothing about.
+
+Measured on a dev host with no `/dev/video*`: the registry's first scan is empty
+and correctly skipped as the initial scan; ~2 s later the host's ALSA cards land
+in `getAudioSources()`, the device SET changes, and the hotplug refresh publishes
+that observation — erasing every simulated capture device from `sources`. Because
+`sources` is on-change only, the coarse-only list then stood for the life of the
+process, and a page that authenticated afterwards got it in its post-login
+snapshot. Nothing failed loudly.
+
+`defaultFetchEngineDevices` (`capabilities.ts`) and `defaultGetEngineDevices`
+(`devices.ts`) therefore both serve `getMockEngineDevices()` under
+`shouldUseMocks()`, so the registry OBSERVES the scenario and a steady scenario
+produces no phantom hotplug transition. Production is byte-unchanged (both gates
+require `isDevelopment()` AND an initialised mock state), and the imports are lazy
+so the mock graph stays off these modules' load paths. When you add a new
+engine-device reader, take deps or route through these defaults — do NOT leave it
+on a raw socket probe. Coverage: `tests/mock-engine-devices-wiring.test.ts`.
+
 ### Scenario-seeded capability profiles (T5)
 
 Three `MOCK_SCENARIO` values seed the engine-capability state:
