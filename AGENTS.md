@@ -39,7 +39,7 @@ CeraUI/
 │   │       │   └── tabs/                  # Legacy tab views (Streaming, Network, General, Advanced, DevTools)
 │   │       └── lib/
 │   │           ├── components/
-│   │           │   ├── dialogs/           # AppDialog.svelte — shared responsive dialog chrome
+│   │           │   ├── dialogs/           # AppDialog.svelte (shared chrome) + lazyDialog()/LazyDialog registry — config dialogs load as separate chunks on first open
 │   │           │   ├── custom/            # Custom components (moved from ui/): simple-alert-dialog,
 │   │           │   │                      #   mode-toggle, locale-selector, mobile-link, pwa/
 │   │           │   ├── streaming/         # ValidationAdapter.ts — FE constraint adapter (no literals)
@@ -66,7 +66,7 @@ CeraUI/
 │   │   └── src/schemas/
 │   │       ├── addons.schema.ts           # AddonDescriptorSchema + AddonStateSchema (T21)
 │   │       └── system.schema.ts           # KIOSK_UNAVAILABLE_ERROR + system schemas
-│   └── i18n/         # typesafe-i18n, 10 languages (workspace:*)
+│   └── i18n/         # Paraglide runtime + hand-editable JSON catalogs, 10 languages (workspace:*)
 ├── scripts/build/    # build-debian-package.sh — produces ceraui .deb
 ├── docs/             # ARCHITECTURE, BUILD_PIPELINE, APT_VERSION_CONTROL, BRANDING, TOUCHSCREEN, LIFECYCLE-INDICATORS
 └── .impeccable.md    # UI/UX design constraints — read before touching frontend visuals
@@ -86,7 +86,7 @@ CeraUI/
 | **Per-core encoder-load COLLECTOR (two kernel realities, probed at runtime)** | `apps/backend/src/modules/system/encoder-load.ts` → `encoder-load` broadcast |
 | **Fan presence + PWM duty-cycle COLLECTOR (`pwm-fan` found by type string, never an index; `pwm1/255` only, never RPM)** | `apps/backend/src/modules/system/fan.ts` → `fan` broadcast |
 | **CPU core count (`nproc`-equivalent) — the denominator that makes `cpuLoad1` readable** | `apps/backend/src/modules/system/cpu.ts` → `cpu` broadcast; render side `apps/frontend/src/lib/system/cpu-load.ts` (`deriveCpuLoad`) |
-| Shared dialog chrome (AppDialog) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| Shared dialog chrome (AppDialog) + lazy-dialog registry | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` + `lazyDialog()`/`LazyDialog`/`LazyDialogFallback` in the same directory |
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
 | Validation constraints (FE adapter) | `apps/frontend/src/lib/components/streaming/ValidationAdapter.ts` |
@@ -694,9 +694,10 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `svelte` | 5.56.9 |
 | `vitest` | 4.1.10 |
 | `vite` | 8.2.1 |
-| `jsdom` | 30.0.1 (requires Node ≥ 24.15; `mise.toml` pins Node 24 → 24.19.x) |
+| `jsdom` | 30.0.1 (requires Node ≥ 24.15; local dev `mise.toml` pins Node 24 → 24.19.x) |
+| CI Node (`build-check.yml`) | 26 — REQUIRED baseline, not a canary (flipped from 24 by todo 18); `publish-deb.yml`/`publish-release.yml` still pin 24 |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
-| `@biomejs/biome` | 2.5.2 |
+| `@biomejs/biome` (via `@ceralive/biome-config@2026.8.0` canon) | 2.5.8 |
 | `@playwright/test` | 1.62.1 |
 | `@lucide/svelte` | 1.31.0 |
 | `svelte-check` | 4.7.6 |
@@ -720,12 +721,16 @@ procedure or child-router key.
 | Scope | Compiler | Why |
 |-------|----------|-----|
 | workspace catalog + `apps/frontend` | **6.0.3** | `svelte-check` refuses to start on TS 7 (`bin/ts-version-check.js`); its peer range is `^5.0.0 \|\| ^6.0.0` |
-| `packages/i18n` bare `typescript` | **6.0.3** | the `typesafe-i18n` generator calls `ts.createProgram`, which TS 7.0 does not ship; on TS 7 the **postinstall** hook dies and `bun install` fails |
-| `apps/backend`, `packages/rpc` | **7.0.2** (direct devDep) | plain `tsc --noEmit`, no compiler-API consumer |
-| `packages/i18n` `check` gate | **7.0.2** via the `typescript-7` npm alias | gives i18n a real TS7 gate without disturbing its TS6 generator |
+| `apps/backend`, `packages/rpc`, `packages/i18n` | **7.0.2** (direct devDep) | plain `tsc --noEmit`, no compiler-API consumer |
 
-TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), which is the single root cause
-of both TS6 holdouts above.
+TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), which is the root cause of the
+one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 devDep with the rest of the
+non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
+`ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
+dep plus a `typescript-7` npm-alias `check` gate) no longer exists. A non-blocking `svelte-check --tsgo`
+canary runs against the frontend catalog (`@typescript/native` alias onto real `typescript@7`, installed
+`--no-save`); it currently reports 2 errors in `ErrorBoundary.svelte`'s `<svelte:boundary>` snippet typing
+that the required TS6 gate does not — informative, not blocking.
 
 Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
 would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),

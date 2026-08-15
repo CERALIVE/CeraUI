@@ -69,7 +69,7 @@ src/
 │   │   │                          #   the toast host, getPersistent() feeds NotificationsPanel
 │   │   └── layout-mode.svelte.ts  # Touch/kiosk layout flag ($persist "layout-mode")
 │   ├── components/
-│   │   ├── dialogs/           # AppDialog.svelte — shared responsive dialog chrome
+│   │   ├── dialogs/           # AppDialog.svelte (shared chrome) + lazyDialog()/LazyDialog registry — config dialogs load as separate chunks on first open (see CONVENTIONS below)
 │   │   │                      #   lazy-dialog.svelte.ts + LazyDialog.svelte + LazyDialogFallback.svelte
 │   │   │                      #   — the async registry that keeps every config dialog in its own chunk
 │   │   │                      #   desktop: Dialog; mobile: Sheet (via MediaQuery from svelte/reactivity)
