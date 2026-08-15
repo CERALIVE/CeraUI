@@ -157,6 +157,10 @@ jobs:
         working-directory: CeraUI
         run: bun run --filter backend test
 
+      - name: i18n unit tests (bun — frozen rendered oracle + backend labelKey contract)
+        working-directory: CeraUI
+        run: bun run --filter @ceraui/i18n test
+
   setup-e2e:
     name: E2E setup (package deps, browser cache, frontend build)
     runs-on: ubuntu-latest

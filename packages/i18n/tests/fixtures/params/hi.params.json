@@ -1,0 +1,446 @@
+{
+	"counts": [
+		0,
+		1,
+		2,
+		5,
+		11,
+		100
+	],
+	"keys": {
+		"advanced.remoteKeyManagedByCloud": {
+			"params": {
+				"provider": "<provider>"
+			},
+			"plural": false
+		},
+		"advanced.sshPassword": {
+			"params": {
+				"sshUser": "<sshUser>"
+			},
+			"plural": false
+		},
+		"devtools.downloadZip": {
+			"params": {
+				"count": "<count>"
+			},
+			"plural": false
+		},
+		"devtools.supportedLanguagesClick": {
+			"params": {
+				"count": "<count>"
+			},
+			"plural": false
+		},
+		"general.streamingMessage": {
+			"params": {
+				"srtLatency": "<srtLatency>",
+				"usingNetworksCount": "<usingNetworksCount>"
+			},
+			"plural": false
+		},
+		"general.updateLastChecked": {
+			"params": {
+				"time": "<time>"
+			},
+			"plural": false
+		},
+		"live.education.info": {
+			"params": {
+				"field": "<field>"
+			},
+			"plural": false
+		},
+		"live.encoder.fpsAvailableAt": {
+			"params": {
+				"fps": "<fps>",
+				"resolution": "<resolution>"
+			},
+			"plural": false
+		},
+		"live.encoder.passthrough.disclosureTranscode": {
+			"params": {
+				"input": "<input>",
+				"output": "<output>"
+			},
+			"plural": false
+		},
+		"live.goLive.autoSelected": {
+			"params": {
+				"name": "<name>"
+			},
+			"plural": false
+		},
+		"live.ingest.linksReadyCount": {
+			"countParams": [
+				"0",
+				"count"
+			],
+			"plural": true
+		},
+		"live.ingest.sessionEnded": {
+			"params": {
+				"duration": "<duration>"
+			},
+			"plural": false
+		},
+		"live.ingest.trendLabel": {
+			"params": {
+				"iface": "<iface>"
+			},
+			"plural": false
+		},
+		"live.inputPicker.audioSwitched": {
+			"params": {
+				"ms": "<ms>"
+			},
+			"plural": false
+		},
+		"live.inputPicker.switched": {
+			"params": {
+				"ms": "<ms>"
+			},
+			"plural": false
+		},
+		"live.networkIngest.noAddress": {
+			"params": {
+				"protocol": "<protocol>"
+			},
+			"plural": false
+		},
+		"live.networkIngest.serviceInactive": {
+			"params": {
+				"protocol": "<protocol>"
+			},
+			"plural": false
+		},
+		"live.preview.channelAria": {
+			"params": {
+				"n": "<n>"
+			},
+			"plural": false
+		},
+		"live.preview.encode.activeHardware": {
+			"params": {
+				"element": "<element>"
+			},
+			"plural": false
+		},
+		"live.preview.encode.activeSoftware": {
+			"params": {
+				"element": "<element>"
+			},
+			"plural": false
+		},
+		"live.preview.reconnectingAttempt": {
+			"params": {
+				"attempt": "<attempt>"
+			},
+			"plural": false
+		},
+		"live.server.bondedAcross": {
+			"countParams": [
+				"0",
+				"count"
+			],
+			"plural": true
+		},
+		"live.setup.linksReady": {
+			"countParams": [
+				"0",
+				"count"
+			],
+			"plural": true
+		},
+		"live.source.coarseSuggestionAction": {
+			"params": {
+				"name": "<name>"
+			},
+			"plural": false
+		},
+		"live.source.coarseSuggestionOne": {
+			"params": {
+				"name": "<name>"
+			},
+			"plural": false
+		},
+		"live.source.degradedReason": {
+			"params": {
+				"reason": "<reason>"
+			},
+			"plural": false
+		},
+		"live.source.lostBannerBodyMany": {
+			"params": {
+				"names": "<names>"
+			},
+			"plural": false
+		},
+		"live.source.lostBannerBodyOne": {
+			"params": {
+				"name": "<name>"
+			},
+			"plural": false
+		},
+		"live.source.lostBannerTitleMany": {
+			"params": {
+				"count": "<count>"
+			},
+			"plural": false
+		},
+		"live.source.lostBannerTitleOne": {
+			"params": {
+				"name": "<name>"
+			},
+			"plural": false
+		},
+		"live.summary.audioFollows": {
+			"params": {
+				"label": "<label>"
+			},
+			"plural": false
+		},
+		"live.transcode.chip": {
+			"params": {
+				"input": "<input>",
+				"output": "<output>"
+			},
+			"plural": false
+		},
+		"network.modem.simUnlock.attemptsRemaining": {
+			"params": {
+				"count": "<count>"
+			},
+			"plural": false
+		},
+		"network.modem.simUnlock.lengthHint": {
+			"params": {
+				"max": "<max>",
+				"min": "<min>"
+			},
+			"plural": false
+		},
+		"network.modem.simUnlock.pukLengthHint": {
+			"params": {
+				"length": "<length>"
+			},
+			"plural": false
+		},
+		"network.summary.activeNetworks": {
+			"params": {
+				"active": "<active>",
+				"total": "<total>"
+			},
+			"plural": false
+		},
+		"network.summary.networksActive": {
+			"params": {
+				"active": "<active>",
+				"count": "<count>",
+				"total": "<total>"
+			},
+			"plural": false
+		},
+		"network.summary.totalBandwidth": {
+			"params": {
+				"total": "<total>"
+			},
+			"plural": false
+		},
+		"network.view.comingSoon": {
+			"params": {
+				"feature": "<feature>"
+			},
+			"plural": false
+		},
+		"networkHelper.toast.connectingNewWifiDescription": {
+			"params": {
+				"ssid": "<ssid>"
+			},
+			"plural": false
+		},
+		"networkHelper.toast.connectingWifiDescription": {
+			"params": {
+				"ssid": "<ssid>"
+			},
+			"plural": false
+		},
+		"networkHelper.toast.disconnectingWifiDescription": {
+			"params": {
+				"ssid": "<ssid>"
+			},
+			"plural": false
+		},
+		"networkHelper.toast.wifiNetworkForgottenDescription": {
+			"params": {
+				"ssid": "<ssid>"
+			},
+			"plural": false
+		},
+		"notifications.appUpdatedDescription": {
+			"params": {
+				"version": "<version>"
+			},
+			"plural": false
+		},
+		"notifications.encoderModeClamped": {
+			"params": {
+				"framerate": "<framerate>",
+				"resolution": "<resolution>"
+			},
+			"plural": false
+		},
+		"notifications.panel.trigger": {
+			"params": {
+				"count": "<count>"
+			},
+			"plural": false
+		},
+		"notifications.streamAutostartNoLinksFailed": {
+			"params": {
+				"attempt": "<attempt>",
+				"maxAttempts": "<maxAttempts>"
+			},
+			"plural": false
+		},
+		"notifications.streamStartEngineRestartingFailed": {
+			"params": {
+				"attempt": "<attempt>",
+				"maxAttempts": "<maxAttempts>"
+			},
+			"plural": false
+		},
+		"notifications.streamStartEngineRestartingRetrying": {
+			"params": {
+				"maxAttempts": "<maxAttempts>",
+				"nextAttempt": "<nextAttempt>"
+			},
+			"plural": false
+		},
+		"notifications.streamStartEngineUnavailableFailed": {
+			"params": {
+				"attempt": "<attempt>",
+				"maxAttempts": "<maxAttempts>"
+			},
+			"plural": false
+		},
+		"notifications.streamStartEngineUnavailableRetrying": {
+			"params": {
+				"maxAttempts": "<maxAttempts>",
+				"nextAttempt": "<nextAttempt>"
+			},
+			"plural": false
+		},
+		"notifications.streamStartTimeoutFailed": {
+			"params": {
+				"attempt": "<attempt>",
+				"maxAttempts": "<maxAttempts>"
+			},
+			"plural": false
+		},
+		"notifications.streamStartTimeoutRetrying": {
+			"params": {
+				"maxAttempts": "<maxAttempts>",
+				"nextAttempt": "<nextAttempt>"
+			},
+			"plural": false
+		},
+		"notifications.validationFailed": {
+			"params": {
+				"fields": "<fields>"
+			},
+			"plural": false
+		},
+		"settings.destinationNeedsKey": {
+			"params": {
+				"cloud": "<cloud>"
+			},
+			"plural": false
+		},
+		"settings.deviceHealth.axis.minutesAgo": {
+			"params": {
+				"n": "<n>"
+			},
+			"plural": false
+		},
+		"settings.deviceHealth.delta": {
+			"params": {
+				"value": "<value>"
+			},
+			"plural": false
+		},
+		"settings.deviceHealth.encoder.active": {
+			"params": {
+				"summary": "<summary>"
+			},
+			"plural": false
+		},
+		"settings.deviceHealth.peak": {
+			"params": {
+				"value": "<value>"
+			},
+			"plural": false
+		},
+		"settings.deviceHealth.traceGaps": {
+			"params": {
+				"n": "<n>"
+			},
+			"plural": false
+		},
+		"settings.deviceHealth.traceLabel": {
+			"params": {
+				"summary": "<summary>"
+			},
+			"plural": false
+		},
+		"settings.deviceStats.cpuLoadHint": {
+			"params": {
+				"cores": "<cores>"
+			},
+			"plural": false
+		},
+		"settings.deviceStats.cpuLoadRaw": {
+			"params": {
+				"load": "<load>"
+			},
+			"plural": false
+		},
+		"settings.dialogs.rebootCountdownRemaining": {
+			"params": {
+				"seconds": "<seconds>"
+			},
+			"plural": false
+		},
+		"settings.feedsCloudObsInstance": {
+			"params": {
+				"label": "<label>"
+			},
+			"plural": false
+		},
+		"settings.valueClamped": {
+			"params": {
+				"value": "<value>"
+			},
+			"plural": false
+		},
+		"wifiSelector.dialog.availableNetworks": {
+			"params": {
+				"network": "<network>"
+			},
+			"plural": false
+		},
+		"wifiSelector.dialog.confirmForget": {
+			"params": {
+				"network": "<network>",
+				"ssid": "<ssid>"
+			},
+			"plural": false
+		},
+		"wifiSelector.dialog.connectTo": {
+			"params": {
+				"ssid": "<ssid>"
+			},
+			"plural": false
+		}
+	}
+}
