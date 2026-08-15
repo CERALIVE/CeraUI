@@ -9,6 +9,7 @@ import { VitePWA } from "vite-plugin-pwa";
 
 import { generateUniqueVersion, pwaConfig } from "./pwa.config";
 import {
+	devOnlyI18nNamespacePlugin,
 	i18nManualChunk,
 	PARAGLIDE_OUTDIR,
 	PARAGLIDE_PROJECT,
@@ -156,6 +157,7 @@ export default defineConfig(({ mode }) => {
 				cleanOutdir: false,
 				strategy: [...PARAGLIDE_STRATEGY],
 			}),
+			devOnlyI18nNamespacePlugin(mode === "production"),
 			persistPlugin(),
 			tailwindcss(),
 			svelte({

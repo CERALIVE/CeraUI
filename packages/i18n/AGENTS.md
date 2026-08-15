@@ -37,10 +37,20 @@ scripts/
 import { m, setLocale, getLocale } from '@ceraui/i18n/svelte';    // frontend — the facade
 import { formatBytes } from '@ceraui/i18n/formatters';             // anywhere
 import { LOCALES, RTL_LANGUAGES } from '@ceraui/i18n';             // locale constants
+import { registerAllNamespaces } from '@ceraui/i18n/eager';        // standalone builds ONLY
 ```
 
-`m` is keyed on the **verbatim dotted key**: `m["live.setup.title"]()`. Those three
-are the whole export map — there is no `/node` subpath and no legacy adapter subpath.
+`m` is keyed on the **verbatim dotted key**: `m["live.setup.title"]()`. There is no
+`/node` subpath and no legacy adapter subpath.
+
+`/eager` is the fourth entry and is NOT for the app. Every namespace is lazy (see
+below), and the SPA resolves them by awaiting `ensureAllNamespaces()` in `main.ts`
+before it mounts. `/eager` registers the whole catalog from STATIC imports instead,
+for a build that cannot fetch a sibling chunk: the federation dialog bundles (one
+hosted module, strict CSP, signed manifest pinning an exact chunk graph) and the two
+test harnesses (`apps/frontend/vitest.setup.ts`, `packages/i18n/tests/setup.ts`).
+Importing it from app code re-fuses the ten-locale catalog into the entry chunk —
+a measured ~400 KB gzip regression.
 
 ## GENERATE
 
@@ -69,6 +79,13 @@ each gate is independently runnable from `bun install` alone.
 - `branding.ts` holds brand names that don't get translated — import from there.
 - Svelte 5 store uses runes — don't convert to stores.
 - Don't hand-edit anything under `generated/` or `src/paraglide/`.
+- **Every namespace is LAZY, and `EAGER_NAMESPACES` (in `scripts/generate-registry.ts`)
+  is empty on purpose.** A compiled Paraglide message inlines all ten locales, so an
+  all-eager catalog is one indivisible blob; under rolldown a statically-reachable
+  chunk cannot be split by naming it, so a dynamic import is the only lever. Measured:
+  entry chunk 842 892 -> 438 997 B gzip, total SPA JS+CSS 909 347 -> 866 755 B gzip.
+  Flipping one back to eager is a regression on both axes —
+  `tests/message-registry.test.ts` fails if any namespace stops being lazy.
 - **Don't import Paraglide's umbrella `paraglide/messages.js`** — it re-exports every
   message eagerly, which collapses the whole catalog into one chunk and makes
   `ensureNamespace()` structurally incapable of splitting anything. Import the facade.

@@ -16,6 +16,7 @@ adapter, its plural resolver, and the TypeScript locale dictionaries are gone �
 | `@ceraui/i18n` | Locale constants — `LOCALES`, `RTL_LANGUAGES`, `BASE_LOCALE`, `directionFor`, `isSupportedLocale`, `resolveInitialLocale`. |
 | `@ceraui/i18n/formatters` | Standalone `Intl` formatters (`formatBytes`, `formatBitrate`, …). No i18n runtime dependency at all — safe to import anywhere, backend included. |
 | `@ceraui/i18n/svelte` | The Paraglide runes store and the `m` message facade. The ONE module frontend call sites import. |
+| `@ceraui/i18n/eager` | `registerAllNamespaces()` — the whole catalog from static imports. For a build that cannot fetch a sibling chunk (the federation bundles) and for test harnesses. **Never import it from app code**: it re-fuses the catalog into the entry chunk. |
 
 There is no `/node` subpath and no legacy adapter subpath — both retired with the
 generator.
@@ -106,25 +107,39 @@ already been imported.
 ### Namespaces and lazy loading
 
 A message's **namespace** is its first dotted segment (`live.setup.title` → `live`).
-Every namespace ships **eager** today: registered at module init, so first paint
-has no dictionary fetch and no flicker.
 
-Flipping one to lazy is a config change in `LAZY_NAMESPACES`
-(`scripts/generate-registry.ts`) plus an `ensureNamespace()` call at the
-destination or dialog that owns it:
+**Every namespace is lazy.** `EAGER_NAMESPACES` (`scripts/generate-registry.ts`) is
+empty, so each namespace becomes its own chunk, and the app awaits them all in
+`apps/frontend/src/main.ts` before it mounts:
+
+```ts
+await ensureAllNamespaces();   // main.ts, before mount(App)
+```
+
+That await is what makes the split a pure BUNDLING change: no view can observe a
+half-populated registry, so no string can flash as its own dotted key. A single
+namespace can still be resolved on its own where that is useful:
 
 ```ts
 await ensureNamespace("devtools");   // before the view renders
 ```
 
-**No call site changes.** Components keep the same synchronous `m["ns.key"]()`
-call in both configurations — proven end to end by
-`apps/frontend/src/tests/i18n-lazy-namespace.test.ts`, which builds the same
-fixture twice and asserts the lazy namespace's messages leave the initial chunk.
+**No call site changes** in either configuration — components keep the same
+synchronous `m["ns.key"]()` call, proven end to end by
+`apps/frontend/src/tests/i18n-lazy-namespace.test.ts`.
 
 Under Vite 8 / rolldown this is the **only** lever that splits the i18n bundle: a
 `manualChunks` name is advisory, and anything statically reachable from the entry
-is fused into one initial chunk regardless of how it is named.
+is fused into one initial chunk regardless of how it is named. A compiled Paraglide
+message inlines all ten locales, so the all-eager catalog was one ~400 KB gzip blob
+in the entry chunk; splitting it took the entry chunk below its own pre-migration
+size and cut the emitted total too (per-namespace chunks compress better than one
+fused megachunk).
+
+The dev-only `devtools` namespace is additionally emptied in PRODUCTION builds
+(`devOnlyI18nNamespacePlugin`, `apps/frontend/vite.i18n.ts`): its only consumers sit
+behind `import.meta.env.DEV`, so Rollup prunes them and the 132 keys × 10 locales
+were unreachable payload.
 
 ---
 

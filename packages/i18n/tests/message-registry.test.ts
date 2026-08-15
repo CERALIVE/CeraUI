@@ -77,7 +77,7 @@ describe("registry bracket access", () => {
 		);
 	});
 
-	it("exposes every catalog key under the all-eager configuration", () => {
+	it("exposes every catalog key once every namespace is registered", () => {
 		expect(Object.keys(registry.m).length).toBe(catalogKeys.length);
 	});
 });
@@ -109,15 +109,24 @@ describe("resolveMessageKey", () => {
 });
 
 describe("namespace loading", () => {
-	it("reports every namespace loaded under the all-eager configuration", () => {
+	it("reports every namespace loaded once every namespace is registered", () => {
 		for (const namespace of registry.NAMESPACES) {
 			expect(registry.isNamespaceLoaded(namespace)).toBe(true);
 		}
 	});
 
-	it("resolves ensureNamespace immediately for an eager namespace", async () => {
+	it("resolves ensureNamespace for an already-registered namespace", async () => {
 		await registry.ensureNamespace("live");
 		expect(registry.isNamespaceLoaded("live")).toBe(true);
+	});
+
+	// Guards the bundle-delta mitigation: flipping any namespace back to eager
+	// re-fuses the ten-locale catalog into the SPA entry chunk, which is a
+	// 400 KB gzip regression the budget gate would only catch after a build.
+	it("keeps every namespace lazy so the catalog can leave the entry chunk", () => {
+		for (const namespace of registry.NAMESPACES) {
+			expect(registry.LOADER_CONFIG[namespace]).toBe("lazy");
+		}
 	});
 
 	it("rejects an unknown namespace rather than silently doing nothing", async () => {

@@ -44,18 +44,39 @@ export const PARAGLIDE_DIR = join(PACKAGE_ROOT, "src", "paraglide");
 export const GENERATED_DIR = join(PACKAGE_ROOT, "generated");
 
 /**
- * Namespaces loaded lazily. EMPTY by design: every namespace ships eager, so the
- * first paint has no dictionary fetch and no flicker. Flipping a namespace to
- * lazy is a CONFIG change only — `ensureNamespace()` is already wired at the
- * destination/dialog activation points, and no call site is rewritten (proved by
- * the lazy-namespace test in apps/frontend).
+ * Namespaces registered SYNCHRONOUSLY at module init. Everything not named here
+ * is loaded through `ensureNamespace()` instead.
+ *
+ * EMPTY by design, and that emptiness is load-bearing. A compiled Paraglide
+ * message module inlines all ten locales, so an all-eager catalog is one
+ * indivisible blob fused into the entry chunk — and under rolldown a
+ * statically-reachable chunk cannot be split by naming it, so a dynamic import
+ * is the ONLY lever. Measured on this tree (plan todo 25, `bun run
+ * build:frontend` + `bun scripts/ci/bundle-report.mjs`):
+ *
+ *   all eager   entry chunk 842 892 B gz · total JS+CSS 909 347 B gz
+ *   all lazy    entry chunk 438 957 B gz · total JS+CSS 866 672 B gz
+ *
+ * The entry chunk drops BELOW its own pre-migration baseline (461 577 B), and
+ * the emitted total falls too — per-namespace chunks minify and compress better
+ * than one fused megachunk. Flipping a namespace back to eager is therefore a
+ * regression on both axes and needs a re-measurement, not a preference.
+ *
+ * Call sites are unchanged in either configuration: `m["ns.key"]()` stays a
+ * plain synchronous call once the namespace is registered. The frontend awaits
+ * `ensureAllNamespaces()` before it mounts, so no view can observe a partially
+ * loaded registry.
  */
-export const LAZY_NAMESPACES: readonly string[] = [];
+export const EAGER_NAMESPACES: readonly string[] = [];
 
 export interface GenerateOptions {
 	/** Where to write the generated modules. Defaults to `generated/`. */
 	outDir?: string;
-	/** Namespaces to load on demand. Defaults to {@link LAZY_NAMESPACES}. */
+	/**
+	 * Namespaces to load on demand. Defaults to every namespace the catalog
+	 * defines except those in {@link EAGER_NAMESPACES} — so a namespace added
+	 * later is lazy by default rather than silently rejoining the entry chunk.
+	 */
 	lazyNamespaces?: readonly string[];
 	/** Compiled paraglide output to read. Defaults to `src/paraglide`. */
 	paraglideDir?: string;
@@ -225,6 +246,13 @@ const LAZY_LOADERS = {
 ${lazyLoaders}
 };
 
+/** Bulk registration for a build that carries the catalog statically. */
+export function registerNamespaces(entries) {
+	for (const namespace of Object.keys(entries)) {
+		registerNamespace(namespace, entries[namespace]);
+	}
+}
+
 /** The namespace a dotted key belongs to, or undefined for an unknown key. */
 export function namespaceForKey(key) {
 	return NAMESPACE_MAP[key]?.namespace;
@@ -301,6 +329,38 @@ export { LOADER_CONFIG };
 }
 
 /**
+ * A build that must stand alone registers the whole catalog from static
+ * imports instead of `ensureNamespace()`.
+ *
+ * The federation dialog bundles are the case: each is fetched by a single
+ * hosted `import()` under a strict CSP, and its signed manifest pins an exact
+ * chunk graph — so the lazily-imported namespace chunks the SPA depends on are
+ * unreachable there, and a dialog would render every string as its own dotted
+ * key. This module is NOT re-exported from `/svelte`; importing it from the app
+ * would pull the whole catalog back into the entry chunk.
+ */
+function eagerEntrySource(namespaces: string[]): string {
+	const imports = namespaces
+		.map((ns, index) => `import * as _ns${index} from "./namespaces/${ns}.js";`)
+		.join("\n");
+	const entries = namespaces
+		.map((ns, index) => `\t${quote(ns)}: _ns${index}.messages,`)
+		.join("\n");
+	return `${BANNER}import { registerNamespaces } from "./registry.js";
+${imports}
+
+export function registerAllNamespaces() {
+	registerNamespaces({
+${entries}
+	});
+}
+`;
+}
+
+const EAGER_ENTRY_DECLARATION = `${BANNER}export declare function registerAllNamespaces(): void;
+`;
+
+/**
  * A narrow re-export of the paraglide runtime. It exists so the facade never
  * imports paraglide's JSDoc-typed `.js` directly: with `checkJs: true` in the
  * frontend tsconfig that would pull the whole generated runtime into
@@ -334,6 +394,9 @@ export type { MessageFn, MessageKey, Namespace } from "./types.js";
 export declare function namespaceForKey(key: string): Namespace | undefined;
 export declare function isNamespaceLoaded(namespace: Namespace): boolean;
 export declare function ensureNamespace(namespace: Namespace): Promise<void>;
+export declare function registerNamespaces(
+	entries: Readonly<Partial<Record<Namespace, Readonly<Record<string, MessageFn>>>>>,
+): void;
 export declare function getMessage(key: string): MessageFn | undefined;
 export declare const NAMESPACES: readonly Namespace[];
 export declare const LOADER_CONFIG: Readonly<Record<Namespace, "eager" | "lazy">>;
@@ -355,8 +418,6 @@ export declare function resolveMessageKey(
 export function generateRegistry(options: GenerateOptions = {}): GenerateResult {
 	const outDir = options.outDir ?? GENERATED_DIR;
 	const paraglideDir = options.paraglideDir ?? PARAGLIDE_DIR;
-	const lazy = options.lazyNamespaces ?? LAZY_NAMESPACES;
-
 	const keys = readCatalogKeys();
 	const byNamespace = new Map<string, string[]>();
 	for (const key of keys) {
@@ -366,6 +427,9 @@ export function generateRegistry(options: GenerateOptions = {}): GenerateResult 
 		else bucket.push(key);
 	}
 	const namespaces = [...byNamespace.keys()].sort();
+	const lazy =
+		options.lazyNamespaces ??
+		namespaces.filter((ns) => !EAGER_NAMESPACES.includes(ns));
 
 	for (const ns of lazy) {
 		if (!byNamespace.has(ns)) {
@@ -406,6 +470,8 @@ export function generateRegistry(options: GenerateOptions = {}): GenerateResult 
 	writeFileSync(join(outDir, "loader-config.d.ts"), LOADER_CONFIG_DECLARATION);
 	writeFileSync(join(outDir, "registry.js"), registrySource(namespaces, lazy));
 	writeFileSync(join(outDir, "registry.d.ts"), REGISTRY_DECLARATION);
+	writeFileSync(join(outDir, "eager.js"), eagerEntrySource(namespaces));
+	writeFileSync(join(outDir, "eager.d.ts"), EAGER_ENTRY_DECLARATION);
 
 	// Bundler-facing sidecar. `manualChunks` is synchronous and runs in the Vite
 	// config's own module scope, so it cannot `await import()` the ESM loader

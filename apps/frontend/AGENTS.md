@@ -108,6 +108,7 @@ New procedures: add to `@ceraui/rpc` schemas first, then extend `TypedRPC` in `c
 bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js
 bun run sign:federation                    # (root) SRI + GPG bundle sigs + signed manifest.json (Task 40)
+bun run test:federation-abi                # (root) build + mount the BUILT bundles against host-contract.ts
 # Linting is Biome-only, run from the workspace root: `biome check .` (or `bun run lint`)
 ```
 
@@ -128,6 +129,13 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
   (CalVer, `2026.7.2` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
+- **The catalog is STATIC here, not lazy.** The SPA splits its ten-locale Paraglide
+  catalog into per-namespace chunks it awaits in `main.ts`; a federation bundle is
+  fetched as ONE hosted module under a strict CSP against a signed manifest that
+  pins an exact chunk graph, so a sibling chunk is unreachable and every string
+  would render as its own dotted key. Each entry calls `registerFederationMessages()`
+  (`src/lib/federation/messages.ts` → `@ceraui/i18n/eager`) at module scope, and
+  `applyFederationLocale(options.locale)` at the top of `mountDialog`.
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
   PWA/service-worker plugin, and emits no `index.html`. The SPA `vite.config.ts` is unmodified.
 - **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so

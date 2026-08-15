@@ -30,6 +30,7 @@ import {
 	getMessage,
 	type MessageFn,
 	type MessageKey,
+	NAMESPACES,
 	type Namespace,
 	ensureNamespace as registryEnsureNamespace,
 	resolveMessageKey as registryResolveMessageKey,
@@ -51,6 +52,7 @@ export type {
 	MessageKey,
 	Namespace,
 } from "../generated/registry.js";
+export { NAMESPACES } from "../generated/registry.js";
 export {
 	BASE_LOCALE,
 	directionFor,
@@ -68,7 +70,7 @@ export function getLocale(): LocaleCode {
 	return localeState;
 }
 
-/** True while a lazy namespace is being fetched. Always false under an all-eager config. */
+/** True while a namespace chunk is being fetched. */
 export function isLocaleLoading(): boolean {
 	return loadingState;
 }
@@ -107,8 +109,8 @@ export interface InitLocaleOptions {
 
 /**
  * Startup: saved preference -> `navigator.language` -> en, then apply it.
- * Synchronous — every namespace is eager, so there is no dictionary fetch to
- * await and no flash of the base locale.
+ * Synchronous — a compiled message carries all ten locales, so selecting one
+ * fetches nothing and there is no flash of the base locale.
  */
 export function initLocale(options: InitLocaleOptions = {}): LocaleCode {
 	const navigatorLanguage =
@@ -140,6 +142,25 @@ export async function ensureNamespace(namespace: Namespace): Promise<void> {
 	loadingState = true;
 	try {
 		await registryEnsureNamespace(namespace);
+	} finally {
+		loadingState = false;
+	}
+}
+
+/**
+ * Register every namespace the catalog defines, in parallel.
+ *
+ * The app awaits this ONCE before it mounts. Every namespace is lazy (see
+ * `EAGER_NAMESPACES` in the registry generator), which is what splits the
+ * ten-locale Paraglide catalog out of the entry chunk — awaiting the whole set
+ * up front keeps rendering byte-identical to the all-eager configuration, so no
+ * view can ever observe a half-populated registry or a key echoed as its own
+ * text.
+ */
+export async function ensureAllNamespaces(): Promise<void> {
+	loadingState = true;
+	try {
+		await Promise.all(NAMESPACES.map(registryEnsureNamespace));
 	} finally {
 		loadingState = false;
 	}

@@ -1376,7 +1376,14 @@ Three Vite lib-mode ES-module bundles — one per config dialog:
 | `server.js` | `apps/frontend/src/lib/federation/server-entry.ts` |
 
 Each entry exports `federationAbiVersion = 1` and
-`mountDialog(target, { host, config })`. The wrapper uses its bundled Svelte
+`mountDialog(target, { host, config, locale })`. `locale` is ADDITIVE and OPTIONAL,
+so the ABI stays 1: a bundle carries its OWN copy of the Paraglide runtime, whose
+active locale is a module-level binding the host cannot otherwise reach, so a host
+that omits it gets the base locale exactly as before. Each entry also calls
+`registerFederationMessages()` (`lib/federation/messages.ts`) at module scope —
+the SPA resolves its message catalog from lazily-imported per-namespace chunks, and
+a hosted bundle fetched as one module against a signed manifest cannot reach those,
+so it registers the catalog statically via `@ceraui/i18n/eager`. The wrapper uses its bundled Svelte
 runtime to mount and unmount the dialog, so the host never mounts a component
 compiled against a different Svelte runtime. `host` is the typed adapter in
 `host-contract.ts`; all three dialogs treat a resolved `{ success: false }` host
@@ -1461,6 +1468,7 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Sign + SRI script | `scripts/sign-federation.ts` |
 | CI publish workflow | `.github/workflows/publish-release.yml` (`publish-federation` job) |
 | Bundle output (gitignored) | `dist/federation/<version>/` |
+| ABI harness (mounts the BUILT bundles) | `apps/frontend/tests/federation/federation-abi.test.ts` via `bun run test:federation-abi` |
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
 | Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) |
 

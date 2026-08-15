@@ -17,6 +17,10 @@
 		"./formatters": {
 			"types": "./src/formatters.ts",
 			"import": "./src/formatters.ts"
+		},
+		"./eager": {
+			"types": "./generated/eager.d.ts",
+			"import": "./generated/eager.js"
 		}
 	},
 	"scripts": {

@@ -3,6 +3,7 @@ import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 
 import { registerSW } from "virtual:pwa-register";
+import { ensureAllNamespaces } from "@ceraui/i18n/svelte";
 import { mount } from "svelte";
 
 import App from "./App.svelte";
@@ -51,6 +52,13 @@ registerSW({
 		console.error("PWA: Service worker registration failed", error);
 	},
 });
+
+// Every i18n namespace is a lazily-imported chunk, which is what keeps the
+// ten-locale Paraglide catalog out of the entry chunk. Awaiting the whole set
+// here — before the first component exists — is what makes that a pure
+// bundling change: no view can render against a half-populated registry, so no
+// string can ever flash as its own dotted key.
+await ensureAllNamespaces();
 
 // Mount the app
 const app = mount(App, { target: document.getElementById("app") as Element });

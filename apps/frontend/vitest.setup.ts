@@ -1,3 +1,4 @@
+import { registerAllNamespaces } from "@ceraui/i18n/eager";
 import { afterAll, beforeEach } from 'vitest';
 
 /**
@@ -132,3 +133,15 @@ beforeEach(() => {
 afterAll(async () => {
 	await new Promise((resolve) => setTimeout(resolve, 50));
 });
+
+/**
+ * Load the message catalog before any spec renders.
+ *
+ * Every namespace is a lazily-imported chunk (`EAGER_NAMESPACES` in the registry
+ * generator) so the ten-locale Paraglide catalog stays out of the SPA's entry
+ * chunk. The app awaits `ensureAllNamespaces()` in `main.ts`; vitest mounts
+ * components directly and never runs that entry, so without this every
+ * `m["ns.key"]()` would return its own dotted key and every copy assertion would
+ * compare a string against its key.
+ */
+registerAllNamespaces();

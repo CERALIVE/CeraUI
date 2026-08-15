@@ -96,3 +96,46 @@ export function i18nManualChunk(id: string): string | null | undefined {
 
 	return undefined;
 }
+
+/**
+ * Namespaces whose ONLY consumers are dev-gated.
+ *
+ * `devtools.*` is read exclusively by `main/tabs/DevTools.svelte` and the
+ * `lib/components/dev-tools/` tree, which `lib/config/index.ts` registers behind
+ * a literal `import.meta.env.DEV`. Vite const-folds that to `false` for a
+ * production build and Rollup prunes the whole subtree — verified on the built
+ * SPA, where the screenshot utility's `html-to-image` and `zip.js` dependencies
+ * are absent. The message catalog had no equivalent gate, so all 132 keys still
+ * shipped, and a compiled Paraglide message inlines all ten locales: 28.6 KiB
+ * gzip of a payload no production surface can reach.
+ */
+export const DEV_ONLY_NAMESPACES: readonly string[] = ["devtools"];
+
+/** Whether a module id is a barrel for a namespace no production surface reaches. */
+export function isDevOnlyNamespaceBarrel(id: string): boolean {
+	const barrel = NAMESPACE_BARREL.exec(id);
+	return barrel !== null && DEV_ONLY_NAMESPACES.includes(barrel[1] ?? "");
+}
+
+const EMPTY_BARREL = "export const messages = {};\n";
+
+/**
+ * Replaces a dev-only namespace barrel with an empty one in production builds.
+ *
+ * A `load` hook rather than a chunking rule: the barrel is reached through
+ * `ensureNamespace()`'s static `import()` map, which is indexed dynamically, so
+ * no amount of tree-shaking can drop it. Emptying its contents is what actually
+ * removes the messages. Development and test builds are untouched.
+ */
+export function devOnlyI18nNamespacePlugin(isProduction: boolean): {
+	name: string;
+	load(id: string): string | null;
+} {
+	return {
+		name: "ceraui:dev-only-i18n-namespaces",
+		load(id: string): string | null {
+			if (!isProduction) return null;
+			return isDevOnlyNamespaceBarrel(id) ? EMPTY_BARREL : null;
+		},
+	};
+}
