@@ -1,19 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/svelte";
 import { afterEach, describe, expect, it } from "vitest";
-
-import ar from "../../../../packages/i18n/src/ar/index";
-import de from "../../../../packages/i18n/src/de/index";
-import en from "../../../../packages/i18n/src/en/index";
-import es from "../../../../packages/i18n/src/es/index";
-import fr from "../../../../packages/i18n/src/fr/index";
-import hi from "../../../../packages/i18n/src/hi/index";
-import ja from "../../../../packages/i18n/src/ja/index";
-import ko from "../../../../packages/i18n/src/ko/index";
-import ptBR from "../../../../packages/i18n/src/pt-BR/index";
-import zh from "../../../../packages/i18n/src/zh/index";
 import type { StreamingOptimismState } from "../lib/rpc/streaming-optimism.svelte";
 import StreamControlButton from "../main/live/StreamControlButton.svelte";
+import { ar, de, en, es, fr, hi, ja, ko, ptBR, zh } from "./helpers/catalog";
 
 function mount(overrides: {
 	isStreaming?: boolean;

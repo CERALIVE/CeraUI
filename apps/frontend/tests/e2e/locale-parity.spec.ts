@@ -2,9 +2,11 @@ import type { WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
-// Direct import of the ar locale dictionary — the ORACLE this spec proves the
-// rendered DOM matches byte-for-byte (todo 18, capability-first-live-experience).
-import ar from "../../../../packages/i18n/src/ar/index.js";
+// Direct import of the ar CATALOG — the ORACLE this spec proves the rendered DOM
+// matches byte-for-byte (todo 18, capability-first-live-experience). Repointed
+// from the legacy `src/ar/index.ts` dictionary onto `messages/ar.json` by plan
+// todo 23: same strings, but the file the app actually compiles and serves.
+import ar from "../../../../packages/i18n/messages/ar.json" with { type: "json" };
 
 /**
  * Locale-parity regression gate (todo 18, capability-first-live-experience).
@@ -151,11 +153,13 @@ test.describe("Locale parity — Arabic RTL + embedded-audio exact-match (todo 1
 		const embedded = page.getByTestId("audio-source-embedded");
 		await expect(embedded).toBeVisible({ timeout: 20_000 });
 
-		// Exact-match against the IMPORTED ar/index.ts dictionary — the strongest
-		// possible proof this is a real translation, not an English placeholder or
-		// a paraphrase drifted from the source file. Param-free key, so the raw
-		// dictionary value IS the rendered text.
-		await expect(embedded).toHaveText(ar.live.source.audioEmbedded, { useInnerText: true });
+		// Exact-match against the IMPORTED ar catalog — the strongest possible proof
+		// this is a real translation, not an English placeholder or a paraphrase
+		// drifted from the source file. Param-free key, so the raw catalog value IS
+		// the rendered text.
+		await expect(embedded).toHaveText(ar["live.source.audioEmbedded"], {
+			useInnerText: true,
+		});
 
 		// No literal interpolation residue (`{...}`/`{{...}}`) ever reaches the DOM.
 		const text = await embedded.innerText();

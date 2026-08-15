@@ -1,73 +1,40 @@
 import { describe, expect, it } from "bun:test";
 
-import type { Locales } from "../src/i18n-types.js";
-import { loadedLocales } from "../src/i18n-util.js";
-import { loadAllLocales } from "../src/i18n-util.sync.js";
+import type { LocaleCode } from "../src/locale-lifecycle.js";
+import {
+	ALL_LOCALES,
+	catalogKeys,
+	NON_BASE_LOCALES,
+	readCatalog,
+} from "./helpers/catalog.js";
 
 // ---------------------------------------------------------------------------
-// PERMANENT locale-parity gate (todo 18, capability-first-live-experience).
+// PERMANENT locale-parity gate (todo 18, capability-first-live-experience;
+// repointed at the inlang catalogs by plan todo 23).
 //
-// typesafe-i18n's generated `Translation` type already forces every non-EN
-// locale's object literal to satisfy the FULL en shape at compile time (each
-// locale file ends `} satisfies Translation`, and `Translation` requires every
-// key en has — no `Partial`). This is a RUNTIME twin of that compile-time
-// guarantee: it walks the LOADED dictionaries (the ones the app actually
-// serves) and asserts exact key-set equality, so a drift is caught by `bun
-// test` alone — no `svelte-check`/full tsc pass required, and it survives any
-// future relaxation of the generated type.
+// The legacy generated `Translation` type used to force every non-EN dictionary
+// to satisfy the full `en` shape at compile time, and this gate was the RUNTIME
+// twin of that guarantee. The catalogs carry no such type — `messages/*.json` is
+// plain data — so after the migration this gate is not a twin of anything: it is
+// the ONLY thing standing between a hand-edited catalog and a locale that
+// silently ships a missing (or orphaned) key. It walks `messages/<locale>.json`,
+// the file the app actually compiles and serves, and asserts exact key-set
+// equality across all ten locales.
 //
 // It also pins the two structural facts from the todo-18 sweep:
 //   - every key added by todos 6, 10, 11, 12, 13 exists in all 10 locales
-//     (covered implicitly by the whole-dictionary parity below, and cross-
-//     checked explicitly per touched namespace);
-//   - the `live.presets.*` object REMOVED by todo 9 stays removed everywhere
-//     (a locale that reintroduces it would fail the whole-dictionary parity
-//     check the moment it drifts from en).
+//     (covered implicitly by the whole-catalog parity below, and cross-checked
+//     explicitly per touched namespace);
+//   - the `live.presets.*` object REMOVED by todo 9 stays removed everywhere.
 // ---------------------------------------------------------------------------
 
-loadAllLocales();
+const EN = readCatalog("en");
+const EN_KEYS = catalogKeys("en");
 
-type Dict = Record<string, unknown>;
-
-const ALL_LOCALES: Locales[] = [
-	"ar",
-	"de",
-	"es",
-	"fr",
-	"hi",
-	"ja",
-	"ko",
-	"pt-BR",
-	"zh",
-];
-
-const EN = loadedLocales.en as unknown as Dict;
-
-/** Depth-first walk collecting every LEAF key as a dotted path, sorted. */
-function collectKeyPaths(dict: Dict, prefix = ""): string[] {
-	const out: string[] = [];
-	for (const [k, v] of Object.entries(dict)) {
-		const path = prefix ? `${prefix}.${k}` : k;
-		if (v && typeof v === "object" && !Array.isArray(v)) {
-			out.push(...collectKeyPaths(v as Dict, path));
-		} else {
-			out.push(path);
-		}
-	}
-	return out.sort();
+/** A dotted key resolves to its catalog entry; `undefined` if absent. */
+function at(locale: LocaleCode, key: string): unknown {
+	return readCatalog(locale)[key];
 }
-
-/** Navigate a dotted path on a loaded dictionary; `undefined` if absent. */
-function at(dict: Dict, path: string): unknown {
-	return path.split(".").reduce<unknown>((cur, seg) => {
-		if (cur && typeof cur === "object" && seg in (cur as Dict)) {
-			return (cur as Dict)[seg];
-		}
-		return undefined;
-	}, dict);
-}
-
-const EN_KEYS = collectKeyPaths(EN);
 
 describe("locale-parity gate: walker sanity", () => {
 	it("collects a non-trivial key set from en (empty extraction FAILS)", () => {
@@ -75,10 +42,10 @@ describe("locale-parity gate: walker sanity", () => {
 	});
 });
 
-describe("locale-parity gate: whole-dictionary key-set equality (all 10 locales)", () => {
-	for (const locale of ALL_LOCALES) {
+describe("locale-parity gate: whole-catalog key-set equality (all 10 locales)", () => {
+	for (const locale of NON_BASE_LOCALES) {
 		it(`${locale}: exact same key set as en (no missing, no orphan keys)`, () => {
-			const keys = collectKeyPaths(loadedLocales[locale] as unknown as Dict);
+			const keys = catalogKeys(locale);
 			const missing = EN_KEYS.filter((k) => !keys.includes(k));
 			const extra = keys.filter((k) => !EN_KEYS.includes(k));
 			expect({ missing, extra }).toEqual({ missing: [], extra: [] });
@@ -104,11 +71,11 @@ describe("locale-parity gate: touched-namespace key-set equality (todos 6, 10-13
 			expect(enKeysInNamespace.length).toBeGreaterThan(0);
 		});
 
-		for (const locale of ALL_LOCALES) {
+		for (const locale of NON_BASE_LOCALES) {
 			it(`${locale}: "${prefix}*" matches en exactly`, () => {
-				const localeKeys = collectKeyPaths(
-					loadedLocales[locale] as unknown as Dict,
-				).filter((k) => k.startsWith(prefix));
+				const localeKeys = catalogKeys(locale).filter((k) =>
+					k.startsWith(prefix),
+				);
 				expect(localeKeys).toEqual(enKeysInNamespace);
 			});
 		}
@@ -128,16 +95,38 @@ describe("locale-parity gate: todo-9 removed keys stay absent (no orphans)", () 
 		"live.presets.failed",
 	] as const;
 
-	it("en confirms live.presets is not an object namespace", () => {
-		expect(at(EN, "live.presets")).toBeUndefined();
+	it("en confirms live.presets is not a live namespace", () => {
+		expect(EN_KEYS.filter((k) => k.startsWith("live.presets."))).toEqual([]);
+		expect(at("en", "live.presets")).toBeUndefined();
 	});
 
-	for (const locale of [...ALL_LOCALES, "en" as Locales]) {
+	for (const locale of ALL_LOCALES) {
 		it(`${locale}: none of the removed live.presets.* leaves are present`, () => {
-			const dict = loadedLocales[locale] as unknown as Dict;
 			for (const leaf of REMOVED_PRESET_LEAVES) {
-				expect(at(dict, leaf)).toBeUndefined();
+				expect(at(locale, leaf)).toBeUndefined();
 			}
+		});
+	}
+});
+
+// The catalogs are the app's own source of truth now, so an entry that is
+// neither a pattern string nor a variant array would compile into something the
+// registry cannot call. Legacy parity never had to check this — the dictionaries
+// were typed — so it is ADDED here rather than carried over.
+describe("locale-parity gate: every catalog entry has a renderable shape", () => {
+	for (const locale of ALL_LOCALES) {
+		it(`${locale}: every entry is a pattern string or a one-element variant array`, () => {
+			const malformed = Object.entries(readCatalog(locale))
+				.filter(([, value]) => {
+					if (typeof value === "string") return false;
+					return !(
+						Array.isArray(value) &&
+						value.length === 1 &&
+						typeof value[0] === "object"
+					);
+				})
+				.map(([key]) => key);
+			expect(malformed).toEqual([]);
 		});
 	}
 });

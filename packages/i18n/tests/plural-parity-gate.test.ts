@@ -1,180 +1,226 @@
 import { describe, expect, it } from "bun:test";
 
-import type { Locales } from "../src/i18n-types.js";
-import { i18nObject, loadedLocales } from "../src/i18n-util.js";
-import { loadAllLocales } from "../src/i18n-util.sync.js";
-import { interpolate } from "../src/plural-resolver.js";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import type { LocaleCode } from "../src/locale-lifecycle.js";
+import {
+	ALL_LOCALES,
+	type ComplexMessage,
+	isComplex,
+	PLURAL_COUNTS,
+	pluralKeys,
+	readCatalog,
+	readOracleParams,
+	readRenderedOracle,
+	variantsOf,
+} from "./helpers/catalog.js";
 
 // ---------------------------------------------------------------------------
-// PERMANENT plural-parity gate (todo 3).
+// PERMANENT plural-parity gate (todo 3; repointed onto the FROZEN oracle by
+// plan todo 23).
 //
-// Statically walks EVERY locale dictionary (all 10), extracts EVERY string that
-// carries typesafe-i18n plural syntax (`{{...}}`), and for each asserts the
-// BROWSER path (`interpolate`, the pure resolver the Svelte 5 runes adapter
-// delegates to) renders byte-for-byte identically to the NODE oracle
-// (`i18nObject`) at counts {0, 1, 2, 5, 11, 100}.
+// It used to render each dictionary string through BOTH live legacy paths (the
+// browser resolver and the node runtime) and assert they agreed. Once the legacy
+// runtime retires there is no second live path to agree with — so the oracle it
+// agreed with was FROZEN first (plan todo 19, `tests/fixtures/<locale>.rendered
+// .json`, captured from the old implementation with both paths cross-checked
+// key-for-key). This gate now renders through the NEW runtime — the generated
+// message registry backing `m`, i.e. the exact module every call site reaches
+// via `@ceraui/i18n/svelte` — and asserts byte equality with that frozen file.
 //
-// The counts are chosen to hit every Arabic plural bucket:
-//   0 -> zero · 1 -> one · 2 -> two · 5 -> few · 11 -> many · 100 -> other.
+// Both sides of "old render === new render" are therefore still proven, by two
+// tests against ONE immutable fixture set:
+//   - OLD  -> fixture: `rendered-oracle-gate.test.ts` renders the legacy runtime
+//             live and diffs it against these files (it retires with that
+//             runtime, at plan todo 24);
+//   - NEW  -> fixture: this file, plus `paraglide-reverse-render-gate.test.ts`
+//             for the whole catalog.
 //
-// A second assertion validates every plural part's ARITY: typesafe-i18n only
-// defines 1-part (`{{s}}` shorthand), 2-part (one|other), 3-part
-// (zero|one|other), and 6-part (zero|one|two|few|many|other) forms. A 4- or
-// 5-part plural is malformed for EVERY locale (pure parity alone can't catch it
-// because both paths mis-handle it identically), so the arity check is what
-// rejects a `{{a|b|c|d}}`-class bug.
+// The counts {0, 1, 2, 5, 11, 100} are the frozen set and hit every Arabic
+// plural bucket: 0 zero, 1 one, 2 two, 5 few, 11 many, 100 other.
 //
-// This is the permanent gate that prevents the plural bug class from recurring
-// as new locale strings are added.
+// The second structural assertion replaces the old branch-ARITY check. The
+// legacy format encoded plural branches positionally (`{{a|b}}`), so a 4- or
+// 5-branch group was malformed for every locale and pure parity could not catch
+// it — both paths mis-handled it identically. The converted format is
+// category-KEYED instead, so the equivalent defect is a variant set that does
+// not cover exactly the locale's own CLDR categories, or whose `*` catch-all is
+// not last (paraglide returns from the first matching variant in FILE ORDER, so
+// a leading catch-all shadows every category above it).
 // ---------------------------------------------------------------------------
 
-// Load all dictionaries synchronously at module scope so the walker below can
-// enumerate real keys at test-COLLECTION time (dynamic `it()` generation).
-loadAllLocales();
+const GENERATED = join(
+	dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"generated",
+);
 
-type Dict = Record<string, unknown>;
+const { m } = (await import(join(GENERATED, "registry.js"))) as {
+	m: Record<
+		string,
+		((inputs?: Record<string, unknown>, options?: { locale: string }) => string)
+	>;
+};
 
-const ALL_LOCALES: Locales[] = [
-	"en",
-	"ar",
-	"de",
-	"es",
-	"fr",
-	"hi",
-	"ja",
-	"ko",
-	"pt-BR",
-	"zh",
-];
-
-// {0,1,2,5,11,100} => ar {zero, one, two, few, many, other}.
-const COUNTS = [0, 1, 2, 5, 11, 100] as const;
-
-// The only legal typesafe-i18n plural aritys: 1 (`{{s}}`), 2 (one|other),
-// 3 (zero|one|other), 6 (zero|one|two|few|many|other).
-const VALID_PART_COUNTS = new Set([1, 2, 3, 6]);
-
-interface PluralString {
-	path: string[];
-	template: string;
+/** The categories `Intl.PluralRules` can actually select for this locale. */
+function cldrCategories(locale: LocaleCode): string[] {
+	return [...new Intl.PluralRules(locale).resolvedOptions().pluralCategories];
 }
 
-// Depth-first walk collecting every leaf string that contains `{{` (a plural
-// expression). Brand `{{deviceName}}`-style placeholders are resolved to real
-// brand names at module load (`branding.ts::brandTranslation`), so they never
-// reach this walker — only genuine plural syntax remains in the loaded dict.
-function collectPluralStrings(
-	dict: Dict,
-	path: string[] = [],
-	out: PluralString[] = [],
-): PluralString[] {
-	for (const [k, v] of Object.entries(dict)) {
-		const next = [...path, k];
-		if (typeof v === "string") {
-			if (v.includes("{{")) out.push({ path: next, template: v });
-		} else if (v && typeof v === "object") {
-			collectPluralStrings(v as Dict, next, out);
+interface VariantDefect {
+	key: string;
+	problem: string;
+	got: string[];
+}
+
+/**
+ * A variant set is legal when its match keys are exactly one per CLDR category
+ * of the locale, plus a trailing `*` catch-all, all on the declared selector.
+ */
+function variantDefects(
+	key: string,
+	variants: ComplexMessage,
+	locale: LocaleCode,
+): VariantDefect[] {
+	const defects: VariantDefect[] = [];
+	const matchKeys = Object.keys(variants.match);
+	const selector = variants.selectors[0];
+
+	if (selector === undefined) {
+		return [{ key, problem: "no selector declared", got: matchKeys }];
+	}
+
+	const expected = [
+		...cldrCategories(locale).map((category) => `${selector}=${category}`),
+		`${selector}=*`,
+	];
+	const missing = expected.filter((entry) => !matchKeys.includes(entry));
+	const extra = matchKeys.filter((entry) => !expected.includes(entry));
+
+	if (missing.length > 0) {
+		defects.push({ key, problem: `missing variants: ${missing.join()}`, got: matchKeys });
+	}
+	if (extra.length > 0) {
+		defects.push({ key, problem: `unexpected variants: ${extra.join()}`, got: matchKeys });
+	}
+	if (matchKeys.at(-1) !== `${selector}=*`) {
+		defects.push({ key, problem: "catch-all is not last", got: matchKeys });
+	}
+	return defects;
+}
+
+/** Legacy `{{one|other}}` syntax must not survive anywhere in a catalog. */
+const LEGACY_PLURAL_SYNTAX = /\{\{/;
+
+function legacySyntaxHits(locale: LocaleCode): string[] {
+	const hits: string[] = [];
+	for (const [key, value] of Object.entries(readCatalog(locale))) {
+		const patterns = isComplex(value)
+			? Object.values(variantsOf(value).match)
+			: [value];
+		if (patterns.some((pattern) => LEGACY_PLURAL_SYNTAX.test(pattern))) {
+			hits.push(key);
 		}
 	}
-	return out;
+	return hits;
 }
 
-// Navigate the `i18nObject(locale)` proxy to `path` and call the leaf with
-// `params` — the NODE oracle for a real dictionary key.
-function oracleAt(
-	proxy: unknown,
-	path: string[],
-	params: Record<string, unknown>,
-): string {
-	let cur: unknown = proxy;
-	for (const seg of path) cur = (cur as Dict)[seg];
-	return (cur as (p: Record<string, unknown>) => string)(params);
-}
-
-// Build a params object that routes `count` to WHATEVER key the plural resolves
-// to: every `{arg}` token key, every explicit `{{key:...}}` key, and the
-// positional-index "0" fallback. Passing identical params to both paths keeps
-// the comparison honest regardless of the inferred key.
-function buildParams(template: string, count: number): Record<string, number> {
-	const params: Record<string, number> = { "0": count };
-	for (const m of template.matchAll(/\{(\w+)(?::\w+)?\}/g)) {
-		const key = m[1];
-		if (key) params[key] = count;
+/** The inputs the frozen oracle used for one plural key at one count. */
+function pluralInputs(
+	locale: LocaleCode,
+	key: string,
+	count: number,
+): Record<string, number> {
+	const spec = readOracleParams(locale).keys[key];
+	if (spec?.plural !== true) {
+		throw new Error(`frozen oracle has no plural spec for ${locale}:${key}`);
 	}
-	for (const m of template.matchAll(/\{\{\s*(\w+)\s*:/g)) {
-		const key = m[1];
-		if (key) params[key] = count;
-	}
-	return params;
-}
-
-// Balanced-brace split (the exact regex typesafe-i18n uses). A `{{...}}` group
-// is captured whole; its inner content starts with `{`.
-const REGEX_BRACKETS_SPLIT = /(\{(?:[^{}]+|\{(?:[^{}]+)*\})*\})/g;
-const REGEX_BRACKETS_WHOLE = /^\{(?:[^{}]+|\{(?:[^{}]+)*\})*\}$/;
-
-// Return the branch-arity of every `{{...}}` plural part in `template`,
-// mirroring `parsePluralPart`'s key/values split (values = segment after the
-// first `:` when a key is present, else the whole content).
-function pluralPartArities(template: string): number[] {
-	const arities: number[] = [];
-	for (const raw of template.split(REGEX_BRACKETS_SPLIT)) {
-		if (!raw || !REGEX_BRACKETS_WHOLE.test(raw)) continue;
-		const content = raw.slice(1, -1);
-		if (!content.startsWith("{")) continue; // `{arg}` token, not a plural part
-		const inner = content.slice(1, -1);
-		const segments = inner.split(":");
-		const values = segments[1] ? segments[1] : segments[0];
-		arities.push((values ?? "").split("|").length);
-	}
-	return arities;
+	return Object.fromEntries(spec.countParams.map((name) => [name, count]));
 }
 
 describe("plural-parity gate: walker sanity", () => {
-	it("finds >0 plural strings in the en dictionary (empty extraction FAILS)", () => {
-		const found = collectPluralStrings(loadedLocales.en as unknown as Dict);
-		expect(found.length).toBeGreaterThan(0);
+	it("finds >0 plural messages in the en catalog (empty extraction FAILS)", () => {
+		expect(pluralKeys("en").length).toBeGreaterThan(0);
 	});
 
-	it("rejects a malformed 4-part plural (arity gate has teeth)", () => {
-		expect(pluralPartArities("x {{a|b|c|d}}").every((n) => VALID_PART_COUNTS.has(n))).toBe(false);
-		expect(pluralPartArities("x {{a|b|c|d|e}}").every((n) => VALID_PART_COUNTS.has(n))).toBe(false);
-		// The four legal forms all pass.
-		expect(pluralPartArities("{{s}}").every((n) => VALID_PART_COUNTS.has(n))).toBe(true);
-		expect(pluralPartArities("{{a|b}}").every((n) => VALID_PART_COUNTS.has(n))).toBe(true);
-		expect(pluralPartArities("{{a|b|c}}").every((n) => VALID_PART_COUNTS.has(n))).toBe(true);
-		expect(pluralPartArities("{{a|b|c|d|e|f}}").every((n) => VALID_PART_COUNTS.has(n))).toBe(true);
+	it("rejects a malformed variant set (the structural gate has teeth)", () => {
+		const legal: ComplexMessage = {
+			declarations: ["input count", "local countPlural = count: plural"],
+			selectors: ["countPlural"],
+			match: { "countPlural=one": "a", "countPlural=other": "b", "countPlural=*": "b" },
+		};
+		expect(variantDefects("probe", legal, "en")).toEqual([]);
+
+		const missingCategory: ComplexMessage = {
+			...legal,
+			match: { "countPlural=one": "a", "countPlural=*": "b" },
+		};
+		expect(variantDefects("probe", missingCategory, "en").length).toBeGreaterThan(0);
+
+		const catchAllFirst: ComplexMessage = {
+			...legal,
+			match: { "countPlural=*": "b", "countPlural=one": "a", "countPlural=other": "b" },
+		};
+		expect(variantDefects("probe", catchAllFirst, "en")).toEqual([
+			{ key: "probe", problem: "catch-all is not last", got: ["countPlural=*", "countPlural=one", "countPlural=other"] },
+		]);
+
+		const arabicSetUnderArabic: ComplexMessage = {
+			...legal,
+			match: { "countPlural=one": "a", "countPlural=other": "b", "countPlural=*": "b" },
+		};
+		expect(variantDefects("probe", arabicSetUnderArabic, "ar").length).toBeGreaterThan(0);
 	});
 });
 
 for (const locale of ALL_LOCALES) {
-	const plurals = collectPluralStrings(loadedLocales[locale] as unknown as Dict);
+	const keys = pluralKeys(locale);
 
-	describe(`plural-parity gate: ${locale} (${plurals.length} plural string(s))`, () => {
+	describe(`plural-parity gate: ${locale} (${keys.length} plural message(s))`, () => {
+		it("carries no legacy {{…}} plural syntax in any catalog entry", () => {
+			expect(legacySyntaxHits(locale)).toEqual([]);
+		});
+
+		it("the frozen oracle carries a per-count render for every plural message", () => {
+			const oracle = readRenderedOracle(locale);
+			const notFrozen = keys.filter((key) => typeof oracle[key] !== "object");
+			expect(notFrozen).toEqual([]);
+		});
+
 		// ja/ko/zh carry no plural syntax — they still run through the walker and
 		// pass trivially (the locale IS included in the gate).
-		if (plurals.length === 0) {
+		if (keys.length === 0) {
 			it("has no plural syntax — trivially passes the gate", () => {
-				expect(plurals).toEqual([]);
+				expect(keys).toEqual([]);
 			});
 			return;
 		}
 
-		it("every plural part has a legal typesafe-i18n arity (1|2|3|6)", () => {
-			const malformed = plurals.flatMap(({ path, template }) =>
-				pluralPartArities(template)
-					.filter((n) => !VALID_PART_COUNTS.has(n))
-					.map((partCount) => ({ key: path.join("."), partCount, template })),
-			);
-			expect(malformed).toEqual([]);
+		it("every plural message covers exactly this locale's CLDR categories, catch-all last", () => {
+			const catalog = readCatalog(locale);
+			const defects = keys.flatMap((key) => {
+				const value = catalog[key];
+				if (value === undefined || !isComplex(value)) {
+					return [{ key, problem: "not a variant message", got: [] }];
+				}
+				return variantDefects(key, variantsOf(value), locale);
+			});
+			expect(defects).toEqual([]);
 		});
 
-		for (const { path, template } of plurals) {
-			for (const count of COUNTS) {
-				it(`${path.join(".")} · count=${count} · interpolate === i18nObject`, () => {
-					const params = buildParams(template, count);
-					const oracle = oracleAt(i18nObject(locale), path, params);
-					expect(interpolate(template, params, locale)).toBe(oracle);
+		for (const key of keys) {
+			for (const count of PLURAL_COUNTS) {
+				const category = new Intl.PluralRules(locale).select(count);
+				it(`${key} · count=${count} (${category}) · m[key] === frozen oracle`, () => {
+					const frozen = readRenderedOracle(locale)[key];
+					expect(typeof frozen).toBe("object");
+					const expected = (frozen as Record<string, string>)[String(count)];
+					const render = m[key];
+					expect(render).toBeDefined();
+					expect(render?.(pluralInputs(locale, key, count), { locale })).toBe(
+						expected,
+					);
 				});
 			}
 		}

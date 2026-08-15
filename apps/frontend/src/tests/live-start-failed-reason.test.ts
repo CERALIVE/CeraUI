@@ -3,7 +3,7 @@ import { cleanup, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import en from "../../../../packages/i18n/src/en/index";
+import { en } from "./helpers/catalog";
 
 const state = vi.hoisted(() => ({
 	stopReason: undefined as string | undefined,

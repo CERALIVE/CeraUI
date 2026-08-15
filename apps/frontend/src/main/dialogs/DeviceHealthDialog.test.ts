@@ -30,7 +30,7 @@ import type {
 	EncoderLoadReading,
 } from "$lib/streaming/encoder-load";
 
-import en from "../../../../../packages/i18n/src/en/index";
+import { en } from "../../tests/helpers/catalog";
 
 const state = {
 	temperature: {

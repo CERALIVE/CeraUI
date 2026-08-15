@@ -4,8 +4,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { loadedLocales } from "../src/i18n-util.js";
-import { loadAllLocales } from "../src/i18n-util.sync.js";
+import { catalogKeys as readCatalogKeys } from "./helpers/catalog.js";
 
 // ---------------------------------------------------------------------------
 // BACKEND labelKey CONTRACT.
@@ -19,33 +18,19 @@ import { loadAllLocales } from "../src/i18n-util.sync.js";
 // This gate extracts every dotted key the backend source can emit and asserts it
 // resolves in the `en` catalog.
 //
-// IT READS THE CATALOG STRUCTURE, NOT THE RUNTIME — which is why it SURVIVES the
-// Paraglide migration unchanged apart from ONE function, `loadEnCatalogKeys()`
-// below (the single migration seam: swap the dictionary import for the message
-// registry / messages/en.json key set and everything else stands).
+// IT READS THE CATALOG STRUCTURE, NOT THE RUNTIME — which is why it SURVIVED the
+// Paraglide migration by changing ONE function, `loadEnCatalogKeys()` below: the
+// legacy nested-dictionary walk became a read of `messages/en.json`, whose keys
+// are already the verbatim dotted form. Everything else stands unchanged.
 // ---------------------------------------------------------------------------
-
-loadAllLocales();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BACKEND_SRC = join(HERE, "..", "..", "..", "apps", "backend", "src");
 
 // ===== THE ONE MIGRATION SEAM ==============================================
-/** Every dotted leaf key of the `en` catalog. */
+/** Every dotted key of the `en` catalog. */
 function loadEnCatalogKeys(): Set<string> {
-	const keys = new Set<string>();
-	const walk = (node: Record<string, unknown>, path: string[]): void => {
-		for (const [k, v] of Object.entries(node)) {
-			const next = [...path, k];
-			if (typeof v === "string") {
-				keys.add(next.join("."));
-				continue;
-			}
-			if (v && typeof v === "object") walk(v as Record<string, unknown>, next);
-		}
-	};
-	walk(loadedLocales.en as unknown as Record<string, unknown>, []);
-	return keys;
+	return new Set(readCatalogKeys("en"));
 }
 // ===========================================================================
 

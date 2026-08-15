@@ -123,7 +123,7 @@ function kioskStatus(state: KioskState, enabled: boolean) {
 	};
 }
 
-// Expected labels, mirroring packages/i18n/src/en/index.ts settings.onDeviceDisplay.states.
+// Expected labels, mirroring packages/i18n/messages/en.json settings.onDeviceDisplay.states.
 const STATE_LABELS: Record<KioskState, string> = {
 	disabled: "Disabled",
 	"enabled-stopped": "Starting\u2026",

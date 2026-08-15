@@ -27,7 +27,7 @@
 		"dev": "typesafe-i18n",
 		"build": "typesafe-i18n --no-watch && bun run check",
 		"check": "node ../../scripts/tsc.mjs --compiler-package typescript-7 --noEmit",
-		"test": "bun test",
+		"test": "bun run generate:i18n && bun test",
 		"fixtures": "bun scripts/generate-fixtures.ts",
 		"convert-catalog": "bun scripts/convert-catalog.ts",
 		"compile-messages": "bun scripts/compile-messages.ts",

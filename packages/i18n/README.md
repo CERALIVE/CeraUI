@@ -174,17 +174,33 @@ source.
 ## Tests
 
 ```bash
-bun test packages/i18n
+bun run --filter @ceraui/i18n test
 ```
+
+That script runs `generate:i18n` first, so the suite is runnable from a clean
+checkout — several gates render through the generated registry.
 
 | File | Proves |
 |---|---|
-| `locale-parity-gate.test.ts` | The key set is identical across all ten locales. |
-| `plural-parity-gate.test.ts` | Plural rendering matches the frozen oracle. |
+| `locale-parity-gate.test.ts` | The key set is identical across all ten locales, and every entry has a renderable shape. |
+| `plural-parity-gate.test.ts` | Plural rendering matches the frozen oracle, and every variant set covers exactly its locale's CLDR categories with the catch-all last. |
+| `svelte-adapter-plural.test.ts` | The store facade (`m`) renders every plural key byte-identically to the frozen oracle; retired legacy grammar stays absent from the catalogs. |
+| `server-plural.test.ts` | `live.server.bondedAcross` renders the exact singular/plural English copy. |
+| `translation-quality.test.ts` | The keys added by todos 6/10-13 are real per-locale translations with no interpolation residue. |
+| `backend-labelkey-contract.test.ts` | Every dotted key the backend can emit as data resolves in the `en` catalog. |
 | `paraglide-catalog-gate.test.ts` | The converted catalog carries every key, with no module-id collisions. |
 | `paraglide-reverse-render-gate.test.ts` | Every converted message renders byte-identically to the legacy runtime. |
+| `rendered-oracle-gate.test.ts` | The LEGACY runtime still renders the frozen oracle byte-for-byte (retires with that runtime). |
 | `locale-lifecycle.test.ts` | Startup priority, RTL direction, unsupported-locale fallback. |
 | `message-registry.test.ts` | The namespace map matches the emitted modules; `resolveMessageKey`'s fallback semantics. |
 
+The two halves of "old render === new render" are proven against ONE immutable
+fixture set: `rendered-oracle-gate.test.ts` is the OLD side, `plural-parity-gate`
++ `paraglide-reverse-render-gate` are the NEW side. Shared readers for the
+catalogs and the fixtures live in `tests/helpers/catalog.ts` and import no legacy
+runtime.
+
 Frontend-side, `apps/frontend/src/tests/` adds the locale-store DOM contract, the
-umbrella-import gate, and the lazy-namespace proof.
+umbrella-import gate, and the lazy-namespace proof. Copy-asserting frontend tests
+read the catalogs through `apps/frontend/src/tests/helpers/catalog.ts`, which
+re-nests the flat dotted keys so path-style assertions stay unchanged.

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import type { Locales } from "../src/i18n-types.js";
-import { loadedLocales } from "../src/i18n-util.js";
-import { loadAllLocales } from "../src/i18n-util.sync.js";
+import type { LocaleCode } from "../src/locale-lifecycle.js";
+import { NON_BASE_LOCALES, readCatalog } from "./helpers/catalog.js";
 
 // ---------------------------------------------------------------------------
 // Translation-quality gate for the exact keys added by todos 6, 10, 11, 12, 13
@@ -11,33 +10,18 @@ import { loadAllLocales } from "../src/i18n-util.sync.js";
 //
 // Proves every new key resolves to a REAL, non-empty, per-locale translation —
 // not an English placeholder silently copy-pasted across all 10 locale files —
-// and that no literal typesafe-i18n interpolation syntax (`{...}` / `{{...}}`)
-// leaks into the rendered string (all of these keys are param-free).
+// and that no literal interpolation syntax (`{...}` / `{{...}}`) leaks into the
+// value (all of these keys are param-free).
+//
+// Repointed by plan todo 23 from the legacy dictionaries onto `messages/*.json`,
+// the catalogs the app compiles and serves. Key access is a direct lookup rather
+// than a nested walk, because the catalogs are keyed by the verbatim dotted key.
 // ---------------------------------------------------------------------------
 
-loadAllLocales();
+const ALL_NON_EN_LOCALES: readonly LocaleCode[] = NON_BASE_LOCALES;
 
-type Dict = Record<string, unknown>;
-
-const ALL_NON_EN_LOCALES: Locales[] = [
-	"ar",
-	"de",
-	"es",
-	"fr",
-	"hi",
-	"ja",
-	"ko",
-	"pt-BR",
-	"zh",
-];
-
-function at(dict: Dict, path: string): unknown {
-	return path.split(".").reduce<unknown>((cur, seg) => {
-		if (cur && typeof cur === "object" && seg in (cur as Dict)) {
-			return (cur as Dict)[seg];
-		}
-		return undefined;
-	}, dict);
+function at(locale: LocaleCode, path: string): unknown {
+	return readCatalog(locale)[path];
 }
 
 // The full key inventory the todo-18 spec names, per originating todo.
@@ -57,16 +41,14 @@ const NEW_KEYS = [
 // same-spelling short word in ja/ko/zh/ar/hi/pt-BR is not itself suspicious, but
 // es/de/fr sharing Latin script with en makes an accidental copy-paste far more
 // plausible, so those three are the load-bearing "proves it's translated" check.
-const MUST_DIFFER_FROM_EN: Locales[] = ["es", "de", "fr"];
+const MUST_DIFFER_FROM_EN: readonly LocaleCode[] = ["es", "de", "fr"];
 
 const INTERPOLATION_RESIDUE_RE = /\{\{?[^}]*\}\}?/;
 
 describe("translation-quality gate: keys added by todos 6/10-13", () => {
-	const en = loadedLocales.en as unknown as Dict;
-
 	for (const { path, todo } of NEW_KEYS) {
 		describe(`${path} (todo ${todo})`, () => {
-			const enValue = at(en, path);
+			const enValue = at("en", path);
 
 			it("exists on en as a non-empty string", () => {
 				expect(typeof enValue).toBe("string");
@@ -75,7 +57,7 @@ describe("translation-quality gate: keys added by todos 6/10-13", () => {
 
 			for (const locale of ALL_NON_EN_LOCALES) {
 				it(`${locale}: resolves to a non-empty string with no interpolation residue`, () => {
-					const value = at(loadedLocales[locale] as unknown as Dict, path);
+					const value = at(locale, path);
 					expect(typeof value).toBe("string");
 					const str = value as string;
 					expect(str.length).toBeGreaterThan(0);
@@ -85,8 +67,7 @@ describe("translation-quality gate: keys added by todos 6/10-13", () => {
 
 			for (const locale of MUST_DIFFER_FROM_EN) {
 				it(`${locale}: is a REAL translation, not the English value copy-pasted`, () => {
-					const value = at(loadedLocales[locale] as unknown as Dict, path) as string;
-					expect(value).not.toBe(enValue);
+					expect(at(locale, path)).not.toBe(enValue);
 				});
 			}
 		});

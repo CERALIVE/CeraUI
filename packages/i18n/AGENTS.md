@@ -49,6 +49,7 @@ import { LL } from '@ceraui/i18n/i18n-svelte5';                    // LEGACY, be
 
 ```bash
 bun run --filter @ceraui/i18n generate:i18n   # paraglide compile + registry generation
+bun run --filter @ceraui/i18n test            # runs generate:i18n first, then bun test
 ```
 
 Runs as the first step of the frontend `check` / `test` / `build` /
@@ -60,6 +61,12 @@ generated modules. The legacy generator still runs separately via `typesafe-i18n
 
 - New keys go into `en` first (legacy `en/index.ts` while it is still the conversion
   source). Other locales follow; the parity gate fails on a differing key set.
+- **The test suite reads `messages/*.json` and the frozen fixtures, not the legacy
+  runtime.** Shared readers live in `tests/helpers/catalog.ts`. The only files still
+  importing the legacy dictionaries are the three CONVERSION-proof gates
+  (`paraglide-catalog-gate`, `paraglide-reverse-render-gate`, `rendered-oracle-gate`)
+  and the conversion scripts — all of which retire together with that runtime. Do not
+  repoint those three: comparing the catalog against the dictionary IS what they prove.
 - `branding.ts` holds brand names that don't get translated — import from there.
 - Svelte 5 store uses runes — don't convert to stores.
 - Don't hand-edit anything under `generated/`, `src/paraglide/`, `i18n-util*.ts`, or
