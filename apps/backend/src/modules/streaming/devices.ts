@@ -311,29 +311,13 @@ async function defaultGetEngineDevices(): Promise<CaptureDevice[] | null> {
 	// idle CeraUI holds no connection, so the engine is treated as unreachable and
 	// the local v4l2 scan is the truthful source. No per-poll connect churn.
 	//
-	// EXCEPT under MOCK_SCENARIO, where the dev host's own v4l2/ALSA hardware is
-	// not what the scenario describes: falling back to it makes the registry
-	// observe a device SET that never contains the simulated cameras, which then
-	// propagates as a hotplug "removal" and empties the source list.
+	// It is deliberately NOT redirected to the scenario device list under
+	// MOCK_SCENARIO: this scan is also `switchInput`'s reachability gate, and a
+	// device the scenario makes VISIBLE in the picker still has no engine or
+	// v4l2 node behind it on a dev host, so the honest answer to a live switch
+	// there is SOURCE_LOST. The `sources` rebuild reads the scenario instead —
+	// see `observedForSourcesRebuild` in sources.ts.
 	try {
-		const { shouldUseMocks } = await import("../../mocks/mock-service.ts");
-		if (shouldUseMocks()) {
-			const { getMockEngineDevices } = await import(
-				"../../mocks/providers/streaming.ts"
-			);
-			return getMockEngineDevices().devices.map((d) =>
-				fromEngineDevice({
-					input_id: d.input_id,
-					device_path: d.device_path,
-					display_name: d.display_name,
-					media_class: d.media_class,
-					kind: d.kind,
-					caps: d.caps,
-					modes: d.modes,
-					stable_id: d.stable_id,
-				}),
-			);
-		}
 		const { cerastreamBackend } = await import("./cerastream-backend.ts");
 		const result = await cerastreamBackend.listDevicesIfActive();
 		if (result === null) return null;

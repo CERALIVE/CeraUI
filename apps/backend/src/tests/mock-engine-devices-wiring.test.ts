@@ -6,17 +6,31 @@ import {
 	createDeviceRegistry,
 	type DeviceRegistryDeps,
 } from "../modules/streaming/devices.ts";
+import {
+	getEngineDeviceCache,
+	refreshEngineDeviceCache,
+	refreshSourcesForHotplug,
+	resetEngineDeviceCache,
+} from "../modules/streaming/sources.ts";
 
 /**
  * `main.ts` injects the scenario's `list-devices` into the capability fold and
- * the boot `sources` seed, and for a long while that was the ONLY wiring. Every
- * other reader — the device registry's own poll, the hotplug refresh it fires,
- * the 5 s signal recheck — took DEFAULT deps, i.e. a real engine socket that
- * cannot exist under `MOCK_SCENARIO`. Each of those falls back to the dev HOST's
- * hardware, which is not what the scenario describes, so the first poll after
- * boot reported the scenario's cameras as removed and emptied `sources` for the
- * rest of the process. Nothing failed loudly: `sources` is on-change only, so
- * the coarse-only list simply stood.
+ * the boot `sources` seed, and for a long while that was the ONLY wiring. The
+ * readers that REBUILD `sources` afterwards — the hotplug refresh and the 5 s
+ * signal recheck — took DEFAULT deps, i.e. a real engine socket that cannot
+ * exist under `MOCK_SCENARIO`, and fell back to the registry's observation of
+ * the dev HOST. So the first host-driven transition after boot reported the
+ * scenario's cameras as removed and emptied `sources` for the rest of the
+ * process. Nothing failed loudly: `sources` is on-change only, so the
+ * coarse-only list simply stood.
+ *
+ * The scope of the repair is exactly that rebuild path. The device REGISTRY
+ * keeps observing the host, because its scan is also `switchInput`'s
+ * reachability gate: a scenario device is VISIBLE in the picker while still
+ * having no engine or v4l2 node behind it, and a live switch to it must keep
+ * answering SOURCE_LOST. The first attempt widened the registry too and erased
+ * that divergence, which is what `tests/e2e/input-picker.spec.ts` exists to
+ * prevent — hence the negative half of this lock.
  */
 
 const ENV_KEYS = ["MOCK_MODE", "MOCK_SCENARIO", "NODE_ENV"] as const;
@@ -71,20 +85,48 @@ describe("mock scenario devices reach the DEFAULT-deps readers", () => {
 		expect(ids).toContain("usb");
 	});
 
-	test("the device registry observes the scenario, not the dev host", async () => {
-		const registry = createDeviceRegistry(hostlessDeps());
-		const ids = (await registry.scan()).map((d) => d.input_id);
+	test("a host-driven transition rebuilds `sources` from the scenario, never from the host", async () => {
+		resetEngineDeviceCache();
+		await refreshEngineDeviceCache();
+		expect(getEngineDeviceCache().map((d) => d.input_id)).toContain("usb");
+
+		// What the registry sees on a dev host with no capture hardware: audio
+		// cards only, and not one of the scenario's cameras.
+		await refreshSourcesForHotplug([
+			{
+				input_id: "audio:hostmic",
+				device_path: "alsa:hostmic",
+				display_name: "Host mic",
+				media_class: "audio",
+				kind: "audio",
+			},
+		]);
+
+		const ids = getEngineDeviceCache().map((d) => d.input_id);
 		expect(ids).toContain("hdmi");
 		expect(ids).toContain("usb");
-		expect(ids).not.toContain("audio:hostmic");
+	});
+});
+
+describe("the switch-reachability gate keeps the HOST's truth", () => {
+	test("the registry scan does NOT adopt the scenario", async () => {
+		const registry = createDeviceRegistry(hostlessDeps());
+		const ids = (await registry.scan()).map((d) => d.input_id);
+		expect(ids).not.toContain("hdmi");
+		expect(ids).not.toContain("usb");
+		expect(ids).toContain("audio:hostmic");
 	});
 
-	test("a steady scenario never fires a hotplug transition", async () => {
-		const onDevicesChanged = mock(() => undefined);
-		const registry = createDeviceRegistry(hostlessDeps({ onDevicesChanged }));
-		await registry.rescan();
-		await registry.rescan();
-		await registry.rescan();
-		expect(onDevicesChanged).toHaveBeenCalledTimes(0);
+	test("a live switch to a scenario-visible device with no node behind it answers SOURCE_LOST", async () => {
+		const engineSwitch = mock(async () => undefined);
+		const registry = createDeviceRegistry(
+			// Streaming, so the engine WOULD be commanded if the gate let it through.
+			hostlessDeps({ engineSwitch, isStreaming: () => true }),
+		);
+		expect(await registry.switchInput("usb")).toMatchObject({
+			success: false,
+			error: "SOURCE_LOST",
+		});
+		expect(engineSwitch).toHaveBeenCalledTimes(0);
 	});
 });

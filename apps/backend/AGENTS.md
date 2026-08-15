@@ -1243,17 +1243,16 @@ classified from the oRPC wrapper message then the error code. Issue paths are sc
 field names (safe); messages are scrubbed through `logRedact`. Returns `undefined`
 when the error has no issue list.
 
-### The scenario is the ENGINE-DEVICE truth on EVERY path, not just the injected two
+### The scenario is the `sources` truth — and deliberately NOT the switch-reachability truth
 
 `main.ts` injects `getMockEngineDevices()` into the capability fold and the boot
-`sources` seed. That is not sufficient, and the gap is silent: every OTHER
-engine-device reader takes DEFAULT deps — the device registry's own poll
-(`devices.ts` `defaultGetEngineDevices`), the hotplug refresh it fires
-(`sources.ts` `refreshSourcesForHotplug`), and the 5 s signal recheck
-(`recheckSourceSignals`) — and those dial a cerastream control socket that cannot
-exist under `MOCK_SCENARIO`. A failing probe then hands over to the observation,
-which in dev is the HOST's own `/sys/class/video4linux` + ALSA scan, i.e. hardware
-the scenario says nothing about.
+`sources` seed. That is not sufficient, and the gap is silent: the readers that
+REBUILD `sources` afterwards — `sources.ts` `refreshSourcesForHotplug` (fired by
+the device registry's own device-SET change) and `recheckSourceSignals` (the 5 s
+tick) — take DEFAULT deps, i.e. a cerastream control socket that cannot exist
+under `MOCK_SCENARIO`. A failing probe then hands over to the registry's
+observation, which in dev is the HOST's own `/sys/class/video4linux` + ALSA scan:
+hardware the scenario says nothing about.
 
 Measured on a dev host with no `/dev/video*`: the registry's first scan is empty
 and correctly skipped as the initial scan; ~2 s later the host's ALSA cards land
@@ -1263,14 +1262,32 @@ that observation — erasing every simulated capture device from `sources`. Beca
 process, and a page that authenticated afterwards got it in its post-login
 snapshot. Nothing failed loudly.
 
-`defaultFetchEngineDevices` (`capabilities.ts`) and `defaultGetEngineDevices`
-(`devices.ts`) therefore both serve `getMockEngineDevices()` under
-`shouldUseMocks()`, so the registry OBSERVES the scenario and a steady scenario
-produces no phantom hotplug transition. Production is byte-unchanged (both gates
-require `isDevelopment()` AND an initialised mock state), and the imports are lazy
-so the mock graph stays off these modules' load paths. When you add a new
-engine-device reader, take deps or route through these defaults — do NOT leave it
-on a raw socket probe. Coverage: `tests/mock-engine-devices-wiring.test.ts`.
+Two seams carry the repair, and BOTH are scoped to the `sources` rebuild:
+
+- `defaultFetchEngineDevices` (`capabilities.ts`) serves `getMockEngineDevices()`
+  under `shouldUseMocks()`. Its only consumers are the capability service and the
+  engine-device cache — the build path, never a gate.
+- `observedForSourcesRebuild` (`sources.ts`) substitutes the scenario list for the
+  registry's host observation in the two rebuild entry points above. The scenario's
+  own hotplug seam is `setMockDeviceAttached`, so the scenario IS the observation.
+
+**`defaultGetEngineDevices` (`devices.ts`) is deliberately NOT redirected.** The
+registry's `scan()` is also `switchInput`'s reachability gate
+(`deviceRegistry.switchInput` re-scans and answers `SOURCE_LOST` when the target
+is absent), and picker-VISIBILITY and switch-REACHABILITY are allowed to diverge:
+a scenario device is visible in the picker while still having no engine or v4l2
+node behind it, and the honest answer to a live switch there is `SOURCE_LOST`.
+Widening the registry too — the first attempt at this fix — erased that divergence
+and broke `tests/e2e/input-picker.spec.ts`'s deliberate negative coverage. Do not
+redo it; if a new reader needs the scenario, route it through
+`observedForSourcesRebuild` or take injected deps.
+
+Production is byte-unchanged (every gate requires `isDevelopment()` AND an
+initialised mock state) and the imports are lazy, so the mock graph stays off
+these modules' load paths. Coverage: `tests/mock-engine-devices-wiring.test.ts`,
+whose second describe is the negative half (the registry must NOT adopt the
+scenario, and a live switch to a scenario-visible device must still refuse before
+commanding the engine).
 
 ### Scenario-seeded capability profiles (T5)
 
