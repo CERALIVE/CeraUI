@@ -1,5 +1,5 @@
 <script lang="ts">
-import { getLL } from '@ceraui/i18n/i18n-svelte5';
+import { resolveMessageKey } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
 
 import { Toaster } from '$lib/components/ui/sonner';
@@ -10,20 +10,9 @@ import {
 } from '$lib/helpers/SystemHelper';
 import { clearNotifications, dismiss, getActive } from '$lib/stores/notifications.svelte';
 
-// Resolve the action label i18n key against the live translation tree, falling
+// Resolve the action label i18n key against the live message registry, falling
 // back to the raw key so an unknown label never blocks the deep-link affordance.
-function resolveActionLabel(key: string): string {
-	const ll = getLL() as Record<string, unknown>;
-	let node: unknown = ll;
-	for (const seg of key.split('.')) {
-		if (node && typeof node === 'object' && seg in (node as object)) {
-			node = (node as Record<string, unknown>)[seg];
-		} else {
-			return key;
-		}
-	}
-	return typeof node === 'function' ? (node as () => string)() : key;
-}
+const resolveActionLabel = resolveMessageKey;
 
 // Bookkeeping for which active notifications have already been surfaced as a
 // toast. Keyed by the store's dedup key (`name`) → the `receivedAt` stamp of

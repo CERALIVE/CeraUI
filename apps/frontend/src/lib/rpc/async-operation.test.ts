@@ -24,7 +24,7 @@ import {
 } from "./async-operation.svelte";
 
 // osCommand's two feedback collaborators are mocked: `toast` is spied so we can
-// assert the SINGLE failure-feedback path, and `getLL()` returns a minimal shape
+// assert the SINGLE failure-feedback path, and the mocked `m` returns a minimal shape
 // so the i18n fallback resolves without booting the typesafe-i18n runtime.
 vi.mock("svelte-sonner", () => ({
 	toast: {
@@ -35,10 +35,8 @@ vi.mock("svelte-sonner", () => ({
 	},
 }));
 
-vi.mock("@ceraui/i18n/i18n-svelte5", () => ({
-	getLL: () => ({
-		network: { os: { operationFailed: () => "operation_failed" } },
-	}),
+vi.mock("@ceraui/i18n/svelte", () => ({
+	m: { "network.os.operationFailed": () => "operation_failed" },
 }));
 
 const {

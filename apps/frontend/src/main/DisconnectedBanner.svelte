@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import LoaderCircleIcon from '@lucide/svelte/icons/loader-circle';
 import RotateCwIcon from '@lucide/svelte/icons/rotate-cw';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
@@ -47,8 +47,8 @@ const ux = $derived(
 			role="status"
 		>
 			<RotateCwIcon class="text-status-info size-4 shrink-0 motion-safe:animate-spin" />
-			<span class="font-medium">{$LL.connection.rebooting()}</span>
-			<span class="text-muted-foreground hidden sm:inline">{$LL.connection.rebootingDescription()}</span>
+			<span class="font-medium">{m["connection.rebooting"]()}</span>
+			<span class="text-muted-foreground hidden sm:inline">{m["connection.rebootingDescription"]()}</span>
 		</div>
 	{:else if ux.mode === 'failed'}
 		<div
@@ -58,14 +58,14 @@ const ux = $derived(
 			role="alert"
 		>
 			<WifiOffIcon class="text-status-error size-4 shrink-0" />
-			<span class="font-medium">{$LL.connection.failed()}</span>
+			<span class="font-medium">{m["connection.failed"]()}</span>
 			<Button
 				class="border-status-error/40 text-status-error hover:bg-status-error/10 ms-auto h-7"
 				onclick={() => retryConnection()}
 				size="sm"
 				variant="outline"
 			>
-				{$LL.connection.retry()}
+				{m["connection.retry"]()}
 			</Button>
 		</div>
 	{:else}
@@ -76,7 +76,7 @@ const ux = $derived(
 			role="status"
 		>
 			<LoaderCircleIcon class="text-status-warning size-4 shrink-0 motion-safe:animate-spin" />
-			<span class="font-medium">{$LL.connection.lost()}</span>
+			<span class="font-medium">{m["connection.lost"]()}</span>
 		</div>
 	{/if}
 {/if}

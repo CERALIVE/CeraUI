@@ -7,16 +7,13 @@
  * This suite locks that the SRTLA fields render and the removed RIST even-port
  * hint is gone.
  */
-import { LL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import { render } from "@testing-library/svelte";
-import { get } from "svelte/store";
 import { describe, expect, it } from "vitest";
 
 import type { Validation } from "$lib/components/streaming/relay-validation";
 
 import CustomEndpointForm from "./CustomEndpointForm.svelte";
-
-const t = get(LL);
 
 function baseProps() {
 	return {
@@ -48,7 +45,7 @@ describe("CustomEndpointForm — SRTLA-only minimal endpoint", () => {
 
 		const addrLabel = container.querySelector('label[for="srtla-addr"]');
 		expect(addrLabel?.textContent?.trim()).toBe(
-			t.settings.srtlaServerAddress(),
+			m["settings.srtlaServerAddress"](),
 		);
 	});
 

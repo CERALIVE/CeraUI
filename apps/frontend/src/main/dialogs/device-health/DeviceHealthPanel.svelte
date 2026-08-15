@@ -36,7 +36,7 @@
   `lib/streaming/encoder-load.ts`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { ENGINE_UNREACHABLE_REVISION } from '@ceraui/rpc/schemas';
 import { Activity, Clock, Cpu, Gauge, MemoryStick, Thermometer, Zap } from '@lucide/svelte';
 import { MediaQuery } from 'svelte/reactivity';
@@ -83,7 +83,6 @@ import { getSocTelemetry } from '$lib/stores/hud.svelte';
 import { getStreamHealthRollup } from '$lib/stores/stream-health.svelte';
 import { cn } from '$lib/utils';
 
-const t = $derived($LL.settings.deviceHealth);
 
 // Shared with DeviceHealthDialog so the shorter lanes, the collapsed now strip,
 // and the dropped footer pivot together — see HEALTH_COMPACT_QUERY.
@@ -142,7 +141,7 @@ function formatHz(hz: number): string {
 const lanes = $derived<RenderLane[]>([
 	{
 		id: 'temp',
-		label: t.lane.temp(),
+		label: m["settings.deviceHealth.lane.temp"](),
 		samples: tempSamples,
 		domain: TEMP_DOMAIN,
 		gapMs: TEMP_GAP_MS,
@@ -152,7 +151,7 @@ const lanes = $derived<RenderLane[]>([
 	},
 	{
 		id: 'load',
-		label: t.lane.load(),
+		label: m["settings.deviceHealth.lane.load"](),
 		samples: loadSamples,
 		domain: 'auto',
 		autoMinCeiling: LOAD_DOMAIN_MIN_CEILING,
@@ -168,7 +167,7 @@ const lanes = $derived<RenderLane[]>([
 	// does not appear. Promoting either to a lane is a follow-up, not this pass.
 	{
 		id: 'memory',
-		label: t.lane.memory(),
+		label: m["settings.deviceHealth.lane.memory"](),
 		samples: memorySamples,
 		domain: MEMORY_DOMAIN,
 		gapMs: MEMORY_GAP_MS,
@@ -211,30 +210,30 @@ const engineRevision = $derived.by(() => {
 });
 
 const encoderCondition = $derived.by(() => {
-	if (caps?.engineUnavailable === true) return t.encoder.engineUnavailable();
-	if (caps?.engineStarting === true) return t.encoder.engineStarting();
-	if (activeEncode === undefined || activeEncode === null) return t.encoder.idle();
+	if (caps?.engineUnavailable === true) return m["settings.deviceHealth.encoder.engineUnavailable"]();
+	if (caps?.engineStarting === true) return m["settings.deviceHealth.encoder.engineStarting"]();
+	if (activeEncode === undefined || activeEncode === null) return m["settings.deviceHealth.encoder.idle"]();
 	const framerate = Number.isFinite(activeEncode.framerate) ? `${activeEncode.framerate}` : '';
 	const summary = [activeEncode.codec, activeEncode.resolution, framerate]
 		.filter((part) => part.length > 0)
 		.join(' ');
-	return t.encoder.active({ summary });
+	return m["settings.deviceHealth.encoder.active"]({ summary });
 });
 
 // `advancing === false` is the ONLY stall claim; `null` is the cold-start /
 // idle-window branch and must never read as "stalled".
 const framesVerdict = $derived.by(() => {
 	const advancing = rollup?.frames.advancing;
-	if (advancing === true) return t.encoder.framesAdvancing();
-	if (advancing === false) return t.encoder.framesStalled();
-	return t.encoder.framesUnknown();
+	if (advancing === true) return m["settings.deviceHealth.encoder.framesAdvancing"]();
+	if (advancing === false) return m["settings.deviceHealth.encoder.framesStalled"]();
+	return m["settings.deviceHealth.encoder.framesUnknown"]();
 });
 
 const hardware = $derived(getSources()?.hardware);
 const soc = $derived(getSocTelemetry());
 const powerRails = $derived.by(() => {
 	if (hardware === 'rk3588' || hardware === 'n100') {
-		return { kind: 'not-instrumented' as const, text: t.power.notInstrumented() };
+		return { kind: 'not-instrumented' as const, text: m["settings.deviceHealth.power.notInstrumented"]() };
 	}
 	if (hardware === 'jetson' && (soc.voltage !== null || soc.current !== null)) {
 		const parts = [
@@ -243,36 +242,36 @@ const powerRails = $derived.by(() => {
 		].filter((part): part is string => part !== null);
 		return { kind: 'live' as const, text: parts.join('  ') };
 	}
-	return { kind: 'no-reading' as const, text: t.power.noReading() };
+	return { kind: 'no-reading' as const, text: m["settings.deviceHealth.power.noReading"]() };
 });
 
 const traceSummary = $derived.by(() => {
 	const parts: string[] = [];
 	if (tempStats !== null) {
 		parts.push(
-			`${t.lane.temp()} ${formatTemp(tempStats.last)} (${formatTemp(tempStats.min)} – ${formatTemp(tempStats.max)})`,
+			`${m["settings.deviceHealth.lane.temp"]()} ${formatTemp(tempStats.last)} (${formatTemp(tempStats.min)} – ${formatTemp(tempStats.max)})`,
 		);
 	}
 	if (loadStats !== null) {
 		parts.push(
-			`${t.nowStrip.load()} ${formatLoad(loadStats.last)} (${formatLoad(loadStats.min)} – ${formatLoad(loadStats.max)})`,
+			`${m["settings.deviceHealth.nowStrip.load"]()} ${formatLoad(loadStats.last)} (${formatLoad(loadStats.min)} – ${formatLoad(loadStats.max)})`,
 		);
 	}
 	if (memoryStats !== null) {
 		parts.push(
-			`${t.lane.memory()} ${formatPercent(memoryStats.last)} (${formatPercent(memoryStats.min)} – ${formatPercent(memoryStats.max)})`,
+			`${m["settings.deviceHealth.lane.memory"]()} ${formatPercent(memoryStats.last)} (${formatPercent(memoryStats.min)} – ${formatPercent(memoryStats.max)})`,
 		);
 	}
-	return parts.length === 0 ? t.waiting() : parts.join(' \u00b7 ');
+	return parts.length === 0 ? m["settings.deviceHealth.waiting"]() : parts.join(' \u00b7 ');
 });
 
 // The widget's headline is real text, not colour, and it belongs in the panel's
 // EXISTING polite region rather than a second one competing with it.
 const encoderHeadline = $derived.by(() => {
 	const activity = deriveEncoderActivity(encoderLoad);
-	if (activity === 'encoding') return t.cores.headlineEncoding();
-	if (activity === 'idle') return t.cores.headlineIdle();
-	return t.cores.headlineUnreported();
+	if (activity === 'encoding') return m["settings.deviceHealth.cores.headlineEncoding"]();
+	if (activity === 'idle') return m["settings.deviceHealth.cores.headlineIdle"]();
+	return m["settings.deviceHealth.cores.headlineUnreported"]();
 });
 
 const announcement = $derived(
@@ -280,7 +279,7 @@ const announcement = $derived(
 		tempStatus.value === null ? null : formatTemp(tempStatus.value),
 		loadStatus.value === null ? null : formatLoad(loadStatus.value),
 		encoderCondition,
-		`${t.cores.title()} ${encoderHeadline}`,
+		`${m["settings.deviceHealth.cores.title"]()} ${encoderHeadline}`,
 	]
 		.filter((part): part is string => part !== null)
 		.join(' \u00b7 '),
@@ -308,7 +307,7 @@ $effect(() => {
 			data-testid="device-health-engine-revision"
 		>
 			<span class="text-muted-foreground/70 shrink-0 text-[0.625rem] font-medium tracking-wide">
-				{t.cores.engineLabel()}
+				{m["settings.deviceHealth.cores.engineLabel"]()}
 			</span>
 			<span class="text-muted-foreground min-w-0 truncate font-mono text-[11px] tabular-nums">
 				{engineRevision}
@@ -337,8 +336,8 @@ $effect(() => {
 			<span
 				class="text-muted-foreground/60 block font-mono text-sm"
 				data-testid="{testId}-value"
-				title={t.unavailable()}
-				aria-label={t.unavailable()}
+				title={m["settings.deviceHealth.unavailable"]()}
+				aria-label={m["settings.deviceHealth.unavailable"]()}
 			>
 				&mdash;
 			</span>
@@ -409,25 +408,25 @@ $effect(() => {
 	     screen-reader user gets the same facts without the trace. -->
 	<div class="grid grid-cols-2 gap-4 sm:grid-cols-3" data-testid="device-health-now">
 		{@render fact(
-			t.nowStrip.temperature(),
+			m["settings.deviceHealth.nowStrip.temperature"](),
 			Thermometer,
 			tempStatus,
 			formatTemp,
-			tempStats === null ? null : t.delta({ value: formatSigned(tempStats.delta, 1) }),
+			tempStats === null ? null : m["settings.deviceHealth.delta"]({ value: formatSigned(tempStats.delta, 1) }),
 			'health-fact-temp',
 		)}
 		{@render fact(
-			t.nowStrip.load(),
+			m["settings.deviceHealth.nowStrip.load"](),
 			Cpu,
 			loadStatus,
 			formatLoad,
-			loadStats === null ? null : t.peak({ value: formatLoad(loadStats.max) }),
+			loadStats === null ? null : m["settings.deviceHealth.peak"]({ value: formatLoad(loadStats.max) }),
 			'health-fact-load',
 		)}
 		<div class="col-span-2 min-w-0 space-y-1 sm:col-span-1" data-testid="health-fact-encoder">
 			<span class="text-muted-foreground flex items-center gap-1.5 text-xs">
 				<Activity aria-hidden={true} class="size-3.5 shrink-0" />
-				<span class="truncate">{t.nowStrip.encoder()}</span>
+				<span class="truncate">{m["settings.deviceHealth.nowStrip.encoder"]()}</span>
 			</span>
 			<span class="text-foreground block text-sm" data-testid="health-fact-encoder-value">
 				{encoderCondition}
@@ -443,15 +442,15 @@ $effect(() => {
 
 	<!-- Band 2 — the strip recorder. -->
 	<HealthTraceField
-		ariaLabel={t.traceLabel({ summary: traceSummary })}
-		axisMinutesAgo={(minutes) => t.axis.minutesAgo({ n: minutes })}
-		axisNowLabel={t.axis.now()}
+		ariaLabel={m["settings.deviceHealth.traceLabel"]({ summary: traceSummary })}
+		axisMinutesAgo={(minutes) => m["settings.deviceHealth.axis.minutesAgo"]({ n: minutes })}
+		axisNowLabel={m["settings.deviceHealth.axis.now"]()}
 		compact={isCompact.current}
 		{frozen}
-		gapLabel={t.gap()}
+		gapLabel={m["settings.deviceHealth.gap"]()}
 		{lanes}
 		{now}
-		waitingLabel={t.waiting()}
+		waitingLabel={m["settings.deviceHealth.waiting"]()}
 	/>
 
 	<!-- Band 3 — the unified encoder widget. Its own header replaces this band's
@@ -478,11 +477,11 @@ $effect(() => {
 			data-testid="device-health-loads"
 		>
 			{#if gpu !== undefined}
-				{@render loadReadout(t.loads.gpu(), Gauge, gpu.loadPercent, gpuDetail, 'health-load-gpu')}
+				{@render loadReadout(m["settings.deviceHealth.loads.gpu"](), Gauge, gpu.loadPercent, gpuDetail, 'health-load-gpu')}
 			{/if}
 			{#if ddr !== undefined}
 				{@render loadReadout(
-					t.loads.ddr(),
+					m["settings.deviceHealth.loads.ddr"](),
 					MemoryStick,
 					ddr.loadPercent,
 					ddrDetail,
@@ -514,7 +513,7 @@ $effect(() => {
 				isCompact.current ? 'flex flex-wrap items-baseline gap-x-2' : 'space-y-0.5',
 			)}
 		>
-			<span class="block text-xs font-medium">{t.power.title()}</span>
+			<span class="block text-xs font-medium">{m["settings.deviceHealth.power.title"]()}</span>
 			<span
 				class={cn(
 					'block text-xs leading-relaxed',

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Play, Square, Loader2 } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -26,10 +26,10 @@ const isTransient = $derived(optimismState === 'starting' || optimismState === '
 // budget), and a spinner beside the unchanged "Start Stream" reads as a stuck
 // button rather than work in progress.
 const startLabel = $derived(
-	optimismState === 'starting' ? $LL.live.starting() : $LL.live.startStream(),
+	optimismState === 'starting' ? m["live.starting"]() : m["live.startStream"](),
 );
 const stopLabel = $derived(
-	optimismState === 'stopping' ? $LL.live.stopping() : $LL.live.stopStream(),
+	optimismState === 'stopping' ? m["live.stopping"]() : m["live.stopStream"](),
 );
 </script>
 

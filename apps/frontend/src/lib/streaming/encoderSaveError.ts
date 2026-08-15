@@ -18,16 +18,19 @@
  * or a shell command — the raw diagnostic rides the backend log instead.
  */
 
-import type { Svelte5Translation } from "@ceraui/i18n";
+import type { MessageFn, MessageKey } from "@ceraui/i18n/svelte";
+
+/** The subset of the facade's `m` these pure helpers need: keyed lookup only. */
+type Messages = Readonly<Record<MessageKey, MessageFn>>;
 
 export const DEVICE_MODE_UNSUPPORTED_ERROR = "device_mode_unsupported";
 
 export function encoderSaveErrorMessage(
 	error: string | undefined,
-	LL: Svelte5Translation,
+	msg: Messages,
 ): string {
 	if (error === DEVICE_MODE_UNSUPPORTED_ERROR) {
-		return LL.live.encoder.deviceModeUnsupported();
+		return msg["live.encoder.deviceModeUnsupported"]();
 	}
-	return LL.notifications.saveFailed();
+	return msg["notifications.saveFailed"]();
 }

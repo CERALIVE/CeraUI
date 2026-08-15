@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { resolveMessageKey } from '@ceraui/i18n/svelte';
 
 import { type NavElements, navElements } from '$lib/config';
 import {
@@ -26,7 +26,7 @@ const handleClick = (identifier: string, navigation: NavElements[string]) => {
 };
 
 const label = (nav: NavElements[string]) =>
-	nav.title ?? $LL.navigation[nav.label as keyof typeof $LL.navigation]();
+	nav.title ?? resolveMessageKey(`navigation.${nav.label}`);
 </script>
 
 <nav

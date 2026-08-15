@@ -8,7 +8,7 @@
  * and maps it to a distinct, localizable toast ({@link describeRpcError},
  * {@link rpcErrorToNotification}).
  *
- * Pure + rune-free: it imports no Svelte runtime and no live `$LL`, so the
+ * Pure + rune-free: it imports no Svelte runtime and no live message store, so the
  * text resolution stays at the toast host — this layer only chooses the i18n
  * key + params.
  */

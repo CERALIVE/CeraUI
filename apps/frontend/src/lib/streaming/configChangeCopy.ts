@@ -1,4 +1,4 @@
-import type { Svelte5Translation } from "@ceraui/i18n";
+import type { MessageFn, MessageKey } from "@ceraui/i18n/svelte";
 import {
 	CONFIG_CHANGE_REASON_DEADLINE,
 	CONFIG_CHANGE_REASON_ENGINE_LOST,
@@ -6,6 +6,9 @@ import {
 	CONFIG_CHANGE_REASON_TEARDOWN_TIMEOUT,
 	type ConfigChangeResult,
 } from "@ceraui/rpc/schemas";
+
+/** The subset of the facade's `m` these pure helpers need: keyed lookup only. */
+type Messages = Readonly<Record<MessageKey, MessageFn>>;
 
 export type ConfigChangeReport = {
 	level: "success" | "warning" | "error";
@@ -20,42 +23,41 @@ export type ConfigChangeReport = {
  * paths, unit names) have shipped to an audience with no console. An unmapped
  * reason therefore points at the in-app log viewer rather than leaking itself.
  */
-function reasonSentence(
-	reason: string | undefined,
-	LL: Svelte5Translation,
-): string {
-	const phase = LL.live.encoder.applyPhase;
+function reasonSentence(reason: string | undefined, msg: Messages): string {
 	if (reason === CONFIG_CHANGE_REASON_TEARDOWN_TIMEOUT)
-		return phase.reasonTeardownTimeout();
+		return msg["live.encoder.applyPhase.reasonTeardownTimeout"]();
 	if (reason === CONFIG_CHANGE_REASON_DEADLINE)
-		return phase.reasonDeadlineExceeded();
+		return msg["live.encoder.applyPhase.reasonDeadlineExceeded"]();
 	if (reason === CONFIG_CHANGE_REASON_ENGINE_LOST)
-		return phase.reasonEngineLost();
-	if (reason === CONFIG_CHANGE_REASON_REJECTED) return phase.reasonRejected();
-	return phase.reasonUnknown();
+		return msg["live.encoder.applyPhase.reasonEngineLost"]();
+	if (reason === CONFIG_CHANGE_REASON_REJECTED)
+		return msg["live.encoder.applyPhase.reasonRejected"]();
+	return msg["live.encoder.applyPhase.reasonUnknown"]();
 }
 
 export function configChangeReport(
 	change: ConfigChangeResult,
-	LL: Svelte5Translation,
+	msg: Messages,
 ): ConfigChangeReport {
-	const phase = LL.live.encoder.applyPhase;
 	if (change.result === "applied") {
-		return { level: "success", message: phase.applied() };
+		return {
+			level: "success",
+			message: msg["live.encoder.applyPhase.applied"](),
+		};
 	}
 	if (change.result === "reverted") {
 		return {
 			level: "warning",
-			message: `${phase.reverted()} ${reasonSentence(change.reason, LL)}`,
+			message: `${msg["live.encoder.applyPhase.reverted"]()} ${reasonSentence(change.reason, msg)}`,
 		};
 	}
 	if (change.result === "rollback_failed") {
 		return {
 			level: "error",
-			message: `${phase.rollbackFailed()} ${reasonSentence(change.reason, LL)}`,
+			message: `${msg["live.encoder.applyPhase.rollbackFailed"]()} ${reasonSentence(change.reason, msg)}`,
 		};
 	}
 	// `busy` / `rejected` mean the transaction never started, so nothing about
 	// the running stream changed — report it as a plain failed save.
-	return { level: "error", message: LL.notifications.saveFailed() };
+	return { level: "error", message: msg["notifications.saveFailed"]() };
 }

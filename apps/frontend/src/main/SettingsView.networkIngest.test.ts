@@ -6,7 +6,7 @@
  * NetworkIngestDialog. This test drives the real SettingsView (heavy children
  * stubbed) and asserts the entry renders and routes clicks to the dialog.
  */
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -50,7 +50,6 @@ vi.mock("svelte-sonner", () => ({
 
 // The entry is retitled "Sources" (same key `networkIngest`, same testids); the
 // displayed copy now comes from `settings.dialogs.sources`.
-const t = getLL().settings.dialogs.sources;
 
 beforeAll(() => {
 	if (!window.matchMedia) {
@@ -74,20 +73,28 @@ afterEach(() => {
 describe("SettingsView — Network ingest entry", () => {
 	it("renders the Network ingest entry in the streaming group", () => {
 		render(SettingsView);
-		const entry = screen.getByRole("button", { name: new RegExp(t.title()) });
+		const entry = screen.getByRole("button", {
+			name: new RegExp(m["settings.dialogs.sources.title"]()),
+		});
 		expect(entry).toBeTruthy();
-		expect(entry.textContent).toContain(t.title());
-		expect(entry.textContent).toContain(t.description());
+		expect(entry.textContent).toContain(m["settings.dialogs.sources.title"]());
+		expect(entry.textContent).toContain(
+			m["settings.dialogs.sources.description"](),
+		);
 	});
 
 	it("opens the dialog on click without error", async () => {
 		render(SettingsView);
-		const entry = screen.getByRole("button", { name: new RegExp(t.title()) });
+		const entry = screen.getByRole("button", {
+			name: new RegExp(m["settings.dialogs.sources.title"]()),
+		});
 		await fireEvent.click(entry);
 		// No throw + entry still present is the smoke assertion (dialog is stubbed).
 		await waitFor(() =>
 			expect(
-				screen.getByRole("button", { name: new RegExp(t.title()) }),
+				screen.getByRole("button", {
+					name: new RegExp(m["settings.dialogs.sources.title"]()),
+				}),
 			).toBeTruthy(),
 		);
 	});

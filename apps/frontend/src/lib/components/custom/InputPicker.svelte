@@ -10,7 +10,7 @@
   deterministically under vitest with no subscription/runtime dependency.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { CaptureDevice, DeviceKind } from '@ceraui/rpc/schemas';
 import { Check, Loader, RadioTower, TriangleAlert } from '@lucide/svelte';
 
@@ -77,7 +77,7 @@ const grouped = $derived.by(() => {
 });
 
 function groupLabel(kind: DeviceKind): string {
-	return $LL.live.inputPicker.groups[kind]();
+	return resolveMessageKey(`live.inputPicker.groups.${kind}`);
 }
 
 function capsLabel(device: CaptureDevice): string {
@@ -98,12 +98,12 @@ function capsLabel(device: CaptureDevice): string {
 	<!-- Hotplug-aware device picker -->
 	<div class="flex items-center gap-2">
 		<RadioTower aria-hidden={true} class="text-primary size-4 shrink-0" />
-		<span class="text-sm font-medium">{$LL.live.inputPicker.title()}</span>
+		<span class="text-sm font-medium">{m["live.inputPicker.title"]()}</span>
 	</div>
 
 	{#if grouped.length === 0}
 		<div class="bg-muted/40 rounded-lg border px-4 py-6 text-center">
-			<p class="text-muted-foreground text-sm">{$LL.live.inputPicker.empty()}</p>
+			<p class="text-muted-foreground text-sm">{m["live.inputPicker.empty"]()}</p>
 		</div>
 	{:else}
 		<div class="space-y-4">
@@ -139,7 +139,7 @@ function capsLabel(device: CaptureDevice): string {
 												class="bg-primary/15 text-primary inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
 											>
 												<Check aria-hidden={true} class="size-3" />
-												{$LL.live.inputPicker.active()}
+												{m["live.inputPicker.active"]()}
 											</span>
 										{/if}
 										{#if device.lost}
@@ -147,7 +147,7 @@ function capsLabel(device: CaptureDevice): string {
 												class="bg-destructive/15 text-destructive inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
 											>
 												<TriangleAlert aria-hidden={true} class="size-3" />
-												{$LL.live.inputPicker.lost()}
+												{m["live.inputPicker.lost"]()}
 											</span>
 										{/if}
 									</div>
@@ -160,42 +160,42 @@ function capsLabel(device: CaptureDevice): string {
 									<div class="flex items-center gap-2">
 										{#if device.kind === 'audio' && audioLiveSwitchField}
 											<FieldSyncIndicator
-												appliedLabel={$LL.live.inputPicker.audioApplied()}
-												applyingLabel={$LL.live.inputPicker.audioApplying()}
-												failedLabel={$LL.live.inputPicker.audioFailed()}
+												appliedLabel={m["live.inputPicker.audioApplied"]()}
+												applyingLabel={m["live.inputPicker.audioApplying"]()}
+												failedLabel={m["live.inputPicker.audioFailed"]()}
 												field={audioLiveSwitchField}
 												labelHidden={true}
 											/>
 										{/if}
 										<Button
-											aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${device.display_name}`}
+											aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${device.display_name}`}
 											data-switch-input={device.input_id}
 											disabled={isActive || isSwitching || audioBlocked}
 											onclick={() => onSwitch?.(device.input_id)}
 											size="sm"
-											title={audioBlocked ? $LL.live.inputPicker.audioSwitchUnavailable() : undefined}
+											title={audioBlocked ? m["live.inputPicker.audioSwitchUnavailable"]() : undefined}
 											variant={isActive ? 'secondary' : 'default'}
 										>
 											{#if isSwitching}
 												<Loader aria-hidden={true} class="size-3.5 animate-spin" />
-												{$LL.live.inputPicker.switching()}
+												{m["live.inputPicker.switching"]()}
 											{:else if isActive}
-												{$LL.live.inputPicker.active()}
+												{m["live.inputPicker.active"]()}
 											{:else}
-												{$LL.live.inputPicker.switch()}
+												{m["live.inputPicker.switch"]()}
 											{/if}
 										</Button>
 									</div>
 								{:else}
 									<Button
-										aria-label={`${$LL.live.inputPicker.select()} \u2013 ${device.display_name}`}
+										aria-label={`${m["live.inputPicker.select"]()} \u2013 ${device.display_name}`}
 										data-select-input={device.input_id}
 										disabled={device.lost}
 										onclick={() => onSelect?.(device.input_id)}
 										size="sm"
 										variant={isSelected ? 'default' : 'outline'}
 									>
-										{isSelected ? $LL.live.inputPicker.selected() : $LL.live.inputPicker.select()}
+										{isSelected ? m["live.inputPicker.selected"]() : m["live.inputPicker.select"]()}
 									</Button>
 								{/if}
 							</li>

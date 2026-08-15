@@ -14,7 +14,7 @@
     (WIFI:T:WPA;S:<name>;P:<password>;;) is rendered so phones can join by scan.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
 import { Copy, Eye, EyeOff, Loader2, Power, QrCode, Router, Save, Wifi } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
@@ -87,14 +87,14 @@ const channelOptions = $derived.by(() => {
 		return Object.entries(available).map(([id, c]) => ({ id, name: c.name }));
 	}
 	return [
-		{ id: 'auto', name: $LL.network.modem.automaticRoamingNetwork() },
-		{ id: 'auto_50', name: $LL.wifiBands.band_5ghz() },
-		{ id: 'auto_24', name: $LL.wifiBands.band_2_4ghz() },
+		{ id: 'auto', name: m["network.modem.automaticRoamingNetwork"]() },
+		{ id: 'auto_50', name: m["wifiBands.band_5ghz"]() },
+		{ id: 'auto_24', name: m["wifiBands.band_2_4ghz"]() },
 	];
 });
 
 const channelLabel = $derived(
-	channelOptions.find((c) => c.id === channel)?.name ?? $LL.hotspotConfigurator.hotspot.selectChannel(),
+	channelOptions.find((c) => c.id === channel)?.name ?? m["hotspotConfigurator.hotspot.selectChannel"](),
 );
 
 // ── Schema-driven validation ──
@@ -108,9 +108,9 @@ const isFormValid = $derived(nameValid && passwordValid);
 // is never left guessing (busy op vs an incomplete form).
 const toggleDisabledReason = $derived(
 	toggling
-		? $LL.hotspotConfigurator.toggleReason.busy()
+		? m["hotspotConfigurator.toggleReason.busy"]()
 		: !isActive && !isFormValid
-			? $LL.hotspotConfigurator.toggleReason.formInvalid()
+			? m["hotspotConfigurator.toggleReason.formInvalid"]()
 			: undefined,
 );
 
@@ -118,15 +118,15 @@ const nameError = $derived(
 	name.length === 0 || nameValid
 		? ''
 		: name.length < bounds.name.min
-			? $LL.hotspotConfigurator.validation.nameMinLength()
-			: $LL.hotspotConfigurator.validation.nameMaxLength(),
+			? m["hotspotConfigurator.validation.nameMinLength"]()
+			: m["hotspotConfigurator.validation.nameMaxLength"](),
 );
 const passwordError = $derived(
 	password.length === 0 || passwordValid
 		? ''
 		: password.length < bounds.password.min
-			? $LL.hotspotConfigurator.validation.passwordMinLength()
-			: $LL.hotspotConfigurator.validation.passwordMaxLength(),
+			? m["hotspotConfigurator.validation.passwordMinLength"]()
+			: m["hotspotConfigurator.validation.passwordMaxLength"](),
 );
 
 // ── QR for the LIVE active credentials (not the unsaved form) ──
@@ -156,8 +156,8 @@ async function handleSave() {
 	await osCommand({
 		key: configKey,
 		rpc: () => rpc.wifi.hotspotConfigure({ device: deviceId, name, password, channel }),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 		// NO confirmOnResolve — confirm comes from the deferred hotspot.config event.
 	});
 }
@@ -172,8 +172,8 @@ async function handleToggle() {
 			key: toggleKey,
 			target: 'station',
 			rpc: () => rpc.wifi.hotspotStop({ device: deviceId }),
-			failMessage: () => $LL.network.os.operationFailed(),
-			busyMessage: () => $LL.network.os.deviceBusy(),
+			failMessage: () => m["network.os.operationFailed"](),
+			busyMessage: () => m["network.os.deviceBusy"](),
 		});
 	} else {
 		toggleTarget = 'hotspot';
@@ -181,8 +181,8 @@ async function handleToggle() {
 			key: toggleKey,
 			target: 'hotspot',
 			rpc: () => rpc.wifi.hotspotStart({ device: deviceId }),
-			failMessage: () => $LL.network.os.operationFailed(),
-			busyMessage: () => $LL.network.os.deviceBusy(),
+			failMessage: () => m["network.os.operationFailed"](),
+			busyMessage: () => m["network.os.deviceBusy"](),
 		});
 	}
 }
@@ -201,10 +201,10 @@ $effect(() => {
 async function copyName() {
 	if (!name) return;
 	if (await copyToClipboard(name)) {
-		toast.success($LL.network.clipboard.nameCopied());
+		toast.success(m["network.clipboard.nameCopied"]());
 	} else {
-		toast.error($LL.network.clipboard.copyFailed(), {
-			description: $LL.network.clipboard.copyFailedDescription(),
+		toast.error(m["network.clipboard.copyFailed"](), {
+			description: m["network.clipboard.copyFailedDescription"](),
 		});
 	}
 }
@@ -212,10 +212,10 @@ async function copyName() {
 async function copyPassword() {
 	if (!password) return;
 	if (await copyToClipboard(password)) {
-		toast.success($LL.network.clipboard.passwordCopied());
+		toast.success(m["network.clipboard.passwordCopied"]());
 	} else {
-		toast.error($LL.network.clipboard.copyFailed(), {
-			description: $LL.network.clipboard.copyFailedDescription(),
+		toast.error(m["network.clipboard.copyFailed"](), {
+			description: m["network.clipboard.copyFailedDescription"](),
 		});
 	}
 }
@@ -224,9 +224,9 @@ async function copyPassword() {
 <AppDialog
 	bind:open
 	contentClass="sm:max-w-md"
-	description={$LL.hotspotConfigurator.help.description()}
+	description={m["hotspotConfigurator.help.description"]()}
 	icon={Router}
-	title={$LL.hotspotConfigurator.dialog.configHotspot()}
+	title={m["hotspotConfigurator.dialog.configHotspot"]()}
 >
 	<div class="space-y-5">
 		<!-- Status row -->
@@ -246,7 +246,7 @@ async function copyPassword() {
 			</span>
 			<div class="min-w-0 flex-1">
 				<p class="text-sm font-medium">
-					{isActive ? $LL.network.status.active() : $LL.network.status.inactive()}
+					{isActive ? m["network.status.active"]() : m["network.status.inactive"]()}
 				</p>
 				{#if iface?.ifname}
 					<p class="text-muted-foreground truncate text-xs">{iface.ifname}</p>
@@ -263,7 +263,7 @@ async function copyPassword() {
 
 		<!-- Name -->
 		<div class="space-y-1.5">
-			<Label class="text-sm font-medium" for="hotspot-name">{$LL.network.hotspot.name()}</Label>
+			<Label class="text-sm font-medium" for="hotspot-name">{m["network.hotspot.name"]()}</Label>
 			<div class="relative">
 				<Input
 					id="hotspot-name"
@@ -273,13 +273,13 @@ async function copyPassword() {
 					autocorrect="off"
 					maxlength={bounds.name.max}
 					minlength={bounds.name.min}
-					placeholder={$LL.hotspotConfigurator.hotspot.placeholderName()}
+					placeholder={m["hotspotConfigurator.hotspot.placeholderName"]()}
 					aria-invalid={Boolean(nameError)}
 					bind:value={name}
 				/>
 				<Button
 					class="absolute end-1 top-1/2 size-8 -translate-y-1/2 rounded-md"
-					aria-label={$LL.network.accessibility.copyName()}
+					aria-label={m["network.accessibility.copyName"]()}
 					disabled={!name}
 					onclick={copyName}
 					size="icon"
@@ -297,7 +297,7 @@ async function copyPassword() {
 		<!-- Password -->
 		<div class="space-y-1.5">
 			<Label class="text-sm font-medium" for="hotspot-password">
-				{$LL.network.hotspot.password()}
+				{m["network.hotspot.password"]()}
 			</Label>
 			<div class="relative">
 				<Input
@@ -308,7 +308,7 @@ async function copyPassword() {
 					autocorrect="off"
 					maxlength={bounds.password.max}
 					minlength={bounds.password.min}
-					placeholder={$LL.hotspotConfigurator.hotspot.placeholderPassword()}
+					placeholder={m["hotspotConfigurator.hotspot.placeholderPassword"]()}
 					type={showPassword ? 'text' : 'password'}
 					aria-invalid={Boolean(passwordError)}
 					bind:value={password}
@@ -316,7 +316,7 @@ async function copyPassword() {
 				<div class="absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
 					<Button
 						class="size-8 rounded-md"
-						aria-label={$LL.network.accessibility.copyPassword()}
+						aria-label={m["network.accessibility.copyPassword"]()}
 						disabled={!password}
 						onclick={copyPassword}
 						size="icon"
@@ -327,7 +327,7 @@ async function copyPassword() {
 					</Button>
 					<Button
 						class="size-8 rounded-md"
-						aria-label={showPassword ? $LL.auth.hidePassword() : $LL.auth.showPassword()}
+						aria-label={showPassword ? m["auth.hidePassword"]() : m["auth.showPassword"]()}
 						onclick={() => (showPassword = !showPassword)}
 						size="icon"
 						type="button"
@@ -349,7 +349,7 @@ async function copyPassword() {
 		<!-- Channel -->
 		<div class="space-y-1.5">
 			<Label class="text-sm font-medium" for="hotspot-channel">
-				{$LL.network.hotspot.channel()}
+				{m["network.hotspot.channel"]()}
 			</Label>
 			<Select.Root onValueChange={(v) => (channel = v)} type="single" bind:value={channel}>
 				<Select.Trigger id="hotspot-channel" class="w-full">{channelLabel}</Select.Trigger>
@@ -359,7 +359,7 @@ async function copyPassword() {
 					{/each}
 				</Select.Content>
 			</Select.Root>
-			<p class="text-muted-foreground text-xs">{$LL.hotspotConfigurator.help.channelHelp()}</p>
+			<p class="text-muted-foreground text-xs">{m["hotspotConfigurator.help.channelHelp"]()}</p>
 		</div>
 
 		<!-- Live QR for the active hotspot credentials -->
@@ -367,11 +367,11 @@ async function copyPassword() {
 			<div class="bg-muted/40 flex flex-col items-center gap-2 rounded-lg border p-4">
 				<div class="text-muted-foreground flex items-center gap-1.5 text-xs font-medium">
 					<QrCode class="size-3.5" />
-					<span>{$LL.network.accessibility.wifiQrCode()}</span>
+					<span>{m["network.accessibility.wifiQrCode"]()}</span>
 				</div>
 				<img
 					class="size-40 rounded-md bg-white p-2"
-					alt={$LL.network.accessibility.wifiQrCode()}
+					alt={m["network.accessibility.wifiQrCode"]()}
 					src={qrDataUrl}
 				/>
 				{#if iface?.hotspot?.name}
@@ -383,7 +383,7 @@ async function copyPassword() {
 
 	{#snippet actions()}
 		<Button class="sm:min-w-24" onclick={() => (open = false)} variant="outline">
-			{$LL.network.dialog.close()}
+			{m["network.dialog.close"]()}
 		</Button>
 		<Button
 			class="sm:min-w-28"
@@ -397,7 +397,7 @@ async function copyPassword() {
 			{:else}
 				<Power class="size-4" />
 			{/if}
-			{isActive ? $LL.network.status.turnOff() : $LL.network.status.enableHotspot()}
+			{isActive ? m["network.status.turnOff"]() : m["network.status.enableHotspot"]()}
 		</Button>
 		<Button class="sm:min-w-24" disabled={!isFormValid || configuring} onclick={handleSave}>
 			{#if configuring}
@@ -405,7 +405,7 @@ async function copyPassword() {
 			{:else}
 				<Save class="size-4" />
 			{/if}
-			{configuring ? $LL.hotspotConfigurator.dialog.saving() : $LL.hotspotConfigurator.dialog.save()}
+			{configuring ? m["hotspotConfigurator.dialog.saving"]() : m["hotspotConfigurator.dialog.save"]()}
 		</Button>
 	{/snippet}
 </AppDialog>

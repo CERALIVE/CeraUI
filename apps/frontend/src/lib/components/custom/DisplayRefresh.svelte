@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import RefreshCwIcon from '@lucide/svelte/icons/refresh-cw';
 
 import { getDisplayProfile, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
@@ -17,8 +17,8 @@ const showRefresh = $derived(prefersEinkTheme(getDisplayProfile()));
 	<button
 		type="button"
 		data-testid="display-refresh"
-		aria-label={$LL.hud.refresh()}
-		title={$LL.hud.refresh()}
+		aria-label={m["hud.refresh"]()}
+		title={m["hud.refresh"]()}
 		onclick={requestDisplayRefresh}
 		class={cn(
 			'fixed end-4 top-1/2 z-50 -translate-y-1/2',

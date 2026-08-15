@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
 import { ChevronRight, Radio } from '@lucide/svelte';
 
@@ -26,12 +26,12 @@ const { modemEntries, netif, isFullyStale, staleInterfaces, onConfigure }: Props
 <section class="bg-card rounded-xl border">
 	<div class="flex items-center gap-2 border-b px-4 py-3">
 		<Radio aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
-		<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.cellular()}</h2>
+		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.cellular"]()}</h2>
 	</div>
 	<div class="divide-y">
 		{#if modemEntries.length === 0}
 			<p class="text-muted-foreground px-4 py-6 text-center text-sm">
-				{$LL.network.view.noModems()}
+				{m["network.view.noModems"]()}
 			</p>
 		{:else}
 			{#each modemEntries as [id, modem], _i (modem.ifname || id + '-' + _i)}
@@ -57,14 +57,14 @@ const { modemEntries, netif, isFullyStale, staleInterfaces, onConfigure }: Props
 							)}
 						>
 							{#if noSim}
-								{$LL.network.view.noModems()}
+								{m["network.view.noModems"]()}
 							{:else}
 								{operator}{#if modem.status?.network_type}
 									· {modem.status.network_type}{/if} ·
 								{#if scanning}
-									{$LL.network.modem.scanning()}
+									{m["network.modem.scanning"]()}
 								{:else}
-									{connected ? $LL.network.view.connected() : $LL.network.view.disconnected()}
+									{connected ? m["network.view.connected"]() : m["network.view.disconnected"]()}
 								{/if}
 							{/if}
 						</p>
@@ -77,7 +77,7 @@ const { modemEntries, netif, isFullyStale, staleInterfaces, onConfigure }: Props
 							<BondToggle
 								name={modem.ifname}
 								enabled={false}
-								disabledReason={$LL.network.view.noSimBond()}
+								disabledReason={m["network.view.noSimBond"]()}
 							/>
 						{:else if entry?.ip}
 							<BondToggle name={modem.ifname} enabled={entry.enabled} ip={entry.ip} />
@@ -89,7 +89,7 @@ const { modemEntries, netif, isFullyStale, staleInterfaces, onConfigure }: Props
 							variant="ghost"
 							onclick={() => onConfigure(id)}
 						>
-							{$LL.network.view.configure()}
+							{m["network.view.configure"]()}
 							<ChevronRight class="size-3.5 rtl:rotate-180" />
 						</Button>
 					</div>

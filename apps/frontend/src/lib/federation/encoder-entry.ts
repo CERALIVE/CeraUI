@@ -1,4 +1,4 @@
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import type {
 	ConfigMessage,
 	Framerate,
@@ -51,12 +51,12 @@ async function saveEncoderConfig(
 		// Named BEFORE `requireAppliedConfig` throws: it collapses every refusal
 		// into one opaque Error, so the typed reason has to be read off the result.
 		if (!result.success) {
-			toast.error(encoderSaveErrorMessage(result.error, getLL()));
+			toast.error(encoderSaveErrorMessage(result.error, m));
 			return;
 		}
 		requireAppliedConfig(result);
 	} catch {
-		toast.error(getLL().notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	}
 }
 

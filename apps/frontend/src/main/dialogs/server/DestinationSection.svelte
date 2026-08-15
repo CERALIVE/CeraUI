@@ -12,7 +12,7 @@
   section only renders the tiles and reports the pick via `onSelect`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Cloud, Plug } from '@lucide/svelte';
 import type { ProviderSelection, RelayMessage } from '@ceraui/rpc/schemas';
 
@@ -50,13 +50,13 @@ function managedUnavailable(choice: ReceiverDestinationChoice): boolean {
 
 function managedHint(choice: ReceiverDestinationChoice): string {
 	if (!isActive(choice)) {
-		return $LL.settings.destinationNeedsKey({ cloud: managedCloudLabel(choice) });
+		return m["settings.destinationNeedsKey"]({ cloud: managedCloudLabel(choice) });
 	}
-	if (relays === undefined) return $LL.notifications.relayWaiting();
+	if (relays === undefined) return m["notifications.relayWaiting"]();
 	if (countRelayServersForProvider(serverEntries, choice) === 0) {
-		return $LL.notifications.relayNone();
+		return m["notifications.relayNone"]();
 	}
-	return $LL.settings.destinationManagedHint();
+	return m["settings.destinationManagedHint"]();
 }
 
 function managedDisabled(choice: ReceiverDestinationChoice): boolean {
@@ -72,9 +72,9 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 </script>
 
 <div class="space-y-2">
-	<Label class="text-sm font-medium" id="destination-label">{$LL.settings.destination()}</Label>
+	<Label class="text-sm font-medium" id="destination-label">{m["settings.destination"]()}</Label>
 	<div
-		aria-label={$LL.settings.destination()}
+		aria-label={m["settings.destination"]()}
 		class="grid gap-2"
 		data-testid="destination"
 		role="radiogroup"
@@ -108,9 +108,9 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 		>
 			<Plug class="text-primary mt-0.5 size-5 shrink-0" />
 			<span class="flex min-w-0 flex-col gap-0.5">
-				<span class="text-foreground text-sm font-medium">{$LL.settings.destinationCustom()}</span>
+				<span class="text-foreground text-sm font-medium">{m["settings.destinationCustom"]()}</span>
 				<span class="text-muted-foreground text-xs leading-snug"
-					>{$LL.settings.destinationCustomHint()}</span
+					>{m["settings.destinationCustomHint"]()}</span
 				>
 			</span>
 		</button>

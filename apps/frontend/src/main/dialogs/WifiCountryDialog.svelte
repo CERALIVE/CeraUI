@@ -12,7 +12,7 @@
   of a silent no-op.
 -->
 <script lang="ts">
-import { LL, locale } from '@ceraui/i18n/i18n-svelte5';
+import { getLocale, m } from '@ceraui/i18n/svelte';
 import { WORLD_REGULATORY_DOMAIN } from '@ceraui/rpc/schemas';
 import { Globe, LoaderCircle, Search } from '@lucide/svelte';
 
@@ -35,7 +35,6 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-const t = $derived($LL.settings.dialogs.wifiCountry);
 
 const OPERATION_KEY = 'wifi-country';
 const busy = $derived(getOperationPhase(OPERATION_KEY) === 'pending');
@@ -43,7 +42,7 @@ const busy = $derived(getOperationPhase(OPERATION_KEY) === 'pending');
 // The confirmed persisted country. Absent = the world domain.
 const savedCountry = $derived(getConfig()?.country ?? WORLD_REGULATORY_DOMAIN);
 
-const options = $derived(countryOptions($locale, t.world()));
+const options = $derived(countryOptions(getLocale(), m["settings.dialogs.wifiCountry.world"]()));
 
 let query = $state('');
 let selected = $state<string | null>(null);
@@ -107,10 +106,10 @@ async function apply() {
 
 <AppDialog
 	bind:open
-	description={t.description()}
+	description={m["settings.dialogs.wifiCountry.description"]()}
 	hideFooter
 	icon={Globe}
-	title={t.title()}
+	title={m["settings.dialogs.wifiCountry.title"]()}
 >
 	<div class="space-y-4">
 		{#if unavailable}
@@ -119,7 +118,7 @@ async function apply() {
 				data-testid="wifi-country-unavailable"
 				role="status"
 			>
-				{t.unavailable()}
+				{m["settings.dialogs.wifiCountry.unavailable"]()}
 			</div>
 		{/if}
 
@@ -129,7 +128,7 @@ async function apply() {
 				data-testid="wifi-country-failed"
 				role="status"
 			>
-				{t.failed()}
+				{m["settings.dialogs.wifiCountry.failed"]()}
 			</div>
 		{/if}
 
@@ -139,12 +138,12 @@ async function apply() {
 				data-testid="wifi-country-mismatch"
 				role="status"
 			>
-				{t.mismatchWarning()}
+				{m["settings.dialogs.wifiCountry.mismatchWarning"]()}
 			</div>
 		{/if}
 
 		<div class="space-y-2">
-			<label class="text-sm font-semibold" for="wifi-country-search">{t.label()}</label>
+			<label class="text-sm font-semibold" for="wifi-country-search">{m["settings.dialogs.wifiCountry.label"]()}</label>
 			<div class="relative">
 				<Search
 					aria-hidden="true"
@@ -156,7 +155,7 @@ async function apply() {
 					bind:value={query}
 					class="ps-9"
 					data-testid="wifi-country-search"
-					placeholder={t.search()}
+					placeholder={m["settings.dialogs.wifiCountry.search"]()}
 				/>
 			</div>
 		</div>
@@ -187,11 +186,11 @@ async function apply() {
 			{/each}
 		</ul>
 
-		<p class="text-muted-foreground text-xs">{t.restartNotice()}</p>
+		<p class="text-muted-foreground text-xs">{m["settings.dialogs.wifiCountry.restartNotice"]()}</p>
 
 		{#if effective !== undefined}
 			<p class="text-muted-foreground text-xs" data-testid="wifi-country-effective">
-				{t.effectiveLabel()}: <span class="font-mono">{effective}</span>
+				{m["settings.dialogs.wifiCountry.effectiveLabel"]()}: <span class="font-mono">{effective}</span>
 			</p>
 		{/if}
 
@@ -207,7 +206,7 @@ async function apply() {
 				disabled={busy || !dirty}
 				onclick={() => void apply()}
 			>
-				{busy ? t.applying() : t.apply()}
+				{busy ? m["settings.dialogs.wifiCountry.applying"]() : m["settings.dialogs.wifiCountry.apply"]()}
 			</Button>
 		</div>
 

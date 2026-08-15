@@ -13,7 +13,7 @@ import WifiLowIcon from '@lucide/svelte/icons/wifi-low';
 import WifiOffIcon from '@lucide/svelte/icons/wifi-off';
 import WifiZeroIcon from '@lucide/svelte/icons/wifi-zero';
 
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 
 import { getSignalCategory, linkVisualState, signalTextClass } from '$lib/helpers/signal';
 import { cn } from '$lib/utils';
@@ -77,7 +77,7 @@ const qualityClass = $derived(signalTextClass(signal));
 // the --link-{n} hue alone. Only set when this indicator represents a numbered
 // bonded link (linkIndex present); decorative signal glyphs stay aria-hidden.
 const linkLevel = $derived(linkIndex != null ? linkIndex + 1 : null);
-const linkAriaLabel = $derived(linkLevel != null ? `${$LL.hud.link()} ${linkLevel}` : undefined);
+const linkAriaLabel = $derived(linkLevel != null ? `${m["hud.link"]()} ${linkLevel}` : undefined);
 </script>
 
 {#snippet barCluster(filled: number)}

@@ -7,7 +7,7 @@
  * pin the mapping and the 10-locale coverage of the copy it selects.
  */
 
-import type { TranslationFunctions } from "@ceraui/i18n";
+import type { MessageFn, MessageKey } from "@ceraui/i18n/svelte";
 import { describe, expect, it } from "vitest";
 
 import ar from "../../../../../packages/i18n/src/ar/index";
@@ -31,11 +31,11 @@ const LOCALES = { ar, de, en, es, fr, hi, ja, ko, "pt-BR": ptBR, zh };
 const DEVICE_MODE_COPY = "device mode unsupported copy";
 const GENERIC_COPY = "generic save failed copy";
 
-function stubLL(): Svelte5Translation {
+function stubLL(): Readonly<Record<MessageKey, MessageFn>> {
 	return {
-		live: { encoder: { deviceModeUnsupported: () => DEVICE_MODE_COPY } },
-		notifications: { saveFailed: () => GENERIC_COPY },
-	} as unknown as Svelte5Translation;
+		"live.encoder.deviceModeUnsupported": () => DEVICE_MODE_COPY,
+		"notifications.saveFailed": () => GENERIC_COPY,
+	} as unknown as Readonly<Record<MessageKey, MessageFn>>;
 }
 
 describe("encoderSaveErrorMessage", () => {

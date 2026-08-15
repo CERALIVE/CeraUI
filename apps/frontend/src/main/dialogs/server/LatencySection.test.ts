@@ -6,14 +6,12 @@
  * shows the negotiated label while streaming, and locks while streaming. No FEC /
  * recovery / presets controls exist here.
  */
-import { LL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render } from "@testing-library/svelte";
-import { get } from "svelte/store";
 import { describe, expect, it, vi } from "vitest";
 
 import LatencySection from "./LatencySection.svelte";
 
-const t = get(LL);
 const RANGE = { min: 100, default: 2000, max: 5000 };
 
 describe("LatencySection — latency-only control", () => {
@@ -57,7 +55,7 @@ describe("LatencySection — latency-only control", () => {
 			'[data-testid="latency-slider"]',
 		) as HTMLInputElement;
 		expect(slider.disabled).toBe(true);
-		expect(container.textContent).toContain(t.settings.latencyNegotiated());
+		expect(container.textContent).toContain(m["settings.latencyNegotiated"]());
 	});
 
 	it("has no FEC/recovery/preset controls", () => {

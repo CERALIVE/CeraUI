@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Bug, Wrench } from '@lucide/svelte';
 
 import DemoOverlayTrigger from '$lib/components/demo-overlay-trigger.svelte';
@@ -30,10 +30,10 @@ import { BUILD_INFO } from '$lib/env';
 					<h1
 						class="text-foreground text-xl font-bold tracking-tight break-words sm:text-3xl"
 					>
-						{$LL.devtools.title()}
+						{m["devtools.title"]()}
 					</h1>
 					<p class="text-muted-foreground mt-1 text-sm sm:text-base">
-						{$LL.devtools.description()}
+						{m["devtools.description"]()}
 					</p>
 				</div>
 			</div>
@@ -42,9 +42,9 @@ import { BUILD_INFO } from '$lib/env';
 			<Badge variant="outline" class="font-mono">
 				<span class="bg-primary mr-1.5 size-1.5 animate-pulse rounded-full"></span>
 				<span class="hidden sm:inline"
-					>{$LL.devtools.developmentMode()}: {BUILD_INFO.MODE} · {$LL.devtools.status()}: {$LL.devtools.active()}</span
+					>{m["devtools.developmentMode"]()}: {BUILD_INFO.MODE} · {m["devtools.status"]()}: {m["devtools.active"]()}</span
 				>
-				<span class="sm:hidden">{$LL.devtools.status()}: {$LL.devtools.active()}</span>
+				<span class="sm:hidden">{m["devtools.status"]()}: {m["devtools.active"]()}</span>
 			</Badge>
 		</div>
 
@@ -78,17 +78,17 @@ import { BUILD_INFO } from '$lib/env';
 				<Card.Header>
 					<Card.Title class="flex items-center gap-2">
 						<Bug class="h-5 w-5 text-primary" />
-						{$LL.devtools.consoleTesting()}
+						{m["devtools.consoleTesting"]()}
 						</Card.Title>
 						<Card.Description>
-							{$LL.devtools.consoleTestingDesc()}
+							{m["devtools.consoleTestingDesc"]()}
 						</Card.Description>
 					</Card.Header>
 
 					<Card.Content class="space-y-3 pb-6">
 						<div class="bg-muted/50 rounded-lg p-3">
 							<div class="text-muted-foreground mb-2 font-mono text-xs font-medium">
-								{$LL.devtools.consoleOutputTests()}
+								{m["devtools.consoleOutputTests"]()}
 							</div>
 							<div class="flex flex-wrap gap-2">
 								<Button
@@ -98,7 +98,7 @@ import { BUILD_INFO } from '$lib/env';
 									onclick={() =>
 										console.log('✅ Console log test:', { timestamp: new Date(), level: 'info' })}
 								>
-									{$LL.devtools.log()}
+									{m["devtools.log"]()}
 								</Button>
 								<Button
 									class="border-status-warning/30 text-status-warning hover:bg-status-warning/10"
@@ -110,7 +110,7 @@ import { BUILD_INFO } from '$lib/env';
 											level: 'warn',
 										})}
 								>
-									{$LL.devtools.warn()}
+									{m["devtools.warn"]()}
 								</Button>
 								<Button
 									class="border-status-error/30 text-status-error hover:bg-status-error/10"
@@ -122,7 +122,7 @@ import { BUILD_INFO } from '$lib/env';
 											level: 'error',
 										})}
 								>
-									{$LL.devtools.error()}
+									{m["devtools.error"]()}
 								</Button>
 								<Button
 									class="border-status-info/30 text-status-info hover:bg-status-info/10"
@@ -135,7 +135,7 @@ import { BUILD_INFO } from '$lib/env';
 											online: navigator.onLine,
 										})}
 								>
-									{$LL.devtools.table()}
+									{m["devtools.table"]()}
 								</Button>
 							</div>
 						</div>
@@ -147,10 +147,10 @@ import { BUILD_INFO } from '$lib/env';
 		<!-- Mobile-Friendly Warning Footer -->
 		<div class="text-muted-foreground bg-muted/30 mt-8 rounded-lg border p-3 sm:mt-12 sm:p-4">
 			<div class="text-sm font-semibold">
-				{$LL.devtools.developmentOnly()}
+				{m["devtools.developmentOnly"]()}
 			</div>
 			<div class="mt-1 text-xs">
-				{$LL.devtools.developmentOnlyDesc()}
+				{m["devtools.developmentOnlyDesc"]()}
 			</div>
 		</div>
 	</div>

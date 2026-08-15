@@ -1,4 +1,4 @@
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import type {
 	NetifMessage,
 	SimPukUnlockOutput,
@@ -50,13 +50,13 @@ export const networkRename = (name: string) => {
 	}
 
 	if (name.startsWith("wl")) {
-		name = getLL().networking.types.wifi();
+		name = m["networking.types.wifi"]();
 	} else if (name.startsWith("eth") || name.startsWith("en")) {
-		name = getLL().networking.types.ethernet();
+		name = m["networking.types.ethernet"]();
 	} else if (name.startsWith("ww")) {
-		name = getLL().networking.types.modem();
+		name = m["networking.types.modem"]();
 	} else if (name.startsWith("usb")) {
-		name = getLL().networking.types.usb();
+		name = m["networking.types.usb"]();
 	}
 
 	return name + numberSuffix;
@@ -129,11 +129,11 @@ export const getConnection = (
 
 export const getWifiBand = (freq: number) => {
 	if (freq > 6000) {
-		return getLL().wifiBands.band_6ghz();
+		return m["wifiBands.band_6ghz"]();
 	} else if (freq > 5000) {
-		return getLL().wifiBands.band_5ghz();
+		return m["wifiBands.band_5ghz"]();
 	}
-	return getLL().wifiBands.band_2_4ghz();
+	return m["wifiBands.band_2_4ghz"]();
 };
 
 export const unlockSimPin = async (

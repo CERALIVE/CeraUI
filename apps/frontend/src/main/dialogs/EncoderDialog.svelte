@@ -62,7 +62,7 @@ export interface EncoderConfig {
 </script>
 
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
 import { BITRATE_DEFAULT_MIN, type DeviceKind, type StreamSource } from '@ceraui/rpc/schemas';
 
@@ -157,18 +157,7 @@ const h265Supported = $derived(h265Option !== undefined);
 const h265SoftwareOnly = $derived(h265Option?.softwareWarning ?? false);
 const uvcH265Sources = $derived(deriveUvcH265Sources(devices));
 // ── i18n key resolver (mirrors the legacy EncoderCard helper) ──────────────────
-const t = (key: string): string => {
-	const parts = key.split('.');
-	let result: unknown = $LL;
-	for (const part of parts) {
-		if (result && typeof result === 'object' && part in result) {
-			result = (result as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof result === 'function' ? (result as () => string)() : key;
-};
+const t = resolveMessageKey;
 
 // Probed hardware formats (resolution/framerate/media-type) surfaced inline.
 const probedCaps = $derived(summarizeProbedCaps(devices, t));
@@ -180,7 +169,7 @@ function framerateOptionTitle(option: FramerateOption): string | undefined {
 	if (!option.reason) return undefined;
 	const reason = t(option.reason);
 	if (!option.hint) return reason;
-	const hint = $LL.live.encoder.fpsAvailableAt({
+	const hint = m["live.encoder.fpsAvailableAt"]({
 		fps: option.hint.fps,
 		resolution: getResolutionLabel(option.hint.resolution),
 	});
@@ -317,7 +306,7 @@ const inputCodecLabel = $derived.by<string>(() => {
 	if (activeSourceKind === 'mjpeg') return 'MJPEG';
 	if (activeSourceKind === 'uvc_h264') return 'H.264';
 	if (activeSourceKind === 'uvc_h265') return 'H.265';
-	return $LL.live.encoder.passthrough.inputRaw();
+	return m["live.encoder.passthrough.inputRaw"]();
 });
 const outputCodecLabel = $derived(passthroughOutputCodec === 'h265' ? 'H.265' : 'H.264');
 
@@ -415,7 +404,7 @@ const errors = $derived.by(() => {
 		localBitrate < BITRATE.min ||
 		localBitrate > BITRATE.max
 	) {
-		e.bitrate = $LL.validation.bitrateRange();
+		e.bitrate = m["validation.bitrateRange"]();
 	}
 	return e;
 });
@@ -435,13 +424,13 @@ const codecSupported = $derived(localCodec !== 'h265' || h265Supported);
 const axisSaveError = $derived.by<string | undefined>(() => {
 	if (!resolutionSupported) {
 		const option = resolutionChoices.find((choice) => choice.value === localResolution);
-		return option?.reason ? t(option.reason) : $LL.validation.invalid();
+		return option?.reason ? t(option.reason) : m["validation.invalid"]();
 	}
 	if (!framerateSupported) {
 		const option = framerateChoices.find((choice) => choice.value === localFramerate);
-		return option?.reason ? framerateOptionTitle(option) : $LL.validation.invalid();
+		return option?.reason ? framerateOptionTitle(option) : m["validation.invalid"]();
 	}
-	if (!codecSupported) return $LL.live.encoder.codecH265Unavailable();
+	if (!codecSupported) return m["live.encoder.codecH265Unavailable"]();
 	return undefined;
 });
 
@@ -500,8 +489,8 @@ function handleSave() {
 	icon={Binary}
 	onPrimary={handleSave}
 	primaryDisabled={!canSave}
-	primaryLabel={$LL.dialogs.save()}
-	title={$LL.settings.encoderSettings()}
+	primaryLabel={m["dialogs.save"]()}
+	title={m["settings.encoderSettings"]()}
 >
 	<div class="space-y-5">
 		{#if sourceChangedNote}
@@ -510,7 +499,7 @@ function handleSave() {
 				data-testid="encoder-source-changed-note"
 				role="status"
 			>
-				{$LL.live.encoder.sourceChangedNote()}
+				{m["live.encoder.sourceChangedNote"]()}
 			</p>
 		{/if}
 
@@ -547,7 +536,7 @@ function handleSave() {
 							class="bg-primary/10 text-primary ms-auto shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
 							data-input-mode={activeInputMode}
 							data-testid="encoder-active-input-mode"
-							title={$LL.live.source.modeLadderHint()}
+							title={m["live.source.modeLadderHint"]()}
 						>
 							{t(inputModeLabelKey(activeInputMode))}
 						</span>
@@ -573,7 +562,7 @@ function handleSave() {
 			{#if probedCaps.length > 0}
 				<div class="bg-muted/30 space-y-1.5 rounded-md border p-2.5" data-testid="probed-caps">
 					<span class="text-muted-foreground text-xs font-medium">
-						{$LL.live.encoder.probedCaps()}
+						{m["live.encoder.probedCaps"]()}
 					</span>
 					{#each probedCaps as device (device.inputId)}
 						<div class="space-y-1" data-input-id={device.inputId}>
@@ -602,10 +591,10 @@ function handleSave() {
 		     old display-only chips). Auto resolves the engine default; H.265 is
 		     disabled-with-reason when the platform can't encode it — never hidden. -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium">{$LL.settings.videoCodec()}</Label>
+			<Label class="text-sm font-medium">{m["settings.videoCodec"]()}</Label>
 			<div
 				class="bg-card/40 grid grid-cols-3 gap-1.5 rounded-lg border p-1"
-				aria-label={$LL.settings.videoCodec()}
+				aria-label={m["settings.videoCodec"]()}
 				data-testid="encoder-codec-selector"
 				role="radiogroup"
 			>
@@ -620,7 +609,7 @@ function handleSave() {
 					onclick={() => (localCodec = undefined)}
 					role="radio"
 				>
-					{$LL.live.encoder.codecAuto()}
+					{m["live.encoder.codecAuto"]()}
 				</button>
 				<button
 					type="button"
@@ -650,7 +639,7 @@ function handleSave() {
 					disabled={!h265Supported}
 					onclick={() => (localCodec = 'h265')}
 					role="radio"
-					title={h265Supported ? undefined : $LL.live.encoder.codecH265Unavailable()}
+					title={h265Supported ? undefined : m["live.encoder.codecH265Unavailable"]()}
 				>
 					H.265
 				</button>
@@ -658,13 +647,13 @@ function handleSave() {
 			{#if codecIsAuto}
 				<p class="text-muted-foreground text-xs" data-testid="codec-auto-resolved">
 					{resolvedAutoCodec === 'h265'
-						? $LL.live.encoder.codecAutoResolvedH265()
-						: $LL.live.encoder.codecAutoResolvedH264()}
+						? m["live.encoder.codecAutoResolvedH265"]()
+						: m["live.encoder.codecAutoResolvedH264"]()}
 				</p>
 			{/if}
 			{#if codecIsH265 && h265SoftwareOnly}
 				<p class="text-status-warning text-xs" data-testid="codec-h265-software">
-					{$LL.settings.softwareEncodeWarning()}
+					{m["settings.softwareEncodeWarning"]()}
 				</p>
 			{/if}
 		</div>
@@ -674,10 +663,10 @@ function handleSave() {
 		     consequence (camera controls bitrate; adaptive bonded bitrate inactive)
 		     ahead of going live, never only while streaming. -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium">{$LL.live.encoder.passthrough.title()}</Label>
+			<Label class="text-sm font-medium">{m["live.encoder.passthrough.title"]()}</Label>
 			<div
 				class="bg-card/40 grid grid-cols-3 gap-1.5 rounded-lg border p-1"
-				aria-label={$LL.live.encoder.passthrough.title()}
+				aria-label={m["live.encoder.passthrough.title"]()}
 				data-testid="encoder-passthrough-selector"
 				role="radiogroup"
 			>
@@ -692,7 +681,7 @@ function handleSave() {
 					onclick={() => (localPassthrough = 'auto')}
 					role="radio"
 				>
-					{$LL.live.encoder.passthrough.auto()}
+					{m["live.encoder.passthrough.auto"]()}
 				</button>
 				<button
 					type="button"
@@ -705,7 +694,7 @@ function handleSave() {
 					onclick={() => (localPassthrough = 'force')}
 					role="radio"
 				>
-					{$LL.live.encoder.passthrough.force()}
+					{m["live.encoder.passthrough.force"]()}
 				</button>
 				<button
 					type="button"
@@ -718,7 +707,7 @@ function handleSave() {
 					onclick={() => (localPassthrough = 'off')}
 					role="radio"
 				>
-					{$LL.live.encoder.passthrough.off()}
+					{m["live.encoder.passthrough.off"]()}
 				</button>
 			</div>
 			<!-- Resolved-mode disclosure: derived from setting + source kind + output
@@ -729,7 +718,7 @@ function handleSave() {
 					data-testid="passthrough-disclosure"
 					data-mode="passthrough"
 				>
-					{$LL.live.encoder.passthrough.disclosurePassthrough()}
+					{m["live.encoder.passthrough.disclosurePassthrough"]()}
 				</p>
 			{:else if resolvedPassthroughMode === 'forceUnavailable'}
 				<p
@@ -737,7 +726,7 @@ function handleSave() {
 					data-testid="passthrough-disclosure"
 					data-mode="forceUnavailable"
 				>
-					{$LL.live.encoder.passthrough.disclosureForceUnavailable()}
+					{m["live.encoder.passthrough.disclosureForceUnavailable"]()}
 				</p>
 			{:else}
 				<p
@@ -745,7 +734,7 @@ function handleSave() {
 					data-testid="passthrough-disclosure"
 					data-mode="transcode"
 				>
-					{$LL.live.encoder.passthrough.disclosureTranscode({
+					{m["live.encoder.passthrough.disclosureTranscode"]({
 						input: inputCodecLabel,
 						output: outputCodecLabel,
 					})}
@@ -760,13 +749,13 @@ function handleSave() {
 		     no-op). -->
 		<div class="bg-muted/40 space-y-3 rounded-lg border p-4" data-testid="encoder-bitrate-control">
 			<div class="flex items-center justify-between gap-2">
-				<Label class="text-sm font-medium" for="encoder-bitrate">{$LL.settings.bitrate()}</Label>
+				<Label class="text-sm font-medium" for="encoder-bitrate">{m["settings.bitrate"]()}</Label>
 				<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">
 					{Number.isFinite(localBitrate) ? localBitrate : BITRATE.defaultMin}
 				</span>
 			</div>
 			<Slider
-				aria-label={$LL.settings.bitrate()}
+				aria-label={m["settings.bitrate"]()}
 				disabled={passthroughActive}
 				max={BITRATE.max}
 				min={BITRATE.min}
@@ -793,16 +782,16 @@ function handleSave() {
 					class="text-muted-foreground bg-muted rounded-md p-2 text-xs"
 					data-testid="bitrate-passthrough-disabled"
 				>
-					{$LL.live.encoder.passthrough.bitrateFixed()}
+					{m["live.encoder.passthrough.bitrateFixed"]()}
 				</p>
 			{/if}
 			<p class="text-muted-foreground text-xs" data-testid="bitrate-range-hint">
-				{$LL.live.encoder.bitrateRangeHint()}: {BITRATE.min}–{BITRATE.max}
-				{$LL.units.kbps()}
+				{m["live.encoder.bitrateRangeHint"]()}: {BITRATE.min}–{BITRATE.max}
+				{m["units.kbps"]()}
 			</p>
 			{#if bitrateClamped}
 				<p class="text-status-warning text-xs" data-testid="bitrate-clamped">
-					{$LL.live.encoder.bitrateClamped()}
+					{m["live.encoder.bitrateClamped"]()}
 				</p>
 			{/if}
 			{#if errors.bitrate}
@@ -810,7 +799,7 @@ function handleSave() {
 			{/if}
 			{#if isStreaming}
 				<p class="text-muted-foreground bg-muted rounded-md p-2 text-xs">
-					{$LL.settings.changeBitrateNotice()}
+					{m["settings.changeBitrateNotice"]()}
 				</p>
 			{/if}
 		</div>
@@ -823,12 +812,12 @@ function handleSave() {
 				class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
 				data-testid="axis-summary"
 			>
-				<span class="font-medium">{$LL.live.encoder.axisSelected()}:</span>
+				<span class="font-medium">{m["live.encoder.axisSelected"]()}:</span>
 				<span class="text-foreground font-mono" data-testid="axis-current">
 					{getResolutionLabel(localResolution)} · {getFramerateLabel(localFramerate)}
 				</span>
 				<span aria-hidden={true}>·</span>
-				<span>{$LL.live.encoder.axisDeviceMax()}:</span>
+				<span>{m["live.encoder.axisDeviceMax"]()}:</span>
 				<span class="text-foreground font-mono" data-testid="axis-device-max">
 					{ceiling.resolution ? getResolutionLabel(ceiling.resolution) : '\u2014'} · {ceiling.framerate
 						? getFramerateLabel(ceiling.framerate)
@@ -841,11 +830,11 @@ function handleSave() {
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-2">
 					<Label class="text-sm font-medium" for="encoder-resolution">
-						{$LL.settings.encodingResolution()}
+						{m["settings.encodingResolution"]()}
 					</Label>
 					<AppliesNextStart
 						show={resolutionAppliesNextStart}
-						label={$LL.live.encoder.appliesNextStart()}
+						label={m["live.encoder.appliesNextStart"]()}
 						data-testid="resolution-applies-next-start"
 					/>
 				</div>
@@ -861,7 +850,7 @@ function handleSave() {
 					>
 						{localResolution
 							? getResolutionLabel(localResolution)
-							: $LL.settings.selectEncodingResolution()}
+							: m["settings.selectEncodingResolution"]()}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
@@ -885,11 +874,11 @@ function handleSave() {
 			<div class="space-y-2">
 				<div class="flex items-center justify-between gap-2">
 					<Label class="text-sm font-medium" for="encoder-framerate">
-						{$LL.settings.framerate()}
+						{m["settings.framerate"]()}
 					</Label>
 					<AppliesNextStart
 						show={framerateAppliesNextStart}
-						label={$LL.live.encoder.appliesNextStart()}
+						label={m["live.encoder.appliesNextStart"]()}
 						data-testid="framerate-applies-next-start"
 					/>
 				</div>
@@ -903,7 +892,7 @@ function handleSave() {
 						aria-invalid={!framerateSupported}
 						class="w-full"
 					>
-						{localFramerate ? getFramerateLabel(localFramerate) : $LL.settings.selectFramerate()}
+						{localFramerate ? getFramerateLabel(localFramerate) : m["settings.selectFramerate"]()}
 					</Select.Trigger>
 					<Select.Content>
 						<Select.Group>
@@ -925,11 +914,11 @@ function handleSave() {
 			<!-- Bitrate overlay toggle -->
 			<div class="flex items-center justify-between gap-3 rounded-lg border p-3">
 				<Label class="flex-1 cursor-pointer text-sm" for="encoder-overlay">
-					{$LL.settings.enableBitrateOverlay()}
+					{m["settings.enableBitrateOverlay"]()}
 				</Label>
 				<LabeledSwitch
 					checked={localOverlay}
-					label={$LL.settings.enableBitrateOverlay()}
+					label={m["settings.enableBitrateOverlay"]()}
 					onCheckedChange={(value) => (localOverlay = value)}
 				/>
 			</div>
@@ -953,10 +942,10 @@ function handleSave() {
 				data-testid="encoder-apply-choice"
 			>
 				<legend class="px-1 text-sm font-medium">
-					{$LL.live.encoder.applyChoice.title()}
+					{m["live.encoder.applyChoice.title"]()}
 				</legend>
 				<p class="text-muted-foreground text-xs">
-					{$LL.live.encoder.applyChoice.description()}
+					{m["live.encoder.applyChoice.description"]()}
 				</p>
 				<label class="flex cursor-pointer items-start gap-2 text-sm">
 					<input
@@ -967,7 +956,7 @@ function handleSave() {
 						type="radio"
 						value="nextStart"
 					/>
-					<span>{$LL.live.encoder.applyChoice.nextStart()}</span>
+					<span>{m["live.encoder.applyChoice.nextStart"]()}</span>
 				</label>
 				<label class="flex cursor-pointer items-start gap-2 text-sm">
 					<input
@@ -978,7 +967,7 @@ function handleSave() {
 						type="radio"
 						value="now"
 					/>
-					<span>{$LL.live.encoder.applyChoice.now()}</span>
+					<span>{m["live.encoder.applyChoice.now"]()}</span>
 				</label>
 			</fieldset>
 		{/if}

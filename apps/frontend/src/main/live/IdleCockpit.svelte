@@ -41,7 +41,7 @@ import type { ResolvedAudioStatus } from '$lib/streaming/sourceSummary';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
 
 import PreviewDisclosure from './PreviewDisclosure.svelte';
@@ -200,20 +200,20 @@ const audioEmbeddedComingSoon = $derived(
 		<summary
 			class="text-muted-foreground cursor-pointer list-none px-4 py-3 text-sm font-medium select-none"
 		>
-			{$LL.live.comingSoon.roadmap()}
+			{m["live.comingSoon.roadmap"]()}
 		</summary>
 		<div class="flex flex-col gap-2.5 px-4 pb-4">
 			<div class="flex items-center justify-between gap-3">
 				<span class="text-muted-foreground flex items-center gap-2 text-sm">
 					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
-					{$LL.live.comingSoon.pip()}
+					{m["live.comingSoon.pip"]()}
 				</span>
 				<ComingSoon debtId="TD-pip" />
 			</div>
 			<div class="flex items-center justify-between gap-3">
 				<span class="text-muted-foreground flex items-center gap-2 text-sm">
 					<Shuffle aria-hidden={true} class="size-4 shrink-0" />
-					{$LL.live.comingSoon.modeFallback()}
+					{m["live.comingSoon.modeFallback"]()}
 				</span>
 				<ComingSoon debtId="TD-mode-fallback" />
 			</div>
@@ -221,10 +221,10 @@ const audioEmbeddedComingSoon = $derived(
 				<div class="flex items-center justify-between gap-3">
 					<span class="text-muted-foreground flex items-center gap-2 text-sm">
 						<Volume2 aria-hidden={true} class="size-4 shrink-0" />
-						{$LL.live.comingSoon.embeddedAudio()}
+						{m["live.comingSoon.embeddedAudio"]()}
 					</span>
 					<!-- CI gate static marker (component renders data-debt-id dynamically): data-debt-id="TD-embedded-audio" -->
-					<ComingSoon debtId="TD-embedded-audio" label={$LL.live.comingSoon.embeddedAudio()} />
+					<ComingSoon debtId="TD-embedded-audio" label={m["live.comingSoon.embeddedAudio"]()} />
 				</div>
 			{/if}
 		</div>

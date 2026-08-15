@@ -36,7 +36,7 @@
  * the unit tests) with an `$effect.root` self-sweep.
  */
 
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import { toast } from "svelte-sonner";
 
 import type { ConnectionState } from "./client";
@@ -548,7 +548,7 @@ export async function osCommand<T>(opts: {
 			if (!opts.silent) {
 				toast.error(
 					(v.busy ? opts.busyMessage : opts.failMessage)?.() ??
-						getLL().network.os.operationFailed(),
+						m["network.os.operationFailed"](),
 				);
 			}
 		} else if (opts.confirmOnResolve) {
@@ -561,7 +561,7 @@ export async function osCommand<T>(opts: {
 	} catch (e) {
 		failOperation(opts.key, e instanceof Error ? e.message : "error");
 		if (!opts.silent) {
-			toast.error(opts.failMessage?.() ?? getLL().network.os.operationFailed());
+			toast.error(opts.failMessage?.() ?? m["network.os.operationFailed"]());
 		}
 		return undefined;
 	}

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { rtlLanguages } from '@ceraui/i18n';
-import { LL, locale } from '@ceraui/i18n/i18n-svelte5';
+import { getLocale, m } from '@ceraui/i18n/svelte';
 import { RefreshCw } from '@lucide/svelte';
 import { onMount } from 'svelte';
 
@@ -14,7 +14,7 @@ interface Props {
 const { onRefresh, threshold = 80, distance = 150, children }: Props = $props();
 
 // RTL support (for future enhancements)
-const _isRTL = $derived(rtlLanguages.includes($locale));
+const _isRTL = $derived(rtlLanguages.includes(getLocale()));
 
 let containerElement: HTMLElement;
 let refreshElement: HTMLElement;
@@ -193,11 +193,11 @@ onMount(() => {
 		/>
 		<span class="text-sm font-medium">
 			{#if isRefreshing}
-				{$LL.pwa.refreshing()}
+				{m["pwa.refreshing"]()}
 			{:else if canRefresh}
-				{$LL.pwa.releaseToRefresh()}
+				{m["pwa.releaseToRefresh"]()}
 			{:else}
-				{$LL.pwa.pullToRefresh()}
+				{m["pwa.pullToRefresh"]()}
 			{/if}
 		</span>
 	</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Minus, Plus } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -42,11 +42,11 @@ const {
      ceiling is owned by EncoderDialog, never this control. -->
 
 <section
-	aria-label={$LL.live.adjustBitrate()}
+	aria-label={m["live.adjustBitrate"]()}
 	class="bg-card space-y-3 rounded-xl border px-5 py-4"
 >
 	<div class="flex items-center justify-between gap-4">
-		<p class="text-sm font-medium">{$LL.live.adjustBitrate()}</p>
+		<p class="text-sm font-medium">{m["live.adjustBitrate"]()}</p>
 		<p
 			class="font-mono text-base font-semibold tabular-nums"
 			style="color: var(--status-live);"
@@ -56,7 +56,7 @@ const {
 	</div>
 	<div class="flex items-center gap-3">
 		<Button
-			aria-label="-{step} {$LL.units.kbps()}"
+			aria-label="-{step} {m["units.kbps"]()}"
 			class="size-11 shrink-0 rounded-lg"
 			disabled={bitrateDraft <= bitrateMin}
 			onclick={() => onStep(-step)}
@@ -66,7 +66,7 @@ const {
 			<Minus aria-hidden={true} class="h-4 w-4" />
 		</Button>
 		<Slider
-			aria-label={$LL.live.adjustBitrate()}
+			aria-label={m["live.adjustBitrate"]()}
 			class="grow"
 			max={sliderMax}
 			min={sliderMin}
@@ -77,7 +77,7 @@ const {
 			value={bitrateDraft}
 		/>
 		<Button
-			aria-label="+{step} {$LL.units.kbps()}"
+			aria-label="+{step} {m["units.kbps"]()}"
 			class="size-11 shrink-0 rounded-lg"
 			disabled={bitrateDraft >= bitrateMax}
 			onclick={() => onStep(step)}

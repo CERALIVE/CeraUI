@@ -2,7 +2,6 @@
 import './app.css';
 
 import { initLocale } from '@ceraui/i18n/svelte';
-import { setLocale as setLegacyLocale } from '@ceraui/i18n/i18n-svelte5';
 import { ModeWatcher, setTheme as setCustomTheme } from 'mode-watcher';
 import { onMount, untrack } from 'svelte';
 
@@ -62,15 +61,9 @@ $effect(() => {
 
 onMount(async () => {
 	// Startup priority: saved preference -> navigator.language -> en. Paraglide
-	// is synchronous (every namespace is eager), so only the legacy adapter still
-	// needs its async dictionary fetch; it coexists until the plan's call-site
-	// codemod lands.
-	const active = initLocale({ saved: getLocale()?.code });
-	try {
-		await setLegacyLocale(active as Parameters<typeof setLegacyLocale>[0]);
-	} catch (error) {
-		console.error('Failed to initialize the legacy i18n adapter:', error);
-	}
+	// is synchronous (every namespace is eager), so there is no dictionary fetch
+	// to await and no flash of the base locale.
+	initLocale({ saved: getLocale()?.code });
 });
 </script>
 

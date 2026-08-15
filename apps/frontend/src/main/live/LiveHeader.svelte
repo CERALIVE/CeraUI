@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 
 interface Props {
 	isStreaming: boolean;
@@ -21,18 +21,18 @@ const { isStreaming }: Props = $props();
 				class="h-2 w-2 rounded-full motion-safe:animate-pulse"
 				style="background-color: var(--status-live);"
 			></span>
-			{$LL.live.streamingActive()}
+			{m["live.streamingActive"]()}
 		</span>
 	{:else}
 		<span
 			class="text-muted-foreground flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold tracking-wide uppercase"
 		>
 			<span class="bg-muted-foreground/50 h-2 w-2 rounded-full"></span>
-			{$LL.live.notStreaming()}
+			{m["live.notStreaming"]()}
 		</span>
 	{/if}
 	<div>
-		<h1 class="text-2xl font-bold tracking-tight">{$LL.live.title()}</h1>
-		<p class="text-muted-foreground text-sm">{$LL.live.description()}</p>
+		<h1 class="text-2xl font-bold tracking-tight">{m["live.title"]()}</h1>
+		<p class="text-muted-foreground text-sm">{m["live.description"]()}</p>
 	</div>
 </header>

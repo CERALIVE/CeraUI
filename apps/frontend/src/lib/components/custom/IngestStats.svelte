@@ -15,7 +15,7 @@
 -->
 <script lang="ts">
 import { formatBytes } from '@ceraui/i18n/formatters';
-import { LL, locale } from '@ceraui/i18n/i18n-svelte5';
+import { getLocale, m } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage } from '@ceraui/rpc/schemas';
 import { Activity, AlertTriangle, Clock, Download, TrendingUp, Upload } from '@lucide/svelte';
 import { untrack } from 'svelte';
@@ -73,7 +73,7 @@ const totalWeight = $derived(links.reduce((sum, link) => sum + link.weight_perce
 // so summing here would make the operator's total run backwards. `undefined`
 // (a sender predating the field) renders as unknown, never as "0 B".
 const EM_DASH = '\u2014';
-const loc = $derived($locale);
+const loc = $derived(getLocale());
 const transferred = $derived(
 	telemetry?.bytes_sent_total === undefined
 		? EM_DASH
@@ -182,9 +182,9 @@ function formatBitrate(kbps: number): string {
 	if (kbps >= 1000) {
 		const mbps = kbps / 1000;
 		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
-		return `${value} ${$LL.units.mbps()}`;
+		return `${value} ${m["units.mbps"]()}`;
 	}
-	return `${kbps} ${$LL.units.kbps()}`;
+	return `${kbps} ${m["units.kbps"]()}`;
 }
 
 // Surfaced inline when a device-local export fails (e.g. Blob/object-URL
@@ -227,7 +227,7 @@ function exportCsv(): void {
 <section
 	data-testid="ingest-stats"
 	class={cn('bg-card rounded-xl border p-4 sm:p-5', className)}
-	aria-label={$LL.live.ingest.ariaLabel()}
+	aria-label={m["live.ingest.ariaLabel"]()}
 >
 	<div class="mb-4 flex items-center gap-2.5">
 		<span
@@ -238,20 +238,20 @@ function exportCsv(): void {
 		</span>
 		<h2 class="text-sm font-semibold tracking-tight">
 			{showSummary && rollup
-				? $LL.live.ingest.sessionEnded({ duration: formatDuration(rollup.durationMs) })
-				: $LL.live.ingest.title()}
+				? m["live.ingest.sessionEnded"]({ duration: formatDuration(rollup.durationMs) })
+				: m["live.ingest.title"]()}
 		</h2>
 		{#if showSummary && rollup}
 			<span
 				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums"
 			>
-				{rollup.sampleCount}&nbsp;{$LL.live.ingest.samples()}
+				{rollup.sampleCount}&nbsp;{m["live.ingest.samples"]()}
 			</span>
 		{:else if hasLinks}
 			<span
 				class="bg-secondary/60 text-muted-foreground ms-auto rounded-full px-2 py-0.5 font-mono text-xs tabular-nums"
 			>
-				{links.length}&nbsp;{$LL.live.ingest.links()}
+				{links.length}&nbsp;{m["live.ingest.links"]()}
 			</span>
 		{/if}
 	</div>
@@ -264,7 +264,7 @@ function exportCsv(): void {
 			class="border-status-warning/30 bg-status-warning/10 text-status-warning mb-4 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium"
 		>
 			<TrendingUp aria-hidden="true" class="size-4 shrink-0" />
-			<span>{$LL.live.ingest.alert()}</span>
+			<span>{m["live.ingest.alert"]()}</span>
 		</div>
 	{/if}
 
@@ -277,7 +277,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<TrendingUp aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{$LL.live.ingest.peak()}</span>
+						<span class="truncate">{m["live.ingest.peak"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-peak"
@@ -291,7 +291,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<Activity aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{$LL.live.ingest.avg()}</span>
+						<span class="truncate">{m["live.ingest.avg"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-avg"
@@ -305,7 +305,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<AlertTriangle aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{$LL.live.ingest.drops()}</span>
+						<span class="truncate">{m["live.ingest.drops"]()}</span>
 					</div>
 					<!-- Informational, not actionable: a passive drop tally uses the
 					     info token; amber is reserved for the actionable alert. -->
@@ -324,7 +324,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<Clock aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{$LL.live.ingest.duration()}</span>
+						<span class="truncate">{m["live.ingest.duration"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-duration"
@@ -338,7 +338,7 @@ function exportCsv(): void {
 						class="text-muted-foreground flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide"
 					>
 						<Upload aria-hidden="true" class="size-3 shrink-0" />
-						<span class="truncate">{$LL.live.ingest.transferred()}</span>
+						<span class="truncate">{m["live.ingest.transferred"]()}</span>
 					</div>
 					<div
 						data-testid="ingest-summary-transferred"
@@ -356,10 +356,10 @@ function exportCsv(): void {
 						'text-[10px] font-medium uppercase tracking-wide',
 					)}
 				>
-					<span class="w-24 shrink-0 ps-4">{$LL.live.ingest.link()}</span>
-					<span class="flex-1">{$LL.live.ingest.contribution()}</span>
-					<span class="w-12 text-end">{$LL.live.ingest.nak()}</span>
-					<span class="w-14 text-end">{$LL.live.ingest.rtt()}</span>
+					<span class="w-24 shrink-0 ps-4">{m["live.ingest.link"]()}</span>
+					<span class="flex-1">{m["live.ingest.contribution"]()}</span>
+					<span class="w-12 text-end">{m["live.ingest.nak"]()}</span>
+					<span class="w-14 text-end">{m["live.ingest.rtt"]()}</span>
 				</div>
 				<div role="list">
 					{#each rollup.links as link, i (link.iface)}
@@ -397,7 +397,7 @@ function exportCsv(): void {
 								data-testid="ingest-link-rtt"
 								class="text-foreground w-14 text-end font-mono tabular-nums"
 							>
-								{`${link.avgRtt} ${$LL.units.ms()}`}
+								{`${link.avgRtt} ${m["units.ms"]()}`}
 							</span>
 						</div>
 					{/each}
@@ -406,7 +406,7 @@ function exportCsv(): void {
 
 			<div
 				class="mt-4 flex flex-wrap gap-2 border-t pt-4"
-				aria-label={$LL.live.ingest.exportAria()}
+				aria-label={m["live.ingest.exportAria"]()}
 			>
 				<Button
 					data-testid="ingest-export-json"
@@ -416,7 +416,7 @@ function exportCsv(): void {
 					onclick={exportJson}
 				>
 					<Download aria-hidden="true" class="size-3.5" />
-					{$LL.live.ingest.exportJson()}
+					{m["live.ingest.exportJson"]()}
 				</Button>
 				<Button
 					data-testid="ingest-export-csv"
@@ -426,7 +426,7 @@ function exportCsv(): void {
 					onclick={exportCsv}
 				>
 					<Download aria-hidden="true" class="size-3.5" />
-					{$LL.live.ingest.exportCsv()}
+					{m["live.ingest.exportCsv"]()}
 				</Button>
 			</div>
 
@@ -438,14 +438,14 @@ function exportCsv(): void {
 					class="border-status-warning/30 bg-status-warning/10 text-status-warning mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
 				>
 					<AlertTriangle aria-hidden="true" class="size-4 shrink-0" />
-					<span>{$LL.live.ingest.exportError()}</span>
+					<span>{m["live.ingest.exportError"]()}</span>
 				</p>
 			{/if}
 		</div>
 	{:else if !hasLinks}
 		<div class="text-muted-foreground flex items-center gap-2 py-2 text-sm" data-testid="ingest-waiting">
 			<Activity aria-hidden="true" class="size-4 shrink-0 opacity-60" />
-			<span>{$LL.live.ingest.waiting()}</span>
+			<span>{m["live.ingest.waiting"]()}</span>
 		</div>
 	{:else}
 		<!-- column header (ps-4 aligns "Link" past the per-link signal dot) -->
@@ -455,10 +455,10 @@ function exportCsv(): void {
 				'text-muted-foreground border-b pb-1.5 text-[10px] font-medium uppercase tracking-wide',
 			)}
 		>
-			<span class="ps-4">{$LL.live.ingest.link()}</span>
-			<span class="text-end">{$LL.live.ingest.rtt()}</span>
-			<span class="text-end">{$LL.live.ingest.nak()}</span>
-			<span class="text-end">{$LL.live.ingest.weight()}</span>
+			<span class="ps-4">{m["live.ingest.link"]()}</span>
+			<span class="text-end">{m["live.ingest.rtt"]()}</span>
+			<span class="text-end">{m["live.ingest.nak"]()}</span>
+			<span class="text-end">{m["live.ingest.weight"]()}</span>
 		</div>
 
 		<!-- per-link rows -->
@@ -490,7 +490,7 @@ function exportCsv(): void {
 							{/if}
 						</div>
 						<span data-testid="ingest-rtt" class="text-foreground text-end font-mono tabular-nums">
-							{`${link.rtt_ms} ${$LL.units.ms()}`}
+							{`${link.rtt_ms} ${m["units.ms"]()}`}
 						</span>
 						<span data-testid="ingest-nak" class="text-foreground text-end font-mono tabular-nums">
 							{link.nak_count}
@@ -505,7 +505,7 @@ function exportCsv(): void {
 						<span
 							class="text-muted-foreground shrink-0 text-[10px] font-medium uppercase tracking-wide"
 						>
-							{$LL.live.ingest.trend()}
+							{m["live.ingest.trend"]()}
 						</span>
 						<svg
 							data-testid="ingest-sparkline"
@@ -519,7 +519,7 @@ function exportCsv(): void {
 								view.degraded ? 'text-status-warning' : 'text-primary',
 							)}
 							role="img"
-							aria-label={$LL.live.ingest.trendLabel({ iface: link.iface })}
+							aria-label={m["live.ingest.trendLabel"]({ iface: link.iface })}
 						>
 							<!-- Baseline track so a short/empty trace still reads as calibrated. -->
 							<line
@@ -564,7 +564,7 @@ function exportCsv(): void {
 									view.degraded ? 'bg-status-warning' : 'bg-primary',
 								)}
 							></span>
-							{view.degraded ? $LL.live.ingest.degraded() : $LL.live.ingest.healthy()}
+							{view.degraded ? m["live.ingest.degraded"]() : m["live.ingest.healthy"]()}
 						</span>
 					</div>
 				</div>
@@ -574,7 +574,7 @@ function exportCsv(): void {
 		<!-- bond totals -->
 		<div class={cn(COLS, 'items-center pt-3 text-xs')}>
 			<span class="text-muted-foreground ps-4 uppercase tracking-wide"
-				>{$LL.live.ingest.total()}</span
+				>{m["live.ingest.total"]()}</span
 			>
 			<span aria-hidden="true" class="text-end">&nbsp;</span>
 			<span
@@ -599,7 +599,7 @@ function exportCsv(): void {
 		-->
 		<div class="mt-2 flex items-baseline justify-between gap-3 border-t pt-2 text-xs">
 			<span class="text-muted-foreground ps-4 uppercase tracking-wide">
-				{$LL.live.ingest.transferred()}
+				{m["live.ingest.transferred"]()}
 			</span>
 			<span
 				data-testid="ingest-total-bytes"

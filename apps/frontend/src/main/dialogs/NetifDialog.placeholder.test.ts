@@ -5,11 +5,11 @@
  *
  * The example value `192.168.1.50` used to live inline in the template. This
  * test renders the actual dialog and asserts the rendered `placeholder`
- * attribute equals the value resolved through `$LL` (the runes i18n adapter
+ * attribute equals the value resolved through `m` (the paraglide message registry
  * defaults to `en` synchronously). That proves the key resolves in the UI — a
  * missing or typo'd key would fail codegen AND make this assertion throw/diverge.
  */
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import { render } from "@testing-library/svelte";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -37,7 +37,7 @@ beforeAll(() => {
 });
 
 describe("NetifDialog — IP placeholder resolves from i18n", () => {
-	it("renders the static-IP input with the placeholder from $LL, not a hardcoded literal", () => {
+	it("renders the static-IP input with the placeholder from the catalog, not a hardcoded literal", () => {
 		render(NetifDialog, {
 			props: { open: true, name: "eth0", iface: undefined },
 		});
@@ -47,7 +47,7 @@ describe("NetifDialog — IP placeholder resolves from i18n", () => {
 		) as HTMLInputElement | null;
 		expect(input).toBeTruthy();
 
-		const resolved = getLL().settings.dialogs.ipPlaceholder();
+		const resolved = m["settings.dialogs.ipPlaceholder"]();
 		// Guard against the tautology where a missing key falls back to its own
 		// path string: the resolved value must be the migrated example literal.
 		expect(resolved).toBe("192.168.1.50");

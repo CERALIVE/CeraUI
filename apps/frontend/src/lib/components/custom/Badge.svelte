@@ -23,7 +23,7 @@ export type BadgeVariant = 'speed' | 'stale' | StatusVariant;
 </script>
 
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Clock } from '@lucide/svelte';
 import type { Snippet } from 'svelte';
 
@@ -114,10 +114,10 @@ const resolvedStatus = $derived<StatusVariant>(
 			className,
 		)}
 		data-stale-interface={staleInterface}
-		title={$LL.network.view.staleHint()}
+		title={m["network.view.staleHint"]()}
 	>
 		<Clock class="size-3" aria-hidden="true" />
-		{$LL.network.view.stale()}
+		{m["network.view.stale"]()}
 	</span>
 {:else}
 	<span

@@ -15,7 +15,7 @@
   got software is told so, and told why.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { PreviewEncodeMode } from '@ceraui/rpc/schemas';
 import { Cpu, TriangleAlert } from '@lucide/svelte';
 
@@ -25,7 +25,6 @@ import { getCapabilities, getConfig, getStatus } from '$lib/rpc/subscriptions.sv
 
 import { derivePreviewEncodeView } from './preview-encode-state';
 
-const t = $derived($LL.live.preview.encode);
 
 const view = $derived(
 	derivePreviewEncodeView(getCapabilities(), getStatus()?.preview_encoder_realized, getConfig()),
@@ -33,16 +32,16 @@ const view = $derived(
 
 const activeText = $derived(
 	view.active === null
-		? t.activeNone()
+		? m["live.preview.encode.activeNone"]()
 		: view.active.mode === 'hardware'
-			? t.activeHardware({ element: view.active.element })
-			: t.activeSoftware({ element: view.active.element }),
+			? m["live.preview.encode.activeHardware"]({ element: view.active.element })
+			: m["live.preview.encode.activeSoftware"]({ element: view.active.element }),
 );
 
 const fallbackMessage = $derived(
 	view.fallback?.code === 'property-failure'
-		? t.fallbackPropertyFailure()
-		: t.fallbackFactoryMissing(),
+		? m["live.preview.encode.fallbackPropertyFailure"]()
+		: m["live.preview.encode.fallbackFactoryMissing"](),
 );
 
 /**
@@ -64,15 +63,15 @@ async function requestMode(hardware: boolean): Promise<void> {
 			<div class="min-w-0">
 				<p class="flex items-center gap-1.5 text-sm font-medium">
 					<Cpu aria-hidden="true" class="size-3.5 shrink-0" />
-					{t.label()}
+					{m["live.preview.encode.label"]()}
 				</p>
-				<p class="text-muted-foreground text-xs">{t.description()}</p>
+				<p class="text-muted-foreground text-xs">{m["live.preview.encode.description"]()}</p>
 				<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="preview-encode-helper">
-					{t.helper()}
+					{m["live.preview.encode.helper"]()}
 				</p>
 			</div>
 			<AsyncSwitch
-				aria-label={t.label()}
+				aria-label={m["live.preview.encode.label"]()}
 				checked={view.requested === 'hardware'}
 				data-testid="preview-encode-switch"
 				onCheckedChange={requestMode}
@@ -87,7 +86,7 @@ async function requestMode(hardware: boolean): Promise<void> {
 				data-mode={view.active?.mode ?? 'none'}
 				data-testid="preview-encode-active"
 			>
-				<span class="font-sans">{t.activeLabel()}:</span>
+				<span class="font-sans">{m["live.preview.encode.activeLabel"]()}:</span>
 				{activeText}
 			</p>
 
@@ -100,14 +99,14 @@ async function requestMode(hardware: boolean): Promise<void> {
 				>
 					<p class="flex items-center gap-1.5 text-xs font-medium">
 						<TriangleAlert aria-hidden="true" class="text-status-warning size-3.5 shrink-0" />
-						{t.fallbackTitle()}
+						{m["live.preview.encode.fallbackTitle"]()}
 					</p>
 					<p class="text-muted-foreground text-xs" data-testid="preview-encode-fallback-message">
 						{fallbackMessage}
 					</p>
 					{#if view.fallback.code === 'property-failure'}
 						<p class="text-muted-foreground text-xs">
-							{t.fallbackPropertyLabel()}:
+							{m["live.preview.encode.fallbackPropertyLabel"]()}:
 							<code class="font-mono" data-testid="preview-encode-fallback-property"
 								>{view.fallback.property}</code
 							>

@@ -13,7 +13,7 @@
   the parent (sourced via ValidationAdapter) — no inline literals here.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Eye, EyeOff } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -48,7 +48,7 @@ const tooShort = $derived(password.length > 0 && password.length < passwordMin);
 
 <div class="bg-muted/40 flex flex-col gap-2 rounded-lg border p-3">
 	<label class="text-muted-foreground text-xs" for="wifi-new-password">
-		{$LL.wifiSelector.dialog.introducePassword()}
+		{m["wifiSelector.dialog.introducePassword"]()}
 	</label>
 	<div class="relative">
 		<Input
@@ -58,14 +58,14 @@ const tooShort = $derived(password.length > 0 && password.length < passwordMin);
 			onkeydown={(e: KeyboardEvent) => {
 				if (e.key === 'Enter') onSubmit();
 			}}
-			placeholder={$LL.wifiSelector.hotspot.placeholderPassword()}
+			placeholder={m["wifiSelector.hotspot.placeholderPassword"]()}
 			type={showPassword ? 'text' : 'password'}
 			bind:value={password}
 		/>
 		<button
 			aria-label={showPassword
-				? $LL.wifiSelector.accessibility.hidePassword()
-				: $LL.wifiSelector.accessibility.showPassword()}
+				? m["wifiSelector.accessibility.hidePassword"]()
+				: m["wifiSelector.accessibility.showPassword"]()}
 			class="text-muted-foreground hover:text-foreground hover:bg-accent absolute end-1.5 top-1/2 -translate-y-1/2 rounded-md p-1.5 transition-colors"
 			onclick={() => (showPassword = !showPassword)}
 			type="button"
@@ -79,15 +79,15 @@ const tooShort = $derived(password.length > 0 && password.length < passwordMin);
 	</div>
 	{#if tooShort}
 		<p class="text-destructive text-xs" role="alert">
-			{$LL.wifiSelector.validation.passwordMinLength()}
+			{m["wifiSelector.validation.passwordMinLength"]()}
 		</p>
 	{/if}
 	<div class="flex justify-end gap-2">
 		<Button onclick={onCancel} size="sm" variant="ghost">
-			{$LL.wifiSelector.dialog.close()}
+			{m["wifiSelector.dialog.close"]()}
 		</Button>
 		<Button disabled={password.length < passwordMin || ifaceBusy} onclick={onSubmit} size="sm">
-			{$LL.wifiSelector.button.connect()}
+			{m["wifiSelector.button.connect"]()}
 		</Button>
 	</div>
 </div>

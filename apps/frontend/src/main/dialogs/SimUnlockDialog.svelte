@@ -18,7 +18,7 @@
   an irreversible lockout, so every attempt is an explicit user action.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { Modem, SimPukUnlockOutput, SimUnlockOutput } from '@ceraui/rpc/schemas';
 import { KeyRound, Loader2, ShieldAlert, ShieldX } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
@@ -84,10 +84,10 @@ const newPinValid = $derived(pinPattern.test(newPin));
 const pukFormValid = $derived(pukValid && newPinValid);
 const dialogTitle = $derived(
 	locked
-		? $LL.network.modem.simUnlock.pukLockedTitle()
+		? m["network.modem.simUnlock.pukLockedTitle"]()
 		: pukRequired
-			? $LL.network.modem.simUnlock.pukTitle()
-			: $LL.network.modem.simUnlock.title(),
+			? m["network.modem.simUnlock.pukTitle"]()
+			: m["network.modem.simUnlock.title"](),
 );
 const dialogIcon = $derived(locked ? ShieldX : pukRequired ? ShieldAlert : KeyRound);
 
@@ -118,7 +118,7 @@ $effect(() => {
 function applyPinResult(result: SimUnlockOutput) {
 	const verdict = classifySimPinResult(result);
 	if (verdict.ok) {
-		toast.success($LL.network.modem.simUnlock.success());
+		toast.success(m["network.modem.simUnlock.success"]());
 		open = false;
 		return;
 	}
@@ -144,7 +144,7 @@ function applyPinResult(result: SimUnlockOutput) {
 function applyPukResult(result: SimPukUnlockOutput) {
 	const verdict = classifySimPukResult(result);
 	if (verdict.ok) {
-		toast.success($LL.network.modem.simUnlock.pukSuccess());
+		toast.success(m["network.modem.simUnlock.pukSuccess"]());
 		open = false;
 		return;
 	}
@@ -182,7 +182,7 @@ async function handleSubmit() {
 			const v = classifySimPinResult(r);
 			return v.reason === 'error' ? { ok: false, reason: 'error' } : { ok: true };
 		},
-		failMessage: () => $LL.network.os.operationFailed(),
+		failMessage: () => m["network.os.operationFailed"](),
 		onResult: (r) => applyPinResult(r),
 	});
 }
@@ -197,7 +197,7 @@ async function handleSubmitPuk() {
 			const v = classifySimPukResult(r);
 			return v.reason === 'error' ? { ok: false, reason: 'error' } : { ok: true };
 		},
-		failMessage: () => $LL.network.os.operationFailed(),
+		failMessage: () => m["network.os.operationFailed"](),
 		onResult: (r) => applyPukResult(r),
 	});
 }
@@ -228,9 +228,9 @@ function handlePukKeydown(event: KeyboardEvent) {
 			>
 				<ShieldX class="text-status-error mt-0.5 size-5 shrink-0" aria-hidden="true" />
 				<div class="min-w-0">
-					<p class="text-sm font-semibold">{$LL.network.modem.simUnlock.pukLockedTitle()}</p>
+					<p class="text-sm font-semibold">{m["network.modem.simUnlock.pukLockedTitle"]()}</p>
 					<p class="text-muted-foreground mt-0.5 text-sm leading-relaxed">
-						{$LL.network.modem.simUnlock.pukLocked()}
+						{m["network.modem.simUnlock.pukLocked"]()}
 					</p>
 				</div>
 			</div>
@@ -243,9 +243,9 @@ function handlePukKeydown(event: KeyboardEvent) {
 			>
 				<ShieldAlert class="text-status-error mt-0.5 size-5 shrink-0" aria-hidden="true" />
 				<div class="min-w-0">
-					<p class="text-sm font-semibold">{$LL.network.modem.simUnlock.pukTitle()}</p>
+					<p class="text-sm font-semibold">{m["network.modem.simUnlock.pukTitle"]()}</p>
 					<p class="text-muted-foreground mt-0.5 text-sm leading-relaxed">
-						{$LL.network.modem.simUnlock.pukRequired()}
+						{m["network.modem.simUnlock.pukRequired"]()}
 					</p>
 				</div>
 			</div>
@@ -256,7 +256,7 @@ function handlePukKeydown(event: KeyboardEvent) {
 					data-testid="sim-puk-attempts"
 				>
 					<span class="text-muted-foreground text-xs">
-						{$LL.network.modem.simUnlock.pukAttemptsLabel()}
+						{m["network.modem.simUnlock.pukAttemptsLabel"]()}
 					</span>
 					<span
 						class={cn(
@@ -271,7 +271,7 @@ function handlePukKeydown(event: KeyboardEvent) {
 
 			<div class="space-y-1.5">
 				<Label class="text-muted-foreground text-xs" for="sim-puk">
-					{$LL.network.modem.simUnlock.pukLabel()}
+					{m["network.modem.simUnlock.pukLabel"]()}
 				</Label>
 				<Input
 					id="sim-puk"
@@ -286,7 +286,7 @@ function handlePukKeydown(event: KeyboardEvent) {
 					inputmode="numeric"
 					maxlength={pukLength}
 					onkeydown={handlePukKeydown}
-					placeholder={$LL.network.modem.simUnlock.pukPlaceholder()}
+					placeholder={m["network.modem.simUnlock.pukPlaceholder"]()}
 					type="password"
 					bind:value={puk}
 				/>
@@ -294,7 +294,7 @@ function handlePukKeydown(event: KeyboardEvent) {
 
 			<div class="space-y-1.5">
 				<Label class="text-muted-foreground text-xs" for="sim-new-pin">
-					{$LL.network.modem.simUnlock.newPinLabel()}
+					{m["network.modem.simUnlock.newPinLabel"]()}
 				</Label>
 				<Input
 					id="sim-new-pin"
@@ -304,28 +304,28 @@ function handlePukKeydown(event: KeyboardEvent) {
 					inputmode="numeric"
 					maxlength={pinMax}
 					onkeydown={handlePukKeydown}
-					placeholder={$LL.network.modem.simUnlock.newPinPlaceholder()}
+					placeholder={m["network.modem.simUnlock.newPinPlaceholder"]()}
 					type="password"
 					bind:value={newPin}
 				/>
 				{#if pukErrorState === 'wrong-puk'}
 					<p class="text-status-error text-sm" data-testid="sim-puk-error" role="alert">
-						{$LL.network.modem.simUnlock.wrongPuk()}
+						{m["network.modem.simUnlock.wrongPuk"]()}
 					</p>
 				{:else}
 					<p class="text-muted-foreground text-xs">
-						{$LL.network.modem.simUnlock.pukLengthHint({ length: pukLength })}
+						{m["network.modem.simUnlock.pukLengthHint"]({ length: pukLength })}
 					</p>
 				{/if}
 			</div>
 		{:else}
 			<p class="text-muted-foreground text-sm leading-relaxed">
-				{$LL.network.modem.simUnlock.description()}
+				{m["network.modem.simUnlock.description"]()}
 			</p>
 
 			<div class="space-y-1.5">
 				<Label class="text-muted-foreground text-xs" for="sim-pin">
-					{$LL.network.modem.simUnlock.pinLabel()}
+					{m["network.modem.simUnlock.pinLabel"]()}
 				</Label>
 				<Input
 					id="sim-pin"
@@ -339,19 +339,19 @@ function handlePukKeydown(event: KeyboardEvent) {
 					inputmode="numeric"
 					maxlength={pinMax}
 					onkeydown={handlePinKeydown}
-					placeholder={$LL.network.modem.simUnlock.pinPlaceholder()}
+					placeholder={m["network.modem.simUnlock.pinPlaceholder"]()}
 					type="password"
 					bind:value={pin}
 				/>
 				{#if errorState === 'wrong-pin'}
 					<p class="text-status-error text-sm" data-testid="sim-pin-error" role="alert">
 						{remainingAttempts === undefined
-							? $LL.network.modem.simUnlock.wrongPin()
-							: $LL.network.modem.simUnlock.attemptsRemaining({ count: remainingAttempts })}
+							? m["network.modem.simUnlock.wrongPin"]()
+							: m["network.modem.simUnlock.attemptsRemaining"]({ count: remainingAttempts })}
 					</p>
 				{:else}
 					<p class="text-muted-foreground text-xs">
-						{$LL.network.modem.simUnlock.lengthHint({ min: pinMin, max: pinMax })}
+						{m["network.modem.simUnlock.lengthHint"]({ min: pinMin, max: pinMax })}
 					</p>
 				{/if}
 			</div>
@@ -360,7 +360,7 @@ function handlePukKeydown(event: KeyboardEvent) {
 
 	{#snippet actions()}
 		<Button class="sm:min-w-24" onclick={() => (open = false)} variant="outline">
-			{$LL.dialogs.close()}
+			{m["dialogs.close"]()}
 		</Button>
 		{#if pukRequired && !locked}
 			<Button
@@ -371,9 +371,9 @@ function handlePukKeydown(event: KeyboardEvent) {
 			>
 				{#if submitting}
 					<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-					{$LL.network.modem.simUnlock.unlocking()}
+					{m["network.modem.simUnlock.unlocking"]()}
 				{:else}
-					{$LL.network.modem.simUnlock.pukSubmit()}
+					{m["network.modem.simUnlock.pukSubmit"]()}
 				{/if}
 			</Button>
 		{:else if !pukRequired}
@@ -385,9 +385,9 @@ function handlePukKeydown(event: KeyboardEvent) {
 			>
 				{#if submitting}
 					<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-					{$LL.network.modem.simUnlock.unlocking()}
+					{m["network.modem.simUnlock.unlocking"]()}
 				{:else}
-					{$LL.network.modem.simUnlock.submit()}
+					{m["network.modem.simUnlock.submit"]()}
 				{/if}
 			</Button>
 		{/if}

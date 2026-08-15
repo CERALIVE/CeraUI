@@ -16,7 +16,7 @@
   nested AppDialog with `destructive` set so its primary button is red.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { UpdateProgress } from '@ceraui/rpc/schemas';
 import { AlertTriangle, Power, PowerOff, RotateCcw } from '@lucide/svelte';
 
@@ -62,9 +62,9 @@ const isUpdating = $derived(
 const blocked = $derived(streaming || isUpdating);
 const blockedReason = $derived(
 	streaming
-		? $LL.settings.dialogs.blockedStreaming()
+		? m["settings.dialogs.blockedStreaming"]()
 		: isUpdating
-			? $LL.settings.dialogs.blockedUpdating()
+			? m["settings.dialogs.blockedUpdating"]()
 			: '',
 );
 
@@ -82,12 +82,12 @@ const busy = $derived(
 );
 
 const confirmLabel = $derived(
-	pending === 'poweroff' ? $LL.advanced.powerOff() : $LL.advanced.reboot(),
+	pending === 'poweroff' ? m["advanced.powerOff"]() : m["advanced.reboot"](),
 );
 const confirmBody = $derived(
 	pending === 'poweroff'
-		? $LL.settings.dialogs.powerOffConfirm()
-		: $LL.settings.dialogs.rebootConfirm(),
+		? m["settings.dialogs.powerOffConfirm"]()
+		: m["settings.dialogs.rebootConfirm"](),
 );
 
 function request(action: PendingAction) {
@@ -113,7 +113,7 @@ async function confirmAction() {
 		target: action,
 		rpc: () => (action === 'reboot' ? rpc.system.reboot() : rpc.system.poweroff()),
 		confirmOnResolve: true,
-		failMessage: () => $LL.network.os.operationFailed(),
+		failMessage: () => m["network.os.operationFailed"](),
 	});
 	pending = null;
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted);
@@ -213,11 +213,11 @@ function dismissRecovery() {
 
 <AppDialog
 	bind:open
-	description={$LL.settings.index.powerDesc()}
+	description={m["settings.index.powerDesc"]()}
 	destructive
 	hideFooter
 	icon={Power}
-	title={$LL.settings.index.power()}
+	title={m["settings.index.power"]()}
 >
 	<div class="space-y-5">
 		{#if rebootPhase === 'counting'}
@@ -231,11 +231,11 @@ function dismissRecovery() {
 					<RotateCcw class="size-6 motion-safe:animate-spin" />
 				</span>
 				<div class="space-y-1">
-					<h3 class="text-sm font-semibold">{$LL.settings.dialogs.rebootCountdownTitle()}</h3>
-					<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.rebootCountdownDescription()}</p>
+					<h3 class="text-sm font-semibold">{m["settings.dialogs.rebootCountdownTitle"]()}</h3>
+					<p class="text-muted-foreground text-xs">{m["settings.dialogs.rebootCountdownDescription"]()}</p>
 				</div>
 				<p class="font-mono text-2xl tabular-nums" data-reboot-countdown>
-					{$LL.settings.dialogs.rebootCountdownRemaining({ seconds: remaining })}
+					{m["settings.dialogs.rebootCountdownRemaining"]({ seconds: remaining })}
 				</p>
 			</div>
 		{:else if rebootPhase === 'recovery'}
@@ -247,17 +247,17 @@ function dismissRecovery() {
 				>
 					<AlertTriangle class="text-status-warning mt-0.5 size-4 shrink-0" />
 					<div class="space-y-1">
-						<p class="text-sm font-medium">{$LL.settings.dialogs.rebootRecoveryTitle()}</p>
-						<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.rebootRecoveryDescription()}</p>
+						<p class="text-sm font-medium">{m["settings.dialogs.rebootRecoveryTitle"]()}</p>
+						<p class="text-muted-foreground text-xs">{m["settings.dialogs.rebootRecoveryDescription"]()}</p>
 					</div>
 				</div>
 				<div class="flex flex-col gap-2 sm:flex-row">
 					<Button class="min-h-11 w-full gap-2" onclick={retryReboot} variant="outline">
 						<RotateCcw class="size-4" />
-						{$LL.settings.dialogs.rebootRecoveryRetry()}
+						{m["settings.dialogs.rebootRecoveryRetry"]()}
 					</Button>
 					<Button class="min-h-11 w-full" onclick={dismissRecovery} variant="ghost">
-						{$LL.settings.dialogs.rebootRecoveryDismiss()}
+						{m["settings.dialogs.rebootRecoveryDismiss"]()}
 					</Button>
 				</div>
 			</div>
@@ -280,8 +280,8 @@ function dismissRecovery() {
 			</span>
 			<div class="min-w-0 flex-1 space-y-3">
 				<div class="space-y-1">
-					<h3 class="text-sm font-semibold">{$LL.advanced.reboot()}</h3>
-					<p class="text-muted-foreground text-xs">{$LL.advanced.rebootDescription()}</p>
+					<h3 class="text-sm font-semibold">{m["advanced.reboot"]()}</h3>
+					<p class="text-muted-foreground text-xs">{m["advanced.rebootDescription"]()}</p>
 				</div>
 				<Button
 					class="w-full gap-2"
@@ -290,7 +290,7 @@ function dismissRecovery() {
 					variant="outline"
 				>
 					<RotateCcw class="size-4" />
-					{$LL.advanced.reboot()}
+					{m["advanced.reboot"]()}
 				</Button>
 			</div>
 		</div>
@@ -307,8 +307,8 @@ function dismissRecovery() {
 			</span>
 			<div class="min-w-0 flex-1 space-y-3">
 				<div class="space-y-1">
-					<h3 class="text-sm font-semibold">{$LL.advanced.powerOff()}</h3>
-					<p class="text-muted-foreground text-xs">{$LL.advanced.powerOffDescription()}</p>
+					<h3 class="text-sm font-semibold">{m["advanced.powerOff"]()}</h3>
+					<p class="text-muted-foreground text-xs">{m["advanced.powerOffDescription"]()}</p>
 				</div>
 				<Button
 					class="w-full gap-2"
@@ -317,7 +317,7 @@ function dismissRecovery() {
 					variant="destructive"
 				>
 					<PowerOff class="size-4" />
-					{$LL.advanced.powerOff()}
+					{m["advanced.powerOff"]()}
 				</Button>
 			</div>
 		</div>
@@ -332,7 +332,7 @@ function dismissRecovery() {
 	onPrimary={confirmAction}
 	primaryDisabled={busy}
 	primaryLabel={confirmLabel}
-	title={$LL.dialogs.areYouSure()}
+	title={m["dialogs.areYouSure"]()}
 >
 	<p class="text-muted-foreground text-sm leading-relaxed">{confirmBody}</p>
 </AppDialog>

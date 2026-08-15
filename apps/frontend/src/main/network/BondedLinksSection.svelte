@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage, Modem } from '@ceraui/rpc/schemas';
 import { Radio } from '@lucide/svelte';
 
@@ -36,10 +36,10 @@ const telemetryByIface = $derived(
 
 /** A short type tag for a bonded link (WiFi, Ethernet, or the modem's network generation). */
 function linkTypeLabel(link: LinkSignal): string {
-	if (link.type === 'wifi') return $LL.network.view.wifi();
-	if (link.type === 'ethernet') return $LL.network.view.ethernet();
+	if (link.type === 'wifi') return m["network.view.wifi"]();
+	if (link.type === 'ethernet') return m["network.view.ethernet"]();
 	const modem = modemEntries.find(([, m]) => (m.ifname || '') === link.id)?.[1];
-	return modem?.status?.network_type || $LL.network.view.cellular();
+	return modem?.status?.network_type || m["network.view.cellular"]();
 }
 
 const total = $derived(aggregateBondBandwidth(links));
@@ -58,14 +58,14 @@ const totalStale = $derived(
 </script>
 
 <!-- ───────────── Bonded Links overview ───────────── -->
-<section class="bg-card rounded-xl border p-4 sm:p-5" aria-label={$LL.network.view.bondedLinks()}>
+<section class="bg-card rounded-xl border p-4 sm:p-5" aria-label={m["network.view.bondedLinks"]()}>
 	<div class="mb-3 flex items-center gap-2">
 		<Radio aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
-		<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.bondedLinks()}</h2>
+		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.bondedLinks"]()}</h2>
 	</div>
 
 	{#if links.length === 0}
-		<p class="text-muted-foreground text-sm">{$LL.network.view.noLinks()}</p>
+		<p class="text-muted-foreground text-sm">{m["network.view.noLinks"]()}</p>
 	{:else}
 		<!-- SOLE home of live per-link numbers on the Network page (Task 19): the
 		     per-interface sections no longer duplicate them (Task 20). -->
@@ -109,11 +109,11 @@ const totalStale = $derived(
 						</span>
 					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
 						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-							{$LL.network.view.noSimLink()}
+							{m["network.view.noSimLink"]()}
 						</span>
 					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
 						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-							{$LL.network.modem.scanning()}
+							{m["network.modem.scanning"]()}
 						</span>
 					{/if}
 					<!-- per-link throughput (Task 18) -->
@@ -143,7 +143,7 @@ const totalStale = $derived(
 			)}
 		>
 			<span class="text-muted-foreground uppercase tracking-wide"
-				>{$LL.network.view.totalBandwidth()}</span
+				>{m["network.view.totalBandwidth"]()}</span
 			>
 			<span class="flex items-baseline gap-2.5">
 				<span

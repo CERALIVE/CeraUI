@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { Component } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
 
@@ -70,7 +70,7 @@ const transitionParams = $derived.by(() => {
 			in:fade={{ duration: 150 }}
 			out:fade={{ duration: 150 }}
 		>
-			<span class="sr-only">{$LL.navigation.loading()}</span>
+			<span class="sr-only">{m["navigation.loading"]()}</span>
 			<div class="border-primary/30 border-t-primary h-6 w-6 animate-spin rounded-full border-2"></div>
 		</div>
 	{/if}
@@ -99,7 +99,7 @@ const transitionParams = $derived.by(() => {
 				</div>
 				<div>
 					<h3 class="text-destructive mb-2 font-semibold">
-						{$LL?.navigation?.navigationError?.() || 'Navigation Error'}
+						{m["navigation.navigationError"]?.() || 'Navigation Error'}
 					</h3>
 					<p class="text-muted-foreground text-sm">{$navigationError}</p>
 				</div>
@@ -107,7 +107,7 @@ const transitionParams = $derived.by(() => {
 					class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 					onclick={() => enhancedNavigationStore.setError(null)}
 				>
-					{$LL.navigation.tryAgain()}
+					{m["navigation.tryAgain"]()}
 				</button>
 			</div>
 		</div>

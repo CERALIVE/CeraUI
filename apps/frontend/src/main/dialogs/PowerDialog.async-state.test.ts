@@ -11,7 +11,7 @@
  *   success    → reboot hands off to the rebooting banner; poweroff closes
  *   failure    → a refused op surfaces an error toast AND releases re-entry
  */
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
+import { m } from "@ceraui/i18n/svelte";
 import {
 	fireEvent,
 	render,
@@ -68,11 +68,10 @@ vi.mock("svelte-sonner", () => ({
 	toast: { error: toastError, success: vi.fn() },
 }));
 
-const L = getLL();
-const POWER_TITLE = L.settings.index.power();
-const CONFIRM_TITLE = L.dialogs.areYouSure();
-const REBOOT_LABEL = L.advanced.reboot();
-const POWEROFF_LABEL = L.advanced.powerOff();
+const POWER_TITLE = m["settings.index.power"]();
+const CONFIRM_TITLE = m["dialogs.areYouSure"]();
+const REBOOT_LABEL = m["advanced.reboot"]();
+const POWEROFF_LABEL = m["advanced.powerOff"]();
 
 function deferred<T>(): {
 	promise: Promise<T>;

@@ -11,7 +11,7 @@
 </style>
 
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { StatusMessage } from '@ceraui/rpc/schemas';
 import { CheckCircle2, Cog, Download, Package, RotateCw, XCircle } from '@lucide/svelte';
 import { onMount } from 'svelte';
@@ -94,15 +94,15 @@ $effect(() => {
 	if (isFailure) {
 		hasShownResult = true;
 		setTimeout(() => {
-			toast.error($LL.updatingOverlay.failedMessage(), {
-				description: failureReason ?? $LL.updatingOverlay.failedDescription(),
+			toast.error(m["updatingOverlay.failedMessage"](), {
+				description: failureReason ?? m["updatingOverlay.failedDescription"](),
 			});
 		}, 500);
 	} else if (isSuccess) {
 		hasShownResult = true;
 		setTimeout(() => {
-			toast.success($LL.updatingOverlay.successMessage(), {
-				description: $LL.updatingOverlay.successDescription(),
+			toast.success(m["updatingOverlay.successMessage"](), {
+				description: m["updatingOverlay.successDescription"](),
 			});
 		}, 500);
 	}
@@ -144,12 +144,12 @@ onMount(() => {
 					<h1
 						class="from-foreground via-primary to-foreground bg-gradient-to-r bg-clip-text text-xl font-bold text-transparent sm:text-3xl md:text-4xl"
 					>
-						<span class="loading-pulse">{$LL.updatingOverlay.title()}</span>
+						<span class="loading-pulse">{m["updatingOverlay.title"]()}</span>
 					</h1>
 
 					<!-- Subtitle with Better Typography -->
 					<p class="text-muted-foreground text-sm leading-relaxed sm:text-lg">
-						{$LL.updatingOverlay.description()}
+						{m["updatingOverlay.description"]()}
 					</p>
 
 					<!-- Enhanced Status Badge -->
@@ -160,27 +160,27 @@ onMount(() => {
 							{#if animationPhase === 'downloading'}
 								<Download class="text-primary h-4 w-4 animate-bounce sm:h-5 sm:w-5" />
 								<span class="text-primary text-sm font-medium sm:text-base"
-									>{$LL.updatingOverlay.downloading()}</span
+									>{m["updatingOverlay.downloading"]()}</span
 								>
 							{:else if animationPhase === 'unpacking'}
 								<Package class="h-4 w-4 animate-pulse text-status-warning sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-warning sm:text-base"
-									>{$LL.updatingOverlay.unpacking()}</span
+									>{m["updatingOverlay.unpacking"]()}</span
 								>
 							{:else if animationPhase === 'installing'}
 								<Cog class="h-4 w-4 animate-spin text-status-info sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-info sm:text-base"
-									>{$LL.updatingOverlay.installing()}</span
+									>{m["updatingOverlay.installing"]()}</span
 								>
 							{:else if animationPhase === 'complete'}
 								<CheckCircle2 class="h-4 w-4 text-status-success sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-success sm:text-base"
-									>{$LL.updatingOverlay.successMessage()}</span
+									>{m["updatingOverlay.successMessage"]()}</span
 								>
 							{:else if animationPhase === 'failed'}
 								<XCircle class="h-4 w-4 text-status-error sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-error sm:text-base"
-									>{$LL.updatingOverlay.failedMessage()}</span
+									>{m["updatingOverlay.failedMessage"]()}</span
 								>
 							{/if}
 						</div>
@@ -219,19 +219,19 @@ onMount(() => {
 								data-testid="update-failed"
 							>
 								<div class="text-sm font-medium text-status-error sm:text-base">
-									{$LL.updatingOverlay.failedMessage()}
+									{m["updatingOverlay.failedMessage"]()}
 								</div>
 								<div
 									class="text-muted-foreground max-w-md text-xs break-words sm:text-sm"
 									data-testid="update-failed-reason"
 								>
-									{failureReason ?? $LL.updatingOverlay.failedDescription()}
+									{failureReason ?? m["updatingOverlay.failedDescription"]()}
 								</div>
 							</div>
 						{:else}
 							<!-- Progress Label -->
 							<div class="text-muted-foreground text-sm sm:text-base">
-								{$LL.updatingOverlay.progress()}
+								{m["updatingOverlay.progress"]()}
 							</div>
 						{/if}
 					</div>
@@ -252,9 +252,9 @@ onMount(() => {
 						<div class="text-muted-foreground flex justify-between text-xs sm:text-sm">
 							<span
 								>{isFinite(progress) ? progress : 0}
-								{$LL.updatingOverlay.of()}
+								{m["updatingOverlay.of"]()}
 								{isFinite(total) ? total : 1}
-								{$LL.updatingOverlay.steps()}</span
+								{m["updatingOverlay.steps"]()}</span
 							>
 							<span>{isFinite(progressPercentage) ? progressPercentage.toFixed(1) : '0.0'}%</span>
 						</div>
@@ -285,7 +285,7 @@ onMount(() => {
 							class="text-center text-[10px] font-medium sm:text-xs"
 							class:text-primary={details?.downloading > 0}
 						>
-							{$LL.updatingOverlay.downloading()}
+							{m["updatingOverlay.downloading"]()}
 						</span>
 						{#if details?.downloading > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
@@ -319,7 +319,7 @@ onMount(() => {
 							class="text-center text-[10px] font-medium sm:text-xs"
 							class:text-status-warning={details?.unpacking > 0}
 						>
-							{$LL.updatingOverlay.unpacking()}
+							{m["updatingOverlay.unpacking"]()}
 						</span>
 						{#if details?.unpacking > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"
@@ -353,7 +353,7 @@ onMount(() => {
 							class="text-center text-[10px] font-medium sm:text-xs"
 							class:text-status-info={details?.setting_up > 0}
 						>
-							{$LL.updatingOverlay.installing()}
+							{m["updatingOverlay.installing"]()}
 						</span>
 						{#if details?.setting_up > 0}
 							<span class="text-muted-foreground text-[9px] sm:text-xs"

@@ -31,7 +31,7 @@
   Presentational: owns NO `$state`, NO RPC. `onSwitch` is LiveView's handleSwitchInput.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
 	CaptureStreamSource,
@@ -132,18 +132,7 @@ function kindFamily(kind: DeviceKind): KindFamily {
 const KIND_ICON = { hdmi: Cable, usb: Usb, network: Radio, other: Video } as const;
 
 // i18n dotted-key resolver (mirrors SourceSection) — no store dep, safe passthrough.
-const t = (key: string): string => {
-	const parts = key.split('.');
-	let result: unknown = $LL;
-	for (const part of parts) {
-		if (result && typeof result === 'object' && part in result) {
-			result = (result as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof result === 'function' ? (result as () => string)() : key;
-};
+const t = resolveMessageKey;
 // The SPECIFIC pipeline/profile label — mirrors SourceSection so the same device
 // reads identically ("UVC H.264", "MJPEG", "Cam Link") whether idle or streaming,
 // never the coarse "USB" collapse. `kindFamily` above still drives only the icon.
@@ -163,7 +152,7 @@ function kindBadgeClass(kind: DeviceKind): string {
 		<Card.Content class="space-y-3 p-4 sm:p-5">
 			<div class="flex items-center gap-1.5">
 				<RefreshCw aria-hidden={true} class="text-primary size-4 shrink-0" />
-				<span class="text-sm font-semibold">{$LL.live.summary.switchTitle()}</span>
+				<span class="text-sm font-semibold">{m["live.summary.switchTitle"]()}</span>
 			</div>
 
 			<ul class="space-y-2">
@@ -204,11 +193,11 @@ function kindBadgeClass(kind: DeviceKind): string {
 								data-testid={`source-selected-${source.id}`}
 							>
 								<Check aria-hidden={true} class="size-4" />
-								{$LL.live.inputPicker.active()}
+								{m["live.inputPicker.active"]()}
 							</span>
 						{:else}
 							<Button
-								aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${source.displayName}`}
+								aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${source.displayName}`}
 								data-switch-input={source.id}
 								disabled={source.id === switchingInput || source.lost === true}
 								onclick={() => onSwitch?.(source.id)}
@@ -216,9 +205,9 @@ function kindBadgeClass(kind: DeviceKind): string {
 								variant="default"
 							>
 								{#if source.id === switchingInput}
-									{$LL.live.inputPicker.switching()}
+									{m["live.inputPicker.switching"]()}
 								{:else}
-									{$LL.live.inputPicker.switch()}
+									{m["live.inputPicker.switch"]()}
 								{/if}
 							</Button>
 						{/if}

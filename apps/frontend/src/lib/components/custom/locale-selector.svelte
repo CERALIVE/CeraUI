@@ -1,6 +1,4 @@
 <script lang="ts">
-import { loadLocaleAsync } from '@ceraui/i18n';
-import { setLocale as setLegacyLocale } from '@ceraui/i18n/i18n-svelte5';
 import { LOCALES, m, setLocale } from '@ceraui/i18n/svelte';
 import { Check, ChevronDown, Globe } from '@lucide/svelte';
 
@@ -17,11 +15,10 @@ let isOpen = $state(false);
 const localeName = $derived.by(() => LOCALES.find((l) => l.code === selectedLocale)?.name ?? 'English');
 const localeFlag = $derived.by(() => LOCALES.find((l) => l.code === selectedLocale)?.flag);
 
-const handleLocaleChange = async (value: string) => {
+const handleLocaleChange = (value: string) => {
 	// The Paraglide store owns the switch: it applies the runtime locale, drives
 	// the re-render, and syncs <html lang>/<html dir>. Persistence stays with the
-	// frontend's $persist store (unchanged key), and the legacy adapter is still
-	// driven alongside until the call-site codemod retires it.
+	// frontend's $persist store (unchanged key).
 	const applied = setLocale(value);
 	selectedLocale = applied;
 	const foundLocale = LOCALES.find((l) => l.code === applied);
@@ -29,12 +26,6 @@ const handleLocaleChange = async (value: string) => {
 		setLocaleStore(foundLocale);
 	}
 	isOpen = false;
-	try {
-		await loadLocaleAsync(applied);
-		await setLegacyLocale(applied);
-	} catch {
-		// Legacy dictionary fetch failed; Paraglide already rendered the switch.
-	}
 };
 </script>
 

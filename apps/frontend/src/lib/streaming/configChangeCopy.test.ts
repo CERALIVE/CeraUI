@@ -1,25 +1,24 @@
-import type { Svelte5Translation } from "@ceraui/i18n";
+import type { MessageFn, MessageKey } from "@ceraui/i18n/svelte";
 import { describe, expect, it } from "vitest";
 
 import { configChangeReport } from "./configChangeCopy";
 
 const LL = {
-	live: {
-		encoder: {
-			applyPhase: {
-				applied: () => "New settings are live",
-				reverted: () => "Could not apply.",
-				rollbackFailed: () => "Could not apply, and the stream stopped",
-				reasonTeardownTimeout: () => "The camera was not released in time.",
-				reasonDeadlineExceeded: () => "The change took longer than expected.",
-				reasonEngineLost: () => "The engine stopped responding.",
-				reasonRejected: () => "The device could not use those settings.",
-				reasonUnknown: () => "Check the system logs.",
-			},
-		},
-	},
-	notifications: { saveFailed: () => "Save failed" },
-} as unknown as Svelte5Translation;
+	"live.encoder.applyPhase.applied": () => "New settings are live",
+	"live.encoder.applyPhase.reverted": () => "Could not apply.",
+	"live.encoder.applyPhase.rollbackFailed": () =>
+		"Could not apply, and the stream stopped",
+	"live.encoder.applyPhase.reasonTeardownTimeout": () =>
+		"The camera was not released in time.",
+	"live.encoder.applyPhase.reasonDeadlineExceeded": () =>
+		"The change took longer than expected.",
+	"live.encoder.applyPhase.reasonEngineLost": () =>
+		"The engine stopped responding.",
+	"live.encoder.applyPhase.reasonRejected": () =>
+		"The device could not use those settings.",
+	"live.encoder.applyPhase.reasonUnknown": () => "Check the system logs.",
+	"notifications.saveFailed": () => "Save failed",
+} as unknown as Readonly<Record<MessageKey, MessageFn>>;
 
 describe("config-change operator copy", () => {
 	it("reports applied as a success", () => {

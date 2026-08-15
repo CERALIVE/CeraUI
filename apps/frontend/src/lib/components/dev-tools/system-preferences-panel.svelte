@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Wifi } from '@lucide/svelte';
 
 import SystemCollapsibleSection from '$lib/components/dev-tools/system-collapsible-section.svelte';
@@ -18,24 +18,24 @@ let { windowInfo }: { windowInfo: WindowInfo } = $props();
 </script>
 
 <!-- User Preferences -->
-<SystemCollapsibleSection icon={Wifi} title={$LL.devtools.userPreferencesAccessibility()}>
+<SystemCollapsibleSection icon={Wifi} title={m["devtools.userPreferencesAccessibility"]()}>
 	<div class="mt-3 grid grid-cols-2 gap-3 md:grid-cols-3">
 			<div class="bg-background/50 rounded-lg border p-3">
-				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.colorScheme()}</div>
+				<div class="text-muted-foreground mb-1 text-xs">{m["devtools.colorScheme"]()}</div>
 				<div class="font-mono text-sm font-medium">{windowInfo.colorScheme}</div>
 			</div>
 			<div class="bg-background/50 rounded-lg border p-3">
-				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.reducedMotion()}</div>
+				<div class="text-muted-foreground mb-1 text-xs">{m["devtools.reducedMotion"]()}</div>
 				<div
 					class="font-mono text-sm font-medium {windowInfo.reducedMotion
 						? 'text-status-warning'
 						: 'text-status-success'}"
 				>
-					{windowInfo.reducedMotion ? $LL.devtools.enabled() : $LL.devtools.disabled()}
+					{windowInfo.reducedMotion ? m["devtools.enabled"]() : m["devtools.disabled"]()}
 				</div>
 			</div>
 			<div class="bg-background/50 rounded-lg border p-3">
-				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.browserLanguages()}</div>
+				<div class="text-muted-foreground mb-1 text-xs">{m["devtools.browserLanguages"]()}</div>
 				<div
 					class="truncate font-mono text-xs font-medium"
 					title={navigator.languages ? navigator.languages.join(', ') : navigator.language}

@@ -20,8 +20,8 @@ import type { NetworkIngest, Pipeline, Pipelines } from "@ceraui/rpc/schemas";
 
 /**
  * i18n key for the disabled-reason tooltip shown on an rtmp/srt pipeline whose
- * network-ingest gateway is not active. Consumers pass this to `LL`
- * (e.g. `LL.live.education.reason.gatewayInactive()`) — never render the key
+ * network-ingest gateway is not active. Consumers resolve this through `m`
+ * (e.g. `m["live.education.reason.gatewayInactive"]()`) — never render the key
  * string directly. It sits alongside the other disabled-option reason keys
  * ({@link OPTION_UNSUPPORTED_ON_PLATFORM} / {@link OPTION_FIXED_BY_SOURCE} in
  * ValidationAdapter). The English text lives in

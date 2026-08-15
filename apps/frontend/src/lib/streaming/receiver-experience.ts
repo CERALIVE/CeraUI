@@ -507,7 +507,7 @@ export function resolveReceiverKind({
 
 /**
  * i18n key per receiver kind for the badge label. The consumer resolves these
- * through the `$LL` proxy — never render the key string directly. The key names
+ * through `m["<key>"]()` — never render the key string directly. The key names
  * are the stable contract (T2); the English copy lives under `live.server.kind.*`.
  */
 const KIND_BADGE_LABEL_KEYS: Record<ReceiverKind, string> = {
@@ -681,7 +681,7 @@ export interface ServerSummaryConfig {
 	remote_provider?: string | undefined;
 }
 
-/** i18n resolvers the summary composes, keeping {@link buildServerSummary} `$LL`-free. */
+/** i18n resolvers the summary composes, keeping {@link buildServerSummary} message-free. */
 export interface ServerSummaryLabels {
 	notConfigured: string;
 	kindLabel: (kind: ReceiverKind) => string;

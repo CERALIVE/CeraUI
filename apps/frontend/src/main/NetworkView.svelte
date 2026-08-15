@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { Modem, NetifEntry, NetifMessage, WifiInterface, WifiStatus } from '@ceraui/rpc/schemas';
 import { Network as NetworkIcon } from '@lucide/svelte';
 
@@ -139,12 +139,12 @@ $effect(() => {
 	<!-- Destination header -->
 	<header class="flex items-center gap-2.5">
 		<NetworkIcon aria-hidden="true" class="text-primary size-5 shrink-0" />
-		<h1 class="text-xl font-semibold tracking-tight">{$LL.navigation.network()}</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{m["navigation.network"]()}</h1>
 	</header>
 
 	{#if isLoading}
 		<!-- Loading state -->
-		<div class="space-y-5" aria-busy="true" aria-label={$LL.network.view.loading()}>
+		<div class="space-y-5" aria-busy="true" aria-label={m["network.view.loading"]()}>
 			<Skeleton class="h-24 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />

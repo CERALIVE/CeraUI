@@ -103,7 +103,7 @@
   must keep rendering identically whether or not the device reported any.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { Snippet } from 'svelte';
 import { FlaskConical } from '@lucide/svelte';
 
@@ -206,7 +206,6 @@ function coreTone(core: EncoderCoreReading): ActivityTone {
 	return 'absent';
 }
 
-const t = $derived($LL.settings.deviceHealth);
 const instrumented = $derived(isEncoderLoadInstrumented(reading));
 const precision = $derived(encoderLoadPrecision(reading));
 const activity = $derived(deriveEncoderActivity(reading));
@@ -221,10 +220,10 @@ const banded = $derived(inline && compact && instrumented);
 
 const headline = $derived(
 	activity === 'encoding'
-		? t.cores.headlineEncoding()
+		? m["settings.deviceHealth.cores.headlineEncoding"]()
 		: activity === 'idle'
-			? t.cores.headlineIdle()
-			: t.cores.headlineUnreported(),
+			? m["settings.deviceHealth.cores.headlineIdle"]()
+			: m["settings.deviceHealth.cores.headlineUnreported"](),
 );
 
 const headlineTone = $derived<ActivityTone>(
@@ -292,7 +291,7 @@ const decoderCores = $derived.by(() => {
 		data-testid="encoder-cores-simulated"
 	>
 		<FlaskConical aria-hidden={true} class={micro ? 'size-2.5' : 'size-3'} />
-		{t.cores.simulated()}
+		{m["settings.deviceHealth.cores.simulated"]()}
 	</span>
 {/snippet}
 
@@ -376,7 +375,7 @@ const decoderCores = $derived.by(() => {
 						class={cn('ms-auto min-w-0 truncate font-mono font-medium', TONE_TEXT[tone])}
 						data-testid="{scope}-core-value-{core.core}"
 					>
-						{core.active ? t.cores.busy() : t.cores.idle()}
+						{core.active ? m["settings.deviceHealth.cores.busy"]() : m["settings.deviceHealth.cores.idle"]()}
 					</span>
 				{:else}
 					{@render leader()}
@@ -390,7 +389,7 @@ const decoderCores = $derived.by(() => {
 						class={cn('ms-auto min-w-0 truncate font-mono', TONE_TEXT[tone])}
 						data-testid="{scope}-core-value-{core.core}"
 					>
-						{t.unavailable()}
+						{m["settings.deviceHealth.unavailable"]()}
 					</span>
 				{/if}
 			</li>
@@ -419,7 +418,7 @@ const decoderCores = $derived.by(() => {
 		     the chip is pushed out. -->
 		<div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
 			<h3 class="text-muted-foreground min-w-0 shrink-0 text-xs font-medium">
-				{t.cores.title()}
+				{m["settings.deviceHealth.cores.title"]()}
 			</h3>
 			{@render verdict()}
 			{#if reading.simulated}
@@ -444,7 +443,7 @@ const decoderCores = $derived.by(() => {
 				class="bg-muted/50 text-muted-foreground rounded-lg px-3 py-2.5"
 				data-testid="encoder-cores-not-instrumented"
 			>
-				<p class="text-xs leading-relaxed">{t.cores.notInstrumented()}</p>
+				<p class="text-xs leading-relaxed">{m["settings.deviceHealth.cores.notInstrumented"]()}</p>
 			</div>
 		{/if}
 	{:else if inline}
@@ -473,7 +472,7 @@ const decoderCores = $derived.by(() => {
 						class="text-muted-foreground/70 hidden text-[11px] leading-snug sm:block"
 						data-testid="encoder-cores-precision-hint"
 					>
-						{precision === 'percent' ? t.cores.percentNote() : t.cores.binaryNote()}
+						{precision === 'percent' ? m["settings.deviceHealth.cores.percentNote"]() : m["settings.deviceHealth.cores.binaryNote"]()}
 					</p>
 				{/if}
 			</div>
@@ -492,7 +491,7 @@ const decoderCores = $derived.by(() => {
 			{@render coreRows(reading.cores, 'encoder')}
 		</div>
 		<p class="text-muted-foreground/80 text-[11px] leading-relaxed" data-testid="encoder-cores-note">
-			{precision === 'percent' ? t.cores.percentNote() : t.cores.binaryNote()}
+			{precision === 'percent' ? m["settings.deviceHealth.cores.percentNote"]() : m["settings.deviceHealth.cores.binaryNote"]()}
 		</p>
 	{/if}
 
@@ -504,7 +503,7 @@ const decoderCores = $derived.by(() => {
 	{#if decoderCores !== null}
 		<section class="space-y-2.5" data-decoder-count={decoderCores.length} data-testid="decoder-cores">
 			<h3 class="text-muted-foreground min-w-0 text-xs font-medium">
-				{t.cores.decodeTitle()}
+				{m["settings.deviceHealth.cores.decodeTitle"]()}
 			</h3>
 			<div class={cn(WELL, 'bg-muted/40')}>
 				{@render coreRows(decoderCores, 'decoder')}

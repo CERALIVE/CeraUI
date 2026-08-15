@@ -10,7 +10,7 @@
   tested; production code lives in LiveView.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { CaptureDevice } from '@ceraui/rpc/schemas';
 import { SWITCH_INPUT_ERRORS } from '@ceraui/rpc/schemas';
 import { toast } from 'svelte-sonner';
@@ -41,7 +41,7 @@ async function handleSwitchInput(inputId: string) {
 	// button normally makes this unreachable, but if the dispatch somehow fires
 	// with the capability off, surface a calm toast instead of a silent warning.
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
-		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
+		toast.warning(m["live.inputPicker.audioSwitchUnavailable"]());
 		return;
 	}
 	switchingInput = inputId;
@@ -51,21 +51,21 @@ async function handleSwitchInput(inputId: string) {
 			target: inputId,
 			rpc: () => rpc.streaming.switchInput({ input_id: inputId }),
 			classify: () => ({ ok: true }),
-			failMessage: () => $LL.live.inputPicker.switchFailed(),
+			failMessage: () => m["live.inputPicker.switchFailed"](),
 		});
 		if (!res) return;
 		if (res.success) {
 			confirmOperation('switch-input');
-			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
+			toast.success(m["live.inputPicker.switched"]({ ms: res.gap_ms ?? 0 }));
 			if (res.audio_follow_pending) {
-				toast.info($LL.live.inputPicker.audioFollowsOnRestart());
+				toast.info(m["live.inputPicker.audioFollowsOnRestart"]());
 			}
 		} else {
 			failOperation('switch-input', res.error ?? 'failed');
 			toast.error(
 				res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST
-					? $LL.live.inputPicker.sourceLost()
-					: $LL.live.inputPicker.switchFailed(),
+					? m["live.inputPicker.sourceLost"]()
+					: m["live.inputPicker.switchFailed"](),
 			);
 		}
 	} finally {

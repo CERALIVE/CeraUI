@@ -30,8 +30,8 @@ import { createSyncRegistry, syncCore } from "./field-sync-state.svelte";
 vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
-vi.mock("@ceraui/i18n/i18n-svelte5", () => ({
-	getLL: () => ({ network: { os: { operationFailed: () => "failed" } } }),
+vi.mock("@ceraui/i18n/svelte", () => ({
+	m: { "network.os.operationFailed": () => "failed" },
 }));
 
 afterEach(() => {

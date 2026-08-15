@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Camera, Download } from '@lucide/svelte';
 import { toPng } from 'html-to-image';
 import { setMode } from 'mode-watcher';
@@ -328,10 +328,10 @@ function clearImages(): void {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2">
 			<Camera class="h-5 w-5 text-primary" />
-			{$LL.devtools.screenshotUtility()}
+			{m["devtools.screenshotUtility"]()}
 		</Card.Title>
 		<Card.Description>
-			{$LL.devtools.screenshotUtilityDescription()}
+			{m["devtools.screenshotUtilityDescription"]()}
 		</Card.Description>
 	</Card.Header>
 
@@ -364,13 +364,13 @@ function clearImages(): void {
 					: 'Capture all screenshots in dark and light themes'}
 			>
 				<Camera class="mr-2 h-4 w-4" />
-				{currentlyCapturing ? $LL.devtools.capturing() : $LL.devtools.captureAllScreenshots()}
+				{currentlyCapturing ? m["devtools.capturing"]() : m["devtools.captureAllScreenshots"]()}
 			</Button.Root>
 
 			<div class="text-muted-foreground text-center text-xs">
-				{$LL.devtools.screenshotCount()}
+				{m["devtools.screenshotCount"]()}
 			<br />
-			{$LL.devtools.enhancedTiming()}
+			{m["devtools.enhancedTiming"]()}
 			</div>
 		</div>
 
@@ -382,7 +382,7 @@ function clearImages(): void {
 				aria-label={`Download ${imagesCount} screenshots as ZIP`}
 			>
 				<Download class="mr-2 h-4 w-4" />
-				{$LL.devtools.downloadZip({ count: imagesCount })}
+				{m["devtools.downloadZip"]({ count: imagesCount })}
 			</Button.Root>
 
 			<Button.Root
@@ -392,7 +392,7 @@ function clearImages(): void {
 				variant="outline"
 				aria-label="Clear all captured screenshots"
 			>
-				{$LL.devtools.clear()}
+				{m["devtools.clear"]()}
 			</Button.Root>
 		</div>
 	</Card.Content>

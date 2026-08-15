@@ -10,7 +10,7 @@
 -->
 <script lang="ts">
 import type { AudioLevelUnavailableReason } from '@ceraui/rpc/schemas';
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 
 import { cn } from '$lib/utils';
 
@@ -35,7 +35,9 @@ const {
 }: Props = $props();
 
 const reasonLabel = $derived(
-	reason !== undefined ? $LL.live.preview.audioUnavailableReason[reason]() : undefined,
+	reason !== undefined
+		? resolveMessageKey(`live.preview.audioUnavailableReason.${reason}`)
+		: undefined,
 );
 
 // dBFS window mapped to the bar: -60 dBFS reads empty, 0 dBFS reads full.
@@ -67,7 +69,7 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 	data-channels={channelCount}
 	class={cn('space-y-1.5', className)}
 	role="group"
-	aria-label={$LL.live.preview.audioLabel()}
+	aria-label={m["live.preview.audioLabel"]()}
 >
 	{#if unavailable}
 		<p
@@ -75,13 +77,13 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 			data-testid="audio-unavailable"
 			role="status"
 		>
-			{$LL.live.preview.audioUnavailable()}{#if reasonLabel}<span class="opacity-70">
+			{m["live.preview.audioUnavailable"]()}{#if reasonLabel}<span class="opacity-70">
 					{' \u00b7 '}{reasonLabel}</span
 				>{/if}
 		</p>
 	{:else if silent}
 		<p class="text-muted-foreground font-mono text-[11px] tracking-wide" data-testid="audio-silent">
-			{$LL.live.preview.audioSilent()}
+			{m["live.preview.audioSilent"]()}
 		</p>
 	{:else}
 		{#each channels as channel, i (i)}
@@ -94,7 +96,7 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 				aria-valuemin={0}
 				aria-valuemax={100}
 				aria-valuenow={Math.round(channel.rms * 100)}
-				aria-label={$LL.live.preview.channelAria({ n: i + 1 })}
+				aria-label={m["live.preview.channelAria"]({ n: i + 1 })}
 			>
 				<div
 					class="absolute inset-y-0 left-0 rounded-full transition-[width] duration-150 ease-out"

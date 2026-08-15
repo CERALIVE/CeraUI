@@ -6,7 +6,7 @@
   pushes a `log` message which the subscription layer turns into a file download.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { AlertTriangle, Download, FileText, Loader2, RefreshCw, ScrollText, Terminal } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -46,24 +46,24 @@ const logs = $derived([
 	{
 		id: 'device' as const,
 		icon: FileText,
-		title: $LL.advanced.ceraliveLog(),
-		desc: $LL.advanced.ceraliveLogTooltip(),
+		title: m["advanced.ceraliveLog"](),
+		desc: m["advanced.ceraliveLogTooltip"](),
 	},
 	{
 		id: 'system' as const,
 		icon: Terminal,
-		title: $LL.advanced.systemLog(),
-		desc: $LL.advanced.systemLogTooltip(),
+		title: m["advanced.systemLog"](),
+		desc: m["advanced.systemLogTooltip"](),
 	},
 ]);
 </script>
 
 <AppDialog
 	bind:open
-	description={$LL.settings.index.logsDesc()}
+	description={m["settings.index.logsDesc"]()}
 	hideFooter
 	icon={ScrollText}
-	title={$LL.settings.index.logs()}
+	title={m["settings.index.logs"]()}
 >
 	<div class="space-y-3">
 		{#each logs as log (log.id)}
@@ -87,10 +87,10 @@ const logs = $derived([
 				>
 					{#if isDownloading}
 						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-						{$LL.advanced.downloading()}
+						{m["advanced.downloading"]()}
 					{:else}
 						<Download class="size-4" />
-						{$LL.advanced.download()}
+						{m["advanced.download"]()}
 					{/if}
 				</Button>
 			</div>
@@ -104,7 +104,7 @@ const logs = $derived([
 				role="alert"
 			>
 				<AlertTriangle aria-hidden="true" class="text-status-warning size-4 shrink-0" />
-				<p class="text-status-warning min-w-0 flex-1 text-xs">{$LL.advanced.downloadFailed()}</p>
+				<p class="text-status-warning min-w-0 flex-1 text-xs">{m["advanced.downloadFailed"]()}</p>
 				<Button
 					class="shrink-0 gap-1.5"
 					data-testid="log-download-retry"
@@ -114,7 +114,7 @@ const logs = $derived([
 					variant="outline"
 				>
 					<RefreshCw class="size-4" />
-					{$LL.advanced.retryDownload()}
+					{m["advanced.retryDownload"]()}
 				</Button>
 			</div>
 		{/if}

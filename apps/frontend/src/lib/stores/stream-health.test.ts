@@ -8,14 +8,12 @@
  * in the central notification store.
  *
  * `stream-health.svelte.ts` imports `notifications.svelte.ts`, which statically
- * imports `@ceraui/i18n/i18n-svelte5` (declares Svelte runes). Mock it so importing
- * the store resolves `$LL` to a plain tree rather than evaluating the adapter.
+ * imports `@ceraui/i18n/svelte` (declares Svelte runes). Mock it so importing
+ * the store resolves messages from a plain tree rather than evaluating the adapter.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@ceraui/i18n/i18n-svelte5", () => ({
-	getLL: vi.fn(() => ({})),
-}));
+vi.mock("@ceraui/i18n/svelte", () => ({ m: {} }));
 
 import { clearNotifications, getActive } from "./notifications.svelte";
 import {

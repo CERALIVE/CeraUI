@@ -10,7 +10,7 @@
   WifiConnectForm.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiInterface } from '@ceraui/rpc/schemas';
 import {
 	Check,
@@ -106,11 +106,11 @@ let {
 			<span class="text-foreground font-semibold tabular-nums">
 				{iface?.available?.length ?? 0}
 			</span>
-			<span class="text-muted-foreground">{$LL.wifiSelector.networks.found()}</span>
+			<span class="text-muted-foreground">{m["wifiSelector.networks.found"]()}</span>
 			{#if scanning}
-				<InlineSpinner data-testid="wifi-scan-status" label={$LL.wifiSelector.button.scanning()} />
+				<InlineSpinner data-testid="wifi-scan-status" label={m["wifiSelector.button.scanning"]()} />
 			{:else if ifaceBusy}
-				<InlineSpinner label={$LL.wifiSelector.dialog.connecting()} />
+				<InlineSpinner label={m["wifiSelector.dialog.connecting"]()} />
 			{/if}
 		</div>
 		<Button
@@ -119,15 +119,15 @@ let {
 			disabled={scanning}
 			onclick={onScan}
 			size="sm"
-			title={scanning ? $LL.wifiSelector.scanReason.scanning() : undefined}
+			title={scanning ? m["wifiSelector.scanReason.scanning"]() : undefined}
 			variant="outline"
 		>
 			{#if scanning}
 				<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-				<span>{$LL.wifiSelector.button.scanning()}</span>
+				<span>{m["wifiSelector.button.scanning"]()}</span>
 			{:else}
 				<RefreshCw class="size-4" />
-				<span>{$LL.wifiSelector.button.scan()}</span>
+				<span>{m["wifiSelector.button.scan"]()}</span>
 			{/if}
 		</Button>
 	</div>
@@ -178,16 +178,16 @@ let {
 							</p>
 							{#if isSecured(network)}
 								<Lock aria-hidden="true" class="text-muted-foreground size-3.5 shrink-0" />
-								<span class="sr-only">{$LL.wifiSelector.accessibility.secured()}</span>
+								<span class="sr-only">{m["wifiSelector.accessibility.secured"]()}</span>
 							{:else}
 								<Unlock aria-hidden="true" class="text-status-warning size-3.5 shrink-0" />
-								<span class="sr-only">{$LL.wifiSelector.accessibility.openNetwork()}</span>
+								<span class="sr-only">{m["wifiSelector.accessibility.openNetwork"]()}</span>
 							{/if}
 							{#if uuid && !network.active}
 								<span
 									class="bg-muted text-muted-foreground text-micro rounded px-1.5 py-0.5 font-medium"
 								>
-									{$LL.wifiSelector.status.saved()}
+									{m["wifiSelector.status.saved"]()}
 								</span>
 							{/if}
 						</div>
@@ -199,7 +199,7 @@ let {
 							<span>{frequencyBand(network.freq)}</span>
 							{#if network.active}
 								<span aria-hidden="true">·</span>
-								<span class="text-primary font-medium">{$LL.wifiSelector.status.connected()}</span>
+								<span class="text-primary font-medium">{m["wifiSelector.status.connected"]()}</span>
 							{/if}
 						</div>
 					</div>
@@ -207,38 +207,38 @@ let {
 					<!-- Actions -->
 					<div class="flex shrink-0 items-center gap-1.5">
 						{#if isConnecting}
-							<InlineSpinner size="md" label={$LL.network.os.connecting()} />
+							<InlineSpinner size="md" label={m["network.os.connecting"]()} />
 						{:else if isConnectTimedOut}
 							<span
 								class="text-muted-foreground hidden items-center text-xs font-medium sm:inline-flex"
 							>
-								{$LL.network.os.stillWorking()}
+								{m["network.os.stillWorking"]()}
 							</span>
 							<Button
-								aria-label={`${$LL.network.os.retry()} ${network.ssid}`}
+								aria-label={`${m["network.os.retry"]()} ${network.ssid}`}
 								class="gap-1.5"
 								onclick={() => (uuid ? onConnectSaved(uuid, network) : onConnectNew(network))}
 								size="sm"
 								variant="outline"
 							>
 								<RefreshCw class="size-4" />
-								<span class="hidden sm:inline">{$LL.network.os.retry()}</span>
+								<span class="hidden sm:inline">{m["network.os.retry"]()}</span>
 							</Button>
 						{:else if isDisconnecting}
-							<InlineSpinner size="md" label={$LL.network.os.disconnecting()} />
+							<InlineSpinner size="md" label={m["network.os.disconnecting"]()} />
 						{:else if isForgetting}
-							<InlineSpinner size="md" label={$LL.network.os.applying()} />
+							<InlineSpinner size="md" label={m["network.os.applying"]()} />
 						{:else if confirming}
 							<Button onclick={() => uuid && onForget(uuid, network)} size="sm" variant="destructive">
-								{$LL.wifiSelector.button.forget()}
+								{m["wifiSelector.button.forget"]()}
 							</Button>
 							<Button onclick={() => onConfirmForget(undefined)} size="sm" variant="ghost">
-								{$LL.wifiSelector.dialog.close()}
+								{m["wifiSelector.dialog.close"]()}
 							</Button>
 						{:else if uuid}
 							{#if network.active}
 								<Button
-									aria-label={`${$LL.wifiSelector.button.disconnect()} ${network.ssid}`}
+									aria-label={`${m["wifiSelector.button.disconnect"]()} ${network.ssid}`}
 									class="gap-1.5"
 									disabled={osBusy}
 									onclick={() => onDisconnect(uuid, network)}
@@ -246,22 +246,22 @@ let {
 									variant="outline"
 								>
 									<WifiOff class="size-4" />
-									<span class="hidden sm:inline">{$LL.wifiSelector.button.disconnect()}</span>
+									<span class="hidden sm:inline">{m["wifiSelector.button.disconnect"]()}</span>
 								</Button>
 							{:else}
 								<Button
-									aria-label={`${$LL.wifiSelector.button.connect()} ${network.ssid}`}
+									aria-label={`${m["wifiSelector.button.connect"]()} ${network.ssid}`}
 									class="gap-1.5"
 									disabled={ifaceBusy || osBusy}
 									onclick={() => onConnectSaved(uuid, network)}
 									size="sm"
 								>
 									<Plug class="size-4" />
-									<span class="hidden sm:inline">{$LL.wifiSelector.button.connect()}</span>
+									<span class="hidden sm:inline">{m["wifiSelector.button.connect"]()}</span>
 								</Button>
 							{/if}
 							<Button
-								aria-label={`${$LL.wifiSelector.button.forget()} ${network.ssid}`}
+								aria-label={`${m["wifiSelector.button.forget"]()} ${network.ssid}`}
 								class="text-muted-foreground hover:text-destructive size-9"
 								disabled={osBusy}
 								onclick={() => onConfirmForget(network.ssid)}
@@ -272,7 +272,7 @@ let {
 							</Button>
 						{:else}
 							<Button
-								aria-label={`${$LL.wifiSelector.button.connect()} ${network.ssid}`}
+								aria-label={`${m["wifiSelector.button.connect"]()} ${network.ssid}`}
 								class="gap-1.5"
 								disabled={ifaceBusy || osBusy}
 								onclick={() => onConnectNew(network)}
@@ -280,7 +280,7 @@ let {
 								variant={expanded ? 'outline' : 'default'}
 							>
 								<Plug class="size-4" />
-								<span class="hidden sm:inline">{$LL.wifiSelector.button.connect()}</span>
+								<span class="hidden sm:inline">{m["wifiSelector.button.connect"]()}</span>
 							</Button>
 						{/if}
 					</div>
@@ -309,9 +309,9 @@ let {
 						<Loader2 class="text-muted-foreground size-7 animate-spin motion-reduce:animate-none" />
 					</div>
 					<div>
-						<p class="text-sm font-semibold">{$LL.wifiSelector.scanningState.title()}</p>
+						<p class="text-sm font-semibold">{m["wifiSelector.scanningState.title"]()}</p>
 						<p class="text-muted-foreground mt-1 max-w-xs text-xs">
-							{$LL.wifiSelector.scanningState.description()}
+							{m["wifiSelector.scanningState.description"]()}
 						</p>
 					</div>
 				</div>
@@ -327,14 +327,14 @@ let {
 						<TriangleAlert class="text-status-warning size-7" />
 					</div>
 					<div>
-						<p class="text-sm font-semibold">{$LL.wifiSelector.scanError.title()}</p>
+						<p class="text-sm font-semibold">{m["wifiSelector.scanError.title"]()}</p>
 						<p class="text-muted-foreground mt-1 max-w-xs text-xs">
-							{$LL.wifiSelector.scanError.description()}
+							{m["wifiSelector.scanError.description"]()}
 						</p>
 					</div>
 					<Button class="gap-2" disabled={scanning} onclick={onScan} size="sm" variant="outline">
 						<RefreshCw class="size-4" />
-						{$LL.wifiSelector.button.scan()}
+						{m["wifiSelector.button.scan"]()}
 					</Button>
 				</div>
 			{:else}
@@ -347,9 +347,9 @@ let {
 						<WifiOff class="text-muted-foreground size-7" />
 					</div>
 					<div>
-						<p class="text-sm font-semibold">{$LL.wifiSelector.emptyState.title()}</p>
+						<p class="text-sm font-semibold">{m["wifiSelector.emptyState.title"]()}</p>
 						<p class="text-muted-foreground mt-1 max-w-xs text-xs">
-							{$LL.wifiSelector.emptyState.description()}
+							{m["wifiSelector.emptyState.description"]()}
 						</p>
 					</div>
 					<Button class="gap-2" disabled={scanning} onclick={onScan} size="sm">
@@ -358,7 +358,7 @@ let {
 						{:else}
 							<RefreshCw class="size-4" />
 						{/if}
-						{$LL.wifiSelector.button.scan()}
+						{m["wifiSelector.button.scan"]()}
 					</Button>
 				</div>
 			{/if}

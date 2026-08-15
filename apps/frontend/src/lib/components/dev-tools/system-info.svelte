@@ -1,6 +1,6 @@
 <script lang="ts">
-import { existingLocales, loadLocaleAsync, type Locales } from '@ceraui/i18n';
-import { LL, locale, setLocale } from '@ceraui/i18n/i18n-svelte5';
+import { existingLocales, type Locales } from '@ceraui/i18n';
+import { getLocale, m, setLocale } from '@ceraui/i18n/svelte';
 import { Code } from '@lucide/svelte';
 
 import SystemBrowserPanel from '$lib/components/dev-tools/system-browser-panel.svelte';
@@ -70,7 +70,7 @@ let buildInfo = $state({
 function updateSystemInfo() {
 	// Browser detection
 	const { userAgent } = navigator;
-	let browser = $LL.devtools.unknown();
+	let browser = m["devtools.unknown"]();
 	let version = '';
 
 	if (userAgent.includes('Chrome')) {
@@ -130,27 +130,23 @@ const languageFlags: Record<string, string> = {
 	hi: '🇮🇳',
 };
 
-// Update locale information using app's i18n system
+// Update locale information using app's i18n system. `getLocale()` is a rune
+// read, so this re-runs on a switch without a store subscription to clean up.
 function updateLocaleInfo() {
-	// Get current locale value first
-	const unsubscribe = locale.subscribe((currentLocale) => {
-		const currentLocaleData = existingLocales.find((l) => l.code === currentLocale);
+	const currentLocale = getLocale();
+	const currentLocaleData = existingLocales.find((l) => l.code === currentLocale);
 
-		localeInfo = {
-			currentLocale: currentLocale || 'en',
-			currentLanguageName: currentLocaleData?.name || 'English',
-			currentLanguageFlag: languageFlags[currentLocale || 'en'] || '🌐',
-			browserLanguage: navigator.language,
-			supportedLocales: existingLocales.map((l) => ({
-				code: l.code,
-				name: l.name,
-				flag: languageFlags[l.code] || '🌐',
-			})),
-		};
-	});
-
-	// Return unsubscribe function for cleanup
-	return unsubscribe;
+	localeInfo = {
+		currentLocale: currentLocale || 'en',
+		currentLanguageName: currentLocaleData?.name || 'English',
+		currentLanguageFlag: languageFlags[currentLocale || 'en'] || '🌐',
+		browserLanguage: navigator.language,
+		supportedLocales: existingLocales.map((l) => ({
+			code: l.code,
+			name: l.name,
+			flag: languageFlags[l.code] || '🌐',
+		})),
+	};
 }
 
 type PerformanceMemory = {
@@ -219,7 +215,7 @@ $effect(() => {
 	updateWindowInfo();
 	updatePerformanceData();
 	updateBuildInfo();
-	const unsubscribeLocale = updateLocaleInfo();
+	updateLocaleInfo();
 
 	// Set up event listeners for dynamic updates
 	const handleResize = () => updateWindowInfo();
@@ -253,10 +249,6 @@ $effect(() => {
 		if (updateInterval) {
 			clearInterval(updateInterval);
 		}
-		// Clean up locale subscription
-		if (unsubscribeLocale) {
-			unsubscribeLocale();
-		}
 	};
 });
 
@@ -267,16 +259,11 @@ function formatMs(ms: number): string {
 }
 
 // Handle language switching from Dev Tools
-async function handleLanguageClick(languageCode: Locales) {
-	try {
-		await loadLocaleAsync(languageCode);
-		setLocale(languageCode);
-		const foundLocale = existingLocales.find((l) => l.code === languageCode);
-		if (foundLocale) {
-			setLocaleStore(foundLocale);
-		}
-	} catch (error) {
-		console.error('Failed to load locale:', error);
+function handleLanguageClick(languageCode: Locales) {
+	const applied = setLocale(languageCode);
+	const foundLocale = existingLocales.find((l) => l.code === applied);
+	if (foundLocale) {
+		setLocaleStore(foundLocale);
 	}
 }
 </script>
@@ -286,10 +273,10 @@ async function handleLanguageClick(languageCode: Locales) {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2">
 			<Code class="h-5 w-5" />
-			{$LL.devtools.systemInfo()}
+			{m["devtools.systemInfo"]()}
 		</Card.Title>
 		<Card.Description>
-			{$LL.devtools.systemInfoDescription()}
+			{m["devtools.systemInfoDescription"]()}
 		</Card.Description>
 	</Card.Header>
 
@@ -317,9 +304,9 @@ async function handleLanguageClick(languageCode: Locales) {
 
 		<!-- Live Timestamp -->
 		<div class="text-muted-foreground bg-muted/30 rounded-md p-2 text-xs" role="status">
-			<span class="font-medium">{$LL.devtools.lastUpdated()}:</span>
+			<span class="font-medium">{m["devtools.lastUpdated"]()}:</span>
 			{new Date().toLocaleString()}
-			<span class="ml-2">• {$LL.devtools.autoRefresh()}</span>
+			<span class="ml-2">• {m["devtools.autoRefresh"]()}</span>
 		</div>
 	</Card.Content>
 </Card.Root>

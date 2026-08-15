@@ -33,7 +33,7 @@
 </style>
 
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Download, Share, WifiOff } from '@lucide/svelte';
 import { onDestroy } from 'svelte';
 
@@ -204,8 +204,8 @@ async function handleMobileInstall() {
 	>
 		<div class="flex items-center justify-center gap-2">
 			<WifiOff class="h-4 w-4" />
-			<span class="text-sm font-medium">{$LL.pwa.offline()}</span>
-			<span class="text-xs opacity-80">• {$LL.pwa.offlineDescription()}</span>
+			<span class="text-sm font-medium">{m["pwa.offline"]()}</span>
+			<span class="text-xs opacity-80">• {m["pwa.offlineDescription"]()}</span>
 		</div>
 	</div>
 {/if}
@@ -230,18 +230,18 @@ async function handleMobileInstall() {
 			<div class="flex min-w-0 flex-1 items-center gap-3">
 				<Download class="h-5 w-5 flex-shrink-0" />
 				<div class="min-w-0 flex-1">
-					<p class="truncate text-sm font-medium">{$LL.pwa.installTitle()}</p>
+					<p class="truncate text-sm font-medium">{m["pwa.installTitle"]()}</p>
 					<p class="truncate text-xs opacity-80">
 						{#if isIOS()}
 							Tap
 							<Share class="mx-1 inline h-3 w-3" />
-							{$LL.pwa.installIosDescription()}
+							{m["pwa.installIosDescription"]()}
 						{:else if isAndroid() && canInstallApp}
-							{$LL.pwa.installAndroidDescription()}
+							{m["pwa.installAndroidDescription"]()}
 						{:else if isAndroid()}
-							{$LL.pwa.installAndroidMenuDescription()}
+							{m["pwa.installAndroidMenuDescription"]()}
 						{:else}
-							{$LL.pwa.installDescription()}
+							{m["pwa.installDescription"]()}
 						{/if}
 					</p>
 				</div>
@@ -254,7 +254,7 @@ async function handleMobileInstall() {
 						size="sm"
 						variant="secondary"
 					>
-						{$LL.pwa.installButton()}
+						{m["pwa.installButton"]()}
 					</Button>
 				{/if}
 				<Button
@@ -263,7 +263,7 @@ async function handleMobileInstall() {
 					size="sm"
 					variant="ghost"
 				>
-					{isAndroid() && canInstallApp ? $LL.pwa.installLater() : $LL.pwa.installIosGotIt()}
+					{isAndroid() && canInstallApp ? m["pwa.installLater"]() : m["pwa.installIosGotIt"]()}
 				</Button>
 			</div>
 		</div>

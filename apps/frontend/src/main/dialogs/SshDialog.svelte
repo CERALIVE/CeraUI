@@ -8,7 +8,7 @@
   reset is a one-shot helper call (resetSSHPasword) with its own success toast.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { Copy, Eye, EyeOff, RotateCcw, SquareTerminal } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
@@ -51,9 +51,9 @@ let toggleTarget = $state<boolean | null>(null);
 async function copyPassword() {
 	if (!sshPass) return;
 	if (await copyToClipboard(sshPass)) {
-		toast.success($LL.advanced.passwordCopied(), { description: $LL.advanced.passwordCopiedDesc() });
+		toast.success(m["advanced.passwordCopied"](), { description: m["advanced.passwordCopiedDesc"]() });
 	} else {
-		toast.error($LL.advanced.copyFailed());
+		toast.error(m["advanced.copyFailed"]());
 	}
 }
 
@@ -61,13 +61,13 @@ async function resetPassword() {
 	try {
 		const password = await resetSSHPasword();
 		if (!password) {
-			toast.error($LL.osActions.sshResetFailed());
+			toast.error(m["osActions.sshResetFailed"]());
 			return;
 		}
-		toast.success($LL.advanced.passwordCopied());
+		toast.success(m["advanced.passwordCopied"]());
 	} catch (error) {
 		console.error('Failed to reset SSH password:', error);
-		toast.error($LL.osActions.sshResetFailed());
+		toast.error(m["osActions.sshResetFailed"]());
 	}
 }
 
@@ -78,8 +78,8 @@ async function toggle() {
 		key: 'ssh',
 		target,
 		rpc: () => (target ? rpc.system.sshStart() : rpc.system.sshStop()),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
@@ -94,10 +94,10 @@ $effect(() => {
 
 <AppDialog
 	bind:open
-	description={$LL.settings.index.sshDesc()}
+	description={m["settings.index.sshDesc"]()}
 	hideFooter
 	icon={SquareTerminal}
-	title={$LL.settings.index.ssh()}
+	title={m["settings.index.ssh"]()}
 >
 	<div class="space-y-5">
 		<!-- Server status -->
@@ -114,7 +114,7 @@ $effect(() => {
 						active ? 'bg-primary motion-safe:animate-pulse' : 'bg-muted-foreground/50',
 					)}
 				></span>
-				<span class="font-medium">{$LL.advanced.sshServer()}</span>
+				<span class="font-medium">{m["advanced.sshServer"]()}</span>
 			</div>
 			<span
 				class={cn(
@@ -122,28 +122,28 @@ $effect(() => {
 					active ? 'bg-primary/15 text-primary' : 'bg-secondary text-secondary-foreground',
 				)}
 			>
-				{active ? $LL.advanced.active() : $LL.advanced.inactive()}
+				{active ? m["advanced.active"]() : m["advanced.inactive"]()}
 			</span>
 		</div>
 
 		<!-- Password -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="ssh-password">
-				{$LL.advanced.sshPassword({ sshUser: user })}
+				{m["advanced.sshPassword"]({ sshUser: user })}
 			</Label>
-			<p class="text-muted-foreground text-xs">{$LL.advanced.sshPasswordTooltip()}</p>
+			<p class="text-muted-foreground text-xs">{m["advanced.sshPasswordTooltip"]()}</p>
 			<div class="relative">
 				<Input
 					id="ssh-password"
 					class="pe-20 font-mono"
-					placeholder={$LL.advanced.sshPasswordPlaceholder()}
+					placeholder={m["advanced.sshPasswordPlaceholder"]()}
 					readonly
 					type={show ? 'text' : 'password'}
 					value={sshPass}
 				/>
 				<div class="absolute end-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
 					<Button
-						aria-label={$LL.advanced.copyToClipboard()}
+						aria-label={m["advanced.copyToClipboard"]()}
 						class="size-8 rounded-md"
 						disabled={!sshPass}
 						onclick={copyPassword}
@@ -154,7 +154,7 @@ $effect(() => {
 						<Copy class="size-4" />
 					</Button>
 					<Button
-						aria-label={show ? $LL.advanced.hidePassword() : $LL.advanced.showPassword()}
+						aria-label={show ? m["advanced.hidePassword"]() : m["advanced.showPassword"]()}
 						class="size-8 rounded-md"
 						onclick={() => (show = !show)}
 						size="icon"
@@ -171,7 +171,7 @@ $effect(() => {
 			</div>
 			<Button class="w-full gap-2" onclick={resetPassword} variant="outline">
 				<RotateCcw class="size-4" />
-				{$LL.advanced.reset()}
+				{m["advanced.reset"]()}
 			</Button>
 		</div>
 
@@ -186,7 +186,7 @@ $effect(() => {
 			disabled={busy}
 			onclick={toggle}
 		>
-			{active ? $LL.advanced.stopSSH() : $LL.advanced.startSSH()}
+			{active ? m["advanced.stopSSH"]() : m["advanced.startSSH"]()}
 		</Button>
 	</div>
 </AppDialog>

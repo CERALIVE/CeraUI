@@ -8,19 +8,19 @@
  * exercisable under the plain (non-Svelte) vitest environment. The reactive
  * runes wrapper is never executed here.
  *
- * `notifications.svelte.ts` statically imports `@ceraui/i18n/i18n-svelte5`, whose
+ * `notifications.svelte.ts` statically imports `@ceraui/i18n/svelte`, whose
  * module body declares Svelte runes ($state). Mock it so importing the store
  * never evaluates those runes; the pure resolver under test receives an
- * explicit `translations` tree rather than reading the live `$LL`.
+ * explicit `translations` tree rather than reading the live registry.
  */
 import type { Notification } from "@ceraui/rpc/schemas";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@ceraui/i18n/i18n-svelte5", () => ({
-	getLL: vi.fn(() => ({})),
+const { messageRegistry } = vi.hoisted(() => ({
+	messageRegistry: {} as Record<string, unknown>,
 }));
+vi.mock("@ceraui/i18n/svelte", () => ({ m: messageRegistry }));
 
-import { getLL } from "@ceraui/i18n/i18n-svelte5";
 import {
 	type ActiveNotification,
 	clearNotifications,
@@ -52,7 +52,7 @@ function makeNotification(overrides: Partial<Notification> = {}): Notification {
 	};
 }
 
-/** A minimal stand-in for the `$LL` translation tree (nested + interpolating). */
+/** A minimal stand-in for the message registry (flat dotted keys + interpolating). */
 const translations = {
 	notifications: {
 		jetsonUndervoltage: () => "Undervoltage (localized)",
@@ -284,19 +284,19 @@ describe("dismissNotification", () => {
 // ============================================
 //
 // The pure suites above pass `translations` explicitly so they never touch
-// `$LL`. This suite drives the runes store end-to-end, where `push()` resolves
-// text via the live `getLL()` — mocked here to a real tree so we assert keys
+// the registry. This suite drives the runes store end-to-end, where `push()` resolves
+// text via the live registry — mocked here to a real map so we assert keys
 // resolve to translated strings instead of leaking raw key strings.
 
 describe("notification store (reactive API)", () => {
 	beforeEach(() => {
-		vi.mocked(getLL).mockReturnValue(translations);
+		Object.assign(messageRegistry, translations);
 		clearNotifications();
 	});
 
 	afterEach(() => {
 		destroyNotificationStore();
-		vi.mocked(getLL).mockReturnValue({});
+		for (const key of Object.keys(messageRegistry)) delete messageRegistry[key];
 	});
 
 	it("dedups by `name`: pushing the same name twice yields one active entry", () => {
@@ -308,7 +308,7 @@ describe("notification store (reactive API)", () => {
 		expect(active[0]?.name).toBe("jetson-undervoltage");
 	});
 
-	it("resolves `key` via the mocked `$LL` with `params` (not the raw key string)", () => {
+	it("resolves `key` via the mocked registry with `params` (not the raw key string)", () => {
 		push(
 			makeNotification({
 				name: "app-updated",

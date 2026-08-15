@@ -17,7 +17,7 @@
 <script lang="ts">
 import { onDestroy, untrack } from 'svelte';
 
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import {
 	PREVIEW_CLOSE_UNAUTHORIZED,
 	PREVIEW_CLOSE_UPSTREAM_DOWN,
@@ -998,51 +998,50 @@ onDestroy(() => {
 });
 
 const unavailableBand = $derived.by(() => {
-	const bands = $LL.live.preview.unavailable;
 	switch (availability) {
 		case 'engineStarting':
-			return { title: bands.engineStarting.title(), body: bands.engineStarting.body() };
+			return { title: m["live.preview.unavailable.engineStarting.title"](), body: m["live.preview.unavailable.engineStarting.body"]() };
 		case 'engineOffline':
-			return { title: bands.engineOffline.title(), body: bands.engineOffline.body() };
+			return { title: m["live.preview.unavailable.engineOffline.title"](), body: m["live.preview.unavailable.engineOffline.body"]() };
 		case 'noVideo':
-			return { title: bands.noVideo.title(), body: bands.noVideo.body() };
+			return { title: m["live.preview.unavailable.noVideo.title"](), body: m["live.preview.unavailable.noVideo.body"]() };
 		case 'tokenRejected':
-			return { title: bands.tokenRejected.title(), body: bands.tokenRejected.body() };
+			return { title: m["live.preview.unavailable.tokenRejected.title"](), body: m["live.preview.unavailable.tokenRejected.body"]() };
 		case 'mintFailed':
-			return { title: bands.mintFailed.title(), body: bands.mintFailed.body() };
+			return { title: m["live.preview.unavailable.mintFailed.title"](), body: m["live.preview.unavailable.mintFailed.body"]() };
 		case 'interrupted':
-			return { title: bands.interrupted.title(), body: bands.interrupted.body() };
+			return { title: m["live.preview.unavailable.interrupted.title"](), body: m["live.preview.unavailable.interrupted.body"]() };
 		case 'backpressure':
-			return { title: bands.backpressure.title(), body: bands.backpressure.body() };
+			return { title: m["live.preview.unavailable.backpressure.title"](), body: m["live.preview.unavailable.backpressure.body"]() };
 		case 'noSourceApplied':
-			return { title: bands.noSourceApplied.title(), body: bands.noSourceApplied.body() };
+			return { title: m["live.preview.unavailable.noSourceApplied.title"](), body: m["live.preview.unavailable.noSourceApplied.body"]() };
 		case 'sourceUnavailable':
-			return { title: bands.sourceUnavailable.title(), body: bands.sourceUnavailable.body() };
+			return { title: m["live.preview.unavailable.sourceUnavailable.title"](), body: m["live.preview.unavailable.sourceUnavailable.body"]() };
 		case 'deviceBusy':
-			return { title: bands.deviceBusy.title(), body: bands.deviceBusy.body() };
+			return { title: m["live.preview.unavailable.deviceBusy.title"](), body: m["live.preview.unavailable.deviceBusy.body"]() };
 		case 'pipelineFailed':
-			return { title: bands.pipelineFailed.title(), body: bands.pipelineFailed.body() };
+			return { title: m["live.preview.unavailable.pipelineFailed.title"](), body: m["live.preview.unavailable.pipelineFailed.body"]() };
 		case 'passthroughActive':
-			return { title: bands.passthroughActive.title(), body: bands.passthroughActive.body() };
+			return { title: m["live.preview.unavailable.passthroughActive.title"](), body: m["live.preview.unavailable.passthroughActive.body"]() };
 		case 'pausedHidden':
-			return { title: bands.pausedHidden.title(), body: bands.pausedHidden.body() };
+			return { title: m["live.preview.unavailable.pausedHidden.title"](), body: m["live.preview.unavailable.pausedHidden.body"]() };
 		default:
-			return { title: bands.previewUnavailable.title(), body: bands.previewUnavailable.body() };
+			return { title: m["live.preview.unavailable.previewUnavailable.title"](), body: m["live.preview.unavailable.previewUnavailable.body"]() };
 	}
 });
 
 const overlayText = $derived.by(() => {
 	switch (status) {
 		case 'unsupported':
-			return $LL.live.preview.unsupported();
+			return m["live.preview.unsupported"]();
 		case 'error':
-			return $LL.live.preview.error();
+			return m["live.preview.error"]();
 		case 'connecting':
-			return $LL.live.preview.connecting();
+			return m["live.preview.connecting"]();
 		case 'reconnecting':
-			return $LL.live.preview.reconnecting();
+			return m["live.preview.reconnecting"]();
 		case 'waiting':
-			return $LL.live.preview.waiting();
+			return m["live.preview.waiting"]();
 		default:
 			return '';
 	}
@@ -1052,11 +1051,11 @@ const overlayText = $derived.by(() => {
 const tierLabel = $derived.by(() => {
 	switch (activeTier) {
 		case 'webrtc':
-			return $LL.live.preview.tierWebrtc();
+			return m["live.preview.tierWebrtc"]();
 		case 'webcodecs':
-			return $LL.live.preview.tierWebcodecs();
+			return m["live.preview.tierWebcodecs"]();
 		case 'mse':
-			return $LL.live.preview.tierMse();
+			return m["live.preview.tierMse"]();
 		default:
 			return '';
 	}
@@ -1073,22 +1072,22 @@ const tierLabel = $derived.by(() => {
 >
 	<div class="mb-3 flex items-center gap-2">
 		<Eye aria-hidden="true" class="text-primary size-4 shrink-0" />
-		<h2 class="text-sm font-semibold tracking-tight">{$LL.live.preview.title()}</h2>
+		<h2 class="text-sm font-semibold tracking-tight">{m["live.preview.title"]()}</h2>
 		<Button
 			class="ms-auto gap-1.5"
 			data-testid="preview-toggle"
 			aria-pressed={enabled}
-			aria-label={$LL.live.preview.toggleAria()}
+			aria-label={m["live.preview.toggleAria"]()}
 			onclick={toggle}
 			size="sm"
 			variant={enabled ? 'secondary' : 'default'}
 		>
 			{#if enabled}
 				<EyeOff aria-hidden="true" class="size-3.5" />
-				{$LL.live.preview.stop()}
+				{m["live.preview.stop"]()}
 			{:else}
 				<Eye aria-hidden="true" class="size-3.5" />
-				{$LL.live.preview.start()}
+				{m["live.preview.start"]()}
 			{/if}
 		</Button>
 	</div>
@@ -1124,7 +1123,7 @@ const tierLabel = $derived.by(() => {
 							variant="secondary"
 						>
 							<Play aria-hidden="true" class="size-3.5" />
-							{$LL.live.preview.resume()}
+							{m["live.preview.resume"]()}
 						</Button>
 					{/if}
 				</div>
@@ -1135,7 +1134,7 @@ const tierLabel = $derived.by(() => {
 					<canvas
 						bind:this={canvasEl}
 						data-testid="preview-canvas"
-						aria-label={$LL.live.preview.canvasAria()}
+						aria-label={m["live.preview.canvasAria"]()}
 						class="h-full w-full object-contain"
 					></canvas>
 				{:else if activeTier === 'mse' || activeTier === 'webrtc'}
@@ -1154,7 +1153,7 @@ const tierLabel = $derived.by(() => {
 					<span
 						data-testid="preview-tier-badge"
 						data-tier={activeTier}
-						aria-label={$LL.live.preview.tierBadgeAria()}
+						aria-label={m["live.preview.tierBadgeAria"]()}
 						class="bg-background/70 text-muted-foreground absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide backdrop-blur-sm"
 					>
 						{tierLabel}
@@ -1169,9 +1168,9 @@ const tierLabel = $derived.by(() => {
 					>
 						<Loader aria-hidden="true" class="size-3 animate-spin motion-reduce:animate-none" />
 						{#if reconnectAttemptText}
-							{$LL.live.preview.reconnectingAttempt({ attempt: reconnectAttemptText })}
+							{m["live.preview.reconnectingAttempt"]({ attempt: reconnectAttemptText })}
 						{:else}
-							{$LL.live.preview.reconnecting()}
+							{m["live.preview.reconnecting"]()}
 						{/if}
 					</div>
 				{/if}
@@ -1181,7 +1180,7 @@ const tierLabel = $derived.by(() => {
 						data-testid="preview-compat"
 						class="bg-background/70 text-muted-foreground absolute top-2 right-2 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
 					>
-						{$LL.live.preview.compatBadge()}
+						{m["live.preview.compatBadge"]()}
 					</span>
 				{/if}
 
@@ -1201,7 +1200,7 @@ const tierLabel = $derived.by(() => {
 		{/if}
 	{:else}
 		<p data-testid="preview-off" class="text-muted-foreground text-sm">
-			{$LL.live.preview.off()}
+			{m["live.preview.off"]()}
 		</p>
 	{/if}
 </section>

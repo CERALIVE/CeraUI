@@ -19,7 +19,7 @@
   targeting; the container is `data-testid="live-summary-strip"`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { ArrowRightLeft, Radio, Zap } from '@lucide/svelte';
 
 import LiveAudioMeter from '$lib/components/preview/LiveAudioMeter.svelte';
@@ -84,7 +84,7 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 	<div class="flex items-center gap-1.5">
 		<span aria-hidden={true} class="bg-primary size-1.5 animate-pulse rounded-full"></span>
 		<span class="text-primary text-[0.65rem] font-semibold tracking-wide uppercase">
-			{$LL.live.summary.nowStreaming()}
+			{m["live.summary.nowStreaming"]()}
 		</span>
 	</div>
 
@@ -108,19 +108,19 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 			<span
 				class="bg-primary/10 text-primary ml-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
 				data-testid="passthrough-chip"
-				title={$LL.live.passthrough.activeHint()}
+				title={m["live.passthrough.activeHint"]()}
 			>
 				<Zap aria-hidden={true} class="size-3" />
-				{$LL.live.passthrough.activeChip()}
+				{m["live.passthrough.activeChip"]()}
 			</span>
 		{:else if summary.inputCodec && summary.codec}
 			<span
 				class="bg-primary/10 text-primary ml-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
 				data-testid="transcode-chip"
-				title={$LL.live.transcode.always()}
+				title={m["live.transcode.always"]()}
 			>
 				<ArrowRightLeft aria-hidden={true} class="size-3" />
-				{$LL.live.transcode.chip({ input: summary.inputCodec, output: summary.codec })}
+				{m["live.transcode.chip"]({ input: summary.inputCodec, output: summary.codec })}
 			</span>
 		{/if}
 	</p>
@@ -130,7 +130,7 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 	{#if hasAudioLine}
 		<p class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
 			{#if audioEmbedded}
-				<span data-live-value="audio">{$LL.live.source.audioEmbedded()}</span>
+				<span data-live-value="audio">{m["live.source.audioEmbedded"]()}</span>
 			{:else if audioCurrent}
 				<span class="font-mono" data-live-value="audio">{audioCurrent}</span>
 			{/if}
@@ -140,7 +140,7 @@ const hasAudioLine = $derived(audioEmbedded || Boolean(audioCurrent) || Boolean(
 					data-testid="audio-follow-pending"
 				>
 					<Radio aria-hidden={true} class="size-3" />
-					{$LL.live.summary.audioFollows({ label: audioPending })}
+					{m["live.summary.audioFollows"]({ label: audioPending })}
 				</span>
 			{/if}
 		</p>

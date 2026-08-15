@@ -43,7 +43,7 @@
   build has no fan feature".
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import {
 	Activity,
 	ArrowDownUp,
@@ -72,10 +72,9 @@ import {
 	partitionSignals,
 } from './device-stats-model';
 
-const t = $derived($LL.settings.deviceStats);
 // The encoder's label already exists, translated, one namespace over. A second
 // key for the identical word is copy sprawl, not clarity.
-const encoderLabel = $derived($LL.settings.deviceHealth.nowStrip.encoder());
+const encoderLabel = $derived(m["settings.deviceHealth.nowStrip.encoder"]());
 
 // Sentinel the backend emits for the boot slot when `rauc` is absent.
 const RAUC_UNAVAILABLE = 'unavailable';
@@ -147,20 +146,20 @@ const fanSignal = $derived.by<DeviceStatSignal>(() => {
 	const base = {
 		key: 'fan',
 		icon: Fan,
-		label: t.fan(),
+		label: m["settings.deviceStats.fan"](),
 		tier: 'primary' as const,
 		attrs: { 'data-fan-state': state },
 	};
 	if (state === 'absent') {
-		return { ...base, value: t.fanAbsent(), sub: t.fanAbsentBody(), prose: true };
+		return { ...base, value: m["settings.deviceStats.fanAbsent"](), sub: m["settings.deviceStats.fanAbsentBody"](), prose: true };
 	}
 	if (state === 'unknown' || fraction === null) return { ...base, value: null };
 	return {
 		...base,
 		value: `${Math.round(fraction * 100)} %`,
 		fraction,
-		sub: state === 'running' ? t.fanCooling() : t.fanOff(),
-		hint: t.fanHint(),
+		sub: state === 'running' ? m["settings.deviceStats.fanCooling"]() : m["settings.deviceStats.fanOff"](),
+		hint: m["settings.deviceStats.fanHint"](),
 	};
 });
 
@@ -175,7 +174,7 @@ const cpuLoadSignal = $derived.by<DeviceStatSignal>(() => {
 	const base = {
 		key: 'cpuLoad',
 		icon: Cpu,
-		label: t.cpuLoad(),
+		label: m["settings.deviceStats.cpuLoad"](),
 		tier: 'primary' as const,
 	};
 	const reading = deriveCpuLoad(stats?.cpuLoad1, cpu?.cores);
@@ -186,21 +185,21 @@ const cpuLoadSignal = $derived.by<DeviceStatSignal>(() => {
 	// No core count on the wire ⇒ no honest denominator, so the raw load average
 	// stays the headline rather than being divided by an assumed one.
 	if (reading.percent === null || reading.fraction === null || cores === null) {
-		return { ...base, value: load, hint: t.cpuLoadHintNoCores() };
+		return { ...base, value: load, hint: m["settings.deviceStats.cpuLoadHintNoCores"]() };
 	}
 	const band = reading.band ?? 'light';
 	const bandLabel = {
-		light: t.cpuLoadLight(),
-		moderate: t.cpuLoadModerate(),
-		heavy: t.cpuLoadHeavy(),
+		light: m["settings.deviceStats.cpuLoadLight"](),
+		moderate: m["settings.deviceStats.cpuLoadModerate"](),
+		heavy: m["settings.deviceStats.cpuLoadHeavy"](),
 	}[band];
 	return {
 		...base,
 		value: `${reading.percent} %`,
 		fraction: reading.fraction,
 		barTone: CPU_BAND_TONE[band],
-		sub: `${bandLabel} \u00b7 ${t.cpuLoadRaw({ load })}`,
-		hint: t.cpuLoadHint({ cores }),
+		sub: `${bandLabel} \u00b7 ${m["settings.deviceStats.cpuLoadRaw"]({ load })}`,
+		hint: m["settings.deviceStats.cpuLoadHint"]({ cores }),
 		attrs: { 'data-cpu-band': band },
 	};
 });
@@ -219,7 +218,7 @@ const memorySignal = $derived.by<DeviceStatSignal | null>(() => {
 	return {
 		key: 'memory',
 		icon: MemoryStick,
-		label: t.memory(),
+		label: m["settings.deviceStats.memory"](),
 		tier: 'primary',
 		value:
 			percent !== undefined
@@ -235,7 +234,7 @@ const memorySignal = $derived.by<DeviceStatSignal | null>(() => {
 		// The percent is the ONLY honest denominator here: it is derived against
 		// MemAvailable, so page cache does not read as consumed.
 		...(percent !== undefined ? { fraction: percent / 100 } : {}),
-		hint: t.memoryHint(),
+		hint: m["settings.deviceStats.memoryHint"](),
 	};
 });
 
@@ -247,13 +246,13 @@ const swapSignal = $derived.by<DeviceStatSignal | null>(() => {
 	return {
 		key: 'swap',
 		icon: Replace,
-		label: t.swap(),
+		label: m["settings.deviceStats.swap"](),
 		tier: 'secondary',
 		// A measured `SwapTotal: 0` is the board ANSWERING "none". Printing it as
 		// "0.0 GiB / 0.0 GiB" would dress a plain fact up as a reading at zero.
 		value:
 			total === 0
-				? t.swapNone()
+				? m["settings.deviceStats.swapNone"]()
 				: used !== undefined
 					? `${gibibytes(used)} / ${gibibytes(total)}`
 					: gibibytes(total),
@@ -267,7 +266,7 @@ const cpuFreqSignal = $derived.by<DeviceStatSignal | null>(() => {
 	return {
 		key: 'cpuFreq',
 		icon: Gauge,
-		label: t.cpuFreq(),
+		label: m["settings.deviceStats.cpuFreq"](),
 		// No `value`: the board runs SEVERAL policies at different clocks, and any
 		// single string would either pick a winner or average incomparable
 		// clusters — the same reason the encoder renders its own body.
@@ -284,11 +283,11 @@ const ddrSignal = $derived.by<DeviceStatSignal | null>(() => {
 	return {
 		key: 'ddr',
 		icon: Layers,
-		label: t.ddr(),
+		label: m["settings.deviceStats.ddr"](),
 		value: wholePercent(ddr.loadPercent),
 		fraction: ddr.loadPercent / 100,
 		sub: `${mhzFromHz(ddr.curFreqHz)} / ${mhzFromHz(ddr.maxFreqHz)}`,
-		hint: t.ddrHint(),
+		hint: m["settings.deviceStats.ddrHint"](),
 		tier: 'primary',
 	};
 });
@@ -310,11 +309,11 @@ const gpuSignal = $derived.by<DeviceStatSignal | null>(() => {
 	return {
 		key: 'gpu',
 		icon: Microchip,
-		label: t.gpu(),
+		label: m["settings.deviceStats.gpu"](),
 		value: wholePercent(gpu.loadPercent),
 		fraction: gpu.loadPercent / 100,
 		...(sub !== undefined ? { sub } : {}),
-		hint: t.gpuHint(),
+		hint: m["settings.deviceStats.gpuHint"](),
 		tier: 'primary',
 	};
 });
@@ -329,7 +328,7 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 		{
 			key: 'socTemp',
 			icon: Thermometer,
-			label: t.socTemp(),
+			label: m["settings.deviceStats.socTemp"](),
 			// No bar: a temperature has no 0-100 denominator to draw against.
 			value: s && s.socTemp != null ? `${s.socTemp.toFixed(1)} \u00b0C` : null,
 			tier: 'primary',
@@ -340,7 +339,7 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 		{
 			key: 'disk',
 			icon: HardDrive,
-			label: t.disk(),
+			label: m["settings.deviceStats.disk"](),
 			sub: disk
 				? disk.type !== 'unknown'
 					? `${humanBytes(disk.total)} \u00b7 ${disk.type}`
@@ -372,7 +371,7 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 		{
 			key: 'network',
 			icon: ArrowDownUp,
-			label: t.network(),
+			label: m["settings.deviceStats.network"](),
 			sub: net?.iface,
 			value: net
 				? `\u2191 ${humanRate(net.txBytesPerSec)}  \u2193 ${humanRate(net.rxBytesPerSec)}`
@@ -385,7 +384,7 @@ const signals = $derived.by<DeviceStatSignal[]>(() => {
 		{
 			key: 'bootSlot',
 			icon: CircuitBoard,
-			label: t.bootSlot(),
+			label: m["settings.deviceStats.bootSlot"](),
 			// Changes only across an OTA.
 			value: slot && slot !== RAUC_UNAVAILABLE ? slot : null,
 			tier: 'secondary',
@@ -411,7 +410,7 @@ const tiers = $derived(partitionSignals(signals));
 	<div
 		class="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-3"
 		data-testid="cpufreq-policies"
-		title={t.cpuFreqHint()}
+		title={m["settings.deviceStats.cpuFreqHint"]()}
 	>
 		{#each cpuFreqPolicies as policy (policy.id)}
 			<div class="min-w-0 space-y-1" data-testid={`cpufreq-policy-${policy.id}`}>
@@ -447,12 +446,12 @@ const tiers = $derived(partitionSignals(signals));
 		class={cn('text-muted-foreground/70 font-medium', sizeClass)}
 		data-testid={`device-stat-${key}-value`}
 	>
-		{t.unavailable()}
+		{m["settings.deviceStats.unavailable"]()}
 	</span>
 {/snippet}
 
 <section class="space-y-2.5" data-testid="device-stats">
-	<h2 class="text-muted-foreground px-1 text-sm font-medium">{t.title()}</h2>
+	<h2 class="text-muted-foreground px-1 text-sm font-medium">{m["settings.deviceStats.title"]()}</h2>
 	<div class="bg-card overflow-hidden rounded-xl border">
 		<!-- Tier 1 — the glance grid. Mirrors the Device Health now-strip's
 		     `grid-cols-2 sm:grid-cols-3` rhythm so the two telemetry surfaces read

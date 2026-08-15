@@ -33,7 +33,7 @@
  * holds by construction: the implicit sole-camera id is folded into the Start
  * payload only, never persisted before the operator acts.
  */
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type {
 	CapabilitiesMessage,
 	ConfigMessage,
@@ -171,7 +171,7 @@ const readiness = $derived(
 const canStart = $derived(!readiness.blocking && optimismState !== 'starting');
 const startDisabledReason = $derived(
 	optimismState === 'starting'
-		? $LL.live.starting()
+		? m["live.starting"]()
 		: readiness.blocking && readiness.primaryFixGate
 			? resolveReason(
 					readiness.gates[readiness.primaryFixGate].reasonKey ??
@@ -197,16 +197,7 @@ function stateColor(state: GateStatus): string {
 // i18n dot-path resolver (mirrors LiveView) — the readiness reasonKeys point at
 // EXISTING leaves; resolve them without adding a switch per key.
 function resolveReason(key: string): string {
-	const parts = key.split('.');
-	let node: unknown = $LL;
-	for (const part of parts) {
-		if (node && typeof node === 'object' && part in node) {
-			node = (node as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof node === 'function' ? (node as () => string)() : key;
+	return resolveMessageKey(key);
 }
 
 function formatBitrate(kbps: number | undefined): string {
@@ -214,9 +205,9 @@ function formatBitrate(kbps: number | undefined): string {
 	if (kbps >= 1000) {
 		const mbps = kbps / 1000;
 		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
-		return `${value} ${$LL.units.mbps()}`;
+		return `${value} ${m["units.mbps"]()}`;
 	}
-	return `${kbps} ${$LL.units.kbps()}`;
+	return `${kbps} ${m["units.kbps"]()}`;
 }
 
 // ── Row projection (presentation-only remap of the readiness verdict) ─────────
@@ -272,8 +263,8 @@ const enabledLinkCount = $derived(
 );
 const networkSummary = $derived(
 	enabledLinkCount > 0
-		? $LL.live.setup.linksReady({ count: enabledLinkCount })
-		: $LL.live.setup.noLinks(),
+		? m["live.setup.linksReady"]({ count: enabledLinkCount })
+		: m["live.setup.noLinks"](),
 );
 </script>
 
@@ -333,7 +324,7 @@ const networkSummary = $derived(
 							onclick={onFix}
 							type="button"
 						>
-							{$LL.live.goLive.fix.openSource()}
+							{m["live.goLive.fix.openSource"]()}
 							<ChevronRight aria-hidden={true} class="h-3.5 w-3.5 rtl:-scale-x-100" />
 						</button>
 					{/if}
@@ -361,8 +352,8 @@ const networkSummary = $derived(
 					></span>
 					<span class="hidden sm:inline">
 						{destinationValidated === true
-							? $LL.live.goLive.validated()
-							: $LL.live.goLive.notChecked()}
+							? m["live.goLive.validated"]()
+							: m["live.goLive.notChecked"]()}
 					</span>
 				</span>
 			{/if}
@@ -372,7 +363,7 @@ const networkSummary = $derived(
 					class="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex min-h-[44px] items-center rounded-md px-2 font-mono text-xs font-medium"
 					data-testid="bitrate-ceiling-chip"
 					onclick={onOpenEncoder}
-					title={$LL.live.goLive.maxBitrate()}
+					title={m["live.goLive.maxBitrate"]()}
 					type="button"
 				>
 					{formatBitrate(maxBitrate)}
@@ -381,10 +372,10 @@ const networkSummary = $derived(
 			{#if locked}
 				<span
 					class="text-muted-foreground inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-xs font-medium"
-					title={$LL.live.stopToChange()}
+					title={m["live.stopToChange"]()}
 				>
 					<Lock aria-hidden={true} class="h-3.5 w-3.5" />
-					<span class="hidden sm:inline">{$LL.live.stopToChange()}</span>
+					<span class="hidden sm:inline">{m["live.stopToChange"]()}</span>
 				</span>
 			{:else}
 				<Button
@@ -397,7 +388,7 @@ const networkSummary = $derived(
 					variant="ghost"
 				>
 					<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
-					<span class="hidden sm:inline">{$LL.live.editSettings()}</span>
+					<span class="hidden sm:inline">{m["live.editSettings"]()}</span>
 					<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
 				</Button>
 			{/if}
@@ -407,7 +398,7 @@ const networkSummary = $derived(
 
 <Card.Root class="overflow-hidden" data-testid="stream-setup-chain">
 	<Card.Header class="pb-3">
-		<Card.Title class="text-sm font-semibold">{$LL.live.setup.title()}</Card.Title>
+		<Card.Title class="text-sm font-semibold">{m["live.setup.title"]()}</Card.Title>
 	</Card.Header>
 	<Card.Content class="space-y-4 py-0 pb-4">
 		<!-- Sole-camera auto-select line — only while config.source is unset and a
@@ -419,7 +410,7 @@ const networkSummary = $derived(
 				data-source-id={soleCamera.id}
 			>
 				<p class="min-w-0 truncate text-sm">
-					{$LL.live.goLive.autoSelected({ name: soleCamera.displayName })}
+					{m["live.goLive.autoSelected"]({ name: soleCamera.displayName })}
 				</p>
 				<Button
 					class="min-h-[44px] shrink-0 gap-1.5"
@@ -428,7 +419,7 @@ const networkSummary = $derived(
 					size="sm"
 					variant="ghost"
 				>
-					{$LL.live.goLive.change()}
+					{m["live.goLive.change"]()}
 				</Button>
 			</div>
 		{/if}
@@ -474,7 +465,7 @@ const networkSummary = $derived(
 						class="text-muted-foreground mt-0.5 size-4 shrink-0"
 					/>
 					<div class="min-w-0">
-						<p class="text-sm font-medium">{$LL.live.goLive.gate.network()}</p>
+						<p class="text-sm font-medium">{m["live.goLive.gate.network"]()}</p>
 						<p class="text-muted-foreground truncate font-mono text-sm">
 							{networkSummary}
 						</p>
@@ -496,7 +487,7 @@ const networkSummary = $derived(
 					size="sm"
 					variant="ghost"
 				>
-					{$LL.live.goLive.fix.goNetwork()}
+					{m["live.goLive.fix.goNetwork"]()}
 					<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
 				</Button>
 			</div>

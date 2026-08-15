@@ -9,7 +9,7 @@
   One concern per dialog — never a mega-dialog.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import {
 	Blocks,
 	ChevronRight,
@@ -71,12 +71,8 @@ interface Group {
 	entries: Entry[];
 }
 
-const t = $derived($LL.settings.index);
-const appearance = $derived($LL.settings.appearance);
-const odd = $derived($LL.settings.onDeviceDisplay);
 // The "Network ingest" entry is retitled "Sources" (test-pattern + rtmp/srt
 // ingest live in one dialog). Same entry key + testids; only the copy changes.
-const sources = $derived($LL.settings.dialogs.sources);
 
 // On-Device Display entry desc tracks the live DC-2 state for at-a-glance
 // status; falls back to the static description before the first kiosk push.
@@ -85,17 +81,17 @@ const displayDesc = $derived.by(() => {
 	const state = kiosk?.state;
 	switch (state) {
 		case 'disabled':
-			return odd.states.disabled();
+			return m["settings.onDeviceDisplay.states.disabled"]();
 		case 'enabled-stopped':
-			return odd.states.enabledStopped();
+			return m["settings.onDeviceDisplay.states.enabledStopped"]();
 		case 'enabled-running':
-			return odd.states.enabledRunning();
+			return m["settings.onDeviceDisplay.states.enabledRunning"]();
 		case 'enabled-failed':
-			return odd.states.enabledFailed();
+			return m["settings.onDeviceDisplay.states.enabledFailed"]();
 		case 'failed-no-display':
-			return odd.states.failedNoDisplay();
+			return m["settings.onDeviceDisplay.states.failedNoDisplay"]();
 		default:
-			return odd.description();
+			return m["settings.onDeviceDisplay.description"]();
 	}
 });
 
@@ -124,7 +120,7 @@ async function handleAutostartChange(next: boolean) {
 		target: next,
 		rpc: () => rpc.system.setAutostart({ autostart: next }),
 		confirmOnResolve: true,
-		failMessage: () => t.autostartError(),
+		failMessage: () => m["settings.index.autostartError"](),
 	});
 	// undefined → re-entry no-op, a thrown RPC, or a refused write (osCommand
 	// already toasted). Reject so AsyncSwitch reverts to the prior value.
@@ -141,33 +137,33 @@ const isDesktop = new MediaQuery('(min-width: 1024px)');
 const groups = $derived<Group[]>([
 	{
 		id: 'system',
-		label: t.groups.system(),
+		label: m["settings.index.groups.system"](),
 		entries: [
-			{ key: 'devicePassword', title: t.devicePassword(), desc: t.devicePasswordDesc(), icon: KeyRound },
-			{ key: 'wifiCountry', title: t.wifiCountry(), desc: t.wifiCountryDesc(), icon: Globe },
+			{ key: 'devicePassword', title: m["settings.index.devicePassword"](), desc: m["settings.index.devicePasswordDesc"](), icon: KeyRound },
+			{ key: 'wifiCountry', title: m["settings.index.wifiCountry"](), desc: m["settings.index.wifiCountryDesc"](), icon: Globe },
 		],
 	},
 	{
 		id: 'streaming',
-		label: t.groups.streaming(),
+		label: m["settings.index.groups.streaming"](),
 		entries: [
-			{ key: 'cloud', title: t.cloudRemote(), desc: t.cloudRemoteDesc(), icon: Cloud },
-			{ key: 'networkIngest', title: sources.title(), desc: sources.description(), icon: Radio },
+			{ key: 'cloud', title: m["settings.index.cloudRemote"](), desc: m["settings.index.cloudRemoteDesc"](), icon: Cloud },
+			{ key: 'networkIngest', title: m["settings.dialogs.sources.title"](), desc: m["settings.dialogs.sources.description"](), icon: Radio },
 		],
 	},
 	{
 		id: 'developer',
-		label: t.groups.developer(),
+		label: m["settings.index.groups.developer"](),
 		entries: [
-			{ key: 'ssh', title: t.ssh(), desc: t.sshDesc(), icon: SquareTerminal },
-			{ key: 'logs', title: t.logs(), desc: t.logsDesc(), icon: ScrollText },
+			{ key: 'ssh', title: m["settings.index.ssh"](), desc: m["settings.index.sshDesc"](), icon: SquareTerminal },
+			{ key: 'logs', title: m["settings.index.logs"](), desc: m["settings.index.logsDesc"](), icon: ScrollText },
 		],
 	},
 	{
 		id: 'software',
-		label: t.groups.software(),
+		label: m["settings.index.groups.software"](),
 		entries: [
-			{ key: 'updates', title: t.updates(), desc: t.updatesDesc(), icon: RefreshCw },
+			{ key: 'updates', title: m["settings.index.updates"](), desc: m["settings.index.updatesDesc"](), icon: RefreshCw },
 			{
 				key: 'addons',
 				title: 'Add-ons',
@@ -178,21 +174,21 @@ const groups = $derived<Group[]>([
 	},
 	{
 		id: 'display',
-		label: t.groups.display(),
-		entries: [{ key: 'onDeviceDisplay', title: odd.title(), desc: displayDesc, icon: Monitor }],
+		label: m["settings.index.groups.display"](),
+		entries: [{ key: 'onDeviceDisplay', title: m["settings.onDeviceDisplay.title"](), desc: displayDesc, icon: Monitor }],
 	},
 	{
 		id: 'device',
-		label: t.groups.device(),
+		label: m["settings.index.groups.device"](),
 		entries: [
 			{
 				key: 'deviceHealth',
-				title: t.deviceHealth(),
-				desc: t.deviceHealthDesc(),
+				title: m["settings.index.deviceHealth"](),
+				desc: m["settings.index.deviceHealthDesc"](),
 				icon: Gauge,
 			},
-			{ key: 'power', title: t.power(), desc: t.powerDesc(), icon: Power, destructive: true },
-			{ key: 'versions', title: t.versions(), desc: t.versionsDesc(), icon: Info },
+			{ key: 'power', title: m["settings.index.power"](), desc: m["settings.index.powerDesc"](), icon: Power, destructive: true },
+			{ key: 'versions', title: m["settings.index.versions"](), desc: m["settings.index.versionsDesc"](), icon: Info },
 		],
 	},
 ]);
@@ -275,8 +271,8 @@ $effect(() => {
 	<div class="container mx-auto max-w-3xl flex-1 space-y-8 p-4 pt-6 sm:p-8">
 		<!-- Header -->
 		<header class="space-y-2">
-			<h1 class="text-3xl font-bold tracking-tight">{t.title()}</h1>
-			<p class="text-muted-foreground">{t.description()}</p>
+			<h1 class="text-3xl font-bold tracking-tight">{m["settings.index.title"]()}</h1>
+			<p class="text-muted-foreground">{m["settings.index.description"]()}</p>
 		</header>
 
 		<!-- Grouped settings index -->
@@ -290,7 +286,7 @@ $effect(() => {
 			<!-- Mobile-only: desktop hosts language + theme in the header toolbar instead. -->
 			{#if !isDesktop.current}
 				<section class="space-y-2.5" data-testid="settings-appearance">
-					<h2 class="text-muted-foreground px-1 text-sm font-medium">{appearance.title()}</h2>
+					<h2 class="text-muted-foreground px-1 text-sm font-medium">{m["settings.appearance.title"]()}</h2>
 					<div class="divide-border bg-card divide-y overflow-hidden rounded-xl border">
 						<div class="flex w-full items-center gap-4 px-4 py-3.5">
 							<span
@@ -299,9 +295,9 @@ $effect(() => {
 								<Languages class="size-[18px]" />
 							</span>
 							<span class="min-w-0 flex-1">
-								<span class="block truncate text-sm font-semibold">{appearance.language()}</span>
+								<span class="block truncate text-sm font-semibold">{m["settings.appearance.language"]()}</span>
 								<span class="text-muted-foreground block truncate text-xs"
-									>{appearance.languageDesc()}</span
+									>{m["settings.appearance.languageDesc"]()}</span
 								>
 							</span>
 							<span class="shrink-0" data-testid="settings-locale-selector">
@@ -315,9 +311,9 @@ $effect(() => {
 								<Palette class="size-[18px]" />
 							</span>
 							<span class="min-w-0 flex-1">
-								<span class="block truncate text-sm font-semibold">{appearance.theme()}</span>
+								<span class="block truncate text-sm font-semibold">{m["settings.appearance.theme"]()}</span>
 								<span class="text-muted-foreground block truncate text-xs"
-									>{appearance.themeDesc()}</span
+									>{m["settings.appearance.themeDesc"]()}</span
 								>
 							</span>
 							<span class="shrink-0" data-testid="settings-theme-toggle">
@@ -339,12 +335,12 @@ $effect(() => {
 									<Rocket class="size-[18px]" />
 								</span>
 								<span class="min-w-0 flex-1">
-									<span class="block truncate text-sm font-semibold">{t.autostart()}</span>
-									<span class="text-muted-foreground block truncate text-xs">{t.autostartDesc()}</span>
+									<span class="block truncate text-sm font-semibold">{m["settings.index.autostart"]()}</span>
+									<span class="text-muted-foreground block truncate text-xs">{m["settings.index.autostartDesc"]()}</span>
 								</span>
 								<span class="shrink-0">
 									<AsyncSwitch
-										aria-label={t.autostart()}
+										aria-label={m["settings.index.autostart"]()}
 										checked={autostart}
 										data-testid="settings-autostart-switch"
 										onCheckedChange={handleAutostartChange}
@@ -409,8 +405,8 @@ $effect(() => {
 			<Info class="size-5" />
 		</span>
 		<div class="space-y-1">
-			<p class="text-sm font-semibold">{t.comingSoon()}</p>
-			<p class="text-muted-foreground text-sm">{t.comingSoonBody()}</p>
+			<p class="text-sm font-semibold">{m["settings.index.comingSoon"]()}</p>
+			<p class="text-muted-foreground text-sm">{m["settings.index.comingSoonBody"]()}</p>
 		</div>
 	</div>
 </AppDialog>

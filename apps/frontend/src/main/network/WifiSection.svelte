@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
 import { ChevronRight, Loader2, Router, Settings2, Wifi } from '@lucide/svelte';
 
@@ -66,8 +66,8 @@ async function switchToHotspot(device: string) {
 		key: `hotspot:${device}`,
 		target: 'hotspot',
 		rpc: () => rpc.wifi.hotspotStart({ device }),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
@@ -77,8 +77,8 @@ async function switchToStation(device: string) {
 		key: `hotspot:${device}`,
 		target: 'station',
 		rpc: () => rpc.wifi.hotspotStop({ device }),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
@@ -99,12 +99,12 @@ $effect(() => {
 <section class="bg-card rounded-xl border">
 	<div class="flex items-center gap-2 border-b px-4 py-3">
 		<Wifi aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
-		<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.wifi()}</h2>
+		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.wifi"]()}</h2>
 	</div>
 	<div class="divide-y">
 		{#if wifiRadios.length === 0}
 			<p class="text-muted-foreground px-4 py-6 text-center text-sm">
-				{$LL.network.view.noWifi()}
+				{m["network.view.noWifi"]()}
 			</p>
 		{:else}
 			{#each wifiRadios as [id, iface] (id)}
@@ -143,11 +143,11 @@ $effect(() => {
 							)}
 						>
 							{#if displayIsHotspot}
-								{$LL.network.view.hotspot()} · {iface.ifname}
+								{m["network.view.hotspot"]()} · {iface.ifname}
 							{:else if connected && net}
-								{$LL.network.view.connected()} · {net.ssid}
+								{m["network.view.connected"]()} · {net.ssid}
 							{:else}
-								{$LL.network.view.disconnected()}
+								{m["network.view.disconnected"]()}
 							{/if}
 						</p>
 					</div>
@@ -160,7 +160,7 @@ $effect(() => {
 							<BondToggle
 								name={iface.ifname}
 								enabled={false}
-								disabledReason={$LL.network.view.hotspotNoBond()}
+								disabledReason={m["network.view.hotspotNoBond"]()}
 							/>
 							<Button
 								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
@@ -170,7 +170,7 @@ $effect(() => {
 								onclick={() => openHotspotSetup(id)}
 							>
 								<Settings2 class="size-3.5" />
-								{$LL.network.view.setup()}
+								{m["network.view.setup"]()}
 							</Button>
 							<Button
 								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
@@ -184,7 +184,7 @@ $effect(() => {
 								{:else}
 									<Wifi class="size-3.5" />
 								{/if}
-								{$LL.network.view.switchToStation()}
+								{m["network.view.switchToStation"]()}
 							</Button>
 						{:else}
 							<!-- Station mode: bond when it holds an IP; connect to a network;
@@ -205,7 +205,7 @@ $effect(() => {
 								variant="ghost"
 								onclick={() => onConnect(id)}
 							>
-								{$LL.network.view.connect()}
+								{m["network.view.connect"]()}
 								<ChevronRight class="size-3.5 rtl:rotate-180" />
 							</Button>
 							{#if iface.supports_hotspot}
@@ -216,8 +216,8 @@ $effect(() => {
 									     aria-label since there is no visible text). -->
 									<Button
 										class="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none"
-										aria-label={$LL.network.view.switchToHotspot()}
-										title={$LL.network.view.switchToHotspot()}
+										aria-label={m["network.view.switchToHotspot"]()}
+										title={m["network.view.switchToHotspot"]()}
 										disabled
 										size="sm"
 										variant="ghost"
@@ -226,22 +226,22 @@ $effect(() => {
 									</Button>
 								{:else}
 									<SimpleAlertDialog
-										buttonAriaLabel={$LL.network.view.switchToHotspot()}
-										confirmButtonText={$LL.network.view.hotspotSwitchConfirm()}
+										buttonAriaLabel={m["network.view.switchToHotspot"]()}
+										confirmButtonText={m["network.view.hotspotSwitchConfirm"]()}
 										confirmVariant="destructive"
 										extraButtonClasses="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none hover:shadow-none bg-transparent text-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
 										iconPosition="left"
-										title={$LL.network.view.switchToHotspot()}
+										title={m["network.view.switchToHotspot"]()}
 										onconfirm={() => switchToHotspot(id)}
 									>
 										{#snippet icon()}
 											<Router class="size-3.5" />
 										{/snippet}
 										{#snippet dialogTitle()}
-											{$LL.network.view.hotspotSwitchTitle()}
+											{m["network.view.hotspotSwitchTitle"]()}
 										{/snippet}
 										{#snippet description()}
-											{$LL.network.view.hotspotSwitchBody()}
+											{m["network.view.hotspotSwitchBody"]()}
 										{/snippet}
 									</SimpleAlertDialog>
 								{/if}

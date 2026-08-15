@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 
 import { Label } from '$lib/components/ui/label';
 
@@ -30,7 +30,7 @@ const fillWidth = $derived(Math.abs(thumbPercent - zeroPercent));
 
 <div class="bg-muted/40 space-y-3 rounded-lg border p-4">
 	<Label class="flex items-center justify-between gap-2 text-sm font-medium" for="audioDelay">
-		<span>{$LL.settings.audioDelay()}</span>
+		<span>{m["settings.audioDelay"]()}</span>
 		<span class="bg-primary/10 text-primary rounded-md px-2 py-1 font-mono text-xs">{value}ms</span>
 	</Label>
 	<div class="my-3">
@@ -48,9 +48,9 @@ const fillWidth = $derived(Math.abs(thumbPercent - zeroPercent));
 		</div>
 		<div class="text-muted-foreground mt-2 flex items-center justify-between text-xs">
 			<span class="flex items-center gap-1"><span class="bg-muted-foreground h-2 w-2 rounded-full"></span>{min}</span>
-			<span class="text-foreground font-medium">{$LL.settings.perfectSync()}</span>
+			<span class="text-foreground font-medium">{m["settings.perfectSync"]()}</span>
 			<span class="flex items-center gap-1">+{max}<span class="bg-primary h-2 w-2 rounded-full"></span></span>
 		</div>
 	</div>
-	<p class="text-muted-foreground text-center text-xs">{$LL.settings.audioDelayEarly()} ← 0ms → {$LL.settings.audioDelayLate()}</p>
+	<p class="text-muted-foreground text-center text-xs">{m["settings.audioDelayEarly"]()} ← 0ms → {m["settings.audioDelayLate"]()}</p>
 </div>

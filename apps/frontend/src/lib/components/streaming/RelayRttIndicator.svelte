@@ -11,7 +11,7 @@
   indicator, not a shared input-validation bound (those live in ValidationAdapter).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 
 import { cn } from '$lib/utils';
 
@@ -51,7 +51,7 @@ const color = $derived(TIER_COLOR[tier]);
 // measurement (e.g. 71.3541…) reads as a clean "71 ms". The `rtt === undefined`
 // check narrows the type so no cast is needed in the rounded branch.
 const label = $derived(
-	rtt === undefined || !Number.isFinite(rtt) ? '\u2014' : `${Math.round(rtt)} ${$LL.units.ms()}`,
+	rtt === undefined || !Number.isFinite(rtt) ? '\u2014' : `${Math.round(rtt)} ${m["units.ms"]()}`,
 );
 </script>
 

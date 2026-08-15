@@ -8,7 +8,7 @@
   source never raises a false alarm.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import { HardDrive, ScrollText } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -22,7 +22,6 @@ interface Props {
 
 const { onViewLogs }: Props = $props();
 
-const t = $derived($LL.settings.deviceStats);
 const warn = $derived(isDiskLow(getDeviceStats()?.disk));
 </script>
 
@@ -38,8 +37,8 @@ const warn = $derived(isDiskLow(getDeviceStats()?.disk));
 			<HardDrive aria-hidden="true" class="size-[18px]" />
 		</span>
 		<div class="min-w-0 flex-1">
-			<p class="text-status-warning text-sm font-semibold">{t.lowDiskTitle()}</p>
-			<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">{t.lowDiskBody()}</p>
+			<p class="text-status-warning text-sm font-semibold">{m["settings.deviceStats.lowDiskTitle"]()}</p>
+			<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">{m["settings.deviceStats.lowDiskBody"]()}</p>
 		</div>
 		<Button
 			class="shrink-0 gap-1.5"
@@ -49,7 +48,7 @@ const warn = $derived(isDiskLow(getDeviceStats()?.disk));
 			variant="outline"
 		>
 			<ScrollText aria-hidden="true" class="size-4" />
-			{t.lowDiskAction()}
+			{m["settings.deviceStats.lowDiskAction"]()}
 		</Button>
 	</div>
 {/if}

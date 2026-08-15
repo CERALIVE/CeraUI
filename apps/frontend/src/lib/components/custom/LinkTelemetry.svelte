@@ -11,7 +11,7 @@
   card height never shifts between the empty and populated states.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry } from '@ceraui/rpc/schemas';
 
 import Badge from '$lib/components/custom/Badge.svelte';
@@ -34,7 +34,7 @@ const stale = $derived(entry?.stale === true);
 
 // weight_percent is a normalized share (0-100; 100 only for a lone link), and
 // rtt_ms=0 is valid — render every real value as-is, never coerce to "--".
-const rtt = $derived(hasData ? `${entry?.rtt_ms} ${$LL.units.ms()}` : PLACEHOLDER);
+const rtt = $derived(hasData ? `${entry?.rtt_ms} ${m["units.ms"]()}` : PLACEHOLDER);
 const nak = $derived(hasData ? String(entry?.nak_count) : PLACEHOLDER);
 const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);
 </script>
@@ -49,11 +49,11 @@ const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);
 		stale && 'opacity-50',
 		className,
 	)}
-	aria-label={loading ? $LL.network.view.telemetryLoading() : $LL.network.view.telemetry()}
+	aria-label={loading ? m["network.view.telemetryLoading"]() : m["network.view.telemetry"]()}
 >
 	<div class="flex min-w-0 flex-col">
 		<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">
-			{$LL.network.view.rtt()}
+			{m["network.view.rtt"]()}
 		</dt>
 		{#if loading}
 			<dd aria-busy="true"><Skeleton class="mt-0.5 h-3.5 w-10" data-testid="link-telemetry-skeleton" /></dd>
@@ -71,7 +71,7 @@ const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);
 
 	<div class="flex min-w-0 flex-col">
 		<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">
-			{$LL.network.view.nak()}
+			{m["network.view.nak"]()}
 		</dt>
 		{#if loading}
 			<dd aria-busy="true"><Skeleton class="mt-0.5 h-3.5 w-10" /></dd>
@@ -89,7 +89,7 @@ const weight = $derived(hasData ? `${entry?.weight_percent}%` : PLACEHOLDER);
 
 	<div class="flex min-w-0 flex-col">
 		<dt class="text-muted-foreground text-[10px] uppercase tracking-wide">
-			{$LL.network.view.weight()}
+			{m["network.view.weight"]()}
 		</dt>
 		{#if loading}
 			<dd aria-busy="true"><Skeleton class="mt-0.5 h-3.5 w-10" /></dd>

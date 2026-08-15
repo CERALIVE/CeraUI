@@ -12,7 +12,7 @@
   this keeps the runes-side honest so a profile switch can't smear e-paper.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import Bell from '@lucide/svelte/icons/bell';
 import CircleAlert from '@lucide/svelte/icons/circle-alert';
 import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -34,15 +34,7 @@ import { dismiss, getPersistent } from '$lib/stores/notifications.svelte';
 import { cn } from '$lib/utils';
 
 function lookupLabel(key: string): string {
-	let node: unknown = $LL;
-	for (const seg of key.split('.')) {
-		if (node && typeof node === 'object' && seg in (node as object)) {
-			node = (node as Record<string, unknown>)[seg];
-		} else {
-			return key;
-		}
-	}
-	return typeof node === 'function' ? (node as () => string)() : key;
+	return resolveMessageKey(key);
 }
 
 let open = $state(false);
@@ -81,7 +73,7 @@ async function handleDismiss(name: string) {
 	variant="ghost"
 	size="icon"
 	class="relative"
-	aria-label={$LL.notifications.panel.trigger({ count })}
+	aria-label={m["notifications.panel.trigger"]({ count })}
 	data-testid="notifications-bell"
 	onclick={() => (open = true)}
 >
@@ -96,7 +88,7 @@ async function handleDismiss(name: string) {
 	{/if}
 </Button>
 
-<AppDialog bind:open title={$LL.notifications.panel.title()} icon={Bell} hideFooter>
+<AppDialog bind:open title={m["notifications.panel.title"]()} icon={Bell} hideFooter>
 	{#if count === 0}
 		<div
 			class="flex flex-col items-center gap-3 py-10 text-center"
@@ -105,9 +97,9 @@ async function handleDismiss(name: string) {
 			<div class="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
 				<Inbox class="size-6" aria-hidden="true" />
 			</div>
-			<p class="text-foreground text-sm font-medium">{$LL.notifications.panel.empty()}</p>
+			<p class="text-foreground text-sm font-medium">{m["notifications.panel.empty"]()}</p>
 			<p class="text-muted-foreground max-w-xs text-sm leading-relaxed">
-				{$LL.notifications.panel.emptyHint()}
+				{m["notifications.panel.emptyHint"]()}
 			</p>
 		</div>
 	{:else}
@@ -148,7 +140,7 @@ async function handleDismiss(name: string) {
 							class="size-7 shrink-0"
 							size="icon"
 							variant="ghost"
-							aria-label={$LL.notifications.panel.dismiss()}
+							aria-label={m["notifications.panel.dismiss"]()}
 							data-testid="notification-dismiss"
 							onclick={() => handleDismiss(item.name)}
 						>

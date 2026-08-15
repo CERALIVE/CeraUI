@@ -19,7 +19,7 @@
  * authenticated RPC socket and dials the backend-origin `/preview` proxy, and it
  * stays fully off (no engine dial) until `open` flips.
  */
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m } from '@ceraui/i18n/svelte';
 
 import PreviewCanvas from '$lib/components/preview/PreviewCanvas.svelte';
 
@@ -42,7 +42,7 @@ let open = $state(false);
 	data-testid="preview-disclosure"
 >
 	<summary class="cursor-pointer list-none px-4 py-3 text-sm font-medium select-none">
-		{$LL.live.modes.preview()}
+		{m["live.modes.preview"]()}
 	</summary>
 	<div class="px-4 pb-4">
 		<PreviewCanvas hostActive={open} />

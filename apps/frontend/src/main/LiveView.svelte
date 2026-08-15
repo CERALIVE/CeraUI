@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { isAudioLiveSwitchEnabled } from '@ceraui/rpc';
 import {
 	type AudioCodec,
@@ -236,12 +236,11 @@ const STREAM_START_ERROR_KEYS = [
 	'source_unavailable',
 	'source_taken_over',
 ] as const;
-type StreamStartErrorKey = (typeof STREAM_START_ERROR_KEYS)[number];
 
 function startFailedMessage(code: string): string {
 	return (STREAM_START_ERROR_KEYS as readonly string[]).includes(code)
-		? $LL.live.startFailed[code as StreamStartErrorKey]()
-		: $LL.live.startFailed.generic();
+		? resolveMessageKey(`live.startFailed.${code}`)
+		: m["live.startFailed.generic"]();
 }
 
 // Todo-25 typed failure → localized message: the class names WHAT failed, and
@@ -252,13 +251,11 @@ function startFailedMessage(code: string): string {
 // JSON-RPC/ALSA string is unactionable noise in the primary toast. It is still
 // captured verbatim by the backend logger and readable via Settings → System Logs.
 function startFailureMessage(failure: { class: string; retriable: boolean }): string {
-	const cls = $LL.live.startFailure.class[
-		failure.class as keyof (typeof $LL.live.startFailure)['class']
-	];
-	const reason = typeof cls === 'function' ? cls() : $LL.live.startFailed.generic();
+	const cls = m[`live.startFailure.class.${failure.class}`];
+	const reason = typeof cls === 'function' ? cls() : m["live.startFailed.generic"]();
 	const retryState = failure.retriable
-		? $LL.live.startFailure.retriedThenFailed()
-		: $LL.live.startFailure.notRetriable();
+		? m["live.startFailure.retriedThenFailed"]()
+		: m["live.startFailure.notRetriable"]();
 	return `${reason} ${retryState}`;
 }
 
@@ -307,7 +304,7 @@ async function handleSwitchInput(inputId: string) {
 	// the capability is off. If it is somehow reached, surface a calm reason and
 	// refuse — the engine would otherwise reject the live audio:* switch.
 	if (!canLiveSwitchInput(inputId, audioLiveSwitchEnabled)) {
-		toast.warning($LL.live.inputPicker.audioSwitchUnavailable());
+		toast.warning(m["live.inputPicker.audioSwitchUnavailable"]());
 		return;
 	}
 	if (isAudioInputId(inputId)) {
@@ -321,21 +318,21 @@ async function handleSwitchInput(inputId: string) {
 			target: inputId,
 			rpc: () => rpc.streaming.switchInput({ input_id: inputId }),
 			classify: () => ({ ok: true }),
-			failMessage: () => $LL.live.inputPicker.switchFailed(),
+			failMessage: () => m["live.inputPicker.switchFailed"](),
 		});
 		if (!res) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 		if (res.success) {
 			confirmOperation('switch-input');
-			toast.success($LL.live.inputPicker.switched({ ms: res.gap_ms ?? 0 }));
+			toast.success(m["live.inputPicker.switched"]({ ms: res.gap_ms ?? 0 }));
 			if (res.audio_follow_pending) {
-				toast.info($LL.live.inputPicker.audioFollowsOnRestart());
+				toast.info(m["live.inputPicker.audioFollowsOnRestart"]());
 			}
 		} else {
 			failOperation('switch-input', res.error ?? 'failed');
 			toast.error(
 				res.error === SWITCH_INPUT_ERRORS.SOURCE_LOST
-					? $LL.live.inputPicker.sourceLost()
-					: $LL.live.inputPicker.switchFailed(),
+					? m["live.inputPicker.sourceLost"]()
+					: m["live.inputPicker.switchFailed"](),
 			);
 		}
 	} finally {
@@ -357,7 +354,7 @@ async function handleSwitchAudio(inputId: string) {
 			// If res.active_audio_input is absent, treat as unconfirmed (incomplete response).
 			if (res.active_audio_input !== undefined) {
 				markFieldApplied(AUDIO_SWITCH_FIELD, res.active_audio_input);
-				toast.info($LL.live.inputPicker.audioSwitched({ ms: res.gap_ms ?? 0 }));
+				toast.info(m["live.inputPicker.audioSwitched"]({ ms: res.gap_ms ?? 0 }));
 			} else {
 				// Success response without confirmed value: revert to prior state.
 				markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
@@ -366,13 +363,13 @@ async function handleSwitchAudio(inputId: string) {
 			markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
 			toast.error(
 				res.error === SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND
-					? $LL.live.inputPicker.audioSourceLost()
-					: $LL.live.inputPicker.audioSwitchFailed(),
+					? m["live.inputPicker.audioSourceLost"]()
+					: m["live.inputPicker.audioSwitchFailed"](),
 			);
 		}
 	} catch {
 		markFieldFailed(AUDIO_SWITCH_FIELD, activeInput ?? inputId);
-		toast.error($LL.live.inputPicker.audioSwitchFailed());
+		toast.error(m["live.inputPicker.audioSwitchFailed"]());
 	} finally {
 		switchingInput = undefined;
 	}
@@ -508,18 +505,7 @@ const effectivePipelineData = $derived(
 
 // i18n key resolver (mirrors EncoderDialog) — passed to PipelineHelper so the
 // friendly source label is translated, with safe key-passthrough on a miss.
-const t = (key: string): string => {
-	const parts = key.split('.');
-	let result: unknown = $LL;
-	for (const part of parts) {
-		if (result && typeof result === 'object' && part in result) {
-			result = (result as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof result === 'function' ? (result as () => string)() : key;
-};
+const t = resolveMessageKey;
 
 // Whether the effective pipeline resolves to a known registry entry. Single
 // source of truth for the reconfigure-required affordance (consumed by T8).
@@ -550,14 +536,14 @@ async function handleEncoderSave(saved: EncoderConfig) {
 		// a `reverted` change is an accepted save whose stream never changed, so
 		// "Saved" alone would be a lie.
 		if (result.configChange !== undefined) {
-			const report = configChangeReport(result.configChange, $LL);
+			const report = configChangeReport(result.configChange, m);
 			if (report.level === 'success') toast.success(report.message);
 			else if (report.level === 'warning') toast.warning(report.message);
 			else toast.error(report.message);
-		} else if (result.success) toast.success($LL.notifications.saved());
-		else toast.error(encoderSaveErrorMessage(result.error, $LL));
+		} else if (result.success) toast.success(m["notifications.saved"]());
+		else toast.error(encoderSaveErrorMessage(result.error, m));
 	} catch {
-		toast.error($LL.notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	} finally {
 		for (const [field] of fields) onRpcResolved(field);
 	}
@@ -607,7 +593,7 @@ async function handleSelectAudioSource(selection: string) {
 	try {
 		await rpc.streaming.setConfig({ asrc });
 	} catch {
-		toast.error($LL.notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	} finally {
 		onRpcResolved('asrc');
 	}
@@ -618,9 +604,9 @@ function formatBitrate(kbps: number | undefined): string {
 	if (kbps >= 1000) {
 		const mbps = kbps / 1000;
 		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
-		return `${value} ${$LL.units.mbps()}`;
+		return `${value} ${m["units.mbps"]()}`;
 	}
-	return `${kbps} ${$LL.units.kbps()}`;
+	return `${kbps} ${m["units.kbps"]()}`;
 }
 
 // Pick the operator-relevant sensors out of the flat string map.
@@ -707,7 +693,7 @@ async function commitBitrate(kbps: number) {
 		const applied = resolveAppliedBitrate(res, clamped, config?.max_br);
 		onRpcAppliedReactive('max_br', applied);
 		bitrateDraft = applied;
-		if (!res.success) toast.error($LL.notifications.saveFailed());
+		if (!res.success) toast.error(m["notifications.saveFailed"]());
 	} catch {
 		// RPC rejected: clear the optimistic lock and reconcile to server truth so
 		// the slider is never stuck on the unconfirmed optimistic value.
@@ -715,7 +701,7 @@ async function commitBitrate(kbps: number) {
 		const authoritative = config?.max_br ?? clamped;
 		onRpcAppliedReactive('max_br', authoritative);
 		bitrateDraft = authoritative;
-		toast.error($LL.notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	}
 }
 
@@ -743,11 +729,11 @@ const encoderSummary = $derived.by(() => {
 		parts.push(
 			pipelineRecognized
 				? getPipelineDisplayName(pipeline, getPipelines()?.pipelines, t)
-				: $LL.live.reconfigureRequired(),
+				: m["live.reconfigureRequired"](),
 		);
 	}
 	if (bitrate) parts.push(formatBitrate(bitrate));
-	if (parts.length === 0) return $LL.general.notConfigured();
+	if (parts.length === 0) return m["general.notConfigured"]();
 	// Todo 12: transport token dropped here — the Destination/server row
 	// (`serverSummary`) is the ONE idle surface that names the transport.
 	return parts.join(' · ');
@@ -761,13 +747,13 @@ const serverSummary = $derived(
 		receiverKind,
 		linkCount ?? 0,
 		{
-			notConfigured: $LL.general.notConfigured(),
+			notConfigured: m["general.notConfigured"](),
 			kindLabel: (k) => t(kindBadgeLabelKey(k)),
-			bondedAcross: (count) => $LL.live.server.bondedAcross({ count }),
-			singleLink: $LL.live.server.singleLink(),
+			bondedAcross: (count) => m["live.server.bondedAcross"]({ count }),
+			singleLink: m["live.server.singleLink"](),
 			providerLabel: (provider) =>
 				provider && provider !== 'custom' ? PROVIDER_LABELS[provider] : undefined,
-			feedsCloudObsInstance: (label) => $LL.settings.feedsCloudObsInstance({ label }),
+			feedsCloudObsInstance: (label) => m["settings.feedsCloudObsInstance"]({ label }),
 		},
 		activeSlot,
 	),
@@ -843,8 +829,8 @@ async function handleStart(overrides: { source?: string } = {}) {
 	if (!result.ok) {
 		toast.error(
 			result.error === 'missingServer'
-				? $LL.live.cannotStartNoServer()
-				: $LL.live.cannotStartNoPipeline(),
+				? m["live.cannotStartNoServer"]()
+				: m["live.cannotStartNoPipeline"](),
 		);
 		return;
 	}
@@ -904,7 +890,7 @@ function handleRetryStop() {
 const configRows = $derived<ConfigRow[]>([
 	{
 		icon: Cpu,
-		label: $LL.settings.encoderSettings(),
+		label: m["settings.encoderSettings"](),
 		value: encoderSummary,
 		section: 'encoder',
 		onEdit: () => (encoderOpen = true),
@@ -913,7 +899,7 @@ const configRows = $derived<ConfigRow[]>([
 	},
 	{
 		icon: Server,
-		label: $LL.general.serverSettings(),
+		label: m["general.serverSettings"](),
 		value: serverSummary,
 		section: 'server',
 		onEdit: () => (serverDialogOpen = true),
@@ -940,7 +926,7 @@ const configRows = $derived<ConfigRow[]>([
 			class="flex items-center gap-3 rounded-lg border border-status-info/40 bg-status-info/10 px-4 py-3 text-sm text-status-info"
 		>
 			<Loader2 class="size-4 shrink-0 animate-spin" />
-			<span>{$LL.live.encoder.applyPhase.applying()}</span>
+			<span>{m["live.encoder.applyPhase.applying"]()}</span>
 		</div>
 	{/if}
 
@@ -953,14 +939,14 @@ const configRows = $derived<ConfigRow[]>([
 			data-testid="stop-stuck-banner"
 			class="flex items-center justify-between gap-3 rounded-lg border border-status-warning/40 bg-status-warning/10 px-4 py-3 text-sm text-status-warning"
 		>
-			<span>{$LL.live.stopStuck.message()}</span>
+			<span>{m["live.stopStuck.message"]()}</span>
 			<button
 				type="button"
 				data-testid="stop-stuck-retry"
 				class="shrink-0 rounded-md border border-status-warning/50 px-3 py-1 font-medium transition-colors hover:bg-status-warning/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-warning/60"
 				onclick={handleRetryStop}
 			>
-				{$LL.live.stopStuck.retry()}
+				{m["live.stopStuck.retry"]()}
 			</button>
 		</div>
 	{/if}

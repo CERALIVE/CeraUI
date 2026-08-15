@@ -12,11 +12,11 @@
 
   Purely presentational: the readiness decision is the pure, unit-tested
   `deriveServerReadiness` (lib/streaming/receiver-experience); the transport
-  label copy is the shared `kindBadgeLabelKey` resolved through the `$LL` proxy.
+  label copy is the shared `kindBadgeLabelKey` resolved through `resolveMessageKey`.
   Motion is CSS-only; no Svelte motion directives.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/i18n-svelte5';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { Link2, Network } from '@lucide/svelte';
 import type { ReceiverKind } from '@ceraui/rpc/schemas';
 
@@ -40,17 +40,7 @@ const { kind, linkCount, onManageLinks }: Props = $props();
 
 const readiness = $derived(deriveServerReadiness(kind, linkCount));
 
-const t = (key: string): string => {
-	let result: unknown = $LL;
-	for (const part of key.split('.')) {
-		if (result && typeof result === 'object' && part in result) {
-			result = (result as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof result === 'function' ? (result as () => string)() : key;
-};
+const t = resolveMessageKey;
 
 const transportLabel = $derived(t(kindBadgeLabelKey(kind)));
 const showManageLinks = $derived(
@@ -69,19 +59,19 @@ const showManageLinks = $derived(
 
 		{#if readiness.variant === 'bonded'}
 			<span class="text-muted-foreground text-sm" data-testid="server-readiness-bonded">
-				{$LL.live.server.bondedAcross({ count: readiness.count })}
+				{m["live.server.bondedAcross"]({ count: readiness.count })}
 			</span>
 		{:else if readiness.variant === 'single'}
 			<span class="text-muted-foreground text-sm" data-testid="server-readiness-single">
-				{$LL.live.server.singleLink()}
+				{m["live.server.singleLink"]()}
 			</span>
 		{:else if readiness.variant === 'fixed'}
 			<span class="text-muted-foreground flex items-center gap-1 text-sm">
-				<span data-testid="server-readiness-fixed">{$LL.live.server.singleLink()}</span>
+				<span data-testid="server-readiness-fixed">{m["live.server.singleLink"]()}</span>
 				<InfoPopover
-					body={$LL.live.server.singleLinkHint()}
+					body={m["live.server.singleLinkHint"]()}
 					testId="server-readiness-info"
-					title={$LL.live.server.singleLink()}
+					title={m["live.server.singleLink"]()}
 				/>
 			</span>
 		{/if}
@@ -95,7 +85,7 @@ const showManageLinks = $derived(
 			type="button"
 		>
 			<Network aria-hidden={true} class="size-4 shrink-0" />
-			{$LL.live.server.manageLinks()}
+			{m["live.server.manageLinks"]()}
 		</button>
 	{/if}
 </div>
