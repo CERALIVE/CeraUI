@@ -109,20 +109,34 @@ already been imported.
 A message's **namespace** is its first dotted segment (`live.setup.title` → `live`).
 
 **Every namespace is lazy.** `EAGER_NAMESPACES` (`scripts/generate-registry.ts`) is
-empty, so each namespace becomes its own chunk, and the app awaits them all in
-`apps/frontend/src/main.ts` before it mounts:
+empty, so each namespace becomes its own chunk. The app resolves them in two
+phases, owned by `apps/frontend/src/lib/i18n/namespace-activation.ts`:
 
 ```ts
-await ensureAllNamespaces();   // main.ts, before mount(App)
+await ensureBootNamespaces();   // main.ts, before mount(App)
 ```
 
-That await is what makes the split a pure BUNDLING change: no view can observe a
-half-populated registry, so no string can flash as its own dotted key. A single
-namespace can still be resolved on its own where that is useful:
+The boot set is every namespace **first paint can read** — the auth gate, layout
+chrome, nav, HUD, toasts, PWA/offline pages, shared dialog chrome, the shell stores
+that render copy of their own, and the DEFAULT `live` destination's own view. That
+await is what keeps first paint atomic: no view observes a half-populated registry,
+so no string can flash as its own dotted key.
+
+Everything a single non-default destination owns is resolved at that destination's
+activation point instead, the same way the config dialogs load on first open:
 
 ```ts
-await ensureNamespace("devtools");   // before the view renders
+await ensureNamespaces(["advanced", "wifiSelector"]);   // before the view renders
+await ensureNamespace("devtools");                       // one namespace
 ```
+
+`NavigationRenderer` does this for each destination and holds the view behind the
+existing transition spinner until it resolves; already-loaded namespaces resolve
+SYNCHRONOUSLY, so a navigation never pays a promise tick for nothing.
+
+**`ensureAllNamespaces()` is not the boot path** — it remains for harnesses and
+full-catalog consumers. Awaiting it before mount serialises first paint behind all
+31 namespaces, which is what this split removed.
 
 **No call site changes** in either configuration — components keep the same
 synchronous `m["ns.key"]()` call, proven end to end by

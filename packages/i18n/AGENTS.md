@@ -44,8 +44,10 @@ import { registerAllNamespaces } from '@ceraui/i18n/eager';        // standalone
 `/node` subpath and no legacy adapter subpath.
 
 `/eager` is the fourth entry and is NOT for the app. Every namespace is lazy (see
-below), and the SPA resolves them by awaiting `ensureAllNamespaces()` in `main.ts`
-before it mounts. `/eager` registers the whole catalog from STATIC imports instead,
+below), and the SPA resolves them in two phases — `ensureBootNamespaces()` before
+mount, then `ensureNamespace()`/`ensureNamespaces()` at each destination's
+activation point (`apps/frontend/src/lib/i18n/namespace-activation.ts`).
+`/eager` registers the whole catalog from STATIC imports instead,
 for a build that cannot fetch a sibling chunk: the federation dialog bundles (one
 hosted module, strict CSP, signed manifest pinning an exact chunk graph) and the two
 test harnesses (`apps/frontend/vitest.setup.ts`, `packages/i18n/tests/setup.ts`).
@@ -86,6 +88,17 @@ each gate is independently runnable from `bun install` alone.
   entry chunk 842 892 -> 438 997 B gzip, total SPA JS+CSS 909 347 -> 866 755 B gzip.
   Flipping one back to eager is a regression on both axes —
   `tests/message-registry.test.ts` fails if any namespace stops being lazy.
+- **`EAGER_NAMESPACES` is NOT the boot set, and must not be used as one.** Which
+  namespaces the SPA awaits before mount is an APP concern, owned by
+  `apps/frontend/src/lib/i18n/namespace-activation.ts`: the boot set is every
+  namespace first paint can read (shell + the DEFAULT `live` destination), and the
+  remainder is claimed by the destination that reads it. Moving a namespace into
+  `EAGER_NAMESPACES` to make it load at boot would fuse it into the entry chunk —
+  the measured regression above — where adding it to the boot set costs nothing
+  extra in bytes, only one more parallel chunk fetch.
+- **`ensureAllNamespaces()` is not a boot path.** It stays for harnesses and
+  full-catalog consumers; calling it before mount re-serialises first paint behind
+  all 31 namespaces, which is exactly what the boot/destination split removed.
 - **Don't import Paraglide's umbrella `paraglide/messages.js`** — it re-exports every
   message eagerly, which collapses the whole catalog into one chunk and makes
   `ensureNamespace()` structurally incapable of splitting anything. Import the facade.

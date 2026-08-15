@@ -95,9 +95,31 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
 	const tab = (await desktopTab.isVisible().catch(() => false)) ? desktopTab : mobileTab;
 	// Idempotent: when already on this destination the click is redundant and, on
 	// the mobile bottom dock, can be intercepted by transient toast overlays.
-	if ((await tab.getAttribute('aria-current').catch(() => null)) === 'page') return;
-	await tab.click();
-	await expect(tab).toHaveAttribute('aria-current', 'page');
+	if ((await tab.getAttribute('aria-current').catch(() => null)) !== 'page') {
+		await tab.click();
+		await expect(tab).toHaveAttribute('aria-current', 'page');
+	}
+	await settleDestination(page, destination);
+}
+
+/**
+ * Wait for a destination's CONTENT, not just its nav state.
+ *
+ * The shell paints before the destination does: each destination's i18n
+ * namespaces are lazy chunks resolved at the navigation activation point, so an
+ * active nav tab no longer implies the view is mounted. A one-shot read
+ * (`locator.count()`, `page.evaluate`) taken on the nav signal alone therefore
+ * races the view — auto-waiting assertions hid it, non-waiting reads did not.
+ */
+export async function settleDestination(
+	page: Page,
+	destination?: Destination,
+): Promise<void> {
+	const selector =
+		destination === undefined
+			? '[data-testid="destination-content"]'
+			: `[data-testid="destination-content"][data-destination="${destination}"]`;
+	await page.locator(selector).waitFor({ state: 'attached', timeout: 30_000 });
 }
 
 /**

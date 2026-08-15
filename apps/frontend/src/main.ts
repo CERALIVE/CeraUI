@@ -3,10 +3,13 @@ import "@fontsource-variable/jetbrains-mono";
 import "./app.css";
 
 import { registerSW } from "virtual:pwa-register";
-import { ensureAllNamespaces } from "@ceraui/i18n/svelte";
 import { mount } from "svelte";
 
 import App from "./App.svelte";
+import {
+	ensureBootNamespaces,
+	prefetchDeferredNamespaces,
+} from "./lib/i18n/namespace-activation";
 import { initSubscriptions } from "./lib/rpc";
 import { initAsyncOperations } from "./lib/rpc/async-operation.svelte";
 import { initFieldSyncState } from "./lib/rpc/field-sync-state.svelte";
@@ -53,15 +56,19 @@ registerSW({
 	},
 });
 
-// Every i18n namespace is a lazily-imported chunk, which is what keeps the
-// ten-locale Paraglide catalog out of the entry chunk. Awaiting the whole set
-// here — before the first component exists — is what makes that a pure
-// bundling change: no view can render against a half-populated registry, so no
-// string can ever flash as its own dotted key.
-await ensureAllNamespaces();
+// Every i18n namespace is a lazily-imported chunk. Only the SHELL set is awaited
+// here — the destinations resolve their own namespaces at the navigation
+// activation point (see lib/i18n/namespace-activation.ts), so first paint no
+// longer waits on the whole catalog while still never rendering a dotted key.
+await ensureBootNamespaces();
 
 // Mount the app
 const app = mount(App, { target: document.getElementById("app") as Element });
+
+// Warm the deferred namespaces now that the shell is on screen. Non-blocking:
+// the destination activation gate is what guarantees correctness, this only
+// keeps the first navigation off the fetch path.
+prefetchDeferredNamespaces();
 
 // Signal successful bundle mount to the boot watchdog
 window.__ceraAppMounted = true;

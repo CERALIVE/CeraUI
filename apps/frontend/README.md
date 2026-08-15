@@ -11,7 +11,7 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 - **TailwindCSS v4** with design tokens defined in `app.css`
 - **shadcn-svelte** (bits-ui v2) for UI primitives — CLI-managed, not hand-edited
 - **`@ceraui/rpc`** — shared oRPC schemas and validation constants (workspace package)
-- **`@ceraui/i18n`** — typesafe-i18n, 10 languages (workspace package)
+- **`@ceraui/i18n`** — Paraglide runtime over hand-editable JSON catalogs, 10 languages (workspace package)
 - **vitest** for unit tests, **Playwright** for E2E
 
 ## Registry Dependencies
@@ -129,7 +129,7 @@ src/
 - **Stores**: Svelte 5 runes only. Files named `*.svelte.ts`.
 - **UI primitives**: add via `bunx shadcn-svelte@latest add <component>`, not by hand.
 - **Custom components**: go in `lib/components/custom/`, not `lib/components/ui/`.
-- **i18n**: all user-visible strings via `LL.*` from `@ceraui/i18n`.
+- **i18n**: all user-visible strings via `m["<key>"]()` from `@ceraui/i18n/svelte` (Paraglide); resolve a dynamic dot-path key through `resolveMessageKey`.
 - **Design tokens**: Ground Control identity (phosphor lime primary, warm graphite background) defined in `app.css`. Read `../../.impeccable.md` before touching visuals.
 - **Touch/kiosk mode**: `?mode=touch` URL flag. See `../../docs/TOUCHSCREEN.md`.
 - **E2E tests**: read `tests/e2e/PLAYBOOK.md` before writing any E2E test.

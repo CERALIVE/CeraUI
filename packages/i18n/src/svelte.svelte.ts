@@ -28,6 +28,7 @@
 
 import {
 	getMessage,
+	isNamespaceLoaded,
 	type MessageFn,
 	type MessageKey,
 	NAMESPACES,
@@ -52,7 +53,7 @@ export type {
 	MessageKey,
 	Namespace,
 } from "../generated/registry.js";
-export { NAMESPACES } from "../generated/registry.js";
+export { isNamespaceLoaded, NAMESPACES } from "../generated/registry.js";
 export {
 	BASE_LOCALE,
 	directionFor,
@@ -148,22 +149,35 @@ export async function ensureNamespace(namespace: Namespace): Promise<void> {
 }
 
 /**
- * Register every namespace the catalog defines, in parallel.
+ * Load a SET of namespaces in parallel — one `loadingState` window for the whole
+ * batch rather than one per namespace.
  *
- * The app awaits this ONCE before it mounts. Every namespace is lazy (see
- * `EAGER_NAMESPACES` in the registry generator), which is what splits the
- * ten-locale Paraglide catalog out of the entry chunk — awaiting the whole set
- * up front keeps rendering byte-identical to the all-eager configuration, so no
- * view can ever observe a half-populated registry or a key echoed as its own
- * text.
+ * This is what an activation point calls: the app boots on the shell set and each
+ * destination resolves its own set before its view renders, so a namespace is
+ * fetched when something is about to read it instead of at boot.
  */
-export async function ensureAllNamespaces(): Promise<void> {
+export async function ensureNamespaces(
+	namespaces: readonly Namespace[],
+): Promise<void> {
 	loadingState = true;
 	try {
-		await Promise.all(NAMESPACES.map(registryEnsureNamespace));
+		await Promise.all(namespaces.map(registryEnsureNamespace));
 	} finally {
 		loadingState = false;
 	}
+}
+
+/**
+ * Register every namespace the catalog defines, in parallel.
+ *
+ * NOT the app's boot path — the SPA awaits only its shell set and defers the rest
+ * to destination activation. This remains for harnesses and any consumer that
+ * genuinely needs the whole catalog resolved (a full-catalog assertion, a
+ * standalone render). Calling it at boot re-serialises first paint behind all 31
+ * namespaces, which is the gap it was introduced to paper over.
+ */
+export async function ensureAllNamespaces(): Promise<void> {
+	await ensureNamespaces(NAMESPACES);
 }
 
 /**

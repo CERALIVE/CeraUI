@@ -7,6 +7,10 @@ import { einkGatedFade as fade, einkGatedFly as fly } from '$lib/transitions';
 
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
 import {
+	areDestinationNamespacesLoaded,
+	ensureDestinationNamespaces,
+} from '$lib/i18n/namespace-activation';
+import {
 	enhancedNavigationStore,
 	getCurrentNavigation,
 	isNavigationTransitioning,
@@ -36,6 +40,34 @@ $effect(() => {
 	if (CurrentComponent) {
 		showContent = true;
 	}
+});
+
+// The destination's i18n namespaces are lazy chunks, so the view must not render
+// until they are in the registry — an unresolved namespace renders every string
+// as its own dotted key. This is the destination-level twin of the lazy config
+// dialogs' fetch-on-first-open, and the existing transition spinner covers the
+// wait. Already-loaded namespaces resolve SYNCHRONOUSLY: deferring a render by a
+// promise tick when nothing needs fetching would break "the nav is active" ⇒
+// "the view is on screen", which both the operator and the e2e helpers rely on.
+const destinationKey = $derived(Object.keys(getCurrentNavigation())[0]);
+let fetchedDestination = $state<string | undefined>(undefined);
+
+const namespacesReady = $derived(
+	destinationKey !== undefined &&
+		(areDestinationNamespacesLoaded(destinationKey) ||
+			fetchedDestination === destinationKey),
+);
+
+$effect(() => {
+	const key = destinationKey;
+	if (key === undefined || areDestinationNamespacesLoaded(key)) return;
+	let active = true;
+	void ensureDestinationNamespaces(key).then(() => {
+		if (active) fetchedDestination = key;
+	});
+	return () => {
+		active = false;
+	};
 });
 
 // Setup hash navigation
@@ -114,8 +146,10 @@ const transitionParams = $derived.by(() => {
 	{:else}
 		<!-- Content with smooth transitions -->
 		<div class="relative min-h-[400px]">
-			{#if CurrentComponent && showContent}
+			{#if CurrentComponent && showContent && namespacesReady}
 				<div
+					data-testid="destination-content"
+					data-destination={destinationKey}
 					in:fly={{
 						...transitionParams,
 						delay: TRANSITION_DURATION / 2,
