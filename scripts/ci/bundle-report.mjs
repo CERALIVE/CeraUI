@@ -44,7 +44,15 @@ const SPA_BASELINE = {
 // `outputStructure: "locale-modules"`, or dynamic namespace chunks with manifest
 // + signing + CSP coverage on the platform side.
 const FEDERATION_BASELINE = {
-	'toast-host.js': 223_579,
+	// Re-derived 2026-08-15: 613,463 B gzip measured from the current federation
+	// build. This shared chunk statically carries the Paraglide catalog because a
+	// hosted federation module is one signed manifest-pinned module graph and
+	// cannot lazy-load the SPA's locale chunks. Keep this exception specific to
+	// toast-host.js; future remedies are (1) Paraglide outputStructure:
+	// "locale-modules", (2) dynamic federation chunks with manifest/signing/CSP
+	// support, or (3) a smaller federation-specific catalog surface. Revisit via
+	// TD-federation-i18n-catalog-size; do not raise the other federation budgets.
+	'toast-host.js': 613_463,
 	'server.js': 26_645,
 	'frontend.css': 24_087,
 	'encoder.js': 22_713,

@@ -87,6 +87,22 @@ register is "empty" precisely when there are none.
 ## Open Debt
 
 ```debt
+id: TD-federation-i18n-catalog-size
+title: Federation toast-host shared chunk carries an oversized static Paraglide catalog
+track: 1
+status: open
+exit_criteria: `bun run build:federation && bun scripts/ci/bundle-report.mjs`
+owner: ceraui-team
+registered_at: 2026-08-15
+resolved_at: null
+unblock: The federation toast-host.js shared chunk measured 613,463 B gzip on 2026-08-15, versus the prior 245,936 B budget, because a hosted federation bundle is one signed manifest-pinned module graph and must carry the Paraglide catalog statically rather than lazy-loading the SPA's locale chunks. Revisit this debt in a dedicated architecture effort by evaluating (1) Paraglide outputStructure: "locale-modules", (2) dynamic federation chunks with manifest/signing/CSP support, and (3) a smaller federation-specific catalog surface; keep this entry open until one remedy is implemented and the live budget can be reduced.
+```
+
+The federation budget exception is intentionally limited to `toast-host.js`; every
+other federation budget remains at its passing value. The measured size is accepted
+as a documented, open debt rather than silently treated as resolved.
+
+```debt
 id: TD-pip
 title: Picture-in-picture / source compositing
 track: 2
