@@ -8,7 +8,7 @@
   custom endpoint stays available via the destination radiogroup regardless.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Cloud } from '@lucide/svelte';
 
 import type { ManagedIngestAccount } from '$lib/streaming/receiver-experience';
@@ -35,12 +35,12 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 </script>
 
 <div class="space-y-2">
-	<Label class="text-sm font-medium" id="ingest-slot-label">{$LL.settings.ingestSlot()}</Label>
+	<Label class="text-sm font-medium" id="ingest-slot-label">{m["settings.ingestSlot"]()}</Label>
 	<p class="text-muted-foreground text-xs leading-snug">
-		{prompting ? $LL.settings.ingestSlotPrompt() : $LL.settings.ingestSlotHint()}
+		{prompting ? m["settings.ingestSlotPrompt"]() : m["settings.ingestSlotHint"]()}
 	</p>
 	<div
-		aria-label={$LL.settings.ingestSlot()}
+		aria-label={m["settings.ingestSlot"]()}
 		class="grid gap-2"
 		data-testid="ingest-slots"
 		role="radiogroup"
@@ -62,7 +62,7 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 						<span class="truncate" data-testid="ingest-slot-label">{managedSlotLabel(account)}</span>
 						{#if account.default}
 							<span class="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase">
-								{$LL.settings.ingestSlotDefault()}
+								{m["settings.ingestSlotDefault"]()}
 							</span>
 						{/if}
 					</span>
@@ -75,7 +75,7 @@ const idleChoice = 'border-border text-muted-foreground hover:text-foreground';
 							data-testid="obs-instance-association"
 							data-endpoint-id={account.endpointId}
 						>
-							{$LL.settings.feedsCloudObsInstance({
+							{m["settings.feedsCloudObsInstance"]({
 								label: obsInstanceAssociation(account)?.label ?? '',
 							})}
 						</span>

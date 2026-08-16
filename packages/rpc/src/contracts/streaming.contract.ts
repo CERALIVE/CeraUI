@@ -80,7 +80,7 @@ export const streamingContract = oc.router({
 	/**
 	 * Subscribe to streaming status changes
 	 */
-	onStatusChange: oc.route({ method: 'GET', path: '/streaming/status' }),
+	onStatusChange: oc,
 
 	/**
 	 * Tri-state stream health (process + frame + SRT + bond liveness)

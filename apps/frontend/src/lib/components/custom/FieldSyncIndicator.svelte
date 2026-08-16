@@ -14,7 +14,7 @@
   e-ink display freeze (`app.css` [data-display='eink'] { animation: none }) stills
   the spinner to a static glyph instead of smearing, with no extra handling.
 
-  Labels are passed in (consumer supplies `$LL.*`) so this shared primitive stays
+  Labels are passed in (consumer supplies `m["…"]()`) so this shared primitive stays
   i18n-agnostic, exactly as InlineSpinner takes its `label`.
 -->
 <script lang="ts">

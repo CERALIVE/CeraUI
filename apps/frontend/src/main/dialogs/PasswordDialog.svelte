@@ -6,7 +6,7 @@
   local state, so there is nothing for a server push to clobber.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Eye, EyeOff, KeyRound } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
@@ -49,11 +49,11 @@ async function save() {
 	saving = true;
 	try {
 		await savePassword(password);
-		toast.success($LL.advanced.passwordCopied());
+		toast.success(m["advanced.passwordCopied"]());
 		open = false;
 	} catch (error) {
 		console.error('Failed to set device password:', error);
-		toast.error($LL.advanced.copyFailed());
+		toast.error(m["advanced.copyFailed"]());
 	} finally {
 		saving = false;
 	}
@@ -62,31 +62,31 @@ async function save() {
 
 <AppDialog
 	bind:open
-	description={$LL.advanced.lanPasswordTooltip()}
+	description={m["advanced.lanPasswordTooltip"]()}
 	icon={KeyRound}
 	onPrimary={save}
 	primaryDisabled={!canSave}
-	primaryLabel={$LL.advanced.save()}
+	primaryLabel={m["advanced.save"]()}
 	closeOnPrimary={false}
-	title={$LL.settings.index.devicePassword()}
+	title={m["settings.index.devicePassword"]()}
 >
 	<div class="space-y-5">
 		<!-- New password -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="device-password">
-				{$LL.advanced.newPassword()}
+				{m["advanced.newPassword"]()}
 			</Label>
 			<div class="relative">
 				<Input
 					id="device-password"
 					autocomplete="new-password"
 					class="pe-11"
-					placeholder={$LL.advanced.newPassword()}
+					placeholder={m["advanced.newPassword"]()}
 					type={show ? 'text' : 'password'}
 					bind:value={password}
 				/>
 				<Button
-					aria-label={show ? $LL.advanced.hidePassword() : $LL.advanced.showPassword()}
+					aria-label={show ? m["advanced.hidePassword"]() : m["advanced.showPassword"]()}
 					class="absolute end-1 top-1/2 size-8 -translate-y-1/2 rounded-md"
 					onclick={() => (show = !show)}
 					size="icon"
@@ -103,7 +103,7 @@ async function save() {
 			{#if tooShort}
 				<p class="text-destructive flex items-center gap-2 text-sm" role="alert">
 					<span class="bg-destructive size-1.5 shrink-0 rounded-full"></span>
-					{$LL.advanced.minLength()}
+					{m["advanced.minLength"]()}
 				</p>
 			{/if}
 		</div>
@@ -111,19 +111,19 @@ async function save() {
 		<!-- Confirm password -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="device-password-confirm">
-				{$LL.settings.dialogs.confirmPassword()}
+				{m["settings.dialogs.confirmPassword"]()}
 			</Label>
 			<Input
 				id="device-password-confirm"
 				autocomplete="new-password"
-				placeholder={$LL.settings.dialogs.confirmPassword()}
+				placeholder={m["settings.dialogs.confirmPassword"]()}
 				type={show ? 'text' : 'password'}
 				bind:value={confirm}
 			/>
 			{#if mismatch}
 				<p class="text-destructive flex items-center gap-2 text-sm" role="alert">
 					<span class="bg-destructive size-1.5 shrink-0 rounded-full"></span>
-					{$LL.settings.dialogs.passwordsMismatch()}
+					{m["settings.dialogs.passwordsMismatch"]()}
 				</p>
 			{/if}
 		</div>

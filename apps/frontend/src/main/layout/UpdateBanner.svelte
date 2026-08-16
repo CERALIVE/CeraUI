@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import ArrowUpToLineIcon from '@lucide/svelte/icons/arrow-up-to-line';
 import XIcon from '@lucide/svelte/icons/x';
 
@@ -25,9 +25,9 @@ $effect(() => {
 		role="status"
 	>
 		<ArrowUpToLineIcon class="text-status-warning size-4 shrink-0 animate-pulse" />
-		<span class="font-medium">{$LL.notifications.updateInProgress()}</span>
+		<span class="font-medium">{m["notifications.updateInProgress"]()}</span>
 		<button
-			aria-label={$LL.a11y.close()}
+			aria-label={m["a11y.close"]()}
 			class="text-muted-foreground hover:text-foreground hover:bg-status-warning/15 ms-auto inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors"
 			onclick={() => (updateBannerDismissed = true)}
 			type="button"

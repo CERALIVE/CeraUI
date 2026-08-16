@@ -36,7 +36,7 @@
   ticker (there is no second pairing surface).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type {
 	CloudProviderEndpoint,
 	ProviderSelection,
@@ -163,7 +163,7 @@ const providerOptions = $derived<Array<{ id: ProviderSelection; name: string; cl
 		name: p.name,
 		cloudUrl: p.cloudUrl,
 	})),
-	{ id: 'custom', name: $LL.advanced.customProvider() },
+	{ id: 'custom', name: m["advanced.customProvider"]() },
 ]);
 
 const selected = $derived(providerOptions.find((p) => p.id === provider));
@@ -252,7 +252,7 @@ async function generateCode() {
 	try {
 		await pairing.generate();
 	} catch {
-		toast.error($LL.settings.pairing.generateFailed());
+		toast.error(m["settings.pairing.generateFailed"]());
 	}
 }
 
@@ -263,12 +263,12 @@ async function completePairing() {
 	try {
 		const result = await pairing.complete();
 		if (result?.paired) {
-			toast.success($LL.settings.pairing.pairedToast());
+			toast.success(m["settings.pairing.pairedToast"]());
 		} else if (result) {
-			toast.error($LL.settings.pairing.pairFailed());
+			toast.error(m["settings.pairing.pairFailed"]());
 		}
 	} catch {
-		toast.error($LL.settings.pairing.pairFailed());
+		toast.error(m["settings.pairing.pairFailed"]());
 	}
 }
 
@@ -283,13 +283,13 @@ const TONE_CLASS: Record<SubscriptionTone, string> = {
 function subscriptionLabel(status: SubscriptionStatus): string {
 	switch (status) {
 		case 'ACTIVE':
-			return $LL.settings.pairing.statusActive();
+			return m["settings.pairing.statusActive"]();
 		case 'FREE':
-			return $LL.settings.pairing.statusFree();
+			return m["settings.pairing.statusFree"]();
 		case 'EXPIRED':
-			return $LL.settings.pairing.statusExpired();
+			return m["settings.pairing.statusExpired"]();
 		case 'CANCELLED':
-			return $LL.settings.pairing.statusCancelled();
+			return m["settings.pairing.statusCancelled"]();
 	}
 }
 
@@ -312,14 +312,14 @@ async function save() {
 						}
 					: undefined,
 		});
-		toast.success($LL.advanced.remoteConfigSaved());
+		toast.success(m["advanced.remoteConfigSaved"]());
 		dirtyProvider = false;
 		dirtyKey = false;
 		dirtyCustom = false;
 		open = false;
 	} catch (error) {
 		console.error('Failed to save remote config:', error);
-		toast.error($LL.advanced.copyFailed());
+		toast.error(m["advanced.copyFailed"]());
 	} finally {
 		saving = false;
 	}
@@ -328,13 +328,13 @@ async function save() {
 
 <AppDialog
 	bind:open
-	description={$LL.settings.index.cloudRemoteDesc()}
+	description={m["settings.index.cloudRemoteDesc"]()}
 	icon={Cloud}
 	onPrimary={save}
 	primaryDisabled={!canSave}
-	primaryLabel={$LL.advanced.save()}
+	primaryLabel={m["advanced.save"]()}
 	closeOnPrimary={false}
-	title={$LL.settings.index.cloudRemote()}
+	title={m["settings.index.cloudRemote"]()}
 >
 	<div class="space-y-5">
 		<!-- Device pairing (claim code) — CeraLive only; no BeLABOX/Custom platform pairing. -->
@@ -347,8 +347,8 @@ async function save() {
 					<Link2 class="size-[18px]" />
 				</span>
 				<div class="min-w-0 flex-1 space-y-0.5">
-					<h3 class="text-sm font-semibold">{$LL.settings.pairing.title()}</h3>
-					<p class="text-muted-foreground text-xs">{$LL.settings.pairing.description()}</p>
+					<h3 class="text-sm font-semibold">{m["settings.pairing.title"]()}</h3>
+					<p class="text-muted-foreground text-xs">{m["settings.pairing.description"]()}</p>
 				</div>
 			</div>
 
@@ -362,17 +362,17 @@ async function save() {
 					</span>
 					<div class="space-y-1">
 						<p class="text-sm font-semibold" data-testid="pairing-status">
-							{$LL.settings.pairing.paired()}
+							{m["settings.pairing.paired"]()}
 						</p>
 						<p class="text-muted-foreground mx-auto max-w-sm text-xs">
-							{$LL.settings.pairing.pairedBody()}
+							{m["settings.pairing.pairedBody"]()}
 						</p>
 					</div>
 
 					<dl class="divide-border bg-background/60 divide-y overflow-hidden rounded-lg border text-start">
 						{#if subStatus}
 							<div class="flex items-center justify-between gap-4 px-4 py-3">
-								<dt class="text-muted-foreground text-sm">{$LL.settings.pairing.subscriptionLabel()}</dt>
+								<dt class="text-muted-foreground text-sm">{m["settings.pairing.subscriptionLabel"]()}</dt>
 								<dd>
 									<span
 										class={cn(
@@ -389,7 +389,7 @@ async function save() {
 						{/if}
 						{#if pairing.deviceId}
 							<div class="flex items-center justify-between gap-4 px-4 py-3">
-								<dt class="text-muted-foreground text-sm">{$LL.settings.pairing.deviceLabel()}</dt>
+								<dt class="text-muted-foreground text-sm">{m["settings.pairing.deviceLabel"]()}</dt>
 								<dd class="font-mono text-sm font-medium" data-testid="pairing-device-id">
 									{pairing.deviceId}
 								</dd>
@@ -403,17 +403,17 @@ async function save() {
 				     matched first or the code branch shadows it. -->
 				<div class="space-y-3">
 					<p class="text-destructive text-sm" data-testid="pairing-error">
-						{$LL.settings.pairing.pairFailed()}
+						{m["settings.pairing.pairFailed"]()}
 					</p>
 					<Button onclick={generateCode} size="sm" data-testid="generate-claim-code">
 						<RefreshCw class="size-4" />
-						{$LL.settings.pairing.regenerate()}
+						{m["settings.pairing.regenerate"]()}
 					</Button>
 				</div>
 			{:else if pairing.code}
 				<!-- Active code: display, live countdown, QR, complete + regenerate. -->
 				<div class="space-y-2">
-					<p class="text-muted-foreground text-xs">{$LL.settings.pairing.codeLabel()}</p>
+					<p class="text-muted-foreground text-xs">{m["settings.pairing.codeLabel"]()}</p>
 					<div
 						class="bg-background rounded-md border px-4 py-3 text-center font-mono text-2xl font-bold tracking-[0.3em]"
 						data-testid="claim-code"
@@ -426,27 +426,27 @@ async function save() {
 							data-testid="claim-code-expiry"
 						>
 							<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-							{$LL.settings.pairing.regenerating()}
+							{m["settings.pairing.regenerating"]()}
 						</p>
 					{:else}
 						<p class="text-muted-foreground text-xs" data-testid="claim-code-expiry">
-							{$LL.settings.pairing.validFor()}
+							{m["settings.pairing.validFor"]()}
 							<span class="text-foreground font-mono font-medium">{pairing.remainingLabel}</span>
 						</p>
 					{/if}
-					<p class="text-muted-foreground text-xs">{$LL.settings.pairing.instructions()}</p>
+					<p class="text-muted-foreground text-xs">{m["settings.pairing.instructions"]()}</p>
 
 					{#if qrDataUrl}
 						<div class="flex flex-col items-center gap-2 pt-1" data-testid="pairing-qr">
 							<img
 								src={qrDataUrl}
-								alt={$LL.settings.pairing.scanToPair()}
+								alt={m["settings.pairing.scanToPair"]()}
 								class="bg-background size-40 rounded-md border p-2"
 								width="160"
 								height="160"
 							/>
 							<p class="text-muted-foreground max-w-xs text-center text-xs">
-								{$LL.settings.pairing.scanToPair()}
+								{m["settings.pairing.scanToPair"]()}
 							</p>
 						</div>
 					{/if}
@@ -454,7 +454,7 @@ async function save() {
 
 				<div class="space-y-2" data-testid="pairing-authorization">
 					<Label class="text-sm font-medium" for="pairing-authorization-input">
-						{$LL.settings.pairing.authorizationLabel()}
+						{m["settings.pairing.authorizationLabel"]()}
 					</Label>
 					<Input
 						id="pairing-authorization-input"
@@ -466,7 +466,7 @@ async function save() {
 						}}
 					/>
 					<p class="text-muted-foreground text-xs">
-						{$LL.settings.pairing.authorizationHint()}
+						{m["settings.pairing.authorizationHint"]()}
 					</p>
 				</div>
 
@@ -480,9 +480,9 @@ async function save() {
 						>
 							{#if pairing.status === 'pairing'}
 								<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-								{$LL.settings.pairing.waiting()}
+								{m["settings.pairing.waiting"]()}
 							{:else}
-								{$LL.settings.pairing.complete()}
+								{m["settings.pairing.complete"]()}
 							{/if}
 						</Button>
 					{/if}
@@ -494,7 +494,7 @@ async function save() {
 						data-testid="regenerate-claim-code"
 					>
 						<RefreshCw class="size-4" />
-						{$LL.settings.pairing.regenerate()}
+						{m["settings.pairing.regenerate"]()}
 					</Button>
 					{#if isDev}
 						<Button
@@ -506,7 +506,7 @@ async function save() {
 							{#if pairing.status === 'pairing'}
 								<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
 							{/if}
-							{$LL.settings.pairing.simulate()}
+							{m["settings.pairing.simulate"]()}
 						</Button>
 					{/if}
 				</div>
@@ -521,7 +521,7 @@ async function save() {
 					{#if pairing.status === 'generating'}
 						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
 					{/if}
-					{$LL.settings.pairing.generate()}
+					{m["settings.pairing.generate"]()}
 				</Button>
 			{/if}
 		</section>
@@ -529,7 +529,7 @@ async function save() {
 
 		<!-- Provider select -->
 		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="cloud-provider">{$LL.advanced.cloudProvider()}</Label>
+			<Label class="text-sm font-medium" for="cloud-provider">{m["advanced.cloudProvider"]()}</Label>
 			<Select.Root
 				type="single"
 				value={provider}
@@ -544,7 +544,7 @@ async function save() {
 				}}
 			>
 				<Select.Trigger id="cloud-provider" class="w-full">
-					{selected?.name ?? $LL.advanced.cloudProvider()}
+					{selected?.name ?? m["advanced.cloudProvider"]()}
 				</Select.Trigger>
 				<Select.Content>
 					{#each providerOptions as p (p.id)}
@@ -558,10 +558,10 @@ async function save() {
 		{#if provider === 'custom'}
 			<div class="bg-muted/40 space-y-4 rounded-lg border p-4">
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="custom-name">{$LL.advanced.providerName()}</Label>
+					<Label class="text-sm font-medium" for="custom-name">{m["advanced.providerName"]()}</Label>
 					<Input
 						id="custom-name"
-						placeholder={$LL.advanced.providerNamePlaceholder()}
+						placeholder={m["advanced.providerNamePlaceholder"]()}
 						value={customName}
 						oninput={(e) => {
 							customName = e.currentTarget.value;
@@ -570,23 +570,23 @@ async function save() {
 					/>
 				</div>
 				<div class="space-y-2">
-					<Label class="text-sm font-medium" for="custom-host">{$LL.advanced.providerHost()}</Label>
+					<Label class="text-sm font-medium" for="custom-host">{m["advanced.providerHost"]()}</Label>
 					<Input
 						id="custom-host"
-						placeholder={$LL.advanced.providerHostPlaceholder()}
+						placeholder={m["advanced.providerHostPlaceholder"]()}
 						value={customHost}
 						oninput={(e) => {
 							customHost = e.currentTarget.value;
 							dirtyCustom = true;
 						}}
 					/>
-					<p class="text-muted-foreground text-xs">{$LL.advanced.providerHostHint()}</p>
+					<p class="text-muted-foreground text-xs">{m["advanced.providerHostHint"]()}</p>
 				</div>
 				<div class="flex items-center justify-between gap-4">
-					<Label class="text-sm" for="custom-secure">{$LL.advanced.useSecureConnection()}</Label>
+					<Label class="text-sm" for="custom-secure">{m["advanced.useSecureConnection"]()}</Label>
 					<LabeledSwitch
 						checked={customSecure}
-						label={$LL.advanced.useSecureConnection()}
+						label={m["advanced.useSecureConnection"]()}
 						onCheckedChange={(v) => {
 							customSecure = v;
 							dirtyCustom = true;
@@ -604,7 +604,7 @@ async function save() {
 				rel="noopener noreferrer"
 				target="_blank"
 			>
-				{$LL.settings.dialogs.getYourKey()}
+				{m["settings.dialogs.getYourKey"]()}
 				<ExternalLink class="size-3.5" />
 			</a>
 		{/if}
@@ -613,9 +613,9 @@ async function save() {
 		{#if keyManaged}
 			<!-- Active managed cloud: the key is catalog-managed, not manually entered. -->
 			<div class="space-y-2" data-testid="remote-key-managed">
-				<Label class="text-sm font-medium">{$LL.advanced.cloudRemoteKey()}</Label>
+				<Label class="text-sm font-medium">{m["advanced.cloudRemoteKey"]()}</Label>
 				<p class="text-muted-foreground text-xs">
-					{$LL.advanced.remoteKeyManagedByCloud({ provider: providerLabel })}
+					{m["advanced.remoteKeyManagedByCloud"]({ provider: providerLabel })}
 				</p>
 				<div
 					class="bg-muted/40 text-muted-foreground rounded-md border px-3 py-2 font-mono text-sm tracking-widest select-none"
@@ -626,8 +626,8 @@ async function save() {
 			</div>
 		{:else}
 			<div class="space-y-2" data-testid="remote-key">
-				<Label class="text-sm font-medium" for="remote-key">{$LL.advanced.cloudRemoteKey()}</Label>
-				<p class="text-muted-foreground text-xs">{$LL.advanced.cloudRemoteKeyTooltip()}</p>
+				<Label class="text-sm font-medium" for="remote-key">{m["advanced.cloudRemoteKey"]()}</Label>
+				<p class="text-muted-foreground text-xs">{m["advanced.cloudRemoteKeyTooltip"]()}</p>
 				<div class="relative">
 					<Input
 						id="remote-key"
@@ -642,7 +642,7 @@ async function save() {
 						}}
 					/>
 					<Button
-						aria-label={showKey ? $LL.advanced.hideRemoteKey() : $LL.advanced.showRemoteKey()}
+						aria-label={showKey ? m["advanced.hideRemoteKey"]() : m["advanced.showRemoteKey"]()}
 						class="absolute end-1 top-1/2 size-8 -translate-y-1/2 rounded-md"
 						onclick={() => (showKey = !showKey)}
 						size="icon"

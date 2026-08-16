@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 
 import { Switch } from '$lib/components/ui/switch';
 import * as Tooltip from '$lib/components/ui/tooltip';
@@ -74,10 +74,10 @@ const isDisabled = $derived(
 );
 
 const actionLabel = $derived(
-	displayed ? $LL.network.view.disableBond() : $LL.network.view.enableBond(),
+	displayed ? m["network.view.disableBond"]() : m["network.view.enableBond"](),
 );
 const stateLabel = $derived(
-	displayed ? $LL.network.view.inBond() : $LL.network.view.excluded(),
+	displayed ? m["network.view.inBond"]() : m["network.view.excluded"](),
 );
 const tooltipText = $derived(disabledReason ?? actionLabel);
 

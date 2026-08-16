@@ -21,7 +21,7 @@
  *
  * Text resolution (D4/D9/D10)
  * ---------------------------
- * Display text is resolved *once, at push time* via `$LL`
+ * Display text is resolved *once, at push time* via the message registry
  * (`@ceraui/i18n/svelte`): when `key` is present and exists in the translation
  * tree it is interpolated with `params`; otherwise the raw `msg` is used as the
  * fallback. Resolution is deliberately eager so a later locale change does NOT
@@ -32,7 +32,7 @@
  * `duration` is seconds on the wire and is converted to milliseconds with
  * `* 1000` — never `* 2500`.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import type {
 	Notification,
 	NotificationAction,
@@ -49,7 +49,7 @@ export interface ActiveNotification {
 	name: string;
 	/** Toast severity. */
 	type: NotificationType;
-	/** Resolved display text (`$LL[key](params)` or `msg` fallback). */
+	/** Resolved display text (`m[key](params)` or `msg` fallback). */
 	text: string;
 	/** Whether the operator may manually dismiss the toast. */
 	isDismissable: boolean;
@@ -63,7 +63,7 @@ export interface ActiveNotification {
 	action?: NotificationAction;
 }
 
-/** A callable translation leaf as exposed by the `$LL` proxy. */
+/** A callable translation leaf as exposed by the `m` registry. */
 type TranslateFn = (
 	params?: Record<string, string | number | boolean>,
 ) => string;
@@ -78,7 +78,7 @@ type TranslateFn = (
  * segment exists and the leaf is callable. Returns `undefined` for any missing
  * segment so the caller can fall back to `msg`.
  *
- * Uses an explicit `in` guard at each step so the live `$LL` Proxy (whose `has`
+ * Uses an explicit `in` guard at each step so the live `m` Proxy (whose `has`
  * trap reports real key presence) cannot smuggle in its "missing key returns
  * the key string" fallback — an absent key resolves to `undefined` here, which
  * routes to the `msg` fallback rather than leaking a raw key into the UI.
@@ -87,6 +87,17 @@ function lookupTranslation(
 	translations: unknown,
 	key: string,
 ): TranslateFn | undefined {
+	// The paraglide registry is FLAT — the whole dotted key IS one property —
+	// while the legacy adapter exposed a nested tree. Both are accepted so the
+	// rune-free unit suites can keep passing a plain nested fixture.
+	if (
+		translations !== null &&
+		typeof translations === "object" &&
+		key in translations
+	) {
+		const flat = (translations as Record<string, unknown>)[key];
+		if (typeof flat === "function") return flat as TranslateFn;
+	}
 	let current: unknown = translations;
 	for (const segment of key.split(".")) {
 		if (
@@ -103,7 +114,7 @@ function lookupTranslation(
 
 /**
  * Coerce arbitrary `params` (`Record<string, unknown>`) into the
- * `string | number | boolean` shape the `$LL` interpolator expects. Non-scalar
+ * `string | number | boolean` shape the message interpolator expects. Non-scalar
  * values are stringified rather than dropped.
  */
 function toInterpolationParams(
@@ -230,7 +241,7 @@ function createNotificationStore(): NotificationStore {
 
 	return {
 		push: (notification) => {
-			active = pushNotification(active, notification, getLL(), Date.now());
+			active = pushNotification(active, notification, m, Date.now());
 		},
 		dismiss: (name) => {
 			active = dismissNotification(active, name);

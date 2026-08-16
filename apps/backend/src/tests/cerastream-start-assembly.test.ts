@@ -315,9 +315,10 @@ describe("buildStartParams — pseudo-source → audio.mode wire contract (Todo 
 		await backend.settle();
 		const started = fake.calls.find((c) => c.op === "start");
 		expect(started).toBeDefined();
-		expect((started?.params as { audio?: { mode?: string } }).audio?.mode).toBe(
-			"device",
-		);
+		expect(
+			(started?.params as { audio?: { mode?: string } } | undefined)?.audio
+				?.mode,
+		).toBe("device");
 	});
 });
 
@@ -350,7 +351,8 @@ describe("buildStartParams — video_passthrough wire contract (Todo 18)", () =>
 		const started = fake.calls.find((c) => c.op === "start");
 		expect(started?.raw).toBe(true);
 		expect(
-			(started?.params as { video_passthrough?: string }).video_passthrough,
+			(started?.params as { video_passthrough?: string } | undefined)
+				?.video_passthrough,
 		).toBe("off");
 	});
 
@@ -460,7 +462,9 @@ describe("reloadAudioDelay — delay routing by engine hello version", () => {
 		await backend.settle();
 		await backend.reloadAudioDelay(-500);
 		const reload = fake.calls.find((c) => c.op === "reload-config");
-		const audio = (reload?.params as { audio?: Record<string, unknown> }).audio;
+		const audio = (
+			reload?.params as { audio?: Record<string, unknown> } | undefined
+		)?.audio;
 		expect(audio?.delay_ms_signed).toBe(-500);
 		expect(audio).not.toHaveProperty("delay_ms");
 	});
@@ -475,7 +479,9 @@ describe("reloadAudioDelay — delay routing by engine hello version", () => {
 		await backend.settle();
 		await backend.reloadAudioDelay(-500);
 		const reload = fake.calls.find((c) => c.op === "reload-config");
-		const audio = (reload?.params as { audio?: Record<string, unknown> }).audio;
+		const audio = (
+			reload?.params as { audio?: Record<string, unknown> } | undefined
+		)?.audio;
 		expect(audio?.delay_ms).toBe(0);
 		expect(audio).not.toHaveProperty("delay_ms_signed");
 		expect(logger.infos.length).toBe(1);
@@ -492,7 +498,9 @@ describe("toReloadParams — general reload carries the signed delay", () => {
 		backend.reloadConfig();
 		await backend.settle();
 		const reload = fake.calls.find((c) => c.op === "reload-config");
-		const audio = (reload?.params as { audio?: Record<string, unknown> }).audio;
+		const audio = (
+			reload?.params as { audio?: Record<string, unknown> } | undefined
+		)?.audio;
 		expect(audio?.delay_ms_signed).toBe(-2000);
 	});
 });

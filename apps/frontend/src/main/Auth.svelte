@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { AlertCircle, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -46,11 +46,11 @@ const loginRejected = $derived(
 );
 
 const passwordError = $derived.by(() => {
-	if (passwordTooShort) return $LL.auth.passwordTooShort();
-	if (loginRejected) return $LL.auth.wrongPassword();
+	if (passwordTooShort) return m["auth.passwordTooShort"]();
+	if (loginRejected) return m["auth.wrongPassword"]();
 	return '';
 });
-const confirmError = $derived(confirmMismatch ? $LL.auth.passwordsDoNotMatch() : '');
+const confirmError = $derived(confirmMismatch ? m["auth.passwordsDoNotMatch"]() : '');
 
 const isFormValid = $derived(
 	setPassword
@@ -187,8 +187,8 @@ async function onSubmit(event: SubmitEvent) {
 				<p class="text-foreground text-xl font-semibold tracking-tight">{deviceName}</p>
 				<p class="text-muted-foreground text-sm text-balance">
 					{setPassword
-						? $LL.auth.help.createPasswordDescription()
-						: $LL.auth.usePassword()}
+						? m["auth.help.createPasswordDescription"]()
+						: m["auth.usePassword"]()}
 				</p>
 			</div>
 		</div>
@@ -199,7 +199,7 @@ async function onSubmit(event: SubmitEvent) {
 				role="status"
 			>
 				<AlertCircle class="text-status-warning size-4 shrink-0" />
-				<span>{$LL.connection.sessionExpired()}</span>
+				<span>{m["connection.sessionExpired"]()}</span>
 			</div>
 		{/if}
 
@@ -207,7 +207,7 @@ async function onSubmit(event: SubmitEvent) {
 			<!-- Password field -->
 			<div class="space-y-2">
 				<Label class="text-sm font-medium" for="password">
-					{setPassword ? $LL.auth.newPassword() : $LL.auth.password()}
+					{setPassword ? m["auth.newPassword"]() : m["auth.password"]()}
 				</Label>
 
 				<div class="relative">
@@ -225,15 +225,15 @@ async function onSubmit(event: SubmitEvent) {
 						dir="ltr"
 						disabled={isLoading}
 						placeholder={setPassword
-							? $LL.auth.placeholderNewPassword()
-							: $LL.auth.placeholderPassword()}
+							? m["auth.placeholderNewPassword"]()
+							: m["auth.placeholderPassword"]()}
 						type={showPassword ? 'text' : 'password'}
 						bind:value={password}
 					/>
 
 					<Button
 						class="absolute end-1 top-1/2 size-9 -translate-y-1/2 text-muted-foreground"
-						aria-label={showPassword ? $LL.auth.hidePassword() : $LL.auth.showPassword()}
+						aria-label={showPassword ? m["auth.hidePassword"]() : m["auth.showPassword"]()}
 						aria-pressed={showPassword}
 						onclick={() => (showPassword = !showPassword)}
 						type="button"
@@ -263,7 +263,7 @@ async function onSubmit(event: SubmitEvent) {
 			{#if setPassword}
 				<div class="space-y-2">
 					<Label class="text-sm font-medium" for="confirm-password">
-						{$LL.auth.confirmPassword()}
+						{m["auth.confirmPassword"]()}
 					</Label>
 					<Input
 						id="confirm-password"
@@ -278,7 +278,7 @@ async function onSubmit(event: SubmitEvent) {
 						autocorrect="off"
 						dir="ltr"
 						disabled={isLoading}
-						placeholder={$LL.auth.placeholderConfirmPassword()}
+						placeholder={m["auth.placeholderConfirmPassword"]()}
 						type={showPassword ? 'text' : 'password'}
 						bind:value={confirmPassword}
 					/>
@@ -301,7 +301,7 @@ async function onSubmit(event: SubmitEvent) {
 					for="remember"
 				>
 					<Checkbox id="remember" class="size-5" bind:checked={remember} />
-					{$LL.auth.rememberMe()}
+					{m["auth.rememberMe"]()}
 				</Label>
 			{/if}
 
@@ -313,16 +313,16 @@ async function onSubmit(event: SubmitEvent) {
 			>
 				{#if isLoading}
 					<LoaderCircle class="size-4 animate-spin" />
-					{setPassword ? $LL.auth.creatingPassword() : $LL.auth.signingIn()}
+					{setPassword ? m["auth.creatingPassword"]() : m["auth.signingIn"]()}
 				{:else}
-					{setPassword ? $LL.auth.setPassword() : $LL.auth.unlock()}
+					{setPassword ? m["auth.setPassword"]() : m["auth.unlock"]()}
 				{/if}
 			</Button>
 		</form>
 
 		<!-- Footer -->
 		<p class="text-muted-foreground mt-6 text-center text-xs">
-			{$LL.auth.secureAccess()} · {siteName}
+			{m["auth.secureAccess"]()} · {siteName}
 		</p>
 	</div>
 </div>

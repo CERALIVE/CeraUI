@@ -9,7 +9,7 @@
   value and the slider is locked (apply-on-reconnect).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { LatencyRange } from '@ceraui/rpc/schemas';
 
 import { Label } from '$lib/components/ui/label';
@@ -60,12 +60,12 @@ const formatSeconds = (ms: number): string => {
 <div class="space-y-2.5" data-testid="latency-section">
 	<div class="flex items-center justify-between gap-2">
 		<Label class="text-sm font-medium" for="latency-slider">
-			{$LL.settings.latency()}
+			{m["settings.latency"]()}
 		</Label>
 		<span class="flex items-center gap-1.5">
 			{#if showingNegotiated}
 				<span class="text-muted-foreground text-micro uppercase tracking-wide">
-					{$LL.settings.latencyNegotiated()}
+					{m["settings.latencyNegotiated"]()}
 				</span>
 			{/if}
 			<span
@@ -84,7 +84,7 @@ const formatSeconds = (ms: number): string => {
 		></div>
 		<input
 			id="latency-slider"
-			aria-label={$LL.settings.latency()}
+			aria-label={m["settings.latency"]()}
 			aria-valuemax={range.max}
 			aria-valuemin={range.min}
 			aria-valuenow={sliderLatency}
@@ -104,12 +104,12 @@ const formatSeconds = (ms: number): string => {
 		></div>
 	</div>
 	<div class="text-muted-foreground flex justify-between text-xs">
-		<span>{formatSeconds(range.min)} · {$LL.settings.lowerLatency()}</span>
-		<span>{$LL.settings.higherLatency()} · {formatSeconds(range.max)}</span>
+		<span>{formatSeconds(range.min)} · {m["settings.lowerLatency"]()}</span>
+		<span>{m["settings.higherLatency"]()} · {formatSeconds(range.max)}</span>
 	</div>
 	{#if clampedLatencyMs !== undefined && clampedLatencyMs !== latencyMs}
 		<p class="text-status-warning text-xs" data-testid="latency-clamped" role="status">
-			{$LL.settings.valueClamped({ value: formatSeconds(clampedLatencyMs) })}
+			{m["settings.valueClamped"]({ value: formatSeconds(clampedLatencyMs) })}
 		</p>
 	{/if}
 </div>

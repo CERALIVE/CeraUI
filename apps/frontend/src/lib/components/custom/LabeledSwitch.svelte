@@ -10,7 +10,7 @@
   Touch/kiosk: the whole control + label hit area is ≥44px tall.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 
 import { Switch } from '$lib/components/ui/switch';
 import * as Tooltip from '$lib/components/ui/tooltip';
@@ -45,7 +45,7 @@ let {
 	class: className,
 }: Props = $props();
 
-const stateLabel = $derived(checked ? $LL.network.view.on() : $LL.network.view.off());
+const stateLabel = $derived(checked ? m["network.view.on"]() : m["network.view.off"]());
 </script>
 
 <Tooltip.Provider>

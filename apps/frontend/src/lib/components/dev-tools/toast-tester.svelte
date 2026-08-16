@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL, locale } from '@ceraui/i18n/svelte';
+import { getLocale, m } from '@ceraui/i18n/svelte';
 import {
 	AlertCircle,
 	AlertTriangle,
@@ -18,28 +18,28 @@ import { Label } from '$lib/components/ui/label';
 import { Textarea } from '$lib/components/ui/textarea';
 
 // Toast testing state
-let customTitle = $state($LL.devtools.customTitle());
-let customDescription = $state($LL.devtools.customDescription());
+let customTitle = $state(m["devtools.customTitle"]());
+let customDescription = $state(m["devtools.customDescription"]());
 let toastDuration = $state(4000);
 
 // Update input values when locale changes
 $effect(() => {
 	// Subscribe to locale changes to update default input values
-	const _currentLocale = $locale; // This creates a dependency on locale changes
+	const _currentLocale = getLocale(); // This creates a dependency on locale changes
 
 	// Reset input values to new locale defaults if they haven't been modified by user
-	if (customTitle === $LL.devtools.customTitle()) {
-		customTitle = $LL.devtools.customTitle();
+	if (customTitle === m["devtools.customTitle"]()) {
+		customTitle = m["devtools.customTitle"]();
 	}
-	if (customDescription === $LL.devtools.customDescription()) {
-		customDescription = $LL.devtools.customDescription();
+	if (customDescription === m["devtools.customDescription"]()) {
+		customDescription = m["devtools.customDescription"]();
 	}
 });
 
 // Toast type definitions with their configurations
 const toastTypes = [
 	{
-		name: $LL.devtools.success(),
+		name: m["devtools.success"](),
 		type: 'success',
 		icon: CheckCircle2,
 		color: 'text-status-success',
@@ -49,7 +49,7 @@ const toastTypes = [
 			toast.success(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $LL.devtools.error(),
+		name: m["devtools.error"](),
 		type: 'error',
 		icon: AlertCircle,
 		color: 'text-status-error',
@@ -59,7 +59,7 @@ const toastTypes = [
 			toast.error(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $LL.devtools.warning(),
+		name: m["devtools.warning"](),
 		type: 'warning',
 		icon: AlertTriangle,
 		color: 'text-status-warning',
@@ -69,7 +69,7 @@ const toastTypes = [
 			toast.warning(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $LL.devtools.info(),
+		name: m["devtools.info"](),
 		type: 'info',
 		icon: Info,
 		color: 'text-status-info',
@@ -79,7 +79,7 @@ const toastTypes = [
 			toast.info(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $LL.devtools.default(),
+		name: m["devtools.default"](),
 		type: 'default',
 		icon: MessageCircle,
 		color: 'text-muted-foreground',
@@ -88,7 +88,7 @@ const toastTypes = [
 		action: () => toast(customTitle, { description: customDescription, duration: toastDuration }),
 	},
 	{
-		name: $LL.devtools.loading(),
+		name: m["devtools.loading"](),
 		type: 'loading',
 		icon: Loader2,
 		color: 'text-status-info',
@@ -99,8 +99,8 @@ const toastTypes = [
 			// Auto-dismiss loading toast after duration
 			setTimeout(() => {
 				toast.dismiss(loadingToast);
-				toast.success($LL.devtools.loadingComplete(), {
-					description: $LL.devtools.loadingCompleteDesc(),
+				toast.success(m["devtools.loadingComplete"](), {
+					description: m["devtools.loadingCompleteDesc"](),
 				});
 			}, toastDuration);
 		},
@@ -110,46 +110,46 @@ const toastTypes = [
 // Preset toast examples
 const presetToasts = [
 	{
-		name: $LL.devtools.networkError(),
+		name: m["devtools.networkError"](),
 		type: 'error',
-		title: $LL.devtools.connectionFailed(),
-		description: $LL.devtools.connectionFailedDesc(),
+		title: m["devtools.connectionFailed"](),
+		description: m["devtools.connectionFailedDesc"](),
 		action: () =>
-			toast.error($LL.devtools.connectionFailed(), {
-				description: $LL.devtools.connectionFailedDesc(),
+			toast.error(m["devtools.connectionFailed"](), {
+				description: m["devtools.connectionFailedDesc"](),
 				duration: 5000,
 			}),
 	},
 	{
-		name: $LL.devtools.settingsSaved(),
+		name: m["devtools.settingsSaved"](),
 		type: 'success',
-		title: $LL.devtools.settingsUpdated(),
-		description: $LL.devtools.settingsUpdatedDesc(),
+		title: m["devtools.settingsUpdated"](),
+		description: m["devtools.settingsUpdatedDesc"](),
 		action: () =>
-			toast.success($LL.devtools.settingsUpdated(), {
-				description: $LL.devtools.settingsUpdatedDesc(),
+			toast.success(m["devtools.settingsUpdated"](), {
+				description: m["devtools.settingsUpdatedDesc"](),
 				duration: 3000,
 			}),
 	},
 	{
-		name: $LL.devtools.updateAvailable(),
+		name: m["devtools.updateAvailable"](),
 		type: 'info',
-		title: $LL.devtools.newVersionAvailable(),
-		description: $LL.devtools.newVersionDesc(),
+		title: m["devtools.newVersionAvailable"](),
+		description: m["devtools.newVersionDesc"](),
 		action: () =>
-			toast.info($LL.devtools.newVersionAvailable(), {
-				description: $LL.devtools.newVersionDesc(),
+			toast.info(m["devtools.newVersionAvailable"](), {
+				description: m["devtools.newVersionDesc"](),
 				duration: 8000,
 			}),
 	},
 	{
-		name: $LL.devtools.lowBattery(),
+		name: m["devtools.lowBattery"](),
 		type: 'warning',
-		title: $LL.devtools.batteryLow(),
-		description: $LL.devtools.batteryLowDesc(),
+		title: m["devtools.batteryLow"](),
+		description: m["devtools.batteryLowDesc"](),
 		action: () =>
-			toast.warning($LL.devtools.batteryLow(), {
-				description: $LL.devtools.batteryLowDesc(),
+			toast.warning(m["devtools.batteryLow"](), {
+				description: m["devtools.batteryLowDesc"](),
 				duration: 6000,
 			}),
 	},
@@ -157,26 +157,26 @@ const presetToasts = [
 
 // Action toasts with buttons
 function showActionToast() {
-	toast($LL.devtools.confirmAction(), {
-		description: $LL.devtools.confirmActionDesc(),
+	toast(m["devtools.confirmAction"](), {
+		description: m["devtools.confirmActionDesc"](),
 		action: {
-			label: $LL.devtools.delete(),
-			onClick: () => toast.success($LL.devtools.itemDeletedSuccess()),
+			label: m["devtools.delete"](),
+			onClick: () => toast.success(m["devtools.itemDeletedSuccess"]()),
 		},
 		cancel: {
-			label: $LL.devtools.cancel(),
-			onClick: () => toast.info($LL.devtools.actionCancelled()),
+			label: m["devtools.cancel"](),
+			onClick: () => toast.info(m["devtools.actionCancelled"]()),
 		},
 		duration: 10000,
 	});
 }
 
 function showPersistentToast() {
-	toast.error($LL.devtools.criticalError(), {
-		description: $LL.devtools.criticalErrorDesc(),
+	toast.error(m["devtools.criticalError"](), {
+		description: m["devtools.criticalErrorDesc"](),
 		duration: Infinity,
 		action: {
-			label: $LL.devtools.dismiss(),
+			label: m["devtools.dismiss"](),
 			onClick: () => toast.dismiss(),
 		},
 	});
@@ -191,21 +191,21 @@ function dismissAllToasts() {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2">
 			<MessageCircle class="h-5 w-5 text-primary" />
-			{$LL.devtools.toastNotificationTester()}
+			{m["devtools.toastNotificationTester"]()}
 		</Card.Title>
 		<Card.Description>
-			{$LL.devtools.testDifferentTypes()}
+			{m["devtools.testDifferentTypes"]()}
 		</Card.Description>
 	</Card.Header>
 
 	<Card.Content class="space-y-6 pb-6">
 		<!-- Custom Toast Configuration -->
 		<div class="bg-muted/50 space-y-4 rounded-lg border p-4">
-			<div class="text-sm font-medium">{$LL.devtools.customToastConfig()}</div>
+			<div class="text-sm font-medium">{m["devtools.customToastConfig"]()}</div>
 
 			<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 				<div class="space-y-2">
-					<Label class="text-xs" for="toast-title">{$LL.devtools.title()}</Label>
+					<Label class="text-xs" for="toast-title">{m["devtools.title"]()}</Label>
 					<Input
 						id="toast-title"
 						class="text-sm"
@@ -215,7 +215,7 @@ function dismissAllToasts() {
 				</div>
 
 				<div class="space-y-2">
-					<Label class="text-xs" for="toast-duration">{$LL.devtools.toastDuration()}</Label>
+					<Label class="text-xs" for="toast-duration">{m["devtools.toastDuration"]()}</Label>
 					<Input
 						id="toast-duration"
 						class="text-sm"
@@ -229,7 +229,7 @@ function dismissAllToasts() {
 			</div>
 
 			<div class="space-y-2">
-				<Label class="text-xs" for="toast-description">{$LL.devtools.description()}</Label>
+				<Label class="text-xs" for="toast-description">{m["devtools.description"]()}</Label>
 				<Textarea
 					id="toast-description"
 					class="resize-none text-sm"
@@ -242,7 +242,7 @@ function dismissAllToasts() {
 
 		<!-- Toast Type Buttons -->
 		<div class="space-y-3">
-			<div class="text-sm font-medium">{$LL.devtools.toastTypes()}</div>
+			<div class="text-sm font-medium">{m["devtools.toastTypes"]()}</div>
 			<div class="grid grid-cols-2 gap-2 md:grid-cols-3">
 				{#each toastTypes as toastType}
 				<Button
@@ -262,7 +262,7 @@ function dismissAllToasts() {
 
 		<!-- Preset Examples -->
 		<div class="space-y-3">
-			<div class="text-sm font-medium">{$LL.devtools.presetExamples()}</div>
+			<div class="text-sm font-medium">{m["devtools.presetExamples"]()}</div>
 			<div class="grid grid-cols-1 gap-2 md:grid-cols-2">
 				{#each presetToasts as preset}
 					<Button
@@ -282,7 +282,7 @@ function dismissAllToasts() {
 
 		<!-- Special Actions -->
 		<div class="space-y-3">
-			<div class="text-sm font-medium">{$LL.devtools.specialToastActions()}</div>
+			<div class="text-sm font-medium">{m["devtools.specialToastActions"]()}</div>
 			<div class="flex flex-wrap gap-2">
 				<Button
 					class="border-status-info/30 bg-status-info/10"
@@ -291,7 +291,7 @@ function dismissAllToasts() {
 					variant="outline"
 				>
 					<CheckCircle2 class="mr-2 h-4 w-4 text-status-info" />
-					<span class="text-status-info">{$LL.devtools.actionToast()}</span>
+					<span class="text-status-info">{m["devtools.actionToast"]()}</span>
 				</Button>
 
 				<Button
@@ -301,7 +301,7 @@ function dismissAllToasts() {
 					variant="outline"
 				>
 					<AlertTriangle class="mr-2 h-4 w-4 text-status-warning" />
-					<span class="text-status-warning">{$LL.devtools.persistent()}</span>
+					<span class="text-status-warning">{m["devtools.persistent"]()}</span>
 				</Button>
 
 				<Button
@@ -312,19 +312,19 @@ function dismissAllToasts() {
 					variant="outline"
 				>
 					<X class="mr-2 h-4 w-4 text-status-error" />
-					<span class="text-status-error">{$LL.devtools.dismissAll()}</span>
+					<span class="text-status-error">{m["devtools.dismissAll"]()}</span>
 				</Button>
 			</div>
 		</div>
 
 		<!-- Testing Tips -->
 		<div class="text-muted-foreground bg-muted/50 space-y-1 rounded-lg p-3 text-xs" role="note">
-			<div class="font-medium">{$LL.devtools.testingTips()}</div>
-			<div>• {$LL.devtools.testingTip1()}</div>
-			<div>• {$LL.devtools.testingTip2()}</div>
-			<div>• {$LL.devtools.testingTip3()}</div>
-			<div>• {$LL.devtools.testingTip4()}</div>
-			<div>• {$LL.devtools.testingTip5()}</div>
+			<div class="font-medium">{m["devtools.testingTips"]()}</div>
+			<div>• {m["devtools.testingTip1"]()}</div>
+			<div>• {m["devtools.testingTip2"]()}</div>
+			<div>• {m["devtools.testingTip3"]()}</div>
+			<div>• {m["devtools.testingTip4"]()}</div>
+			<div>• {m["devtools.testingTip5"]()}</div>
 		</div>
 	</Card.Content>
 </Card.Root>

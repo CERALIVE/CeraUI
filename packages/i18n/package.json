@@ -1,7 +1,7 @@
 {
 	"name": "@ceraui/i18n",
 	"version": "2026.6.1",
-	"description": "Typesafe internationalization package for CeraUI",
+	"description": "Internationalization package for CeraUI — inlang catalogs compiled by Paraglide",
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
@@ -11,35 +11,35 @@
 			"import": "./src/index.ts"
 		},
 		"./svelte": {
-			"types": "./src/i18n-svelte5.svelte.ts",
-			"import": "./src/i18n-svelte5.svelte.ts"
-		},
-		"./node": {
-			"types": "./src/i18n-node.ts",
-			"import": "./src/i18n-node.ts"
+			"types": "./src/svelte.svelte.ts",
+			"import": "./src/svelte.svelte.ts"
 		},
 		"./formatters": {
 			"types": "./src/formatters.ts",
 			"import": "./src/formatters.ts"
+		},
+		"./eager": {
+			"types": "./generated/eager.d.ts",
+			"import": "./generated/eager.js"
 		}
 	},
 	"scripts": {
-		"dev": "typesafe-i18n",
-		"build": "typesafe-i18n --no-watch && tsc",
-		"typesafe-i18n": "typesafe-i18n --no-watch",
-		"postinstall": "typesafe-i18n --no-watch",
-		"prepare": "typesafe-i18n --no-watch"
-	},
-	"dependencies": {
-		"typesafe-i18n": "^5.27.1"
+		"check": "bun run generate:i18n && node ../../scripts/tsc.mjs --noEmit",
+		"test": "bun run generate:i18n && bun test",
+		"compile-messages": "bun scripts/compile-messages.ts",
+		"generate-registry": "bun scripts/generate-registry.ts",
+		"generate:i18n": "bun scripts/compile-messages.ts && bun scripts/generate-registry.ts"
 	},
 	"devDependencies": {
-		"typescript": "catalog:"
+		"@inlang/paraglide-js": "2.23.2",
+		"svelte": "^5.56.9",
+		"typescript": "^7.0.2"
 	},
 	"keywords": [
 		"i18n",
 		"internationalization",
-		"typesafe",
+		"paraglide",
+		"inlang",
 		"svelte",
 		"typescript"
 	],

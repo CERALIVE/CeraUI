@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Clock } from '@lucide/svelte';
 
 type PerformanceData = {
@@ -24,7 +24,7 @@ let {
 		</div>
 		<div class="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.dnsLookup()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.dnsLookup"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.domainLookupEnd - performanceData.timing.domainLookupStart,
@@ -32,7 +32,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.connect()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.connect"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.connectEnd - performanceData.timing.connectStart,
@@ -40,7 +40,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.request()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.request"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.responseStart - performanceData.timing.requestStart,
@@ -48,7 +48,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.response()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.response"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.responseEnd - performanceData.timing.responseStart,
@@ -56,7 +56,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.domContent()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.domContent"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.domContentLoadedEventEnd -
@@ -65,7 +65,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.domComplete()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.domComplete"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.domComplete -
@@ -74,7 +74,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.loadEvent()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.loadEvent"]()}</div>
 				<div class="font-mono">
 					{Math.round(
 						performanceData.timing.loadEventEnd - performanceData.timing.loadEventStart,
@@ -82,7 +82,7 @@ let {
 				</div>
 			</div>
 			<div class="bg-background/50 rounded border p-2">
-				<div class="text-muted-foreground mb-1">{$LL.devtools.total()}</div>
+				<div class="text-muted-foreground mb-1">{m["devtools.total"]()}</div>
 				<div class="font-mono font-bold">{formatMs(performanceData.loadTime)}</div>
 			</div>
 		</div>

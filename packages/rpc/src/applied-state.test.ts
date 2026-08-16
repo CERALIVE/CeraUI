@@ -88,20 +88,21 @@ describe('Applied-state output schemas', () => {
 			}
 		});
 
-		it.each(['busy', 'cancelled'] as const)('preserves the typed %s result', (lifecycleResult:
-			| 'busy'
-			| 'cancelled') => {
-			const result = streamingStartOutputSchemaExtended.parse({
-				success: false,
-				is_streaming: false,
-				result: lifecycleResult,
-				attemptId: 'att_schema_test',
-			});
-			expect(result).toMatchObject({
-				result: lifecycleResult,
-				attemptId: 'att_schema_test',
-			});
-		});
+		it.each(['busy', 'cancelled'] as const)(
+			'preserves the typed %s result',
+			(lifecycleResult: 'busy' | 'cancelled') => {
+				const result = streamingStartOutputSchemaExtended.parse({
+					success: false,
+					is_streaming: false,
+					result: lifecycleResult,
+					attemptId: 'att_schema_test',
+				});
+				expect(result).toMatchObject({
+					result: lifecycleResult,
+					attemptId: 'att_schema_test',
+				});
+			},
+		);
 
 		it('strips internal lifecycle metadata from an established failure response', () => {
 			const result = streamingStartOutputSchemaExtended.parse({

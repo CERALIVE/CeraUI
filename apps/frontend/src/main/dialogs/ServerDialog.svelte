@@ -26,7 +26,7 @@
   `buildManagedSlotConfig` and locks every field before the RPC.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Server } from '@lucide/svelte';
 import type { ConfigMessage, RelayProtocol } from '@ceraui/rpc/schemas';
 import { untrack } from 'svelte';
@@ -216,8 +216,8 @@ const endpointErrors = $derived(serverEndpointErrors({
 	portStr,
 	port: portNum,
 	draftAddr: draft.srtla_addr,
-	portRangeMessage: $LL.validation.portRange(),
-	addressRequiredMessage: $LL.settings.errors.srtlaServerAddressRequired(),
+	portRangeMessage: m["validation.portRange"](),
+	addressRequiredMessage: m["settings.errors.srtlaServerAddressRequired"](),
 }));
 const portError = $derived(endpointErrors.port);
 const addrError = $derived(endpointErrors.address);
@@ -262,8 +262,8 @@ async function handleSave() {
 		hostAdapter,
 		input,
 		onSaved,
-		savedMessage: $LL.notifications.saved(),
-		failedMessage: $LL.notifications.saveFailed(),
+		savedMessage: m["notifications.saved"](),
+		failedMessage: m["notifications.saveFailed"](),
 	});
 	if (result.kind === 'applied-latency') appliedLatencyMs = result.value;
 	if (result.kind === 'close') {
@@ -279,8 +279,8 @@ async function handleSave() {
 	icon={Server}
 	onPrimary={handleSave}
 	primaryDisabled={!canSave}
-	primaryLabel={$LL.dialogs.save()}
-	title={$LL.settings.receiverServer()}
+	primaryLabel={m["dialogs.save"]()}
+	title={m["settings.receiverServer"]()}
 >
 	<ServerDialogContent
 		{isStreaming} {catalogDrift} {activeProvider} {relays} {destinationChoice} {destination}

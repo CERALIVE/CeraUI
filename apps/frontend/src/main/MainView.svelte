@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
 import LocaleSelector from '$lib/components/custom/locale-selector.svelte';
@@ -47,7 +47,7 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 			href="#main-content"
 			class="bg-primary text-primary-foreground focus-visible:ring-ring sr-only rounded-md px-4 py-2 text-sm font-semibold shadow-lg transition-none focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:outline-none focus-visible:ring-2"
 		>
-			{$LL.a11y.skipToContent()}
+			{m["a11y.skipToContent"]()}
 		</a>
 		<HudRegion affordance />
 		<header class="bg-background sticky top-0 z-40 w-full border-b">

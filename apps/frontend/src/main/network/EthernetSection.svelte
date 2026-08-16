@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { NetifEntry } from '@ceraui/rpc/schemas';
 import { ChevronRight, Network as NetworkIcon } from '@lucide/svelte';
 
@@ -54,12 +54,12 @@ function settle(proceed: boolean) {
 <section class="bg-card rounded-xl border">
 	<div class="flex items-center gap-2 border-b px-4 py-3">
 		<NetworkIcon aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
-		<h2 class="text-sm font-semibold tracking-tight">{$LL.network.view.ethernet()}</h2>
+		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.ethernet"]()}</h2>
 	</div>
 	<div class="divide-y">
 		{#if wiredEntries.length === 0}
 			<p class="text-muted-foreground px-4 py-6 text-center text-sm">
-				{$LL.network.view.noEthernet()}
+				{m["network.view.noEthernet"]()}
 			</p>
 		{:else}
 			{#each wiredEntries as [name, iface] (name)}
@@ -77,16 +77,16 @@ function settle(proceed: boolean) {
 							{#if iface.ip}
 								<code class="font-mono">{iface.ip}</code>
 								{#if linkLocal}
-									<Badge variant="info" size="micro" data-testid="netif-link-local" label={$LL.network.view.linkLocal()} />
+									<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
 								{/if}
 								<span aria-hidden="true">·</span>
 							{/if}
-							{iface.enabled ? $LL.network.view.connected() : $LL.network.view.off()}
+							{iface.enabled ? m["network.view.connected"]() : m["network.view.off"]()}
 						</p>
 						{#if linkLocal}
 							<!-- Calm, informational: 169.254/16 is an automatic OS address, not a stuck static config. -->
 							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-link-local-hint">
-								{$LL.network.view.linkLocalHint()}
+								{m["network.view.linkLocalHint"]()}
 							</p>
 						{/if}
 					</div>
@@ -107,7 +107,7 @@ function settle(proceed: boolean) {
 							variant="ghost"
 							onclick={() => onConfigure(name)}
 						>
-							{$LL.network.view.configure()}
+							{m["network.view.configure"]()}
 							<ChevronRight class="size-3.5 rtl:rotate-180" />
 						</Button>
 					</div>
@@ -121,9 +121,9 @@ function settle(proceed: boolean) {
 <AlertDialog.Root bind:open={confirmOpen} onOpenChange={(open) => !open && settle(false)}>
 	<AlertDialog.Content>
 		<AlertDialog.Header>
-			<AlertDialog.Title>{$LL.network.view.wiredDisableTitle()}</AlertDialog.Title>
+			<AlertDialog.Title>{m["network.view.wiredDisableTitle"]()}</AlertDialog.Title>
 			<AlertDialog.Description>
-				{$LL.network.view.wiredDisableBody()}
+				{m["network.view.wiredDisableBody"]()}
 				{#if pendingName}
 					<span class="text-foreground/80 mt-1 block font-mono text-xs">{pendingName}</span>
 				{/if}
@@ -131,13 +131,13 @@ function settle(proceed: boolean) {
 		</AlertDialog.Header>
 		<AlertDialog.Footer>
 			<AlertDialog.Cancel onclick={() => settle(false)}>
-				{$LL.dialog.cancel()}
+				{m["dialog.cancel"]()}
 			</AlertDialog.Cancel>
 			<AlertDialog.Action
 				class="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 				onclick={() => settle(true)}
 			>
-				{$LL.network.view.disableBond()}
+				{m["network.view.disableBond"]()}
 			</AlertDialog.Action>
 		</AlertDialog.Footer>
 	</AlertDialog.Content>

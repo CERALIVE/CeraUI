@@ -44,5 +44,5 @@ export const modemsContract = oc.router({
 	/**
 	 * Subscribe to modem status changes
 	 */
-	onStatusChange: oc.route({ method: 'GET', path: '/modems/status' }),
+	onStatusChange: oc,
 });

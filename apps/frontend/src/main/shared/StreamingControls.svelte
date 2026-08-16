@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Loader2, Play, Square } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -62,13 +62,13 @@ const handleStop = () => {
 		<span class="flex items-center justify-center gap-3">
 			{#if starting}
 				<Loader2 aria-hidden={true} class="h-5 w-5 animate-spin" />
-				<span>{$LL.live.starting()}</span>
+				<span>{m["live.starting"]()}</span>
 			{:else}
 				<Play
 					aria-hidden={true}
 					class="h-5 w-5 transition-transform group-hover:translate-x-0.5 group-hover:scale-110"
 				/>
-				<span>{$LL.live.startStream()}</span>
+				<span>{m["live.startStream"]()}</span>
 			{/if}
 		</span>
 	</Button>
@@ -90,7 +90,7 @@ const handleStop = () => {
 		<span class="flex items-center justify-center gap-3">
 			{#if stopping}
 				<Loader2 aria-hidden={true} class="h-5 w-5 animate-spin" />
-				<span>{$LL.live.stopping()}</span>
+				<span>{m["live.stopping"]()}</span>
 			{:else}
 				<span class="relative flex">
 					<Square aria-hidden={true} class="h-5 w-5 transition-transform group-hover:scale-110" />
@@ -100,7 +100,7 @@ const handleStop = () => {
 						style="background-color: var(--status-live);"
 					></span>
 				</span>
-				<span>{$LL.live.stopStream()}</span>
+				<span>{m["live.stopStream"]()}</span>
 			{/if}
 		</span>
 	</Button>
@@ -117,7 +117,7 @@ const handleStop = () => {
 					{@render startButton('rounded-xl py-6 text-lg')}
 					{#if disabled && !busy}
 						<p class="text-muted-foreground mt-2 text-center text-sm">
-							{$LL.settings.completeRequiredFields()}
+							{m["settings.completeRequiredFields"]()}
 						</p>
 					{/if}
 				{/if}
@@ -137,7 +137,7 @@ const handleStop = () => {
 				{@render startButton('')}
 				{#if disabled && !busy}
 					<p class="text-muted-foreground mt-2 text-center text-sm">
-						{$LL.settings.completeRequiredFields()}
+						{m["settings.completeRequiredFields"]()}
 					</p>
 				{/if}
 			{/if}

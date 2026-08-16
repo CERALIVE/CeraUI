@@ -17,7 +17,7 @@
   never an error toast.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import {
 	NETWORK_INGEST_UNAVAILABLE_ERROR,
 	type NetworkIngestProtocol,
@@ -42,8 +42,6 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-const t = $derived($LL.settings.networkIngest);
-const sources = $derived($LL.settings.dialogs.sources);
 
 type Protocol = 'rtmp' | 'srt';
 const PROTOCOLS: readonly Protocol[] = ['rtmp', 'srt'];
@@ -99,7 +97,7 @@ async function toggle(protocol: Protocol, next: boolean) {
 			!r.success && r.error !== NETWORK_INGEST_UNAVAILABLE_ERROR
 				? { ok: false, reason: r.error }
 				: { ok: true },
-		failMessage: () => $LL.network.os.operationFailed(),
+		failMessage: () => m["network.os.operationFailed"](),
 	});
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
 	if (!result) {
@@ -200,18 +198,18 @@ const STATUS_META = {
 } as const satisfies Record<IngestStatus, { dot: string }>;
 
 const statusLabels = $derived({
-	running: t.statusRunning(),
-	stopped: t.statusStopped(),
-	disabled: t.statusDisabled(),
+	running: m["settings.networkIngest.statusRunning"](),
+	stopped: m["settings.networkIngest.statusStopped"](),
+	disabled: m["settings.networkIngest.statusDisabled"](),
 } satisfies Record<IngestStatus, string>);
 
 const toggleLabels = $derived({
-	rtmp: t.toggleRtmp(),
-	srt: t.toggleSrt(),
+	rtmp: m["settings.networkIngest.toggleRtmp"](),
+	srt: m["settings.networkIngest.toggleSrt"](),
 } satisfies Record<Protocol, string>);
 </script>
 
-<AppDialog bind:open description={sources.description()} hideFooter icon={Radio} title={sources.title()}>
+<AppDialog bind:open description={m["settings.dialogs.sources.description"]()} hideFooter icon={Radio} title={m["settings.dialogs.sources.title"]()}>
 	<div class="space-y-5">
 		{#if unavailable}
 			<div
@@ -219,12 +217,12 @@ const toggleLabels = $derived({
 				data-testid="network-ingest-unavailable"
 				role="status"
 			>
-				{t.unavailable()}
+				{m["settings.networkIngest.unavailable"]()}
 			</div>
 		{/if}
 
 		<!-- What LAN ingest is + the same-network requirement. -->
-		<p class="text-muted-foreground text-sm">{t.explanation()}</p>
+		<p class="text-muted-foreground text-sm">{m["settings.networkIngest.explanation"]()}</p>
 
 		<!-- Per-protocol enable/disable rows. -->
 		<div class="divide-border overflow-hidden rounded-lg border">
@@ -272,8 +270,8 @@ const toggleLabels = $derived({
 					data-testid="sources-test-pattern-row"
 				>
 					<div class="min-w-0 flex-1">
-						<p class="text-sm font-semibold">{sources.testPatternToggle()}</p>
-						<p class="text-muted-foreground mt-0.5 text-xs">{sources.testPatternHint()}</p>
+						<p class="text-sm font-semibold">{m["settings.dialogs.sources.testPatternToggle"]()}</p>
+						<p class="text-muted-foreground mt-0.5 text-xs">{m["settings.dialogs.sources.testPatternHint"]()}</p>
 					</div>
 					<span class="flex shrink-0 items-center gap-2">
 						{#if testPatternBusy()}
@@ -283,7 +281,7 @@ const toggleLabels = $derived({
 							/>
 						{/if}
 						<Switch
-							aria-label={sources.testPatternToggle()}
+							aria-label={m["settings.dialogs.sources.testPatternToggle"]()}
 							bind:checked={() => showTestPattern, (next) => void toggleTestPattern(next)}
 							data-testid="sources-test-pattern-toggle"
 							disabled={testPatternBusy()}
@@ -297,7 +295,7 @@ const toggleLabels = $derived({
 					data-testid="sources-test-pattern-error"
 					role="status"
 				>
-					{$LL.network.os.operationFailed()}
+					{m["network.os.operationFailed"]()}
 				</div>
 			{/if}
 		</div>

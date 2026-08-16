@@ -6,15 +6,12 @@
  * shows its servers description (or the D6 waiting/none hint); any other managed
  * cloud shows the "add your key" prompt. No nested provider dropdown.
  */
-import { LL } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import type { RelayMessage } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
-import { get } from "svelte/store";
 import { describe, expect, it, vi } from "vitest";
 
 import DestinationSection from "./DestinationSection.svelte";
-
-const t = get(LL);
 
 const relaysWithServer: RelayMessage = {
 	accounts: {},
@@ -75,10 +72,10 @@ describe("DestinationSection — three destination tiles", () => {
 			'[data-testid="destination-belabox"]',
 		);
 		expect(ceralive?.textContent).toContain(
-			t.settings.destinationManagedHint(),
+			m["settings.destinationManagedHint"](),
 		);
 		expect(belabox?.textContent).toContain(
-			t.settings.destinationNeedsKey({ cloud: "BELABOX Cloud" }),
+			m["settings.destinationNeedsKey"]({ cloud: "BELABOX Cloud" }),
 		);
 	});
 
@@ -114,6 +111,6 @@ describe("DestinationSection — three destination tiles", () => {
 			'[data-testid="destination-ceralive"]',
 		) as HTMLButtonElement;
 		expect(ceralive.disabled).toBe(true);
-		expect(ceralive.textContent).toContain(t.notifications.relayWaiting());
+		expect(ceralive.textContent).toContain(m["notifications.relayWaiting"]());
 	});
 });

@@ -19,5 +19,5 @@ export const statusContract = oc.router({
 	/**
 	 * Subscribe to all status changes (aggregated)
 	 */
-	onStatusChange: oc.route({ method: 'GET', path: '/status' }),
+	onStatusChange: oc,
 });

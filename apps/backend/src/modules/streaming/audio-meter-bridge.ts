@@ -58,6 +58,7 @@ import {
 	resolveMeterPreference,
 } from "./audio.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
+import { asRawRequestClient } from "./raw-request.ts";
 import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
 
 /** Backoff bounds for the initial-connect retry. Mirrors `engine-reconnect.ts`. */
@@ -531,10 +532,10 @@ function sendMeterDevice(
 	client: CerastreamClient,
 	meter_device: string | null,
 ): Promise<unknown> {
-	const raw = client as unknown as {
-		rawRequest(method: string, params?: unknown): Promise<unknown>;
-	};
-	return raw.rawRequest("reload-config", { audio: { meter_device } });
+	return asRawRequestClient(client, "reload-config").rawRequest(
+		"reload-config",
+		{ audio: { meter_device } },
+	);
 }
 
 /**

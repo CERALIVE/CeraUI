@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 
 import {
@@ -7,11 +7,28 @@ import {
 	discoverFederationAssets,
 	federationAssetKind,
 	normalizeFederationAssetText,
+	parsePackageVersion,
 } from './federation-assets.ts';
 
-const OUTPUT = join(import.meta.dir, '../dist/federation/2026.7.0');
+// Derived, never literal. A pinned version silently tests whatever stale output
+// a dirty checkout happens to hold, and fails outright on a clean one the moment
+// package.json moves on — which it had (this read `2026.7.0` while the build
+// emitted `2026.7.2`). This is the SAME resolution sign-federation.ts uses, so
+// the two cannot disagree about which directory is being signed.
+const ROOT = join(import.meta.dir, '..');
+const VERSION = parsePackageVersion(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const OUTPUT = join(ROOT, 'dist', 'federation', VERSION);
 
 describe('federation asset contract', () => {
+	it('resolves the output directory from the root package version', () => {
+		expect(VERSION).toMatch(/^\d{4}\.\d+\.\d+$/);
+		expect(OUTPUT.endsWith(join('dist', 'federation', VERSION))).toBe(true);
+		expect(
+			existsSync(OUTPUT),
+			`no federation output at ${OUTPUT} — run \`bun run build:federation\` first`,
+		).toBe(true);
+	});
+
 	it('classifies entries, chunks, and styles', () => {
 		expect(federationAssetKind('encoder.js')).toBe('entry');
 		expect(federationAssetKind('select-hash.js')).toBe('chunk');

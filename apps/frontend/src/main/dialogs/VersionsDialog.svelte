@@ -11,7 +11,7 @@
   primary value, with any build metadata demoted to a secondary line.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { Revisions } from '@ceraui/rpc/schemas';
 import { Info } from '@lucide/svelte';
 
@@ -69,9 +69,9 @@ const rows = $derived(
 
 <AppDialog
 	bind:open
-	description={$LL.settings.index.versionsDesc()}
+	description={m["settings.index.versionsDesc"]()}
 	icon={Info}
-	title={$LL.settings.index.versions()}
+	title={m["settings.index.versions"]()}
 >
 	{#if rows.length > 0}
 		<dl class="divide-border bg-card divide-y overflow-hidden rounded-lg border">
@@ -90,6 +90,6 @@ const rows = $derived(
 			{/each}
 		</dl>
 	{:else}
-		<p class="text-muted-foreground py-4 text-sm">{$LL.common.loading()}</p>
+		<p class="text-muted-foreground py-4 text-sm">{m["common.loading"]()}</p>
 	{/if}
 </AppDialog>

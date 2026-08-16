@@ -12,11 +12,11 @@
   • schemaVersionMismatch → informational band (role="status"); options approximate.
   • normal                → nothing.
 
-  All copy is `$LL.live.education.tier.*`. The banner stays in normal document
+  All copy is `m["live.education.tier.*"]`. The banner stays in normal document
   flow so headless/hidden-tab renders show it without a class-triggered reveal.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { CapabilitiesMessage } from '@ceraui/rpc/schemas';
 import { Info, LoaderCircle, ServerOff } from '@lucide/svelte';
 
@@ -43,9 +43,9 @@ const tier = $derived(view.tier);
 		>
 			<ServerOff aria-hidden={true} class="text-muted-foreground mt-0.5 size-5 shrink-0" />
 			<div class="min-w-0 flex-1 space-y-1">
-				<p class="text-sm font-semibold">{$LL.live.education.tier.engineUnavailable.title()}</p>
+				<p class="text-sm font-semibold">{m["live.education.tier.engineUnavailable.title"]()}</p>
 				<p class="text-muted-foreground text-sm">
-					{$LL.live.education.tier.engineUnavailable.body()}
+					{m["live.education.tier.engineUnavailable.body"]()}
 				</p>
 			</div>
 		</div>
@@ -61,9 +61,9 @@ const tier = $derived(view.tier);
 					class="text-primary mt-0.5 size-5 shrink-0 animate-spin motion-reduce:animate-none"
 				/>
 				<div class="min-w-0 flex-1 space-y-1">
-					<p class="text-sm font-semibold">{$LL.live.education.tier.engineStarting.title()}</p>
+					<p class="text-sm font-semibold">{m["live.education.tier.engineStarting.title"]()}</p>
 					<p class="text-muted-foreground text-sm">
-						{$LL.live.education.tier.engineStarting.body()}
+						{m["live.education.tier.engineStarting.body"]()}
 					</p>
 				</div>
 			</div>
@@ -82,10 +82,10 @@ const tier = $derived(view.tier);
 			<Info class="text-status-info mt-0.5 size-5 shrink-0" aria-hidden={true} />
 			<div class="min-w-0 flex-1 space-y-1">
 				<p class="text-sm font-semibold">
-					{$LL.live.education.tier.schemaVersionMismatch.title()}
+					{m["live.education.tier.schemaVersionMismatch.title"]()}
 				</p>
 				<p class="text-muted-foreground text-sm">
-					{$LL.live.education.tier.schemaVersionMismatch.body()}
+					{m["live.education.tier.schemaVersionMismatch.body"]()}
 				</p>
 			</div>
 		</div>

@@ -23,34 +23,35 @@
 		"build:federation": "bun run --filter frontend build:federation",
 		"test:federation": "bun run build:federation && bun test scripts/federation-assets.test.mjs",
 		"sign:federation": "bun run scripts/sign-federation.ts",
+		"test:federation-abi": "bun run build:federation && bun run --filter frontend test:federation-abi",
 		"build:backend": "bun run --filter backend build:backend-only",
 		"preview": "bun run --filter frontend preview",
-		"test": "bun run --filter @ceraui/rpc test && bun run --filter frontend test && bun run --filter backend test",
+		"test": "bun run --filter @ceraui/rpc test && bun run --filter @ceraui/i18n test && bun run --filter frontend test && bun run --filter backend test",
 		"test:build-check-shape": "bun test scripts/ci/build-check-shape.test.mjs",
 		"test:release-package-contracts": "bash scripts/build/release-package-contracts.sh",
 		"test:service-contract": "bash scripts/ci/run-service-contract.sh",
 		"check:tech-debt": "node scripts/check-tech-debt.mjs",
 		"test:tech-debt": "node --test scripts/check-tech-debt.test.mjs",
 		"check:rc-pins": "bash scripts/check-rc-pins.sh",
-		"test:e2e": "bun run --filter frontend test:e2e -- --grep-invert \"@visual|@a11y|@gallery\"",
+		"test:e2e": "bun run --filter frontend test:e2e -- --grep-invert \"@visual|@a11y|@gallery|@premigration-upgrade\"",
 		"test:e2e:visual": "bun run --filter frontend test:e2e -- --grep @visual",
 		"screenshots": "bun run --filter frontend test:e2e:gallery",
-		"lint": "biome check . && bun run --filter backend check && bun run --filter frontend check && bun run --filter backend lint && bun run --filter frontend lint",
+		"lint": "biome check . && bun run --filter backend check && bun run --filter @ceraui/rpc check && bun run --filter @ceraui/i18n check && bun run --filter frontend check && bun run --filter backend lint && bun run --filter frontend lint",
 		"lint:fix": "biome check --write . ; bun run --filter backend lint:fix ; bun run --filter frontend lint:fix",
 		"clean": "rm -rf dist/ && bun run --filter './apps/*' clean && rm -rf node_modules",
 		"clean:all": "bun run clean"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.2",
-		"@ceralive/biome-config": "^2026.6.2",
-		"@types/node": "^26.1.1",
+		"@biomejs/biome": "2.5.8",
+		"@ceralive/biome-config": "^2026.8.0",
+		"@types/node": "^26.2.0",
 		"dotenv-cli": "^11.0.0",
 		"glob": "^13.0.6",
 		"mprocs": "^0.9.6",
 		"typescript": "^6.0.3"
 	},
 	"volta": {
-		"node": "24.0.0"
+		"node": "26.0.0"
 	},
 	"packageManager": "bun@1.3.14",
 	"workspaces": {

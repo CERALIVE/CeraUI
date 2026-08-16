@@ -237,5 +237,5 @@ The backend broadcasts state changes via the existing `kiosk` event type on the 
 - The dialog composes `AppDialog.svelte`.
 - The toggle binds to `kiosk_enabled` from the RPC response.
 - The status indicator derives from the `kiosk` broadcast event state field.
-- All user-facing strings go through `LL.*` (typesafe-i18n).
+- All user-facing strings go through `m[...]` (Paraglide) — historical: this doc predates the `typesafe-i18n`→Paraglide cutover (todo 24), when the facade was `LL.*`.
 - No inline validation literals.

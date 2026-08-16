@@ -17,7 +17,7 @@
   entirely separate from this component — it is neither read nor rendered here.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { NetifMessage } from '@ceraui/rpc/schemas';
 import { Info, TriangleAlert } from '@lucide/svelte';
 
@@ -57,10 +57,10 @@ const hasPolicyRouteMissing = $derived(entries.some((entry) => entry.policy_rout
 		<Info class="text-status-info mt-0.5 size-5 shrink-0" aria-hidden="true" />
 		<div class="min-w-0 space-y-1">
 			<p class="text-sm font-semibold tracking-tight">
-				{$LL.network.collision.sameSubnetTitle()}
+				{m["network.collision.sameSubnetTitle"]()}
 			</p>
 			<p class="text-muted-foreground text-sm">
-				{$LL.network.collision.sameSubnetBody()}
+				{m["network.collision.sameSubnetBody"]()}
 			</p>
 			<div class="flex flex-wrap gap-1.5 pt-0.5">
 				{#each sameSubnetGroups as group (group)}
@@ -84,10 +84,10 @@ const hasPolicyRouteMissing = $derived(entries.some((entry) => entry.policy_rout
 		<TriangleAlert class="text-status-warning mt-0.5 size-5 shrink-0" aria-hidden="true" />
 		<div class="min-w-0 space-y-1">
 			<p class="text-sm font-semibold tracking-tight">
-				{$LL.network.collision.policyRouteTitle()}
+				{m["network.collision.policyRouteTitle"]()}
 			</p>
 			<p class="text-muted-foreground text-sm">
-				{$LL.network.collision.policyRouteBody()}
+				{m["network.collision.policyRouteBody"]()}
 			</p>
 		</div>
 	</div>

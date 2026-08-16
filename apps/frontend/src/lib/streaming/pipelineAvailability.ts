@@ -20,12 +20,12 @@ import type { NetworkIngest, Pipeline, Pipelines } from "@ceraui/rpc/schemas";
 
 /**
  * i18n key for the disabled-reason tooltip shown on an rtmp/srt pipeline whose
- * network-ingest gateway is not active. Consumers pass this to `LL`
- * (e.g. `LL.live.education.reason.gatewayInactive()`) — never render the key
+ * network-ingest gateway is not active. Consumers resolve this through `m`
+ * (e.g. `m["live.education.reason.gatewayInactive"]()`) — never render the key
  * string directly. It sits alongside the other disabled-option reason keys
  * ({@link OPTION_UNSUPPORTED_ON_PLATFORM} / {@link OPTION_FIXED_BY_SOURCE} in
  * ValidationAdapter). The English text lives in
- * `packages/i18n/src/en/index.ts` under `live.education.reason.gatewayInactive`.
+ * `packages/i18n/messages/en.json` under `live.education.reason.gatewayInactive`.
  */
 export const PIPELINE_GATEWAY_INACTIVE =
 	"live.education.reason.gatewayInactive" as const;
@@ -39,7 +39,7 @@ export const PIPELINE_GATEWAY_INACTIVE =
  * This is DISTINCT from {@link PIPELINE_GATEWAY_INACTIVE}: the gateway is up, so
  * the fix is "join a LAN or enable the device hotspot", not "start the service".
  * Keeping the two reasons separate lets every surface show the RIGHT copy for the
- * RIGHT problem. The English text lives in `packages/i18n/src/en/index.ts` under
+ * RIGHT problem. The English text lives in `packages/i18n/messages/en.json` under
  * `live.education.reason.gatewayNoAddress`.
  */
 export const PIPELINE_GATEWAY_NO_ADDRESS =

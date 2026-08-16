@@ -87,6 +87,22 @@ register is "empty" precisely when there are none.
 ## Open Debt
 
 ```debt
+id: TD-federation-i18n-catalog-size
+title: Federation toast-host shared chunk carries an oversized static Paraglide catalog
+track: 1
+status: open
+exit_criteria: `bun run build:federation && bun scripts/ci/bundle-report.mjs`
+owner: ceraui-team
+registered_at: 2026-08-15
+resolved_at: null
+unblock: The federation toast-host.js shared chunk measured 613,463 B gzip on 2026-08-15, versus the prior 245,936 B budget, because a hosted federation bundle is one signed manifest-pinned module graph and must carry the Paraglide catalog statically rather than lazy-loading the SPA's locale chunks. Revisit this debt in a dedicated architecture effort by evaluating (1) Paraglide outputStructure: "locale-modules", (2) dynamic federation chunks with manifest/signing/CSP support, and (3) a smaller federation-specific catalog surface; keep this entry open until one remedy is implemented and the live budget can be reduced.
+```
+
+The federation budget exception is intentionally limited to `toast-host.js`; every
+other federation budget remains at its passing value. The measured size is accepted
+as a documented, open debt rather than silently treated as resolved.
+
+```debt
 id: TD-pip
 title: Picture-in-picture / source compositing
 track: 2
@@ -220,7 +236,7 @@ exit_criteria: `bun run --filter backend test -- sources.test.ts`
 owner: ceraui-team
 registered_at: 2026-07-04
 resolved_at: null
-unblock: remove only after the FULL migrate-then-wait-then-delete sequence below completes — it is NOT a straight one-release timer. The device-first source model (experience-simplification Tasks 1-16) folds pipelines/devices/device_modes into ONE unified sources broadcast (modules/streaming/sources.ts, getSourcesMessage/buildSources), but the three legacy producers are deliberately left running byte-for-byte unchanged as a rollback safety net: the `devices` broadcast (modules/streaming/devices.ts `deps.broadcast("devices", …)` + its post-login dispatch in rpc/adapter.ts), the `pipelines` broadcast (rpc/procedures/streaming.procedure.ts `broadcastMsg("pipelines", …)`), and the `device_modes` field folded onto the `capabilities` broadcast (modules/streaming/capabilities.ts). CORRECTED 2026-07-06 — this entry previously made a FALSE blanket claim that every frontend consumer had already migrated onto `getSources()`; in truth `EncoderDialog.svelte` (`getPipelines`+`getDevices`), `AudioDialog.svelte` (`getPipelines`), `LiveView.svelte` (`getPipelines`), and `StreamingStateManager.svelte.ts` (`getPipelines`) all still consume the legacy getters directly today — only `SourceSection`/`StreamSetupChain` read `getSources()` exclusively. The REAL exit condition: (1) migrate `EncoderDialog`/`AudioDialog`/`LiveView`/`StreamingStateManager` off `getPipelines`/`getDevices` onto `getSources`-derived data, (2) ship one full release on that migrated state as the sole consumer path with no rollback needed, (3) THEN delete the three legacy producers/fields (and the now-unused `getPipelines`/`devices`/`device_modes` schema surface, if nothing else depends on it), then flip this entry to resolved.
+unblock: remove only after the FULL migrate-then-wait-then-delete sequence below completes — it is NOT a straight one-release timer. The device-first source model (experience-simplification Tasks 1-16) folds pipelines/devices/device_modes into ONE unified sources broadcast (modules/streaming/sources.ts, getSourcesMessage/buildSources), but the three legacy producers are deliberately left running byte-for-byte unchanged as a rollback safety net: the `devices` broadcast (modules/streaming/devices.ts `deps.broadcast("devices", …)` + its post-login dispatch in rpc/adapter.ts), the `pipelines` broadcast (rpc/procedures/streaming.procedure.ts `broadcastMsg("pipelines", …)`), and the `device_modes` field folded onto the `capabilities` broadcast (modules/streaming/capabilities.ts). CORRECTED 2026-07-06 — this entry previously made a FALSE blanket claim that every frontend consumer had already migrated onto `getSources()`; in truth `EncoderDialog.svelte` (`getPipelines`+`getDevices`), `AudioDialog.svelte` (`getPipelines`), `LiveView.svelte` (`getPipelines`), and `StreamingStateManager.svelte.ts` (`getPipelines`) all still consume the legacy getters directly today — only `SourceSection`/`StreamSetupChain` read `getSources()` exclusively. The REAL exit condition: (1) migrate `EncoderDialog`/`AudioDialog`/`LiveView`/`StreamingStateManager` off `getPipelines`/`getDevices` onto `getSources`-derived data, (2) ship one full release on that migrated state as the sole consumer path with no rollback needed, (3) THEN delete the three legacy producers/fields (and the now-unused `getPipelines`/`devices`/`device_modes` schema surface, if nothing else depends on it), then flip this entry to resolved. STEP 1 DONE 2026-08-15 (ts7-node26-i18n-quality todo 27): all four consumers now read `getSources()` through `apps/frontend/src/lib/streaming/sources-view-model.ts`, which projects the unified `StreamSource[]` back into the legacy `Pipelines` registry and the probed-caps/UVC-H.265 device views the Encoder dialog renders. `grep -rn "getPipelines()\|getDevices()" apps/frontend/src` now returns ZERO call sites outside `subscriptions.svelte.ts` itself (the remaining hits are the `lib/rpc/client.ts` procedure type, the `lib/rpc/index.ts` barrel re-export, and three documentation comments in `NetworkIngestSection.svelte`/`networkIngestRows.ts`/`audioGate.ts`). The three legacy PRODUCERS were deliberately left running unchanged — this entry stays OPEN on step 2. NEXT GATE: after the next release tag lands, verify it contains the migration commit (`git tag --contains <sha>` non-empty) and that no rollback was needed, then execute step 3.
 ```
 
 This entry carries no source `data-debt-id` marker — the shim is a backend

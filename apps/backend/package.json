@@ -13,7 +13,7 @@
 		"@ceralive/control-protocol": "2026.7.0",
 		"@ceralive/srtla-send": "2026.6.2",
 		"@ceraui/rpc": "workspace:*",
-		"@orpc/server": "^1.14.8",
+		"@orpc/server": "2.0.0-beta.27",
 		"finalhandler": "^2.1.1",
 		"zod": "catalog:",
 		"http-proxy": "^1.18.1",
@@ -28,8 +28,8 @@
 		"@types/serve-static": "^2.2.0",
 		"@types/ws": "^8.18.1",
 		"@types/xml2js": "^0.4.14",
-		"npm-run-all2": "^9.0.2",
-		"typescript": "catalog:"
+		"npm-run-all2": "^9.0.3",
+		"typescript": "^7.0.2"
 	},
 	"scripts": {
 		"dev": "NODE_ENV=development bun --watch run src/main.ts",
@@ -40,7 +40,7 @@
 		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; NODE_ENV=production bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive' && cd ../.. && bun run build:frontend",
 		"build:backend-only": "rm -rf ../../dist/ceralive ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; NODE_ENV=production bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive'",
 		"test": "bun test",
-		"check": "bun tsc --noEmit && bash scripts/check-exec-guard.sh",
+		"check": "node ../../scripts/tsc.mjs --noEmit && bash scripts/check-exec-guard.sh",
 		"check:exec-guard": "bash scripts/check-exec-guard.sh",
 		"lint": "echo 'Backend linting handled by root Biome'",
 		"lint:fix": "echo 'Backend fixing handled by root Biome'",

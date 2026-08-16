@@ -31,7 +31,7 @@ vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 vi.mock("@ceraui/i18n/svelte", () => ({
-	getLL: () => ({ network: { os: { operationFailed: () => "failed" } } }),
+	m: { "network.os.operationFailed": () => "failed" },
 }));
 
 afterEach(() => {

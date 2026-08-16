@@ -12,7 +12,7 @@ import { expect, type Page } from '@playwright/test';
  *   We set BOTH so the persisted preference and the applied class agree.
  * - Locale: the app store persists `locale` as a JSON object; App.svelte reads
  *   `getLocale()?.code`, so a `{ code }` object is sufficient. The <html lang>
- *   attribute is set by typesafe-i18n once that code loads.
+ *   attribute is set by the i18n store once that code loads.
  */
 
 /**
@@ -83,12 +83,43 @@ export async function navigateTo(page: Page, destination: Destination): Promise<
 	const desktopTab = page.locator(`#nav-tab-${destination}`);
 	const mobileTab = page.locator(`#mobile-nav-tab-${destination}`);
 
+	// The rail and the dock are mutually exclusive, and BOTH mount after `load` —
+	// so a one-shot isVisible() races the SPA and can pick the layout this viewport
+	// never shows, whose click then blocks until the test times out. Wait for the
+	// layout that actually rendered before choosing.
+	await page
+		.locator(`#nav-tab-${destination}:visible, #mobile-nav-tab-${destination}:visible`)
+		.first()
+		.waitFor({ state: 'visible' });
+
 	const tab = (await desktopTab.isVisible().catch(() => false)) ? desktopTab : mobileTab;
 	// Idempotent: when already on this destination the click is redundant and, on
 	// the mobile bottom dock, can be intercepted by transient toast overlays.
-	if ((await tab.getAttribute('aria-current').catch(() => null)) === 'page') return;
-	await tab.click();
-	await expect(tab).toHaveAttribute('aria-current', 'page');
+	if ((await tab.getAttribute('aria-current').catch(() => null)) !== 'page') {
+		await tab.click();
+		await expect(tab).toHaveAttribute('aria-current', 'page');
+	}
+	await settleDestination(page, destination);
+}
+
+/**
+ * Wait for a destination's CONTENT, not just its nav state.
+ *
+ * The shell paints before the destination does: each destination's i18n
+ * namespaces are lazy chunks resolved at the navigation activation point, so an
+ * active nav tab no longer implies the view is mounted. A one-shot read
+ * (`locator.count()`, `page.evaluate`) taken on the nav signal alone therefore
+ * races the view — auto-waiting assertions hid it, non-waiting reads did not.
+ */
+export async function settleDestination(
+	page: Page,
+	destination?: Destination,
+): Promise<void> {
+	const selector =
+		destination === undefined
+			? '[data-testid="destination-content"]'
+			: `[data-testid="destination-content"][data-destination="${destination}"]`;
+	await page.locator(selector).waitFor({ state: 'attached', timeout: 30_000 });
 }
 
 /**

@@ -14,7 +14,7 @@
   e-paper). Touch safety: every control meets the 44px minimum tap target.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Check, ChevronRight, Radio, Rocket, Server, X } from '@lucide/svelte';
 import type { Component } from 'svelte';
 
@@ -41,7 +41,6 @@ const {
 	onDismiss,
 }: Props = $props();
 
-const t = $derived($LL.live.onboarding);
 
 interface Step {
 	id: 'network' | 'server' | 'start';
@@ -57,24 +56,24 @@ const steps = $derived<Step[]>([
 	{
 		id: 'network',
 		icon: Radio,
-		title: t.steps.network.title(),
-		hint: t.steps.network.hint(),
+		title: m["live.onboarding.steps.network.title"](),
+		hint: m["live.onboarding.steps.network.hint"](),
 		done: networkDone,
-		action: { label: t.steps.network.action(), onClick: onConfigureNetwork },
+		action: { label: m["live.onboarding.steps.network.action"](), onClick: onConfigureNetwork },
 	},
 	{
 		id: 'server',
 		icon: Server,
-		title: t.steps.server.title(),
-		hint: t.steps.server.hint(),
+		title: m["live.onboarding.steps.server.title"](),
+		hint: m["live.onboarding.steps.server.hint"](),
 		done: serverDone,
-		action: { label: t.steps.server.action(), onClick: onConfigureServer },
+		action: { label: m["live.onboarding.steps.server.action"](), onClick: onConfigureServer },
 	},
 	{
 		id: 'start',
 		icon: Rocket,
-		title: t.steps.start.title(),
-		hint: t.steps.start.hint(),
+		title: m["live.onboarding.steps.start.title"](),
+		hint: m["live.onboarding.steps.start.hint"](),
 		done: startDone,
 	},
 ]);
@@ -85,13 +84,13 @@ const steps = $derived<Step[]>([
 		<Card.Content class="space-y-4 p-5 sm:p-6">
 			<div class="flex items-start gap-3">
 				<div class="min-w-0 flex-1 space-y-1">
-					<h2 class="text-base font-semibold">{t.title()}</h2>
-					<p class="text-muted-foreground text-sm">{t.subtitle()}</p>
+					<h2 class="text-base font-semibold">{m["live.onboarding.title"]()}</h2>
+					<p class="text-muted-foreground text-sm">{m["live.onboarding.subtitle"]()}</p>
 				</div>
 				<button
 					type="button"
 					class="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring/50 grid size-11 shrink-0 place-items-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:outline-none"
-					aria-label={t.dismiss()}
+					aria-label={m["live.onboarding.dismiss"]()}
 					onclick={onDismiss}
 				>
 					<X aria-hidden={true} class="size-4" />
@@ -130,7 +129,7 @@ const steps = $derived<Step[]>([
 						</span>
 
 						{#if step.done}
-							<span class="text-primary shrink-0 text-xs font-medium">{t.done()}</span>
+							<span class="text-primary shrink-0 text-xs font-medium">{m["live.onboarding.done"]()}</span>
 						{:else if step.action}
 							<Button
 								class="min-h-11 shrink-0 gap-1.5"

@@ -1,248 +1,242 @@
-import { beforeAll, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 
-import type { Locales } from "../src/i18n-types.js";
-import { i18nObject, i18nString, loadedLocales } from "../src/i18n-util.js";
-import { loadAllLocales } from "../src/i18n-util.sync.js";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+import type { LocaleCode } from "../src/locale-lifecycle.js";
 import {
-	type InterpolationParams,
-	interpolate,
-} from "../src/plural-resolver.js";
+	ALL_LOCALES,
+	isComplex,
+	PLURAL_COUNTS,
+	readCatalog,
+	readOracleParams,
+	readRenderedOracle,
+	variantsOf,
+} from "./helpers/catalog.js";
 
 // ---------------------------------------------------------------------------
-// The Svelte 5 runes adapter (`i18n-svelte5.svelte.ts`) renders EVERY
-// translation string through the pure, rune-free `interpolate()` exported from
-// `plural-resolver.ts`. These tests therefore prove the BROWSER path (adapter)
-// renders typesafe-i18n plural syntax byte-for-byte identically to the NODE
-// path — using the real `i18nObject` / `i18nString` runtime as the oracle.
+// STORE-FACING PLURAL PARITY (plan todo 23; replaces the legacy adapter gate).
 //
-// TDD: written FIRST (fails while the resolver only does param substitution and
-// leaves the literal `{{link|links}}` in the output), then made green by the
-// resolver implementation.
+// The legacy Svelte 5 adapter rendered every string through the pure
+// `interpolate()` resolver, so this file proved that resolver byte-matched the
+// legacy node runtime. Both are deleted (plan todo 24). What SURVIVES is
+// the claim that mattered: the string an operator sees for a plural key is
+// byte-identical to what the old implementation produced.
+//
+// So the render path here is the NEW store's own — `generated/registry.js`, the
+// module `@ceraui/i18n/svelte` re-exports as `m` — and the oracle is the FROZEN
+// old-implementation capture (plan todo 19). Every assertion is an exact string,
+// including the shipped Arabic `linksReadyCount` defect (`{count}  للتجميع`,
+// double space: a 2-branch source key whose absent `zero`/`two` branches render
+// empty). Reproducing a defect byte-for-byte is the point — a copy fix is a
+// separate, separately-reviewed translation PR that updates the fixtures.
+//
+// WHAT REPLACED THE SYNTHETIC-TEMPLATE CASES. The legacy file also drove 17
+// hand-written templates through the resolver to cover legacy grammar the
+// dictionaries did not use: the `{{s}}` suffix shorthand, keyed `{{k:a|b}}`,
+// 3-branch `zero|one|other`, and `??` value injection. Those forms have NO
+// representation in the converted catalog — not by omission, but by construction:
+// the converter REJECTED each of them by name (`assertSupportedPlural`, deleted
+// with the converter), and the todo-19 grammar inventory found zero
+// occurrences of any of them across all ten locales. There is therefore no
+// converted message to render them through, and reimplementing the resolver here
+// to keep the old assertions alive would test a deleted implementation.
+//
+// The equivalent protection post-cutover is an INVENTORY LOCK: the catalogs are
+// hand-editable JSON from todo 24 on, so each retired form is asserted ABSENT by
+// name from every locale. A hand edit that reintroduces one fails here instead of
+// silently reaching an operator as literal `{{s}}`.
 // ---------------------------------------------------------------------------
 
-type Dict = Record<string, unknown>;
+const GENERATED = join(
+	dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"generated",
+);
 
-// Locales that carry typesafe-i18n plural syntax on the tested keys. ja/ko/zh
-// have no `{{...}}` on these keys (regression: they must still byte-match).
-const ALL_LOCALES: Locales[] = [
-	"en",
-	"ar",
-	"fr",
-	"de",
-	"es",
-	"pt-BR",
-	"hi",
-	"ja",
-	"ko",
-	"zh",
-];
-const COUNTS = [0, 1, 2, 6] as const;
+const { m } = (await import(join(GENERATED, "registry.js"))) as {
+	m: Record<
+		string,
+		((inputs?: Record<string, unknown>, options?: { locale: string }) => string)
+	>;
+};
 
-beforeAll(() => {
-	loadAllLocales();
-});
+/** The three keys the todo-19 grammar inventory found carry plural syntax. */
+const PLURAL_KEYS = [
+	"live.server.bondedAcross",
+	"live.setup.linksReady",
+	"live.ingest.linksReadyCount",
+] as const;
 
-// Depth-first search for the first path whose final segment === `key` and whose
-// value is a string. `bondedAcross` / `linksReadyCount` are unique leaf keys.
-function findPath(
-	dict: Dict,
+function renderPlural(locale: LocaleCode, key: string, count: number): string {
+	const spec = readOracleParams(locale).keys[key];
+	const inputs =
+		spec?.plural === true
+			? Object.fromEntries(spec.countParams.map((name) => [name, count]))
+			: (spec?.params ?? {});
+	const render = m[key];
+	if (render === undefined) throw new Error(`registry has no message ${key}`);
+	return render(inputs, { locale });
+}
+
+/**
+ * ja/ko/zh carry no plural syntax on these keys, so their frozen entry is a
+ * single string rather than a per-count map — and it must render identically at
+ * every count. That regression case was in the legacy gate and is kept here.
+ */
+function frozenRender(
+	locale: LocaleCode,
 	key: string,
-	path: string[] = [],
-): string[] | undefined {
-	for (const [k, v] of Object.entries(dict)) {
-		const next = [...path, k];
-		if (k === key && typeof v === "string") return next;
-		if (v && typeof v === "object") {
-			const found = findPath(v as Dict, key, next);
-			if (found) return found;
-		}
-	}
-	return undefined;
+	count: number,
+): string | undefined {
+	const entry = readRenderedOracle(locale)[key];
+	return typeof entry === "string" ? entry : entry?.[String(count)];
 }
 
-function rawAt(dict: Dict, path: string[]): string {
-	let cur: unknown = dict;
-	for (const seg of path) cur = (cur as Dict)[seg];
-	return cur as string;
+/** Every rendered pattern of a catalog, plural branches expanded. */
+function allPatterns(locale: LocaleCode): Array<{ key: string; pattern: string }> {
+	return Object.entries(readCatalog(locale)).flatMap(([key, value]) =>
+		(isComplex(value) ? Object.values(variantsOf(value).match) : [value]).map(
+			(pattern) => ({ key, pattern }),
+		),
+	);
 }
 
-function oracleAt(
-	proxy: unknown,
-	path: string[],
-	params: Record<string, unknown>,
-): string {
-	let cur: unknown = proxy;
-	for (const seg of path) cur = (cur as Dict)[seg];
-	return (cur as (p: Record<string, unknown>) => string)(params);
-}
-
-type StringOracle = (text: string, params: Record<string, unknown>) => string;
-
-describe("svelte adapter plural parity (interpolate === i18nObject)", () => {
-	for (const key of ["bondedAcross", "linksReadyCount"] as const) {
+describe("store plural parity (m[key] === frozen old-implementation oracle)", () => {
+	for (const key of PLURAL_KEYS) {
 		for (const locale of ALL_LOCALES) {
-			for (const count of COUNTS) {
-				it(`${locale} · ${key} · count=${count}`, () => {
-					const dict = loadedLocales[locale] as unknown as Dict;
-					const path = findPath(dict, key);
-					expect(path).toBeDefined();
-					if (!path) return;
-
-					const template = rawAt(dict, path);
-					const oracle = oracleAt(i18nObject(locale), path, { count });
-
-					expect(interpolate(template, { count }, locale)).toBe(oracle);
+			for (const count of PLURAL_COUNTS) {
+				const category = new Intl.PluralRules(locale).select(count);
+				it(`${locale} · ${key} · count=${count} (${category})`, () => {
+					const expected = frozenRender(locale, key, count);
+					expect(expected).toBeString();
+					expect(renderPlural(locale, key, count)).toBe(expected as string);
 				});
 			}
 		}
 	}
 });
 
-describe("plural semantics parity (interpolate === i18nString oracle)", () => {
-	const cases: Array<{
-		name: string;
-		template: string;
-		params: InterpolationParams;
-		locale: Locales;
-	}> = [
-		// (a) unkeyed plural inherits the PREVIOUS param's key (lastAccessor) —
-		// parser oracle `'{ nr: number } {{ Project | Projects }}'` -> key `nr`.
-		{
-			name: "(a) lastAccessor: {nr:number} then {{Project|Projects}} (plural)",
-			template: "{nr:number} {{ Project | Projects }}",
-			params: { nr: 2 },
-			locale: "en",
+describe("Arabic six-way selection reaches every CLDR bucket", () => {
+	const AR_SIX_WAY = {
+		"live.server.bondedAcross": {
+			zero: "مجمّع عبر 0 روابط",
+			one: "مجمّع عبر 1 رابط",
+			two: "مجمّع عبر 2 رابطين",
+			few: "مجمّع عبر 5 روابط",
+			many: "مجمّع عبر 11 رابطًا",
+			other: "مجمّع عبر 100 رابط",
 		},
-		{
-			name: "(a) lastAccessor: {nr:number} then {{Project|Projects}} (singular)",
-			template: "{nr:number} {{ Project | Projects }}",
-			params: { nr: 1 },
-			locale: "en",
+		"live.setup.linksReady": {
+			zero: "0 روابط جاهزة",
+			one: "1 رابط جاهزة",
+			two: "2 رابطان جاهزة",
+			few: "5 روابط جاهزة",
+			many: "11 رابطًا جاهزة",
+			other: "100 رابط جاهزة",
 		},
-		// plural BEFORE any param -> falls back to the FIRST key seen anywhere.
-		{
-			name: "(a) plural before first param falls back to first key",
-			template: "{{item|items}} for {nr:number}",
-			params: { nr: 3 },
-			locale: "en",
+		// The SHIPPED defect, frozen: `zero` and `two` select branches the source
+		// key never declared, so they render empty and leave a double space.
+		"live.ingest.linksReadyCount": {
+			zero: "0  للتجميع",
+			one: "1 رابط جاهز للتجميع",
+			two: "2  للتجميع",
+			few: "5 روابط جاهزة للتجميع",
+			many: "11 روابط جاهزة للتجميع",
+			other: "100 روابط جاهزة للتجميع",
 		},
-		// (b) keyed plural {{key:a|b}} overrides lastAccessor.
-		{
-			name: "(b) keyed plural {{count:apple|apples}} (plural)",
-			template: "{{count:apple|apples}}",
-			params: { count: 3 },
-			locale: "en",
-		},
-		{
-			name: "(b) keyed plural {{count:apple|apples}} (singular)",
-			template: "{{count:apple|apples}}",
-			params: { count: 1 },
-			locale: "en",
-		},
-		// (c) 3-part zero|one|other + the 0 -> `zero` special rule.
-		{
-			name: "(c) 3-part zero-special (count=0)",
-			template: "{count:number} {{no cats|one cat|?? cats}}",
-			params: { count: 0 },
-			locale: "en",
-		},
-		{
-			name: "(c) 3-part one (count=1)",
-			template: "{count:number} {{no cats|one cat|?? cats}}",
-			params: { count: 1 },
-			locale: "en",
-		},
-		{
-			name: "(c) 3-part other (count=5)",
-			template: "{count:number} {{no cats|one cat|?? cats}}",
-			params: { count: 5 },
-			locale: "en",
-		},
-		// (c) 6-part (zero|one|two|few|many|other) via Intl.PluralRules('ar').
-		{
-			name: "(c) 6-part ar zero (count=0)",
-			template: "{count} {{zero|one|two|few|many|other}}",
-			params: { count: 0 },
-			locale: "ar",
-		},
-		{
-			name: "(c) 6-part ar two (count=2)",
-			template: "{count} {{zero|one|two|few|many|other}}",
-			params: { count: 2 },
-			locale: "ar",
-		},
-		{
-			name: "(c) 6-part ar few (count=6)",
-			template: "{count} {{zero|one|two|few|many|other}}",
-			params: { count: 6 },
-			locale: "ar",
-		},
-		{
-			name: "(c) 6-part ar many (count=11)",
-			template: "{count} {{zero|one|two|few|many|other}}",
-			params: { count: 11 },
-			locale: "ar",
-		},
-		// (d) {{s}} suffix shorthand (empty singular).
-		{
-			name: "(d) {{s}} shorthand (singular)",
-			template: "{count:number} item{{s}}",
-			params: { count: 1 },
-			locale: "en",
-		},
-		{
-			name: "(d) {{s}} shorthand (plural)",
-			template: "{count:number} item{{s}}",
-			params: { count: 2 },
-			locale: "en",
-		},
-		{
-			name: "(d) {{s}} shorthand (zero -> plural in en)",
-			template: "{count:number} item{{s}}",
-			params: { count: 0 },
-			locale: "en",
-		},
-		// (e) `??` value injection INSIDE the chosen branch (rest is literal).
-		{
-			name: "(e) ?? value injection (plural branch)",
-			template: "{count:number} {{a banana|?? bananas}}",
-			params: { count: 5 },
-			locale: "en",
-		},
-		{
-			name: "(e) ?? value injection (singular branch, no ??)",
-			template: "{count:number} {{a banana|?? bananas}}",
-			params: { count: 1 },
-			locale: "en",
-		},
-	];
+	} as const;
 
-	for (const c of cases) {
-		it(c.name, () => {
-			const oracle = i18nString(c.locale) as unknown as StringOracle;
-			expect(interpolate(c.template, c.params, c.locale)).toBe(
-				oracle(c.template, c.params),
-			);
-		});
+	const COUNT_FOR_CATEGORY = { zero: 0, one: 1, two: 2, few: 5, many: 11, other: 100 } as const;
+
+	for (const [key, byCategory] of Object.entries(AR_SIX_WAY)) {
+		for (const [category, expected] of Object.entries(byCategory)) {
+			it(`ar · ${key} · ${category}`, () => {
+				const count = COUNT_FOR_CATEGORY[category as keyof typeof COUNT_FOR_CATEGORY];
+				expect(renderPlural("ar", key, count)).toBe(expected);
+				expect(frozenRender("ar", key, count)).toBe(expected);
+			});
+		}
 	}
 });
 
-describe("regression: strings without plural syntax render unchanged", () => {
-	it("plain string is byte-identical", () => {
-		const s = "Bonded links ready to bond";
-		expect(interpolate(s, {}, "en")).toBe(s);
+describe("English zero/one/other selection", () => {
+	const EN_EXPECTED = {
+		"live.server.bondedAcross": { 0: "Bonded across 0 links", 1: "Bonded across 1 link", 100: "Bonded across 100 links" },
+		"live.setup.linksReady": { 0: "0 links ready", 1: "1 link ready", 100: "100 links ready" },
+		"live.ingest.linksReadyCount": { 0: "0 links ready to bond", 1: "1 link ready to bond", 100: "100 links ready to bond" },
+	} as const;
+
+	for (const [key, byCount] of Object.entries(EN_EXPECTED)) {
+		for (const [count, expected] of Object.entries(byCount)) {
+			it(`en · ${key} · count=${count}`, () => {
+				expect(renderPlural("en", key, Number(count))).toBe(expected);
+			});
+		}
+	}
+});
+
+// Grammar the legacy runtime supported, the converter refuses, and the catalogs
+// have never contained. Each is asserted absent BY NAME so a hand edit that
+// reintroduces one fails here rather than in front of an operator.
+describe("retired legacy grammar stays absent from every catalog", () => {
+	const RETIRED_FORMS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
+		{ name: "{{s}} suffix shorthand", pattern: /\{\{\s*s\s*\}\}/ },
+		{ name: "keyed plural {{key:a|b}}", pattern: /\{\{[^{}]*:[^{}]*\|[^{}]*\}\}/ },
+		{ name: "positional {0} parameter", pattern: /\{\d+\}/ },
+		{ name: "formatter pipe {x|fmt}", pattern: /\{\w+\|[^{}]*\}/ },
+		{ name: "optional param {x?:t}", pattern: /\{\w+\?:/ },
+		{ name: "any {{…}} plural group", pattern: /\{\{/ },
+	];
+
+	for (const locale of ALL_LOCALES) {
+		for (const { name, pattern } of RETIRED_FORMS) {
+			it(`${locale}: no ${name}`, () => {
+				const hits = allPatterns(locale)
+					.filter(({ pattern: text }) => pattern.test(text))
+					.map(({ key }) => key);
+				expect([...new Set(hits)]).toEqual([]);
+			});
+		}
+	}
+
+	it("`??` value injection is absent from every catalog", () => {
+		const hits = ALL_LOCALES.flatMap((locale) =>
+			allPatterns(locale)
+				.filter(({ pattern }) => pattern.includes("??"))
+				.map(({ key }) => `${locale}:${key}`),
+		);
+		expect(hits).toEqual([]);
 	});
 
-	it("no params leaves plain text untouched", () => {
-		expect(interpolate("Links ready", {}, "en")).toBe("Links ready");
+	it("exactly three keys carry plural variants, in every locale that has any", () => {
+		for (const locale of ALL_LOCALES) {
+			const keys = Object.entries(readCatalog(locale))
+				.filter(([, value]) => isComplex(value))
+				.map(([key]) => key)
+				.sort();
+			const expected = ["ja", "ko", "zh"].includes(locale)
+				? []
+				: [...PLURAL_KEYS].sort();
+			expect(keys).toEqual(expected);
+		}
+	});
+});
+
+describe("regression: messages without plural syntax render unchanged", () => {
+	it("a plain string renders byte-identically to the frozen oracle", () => {
+		const render = m["live.setup.title"];
+		expect(render?.()).toBe("Stream setup");
+		expect(render?.()).toBe(readRenderedOracle("en")["live.setup.title"]);
 	});
 
-	it("param-only string substitutes and matches the oracle", () => {
-		const template = "RTT trend for {iface:string}";
-		const params = { iface: "wlan0" };
-		const oracle = i18nString("en") as unknown as StringOracle;
+	it("a message with no inputs is untouched by an empty input object", () => {
+		expect(m["live.setup.title"]?.({})).toBe("Stream setup");
+	});
 
-		expect(interpolate(template, params, "en")).toBe("RTT trend for wlan0");
-		expect(interpolate(template, params, "en")).toBe(oracle(template, params));
+	it("a param-only message substitutes and matches the frozen oracle", () => {
+		const oracle = readRenderedOracle("en")["advanced.sshPassword"];
+		const params = readOracleParams("en").keys["advanced.sshPassword"]?.params;
+		expect(m["advanced.sshPassword"]?.(params)).toBe(oracle);
 	});
 });

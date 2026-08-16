@@ -1924,11 +1924,51 @@ let hotplugRefreshGeneration = 0;
  * result that is no longer the current view rather than reviving the world it
  * asked about.
  */
-export async function refreshSourcesForHotplug(
+/**
+ * The device set to REBUILD `sources` from.
+ *
+ * Normally the registry's own observation verbatim — that is what lets a removal
+ * survive a failing probe. Under MOCK_SCENARIO the registry observes the dev
+ * HOST, which is hardware the scenario says nothing about, so its transitions
+ * would publish an empty capture list over the simulated devices and the picker
+ * would sit coarse-only for the life of the process. The scenario's own hotplug
+ * seam is `setMockDeviceAttached`, so the scenario list is the observation here.
+ *
+ * The REGISTRY is deliberately left reading the host (`defaultGetEngineDevices`):
+ * its scan is also `switchInput`'s reachability gate, and a device the scenario
+ * makes visible in the picker is still not switchable when no engine or v4l2 node
+ * backs it. Picker-visibility and switch-reachability are allowed to diverge.
+ */
+async function observedForSourcesRebuild(
 	observed: readonly CaptureDevice[],
+): Promise<readonly CaptureDevice[]> {
+	const { shouldUseMocks } = await import("../../mocks/mock-service.ts");
+	if (!shouldUseMocks()) return observed;
+	const { getMockEngineDevices } = await import(
+		"../../mocks/providers/streaming.ts"
+	);
+	return getMockEngineDevices().devices.map((d) =>
+		fromEngineDevice({
+			input_id: d.input_id,
+			device_path: d.device_path,
+			display_name: d.display_name,
+			media_class: d.media_class,
+			kind: d.kind,
+			caps: d.caps,
+			modes: d.modes,
+			stable_id: d.stable_id,
+		}),
+	);
+}
+
+export async function refreshSourcesForHotplug(
+	hostObserved: readonly CaptureDevice[],
 	deps: EngineDeviceCacheDeps = defaultEngineDeviceCacheDeps,
 ): Promise<void> {
+	// The ticket is taken SYNCHRONOUSLY, before any await, so two transitions
+	// still order by the moment they were RAISED (the fence's whole premise).
 	const generation = ++hotplugRefreshGeneration;
+	const observed = await observedForSourcesRebuild(hostObserved);
 	const probe = await probeEngineDevices(deps);
 	if (generation !== hotplugRefreshGeneration) return;
 	if (probe === undefined) {
@@ -1994,10 +2034,11 @@ export async function recheckSourceSignals(
 }
 
 async function runSignalRecheck(
-	observed: readonly CaptureDevice[],
+	hostObserved: readonly CaptureDevice[],
 	deps: EngineDeviceCacheDeps,
 ): Promise<void> {
 	const generation = ++hotplugRefreshGeneration;
+	const observed = await observedForSourcesRebuild(hostObserved);
 	const probe = await probeEngineDevices(deps);
 	if (generation !== hotplugRefreshGeneration) return;
 	if (probe === undefined) return;

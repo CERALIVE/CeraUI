@@ -844,7 +844,9 @@ describe("CerastreamBackend behavioural contract", () => {
 		expect(config.max_br).toBe(9000);
 		expect(saveCount()).toBeGreaterThan(0);
 		const sb = fake.calls.find((c) => c.op === "set-bitrate");
-		expect((sb?.params as { max_bitrate: number }).max_bitrate).toBe(9000);
+		expect(
+			(sb?.params as { max_bitrate: number } | undefined)?.max_bitrate,
+		).toBe(9000);
 	});
 
 	test("setBitrate persists without IPC when not streaming", async () => {

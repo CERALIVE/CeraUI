@@ -23,7 +23,7 @@
  * State ownership stays in LiveView: EVERY datum and handler here is a prop — this
  * component owns NO `$state`, NO RPC, and writes NO config.
  */
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
 	ConfigMessage,
@@ -199,8 +199,8 @@ const showVideoSignalLost = $derived(
 		>
 			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
 			<div class="min-w-0 space-y-0.5">
-				<p class="text-destructive text-sm font-medium">{$LL.live.source.lostStreamingTitle()}</p>
-				<p class="text-muted-foreground text-xs">{$LL.live.source.lostStreamingBody()}</p>
+				<p class="text-destructive text-sm font-medium">{m["live.source.lostStreamingTitle"]()}</p>
+				<p class="text-muted-foreground text-xs">{m["live.source.lostStreamingBody"]()}</p>
 			</div>
 		</div>
 	{/if}
@@ -214,9 +214,9 @@ const showVideoSignalLost = $derived(
 			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
 			<div class="min-w-0 space-y-0.5">
 				<p class="text-destructive text-sm font-medium">
-					{$LL.live.source.signalLostStreamingTitle()}
+					{m["live.source.signalLostStreamingTitle"]()}
 				</p>
-				<p class="text-muted-foreground text-xs">{$LL.live.source.signalLostStreamingBody()}</p>
+				<p class="text-muted-foreground text-xs">{m["live.source.signalLostStreamingBody"]()}</p>
 			</div>
 		</div>
 	{/if}
@@ -230,9 +230,9 @@ const showVideoSignalLost = $derived(
 			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
 			<div class="min-w-0 space-y-0.5">
 				<p class="text-destructive text-sm font-medium">
-					{$LL.live.source.audioLostStreamingTitle()}
+					{m["live.source.audioLostStreamingTitle"]()}
 				</p>
-				<p class="text-muted-foreground text-xs">{$LL.live.source.audioLostStreamingBody()}</p>
+				<p class="text-muted-foreground text-xs">{m["live.source.audioLostStreamingBody"]()}</p>
 			</div>
 		</div>
 	{/if}
@@ -246,9 +246,9 @@ const showVideoSignalLost = $derived(
 			<TriangleAlert aria-hidden={true} class="text-destructive mt-0.5 size-4 shrink-0" />
 			<div class="min-w-0 space-y-0.5">
 				<p class="text-destructive text-sm font-medium">
-					{$LL.live.source.linksDownStreamingTitle()}
+					{m["live.source.linksDownStreamingTitle"]()}
 				</p>
-				<p class="text-muted-foreground text-xs">{$LL.live.source.linksDownStreamingBody()}</p>
+				<p class="text-muted-foreground text-xs">{m["live.source.linksDownStreamingBody"]()}</p>
 			</div>
 		</div>
 	{/if}
@@ -325,7 +325,7 @@ const showVideoSignalLost = $derived(
 			data-testid="summary-done"
 			onclick={() => onCloseSummary?.()}
 		>
-			{$LL.live.ingest.done()}
+			{m["live.ingest.done"]()}
 		</Button>
 	{:else}
 		<StreamControlButton

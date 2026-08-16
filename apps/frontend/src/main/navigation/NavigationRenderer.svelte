@@ -1,11 +1,15 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { Component } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
 
 import { einkGatedFade as fade, einkGatedFly as fly } from '$lib/transitions';
 
 import { setupHashNavigation } from '$lib/helpers/NavigationHelper';
+import {
+	areDestinationNamespacesLoaded,
+	ensureDestinationNamespaces,
+} from '$lib/i18n/namespace-activation';
 import {
 	enhancedNavigationStore,
 	getCurrentNavigation,
@@ -36,6 +40,34 @@ $effect(() => {
 	if (CurrentComponent) {
 		showContent = true;
 	}
+});
+
+// The destination's i18n namespaces are lazy chunks, so the view must not render
+// until they are in the registry — an unresolved namespace renders every string
+// as its own dotted key. This is the destination-level twin of the lazy config
+// dialogs' fetch-on-first-open, and the existing transition spinner covers the
+// wait. Already-loaded namespaces resolve SYNCHRONOUSLY: deferring a render by a
+// promise tick when nothing needs fetching would break "the nav is active" ⇒
+// "the view is on screen", which both the operator and the e2e helpers rely on.
+const destinationKey = $derived(Object.keys(getCurrentNavigation())[0]);
+let fetchedDestination = $state<string | undefined>(undefined);
+
+const namespacesReady = $derived(
+	destinationKey !== undefined &&
+		(areDestinationNamespacesLoaded(destinationKey) ||
+			fetchedDestination === destinationKey),
+);
+
+$effect(() => {
+	const key = destinationKey;
+	if (key === undefined || areDestinationNamespacesLoaded(key)) return;
+	let active = true;
+	void ensureDestinationNamespaces(key).then(() => {
+		if (active) fetchedDestination = key;
+	});
+	return () => {
+		active = false;
+	};
 });
 
 // Setup hash navigation
@@ -70,7 +102,7 @@ const transitionParams = $derived.by(() => {
 			in:fade={{ duration: 150 }}
 			out:fade={{ duration: 150 }}
 		>
-			<span class="sr-only">{$LL.navigation.loading()}</span>
+			<span class="sr-only">{m["navigation.loading"]()}</span>
 			<div class="border-primary/30 border-t-primary h-6 w-6 animate-spin rounded-full border-2"></div>
 		</div>
 	{/if}
@@ -99,7 +131,7 @@ const transitionParams = $derived.by(() => {
 				</div>
 				<div>
 					<h3 class="text-destructive mb-2 font-semibold">
-						{$LL?.navigation?.navigationError?.() || 'Navigation Error'}
+						{m["navigation.navigationError"]?.() || 'Navigation Error'}
 					</h3>
 					<p class="text-muted-foreground text-sm">{$navigationError}</p>
 				</div>
@@ -107,15 +139,17 @@ const transitionParams = $derived.by(() => {
 					class="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg px-4 py-2 transition-colors focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none"
 					onclick={() => enhancedNavigationStore.setError(null)}
 				>
-					{$LL.navigation.tryAgain()}
+					{m["navigation.tryAgain"]()}
 				</button>
 			</div>
 		</div>
 	{:else}
 		<!-- Content with smooth transitions -->
 		<div class="relative min-h-[400px]">
-			{#if CurrentComponent && showContent}
+			{#if CurrentComponent && showContent && namespacesReady}
 				<div
+					data-testid="destination-content"
+					data-destination={destinationKey}
 					in:fly={{
 						...transitionParams,
 						delay: TRANSITION_DURATION / 2,

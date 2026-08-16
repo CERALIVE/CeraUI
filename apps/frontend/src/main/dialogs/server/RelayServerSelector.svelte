@@ -8,7 +8,7 @@
   selector, and the editable Stream ID. Presentational: the container owns state.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { RelayAccount, RelayServer } from '@ceraui/rpc/schemas';
 
 import RelayRttIndicator from '$lib/components/streaming/RelayRttIndicator.svelte';
@@ -52,7 +52,7 @@ let {
 </script>
 
 <div class="space-y-2">
-	<Label class="text-sm font-medium" for="relay-server">{$LL.settings.relayServer()}</Label>
+	<Label class="text-sm font-medium" for="relay-server">{m["settings.relayServer"]()}</Label>
 	<Select.Root
 		disabled={relaysUnavailable || isStreaming}
 		onValueChange={onServer}
@@ -61,7 +61,7 @@ let {
 	>
 		<Select.Trigger id="relay-server" class="w-full">
 			<span class="flex w-full items-center gap-2">
-				<span class="truncate">{relayServerName ?? $LL.settings.relayServer()}</span>
+				<span class="truncate">{relayServerName ?? m["settings.relayServer"]()}</span>
 				{#if relayServerName}
 					<RelayRttIndicator class="ms-auto" rtt={relayServerRtt} />
 				{/if}
@@ -83,7 +83,7 @@ let {
 </div>
 
 <div class="space-y-2">
-	<Label class="text-sm font-medium" for="relay-endpoint">{$LL.settings.autoEndpoint()}</Label>
+	<Label class="text-sm font-medium" for="relay-endpoint">{m["settings.autoEndpoint"]()}</Label>
 	<output
 		id="relay-endpoint"
 		class="bg-muted/60 text-muted-foreground block rounded-md border px-3 py-2 font-mono text-sm"
@@ -94,8 +94,8 @@ let {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="relay-account">
-		{$LL.settings.relayServerAccount()}
-		<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+		{m["settings.relayServerAccount"]()}
+		<span class="text-muted-foreground ms-1 text-xs">({m["settings.optional"]()})</span>
 	</Label>
 	<Select.Root
 		disabled={relaysUnavailable || isStreaming}
@@ -104,7 +104,7 @@ let {
 		value={relayAccount}
 	>
 		<Select.Trigger id="relay-account" class="w-full">
-			{relayAccountName ?? $LL.settings.manualConfiguration()}
+			{relayAccountName ?? m["settings.manualConfiguration"]()}
 		</Select.Trigger>
 		<Select.Content>
 			<Select.Group>
@@ -123,15 +123,15 @@ let {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="relay-streamid">
-		{$LL.settings.streamId()}
-		<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+		{m["settings.streamId"]()}
+		<span class="text-muted-foreground ms-1 text-xs">({m["settings.optional"]()})</span>
 	</Label>
 	<Input
 		id="relay-streamid"
 		class="font-mono"
 		disabled={isStreaming}
 		oninput={(e) => onRelayStreamId(e.currentTarget.value)}
-		placeholder={$LL.settings.placeholders.srtStreamId()}
+		placeholder={m["settings.placeholders.srtStreamId"]()}
 		value={relayStreamId}
 	/>
 </div>

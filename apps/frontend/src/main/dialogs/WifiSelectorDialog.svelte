@@ -24,7 +24,7 @@
   disabled Connect when a secured network's password is shorter than the minimum.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiStatus } from '@ceraui/rpc/schemas';
 import { Wifi } from '@lucide/svelte';
 
@@ -144,8 +144,8 @@ async function connectVia(ssid: string, run: () => Promise<unknown>) {
 		key: wifiOpKey,
 		target: ssid,
 		rpc: run,
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
@@ -155,8 +155,8 @@ async function handleScan() {
 	await osCommand({
 		key: scanKey,
 		rpc: () => rpc.wifi.scan({ device: deviceId }),
-		busyMessage: () => $LL.network.os.deviceBusy(),
-		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => m["network.os.deviceBusy"](),
+		failMessage: () => m["network.os.operationFailed"](),
 	});
 }
 
@@ -173,8 +173,8 @@ async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
 		key: wifiOpKey,
 		target: network.ssid,
 		rpc: () => rpc.wifi.disconnect({ uuid }),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
@@ -215,8 +215,8 @@ async function handleForget(uuid: string, network: AvailableWifiNetwork) {
 		key: wifiOpKey,
 		target: network.ssid,
 		rpc: () => rpc.wifi.forget({ uuid }),
-		failMessage: () => $LL.network.os.operationFailed(),
-		busyMessage: () => $LL.network.os.deviceBusy(),
+		failMessage: () => m["network.os.operationFailed"](),
+		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
@@ -335,7 +335,7 @@ $effect(() => {
 	contentClass="sm:max-w-xl"
 	description={ifaceLabel}
 	icon={Wifi}
-	title={$LL.wifiSelector.dialog.availableNetworks()}
+	title={m["wifiSelector.dialog.availableNetworks"]()}
 >
 	<WifiNetworkList
 		{confirmForget}

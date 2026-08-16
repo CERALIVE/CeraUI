@@ -23,7 +23,7 @@
   which the e-ink freeze + `prefers-reduced-motion` already neutralise globally.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { CircleHelp, ExternalLink } from '@lucide/svelte';
 
 import * as Popover from '$lib/components/ui/popover';
@@ -67,7 +67,7 @@ let {
 	learnMoreLabel,
 }: Props = $props();
 
-const triggerLabel = $derived(ariaLabel ?? $LL.live.education.info({ field: title }));
+const triggerLabel = $derived(ariaLabel ?? m["live.education.info"]({ field: title }));
 </script>
 
 <Popover.Root>
@@ -107,7 +107,7 @@ const triggerLabel = $derived(ariaLabel ?? $LL.live.education.info({ field: titl
 				data-testid="info-popover-reason"
 			>
 				<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-					{$LL.live.education.reasonLabel()}
+					{m["live.education.reasonLabel"]()}
 				</p>
 				<p class="text-foreground/90 mt-0.5 text-sm">{reason}</p>
 			</div>

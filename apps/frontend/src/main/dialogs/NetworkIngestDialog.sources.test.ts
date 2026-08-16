@@ -15,7 +15,7 @@
  * lands (no optimistic flip on the RPC resolve). rtmp/srt keep their existing
  * non-silent behavior.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
 	afterEach,
@@ -59,8 +59,6 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 vi.mock("svelte-sonner", () => ({
 	toast: { error: toastError, success: vi.fn() },
 }));
-
-const sources = getLL().settings.dialogs.sources;
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 	let resolve!: (value: T) => void;
@@ -135,7 +133,9 @@ describe("NetworkIngestDialog — test-pattern row rendering (a)", () => {
 		render(NetworkIngestDialog, { props: { open: true } });
 
 		const row = screen.getByTestId("sources-test-pattern-row");
-		expect(row.textContent).toContain(sources.testPatternToggle());
+		expect(row.textContent).toContain(
+			m["settings.dialogs.sources.testPatternToggle"](),
+		);
 		// Absent key = visible = switch ON ("Show test pattern").
 		expect(testPatternToggle().getAttribute("aria-checked")).toBe("true");
 	});

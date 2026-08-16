@@ -20,6 +20,7 @@ import type {
 	CaptureStreamSource,
 	ConfigMessage,
 	SourcesMessage,
+	StreamSource,
 } from "@ceraui/rpc/schemas";
 
 /** The resolved effective-source view. All fields absent-safe. */
@@ -78,4 +79,47 @@ export function hasEffectiveSource(
 ): boolean {
 	if (sources === undefined) return true;
 	return deriveEffectiveSource(config, sources).effectiveSourceId !== undefined;
+}
+
+function resolveEffectiveSourceEntry(
+	config: ConfigMessage | undefined,
+	sources: SourcesMessage,
+): StreamSource | undefined {
+	const { effectiveSourceId } = deriveEffectiveSource(config, sources);
+	if (effectiveSourceId === undefined) return undefined;
+	return sources.sources.find((source) => source.id === effectiveSourceId);
+}
+
+/**
+ * Stamp the start-config base onto the EFFECTIVE SOURCE so the TWO Start gates
+ * cannot disagree.
+ *
+ * The readiness source gate resolves `config.source` against the sources snapshot
+ * and enables Start; `buildStartConfig`'s recognition gate reads the persisted,
+ * DERIVED `config.pipeline` and refuses with `unknownPipeline`. When those two
+ * drift the Start button renders enabled and then toasts a refusal on click — a
+ * control that lies about being actionable.
+ *
+ * Resolving ⇒ `source` + `pipeline` come from THAT row (a stale pipeline can never
+ * reach the payload). Not resolving ⇒ `pipeline` is DROPPED, so the start refuses
+ * for exactly the reason readiness blocks, and a recognized-but-unrelated
+ * persisted pipeline cannot smuggle a start past an unofferable source.
+ *
+ * An absent `sources` snapshot is fail-open: a federation / standalone mount does
+ * not know the source list, and reconciling against nothing would refuse every
+ * start there.
+ */
+export function reconcileStartSource(
+	config: ConfigMessage | undefined,
+	sources: SourcesMessage | undefined,
+): ConfigMessage | undefined {
+	if (config === undefined || sources === undefined) return config;
+
+	const entry = resolveEffectiveSourceEntry(config, sources);
+	if (entry === undefined) {
+		const { pipeline: _unresolvable, ...rest } = config;
+		return rest as ConfigMessage;
+	}
+
+	return { ...config, source: entry.id, pipeline: entry.pipelineId };
 }

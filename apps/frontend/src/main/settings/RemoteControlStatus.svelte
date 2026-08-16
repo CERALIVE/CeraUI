@@ -10,27 +10,26 @@
   Provider-agnostic: the row never assumes CeraLive (multi-cloud safe).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Cloud, CloudOff, RadioTower } from '@lucide/svelte';
 
 import { getRemoteControlStatus } from '$lib/stores/pairing.svelte';
 
 const status = $derived(getRemoteControlStatus());
-const t = $derived($LL.settings.remoteControl);
 
 const label = $derived(
 	status === 'connected'
-		? t.connected()
+		? m["settings.remoteControl.connected"]()
 		: status === 'paired-disconnected'
-			? t.disconnected()
-			: t.notPaired(),
+			? m["settings.remoteControl.disconnected"]()
+			: m["settings.remoteControl.notPaired"](),
 );
 const hint = $derived(
 	status === 'connected'
-		? t.connectedHint()
+		? m["settings.remoteControl.connectedHint"]()
 		: status === 'paired-disconnected'
-			? t.disconnectedHint()
-			: t.notPairedHint(),
+			? m["settings.remoteControl.disconnectedHint"]()
+			: m["settings.remoteControl.notPairedHint"](),
 );
 const Icon = $derived(
 	status === 'connected' ? RadioTower : status === 'paired-disconnected' ? CloudOff : Cloud,

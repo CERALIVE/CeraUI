@@ -18,10 +18,11 @@ import {
 	getAudioCodecs,
 	getConfig,
 	getIsStreaming,
-	getPipelines,
 	getRelays,
+	getSources,
 	getStatus,
 } from "$lib/rpc/subscriptions.svelte";
+import { pipelinesFromSources } from "$lib/streaming/sources-view-model";
 
 export interface StreamingState {
 	pipelines: Pipelines | undefined;
@@ -41,10 +42,10 @@ export interface StreamingState {
  */
 class StreamingStateManager {
 	readonly pipelines = $derived<Pipelines | undefined>(
-		getPipelines()?.pipelines as Pipelines | undefined,
+		pipelinesFromSources(getSources()),
 	);
 	readonly hardware = $derived<HardwareType | undefined>(
-		getPipelines()?.hardware as HardwareType | undefined,
+		getSources()?.hardware,
 	);
 	readonly isStreaming = $derived<boolean | undefined>(getIsStreaming());
 	readonly audioSources = $derived<Array<string>>(getStatus()?.asrcs ?? []);

@@ -1,6 +1,6 @@
 <script lang="ts">
 import { untrack } from 'svelte';
-import { LL, locale } from '@ceraui/i18n/svelte';
+import { getLocale, m } from '@ceraui/i18n/svelte';
 import { formatBitrate, formatCurrent, formatRelativeTime, formatTemp, formatVoltage } from '@ceraui/i18n/formatters';
 import ActivityIcon from '@lucide/svelte/icons/activity';
 import CircleCheckIcon from '@lucide/svelte/icons/circle-check';
@@ -55,7 +55,7 @@ let open = $state(false);
 
 // Full reactive HUD snapshot — re-derives as getters / staleness clock change.
 const hud = $derived(getHudState());
-const loc = $derived($locale);
+const loc = $derived(getLocale());
 
 // Connection / streaming state machine for the lead badge.
 const isOffline = $derived(hud.isFullyStale);
@@ -88,14 +88,14 @@ const primaryBitrateKbps = $derived(measuredKbps ?? (isLive ? hud.bitrateKbps : 
 const bitrateText = $derived(
 	primaryBitrateKbps != null ? formatBitrate(loc)(primaryBitrateKbps) : '—',
 );
-const bitrateHeading = $derived(isBitrateMeasured ? $LL.hud.bitrate() : $LL.hud.bitrateTarget());
+const bitrateHeading = $derived(isBitrateMeasured ? m["hud.bitrate"]() : m["hud.bitrateTarget"]());
 // Marks an unmeasured headline as the setpoint for text surfaces (accessible
 // name, live region) whose heading cannot carry that distinction visually.
 const targetQualifierSuffix = $derived(
-	!isBitrateMeasured && primaryBitrateKbps != null ? ` (${$LL.hud.bitrateTarget()})` : '',
+	!isBitrateMeasured && primaryBitrateKbps != null ? ` (${m["hud.bitrateTarget"]()})` : '',
 );
 const bitrateHint = $derived(
-	isBitrateMeasured ? $LL.hud.bitrateMeasuredHint() : $LL.hud.bitrateTargetHint(),
+	isBitrateMeasured ? m["hud.bitrateMeasuredHint"]() : m["hud.bitrateTargetHint"](),
 );
 
 // Shown only when the measured figure has taken the headline — otherwise the
@@ -121,14 +121,14 @@ const HealthIcon = $derived(HEALTH_ICON[health]);
 const healthIconColor = $derived(HEALTH_ICON_COLOR[health]);
 const healthLabel = $derived(
 	health === 'healthy'
-		? $LL.hud.healthHealthy()
+		? m["hud.healthHealthy"]()
 		: health === 'degraded'
-			? $LL.hud.healthDegraded()
+			? m["hud.healthDegraded"]()
 			: health === 'dead'
-				? $LL.hud.healthDead()
+				? m["hud.healthDead"]()
 				: health === 'idle'
-					? $LL.hud.healthIdle()
-					: $LL.hud.healthUnknown(),
+					? m["hud.healthIdle"]()
+					: m["hud.healthUnknown"](),
 );
 
 // Stream-health rollup DETAIL (Task 15): the per-subsystem breakdown
@@ -153,14 +153,14 @@ const RollupIcon = $derived(HEALTH_ICON[rollupState]);
 const rollupIconColor = $derived(HEALTH_ICON_COLOR[rollupState]);
 const rollupLabel = $derived(
 	rollupState === 'healthy'
-		? $LL.hud.healthHealthy()
+		? m["hud.healthHealthy"]()
 		: rollupState === 'degraded'
-			? $LL.hud.healthDegraded()
+			? m["hud.healthDegraded"]()
 			: rollupState === 'dead'
-				? $LL.hud.healthDead()
+				? m["hud.healthDead"]()
 				: rollupState === 'idle'
-					? $LL.hud.healthIdle()
-					: $LL.hud.healthUnknown(),
+					? m["hud.healthIdle"]()
+					: m["hud.healthUnknown"](),
 );
 
 // Top reason behind a non-healthy rollup (Task 16): the backend names the
@@ -200,9 +200,9 @@ const streamingLastSeen = $derived(lastSeen(hud.lastUpdatedAt.streaming));
 const TELEMETRY_ANNOUNCE_DEBOUNCE_MS = 1500;
 const telemetrySummary = $derived(
 	[
-		isOffline ? $LL.hud.offline() : isLive ? $LL.hud.live() : $LL.hud.idle(),
-		`${$LL.hud.bitrate()}: ${bitrateText}${targetQualifierSuffix}`,
-		`${$LL.hud.network()}: ${hud.links.length}`,
+		isOffline ? m["hud.offline"]() : isLive ? m["hud.live"]() : m["hud.idle"](),
+		`${m["hud.bitrate"]()}: ${bitrateText}${targetQualifierSuffix}`,
+		`${m["hud.network"]()}: ${hud.links.length}`,
 	].join(' · '),
 );
 let announcedTelemetry = $state('');
@@ -217,25 +217,25 @@ $effect(() => {
 // Accessible names for the compact badges. Each carries its current value AND its
 // staleness ("Stale") so assistive tech reads the same degradation the sighted
 // dimming conveys — never a fresh-sounding value for an aged reading.
-const staleSuffix = (isStale: boolean) => (isStale ? `, ${$LL.hud.stale()}` : '');
+const staleSuffix = (isStale: boolean) => (isStale ? `, ${m["hud.stale"]()}` : '');
 // The accessible name ALWAYS leads with "Bitrate", even when the visual heading
 // reads "Target": a bare "Target: 4.1 Mbps" tells a screen-reader user nothing
 // about what is being targeted. The measured-vs-target distinction rides as a
 // qualifier instead, so the fact stays identifiable and the nuance survives.
 const bitrateLabel = $derived(
-	`${$LL.hud.bitrate()}: ${primaryBitrateKbps != null ? bitrateText : $LL.hud.noData()}` +
+	`${m["hud.bitrate"]()}: ${primaryBitrateKbps != null ? bitrateText : m["hud.noData"]()}` +
 		`${targetQualifierSuffix}` +
-		`${showTargetQualifier ? `, ${$LL.hud.bitrateTarget()} ${bitrateTargetText}` : ''}` +
-		`${bitrateBelowLimit ? `, ${$LL.hud.bitrateLimit()} ${bitrateLimitText}` : ''}${staleSuffix(bitrateDimmed)}`,
+		`${showTargetQualifier ? `, ${m["hud.bitrateTarget"]()} ${bitrateTargetText}` : ''}` +
+		`${bitrateBelowLimit ? `, ${m["hud.bitrateLimit"]()} ${bitrateLimitText}` : ''}${staleSuffix(bitrateDimmed)}`,
 );
 // The compact strip now shows a single temperature chip; the aria name carries
 // just that value + its staleness (voltage / current moved to the sheet).
 const socTempLabel = $derived(
-	`${$LL.hud.sensors()}: ${$LL.hud.temperature()} ${tempState === 'nodata' ? '—' : tempText}${staleSuffix(soc.isStale)}`,
+	`${m["hud.sensors"]()}: ${m["hud.temperature"]()} ${tempState === 'nodata' ? '—' : tempText}${staleSuffix(soc.isStale)}`,
 );
 function linkLabel(link: LinkSignal): string {
-	const sig = link.signal != null ? `${Math.round(link.signal)}%` : $LL.hud.noData();
-	return `${$LL.hud.network()} L${link.linkIndex + 1}: ${sig}${staleSuffix(link.isStale)}`;
+	const sig = link.signal != null ? `${Math.round(link.signal)}%` : m["hud.noData"]();
+	return `${m["hud.network"]()} L${link.linkIndex + 1}: ${sig}${staleSuffix(link.isStale)}`;
 }
 
 // Critical-transition announcer (separate from the continuous summary above): a
@@ -256,11 +256,11 @@ $effect(() => {
 	if (!primed) {
 		primed = true;
 	} else if (live && !prevLive) {
-		message = $LL.hud.announceStreamStarted();
+		message = m["hud.announceStreamStarted"]();
 	} else if (!live && prevLive) {
-		message = $LL.hud.announceStreamStopped();
+		message = m["hud.announceStreamStopped"]();
 	} else if (links < prevActiveLinks) {
-		message = $LL.hud.announceLinkDropped();
+		message = m["hud.announceLinkDropped"]();
 	}
 	prevLive = live;
 	prevActiveLinks = links;
@@ -319,7 +319,7 @@ $effect(() => {
 				{...props}
 				type="button"
 				data-hud-region
-				aria-label={$LL.hud.expandDetails()}
+				aria-label={m["hud.expandDetails"]()}
 				class={cn(
 					'bg-sidebar text-foreground hover:bg-accent/50 focus-visible:ring-ring/50 flex h-12 w-full items-center gap-3 border-t px-4 text-start text-xs font-medium tracking-wide transition-colors focus-visible:ring-2 focus-visible:outline-none',
 					className,
@@ -331,21 +331,21 @@ $effect(() => {
 						class="bg-muted text-muted-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
 					>
 						<ClockIcon class="size-3" aria-hidden="true" />
-						{$LL.hud.offline()}
+						{m["hud.offline"]()}
 					</span>
 				{:else if isLive}
 					<span
 						class="bg-status-live text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
 					>
 						<span class="size-2 rounded-full bg-current motion-safe:animate-pulse"></span>
-						{$LL.hud.live()}
+						{m["hud.live"]()}
 					</span>
 				{:else}
 					<span
 						class="text-muted-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
 					>
 						<span class="bg-status-idle size-2 rounded-full"></span>
-						{$LL.hud.idle()}
+						{m["hud.idle"]()}
 					</span>
 				{/if}
 
@@ -354,11 +354,11 @@ $effect(() => {
 					data-testid="stream-health"
 					data-state={health}
 					class="inline-flex shrink-0 items-center gap-1"
-					title="{$LL.hud.streamHealth()}: {healthLabel}"
+					title="{m["hud.streamHealth"]()}: {healthLabel}"
 				>
 					<HealthIcon class={cn('size-3.5 shrink-0', healthIconColor)} aria-hidden="true" />
 					<span class="text-[0.7rem] font-semibold">{healthLabel}</span>
-					<span class="sr-only">{$LL.hud.streamHealth()}</span>
+					<span class="sr-only">{m["hud.streamHealth"]()}</span>
 				</span>
 
 				{#if healthReason}
@@ -384,7 +384,7 @@ $effect(() => {
 					class={cn('inline-flex shrink-0 items-center gap-1 font-mono tabular-nums', bitrateDimmed && 'opacity-50')}
 					role="img"
 					aria-label={bitrateLabel}
-					title={bitrateBelowLimit ? $LL.hud.bitrateBelowLimitHint() : bitrateHint}
+					title={bitrateBelowLimit ? m["hud.bitrateBelowLimitHint"]() : bitrateHint}
 					data-testid="hud-bitrate"
 					data-below-limit={bitrateBelowLimit ? 'true' : undefined}
 					data-measured={isBitrateMeasured ? 'true' : undefined}
@@ -397,9 +397,9 @@ $effect(() => {
 						<span
 							class="text-muted-foreground/70 text-[0.7rem]"
 							data-testid="hud-bitrate-target"
-							title={$LL.hud.bitrateTargetHint()}
+							title={m["hud.bitrateTargetHint"]()}
 						>
-							{$LL.hud.bitrateTarget()} {bitrateTargetText}
+							{m["hud.bitrateTarget"]()} {bitrateTargetText}
 						</span>
 					{/if}
 					{#if bitrateBelowLimit}
@@ -414,7 +414,7 @@ $effect(() => {
 				<!-- Bonded link signals -->
 				<span class="flex min-w-0 flex-1 items-center gap-2.5 overflow-hidden">
 					{#if hud.links.length === 0}
-						<span class="text-muted-foreground/60 truncate">{$LL.hud.noData()}</span>
+						<span class="text-muted-foreground/60 truncate">{m["hud.noData"]()}</span>
 					{:else}
 						{#each hud.links as link (link.linkIndex)}
 							<span
@@ -438,14 +438,14 @@ $effect(() => {
 					class="inline-flex shrink-0 items-center gap-1.5 font-mono tabular-nums"
 					role="img"
 					aria-label={socTempLabel}
-					title={$LL.hud.temperature()}
+					title={m["hud.temperature"]()}
 				>
 					{#if soc.isStale}
 						<ClockIcon class="size-3 shrink-0 opacity-50" aria-hidden="true" />
 					{:else}
 						<ThermometerIcon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
 					{/if}
-					{@render socValue(tempState, tempText, $LL.hud.temperature())}
+					{@render socValue(tempState, tempText, m["hud.temperature"]())}
 				</span>
 			</button>
 		{/snippet}
@@ -453,11 +453,11 @@ $effect(() => {
 
 	<Sheet.Content side="bottom" class="max-h-[85dvh] gap-0 overflow-y-auto">
 		<Sheet.Header class="gap-1">
-			<Sheet.Title>{$LL.hud.status()}</Sheet.Title>
+			<Sheet.Title>{m["hud.status"]()}</Sheet.Title>
 			<Sheet.Description>
 				<span data-testid="hud-sheet-subtitle" data-state={lifecycle}>
 					{#if lifecycle !== 'offline' && streamingLastSeen}
-						{$LL.hud.lastUpdated()} {streamingLastSeen}
+						{m["hud.lastUpdated"]()} {streamingLastSeen}
 					{/if}
 				</span>
 			</Sheet.Description>
@@ -466,13 +466,13 @@ $effect(() => {
 		<div class="flex flex-col gap-4 px-4 pb-6">
 			<!-- Streaming -->
 			<section class="flex flex-col gap-2">
-				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{$LL.hud.streaming()}</h3>
+				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{m["hud.streaming"]()}</h3>
 
 				<!-- 1. ONE verdict line: lifecycle status + health rollup verdict (Task 8/15) -->
 				<div class="flex flex-col gap-2 border-b py-2" data-testid="stream-health-detail" data-state={rollupState}>
 					<div class="flex items-center justify-between gap-3">
 						<span class="text-muted-foreground flex items-center gap-1.5">
-							{$LL.hud.streamHealth()}
+							{m["hud.streamHealth"]()}
 							<Tooltip.Provider>
 								<Tooltip.Root>
 									<Tooltip.Trigger>
@@ -481,7 +481,7 @@ $effect(() => {
 												{...props}
 												type="button"
 												data-testid="stream-health-info"
-												aria-label={$LL.hud.streamHealth()}
+												aria-label={m["hud.streamHealth"]()}
 												class="text-muted-foreground/70 hover:text-foreground focus-visible:ring-ring/50 inline-flex rounded-full transition-colors focus-visible:ring-2 focus-visible:outline-none"
 											>
 												<InfoIcon class="size-3.5" aria-hidden="true" />
@@ -492,19 +492,19 @@ $effect(() => {
 										<ul class="flex flex-col gap-1.5 text-xs">
 											<li class="flex items-start gap-1.5">
 												<CircleCheckIcon class="text-status-success mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-												<span><span class="font-semibold">{$LL.hud.healthHealthy()}:</span> {$LL.hud.healthExplainHealthy()}</span>
+												<span><span class="font-semibold">{m["hud.healthHealthy"]()}:</span> {m["hud.healthExplainHealthy"]()}</span>
 											</li>
 											<li class="flex items-start gap-1.5">
 												<TriangleAlertIcon class="text-status-warning mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-												<span><span class="font-semibold">{$LL.hud.healthDegraded()}:</span> {$LL.hud.healthExplainDegraded()}</span>
+												<span><span class="font-semibold">{m["hud.healthDegraded"]()}:</span> {m["hud.healthExplainDegraded"]()}</span>
 											</li>
 											<li class="flex items-start gap-1.5">
 												<CircleXIcon class="text-status-error mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-												<span><span class="font-semibold">{$LL.hud.healthDead()}:</span> {$LL.hud.healthExplainDead()}</span>
+												<span><span class="font-semibold">{m["hud.healthDead"]()}:</span> {m["hud.healthExplainDead"]()}</span>
 											</li>
 											<li class="flex items-start gap-1.5">
 												<CircleDotIcon class="text-status-neutral mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-												<span><span class="font-semibold">{$LL.hud.healthIdle()}:</span> {$LL.hud.healthExplainIdle()}</span>
+												<span><span class="font-semibold">{m["hud.healthIdle"]()}:</span> {m["hud.healthExplainIdle"]()}</span>
 											</li>
 										</ul>
 									</Tooltip.Content>
@@ -514,20 +514,20 @@ $effect(() => {
 						<span class="inline-flex items-center gap-1.5 font-medium" data-testid="stream-health-state">
 							{#if lifecycle === 'offline'}
 								<ClockIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
-								{$LL.hud.noSignal()}
+								{m["hud.noSignal"]()}
 							{:else if rollup}
 								<RollupIcon class={cn('size-4 shrink-0', rollupIconColor)} aria-hidden="true" />
 								{rollupLabel}
 							{:else}
 								<CircleDotIcon class="text-status-neutral size-4 shrink-0" aria-hidden="true" />
-								{$LL.hud.idle()}
+								{m["hud.idle"]()}
 							{/if}
 						</span>
 					</div>
 
 					{#if lifecycle === 'offline'}
 						{#if streamingLastSeen}
-							<p class="text-muted-foreground text-xs" data-testid="hud-last-seen">{$LL.hud.lastSeen()} {streamingLastSeen}</p>
+							<p class="text-muted-foreground text-xs" data-testid="hud-last-seen">{m["hud.lastSeen"]()} {streamingLastSeen}</p>
 						{/if}
 					{:else if rollup && healthReason}
 						<p class="text-status-warning text-xs" data-testid="stream-health-reason-detail">{healthReason.detail}</p>
@@ -546,36 +546,36 @@ $effect(() => {
 					<dl class="grid grid-cols-2 gap-2 text-xs" data-testid="stream-health-rollup">
 						{@render rollupTile(
 							'health-process',
-							$LL.hud.healthProcess(),
+							m["hud.healthProcess"](),
 							rollup.process.alive === true ? 'ok' : rollup.process.alive === false ? 'bad' : 'unknown',
-							$LL.hud.healthRunning(),
-							$LL.hud.healthNotRunning(),
-							$LL.hud.healthUnknown(),
+							m["hud.healthRunning"](),
+							m["hud.healthNotRunning"](),
+							m["hud.healthUnknown"](),
 							CircleCheckIcon,
 							CircleXIcon,
 						)}
 						{@render rollupTile(
 							'health-srt',
-							$LL.hud.healthSrt(),
+							m["hud.healthSrt"](),
 							rollup.srt.reconnecting === false ? 'ok' : rollup.srt.reconnecting === true ? 'bad' : 'unknown',
-							$LL.hud.healthStable(),
-							$LL.hud.healthReconnecting(),
-							$LL.hud.healthUnknown(),
+							m["hud.healthStable"](),
+							m["hud.healthReconnecting"](),
+							m["hud.healthUnknown"](),
 							null,
 							TriangleAlertIcon,
 						)}
 						{@render rollupTile(
 							'health-frames',
-							$LL.hud.healthFrames(),
+							m["hud.healthFrames"](),
 							rollup.frames.advancing === true ? 'ok' : rollup.frames.advancing === false ? 'bad' : 'unknown',
-							$LL.hud.healthAdvancing(),
-							$LL.hud.healthStalled(),
-							$LL.hud.healthUnknown(),
+							m["hud.healthAdvancing"](),
+							m["hud.healthStalled"](),
+							m["hud.healthUnknown"](),
 							null,
 							TriangleAlertIcon,
 						)}
 						<div class="bg-secondary/40 flex flex-col gap-1 rounded-lg p-2.5" data-testid="health-bond">
-							<dt class="text-muted-foreground text-[0.7rem] font-medium">{$LL.hud.healthBond()}</dt>
+							<dt class="text-muted-foreground text-[0.7rem] font-medium">{m["hud.healthBond"]()}</dt>
 							<dd
 								class={cn(
 									'font-mono font-medium tabular-nums',
@@ -587,7 +587,7 @@ $effect(() => {
 						</div>
 					</dl>
 				{:else if lifecycle !== 'offline'}
-					<p class="text-muted-foreground/70 text-xs" data-testid="stream-health-rollup-empty">{$LL.hud.noData()}</p>
+					<p class="text-muted-foreground/70 text-xs" data-testid="stream-health-rollup-empty">{m["hud.noData"]()}</p>
 				{/if}
 
 				<!-- 4. Bitrate: the measured headline, then the engine's target beneath it. -->
@@ -612,7 +612,7 @@ $effect(() => {
 					<div class="flex items-center justify-between gap-3 border-b py-2" data-testid="hud-bitrate-target-row">
 						<span class="text-muted-foreground flex items-center gap-2">
 							<InfoIcon class="size-3.5 shrink-0" aria-hidden="true" />
-							{$LL.hud.bitrateTarget()}
+							{m["hud.bitrateTarget"]()}
 						</span>
 						<span class="font-mono tabular-nums">{bitrateTargetText}</span>
 					</div>
@@ -625,21 +625,21 @@ $effect(() => {
 					<div class="flex items-center justify-between gap-3 border-b py-2" data-testid="hud-bitrate-limit-row">
 						<span class="text-muted-foreground flex items-center gap-2">
 							<InfoIcon class="size-3.5 shrink-0" aria-hidden="true" />
-							{$LL.hud.bitrateLimit()}
+							{m["hud.bitrateLimit"]()}
 						</span>
 						<span class="font-mono tabular-nums">{bitrateLimitText}</span>
 					</div>
 					<p class="text-muted-foreground/70 py-2 text-xs" data-testid="hud-bitrate-below-limit-hint">
-						{$LL.hud.bitrateBelowLimitHint()}
+						{m["hud.bitrateBelowLimitHint"]()}
 					</p>
 				{/if}
 			</section>
 
 			<!-- Network links -->
 			<section class="flex flex-col gap-1">
-				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{$LL.hud.network()}</h3>
+				<h3 class="text-muted-foreground mb-1 text-xs font-medium">{m["hud.network"]()}</h3>
 				{#if hud.links.length === 0}
-					<p class="text-muted-foreground/70 py-2 text-sm">{$LL.hud.noData()}</p>
+					<p class="text-muted-foreground/70 py-2 text-sm">{m["hud.noData"]()}</p>
 				{:else}
 					{#each hud.links as link (link.linkIndex)}
 						<div class={cn('flex items-center justify-between gap-3 border-b py-2', link.isStale && 'opacity-50')}>
@@ -673,27 +673,27 @@ $effect(() => {
 			<!-- Sensors: collapsed to ONE inline mono line (temp · voltage · current) -->
 			<section class={cn('flex flex-col gap-1', hud.isSensorsStale && 'opacity-50')}>
 				<h3 class="text-muted-foreground mb-1 flex items-center gap-2 text-xs font-medium">
-					{$LL.hud.sensors()}
+					{m["hud.sensors"]()}
 					{#if hud.isSensorsStale}<ClockIcon class="size-3.5" aria-hidden="true" />{/if}
 				</h3>
 				<div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-2 font-mono text-sm tabular-nums" data-testid="hud-sensors-line">
-					<span class="inline-flex items-center gap-1.5" title={$LL.hud.temperature()}>
+					<span class="inline-flex items-center gap-1.5" title={m["hud.temperature"]()}>
 						<ThermometerIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 						{hud.temperature != null ? formatTemp(loc)(hud.temperature) : '—'}
 					</span>
 					<span class="text-muted-foreground/40" aria-hidden="true">·</span>
-					<span class="inline-flex items-center gap-1.5" title={$LL.hud.voltage()}>
+					<span class="inline-flex items-center gap-1.5" title={m["hud.voltage"]()}>
 						<ZapIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 						{hud.voltage != null ? formatVoltage(loc)(hud.voltage) : '—'}
 					</span>
 					<span class="text-muted-foreground/40" aria-hidden="true">·</span>
-					<span class="inline-flex items-center gap-1.5" title={$LL.hud.current()}>
+					<span class="inline-flex items-center gap-1.5" title={m["hud.current"]()}>
 						<ActivityIcon class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 						{hud.current != null ? formatCurrent(loc)(hud.current) : '—'}
 					</span>
 				</div>
 				{#if lastSeen(hud.lastUpdatedAt.sensors)}
-					<p class="text-muted-foreground/70 mt-1 text-xs">{$LL.hud.lastUpdated()} {lastSeen(hud.lastUpdatedAt.sensors)}</p>
+					<p class="text-muted-foreground/70 mt-1 text-xs">{m["hud.lastUpdated"]()} {lastSeen(hud.lastUpdatedAt.sensors)}</p>
 				{/if}
 			</section>
 		</div>

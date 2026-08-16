@@ -9,7 +9,7 @@
  * the real component against a mocked `rpc.system.*` (the real osCommand runs) and
  * assert in-flight, success, and failure-releases-re-entry per action.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import { KIOSK_UNAVAILABLE_ERROR } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
@@ -58,10 +58,9 @@ vi.mock("svelte-sonner", () => ({
 	toast: { error: toastError, success: vi.fn() },
 }));
 
-const t = getLL().settings.onDeviceDisplay;
-const TOUCH_LABEL = t.touch();
-const SHOW_KB_LABEL = t.showKeyboard();
-const HIDE_KB_LABEL = t.hideKeyboard();
+const TOUCH_LABEL = m["settings.onDeviceDisplay.touch"]();
+const SHOW_KB_LABEL = m["settings.onDeviceDisplay.showKeyboard"]();
+const HIDE_KB_LABEL = m["settings.onDeviceDisplay.hideKeyboard"]();
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 	let resolve!: (value: T) => void;
@@ -156,7 +155,7 @@ describe("OnDeviceDisplaySection — kiosk enable (kioskStart)", () => {
 		});
 		await waitFor(() =>
 			expect(screen.getByTestId("kiosk-state-label").textContent).toBe(
-				t.states.enabledRunning(),
+				m["settings.onDeviceDisplay.states.enabledRunning"](),
 			),
 		);
 		expect(enableSwitch().getAttribute("aria-checked")).toBe("true");
@@ -205,7 +204,7 @@ describe("OnDeviceDisplaySection — kiosk disable (kioskStop)", () => {
 		await waitFor(() => expect(rpcMocks.kioskStop).toHaveBeenCalledOnce());
 		await waitFor(() =>
 			expect(screen.getByTestId("kiosk-state-label").textContent).toBe(
-				t.states.disabled(),
+				m["settings.onDeviceDisplay.states.disabled"](),
 			),
 		);
 	});

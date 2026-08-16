@@ -23,7 +23,7 @@
   with `asrc` absent from config.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { AUDIO_SOURCE_AUTO, audioCodecSchema, type AudioCodec } from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
@@ -47,6 +47,7 @@ import {
 	resolveAudioSourceList,
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
+import { pipelinesFromSources } from '$lib/streaming/sources-view-model';
 import { rpc } from '$lib/rpc';
 import { markPending, onRpcResolved } from '$lib/rpc/dirty-registry.svelte';
 import AudioDialogContent from './audio/AudioDialogContent.svelte';
@@ -55,7 +56,7 @@ import {
 	getCapabilities,
 	getConfig,
 	getIsStreaming,
-	getPipelines,
+	getSources,
 	getStatus,
 } from '$lib/rpc/subscriptions.svelte';
 
@@ -111,7 +112,7 @@ const DELAY_STEP = 5;
 
 // Live device state (non-deprecated subscriptions getters).
 const config = $derived(getConfig());
-const pipelines = $derived(getPipelines()?.pipelines);
+const pipelines = $derived(pipelinesFromSources(getSources()));
 const audioCodecs = $derived(getAudioCodecs());
 const audioSources = $derived(getStatus()?.asrcs ?? []);
 const audioSourceList = $derived(getStatus()?.audio_sources);
@@ -198,9 +199,9 @@ const saveDisabled = $derived(!hasAudioSupport || isStreaming);
 const codecHasSource = $derived(audioEmbeddedActive || Boolean(activeAudioSource));
 const codecDisabledReason = $derived(
 	isStreaming
-		? $LL.settings.codecDisabledReason.streaming()
+		? m["settings.codecDisabledReason.streaming"]()
 		: !codecHasSource
-			? $LL.settings.codecDisabledReason.noSource()
+			? m["settings.codecDisabledReason.noSource"]()
 			: undefined,
 );
 
@@ -211,18 +212,7 @@ function clampDelay(value: number): number {
 
 // i18n key resolver (mirrors the EncoderDialog helper) — lets the pure
 // sourceSummary helpers resolve localized keys without a store/rune dependency.
-const t = (key: string): string => {
-	const parts = key.split('.');
-	let result: unknown = $LL;
-	for (const part of parts) {
-		if (result && typeof result === 'object' && part in result) {
-			result = (result as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof result === 'function' ? (result as () => string)() : key;
-};
+const t = resolveMessageKey;
 
 // Resolved-audio display (single owner): an active Auto selection surfaces
 // "Auto → device"; the embedded reason surfaces the embedded state.
@@ -235,16 +225,16 @@ const resolvedAudio = $derived(
 // backend), the resolved device/pseudo-source label, or a calm "none" fallback
 // when `asrc` is absent (federation tolerance).
 const activeAudioSourceLabel = $derived.by(() => {
-	if (audioEmbeddedActive || resolvedAudio.embedded) return $LL.live.source.audioEmbedded();
+	if (audioEmbeddedActive || resolvedAudio.embedded) return m["live.source.audioEmbedded"]();
 	if (resolvedAudio.current) return resolvedAudio.current;
 	if (activeAudioSource === AUDIO_SOURCE_AUTO) return '\u2014';
-	if (!activeAudioSource) return $LL.settings.noAudioSourceSelected();
+	if (!activeAudioSource) return m["settings.noAudioSourceSelected"]();
 	return activeAudioEntry ? audioSourceLabel(activeAudioEntry, t) : activeAudioSource;
 });
 const codecTriggerLabel = $derived(
 	draftCodec && audioCodecs
-		? (audioCodecs[draftCodec]?.name ?? $LL.settings.selectAudioCodec())
-		: $LL.settings.selectAudioCodec(),
+		? (audioCodecs[draftCodec]?.name ?? m["settings.selectAudioCodec"]())
+		: m["settings.selectAudioCodec"](),
 );
 
 // The active entry backs the read-only detail tooltip and the External badge.
@@ -280,7 +270,7 @@ async function handleSave() {
 		const result = await (hostAdapter?.setConfig(input) ?? rpc.streaming.setConfig(input));
 		requireAppliedConfig(result);
 	} catch {
-		toast.error($LL.notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	} finally {
 		for (const [field] of fields) onRpcResolved(field);
 	}
@@ -292,8 +282,8 @@ async function handleSave() {
 	icon={Volume2}
 	onPrimary={handleSave}
 	primaryDisabled={saveDisabled}
-	primaryLabel={$LL.dialogs.save()}
-	title={$LL.general.audioSettings()}
+	primaryLabel={m["dialogs.save"]()}
+	title={m["general.audioSettings"]()}
 >
 	<AudioDialogContent
 		{gateState}

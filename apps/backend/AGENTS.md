@@ -617,8 +617,8 @@ indefinitely for a present device, with no recovery short of the operator re-pic
 
 The gate itself is unchanged: a level whose `source.identity` names a different card
 than the preference is still dropped. Only the reason string and the retry behaviour
-moved. `AudioLevelMeter` needed no change — it already indexes
-`$LL.live.preview.audioUnavailableReason[reason]()`.
+moved. `AudioLevelMeter` needed no change — it already resolves the dynamic Paraglide
+key with `resolveMessageKey(\`live.preview.audioUnavailableReason.${reason}\`)`.
 
 **THE RECOVERY PATH MUST NOT BE GATED ON THE SIGNAL WHOSE ABSENCE IS THE FAILURE.**
 `noteForeignCardLevel` watches frame CONTENT, so it can only ever run while frames
@@ -1243,6 +1243,52 @@ classified from the oRPC wrapper message then the error code. Issue paths are sc
 field names (safe); messages are scrubbed through `logRedact`. Returns `undefined`
 when the error has no issue list.
 
+### The scenario is the `sources` truth — and deliberately NOT the switch-reachability truth
+
+`main.ts` injects `getMockEngineDevices()` into the capability fold and the boot
+`sources` seed. That is not sufficient, and the gap is silent: the readers that
+REBUILD `sources` afterwards — `sources.ts` `refreshSourcesForHotplug` (fired by
+the device registry's own device-SET change) and `recheckSourceSignals` (the 5 s
+tick) — take DEFAULT deps, i.e. a cerastream control socket that cannot exist
+under `MOCK_SCENARIO`. A failing probe then hands over to the registry's
+observation, which in dev is the HOST's own `/sys/class/video4linux` + ALSA scan:
+hardware the scenario says nothing about.
+
+Measured on a dev host with no `/dev/video*`: the registry's first scan is empty
+and correctly skipped as the initial scan; ~2 s later the host's ALSA cards land
+in `getAudioSources()`, the device SET changes, and the hotplug refresh publishes
+that observation — erasing every simulated capture device from `sources`. Because
+`sources` is on-change only, the coarse-only list then stood for the life of the
+process, and a page that authenticated afterwards got it in its post-login
+snapshot. Nothing failed loudly.
+
+Two seams carry the repair, and BOTH are scoped to the `sources` rebuild:
+
+- `defaultFetchEngineDevices` (`capabilities.ts`) serves `getMockEngineDevices()`
+  under `shouldUseMocks()`. Its only consumers are the capability service and the
+  engine-device cache — the build path, never a gate.
+- `observedForSourcesRebuild` (`sources.ts`) substitutes the scenario list for the
+  registry's host observation in the two rebuild entry points above. The scenario's
+  own hotplug seam is `setMockDeviceAttached`, so the scenario IS the observation.
+
+**`defaultGetEngineDevices` (`devices.ts`) is deliberately NOT redirected.** The
+registry's `scan()` is also `switchInput`'s reachability gate
+(`deviceRegistry.switchInput` re-scans and answers `SOURCE_LOST` when the target
+is absent), and picker-VISIBILITY and switch-REACHABILITY are allowed to diverge:
+a scenario device is visible in the picker while still having no engine or v4l2
+node behind it, and the honest answer to a live switch there is `SOURCE_LOST`.
+Widening the registry too — the first attempt at this fix — erased that divergence
+and broke `tests/e2e/input-picker.spec.ts`'s deliberate negative coverage. Do not
+redo it; if a new reader needs the scenario, route it through
+`observedForSourcesRebuild` or take injected deps.
+
+Production is byte-unchanged (every gate requires `isDevelopment()` AND an
+initialised mock state) and the imports are lazy, so the mock graph stays off
+these modules' load paths. Coverage: `tests/mock-engine-devices-wiring.test.ts`,
+whose second describe is the negative half (the registry must NOT adopt the
+scenario, and a live switch to a scenario-visible device must still refuse before
+commanding the engine).
+
 ### Scenario-seeded capability profiles (T5)
 
 Three `MOCK_SCENARIO` values seed the engine-capability state:
@@ -1361,7 +1407,7 @@ without a real `passwd`/`/etc/shadow` (and without persisting to disk).
 ## CONVENTIONS
 
 - Runtime: Bun only. No Node-specific APIs (`fs/promises` ok; `node:cluster` not).
-- Build: `bun build --compile --minify --bytecode --target=bun-linux-{arm64|amd64}` — single binary, no runtime on device.
+- Build: `bun build --compile --minify --sourcemap --target=bun-linux-{arm64|amd64}` — single binary, no runtime on device. `--sourcemap` is deliberate and EMBEDDED in the binary (device stack traces stay symbolicated); the frontend's maps follow the opposite policy — emitted `hidden` and relocated out of the packaged tree, see `apps/frontend/vite.sourcemaps.ts`. **There is no `--bytecode`, and it cannot be added as a flag**: `bun build --bytecode` forces `--format=cjs`, and `main.ts`'s boot ladder is 20 top-level `await`s (`runCritical`/`guardNonCritical` phases), so the build fails outright. Adopting it means restructuring boot away from top-level await first.
 - Tests: `bun test` (not vitest). Files in `src/tests/`.
 - Config files (`config.json`, `setup.json`, `auth_tokens.json`) read/written from working dir — path-sensitive in production.
 - `MOCK_SCENARIO` env activates mock providers. Scenarios: `single-modem`, `streaming-active`, `multi-modem-wifi` (default dev), `modem-pin-locked` (2 modems, modem 0 SIM PIN-locked, fixture PIN `0000` — the `unlockSim`/`unlockSimPuk` RPCs route to the mock SIM state machine). Three additional scenario-seeded capability scenarios: `caps-full`, `engine-starting`, `engine-unavailable` (T5).

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { LatencyRange, RelayAccount, RelayMessage, RelayServer } from '@ceraui/rpc/schemas';
 import { KeyRound } from '@lucide/svelte';
 
@@ -70,10 +70,10 @@ let props: Props = $props();
 
 <div class="space-y-5">
 	{#if props.isStreaming}
-		<p class="rounded-lg border px-3 py-2 text-sm" style="color: var(--status-live); border-color: color-mix(in oklab, var(--status-live) 35%, transparent); background-color: color-mix(in oklab, var(--status-live) 10%, transparent);">{$LL.live.stopToChange()}</p>
+		<p class="rounded-lg border px-3 py-2 text-sm" style="color: var(--status-live); border-color: color-mix(in oklab, var(--status-live) 35%, transparent); background-color: color-mix(in oklab, var(--status-live) 10%, transparent);">{m["live.stopToChange"]()}</p>
 	{/if}
 	{#if props.catalogDrift}
-		<p class="text-muted-foreground rounded-lg border px-3 py-2 text-sm" data-testid="catalog-drift-note" role="status">{$LL.settings.catalogDriftNote()}</p>
+		<p class="text-muted-foreground rounded-lg border px-3 py-2 text-sm" data-testid="catalog-drift-note" role="status">{m["settings.catalogDriftNote"]()}</p>
 	{/if}
 	<DestinationSection activeProvider={props.activeProvider} isStreaming={props.isStreaming} onSelect={props.onDestination} relays={props.relays} selected={props.destinationChoice} />
 	{#if props.destinationChoice !== 'belabox'}<TransportRow />{/if}
@@ -91,8 +91,8 @@ let props: Props = $props();
 		/>
 	{:else if props.destination === 'managed'}
 		<div class="border-border bg-muted/40 flex flex-col gap-3 rounded-lg border px-3 py-3" data-testid="destination-needs-key" role="status">
-			<div class="flex items-start gap-2"><KeyRound class="text-primary mt-0.5 size-4 shrink-0" /><span class="text-muted-foreground text-sm leading-snug">{$LL.settings.destinationNeedsKey({ cloud: managedCloudLabel(props.destinationChoice) })}</span></div>
-			<Button class="w-full" data-testid="destination-add-key" onclick={props.onAddKey} variant="outline">{$LL.settings.destinationAddKey()}</Button>
+			<div class="flex items-start gap-2"><KeyRound class="text-primary mt-0.5 size-4 shrink-0" /><span class="text-muted-foreground text-sm leading-snug">{m["settings.destinationNeedsKey"]({ cloud: managedCloudLabel(props.destinationChoice) })}</span></div>
+			<Button class="w-full" data-testid="destination-add-key" onclick={props.onAddKey} variant="outline">{m["settings.destinationAddKey"]()}</Button>
 		</div>
 	{:else}
 		<CustomEndpointForm

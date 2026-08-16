@@ -19,7 +19,7 @@ function handleError(error: unknown): void {
 <svelte:boundary onerror={handleError}>
 	{@render children()}
 
-	{#snippet failed(error, reset)}
+	{#snippet failed(error: unknown, reset: () => void)}
 		<ErrorBoundaryFallback {error} {reset} />
 	{/snippet}
 </svelte:boundary>

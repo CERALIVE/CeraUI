@@ -29,13 +29,8 @@
   `handleSelectInput`.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
-import type {
-	NetworkIngest,
-	Pipelines,
-	RequiresGateway,
-	StreamingSetConfigOutput,
-} from '@ceraui/rpc/schemas';
+import { m } from '@ceraui/i18n/svelte';
+import type { NetworkIngest, Pipelines, RequiresGateway } from '@ceraui/rpc/schemas';
 import { VIDEO_SOURCE_LABELS } from '@ceraui/rpc/schemas';
 import { Check, Copy, QrCode, Radio } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
@@ -109,11 +104,11 @@ const rows = $derived.by<IngestRow[]>(() =>
 		const label = VIDEO_SOURCE_LABELS[row.protocol] ?? row.protocol;
 		let reason = '';
 		if (row.addressless) {
-			reason = $LL.live.networkIngest.noAddress({ protocol: label });
+			reason = m["live.networkIngest.noAddress"]({ protocol: label });
 		} else if (row.gatewayBlocked) {
-			reason = $LL.live.networkIngest.serviceInactive({ protocol: label });
+			reason = m["live.networkIngest.serviceInactive"]({ protocol: label });
 		} else if (row.streamingLocked) {
-			reason = $LL.live.networkIngest.streamingLocked();
+			reason = m["live.networkIngest.streamingLocked"]();
 		}
 		return {
 			protocol: row.protocol,
@@ -125,10 +120,10 @@ const rows = $derived.by<IngestRow[]>(() =>
 			disabled: row.disabled,
 			reason,
 			statusLabel: row.addressless
-				? $LL.live.networkIngest.noAddressStatus()
+				? m["live.networkIngest.noAddressStatus"]()
 				: row.serviceActive
-					? $LL.live.networkIngest.active()
-					: $LL.live.networkIngest.inactive(),
+					? m["live.networkIngest.active"]()
+					: m["live.networkIngest.inactive"](),
 			statusWarn: row.addressless || !row.serviceActive,
 			// No url ⇒ nothing to encode into a QR or copy: suppress the panel.
 			showInstructions: row.url !== null,
@@ -151,11 +146,11 @@ async function handleSelect(row: IngestRow): Promise<void> {
 			markFieldApplied(PIPELINE_FIELD, result.applied.pipeline);
 		} else {
 			markFieldFailed(PIPELINE_FIELD, selectedPipeline);
-			toast.error($LL.notifications.saveFailed());
+			toast.error(m["notifications.saveFailed"]());
 		}
 	} catch {
 		markFieldFailed(PIPELINE_FIELD, selectedPipeline);
-		toast.error($LL.notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	}
 }
 
@@ -184,9 +179,9 @@ $effect(() => {
 async function copyUrl(url: string | null): Promise<void> {
 	if (!url) return;
 	if (await copyToClipboard(url)) {
-		toast.success($LL.live.networkIngest.copied());
+		toast.success(m["live.networkIngest.copied"]());
 	} else {
-		toast.error($LL.live.networkIngest.copyFailed());
+		toast.error(m["live.networkIngest.copyFailed"]());
 	}
 }
 </script>
@@ -197,14 +192,14 @@ async function copyUrl(url: string | null): Promise<void> {
 			<!-- Section header + info affordance -->
 			<div class="flex items-center gap-1">
 				<Radio aria-hidden={true} class="text-primary size-4 shrink-0" />
-				<span class="text-sm font-semibold">{$LL.live.networkIngest.title()}</span>
+				<span class="text-sm font-semibold">{m["live.networkIngest.title"]()}</span>
 				<InfoPopover
-					body={$LL.live.networkIngest.infoBody()}
+					body={m["live.networkIngest.infoBody"]()}
 					testId="info-network-ingest"
-					title={$LL.live.networkIngest.infoTitle()}
+					title={m["live.networkIngest.infoTitle"]()}
 				/>
 			</div>
-			<p class="text-muted-foreground text-xs">{$LL.live.networkIngest.subtitle()}</p>
+			<p class="text-muted-foreground text-xs">{m["live.networkIngest.subtitle"]()}</p>
 
 			<ul class="space-y-3">
 				{#each rows as row (row.protocol)}
@@ -237,7 +232,7 @@ async function copyUrl(url: string | null): Promise<void> {
 									class="text-primary inline-flex items-center gap-1 text-xs font-semibold"
 								>
 									<Check aria-hidden={true} class="size-4" />
-									{$LL.live.networkIngest.selected()}
+									{m["live.networkIngest.selected"]()}
 								</span>
 							{/if}
 						</button>
@@ -251,20 +246,20 @@ async function copyUrl(url: string | null): Promise<void> {
 								data-testid={`network-ingest-instructions-toggle-${row.protocol}`}
 							>
 								<QrCode aria-hidden={true} class="size-3.5" />
-								{$LL.live.networkIngest.instructionsToggle()}
+								{m["live.networkIngest.instructionsToggle"]()}
 							</summary>
 							<div
 								class="bg-muted/40 mt-2 flex flex-col items-center gap-3 rounded-lg border p-4"
 								data-testid={`network-ingest-instructions-${row.protocol}`}
 							>
 								<p class="text-muted-foreground text-center text-xs">
-									{$LL.live.networkIngest.instructions()}
+									{m["live.networkIngest.instructions"]()}
 								</p>
 
 								{#if qrDataUrls[row.protocol]}
 									<img
 										class="size-40 rounded-md bg-white p-2"
-										alt={$LL.live.networkIngest.qrLabel()}
+										alt={m["live.networkIngest.qrLabel"]()}
 										data-testid={`network-ingest-qr-${row.protocol}`}
 										src={qrDataUrls[row.protocol]}
 									/>
@@ -280,11 +275,11 @@ async function copyUrl(url: string | null): Promise<void> {
 										{row.url}
 									</code>
 									<Button
-										aria-label={$LL.live.networkIngest.copy()}
+										aria-label={m["live.networkIngest.copy"]()}
 										data-testid={`network-ingest-copy-${row.protocol}`}
 										onclick={() => copyUrl(row.url)}
 										size="icon"
-										title={$LL.live.networkIngest.copy()}
+										title={m["live.networkIngest.copy"]()}
 										variant="outline"
 									>
 										<Copy class="size-4" />

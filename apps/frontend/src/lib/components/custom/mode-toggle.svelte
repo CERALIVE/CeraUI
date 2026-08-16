@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Check, Monitor, Moon, Sun } from '@lucide/svelte';
 import { resetMode, setMode } from 'mode-watcher';
 
@@ -28,15 +28,15 @@ const handleModeChange = (mode: ColorMode) => {
 };
 
 const themes = [
-	{ value: 'light' as const, icon: Sun, label: () => $LL?.theme?.light?.() || 'Light' },
-	{ value: 'dark' as const, icon: Moon, label: () => $LL?.theme?.dark?.() || 'Dark' },
-	{ value: 'system' as const, icon: Monitor, label: () => $LL?.theme?.system?.() || 'System' },
+	{ value: 'light' as const, icon: Sun, label: () => m["theme.light"]?.() || 'Light' },
+	{ value: 'dark' as const, icon: Moon, label: () => m["theme.dark"]?.() || 'Dark' },
+	{ value: 'system' as const, icon: Monitor, label: () => m["theme.system"]?.() || 'System' },
 ] as const;
 
 const systemResolvedLabel = $derived(
 	resolveSystemMode() === 'dark'
-		? $LL?.theme?.dark?.() || 'Dark'
-		: $LL?.theme?.light?.() || 'Light',
+		? m["theme.dark"]?.() || 'Dark'
+		: m["theme.light"]?.() || 'Light',
 );
 </script>
 
@@ -48,7 +48,7 @@ const systemResolvedLabel = $derived(
 				class="relative h-9 w-9 rounded-lg"
 				data-testid="theme-toggle"
 				size="icon"
-				title={$LL?.theme?.changeTheme?.() || 'Change theme'}
+				title={m["theme.changeTheme"]?.() || 'Change theme'}
 				variant="ghost"
 			>
 				<Sun
@@ -57,7 +57,7 @@ const systemResolvedLabel = $derived(
 				<Moon
 					class="absolute h-[1.125rem] w-[1.125rem] scale-0 rotate-90 transition-transform duration-200 dark:scale-100 dark:rotate-0"
 				/>
-				<span class="sr-only">{$LL?.theme?.toggleTheme?.() || 'Toggle theme'}</span>
+				<span class="sr-only">{m["theme.toggleTheme"]?.() || 'Toggle theme'}</span>
 			</Button>
 		{/snippet}
 	</DropdownMenu.Trigger>
@@ -69,7 +69,7 @@ const systemResolvedLabel = $derived(
 	>
 		<div class="px-2 py-1.5">
 			<h4 class="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
-				{$LL?.theme?.changeTheme?.() || 'Change theme'}
+				{m["theme.changeTheme"]?.() || 'Change theme'}
 			</h4>
 		</div>
 

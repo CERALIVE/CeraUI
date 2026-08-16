@@ -23,7 +23,6 @@ import {
 	wifiStatusSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
-import type WebSocket from "ws";
 
 import {
 	getMockState,
@@ -146,7 +145,7 @@ export const wifiConnectProcedure = authedProcedure
 	.output(wifiOperationOutputSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
 			handleWifi(ws, { connect: input.uuid });
 			if (shouldUseMocks()) {
@@ -181,7 +180,7 @@ export const wifiDisconnectProcedure = authedProcedure
 	.output(wifiOperationOutputSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
 			handleWifi(ws, { disconnect: input.uuid });
 			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
@@ -200,7 +199,7 @@ export const wifiConnectNewProcedure = authedProcedure
 	.output(wifiOperationOutputSchema)
 	.handler(({ input, context }): MutationResult => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		handleWifi(context.ws as unknown as WebSocket, {
+		handleWifi(context.ws, {
 			new: {
 				device: Number(input.device),
 				ssid: input.ssid,
@@ -239,7 +238,7 @@ export const wifiForgetProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
 			handleWifi(ws, { forget: input.uuid });
 			if (shouldUseMocks()) {
@@ -270,7 +269,7 @@ export const wifiScanProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, { scan: Number(input.device) });
 		});
@@ -286,7 +285,7 @@ export const hotspotStartProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
 				hotspot: { start: { device: Number(input.device) } },
@@ -311,7 +310,7 @@ export const hotspotStopProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
 				hotspot: { stop: { device: Number(input.device) } },
@@ -335,7 +334,7 @@ export const hotspotConfigureProcedure = authedProcedure
 	.output(successResponseSchema)
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws as unknown as WebSocket;
+		const ws = context.ws;
 		const busy = await runGuarded(macForDeviceId(input.device), () => {
 			handleWifi(ws, {
 				hotspot: {

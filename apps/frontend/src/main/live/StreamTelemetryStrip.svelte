@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 
 import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
 import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
@@ -59,16 +59,16 @@ const {
 
 <!-- Live telemetry strip — only meaningful while streaming -->
 <section
-	aria-label={$LL.live.overview()}
+	aria-label={m["live.overview"]()}
 	class="bg-card flex flex-wrap items-center gap-x-10 gap-y-4 rounded-xl border px-5 py-4"
 >
 	<div class="space-y-1">
 		<p
 			class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
 			data-testid="telemetry-bitrate-heading"
-			title={bitrateMeasured ? $LL.hud.bitrateMeasuredHint() : $LL.hud.bitrateTargetHint()}
+			title={bitrateMeasured ? m["hud.bitrateMeasuredHint"]() : m["hud.bitrateTargetHint"]()}
 		>
-			{bitrateMeasured ? $LL.hud.bitrateSending() : $LL.hud.bitrateTarget()}
+			{bitrateMeasured ? m["hud.bitrateSending"]() : m["hud.bitrateTarget"]()}
 		</p>
 		<p class="font-mono text-lg font-semibold">
 			<span data-testid="telemetry-bitrate" style="color: var(--status-live);">{bitrate}</span>
@@ -76,8 +76,8 @@ const {
 		{#if bitrateTarget || bitrateLimit}
 			<p class="text-muted-foreground/70 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs">
 				{#if bitrateTarget}
-					<span data-testid="telemetry-bitrate-target" title={$LL.hud.bitrateTargetHint()}>
-						{$LL.hud.bitrateTarget()}
+					<span data-testid="telemetry-bitrate-target" title={m["hud.bitrateTargetHint"]()}>
+						{m["hud.bitrateTarget"]()}
 						<span class="font-mono">{bitrateTarget}</span>
 					</span>
 				{/if}
@@ -85,8 +85,8 @@ const {
 					<span aria-hidden="true" class="text-muted-foreground/40">·</span>
 				{/if}
 				{#if bitrateLimit}
-					<span data-testid="telemetry-bitrate-limit" title={$LL.hud.bitrateBelowLimitHint()}>
-						{$LL.hud.bitrateLimit()}
+					<span data-testid="telemetry-bitrate-limit" title={m["hud.bitrateBelowLimitHint"]()}>
+						{m["hud.bitrateLimit"]()}
 						<span class="font-mono">{bitrateLimit}</span>
 					</span>
 				{/if}
@@ -96,7 +96,7 @@ const {
 	{#if tempSensor}
 		<div class="space-y-1">
 			<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-				{$LL.hud.temperature()}
+				{m["hud.temperature"]()}
 			</p>
 			<p class="font-mono text-lg font-semibold">{tempSensor}</p>
 		</div>
@@ -104,7 +104,7 @@ const {
 	{#if uptimeSensor}
 		<div class="space-y-1">
 			<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-				{$LL.hud.uptime()}
+				{m["hud.uptime"]()}
 			</p>
 			<p class="font-mono text-lg font-semibold">{uptimeSensor}</p>
 		</div>
@@ -119,7 +119,7 @@ const {
 		-->
 		<div class="min-w-0 space-y-1" data-testid="telemetry-encoder">
 			<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-				{$LL.hud.encoder()}
+				{m["hud.encoder"]()}
 			</p>
 			<EncoderStatus density="inline" reading={encoderLoad} />
 		</div>

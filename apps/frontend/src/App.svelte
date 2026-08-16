@@ -1,8 +1,7 @@
 <script lang="ts">
 import './app.css';
 
-import { isLocale, loadLocaleAsync } from '@ceraui/i18n';
-import { setLocale } from '@ceraui/i18n/svelte';
+import { initLocale } from '@ceraui/i18n/svelte';
 import { ModeWatcher, setTheme as setCustomTheme } from 'mode-watcher';
 import { onMount, untrack } from 'svelte';
 
@@ -61,33 +60,10 @@ $effect(() => {
 });
 
 onMount(async () => {
-	try {
-		// Priority: 1. Saved preference, 2. Browser locale, 3. English fallback
-		const savedLocale = getLocale()?.code;
-		const browserLocale = typeof window !== 'undefined' ? (navigator.language.split('-')[0] ?? 'en') : 'en';
-
-		let targetLocale: string;
-		if (savedLocale && isLocale(savedLocale)) {
-			targetLocale = savedLocale;
-		} else if (isLocale(browserLocale)) {
-			targetLocale = browserLocale;
-		} else {
-			targetLocale = 'en';
-		}
-
-		// Load the locale
-		await loadLocaleAsync(targetLocale as Parameters<typeof loadLocaleAsync>[0]);
-		setLocale(targetLocale as Parameters<typeof setLocale>[0]);
-	} catch (error) {
-		console.error('Failed to initialize i18n:', error);
-		// Fallback to English
-		try {
-			await loadLocaleAsync('en');
-			setLocale('en');
-		} catch (fallbackError) {
-			console.error('Critical: Even English fallback failed:', fallbackError);
-		}
-	}
+	// Startup priority: saved preference -> navigator.language -> en. Paraglide
+	// is synchronous (every namespace is eager), so there is no dictionary fetch
+	// to await and no flash of the base locale.
+	initLocale({ saved: getLocale()?.code });
 });
 </script>
 

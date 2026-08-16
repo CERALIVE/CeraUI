@@ -88,10 +88,10 @@ export function isPortValid(value: number | undefined): boolean {
 
 export const STREAMING_MODE = "streaming";
 
-// i18n keys for disabled-option reason tooltips. Consumers pass these to LL
-// (e.g. LL.live.education.reason.unsupportedPlatform()) — never render the key
+// i18n keys for disabled-option reason tooltips. Consumers resolve these through
+// `m` (e.g. m["live.education.reason.unsupportedPlatform"]()) — never render the key
 // string directly. The key names are the stable contract; the English text lives
-// in packages/i18n/src/en/index.ts under live.education.reason.*.
+// in packages/i18n/messages/en.json under live.education.reason.*.
 export const OPTION_UNSUPPORTED_ON_PLATFORM =
 	"live.education.reason.unsupportedPlatform" as const;
 export const OPTION_FIXED_BY_SOURCE =

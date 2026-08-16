@@ -11,7 +11,7 @@
   never clobbered by live telemetry.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { IP_ADDRESS_REGEX, type NetifEntry } from '@ceraui/rpc/schemas';
 import { Info, Network } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
@@ -86,7 +86,7 @@ async function save() {
 	// Cross-surface busy guard: a bond toggle (or another save) on THIS iface is
 	// in flight — refuse with the standard busy feedback, don't dispatch a second.
 	if (isOperationPending(netifKey)) {
-		toast.error($LL.network.os.deviceBusy());
+		toast.error(m["network.os.deviceBusy"]());
 		return;
 	}
 	saving = true;
@@ -101,14 +101,14 @@ async function save() {
 				ip: trimmedIp === '' ? undefined : trimmedIp,
 				enabled,
 			}),
-		busyMessage: () => $LL.network.os.deviceBusy(),
-		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => m["network.os.deviceBusy"](),
+		failMessage: () => m["network.os.operationFailed"](),
 	});
 	saving = false;
 	// success:false / throw are already toasted by osCommand and keep the dialog
 	// open with the form value preserved. Only a confirmed success closes it.
 	if (result?.success) {
-		toast.success($LL.network.os.saved());
+		toast.success(m["network.os.saved"]());
 		open = false;
 	}
 }
@@ -120,9 +120,9 @@ async function save() {
 	icon={Network}
 	onPrimary={save}
 	primaryDisabled={ipInvalid}
-	primaryLabel={$LL.advanced.save()}
+	primaryLabel={m["advanced.save"]()}
 	primaryLoading={saving}
-	title={$LL.network.view.configure()}
+	title={m["network.view.configure"]()}
 	bind:open
 >
 	<div class="space-y-6">
@@ -130,15 +130,15 @@ async function save() {
 		<div class="flex items-start justify-between gap-4">
 			<div class="min-w-0 space-y-0.5">
 				<Label class="text-sm font-medium" for="netif-enabled">
-					{$LL.settings.dialogs.enableInterface()}
+					{m["settings.dialogs.enableInterface"]()}
 				</Label>
 				<p class="text-muted-foreground text-xs">
-					{$LL.settings.dialogs.enableInterfaceDesc()}
+					{m["settings.dialogs.enableInterfaceDesc"]()}
 				</p>
 			</div>
 			<LabeledSwitch
 				checked={enabled}
-				label={$LL.settings.dialogs.enableInterface()}
+				label={m["settings.dialogs.enableInterface"]()}
 				onCheckedChange={(v) => {
 					enabled = v;
 					dirtyEnabled = true;
@@ -155,14 +155,14 @@ async function save() {
 				class="bg-status-info/10 border-status-info/30 flex items-start gap-3 rounded-lg border p-3"
 			>
 				<Info class="text-status-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
-				<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.linkLocalNotice()}</p>
+				<p class="text-muted-foreground text-xs">{m["settings.dialogs.linkLocalNotice"]()}</p>
 			</div>
 		{/if}
 
 		<!-- Static IP -->
 		<div class="space-y-2">
 			<Label class="text-sm font-medium" for="netif-ip">
-				{$LL.settings.dialogs.staticIp()}
+				{m["settings.dialogs.staticIp"]()}
 			</Label>
 			<Input
 				id="netif-ip"
@@ -173,17 +173,17 @@ async function save() {
 					ip = e.currentTarget.value;
 					dirtyIp = true;
 				}}
-				placeholder={$LL.settings.dialogs.ipPlaceholder()}
+				placeholder={m["settings.dialogs.ipPlaceholder"]()}
 				spellcheck={false}
 				value={ip}
 			/>
 			{#if ipInvalid}
 				<p class="text-destructive flex items-center gap-2 text-sm" role="alert">
 					<span class="bg-destructive size-1.5 shrink-0 rounded-full"></span>
-					{$LL.settings.dialogs.ipInvalid()}
+					{m["settings.dialogs.ipInvalid"]()}
 				</p>
 			{:else}
-				<p class="text-muted-foreground text-xs">{$LL.settings.dialogs.dhcpHint()}</p>
+				<p class="text-muted-foreground text-xs">{m["settings.dialogs.dhcpHint"]()}</p>
 			{/if}
 		</div>
 	</div>

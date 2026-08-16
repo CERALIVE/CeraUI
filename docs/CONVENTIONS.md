@@ -90,5 +90,72 @@ Promotion to `error` is deferred until Biome resolves imported-async returns or 
 
 > **Never put `//` or `/* */` comments in any CeraUI `biome.json`.** Biome 2.5.0
 > silently drops the entire `linter.rules` block when the config contains a comment
-> (only the formatter keeps running, with no parse error). Document rule rationale
-> here, not inline in the config.
+> (only the formatter keeps running, with no parse error). Under Biome 2.5.8 the
+> failure mode has changed but is no friendlier: the file stops parsing at all, so
+> `"root": false` is lost and the run dies with a misleading *"Found a nested root
+> configuration"* error that names neither the comment nor the line. Document rule
+> rationale here, not inline in the config.
+
+---
+
+## Svelte lint overrides — why exactly two rules stay off (2026-08-14)
+
+`apps/frontend/biome.json` disables **two** lint rules for `**/*.svelte`, and only two:
+
+| Rule | Status | Why |
+|------|--------|-----|
+| `correctness/noUnusedVariables` | **off** | Biome does not count template references. |
+| `correctness/noUnusedImports` | **off** | Same; Paraglide `m["<key>"]()` imports used only in markup are still missed. |
+
+Biome 2.5.3 (PR #10534) fixed `$store`/`$bindable` false positives **for
+`noUnusedVariables` only**, and 2.5.7 (PR #11198, issue #11171) fixed `{@attach}`
+for both unused-symbol rules. Both fixes are in 2.5.8 — and both are too narrow to
+retire the overrides. Re-enabling the pair on this tree currently produces **1,739
+errors and 13 warnings** in `apps/frontend`; the errors include Paraglide imports
+used only in markup (for example `BufferingIndicator.svelte`'s `m["hud.*"]()` calls)
+and cascading markup-only references. The general gap is still open upstream:
+[biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590) ("Support for
+cross language lint rules"), with
+[#9193](https://github.com/biomejs/biome/issues/9193) (namespace import used as
+`<Tabs.Root />`), [#10081](https://github.com/biomejs/biome/issues/10081) (symbol used
+only inside an attribute string) and
+[#11215](https://github.com/biomejs/biome/issues/11215) (`class:` / `style:`
+shorthand) as open instances.
+
+Two false-positive shapes dominate, and both must be gone before this is revisited:
+
+1. **Markup-only references.** Anything a component declares in `<script>` and uses
+   only in markup is reported unused — that is most of a Svelte component.
+   Paraglide imports such as `import { m } from '@ceraui/i18n/svelte'` are reported
+    unused when their `m["<key>"]()` calls appear only in markup; for example,
+    `BufferingIndicator.svelte` uses `m["hud.buffering"]()` and related keys in its
+    template. This is the current Paraglide-specific reproduction of the historical
+    typesafe-i18n store-import false positive.
+2. **Cascading false positives.** A symbol referenced *only* from inside another
+   symbol that is itself markup-only is flagged too. `SettingsView.svelte`'s icon
+   imports (`Cloud`, `Radio`, …) are used at `icon: Cloud` inside the `groups`
+   array — but `groups` is consumed by an `{#each}`, so Biome calls `groups` unused
+   and then every icon it names unused as well.
+
+**The other three rules from the historical override list are gone for two different
+reasons, both verified by probe rather than assumed:**
+
+- `correctness/noUnusedFunctionParameters` — **genuinely re-enabled.** It runs on
+  `.svelte`, and re-enabling it found exactly one real finding (a vestigial
+  `filename` parameter in `dev-tools/screenshot-utility.svelte`), now fixed.
+- `style/useImportType` and `style/useConst` — **the overrides were dead config.**
+  Both rules are inert on `.svelte` in Biome 2.5.8: a file carrying textbook
+  violations of each reports nothing even when the rules are set to `"error"`
+  directly in `apps/frontend/biome.json`, while the identical violations fire at
+  `error` in a `.ts` file. This is rule-specific, not a blanket "no `style` rules on
+  Svelte" — `style/noNonNullAssertion` does fire on `.svelte`. Disabling a rule that
+  never ran bought nothing, so the entries were removed rather than carried forward.
+
+**The formatter override on the same block is unrelated and stays.** Biome's
+experimental HTML formatter rewrites the `<script>` block to double quotes and cannot
+parse Svelte control flow, so `.svelte` markup is still formatted by the Svelte VS
+Code extension. Nothing above changes that.
+
+**Before re-attempting this:** re-read #8590 first. The check is a single command —
+delete the two entries, run `bunx biome check .`, and compare the count against the
+37-warning baseline. Anything in the thousands means the template gap is still open.

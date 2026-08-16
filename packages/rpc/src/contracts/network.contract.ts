@@ -30,5 +30,5 @@ export const networkContract = oc.router({
 	/**
 	 * Subscribe to network interface status changes
 	 */
-	onStatusChange: oc.route({ method: 'GET', path: '/network/status' }),
+	onStatusChange: oc,
 });

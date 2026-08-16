@@ -34,7 +34,9 @@ import type {
 import {
 	CONFIG_CHANGE_EVENT,
 	configChangeStateSchema,
+	hardwareTypeSchema,
 	notificationsMessageSchema,
+	pipelineSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
@@ -152,6 +154,27 @@ let cpuInfoState = $state<CpuInfo | undefined>(undefined);
 let sensorsState = $state<SensorsStatus | undefined>(undefined);
 let revisionsState = $state<Revisions | undefined>(undefined);
 let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
+
+// A pre-`{hardware, pipelines}` backend broadcasts the bare pipeline record, so
+// the wrapper is rebuilt here. Each entry is parsed rather than asserted: an
+// entry the schema rejects is dropped instead of being handed to consumers as a
+// well-typed value it is not.
+export function parseLegacyPipelines(data: unknown): PipelinesMessage {
+	const hardware = hardwareTypeSchema.safeParse(
+		(data as { hardware?: unknown } | null | undefined)?.hardware,
+	);
+	const pipelines: PipelinesMessage["pipelines"] = {};
+	if (data && typeof data === "object") {
+		for (const [id, entry] of Object.entries(data)) {
+			const parsed = pipelineSchema.safeParse(entry);
+			if (parsed.success) pipelines[id] = parsed.data;
+		}
+	}
+	return {
+		hardware: hardware.success ? hardware.data : "generic",
+		pipelines,
+	};
+}
 let capabilitiesState = $state<CapabilitiesMessage | undefined>(undefined);
 // Device-first unified source list (Wave 2, T6). Fed by the `sources` broadcast
 // (backend T2) — the SAME seq/post-login-snapshot machinery as `pipelines`.
@@ -643,10 +666,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			) {
 				pipelinesState = data as PipelinesMessage;
 			} else {
-				pipelinesState = {
-					hardware: (data as { hardware?: string })?.hardware ?? "generic",
-					pipelines: data as Record<string, unknown>,
-				} as unknown as PipelinesMessage;
+				pipelinesState = parseLegacyPipelines(data);
 			}
 			break;
 

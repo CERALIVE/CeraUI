@@ -235,7 +235,7 @@ function startServer(): void {
 							data: initPreviewSocketData(token),
 						});
 						if (previewOk) {
-							return undefined as unknown as Response;
+							return undefined;
 						}
 						return new Response("WebSocket upgrade failed", { status: 500 });
 					}
@@ -245,7 +245,7 @@ function startServer(): void {
 					});
 					if (success) {
 						// Bun automatically returns a 101 Switching Protocols response
-						return undefined as unknown as Response;
+						return undefined;
 					}
 					return new Response("WebSocket upgrade failed", { status: 500 });
 				}

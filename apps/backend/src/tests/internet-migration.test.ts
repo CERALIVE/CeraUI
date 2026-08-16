@@ -74,7 +74,7 @@ describe("httpGet — fetch-backed HTTP probe", () => {
 		});
 
 		const init = spy.mock.calls[0]?.[1] as RequestInit | undefined;
-		expect((init?.headers as Record<string, string>).Host).toBe(
+		expect((init?.headers as Record<string, string> | undefined)?.Host).toBe(
 			CONNECTIVITY_CHECK_DOMAIN,
 		);
 		// An AbortSignal is always attached for the timeout path.
@@ -100,7 +100,7 @@ describe("checkConnectivity — gstatic 204 signal", () => {
 		// Probes the supplied remote addr with the gstatic Host header.
 		expect(spy.mock.calls[0]?.[0]).toBe("http://8.8.8.8/generate_204");
 		const init = spy.mock.calls[0]?.[1] as RequestInit | undefined;
-		expect((init?.headers as Record<string, string>).Host).toBe(
+		expect((init?.headers as Record<string, string> | undefined)?.Host).toBe(
 			CONNECTIVITY_CHECK_DOMAIN,
 		);
 	});

@@ -14,7 +14,7 @@
   showing a spinner.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -91,15 +91,15 @@ const refusalMessage = $derived.by(() => {
 	if (startOutcome?.kind !== 'refused') return undefined;
 	switch (startOutcome.reason) {
 		case 'updates_disabled':
-			return $LL.general.updateReasonDisabled();
+			return m["general.updateReasonDisabled"]();
 		case 'streaming':
-			return $LL.general.updateReasonStreaming();
+			return m["general.updateReasonStreaming"]();
 		case 'already_updating':
-			return $LL.general.updateReasonAlreadyUpdating();
+			return m["general.updateReasonAlreadyUpdating"]();
 		case 'check_unavailable':
-			return $LL.general.updateReasonCheckUnavailable();
+			return m["general.updateReasonCheckUnavailable"]();
 		default:
-			return $LL.general.updateReasonUnknown();
+			return m["general.updateReasonUnknown"]();
 	}
 });
 
@@ -126,20 +126,20 @@ const checkRefusalMessage = $derived.by(() => {
 	if (checkRefusal === undefined) return undefined;
 	switch (checkRefusal) {
 		case 'updates_disabled':
-			return $LL.general.updateReasonDisabled();
+			return m["general.updateReasonDisabled"]();
 		case 'check_unavailable':
-			return $LL.general.updateCheckReasonBusy();
+			return m["general.updateCheckReasonBusy"]();
 		default:
-			return $LL.general.updateReasonUnknown();
+			return m["general.updateReasonUnknown"]();
 	}
 });
 
 const checkFailureMessage = $derived.by(() => {
 	switch (checkFailed?.reason) {
 		case 'refresh_failed':
-			return $LL.general.updateCheckReasonRefreshFailed();
+			return m["general.updateCheckReasonRefreshFailed"]();
 		case 'discovery_failed':
-			return $LL.general.updateCheckReasonDiscoveryFailed();
+			return m["general.updateCheckReasonDiscoveryFailed"]();
 		default:
 			return undefined;
 	}
@@ -204,10 +204,10 @@ $effect(() => {
 
 <AppDialog
 	bind:open
-	description={$LL.settings.index.updatesDesc()}
+	description={m["settings.index.updatesDesc"]()}
 	hideFooter
 	icon={RefreshCw}
-	title={$LL.settings.index.updates()}
+	title={m["settings.index.updates"]()}
 >
 	<div class="space-y-5">
 		<!-- Availability summary — the version is already present in the `available`
@@ -218,7 +218,7 @@ $effect(() => {
 					<AlertTriangle class="text-destructive mt-0.5 size-5 shrink-0" />
 					<div class="min-w-0">
 						<p class="text-destructive text-lg font-semibold">
-							{$LL.general.updateFailed()}
+							{m["general.updateFailed"]()}
 						</p>
 						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
 							{failed.reason}
@@ -230,17 +230,17 @@ $effect(() => {
 					<CheckCircle2 class="text-status-success mt-0.5 size-5 shrink-0" />
 					<div class="min-w-0">
 						<p class="text-status-success text-lg font-semibold">
-							{$LL.general.updateComplete()}
+							{m["general.updateComplete"]()}
 						</p>
 						<p class="text-muted-foreground mt-1 text-sm">
-							{$LL.general.updateCompleteDetail()}
+							{m["general.updateCompleteDetail"]()}
 						</p>
 					</div>
 				</div>
 			{:else if count > 0}
 				<p class="text-2xl font-bold">
 					{count}
-					{count === 1 ? $LL.general.package() : $LL.general.packages()}
+					{count === 1 ? m["general.package"]() : m["general.packages"]()}
 				</p>
 				{#if size}
 					<p class="text-muted-foreground mt-0.5 text-sm">{size}</p>
@@ -260,7 +260,7 @@ $effect(() => {
 					<AlertTriangle class="text-status-warning mt-0.5 size-5 shrink-0" />
 					<div class="min-w-0">
 						<p class="text-status-warning text-lg font-semibold">
-							{$LL.general.updateCheckFailed()}
+							{m["general.updateCheckFailed"]()}
 						</p>
 						{#if checkFailureMessage}
 							<p
@@ -273,12 +273,12 @@ $effect(() => {
 					</div>
 				</div>
 			{:else}
-				<p class="text-lg font-semibold">{$LL.general.noUpdatesAvailable()}</p>
+				<p class="text-lg font-semibold">{m["general.noUpdatesAvailable"]()}</p>
 				<!-- Without this the operator cannot tell a successful check that found
 				     nothing from a button that did nothing at all. -->
 				{#if lastCheckedLabel}
 					<p class="text-muted-foreground mt-1 text-sm" data-testid="update-last-checked">
-						{$LL.general.updateLastChecked({ time: lastCheckedLabel })}
+						{m["general.updateLastChecked"]({ time: lastCheckedLabel })}
 					</p>
 				{/if}
 			{/if}
@@ -288,14 +288,14 @@ $effect(() => {
 			<div class="space-y-2" aria-live="polite">
 				<div class="flex items-center gap-2 text-sm font-medium">
 					<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
-					{$LL.settings.dialogs.updating()}
+					{m["settings.dialogs.updating"]()}
 				</div>
 				<Progress value={progressValue ?? 100} />
 			</div>
 		{:else if starting}
 			<div class="flex items-center gap-2 text-sm font-medium" aria-live="polite">
 				<RefreshCw class="text-primary size-4 motion-safe:animate-spin" />
-				{$LL.network.os.applying()}
+				{m["network.os.applying"]()}
 			</div>
 		{:else}
 			<!-- A start that was refused, or accepted and then never reported, must
@@ -310,8 +310,8 @@ $effect(() => {
 					<div class="min-w-0 space-y-0.5">
 						<p class="text-sm font-medium">
 							{startOutcome.kind === 'stalled'
-								? $LL.general.updateNoProgress()
-								: $LL.general.updateStartRefused()}
+								? m["general.updateNoProgress"]()
+								: m["general.updateStartRefused"]()}
 						</p>
 						{#if refusalMessage}
 							<p
@@ -333,7 +333,7 @@ $effect(() => {
 				>
 					<AlertTriangle class="text-status-warning mt-0.5 size-4 shrink-0" />
 					<div class="min-w-0 space-y-0.5">
-						<p class="text-sm font-medium">{$LL.general.updateCheckRefused()}</p>
+						<p class="text-sm font-medium">{m["general.updateCheckRefused"]()}</p>
 						{#if checkRefusalMessage}
 							<p
 								class="text-muted-foreground text-sm break-words"
@@ -356,13 +356,13 @@ $effect(() => {
 					data-testid="update-retry"
 				>
 					<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
-					{$LL.general.retryUpdateCheck()}
+					{m["general.retryUpdateCheck"]()}
 				</Button>
 			{:else}
 				{#if count > 0}
 					<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
 						<Download class="size-4" />
-						{$LL.general.updateButton()}
+						{m["general.updateButton"]()}
 					</Button>
 				{/if}
 				<Button
@@ -373,7 +373,7 @@ $effect(() => {
 					variant="outline"
 				>
 					<RefreshCw class="size-4 {checking ? 'motion-safe:animate-spin' : ''}" />
-					{checking ? $LL.general.checkingForUpdates() : $LL.general.checkForUpdates()}
+					{checking ? m["general.checkingForUpdates"]() : m["general.checkForUpdates"]()}
 				</Button>
 			{/if}
 		{/if}
@@ -385,8 +385,8 @@ $effect(() => {
 	bind:open={confirmOpen}
 	destructive
 	onPrimary={doInstall}
-	primaryLabel={$LL.general.updateButton()}
-	title={$LL.general.areYouSure()}
+	primaryLabel={m["general.updateButton"]()}
+	title={m["general.areYouSure"]()}
 >
-	<p class="text-muted-foreground text-sm leading-relaxed">{$LL.general.updateConfirmation()}</p>
+	<p class="text-muted-foreground text-sm leading-relaxed">{m["general.updateConfirmation"]()}</p>
 </AppDialog>

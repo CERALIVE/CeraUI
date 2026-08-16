@@ -1,30 +1,22 @@
 /**
  * Locale-aware formatters for CeraUI.
  *
- * Two layers live here:
+ * Standalone `Intl`-based formatter factories (`formatBitrate`, `formatTemp`,
+ * …). Each takes a locale and returns a unit-aware formatting function.
  *
- * 1. `initFormatters` — the `typesafe-i18n` contract. The generated
- *    `Formatters` type is currently `{}` (no `{value|formatter}` syntax is used
- *    inside translation strings), so this returns an empty object. Keeping the
- *    signature intact means codegen / the generated `i18n-util` keep compiling.
- *
- * 2. Standalone `Intl`-based formatter factories (`formatBitrate`, `formatTemp`,
- *    …). These are the functions components and tests actually call. They take a
- *    locale and return a unit-aware formatting function. They are decoupled from
- *    the translation-interpolation pipeline on purpose: the custom Svelte 5
- *    runes adapter (`i18n-svelte5.svelte.ts`) does plain `{key}` interpolation
- *    and never invokes typesafe-i18n formatters, so wiring these through the
- *    `Formatters` type would buy nothing.
+ * They are deliberately decoupled from the message pipeline: no translated
+ * string uses an in-message formatter, so these never pass through the i18n
+ * runtime and this module imports none. That is what makes
+ * `@ceraui/i18n/formatters` safe to import anywhere, including the backend.
  */
 
-import type { FormattersInitializer } from "typesafe-i18n";
-import type { Formatters, Locales } from "./i18n-types.js";
+import type { LocaleCode } from "./locale-lifecycle.js";
 
 /**
- * A BCP-47 locale tag. We accept the typed `Locales` union as well as any raw
+ * A BCP-47 locale tag. We accept the typed `LocaleCode` union as well as any raw
  * string so callers can pass `navigator.language` / `Intl`-resolved tags.
  */
-export type LocaleArg = Locales | string;
+export type LocaleArg = LocaleCode | string;
 
 /** A formatter that turns a numeric (or Date) value into a localized string. */
 export type ValueFormatter<T> = (value: T) => string;
@@ -164,16 +156,3 @@ export const createFormatters = (locale: LocaleArg): AppFormatters => ({
 	percent: formatPercent(locale),
 	relativeTime: formatRelativeTime(locale),
 });
-
-/**
- * typesafe-i18n initializer. `Formatters` is `{}` (no in-string formatter usage),
- * so this returns an empty object — the real formatters are the standalone
- * factories above.
- */
-export const initFormatters: FormattersInitializer<Locales, Formatters> = (
-	_locale: Locales,
-) => {
-	const formatters: Formatters = {};
-
-	return formatters;
-};

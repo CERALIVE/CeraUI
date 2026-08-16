@@ -13,7 +13,7 @@
   lives in a literal call-site comment naming the OPEN register id (TD-NNN).
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Clock } from '@lucide/svelte';
 
 import * as Tooltip from '$lib/components/ui/tooltip';
@@ -32,8 +32,8 @@ interface Props {
 
 let { debtId, hint, label, class: className }: Props = $props();
 
-const pillLabel = $derived(label ?? $LL.live.comingSoon.label());
-const roadmap = $derived(hint ?? $LL.live.comingSoon.hint());
+const pillLabel = $derived(label ?? m["live.comingSoon.label"]());
+const roadmap = $derived(hint ?? m["live.comingSoon.hint"]());
 </script>
 
 <Tooltip.Provider delayDuration={150}>

@@ -1,21 +1,37 @@
 import { describe, expect, it } from "bun:test";
 
-import { i18nObject } from "../src/i18n-util.js";
-import { loadLocale } from "../src/i18n-util.sync.js";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-loadLocale("en");
-const L = i18nObject("en");
+const GENERATED = join(
+	dirname(fileURLToPath(import.meta.url)),
+	"..",
+	"generated",
+);
+
+const { m } = (await import(join(GENERATED, "registry.js"))) as {
+	m: Record<
+		string,
+		((inputs?: Record<string, unknown>, options?: { locale: string }) => string)
+	>;
+};
 
 describe("live.server.bondedAcross", () => {
 	it("renders the singular noun at count=1", () => {
-		expect(L.live.server.bondedAcross({ count: 1 })).toBe(
+		expect(m["live.server.bondedAcross"]?.({ count: 1 })).toBe(
 			"Bonded across 1 link",
 		);
 	});
 
 	it("renders the plural noun at count=3", () => {
-		expect(L.live.server.bondedAcross({ count: 3 })).toBe(
+		expect(m["live.server.bondedAcross"]?.({ count: 3 })).toBe(
 			"Bonded across 3 links",
+		);
+	});
+
+	it("renders the plural noun at count=0", () => {
+		expect(m["live.server.bondedAcross"]?.({ count: 0 })).toBe(
+			"Bonded across 0 links",
 		);
 	});
 });

@@ -15,8 +15,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import type WebSocket from "ws";
-
 import { setNetifDupIpSuppression } from "../network/network-interfaces.ts";
 import {
 	nmConnect,
@@ -24,6 +22,7 @@ import {
 	nmDisconnect,
 } from "../network/network-manager.ts";
 import { withDeviceLock } from "../network/state/device-lock.ts";
+import type { MessageSocket } from "../ui/message-socket.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
@@ -142,7 +141,7 @@ function isHotspotConfigComplete(
 }
 
 export async function wifiHotspotConfig(
-	conn: WebSocket,
+	conn: MessageSocket,
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["config"]>,
 ) {
 	// Find the Wifi interface

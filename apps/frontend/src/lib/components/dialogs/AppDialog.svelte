@@ -50,7 +50,7 @@
   contentClass?   string     — extra classes merged onto the surface.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Dialog as DialogPrimitive } from 'bits-ui';
 import Loader2 from '@lucide/svelte/icons/loader-2';
 import XIcon from '@lucide/svelte/icons/x';
@@ -148,7 +148,7 @@ const surfaceClass = cn(
 			{#snippet child({ props })}
 				<Button
 					{...props}
-					aria-label={$LL.dialogs.close()}
+					aria-label={m["dialogs.close"]()}
 					class="absolute end-3 top-3.5 size-8 rounded-md"
 					size="icon"
 					variant="ghost"
@@ -175,7 +175,7 @@ const surfaceClass = cn(
 				{@render actions()}
 			{:else if onPrimary}
 				<Button class="sm:min-w-24" onclick={handleCancel} variant="outline">
-					{secondaryLabel ?? $LL.dialogs.cancel()}
+					{secondaryLabel ?? m["dialogs.cancel"]()}
 				</Button>
 				<Button
 					class="sm:min-w-24"
@@ -186,14 +186,14 @@ const surfaceClass = cn(
 					{#if primaryLoading}
 						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
 					{/if}
-					{primaryLabel ?? $LL.dialogs.save()}
+					{primaryLabel ?? m["dialogs.save"]()}
 				</Button>
 			{:else}
 				<!-- Info-only dialog: a single close action. -->
 				<DialogPrimitive.Close>
 					{#snippet child({ props })}
 						<Button {...props} class="sm:min-w-24" variant="outline">
-							{secondaryLabel ?? $LL.dialogs.close()}
+							{secondaryLabel ?? m["dialogs.close"]()}
 						</Button>
 					{/snippet}
 				</DialogPrimitive.Close>

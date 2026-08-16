@@ -11,7 +11,7 @@
  * SUCCESS path (latch clears → dialog closes) needs the reactive store and is
  * proven end-to-end in the e2e spec, not here.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import { fireEvent, render, screen, within } from "@testing-library/svelte";
 import {
 	afterEach,
@@ -62,10 +62,9 @@ vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-const L = getLL();
-const POWER_TITLE = L.settings.index.power();
-const CONFIRM_TITLE = L.dialogs.areYouSure();
-const REBOOT_LABEL = L.advanced.reboot();
+const POWER_TITLE = m["settings.index.power"]();
+const CONFIRM_TITLE = m["dialogs.areYouSure"]();
+const REBOOT_LABEL = m["advanced.reboot"]();
 
 const phase = (name: string) =>
 	document.querySelector(`[data-reboot-phase="${name}"]`);
@@ -130,12 +129,12 @@ describe("PowerDialog — reboot countdown then still-reachable recovery", () =>
 		expect(markRebooting).toHaveBeenCalledOnce();
 		expect(phase("counting")).not.toBeNull();
 		expect(
-			screen.getByText(L.settings.dialogs.rebootCountdownTitle()),
+			screen.getByText(m["settings.dialogs.rebootCountdownTitle"]()),
 		).toBeTruthy();
 		// The countdown shows whole seconds remaining, sourced from i18n.
 		expect(
 			screen.getByText(
-				L.settings.dialogs.rebootCountdownRemaining({ seconds: 3 }),
+				m["settings.dialogs.rebootCountdownRemaining"]({ seconds: 3 }),
 			),
 		).toBeTruthy();
 
@@ -147,7 +146,7 @@ describe("PowerDialog — reboot countdown then still-reachable recovery", () =>
 		expect(phase("recovery")).not.toBeNull();
 		expect(clearRebooting).toHaveBeenCalled();
 		expect(
-			screen.getByText(L.settings.dialogs.rebootRecoveryTitle()),
+			screen.getByText(m["settings.dialogs.rebootRecoveryTitle"]()),
 		).toBeTruthy();
 	});
 
@@ -163,7 +162,7 @@ describe("PowerDialog — reboot countdown then still-reachable recovery", () =>
 		const recovery = phase("recovery") as HTMLElement;
 		await fireEvent.click(
 			within(recovery).getByRole("button", {
-				name: L.settings.dialogs.rebootRecoveryRetry(),
+				name: m["settings.dialogs.rebootRecoveryRetry"](),
 			}),
 		);
 		await vi.advanceTimersByTimeAsync(0);
@@ -187,7 +186,7 @@ describe("PowerDialog — streaming block is preserved", () => {
 
 		expect(rebootButton.disabled).toBe(true);
 		expect(
-			screen.getByText(L.settings.dialogs.blockedStreaming()),
+			screen.getByText(m["settings.dialogs.blockedStreaming"]()),
 		).toBeTruthy();
 		// No countdown is reachable while blocked.
 		expect(phase("counting")).toBeNull();

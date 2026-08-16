@@ -10,7 +10,7 @@
     roadmap: data-debt-id="TD-plain-srt-egress"
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
@@ -18,11 +18,11 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 
 <div class="space-y-2">
 	<div class="flex items-center gap-1">
-		<span class="text-sm font-medium" id="transport-row-label">{$LL.settings.transportKind()}</span>
+		<span class="text-sm font-medium" id="transport-row-label">{m["settings.transportKind"]()}</span>
 		<InfoPopover
-			body={$LL.settings.transportKindHint()}
+			body={m["settings.transportKindHint"]()}
 			testId="transport-row-info"
-			title={$LL.settings.transportKind()}
+			title={m["settings.transportKind"]()}
 		/>
 	</div>
 
@@ -38,7 +38,7 @@ import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 				data-testid="transport-srtla-active"
 			>
 				<span class="bg-primary size-1.5 shrink-0 rounded-full motion-safe:animate-pulse" aria-hidden={true}></span>
-				{$LL.settings.transportActive()}
+				{m["settings.transportActive"]()}
 			</span>
 		</div>
 

@@ -19,7 +19,7 @@
   the primary (Save) action is disabled.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { Modem } from '@ceraui/rpc/schemas';
 import {
 	Globe,
@@ -203,8 +203,8 @@ async function handleSave() {
 	const result = await osCommand({
 		key: configKey,
 		rpc: () => rpc.modems.configure(input),
-		busyMessage: () => $LL.network.os.deviceBusy(),
-		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => m["network.os.deviceBusy"](),
+		failMessage: () => m["network.os.operationFailed"](),
 	});
 	// Release the echo baseline to the server-APPLIED (post-clamp) config, never
 	// the intended draft, so the configure-echo confirm matches what the device
@@ -239,25 +239,25 @@ async function handleScan() {
 	await osCommand({
 		key: scanKey,
 		rpc: () => rpc.modems.scan({ device: Number(deviceId) }),
-		busyMessage: () => $LL.network.os.deviceBusy(),
-		failMessage: () => $LL.network.os.operationFailed(),
+		busyMessage: () => m["network.os.deviceBusy"](),
+		failMessage: () => m["network.os.operationFailed"](),
 	});
 }
 
 const selectedNetworkLabel = $derived(
 	formData.network === '-1'
-		? $LL.network.modem.automaticRoamingNetwork()
+		? m["network.modem.automaticRoamingNetwork"]()
 		: (modem.available_networks?.[formData.network]?.name ?? formData.network),
 );
 </script>
 
 <AppDialog
 	closeOnPrimary={false}
-	description={$LL.network.modem.configureDescription()}
+	description={m["network.modem.configureDescription"]()}
 	icon={Radio}
 	onPrimary={handleSave}
 	primaryDisabled={primaryDisabled}
-	primaryLabel={$LL.network.modem.save()}
+	primaryLabel={m["network.modem.save"]()}
 	primaryLoading={savePending}
 	title={modem.name}
 	bind:open
@@ -289,8 +289,8 @@ const selectedNetworkLabel = $derived(
 			>
 				<SignalZero class="text-status-warning mt-0.5 size-5 shrink-0" aria-hidden="true" />
 				<div class="min-w-0">
-					<p class="text-sm font-semibold">{$LL.network.modem.noSim()}</p>
-					<p class="text-muted-foreground mt-0.5 text-xs">{$LL.network.modem.noSimHint()}</p>
+					<p class="text-sm font-semibold">{m["network.modem.noSim"]()}</p>
+					<p class="text-muted-foreground mt-0.5 text-xs">{m["network.modem.noSimHint"]()}</p>
 				</div>
 			</div>
 		{/if}
@@ -299,7 +299,7 @@ const selectedNetworkLabel = $derived(
 		<fieldset class="space-y-4 disabled:pointer-events-none" disabled={noSim}>
 			<!-- ── Network type ────────────────────────────────────────────────── -->
 			<div class="space-y-1.5">
-				<Label class="text-muted-foreground text-xs">{$LL.network.modem.networkType()}</Label>
+				<Label class="text-muted-foreground text-xs">{m["network.modem.networkType"]()}</Label>
 				<Select.Root
 					disabled={noSim}
 					onValueChange={(val) => {
@@ -322,7 +322,7 @@ const selectedNetworkLabel = $derived(
 						{/each}
 						{#if (modem.network_type?.supported ?? []).length === 0}
 							<div class="text-muted-foreground px-2 py-1.5 text-xs">
-								{$LL.network.modem.noNetworksFound()}
+								{m["network.modem.noNetworksFound"]()}
 							</div>
 						{/if}
 					</Select.Group>
@@ -341,14 +341,14 @@ const selectedNetworkLabel = $derived(
 						aria-hidden="true"
 					/>
 					<div class="min-w-0">
-						<p class="text-sm font-medium">{$LL.network.modem.enableRoaming()}</p>
-						<p class="text-muted-foreground text-xs">{$LL.network.modem.roamingDescription()}</p>
+						<p class="text-sm font-medium">{m["network.modem.enableRoaming"]()}</p>
+						<p class="text-muted-foreground text-xs">{m["network.modem.roamingDescription"]()}</p>
 					</div>
 				</div>
 				<LabeledSwitch
 					checked={formData.roaming}
 					disabled={noSim}
-					label={$LL.network.modem.enableRoaming()}
+					label={m["network.modem.enableRoaming"]()}
 					onCheckedChange={(checked) => (formData.roaming = checked)}
 				/>
 			</div>
@@ -358,7 +358,7 @@ const selectedNetworkLabel = $derived(
 				<div class="space-y-2" transition:slide={{ duration: 150 }}>
 					<div class="flex items-center justify-between gap-2">
 						<Label class="text-muted-foreground text-xs">
-							{$LL.network.modem.availableNetworks()}
+							{m["network.modem.availableNetworks"]()}
 						</Label>
 						<Button
 							class="h-8 gap-1.5 px-2.5 text-xs"
@@ -371,10 +371,10 @@ const selectedNetworkLabel = $derived(
 						>
 							{#if scanning}
 								<Loader2 class="size-3.5 motion-safe:animate-spin" />
-								{$LL.network.modem.scanning()}
+								{m["network.modem.scanning"]()}
 							{:else}
 								<RefreshCw class="size-3.5" />
-								{$LL.network.modem.scanForNetworks()}
+								{m["network.modem.scanForNetworks"]()}
 							{/if}
 						</Button>
 					</div>
@@ -393,7 +393,7 @@ const selectedNetworkLabel = $derived(
 						<Select.Content>
 							<Select.Group>
 								<Select.Item
-									label={$LL.network.modem.automaticRoamingNetwork()}
+									label={m["network.modem.automaticRoamingNetwork"]()}
 									value="-1"
 								/>
 								{#each availableNetworks as [key, net] (key)}
@@ -405,14 +405,14 @@ const selectedNetworkLabel = $derived(
 
 					{#if scanError}
 						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert">
-							{$LL.network.modem.scanFailed()}
+							{m["network.modem.scanFailed"]()}
 						</p>
 					{:else if scanning}
 						<p class="text-muted-foreground text-xs" data-testid="modem-scanning-state">
-							{$LL.network.modem.scanningForNetworks()}
+							{m["network.modem.scanningForNetworks"]()}
 						</p>
 					{:else if availableNetworks.length === 0}
-						<p class="text-muted-foreground text-xs">{$LL.network.modem.noNetworksFound()}</p>
+						<p class="text-muted-foreground text-xs">{m["network.modem.noNetworksFound"]()}</p>
 					{/if}
 				</div>
 			{/if}
@@ -428,14 +428,14 @@ const selectedNetworkLabel = $derived(
 						aria-hidden="true"
 					/>
 					<div class="min-w-0">
-						<p class="text-sm font-medium">{$LL.network.modem.autoapn()}</p>
-						<p class="text-muted-foreground text-xs">{$LL.network.modem.autoApnDescription()}</p>
+						<p class="text-sm font-medium">{m["network.modem.autoapn"]()}</p>
+						<p class="text-muted-foreground text-xs">{m["network.modem.autoApnDescription"]()}</p>
 					</div>
 				</div>
 				<LabeledSwitch
 					checked={formData.autoconfig}
 					disabled={noSim}
-					label={$LL.network.modem.autoapn()}
+					label={m["network.modem.autoapn"]()}
 					onCheckedChange={(checked) => (formData.autoconfig = checked)}
 				/>
 			</div>
@@ -446,36 +446,36 @@ const selectedNetworkLabel = $derived(
 					<div class="space-y-1.5">
 						<Label class="text-muted-foreground flex items-center gap-1.5 text-xs" for="modem-apn">
 							<NetworkIcon class="size-3.5" />
-							{$LL.network.modem.apn()}
+							{m["network.modem.apn"]()}
 						</Label>
 						<Input
 							id="modem-apn"
 							aria-invalid={apnError}
 							class={cn('h-10 text-sm', apnError && 'border-status-error focus-visible:ring-status-error')}
 						disabled={noSim}
-						placeholder={$LL.network.modem.apnPlaceholder()}
+						placeholder={m["network.modem.apnPlaceholder"]()}
 							bind:value={formData.apn}
 						/>
 						{#if apnError}
-							<p class="text-status-error text-xs">{$LL.network.modem.apnRequired()}</p>
+							<p class="text-status-error text-xs">{m["network.modem.apnRequired"]()}</p>
 						{/if}
 					</div>
 
 					<div class="space-y-1.5">
-						<Label class="text-muted-foreground text-xs">{$LL.network.modem.credentials()}</Label>
+						<Label class="text-muted-foreground text-xs">{m["network.modem.credentials"]()}</Label>
 						<div class="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
 							<Input
-								aria-label={$LL.network.modem.username()}
+								aria-label={m["network.modem.username"]()}
 								class="h-10 text-sm"
 								disabled={noSim}
-								placeholder={$LL.network.modem.username()}
+								placeholder={m["network.modem.username"]()}
 								bind:value={formData.username}
 							/>
 							<Input
-								aria-label={$LL.network.modem.password()}
+								aria-label={m["network.modem.password"]()}
 								class="h-10 text-sm"
 								disabled={noSim}
-								placeholder={$LL.network.modem.password()}
+								placeholder={m["network.modem.password"]()}
 								type="password"
 								bind:value={formData.password}
 							/>

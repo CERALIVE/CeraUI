@@ -250,15 +250,14 @@ describe("formatProbedCap", () => {
 		).toBe("1280\u00d7720 VP9");
 	});
 
-	it.each([
-		"audio/x-raw",
-		"audio/mpeg",
-		"audio/x-alaw",
-	])("renders %s as a plain-language audio label", (mediaType) => {
-		const label = formatProbedCap({ media_type: mediaType });
-		expect(label).toBe("Audio");
-		expect(label).not.toContain("/");
-	});
+	it.each(["audio/x-raw", "audio/mpeg", "audio/x-alaw"])(
+		"renders %s as a plain-language audio label",
+		(mediaType) => {
+			const label = formatProbedCap({ media_type: mediaType });
+			expect(label).toBe("Audio");
+			expect(label).not.toContain("/");
+		},
+	);
 
 	it("renders nothing for a format carrying no information at all", () => {
 		expect(formatProbedCap({})).toBe("");

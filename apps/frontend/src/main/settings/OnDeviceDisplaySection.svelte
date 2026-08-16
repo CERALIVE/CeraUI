@@ -14,7 +14,7 @@
   live `state` — so a failed unit never reads as "running".
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import {
 	KIOSK_UNAVAILABLE_ERROR,
 	kioskDisplaySchema,
@@ -48,7 +48,6 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-const t = $derived($LL.settings.onDeviceDisplay);
 
 // Option lists sourced from the contract enums (no inline string literals).
 const displayOptions = kioskDisplaySchema.options;
@@ -116,7 +115,7 @@ async function handleEnableChange(next: boolean) {
 		rpc: () => (next ? rpc.system.kioskStart() : rpc.system.kioskStop()),
 		confirmOnResolve: true,
 		classify: () => ({ ok: true }),
-		failMessage: () => t.toggleError(),
+		failMessage: () => m["settings.onDeviceDisplay.toggleError"](),
 	});
 	// undefined → re-entry no-op or a thrown RPC (osCommand already toasted).
 	if (!result) throw new Error('kiosk_toggle_failed');
@@ -146,7 +145,7 @@ async function configure(patch: Partial<KioskConfigureInput>) {
 		rpc: () => rpc.system.kioskConfigure(next),
 		confirmOnResolve: true,
 		classify: () => ({ ok: true }),
-		failMessage: () => t.configureError(),
+		failMessage: () => m["settings.onDeviceDisplay.configureError"](),
 	});
 	if (!result) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.applied) {
@@ -172,7 +171,7 @@ async function signalOsk(visible: boolean) {
 		rpc: () => rpc.system.kioskOsk({ visible }),
 		confirmOnResolve: true,
 		classify: () => ({ ok: true }),
-		failMessage: () => t.keyboardError(),
+		failMessage: () => m["settings.onDeviceDisplay.keyboardError"](),
 	});
 	if (!result) return; // re-entry no-op or a thrown RPC (osCommand already toasted)
 	if (result.error === KIOSK_UNAVAILABLE_ERROR || !result.success) {
@@ -195,31 +194,31 @@ const STATE_META = {
 } as const satisfies Record<KioskState, { tone: string; spin: boolean }>;
 
 const stateLabels = $derived({
-	disabled: t.states.disabled(),
-	'enabled-stopped': t.states.enabledStopped(),
-	'enabled-running': t.states.enabledRunning(),
-	'enabled-failed': t.states.enabledFailed(),
-	'failed-no-display': t.states.failedNoDisplay(),
+	disabled: m["settings.onDeviceDisplay.states.disabled"](),
+	'enabled-stopped': m["settings.onDeviceDisplay.states.enabledStopped"](),
+	'enabled-running': m["settings.onDeviceDisplay.states.enabledRunning"](),
+	'enabled-failed': m["settings.onDeviceDisplay.states.enabledFailed"](),
+	'failed-no-display': m["settings.onDeviceDisplay.states.failedNoDisplay"](),
 } satisfies Record<KioskState, string>);
 
 const stateHints = $derived({
-	disabled: t.stateHints.disabled(),
-	'enabled-stopped': t.stateHints.enabledStopped(),
-	'enabled-running': t.stateHints.enabledRunning(),
-	'enabled-failed': t.stateHints.enabledFailed(),
-	'failed-no-display': t.stateHints.failedNoDisplay(),
+	disabled: m["settings.onDeviceDisplay.stateHints.disabled"](),
+	'enabled-stopped': m["settings.onDeviceDisplay.stateHints.enabledStopped"](),
+	'enabled-running': m["settings.onDeviceDisplay.stateHints.enabledRunning"](),
+	'enabled-failed': m["settings.onDeviceDisplay.stateHints.enabledFailed"](),
+	'failed-no-display': m["settings.onDeviceDisplay.stateHints.failedNoDisplay"](),
 } satisfies Record<KioskState, string>);
 
 const displayLabels = $derived({
-	lcd: t.profiles.lcd(),
-	eink: t.profiles.eink(),
-	mono: t.profiles.mono(),
+	lcd: m["settings.onDeviceDisplay.profiles.lcd"](),
+	eink: m["settings.onDeviceDisplay.profiles.eink"](),
+	mono: m["settings.onDeviceDisplay.profiles.mono"](),
 } satisfies Record<KioskDisplay, string>);
 
 const performanceLabels = $derived({
-	low: t.performanceModes.low(),
-	balanced: t.performanceModes.balanced(),
-	high: t.performanceModes.high(),
+	low: m["settings.onDeviceDisplay.performanceModes.low"](),
+	balanced: m["settings.onDeviceDisplay.performanceModes.balanced"](),
+	high: m["settings.onDeviceDisplay.performanceModes.high"](),
 } satisfies Record<KioskPerformance, string>);
 
 const meta = $derived(STATE_META[liveState]);
@@ -247,10 +246,10 @@ const isRunning = $derived(liveState === 'enabled-running');
 
 <AppDialog
 	bind:open
-	description={t.description()}
+	description={m["settings.onDeviceDisplay.description"]()}
 	hideFooter
 	icon={Monitor}
-	title={t.title()}
+	title={m["settings.onDeviceDisplay.title"]()}
 >
 	<div class="space-y-5">
 		{#if unavailable}
@@ -259,7 +258,7 @@ const isRunning = $derived(liveState === 'enabled-running');
 				data-testid="kiosk-unavailable"
 				role="status"
 			>
-				{t.unavailable()}
+				{m["settings.onDeviceDisplay.unavailable"]()}
 			</div>
 		{/if}
 
@@ -291,11 +290,11 @@ const isRunning = $derived(liveState === 'enabled-running');
 		<!-- Enable / disable toggle (pessimistic, locks to applied) -->
 		<div class="flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
 			<div class="min-w-0">
-				<p class="text-sm font-medium">{t.enable()}</p>
-				<p class="text-muted-foreground text-xs">{t.enableDesc()}</p>
+				<p class="text-sm font-medium">{m["settings.onDeviceDisplay.enable"]()}</p>
+				<p class="text-muted-foreground text-xs">{m["settings.onDeviceDisplay.enableDesc"]()}</p>
 			</div>
 			<AsyncSwitch
-				aria-label={t.enable()}
+				aria-label={m["settings.onDeviceDisplay.enable"]()}
 				checked={enabled}
 				data-testid="kiosk-enable-switch"
 				disabled={!loaded}
@@ -305,7 +304,7 @@ const isRunning = $derived(liveState === 'enabled-running');
 
 		<!-- Display profile -->
 		<div class="space-y-1.5">
-			<Label class="text-muted-foreground text-xs" for="kiosk-display">{t.displayProfile()}</Label>
+			<Label class="text-muted-foreground text-xs" for="kiosk-display">{m["settings.onDeviceDisplay.displayProfile"]()}</Label>
 			<Select.Root
 				disabled={!loaded}
 				onValueChange={(val) => {
@@ -314,7 +313,7 @@ const isRunning = $derived(liveState === 'enabled-running');
 				type="single"
 				value={display}
 			>
-				<Select.Trigger aria-label={t.displayProfile()} class="h-10 w-full text-sm" id="kiosk-display">
+				<Select.Trigger aria-label={m["settings.onDeviceDisplay.displayProfile"]()} class="h-10 w-full text-sm" id="kiosk-display">
 					{displayLabels[display]}
 				</Select.Trigger>
 				<Select.Content>
@@ -325,19 +324,19 @@ const isRunning = $derived(liveState === 'enabled-running');
 					</Select.Group>
 				</Select.Content>
 			</Select.Root>
-			<p class="text-muted-foreground text-xs">{t.displayProfileDesc()}</p>
+			<p class="text-muted-foreground text-xs">{m["settings.onDeviceDisplay.displayProfileDesc"]()}</p>
 		</div>
 
 		<!-- Touch mode -->
 		<div class="flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
 			<div class="min-w-0">
-				<p class="text-sm font-medium">{t.touch()}</p>
-				<p class="text-muted-foreground text-xs">{t.touchDesc()}</p>
+				<p class="text-sm font-medium">{m["settings.onDeviceDisplay.touch"]()}</p>
+				<p class="text-muted-foreground text-xs">{m["settings.onDeviceDisplay.touchDesc"]()}</p>
 			</div>
 			<LabeledSwitch
 				checked={touch}
 				disabled={!loaded}
-				label={t.touch()}
+				label={m["settings.onDeviceDisplay.touch"]()}
 				onCheckedChange={(next) => void configure({ touch: next })}
 			/>
 		</div>
@@ -346,20 +345,20 @@ const isRunning = $derived(liveState === 'enabled-running');
 		     toggle is its inverse, so checked ⇒ motion:false). -->
 		<div class="flex items-center justify-between gap-3 rounded-lg border px-4 py-3">
 			<div class="min-w-0">
-				<p class="text-sm font-medium">{t.motion()}</p>
-				<p class="text-muted-foreground text-xs">{t.motionDesc()}</p>
+				<p class="text-sm font-medium">{m["settings.onDeviceDisplay.motion"]()}</p>
+				<p class="text-muted-foreground text-xs">{m["settings.onDeviceDisplay.motionDesc"]()}</p>
 			</div>
 			<LabeledSwitch
 				checked={!motion}
 				disabled={!loaded}
-				label={t.motion()}
+				label={m["settings.onDeviceDisplay.motion"]()}
 				onCheckedChange={(next) => void configure({ motion: !next })}
 			/>
 		</div>
 
 		<!-- Performance mode -->
 		<div class="space-y-1.5">
-			<Label class="text-muted-foreground text-xs" for="kiosk-performance">{t.performance()}</Label>
+			<Label class="text-muted-foreground text-xs" for="kiosk-performance">{m["settings.onDeviceDisplay.performance"]()}</Label>
 			<Select.Root
 				disabled={!loaded}
 				onValueChange={(val) => {
@@ -369,7 +368,7 @@ const isRunning = $derived(liveState === 'enabled-running');
 				value={performance}
 			>
 				<Select.Trigger
-					aria-label={t.performance()}
+					aria-label={m["settings.onDeviceDisplay.performance"]()}
 					class="h-10 w-full text-sm"
 					id="kiosk-performance"
 				>
@@ -383,14 +382,14 @@ const isRunning = $derived(liveState === 'enabled-running');
 					</Select.Group>
 				</Select.Content>
 			</Select.Root>
-			<p class="text-muted-foreground text-xs">{t.performanceDesc()}</p>
+			<p class="text-muted-foreground text-xs">{m["settings.onDeviceDisplay.performanceDesc"]()}</p>
 		</div>
 
 		<!-- On-screen keyboard. Only actionable while the kiosk is running. -->
 		<div class="space-y-2">
 			<div class="min-w-0">
-				<p class="text-sm font-medium">{t.keyboard()}</p>
-				<p class="text-muted-foreground text-xs">{t.keyboardDesc()}</p>
+				<p class="text-sm font-medium">{m["settings.onDeviceDisplay.keyboard"]()}</p>
+				<p class="text-muted-foreground text-xs">{m["settings.onDeviceDisplay.keyboardDesc"]()}</p>
 			</div>
 			<div class="flex gap-2">
 				<Button
@@ -400,7 +399,7 @@ const isRunning = $derived(liveState === 'enabled-running');
 					variant="outline"
 				>
 					<Keyboard class="size-4" />
-					{t.showKeyboard()}
+					{m["settings.onDeviceDisplay.showKeyboard"]()}
 				</Button>
 				<Button
 					class="flex-1 gap-2"
@@ -409,7 +408,7 @@ const isRunning = $derived(liveState === 'enabled-running');
 					variant="outline"
 				>
 					<KeyboardOff class="size-4" />
-					{t.hideKeyboard()}
+					{m["settings.onDeviceDisplay.hideKeyboard"]()}
 				</Button>
 			</div>
 		</div>

@@ -106,6 +106,21 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		page,
 	}) => {
 		const AUDIO_PIPELINE = 'e2e-audio-pipeline';
+		// The audio gate reads the pipeline registry CeraUI projects from the unified
+		// `sources` broadcast, so the synthetic audio-capable pipeline is injected as a
+		// coarse source row — the legacy `pipelines` catalog is no longer consumed.
+		const AUDIO_SOURCE_ROW: Frame = {
+			origin: 'coarse',
+			id: AUDIO_PIPELINE,
+			pipelineId: AUDIO_PIPELINE,
+			labelKey: 'settings.sources.hdmi',
+			modes: [],
+			supportsAudio: true,
+			supportsResolutionOverride: false,
+			supportsFramerateOverride: false,
+			audioKind: 'selectable',
+			available: true,
+		};
 		const ws = await attachWs(page, {
 			mutateInbound: (frame) => {
 				const config = frame.config as Frame | undefined;
@@ -118,19 +133,17 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 					// No saved audio source → draftSource stays undefined → codec locked.
 					delete config.asrc;
 				}
-				// Keep our injected pipeline catalog authoritative.
-				return !('pipelines' in frame);
+				const sources = frame.sources as Frame | undefined;
+				const rows = sources?.sources;
+				if (Array.isArray(rows) && !rows.some((r) => (r as Frame).id === AUDIO_PIPELINE)) {
+					rows.push({ ...AUDIO_SOURCE_ROW });
+				}
+				return true;
 			},
 		});
 		await page.goto('/');
 		await ensureAuthenticated(page);
 		await navigateTo(page, 'live');
-		ws.push({
-			pipelines: {
-				hardware: 'generic',
-				pipelines: { [AUDIO_PIPELINE]: { name: 'E2E Audio', supportsAudio: true } },
-			},
-		});
 		ws.push({ config: { pipeline: AUDIO_PIPELINE, source: 'hdmi' } });
 
 		await page.getByTestId('open-audio-dialog').click();
@@ -167,16 +180,24 @@ test.describe('disabled-reason hints + loading/empty distinction (T15)', () => {
 		);
 	});
 
-	// ── A3. Stream start — disabled reason when the pipeline is unrecognized ────
-	test('Stream start: disabled without a usable pipeline carries the cannot-start reason', async ({
+	// ── A3. Stream start — disabled reason when the source is unusable ──────────
+	// The Start gate reads `config.source` resolved against the `sources` snapshot;
+	// the stale `pipeline` beside it pins that a drifted pipeline cannot smuggle a
+	// start past an unusable source. BOTH are stated here rather than inherited:
+	// the seed (`apps/backend/config.json`, gitignored) can carry a persisted
+	// `source` from an earlier run, which would silently un-block the button.
+	test('Stream start: disabled without a usable source carries the cannot-start reason', async ({
 		page,
 	}) => {
 		await attachWs(page, {
 			mutateInbound: (frame) => {
 				const config = frame.config as Frame | undefined;
 				// Keep a server target (hasServer true so the control renders) but
-				// make the pipeline unrecognized → canStart false.
-				if (config) config.pipeline = 'e2e-unknown-pipeline';
+				// make the selected source unresolvable → canStart false.
+				if (config) {
+					config.source = 'e2e-unknown-source';
+					config.pipeline = 'e2e-unknown-pipeline';
+				}
 				const status = frame.status as Frame | undefined;
 				if (status) status.is_streaming = false;
 				return true;

@@ -26,8 +26,14 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
  * the LabeledSwitch — its tooltip-wrapped control is not reliably actuated by
  * Playwright synthetic events, which is orthogonal to the scan behaviour here.
  *
- * The harness also captures the modems snapshot + the last `modems.configure`
- * input, and optionally drops `modems.scan`. No fixed-delay waits: every step
+ * The harness ACCUMULATES the modems snapshot the same way the frontend store
+ * does (field-by-field per modem id) rather than keeping the last frame — the
+ * backend's retained status poll broadcasts status-only partials, so a snapshot
+ * built from one frame can be missing `config` entirely, and re-emitting that
+ * would clear the modem's APN and permanently disable Save.
+ *
+ * The harness also captures the last `modems.configure` input, and optionally
+ * drops `modems.scan`. No fixed-delay waits: every step
  * asserts on a stable DOM/state signal.
  */
 
@@ -44,6 +50,19 @@ function installWsHarness(): void {
 		failScan: false,
 		scanFailDelay: 0,
 		_seq: 0,
+		// Mirrors the store's `mergeModemList`. Only a newly-added modem carries a
+		// full descriptor; the retained status poll sends status-only partials, so
+		// keeping just the LAST frame yields a snapshot with no `config`.
+		mergeModems(incoming: Record<string, Record<string, unknown>>) {
+			const prev = w.__cera.lastModems ?? {};
+			const next: Record<string, unknown> = { ...prev };
+			for (const id of Object.keys(incoming)) {
+				const entry = incoming[id];
+				if (!entry) continue;
+				next[id] = { ...(prev[id] ?? {}), ...entry };
+			}
+			w.__cera.lastModems = next;
+		},
 		emit(type: string, payload: unknown) {
 			const s = w.__cera.socket;
 			if (s)
@@ -68,7 +87,7 @@ function installWsHarness(): void {
 					const o = JSON.parse(ev.data);
 					const modems = o?.modems ?? o?.status?.modems;
 					if (modems && typeof modems === "object") {
-						w.__cera.lastModems = modems;
+						w.__cera.mergeModems(modems);
 					}
 				} catch {
 					/* non-JSON frame */

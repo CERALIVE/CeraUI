@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Activity } from '@lucide/svelte';
 
 type PerformanceData = {
@@ -34,11 +34,11 @@ let {
 <div class="space-y-3">
 	<div class="flex items-center gap-2 text-sm font-medium">
 		<Activity class="h-4 w-4" />
-		{$LL.devtools.livePerformanceMetrics()}
+		{m["devtools.livePerformanceMetrics"]()}
 	</div>
 	<div class="grid grid-cols-2 gap-3 md:grid-cols-4" aria-live="polite">
 		<div class="bg-background/50 rounded-lg border p-3">
-			<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.pageLoad()}</div>
+			<div class="text-muted-foreground mb-1 text-xs">{m["devtools.pageLoad"]()}</div>
 			<div
 				class="text-lg font-bold {performanceData.loadTime < 1000
 					? 'text-status-success'
@@ -50,7 +50,7 @@ let {
 			</div>
 		</div>
 		<div class="bg-background/50 rounded-lg border p-3">
-			<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.jsMemory()}</div>
+			<div class="text-muted-foreground mb-1 text-xs">{m["devtools.jsMemory"]()}</div>
 			<div
 				class="text-lg font-bold {performanceData.memory < 50
 					? 'text-status-success'
@@ -62,13 +62,13 @@ let {
 			</div>
 		</div>
 		<div class="bg-background/50 rounded-lg border p-3">
-			<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.viewport()}</div>
+			<div class="text-muted-foreground mb-1 text-xs">{m["devtools.viewport"]()}</div>
 			<div class="text-lg font-bold text-primary">
 				{windowInfo.width}×{windowInfo.height}
 			</div>
 		</div>
 		<div class="bg-background/50 rounded-lg border p-3">
-			<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.screen()}</div>
+			<div class="text-muted-foreground mb-1 text-xs">{m["devtools.screen"]()}</div>
 			<div class="text-lg font-bold text-primary">
 				{windowInfo.screenWidth}×{windowInfo.screenHeight}
 			</div>

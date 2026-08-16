@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Play, Square } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
@@ -98,10 +98,10 @@ $effect(() => {
 	<Card.Header>
 		<Card.Title class="flex items-center gap-2">
 			<Play class="h-5 w-5 text-primary" />
-			{$LL.devtools.overlayDemo()}
+			{m["devtools.overlayDemo"]()}
 		</Card.Title>
 		<Card.Description>
-			{$LL.devtools.overlayDemoDescription()}
+			{m["devtools.overlayDemoDescription"]()}
 		</Card.Description>
 	</Card.Header>
 
@@ -113,7 +113,7 @@ $effect(() => {
 				onclick={startDemo}
 			>
 				<Play class="mr-2 h-4 w-4" />
-				{$LL.devtools.startDemo()}
+				{m["devtools.startDemo"]()}
 			</Button>
 
 			<Button
@@ -122,7 +122,7 @@ $effect(() => {
 				variant="outline"
 			>
 				<Square class="mr-2 h-4 w-4" />
-				{$LL.devtools.stopDemo()}
+				{m["devtools.stopDemo"]()}
 			</Button>
 		</div>
 
@@ -131,20 +131,20 @@ $effect(() => {
 			<div
 				class="rounded-md border border-primary/30 bg-primary/10 p-3 text-sm"
 			>
-				<div class="mb-1 font-medium text-primary">{$LL.devtools.demoRunning()}</div>
+				<div class="mb-1 font-medium text-primary">{m["devtools.demoRunning"]()}</div>
 				<div>
-					{$LL.devtools.phase()}: {demoPhase}/10 | {$LL.devtools.downloading()}: {demoDetails.downloading}
-					| {$LL.devtools.unpacking()}: {demoDetails.unpacking} | {$LL.devtools.installing()}: {demoDetails.setting_up}
+					{m["devtools.phase"]()}: {demoPhase}/10 | {m["devtools.downloading"]()}: {demoDetails.downloading}
+					| {m["devtools.unpacking"]()}: {demoDetails.unpacking} | {m["devtools.installing"]()}: {demoDetails.setting_up}
 				</div>
 			</div>
 		{/if}
 
 		<!-- Demo Info -->
 		<div class="text-muted-foreground space-y-1 text-xs">
-			<p>• {$LL.devtools.demoInfo1()}</p>
-			<p>• {$LL.devtools.demoInfo2()}</p>
-			<p>• {$LL.devtools.demoInfo3()}</p>
-			<p>• {$LL.devtools.demoInfo4()}</p>
+			<p>• {m["devtools.demoInfo1"]()}</p>
+			<p>• {m["devtools.demoInfo2"]()}</p>
+			<p>• {m["devtools.demoInfo3"]()}</p>
+			<p>• {m["devtools.demoInfo4"]()}</p>
 		</div>
 	</Card.Content>
 </Card.Root>

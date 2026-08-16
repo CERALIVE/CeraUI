@@ -9,7 +9,7 @@
  * `role="status"` band, never an error toast. These tests drive the real
  * component against a mocked `rpc.network.setIngestEnabled` + `getStatus`.
  */
-import { getLL } from "@ceraui/i18n/svelte";
+import { m } from "@ceraui/i18n/svelte";
 import { NETWORK_INGEST_UNAVAILABLE_ERROR } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import {
@@ -47,8 +47,6 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 vi.mock("svelte-sonner", () => ({
 	toast: { error: toastError, success: vi.fn() },
 }));
-
-const t = getLL().settings.networkIngest;
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 	let resolve!: (value: T) => void;
@@ -121,13 +119,13 @@ describe("NetworkIngestDialog — status rendering", () => {
 		expect(toggle("rtmp").getAttribute("aria-checked")).toBe("true");
 		expect(
 			screen.getByTestId("network-ingest-status-rtmp").textContent,
-		).toContain(t.statusRunning());
+		).toContain(m["settings.networkIngest.statusRunning"]());
 
 		// SRT operator-disabled → toggle OFF, status "disabled".
 		expect(toggle("srt").getAttribute("aria-checked")).toBe("false");
 		expect(
 			screen.getByTestId("network-ingest-status-srt").textContent,
-		).toContain(t.statusDisabled());
+		).toContain(m["settings.networkIngest.statusDisabled"]());
 	});
 
 	it("shows the stopped state for an enabled-but-inactive gateway", () => {
@@ -141,11 +139,11 @@ describe("NetworkIngestDialog — status rendering", () => {
 		expect(toggle("rtmp").getAttribute("aria-checked")).toBe("true");
 		expect(
 			screen.getByTestId("network-ingest-status-rtmp").textContent,
-		).toContain(t.statusStopped());
+		).toContain(m["settings.networkIngest.statusStopped"]());
 		// A null (board-unsupported) srt entry defaults to enabled + stopped.
 		expect(
 			screen.getByTestId("network-ingest-status-srt").textContent,
-		).toContain(t.statusStopped());
+		).toContain(m["settings.networkIngest.statusStopped"]());
 	});
 });
 

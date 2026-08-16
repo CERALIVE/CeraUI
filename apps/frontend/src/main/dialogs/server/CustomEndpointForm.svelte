@@ -8,7 +8,7 @@
   Presentational: the container owns the validate + save handlers.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { RelayValidateStage } from '@ceraui/rpc/schemas';
 import Check from '@lucide/svelte/icons/check';
 import Circle from '@lucide/svelte/icons/circle';
@@ -59,13 +59,13 @@ let {
 const stageViews = $derived(deriveStageViews(validation));
 
 function stageLabel(stage: RelayValidateStage): string {
-	return $LL.settings.validateStages[stage]();
+	return resolveMessageKey(`settings.validateStages.${stage}`);
 }
 </script>
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-addr">
-		{$LL.settings.srtlaServerAddress()}
+		{m["settings.srtlaServerAddress"]()}
 	</Label>
 	<Input
 		id="srtla-addr"
@@ -73,7 +73,7 @@ function stageLabel(stage: RelayValidateStage): string {
 		class="font-mono"
 		disabled={isStreaming}
 		oninput={(e) => onAddr(e.currentTarget.value)}
-		placeholder={$LL.settings.placeholders.srtlaServerAddress()}
+		placeholder={m["settings.placeholders.srtlaServerAddress"]()}
 		value={addr}
 	/>
 	{#if addrError}
@@ -83,7 +83,7 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-port">
-		{$LL.settings.srtlaServerPort()}
+		{m["settings.srtlaServerPort"]()}
 	</Label>
 	<Input
 		id="srtla-port"
@@ -94,7 +94,7 @@ function stageLabel(stage: RelayValidateStage): string {
 		max={port.max}
 		min={port.min}
 		oninput={(e) => onPort(e.currentTarget.value)}
-		placeholder={$LL.settings.placeholders.srtlaServerPort()}
+		placeholder={m["settings.placeholders.srtlaServerPort"]()}
 		type="number"
 		value={portStr}
 	/>
@@ -105,30 +105,30 @@ function stageLabel(stage: RelayValidateStage): string {
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srt-streamid">
-		{$LL.settings.srtStreamId()}
-		<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+		{m["settings.srtStreamId"]()}
+		<span class="text-muted-foreground ms-1 text-xs">({m["settings.optional"]()})</span>
 	</Label>
 	<Input
 		id="srt-streamid"
 		class="font-mono"
 		disabled={isStreaming}
 		oninput={(e) => onStreamId(e.currentTarget.value)}
-		placeholder={$LL.settings.placeholders.srtStreamId()}
+		placeholder={m["settings.placeholders.srtStreamId"]()}
 		value={streamId}
 	/>
 </div>
 
 <div class="space-y-2">
 	<Label class="text-sm font-medium" for="srtla-passphrase">
-		{$LL.settings.relaySecret()}
-		<span class="text-muted-foreground ms-1 text-xs">({$LL.settings.optional()})</span>
+		{m["settings.relaySecret"]()}
+		<span class="text-muted-foreground ms-1 text-xs">({m["settings.optional"]()})</span>
 	</Label>
 	<Input
 		id="srtla-passphrase"
 		class="font-mono"
 		disabled={isStreaming}
 		oninput={(e) => onPassphrase(e.currentTarget.value)}
-		placeholder={$LL.settings.relaySecretPlaceholder()}
+		placeholder={m["settings.relaySecretPlaceholder"]()}
 		type="password"
 		value={passphrase}
 	/>
@@ -144,9 +144,9 @@ function stageLabel(stage: RelayValidateStage): string {
 	>
 		{#if validation.state === 'validating'}
 			<Loader2 class="size-4 animate-spin motion-reduce:animate-none" />
-			{$LL.settings.validating()}
+			{m["settings.validating"]()}
 		{:else}
-			{$LL.settings.validate()}
+			{m["settings.validate"]()}
 		{/if}
 	</Button>
 
@@ -181,11 +181,11 @@ function stageLabel(stage: RelayValidateStage): string {
 
 		{#if validation.state === 'pass'}
 			<p class="text-primary text-sm" role="status">
-				{$LL.settings.validationPassed()}
+				{m["settings.validationPassed"]()}
 			</p>
 		{:else if validation.state === 'fail'}
 			<p class="text-destructive text-sm" role="alert">
-				{$LL.settings.validationFailed()} ({validation.stage}){validation.reason
+				{m["settings.validationFailed"]()} ({validation.stage}){validation.reason
 					? `: ${validation.reason}`
 					: ''}
 			</p>

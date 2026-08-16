@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import TriangleAlertIcon from '@lucide/svelte/icons/triangle-alert';
 
 import { Button } from '$lib/components/ui/button';
@@ -21,13 +21,13 @@ let { reset }: { error: unknown; reset: () => void } = $props();
 			<TriangleAlertIcon class="size-6" />
 		</div>
 		<h1 class="text-card-foreground text-xl font-semibold tracking-tight text-balance">
-			{$LL.errorBoundary.title()}
+			{m["errorBoundary.title"]()}
 		</h1>
 		<p class="text-muted-foreground mx-auto mt-2 max-w-prose text-sm leading-relaxed text-pretty">
-			{$LL.errorBoundary.description()}
+			{m["errorBoundary.description"]()}
 		</p>
 		<Button class="mt-6 w-full" onclick={reset}>
-			{$LL.errorBoundary.retry()}
+			{m["errorBoundary.retry"]()}
 		</Button>
 	</div>
 </div>

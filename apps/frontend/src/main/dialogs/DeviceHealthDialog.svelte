@@ -14,7 +14,7 @@
   it — never on an ordinary Settings render.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Gauge } from '@lucide/svelte';
 import { MediaQuery } from 'svelte/reactivity';
 
@@ -29,7 +29,6 @@ interface Props {
 
 let { open = $bindable(false) }: Props = $props();
 
-const t = $derived($LL.settings.deviceHealth);
 
 // The footer holds nothing but a second Close button, and on the 1024x600 kiosk
 // panel its 77px is most of the 99px that made the instrument scroll — which it
@@ -41,10 +40,10 @@ const isCompact = new MediaQuery(HEALTH_COMPACT_QUERY);
 <AppDialog
 	bind:open
 	contentClass="sm:max-w-2xl"
-	description={t.description()}
+	description={m["settings.deviceHealth.description"]()}
 	hideFooter={isCompact.current}
 	icon={Gauge}
-	title={t.title()}
+	title={m["settings.deviceHealth.title"]()}
 >
 	<DeviceHealthPanel />
 </AppDialog>

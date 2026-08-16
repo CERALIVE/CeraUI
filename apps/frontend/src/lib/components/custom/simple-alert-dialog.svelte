@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Loader2 } from '@lucide/svelte';
 import { AlertDialog as AlertDialogDefault, type WithoutChild } from 'bits-ui';
 import type { Snippet } from 'svelte';
@@ -198,7 +198,7 @@ const confirmButtonClasses = $derived(
 			<AlertDialog.Footer class={footerClasses}>
 				{#if !hideCancelButton}
 					<AlertDialog.Cancel class={cancelButtonClasses} onclick={() => oncancel?.()}>
-						{cancelButtonText ?? $LL.dialog.cancel()}
+						{cancelButtonText ?? m["dialog.cancel"]()}
 					</AlertDialog.Cancel>
 				{/if}
 
@@ -211,7 +211,7 @@ const confirmButtonClasses = $derived(
 					{#if confirmPending}
 						<Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" />
 					{/if}
-					{confirmButtonText ?? $LL.dialog.continue()}
+					{confirmButtonText ?? m["dialog.continue"]()}
 				</AlertDialog.Action>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>

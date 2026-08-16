@@ -7,19 +7,21 @@
  * pin the mapping and the 10-locale coverage of the copy it selects.
  */
 
-import type { TranslationFunctions } from "@ceraui/i18n";
+import type { MessageFn, MessageKey } from "@ceraui/i18n/svelte";
 import { describe, expect, it } from "vitest";
 
-import ar from "../../../../../packages/i18n/src/ar/index";
-import de from "../../../../../packages/i18n/src/de/index";
-import en from "../../../../../packages/i18n/src/en/index";
-import es from "../../../../../packages/i18n/src/es/index";
-import fr from "../../../../../packages/i18n/src/fr/index";
-import hi from "../../../../../packages/i18n/src/hi/index";
-import ja from "../../../../../packages/i18n/src/ja/index";
-import ko from "../../../../../packages/i18n/src/ko/index";
-import ptBR from "../../../../../packages/i18n/src/pt-BR/index";
-import zh from "../../../../../packages/i18n/src/zh/index";
+import {
+	ar,
+	de,
+	en,
+	es,
+	fr,
+	hi,
+	ja,
+	ko,
+	ptBR,
+	zh,
+} from "../../tests/helpers/catalog";
 
 import {
 	DEVICE_MODE_UNSUPPORTED_ERROR,
@@ -31,11 +33,11 @@ const LOCALES = { ar, de, en, es, fr, hi, ja, ko, "pt-BR": ptBR, zh };
 const DEVICE_MODE_COPY = "device mode unsupported copy";
 const GENERIC_COPY = "generic save failed copy";
 
-function stubLL(): Svelte5Translation {
+function stubLL(): Readonly<Record<MessageKey, MessageFn>> {
 	return {
-		live: { encoder: { deviceModeUnsupported: () => DEVICE_MODE_COPY } },
-		notifications: { saveFailed: () => GENERIC_COPY },
-	} as unknown as Svelte5Translation;
+		"live.encoder.deviceModeUnsupported": () => DEVICE_MODE_COPY,
+		"notifications.saveFailed": () => GENERIC_COPY,
+	} as unknown as Readonly<Record<MessageKey, MessageFn>>;
 }
 
 describe("encoderSaveErrorMessage", () => {

@@ -63,7 +63,7 @@ const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
 const uniqueBlobName = `blob-report-${matrixProject}-${matrixShard}`;
-const browserCacheKey = `${expression('runner.os')}-ms-playwright-${expression(
+const browserCacheKey = `${expression('runner.os')}-ms-playwright-v2-${expression(
 	'steps.playwright-version.outputs.version',
 )}`;
 const srtlaRuntimeUrl =
@@ -111,6 +111,17 @@ const mutations = [
 				source,
 				`          key: ${browserCacheKey}`,
 				`          # key: ${browserCacheKey}\n          key: Linux-ms-playwright-static`,
+				2,
+			),
+	},
+	{
+		name: 're-guarding the browser install on the cache hit',
+		expectedError: 'setup-e2e browser install condition must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'      - name: Install Playwright browsers\n        working-directory: CeraUI',
+				"      - name: Install Playwright browsers\n        if: steps.playwright-cache.outputs.cache-hit != 'true'\n        working-directory: CeraUI",
 				2,
 			),
 	},

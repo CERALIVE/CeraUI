@@ -31,7 +31,7 @@
  * action is a callback prop (Task 11 threads the real handlers), so the
  * sole-camera "no premature setConfig" contract holds by construction.
  */
-import { LL } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type {
 	CapabilitiesMessage,
 	ConfigMessage,
@@ -177,7 +177,7 @@ const collapsed = $derived(canCollapse && !userExpanded);
 const canStart = $derived(!readiness.blocking && optimismState !== 'starting');
 const startDisabledReason = $derived(
 	optimismState === 'starting'
-		? $LL.live.starting()
+		? m["live.starting"]()
 		: readiness.blocking && readiness.primaryFixGate
 			? resolveReason(
 					readiness.gates[readiness.primaryFixGate].reasonKey ??
@@ -209,24 +209,24 @@ function stateColor(state: GateStatus): string {
 function gateLabel(key: GoLiveGateKey): string {
 	switch (key) {
 		case 'source':
-			return $LL.live.goLive.gate.source();
+			return m["live.goLive.gate.source"]();
 		case 'network':
-			return $LL.live.goLive.gate.network();
+			return m["live.goLive.gate.network"]();
 		case 'destination':
-			return $LL.live.goLive.gate.destination();
+			return m["live.goLive.gate.destination"]();
 		case 'engine':
-			return $LL.live.goLive.gate.engine();
+			return m["live.goLive.gate.engine"]();
 	}
 }
 
 function fixLabel(fix: GateFix): string {
 	switch (fix) {
 		case 'openSource':
-			return $LL.live.goLive.fix.openSource();
+			return m["live.goLive.fix.openSource"]();
 		case 'goNetwork':
-			return $LL.live.goLive.fix.goNetwork();
+			return m["live.goLive.fix.goNetwork"]();
 		case 'openServer':
-			return $LL.live.goLive.fix.openServer();
+			return m["live.goLive.fix.openServer"]();
 		case 'none':
 			return '';
 	}
@@ -235,16 +235,7 @@ function fixLabel(fix: GateFix): string {
 // i18n dot-path resolver (mirrors LiveView) — the readiness reasonKeys point at
 // EXISTING leaves; resolve them without adding a switch per key.
 function resolveReason(key: string): string {
-	const parts = key.split('.');
-	let node: unknown = $LL;
-	for (const part of parts) {
-		if (node && typeof node === 'object' && part in node) {
-			node = (node as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof node === 'function' ? (node as () => string)() : key;
+	return resolveMessageKey(key);
 }
 
 function formatBitrate(kbps: number | undefined): string {
@@ -252,9 +243,9 @@ function formatBitrate(kbps: number | undefined): string {
 	if (kbps >= 1000) {
 		const mbps = kbps / 1000;
 		const value = Number.isInteger(mbps) ? String(mbps) : mbps.toFixed(1);
-		return `${value} ${$LL.units.mbps()}`;
+		return `${value} ${m["units.mbps"]()}`;
 	}
-	return `${kbps} ${$LL.units.kbps()}`;
+	return `${kbps} ${m["units.kbps"]()}`;
 }
 </script>
 
@@ -278,9 +269,9 @@ function formatBitrate(kbps: number | undefined): string {
 						aria-hidden={true}
 					></span>
 					<div class="min-w-0">
-						<p class="text-sm font-semibold">{$LL.live.goLive.readyTitle()}</p>
+						<p class="text-sm font-semibold">{m["live.goLive.readyTitle"]()}</p>
 						<p class="text-muted-foreground truncate text-xs">
-							{$LL.live.goLive.readyHint()}
+							{m["live.goLive.readyHint"]()}
 						</p>
 					</div>
 				</div>
@@ -291,7 +282,7 @@ function formatBitrate(kbps: number | undefined): string {
 					size="sm"
 					variant="ghost"
 				>
-					{$LL.live.goLive.showChecks()}
+					{m["live.goLive.showChecks"]()}
 				</Button>
 			</div>
 			<StreamControlButton
@@ -305,7 +296,7 @@ function formatBitrate(kbps: number | undefined): string {
 		</Card.Content>
 	{:else}
 		<Card.Header class="pb-3">
-			<Card.Title class="text-sm font-semibold">{$LL.live.streamSettings()}</Card.Title>
+			<Card.Title class="text-sm font-semibold">{m["live.streamSettings"]()}</Card.Title>
 		</Card.Header>
 		<Card.Content class="space-y-4 py-0 pb-4">
 			<!-- Readiness gates — one row per gate, disabled-with-reason, never hidden. -->
@@ -363,7 +354,7 @@ function formatBitrate(kbps: number | undefined): string {
 					data-source-id={soleCamera.id}
 				>
 					<p class="min-w-0 truncate text-sm">
-						{$LL.live.goLive.autoSelected({ name: soleCamera.displayName })}
+						{m["live.goLive.autoSelected"]({ name: soleCamera.displayName })}
 					</p>
 					<Button
 						class="min-h-[44px] shrink-0 gap-1.5"
@@ -372,7 +363,7 @@ function formatBitrate(kbps: number | undefined): string {
 						size="sm"
 						variant="ghost"
 					>
-						{$LL.live.goLive.change()}
+						{m["live.goLive.change"]()}
 					</Button>
 				</div>
 			{/if}
@@ -423,8 +414,8 @@ function formatBitrate(kbps: number | undefined): string {
 									></span>
 									<span class="hidden sm:inline">
 										{destinationValidated === true
-											? $LL.live.goLive.validated()
-											: $LL.live.goLive.notChecked()}
+											? m["live.goLive.validated"]()
+											: m["live.goLive.notChecked"]()}
 									</span>
 								</span>
 							{/if}
@@ -434,7 +425,7 @@ function formatBitrate(kbps: number | undefined): string {
 									class="bg-secondary text-secondary-foreground hover:bg-secondary/80 inline-flex min-h-[44px] items-center rounded-md px-2 font-mono text-xs font-medium"
 									data-testid="bitrate-ceiling-chip"
 									onclick={onOpenEncoder}
-									title={$LL.live.goLive.maxBitrate()}
+									title={m["live.goLive.maxBitrate"]()}
 									type="button"
 								>
 									{formatBitrate(maxBitrate)}
@@ -443,10 +434,10 @@ function formatBitrate(kbps: number | undefined): string {
 							{#if locked}
 								<span
 									class="text-muted-foreground inline-flex min-h-[44px] items-center gap-1.5 rounded-md px-2 text-xs font-medium"
-									title={$LL.live.stopToChange()}
+									title={m["live.stopToChange"]()}
 								>
 									<Lock aria-hidden={true} class="h-3.5 w-3.5" />
-									<span class="hidden sm:inline">{$LL.live.stopToChange()}</span>
+									<span class="hidden sm:inline">{m["live.stopToChange"]()}</span>
 								</span>
 							{:else}
 								<Button
@@ -457,7 +448,7 @@ function formatBitrate(kbps: number | undefined): string {
 									variant="ghost"
 								>
 									<Pencil aria-hidden={true} class="h-3.5 w-3.5" />
-									<span class="hidden sm:inline">{$LL.live.editSettings()}</span>
+									<span class="hidden sm:inline">{m["live.editSettings"]()}</span>
 									<ChevronRight aria-hidden={true} class="h-4 w-4 rtl:-scale-x-100" />
 								</Button>
 							{/if}
@@ -473,7 +464,7 @@ function formatBitrate(kbps: number | undefined): string {
 					onclick={() => (userExpanded = false)}
 					type="button"
 				>
-					{$LL.live.goLive.hideChecks()}
+					{m["live.goLive.hideChecks"]()}
 				</button>
 			{/if}
 

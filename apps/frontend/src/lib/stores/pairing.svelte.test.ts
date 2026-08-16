@@ -6,9 +6,11 @@
  * always reachable), and the presence of the new i18n keys in every locale.
  */
 
-import { existingLocales, loadLocale } from "@ceraui/i18n";
+import { existingLocales } from "@ceraui/i18n";
 import type { ProviderSelection } from "@ceraui/rpc/schemas";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { CATALOGS } from "../../tests/helpers/catalog";
 
 const subs = vi.hoisted(() => ({
 	config: undefined as
@@ -135,8 +137,8 @@ describe("i18n — remote-control status keys in all 10 locales", () => {
 	});
 
 	for (const { code } of existingLocales) {
-		it(`provides every settings.remoteControl key for "${code}"`, async () => {
-			const translation = (await loadLocale(code)) as {
+		it(`provides every settings.remoteControl key for "${code}"`, () => {
+			const translation = CATALOGS[code] as {
 				settings: { remoteControl: Record<string, unknown> };
 			};
 			const remoteControl = translation.settings.remoteControl;

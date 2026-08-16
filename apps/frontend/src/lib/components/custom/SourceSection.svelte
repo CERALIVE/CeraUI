@@ -30,7 +30,7 @@
   level sits with the device it meters instead of in a separate page section.
 -->
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type {
 	ActiveEncode,
 	AudioSource,
@@ -196,18 +196,7 @@ const hasActiveConfig = $derived(
 
 // i18n key resolver (mirrors AudioDialog) — resolves a dotted labelKey to a locale
 // string without a store dep, with safe key-passthrough on a miss.
-const t = (key: string): string => {
-	const parts = key.split('.');
-	let result: unknown = $LL;
-	for (const part of parts) {
-		if (result && typeof result === 'object' && part in result) {
-			result = (result as Record<string, unknown>)[part];
-		} else {
-			return key;
-		}
-	}
-	return typeof result === 'function' ? (result as () => string)() : key;
-};
+const t = resolveMessageKey;
 
 // ── Unified source list (Task 13) ──────────────────────────────────────────
 // Every source in backend (`caps.sources`) broadcast order — capture rows render
@@ -332,11 +321,11 @@ async function handleSelectMode(source: StreamSource, mode: InputMode): Promise<
 			markFieldApplied(INPUT_MODE_FIELD, result.applied.input_mode);
 		} else {
 			markFieldFailed(INPUT_MODE_FIELD, config?.input_mode);
-			toast.error($LL.live.source.modeSwitchFailed());
+			toast.error(m["live.source.modeSwitchFailed"]());
 		}
 	} catch {
 		markFieldFailed(INPUT_MODE_FIELD, config?.input_mode);
-		toast.error($LL.live.source.modeSwitchFailed());
+		toast.error(m["live.source.modeSwitchFailed"]());
 	} finally {
 		// Release the optimistic latch either way: the authoritative answer is the
 		// next `sources` broadcast's own `selectedInputMode`.
@@ -366,7 +355,7 @@ function rowDisabled(source: StreamSource): boolean {
 // The disabled reason surfaced as the row `title` (i18n dot-path from the source).
 function rowReason(source: StreamSource): string | undefined {
 	if (source.origin === 'capture' && source.lost === true) {
-		return $LL.live.source.lostBody();
+		return m["live.source.lostBody"]();
 	}
 	return source.unavailableReason ? t(source.unavailableReason) : undefined;
 }
@@ -456,11 +445,11 @@ async function handleSelectSource(source: StreamSource): Promise<void> {
 			markFieldApplied(SOURCE_FIELD, result.applied.source);
 		} else {
 			markFieldFailed(SOURCE_FIELD, config?.source);
-			toast.error($LL.notifications.saveFailed());
+			toast.error(m["notifications.saveFailed"]());
 		}
 	} catch {
 		markFieldFailed(SOURCE_FIELD, config?.source);
-		toast.error($LL.notifications.saveFailed());
+		toast.error(m["notifications.saveFailed"]());
 	}
 }
 
@@ -500,9 +489,9 @@ $effect(() => {
 async function copyNetworkIngestUrl(url: string | null): Promise<void> {
 	if (!url) return;
 	if (await copyToClipboard(url)) {
-		toast.success($LL.live.networkIngest.copied());
+		toast.success(m["live.networkIngest.copied"]());
 	} else {
-		toast.error($LL.live.networkIngest.copyFailed());
+		toast.error(m["live.networkIngest.copyFailed"]());
 	}
 }
 
@@ -562,29 +551,29 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
 			<div class="flex items-center gap-1">
 				<Video aria-hidden={true} class="text-primary size-4 shrink-0" />
-				<span class="text-sm font-semibold">{$LL.live.source.label()}</span>
+				<span class="text-sm font-semibold">{m["live.source.label"]()}</span>
 				<InfoPopover
-					body={$LL.live.education.field.source.body()}
+					body={m["live.education.field.source.body"]()}
 					testId="info-source"
-					title={$LL.live.education.field.source.title()}
+					title={m["live.education.field.source.title"]()}
 				/>
 			</div>
 			{#if capChips.length || summary?.audioSupported}
 				<div
 					class="flex flex-wrap items-center gap-1.5"
 					data-testid="source-capabilities"
-					aria-label={$LL.live.source.capabilities()}
+					aria-label={m["live.source.capabilities"]()}
 				>
 					<span
 						class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
 					data-testid="cap-device-max"
 				>
-					{$LL.live.source.sourceMax()}
+					{m["live.source.sourceMax"]()}
 					</span>
 					<InfoPopover
-						body={$LL.live.education.field.mode.body()}
+						body={m["live.education.field.mode.body"]()}
 						testId="info-mode"
-						title={$LL.live.education.field.mode.title()}
+						title={m["live.education.field.mode.title"]()}
 					/>
 					{#each capChips as chip (chip)}
 						<span
@@ -599,7 +588,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							data-testid="cap-audio"
 						>
 							<Volume2 aria-hidden={true} class="size-3" />
-							{$LL.settings.audioSource()}
+							{m["settings.audioSource"]()}
 						</span>
 					{/if}
 				</div>
@@ -622,7 +611,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					{#if activeSummary.live}
 						<span aria-hidden={true} class="bg-primary size-1.5 rounded-full"></span>
 					{/if}
-					{activeSummary.live ? $LL.live.source.activeLive() : $LL.live.source.activeConfigured()}
+					{activeSummary.live ? m["live.source.activeLive"]() : m["live.source.activeConfigured"]()}
 				</span>
 				<span class="text-foreground truncate font-mono text-sm" data-testid="active-config-value">
 					{activeParts.join(' \u00b7 ')}
@@ -641,19 +630,19 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				<div class="min-w-0 space-y-0.5">
 					<p class="text-destructive text-sm font-medium" data-testid="source-lost-banner-title">
 						{lostCaptures.length === 1
-							? $LL.live.source.lostBannerTitleOne({ name: lostNames })
-							: $LL.live.source.lostBannerTitleMany({ count: lostCaptures.length })}
+							? m["live.source.lostBannerTitleOne"]({ name: lostNames })
+							: m["live.source.lostBannerTitleMany"]({ count: lostCaptures.length })}
 					</p>
 					<p class="text-muted-foreground text-xs">
 						{lostCaptures.length === 1
-							? $LL.live.source.lostBannerBodyOne({ name: lostNames })
-							: $LL.live.source.lostBannerBodyMany({ names: lostNames })}
+							? m["live.source.lostBannerBodyOne"]({ name: lostNames })
+							: m["live.source.lostBannerBodyMany"]({ names: lostNames })}
 					</p>
 					<p
 						class="text-muted-foreground text-xs"
 						data-testid="source-lost-banner-remembered"
 					>
-						{$LL.live.source.lostBannerRemembered()}
+						{m["live.source.lostBannerRemembered"]()}
 					</p>
 				</div>
 			</div>
@@ -678,15 +667,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						class="text-status-warning text-sm font-medium"
 						data-testid="source-degraded-banner-title"
 					>
-						{$LL.live.source.degradedTitle()}
+						{m["live.source.degradedTitle"]()}
 					</p>
-					<p class="text-muted-foreground text-xs">{$LL.live.source.degradedBody()}</p>
+					<p class="text-muted-foreground text-xs">{m["live.source.degradedBody"]()}</p>
 					{#if degradedDetail}
 						<p
 							class="text-muted-foreground font-mono text-xs break-words"
 							data-testid="source-degraded-reason"
 						>
-							{$LL.live.source.degradedReason({ reason: degradedDetail })}
+							{m["live.source.degradedReason"]({ reason: degradedDetail })}
 						</p>
 					{/if}
 				</div>
@@ -756,8 +745,8 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													data-testid={`source-network-ingest-status-${source.requiresGateway}`}
 												>
 													{source.available
-														? $LL.live.networkIngest.active()
-														: $LL.live.networkIngest.inactive()}
+														? m["live.networkIngest.active"]()
+														: m["live.networkIngest.inactive"]()}
 												</span>
 											{/if}
 										</span>
@@ -777,7 +766,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													data-testid={`source-lost-${source.id}`}
 												>
 													<Unplug aria-hidden={true} class="size-3" />
-													{$LL.live.inputPicker.lost()}
+													{m["live.inputPicker.lost"]()}
 												</span>
 											{:else if source.degraded}
 												<!-- A THIRD state beside Lost and No signal, and the row is
@@ -791,7 +780,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													title={source.degraded.reason ?? source.degraded.code}
 												>
 													<Activity aria-hidden={true} class="size-3" />
-													{$LL.live.source.degradedBadge()}
+													{m["live.source.degradedBadge"]()}
 												</span>
 											{:else if hasNoSignal(source)}
 												<!-- Calm amber, NOT the destructive red `lost` treatment: the
@@ -802,7 +791,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													data-testid={`source-no-signal-${source.id}`}
 												>
 													<SignalZero aria-hidden={true} class="size-3" />
-													{$LL.live.source.noSignal()}
+													{m["live.source.noSignal"]()}
 												</span>
 											{/if}
 										{/if}
@@ -812,7 +801,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												data-testid={`source-not-connected-${source.id}`}
 											>
 												<Unplug aria-hidden={true} class="size-3" />
-												{$LL.live.source.notConnected()}
+												{m["live.source.notConnected"]()}
 											</span>
 										{/if}
 										{#if source.origin === 'network' && source.supportsAudio}
@@ -821,7 +810,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												data-testid={`source-network-audio-${source.requiresGateway}`}
 											>
 												<Volume2 aria-hidden={true} class="size-3" />
-												{$LL.live.networkIngest.includesAudio()}
+												{m["live.networkIngest.includesAudio"]()}
 											</span>
 										{/if}
 										{#if selected}
@@ -836,7 +825,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												{:else}
 													<Check aria-hidden={true} class="size-4" />
 												{/if}
-												{$LL.live.inputPicker.selected()}
+												{m["live.inputPicker.selected"]()}
 											</span>
 										{/if}
 									</span>
@@ -846,7 +835,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								     (onSwitch → LiveView switchInput). -->
 								{#if source.origin === 'capture' && isStreaming}
 									<Button
-										aria-label={`${$LL.live.inputPicker.switch()} \u2013 ${source.displayName}`}
+										aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${source.displayName}`}
 										data-switch-input={source.id}
 										disabled={source.id === activeInput ||
 											source.id === switchingInput ||
@@ -856,11 +845,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										variant={source.id === activeInput ? 'secondary' : 'default'}
 									>
 										{#if source.id === switchingInput}
-											{$LL.live.inputPicker.switching()}
+											{m["live.inputPicker.switching"]()}
 										{:else if source.id === activeInput}
-											{$LL.live.inputPicker.active()}
+											{m["live.inputPicker.active"]()}
 										{:else}
-											{$LL.live.inputPicker.switch()}
+											{m["live.inputPicker.switch"]()}
 										{/if}
 									</Button>
 								{/if}
@@ -871,9 +860,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								     its own keyboard/touch target (never a nested interactive). -->
 								{#if source.origin === 'network' && source.available}
 									<InfoPopover
-										body={$LL.live.networkIngest.infoBody()}
+										body={m["live.networkIngest.infoBody"]()}
 										testId={`source-network-ingest-info-${source.requiresGateway}`}
-										title={$LL.live.networkIngest.infoTitle()}
+										title={m["live.networkIngest.infoTitle"]()}
 									/>
 								{/if}
 
@@ -882,9 +871,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								     the select button — never a nested interactive). -->
 								{#if source.origin === 'coarse'}
 									<InfoPopover
-										body={$LL.live.source.notConnectedBody()}
+										body={m["live.source.notConnectedBody"]()}
 										testId={`source-not-connected-info-${source.id}`}
-										title={$LL.live.source.notConnectedTitle()}
+										title={m["live.source.notConnectedTitle"]()}
 									/>
 								{/if}
 
@@ -893,9 +882,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								     OUTSIDE the select button — never a nested interactive). -->
 								{#if hasNoSignal(source)}
 									<InfoPopover
-										body={$LL.live.source.noSignalBody()}
+										body={m["live.source.noSignalBody"]()}
 										testId={`source-no-signal-info-${source.id}`}
-										title={$LL.live.source.noSignalTitle()}
+										title={m["live.source.noSignalTitle"]()}
 									/>
 								{/if}
 
@@ -903,11 +892,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								     hardware H.264/H.265 (accurate hardware description, not a fault). -->
 								{#if source.origin === 'capture' && source.kind === 'mjpeg'}
 									<InfoPopover
-										body={$LL.live.source.mjpegBody()}
-										learnMoreLabel={$LL.live.source.mjpegLearnMore()}
+										body={m["live.source.mjpegBody"]()}
+										learnMoreLabel={m["live.source.mjpegLearnMore"]()}
 										learnMoreUrl={UVC_H264_DETECTION_DOC_URL}
 										testId={`source-mjpeg-info-${source.id}`}
-										title={$LL.live.source.mjpegTitle()}
+										title={m["live.source.mjpegTitle"]()}
 									/>
 								{/if}
 							</div>
@@ -922,16 +911,16 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										<span
 											class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
 										>
-											{$LL.live.source.modeLabel()}
+											{m["live.source.modeLabel"]()}
 										</span>
 										<InfoPopover
-											body={$LL.live.source.modeHint()}
+											body={m["live.source.modeHint"]()}
 											testId={`source-mode-info-${source.id}`}
-											title={$LL.live.source.modeLabel()}
+											title={m["live.source.modeLabel"]()}
 										/>
 									</div>
 									<div
-										aria-label={$LL.live.source.modeLabel()}
+										aria-label={m["live.source.modeLabel"]()}
 										class="flex flex-wrap gap-1.5"
 										role="radiogroup"
 									>
@@ -955,7 +944,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{/each}
 									</div>
 									<p class="text-muted-foreground text-xs">
-										{$LL.live.source.modeApplyNote()}
+										{m["live.source.modeApplyNote"]()}
 									</p>
 								</div>
 							{/if}
@@ -976,10 +965,10 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									/>
 									<div class="min-w-0 flex-1 space-y-1.5">
 										<p class="text-status-warning text-sm font-medium">
-											{$LL.live.source.coarseUnboundTitle()}
+											{m["live.source.coarseUnboundTitle"]()}
 										</p>
 										<p class="text-muted-foreground text-xs leading-relaxed">
-											{$LL.live.source.coarseUnboundBody()}
+											{m["live.source.coarseUnboundBody"]()}
 										</p>
 										{#if coarseUnbound.suggestions.length > 0}
 											{@const only =
@@ -991,8 +980,8 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												data-testid={`source-coarse-suggestion-lead-${source.id}`}
 											>
 												{only
-													? $LL.live.source.coarseSuggestionOne({ name: only.displayName })
-													: $LL.live.source.coarseSuggestionMany()}
+													? m["live.source.coarseSuggestionOne"]({ name: only.displayName })
+													: m["live.source.coarseSuggestionMany"]()}
 											</p>
 											<div class="flex flex-wrap gap-2 pt-0.5">
 												{#each coarseUnbound.suggestions as suggestion (suggestion.id)}
@@ -1009,7 +998,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 													>
 														<SuggestionIcon aria-hidden={true} class="size-3.5" />
 														<span class="min-w-0 break-words">
-															{$LL.live.source.coarseSuggestionAction({
+															{m["live.source.coarseSuggestionAction"]({
 																name: suggestion.displayName,
 															})}
 														</span>
@@ -1036,7 +1025,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										class="text-muted-foreground mt-0.5 text-xs"
 										data-testid={`source-network-ingest-settings-hint-${source.requiresGateway}`}
 									>
-										{$LL.live.networkIngest.disabledInSettingsHint()}
+										{m["live.networkIngest.disabledInSettingsHint"]()}
 									</p>
 								{/if}
 							{/if}
@@ -1058,7 +1047,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									class="text-muted-foreground mt-0.5 text-xs"
 									data-testid={`source-hidden-settings-hint-${source.id}`}
 								>
-									{$LL.live.networkIngest.disabledInSettingsHint()}
+									{m["live.networkIngest.disabledInSettingsHint"]()}
 								</p>
 							{/if}
 
@@ -1069,7 +1058,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										data-testid={`source-network-ingest-instructions-toggle-${source.requiresGateway}`}
 									>
 										<QrCode aria-hidden={true} class="size-3.5" />
-										{$LL.live.networkIngest.instructionsToggle()}
+										{m["live.networkIngest.instructionsToggle"]()}
 									</summary>
 									<div
 										class="bg-muted/40 mt-2 flex flex-col items-center gap-3 rounded-lg border p-4"
@@ -1078,7 +1067,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{#if networkQrDataUrls[source.id]}
 											<img
 												class="size-40 rounded-md bg-white p-2"
-												alt={$LL.live.networkIngest.qrLabel()}
+												alt={m["live.networkIngest.qrLabel"]()}
 												data-testid={`source-network-ingest-qr-${source.requiresGateway}`}
 												src={networkQrDataUrls[source.id]}
 											/>
@@ -1093,11 +1082,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												{source.url}
 											</code>
 											<Button
-												aria-label={$LL.live.networkIngest.copy()}
+												aria-label={m["live.networkIngest.copy"]()}
 												data-testid={`source-network-ingest-copy-${source.requiresGateway}`}
 												onclick={() => copyNetworkIngestUrl(source.url)}
 												size="icon"
-												title={$LL.live.networkIngest.copy()}
+												title={m["live.networkIngest.copy"]()}
 												variant="outline"
 											>
 												<Copy class="size-4" />
@@ -1108,8 +1097,8 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 											data-testid={`source-network-ingest-codec-education-${source.requiresGateway}`}
 										>
 											{source.requiresGateway === 'rtmp'
-												? $LL.live.networkIngest.codecEducation.rtmp()
-												: $LL.live.networkIngest.codecEducation.srt()}
+												? m["live.networkIngest.codecEducation.rtmp"]()
+												: m["live.networkIngest.codecEducation.srt"]()}
 										</p>
 									</div>
 								</details>
@@ -1133,10 +1122,10 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				>
 					<Unplug aria-hidden={true} class="text-muted-foreground size-6 shrink-0" />
 					<p class="text-sm font-medium" data-testid="source-empty-title">
-						{$LL.live.source.emptyTitle()}
+						{m["live.source.emptyTitle"]()}
 					</p>
 					<p class="text-muted-foreground max-w-sm text-xs leading-relaxed">
-						{$LL.live.source.emptyBody()}
+						{m["live.source.emptyBody"]()}
 					</p>
 				</div>
 			{/if}
@@ -1152,18 +1141,18 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		<div class="space-y-2 border-t pt-5" data-testid="source-audio">
 			<div class="flex items-center gap-1">
 				<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-				<span class="text-sm font-medium">{$LL.settings.audioSource()}</span>
+				<span class="text-sm font-medium">{m["settings.audioSource"]()}</span>
 				<InfoPopover
-					body={$LL.live.education.field.audio.body()}
+					body={m["live.education.field.audio.body"]()}
 					testId="info-audio"
-					title={$LL.live.education.field.audio.title()}
+					title={m["live.education.field.audio.title"]()}
 				/>
 				{#if audioComingSoon}
 					<span
 						class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
-						title={$LL.live.comingSoon.hint()}
+						title={m["live.comingSoon.hint"]()}
 					>
-						{$LL.live.comingSoon.label()}
+						{m["live.comingSoon.label"]()}
 					</span>
 				{/if}
 				{#if onOpenAudioDialog && !isStreaming}
@@ -1175,7 +1164,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						variant="ghost"
 					>
 						<Pencil aria-hidden={true} class="size-3.5" />
-						<span>{$LL.live.source.audioEdit()}</span>
+						<span>{m["live.source.audioEdit"]()}</span>
 						<ChevronRight aria-hidden={true} class="size-4 rtl:-scale-x-100" />
 					</Button>
 				{/if}
@@ -1208,17 +1197,17 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 				>
 					<p class="text-sm font-medium">
 						{resolvedAudio.sameDeviceState === 'ambiguous'
-							? $LL.live.source.audioAmbiguousTitle()
+							? m["live.source.audioAmbiguousTitle"]()
 							: resolvedAudio.sameDeviceState === 'no-capture'
-								? $LL.live.source.audioNoCaptureTitle()
-								: $LL.live.source.audioNoSameDeviceTitle()}
+								? m["live.source.audioNoCaptureTitle"]()
+								: m["live.source.audioNoSameDeviceTitle"]()}
 					</p>
 					<p class="text-muted-foreground text-xs">
 						{resolvedAudio.sameDeviceState === 'ambiguous'
-							? $LL.live.source.audioAmbiguousBody()
+							? m["live.source.audioAmbiguousBody"]()
 							: resolvedAudio.sameDeviceState === 'no-capture'
-								? $LL.live.source.audioNoCaptureBody()
-								: $LL.live.source.audioNoSameDeviceBody()}
+								? m["live.source.audioNoCaptureBody"]()
+								: m["live.source.audioNoSameDeviceBody"]()}
 					</p>
 					{#if resolvedAudio.sameDeviceCandidates.length > 0}
 						<ul class="flex flex-wrap gap-1.5" data-testid="audio-same-device-candidates">
@@ -1235,7 +1224,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 			{/if}
 			{#if resolvedAudio.pending !== undefined}
 				<p class="text-status-info text-xs" data-testid="audio-follow-pending">
-					{$LL.live.inputPicker.audioFollowsOnRestart()}
+					{m["live.inputPicker.audioFollowsOnRestart"]()}
 				</p>
 			{/if}
 
@@ -1246,11 +1235,11 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					data-testid="audio-source-embedded"
 				>
 					<Volume2 aria-hidden={true} class="text-muted-foreground size-4 shrink-0" />
-					<span class="text-sm">{$LL.live.source.audioEmbedded()}</span>
+					<span class="text-sm">{m["live.source.audioEmbedded"]()}</span>
 				</div>
 			{:else if audioMode === 'none'}
 				<p class="text-muted-foreground text-sm" data-testid="audio-source-none">
-					{$LL.live.source.audioNone()}
+					{m["live.source.audioNone"]()}
 				</p>
 			{:else if audioReadOnly}
 				<!-- Single source, or streaming (live switch gated) → read-only. -->
@@ -1260,14 +1249,14 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					title={displayedAudioDetail}
 				>
 					<span class="truncate font-mono text-sm">
-						{displayedAudioLabel ?? $LL.live.source.audioNone()}
+						{displayedAudioLabel ?? m["live.source.audioNone"]()}
 					</span>
 					{#if displayedAudioExternal}
 						<Badge
 							data-testid="audio-source-external"
-							label={$LL.settings.audioDeviceExternal()}
+							label={m["settings.audioDeviceExternal"]()}
 							size="micro"
-							title={$LL.settings.audioDeviceExternalHint()}
+							title={m["settings.audioDeviceExternalHint"]()}
 							variant="info"
 						/>
 					{/if}
@@ -1276,7 +1265,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
 							data-testid="audio-source-unavailable"
 						>
-							{$LL.settings.notAvailableAudioSource()}
+							{m["settings.notAvailableAudioSource"]()}
 						</span>
 					{/if}
 				</div>
@@ -1294,15 +1283,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					>
 						{#if notAvailableAudioSource}
 							<span data-testid="audio-source-unavailable">
-								{`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
+								{`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
 							</span>
 						{:else}
 							<span class="flex min-w-0 items-center gap-2">
-								<span class="truncate">{displayedAudioLabel ?? $LL.settings.selectAudioSource()}</span>
+								<span class="truncate">{displayedAudioLabel ?? m["settings.selectAudioSource"]()}</span>
 								{#if displayedAudioExternal}
 									<Badge
 										data-testid="audio-source-external"
-										label={$LL.settings.audioDeviceExternal()}
+										label={m["settings.audioDeviceExternal"]()}
 										size="micro"
 										variant="info"
 									/>
@@ -1329,7 +1318,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										{#if isExternalAudioSource(entry)}
 											<Badge
 												data-testid="audio-option-external-{entry.id}"
-												label={$LL.settings.audioDeviceExternal()}
+												label={m["settings.audioDeviceExternal"]()}
 												size="micro"
 												variant="info"
 											/>
@@ -1344,8 +1333,8 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 									aria-disabled="true"
 									data-testid="audio-option-unavailable"
 									disabled
-									label={`${notAvailableAudioSource} (${$LL.settings.notAvailableAudioSource()})`}
-									title={$LL.settings.notAvailableAudioSourceHint()}
+									label={`${notAvailableAudioSource} (${m["settings.notAvailableAudioSource"]()})`}
+									title={m["settings.notAvailableAudioSourceHint"]()}
 									value={notAvailableAudioSource}
 								></Select.Item>
 							{/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import type { Modem, NetifEntry, NetifMessage, WifiInterface, WifiStatus } from '@ceraui/rpc/schemas';
 import { Network as NetworkIcon } from '@lucide/svelte';
 
@@ -15,11 +15,7 @@ import {
 import { getHudState } from '$lib/stores/hud.svelte';
 import type { LinkSignal } from '$lib/types/hud';
 
-import HotspotDialog from './dialogs/HotspotDialog.svelte';
-import ModemConfigDialog from './dialogs/ModemConfigDialog.svelte';
-import NetifDialog from './dialogs/NetifDialog.svelte';
-import SimUnlockDialog from './dialogs/SimUnlockDialog.svelte';
-import WifiSelectorDialog from './dialogs/WifiSelectorDialog.svelte';
+import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 
 import BondedLinksSection from './network/BondedLinksSection.svelte';
 import CellularSection from './network/CellularSection.svelte';
@@ -27,6 +23,14 @@ import CollisionBands from './network/CollisionBands.svelte';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
 import WifiSection from './network/WifiSection.svelte';
+
+// None of these is on the path to first paint — each is its own chunk, fetched
+// on first open.
+const NetifDialog = lazyDialog(() => import('./dialogs/NetifDialog.svelte'));
+const WifiSelectorDialog = lazyDialog(() => import('./dialogs/WifiSelectorDialog.svelte'));
+const HotspotDialog = lazyDialog(() => import('./dialogs/HotspotDialog.svelte'));
+const ModemConfigDialog = lazyDialog(() => import('./dialogs/ModemConfigDialog.svelte'));
+const SimUnlockDialog = lazyDialog(() => import('./dialogs/SimUnlockDialog.svelte'));
 
 // Getters — always from the non-deprecated subscriptions surface.
 const wifi = $derived<WifiStatus | undefined>(getWifi());
@@ -139,12 +143,12 @@ $effect(() => {
 	<!-- Destination header -->
 	<header class="flex items-center gap-2.5">
 		<NetworkIcon aria-hidden="true" class="text-primary size-5 shrink-0" />
-		<h1 class="text-xl font-semibold tracking-tight">{$LL.navigation.network()}</h1>
+		<h1 class="text-xl font-semibold tracking-tight">{m["navigation.network"]()}</h1>
 	</header>
 
 	{#if isLoading}
 		<!-- Loading state -->
-		<div class="space-y-5" aria-busy="true" aria-label={$LL.network.view.loading()}>
+		<div class="space-y-5" aria-busy="true" aria-label={m["network.view.loading"]()}>
 			<Skeleton class="h-24 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />
@@ -177,22 +181,46 @@ $effect(() => {
 </div>
 
 <!-- Per-interface Ethernet configuration (Task 24) -->
-<NetifDialog bind:open={netifDialogOpen} name={selectedNetifName} iface={selectedNetif} />
+<LazyDialog
+	dialog={NetifDialog}
+	bind:open={netifDialogOpen}
+	name={selectedNetifName}
+	iface={selectedNetif}
+/>
 
 <!-- WiFi network selector — scoped to the radio whose Connect was tapped -->
 {#if wifiSelectorDeviceId}
-	<WifiSelectorDialog bind:open={wifiSelectorOpen} deviceId={wifiSelectorDeviceId} />
+	<LazyDialog
+		dialog={WifiSelectorDialog}
+		bind:open={wifiSelectorOpen}
+		deviceId={wifiSelectorDeviceId}
+	/>
 {/if}
 
 {#if hotspotTarget}
-	<HotspotDialog bind:open={hotspotDialogOpen} deviceId={hotspotTarget[0]} iface={hotspotTarget[1]} />
+	<LazyDialog
+		dialog={HotspotDialog}
+		bind:open={hotspotDialogOpen}
+		deviceId={hotspotTarget[0]}
+		iface={hotspotTarget[1]}
+	/>
 {/if}
 
 {#if configModem && configModemId}
-	<ModemConfigDialog bind:open={modemDialogOpen} deviceId={configModemId} modem={configModem} />
+	<LazyDialog
+		dialog={ModemConfigDialog}
+		bind:open={modemDialogOpen}
+		deviceId={configModemId}
+		modem={configModem}
+	/>
 {/if}
 
 <!-- SIM PIN unlock — auto-prompted when a PIN/PUK-locked modem is detected -->
 {#if lockedModem && lockedModemId}
-	<SimUnlockDialog bind:open={simUnlockOpen} deviceId={lockedModemId} modem={lockedModem} />
+	<LazyDialog
+		dialog={SimUnlockDialog}
+		bind:open={simUnlockOpen}
+		deviceId={lockedModemId}
+		modem={lockedModem}
+	/>
 {/if}

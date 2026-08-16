@@ -310,6 +310,13 @@ async function defaultGetEngineDevices(): Promise<CaptureDevice[] | null> {
 	// Reachable == a live control session holds a client (during a stream); when
 	// idle CeraUI holds no connection, so the engine is treated as unreachable and
 	// the local v4l2 scan is the truthful source. No per-poll connect churn.
+	//
+	// It is deliberately NOT redirected to the scenario device list under
+	// MOCK_SCENARIO: this scan is also `switchInput`'s reachability gate, and a
+	// device the scenario makes VISIBLE in the picker still has no engine or
+	// v4l2 node behind it on a dev host, so the honest answer to a live switch
+	// there is SOURCE_LOST. The `sources` rebuild reads the scenario instead —
+	// see `observedForSourcesRebuild` in sources.ts.
 	try {
 		const { cerastreamBackend } = await import("./cerastream-backend.ts");
 		const result = await cerastreamBackend.listDevicesIfActive();

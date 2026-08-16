@@ -39,7 +39,7 @@ CeraUI/
 │   │       │   └── tabs/                  # Legacy tab views (Streaming, Network, General, Advanced, DevTools)
 │   │       └── lib/
 │   │           ├── components/
-│   │           │   ├── dialogs/           # AppDialog.svelte — shared responsive dialog chrome
+│   │           │   ├── dialogs/           # AppDialog.svelte (shared chrome) + lazyDialog()/LazyDialog registry — config dialogs load as separate chunks on first open
 │   │           │   ├── custom/            # Custom components (moved from ui/): simple-alert-dialog,
 │   │           │   │                      #   mode-toggle, locale-selector, mobile-link, pwa/
 │   │           │   ├── streaming/         # ValidationAdapter.ts — FE constraint adapter (no literals)
@@ -66,7 +66,7 @@ CeraUI/
 │   │   └── src/schemas/
 │   │       ├── addons.schema.ts           # AddonDescriptorSchema + AddonStateSchema (T21)
 │   │       └── system.schema.ts           # KIOSK_UNAVAILABLE_ERROR + system schemas
-│   └── i18n/         # typesafe-i18n, 10 languages (workspace:*)
+│   └── i18n/         # Paraglide runtime + hand-editable JSON catalogs, 10 languages (workspace:*)
 ├── scripts/build/    # build-debian-package.sh — produces ceraui .deb
 ├── docs/             # ARCHITECTURE, BUILD_PIPELINE, APT_VERSION_CONTROL, BRANDING, TOUCHSCREEN, LIFECYCLE-INDICATORS
 └── .impeccable.md    # UI/UX design constraints — read before touching frontend visuals
@@ -86,7 +86,7 @@ CeraUI/
 | **Per-core encoder-load COLLECTOR (two kernel realities, probed at runtime)** | `apps/backend/src/modules/system/encoder-load.ts` → `encoder-load` broadcast |
 | **Fan presence + PWM duty-cycle COLLECTOR (`pwm-fan` found by type string, never an index; `pwm1/255` only, never RPM)** | `apps/backend/src/modules/system/fan.ts` → `fan` broadcast |
 | **CPU core count (`nproc`-equivalent) — the denominator that makes `cpuLoad1` readable** | `apps/backend/src/modules/system/cpu.ts` → `cpu` broadcast; render side `apps/frontend/src/lib/system/cpu-load.ts` (`deriveCpuLoad`) |
-| Shared dialog chrome (AppDialog) | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` |
+| Shared dialog chrome (AppDialog) + lazy-dialog registry | `apps/frontend/src/lib/components/dialogs/AppDialog.svelte` + `lazyDialog()`/`LazyDialog`/`LazyDialogFallback` in the same directory |
 | Reconnect/reboot/session-expiry UX | `apps/frontend/src/lib/stores/connection-ux.svelte.ts` |
 | Touch/kiosk layout mode | `apps/frontend/src/lib/stores/layout-mode.svelte.ts` |
 | Validation constraints (FE adapter) | `apps/frontend/src/lib/components/streaming/ValidationAdapter.ts` |
@@ -174,8 +174,9 @@ bun run build         # compile backend binary + frontend static
 bun run test:release-package-contracts   # provenance + release graph + dispatch-input security
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
-bun tsc --noEmit      # type-check backend (run from apps/backend/)
+bun run --filter backend check   # type-check backend (TS 7 via scripts/tsc.mjs) + exec guards
 bun run --filter frontend test   # vitest frontend unit tests
+bun run build:frontend && bun apps/frontend/scripts/check-precache.mjs   # PWA precache-manifest gate
 ```
 
 ## ADD-ON SUBSYSTEM [EXISTS]
@@ -684,23 +685,58 @@ public functions, so existing tests that pass deps explicitly are unaffected.
 
 Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEach`/`afterEach` to pick the branch deterministically on any host.
 
-## DEP BASELINE (as of 2026-07)
+## DEP BASELINE (as of 2026-08)
 
 | Package | Version |
 |---------|---------|
-| `@orpc/*` (client, server, contract) | 1.14.8 |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.27 — EXACT pin, see below |
 | Bun pin (`.bun-version`) | 1.3.14 |
-| `svelte` | 5.56.7 |
+| `svelte` | 5.56.9 |
 | `vitest` | 4.1.10 |
-| `vite` | 8.1.5 |
+| `vite` | 8.2.1 |
+| `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
+| Node | **26 everywhere** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
-| `@biomejs/biome` | 2.5.2 |
-| `@playwright/test` | 1.61.1 |
-| `@lucide/svelte` | 1.26.0 |
-| `svelte-check` | 4.7.3 |
-| `@sveltejs/vite-plugin-svelte` | 7.1.3 |
-| `@axe-core/playwright` | 4.12.1 |
-| `@types/node` | 26.1.1 (Node-26 typings; runtime CI stays on Node 24 — types-ahead-of-runtime, all gates green) |
+| `@biomejs/biome` (via `@ceralive/biome-config@2026.8.0` canon) | 2.5.8 |
+| `@playwright/test` | 1.62.1 |
+| `@lucide/svelte` | 1.31.0 |
+| `svelte-check` | 4.7.6 |
+| `@sveltejs/vite-plugin-svelte` | 7.3.0 |
+| `@axe-core/playwright` | 4.13.0 |
+| `@types/node` | 26.2.0 (matches the Node 26 runtime baseline) |
+| `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
+
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.27` would range forward across betas and into stable
+2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
+serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
+WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
+`RPCLink` here. v2 removed `.route()`/`.prefix()`/`.tag()` from the builder (OpenAPI routing moved to
+`openapi()` metadata in `@orpc/openapi`), so the push-only subscription entries in `packages/rpc/src/contracts/`
+are declared as a bare `oc`. Do not reintroduce route metadata — CeraUI serves no OpenAPI surface.
+Reserved router keys in v2 (`then`, `bind`, `valueOf`, `toString`, `toJSON`) must never be used as a
+procedure or child-router key.
+
+### TypeScript: two majors, deliberately
+
+| Scope | Compiler | Why |
+|-------|----------|-----|
+| workspace catalog + `apps/frontend` | **6.0.3** | `svelte-check` refuses to start on TS 7 (`bin/ts-version-check.js`); its peer range is `^5.0.0 \|\| ^6.0.0` |
+| `apps/backend`, `packages/rpc`, `packages/i18n` | **7.0.2** (direct devDep) | plain `tsc --noEmit`, no compiler-API consumer |
+
+TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), which is the root cause of the
+one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 devDep with the rest of the
+non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
+`ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
+dep plus a `typescript-7` npm-alias `check` gate) no longer exists. A non-blocking `svelte-check --tsgo`
+canary runs against the frontend catalog (`@typescript/native` alias onto real `typescript@7`, installed
+`--no-save`); the current run reports **0 errors and 5 warnings in 4 files** (the
+`state_referenced_locally` warnings are in test fixtures and the slider component), while the required TS6 gate
+remains the blocking check — informative, not blocking.
+
+Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
+would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
+which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
+selects the alias). `bun tsc` is likewise banned (oven-sh/bun#37152).
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 
@@ -718,7 +754,8 @@ Both are unset by default, so the control channel stays gated until provisioned.
 ## CONVENTIONS
 
 - Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `bun run lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
-- Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. The same override silences false-positive `noUnusedVariables`/`noUnusedImports`/`useImportType`/`useConst` that Biome's partial template analysis emits for script vars used in markup.
+- Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. That formatter override is unrelated to the lint one below and is not up for review.
+- Svelte lint overrides are down to **exactly two** rules (2026-08-14, Biome 2.5.8): `correctness/noUnusedVariables` and `correctness/noUnusedImports`, both off for `**/*.svelte` because Biome still does not count template references — re-enabling the pair currently yields **1,739 errors and 13 warnings** in `apps/frontend` (the errors include Paraglide `m["<key>"]()` imports used only in markup, such as `BufferingIndicator.svelte`, plus cascading markup-only references). The upstream gap is [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590), open. 2.5.3 fixed `$store`/`$bindable` for `noUnusedVariables` only and 2.5.7 fixed `{@attach}`; both are in 2.5.8 and both are too narrow to retire the overrides. The other three historical entries are gone: `noUnusedFunctionParameters` was genuinely **re-enabled** (it found one real vestigial parameter, now fixed), while `useImportType`/`useConst` were **dead config** — both are inert on `.svelte` in 2.5.8 even when set to `"error"` directly, though `noNonNullAssertion` does fire, so this is rule-specific rather than a blanket exclusion. Full rationale, reproduction command, and the re-attempt checklist: [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Svelte lint overrides". Do NOT re-add a blanket disable for a rule that is not actually firing.
 - Strict TS: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are enabled in `tsconfig.json` (root), `apps/backend`, and `packages/rpc`. The frontend app (`apps/frontend/tsconfig.app.json`) and `tsconfig.node.json` enable `strict` + `noUncheckedIndexedAccess`; `exactOptionalPropertyTypes` is intentionally omitted there because it is incompatible with bits-ui v2 / shadcn-svelte and vite-plugin-pwa types (unfixable "union too complex" errors in CLI-managed components). The e2e tsconfig stays at baseline `strict` (ungated Playwright test code).
 - Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default). Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock paths.
 - `LOG_LEVEL` env var overrides the Winston transport level for ALL transports (console + file). Unset = per-transport defaults (dev console `info`, prod console `warn`, file `debug`). Set `LOG_LEVEL=debug` to enable per-RPC trace lines.
@@ -780,6 +817,29 @@ page's worker-scoped 3100-3199 backend; the reference backend on port 3002 is no
 the functional page backend. Local Vite dev does not enable cookie routing. The
 semantic YAML contract is
 `bun run test:build-check-shape`.
+
+Four further Build Check facts, all landed 2026-08-14:
+
+- **Node 26 is the required runtime** (`NODE_VERSION: "26"`), not a canary lane.
+  The frontend vitest suite was proven green on both Node 24 and 26 first.
+- **`tsgo-canary` is advisory and must stay that way** (`continue-on-error: true`,
+  `gate: perf` in the root manifest). It installs `@typescript/native` — an npm
+  alias onto `typescript@7`, NOT the `@typescript/native-preview` nightly — with
+  `--no-save` beside the workspace TS6 and runs `svelte-check --tsgo`
+  (`scripts/ci/tsgo-canary.sh`, `apps/frontend/tsconfig.tsgo.json`). Plain
+  `--tsgo`, never `--tsgo-experimental-api` (language-tools#3095 fails under Bun).
+- **`setup-e2e` typechecks and measures before it uploads**: `bun run --filter
+  frontend check` gates the build, and `bun scripts/ci/bundle-report.mjs` fails
+  the job when the initial-route JS gzip set exceeds its documented budget.
+- **The e2e exclusion tag list lives in TWO files** — the root `test:e2e` script
+  and the Functional E2E step's `--grep-invert`. Both carry
+  `@visual|@a11y|@gallery|@premigration-upgrade`; change one and you must change
+  the other (and the root `ci-local.manifest.yaml` legs with it).
+
+Any change to this workflow's jobs or run steps also changes the root repo's
+`ci-local.manifest.yaml` — `scripts/ceraui_build_check_manifest_contract_test.py`
+and `scripts/ceraui_build_check_execution_contract_test.py` model the job set and
+per-job run-step digests with SET EQUALITY and fail on anything unmodeled.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 
@@ -1322,7 +1382,14 @@ Three Vite lib-mode ES-module bundles — one per config dialog:
 | `server.js` | `apps/frontend/src/lib/federation/server-entry.ts` |
 
 Each entry exports `federationAbiVersion = 1` and
-`mountDialog(target, { host, config })`. The wrapper uses its bundled Svelte
+`mountDialog(target, { host, config, locale })`. `locale` is ADDITIVE and OPTIONAL,
+so the ABI stays 1: a bundle carries its OWN copy of the Paraglide runtime, whose
+active locale is a module-level binding the host cannot otherwise reach, so a host
+that omits it gets the base locale exactly as before. Each entry also calls
+`registerFederationMessages()` (`lib/federation/messages.ts`) at module scope —
+the SPA resolves its message catalog from lazily-imported per-namespace chunks, and
+a hosted bundle fetched as one module against a signed manifest cannot reach those,
+so it registers the catalog statically via `@ceraui/i18n/eager`. The wrapper uses its bundled Svelte
 runtime to mount and unmount the dialog, so the host never mounts a component
 compiled against a different Svelte runtime. `host` is the typed adapter in
 `host-contract.ts`; all three dialogs treat a resolved `{ success: false }` host
@@ -1407,6 +1474,7 @@ platform checks `ceraui-version` at session start; out-of-window devices get
 | Sign + SRI script | `scripts/sign-federation.ts` |
 | CI publish workflow | `.github/workflows/publish-release.yml` (`publish-federation` job) |
 | Bundle output (gitignored) | `dist/federation/<version>/` |
+| ABI harness (mounts the BUILT bundles) | `apps/frontend/tests/federation/federation-abi.test.ts` via `bun run test:federation-abi` |
 | Full hosting/signing contract | root `AGENTS.md` → "Version-federation hosting/signing contract" |
 | Serving route (apt-worker) | [`../apt-worker/AGENTS.md`](../apt-worker/AGENTS.md) |
 
@@ -1812,11 +1880,12 @@ existing bus, no new endpoint). Every row is one of four `origin` variants
 - **Shim policy**: the legacy `pipelines`/`devices` broadcasts and the coarse
   `capabilities.device_modes` field are kept running unmodified as a rollback
   safety net. `EncoderDialog.svelte`, `AudioDialog.svelte`, `LiveView.svelte`,
-  and `StreamingStateManager.svelte.ts` still call `getPipelines`/`getDevices`
-  directly today — only `SourceSection`/`StreamSetupChain` read `getSources()`
-  exclusively. The real exit condition is migrate those four consumers off the
-  legacy getters onto `getSources()`-derived data, THEN ship one release with
-  no rollback needed, THEN delete the producers. Tracked as
+  and `StreamingStateManager.svelte.ts` have migrated off the legacy getters and
+  now use `getSources()`-derived data. The legacy getter definitions and
+  compatibility/comment references remain, but there are no direct consumer
+  call sites in these four files. The producers stay in place for the rollback
+  net; the real exit condition is ship one release with no rollback needed,
+  THEN delete the producers. Tracked as
   `TD-legacy-source-broadcasts` in `docs/TECHNICAL_DEBT.md`; do not delete the
   producers until that entry's exit condition is met.
 

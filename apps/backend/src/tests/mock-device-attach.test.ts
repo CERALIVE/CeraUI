@@ -171,9 +171,11 @@ describe("setMockDeviceAttached seam (C7)", () => {
 		const sourcesFrame = frames.find((f) => "sources" in f);
 		expect(sourcesFrame).toBeDefined();
 		const sources = (
-			sourcesFrame?.sources as { sources: Array<Record<string, unknown>> }
-		).sources;
-		expect(sources.find((s) => s.id === USB_INPUT_ID)?.lost).toBe(true);
+			sourcesFrame?.sources as
+				| { sources: Array<Record<string, unknown>> }
+				| undefined
+		)?.sources;
+		expect(sources?.find((s) => s.id === USB_INPUT_ID)?.lost).toBe(true);
 	});
 
 	test("resetMockState() restores attachment", () => {

@@ -1,5 +1,5 @@
 <script lang="ts">
-import { LL } from '@ceraui/i18n/svelte';
+import { m } from '@ceraui/i18n/svelte';
 import { Wifi } from '@lucide/svelte';
 
 type NetworkConnection = {
@@ -20,22 +20,22 @@ let { connection }: { connection: NetworkConnection } = $props();
 		</div>
 		<div class="grid grid-cols-2 gap-3 md:grid-cols-3">
 			<div class="bg-background/50 rounded-lg border p-3">
-				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.type()}</div>
+				<div class="text-muted-foreground mb-1 text-xs">{m["devtools.type"]()}</div>
 				<div class="font-mono text-sm font-medium">
-					{connection.effectiveType || $LL.devtools.unknown()}
+					{connection.effectiveType || m["devtools.unknown"]()}
 				</div>
 			</div>
 			<div class="bg-background/50 rounded-lg border p-3">
-				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.downlink()}</div>
+				<div class="text-muted-foreground mb-1 text-xs">{m["devtools.downlink"]()}</div>
 				<div class="font-mono text-sm font-medium">
-					{connection.downlink || $LL.devtools.unknown()}
-					{$LL.devtools.mbps()}
+					{connection.downlink || m["devtools.unknown"]()}
+					{m["devtools.mbps"]()}
 				</div>
 			</div>
 			<div class="bg-background/50 rounded-lg border p-3">
-				<div class="text-muted-foreground mb-1 text-xs">{$LL.devtools.rtt()}</div>
+				<div class="text-muted-foreground mb-1 text-xs">{m["devtools.rtt"]()}</div>
 				<div class="font-mono text-sm font-medium">
-					{connection.rtt || $LL.devtools.unknown()}{$LL.devtools.ms()}
+					{connection.rtt || m["devtools.unknown"]()}{m["devtools.ms"]()}
 				</div>
 			</div>
 		</div>
