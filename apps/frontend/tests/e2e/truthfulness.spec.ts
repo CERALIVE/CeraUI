@@ -124,13 +124,23 @@ function findOrphanDebtIds(
 
 // ── Test-owned proxy control state (reset per test in beforeEach) ────────────
 let pageWs: WebSocketRoute | null = null;
-// Drop the backend's own `devices` / `capabilities` / `sources` echoes so the
-// INJECTED snapshots are authoritative — the backend's multi-modem-wifi profile
-// reports its own capture device + a default caps/sources snapshot on connect,
-// which would otherwise race the test-injected truth.
+// Drop the backend's own `devices` / `capabilities` / `sources` / `config` echoes
+// so the INJECTED snapshots are authoritative — the backend's multi-modem-wifi
+// profile reports its own capture device + a default caps/sources snapshot on
+// connect, which would otherwise race the test-injected truth.
+//
+// `config` belongs to that same family, and leaving it out was the defect behind a
+// CI-only failure: the frontend MERGES a `config` frame field-by-field, so a key a
+// test does NOT inject — `source` above all — inherits whatever the per-worker
+// backend last persisted, and both `hasEffectiveSource` (does the audio surface
+// render at all) and `visibleSources` (an operator-disabled row stays visible while
+// SELECTED) key off it. Each test now declares its own `config` premise instead.
+// The one test asserting a REAL persisted config reads it over a direct
+// `streaming.getConfig` RPC, not this broadcast, so it is unaffected.
 let dropServerDevices = false;
 let dropServerCapabilities = false;
 let dropServerSources = false;
+let dropServerConfig = false;
 // `status` is NOT blanket-dropped: unlike caps/devices/sources, most tests here do
 // NOT inject their own `status` and DO rely on the real backend's initial `status`
 // broadcast (asrcs, audio_sources, is_streaming, active_encode, network_ingest) to
@@ -416,6 +426,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		dropServerDevices = true;
 		dropServerCapabilities = true;
 		dropServerSources = true;
+		dropServerConfig = true;
 		dropServerStatus = testInfo.annotations.some(
 			(a) => a.type === DROP_SERVER_STATUS_ANNOTATION,
 		);
@@ -464,6 +475,7 @@ test.describe("Capability truthfulness (functional)", () => {
 					if (dropServerDevices && "devices" in frame) return;
 					if (dropServerCapabilities && "capabilities" in frame) return;
 					if (dropServerSources && "sources" in frame) return;
+					if (dropServerConfig && "config" in frame) return;
 					if (dropServerStatus && "status" in frame) return;
 				} catch {
 					/* non-JSON / binary frame */
@@ -1257,7 +1269,15 @@ test.describe("Capability truthfulness (functional)", () => {
 	}) => {
 		// An active audio source + a known srtla destination: the codec select is
 		// enabled (so it opens) and the gate has a transport to evaluate against.
-		serverConfig({ asrc: "USB audio", relay_protocol: "srtla" });
+		// `source` is REQUIRED here, not decoration: the audio surface (and with it
+		// `open-audio-dialog`) renders only once an effective source resolves, and the
+		// coarse row below is `origin: "coarse"` — never the implicit sole CAMERA — so
+		// selecting it explicitly is the only thing that resolves one.
+		serverConfig({
+			source: "hdmi",
+			asrc: "USB audio",
+			relay_protocol: "srtla",
+		});
 		send(GENERIC_PIPELINES);
 		// The audio gate reads the pipeline registry CeraUI projects from `sources`,
 		// so the audio-capable `hdmi` pipeline has to arrive on that broadcast.
