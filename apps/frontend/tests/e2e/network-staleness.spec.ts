@@ -49,10 +49,33 @@ function writeEvidence(fileName: string, lines: string[]): void {
 	);
 }
 
-type ModemRecord = Record<
-	string,
-	{ ifname?: string; no_sim?: boolean; status?: { signal?: number } }
->;
+type ModemEntry = {
+	ifname?: string;
+	no_sim?: boolean;
+	status?: { signal?: number };
+};
+type ModemRecord = Record<string, ModemEntry>;
+
+/**
+ * Fold a `modems` frame into the running snapshot the same way the store's
+ * `mergeModemList` does — field-by-field PER MODEM ID.
+ *
+ * Only a newly-added modem carries a full descriptor — `buildModemMessage`
+ * fills `ifname`/`config`/`no_sim` ONLY for ids in the broadcast's full-state
+ * set, and `broadcastFromDiff` puts just the ADDED ids there. Every other
+ * broadcast, including the retained status poll, is STATUS-ONLY for every
+ * modem. A top-level `{...prev, ...incoming}` spread replaces each modem
+ * WHOLESALE, so one such partial strips `ifname`/`no_sim` from all of them and
+ * the SIM-modem filter below sees zero.
+ */
+function mergeModems(prev: ModemRecord, incoming: ModemRecord): ModemRecord {
+	const next: ModemRecord = { ...prev };
+	for (const [id, modem] of Object.entries(incoming)) {
+		if (!modem) continue;
+		next[id] = { ...next[id], ...modem };
+	}
+	return next;
+}
 
 test.describe("Task 22 — per-interface staleness", () => {
 	test.skip(
@@ -90,7 +113,7 @@ test.describe("Task 22 — per-interface staleness", () => {
 					};
 					const modems = frame?.status?.modems ?? frame?.modems;
 					if (modems && typeof modems === "object") {
-						serverModems = { ...serverModems, ...modems };
+						serverModems = mergeModems(serverModems, modems);
 						if (takeover) return;
 					}
 					// After takeover, drop the frozen interface's netif throughput
