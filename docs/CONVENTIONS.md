@@ -105,13 +105,15 @@ Promotion to `error` is deferred until Biome resolves imported-async returns or 
 | Rule | Status | Why |
 |------|--------|-----|
 | `correctness/noUnusedVariables` | **off** | Biome does not count template references. |
-| `correctness/noUnusedImports` | **off** | Same, plus the `$store` auto-subscription gap below. |
+| `correctness/noUnusedImports` | **off** | Same; Paraglide `m["<key>"]()` imports used only in markup are still missed. |
 
 Biome 2.5.3 (PR #10534) fixed `$store`/`$bindable` false positives **for
 `noUnusedVariables` only**, and 2.5.7 (PR #11198, issue #11171) fixed `{@attach}`
 for both unused-symbol rules. Both fixes are in 2.5.8 — and both are too narrow to
-retire the overrides. Re-enabling the pair on this tree produces **1,724 diagnostics,
-0 of which are real**, because the general gap is still open upstream:
+retire the overrides. Re-enabling the pair on this tree currently produces **1,739
+errors and 13 warnings** in `apps/frontend`; the errors include Paraglide imports
+used only in markup (for example `BufferingIndicator.svelte`'s `m["hud.*"]()` calls)
+and cascading markup-only references. The general gap is still open upstream:
 [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590) ("Support for
 cross language lint rules"), with
 [#9193](https://github.com/biomejs/biome/issues/9193) (namespace import used as
@@ -124,9 +126,11 @@ Two false-positive shapes dominate, and both must be gone before this is revisit
 
 1. **Markup-only references.** Anything a component declares in `<script>` and uses
    only in markup is reported unused — that is most of a Svelte component.
-   `import { LL } from '@ceraui/i18n/svelte'` is the worst case: it is referenced as
-   `$LL` (store auto-subscription), which `noUnusedImports` still does not follow, so
-   **~45 components** are told their i18n import is dead.
+   Paraglide imports such as `import { m } from '@ceraui/i18n/svelte'` are reported
+    unused when their `m["<key>"]()` calls appear only in markup; for example,
+    `BufferingIndicator.svelte` uses `m["hud.buffering"]()` and related keys in its
+    template. This is the current Paraglide-specific reproduction of the historical
+    typesafe-i18n store-import false positive.
 2. **Cascading false positives.** A symbol referenced *only* from inside another
    symbol that is itself markup-only is flagged too. `SettingsView.svelte`'s icon
    imports (`Cloud`, `Radio`, …) are used at `icon: Cloud` inside the `groups`

@@ -617,8 +617,8 @@ indefinitely for a present device, with no recovery short of the operator re-pic
 
 The gate itself is unchanged: a level whose `source.identity` names a different card
 than the preference is still dropped. Only the reason string and the retry behaviour
-moved. `AudioLevelMeter` needed no change — it already indexes
-`$LL.live.preview.audioUnavailableReason[reason]()`.
+moved. `AudioLevelMeter` needed no change — it already resolves the dynamic Paraglide
+key with `resolveMessageKey(\`live.preview.audioUnavailableReason.${reason}\`)`.
 
 **THE RECOVERY PATH MUST NOT BE GATED ON THE SIGNAL WHOSE ABSENCE IS THE FAILURE.**
 `noteForeignCardLevel` watches frame CONTENT, so it can only ever run while frames
