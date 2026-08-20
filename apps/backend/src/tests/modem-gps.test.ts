@@ -19,7 +19,10 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { GnssFixState } from "@ceraui/rpc/schemas";
 import { GNSS_ACQUIRE_TIMEOUT_MS, GNSS_FIX_TTL_MS } from "@ceraui/rpc/schemas";
 import { getConfig } from "../modules/config.ts";
-import { readModemCapabilityEvidence } from "../modules/modems/capability-evidence.ts";
+import {
+	initModemCapabilityEvidence,
+	readModemCapabilityEvidence,
+} from "../modules/modems/capability-evidence.ts";
 import {
 	resolveCapabilityModuleState,
 	setModemCapabilityEvidenceReader,
@@ -458,7 +461,7 @@ describe("the module under the capability gate", () => {
 
 	afterEach(() => {
 		resetModemGpsState();
-		setModemCapabilityEvidenceReader(null);
+		initModemCapabilityEvidence();
 		clearGate();
 	});
 

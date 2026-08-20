@@ -526,9 +526,9 @@ describe("modem.reconfig readiness gate (annex CELLULAR_STACK_INITIALIZING)", ()
 		expect(h.results[0]?.payload.ok).toBe(true);
 	});
 
-	test("the default (mmcli) backend has no init window at all", async () => {
+	test("the explicit mmcli rollback backend has no init window at all", async () => {
 		resetStack();
-		expect(getConfig().modem_backend).toBeUndefined();
+		getConfig().modem_backend = "mmcli";
 		expect(getCellularStack().ready).toBe(true);
 
 		await initCellularStack({});

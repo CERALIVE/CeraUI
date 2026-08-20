@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getConfig } from "../modules/config.ts";
+import { initModemCapabilityEvidence } from "../modules/modems/capability-evidence.ts";
 import {
 	type ModemCapabilityEvidence,
 	resolveModemCapabilityClaims,
@@ -157,7 +158,7 @@ afterEach(async () => {
 	resetLifecycleInterlock();
 	resetRecoveryBarrier();
 	resetMutationJournalDeps();
-	setModemCapabilityEvidenceReader(null);
+	initModemCapabilityEvidence();
 	setModemIdPathReader(null);
 	resetModemWireProducer();
 	for (const id of Object.keys(getModems())) {

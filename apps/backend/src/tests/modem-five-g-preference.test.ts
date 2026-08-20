@@ -25,6 +25,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getConfig } from "../modules/config.ts";
+import { initModemCapabilityEvidence } from "../modules/modems/capability-evidence.ts";
 import { setModemCapabilityEvidenceReader } from "../modules/modems/capability-gates.ts";
 import {
 	applyFiveGPreference,
@@ -169,7 +170,7 @@ afterEach(async () => {
 	resetLifecycleInterlock();
 	resetRecoveryBarrier();
 	resetMutationJournalDeps();
-	setModemCapabilityEvidenceReader(null);
+	initModemCapabilityEvidence();
 	setModemIdPathReader(null);
 	resetModemWireProducer();
 	for (const id of Object.keys(getModems())) delete getModems()[Number(id)];

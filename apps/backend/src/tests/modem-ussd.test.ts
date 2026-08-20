@@ -32,6 +32,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { USSD_SESSION_STATES } from "@ceraui/rpc/schemas";
 import { getConfig } from "../modules/config.ts";
+import { initModemCapabilityEvidence } from "../modules/modems/capability-evidence.ts";
 import { setModemCapabilityEvidenceReader } from "../modules/modems/capability-gates.ts";
 import {
 	classifyUssdCliFailure,
@@ -564,7 +565,7 @@ describe("the gated USSD module", () => {
 		resetLifecycleInterlock();
 		resetRecoveryBarrier();
 		resetModemUssdState();
-		setModemCapabilityEvidenceReader(null);
+		initModemCapabilityEvidence();
 		delete getConfig().modem_capabilities;
 	});
 

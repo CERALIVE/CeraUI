@@ -21,6 +21,7 @@ import {
 	REDACTED,
 } from "../helpers/logger.ts";
 import { getConfig } from "../modules/config.ts";
+import { initModemCapabilityEvidence } from "../modules/modems/capability-evidence.ts";
 import { setModemCapabilityEvidenceReader } from "../modules/modems/capability-gates.ts";
 import type { UssdCliRunner } from "../modules/modems/mmcli-ussd.ts";
 import {
@@ -189,7 +190,7 @@ describe("the module itself is content-free", () => {
 		resetLifecycleInterlock();
 		resetRecoveryBarrier();
 		resetModemUssdState();
-		setModemCapabilityEvidenceReader(null);
+		initModemCapabilityEvidence();
 		delete getConfig().modem_capabilities;
 	});
 
