@@ -114,17 +114,20 @@ test.describe(
 
 			const card = dialog.getByTestId("modem-usb-mode-card");
 			await expect(card).toBeVisible();
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toContainText(
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
 				"qmi",
 			);
 			record("active mode before the switch: qmi");
 
-			await dialog.getByRole("button", { name: /Switch to mbim/i }).click();
+			await dialog.getByTestId("modem-usb-mode-target-mbim").click();
+			await dialog.getByRole("button", { name: /Switch to/i }).click();
 			await page.getByRole("button", { name: /Switch mode/i }).click();
 
 			// The RPC has resolved successfully. Nothing else has happened.
 			await expect(dialog.getByTestId("modem-usb-mode-switching")).toBeVisible();
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toContainText(
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
 				"qmi",
 			);
 			await expect(
@@ -136,7 +139,8 @@ test.describe(
 			await patchModem(page, key, { usb_mode: "mbim" });
 
 			await expect(dialog.getByTestId("modem-usb-mode-confirmed")).toBeVisible();
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toContainText(
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
 				"mbim",
 			);
 			record("after the confirming broadcast: active mode flipped to mbim");
@@ -157,13 +161,15 @@ test.describe(
 
 			await openTargetModemDialog(page, MODEM_INDEX);
 			const dialog = page.getByRole("dialog");
-			await dialog.getByRole("button", { name: /Switch to mbim/i }).click();
+			await dialog.getByTestId("modem-usb-mode-target-mbim").click();
+			await dialog.getByRole("button", { name: /Switch to/i }).click();
 			await page.getByRole("button", { name: /Switch mode/i }).click();
 
 			const band = dialog.getByTestId("modem-usb-mode-error");
 			await expect(band).toBeVisible();
 			await expect(band).toContainText(/certified/i);
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toContainText(
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
 				"qmi",
 			);
 			await expect(
@@ -207,7 +213,7 @@ test.describe(
 			}
 
 			async function closeDialog(): Promise<void> {
-				await page.keyboard.press("Escape");
+				await dialog.getByRole("button", { name: "Close" }).first().click();
 				await expect(dialog).toHaveCount(0);
 			}
 
@@ -240,7 +246,8 @@ test.describe(
 			// Assert the mode the device is IN before asserting what it is offered:
 			// a late broadcast overwriting the patched composition would otherwise
 			// surface as a confusing "wrong number of radios".
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toContainText(
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
 				"qmi",
 			);
 			await expect(targets.getByRole("radio")).toHaveCount(2);
@@ -276,7 +283,8 @@ test.describe(
 			);
 			await expectNoControl();
 			// The card still REPORTS the active mode — only the control is withdrawn.
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toContainText(
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
 				"qmi",
 			);
 			await captureCard("usb-mode-unknown-firmware");
