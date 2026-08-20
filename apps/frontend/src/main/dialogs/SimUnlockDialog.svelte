@@ -1,8 +1,8 @@
 <!--
   SimUnlockDialog.svelte — SIM PIN/PUK unlock prompt for a locked modem.
 
-  Auto-opened by NetworkView when a modem reports a SIM lock. Two flows share one
-  dialog:
+  Opened by NetworkView from the locked modem's OWN row — never auto-opened, and
+  only ever for a lock that blocks registration. Two flows share one dialog:
     • PIN flow (sim_lock.required === 'sim-pin') — submits the PIN exactly once via
       the Task 22 `modems.unlockSim` RPC; maps the terminal state back to the UI:
         success      → toast + close
@@ -20,6 +20,17 @@
         puk2-required → terminal; only the carrier's PUK2 can restore it
         unsupported   → terminal; this modem exposes no PIN2 route
         no-pin2-lock  → close
+
+  THE PIN2 FLOW IS NO LONGER REACHABLE, by product decision: PIN2 gates only the
+  SIM's Fixed-Dialling-Number list and this product exposes no calls or contacts
+  surface, so CeraUI stopped surfacing the lock at all (the row badge and the
+  config dialog's band that used to lead here are both gone). It is kept rather
+  than deleted because it is not a separable branch — it shares this dialog's
+  title, icon, open-edge reseed, single keyed op, submit guard and footer with
+  the blocking PIN/PUK flow, which must not be disturbed. Excising it is its own
+  change; see `apps/frontend/AGENTS.md` → "A SIM LOCK IS REACHED FROM ITS OWN
+  ROW". The wire is unaffected — ModemManager still reports `sim-pin2` and the
+  `modems.unlockSimPin2` RPC still exists.
 
   PIN2 IS NOT A SECOND SIM PIN, and the copy must never let the two blur. PIN1
   gates the card: unverified, the modem cannot register and there is no link.
@@ -63,14 +74,14 @@ interface Props {
 	modem: Modem;
 	deviceId: string | number;
 	/**
-	 * Set ONLY when this dialog was opened from inside another one — today the
-	 * `ModemConfigDialog` lock band, for the non-blocking `sim-pin2`/`sim-puk2`
-	 * case (todo 46's routing split). Unlocking a PIN2 is a sub-setting of that
-	 * modem's settings, so leaving it must return to them rather than dropping
-	 * the operator back onto the Network page having lost their place.
+	 * Set ONLY when this dialog is opened from inside another one, so leaving it
+	 * returns there rather than dropping the operator back onto the Network page
+	 * having lost their place.
 	 *
-	 * Absent = the STANDALONE case (a blocking `sim-pin`/`sim-puk` reached from
-	 * the row's own "Unlock SIM" button), which closes fully, unchanged.
+	 * NO CALLER PASSES IT TODAY. Its one producer was the `ModemConfigDialog`
+	 * lock band for a non-blocking `sim-pin2`, and that band is gone — the row's
+	 * own "Unlock SIM" button is now the single entry point, and it is the
+	 * STANDALONE case, which closes fully.
 	 */
 	onBack?: () => void;
 }

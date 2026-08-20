@@ -71,12 +71,15 @@
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { Modem, NetifMessage } from '@ceraui/rpc/schemas';
 import {
+	Antenna,
 	Check,
 	ChevronDown,
 	ChevronRight,
 	CircleAlert,
 	CircleHelp,
 	CircleOff,
+	EthernetPort,
+	ExternalLink,
 	Globe,
 	Hourglass,
 	Lock,
@@ -91,6 +94,7 @@ import {
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
 import { Button } from '$lib/components/ui/button';
 import { cn } from '$lib/utils';
 import type { ModemRowState, ModemRowTone, ModemSignalTier } from './cellular-row';
@@ -103,7 +107,7 @@ import {
 	configureDisabledReasonKey,
 	detailLine,
 	isRoamingActive,
-	lockBadgeLock,
+	isSimlessModem,
 	primaryLabel,
 	registrationRejectionKey,
 	resolveClassBand,
@@ -111,6 +115,7 @@ import {
 	resolveRowState,
 	resolveSignalTier,
 	routerAdminConnectionKey,
+	routerAdminHost,
 	routerAdminSignal,
 	routerAdminSimKey,
 	rowNoteKeys,
@@ -119,6 +124,8 @@ import {
 	stateLabelKey,
 	stateTone,
 } from './cellular-row';
+import { detailFields, trafficFields } from '../dialogs/router-dongle-fields';
+import { openRouterAdminUi, routerAdminOpenReasonKey } from './router-admin-open';
 import type { RouterSignalReadout } from './router-signal';
 import {
 	isStaleReadout,
@@ -168,7 +175,11 @@ const STATE_ICON = {
 	connected: Check,
 	connecting: Hourglass,
 	disconnecting: Hourglass,
-	registered: Hourglass,
+	// An ANTENNA, not the `Hourglass` its former amber neighbours draw: the radio
+	// is attached to its network and resting there, so an hourglass reads as
+	// "stuck". Not `Check` either — that is `connected`, i.e. a bearer is up and
+	// the link can bond. Full derivation: `cellular-row.ts` STATE_TONES.
+	registered: Antenna,
 	searching: Hourglass,
 	scanning: Hourglass,
 	enabled: Radio,
@@ -179,14 +190,36 @@ const STATE_ICON = {
 	failed: CircleAlert,
 	locked: Lock,
 	'no-sim': CircleOff,
-	'router-up': Check,
+	// A PORT, not the `Check` `connected` draws. Both states used to share that
+	// tick, so a router dongle's link-state badge and a radio carrying a live
+	// bearer differed by one word and nothing else. This glyph names the thing
+	// the state is actually about — the USB-Ethernet link the dongle presents to
+	// the board — so the row separates the two by word, colour AND shape.
+	'router-up': EthernetPort,
 	'router-acquiring': Hourglass,
 	'router-down': CircleAlert,
 	unknown: CircleHelp,
 } satisfies Record<ModemRowState, unknown>;
 
-const TONE_BADGE: Record<ModemRowTone, 'success' | 'warning' | 'error' | 'neutral'> = {
+// A state whose word needs one more sentence to be unambiguous. SUPPLEMENTARY
+// only, never the sole carrier — the shipped kiosk touchscreen cannot hover to
+// reveal a title (the roaming badge's own precedent, below). What makes the
+// link-state badge honest on its own is the WORD plus the `No SIM` pill that
+// renders beside it; this is for the pointer and the accessibility tree.
+const STATE_HINT: Partial<Record<ModemRowState, string>> = {
+	'router-up': 'network.cellular.state.routerLinkUpHint',
+};
+
+// `ready` takes the INFO register, which is the only one left that is neither a
+// claim of trouble nor a claim of traffic: amber would repeat the "still working
+// on it" lie, lime is reserved for a link that is actually in the bond, and grey
+// is for a device that told us nothing.
+const TONE_BADGE: Record<
+	ModemRowTone,
+	'success' | 'info' | 'warning' | 'error' | 'neutral'
+> = {
 	live: 'success',
+	ready: 'info',
 	pending: 'warning',
 	attention: 'warning',
 	error: 'error',
@@ -195,6 +228,7 @@ const TONE_BADGE: Record<ModemRowTone, 'success' | 'warning' | 'error' | 'neutra
 
 const TONE_DOT: Record<ModemRowTone, string> = {
 	live: 'bg-primary',
+	ready: 'bg-status-info',
 	pending: 'bg-status-warning',
 	attention: 'bg-status-warning',
 	error: 'bg-status-error',
@@ -315,6 +349,25 @@ function buildAdminSegments(modem: Modem): AdminSegment[] {
 			label: m["network.routerCellular.serialLabel"](),
 			value: serial,
 		});
+	// The admin address as a SCANNABLE fact, not only as a clause inside the
+	// sentence below it. Where the dongle answers is the first thing an operator
+	// reaches for when a row misbehaves, and a value buried mid-paragraph is not
+	// something you can find at a glance. It reads the SAME `admin_url` that
+	// sentence does — one reading, rendered twice for two different jobs.
+	//
+	// Gated on `reachable` because this strip is what the DEVICE reported, and
+	// the address is something the HOST knows (its default route). A dongle that
+	// answered nothing must keep an empty strip rather than gain one holding a
+	// fact it never stated — the unreachable note below already speaks for it.
+	const adminHost = modem.router_admin?.reachable
+		? routerAdminHost(modem)
+		: undefined;
+	if (adminHost)
+		segments.push({
+			id: 'router-admin-address',
+			label: m["network.routerCellular.addressLabel"](),
+			value: adminHost,
+		});
 	return segments;
 }
 
@@ -326,6 +379,20 @@ let openDetails = $state<Record<string, boolean>>({});
 
 function toggleDetails(rowId: string): void {
 	openDetails = { ...openDetails, [rowId]: !openDetails[rowId] };
+}
+
+let adminOpenFailure = $state<Record<string, string>>({});
+
+async function openAdminUi(rowId: string): Promise<void> {
+	const { [rowId]: _cleared, ...rest } = adminOpenFailure;
+	adminOpenFailure = rest;
+	const outcome = await openRouterAdminUi(rowId);
+	if (!outcome.ok) {
+		adminOpenFailure = {
+			...adminOpenFailure,
+			[rowId]: routerAdminOpenReasonKey(outcome.reason),
+		};
+	}
 }
 </script>
 
@@ -362,10 +429,20 @@ function toggleDetails(rowId: string): void {
 				</p>
 			{/if}
 		{:else}
-			{#each modemEntries as [id, modem], _i (modem.ifname || id + '-' + _i)}
+			<!-- Keyed on the roster id, which is the map key and therefore unique by
+			     construction, and is already what the row's own disclosure state is
+			     filed under (`openDetails[id]`). It USED to be
+			     `modem.ifname || id + '-' + index`, and both halves of that are a
+			     remount trigger: the bench HiLink twins share one factory MAC so
+			     they rename against each other (`enx0c5b8f279a64` <-> `eth1`) on
+			     replug, which SWAPS two rows' keys and destroys both; and an
+			     `ifname` that appears or disappears flips a row between the two
+			     halves of the fallback. -->
+			{#each modemEntries as [id, modem] (id)}
 				{@const band = resolveClassBand(modem.device_class)}
 				{@const state = resolveRowState(modem, band)}
 				{@const tone = stateTone(state)}
+				{@const simless = isSimlessModem(modem)}
 				{@const primary = primaryLabel(modem, id)}
 				{@const detail = detailLine(modem, primary)}
 				{@const slot = slotBadgeLabel(modem, primary)}
@@ -375,7 +452,6 @@ function toggleDetails(rowId: string): void {
 				{@const bondBlockedKey = bondDisabledReasonKey(modem, band, state, Boolean(entry?.ip))}
 				{@const configBlockedKey = configureDisabledReasonKey(band, modem)}
 				{@const rowAction = resolveRowAction(modem, band)}
-				{@const lockBadge = lockBadgeLock(modem, state)}
 				{@const roaming = isRoamingActive(modem)}
 				{@const carrier = carrierLabel(modem)}
 				{@const rejectionKey = registrationRejectionKey(modem)}
@@ -392,11 +468,14 @@ function toggleDetails(rowId: string): void {
 				{@const ifaceStale = staleInterfaces.has(modem.ifname) || isFullyStale}
 				{@const showStale = ifaceStale && state !== 'no-sim' && modem.status !== undefined}
 				{@const StateIcon = STATE_ICON[state]}
+				{@const stateHintKey = STATE_HINT[state]}
 				<!-- Single-line summary: identity + honest bands left; controls right. -->
 				{@const admin = modem.router_admin}
 				{@const adminSegments = buildAdminSegments(modem)}
 				{@const routerSignal = resolveRouterSignalReadout(modem)}
 				{@const routerSignalModel = admin?.signal}
+				{@const adminDetails = detailFields(admin)}
+				{@const adminTraffic = trafficFields(admin)}
 				{@const detailsOpen = openDetails[id] === true}
 				{@const detailsId = `modem-details-${id}`}
 				<div
@@ -442,30 +521,37 @@ function toggleDetails(rowId: string): void {
 									label={slot}
 								/>
 							{/if}
-							<Badge
-								variant={TONE_BADGE[tone]}
-								size="micro"
-								class={MICRO_TEXT}
-								data-testid="modem-state-badge"
-								data-modem-state={state}
-							>
-								<StateIcon class="size-3" aria-hidden="true" />
-								{t(stateLabelKey(state))}
-							</Badge>
-							<!-- A non-blocking lock no longer speaks over the radio's state, so
-							     it gets its own pill: the row must stay the surface an operator
-							     discovers an outstanding lock from (todo 46). -->
-							{#if lockBadge}
+							<!-- A directly-managed modem COLLAPSES its no-SIM condition into
+							     the lifecycle badge (`resolveRowState` returns `no-sim`), while
+							     a router dongle keeps a truthful `Up` and carries the fact as
+							     its own pill. Both now draw the SAME tag: the collapse decides
+							     WHERE the badge sits, never what it looks like. -->
+							{#if state === 'no-sim'}
+								<NoSimBadge
+									class={MICRO_TEXT}
+									data-modem-state={state}
+									testid="modem-state-badge"
+								/>
+							{:else}
 								<Badge
-									variant="warning"
+									variant={TONE_BADGE[tone]}
 									size="micro"
 									class={MICRO_TEXT}
-									data-testid="modem-lock-badge"
-									data-sim-lock={lockBadge}
+									data-testid="modem-state-badge"
+									data-modem-state={state}
+									title={stateHintKey ? t(stateHintKey) : undefined}
 								>
-									<Lock class="size-3" aria-hidden="true" />
-									{t('network.cellular.state.locked')}
+									<StateIcon class="size-3" aria-hidden="true" />
+									{t(stateLabelKey(state))}
 								</Badge>
+							{/if}
+							<!-- The dongle half of the same fact. Its lifecycle badge is
+							     deliberately NOT overwritten (`router_direct` really does mean
+							     the host holds a routable address), so the SIM verdict needs a
+							     pill of its own — and it has to be the identical pill, or the
+							     two classes describe one condition two ways. -->
+							{#if state !== 'no-sim' && simless}
+								<NoSimBadge class={MICRO_TEXT} />
 							{/if}
 							<!-- The carrier is a STATUS fact and lives with the other status
 							     facts. It used to be the row's TITLE, which pushed the device
@@ -528,44 +614,39 @@ function toggleDetails(rowId: string): void {
 							     state behind a bare mark is a state nobody can read. There is no
 							     spinner in either arm: a poll that has not answered yet is
 							     `not-reported`, which is a fact rather than a wait. -->
-							{#if signal === undefined && routerSignal}
-								{@const RouterSignalIcon = routerSignalIcon(routerSignal)}
-								{@const stale = isStaleReadout(routerSignal)}
-								<span
-									class={cn(
-										'inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-0.5',
-										routerSignalColor(routerSignal),
-									)}
-									data-testid="modem-router-signal"
-									data-provenance={routerSignal.provenance}
-									data-signal-state={routerSignal.kind}
-									data-freshness={routerSignal.freshness}
-									data-signal-tier={routerSignal.kind === 'reading'
-										? routerSignal.tier
-										: undefined}
-									data-unknown-reason={routerSignal.kind === 'unknown'
-										? routerSignal.reason
-										: undefined}
-									data-live={routerSignal.kind === 'reading' &&
-									routerSignal.freshness === 'live'
-										? 'true'
-										: 'false'}
-									title={m["network.routerCellular.signal.provenanceNote"]()}
-								>
-									<Router class="size-3 shrink-0" aria-hidden="true" />
-									<RouterSignalIcon class="size-3.5 shrink-0" aria-hidden="true" />
+							<!-- …and NOT when the shared No-SIM tag is already on this row.
+							     A `no-sim` readout is this instrument saying "there is no
+							     signal to report, because there is no card", which is exactly
+							     what the tag beside it says — rendering both put the same fact
+							     on one row twice, in two different colours, which is the
+							     duplication this row's `rowNoteKeys` de-duplication already
+							     forbids for its note lines. The per-metric strip inside the
+							     disclosure is untouched. -->
+							<!-- The GLYPH moved to the instrument column, beside where an
+							     MM radio draws its own (see there). Only the WORDS stay here,
+							     and only for the states that have one: this side of the row
+							     wraps freely, so a long sentence can never squeeze the
+							     controls off a 390px screen — which is exactly why the whole
+							     chip used to live here. A plain live reading says nothing
+							     here, matching the MM row, whose tier is likewise glyph-only. -->
+							{#if signal === undefined && routerSignal && !simless}
+								{#if routerSignal.kind !== 'reading'}
 									<span
-										class={routerSignal.kind === 'reading' ? 'sr-only' : MICRO_TEXT}
+										class={cn(MICRO_TEXT, routerSignalColor(routerSignal))}
 										data-testid="modem-router-signal-state"
+										data-signal-state={routerSignal.kind}
+										data-unknown-reason={routerSignal.kind === 'unknown'
+											? routerSignal.reason
+											: undefined}
 									>
 										{t(routerSignalStateKey(routerSignal))}
 									</span>
-									{#if stale}
-										<span class={MICRO_TEXT} data-testid="modem-router-signal-stale">
-											{m["network.routerCellular.signal.stale"]()}
-										</span>
-									{/if}
-								</span>
+								{/if}
+								{#if isStaleReadout(routerSignal)}
+									<span class={MICRO_TEXT} data-testid="modem-router-signal-stale">
+										{m["network.routerCellular.signal.stale"]()}
+									</span>
+								{/if}
 							{/if}
 						</div>
 						<!-- Why this device's controls are what they are, on screen — a
@@ -587,9 +668,24 @@ function toggleDetails(rowId: string): void {
 						{#if signal}
 							{@const SignalIcon = SIGNAL_ICON[signal]}
 							<!-- Qualitative tier with a word behind it — no digits, no
-							     `data-live-value`, so it duplicates no BondedLinks number. -->
+							     `data-live-value`, so it duplicates no BondedLinks number.
+							     IT CARRIES THE ROUTER CAPSULE'S BOX METRICS, WITH THE FRAME
+							     TURNED TRANSPARENT. The two indicators are right-anchored in
+							     one cluster, so their BOXES already lined up — but the router
+							     chip insets its bars by its own border + `px-1.5`, and this
+							     glyph's bars WERE its right edge, so the two tiers' bars sat
+							     6px apart in the same column. Measured on the bench board, that
+							     6px plus the bond word's 7px (see BondToggle) spread the seven
+							     rows' bars across 13px. Matching the box is what makes one
+							     column out of two shapes, and it equalises their heights too.
+							     `border-transparent` is LOAD-BEARING: the dashed frame is the
+							     router chip's provenance mark, so this one must reserve the
+							     same 1px without ever drawing it. -->
 							<span
-								class={cn('inline-flex items-center', SIGNAL_COLOR[signal])}
+								class={cn(
+									'inline-flex items-center rounded-md border border-transparent px-1.5 py-1 leading-none',
+									SIGNAL_COLOR[signal],
+								)}
 								data-testid="modem-signal"
 								data-signal-tier={signal}
 								role="img"
@@ -597,6 +693,47 @@ function toggleDetails(rowId: string): void {
 								title={t(signalLabelKey(signal))}
 							>
 								<SignalIcon class="size-4" aria-hidden="true" />
+							</span>
+						{/if}
+						<!-- The dongle's own reading, in the SAME slot, at the SAME size,
+						     in the SAME four-tier language as the MM glyph above — because
+						     "how is this link's radio" is one question and an operator
+						     should not have to learn two answers to it depending on which
+						     kind of device happens to be in the port.
+						     PROVENANCE SURVIVES THAT, and is still carried four ways: the
+						     `Router` mark, the DASHED frame (the "not the primary
+						     instrument" vocabulary), `data-provenance` for machines, and
+						     the prose sentence in the disclosure. The two can never both
+						     draw — `signal === undefined` is asserted in both directions by
+						     test — so one row still shows exactly one radio reading. -->
+						{#if signal === undefined && routerSignal && !simless}
+							{@const RouterSignalIcon = routerSignalIcon(routerSignal)}
+							{@const stateLabel = t(routerSignalStateKey(routerSignal))}
+							<span
+								class={cn(
+									'inline-flex items-center gap-1 rounded-md border border-dashed px-1.5 py-1 leading-none',
+									routerSignalColor(routerSignal),
+								)}
+								data-testid="modem-router-signal"
+								data-provenance={routerSignal.provenance}
+								data-signal-state={routerSignal.kind}
+								data-freshness={routerSignal.freshness}
+								data-signal-tier={routerSignal.kind === 'reading'
+									? routerSignal.tier
+									: undefined}
+								data-unknown-reason={routerSignal.kind === 'unknown'
+									? routerSignal.reason
+									: undefined}
+								data-live={routerSignal.kind === 'reading' &&
+								routerSignal.freshness === 'live'
+									? 'true'
+									: 'false'}
+								role="img"
+								aria-label={`${stateLabel} — ${m["network.routerCellular.signal.provenanceNote"]()}`}
+								title={m["network.routerCellular.signal.provenanceNote"]()}
+							>
+								<Router class="size-3 shrink-0" aria-hidden="true" />
+								<RouterSignalIcon class="size-4 shrink-0" aria-hidden="true" />
 							</span>
 						{/if}
 						{#if showStale}
@@ -676,7 +813,22 @@ function toggleDetails(rowId: string): void {
 					inert={!detailsOpen}
 					style:grid-template-rows={detailsOpen ? '1fr' : '0fr'}
 				>
-					<div class="min-h-0 overflow-hidden">
+					<!-- `overflow: hidden` clips PAINTING, not layout: every control in
+					     here keeps a full-size box at its uncollapsed position, so a
+					     collapsed row's buttons report a non-empty rect from inside the
+					     zero-height track. Measured on the board, `open-router-admin`
+					     read 173x32 at y=1433 while its clipping ancestor was 0px tall —
+					     which is why Playwright called it "visible, enabled and stable"
+					     and then hit-tested onto whichever `modem-row` is actually
+					     painted there, retrying "intercepts pointer events" forever.
+					     `visibility` is inherited and removes the subtree from hit
+					     testing, and it TRANSITIONS: an endpoint of `visible` holds for
+					     the whole duration, so the close still animates and the open is
+					     instant. Being pure CSS, both motion freezes still cover it. -->
+					<div
+						class="min-h-0 overflow-hidden transition-[visibility] duration-200"
+						style:visibility={detailsOpen ? 'visible' : 'hidden'}
+					>
 						<div class="mt-2 space-y-1.5 border-t pt-2 ps-5">
 							<!-- The class band's explanation was only ever a `title`, which
 							     the shipped kiosk touchscreen can never reveal. Down here
@@ -782,10 +934,73 @@ function toggleDetails(rowId: string): void {
 									{/if}
 								</div>
 							{/if}
-							<!-- Stated, never linked: the address lives on the dongle's OWN
-							     network, which the operator's browser is not on, so an anchor
-							     here would be a control that cannot work — the exact defect
-							     todo 47 removed from this device's other row. -->
+							<!-- Everything else the dongle said about its own radio and its own
+							     box. Every row is a field the DEVICE published; a field it did
+							     not state produces no row at all, so this block is as short as
+							     the device is quiet — on the bench that is four rows for a
+							     SIM-less HiLink and a dozen for a registered UFI. -->
+							{#if adminDetails.length > 0}
+								<div class="space-y-1" data-testid="router-admin-details">
+									<p class="text-xs font-medium">
+										{m["network.routerCellular.detail.title"]()}
+									</p>
+									<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+										{#each adminDetails as field (field.id)}
+											<dt class="text-muted-foreground/80">{field.label}</dt>
+											<dd
+												class="min-w-0 font-mono tabular-nums break-all"
+												data-testid={`router-detail-${field.id}`}
+											>
+												{field.value}
+												<!-- On screen, never a `title`: the shipped kiosk
+												     touchscreen has no hover to reveal one. -->
+												{#if field.note}
+													<span
+														class="text-muted-foreground/80 block font-sans break-normal"
+														data-testid={`router-detail-${field.id}-note`}
+													>
+														{field.note}
+													</span>
+												{/if}
+											</dd>
+										{/each}
+									</dl>
+								</div>
+							{/if}
+							<!-- The dongle's OWN accounting. It is labelled as the device's
+							     rather than CeraLive's, and stated NOT to be the bond's rate,
+							     because a byte total sitting under a cellular row is exactly
+							     what an operator would otherwise read as throughput —
+							     BondedLinksSection owns that, from what the sender measured. -->
+							{#if adminTraffic.length > 0}
+								<div class="space-y-1" data-testid="router-admin-traffic">
+									<p class="text-xs font-medium">
+										{m["network.routerCellular.traffic.title"]()}
+									</p>
+									<p class="text-muted-foreground/80 text-xs">
+										{m["network.routerCellular.traffic.note"]()}
+									</p>
+									<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+										{#each adminTraffic as field (field.id)}
+											<dt class="text-muted-foreground/80">{field.label}</dt>
+											<dd
+												class="min-w-0 font-mono tabular-nums break-all"
+												data-testid={`router-traffic-${field.id}`}
+											>
+												{field.value}
+											</dd>
+										{/each}
+									</dl>
+								</div>
+							{/if}
+							<!-- The address is STATED, and the page it names is now REACHABLE —
+							     not by linking to it (the operator's browser is not on the
+							     dongle's network, which is why todo 47 removed the dead anchor)
+							     but through CeraUI's own proxy, which carries the page over the
+							     interface this exact unit is plugged into. The button is keyed
+							     on the row id, never on the address: two identical units share
+							     one factory address, so an address-keyed link would open
+							     whichever of the pair the kernel happened to pick. -->
 							{#if admin}
 								<p
 									class="text-muted-foreground/80 text-xs"
@@ -798,6 +1013,26 @@ function toggleDetails(rowId: string): void {
 										{m["network.routerCellular.adminUnreachable"]()}
 									{/if}
 								</p>
+								<Button
+									class="h-8 min-h-[var(--touch-target-min)] w-fit gap-1 px-2.5"
+									data-testid="open-router-admin"
+									data-device={id}
+									size="sm"
+									variant="outline"
+									onclick={() => openAdminUi(id)}
+								>
+									<ExternalLink class="size-3.5" aria-hidden="true" />
+									{m["network.routerCellular.adminOpen"]()}
+								</Button>
+								{#if adminOpenFailure[id]}
+									<p
+										class="text-status-warning text-xs"
+										data-testid="router-admin-open-error"
+										role="status"
+									>
+										{t(adminOpenFailure[id])}
+									</p>
+								{/if}
 							{/if}
 						</div>
 					</div>

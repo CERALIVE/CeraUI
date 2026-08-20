@@ -73,6 +73,8 @@ export const SHADOW_EXTRA_SENSITIVE_KEYS: ReadonlySet<string> = new Set<string>(
 		"user",
 		"msisdn",
 		"phonenumber",
+		"ownnumber",
+		"ownnumbers",
 		"imei",
 		"imeisv",
 		"meid",

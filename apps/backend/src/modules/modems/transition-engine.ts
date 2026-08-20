@@ -57,16 +57,29 @@ import { getIsStreaming } from "../streaming/streaming.ts";
 import {
 	createAtSender,
 	createInhibitPort,
+	defaultInhibitPortDeps,
 	type InhibitPort,
+	waitForAtPortReady,
 } from "./transition-ports.ts";
 
 const AT_PORT_RE = /^([\w./-]+)\s*\(at\)$/i;
 
-/** The AT control port out of ModemManager's own `modem.generic.ports` list. */
+/**
+ * The AT control port out of ModemManager's own `modem.generic.ports` list, as
+ * an OPENABLE PATH.
+ *
+ * MM names a port by its bare kernel name (`ttyUSB7 (at)`), which is not a path
+ * — board-measured, the transition died at
+ * `ENOENT: no such file or directory, open 'ttyUSB7'` after the lease, the
+ * journal and the inhibit had all been taken. An entry that already carries a
+ * path is left alone, so a future MM that reports one is unaffected.
+ */
 export function findAtPort(ports: ReadonlyArray<string>): string | undefined {
 	for (const entry of ports) {
 		const match = AT_PORT_RE.exec(entry.trim());
-		if (match?.[1] !== undefined) return match[1];
+		const name = match?.[1];
+		if (name === undefined) continue;
+		return name.includes("/") ? name : `/dev/${name}`;
 	}
 	return undefined;
 }
@@ -112,7 +125,7 @@ export function createInterlockBridge(
 export interface TransitionEngineDeps {
 	readonly actor: ModemActor;
 	readonly nm: NmcliNmPort;
-	readonly inhibitPort: InhibitPort;
+	createInhibitPort(atPort: string): InhibitPort;
 	createAtSender(portPath: string): AtCommandSender;
 	enumerate(): Promise<readonly UsbDeviceSnapshot[]>;
 }
@@ -125,7 +138,13 @@ export function defaultTransitionEngineDeps(): TransitionEngineDeps {
 	return {
 		actor: processActor,
 		nm: new NmcliNmPort({ runner: new SpawnNmcliRunner() }),
-		inhibitPort: createInhibitPort(),
+		// The AT port is bound here so the inhibition can wait for POSITIVE
+		// evidence that ModemManager released that exact tty.
+		createInhibitPort: (atPort) =>
+			createInhibitPort({
+				...defaultInhibitPortDeps,
+				confirmPortFree: () => waitForAtPortReady(atPort),
+			}),
 		createAtSender: (portPath) => createAtSender(portPath),
 		enumerate: () => createUsbEnumerator().enumerate(),
 	};
@@ -152,7 +171,7 @@ export function createTransitionEngine(
 	return new UsbModeTransition({
 		actor: deps.actor,
 		nm: deps.nm,
-		modemManager: deps.inhibitPort,
+		modemManager: deps.createInhibitPort(atPort),
 		atSender: deps.createAtSender(atPort),
 		enumerate: deps.enumerate,
 		interlock: createInterlockBridge(request.stableKey),

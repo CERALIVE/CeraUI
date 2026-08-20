@@ -137,6 +137,37 @@ export function isGpsSensitiveKey(key: string): boolean {
 }
 
 /**
+ * The SIM's OWN number (MSISDN) — its own class, for the reason SMS content is.
+ *
+ * It CANNOT join {@link SENSITIVE_KEY_RE}: that regex is a SUBSTRING match, so
+ * `number` there would blank a slot index, a band count, a `phoneNumberLength`
+ * bound and every unrelated `numbers` on the device. These are matched WHOLE
+ * after case-, separator- AND dot-folding, so mmcli's
+ * `modem.generic.own-numbers` and MM's `Modem.OwnNumbers` are both caught by one
+ * rule. `msisdn` stays in {@link SMS_SENSITIVE_KEYS}, its historical home, and
+ * is deliberately not duplicated here.
+ *
+ * The UI DISPLAYS this value behind an explicit reveal. That is a rendering
+ * decision about a surface the subscriber already owns; it does not make the
+ * number loggable, so it is scrubbed exactly like a PIN.
+ */
+const OWN_NUMBER_SENSITIVE_KEYS: ReadonlySet<string> = new Set<string>([
+	"ownnumber",
+	"ownnumbers",
+	"phonenumber",
+	"phonenumbers",
+	"simnumber",
+	"subscribernumber",
+	"modemgenericownnumbers",
+	"modemownnumbers",
+]);
+
+/** Whole-key own-number test, case-, separator- and dot-insensitive. */
+export function isOwnNumberSensitiveKey(key: string): boolean {
+	return OWN_NUMBER_SENSITIVE_KEYS.has(key.toLowerCase().replace(/[_.-]/g, ""));
+}
+
+/**
  * Backstop for the VALUE side: a raw `mmcli -K -s <path>` record pasted into a
  * free-text log line carries the body and the originator on its face. The
  * backend's SMS module is content-free by construction, so this should never
@@ -165,6 +196,17 @@ const NMEA_SENTENCE_RE = /\$G[A-Z]{1,2}(?:GGA|RMC|GLL),/;
 const USSD_RECORD_RE =
 	/modem\.3gpp\.ussd\.(?:status|network-request|network-notification)\s*:/i;
 
+/**
+ * The VALUE-side twin of {@link OWN_NUMBER_SENSITIVE_KEYS}: a raw
+ * `mmcli -K -m <id>` record carries the subscriber's number on its face,
+ * whatever key it happens to be logged under. mmcli renders a repeated field as
+ * `<key>.length` + `<key>.value[N]`, so both spellings are matched. The modem
+ * module never logs raw `-K` output, so this should never fire — it exists so a
+ * future call site that does cannot quietly reintroduce the leak.
+ */
+const OWN_NUMBER_RECORD_RE =
+	/modem\.generic\.own-numbers(?:\.length|\.value\[\d+])?\s*:/i;
+
 function looksSecret(value: string): boolean {
 	return (
 		PASETO_RE.test(value) ||
@@ -173,7 +215,8 @@ function looksSecret(value: string): boolean {
 		SMS_RECORD_RE.test(value) ||
 		LOCATION_RECORD_RE.test(value) ||
 		NMEA_SENTENCE_RE.test(value) ||
-		USSD_RECORD_RE.test(value)
+		USSD_RECORD_RE.test(value) ||
+		OWN_NUMBER_RECORD_RE.test(value)
 	);
 }
 
@@ -209,7 +252,8 @@ function redactValue(value: unknown): unknown {
 				SENSITIVE_KEY_RE.test(key) ||
 				isSmsSensitiveKey(key) ||
 				isGpsSensitiveKey(key) ||
-				isUssdSensitiveKey(key)
+				isUssdSensitiveKey(key) ||
+				isOwnNumberSensitiveKey(key)
 					? REDACTED
 					: redactValue(inner);
 		}
@@ -238,7 +282,8 @@ export const redact = winston.format((info) => {
 			SENSITIVE_KEY_RE.test(key) ||
 			isSmsSensitiveKey(key) ||
 			isGpsSensitiveKey(key) ||
-			isUssdSensitiveKey(key)
+			isUssdSensitiveKey(key) ||
+			isOwnNumberSensitiveKey(key)
 				? REDACTED
 				: redactValue(info[key]);
 	}

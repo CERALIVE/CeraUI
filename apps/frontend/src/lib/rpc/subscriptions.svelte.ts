@@ -39,6 +39,7 @@ import {
 	pipelineSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import {
@@ -409,9 +410,22 @@ function mergeModemList(
 	incoming: ModemList,
 ): ModemList {
 	const next: ModemList = {};
+	let changed = false;
 	for (const [id, modem] of Object.entries(incoming)) {
 		if (!modem) continue;
-		next[id] = { ...prev?.[id], ...modem };
+		const previous = prev?.[id];
+		const kept = preserveWireIdentity(previous, { ...previous, ...modem });
+		if (kept !== previous) changed = true;
+		next[id] = kept;
+	}
+	// The key set stays authoritative: a roster that shed an id is a genuine
+	// change even when every surviving entry is byte-identical.
+	if (
+		!changed &&
+		prev !== undefined &&
+		Object.keys(next).length === Object.keys(prev).length
+	) {
+		return prev;
 	}
 	return next;
 }
@@ -550,6 +564,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// value is read per key rather than seeded wholesale.
 			const incoming = data as NetifMessage;
 			const merged: NetifMessage = {};
+			let netifChanged = false;
 			for (const [ifname, entry] of Object.entries(incoming)) {
 				if (!entry) continue;
 				// An explicit `dongle: null` is the backend RETRACTING a dongle claim,
@@ -603,9 +618,19 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				};
 				if (retractRouterCellular) delete next.router_cellular;
 				if (retractModemNet) delete next.usb_modem_net;
-				merged[ifname] = next;
+				const previous = netifState?.[ifname];
+				const kept = preserveWireIdentity(previous, next);
+				if (kept !== previous) netifChanged = true;
+				merged[ifname] = kept;
 			}
-			netifState = merged;
+			// Same key-set authority as the modem merge: an interface the frame
+			// dropped is a change even when every survivor is byte-identical.
+			netifState =
+				!netifChanged &&
+				netifState !== undefined &&
+				Object.keys(merged).length === Object.keys(netifState).length
+					? netifState
+					: merged;
 			break;
 		}
 

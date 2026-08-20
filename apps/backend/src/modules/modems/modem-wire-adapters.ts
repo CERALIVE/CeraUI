@@ -69,6 +69,7 @@ import type {
 	ModemDeviceClass,
 	ModemEsim,
 	ModemRecoveryState,
+	ModemRegistrationRejection,
 	RouterAdmin,
 	UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
@@ -78,7 +79,7 @@ import type {
 	DongleMetadata,
 	DongleState,
 } from "../network/dongle-metadata.ts";
-
+import { modemHardwareName } from "./modem-identity.ts";
 import type {
 	ProjectedModemAdditive,
 	ProjectedModemConfig,
@@ -88,6 +89,7 @@ import type {
 import { getAvailableNetworksForModem, type Modem } from "./modems-state.ts";
 import type { PhysicalDeviceRecord } from "./physical-identity.ts";
 import { routerCellularDisplayName } from "./physical-identity.ts";
+import type { SimPresence } from "./sim-presence.ts";
 
 // The display-name rule lives with the identity record it titles, so the two
 // cannot drift; re-exported here because this is where its callers already look.
@@ -119,9 +121,11 @@ export interface MmcliAdapterOptions {
  * through the SAME `getAvailableNetworksForModem` helper — so the projected
  * entry is byte-identical to the live broadcast. The MM runtime id keys the row.
  *
- * NOTHING Phase-B-additive is attached here beyond `stable_key`: mmcli observes
- * none of those fields, and manufacturing them from a poorer source is how a UI
- * ends up rendering a confident value nobody measured.
+ * Of the Phase-B additive DETAIL block, mmcli observes only what it genuinely
+ * reads — the registration rejection, the packet-service state, and the SIM's
+ * own number. Every other additive field stays absent here, because
+ * manufacturing one from a poorer source is how a UI ends up rendering a
+ * confident value nobody measured.
  *
  * `modem.status` MUST be present — the live builder skips a modem without one,
  * so callers filter on that before adapting.
@@ -184,6 +188,9 @@ export function fromMmcliModem(
 			autoconfig: modem.config.autoconfig,
 		};
 	}
+	if (modem.sim_presence !== undefined) {
+		source.simPresence = modem.sim_presence;
+	}
 	if (modem.sim_lock) {
 		source.simLock = modem.sim_lock;
 	}
@@ -196,6 +203,12 @@ export function fromMmcliModem(
 	}
 	if (modem.status.packet_service_state !== undefined) {
 		additive.packet_service_state = modem.status.packet_service_state;
+	}
+	if (modem.own_numbers !== undefined && modem.own_numbers.length > 0) {
+		additive.own_numbers = [...modem.own_numbers];
+	}
+	if (modem.iccid !== undefined && modem.iccid.length > 0) {
+		additive.iccid = modem.iccid;
 	}
 	if (Object.keys(additive).length > 0) {
 		source.additive = additive;
@@ -290,14 +303,35 @@ export interface DbusModemView {
 	/** MM `Modem.SignalQuality` (0-100). */
 	readonly signal: number;
 	readonly operatorName?: string;
+	/**
+	 * `Modem3gpp.NetworkRejection` — the network's OWN stated reason for refusing
+	 * this radio. Absent means the modem reported none, never "registration is
+	 * fine": a searching modem with no rejection has simply not been told why.
+	 *
+	 * It rides the ADDITIVE block, not `status`, because the wire `status` block
+	 * is byte-locked against the pre-Phase-B builder — the same placement the
+	 * mmcli adapter uses for the same two fields.
+	 */
+	readonly registrationRejection?: ModemRegistrationRejection;
+	/** `Modem3gpp.PacketServiceState` — `attached` / `detached`. */
+	readonly packetServiceState?: string;
 	/** Drives the legacy `scanning` connection override. */
 	readonly scanning?: boolean;
 	readonly supportedNetworkTypes: readonly string[];
 	readonly activeNetworkType: string | null;
 	readonly simLockRequired?: string;
 	readonly simLockRemainingAttempts?: number;
-	/** The NM-owned profile; absent ⇒ wire `no_sim: true`. */
+	/** The NM-owned profile. Its absence is not a SIM claim — see `simPresence`. */
 	readonly config?: ProjectedModemConfig;
+	/**
+	 * What MM saw in the slot, read from `Modem.Sim` / `Modem.SimSlots` /
+	 * `Modem.StateFailedReason`. Absent ⇒ the fold could not answer.
+	 */
+	readonly simPresence?: SimPresence;
+	/** The SIM's own number(s) from `Modem.OwnNumbers`. SENSITIVE — never logged. */
+	readonly ownNumbers?: readonly string[];
+	/** The SIM's ICCID from `Sim.SimIdentifier`. Displayed plainly, unlike above. */
+	readonly iccid?: string;
 	readonly availableNetworks?: ProjectedModemSource["availableNetworks"];
 
 	// ── Phase-B detail (additive; each omitted when not observed) ─────────────
@@ -320,8 +354,8 @@ export interface DbusModemView {
  * The legacy half is a pure vocabulary translation — `connection` from the MM
  * state token (with `scanning` overriding it), `roaming` from the registration
  * status, `network_type` from the folded active-RAT set, `no_sim` from the
- * absence of an NM profile — so a consumer cannot tell this row apart from an
- * mmcli one.
+ * observed SIM slot — so a consumer cannot tell this row apart from an mmcli
+ * one.
  */
 export function fromDbusView(view: DbusModemView): ProjectedModemSource {
 	const status: WireModemStatus = {
@@ -362,6 +396,9 @@ export function fromDbusView(view: DbusModemView): ProjectedModemSource {
 	}
 	if (view.config) {
 		source.config = view.config;
+	}
+	if (view.simPresence !== undefined) {
+		source.simPresence = view.simPresence;
 	}
 	if (view.availableNetworks !== undefined) {
 		source.availableNetworks = view.availableNetworks;
@@ -427,6 +464,14 @@ function buildDbusAdditive(
 		additive.firmware_revision = view.firmwareRevision;
 		observed = true;
 	}
+	if (view.ownNumbers !== undefined && view.ownNumbers.length > 0) {
+		additive.own_numbers = [...view.ownNumbers];
+		observed = true;
+	}
+	if (view.iccid !== undefined && view.iccid.length > 0) {
+		additive.iccid = view.iccid;
+		observed = true;
+	}
 	if (view.esim !== undefined) {
 		additive.esim = view.esim;
 		observed = true;
@@ -435,20 +480,38 @@ function buildDbusAdditive(
 		additive.cell_info = view.cellInfo;
 		observed = true;
 	}
+	if (view.registrationRejection !== undefined) {
+		additive.registration_rejection = view.registrationRejection;
+		observed = true;
+	}
+	if (view.packetServiceState !== undefined) {
+		additive.packet_service_state = view.packetServiceState;
+		observed = true;
+	}
 
 	return observed ? additive : undefined;
 }
 
 /**
- * Compose the legacy hardware name `"<model> - <last5-of-imei>"` exactly as
- * `modem-registration.ts` does, so a D-Bus name and an mmcli name for the same
- * device match byte for byte.
+ * Compose the hardware name exactly as `modem-registration.ts` does, so a D-Bus
+ * name and an mmcli name for the same device match byte for byte.
+ *
+ * That is why it CALLS `modemHardwareName` rather than re-spelling its format
+ * string. The retired body here was a hand-rolled `"<model> - <last5-of-imei>"`,
+ * so the garbage-identity fallback that `modem-identity.ts` applies on the mmcli
+ * path was silently absent on the D-Bus one — and `"dbus"` is the DEFAULT
+ * backend, so the fallback reached no shipped device at all. Board-measured on
+ * `ceralive2` (2026-08-18): the Qualcomm reference-design stick reporting
+ * `manufacturer: 1` / `model: 0` was still titled **"0 - 54863"** with the fix
+ * present in the binary, because this composer is the one the wire went through.
  */
 function buildDbusName(view: DbusModemView): string {
-	const model = view.model ?? "";
-	const imei = view.equipmentId ?? "";
-	const partial = imei.length > 5 ? imei.slice(imei.length - 5) : imei;
-	return `${model} - ${partial}`;
+	return modemHardwareName({
+		model: view.model,
+		manufacturer: view.manufacturer,
+		firmwareRevision: view.firmwareRevision,
+		equipmentId: view.equipmentId,
+	});
 }
 
 // ── router-dongle adapter ────────────────────────────────────────────────────

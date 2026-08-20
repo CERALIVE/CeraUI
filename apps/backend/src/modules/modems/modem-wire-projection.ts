@@ -65,6 +65,7 @@ import type {
 // to use this one is that `getAvailableNetworksForModem` and the live builder are
 // typed with it — swapping in the schema type just relocates the cast.
 import type { AvailableNetwork } from "./modems-state.ts";
+import { claimsNoSim, type SimPresence } from "./sim-presence.ts";
 
 /** Wire status block — identical shape to `modem-status.ts`'s internal type. */
 export interface WireModemStatus {
@@ -101,12 +102,13 @@ export type ProjectedDeviceKind = "mm-managed" | "router" | "unmanaged";
 /**
  * Whether CeraUI can SEE this device's SIM at all.
  *
- * The legacy wire is binary — a `config` block, or `no_sim: true` — because
- * every device on it was ModemManager-managed, so the absence of a connection
- * profile really did prove the absence of a SIM. A router-mode dongle breaks
- * that: it has a SIM, runs its own embedded connection manager, and exposes
- * NEITHER fact to the host. Both legacy answers would therefore be false, so
- * `"opaque"` emits neither key and the UI renders the row without SIM detail.
+ * A router-mode dongle has a SIM, runs its own embedded connection manager, and
+ * exposes NEITHER fact to the host — so neither a `config` block nor
+ * `no_sim: true` could be true of it, and `"opaque"` emits neither key.
+ *
+ * `"visible"` does NOT mean the legacy binary is restored for such a device:
+ * within it, a missing profile and a missing SIM stay separate questions, and
+ * only {@link ProjectedModemSource.simPresence} answers the second.
  */
 export type ProjectedSimVisibility = "visible" | "opaque";
 
@@ -128,6 +130,17 @@ export interface ProjectedModemAdditive {
 	readonly recommended_usb_mode?: UsbCompositionMode;
 	readonly data_usage?: ModemDataUsage;
 	readonly firmware_revision?: string;
+	/**
+	 * The SIM's own number(s). SENSITIVE — displayed behind an explicit reveal in
+	 * the UI, and redacted from every log regardless (`helpers/logger.ts`).
+	 */
+	readonly own_numbers?: readonly string[];
+	/**
+	 * The SIM's ICCID. NOT sensitive in the way {@link own_numbers} is — it is
+	 * printed on the card and read aloud to carrier support, so it is displayed
+	 * plainly.
+	 */
+	readonly iccid?: string;
 	readonly esim?: ModemEsim;
 	readonly cell_info?: ModemCellInfo;
 	readonly registration_rejection?: ModemRegistrationRejection;
@@ -180,8 +193,19 @@ export interface ProjectedModemSource {
 	 */
 	readonly status?: WireModemStatus;
 	readonly simVisibility: ProjectedSimVisibility;
-	/** The NM profile. With `simVisibility: "visible"`, absence ⇒ `no_sim: true`. */
+	/**
+	 * The NM profile. Its absence is NOT what decides `no_sim` — a profile is
+	 * provisioned only once a SIM has been read AND a connection created for it,
+	 * so a card that has not registered yet has none. {@link simPresence} is the
+	 * fact the claim is derived from.
+	 */
 	readonly config?: ProjectedModemConfig;
+	/**
+	 * What the modem service SAW in the slot. `undefined` means it could not
+	 * answer, which preserves the pre-existing profile-absence behaviour for any
+	 * source that observes no SIM evidence at all — never a silent claim.
+	 */
+	readonly simPresence?: SimPresence;
 	readonly simLock?: WireSimLock;
 	readonly availableNetworks?: Record<string, AvailableNetwork>;
 	readonly additive?: ProjectedModemAdditive;
@@ -219,6 +243,8 @@ export type WireModemEntry = {
 	data_usage?: ModemDataUsage;
 	data_usage_policy?: ModemDataUsagePolicy;
 	firmware_revision?: string;
+	own_numbers?: string[];
+	iccid?: string;
 	esim?: ModemEsim;
 	cell_info?: ModemCellInfo;
 	registration_rejection?: ModemRegistrationRejection;
@@ -251,6 +277,7 @@ interface ProjectedLocalState {
 	readonly usagePolicy?: ModemDataUsagePolicy | undefined;
 	readonly capabilityModules?: CapabilityModuleClaims | undefined;
 	readonly fiveGPreference?: ModemFiveGPreference | undefined;
+	readonly usbMode?: UsbCompositionMode | undefined;
 }
 
 export interface ProjectModemWireDeps {
@@ -282,6 +309,12 @@ export interface ProjectModemWireDeps {
 	readonly fiveGPreferenceFor?: (
 		stableKey?: string,
 	) => ModemFiveGPreference | undefined;
+	/**
+	 * The composition udev currently reports for a row. Injected for the same
+	 * reason as the three above — it is read from USB DESCRIPTORS, which no modem
+	 * source observes (ModemManager does not report a USB composition at all).
+	 */
+	readonly usbModeFor?: (stableKey?: string) => UsbCompositionMode | undefined;
 	/**
 	 * Prior `allocationKey → synthetic id` allocations, retained across
 	 * snapshots so a replugged device gets its OLD id back. Optional; an empty
@@ -452,7 +485,7 @@ function buildWireEntry(
 	if (source.simVisibility === "visible") {
 		if (source.config) {
 			entry.config = resolveWireConfig(source.config, hasGsmAutoconfig);
-		} else {
+		} else if (claimsNoSim(source.simPresence)) {
 			entry.no_sim = true;
 		}
 	}
@@ -507,6 +540,14 @@ function appendAdditive(
 		if (additive.firmware_revision !== undefined) {
 			entry.firmware_revision = additive.firmware_revision;
 		}
+		// Non-empty by contract: a carrier that published none omits the key, so an
+		// empty array here would be a claim the schema deliberately cannot express.
+		if (additive.own_numbers !== undefined && additive.own_numbers.length > 0) {
+			entry.own_numbers = [...additive.own_numbers];
+		}
+		if (additive.iccid !== undefined && additive.iccid.length > 0) {
+			entry.iccid = additive.iccid;
+		}
 		if (additive.esim !== undefined) {
 			entry.esim = additive.esim;
 		}
@@ -543,6 +584,13 @@ function appendAdditive(
 	// be indistinguishable from a modem that advertised no postures.
 	if (local.fiveGPreference !== undefined) {
 		entry.five_g_preference = local.fiveGPreference;
+	}
+
+	// A source that OBSERVED a composition keeps it; the udev read only fills the
+	// gap. Nothing but the mock provider observes one today, so on hardware this
+	// is the only writer — but the precedence must not depend on that staying true.
+	if (entry.usb_mode === undefined && local.usbMode !== undefined) {
+		entry.usb_mode = local.usbMode;
 	}
 }
 
@@ -589,6 +637,7 @@ export function projectModemWire(
 					usagePolicy: deps.usagePolicyFor?.(String(id), source.stableKey),
 					capabilityModules: deps.capabilityModulesFor?.(source.stableKey),
 					fiveGPreference: deps.fiveGPreferenceFor?.(source.stableKey),
+					usbMode: deps.usbModeFor?.(source.stableKey),
 				}
 			: {};
 		message[String(id)] = buildWireEntry(

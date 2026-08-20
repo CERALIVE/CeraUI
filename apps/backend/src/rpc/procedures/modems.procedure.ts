@@ -80,6 +80,7 @@ import {
 	unlockSimPuk,
 } from "../../modules/modems/mmcli.ts";
 import { readSmsInbox } from "../../modules/modems/mmcli-sms.ts";
+import { modemNetworkScan } from "../../modules/modems/modem-network-scan.ts";
 import {
 	broadcastModems,
 	buildModemsWireMessage,
@@ -87,7 +88,6 @@ import {
 import { getModemIdPath } from "../../modules/modems/modem-wire-producer.ts";
 import {
 	applyModemConfig,
-	handleModems,
 	type ModemConfigOutcome,
 } from "../../modules/modems/modems.ts";
 import { getModem } from "../../modules/modems/modems-state.ts";
@@ -336,23 +336,26 @@ async function applyUsagePolicyChange(input: {
 export const scanModemProcedure = modemProcedure
 	.input(modemScanInputSchema)
 	.output(modemScanOutputSchema)
-	.handler(async ({ input, context }) => {
+	.handler(async ({ input }) => {
 		// A 3GPP network scan drops the modem's registration for its duration, so
 		// it takes the mutation lease like every other disruptive path — it is not
 		// journaled, because it restores itself and has no pre-state to put back.
+		// AWAITED, and deliberately NOT through `handleModems`: that dispatcher
+		// `void`s the scan, so the procedure could only ever reply `{success:true}`
+		// — including for a scan that was killed mid-sweep. The mutation lease
+		// above is what serializes this against other modem work; the modem update
+		// lock is not taken across the scan because a 3GPP sweep runs for minutes
+		// and holding it would stall the `modems` broadcast for that whole window.
 		const guarded = await withModemMutation(
 			modemStableKeyForId(Number(input.device)),
-			async () => {
-				await withModemUpdateLock(async () => {
-					handleModems(context.ws as unknown as import("ws").default, {
-						scan: { device: String(input.device) },
-					});
-				});
-			},
+			() => modemNetworkScan(Number(input.device)),
 		);
-		return guarded.ok
+		if (!guarded.ok) {
+			return { success: false, mutationRefusal: guarded.refusal };
+		}
+		return guarded.value.ok
 			? { success: true }
-			: { success: false, mutationRefusal: guarded.refusal };
+			: { success: false, scanFailure: guarded.value.reason };
 	});
 
 /**

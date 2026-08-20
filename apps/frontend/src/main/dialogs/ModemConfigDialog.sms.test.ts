@@ -24,6 +24,7 @@ import type { Modem, SmsMessage } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { openModemAdvanced } from "../../tests/helpers/modem-advanced";
 import { resetModemsFeed } from "../../tests/helpers/modem-feed.svelte";
 import ModemConfigDialog from "./ModemConfigDialog.svelte";
 
@@ -114,6 +115,11 @@ function mount(overrides: Partial<Modem> = {}) {
  * survive would make that outcome unreachable from a test.
  */
 async function openInbox(): Promise<void> {
+	// The card sits inside the "Advanced" disclosure, whose collapsed body is
+	// `visibility: hidden` — so it is inaccessible until expanded, and any
+	// assertion that runs the accessible-name algorithm has to address the
+	// surface an operator can actually reach.
+	await openModemAdvanced();
 	await fireEvent.click(screen.getByTestId("modem-sms-toggle"));
 	await waitFor(() => expect(getSms).toHaveBeenCalled());
 }

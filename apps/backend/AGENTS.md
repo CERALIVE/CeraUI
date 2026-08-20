@@ -68,6 +68,8 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Boot SIM PIN auto-unlock hook (bounded, single attempt) | `modules/modems/sim-autounlock.ts` |
 | **Cellular composition root (backend selection + readiness gate) and its boot wiring** | `modules/cellular/cellular-stack.ts` (`initCellularStack`, `getCellularStack`, `assertCellularStackReady`) + `main.ts`; contract below → THE CELLULAR SUBSYSTEM |
 | **The `modems` wire producer (`stable_key`, dongle rows, synthetic ids, the ID_PATH cache)** | `modules/modems/modem-wire-producer.ts` (`buildProjectedModemsMessage`, `refreshModemIdPaths`) → `modem-status.ts` (`buildModemsWireMessage`) |
+| **Where a modem's `ID_PATH` — the anchor EVERY mutation fails closed on — actually comes from (udev NET records, never the USB enumerator)** | `modules/modems/modem-id-path-source.ts` (`readModemIdPaths`, `parseNetIdPaths`); contract below → THE COMPOSITION ROOT OWNS THE THREE THINGS… item 1 |
+| **A 3GPP network scan's typed outcome (`timed_out` / `already_scanning` / `failed`) and why an empty result is a SUCCESS** | `modules/modems/modem-network-scan.ts` (`modemNetworkScan`, `clearScanningMarker`) + `modules/modems/mmcli.ts` (`mmNetworkScan`, `SCAN_TIMEOUT_GRACE_S`) → `rpc/procedures/modems.procedure.ts` `scanModemProcedure`; wire `scanFailure` on `modemScanOutputSchema` |
 | **The OPTIMISTIC "Modem detected" row (udev attach → provisional row, and the precedence that retires it)** | `modules/cellular/udev-cellular-events.ts` + `udev-provisional-cache.ts` + `udev-monitor.ts`; contract below → A DEVICE IS ANNOUNCED BEFORE ANY MODEM SERVICE CAN DESCRIBE IT |
 | **Mutation-free D-Bus-vs-mmcli shadow evidence (opt-in, never on the wire)** | `modules/cellular/shadow.ts` (`startModemShadowIfEnabled`) + `shadow-wiring.ts` + `docs/MMCLI-RETIREMENT-GATE.md` |
 | USB-composition-mode switch gates (`modems.setUsbMode`, default-absent `modem_provisioning`) | `rpc/procedures/modems.procedure.ts` → `setUsbModeProcedure`; contract below → USB-COMPOSITION SWITCH |
@@ -87,6 +89,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s) | `modules/network/network-interfaces.ts` (`computeInterfaceRate`, `processIfconfigOutput`) |
 | WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
+| WiFi scan coalescing + Forget removing EVERY same-SSID profile | `modules/wifi/wifi-connections.ts` (`wifiRescan`) + `modules/wifi/wifi.ts` (`savedAll`, `wifiSiblingConnections`, `wifiForget`); contract below → A SCAN IS COALESCED, AND FORGET REMOVES THE NETWORK |
 | Regulatory domain + kernel-derived hotspot channels (`iw reg set` / `iw phy` parser, regdb precheck, armed restore timer) | `modules/wifi/regdomain.ts` (`applyRegulatoryDomain`, `deriveApChannels`, `checkWirelessRegdbSupport`, `buildRegdomainRestoreCommand`) |
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | **Device-bound connectivity probe (`curl --interface`) — the only thing that can name one of two same-IP twins** | `modules/network/device-bound-probe.ts` (`checkConnectivityViaDevice`, `SAFE_IFNAME_RE`) + `connectivity-candidates.ts` (`probeBindingFor`, `deviceBoundProbeExclusionReason`) + `connectivity-election.ts` (`electConnectivityCandidate`, injected probe pair); contract below → …AND A PROBE THAT MUST NAME A DEVICE BINDS ONE |
@@ -984,6 +987,45 @@ interface renamed to a prefix no rule could have an opinion about; verdicts
 unchanged). Frontend half: `apps/frontend/AGENTS.md` → "A dongle is named
 CELLULAR from its descriptors".
 
+### …AND TWO OVERLAPPING SWEEPS CANNOT COMMIT OUT OF ORDER [EXISTS]
+
+`refreshUsbNetMarkers` is driven by the 5 s netif cadence AND by anything else
+wanting a fresh marker set, so two sweeps of the same sysfs tree can be in flight
+at once — and a replug, which is what prompts the second sweep, is also what
+makes the reads slow. Last-writer-wins meant an OLDER sweep landing late
+overwrote a NEWER one's view of the very topology change that triggered it: the
+retired dongle's markers, `stable_key` and physical descriptors all came back,
+and nothing re-poked until the next cadence tick. Same defect class, and the same
+remedy, as `sources.ts`'s `hotplugRefreshGeneration`.
+
+- **A ticket is taken BEFORE the read and checked AFTER it.** A completion whose
+  generation is no longer the newest writes nothing and answers `false` — it
+  published no edge, and the sweep that fenced it out reports the real one. Only
+  the newest generation can reach the commit, so the `snapshotKey` "did anything
+  change" comparison is taken at commit time rather than before the read.
+- **Single-flight JOINS an identical request** — same interface set AND the same
+  `deps` OBJECT (identity, not shape: two different deps read two different
+  trees, which is exactly what a fixture does). A second sweep of the same tree
+  could only answer the same question twice and race its own twin.
+- **A DIFFERENT request is never coalesced.** It starts its own sweep, takes a
+  newer ticket, and fences the earlier one out — coalescing on the ifname set
+  alone would answer one question with another's data.
+- **The fence is scoped to THIS domain and must stay that way.** The counter
+  covers the three marker caches in `router-cellular-scan.ts` and nothing else;
+  putting the modem, dongle-metadata or policy-route sweeps behind one shared
+  gate would let an unrelated slow read stall this one for no correctness gain.
+- **`resetUsbNetMarkers()` bumps the generation too**, so a sweep still reading
+  when a test resets cannot repopulate the caches that reset just cleared.
+
+Coverage: `tests/usb-net-scan-fencing.test.ts` — the out-of-order case driven by
+a manually-resolved gate (the older sweep is parked at its first sysfs read and
+the newer one is AWAITED to completion before the gate opens, so the ordering is
+controlled rather than timed), with a non-vacuity check that the older tree
+really does describe a different SKU; plus the natural-order fence, the
+join-don't-re-read proof by read count, the two-different-requests negative, the
+reset fence, and the sequential control. Rule-E proof in both directions:
+neutering the generation check reddens 3 tests, neutering the join reddens 1.
+
 ## …AND A DONGLE THAT NAMES A CLASS IS GIVEN ITS REAL MODEL [EXISTS]
 
 The classification above was right and the NAME beside it was not. Both bench
@@ -1158,10 +1200,79 @@ degrades every failure to `{admin_url, reachable: false}` rather than throwing.
 A vendor whose dialect is unknown still gets that reading: the address is a routing
 fact worth stating even when nothing could be read behind it.
 
-Coverage: `tests/router-cellular-admin.test.ts` (verbatim bench bodies for both
-dialects, the unjustifiable-SIM-code → `unknown` rule, the dev-host no-spawn gate, the
+**A SIM CODE MUST BE READ IN THE DIALECT'S OWN VOCABULARY, NOT A NEIGHBOUR'S.**
+The three dialects each name SIM presence differently, and getting one word wrong
+costs the whole segment silently — `unknown` renders as ABSENCE OF A CLAIM, so an
+unrecognised code is indistinguishable from a dongle that was never asked. The UFI
+was in exactly that state: `ufiSim` knew `"valid"`, the firmware answers `"ok"`
+(board-measured on `UFI_HM_SIM1_V016_240828`, beside a real IMSI and ICCID), so a
+seated card reported no SIM segment at all while ZTE and Huawei rows carried one.
+The fix is one accepted code, NOT the vendor's own looser rule — its bundle treats
+every non-`"invalid"` value as a good card, and adopting that would report a
+future locked state as healthy.
+
+**The bond gate needed NO change, and that is the design working.**
+`isSimlessForBond` gates on `"absent"` alone, so `unknown` never gated and the UFI
+stayed bondable throughout; once the read was fixed, `"present"` keeps it bondable
+for a REASON rather than by default, and a card pulled from it would now correctly
+raise `NETIF_ERR_NOSIM`. Confirmed live: the UFI reads `SIM present` and remains
+`In Bond`. This is the documented positive-evidence rule, so do not "harden" the
+gate to fire on `unknown` when a dialect looks quiet — fix the DATA.
+
+Coverage: `tests/router-cellular-admin.test.ts` (verbatim bench bodies for all three
+dialects, the unjustifiable-SIM-code → `unknown` rule, the UFI's `"ok"` seated-card
+capture with its unnamed-code negatives, the dev-host no-spawn gate, the
 per-interface binding) and `tests/router-cellular-wire.test.ts` (the two adapters'
 divergence, no fabricated status/SIM/network list, the twins keeping separate ids).
+
+### …AND A SIM-LESS ONE NEVER JOINS THE BOND [EXISTS]
+
+`no_sim` is ModemManager's answer, and a `router-ethernet` dongle is
+architecturally invisible to ModemManager — so the bond gate, which only ever
+read that field, never covered this class at all. The dongle still leases the
+host a perfectly good address from its OWN embedded router, so it looked
+bondable to every rule that reads only an address.
+
+**Board-measured, and the accident that hid it:** a SIM-less ZTE MF79U
+(`192.168.0.169`) and a SIM-less Qualcomm UFI were both in `genSrtlaIpList()`,
+while their SIM-less Huawei siblings were out — and the ONLY thing separating
+the two pairs was that the Huaweis happen to share one factory LAN subnet and so
+collided on `NETIF_ERR_DUPIPV4`. Their exclusion was a different rule firing by
+luck, not this one working. The operator-visible symptom was the same condition
+producing three different toggle states across four dongles.
+
+- **`NETIF_ERR_NOSIM` (0x04) is the mechanism**, set by `applyRouterSimBondGate`
+  from the admin cache `router-cellular-admin.ts` already fills. Everything
+  downstream then follows for free and CANNOT disagree: `setNetifError` lowers
+  `enabled`, `isBondCandidate`'s existing `(error & ~DUPIPV4) !== 0` test
+  excludes it, and the frontend's `isBondMember` mirror (`enabled && ip`,
+  error-free) drops the row from Bonded Links. A gate that excluded the link from
+  srtla WITHOUT lowering `enabled` would have left that documented mirror lying.
+- **It runs on EVERY pass, not inside the `intsChanged` branch its dup-IP sibling
+  lives in.** The netif map is byte-identical across a SIM being pulled from a
+  dongle that keeps its lease, so a topology-gated check would never fire for the
+  case it exists for. Pinned by a test that drives two passes with an unchanged
+  interface set.
+- **`sim: "absent"` is the ONLY gating answer.** It is reachable only from a
+  device-stated code the dialect parser was willing to justify — an unreachable
+  dongle carries no `sim` field at all and a doubtful one reads `unknown` — so a
+  missed 30 s probe cycle can never take a working uplink out of a live bond.
+  Do NOT "harden" this to gate on `unknown`.
+- **The rule itself is `@ceraui/rpc` `capabilities/sim-bond-eligibility.ts`**,
+  shared verbatim with the frontend's toggle. Same argument as
+  `device-mode-truth.ts`: a live toggle over a link the device refuses, and a
+  disabled toggle over a link the device is bonding, are both lies.
+- **Recovery is an operator action, exactly like dup-IP's.** `clearNetifError`
+  drops the flag but does not restore `enabled`, so inserting a SIM leaves the
+  link excluded until the operator toggles it back in. That is the existing
+  behaviour of every netif error flag and is deliberate — the device stops
+  refusing, the operator decides to bond.
+
+Coverage: `tests/no-sim-bond-gate.test.ts` — the production path (real
+`processIfconfigOutput` against the real admin cache) asserting `genSrtlaIpList()`
+and the wire's `enabled`/`error`, the self-correction, the no-topology-change
+pass, and the four positive-evidence negatives. Frontend half:
+`apps/frontend/AGENTS.md` → "A SIM-LESS LINK CANNOT BE TOGGLED INTO THE BOND".
 
 ### …AND THE ZTE/UFI READS EXPANDED WITHOUT GAINING A WRITE [EXISTS]
 
@@ -1250,6 +1361,136 @@ all (its `postViaInterface` throws in the test). Coverage:
 `apps/frontend/src/main/dialogs/router-dongle-fields.ts` (`netModeCapability`) +
 `RouterDongleDialog.svelte`, which offers a control in the REPORTED arm and none
 at all in the refused one.
+
+### …AND ITS OWN WEB UI IS REACHED THROUGH A DEVICE-BOUND REVERSE PROXY [EXISTS]
+
+Every setting a router dongle really owns lives in its OWN embedded admin web
+UI, and until now CeraUI could only STATE that address: the page is on the
+dongle's network, which the operator's browser is not on, so an anchor would
+have been a control that cannot work. `modules/network/router-admin-proxy.ts`
+(pure) + `modules/ui/dongle-admin-proxy.ts` (effects) +
+`modules/ui/dongle-admin-session.ts` (auth) carry that page through CeraUI's own
+origin instead, at `/dongle-admin/<wireId>/…`.
+
+**THE PATH NAMES A DEVICE, NOT AN ADDRESS, AND THAT IS THE WHOLE POINT.**
+Identical units ship one factory LAN subnet, so the bench pair BOTH lease the
+host `192.168.8.100` and BOTH publish `192.168.8.1` as their admin address — a
+destination names a PAIR. It is worse than ambiguous: board-measured, the ZTE
+(whose own gateway is `192.168.0.1`) also ANSWERED a request addressed to
+`192.168.8.1`, because what selects the unit is the BINDING, not the address.
+Resolution therefore runs in one direction only —
+`wire id → routerCellularIfnameForWireId → that interface's own default route` —
+and the request goes out `curl --interface`, the same `SO_BINDTODEVICE`
+mechanism `router-cellular-admin.ts` and `device-bound-probe.ts` already use.
+Proven live: the two twins' proxy paths returned serials `…872` and `…793`.
+
+**AUTH IS A TOKEN EXCHANGED ONCE FOR A SCOPED COOKIE.** A preview is one socket,
+so its single-use token authenticates the whole thing; an admin UI is a browsing
+session of many requests, so a single-use token cannot. `system`-style minting
+happens over the ALREADY-AUTHENTICATED RPC socket (`modems.openRouterAdmin`),
+and the first request swaps it for an `HttpOnly; SameSite=Strict` cookie scoped
+to `Path=/dongle-admin`, then REDIRECTS to strip the spent token so it never
+lingers in history or in a referrer the dongle would see. No `Secure` — the
+device legitimately serves plain HTTP on the LAN, where a `Secure` cookie would
+silently never be stored.
+
+**FIVE THINGS ABOUT THE RESPONSE, EVERY ONE OF THEM BOARD-FOUND:**
+
+- **A CONTENT-TYPE THE DONGLE DID NOT STATE IS SNIFFED, or the page DOWNLOADS.**
+  The UFI's httpd infers its type from the URL's file EXTENSION, so an
+  extensionless path answers with the header ABSENT — board-measured, `GET /`
+  returns 200 and a full `<!DOCTYPE html>` body with no content-type, while
+  `GET /index.html` returns the same bytes WITH `text/html`. The other two
+  dialects never reach that state because both REDIRECT `/` to an explicit
+  `.html` path. Absence is not neutral: `Bun.serve` labels a content-type-less
+  response `application/octet-stream`, so the browser is handed a positive
+  "this is a file" and DOWNLOADS the admin page — and the same absence silences
+  `shouldRewriteBody`, so the page's own `/static/…` refs stay pointed at
+  CeraUI's origin. One defect, two symptoms. `sniffAbsentContentType` applies
+  the mimesniff HTML prefixes, and ONLY when the device stated nothing — a
+  dialect that named a type is byte-untouched, whatever it named. No charset is
+  asserted; the document's own `<meta charset>` knows better than a sniff.
+- **`--compressed` is mandatory.** The HiLink serves its scripts PRE-GZIPPED and
+  answers `Content-Encoding: gzip` even to an explicit `Accept-Encoding:
+  identity`. Without the flag the browser gets gzip bytes under a
+  `text/javascript` label. `content-encoding` is stripped from what we forward
+  ONLY because curl already decoded it — the flag and the strip belong together.
+- **Header capture goes to a TEMP FILE, never `/dev/stderr`.** Against a Bun PIPE
+  that form never completes: `exitCode` comes back `null` with both streams
+  EMPTY, while the identical argv writing to a file exits 0 with a full header
+  block. It works under a shell redirect, which is exactly why a hand-run
+  `curl … 2>/tmp/h` looks fine and the same command under `Bun.spawn` does not.
+- **`X-Frame-Options` / CSP / HSTS are stripped.** A dongle must not dictate
+  framing or transport policy for the DEVICE's origin; an HSTS pin in particular
+  would lock an operator out of a board that serves plain HTTP on the LAN.
+- **`Set-Cookie` is re-pathed onto the per-device prefix.** Two identical twins
+  issue cookies of the SAME name, so without it they overwrite each other's
+  session on CeraUI's one origin.
+
+**URL REWRITING IS BEST-EFFORT, AND ITS LIMITS ARE MEASURED, NOT ASSUMED.**
+`rewriteAdminBody` re-points root-relative references so an opaque vendor SPA
+loads under a path prefix. Three rules exist only because each was found
+breaking a real page on the bench, and every one of them is a REFUSAL to rewrite:
+
+1. **A path must name a DIRECTORY outside CSS** (`"/api/…"`), because a regex
+   literal may END in a quote — jQuery 1.7.2 ships `replace(/'/g, …)` and
+   `/ jQuery\d+="(?:\d+|null)"/g`, which are character-for-character
+   indistinguishable from a quoted path. Rewriting them produced
+   `SyntaxError: Invalid regular expression flags` and took jQuery out entirely.
+2. **`(` is a delimiter in STYLESHEETS only**, because in JS it also opens a
+   regex: `replace(/-/g, …)` became `replace(/dongle-admin/1001/-/g, …)`, and
+   `main.js` then defined nothing and threw `create_button is not defined`.
+3. **A DATA payload is never rewritten**, whatever the content-type claims — the
+   HiLink API answers XML under `text/html`, so the header alone would sweep
+   every session token and API document into the transform. A bare `"/"` is
+   likewise left alone: it is the same three characters as `split('/')`.
+
+So a single-segment `"/index.html"` is NOT rewritten. That is the accepted cost —
+corrupting a script the device depends on is a far worse failure than one
+unrewritten link, and the BINDING, which is what decides WHICH physical unit
+answers, does not depend on any of it.
+
+**TWO ADDITIONS, both forced by the UFI's Vue/webpack SPA and both narrowed
+rather than generalised:**
+
+4. **An UNQUOTED attribute is still an attribute.** Everything above keys on a
+   QUOTE, and html-minifier output has none: the UFI's index is
+   `<link href=/static/css/app.css>` / `<script src=/static/js/app.js>`, so every
+   asset reference survived untouched. The extra pass is deliberately NOT a bare
+   `=` delimiter — `re=/foo/` is exactly that shape in JavaScript, the same trap
+   `(` was banned for — but is restricted to `text/html` bodies AND to the fixed
+   set of attributes HTML DEFINES as URL-valued.
+5. **A bundler's public path is the one assembled URL that CAN be followed.** The
+   standing "a URL built at runtime out of fragments cannot be followed" caveat
+   has exactly one important exception: a webpack runtime carries a SINGLE
+   literal (`n.p="/"`) and composes every lazy chunk as `n.p + "static/js/" + …`.
+   Board-measured, that sent chunk 0 to CeraUI's origin root, which answered with
+   CeraUI's own index under a `text/html` label — so the vendor SPA loaded its
+   shell and mounted NOTHING. Re-basing that one literal fixes every chunk it
+   will ever assemble, and it is gated on the body positively BEING a webpack
+   runtime (`webpackJsonp`/`__webpack_require__`), so an unrelated `.p="/"` is
+   out of reach.
+
+**Board-proven end to end, twice.** (2026-08-18, two Huawei E3372 twins): each
+twin's button opens its own session, the vendor SPA runs its full API sequence
+through the proxy with ZERO page errors, and each lands on its own unit —
+`Y4QDU17621000872` (`enx0c5b8f279a64`) and `Y4QDU17621000793` (`eth1`).
+(2026-08-18, Qualcomm 4G UFI `enx020a53313630`, fresh Playwright context with
+`serviceWorkers: 'block'`): the button RENDERS the vendor SPA instead of
+downloading it — `content-type: text/html`, zero downloads — the operator logs
+into the dongle, and sub-navigating to its Wifi settings page keeps **every**
+request under `/dongle-admin/1003/`: zero requests escaped to CeraUI's origin.
+
+Coverage: `tests/router-admin-proxy.test.ts` — the bench default-route fixture
+producing two different bindings from ONE address, the end-to-end binding proof,
+the token/session matrix, the rewriter's refusals (the two verbatim jQuery
+regex literals, the XHTML self-closing tag, the XML payload, the separator
+literal), and the UFI's verbatim content-type-less index driven end to end
+(served as HTML, assets re-pointed) with its stated-type and unquoted-attribute
+negatives plus the webpack public-path pass. Rule-E proof: resolving the binding
+by ADDRESS instead of by identity reddens exactly the two tests that carry that
+correctness claim; dropping the sniff or the unquoted-attribute pass reddens
+three more.
 
 ### …AND THE WRITES IT GATES ARE STAGE B [EXISTS]
 
@@ -1464,6 +1705,47 @@ neither fsyncs nor sets a mode — is deliberately not used here).
 - **`link_id` is MINTED BY TODO 10** (`physical-identity.ts` `mintLinkId`) and
   never invented here. One id authority, or the bind-map writer and the telemetry
   registry attribute the same operator's link to two different devices.
+- **…and a link it cannot answer for is UNMAPPABLE, not renamed.** A failed
+  identity resolution used to fall back to `` `lnk_${ifname}` `` — a string with
+  the exact shape of a minted id, keyed on the one property this fleet has
+  already proven is not a device. The bench twins ship ONE factory MAC, so
+  systemd can name only one of them predictably (`enx0c5b8f279a64`) and the other
+  falls back to `eth1`; a replug can swap which is which, and an id keyed on the
+  name follows the NAME, handing the next device in that socket the previous
+  unit's telemetry row. `describeBondEntry` now answers with `bind-map.ts`'s
+  `unmappableBondEntry(ip, iface)` — no id, and no way to pass one in — which
+  stamps the explicit `identityState: "unmappable"`. Four properties are
+  load-bearing:
+  - **The entry is KEPT.** It is still returned, its IP still goes in
+    `BIND_IPS_FILE`, and the link still carries traffic. What it loses is the
+    CLAIM that we know which device it is — a dropped entry would be the silent
+    loss this whole contract exists to end.
+  - **It cannot become a sidecar row**, by construction: `isMappableEntry` is a
+    type predicate answering `entry is MappedBondEntry` (an entry carrying a
+    minted id), and `buildBindMapDocument` takes only those. So the writer's
+    EXISTING undescribable-link path runs unchanged — the IP list is published,
+    the sidecar is retired, and the launch reports `degraded` through the ONE
+    normalized disposition rather than through a new vocabulary.
+  - **The consequence for a DUP-IP link is deliberate, and is the documented
+    rule rather than a new one:** `admitEntry` already admits a duplicate-IP link
+    ONLY when it can be described, so a twin whose identity resolution failed is
+    now excluded instead of joining the bond under a name-keyed id. In practice
+    this is unreachable — `resolvePhysicalDevice` always resolves, falling back
+    to its stated `anchor: "ifname"` rung — so the catch fires only on a genuinely
+    broken descriptor read.
+  - **`setBondIdentityResolverForTest` is the seam** (the `set*ForTest`
+    convention) that makes the failure drivable without a module mock.
+- **The degraded state RIDES THE WIRE as `linkTelemetry.links[].identity_state`**
+  (`@ceraui/rpc` `bondLinkIdentityStateSchema`), emitted only as `"unmappable"`.
+  `link-telemetry-rows.ts`'s `unmappableByIface` is SUPPRESSION-ONLY: it can
+  never promote a row to an identity (no `link_id`, no `port_label`, no
+  `serial`), so the legacy `conn_id` rung's rows stay byte-identical and the
+  marker only ever answers the question the ladder's silence leaves open — is
+  this link KNOWN-unidentifiable, or merely unresolved on this rung. Absence
+  therefore makes NO claim in either direction. Do NOT widen it into a rung that
+  resolves an identity by the derived interface name: `legacyIface` picks the
+  first interface holding a shared address, which is exactly the ambiguity rung 3
+  is gated on.
 - **`generation` is monotonic per WRITER PROCESS** and increments on EVERY
   publication, including one whose IP bytes did not change. That is the only
   signal a MAPPING-ONLY change can produce — moving a link between interfaces
@@ -1536,7 +1818,17 @@ mapping-only `changed`, unmappable + failed-sidecar retirement, and the static
 SIGHUP-wiring lock), `tests/bind-map-spawn.test.ts` (every probe failure mode →
 legacy vector; a disposition on EVERY branch), `tests/bind-map-disposition.test.ts`
 (the capability-document table, writer synthesis, sender-replaces-writer, and all
-seven degraded reasons reaching a band).
+seven degraded reasons reaching a band),
+`tests/bond-entry-degraded-identity.test.ts` (a forced resolution failure driven
+through the REAL netif scan → `genSrtlaBondEntries` → writer → registry →
+`status.linkTelemetry`: the entry is kept, carries no id, cannot become a row,
+still publishes its IP, and reaches the wire as `identity_state: "unmappable"` on
+both the legacy rung and a sender that echoes its interface — plus the
+byte-compat control that a healthy bond gains no marker anywhere), and
+`tests/link-id-authority-gate.test.ts` (the comment-stripped repo walk: no
+`lnk_` template/concatenation invention anywhere including fixtures, the prefix
+literal confined to `physical-identity.ts` in shipped code, a self-proving
+detector, and a non-vacuity check on the scan scope).
 
 **Honest status:** no claim here has been exercised against a real twin-modem
 board. Every fixture models the contract.
@@ -2337,12 +2629,42 @@ operator sees their modems at all.
    A failed refresh RETAINS the previous map: an unreadable udev database is a
    statement about the read, not about the devices, and clearing it would make
    every row look like new hardware to a frontend correlating a mode switch.
+
+   **THE MAP IS BUILT FROM udev's NET RECORDS** (`modem-id-path-source.ts`
+   `readModemIdPaths` / the pure `parseNetIdPaths`), NOT from
+   `@ceralive/modem-control`'s `createUsbEnumerator()`. That enumerator's
+   `UsbDeviceSnapshot.ifname` is declared on the type and **never populated** —
+   `parseUdevDatabase` keeps only `DEVTYPE=usb_device` records, and a
+   `usb_device` record does not carry `INTERFACE`; the netdev is a separate child
+   record under the `net` subsystem. Board-measured on `ceralive2`
+   (2026-08-18): **24** `usb_device` records, **0** of them carrying an
+   `INTERFACE`. So the map was EMPTY on every real board, `getModemIdPath()`
+   answered `undefined` for every interface, no modem resolved a `stable_key`,
+   and the fail-closed mutation contract therefore refused EVERY modem mutation —
+   config save, network scan, SIM unlock, USB-mode switch — with
+   `identity_unresolved`, on hardware whose modems all publish a good `ID_PATH`.
+   The guard was right; its input was dead. A ZERO-length result is now logged at
+   `warn`, because "no modem has an identity" and "this board has no modems" were
+   otherwise indistinguishable. The netdev's interface-level path
+   (`…-usb-0:1.4.4:1.4`) reduces through the unchanged `deriveModemStableKey` to
+   the SAME `usb_device` parent MM's sysfs `Modem.Physdev` mints, so the two
+   sources still agree by construction. A netdev with no `ID_PATH` (the
+   duplicate-MAC HiLink twin, whose rename collides and leaves udev with only
+   `ID_RENAMING=1`) is OMITTED — never keyed on its name.
 2. **It refreshes on PRESENCE edges only** — `discoverModems()` and
    `handleModemAdded`, never the 30 s status poll. An `ID_PATH` names where a
    device is plugged in, so a poll cannot move it.
 3. **It retains `syntheticIds` across snapshots.** `projectModemWire` returns the
    allocation it made and expects it back as `previousSyntheticIds`; drop that
    round-trip and every poll renumbers the dongles under the operator.
+
+4. **It joins the mmcli-side 3GPP SCAN RESULTS onto a D-Bus row**
+   (`withScanResults`). A scan is an mmcli operation writing into mmcli state,
+   MM publishes no scan-result property for the fold to read, and `"dbus"` is the
+   default backend — so a scan ran, succeeded, and reached the operator as an
+   unchanged (empty) network list. The composition root is the only place that
+   sees both halves. A modem the mmcli side never scanned is left UNCHANGED
+   rather than given an empty list, which would claim a scan found nothing.
 
 **Which adapter produces a radio row follows the backend that COMMITTED, never
 the config key.** A `dbus` request that fell back to mmcli must project mmcli
@@ -2611,6 +2933,79 @@ divergence-count mechanism (todo 21, `docs/MMCLI-RETIREMENT-GATE.md`):
 alone requires the NEXT STEP two sections above (setting `modem_backend: "dbus"`
 on a real board) to have even started, and it hasn't. This todo documents the
 condition; it does not — and must not — trigger any part of it.
+
+## PRESENCE IS POLLED, BECAUSE NOTHING IN PRODUCTION EMITS `modem-added` [EXISTS]
+
+`handleMonitorEvent` (`modem-update-loop.ts`) switches on `modem-added` /
+`modem-removed` / `device-state`. **The first two arms are unreachable on real
+hardware.** The production emitter is `NmcliMonitorManager`, and its
+`parseMonitorLine` can return nothing but `connection-state` and `device-state`
+— `nmcli monitor` reports NetworkManager devices and connections and has no view
+of the ModemManager modem lifecycle at all. Only the scripted
+`MockMonitorEmitter` ever emits the modem arms, which is exactly why the whole
+suite stayed green while the device did not.
+
+So presence was established ONCE, by the boot `discoverModems()`, and the
+retained 30 s poll deliberately "never re-lists / re-registers". A modem that
+appeared after boot was therefore never registered — and registration is the
+step that resolves, and where absent CREATES, its NetworkManager GSM profile
+(`registerModem` → `getModemConfig` → `addConnectionForModem`). No registration,
+no profile; no profile, nothing to activate.
+
+**Board-measured on `ceralive2` (Rock 5B+, 2026-08-19).** ModemManager dropped
+modems 3 and 5 at 23:58, created modem9 (Quectel RM530N-GL) at 23:59:52 and
+modem10 (Fibocom FM350-GL) at 00:00:21. An hour later:
+
+```
+mmcli -L                    → modems 0, 6, 9, 10
+ceralive journal (last 30m) → mmcli -K -m 3 , mmcli -K -m 5     ← and nothing else
+                              zero lines naming modem 9 or 10
+                              zero "Modem N removed" warnings
+mmcli -m 10                 → state: registered, home, Movistar, packet service attached
+nmcli connection show       → NO gsm profile whose gsm.device-id is the FM350's
+ip -4 addr show enx000011121314 → (none)
+```
+
+The operator's report — *"it's registering to the network but apparently is not
+able to connect, and it's got signal"* — was precisely this: a radio-attached
+modem CeraUI had never heard of.
+
+`runModemStatusPoll()` now runs the same `reconcileModemPresenceLocked()` as
+discovery, so it re-lists every tick. Three properties are load-bearing:
+
+- **An unreadable `mmcli -L` RETAINS every modem.** `mmListWithRetry()` answers
+  `undefined` after exhausting its retries, and the old `?? []` read that as an
+  empty roster. That was survivable while only boot called it; at 30 s it would
+  evict the entire registry — and with it every modem's resolved profile — on one
+  transient failure, then re-register everything on the next tick. `undefined` is
+  a statement about the READ; `[]` is authoritative and really does remove.
+- **ID_PATHs refresh on a presence EDGE only** (discovery excepted, being the
+  boot seed). An ID_PATH names where a device is plugged in, so a quiet tick
+  cannot move it.
+- **A poll-discovered modem reconciles as a genuine `added`**, so the existing
+  diff pipeline resets the cached gsm connections exactly as an event-driven add
+  did. Nothing downstream needed to change.
+
+Cost is ONE `mmcli -L` spawn per 30 s tick. Do NOT restore the
+event-driven-only form without first giving the production monitor a real
+modem-lifecycle source — and note the `mmcli` backend, still the supported
+rollback value, has none at all.
+
+**This fixes CeraUI's half only.** The FM350 that exposed it needs a second,
+separate fix outside this repo: it enumerates in an RNDIS composition
+(`option` + `rndis_host`, no MBIM/QMI port), so MM assigns `plugin: generic` and
+its dial fails. With a correct profile hand-created, MM reached
+`simple connect state (9/10): connect` and the bearer answered
+`NotSupported: 0,NONE` on all three attempts — with the APN correctly
+auto-resolved to `internet.movistar.com.co`. See the evidence note in
+`.omo/notepads/modem-phase-c-quality/evidence/`.
+
+Coverage: `tests/modem-presence-reconcile.test.ts` (the board's own 3/5 → 0/6/9/10
+drift driven through the REAL poll, the FM350 registering, the retention rule,
+the empty-roster control, the quiet-tick vs presence-edge ID_PATH split, and a
+static lock proving `parseMonitorLine` cannot answer `modem-added` for any real
+`nmcli monitor` line). Rule-E proof captured in both directions: restoring the
+status-only poll reddens 4 tests; dropping the retention rule reddens 1.
 
 ## A DEVICE IS ANNOUNCED BEFORE ANY MODEM SERVICE CAN DESCRIBE IT [EXISTS]
 
@@ -3070,6 +3465,173 @@ in any free-text log line is replaced wholesale). Coverage:
 scripted-runner flow incl. zero-retry and the 50-read cap),
 `tests/modem-sms-redaction.test.ts` (drives the REAL logger),
 `tests/modem-sms-readonly-gate.test.ts`. UI half: todo 39.
+
+## A USSD REPLY IS ASYNCHRONOUS, AND THE PROPERTY THAT HOLDS IT IS RETAINED [EXISTS]
+
+`mmcli-ussd.ts`'s two hardest rules are both measured rather than reasoned, from a
+live `*611#` dialogue on bench `ceralive2` (Movistar Colombia, MM 1.24.2,
+2026-08-18). BLOCKER B4 — "the exact framing of a USSD reply has NOT been verified
+against a real carrier answer" — is resolved by that run, and the answer was that
+**both previously-accepted shapes were wrong**.
+
+**1. mmcli uses the word "reply" as a KEY nowhere.** An action prints
+`… new reply from network: '<raw text>'` — a whole SENTENCE before the colon, with
+the carrier's text spanning REAL newlines and closed by the LAST quote — and
+`-K --3gpp-ussd-status` keys the same text `modem.3gpp.ussd.network-request`, note
+*request*, g_strescape()d onto one line. `parseUssdReply` accepts both; the legacy
+`…reply` suffix is retained only as forward tolerance, and a test pins that the
+fabricated `Reply: '…'` shape the retired parser was built around does NOT match.
+
+**2. `--3gpp-ussd-respond` DOES NOT BLOCK on the network.** `initiate` does (2.2 s
+measured, reply on stdout). `respond` returns in **60 ms** with an EMPTY reply:
+
+```
+21:27:56.894  --3gpp-ussd-respond=4 dispatched
+21:27:56.954  returned — 60 ms, reply EMPTY
+21:27:56.958  status: idle,          request = the PREVIOUS turn's menu
+21:27:57.238  status: idle,          request = the PREVIOUS turn's menu
+21:27:57.524  status: user-response, request = this turn's answer   (+570 ms)
+```
+
+So reading the status ONCE, immediately, is wrong twice over: the state is
+transiently `idle`, which reports a live dialogue as `closed`, and the property —
+which is RETAINED across turns and even across a cancel — still holds the previous
+turn's text, which is then served as this turn's reply. **A plausible, wrong menu
+is worse than no menu**, and this was observed end-to-end on the board before it
+was fixed.
+
+`runTurn` therefore snapshots the property BEFORE dispatching (the only way to
+tell this turn's answer from the last one's), and when stdout carried no reply it
+polls `readUssdStatus` for a bounded `REPLY_WAIT_MS` (8 s, ~14× the measured
+arrival) at `REPLY_POLL_MS` (250 ms). **Arrival is detected two ways and the second
+is not redundant**: the text CHANGING is primary, but a menu can legitimately
+repeat itself (answering `00:inicio` re-serves the root menu byte-identically), so
+an observed `idle → not-idle` edge counts as arrival independently of the text. A
+bound that elapses with no arrival yields NO reply — never the retained value.
+
+**Never log a value on this path.** `parseUssdNetworkRequest` deliberately does not
+route through `mmcliParseSep`, which logs an unsplittable line VERBATIM; every
+value here is subscriber content. Verified live: a `debug.log` covering a full
+four-turn dialogue contains 0 occurrences of the MSISDN or of any menu text.
+
+Board-proven end to end through CeraUI's OWN authenticated RPC: `ussdInitiate`
+`*611#` → the root menu (carrying the SIM's number), `ussdRespond` `4` → the
+balance submenu, `ussdRespond` `1` → its submenu, `ussdRespond` `1` → `Total:$0`,
+`ussdCancel` → `closed/cancelled`, session `idle`. Every reply byte-identical to
+the manual `mmcli` walk. Coverage: `tests/modem-ussd.test.ts` (both real shapes,
+the empty-respond negative, the two-turn dialogue over the board captures, and the
+answer-never-lands case asserting NO reply rather than the retained one).
+
+## `no_sim` REPORTS A SLOT, NOT A NETWORKMANAGER PROFILE [EXISTS]
+
+`modules/modems/sim-presence.ts` (pure) is the ONE rule behind the wire's
+`no_sim`, and both builders route through its `claimsNoSim`.
+
+The wire's `no_sim` was derived from the absence of an NM GSM connection
+profile. That is a different fact: a profile is provisioned only once a SIM has
+been READ **and** a connection created for it, so a modem holding a working card
+that has not registered yet has none. Board-measured on a Quectel RM530N-GL
+(2026-08-18): `mmcli -m 3` reported `modem.generic.sim:
+/org/freedesktop/ModemManager1/SIM/0`, an occupied slot, `lock: sim-pin2`, the
+SIM's own number, and `state: searching` under a `gprs-and-non-gprs-not-allowed`
+network rejection — while CeraUI rendered **"No SIM card detected"** in the modem
+dialog and simultaneously offered that same card's SMS inbox and its optional
+PIN2 unlock band. Three operator-visible surfaces, exactly one of them reading
+the wrong fact.
+
+**THREE ANSWERS, and the third is not a synonym for the second.** `present` (MM
+named a SIM object — the ONLY value that suppresses the claim, regardless of
+profile, lock or registration state), `absent` (MM's own
+`state-failed-reason: sim-missing`, a positive statement rather than an
+inference from silence), and `unknown` (neither — the read could not answer).
+
+- **`unknown` keeps the pre-existing behaviour**, so no modem class silently
+  stops reporting a genuinely missing SIM. It is also what a poll that could not
+  answer resolves to, and `mergeRefreshedModem` then RETAINS the previous value
+  — the same withhold-on-unknown rule `deriveNetworkTypes` follows, for the same
+  reason: a statement about the READ must not demote a card that was seen.
+- **AN EMPTY SLOT IS PUBLISHED AS `/`, not dropped.** Board-measured on the
+  SIMCom SIM7600G-H, whose two `sim-slots` values both read `/`. So the test is
+  the object-path SHAPE (`isSimObjectPath`), never "is this string non-empty" —
+  the latter reports every empty-slot modem as holding a card.
+- **The failed-reason is consulted LAST**, so a modem reporting both a SIM object
+  and a stale `sim-missing` failure resolves `present`: a card MM can NAME is a
+  card that is physically there.
+- **BOTH backends read the SAME three MM facts.** `dbus-view-fold.ts`
+  `readSimPresence` is the D-Bus twin (`Modem.Sim` / `Modem.SimSlots` /
+  `Modem.StateFailedReason`), so the mmcli and D-Bus paths cannot disagree about
+  whether a modem holds a card. This matters more on the D-Bus path than on
+  mmcli: the fold never populates `config` at all, so under the old rule EVERY
+  D-Bus-backed row claimed `no_sim`.
+- **A SIM-present modem with no profile emits NEITHER key** — no `config`, no
+  `no_sim` — which is the honest "SIM present, not yet configured" state. The row
+  then renders the radio's real state (`searching` plus the network's own
+  rejection reason), its PIN2 lock badge, and a usable config dialog.
+- The `simVisibility: "opaque"` router-dongle rule is UNCHANGED and orthogonal:
+  it still emits neither key for a device whose SIM the host cannot see at all.
+
+`ModemInfo` gained `modem.generic.state-failed-reason` and
+`modem.generic.sim-slots` (both optional — mmcli drops a `--` value), and `Modem`
+gained `sim_presence`. Coverage: `tests/modem-sim-presence.test.ts`, driven
+through the REAL parser, the REAL refresh merge and BOTH wire builders against
+verbatim board captures — the Quectel for `present`, and the SIMCom /
+HiMi U01 / Fibocom FM350-GL for `absent`. Rule-E proof: forcing `claimsNoSim`
+to `true` reddens 4 tests.
+
+## THE SIM'S OWN NUMBER IS DISPLAYED, AND NEVER LOGGED [EXISTS]
+
+ModemManager publishes the SIM's own number (MSISDN) as `Modem.OwnNumbers`, and
+nothing in this stack read it — an operator holding four identical sticks had no
+way to tell which SIM was in which slot. It now rides the wire as the
+additive-optional `modem.own_numbers` and is rendered behind an explicit reveal.
+
+**It is read on BOTH backends, from the same property.** mmcli's
+`modem.generic.own-numbers` (`mmcli.ts` → `deriveOwnNumbers`,
+`modem-registration.ts`) and the D-Bus fold's `Modem.OwnNumbers`
+(`dbus-view-fold.ts` `readOwnNumbers`) produce the same field, so the two paths
+cannot disagree about which SIM is in the slot.
+
+Five decisions carry weight:
+
+- **ABSENT, EMPTY and BLANK all read as NOT REPORTED.** Most SIMs carry no
+  MSISDN in their elementary files, so an empty answer is the ordinary case;
+  publishing `[]` would invite the UI to render "no numbers" as a finding rather
+  than as silence. `own_numbers` is `z.array(z.string().min(1)).min(1)
+  .optional()` — the schema cannot express the empty list at all.
+- **It is an ARRAY, and the tail is not dropped.** MM's property is `as` and a
+  dual-number SIM is expressible; collapsing to a first element would be a silent
+  loss. The bench Quectel RM530N-GL reports exactly one.
+- **A refresh REPLACES it, it does not retain.** This is the deliberate opposite
+  of `sim_presence`'s withhold-on-unknown rule, and the reason is that the two
+  absences mean different things: `parseModemInfo` already rejects a record with
+  no `modem.` key at all, so a successful parse that omits this one is the modem
+  saying "none" rather than a read that could not answer. Retaining would latch a
+  swapped-out subscriber's number on screen — the `policy_route_missing` latch,
+  with PII in it. `mergeRefreshedModem` therefore drops the previous value before
+  spreading.
+- **mmcli's `-K` array indices are ONE-BASED.** The bench capture reads
+  `modem.generic.own-numbers.value[1]`, as do `drivers`, `ports` and
+  `unlock-retries`. `mmcliParseSep` pushes in encounter order, so nothing may
+  key on the index number.
+- **It is its OWN redaction class** (`helpers/logger.ts`
+  `isOwnNumberSensitiveKey`, plus the `OWN_NUMBER_RECORD_RE` value-side
+  backstop for a raw `-K` record). It cannot join `SENSITIVE_KEY_RE`, which is a
+  SUBSTRING match: `number` there would blank a slot index, a band count and
+  every unrelated `numbers` on the device. `msisdn` stays in the SMS set, its
+  historical home, and is not duplicated. `shadow-redaction.ts` gained the same
+  keys for the mutation-free evidence collector.
+
+**DISPLAYED is not LOGGABLE.** The UI shows the number behind a reveal because
+the subscriber owns that surface; the device still scrubs it from every
+transport, exactly like a PIN. Both halves are asserted — the render side in the
+frontend suite, the log side by driving the REAL winston transport.
+
+Engine-side half: `modem-stack` `AGENTS.md` → THE SIM'S OWN NUMBER. Frontend
+half: `apps/frontend/AGENTS.md` → THE SIM'S OWN NUMBER IS HIDDEN BY DEFAULT.
+Coverage: `tests/modem-own-number.test.ts` (the one-based-index parse, the three
+absences, the multi-number case, the swap-clears-it merge, the additive
+byte-compat diff against the legacy oracle, the D-Bus fold, and the redaction
+matrix incl. the real-logger proof and the no-over-redaction control).
 
 ## A MODEM SAVE SPENDS A RECONNECT ONLY WHEN IT MUST [EXISTS]
 
@@ -3605,6 +4167,58 @@ suite: every refusal arm asserts BOTH the typed refusal AND that the effect
 provably never ran, with a NEGATIVE CONTROL proving a module that bypasses the
 helper mutates freely under identical conditions. Engine-side half:
 `modem-stack/control/src/capability/`.
+
+### …AND THE IDENTITY IT GATES ON COMES FROM udev's NET RECORDS [EXISTS]
+
+Every gated module resolves the modem to a `stable_key` FIRST — the USSD session,
+the GNSS session and the lease that guards them are all filed under it. That
+resolution was `defaultResolveIdentity` (`usb-mode-identity.ts`), which matched
+`createUsbEnumerator().enumerate()` on `device.ifname`. **That field is declared
+on `UsbDeviceSnapshot` and never populated**, for the reason
+`modem-id-path-source.ts` already documents: the enumerator keeps only
+`DEVTYPE=usb_device` records and such a record carries no `INTERFACE`.
+Re-measured on `ceralive2` (2026-08-18): **24** `usb_device` records, **0** with
+one, while **9** net records carry an `INTERFACE` AND an `ID_PATH`.
+
+So this was the SECOND half of a defect that was only ever half-fixed. The wire
+producer's `stable_key` map was repaired by reading udev's net records; this
+resolver was not, so `stable_key` was correct on the wire while every capability
+RPC answered `unknown_modem` **on the same board, in the same second**.
+Board-measured before/after on the Quectel RM530N-GL:
+
+| RPC | before | after |
+|---|---|---|
+| `modems.getUssd` | `unknown_modem` | `{session:{state:"idle"}}` |
+| `modems.ussdInitiate` | `unknown_modem` | the carrier's real `*611#` menu |
+| `modems.getGps` | `unknown_modem` | the modem's real GNSS capability set |
+| `modems.getUsbModeOptions` | `identity_unresolved` | `active:"qmi"`, `uncertified` |
+
+- **`resolveModemIdentityAnchor` (`mutation-identity.ts`) is the ONE resolver the
+  capability modules use**, and it is a thin reuse of `modemStableKeyForId` —
+  the same fixed source, not a third mechanism. It answers `{stableKey}` and
+  nothing else, so a PCIe-attached or momentarily-unenumerable modem is not
+  refused for lacking catalog discriminators it never needed.
+- **`defaultResolveIdentity` still enumerates USB**, because the catalog
+  discriminators (`vid:pid`, model, firmware revision, composition mode) exist
+  nowhere else — but it now derives the key from the net records and MATCHES the
+  USB snapshot against it. The snapshot's `physicalUid` is the parent
+  `usb_device`'s `ID_PATH`, which reduces through the shared
+  `deriveModemStableKey` to the SAME key the netdev's interface-level path does,
+  so the two sources agree by construction rather than by coincidence.
+- **`five-g-pref` was never affected** — `five-g-apply.ts` already resolved
+  through `modemStableKeyForId`. That is what makes the split a fix rather than a
+  new convention: one module had it right and the rest did not.
+- **A capability MUTATION still needs its READ first.** The evidence cache is
+  process-local, so on a fresh boot `ussdEvidence` answers `unknown` and the gate
+  fails closed with `module_unavailable` until `modems.getUssd` has run once.
+  Confirmed live. That is the framework's fail-closed rule working, not a
+  regression — but it means an operator surface must probe before it offers.
+
+Coverage: `tests/modem-capability-identity.test.ts`, whose fixtures are VERBATIM
+`udevadm info --export-db` records from the board — the `usb_device` one carrying
+no `INTERFACE` and its netdev carrying both. That shape is the point: the retired
+code passed its suite because its fixtures were hand-built snapshots holding an
+`ifname` udev does not put there. `setUsbUdevDatabaseReaderForTest` is the seam.
 
 ### THE 5G PREFERENCE IS A RANKING, AND ITS ECHO IS A READBACK [EXISTS — UNCERTIFIED]
 
@@ -5612,6 +6226,50 @@ FIRST, reason `live.education.reason.disabledInSettings`). See root `AGENTS.md`
 → "LIVE-CORRECTNESS-PASS FIXES" for the frontend-side contract
 (`NetworkIngestDialog.svelte`, `SourceSection.svelte`'s visible-row filter).
 
+## A SCAN IS COALESCED, AND FORGET REMOVES THE NETWORK [EXISTS]
+
+Two WiFi defects behind one operator report — *"forgetting a network or
+disconnecting from a network is not working"*. Full evidence:
+`.omo/notepads/modem-phase-c-quality/evidence/session-amendment-wifi-forget-disconnect.md`.
+
+**`wifiRescan()` COALESCES, because `wifi.scan` is an RPC and nmcli costs a D-Bus
+connection.** Every `nmcli` process opens its own connection to the SYSTEM bus,
+and root's `max_connections_per_user` (256) is a DEVICE-WIDE resource. Measured on
+a Rock 5B+ (2026-08-19): a frontend render loop drove ~50 `wifi.scan` per second,
+250-330 concurrent `nmcli device wifi rescan` processes were live, and `busctl`
+itself could not list names — after which EVERY nmcli on the box answered
+`Could not create NMClient object: …LimitsExceeded`, taking WiFi
+connect/disconnect/forget, the gateway election and the modem profile writes with
+it. The client that caused it is fixed in `apps/frontend` (`WifiSelectorDialog`'s
+periodic scan, see that repo's Async OS-operation entry), but the guard stays: a
+device must not be knockable over by a repeated READ RPC, whoever sends it.
+Concurrent callers JOIN the in-flight run (their intent is exactly what it
+delivers) rather than yielding, and the shared promise SWALLOWS its rejection —
+one failed scan must not raise an unhandled rejection per joiner. Same discipline
+as `signalRecheckInFlight` in `modules/streaming/sources.ts`.
+`setRescanActionForTest` mirrors `setScanRefreshAction` as the counting seam.
+
+**`WifiInterface.savedAll` exists because Forget removes a NETWORK, not a
+profile.** `saved` is `Record<SSID, uuid>`, and NetworkManager holds a profile per
+CONNECTION — the same board carried `4G-UFI-611A` AND `ufi-recovery`, both
+`802-11-wireless.ssid = 4G-UFI-611A`. So Forget deleted one, the sibling kept the
+SSID in the map, and the row still read "Saved": indistinguishable, to the
+operator, from a Forget that did nothing. `registerSavedWifiConnection` now also
+appends to `savedAll` (`rememberSavedUuid`), and `wifiForget` deletes every uuid
+`wifiSiblingConnections(uuid)` resolves.
+
+- **`savedAll` is OFF the wire.** No schema change; `saved` still names ONE uuid,
+  which is what the frontend acts on.
+- **Only FORGET reads it.** Connect and disconnect mean "act on this connection";
+  only Forget means "remove this network".
+- **A MAC-bound profile records its sibling on ITS adapter only** — a bound
+  profile is not another radio's network to remove.
+- **`wifiUpdateSavedConns` clears BOTH maps** before the sweep, or a deleted
+  profile lingers as a phantom sibling and Forget issues a delete for a uuid that
+  no longer exists.
+
+Coverage: `tests/wifi-rescan-coalescing.test.ts`, `tests/wifi-forget-same-ssid.test.ts`.
+
 ## WIFI AP-vs-CLIENT CLASSIFICATION [EXISTS]
 
 A radio in AP/hotspot mode and a radio associated with somebody else's access
@@ -6393,6 +7051,12 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't classify a USB network interface by its NAME — not `enx*`, not `eth*`, not any prefix. This bench's two HiLink units share one factory MAC, so one is named `enx0c5b8f279a64` and its twin falls back to `eth1`; either prefix rule badges exactly one of a matched pair. `classifyUsbNetDevice` is not given a name at all, and it must stay that way.
 - Don't import modem-stack's `device-classifier.ts` across the sibling boundary (Rule D) — `usb-net-classifier.ts` is a re-derived MIRROR with its own bench-captured fixtures. And don't drop the cellular-evidence gate on top of it: modem-stack's `router-mode` verdict means "a tether with no control port", which is equally true of a plain USB-to-Ethernet adapter, so claiming CELLULAR on that alone would put the word on a wired NIC.
 - Don't read only the netdev's OWN USB interface — the vendor ids, the AT/QMI ports and the ZeroCD mass-storage companion all live on the PARENT device, and those are exactly the descriptors the classification turns on.
+- Don't proxy a dongle's admin UI by DESTINATION ADDRESS — identical units share one factory address, and the bench ZTE answered a request addressed to its twins' gateway, so the address selects nothing. Resolve `wire id -> interface -> that interface's own default route` and bind with `curl --interface`; a hardcoded `192.168.8.1` or a best-guess interface reaches whichever unit the kernel picks.
+- Don't drop `--compressed` from the admin proxy, and don't forward or set an `Accept-Encoding` header — the dongle serves pre-gzipped assets and ignores `identity`, and a header set here overrides the flag and leaves curl unable to decode the reply. Stripping `content-encoding` is correct ONLY while that flag is present.
+- Don't route curl's `--dump-header` to `/dev/stderr` under `Bun.spawn` — against a PIPE it never completes (`exitCode: null`, both streams empty), even though the same argv works under a shell redirect to a file.
+- Don't widen the admin-UI URL rewriter. `(` is a delimiter in CSS only (in JS it opens a regex), a path must name a DIRECTORY outside CSS (a regex literal can end in a quote — jQuery's `replace(/'/g, …)` is byte-identical to a quoted path), a bare `"/"` is a separator as often as a link, and an XML/JSON body is data whatever its content-type says. Each of those refusals is a page that rendered blank on the bench before it existed.
+- Don't replay a dongle's `X-Frame-Options`, CSP or `Strict-Transport-Security` onto CeraUI's origin, and don't leave `Set-Cookie` on `Path=/` — an HSTS pin locks the operator out of a board that serves plain HTTP, and two twins issue same-named cookies that would overwrite each other.
+- Don't mint, template, or concatenate a `lnk_`-prefixed id outside `physical-identity.ts` — a name-shaped identity follows the NAME, and the bench twins swap names on a replug, so the next device in the socket inherits the previous unit's telemetry row. A link whose identity cannot be resolved gets `unmappableBondEntry()`'s explicit `unmappable` state and NO id. Don't "fix" the resulting refusal by giving `buildBindMapDocument` a placeholder `link_id`, by dropping the entry so the bond looks clean, or by widening `unmappableByIface` into a rung that resolves an identity from the derived interface name. `tests/link-id-authority-gate.test.ts` fails the build on the first three.
 - Don't derive a second physical identity anywhere — `physical-identity.ts` is the ONE resolver and the ONE `link_id` authority, or the bind map and the telemetry registry attribute an operator's links to different devices. Don't key a classified dongle on its interface name again (that is the defect this closed), don't add an alias table unifying the serial and port rungs (a stale port alias hands the NEXT device the previous unit's identity), and don't re-key the wire's `stable_key` onto the serial rung — todo 17's consumers, the usage-policy store and the projection fixtures all correlate on the ID_PATH-derived value.
 - Don't write `BIND_IPS_FILE` outside `publishBondMapping` — the two-file ADR-003 publication order (ips rename → sidecar rename as the COMMIT POINT → SIGHUP), the unique temp siblings, the fsync, and the 0600 sidecar mode are all one contract, and a second writer desynchronizes the `generation` counter the reader orders mappings by. Don't swap the sidecar write to `Bun.write`: it neither fsyncs nor sets a mode, and the reader REFUSES a group- or world-writable sidecar.
 - Don't key the SIGHUP on an IP-list diff — a MAPPING-ONLY change (a link moving between interfaces) leaves the IP bytes byte-identical, so only `publication.changed`/`generation` can see it. That is the whole reason the generation increments on every publication.
@@ -6408,9 +7072,11 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't filter the descriptor/hwdb model through `isUninformativeIdentity` — that rule judges mmcli's identity answers, where a bare numeral is measured garbage; here the bare numeral is the PRODUCT ID the classifier chose as its honest floor, so filtering it degrades `Qualcomm 9024` to `Qualcomm 05c6:9024`.
 - Don't parse a router row's allocation key back into an interface name — once it carries a real `stable_key` that key is an `ID_PATH`, which names a PORT. Read the mapping the last collection recorded.
 - Don't assume `duplicate_model` from a model name or a vendor table — it is true only when a second device of that exact `vid_pid` is attached right now, resolved across the whole scan. And don't "unify" `applyRouterCellularProjection` with `applyDongleProjection`: the first must never union a row in, and its `null` retraction keeps the row rather than retiring it.
+- Don't commit a USB-net sweep's result without checking the generation it was issued — the netif cadence and a replug-triggered refresh overlap, and last-writer-wins republishes the RETIRED dongle's markers over the live ones. Don't coalesce on the interface set alone either (the `deps` object is half the request), don't widen the fence into a shared lock over unrelated scans, and don't drop the generation bump in `resetUsbNetMarkers()` — a sweep still reading would otherwise repopulate the caches the reset just cleared.
 - Don't import the dongle metadata schema from the sibling `image-building-pipeline` checkout — Rule D forbids the path reference, and the contract itself requires each repo to carry its own reader and fixtures. Don't tighten the mirrored `driver` field into the contract's three-value enum either: a reader must ignore what it does not know, and rejecting a fourth USB-ethernet driver would drop a working dongle over a field nothing here reads.
 - Don't add `enx*` to the policy-route candidate set — the image dispatcher maps only `enx*0`..`enx*7` by the ifname's LAST character, so ~half of correctly-working adapters would false-flag amber for a documented dispatcher gap.
 - Don't statically import `gateways.ts` from `network-interfaces.ts` to call `queueUpdateGw` — that edge cycles, and an eagerly-wired default dials real DNS from a parser-only test. It is installed by `initNetworkInterfaceMonitoring`.
+- Don't derive `no_sim` from the absence of a NetworkManager GSM profile — a profile is provisioned only after a SIM has been READ and a connection created for it, so a working card that has not registered yet has none, and the board's Quectel was reported SIM-less while its own SMS inbox and PIN2 unlock were correctly offered. Route it through `sim-presence.ts` `claimsNoSim`. Don't collapse `unknown` into `absent` either (that is what keeps a modem class from silently losing a genuine no-SIM report), don't let an `unknown` poll overwrite a `present` already seen, and don't test a SIM slot for a non-empty string: an EMPTY slot is published as the bare path `/`, so only the object-path SHAPE tells the two apart.
 - Don't accept a usage-policy write without proving the pinned
   `@ceralive/modem-control` can apply one — `setUsagePolicy` arrived at 1.0.0 and an
   older pin must answer `usage_policy_unsupported`, not a silent success. Don't
@@ -6523,6 +7189,14 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't move either cellular guard below `initModemUpdateLoop` in `main.ts`, and don't reorder them relative to each other — the loop's first discovery + `modems` broadcast fire immediately, and `initCellularStack` publishes `{ready:false}` synchronously, so a reordered boot puts the operator's first modem snapshot inside the window where every modem procedure refuses `CELLULAR_STACK_INITIALIZING`. Don't reclassify either as `runCritical` either: the dbus→mmcli fallback lives INSIDE the stack, so reaching the guard means the cellular subsystem is down and the device must still keep its UI.
 - Don't rewrite `buildModemsMessage` in terms of the projection, and don't delete it as dead — it is NOT on the wire (`buildModemsWireMessage` is) precisely so it can stay the independent implementation `modem-wire-projection.test.ts` asserts byte-compat against. "De-duplicating" it makes that assertion compare the projector to itself. And don't drop the fail-safe fallback: the additive fields are enrichment, the legacy ones are the operator's whole modem list.
 - Don't fabricate a `stable_key` for a modem whose `ID_PATH` did not resolve, and don't clear the id-path cache when a refresh FAILS — absence yields the pre-Phase-B wire (honest), while a cleared cache makes every row look like new hardware to a frontend correlating a USB-mode switch. Don't refresh it on the 30 s status poll either: an `ID_PATH` names where a device is plugged in, so only presence edges can move it.
+- Don't build the `ifname → ID_PATH` map from `@ceralive/modem-control`'s `createUsbEnumerator()` — `UsbDeviceSnapshot.ifname` is declared and NEVER populated (that enumerator keeps only `DEVTYPE=usb_device` records, which carry no `INTERFACE`), so the map was empty on every real board and the fail-closed identity contract refused EVERY modem mutation with `identity_unresolved`. Read udev's NET records (`modem-id-path-source.ts`). And don't test it with a hand-built device list carrying an `ifname` — that is exactly the fixture shape that kept this green; drive the parser with verbatim `udevadm info --export-db` output.
+- Don't match a USB snapshot on `device.ifname` ANYWHERE — the bullet above is about the wire producer's map, and the SAME dead field was still being matched in `defaultResolveIdentity`, so every capability module (`ussd`, `gps`, `band-lock`) and `modems.getUsbModeOptions` answered `unknown_modem`/`identity_unresolved` on real hardware while `stable_key` was correct on the wire. Derive the key from `modemStableKeyForIfname` and match the snapshot's `physicalUid` through `deriveModemStableKey`. And don't add a THIRD resolver: the capability modules take `resolveModemIdentityAnchor`, which is a reuse of the same fixed source.
+- Don't read a USSD status ONCE, immediately after a turn, and treat what it holds as that turn's answer — `--3gpp-ussd-respond` returns in 60 ms without waiting for the network, so for ~570 ms the state reads `idle` (reporting a live dialogue closed) and the RETAINED property still holds the PREVIOUS turn's menu, which then reaches the operator as this turn's reply. Snapshot the property BEFORE dispatching and wait for arrival; a bound that elapses must yield NO reply, never the retained value.
+- Don't match a USSD reply on a key called `reply` — mmcli uses that word as a key nowhere. The action line's key is the whole sentence `… new reply from network`, and the `-K` key is `modem.3gpp.ussd.network-request`. Don't route that value through `mmcliParseSep` either: it logs an unsplittable line verbatim, and every value here is subscriber content.
+- Don't let `fromDbusView` re-derive a fact `fromMmcliModem` already derives. `"dbus"` is the DEFAULT backend, so an mmcli-only fix ships and reaches NO device — three separate defects took this shape at once: the garbage-identity name fallback (bypassed by a hand-rolled `buildDbusName` that even claimed byte-identical output while implementing a different rule), `registration_rejection`/`packet_service_state` (never folded, leaving the whole `REJECTION_REASON_KEYS` operator-copy surface dead code), and the 3GPP scan results. When you add a fact to a modem row, name which of the TWO adapters you taught.
+- Don't hand a child process its own deadline and leave the outer wrapper on a default — the shorter of two contradictory timeouts wins, silently. `mmNetworkScan` passed `--timeout=240` to mmcli while `run()` killed it at its 30 s default, and a board-measured 27.8 s cold scan sat 2.2 s inside that cap, so the scan failed INTERMITTENTLY and read as a hardware flake. The outer budget must be strictly larger.
+- Don't answer a modem operation `{success:true}` from a `void`-dispatched effect. `scanModemProcedure` went through `handleModems`, which `void`s its work, so a scan killed mid-sweep still replied success and rebroadcast a stale empty list. A procedure that cannot observe its own effect cannot report it — await the operation and return its typed outcome. And don't collapse "found nothing" into a failure: an empty result with `success: true` is a real answer about coverage.
+- Don't clear an in-flight marker on `Modem` through a CAPTURED reference. `mergeRefreshedModem` immutably REPLACES the object each poll (so the T11 diff can see a change by value) and spreads the previous one, so the flag rides forward onto the replacement while a `delete` on the old object mutates something nothing reads. Board-measured: one scan latched `is_scanning` for the process lifetime — every later scan refused `already_scanning` and the row read `connection: "scanning"` forever, since `buildModemStatus` derives that label from the same flag. Clear it through the state map (`clearScanningMarker`).
 - Don't drop the `syntheticIds` round-trip through `buildProjectedModemsMessage` — the projector deliberately does not own that state, and without it every poll renumbers the dongles under the operator.
 - Don't decide which adapter produces a radio row from `config.modem_backend` — read the backend the stack COMMITTED (`getCellularStack()`), or a `dbus` request that fell back to mmcli advertises a detail block nothing observed.
 - Don't publish an MM restart's first resnapshot verbatim — it legitimately answers `modemCount: 0` **18 ms** after the daemon re-acquires its bus name and refills over ~20 s (measured, todo 16 gate 4), so forwarding it blanks the operator's modem list on every restart. Route a new epoch through the cache's `settling` merge, match carried rows on the `ID_PATH` anchor (MM renumbers the WHOLE roster across a restart), and don't shorten `EPOCH_SETTLE_MS` below the measured refill.
@@ -6535,6 +7209,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't hand a raw `Modem.Physdev`/`Modem.Device` sysfs path to anything that compares `stable_key` — it names the same socket as a udev `ID_PATH` in a different vocabulary, so supersession silently never fires (todo 24: two rows per stick, 10/10 cycles, with todo 18's suite green throughout). `deriveModemStableKey` normalizes for you; use `canonicalModemIdPath` where the path is also STORED. And don't paper over the next instance of this with a compare-time fuzzy match or a third key format — normalize at the derivation, to the ID_PATH shape.
 - Don't write a supersession fixture with the same key encoding on both sides — that is precisely the gap that let this ship. Pair an `ID_PATH`-keyed provisional row against a SYSFS-path-keyed authoritative one, and assert on the WHOLE payload length: a key-filtered assertion cannot see the duplicate row under the other encoding.
 - Don't accept a `usb_interface`, a `bind`/`change`, or an attach with no `ID_PATH` as a provisional row — the first draws one composite stick as several rows, the second describes a device already present, and the third can never be superseded, which is the ghost class this feature must not introduce.
+- Don't make the retained modem poll status-only again, and don't gate modem presence on `modem-added`/`modem-removed` — the production `NmcliMonitorManager` structurally cannot emit either (`nmcli monitor` has no view of the ModemManager lifecycle), so those arms are mock-only and presence would once more be established just once, at boot. Board-measured: a Fibocom FM350-GL created 46 minutes after boot was never registered, never got an NM profile, and sat `registered` with a live SIM and no IP while CeraUI kept polling two indices that no longer existed. And don't read an unreadable `mmcli -L` as an empty roster (`?? []`) — at the 30 s cadence that evicts every modem's resolved profile on one transient failure; `undefined` retains, `[]` is authoritative.
 - Don't reach for the npm `udev` binding, and don't drop `--udev` from the monitor's argv — the binding is an unmaintained native addon a `bun build --compile` binary cannot load, and the `--kernel` events that precede rule processing carry no `ID_*` properties at all. Don't skip the cache clear on a monitor restart either: the child has no replay, so a detach during the gap leaves a row nothing can retire.
 - Don't seed the dev dongle fixtures PAST `dongle-metadata.ts`'s deps seam, and don't freeze their `updated_at_ms` — entering as file CONTENT is what keeps the real schema/staleness/ambiguity rules on the dev path, and a frozen timestamp makes the rows silently vanish after 90 s. Don't give the duplicate-MAC HiLink pair different MACs to "fix" the fixture: that collision is the whole reason identity is `ID_PATH`-keyed.
 - Don't write a raw ifname as the mmcli-side shadow `deviceKey` — the observer side is opaque-hashed, so the join fails and every cycle emits a matched `only-in-mmcli` + `only-in-dbus` pair instead of a real divergence. That is the state the retirement runbook calls a gate blocker, and it looks like data rather than a bug.
@@ -6607,6 +7282,8 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't add a country→channel table anywhere — the hotspot channel set is DERIVED by applying `iw reg set <CC>` and parsing `iw phy` back out (`regdomain.ts`), because the legal set depends on the kernel's regdb version, the radio, and self-managed adapters. And don't validate a channel with `isWifiChannelName` alone: that is a SHAPE check, and legality is `isChannelOffered` against the runtime-derived set.
 - Don't union two wiphys' channel lists, and don't clamp a live AP off the air on an EMPTY derivation — a failed `iw phy` probe proves nothing about legality (see HOTSPOT CHANNELS ARE DERIVED FROM THE KERNEL).
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
+- Don't spawn `nmcli` from an RPC-reachable path without a bound — every nmcli process takes one of root's 256 system-bus connections, so an unguarded repeat makes EVERY NetworkManager operation on the device fail `Could not create NMClient object`. `wifiRescan()` coalesces; keep it that way, and keep its shared promise from rejecting.
+- Don't delete only the `saved[ssid]` uuid in `wifiForget` — a second NM profile for the same SSID keeps the row reading "Saved", which the operator cannot tell from a Forget that did nothing. Go through `wifiSiblingConnections`. And don't put `savedAll` on the wire or read it from connect/disconnect: those act on a CONNECTION, Forget removes a NETWORK.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.
 - Don't delete a hotspot profile because nothing claims the address it is bound to — a temporarily unplugged radio looks identical to an abandoned profile, and the deletion destroys the very credentials the backstop exists to preserve. Deletion needs POSITIVE evidence from the credential store (`collectSupersededHotspotConns`), and the `Hotspot-N` name pattern is a narrowing filter, never evidence: an operator's own `nmcli device wifi hotspot` profile carries the same id. Don't stop maintaining `previousConns` either — it is the ONLY record that a superseded profile was ever ours, and without it a real duplicate becomes permanently undeletable.

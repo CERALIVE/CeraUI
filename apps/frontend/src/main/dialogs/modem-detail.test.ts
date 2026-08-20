@@ -23,6 +23,9 @@ import {
 	firmwareRevision,
 	hasModemDetail,
 	isStandingUsbRefusal,
+	OWN_NUMBER_MASK,
+	ownNumbers,
+	simIccid,
 	usageView,
 } from "./modem-detail";
 
@@ -315,6 +318,10 @@ describe("hasModemDetail", () => {
 		expect(hasModemDetail({ cell_info: { rsrp: -90 } })).toBe(true);
 		expect(hasModemDetail({ esim: { sim_type: "esim" } })).toBe(true);
 		expect(hasModemDetail({ firmware_revision: "RM520NGL_1.0" })).toBe(true);
+		expect(hasModemDetail({ own_numbers: ["+573115422359"] })).toBe(true);
+		expect(hasModemDetail({ own_numbers: [] })).toBe(false);
+		expect(hasModemDetail({ iccid: "8957123102400060892" })).toBe(true);
+		expect(hasModemDetail({ iccid: "   " })).toBe(false);
 	});
 });
 
@@ -346,5 +353,52 @@ describe("isStandingUsbRefusal", () => {
 		]) {
 			expect(isStandingUsbRefusal(refusal)).toBe(false);
 		}
+	});
+});
+
+describe("ownNumbers", () => {
+	// The bench Quectel RM530N-GL's own SIM, as `mmcli -m 3` reported it live.
+	const BOARD = "+573115422359";
+
+	it("carries every number the carrier published, in order", () => {
+		expect(ownNumbers([BOARD, "+573001112233"])).toEqual([
+			BOARD,
+			"+573001112233",
+		]);
+	});
+
+	it("answers undefined for the common case — a SIM that published none", () => {
+		expect(ownNumbers(undefined)).toBeUndefined();
+		expect(ownNumbers([])).toBeUndefined();
+	});
+
+	it("drops blank members, and an all-blank list is absence", () => {
+		expect(ownNumbers(["  ", BOARD, ""])).toEqual([BOARD]);
+		expect(ownNumbers(["  ", ""])).toBeUndefined();
+	});
+
+	it("the mask carries no digits and no shape of the value", () => {
+		expect(OWN_NUMBER_MASK).not.toMatch(/[0-9+]/);
+		expect(OWN_NUMBER_MASK.length).toBeGreaterThan(0);
+	});
+});
+
+describe("simIccid", () => {
+	// The bench Quectel RM530N-GL's real ICCID, read live off `ceralive2`. It is
+	// deliberately unredacted: an ICCID is printed on the card, unlike the
+	// subscriber number above.
+	const BOARD = "8957123102400060892";
+
+	it("carries the value verbatim — there is no mask for this field", () => {
+		expect(simIccid(BOARD)).toBe(BOARD);
+	});
+
+	it("answers undefined for a modem that reported none", () => {
+		expect(simIccid(undefined)).toBeUndefined();
+		expect(simIccid("")).toBeUndefined();
+	});
+
+	it("treats a locked SIM's blank answer as absence, never a value", () => {
+		expect(simIccid("   ")).toBeUndefined();
 	});
 });

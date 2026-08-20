@@ -89,6 +89,24 @@ export type BaseWifiInterface = {
 	hw: string; // the name of the wifi adapter hardware
 	available: Map<SSID, WifiNetwork>;
 	saved: Record<SSID, ConnectionUUID>;
+	/*
+	  EVERY profile this adapter has for an SSID, not just the one `saved` names.
+	  NetworkManager happily holds several — a CeraUI-created profile plus one an
+	  image baked in, or two an operator made under different names — and `saved`
+	  is keyed by SSID, so it can only ever surface ONE of them.
+
+	  That is invisible until Forget: the operator forgets the network, exactly
+	  one profile is deleted, the sibling keeps the SSID in this map, and the row
+	  still reads "Saved". Board-observed on a Rock 5B+ (2026-08-19), where
+	  `4G-UFI-611A` and `ufi-recovery` were two NM profiles for the ONE SSID
+	  `4G-UFI-611A`: the delete succeeded and the UI was indistinguishable from a
+	  Forget that had done nothing.
+
+	  It stays OFF the wire. The frontend acts on one uuid and the schema is
+	  unchanged; only `wifiForget` reads this, because only Forget means "remove
+	  this network", where connect/disconnect mean "act on this connection".
+	*/
+	savedAll: Record<SSID, ConnectionUUID[]>;
 	removed?: true;
 };
 
@@ -315,6 +333,7 @@ export async function wifiUpdateDevices() {
 					conn,
 					available: new Map(),
 					saved: {},
+					savedAll: {},
 				};
 
 				if (parsedProps.value.supportsAp) {

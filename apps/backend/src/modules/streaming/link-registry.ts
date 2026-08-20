@@ -42,14 +42,23 @@
   each is in. A serial rides a row ONLY when the device actually reports one.
 */
 
+import type { BondLinkIdentityState } from "@ceraui/rpc/schemas";
+
 import { logger } from "../../helpers/logger.ts";
 import { resolveModemPhysicalIdentity } from "../modems/physical-identity-source.ts";
-import type { BondEntry } from "./bind-map.ts";
+import { type BondEntry, isUnmappableEntry } from "./bind-map.ts";
 
 /** One bonded link, as a rendered row needs to identify it. */
 export interface LinkIdentity {
-	/** Todo 10's minted id — the row's identity, position-independent. */
-	readonly linkId: string;
+	/**
+	 * Todo 10's minted id — the row's identity, position-independent. ABSENT
+	 * exactly when {@link LinkIdentity.identityState} is `unmappable`: there is
+	 * one minting authority, and a link it could not answer for gets the state
+	 * rather than a stand-in id.
+	 */
+	readonly linkId?: string;
+	/** The explicit identity verdict the writer published for this link. */
+	readonly identityState: BondLinkIdentityState;
 	readonly iface: string;
 	readonly ip: string;
 	/** udev `ID_PATH`, when the writer published one. Diagnostic. */
@@ -135,8 +144,10 @@ export function registerBondIdentities(entries: readonly BondEntry[]): void {
 	identities = entries.map((entry) => {
 		const portLabel = portLabelFromIdPath(entry.idPath);
 		const serial = detailResolver(entry.iface)?.serial;
+		const unmappable = isUnmappableEntry(entry) || entry.linkId === undefined;
 		return {
-			linkId: entry.linkId,
+			identityState: unmappable ? "unmappable" : "resolved",
+			...(unmappable ? {} : { linkId: entry.linkId }),
 			iface: entry.iface,
 			ip: entry.ip,
 			...(entry.idPath !== undefined ? { idPath: entry.idPath } : {}),
@@ -145,7 +156,13 @@ export function registerBondIdentities(entries: readonly BondEntry[]): void {
 		};
 	});
 
-	byLinkId = new Map(identities.map((identity) => [identity.linkId, identity]));
+	// An unmappable link is deliberately absent from this index: it is keyed by
+	// interface only, so nothing can look it up by an id it does not have.
+	byLinkId = new Map(
+		identities.flatMap((identity) =>
+			identity.linkId === undefined ? [] : [[identity.linkId, identity]],
+		),
+	);
 	byIface = new Map(identities.map((identity) => [identity.iface, identity]));
 }
 

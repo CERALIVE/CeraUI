@@ -80,11 +80,19 @@ describe("resolveRowState", () => {
 		expect(resolveRowState(m, "mm-managed")).toBe("no-sim");
 	});
 
-	it.each(["sim-pin", "sim-pin2", "sim-puk", "sim-puk2"] as const)(
+	it.each(["sim-pin", "sim-puk"] as const)(
 		"%s renders the locked state",
 		(required) => {
 			const m = modem({ sim_lock: { required } });
 			expect(resolveRowState(m, "mm-managed")).toBe("locked");
+		},
+	);
+
+	it.each(["sim-pin2", "sim-puk2"] as const)(
+		"%s is NOT surfaced — it gates only the SIM's FDN list, which this product has no way to reach",
+		(required) => {
+			const m = modem({ sim_lock: { required } });
+			expect(resolveRowState(m, "mm-managed")).toBe("unknown");
 		},
 	);
 
@@ -170,16 +178,159 @@ describe("state presentation", () => {
 
 	it.each([
 		["connected", "live"],
-		["router-up", "live"],
+		["router-up", "ready"],
+		["registered", "ready"],
 		["connecting", "pending"],
+		["disconnecting", "pending"],
+		["searching", "pending"],
+		["scanning", "pending"],
+		["enabled", "pending"],
+		["enabling", "pending"],
+		["disabling", "pending"],
+		["initializing", "pending"],
 		["router-acquiring", "pending"],
 		["locked", "attention"],
 		["no-sim", "attention"],
 		["failed", "error"],
 		["router-down", "error"],
+		["disabled", "idle"],
 		["unknown", "idle"],
 	] as const)("%s tone is %s", (state, tone) => {
 		expect(stateTone(state)).toBe(tone);
+	});
+});
+
+/**
+ * A ROUTER DONGLE'S "UP" IS A LINK, AND THE ROW MUST NOT READ IT AS A PATH.
+ *
+ * `router-up` describes the USB-Ethernet link the dongle presents to the board.
+ * It is the only thing this stack can observe about the device, and it stops at
+ * layer 2 — the cellular service behind it is exactly what `router-ethernet`
+ * means the device cannot reach. Rendered as a bare green "Up" it read as "this
+ * is working", which is why the bench's four SIM-less dongles each showed `Up`
+ * next to `No SIM`: two pills that cannot both be true under that reading.
+ *
+ * So the state must be separable from a genuinely-carrying `connected` on every
+ * channel the row has — WORD, and the colour register that reinforces it — and
+ * it must read the same whether or not a SIM is present, because the SIM is not
+ * what it reports on.
+ */
+describe("the router link-state badge names the LINK, not the connection", () => {
+	const routerDongle = (routerAdmin?: Record<string, unknown>): Modem =>
+		modem({
+			ifname: "enx0c5b8f279a64",
+			device_class: "router-ethernet",
+			availability_reason: "router_direct",
+			...(routerAdmin === undefined
+				? {}
+				: { router_admin: routerAdmin as never }),
+		});
+
+	it("does not borrow the netns veth row's key — that is a different link", () => {
+		expect(stateLabelKey("router-up")).toBe(
+			"network.cellular.state.routerLinkUp",
+		);
+		expect(stateLabelKey("router-up")).not.toBe("network.dongle.stateUp");
+	});
+
+	it("is distinct from `connected` in BOTH word and colour register", () => {
+		expect(stateLabelKey("router-up")).not.toBe(stateLabelKey("connected"));
+		expect(stateTone("router-up")).not.toBe(stateTone("connected"));
+	});
+
+	it("is never drawn in the register the BOND is drawn in", () => {
+		expect(stateTone("router-up")).not.toBe("live");
+	});
+
+	it("is not pessimistic either — a good local link is not a fault", () => {
+		expect(stateTone("router-up")).not.toBe("error");
+		expect(stateTone("router-up")).not.toBe("attention");
+		expect(stateTone("router-up")).toBe(stateTone("registered"));
+	});
+
+	// The SIM is a fact about the radio inside the dongle; the badge is a fact
+	// about the wire in front of it. A SIM-less unit and a SIM-holding one must
+	// therefore report the SAME link state — the `No SIM` pill beside it is what
+	// carries the difference, and collapsing the two into one badge is what made
+	// the row contradict itself in the first place.
+	it.each([
+		["no SIM", { admin_url: "http://192.168.8.1", sim: "absent" }],
+		["a SIM", { admin_url: "http://192.168.8.1", sim: "present" }],
+	] as const)("reads identically with %s in the dongle", (_label, admin) => {
+		const state = resolveRowState(routerDongle(admin), "router-ethernet");
+		expect(state).toBe("router-up");
+		expect(stateLabelKey(state)).toBe("network.cellular.state.routerLinkUp");
+		expect(stateTone(state)).toBe("ready");
+	});
+});
+
+/**
+ * A REGISTERED RADIO IS RESTING, NOT WORKING — AND IT IS NOT IN THE BOND.
+ *
+ * The fixture is this bench's Quectel RM530N-GL as `mmcli -m 44` reported it on
+ * 2026-08-18: attached to Movistar on its HOME network over LTE at 86 %, packet
+ * service attached, no rejection, and a non-blocking `sim-pin2` outstanding.
+ * Nothing about it is in flight and nothing about it is broken — which is the
+ * whole point, because it used to draw the amber "still working on it" register
+ * behind an `Hourglass`.
+ */
+describe("registered is its own register (board fixture)", () => {
+	const rm530n = modem({
+		ifname: "wwan2",
+		name: "RM530N-GL - 16855",
+		device_class: "usb",
+		sim_lock: { required: "sim-pin2" },
+		packet_service_state: "attached",
+		status: {
+			connection: "registered",
+			signal: 86,
+			roaming: false,
+			network: "Movistar",
+			network_type: "lte",
+		},
+	} as Partial<Modem>);
+
+	it("resolves to `registered` — the non-blocking PIN2 does not speak over it", () => {
+		expect(resolveRowState(rm530n, "mm-managed")).toBe("registered");
+	});
+
+	it("is NOT drawn in the transitional register", () => {
+		const tone = stateTone("registered");
+
+		expect(tone).toBe("ready");
+		for (const inFlight of ["searching", "connecting", "scanning"] as const) {
+			expect(tone).not.toBe(stateTone(inFlight));
+		}
+	});
+
+	// The other half of the fix, and the reason `ready` had to exist rather than
+	// `registered` simply being promoted to `live`: this modem holds no address,
+	// so the row itself refuses the bond. A carrying-data colour above that
+	// sentence would make the row contradict itself.
+	it("is NOT drawn as bonded, because the row refuses the bond", () => {
+		expect(stateTone("registered")).not.toBe(stateTone("connected"));
+		expect(
+			bondDisabledReasonKey(rm530n, "mm-managed", "registered", false),
+		).toBe("network.cellular.bond.noAddress");
+	});
+
+	it("claims no fault — an attached packet service explains nothing", () => {
+		expect(registrationRejectionKey(rm530n)).toBeUndefined();
+	});
+
+	// A `registered` radio whose packet service is DETACHED is a different fact,
+	// and `DATA_EXPECTED_STATES` already names it. The calm tone must not swallow
+	// that line.
+	it("still names a detached packet service on the same state", () => {
+		const detached = modem({
+			...rm530n,
+			packet_service_state: "detached",
+		} as Partial<Modem>);
+
+		expect(registrationRejectionKey(detached)).toBe(
+			"network.cellular.rejection.packetDetached",
+		);
+		expect(stateTone("registered")).toBe("ready");
 	});
 });
 
@@ -301,16 +452,32 @@ describe("configureDisabledReasonKey", () => {
 	});
 
 	it.each([
-		["router-ethernet", "network.cellular.reason.routerManaged"],
+		["router-ethernet", "network.cellular.reason.routerControlsUnverified"],
 		["unmanaged", "network.cellular.config.unmanaged"],
 	] as const)("%s is disabled with a reason", (band, key) => {
 		expect(configureDisabledReasonKey(band)).toBe(key);
 	});
 
-	it("a router dongle REUSES its availability reason — the same fact, stated once", () => {
-		expect(configureDisabledReasonKey("router-ethernet")).toBe(
-			availabilityReasonKey("router_managed"),
-		);
+	/**
+	 * WHY IT IS REFUSED IS THE QUESTION, AND EVERY REFUSAL USED TO ANSWER IT
+	 * THE SAME WAY.
+	 *
+	 * Configure is refused when no write to this dongle has been PROVEN to
+	 * land, and offered when one has. Both rows are `router-ethernet`, both run
+	 * their own router, and while the refusal reused the generic availability
+	 * sentence the two rows differed by nothing an operator could read: a
+	 * working Huawei and a refused ZTE both said "manages this connection
+	 * itself". The reason must therefore be its own key — distinct from every
+	 * other reason on this surface, so no future collapse can re-merge them.
+	 */
+	it("names the unverified-write refusal in its own words", () => {
+		const key = configureDisabledReasonKey("router-ethernet");
+
+		expect(key).toBe("network.cellular.reason.routerControlsUnverified");
+		expect(key).not.toBe(availabilityReasonKey("router_managed"));
+		expect(key).not.toBe(availabilityReasonKey("router_direct"));
+		expect(key).not.toBe(configureDisabledReasonKey("unmanaged"));
+		expect(key).not.toBe("network.cellular.reason.unknown");
 	});
 
 	// The capability gate, both ways. `controls` is the backend's claim that a
@@ -334,7 +501,7 @@ describe("configureDisabledReasonKey", () => {
 			router_admin: { admin_url: "http://192.168.0.1", reachable: true },
 		} as unknown as Modem;
 		expect(configureDisabledReasonKey("router-ethernet", readOnly)).toBe(
-			"network.cellular.reason.routerManaged",
+			"network.cellular.reason.routerControlsUnverified",
 		);
 	});
 });
@@ -357,6 +524,41 @@ describe("rowNoteKeys", () => {
 
 	it("a fully healthy row explains nothing, because there is nothing to explain", () => {
 		expect(rowNoteKeys({})).toEqual([]);
+	});
+
+	/**
+	 * The unverified-write refusal already contains the generic sentence's
+	 * content — it names why THIS dongle offers nothing and still points at its
+	 * own web interface — so the two are not two facts. Printing both restates
+	 * half of one under the other and grows the row back towards the wall the
+	 * density pass removed, which is the only reason splitting the keys is safe.
+	 */
+	it("drops a generic line the specific one already covers", () => {
+		expect(
+			rowNoteKeys({
+				availability: "network.cellular.reason.routerManaged",
+				configure: "network.cellular.reason.routerControlsUnverified",
+			}),
+		).toEqual(["network.cellular.reason.routerControlsUnverified"]);
+	});
+
+	it("keeps the generic line when nothing supersedes it", () => {
+		expect(
+			rowNoteKeys({ availability: "network.cellular.reason.routerManaged" }),
+		).toEqual(["network.cellular.reason.routerManaged"]);
+	});
+
+	it("supersedes only the named key, never a neighbouring reason", () => {
+		expect(
+			rowNoteKeys({
+				availability: "network.cellular.reason.routerManaged",
+				bond: "network.cellular.bond.routerManagedLink",
+				configure: "network.cellular.reason.routerControlsUnverified",
+			}),
+		).toEqual([
+			"network.cellular.bond.routerManagedLink",
+			"network.cellular.reason.routerControlsUnverified",
+		]);
 	});
 
 	it("every router lifecycle state costs at most TWO lines", () => {
@@ -585,14 +787,20 @@ describe("cellular-row — SIM-lock routing (todo 46)", () => {
 	const locked = (required: string) =>
 		modem({ sim_lock: { required, remainingAttempts: 3 } } as Partial<Modem>);
 
-	it("reads the outstanding lock back, and only for real lock tokens", () => {
+	it("reads back only the locks this UI surfaces at all", () => {
 		expect(activeSimLock(locked("sim-pin"))).toBe("sim-pin");
-		expect(activeSimLock(locked("sim-pin2"))).toBe("sim-pin2");
 		expect(activeSimLock(locked("sim-puk"))).toBe("sim-puk");
-		expect(activeSimLock(locked("sim-puk2"))).toBe("sim-puk2");
 		expect(activeSimLock(modem())).toBeUndefined();
 		expect(activeSimLock(locked("none"))).toBeUndefined();
 		expect(activeSimLock(locked("unknown-future-token"))).toBeUndefined();
+	});
+
+	it("answers `undefined` for the `2` variants — they are not surfaced", () => {
+		// A product decision, not a reading: PIN2/PUK2 gate only the SIM's
+		// Fixed-Dialling-Number list, and this product has no calls or contacts
+		// surface to reach it from. The wire still carries the token.
+		expect(activeSimLock(locked("sim-pin2"))).toBeUndefined();
+		expect(activeSimLock(locked("sim-puk2"))).toBeUndefined();
 	});
 
 	it("counts PIN1/PUK1 as blocking and the `2` variants as NOT blocking", () => {
@@ -632,13 +840,18 @@ describe("cellular-row — SIM-lock routing (todo 46)", () => {
 		expect(resolveRowAction(locked("sim-pin"), "unmanaged")).toBe("configure");
 	});
 
-	it("still renders every lock token as the one `locked` STATE", () => {
-		// With no radio state reported there is nothing for the lock to speak
-		// over, so all four collapse to the single badge. Routing splits them;
-		// the badge deliberately does not.
-		for (const token of ["sim-pin", "sim-pin2", "sim-puk", "sim-puk2"]) {
+	it("renders a BLOCKING lock as the `locked` STATE", () => {
+		for (const token of ["sim-pin", "sim-puk"]) {
 			expect(resolveRowState(locked(token), "mm-managed")).toBe("locked");
 		}
+	});
+
+	it("never renders a `2` variant as `locked`, even with no radio state", () => {
+		// The old rule let a `2` variant claim `locked` whenever the radio had
+		// reported nothing. "Nothing was reported" is `unknown`; a lock this
+		// product cannot act on may not stand in for it.
+		expect(resolveRowState(locked("sim-pin2"), "mm-managed")).toBe("unknown");
+		expect(resolveRowState(locked("sim-puk2"), "mm-managed")).toBe("unknown");
 	});
 });
 
@@ -692,6 +905,54 @@ describe("a searching modem reports its REAL signal, not zero", () => {
 
 	it("keeps the primary action on configure, matching the state it now shows", () => {
 		expect(resolveRowAction(QUECTEL_SEARCHING, "mm-managed")).toBe("configure");
+	});
+});
+
+/**
+ * The same bench Quectel once it REGISTERS, which is how it reads on the board
+ * today — and the state this row must show ALONE.
+ *
+ * `sim-pin2` was previously disclosed twice over: it forced `locked` whenever no
+ * connection was reported, and otherwise rode along as a second "SIM locked"
+ * pill beside the true state. Both are gone. There is no PIN2 surface left in
+ * this UI, so every derivation an operator can see must resolve as if the token
+ * were absent.
+ */
+describe("a `sim-pin2`-only modem is indistinguishable from an unlocked one", () => {
+	const QUECTEL_REGISTERED = {
+		...QUECTEL_SEARCHING,
+		status: { ...QUECTEL_SEARCHING.status, connection: "registered" },
+	} as Modem;
+
+	const UNLOCKED = { ...QUECTEL_REGISTERED, sim_lock: undefined } as Modem;
+
+	it("renders its REAL state, in the resting `ready` register", () => {
+		expect(resolveRowState(QUECTEL_REGISTERED, "mm-managed")).toBe(
+			"registered",
+		);
+		expect(stateTone(resolveRowState(QUECTEL_REGISTERED, "mm-managed"))).toBe(
+			"ready",
+		);
+	});
+
+	it("discloses no lock anywhere a row could render one", () => {
+		expect(activeSimLock(QUECTEL_REGISTERED)).toBeUndefined();
+		expect(isBlockingSimLock(activeSimLock(QUECTEL_REGISTERED))).toBe(false);
+		expect(resolveRowAction(QUECTEL_REGISTERED, "mm-managed")).toBe(
+			"configure",
+		);
+	});
+
+	it("derives exactly what the same modem with NO lock derives", () => {
+		for (const band of ["mm-managed"] as const) {
+			expect(resolveRowState(QUECTEL_REGISTERED, band)).toBe(
+				resolveRowState(UNLOCKED, band),
+			);
+			expect(resolveRowAction(QUECTEL_REGISTERED, band)).toBe(
+				resolveRowAction(UNLOCKED, band),
+			);
+		}
+		expect(activeSimLock(QUECTEL_REGISTERED)).toBe(activeSimLock(UNLOCKED));
 	});
 });
 

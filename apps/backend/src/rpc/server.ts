@@ -12,6 +12,7 @@ import { logger } from "../helpers/logger.ts";
 import { getIsStreaming } from "../modules/streaming/streaming.ts";
 import { getLocalObservability } from "../modules/system/observability.ts";
 import { getSystemdSocket } from "../modules/system/systemd.ts";
+import { handleDongleAdminRequest } from "../modules/ui/dongle-admin-proxy.ts";
 import {
 	handleKioskTokenExchange,
 	KIOSK_TOKEN_PARAM,
@@ -140,6 +141,16 @@ async function handleRequest(
 		if (exchange) {
 			return exchange;
 		}
+	}
+
+	// Router-dongle admin-UI reverse proxy. Forked BEFORE the dev-server proxy and
+	// the static server, because those would otherwise answer the dongle's own
+	// absolute paths. It authenticates itself (single-use token -> scoped
+	// HttpOnly cookie) and answers `null` for any path that is not its own, so
+	// every other route is untouched.
+	const dongleAdmin = await handleDongleAdminRequest(req);
+	if (dongleAdmin) {
+		return dongleAdmin;
 	}
 
 	// Read-only probe for the dev-sync stream-active guard. Intentional exception

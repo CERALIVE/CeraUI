@@ -23,6 +23,7 @@ import type {
 	SimLockRequired,
 } from "./mmcli.ts";
 import type { ModemStatus } from "./modem-registration.ts";
+import type { SimPresence } from "./sim-presence.ts";
 
 export type SimLock = {
 	required: SimLockRequired;
@@ -72,6 +73,24 @@ export type Modem = {
 	inhibit?: true; // don't bring up automatically
 	config?: ModemConfig;
 	status?: ModemStatus;
+	/**
+	 * Whether ModemManager can SEE a card in this modem. Absent means the read
+	 * could not answer — never "no SIM"; see `sim-presence.ts`, which owns the
+	 * distinction between this and the presence of an NM connection profile.
+	 */
+	sim_presence?: SimPresence;
+	/**
+	 * The SIM's own number(s), as mmcli reported them. SENSITIVE — never logged.
+	 * Absent means the carrier published none, which is the ordinary case.
+	 */
+	own_numbers?: Array<string>;
+	/**
+	 * The SIM's ICCID, from the SIM object rather than the modem's own `-K`
+	 * payload — so a status refresh cannot re-read it and it is PRESERVED across
+	 * polls (like `config`, its sibling from the same read). A card swap
+	 * re-registers the modem, which is what replaces it.
+	 */
+	iccid?: string;
 	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
 	removed?: true;

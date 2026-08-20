@@ -36,16 +36,21 @@
   failed.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { Modem, RouterAdminControls } from '@ceraui/rpc/schemas';
-import { Info, Router } from '@lucide/svelte';
+import { ExternalLink, Info, Router } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
+import { Button } from '$lib/components/ui/button';
 import { AppDialog } from '$lib/components/dialogs';
 import { Label } from '$lib/components/ui/label';
 import { rpc } from '$lib/rpc';
 
+import {
+	openRouterAdminUi,
+	routerAdminOpenReasonKey,
+} from '../network/router-admin-open';
 import { detailFields, identityFields, netModeCapability } from './router-dongle-fields';
 
 interface Props {
@@ -85,6 +90,13 @@ function deviceValue(id: ControlId): boolean {
 const identity = $derived(identityFields(admin));
 const details = $derived(detailFields(admin));
 const netMode = $derived(netModeCapability(admin));
+
+async function openAdmin(): Promise<void> {
+	const outcome = await openRouterAdminUi(deviceId);
+	if (!outcome.ok) {
+		toast.error(resolveMessageKey(routerAdminOpenReasonKey(outcome.reason)));
+	}
+}
 
 function refusalMessage(error: string | undefined): string {
 	if (error === 'not_applied') return m["network.routerCellular.control.notApplied"]();
@@ -306,8 +318,11 @@ async function applyNetMode(mode: string) {
 		{/if}
 
 		{#if admin}
-			<!-- Stated, never linked: the address is on the DONGLE's network, which
-			     the operator's browser is not on, so an anchor would be dead. -->
+			<!-- The address is stated, and the page it names is reachable through
+			     CeraUI's own proxy rather than by linking to it: the operator's
+			     browser is not on the dongle's network. The proxy is addressed by
+			     `deviceId`, which resolves to an INTERFACE — an address would name
+			     both units of an identical pair. -->
 			<p class="text-muted-foreground/80 text-xs" data-testid="dongle-admin-note">
 				{#if admin.reachable}
 					{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
@@ -315,6 +330,16 @@ async function applyNetMode(mode: string) {
 					{m["network.routerCellular.adminUnreachable"]()}
 				{/if}
 			</p>
+			<Button
+				class="w-fit gap-1"
+				data-testid="dongle-open-admin"
+				size="sm"
+				variant="outline"
+				onclick={openAdmin}
+			>
+				<ExternalLink class="size-3.5" aria-hidden="true" />
+				{m["network.routerCellular.adminOpen"]()}
+			</Button>
 		{/if}
 	</div>
 </AppDialog>

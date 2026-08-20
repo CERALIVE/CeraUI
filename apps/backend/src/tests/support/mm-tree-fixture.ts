@@ -58,9 +58,19 @@ export interface ModemFixture {
 	readonly unlockRequired?: number;
 	readonly unlockRetries?: readonly (readonly [number, number])[];
 	readonly revision?: string;
+	readonly ownNumbers?: readonly string[];
 	readonly simPath?: string;
+	/** `Sim.SimIdentifier`. An empty string is MM's "the card withheld it". */
+	readonly iccid?: string;
 	readonly simType?: number;
 	readonly esimStatus?: number;
+	readonly packetServiceState?: number;
+	readonly networkRejection?: {
+		readonly error: number;
+		readonly operatorId?: string;
+		readonly operatorName?: string;
+		readonly accessTechnology?: number;
+	};
 }
 
 function v(
@@ -122,10 +132,31 @@ function modemProps(fixture: ModemFixture): [string, ReturnType<typeof v>][] {
 	if (fixture.revision !== undefined) {
 		props.push(["Revision", v("s", fixture.revision)]);
 	}
+	if (fixture.ownNumbers !== undefined) {
+		props.push(["OwnNumbers", v("as", [...fixture.ownNumbers])]);
+	}
 	if (fixture.simPath !== undefined) {
 		props.push(["Sim", v("o", fixture.simPath)]);
 	}
 	return props;
+}
+
+function networkRejectionDict(
+	rejection: NonNullable<ModemFixture["networkRejection"]>,
+): DbusValue {
+	const entries: [string, ReturnType<typeof v>][] = [
+		["error", v("u", rejection.error)],
+	];
+	if (rejection.operatorId !== undefined) {
+		entries.push(["operator-id", v("s", rejection.operatorId)]);
+	}
+	if (rejection.operatorName !== undefined) {
+		entries.push(["operator-name", v("s", rejection.operatorName)]);
+	}
+	if (rejection.accessTechnology !== undefined) {
+		entries.push(["access-technology", v("u", rejection.accessTechnology)]);
+	}
+	return entries as unknown as DbusValue;
 }
 
 /** One modem object plus (when the fixture names one) its SIM object. */
@@ -145,6 +176,19 @@ export function modemObjects(fixture: ModemFixture): DecodedManagedObjects {
 						...(fixture.operatorName !== undefined
 							? ([["OperatorName", v("s", fixture.operatorName)]] as const)
 							: []),
+						...(fixture.packetServiceState !== undefined
+							? ([
+									["PacketServiceState", v("u", fixture.packetServiceState)],
+								] as const)
+							: []),
+						...(fixture.networkRejection !== undefined
+							? ([
+									[
+										"NetworkRejection",
+										v("a{sv}", networkRejectionDict(fixture.networkRejection)),
+									],
+								] as const)
+							: []),
 					],
 				],
 			],
@@ -161,7 +205,7 @@ export function modemObjects(fixture: ModemFixture): DecodedManagedObjects {
 				[
 					SIM_IFACE,
 					[
-						["SimIdentifier", v("s", "8934071100000000001")],
+						["SimIdentifier", v("s", fixture.iccid ?? "8934071100000000001")],
 						["SimType", v("u", fixture.simType ?? 1)],
 						...(fixture.esimStatus !== undefined
 							? ([["EsimStatus", v("u", fixture.esimStatus)]] as const)

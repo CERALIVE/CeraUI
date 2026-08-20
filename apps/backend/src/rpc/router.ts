@@ -44,6 +44,7 @@ import {
 	ussdRespondProcedure,
 } from "./procedures/modems.procedure.ts";
 import {
+	openRouterAdminProcedure,
 	setRouterControlProcedure,
 	setRouterNetModeProcedure,
 	setRouterSubnetProcedure,
@@ -170,6 +171,7 @@ const stableRoutes = {
 		getBands: getModemBandsProcedure,
 		setBands: setModemBandsProcedure,
 		setFiveGPreference: setFiveGPreferenceProcedure,
+		openRouterAdmin: openRouterAdminProcedure,
 		setRouterControl: setRouterControlProcedure,
 		setRouterNetMode: setRouterNetModeProcedure,
 		setRouterSubnet: setRouterSubnetProcedure,

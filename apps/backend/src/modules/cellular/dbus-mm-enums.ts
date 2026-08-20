@@ -203,6 +203,72 @@ export function decodeEsimStatus(
 	return undefined;
 }
 
+/**
+ * MMModem3gppPacketServiceState (`Modem3gpp.PacketServiceState`) → the mmcli
+ * `modem.3gpp.packet-service-state` token.
+ *
+ * `0` (unknown) yields `undefined`: absence on this seam means "not observed",
+ * and a radio that has not said whether it is attached must not be reported as
+ * detached — that is a fault claim the device did not make.
+ */
+export function decodePacketServiceState(
+	value: number | undefined,
+): string | undefined {
+	if (value === 1) return "detached";
+	if (value === 2) return "attached";
+	return undefined;
+}
+
+/**
+ * MMNetworkError (`Modem3gpp.NetworkRejection`'s `error` key) → the mmcli
+ * `modem.3gpp.network-rejection-error` token.
+ *
+ * These ARE the tokens the frontend's `REJECTION_REASON_KEYS` table already
+ * maps to operator copy, so the vocabulary is fixed by that table rather than
+ * chosen here. Values follow `MMNetworkError` in ModemManager's
+ * `include/ModemManager-enums.h`, which numbers them by their 3GPP reject cause.
+ *
+ * An unlisted cause yields `undefined` rather than a made-up token: the whole
+ * point of the field is that each value points the operator somewhere specific,
+ * and a cause this build cannot name says nothing worth rendering.
+ */
+export function decodeNetworkRejectionError(
+	value: number | undefined,
+): string | undefined {
+	switch (value) {
+		case 2:
+			return "imsi-unknown-in-hlr";
+		case 3:
+			return "illegal-ms";
+		case 4:
+			return "imsi-unknown-in-vlr";
+		case 5:
+			return "imei-not-accepted";
+		case 6:
+			return "illegal-me";
+		case 7:
+			return "gprs-not-allowed";
+		case 8:
+			return "gprs-and-non-gprs-not-allowed";
+		case 11:
+			return "plmn-not-allowed";
+		case 12:
+			return "location-area-not-allowed";
+		case 13:
+			return "roaming-not-allowed-in-location-area";
+		case 14:
+			return "gprs-not-allowed-in-plmn";
+		case 15:
+			return "no-cells-in-location-area";
+		case 17:
+			return "network-failure";
+		case 22:
+			return "congestion";
+		default:
+			return undefined;
+	}
+}
+
 /** The trailing integer of an MM object path (`…/Modem/7` ⇒ `7`), else `undefined`. */
 export function runtimeIdFromPath(path: string): number | undefined {
 	const match = /\/(\d+)$/.exec(path);

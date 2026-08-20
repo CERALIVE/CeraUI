@@ -12,6 +12,7 @@ import { describe, expect, it } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { mintLinkId } from "../modules/modems/physical-identity.ts";
 import { setup } from "../modules/setup.ts";
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import { publishSrtlaBond } from "../modules/streaming/srtla.ts";
@@ -22,7 +23,7 @@ const entries = (...ips: string[]): BondEntry[] =>
 	ips.map((ip, index) => ({
 		ip,
 		iface: `eth${index}`,
-		linkId: `lnk_eth${index}`,
+		linkId: mintLinkId(`ifname:eth${index}`),
 	}));
 
 describe("srtla ips-file writer (Task 13 Bun.write migration)", () => {

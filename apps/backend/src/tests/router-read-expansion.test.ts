@@ -244,6 +244,7 @@ describe("the UFI reads cover the catalog commands", () => {
 			provider: "无服务。",
 			network_mode: "1",
 			ssid: "4G-UFI-611A",
+			web_version: "WEB1.1",
 			product: "HM-UFI-01",
 		});
 	});
@@ -287,6 +288,7 @@ describe("the UFI reads cover the catalog commands", () => {
 			provider: "无服务。",
 			network_mode: "1",
 			ssid: "4G-UFI-611A",
+			web_version: "WEB1.1",
 			product: "HM-UFI-01",
 		});
 	});

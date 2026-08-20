@@ -51,11 +51,14 @@ import type {
 	DbusModemView,
 	DbusRegistrationView,
 } from "../modems/modem-wire-adapters.ts";
+import { isSimObjectPath, type SimPresence } from "../modems/sim-presence.ts";
 
 import {
 	decodeAccessTechnologies,
 	decodeEsimStatus,
 	decodeMmState,
+	decodeNetworkRejectionError,
+	decodePacketServiceState,
 	decodeRegistrationState,
 	decodeSimType,
 	decodeUnlockRequired,
@@ -145,6 +148,129 @@ function readEsim(
 		: { sim_type: simType };
 }
 
+/**
+ * The SIM's ICCID, from the SIM object the modem points at — NOT from the modem
+ * itself, which publishes no such property. Board-confirmed on `ceralive2`:
+ * `busctl get-property … /SIM/2 …Sim SimIdentifier` answers the same digits
+ * `mmcli -i` prints, so the two backends agree by reading one MM fact.
+ *
+ * A card that has not been read yet answers the empty string, which is absence.
+ */
+function readIccid(
+	tree: DecodedManagedObjects,
+	modem: ReturnType<typeof findInterface>,
+): string | undefined {
+	const sim = followObjectPath(tree, modem, "Sim", SIM_IFACE);
+	const iccid = stringProp(sim, "SimIdentifier")?.trim();
+	return iccid !== undefined && iccid.length > 0 ? iccid : undefined;
+}
+
+/** MM_MODEM_STATE_FAILED_REASON_SIM_MISSING — MM's own "there is no card" value. */
+const FAILED_REASON_SIM_MISSING = 2;
+
+/**
+ * The D-Bus twin of `sim-presence.ts`'s mmcli rule, reading the SAME three MM
+ * facts (`Modem.Sim`, `Modem.SimSlots`, `Modem.StateFailedReason`) so the two
+ * backends cannot disagree about whether a modem holds a card. An empty slot is
+ * published as the root path `/`, so the object-path SHAPE is the test.
+ */
+function readSimPresence(modem: ReturnType<typeof findInterface>): SimPresence {
+	if (isSimObjectPath(stringProp(modem, "Sim"))) {
+		return "present";
+	}
+	const slots = propValue(modem, "SimSlots");
+	if (Array.isArray(slots) && slots.some(isSimObjectPath)) {
+		return "present";
+	}
+	return numberProp(modem, "StateFailedReason") === FAILED_REASON_SIM_MISSING
+		? "absent"
+		: "unknown";
+}
+
+/**
+ * One entry of an `a{sv}` property, unwrapped past its variant.
+ *
+ * The codec decodes a dict to `[key, {signature, value}]` pairs and `propValue`
+ * only unwraps the OUTER property variant, so a nested `a{sv}` still carries a
+ * variant per value — which is why this cannot reuse `stringProp`/`numberProp`.
+ */
+function dictEntry(dict: DbusValue | undefined, key: string): unknown {
+	if (!Array.isArray(dict)) return undefined;
+	for (const entry of dict) {
+		if (!Array.isArray(entry) || entry[0] !== key) continue;
+		const variant = entry[1];
+		return variant !== null && typeof variant === "object" && "value" in variant
+			? (variant as { value: unknown }).value
+			: variant;
+	}
+	return undefined;
+}
+
+/**
+ * The network's own stated reason for refusing registration
+ * (`Modem3gpp.NetworkRejection`, `a{sv}`).
+ *
+ * The mmcli twin of this lives in `modem-registration.ts`, and its anchoring
+ * rule is reproduced rather than re-decided: no decodable `error` ⇒ NO rejection
+ * at all, because the operator-id / access-technology fields describe nothing an
+ * operator could act on without it.
+ *
+ * WHY IT EXISTS: `"dbus"` is the DEFAULT backend, and this fold published no
+ * rejection at all — so the whole `REJECTION_REASON_KEYS` surface the frontend
+ * already ships was unreachable on every shipped device. A bench Quectel that
+ * ModemManager's own log described as `imsi-unknown-in-hlr` on its home network
+ * reached the operator as a bare "Searching…" forever.
+ */
+function readNetworkRejection(
+	modem3gpp: ReturnType<typeof findInterface>,
+): DbusModemView["registrationRejection"] {
+	const dict = propValue(modem3gpp, "NetworkRejection");
+	const raw = dictEntry(dict, "error");
+	const error = decodeNetworkRejectionError(
+		typeof raw === "number" ? raw : undefined,
+	);
+	if (error === undefined) return undefined;
+
+	const operatorId = dictEntry(dict, "operator-id");
+	const operatorName = dictEntry(dict, "operator-name");
+	const rawTech = dictEntry(dict, "access-technology");
+	const [accessTechnology] = decodeAccessTechnologies(
+		typeof rawTech === "number" ? rawTech : undefined,
+	);
+
+	return {
+		error,
+		...(typeof operatorId === "string" && operatorId.length > 0
+			? { operator_id: operatorId }
+			: {}),
+		...(typeof operatorName === "string" && operatorName.length > 0
+			? { operator_name: operatorName }
+			: {}),
+		...(accessTechnology !== undefined
+			? { access_technology: accessTechnology }
+			: {}),
+	};
+}
+
+/**
+ * `Modem.OwnNumbers` is `as`. Blank members are dropped and an all-blank list
+ * answers `undefined`, so a carrier that published nothing reads as silence
+ * rather than as an empty list a consumer could mistake for a finding.
+ */
+function readOwnNumbers(
+	modem: ReturnType<typeof findInterface>,
+): string[] | undefined {
+	const value = propValue(modem, "OwnNumbers");
+	if (!Array.isArray(value)) {
+		return undefined;
+	}
+	const numbers = value
+		.filter((item): item is string => typeof item === "string")
+		.map((item) => item.trim())
+		.filter((item) => item.length > 0);
+	return numbers.length > 0 ? numbers : undefined;
+}
+
 /** `Modem.UnlockRetries` is `a{uu}`; the retries for the CURRENTLY required lock. */
 function readUnlockRetries(
 	value: DbusValue | undefined,
@@ -199,6 +325,13 @@ function foldOne(
 	const operatorName = stringProp(modem3gpp, "OperatorName");
 	const firmwareRevision = stringProp(modem, "Revision");
 	const esim = readEsim(tree, modem);
+	const simPresence = readSimPresence(modem);
+	const ownNumbers = readOwnNumbers(modem);
+	const iccid = readIccid(tree, modem);
+	const registrationRejection = readNetworkRejection(modem3gpp);
+	const packetServiceState = decodePacketServiceState(
+		numberProp(modem3gpp, "PacketServiceState"),
+	);
 
 	return {
 		runtimeId,
@@ -226,6 +359,11 @@ function foldOne(
 		...(firmwareRevision !== undefined && firmwareRevision.length > 0
 			? { firmwareRevision }
 			: {}),
+		...(simPresence !== "unknown" ? { simPresence } : {}),
+		...(ownNumbers !== undefined ? { ownNumbers } : {}),
+		...(iccid !== undefined ? { iccid } : {}),
+		...(registrationRejection !== undefined ? { registrationRejection } : {}),
+		...(packetServiceState !== undefined ? { packetServiceState } : {}),
 		...(simLockRequired !== undefined ? { simLockRequired } : {}),
 		...(retries !== undefined ? { simLockRemainingAttempts: retries } : {}),
 		...(esim !== undefined ? { esim } : {}),

@@ -58,7 +58,7 @@ import {
 	readLocationStatus,
 	setLocationGnss,
 } from "./mmcli-location.ts";
-import { defaultResolveIdentity } from "./usb-mode-identity.ts";
+import { resolveModemIdentityAnchor } from "./mutation-identity.ts";
 
 export type ModemGpsSnapshot = {
 	readonly capability: CapabilityEvidence;
@@ -148,7 +148,7 @@ const defaultDeps: ModemGpsDeps = { now: () => Date.now() };
 function identityOf(
 	deps: ModemGpsDeps,
 ): (deviceId: string) => Promise<{ stableKey: string } | undefined> {
-	return deps.resolveIdentity ?? defaultResolveIdentity;
+	return deps.resolveIdentity ?? resolveModemIdentityAnchor;
 }
 
 /**

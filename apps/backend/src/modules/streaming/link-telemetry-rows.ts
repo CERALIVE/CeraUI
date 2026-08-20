@@ -43,6 +43,7 @@
 */
 
 import type { Telemetry } from "@ceralive/srtla-send/telemetry";
+import type { BondLinkIdentityState } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import {
@@ -62,9 +63,17 @@ export interface LinkTelemetryEntry {
 	conn_id: string;
 	/**
 	 * Todo 10's minted per-device id: THE row identity when it is known. Absent
-	 * only for a link resolved on the legacy `conn_id` rung.
+	 * for a link resolved on the legacy `conn_id` rung, and for one whose
+	 * identity could not be resolved at all — {@link LinkTelemetryEntry.identity_state}
+	 * is what tells those two apart.
 	 */
 	link_id?: string;
+	/**
+	 * Emitted ONLY as `"unmappable"`, and only when the writer positively failed
+	 * to resolve this link's device. Absence makes no claim either way, which is
+	 * the honest reading of a legacy-rung row.
+	 */
+	identity_state?: BondLinkIdentityState;
 	/** Human interface name — the sender's own, or the backend-owned IP list's. */
 	iface: string;
 	/** Physical port this link's device sits in — what separates two twins. */
@@ -323,6 +332,22 @@ function resolveIdentity(
 }
 
 /**
+ * The degraded marker for a row the ladder could not identify.
+ *
+ * SUPPRESSION-ONLY, and that is the whole safety argument: it can never promote
+ * a row to an identity — no `link_id`, no port label, no serial — so the legacy
+ * rung's rows stay byte-identical to before. It answers the one question the
+ * ladder's silence leaves open ("is this link KNOWN-unidentifiable, or merely
+ * unresolved on this rung") from the writer's own record for the interface the
+ * row actually resolved to. A resolved entry contributes nothing here.
+ */
+function unmappableByIface(iface: string): BondLinkIdentityState | undefined {
+	return identityForIface(iface)?.identityState === "unmappable"
+		? "unmappable"
+		: undefined;
+}
+
+/**
  * Project one snapshot onto the rendered rows.
  *
  * `mappingActive` comes from the ONE normalized disposition stream — it is never
@@ -338,13 +363,18 @@ export function buildLinkRows(
 	return snapshot.connections.map((conn) => {
 		const identity = resolveIdentity(conn.conn_id, conn, mappingActive);
 		const bytesSentTotal = asCumulativeBytes(conn);
+		const iface =
+			identity?.iface ??
+			readOptionalString(conn, "iface") ??
+			legacyIface(conn.conn_id);
+		const identityState = identity?.identityState ?? unmappableByIface(iface);
 		return {
 			conn_id: conn.conn_id,
-			...(identity !== undefined ? { link_id: identity.linkId } : {}),
-			iface:
-				identity?.iface ??
-				readOptionalString(conn, "iface") ??
-				legacyIface(conn.conn_id),
+			...(identity?.linkId !== undefined ? { link_id: identity.linkId } : {}),
+			...(identityState === "unmappable"
+				? { identity_state: identityState }
+				: {}),
+			iface,
 			...(identity?.portLabel !== undefined
 				? { port_label: identity.portLabel }
 				: {}),

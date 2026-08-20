@@ -17,6 +17,15 @@
   native `<details>` has. Do NOT swap it for `aria-hidden`: that hides the
   subtree from AT while leaving it focusable, which is the axe `aria-hidden-focus`
   violation rather than a fix for it.
+
+  …AND IT IS `visibility: hidden` TOO, WHICH IS A DIFFERENT PROBLEM. `inert`
+  governs focus and the accessibility tree; NEITHER it nor `overflow: hidden`
+  withdraws a layout box from HIT TESTING. A collapsed body's controls keep
+  full-size rects at their uncollapsed coordinates, so a pointer-driven caller
+  is told they are visible and then hit-tests onto whatever is really painted
+  there. See the note on the body below for the board measurement, and the
+  Cellular row (`main/network/CellularSection.svelte`), which carries the same
+  guard on its own copy of this shape.
 -->
 <script lang="ts">
 import { ChevronDown } from '@lucide/svelte';
@@ -107,7 +116,25 @@ let {
 		inert={!open}
 		style:grid-template-rows={open ? '1fr' : '0fr'}
 	>
-		<div class="min-h-0 overflow-hidden">
+		<!-- `overflow: hidden` clips PAINTING, not layout: every control in here
+		     keeps a full-size box at its uncollapsed position, so a collapsed
+		     body's buttons report a non-empty rect from inside a zero-height
+		     grid track. Measured on the board through the Cellular row's own
+		     copy of this shape, `open-router-admin` read 173x32 at y=1433 while
+		     its clipping ancestor was 0px tall — which is why Playwright called
+		     it "visible, enabled and stable" and then hit-tested onto whatever
+		     is genuinely painted at those coordinates, retrying "intercepts
+		     pointer events" forever rather than failing. `visibility` is
+		     inherited and removes the subtree from hit testing, and it
+		     TRANSITIONS: an endpoint of `visible` holds for the whole duration,
+		     so the close still animates alongside the row collapse and the open
+		     is instant. Being pure CSS, both motion freezes still cover it.
+		     `inert` is NOT redundant with it — that governs focus and the
+		     accessibility tree, this governs painting and hit testing. -->
+		<div
+			class="min-h-0 overflow-hidden transition-[visibility] duration-200"
+			style:visibility={open ? 'visible' : 'hidden'}
+		>
 			<div class="border-t px-4 py-4">
 				{@render children()}
 			</div>

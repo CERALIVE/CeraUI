@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { mintLinkId } from "../modules/modems/physical-identity.ts";
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import type { BindMapPublication } from "../modules/streaming/bind-map-writer.ts";
 import { prepareSrtlaIpAddresses } from "../modules/streaming/streamloop/session.ts";
@@ -14,7 +15,7 @@ const PUBLISHED: BindMapPublication = {
 const entry = (ip: string, iface: string): BondEntry => ({
 	ip,
 	iface,
-	linkId: `lnk_${iface}`,
+	linkId: mintLinkId(`ifname:${iface}`),
 });
 
 function deferred(): {

@@ -39,7 +39,7 @@
  * from inside a held mutation lease on a provisioned device.
  */
 
-import { open } from "node:fs/promises";
+import { constants as fsConstants, open } from "node:fs/promises";
 import type {
 	AtCommandSender,
 	AtResponse,
@@ -50,6 +50,8 @@ import { logger } from "../../helpers/logger.ts";
 import { spawnWatcher } from "../../helpers/spawn-policy.ts";
 
 const INHIBIT_SETTLE_MS = 750;
+const INHIBIT_READY_TIMEOUT_MS = 20_000;
+const INHIBIT_READY_POLL_MS = 500;
 const AT_READ_TIMEOUT_MS = 10_000;
 const AT_POLL_MS = 100;
 
@@ -62,6 +64,19 @@ export interface InhibitPortDeps {
 	spawn(uid: string): { kill(): void; readonly exited: Promise<unknown> };
 	wait(ms: number): Promise<void>;
 	now(): number;
+	/**
+	 * Positive evidence that ModemManager has actually LET GO of the AT port.
+	 *
+	 * `INHIBIT_SETTLE_MS` alone is a guess, and board measurement showed the
+	 * guess is wrong for this SKU in its MBIM composition: 750 ms after the
+	 * child starts MM still holds `ttyUSB7`, an open+read on it never returns,
+	 * and the transaction dies on its own 30 s watchdog with
+	 * `AT command timed out` — while the modem had in fact answered, so the
+	 * reply was still queued for whoever drained the port next. The same probe
+	 * under a 3 s wait answered in 7 ms. Absent, the settle delay alone is used,
+	 * which is the pre-measurement behaviour.
+	 */
+	confirmPortFree?: () => Promise<boolean>;
 }
 
 export const defaultInhibitPortDeps: InhibitPortDeps = {
@@ -94,6 +109,7 @@ export function createInhibitPort(
 			// MM releases the device asynchronously after the call is accepted, so
 			// the AT port is not free the instant the child starts.
 			await deps.wait(INHIBIT_SETTLE_MS);
+			await deps.confirmPortFree?.();
 			return { uid, acquiredAt: deps.now() as InhibitLease["acquiredAt"] };
 		},
 		uninhibit(lease) {
@@ -113,6 +129,51 @@ export function createInhibitPort(
 	};
 }
 
+/**
+ * Poll a bare `AT` handshake until the port answers, bounded.
+ *
+ * O_NONBLOCK is what makes this SAFE to call against a port ModemManager may
+ * still be holding: the failure mode being probed for is precisely an open/read
+ * that never returns, so a blocking probe would wedge on the first attempt
+ * instead of reporting it. It answers `false` rather than throwing — a port that
+ * never frees is the transaction's own AT timeout to report, not this probe's.
+ */
+export async function waitForAtPortReady(
+	path: string,
+	deps: Pick<AtSenderDeps, "now" | "wait"> = defaultAtSenderDeps,
+): Promise<boolean> {
+	const deadline = deps.now() + INHIBIT_READY_TIMEOUT_MS;
+	while (deps.now() < deadline) {
+		if (await probeAtPort(path)) return true;
+		await deps.wait(INHIBIT_READY_POLL_MS);
+	}
+	return false;
+}
+
+async function probeAtPort(path: string): Promise<boolean> {
+	let handle: Awaited<ReturnType<typeof open>> | undefined;
+	try {
+		handle = await open(
+			path,
+			fsConstants.O_RDWR | fsConstants.O_NOCTTY | fsConstants.O_NONBLOCK,
+		);
+		await handle.write("AT\r");
+		for (let attempt = 0; attempt < 10; attempt += 1) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			const buffer = Buffer.alloc(512);
+			const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+			if (buffer.subarray(0, bytesRead).toString("utf8").includes("OK")) {
+				return true;
+			}
+		}
+		return false;
+	} catch {
+		return false;
+	} finally {
+		await handle?.close().catch(() => undefined);
+	}
+}
+
 export interface AtSenderDeps {
 	openPort(path: string): Promise<{
 		write(data: string): Promise<void>;
@@ -128,7 +189,16 @@ async function openTty(path: string): Promise<{
 	read(): Promise<string>;
 	close(): Promise<void>;
 }> {
-	const handle = await open(path, "r+");
+	// O_NOCTTY IS LOAD-BEARING, NOT HYGIENE. A systemd service has no controlling
+	// terminal, so opening a tty without it makes THAT tty the controlling one —
+	// and the AT command this port exists to send is the one that resets the
+	// modem, which tears its own tty down. Board-measured on `ceralive2`: the
+	// kernel logged `option1 ttyUSB7 … now disconnected` and 2.9 s later
+	// `ceralive.service: Deactivated successfully` — the backend was hung up by
+	// the device it had just told to restart, mid-transaction, leaving the
+	// journal entry for systemd's replay to quarantine even though the hardware
+	// switch had actually succeeded.
+	const handle = await open(path, fsConstants.O_RDWR | fsConstants.O_NOCTTY);
 	return {
 		write: async (data) => {
 			await handle.write(data);

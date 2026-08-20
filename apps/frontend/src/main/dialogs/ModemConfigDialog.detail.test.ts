@@ -668,81 +668,46 @@ describe("the `uncertified` USB refusal is a FIRST-CLASS state", () => {
 });
 
 /**
- * Todo 46 — the outstanding-lock band.
+ * The outstanding-lock band is GONE, and this suite is what keeps it gone.
  *
- * Only a NON-BLOCKING lock can reach this dialog (the row routes a blocking one
- * straight to unlock), and that gate is what keeps the band's copy honest: it
- * tells the operator their service is unaffected, which is true of the `2`
- * variants and false of PIN1/PUK1. It must also never GATE anything — the
- * operator opened a working modem's settings and is entitled to them.
+ * It existed only for a non-blocking `sim-pin2`/`sim-puk2` — telling the
+ * operator their service was unaffected while still flagging the modem as
+ * locked, which reads as more alarming than it is. PIN2 gates only the SIM's
+ * Fixed-Dialling-Number list and this product exposes no calls or contacts
+ * surface, so the lock is no longer surfaced anywhere. What the dialog still
+ * owes such a modem is exactly what it owes an unlocked one: a complete,
+ * ungated form.
  */
-describe("ModemConfigDialog — outstanding SIM lock (todo 46)", () => {
+describe("ModemConfigDialog — a `sim-pin2` modem is treated as unlocked", () => {
 	function lockedModem(required: string): Modem {
 		const base = fullModem();
 		return { ...base, sim_lock: { required, remainingAttempts: 3 } } as Modem;
 	}
 
-	function mountLocked(required: string, onUnlock = vi.fn()) {
-		const view = render(ModemConfigDialog, {
-			props: {
-				open: true,
-				modem: lockedModem(required),
-				deviceId: "0",
-				onUnlock,
-			},
+	function mountLocked(required: string) {
+		return render(ModemConfigDialog, {
+			props: { open: true, modem: lockedModem(required), deviceId: "0" },
 		});
-		return { ...view, onUnlock };
 	}
 
-	it.each(["sim-pin2", "sim-puk2"])(
-		"%s reports the lock and offers the unlock beside the settings",
-		(required) => {
-			mountLocked(required);
-			const band = screen.getByTestId("modem-locked-band");
-			expect(band.getAttribute("data-sim-lock")).toBe(required);
-			// Calm status, never an alert — nothing is wrong with this modem.
-			expect(band.getAttribute("role")).toBe("status");
-			expect(screen.getByTestId("modem-locked-unlock")).toBeTruthy();
-			expectDialogIntact();
-		},
-	);
-
-	it("hands off to the unlock flow when the band's action is pressed", async () => {
-		const { onUnlock } = mountLocked("sim-pin2");
-		await fireEvent.click(screen.getByTestId("modem-locked-unlock"));
-		expect(onUnlock).toHaveBeenCalledTimes(1);
-	});
-
-	it.each(["sim-pin", "sim-puk"])(
-		"%s draws NO band — its copy would be a lie, and the row never routes it here",
+	it.each(["sim-pin", "sim-pin2", "sim-puk", "sim-puk2"])(
+		"%s draws no lock band and offers no unlock affordance",
 		(required) => {
 			mountLocked(required);
 			expect(screen.queryByTestId("modem-locked-band")).toBeNull();
+			expect(screen.queryByTestId("modem-locked-unlock")).toBeNull();
 			expectDialogIntact();
 		},
 	);
 
 	it("draws no band for an unlocked modem", () => {
 		render(ModemConfigDialog, {
-			props: {
-				open: true,
-				modem: fullModem(),
-				deviceId: "0",
-				onUnlock: vi.fn(),
-			},
+			props: { open: true, modem: fullModem(), deviceId: "0" },
 		});
 		expect(screen.queryByTestId("modem-locked-band")).toBeNull();
 	});
 
-	it("stays absent when the host offers no unlock route", () => {
-		// A band whose only action cannot fire would be a dead end.
-		render(ModemConfigDialog, {
-			props: { open: true, modem: lockedModem("sim-pin2"), deviceId: "0" },
-		});
-		expect(screen.queryByTestId("modem-locked-band")).toBeNull();
-	});
-
-	it("gates NOTHING — the lock is an offer, not a lock on the form", () => {
+	it("gates NOTHING — a PIN2 modem registers and streams, so its form stays live", () => {
 		mountLocked("sim-pin2");
 		expect(
 			screen

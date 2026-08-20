@@ -360,6 +360,59 @@ describe("cellular boot — backend selection is what the wire follows", () => {
 			expect(row.status).toBeDefined();
 		}
 	});
+
+	/**
+	 * The NM profile is NOT a ModemManager fact, so the fold cannot observe it —
+	 * and because the wire block is OPTIONAL, its absence broke nothing loudly.
+	 * What it broke quietly is the dialog's configure-echo, which returns `false`
+	 * on a missing config, so a save the device ACCEPTED could never be confirmed
+	 * and the spinner ran to its TTL. Board-measured on a Quectel RM530N-GL.
+	 */
+	test("a dbus row carries the NM connection profile the mmcli row carries", async () => {
+		await bootLikeCellular("multi-modem-wifi", { backend: "mmcli" });
+		const viaMmcli = Object.fromEntries(
+			Object.entries(buildModemsWireMessage())
+				.filter(([, row]) => row.config !== undefined)
+				.map(([id, row]) => [id, row.config]),
+		);
+		// The fixture must actually provision a profile, or this proves nothing.
+		expect(Object.keys(viaMmcli).length).toBeGreaterThan(0);
+
+		clearModems();
+		resetCellularStack();
+		resetModemWireProducer();
+		await bootLikeCellular("multi-modem-wifi", { backend: "dbus" });
+		expect(getCellularStack()).toEqual({
+			backend: "dbus",
+			ready: true,
+			degraded: false,
+		});
+
+		const viaDbus = buildModemsWireMessage();
+		for (const [id, config] of Object.entries(viaMmcli)) {
+			expect(viaDbus[id]?.config).toEqual(config);
+		}
+	});
+
+	/**
+	 * The other half of the join's contract: a modem the mmcli side holds no
+	 * profile for stays ABSENT. An empty block would render in the dialog as a
+	 * real, blank profile and invite a save against a connection that is not
+	 * provisioned yet.
+	 */
+	test("a modem with no NM profile is left without a config block", async () => {
+		await bootLikeCellular("multi-modem-wifi", { backend: "dbus" });
+		// The D-Bus views are independent of the mmcli state map, so dropping the
+		// map leaves the SAME rows with nothing to join a profile from.
+		clearModems();
+
+		const rows = Object.values(buildModemsWireMessage()).filter(
+			(row) => row.device_class !== "router-ethernet",
+		);
+		for (const row of rows) {
+			expect(Object.hasOwn(row, "config")).toBe(false);
+		}
+	});
 });
 
 /**

@@ -315,3 +315,104 @@ describe("the disclosure is a real disclosure", () => {
 		);
 	});
 });
+
+/**
+ * A collapsed body is MOUNTED and clipped by design (todo 64 rule 3), but
+ * `overflow: hidden` clips painting and not layout — so every control inside
+ * kept a full-size box at its uncollapsed coordinates. Measured on the bench
+ * board, `open-router-admin` reported 173x32 at y=1433 from inside a clipping
+ * ancestor that was 0px tall, which is a control that is unreachable to a
+ * pointer yet advertises itself as reachable: Playwright resolved it,
+ * announced "element is visible, enabled and stable", hit-tested its centre
+ * onto whichever `modem-row` is genuinely painted at those coordinates, and
+ * retried "intercepts pointer events" until it timed out.
+ *
+ * `visibility` is the property that fixes BOTH halves at once — it is
+ * inherited, it withdraws the subtree from hit testing, and a browser reports
+ * it as not-visible. Nothing about the mounted-and-inert contract changes.
+ */
+describe("a collapsed disclosure hides its content from the pointer", () => {
+	function clip(container: HTMLElement): HTMLElement {
+		const el = detailsBody(container).firstElementChild;
+		if (!(el instanceof HTMLElement)) throw new Error("no clipping wrapper");
+		return el;
+	}
+
+	it("marks the clipped wrapper visibility:hidden while collapsed", () => {
+		const { container } = renderRows([["0", hilink()]]);
+
+		expect(detailsBody(container).dataset.open).toBe("false");
+		expect(clip(container).style.visibility).toBe("hidden");
+	});
+
+	it("reveals it on open and hides it again on close", async () => {
+		const { container, getByTestId } = renderRows([["0", hilink()]]);
+
+		await fireEvent.click(getByTestId("modem-details-toggle"));
+		expect(clip(container).style.visibility).toBe("visible");
+
+		await fireEvent.click(getByTestId("modem-details-toggle"));
+		expect(clip(container).style.visibility).toBe("hidden");
+	});
+
+	it("hides only the collapsed row's content, never an open sibling's", async () => {
+		const { container } = renderRows([
+			["0", refusedRadio()],
+			["1", hilink()],
+		]);
+		const toggles = [
+			...container.querySelectorAll<HTMLElement>(
+				'[data-testid="modem-details-toggle"]',
+			),
+		];
+		// biome-ignore lint/style/noNonNullAssertion: two rows rendered above
+		await fireEvent.click(toggles[1]!);
+
+		const wrappers = [
+			...container.querySelectorAll<HTMLElement>(
+				'[data-testid="modem-details-body"]',
+			),
+		].map((body) => body.firstElementChild as HTMLElement);
+
+		expect(wrappers.map((el) => el.style.visibility)).toEqual([
+			"hidden",
+			"visible",
+		]);
+	});
+
+	it("keeps the reveal in CSS, so both motion freezes still cover it", () => {
+		const { container } = renderRows([["0", hilink()]]);
+		expect(clip(container).className).toContain("transition-[visibility]");
+	});
+});
+
+/**
+ * The `{#each}` key. It used to be `modem.ifname || id + '-' + index`, and the
+ * bench HiLink twins ship ONE factory MAC between them, so they rename against
+ * each other (`enx0c5b8f279a64` <-> `eth1`) on replug — which swaps two rows'
+ * keys and makes Svelte destroy and rebuild both, discarding their disclosure
+ * state and detaching whatever the operator was reaching for.
+ */
+describe("a row survives its interface being renamed", () => {
+	it("keeps the row's DOM node and its open disclosure across a rename", async () => {
+		const twinA = { ...hilink(), ifname: "enx0c5b8f279a64" } as Modem;
+		const twinB = { ...hilink(), ifname: "eth1" } as Modem;
+		const { container, getByTestId, rerender } = renderRows([["1001", twinA]]);
+
+		await fireEvent.click(getByTestId("modem-details-toggle"));
+		const before = row(container);
+		expect(detailsBody(container).dataset.open).toBe("true");
+
+		await rerender({
+			modemEntries: [["1001", twinB]],
+			netif: { eth1: { tp: 0, enabled: true, ip: "10.0.0.5" } },
+			isFullyStale: false,
+			staleInterfaces: new Set<string>(),
+			onConfigure: vi.fn(),
+		});
+
+		expect(row(container)).toBe(before);
+		expect(row(container).dataset.ifname).toBe("eth1");
+		expect(detailsBody(container).dataset.open).toBe("true");
+	});
+});

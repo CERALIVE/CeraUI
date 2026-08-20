@@ -27,6 +27,7 @@ import {
 	it,
 	vi,
 } from "vitest";
+import { openModemAdvanced } from "../../tests/helpers/modem-advanced";
 import {
 	publishModems,
 	resetModemsFeed,
@@ -202,6 +203,11 @@ describe("ONLY the certified transitions are rendered", () => {
 		});
 
 		const group = await screen.findByTestId("modem-usb-mode-targets");
+		// The card lives inside the "Advanced" disclosure, whose collapsed body is
+		// `visibility: hidden` and therefore INACCESSIBLE — so a role query has to
+		// address it the way an operator does. `getByTestId` reaches it either
+		// way, which is why only this assertion needed the step.
+		await openModemAdvanced();
 		const rendered = within(group)
 			.getAllByRole("radio")
 			.map((el) => el.getAttribute("data-testid"));

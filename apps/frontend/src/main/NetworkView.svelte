@@ -133,23 +133,9 @@ let simUnlockOpen = $state(false);
 let unlockModemId = $state<string | null>(null);
 const unlockModem = $derived(modemEntries.find(([id]) => id === unlockModemId)?.[1]);
 
-// The modem whose config dialog handed off to the unlock flow, or null when the
-// unlock was reached STANDALONE from a row. It is the whole distinction between
-// "go back" and "close": only the nested route has somewhere to go back to.
-let unlockReturnToConfigId = $state<string | null>(null);
-
-function openSimUnlock(id: string, returnToConfigId: string | null = null) {
+function openSimUnlock(id: string) {
 	unlockModemId = id;
-	unlockReturnToConfigId = returnToConfigId;
 	simUnlockOpen = true;
-}
-
-function returnFromSimUnlock() {
-	const returnTo = unlockReturnToConfigId;
-	if (returnTo === null) return;
-	unlockReturnToConfigId = null;
-	configModemId = returnTo;
-	modemDialogOpen = true;
 }
 
 /**
@@ -171,8 +157,11 @@ function returnFromSimUnlock() {
  *     at all. So the lock returns on every single boot, forever, for something
  *     that blocks no traffic — an auto-prompt the operator could never silence.
  *
- * The row's own "SIM locked" badge is the discovery surface instead, and it was
- * already there.
+ * That third point is now settled the other way round: PIN2/PUK2 is not
+ * surfaced anywhere in this UI at all, because it gates only the SIM's
+ * Fixed-Dialling-Number list and this product has no calls or contacts surface
+ * to reach it from. The row's own "SIM locked" badge remains the discovery
+ * surface, and it now only ever names a lock that really did stop the radio.
  */
 function openModemConfig(id: string) {
 	const modem = modemEntries.find(([entryId]) => entryId === id)?.[1];
@@ -268,18 +257,11 @@ function openModemConfig(id: string) {
 {/if}
 
 {#if configModem && configModemId}
-	<!-- Bound here so the handoff closure captures a narrowed id: the `{#if}`
-	     narrows the template, not a callback that outlives this evaluation. -->
-	{@const lockedConfigModemId = configModemId}
 	<LazyDialog
 		dialog={ModemConfigDialog}
 		bind:open={modemDialogOpen}
 		deviceId={configModemId}
 		modem={configModem}
-		onUnlock={() => {
-			modemDialogOpen = false;
-			openSimUnlock(lockedConfigModemId, lockedConfigModemId);
-		}}
 	/>
 {/if}
 
@@ -292,15 +274,14 @@ function openModemConfig(id: string) {
 	/>
 {/if}
 
-<!-- SIM unlock — reached from the locked modem's own row (a blocking lock
-     renames that row's button to "Unlock SIM"), or from the locked band inside
-     the config dialog for a non-blocking PIN2. Never auto-opened. -->
+<!-- SIM unlock — reached ONLY from the locked modem's own row, whose button a
+     blocking lock renames to "Unlock SIM". Never auto-opened, and there is no
+     second route into it. -->
 {#if unlockModem && unlockModemId}
 	<LazyDialog
 		dialog={SimUnlockDialog}
 		bind:open={simUnlockOpen}
 		deviceId={unlockModemId}
 		modem={unlockModem}
-		onBack={unlockReturnToConfigId === null ? undefined : returnFromSimUnlock}
 	/>
 {/if}

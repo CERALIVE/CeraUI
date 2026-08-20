@@ -513,6 +513,53 @@ for (const condition of CONDITIONS) {
 			await dialog.screenshot({ path: shot("modem-dialog") });
 		});
 
+		// ── The SIM's own number: hidden by default, revealed on request ─────────
+		// The PNGs are evidence; every criterion below is asserted. The one that
+		// matters most is NEGATIVE — the number must not be anywhere in the
+		// dialog's rendered text before the reveal, because a CSS mask or a
+		// `hidden` attribute would still put it in a screen share and in the
+		// accessibility tree.
+		test("the SIM own-number is masked until revealed, and absent when unpublished", {
+			tag: "@visual",
+		}, async ({ page }) => {
+			const OWN_NUMBER = "+573115422359";
+			serverConfig({ modem_provisioning: true });
+			sendModems({
+				[MM_HEALTHY_ID]: mmManaged({
+					...FULL_DETAIL,
+					own_numbers: [OWN_NUMBER],
+				}),
+			});
+
+			const dialog = await openModemDialog(page);
+			const field = dialog.getByTestId("modem-own-number");
+			await expect(field).toBeVisible();
+
+			const value = dialog.getByTestId("modem-own-number-value-0");
+			await expect(value).toHaveAttribute("data-revealed", "false");
+			expect(await dialog.textContent()).not.toContain(OWN_NUMBER);
+
+			const toggle = dialog.getByTestId("modem-own-number-toggle");
+			await expect(toggle).toHaveAttribute("aria-pressed", "false");
+			await field.screenshot({ path: shot("own-number-hidden") });
+
+			await toggle.click();
+
+			await expect(value).toHaveAttribute("data-revealed", "true");
+			await expect(value).toHaveText(OWN_NUMBER);
+			await expect(toggle).toHaveAttribute("aria-pressed", "true");
+			await field.screenshot({ path: shot("own-number-revealed") });
+
+			// Honest absence: a SIM that published no number renders no field at
+			// all — no label, no dash, no "Unknown".
+			await enterModemSurface(page, { modem_provisioning: true });
+			const plain = await openModemDialog(page);
+			await expect(plain.getByTestId("modem-detail-card")).toBeVisible();
+			await expect(plain.getByTestId("modem-own-number")).toHaveCount(0);
+			await expect(plain.getByTestId("modem-own-number-toggle")).toHaveCount(0);
+			await plain.screenshot({ path: shot("own-number-absent") });
+		});
+
 		// ── USB-mode card: the THREE terminal presentations (todos 27/28) ────────
 		test("the three USB-mode terminal presentations are pairwise distinguishable without colour", {
 			tag: "@visual",

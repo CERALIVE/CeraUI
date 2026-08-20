@@ -36,6 +36,10 @@
  */
 
 import {
+	DONGLE_ADMIN_PATH_PREFIX,
+	DONGLE_ADMIN_TOKEN_PARAM,
+	openRouterAdminInputSchema,
+	openRouterAdminOutputSchema,
 	type SetRouterNetModeOutput,
 	setRouterControlInputSchema,
 	setRouterControlOutputSchema,
@@ -66,6 +70,8 @@ import {
 // registers the `router-subnet` rollback on todo 25's registry, so a rewrite that
 // crashed mid-flight has a handler waiting when startup replay reaches it.
 import { preStateFor } from "../../modules/network/router-subnet-rollback.ts";
+import { resolveDongleAdminTarget } from "../../modules/ui/dongle-admin-proxy.ts";
+import { mintDongleAdminToken } from "../../modules/ui/dongle-admin-session.ts";
 import { modemProcedure } from "./modems.procedure.ts";
 
 /**
@@ -285,4 +291,43 @@ export const setRouterSubnetProcedure = modemProcedure
 		}
 		await refreshRouterAdminState();
 		return { status: outcome.status, detail: outcome.detail };
+	});
+
+/**
+ * Open a CeraUI-hosted session onto one dongle's OWN admin web UI.
+ *
+ * It answers a same-origin PATH, never the dongle's address: the operator's
+ * browser is not on the dongle's LAN, which is the whole reason the proxy exists.
+ * The refusal arms are the two ways identity can fail — an id the classifier no
+ * longer holds, and a device whose interface or lease could not be resolved —
+ * because a proxy that cannot name the interface cannot tell two identical units
+ * apart, and answering with a best guess is exactly the defect being avoided.
+ *
+ * The target is resolved BEFORE a token is minted, so a refusal costs no
+ * credential and the operator is told why rather than being handed a link that
+ * opens onto an error.
+ */
+export const openRouterAdminProcedure = modemProcedure
+	.input(openRouterAdminInputSchema)
+	.output(openRouterAdminOutputSchema)
+	.handler(async ({ input }) => {
+		const wireId = Number(input.device);
+		if (!Number.isInteger(wireId)) {
+			return { success: false, error: "unknown_device" as const };
+		}
+		const ifname = routerCellularIfnameForWireId(wireId);
+		if (ifname === undefined || ifname === "") {
+			return { success: false, error: "unknown_device" as const };
+		}
+		if (getRouterCellularMarker(ifname) === undefined) {
+			return { success: false, error: "interface_unresolved" as const };
+		}
+		const target = await resolveDongleAdminTarget(wireId);
+		if (target === undefined) {
+			return { success: false, error: "admin_unreachable" as const };
+		}
+
+		const token = mintDongleAdminToken();
+		const url = `${DONGLE_ADMIN_PATH_PREFIX}/${wireId}/?${DONGLE_ADMIN_TOKEN_PARAM}=${token}`;
+		return { success: true, url };
 	});

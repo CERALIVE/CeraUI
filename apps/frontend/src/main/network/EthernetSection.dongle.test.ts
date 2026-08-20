@@ -159,6 +159,16 @@ describe("EthernetSection — isolated-dongle row", () => {
 	// previous golden was exactly those two class lists and nothing else, which is
 	// what this lock exists to prove. Re-capture it again only for a change you
 	// can describe in the same terms.
+	//
+	// RE-CAPTURED A SECOND TIME, for the bond state word's width reserve. The
+	// word now renders BOTH states into one grid cell — the inactive one
+	// `invisible` — so the slot measures the wider of them in any locale and can
+	// no longer displace the signal glyph that sits beside it in the Cellular
+	// row's instrument cluster. Measured on the bench board: `In Bond` and
+	// `Excluded` differ by 7px, which split that section's rows into two
+	// misaligned columns. The diff against the previous golden is exactly ONE
+	// span becoming three nested ones, and nothing else — the switch, the
+	// Configure button, the text column and the state dot are byte-identical.
 	it("renders a plain wired row identically to before the dongle change", () => {
 		const { container } = renderRows([["eth0", PLAIN_ROW]]);
 		expect(shapeOf(container)).toBe(plainRowGolden.trimEnd());

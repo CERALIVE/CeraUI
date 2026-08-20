@@ -558,6 +558,37 @@ describe("modem wire projection — D-Bus rows", () => {
 		expect(modemSchema.parse(entry).device_class).toBe("usb");
 	});
 
+	test("usbModeFor fills usb_mode when NO source observed one — the hardware path", () => {
+		const view = buildDbusViewFixture();
+		const { usbMode: _dropped, ...withoutMode } = view;
+		const projected = projectModemWire([fromDbusView(withoutMode)], {
+			hasGsmAutoconfig: false,
+			usbModeFor: (stableKey) =>
+				stableKey === USB_DEVICE_PATH ? "mbim" : undefined,
+		});
+
+		expect(projected.message["1"]?.usb_mode).toBe("mbim");
+	});
+
+	test("an OBSERVED composition wins over the udev read", () => {
+		const projected = projectModemWire([fromDbusView(buildDbusViewFixture())], {
+			hasGsmAutoconfig: false,
+			usbModeFor: () => "ecm-ncm",
+		});
+
+		expect(projected.message["1"]?.usb_mode).toBe("qmi");
+	});
+
+	test("no usbModeFor and no observation leaves usb_mode absent, not guessed", () => {
+		const view = buildDbusViewFixture();
+		const { usbMode: _dropped, ...withoutMode } = view;
+		const projected = projectModemWire([fromDbusView(withoutMode)], {
+			hasGsmAutoconfig: false,
+		});
+
+		expect(Object.hasOwn(projected.message["1"] ?? {}, "usb_mode")).toBe(false);
+	});
+
 	test("a D-Bus row with no observed detail carries none of it", () => {
 		const view = buildDbusViewFixture();
 		const bare = fromDbusView({

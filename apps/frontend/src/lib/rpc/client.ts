@@ -41,6 +41,8 @@ import type {
 	ModemUssdOutput,
 	NetifConfigInput,
 	NetifConfigOutput,
+	OpenRouterAdminInput,
+	OpenRouterAdminOutput,
 	PreviewTokenOutput,
 	RelayValidateInput,
 	RelayValidateOutput,
@@ -659,6 +661,19 @@ export interface TypedRPC {
 		 */
 		getGps: (input: ModemGpsInput) => Promise<ModemGpsOutput>;
 		setGps: (input: SetModemGpsInput) => Promise<SetModemGpsOutput>;
+		/**
+		 * Open a CeraUI-hosted session onto this dongle's OWN admin web UI.
+		 *
+		 * Answers a SAME-ORIGIN PATH, never the dongle's address — the operator's
+		 * browser is not on the dongle's LAN, which is why the proxy exists. The
+		 * device is named by its wire id, which the backend resolves to an
+		 * INTERFACE; two identical units sharing one factory address are therefore
+		 * told apart by the binding rather than by a destination nobody can
+		 * disambiguate.
+		 */
+		openRouterAdmin: (
+			input: OpenRouterAdminInput,
+		) => Promise<OpenRouterAdminOutput>;
 		setRouterControl: (
 			input: SetRouterControlInput,
 		) => Promise<SetRouterControlOutput>;

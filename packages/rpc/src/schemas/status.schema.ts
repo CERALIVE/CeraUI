@@ -97,6 +97,23 @@ export type RemoteStatus = z.infer<typeof remoteStatusSchema>;
 // Per-uplink srtla_send telemetry. Mirror of LinkTelemetryEntry in
 // apps/backend/src/modules/streaming/link-telemetry.ts. rtt_ms=0 and
 // weight_percent=100 are valid sender constants, not sentinels.
+// Whether a bonded link's PHYSICAL identity could be resolved at all.
+//
+// The `link_id` below is minted by ONE authority (the physical-identity module's
+// `mintLinkId`). When that resolution fails there is no honest id to publish, and
+// the answer is this explicit state rather than a plausible-looking one derived
+// from the interface name — an ifname is not a device, so an id shaped like a
+// minted one but keyed on a name silently follows the NAME across a replug and
+// attributes one operator's link to another device.
+//
+// `resolved` is the ordinary case and is never emitted (its evidence is the
+// `link_id` itself); `unmappable` is emitted so the operator surface can say
+// "this link's identity is unknown" instead of showing a fabricated id or an
+// unexplained blank.
+export const BOND_LINK_IDENTITY_STATES = ['resolved', 'unmappable'] as const;
+export const bondLinkIdentityStateSchema = z.enum(BOND_LINK_IDENTITY_STATES);
+export type BondLinkIdentityState = z.infer<typeof bondLinkIdentityStateSchema>;
+
 export const linkTelemetryEntrySchema = z.object({
 	conn_id: z.string(),
 	/**
@@ -109,6 +126,13 @@ export const linkTelemetryEntrySchema = z.object({
 	 * `conn_id` rung, never that it has no identity.
 	 */
 	link_id: z.string().optional(),
+	/**
+	 * Emitted ONLY as `'unmappable'`, and only when the writer positively failed
+	 * to resolve this link's physical identity. Absence is the ordinary case —
+	 * either the identity resolved (proven by `link_id`) or this row came off the
+	 * legacy `conn_id` rung, which makes no claim about identity either way.
+	 */
+	identity_state: bondLinkIdentityStateSchema.optional(),
 	iface: z.string(),
 	/**
 	 * The physical port this link's device sits in (`USB 0-1.3.1`), derived from

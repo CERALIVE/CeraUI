@@ -116,10 +116,13 @@ describe("Qualcomm 4G UFI readings", () => {
 			sim: "absent",
 			connection: "disconnected",
 			apn: "none",
-			// Todo 23. The ONLY non-signal field this capture states is the
-			// carrier string, published verbatim — the device's own words, never
-			// translated and never widened to the fields it said nothing about.
-			details: { provider: "无服务。" },
+			// Todo 23, widened by the enrichment pass. Every value is published
+			// verbatim — the device's own words, never translated and never
+			// widened to the fields it said nothing about. `station_id` is the
+			// device's `bsid` and CLAIMS NOTHING about what it identifies; this
+			// capture states no `cellid`/`cputemp`/`wifinum`/`ethnum`, so those
+			// produce no key at all rather than an empty one.
+			details: { provider: "无服务。", station_id: "25002" },
 			// Todo 20. The dialect publishes ONE scalar and no bar scale, so every
 			// other quantity is `unsupported` rather than a fabricated zero.
 			signal: {
@@ -149,6 +152,44 @@ describe("Qualcomm 4G UFI readings", () => {
 		expect(reading.sim).toBe("unknown");
 		expect(reading.connection).toBe("unknown");
 		expect(reading.apn).toBeUndefined();
+	});
+
+	it("reads a SEATED card, which this firmware calls `ok` and not `valid`", () => {
+		// Verbatim `getallstatus` from the bench UFI with a real SIM inserted
+		// (ceralive2, 2026-08-18). Knowing only `valid` reported this card as
+		// `unknown`, i.e. no SIM segment on the row at all, while the SAME
+		// payload carried a real IMSI.
+		const seated =
+			'{"reply":"ok","params":{"signalStrength":-88,"carrier":"Emergency calls only","internetState":"disconnected","imsi":"732123704103087","simCardState":"ok","wifiapstatus":"on"}}';
+		expect(
+			parseUfi("http://192.168.100.1", { shell: UFI_SHELL, status: seated })
+				.sim,
+		).toBe("present");
+
+		// The vendor's own bundle treats every non-`invalid` value as a good
+		// card. This does not: an unnamed code is an unread one, so a firmware
+		// that grows a locked state cannot be reported as healthy.
+		for (const state of ["", "unknown", "locked", "pin", "absent"]) {
+			expect(
+				parseUfi("http://192.168.100.1", {
+					shell: UFI_SHELL,
+					status: `{"reply":"ok","params":{"simCardState":"${state}"}}`,
+				}).sim,
+			).toBe("unknown");
+		}
+		// …and the two codes the firmware DOES name keep their verdicts.
+		expect(
+			parseUfi("http://192.168.100.1", {
+				shell: UFI_SHELL,
+				status: '{"reply":"ok","params":{"simCardState":"invalid"}}',
+			}).sim,
+		).toBe("absent");
+		expect(
+			parseUfi("http://192.168.100.1", {
+				shell: UFI_SHELL,
+				status: '{"reply":"ok","params":{"simCardState":"valid"}}',
+			}).sim,
+		).toBe("present");
 	});
 });
 

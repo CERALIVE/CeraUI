@@ -122,6 +122,7 @@ import {
 	type RouterAdminCapabilities,
 } from "./router-capabilities.ts";
 import {
+	parseHilinkDetails,
 	parseUfiDetails,
 	parseZteDetails,
 	type RouterAdminDetails,
@@ -391,6 +392,11 @@ export function parseHilink(
 	if (maxBars !== undefined) reading.signal_max_bars = maxBars;
 	const apn = parseHilinkActiveApn(profiles);
 	if (apn !== undefined) reading.apn = apn;
+	const details = parseHilinkDetails({
+		information,
+		signal: bodies.signal ?? "",
+	});
+	if (details !== undefined) reading.details = details;
 	// Discovery lands in the SAME reading as `controls`, so no consumer can ever
 	// render a control for a setting whose capability had not been read yet.
 	if (bodies.netModeList !== undefined) {
@@ -512,9 +518,20 @@ function ufiParams(body: string): Record<string, unknown> | undefined {
 	return params as Record<string, unknown>;
 }
 
+/**
+ * `getallstatus`'s `simCardState`. `"ok"` is what the firmware answers for a
+ * seated card — board-measured on `UFI_HM_SIM1_V016_240828` beside a real IMSI
+ * and ICCID — so knowing only `"valid"` reported a present SIM as `unknown`,
+ * i.e. no SIM segment on the row at all. `"invalid"` is the vendor's own failure
+ * value (its bundled UI is a single `"invalid" === simCardState` test).
+ *
+ * That UI treats every OTHER value as a good card; this does not, so a firmware
+ * that grows a distinct locked state reads as unread rather than as healthy —
+ * the positive-evidence rule the HiLink and ZTE parsers already follow.
+ */
 function ufiSim(value: string | undefined): RouterAdminSim {
 	if (value === "invalid") return "absent";
-	if (value === "valid") return "present";
+	if (value === "ok" || value === "valid") return "present";
 	return "unknown";
 }
 
@@ -573,6 +590,7 @@ export function parseUfi(
 		status,
 		networkMode: bodies.networkMode ?? "",
 		produceInfo: bodies.produceInfo ?? "",
+		sysinfo: bodies.sysinfo ?? "",
 	});
 	if (details !== undefined) reading.details = details;
 	const currentApn = ufiString(apnData?.apn);

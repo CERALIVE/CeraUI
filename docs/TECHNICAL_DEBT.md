@@ -325,6 +325,64 @@ The audit script (`scripts/audit-contract-parity.mjs`) classifies
 not fail the parity gate; this register entry is the durable record that the
 device-side fan-out is a known, benign mismatch pending an explicit no-op consumer.
 
+```debt
+id: TD-hilink-write-actions
+title: Huawei HiLink (E3372) write-capable dongle actions — reconnect, net-mode/band lock, reboot, APN profiles, PIN/PUK, manual PLMN, antenna settings
+track: 1
+status: open
+exit_criteria: capability:router_admin_hilink_write_actions
+owner: ceraui-team
+registered_at: 2026-08-18
+resolved_at: null
+unblock: The current router_admin surface (apps/backend/src/modules/network/router-cellular-admin.ts, router-capabilities.ts, router-details.ts) is deliberately READ-ONLY for HiLink devices — a `112008` net-mode refusal is a CAPABILITY READING, never a control (see AGENTS.md "…AND THE HiLINK CAPABILITY IS DISCOVERED BEFORE ANYTHING IS OFFERED"). This session's librarian research against the mature reverse-engineered client `Salamek/huawei-lte-api` surfaced SEVEN write-capable HiLink endpoints that were investigated but NOT built, each a straightforward extension of the existing capability-discovery-then-gate pattern (Stage B, router-cellular-control.ts) once a product decision picks it up: (1) `net/reconnect` — a guarded reconnect-without-reboot recovery action, lower blast radius than a full `device/control` reboot; worth building first as a "less scary" recovery affordance behind a confirmation dialog. (2) `net/net-mode` + `net/net-mode-list` — 2G/3G/4G mode lock + LTE band-lock; this is the SAME capability-module concept CeraUI already ships for other vendors (packages/rpc/src/schemas/capability-modules.schema.ts band-lock ladder), so a HiLink implementation is a natural additional capability module rather than a new pattern. (3) `device/control` reboot — remote "reset a stuck dongle" action; needs explicit confirmation UX because it causes a temporary link loss identical to a physical unplug. (4) `dialup/profiles` + `dialup/auto-apn` — full APN profile management; HIGH RISK because a bad write can break the current link and profile fields carry operator credentials. (5) `sms/*` send/delete/read-status mutations — this is the dongle's OWN separate SMS surface, distinct from CeraUI's existing ModemManager-based read-only SMS for PCIe/M.2 modems (apps/backend/src/modules/modems/sms-port.ts); a HiLink implementation would be a second, parallel SMS transport, not an extension of the MM one. (6) `pin/*` — PIN/PUK verify/change/enable-disable via the dongle's own HiLink API; CeraUI already has SIM PIN/PUK handling for MM-managed modems (apps/backend/src/modules/modems/sim-autounlock.ts + the SIM unlock UI flow) — a HiLink implementation is a SEPARATE surface for router-mode ethernet dongles, not a route through the existing one. (7) `net/register` manual operator/PLMN selection — an advanced carrier-recovery control for a stuck registration. (8) `device/antenna_settings` — firmware/model-specific and its exact value semantics are unconfirmed against a real E3372 unit; do not build this one without a fresh live probe. To clear: a product decision to build any of these (most likely `net/reconnect` first, as the lowest-blast-radius win), landing behind the SAME capability-discovery-then-gate pattern router_admin already uses, wired through router-cellular-control.ts and surfaced in RouterDongleDialog.svelte with an explicit confirmation UX for any action that can interrupt the link (reconnect, reboot, net-mode change, PIN operations). Split multi-action work into per-action register entries at implementation time if convenient; this entry covers the whole not-yet-built HiLink write surface as researched.
+```
+
+This entry carries no source `data-debt-id` marker — none of these actions have any
+UI affordance yet (no `ComingSoon` pill, no disabled button) because building the
+UI ahead of the feature would misrepresent unbuilt backend capability as a roadmap
+promise. The register entry is the durable record of what this session's research
+found and deliberately did not build, so a future implementer starts from the
+`Salamek/huawei-lte-api` precedent instead of re-discovering the HiLink write
+surface from scratch.
+
+```debt
+id: TD-zte-mf79u-write-actions
+title: ZTE MF79U write-capable dongle actions — router-native SMS surface (unconfirmed value) and CONNECT/DISCONNECT_NETWORK (proven firmware-rejected on tested hardware)
+track: 1
+status: open
+exit_criteria: capability:router_admin_zte_write_actions
+owner: ceraui-team
+registered_at: 2026-08-18
+resolved_at: null
+unblock: Two DIFFERENT classes of not-built ZTE MF79U capability, and they must not be conflated. CLASS A — genuinely undecided: an SMS list surface (`sms_data_total` + pagination goform calls, researched against `teixeluis/zte-lte-modem` and `fengjiaqi927/ZTE-MF79U-shell-scripts`) would be a second, SEPARATE router-dongle SMS surface distinct from CeraUI's ModemManager-based one (apps/backend/src/modules/modems/sms-port.ts) — same relationship to the MM surface as HiLink's `sms/*` in TD-hilink-write-actions. It is UNCONFIRMED whether this is worth building at all given CeraUI's existing SMS story; the exit condition is a product decision, not an engineering blocker. Network-mode/band-lock write is ALSO not confirmed available on MF79U firmware at all — it may exist only on other ZTE product lines, and no write attempt should be built against this device without first confirming the goform endpoint exists on THIS firmware. CLASS B — actively disproven, not just undone: `CONNECT_NETWORK` / `DISCONNECT_NETWORK` writes were bench-tested by CeraUI itself against the exact firmware this project ships against (`BD_XCBZHKMF79UV1.0.0B03`) and REJECTED by the device — see apps/backend/src/modules/network/router-cellular-admin.ts lines 64-83 for that finding, which is why router_admin stayed read-only for this vendor. This is not a "hasn't been built yet" gap, it is a "built the write path, the firmware refused it" result. A future implementer must NOT assume CONNECT_NETWORK/DISCONNECT_NETWORK works on any MF79U unit without a FRESH per-firmware round-trip proof against that specific unit's firmware string — a firmware update from ZTE could change this in either direction, so the existing bench result does not generalize past the exact string it was measured against. To clear: (Class A) a product decision on router-native SMS scope, or a confirmed live goform probe proving net-mode/band-lock exists on a specific MF79U firmware before any write code is written. (Class B) stays open as a documented negative result unless a future firmware version is bench-tested and proven to accept the write — at which point this entry should be split so the Class B finding is not silently reopened alongside a Class A decision.
+```
+
+This entry carries no source `data-debt-id` marker for the same reason as
+`TD-hilink-write-actions` — no UI affordance exists to point at. The Class B
+half is the more important record: it stops a future agent from re-attempting
+`CONNECT_NETWORK`/`DISCONNECT_NETWORK` on the strength of the ZTE reference
+clients' documentation, which describes the wire protocol but not this vendor's
+firmware-level refusal.
+
+```debt
+id: TD-ufi-himiapi-write-actions
+title: Qualcomm-chipset generic "4G UFI" (himiapi) write actions — fundamentally unconfirmed, needs live command-ID probing before any implementation
+track: 1
+status: open
+exit_criteria: capability:router_admin_ufi_write_actions
+owner: ceraui-team
+registered_at: 2026-08-18
+resolved_at: null
+unblock: This entry is the WEAKEST-evidence class of the three dongle-vendor writes researched this session, and it must read that way. The `himiapi` (`/goform`+`funcNo`-style) family this project's UFI devices actually speak has NO mature reverse-engineered client comparable to `Salamek/huawei-lte-api` or the ZTE shell scripts. The closest researched precedent, `danyaPostfactum/MifiService`, uses `/ajax` + `funcNo` — a DIFFERENT API family belonging to related-but-not-identical Android UFI firmware, not the specific `himiapi` dialect this project's devices expose (see the read-only-field research this session, which already documents this same distinction for the fields it DID add). Every one of network-mode writes, data counters beyond what the parallel read-only-fields task added, Wi-Fi client listing, reboot/reset, and SMS is UNCONFIRMED for the actual `himiapi` dialect — none of the `/ajax` precedent's `funcNo` command IDs should be assumed to transfer, because a mismatched funcNo against the wrong dialect can silently no-op, silently apply the wrong setting, or (worst case) trigger an unintended action on hardware with no dry-run mode. This whole API family is poorly documented and firmware-inconsistent across white-label units — two units sold under the same "4G UFI" branding are not guaranteed to speak the same dialect. To clear: before building ANY write path here, a fresh live command-ID probe must be run against the SPECIFIC device model/firmware this project ships (the same board-bench-and-record method that produced the read-only `router_admin.details`/`router_admin.capabilities` blocks and the ZTE bench-rejection finding in TD-zte-mf79u-write-actions), confirming both the funcNo values AND that the write is accepted before any UI or backend code is written. Do NOT adopt the `/ajax` precedent's funcNo table as a starting point for implementation — it is documented here as a negative example (a different API family), not a template.
+```
+
+This entry carries no source `data-debt-id` marker for the same reason as the two
+above. It is the most cautionary of the three: unlike HiLink (a mature client
+exists) and ZTE (CeraUI has its own bench-proven negative result), the UFI
+`himiapi` write surface has no trustworthy reference at all, so the register entry
+exists to stop a future agent from copying the `/ajax` `funcNo` table onto the
+wrong device.
+
 ## Resolved Debt
 
 ```debt

@@ -101,17 +101,114 @@ describe("certifiedUsbTargets — the exact model+firmware, and nothing near it"
 		).toEqual([]);
 	});
 
-	test("a real fleet modem offers nothing — no reviewed evidence bundle exists", () => {
+	const RM530N = {
+		vidPid: "2c7c:0801",
+		model: "RM530N-GL",
+		firmwareRevision: "RM530NGLAAR05A01M4G",
+	} as const;
+
+	/**
+	 * A LOCAL catalog shaped like the RM530N-GL entry the 2026-08-19 bench drill
+	 * produced. It is local rather than the shipped `CERTIFIED_CATALOG` because
+	 * the entry ships from modem-stack: asserting it here would make this suite
+	 * fail until that release lands and the pin is bumped, which is a cross-repo
+	 * ordering constraint rather than a property of the selection rule. No
+	 * shipped catalog carries this SKU yet — the drill that would certify it is
+	 * recorded but not accepted — so what this suite owns is the SELECTION rule,
+	 * never the claim that any particular device is certified.
+	 */
+	const drilledCatalog = {
+		schemaVersion: 1 as const,
+		entries: [
+			{
+				vidPid: "2c7c:0801",
+				model: "RM530N-GL",
+				firmwarePrefix: "RM530NGLAAR05A01M4G",
+				canonicalMode: "qmi" as const,
+				permittedTransitions: [
+					{
+						from: "qmi" as const,
+						to: "mbim" as const,
+						atCommand: 'AT+QCFG="usbnet",2',
+						expectedResponse: "OK",
+						expectsPortDrop: true,
+						expectedDescriptors: {
+							deviceClass: 0,
+							interfaces: [
+								{
+									interfaceClass: 2,
+									interfaceSubClass: 14,
+									interfaceProtocol: 0,
+								},
+							],
+						},
+					},
+					{
+						from: "mbim" as const,
+						to: "qmi" as const,
+						atCommand: 'AT+QCFG="usbnet",0',
+						expectedResponse: "OK",
+						expectsPortDrop: true,
+						expectedDescriptors: {
+							deviceClass: 0,
+							interfaces: [
+								{
+									interfaceClass: 255,
+									interfaceSubClass: 255,
+									interfaceProtocol: 255,
+								},
+							],
+						},
+					},
+				],
+			},
+		],
+	};
+
+	test("the DRILLED fleet modem offers the round trip it was certified for", () => {
+		expect(certifiedUsbTargets(drilledCatalog, identity(RM530N))).toEqual([
+			"mbim",
+		]);
 		expect(
 			certifiedUsbTargets(
-				CERTIFIED_CATALOG,
-				identity({
-					vidPid: "2c7c:0801",
-					model: "RM530N-GL",
-					firmwareRevision: "RM530NGLAAR05A01M4G",
-				}),
+				drilledCatalog,
+				identity({ ...RM530N, currentMode: "mbim" }),
+			),
+		).toEqual(["qmi"]);
+	});
+
+	test("…and NOT ecm-ncm, which its catalog entry deliberately does not declare", () => {
+		expect(certifiedUsbTargets(drilledCatalog, identity(RM530N))).not.toContain(
+			"ecm-ncm",
+		);
+	});
+
+	test("the drilled unit's own USB bcdDevice is not a firmware key", () => {
+		expect(
+			certifiedUsbTargets(
+				drilledCatalog,
+				identity({ ...RM530N, firmwareRevision: "0504" }),
 			),
 		).toEqual([]);
+	});
+
+	test("a fleet modem with NO reviewed evidence still offers nothing", () => {
+		for (const uncertified of [
+			{
+				vidPid: "1e0e:9001",
+				model: "SIMCOM_SIM7600G-H",
+				firmwareRevision: "LE20B04SIM7600G22",
+			},
+			{
+				vidPid: "0e8d:7127",
+				model: "FM350-GL",
+				firmwareRevision: "81600.0000.00.19.17.10",
+			},
+		]) {
+			expect(
+				certifiedUsbTargets(CERTIFIED_CATALOG, identity(uncertified)),
+			).toEqual([]);
+		}
 	});
 
 	test("a NON-MM current mode offers nothing — the catalog forbids crossing that line", () => {

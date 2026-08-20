@@ -19,7 +19,7 @@
   mmcli helpers
 */
 import { logger } from "../../helpers/logger.ts";
-import { ALLOWED, run } from "../../helpers/run.ts";
+import { ALLOWED, RunTimeoutError, run } from "../../helpers/run.ts";
 import {
 	handleMmcliCommand,
 	shouldMockModems,
@@ -43,7 +43,19 @@ export type NetworkType = {
 
 export type ModemInfo = {
 	"modem.generic.sim": string;
+	/**
+	 * The multi-SIM slot list. Optional because most single-slot firmware omits
+	 * it entirely, and because an EMPTY slot is published as the bare root path
+	 * `/` rather than being dropped — see `sim-presence.ts`, the one consumer.
+	 */
+	"modem.generic.sim-slots"?: Array<string>;
 	"modem.generic.state": string;
+	/**
+	 * MM's own reason a modem is in `failed`. `sim-missing` is the POSITIVE
+	 * statement that there is no card in the device, which is what the wire's
+	 * `no_sim` is supposed to report — see `sim-presence.ts`.
+	 */
+	"modem.generic.state-failed-reason"?: string;
 	"modem.generic.ports": Array<string>;
 	"modem.generic.model": string;
 	// Identity fields the row title falls back to when `model` is garbage (see
@@ -55,6 +67,12 @@ export type ModemInfo = {
 	"modem.generic.supported-modes": Array<string>;
 	"modem.generic.equipment-identifier": string;
 	"modem.generic.device-identifier": string;
+	/**
+	 * The SIM's own number(s) — mmcli's rendering of MM's `Modem.OwnNumbers`.
+	 * Optional, and ABSENT is the ordinary case: most SIMs carry no MSISDN in
+	 * their elementary files, so mmcli prints `--` and `mmcliParseSep` drops it.
+	 */
+	"modem.generic.own-numbers"?: Array<string>;
 	"modem.generic.access-technologies": Array<string>;
 	"modem.generic.signal-quality.value": number;
 	"modem.3gpp.operator-name"?: string;
@@ -452,6 +470,17 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 
 	const manufacturer = readOptionalString(parsed, "modem.generic.manufacturer");
 	const revision = readOptionalString(parsed, "modem.generic.revision");
+	const stateFailedReason = readOptionalString(
+		parsed,
+		"modem.generic.state-failed-reason",
+	);
+	const simSlots = readStringList(parsed, "modem.generic.sim-slots");
+	// Blank members are dropped and an all-blank list omits the key: mmcli renders
+	// a carrier that published nothing as `--`, and an empty array would read as a
+	// finding rather than as silence.
+	const ownNumbers = readStringList(parsed, "modem.generic.own-numbers")
+		.map((value) => value.trim())
+		.filter((value) => value.length > 0);
 	const operatorName = readOptionalString(parsed, "modem.3gpp.operator-name");
 	const registrationState = readOptionalString(
 		parsed,
@@ -460,7 +489,11 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 
 	return parseOk({
 		"modem.generic.sim": readString(parsed, "modem.generic.sim"),
+		...(simSlots.length > 0 ? { "modem.generic.sim-slots": simSlots } : {}),
 		"modem.generic.state": readString(parsed, "modem.generic.state"),
+		...(stateFailedReason !== undefined
+			? { "modem.generic.state-failed-reason": stateFailedReason }
+			: {}),
 		"modem.generic.ports": readStringList(parsed, "modem.generic.ports"),
 		"modem.generic.model": readString(parsed, "modem.generic.model"),
 		...(manufacturer !== undefined
@@ -483,6 +516,9 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 			parsed,
 			"modem.generic.device-identifier",
 		),
+		...(ownNumbers.length > 0
+			? { "modem.generic.own-numbers": ownNumbers }
+			: {}),
 		"modem.generic.access-technologies": readStringList(
 			parsed,
 			"modem.generic.access-technologies",
@@ -806,11 +842,42 @@ export async function mmGetModemUnlockInfo(
 export async function mmGetModemPorts(
 	modemPath: string,
 ): Promise<Array<string> | undefined> {
+	return (await mmGetModemGenericFacts(modemPath))?.ports;
+}
+
+/** The `modem.generic` facts a USB-composition transition is identified by. */
+export interface ModemGenericFacts {
+	/** `modem.generic.ports`, e.g. `["cdc-wdm0 (qmi)", "ttyUSB2 (at)", …]`. */
+	readonly ports: Array<string>;
+	/**
+	 * `modem.generic.revision` — the MODEM FIRMWARE revision (`RM530NGLAAR05A01M4G`).
+	 *
+	 * ModemManager is the only source of it. udev's `ID_REVISION` is the USB
+	 * `bcdDevice` (`0504` for that same unit), which is a descriptor constant shared
+	 * by every firmware build the module ever ships — so a certification keyed on it
+	 * is not firmware-keyed at all.
+	 */
+	readonly revision: string;
+}
+
+/**
+ * Read one modem's generic facts via a single `mmcli -K -m <path>`.
+ *
+ * A pure READ, like {@link mmGetModemUnlockInfo}: it never registers or connects
+ * the modem.
+ */
+export async function mmGetModemGenericFacts(
+	modemPath: string,
+): Promise<ModemGenericFacts | undefined> {
 	try {
 		const stdout = await run(mmcliBinary, ["-K", "-m", modemPath]);
-		return readStringList(mmcliParseSep(stdout), "modem.generic.ports");
+		const parsed = mmcliParseSep(stdout);
+		return {
+			ports: readStringList(parsed, "modem.generic.ports"),
+			revision: readString(parsed, "modem.generic.revision"),
+		};
 	} catch (err) {
-		logger.error(`mmGetModemPorts err: ${describeCliError(err)}`);
+		logger.error(`mmGetModemGenericFacts err: ${describeCliError(err)}`);
 		return undefined;
 	}
 }
@@ -1042,7 +1109,25 @@ export function parseNetworkScanResults(
 	return parseOk(results);
 }
 
-export async function mmNetworkScan(id: ModemId, timeout = 240) {
+/** How long `run()` waits PAST mmcli's own deadline before killing the scan. */
+const SCAN_TIMEOUT_GRACE_S = 15;
+
+/**
+ * A 3GPP network scan, or a typed reason it produced nothing.
+ *
+ * It answers a RESULT rather than `NetworkScanResult[] | undefined` because the
+ * caller has to tell "the radio found no networks" from "the scan never
+ * completed" — collapsing them is what let a killed scan reach the operator as a
+ * successful one with an empty list.
+ */
+export type NetworkScanOutcome =
+	| { readonly ok: true; readonly results: NetworkScanResult[] }
+	| { readonly ok: false; readonly reason: "timed_out" | "failed" };
+
+export async function mmNetworkScan(
+	id: ModemId,
+	timeout = 240,
+): Promise<NetworkScanOutcome> {
 	try {
 		// Check for mock mode
 		if (shouldMockModems()) {
@@ -1056,27 +1141,37 @@ export async function mmNetworkScan(id: ModemId, timeout = 240) {
 				const parsed = parseNetworkScanResults(mmcliParseSep(mockOutput));
 				if (!parsed.ok) {
 					logParseError(parsed);
-					return;
+					return { ok: false, reason: "failed" };
 				}
-				return parsed.value;
+				return { ok: true, results: parsed.value };
 			}
 		}
 
-		const stdout = await run(mmcliBinary, [
-			`--timeout=${timeout}`,
-			"-K",
-			"-m",
-			String(id),
-			"--3gpp-scan",
-		]);
+		// The OUTER budget must outlive the one handed to mmcli, or the shorter of
+		// two contradictory numbers silently wins. `run()`'s default is 30 s while
+		// this command declares 240 s, so every cold 3GPP scan was killed by its
+		// own caller — board-measured on `ceralive2`:
+		//   run: mmcli --timeout=240 -K -m 41 --3gpp-scan
+		//   mmNetworkScan err: Command timed out: mmcli --timeout=240 … (at 30 s)
+		// A scan legitimately takes far longer than a status read (the radio has to
+		// sweep every band), so the grace lets mmcli hit its OWN deadline first and
+		// report the network's answer rather than being killed mid-sweep.
+		const stdout = await run(
+			mmcliBinary,
+			[`--timeout=${timeout}`, "-K", "-m", String(id), "--3gpp-scan"],
+			{ timeout: (timeout + SCAN_TIMEOUT_GRACE_S) * 1000 },
+		);
 		const parsed = parseNetworkScanResults(mmcliParseSep(stdout));
 		if (!parsed.ok) {
 			logParseError(parsed);
-			return;
+			return { ok: false, reason: "failed" };
 		}
-		return parsed.value;
+		return { ok: true, results: parsed.value };
 	} catch (err) {
 		logger.error(`mmNetworkScan err: ${describeCliError(err)}`);
+		return {
+			ok: false,
+			reason: err instanceof RunTimeoutError ? "timed_out" : "failed",
+		};
 	}
-	return undefined;
 }

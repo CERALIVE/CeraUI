@@ -28,10 +28,10 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 18 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(18);
+	it("classifies all 19 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(19);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(18);
+		expect(ids.size).toBe(19);
 	});
 
 	it("every site's declared contract satisfies its class invariants", () => {

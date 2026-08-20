@@ -27,6 +27,7 @@
 import { m } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiStatus } from '@ceraui/rpc/schemas';
 import { Wifi } from '@lucide/svelte';
+import { untrack } from 'svelte';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
@@ -302,16 +303,39 @@ $effect(() => {
 // never interrupts with a toast; the failing tick surfaces only through the calm
 // `wifi-scan-error` band (via `scanError`). `confirmOnResolve` resolves the ok
 // path immediately (scan RPC has no completion marker) which also re-arms +
-// clears a prior failure on the next successful tick. The 22s interval and its
-// cleanup are unchanged.
+// clears a prior failure on the next successful tick.
+//
+// THE DISPATCH IS `untrack`ed, AND THAT IS THE WHOLE POINT OF THIS EFFECT.
+// `osCommand` reads the async-operation store (its re-entry guard,
+// `isOperationPending`) and then WRITES it (`beginOperation`), both before its
+// first `await` — i.e. synchronously inside this effect body, where Svelte 5
+// records every rune read as a dependency. So the effect subscribed to the very
+// operation it dispatches: `confirmOnResolve` flipped `pending → confirmed` the
+// moment the RPC resolved, the effect re-ran, the (no-longer-pending) guard let
+// a NEW scan through, and that scan's `begin` re-dirtied it again. The interval
+// was never the cadence — the RPC round-trip was.
+//
+// Measured on a Rock 5B+ (2026-08-19): with this dialog CLOSED the device runs
+// ONE `nmcli` (the `nmcli monitor` supervisor) and holds 31 system-bus names;
+// within five seconds of OPENING it, 250-330 concurrent `nmcli device wifi
+// rescan` processes were live and root's `max_connections_per_user=256` D-Bus
+// limit was exhausted, after which EVERY nmcli on the box — including this
+// backend's own `conn down` / `conn del` — failed with `Could not create
+// NMClient object`. That is why WiFi disconnect and forget "did nothing": the
+// storm runs exactly while the operator has this dialog open to use them.
+//
+// Do NOT remove the `untrack`, and do NOT call `osCommand` (or anything else
+// that writes the op store) from an effect body without one.
 $effect(() => {
 	if (!open) return;
 	const runSilentScan = () =>
-		void osCommand({
-			key: periodicScanKey,
-			rpc: () => rpc.wifi.scan({ device: deviceId }),
-			confirmOnResolve: true,
-			silent: true,
+		untrack(() => {
+			void osCommand({
+				key: periodicScanKey,
+				rpc: () => rpc.wifi.scan({ device: deviceId }),
+				confirmOnResolve: true,
+				silent: true,
+			});
 		});
 	runSilentScan();
 	const id = setInterval(runSilentScan, 22000);

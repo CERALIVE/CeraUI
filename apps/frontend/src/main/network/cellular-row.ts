@@ -49,7 +49,25 @@
  * DOT-PATH KEY, not a string — the component resolves it through
  * `resolveMessageKey`, and this module stays pure and locale-free.
  */
+import { isSimlessForBond } from "@ceraui/rpc";
 import type { ConnectionStatus, Modem } from "@ceraui/rpc/schemas";
+
+/**
+ * Does this device report an empty SIM slot, whichever class it belongs to?
+ *
+ * The two modem classes publish that same fact through DIFFERENT wire fields —
+ * ModemManager's `no_sim` for a directly-managed radio, the dongle's own admin
+ * API as `router_admin.sim` for a `router-ethernet` unit — and the shared rule
+ * in `@ceraui/rpc` is what keeps this row's answer identical to the DEVICE's own
+ * bond gate. Reading only `no_sim` here is what left a SIM-less dongle with a
+ * live "In Bond" toggle while a SIM-less modem's was forced off.
+ */
+export function isSimlessModem(modem: Modem): boolean {
+	return isSimlessForBond({
+		noSim: modem.no_sim,
+		routerSim: modem.router_admin?.sim,
+	});
+}
 
 /**
  * The tier/class band a row is stamped with. The vocabulary is
@@ -72,8 +90,20 @@ export type ModemRowState =
 	| "router-acquiring"
 	| "router-down";
 
-/** The state dot's register. `idle` is "nothing was reported", not "off". */
-export type ModemRowTone = "live" | "pending" | "attention" | "error" | "idle";
+/**
+ * The state dot's register. `idle` is "nothing was reported", not "off".
+ *
+ * `ready` is the sixth, and it exists because the other five could not name the
+ * state a healthy radio SITS in — attached to its network, carrying no data,
+ * nothing wrong and nothing to do. See {@link STATE_TONES}.
+ */
+export type ModemRowTone =
+	| "live"
+	| "ready"
+	| "pending"
+	| "attention"
+	| "error"
+	| "idle";
 
 /**
  * Qualitative radio strength. Deliberately NOT a percentage and deliberately
@@ -93,33 +123,36 @@ const MM_MANAGED_CLASSES: ReadonlySet<string> = new Set([
 	"soc-qrtr",
 ]);
 
-/** SIM-lock tokens that mean the operator has something to unlock. */
-const ACTIVE_SIM_LOCKS: ReadonlySet<string> = new Set([
-	"sim-pin",
-	"sim-pin2",
-	"sim-puk",
-	"sim-puk2",
-]);
-
 /**
- * Locks that stop the radio REGISTERING, so the config form behind them is inert.
+ * The SIM locks this UI surfaces AT ALL, which is exactly the set that stops
+ * the radio REGISTERING — so a row carrying one has genuinely lost service and
+ * the config form behind it is inert.
  *
- * The `2` variants are deliberately ABSENT — that omission IS this set's
+ * The `2` variants are deliberately ABSENT, and that omission IS this set's
  * purpose. ModemManager refuses to mark either of them a lock: "we don't care
  * about SIM-PIN2/SIM-PUK2 since the device is operational without it"
  * (`src/mm-iface-modem.c`), and the bench Quectel proves it, registering with
- * `lock: sim-pin2` still outstanding. Adding either would make a working
- * modem's settings unreachable behind a prompt for a credential that gates
- * only the Fixed-Dialling-Number list.
+ * `lock: sim-pin2` still outstanding. PIN2 gates ONLY the SIM's
+ * Fixed-Dialling-Number list — this product exposes no calls, no contacts and
+ * no FDN surface anywhere, so the lock blocks nothing an operator here can
+ * reach, and an unlock would not even survive a reboot (`Sim.SendPin` verifies
+ * for the current UICC session only, and there is no PIN2 equivalent of
+ * `EnablePin`). Surfacing it flagged a working modem as "locked" over a
+ * credential with nothing behind it.
+ *
+ * Do NOT add either token back. That is a product decision about what this
+ * device DOES, not an oversight about what ModemManager reports — the wire
+ * still carries `sim-pin2` truthfully, and this UI still chooses not to render
+ * it.
  */
 const BLOCKING_SIM_LOCKS: ReadonlySet<string> = new Set(["sim-pin", "sim-puk"]);
 
 /**
  * What the row's primary action should DO, which is not always "configure".
  *
- * - `configure` — no lock, or a lock that blocks nothing. The config dialog is
- *   the honest destination; when a non-blocking lock is outstanding the dialog
- *   carries its own band pointing at the unlock flow.
+ * - `configure` — no lock this UI surfaces. The config dialog is the honest
+ *   destination, including for a modem carrying an unsurfaced `sim-pin2`, which
+ *   registers and streams normally.
  * - `unlock` — a blocking lock. Registration is impossible until it clears, so
  *   the config form would be a dead end and the button says `unlock` instead.
  */
@@ -217,17 +250,66 @@ const STATE_LABEL_KEYS: Readonly<Record<ModemRowState, string>> = {
 	failed: "network.modem.connectionStatus.failed",
 	locked: "network.cellular.state.locked",
 	"no-sim": "network.cellular.state.noSim",
-	"router-up": "network.dongle.stateUp",
+	// A `router-ethernet` dongle presents itself to the board as a USB-Ethernet
+	// adapter, so this state is the LOCAL wired link between the two — layer 2,
+	// and nothing more. It cannot speak for the cellular service inside the
+	// dongle, which this stack architecturally never reaches; the class hint
+	// says the same thing at length ("the device sees it as an Ethernet
+	// uplink"). A bare "Up" claims the whole path, which is why a SIM-LESS
+	// dongle rendered `Up` beside `No SIM` — two pills that cannot both be true
+	// under that reading. The word must therefore NAME what is up.
+	//
+	// That is also why it does not borrow `network.dongle.stateUp`: those keys
+	// belong to the `dg<N>h` veth row in `EthernetSection`, a different link on
+	// a different surface. `router-acquiring`/`router-down` stay shared — no
+	// promise about connectivity is possible from either word.
+	"router-up": "network.cellular.state.routerLinkUp",
 	"router-acquiring": "network.dongle.stateAcquiring",
 	"router-down": "network.dongle.stateDown",
 	unknown: "network.cellular.state.unknown",
 };
 
+/**
+ * State → dot register.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * `registered` IS NOT `pending`, AND IT IS NOT `connected` EITHER
+ * ────────────────────────────────────────────────────────────────────────────
+ *
+ * It used to be `pending`, which drew a modem ATTACHED to its home network in
+ * the same amber register, behind the same `Hourglass`, as one still `searching`
+ * for a network it has not found. Those are opposite conditions, and an operator
+ * reading the row said so: an hourglass on a working radio reads as "something
+ * is stuck", not "this is working".
+ *
+ * ModemManager's own vocabulary settles it. `MM_MODEM_STATE_SEARCHING` is the
+ * modem "searching for a network provider to register with" — genuinely work in
+ * progress. `MM_MODEM_STATE_REGISTERED` is "registered with a network provider,
+ * and data connections and messaging may be available for use" — a RESTING state
+ * the radio holds indefinitely, not one it is passing through. Board-measured on
+ * this bench's Quectel RM530N-GL: `state: registered` / `registration: home` /
+ * `packet service state: attached` / `access tech: lte` / 86 % on Movistar, with
+ * no rejection reason and nothing in flight.
+ *
+ * It is NOT `live` either, and that is the other half. `live` is the register
+ * the BOND is drawn in, and a `registered` modem has no bearer — so its net
+ * interface holds no address at all (measured on the same board, where
+ * `ip -br -4 addr` lists no `wwan2`). The device's own `isBondCandidate` gates
+ * on that address before anything else, so the link is not a bonding candidate,
+ * and this row ALREADY says so on its note line. Painting the badge
+ * phosphor-lime would make the row contradict itself: a carrying-data colour
+ * above a sentence explaining that it carries none, beside a dead bond toggle.
+ *
+ * Hence `ready`. Each of the other five says something false about it: `pending`
+ * claims work in progress, `live` claims the bond, `attention` demands an action
+ * there is none to take, `error` claims a fault the network never reported, and
+ * `idle` claims nothing was reported by a radio that reported everything.
+ */
 const STATE_TONES: Readonly<Record<ModemRowState, ModemRowTone>> = {
 	connected: "live",
 	connecting: "pending",
 	disconnecting: "pending",
-	registered: "pending",
+	registered: "ready",
 	searching: "pending",
 	scanning: "pending",
 	enabled: "pending",
@@ -238,7 +320,15 @@ const STATE_TONES: Readonly<Record<ModemRowState, ModemRowTone>> = {
 	failed: "error",
 	locked: "attention",
 	"no-sim": "attention",
-	"router-up": "live",
+	// `ready` for the same reason `registered` is, one register down: `live` is
+	// the colour the BOND is drawn in, and a link-state badge reports a link,
+	// never traffic. The dongle behind an up link may hold no SIM at all, so
+	// phosphor-lime would put a carrying-data colour beside a `No SIM` pill —
+	// the colour half of the contradiction the word half above removes. It is
+	// not a claim of trouble: a good local link with nothing yet behind it is
+	// precisely the resting-healthy state `ready` exists for, and whether the
+	// link actually carries bonded traffic is `BondedLinksSection`'s question.
+	"router-up": "ready",
 	"router-acquiring": "pending",
 	"router-down": "error",
 	unknown: "idle",
@@ -301,17 +391,13 @@ export function resolveRowState(
 	const connection = modem.status?.connection;
 
 	// Only a lock that actually STOPS the radio may speak over the radio's own
-	// reported state. A `sim-pin2`/`sim-puk2` row used to render "SIM locked"
-	// while the modem was live on the air, which is the bench Quectel's exact
-	// case: 81% signal, `searching`, and a badge blaming a credential that gates
-	// nothing but the Fixed-Dialling-Number list. The operator read that as a
-	// broken modem. A non-blocking lock is still surfaced — by the config
-	// dialog's own band — it just no longer overwrites the truth.
-	if (lock !== undefined && ACTIVE_SIM_LOCKS.has(lock)) {
-		if (connection === undefined || BLOCKING_SIM_LOCKS.has(lock)) {
-			return "locked";
-		}
-	}
+	// reported state, and that is now the only kind this UI reports at all
+	// ({@link BLOCKING_SIM_LOCKS}). A `sim-pin2`/`sim-puk2` row used to render
+	// "SIM locked" while the modem was live on the air — the bench Quectel's
+	// exact case: registered on its carrier, with a badge blaming a credential
+	// that gates nothing this product can reach. It now renders whatever the
+	// radio is genuinely doing, with no lock indication anywhere.
+	if (lock !== undefined && BLOCKING_SIM_LOCKS.has(lock)) return "locked";
 
 	if (connection !== undefined) return connection;
 
@@ -333,35 +419,20 @@ export function resolveRowState(
 }
 
 /**
- * The outstanding SIM lock, or `undefined`. `resolveRowState` collapses all four
+ * The outstanding SIM lock, or `undefined`. `resolveRowState` collapses both
  * tokens into one `locked` state for display; the unlock routing needs to know
- * WHICH, so it reads this instead of re-testing the raw wire field.
+ * WHICH, so it reads this instead of re-testing the raw wire field. A
+ * `sim-pin2`/`sim-puk2` modem answers `undefined` — this UI does not surface
+ * those at all (see {@link BLOCKING_SIM_LOCKS}).
  */
 export function activeSimLock(modem: Modem): string | undefined {
 	const lock = modem.sim_lock?.required;
-	if (lock === undefined || !ACTIVE_SIM_LOCKS.has(lock)) return undefined;
+	if (lock === undefined || !BLOCKING_SIM_LOCKS.has(lock)) return undefined;
 	return lock;
 }
 
 export function isBlockingSimLock(lock: string | undefined): boolean {
 	return lock !== undefined && BLOCKING_SIM_LOCKS.has(lock);
-}
-
-/**
- * The lock to render as its OWN badge, beside a truthful state badge.
- *
- * A non-blocking lock no longer overwrites the radio's state
- * ({@link resolveRowState}), so without this the row would stop disclosing the
- * lock at all — and the row is the surface an operator discovers it from. It
- * returns `undefined` when the state badge ALREADY reads `locked`, because two
- * pills saying the same word is noise, not emphasis.
- */
-export function lockBadgeLock(
-	modem: Modem,
-	state: ModemRowState,
-): string | undefined {
-	if (state === "locked") return undefined;
-	return activeSimLock(modem);
 }
 
 /**
@@ -488,7 +559,7 @@ export function bondDisabledReasonKey(
 	state: ModemRowState,
 	hasAddress: boolean,
 ): string | undefined {
-	if (modem.no_sim === true) return "network.view.noSimBond";
+	if (isSimlessModem(modem)) return "network.view.noSimBond";
 
 	if (band === "router-ethernet") {
 		if (state === "router-acquiring") return "network.dongle.blockedAcquiring";
@@ -513,11 +584,6 @@ export function bondDisabledReasonKey(
  * advanced detail lives (Design Principle 3: no inline mega-forms). A device
  * this stack does not control has nothing to configure there, so the control is
  * disabled with a reason rather than opening a form that would do nothing.
- *
- * A router dongle's answer is deliberately the SAME key its `router_managed`
- * availability token resolves to — "its network settings live in its own web
- * interface, not here" IS why Configure is dead — so {@link rowNoteKeys}
- * collapses the two into one line instead of restating the same fact twice.
  */
 /**
  * Why this row's Configure control cannot open anything, or `undefined`.
@@ -528,6 +594,15 @@ export function bondDisabledReasonKey(
  * emitted after a real round-trip proved the write lands. So a Huawei HiLink
  * opens a dialog with two working switches, and a ZTE whose firmware accepts
  * every request and applies none still says so instead of offering them.
+ *
+ * That refusal gets its OWN sentence rather than the generic `routerManaged`
+ * one every dongle's availability token already resolves to. Sharing the key
+ * made the two collapse into one line, which was tidy and uninformative: an
+ * operator comparing a working Huawei row against a refused ZTE row read the
+ * identical "manages this connection itself" on both and had no way to see why
+ * only one of them offers settings. The distinction IS the answer to their
+ * question, so it has to be on screen. {@link rowNoteKeys} keeps the row's
+ * two-line ceiling by superseding the generic line instead of collapsing it.
  */
 export function configureDisabledReasonKey(
 	band: ModemClassBand,
@@ -535,7 +610,7 @@ export function configureDisabledReasonKey(
 ): string | undefined {
 	if (band === "router-ethernet") {
 		return modem?.router_admin?.controls === undefined
-			? "network.cellular.reason.routerManaged"
+			? "network.cellular.reason.routerControlsUnverified"
 			: undefined;
 	}
 	if (band === "unmanaged") return "network.cellular.config.unmanaged";
@@ -543,14 +618,30 @@ export function configureDisabledReasonKey(
 }
 
 /**
+ * A note key that makes another note key redundant on the same row.
+ *
+ * De-duplication by identity is not enough once one control's reason is a
+ * strictly MORE SPECIFIC statement of another's: the unverified-write refusal
+ * names why this particular dongle offers nothing AND still points at its own
+ * web interface, so printing the generic sentence under it restates half of it
+ * and grows the row back towards the wall todo 64 removed.
+ */
+const SUPERSEDED_NOTE_KEYS: Readonly<Record<string, string>> = {
+	"network.cellular.reason.routerControlsUnverified":
+		"network.cellular.reason.routerManaged",
+};
+
+/**
  * The row's explanation lines, in order and DE-DUPLICATED.
  *
  * Each disabled control contributes its own reason, and on a router dongle
  * those reasons overlap — rendered naively the row grew three sentences saying
  * two things, which reads as a wall rather than as an instrument. Identical
- * keys collapse, so every row carries at most two lines and no fact is stated
- * twice. Nothing is DROPPED: a reason that is not on screen here does not exist
- * anywhere, which is the bare-disabled-control defect this list prevents.
+ * keys collapse and a superseded key drops (see {@link SUPERSEDED_NOTE_KEYS}),
+ * so every row carries at most two lines and no fact is stated twice. Nothing
+ * is DROPPED without a survivor that already states it: a reason that is not on
+ * screen here does not exist anywhere, which is the bare-disabled-control
+ * defect this list prevents.
  */
 export function rowNoteKeys(input: {
 	rejection?: string | undefined;
@@ -571,7 +662,13 @@ export function rowNoteKeys(input: {
 		if (key === undefined || notes.includes(key)) continue;
 		notes.push(key);
 	}
-	return notes;
+
+	const superseded = new Set(
+		notes
+			.map((key) => SUPERSEDED_NOTE_KEYS[key])
+			.filter((key): key is string => key !== undefined),
+	);
+	return notes.filter((key) => !superseded.has(key));
 }
 
 /**
@@ -690,6 +787,27 @@ export function routerAdminSignal(
 	const max = modem.router_admin?.signal_max_bars;
 	if (bars === undefined || max === undefined || max <= 0) return undefined;
 	return { bars, max };
+}
+
+/**
+ * The dongle's admin ADDRESS, from the same `admin_url` the note beside it
+ * renders — read once, never probed a second time.
+ *
+ * The scheme is dropped because the fact strip states an address rather than a
+ * link (this page cannot reach it directly; the proxy button is what opens it),
+ * and a value under an "Admin IP" label that reads `http://…` describes a URL.
+ * Anything that does not parse as a URL is passed through untouched rather than
+ * pattern-stripped — the backend builds this from `ip route`, so an unexpected
+ * shape is a reading we should not be reformatting.
+ */
+export function routerAdminHost(modem: Modem): string | undefined {
+	const raw = modem.router_admin?.admin_url;
+	if (raw === undefined || raw === "") return undefined;
+	try {
+		return new URL(raw).host;
+	} catch {
+		return raw;
+	}
 }
 
 /** Does the probe have anything to show beyond the admin address itself? */

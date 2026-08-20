@@ -400,14 +400,29 @@ describe("CellularSection — todo 26 state table (every class renders a row)", 
 		for (const token of ["router_managed", "dongle_acquiring", "dongle_down"]) {
 			expect(text).not.toContain(token);
 		}
-		// …and the explanation IS on screen for every device carrying one.
+		// …and the explanation IS on screen for every device carrying one. What
+		// must survive is the EXPLANATION, not one exact key: a reason may be
+		// superseded by a strictly more specific line that already states it
+		// (the unverified-write refusal covers the generic "settings live in its
+		// own web interface" sentence), and the row deliberately prints only the
+		// informative one.
 		for (const row of STATE_TABLE) {
 			if (row.modem.availability_reason === undefined) continue;
-			const key = availabilityReasonKey(row.modem.availability_reason);
-			const note = container.querySelector(
-				`[data-modem-id="${row.id}"] [data-note-key="${key}"]`,
-			);
-			expect(note?.textContent?.trim(), row.label).toBeTruthy();
+			const notes = [
+				...container.querySelectorAll(
+					`[data-modem-id="${row.id}"] [data-testid="modem-note"]`,
+				),
+			];
+			expect(notes.length, row.label).toBeGreaterThan(0);
+			for (const note of notes) {
+				expect(note.textContent?.trim(), row.label).toBeTruthy();
+			}
+
+			const keys = notes.map((note) => note.getAttribute("data-note-key"));
+			const stated =
+				keys.includes(availabilityReasonKey(row.modem.availability_reason)) ||
+				keys.includes("network.cellular.reason.routerControlsUnverified");
+			expect(stated, row.label).toBe(true);
 		}
 	});
 
@@ -728,55 +743,41 @@ describe("CellularSection — SIM-lock affordance (todo 46)", () => {
 		},
 	);
 
-	it.each(["sim-pin", "sim-pin2", "sim-puk", "sim-puk2"])(
-		"%s still discloses the lock ON THE ROW — it stays the discovery surface",
-		(required) => {
-			const { container } = renderLocked(required);
-			// Todo 49 split WHERE the lock is disclosed, never WHETHER: a blocking
-			// lock still owns the state badge, a non-blocking one gets its own pill
-			// so the state badge can tell the radio's truth. Either way the row says
-			// "locked" in a WORD, not colour alone.
-			const badge = container.querySelector<HTMLElement>(
-				'[data-testid="modem-state-badge"]',
-			);
-			const lockBadge = container.querySelector<HTMLElement>(
-				'[data-testid="modem-lock-badge"]',
-			);
-			const disclosed =
-				badge?.dataset.modemState === "locked" ? badge : lockBadge;
-			expect(disclosed).not.toBeNull();
-			expect(disclosed?.textContent?.trim()).toBeTruthy();
-		},
-	);
-
 	it.each(["sim-pin", "sim-puk"])(
-		"%s BLOCKS registration, so it keeps the state badge",
+		"%s discloses the lock ON THE ROW — it stays the discovery surface",
 		(required) => {
 			const { container } = renderLocked(required);
+			// A lock that stops the radio owns the state badge outright, and it says
+			// so in a WORD rather than by colour alone.
 			const badge = container.querySelector<HTMLElement>(
 				'[data-testid="modem-state-badge"]',
 			);
 			expect(badge?.dataset.modemState).toBe("locked");
-			expect(
-				container.querySelector('[data-testid="modem-lock-badge"]'),
-			).toBeNull();
+			expect(badge?.textContent?.trim()).toBeTruthy();
 		},
 	);
 
 	it.each(["sim-pin2", "sim-puk2"])(
-		"%s does NOT block the radio, so the state badge keeps reporting it",
+		"%s is not surfaced at all — the row reads exactly as an unlocked one",
 		(required) => {
 			const { container } = renderLocked(required);
 			const badge = container.querySelector<HTMLElement>(
 				'[data-testid="modem-state-badge"]',
 			);
 			expect(badge?.dataset.modemState).toBe("connected");
-			const lockBadge = container.querySelector<HTMLElement>(
-				'[data-testid="modem-lock-badge"]',
-			);
-			expect(lockBadge?.dataset.simLock).toBe(required);
+			expect(container.querySelector("[data-sim-lock]")).toBeNull();
+			expect(container.textContent).not.toContain("SIM locked");
 		},
 	);
+
+	it("renders NO separate lock pill for any lock — the surface is gone", () => {
+		for (const required of ["sim-pin", "sim-pin2", "sim-puk", "sim-puk2"]) {
+			const { container } = renderLocked(required);
+			expect(
+				container.querySelector('[data-testid="modem-lock-badge"]'),
+			).toBeNull();
+		}
+	});
 
 	it("fires onConfigure with the modem id so the view can route it", () => {
 		const { container, onConfigure } = renderLocked("sim-pin");

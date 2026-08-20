@@ -33,6 +33,7 @@ import {
 	type SimLock,
 } from "./modems-state.ts";
 import { evaluateRoamingAdvisoriesForWire } from "./roaming-advisory.ts";
+import { claimsNoSim } from "./sim-presence.ts";
 
 type ModemsResponseModemStatus = {
 	connection: string;
@@ -117,7 +118,10 @@ function buildModemMessage(
 				autoconfig: resolveGsmAutoconfigSupport() && modem.config.autoconfig,
 				autoconfig_supported: resolveGsmAutoconfigSupport(),
 			};
-		} else {
+		} else if (claimsNoSim(modem.sim_presence)) {
+			// An NM profile is provisioned only after a SIM has been read AND a
+			// connection created for it, so its absence is NOT evidence of a
+			// missing card — see `sim-presence.ts` for the board measurement.
 			fullState.no_sim = true;
 		}
 		if (modem.sim_lock) {

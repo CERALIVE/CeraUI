@@ -65,6 +65,12 @@ import {
 } from "./capability-gates.ts";
 import { buildFiveGPreferenceView } from "./five-g-preference.ts";
 import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
+import { readModemIdPaths } from "./modem-id-path-source.ts";
+import {
+	modemUsbModeForStableKey,
+	refreshModemUsbModes,
+	resetModemUsbModes,
+} from "./modem-usb-mode-source.ts";
 import {
 	type DbusModemView,
 	fromDbusView,
@@ -101,38 +107,20 @@ let retainedSyntheticIds: ReadonlyMap<string, number> = new Map();
 const routerCellularIfnames = new Map<string, string>();
 
 /**
- * The real reader: one `udevadm` export-db pass through the package's own
- * enumerator, the SAME source `usb-mode-transition.ts` correlates on — so a row
- * on the wire and the device a mode switch acts upon can never disagree about
- * which `ID_PATH` a modem has.
+ * The real reader lives in `modem-id-path-source.ts` — see that module's header
+ * for why it reads udev's NET records rather than `@ceralive/modem-control`'s
+ * `UsbDeviceSnapshot.ifname`, which is declared but never populated and made
+ * this map permanently empty on every real board.
  *
- * The import is LAZY. `@ceralive/modem-control`'s backend graph is not on this
- * module's load path otherwise, and `modem-status.ts` is imported at boot by the
- * websocket push.
+ * It resolves the SAME `ID_PATH` a mode switch correlates on: the netdev record's
+ * interface-level path reduces, through the shared `deriveModemStableKey`, to the
+ * `usb_device` parent every other adapter keys on.
  */
-async function defaultReadIdPaths(): Promise<ReadonlyMap<string, string>> {
-	if (shouldUseMocks()) {
-		const { getMockModemIdPaths } = await import(
-			"../../mocks/providers/cellular.ts"
-		);
-		return getMockModemIdPaths();
-	}
-	const { createUsbEnumerator } = await import("@ceralive/modem-control");
-	const devices = await createUsbEnumerator().enumerate();
-	const resolved = new Map<string, string>();
-	for (const device of devices) {
-		if (device.ifname !== undefined && device.physicalUid !== undefined) {
-			resolved.set(device.ifname, device.physicalUid);
-		}
-	}
-	return resolved;
-}
-
-let readIdPaths: ModemIdPathReader = defaultReadIdPaths;
+let readIdPaths: ModemIdPathReader = readModemIdPaths;
 
 /** Test seam, mirroring the `set*Runner` convention. */
 export function setModemIdPathReader(reader: ModemIdPathReader | null): void {
-	readIdPaths = reader ?? defaultReadIdPaths;
+	readIdPaths = reader ?? readModemIdPaths;
 }
 
 /** The cached `ID_PATH` for an interface, or `undefined` when unresolved. */
@@ -162,6 +150,10 @@ export async function refreshModemIdPaths(): Promise<void> {
 			error,
 		});
 	}
+	// The USB composition is read on the SAME presence edges and from the same
+	// udev database, so a row's `stable_key` and its `usb_mode` are always two
+	// facts about one observation rather than two observations.
+	await refreshModemUsbModes();
 }
 
 /**
@@ -176,7 +168,11 @@ function collectRadioSources(): ProjectedModemSource[] {
 	if (stack.ready && !stack.degraded && stack.backend === "dbus") {
 		const views = readDbusViews();
 		if (views.length > 0) {
-			return views.map(fromDbusView);
+			return views.map((view) =>
+				fromDbusView(
+					withSimIdentity(withConnectionConfig(withScanResults(view))),
+				),
+			);
 		}
 	}
 
@@ -217,6 +213,109 @@ function collectRadioSources(): ProjectedModemSource[] {
  * stale-marked rows, because mmcli talks to the same dead daemon and has no
  * better answer. Both rules live in `docs/DBUS-OBSERVATION-CONTRACT.md` §(d).
  */
+/**
+ * Attach the last 3GPP scan's results to a D-Bus view.
+ *
+ * The scan is an mmcli operation (`modem-network-scan.ts`), so it writes into
+ * the mmcli-side modem state — and the D-Bus fold has no `NetworkRejection`-like
+ * property to read them back from, because MM does not publish a scan result as
+ * a property at all. So the two halves must be joined HERE, at the composition
+ * root, which is the only place that can see both.
+ *
+ * Without it a scan under the DEFAULT backend ran, succeeded, and reached the
+ * operator as an unchanged (empty) network list — a scan that silently did
+ * nothing, which is the second half of the "scan is failing" report.
+ *
+ * The join key is the MM index: both sides are ModemManager runtime ids for the
+ * same daemon, so `runtimeId` IS the mmcli id. A view whose modem the mmcli side
+ * has never scanned is returned UNCHANGED rather than given an empty list — an
+ * empty list is a claim that a scan found nothing.
+ */
+function withScanResults(view: DbusModemView): DbusModemView {
+	if (view.availableNetworks !== undefined) return view;
+	const scanned = getModem(view.runtimeId)?.available_networks;
+	if (scanned === undefined) return view;
+	return { ...view, availableNetworks: scanned };
+}
+
+/**
+ * Attach the modem's NetworkManager connection profile to a D-Bus view.
+ *
+ * The SIBLING of {@link withScanResults}, for the same structural reason: the
+ * profile is NetworkManager's, written into the mmcli-side modem state by
+ * `registerModem`/`applyModemConfig`, and ModemManager publishes no property the
+ * fold could read it back from — so the two halves can only be joined HERE, at
+ * the one place that sees both. `DbusModemView.config` has always declared the
+ * field; nothing ever filled it.
+ *
+ * Omission was SILENT, because the block is optional: `modemConfigEchoMatches`
+ * returns `false` on a missing config, so a save the device ACCEPTED could never
+ * be confirmed and the dialog span to its TTL with no result either way.
+ * Board-measured on a Quectel RM530N-GL: `modems.configure` answered
+ * `{"success":true,…,"reconnected":false}` in 469 ms while the very next
+ * `modems.getAll` carried no `config` key at all.
+ *
+ * Join key is the MM index, exactly as above. A modem the mmcli side holds no
+ * profile for is returned UNCHANGED — "not yet provisioned" must stay absent
+ * rather than become an empty profile the dialog renders as a real, blank one.
+ * The `conn` UUID is deliberately NOT copied: it is internal routing state, and
+ * the mmcli adapter does not put it on the wire either.
+ */
+function withConnectionConfig(view: DbusModemView): DbusModemView {
+	if (view.config !== undefined) return view;
+	const config = getModem(view.runtimeId)?.config;
+	if (config === undefined) return view;
+	return {
+		...view,
+		config: {
+			apn: config.apn,
+			username: config.username,
+			password: config.password,
+			roaming: config.roaming,
+			network: config.network,
+			autoconfig: config.autoconfig,
+		},
+	};
+}
+
+/**
+ * Attach the SIM's ICCID to a D-Bus view.
+ *
+ * The THIRD sibling of {@link withScanResults} / {@link withConnectionConfig},
+ * and the structural reason is sharper here: ModemManager's ObjectManager at
+ * `/org/freedesktop/ModemManager1` exports ONLY `Modem` objects, so the SIM
+ * object the ICCID lives on is not in the `GetManagedObjects` tree the fold is
+ * given — it is a separate D-Bus object reachable only by its own `Get` call.
+ * `dbus-view-fold.ts` `readIccid` therefore cannot resolve it on real hardware.
+ *
+ * Board-measured on `ceralive2` (2026-08-18), against a Quectel RM530N-GL whose
+ * SIM `busctl` reads perfectly at `/SIM/2`:
+ *
+ *   object-dict length ......................... 4   (all `Modem/*`)
+ *   occurrences of `…ModemManager1.Sim` iface ... 0
+ *   occurrences of `SimIdentifier` .............. 0
+ *
+ * mmcli reads it fine (`mmcli -i <sim-path>`, already parsed at registration and
+ * already used to resolve the NM profile), and the mmcli side keeps running under
+ * the D-Bus default as the 30 s reconciliation backstop — so, exactly as for a
+ * scan result and an NM profile, the two halves can only be joined HERE.
+ *
+ * Join key is the MM index, as above. A modem the mmcli side holds no ICCID for
+ * is returned UNCHANGED — a card that withheld its identifier must stay absent
+ * rather than become an empty string the dialog renders as a row.
+ *
+ * NOTE the same tree gap silently disables `readEsim`, which reads that same SIM
+ * object: `modem.esim` has never been populated on a real board. That is a
+ * PRE-EXISTING defect, out of scope here, and deliberately not papered over —
+ * fixing it needs the same join or a real per-SIM `Get`.
+ */
+function withSimIdentity(view: DbusModemView): DbusModemView {
+	if (view.iccid !== undefined) return view;
+	const iccid = getModem(view.runtimeId)?.iccid;
+	if (iccid === undefined || iccid.length === 0) return view;
+	return { ...view, iccid };
+}
+
 function readDbusViews(): readonly DbusModemView[] {
 	if (shouldUseMocks()) {
 		return mockDbusViews?.() ?? [];
@@ -355,6 +454,7 @@ export function buildProjectedModemsMessage(
 				IMPLEMENTED_MODEM_CAPABILITY_MODULES,
 			),
 		fiveGPreferenceFor: projectFiveGPreference,
+		usbModeFor: modemUsbModeForStableKey,
 		...(fullState !== undefined ? { fullState } : {}),
 	});
 	retainedSyntheticIds = result.syntheticIds;
@@ -451,6 +551,7 @@ export function resetModemWireProducer(): void {
 	retainedSyntheticIds = new Map();
 	routerCellularIfnames.clear();
 	resetPhysicalIdentityRegistry();
-	readIdPaths = defaultReadIdPaths;
+	readIdPaths = readModemIdPaths;
+	resetModemUsbModes();
 	mockDbusViews = undefined;
 }

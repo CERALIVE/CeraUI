@@ -66,6 +66,7 @@ import {
 	type SimLock,
 	setModem,
 } from "./modems-state.ts";
+import { deriveSimPresence } from "./sim-presence.ts";
 
 export type ModemStatus = {
 	connection: string;
@@ -436,6 +437,23 @@ export function deriveRadioModeCatalog(
 }
 
 /**
+ * The SIM's own number(s) from a fresh `-K` payload, or `undefined` when the
+ * carrier published none.
+ *
+ * Unlike `deriveNetworkTypes`, an absent answer is NOT a statement about the
+ * read: `parseModemInfo` already rejects a record with no `modem.` key at all,
+ * so a successful parse that omits this one means the modem reported no MSISDN.
+ * That is why the refresh REPLACES rather than retains — a SIM swap must be able
+ * to clear the previous subscriber's number, not latch it on screen.
+ */
+export function deriveOwnNumbers(
+	modemInfo: ModemInfo,
+): Array<string> | undefined {
+	const numbers = modemInfo["modem.generic.own-numbers"];
+	return numbers !== undefined && numbers.length > 0 ? [...numbers] : undefined;
+}
+
+/**
  * Rebuild an already-registered modem from a fresh `-K` payload.
  *
  * Pure — the caller owns the fetch and the write — so the merge rule is provable
@@ -450,10 +468,20 @@ export function mergeRefreshedModem(
 	const simLock = buildSimLock(modemInfo);
 	const networkType = deriveNetworkTypes(modemInfo);
 	const radioModes = deriveRadioModeCatalog(modemInfo);
-	const { removed: _removed, ...previousRest } = previous;
+	const simPresence = deriveSimPresence(modemInfo);
+	const ownNumbers = deriveOwnNumbers(modemInfo);
+	const {
+		removed: _removed,
+		own_numbers: _staleOwnNumbers,
+		...previousRest
+	} = previous;
 	return {
 		...previousRest,
 		status,
+		// `unknown` is a statement about the READ, so the previous answer stands
+		// rather than a modem's SIM silently becoming undetected on one poll.
+		...(simPresence !== "unknown" ? { sim_presence: simPresence } : {}),
+		...(ownNumbers !== undefined ? { own_numbers: ownNumbers } : {}),
 		...(simLock !== undefined ? { sim_lock: simLock } : {}),
 		...(networkType !== undefined ? { network_type: networkType } : {}),
 		...(radioModes !== undefined ? { radio_modes: radioModes } : {}),
@@ -538,6 +566,8 @@ async function registerModem(id: number) {
 		active: null,
 	};
 	const radioModes = deriveRadioModeCatalog(modemInfo);
+	const simPresence = deriveSimPresence(modemInfo);
+	const ownNumbers = deriveOwnNumbers(modemInfo);
 
 	// Some firmware answers ModemManager's identity query with a bare numeral —
 	// board-measured `manufacturer: 1` / `model: 0`, which rendered as the row
@@ -554,6 +584,11 @@ async function registerModem(id: number) {
 	if (simInfo) {
 		simNetwork = simInfo["sim.properties.operator-name"] || "Unknown";
 	}
+
+	// A locked SIM withholds its ICCID and mmcli prints `--`, which the parser
+	// already reduces to an empty string — so absence and "not readable yet" are
+	// the same honest answer here, and neither may reach the wire as a value.
+	const iccid = simInfo?.["sim.properties.iccid"]?.trim();
 
 	// Bridge the already-fetched flat `-K` shape into the nested form
 	// parseMmcliModel expects (no second mmcli call). Missing fields stay undefined.
@@ -574,6 +609,9 @@ async function registerModem(id: number) {
 		...(manufacturer !== undefined ? { manufacturer } : {}),
 		network_type: networkType,
 		...(radioModes !== undefined ? { radio_modes: radioModes } : {}),
+		...(simPresence !== "unknown" ? { sim_presence: simPresence } : {}),
+		...(ownNumbers !== undefined ? { own_numbers: ownNumbers } : {}),
+		...(iccid ? { iccid } : {}),
 		...(config !== undefined ? { config } : {}),
 	};
 

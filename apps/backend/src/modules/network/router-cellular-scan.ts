@@ -522,27 +522,104 @@ function cachedSets(): UsbNetMarkerSets {
 	};
 }
 
-/**
- * Refresh the cached markers from the current interface set.
+/*
+ * SINGLE-FLIGHT + GENERATION FENCING, and why the fence is scoped to THIS sweep.
  *
- * @returns whether the observable state changed, so a caller may rebroadcast on
- *   a real edge rather than every tick. NEVER throws.
+ * `refreshUsbNetMarkers` is driven by the 5 s netif cadence and by any caller
+ * wanting a fresh marker set, so two sweeps of the same sysfs tree can be in
+ * flight at once — and a replug, which is exactly what triggers the second
+ * sweep, is also what makes the reads slow. Whichever sweep finished LAST used
+ * to win, so an OLDER sweep landing late overwrote a NEWER one's view of the
+ * very topology change that prompted it. Same defect class, and the same
+ * remedy, as `sources.ts`'s `hotplugRefreshGeneration`.
+ *
+ * The counter is module-local and fences ONLY the three caches below. It is
+ * deliberately NOT a shared lock over unrelated scans: putting the modem,
+ * dongle-metadata or policy-route sweeps behind one gate would let an unrelated
+ * slow read stall this one for no correctness gain.
  */
-export async function refreshUsbNetMarkers(
+let usbNetScanGeneration = 0;
+
+type InFlightUsbNetScan = {
+	readonly generation: number;
+	/** The interface set this sweep was asked about. */
+	readonly key: string;
+	/** Identity, not shape — two different deps read two different trees. */
+	readonly deps: RouterCellularScanDeps;
+	readonly result: Promise<boolean>;
+};
+
+let inFlightUsbNetScan: InFlightUsbNetScan | undefined;
+
+function scanRequestKey(ifnames: readonly string[]): string {
+	// NUL cannot appear in an interface name, so it can never merge two
+	// different requests into one key.
+	return ifnames.join("\u0000");
+}
+
+async function runUsbNetScan(
 	ifnames: readonly string[],
-	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+	deps: RouterCellularScanDeps,
+	generation: number,
 ): Promise<boolean> {
-	const before = snapshotKey(cachedSets());
 	try {
 		const scanned = await scanUsbNetMarkers(ifnames, deps);
+		if (generation !== usbNetScanGeneration) {
+			// A newer sweep (or a reset) started while this one was reading, so
+			// this result describes a world that has already been superseded.
+			// Dropping it is the whole point: committing would republish the
+			// PREVIOUS topology over the current one.
+			logger.debug("usb-net scan superseded", {
+				generation,
+				current: usbNetScanGeneration,
+			});
+			return false;
+		}
+		// Taken here rather than before the read: only the newest generation can
+		// reach this line, so nothing else can have committed in between — and a
+		// `resetUsbNetMarkers()` mid-flight would have fenced us out above.
+		const before = snapshotKey(cachedSets());
 		markers = scanned.routerCellular;
 		modemNetMarkers = scanned.modemNet;
 		physicalDescriptors = scanned.physical;
+		return snapshotKey(cachedSets()) !== before;
 	} catch (err) {
 		logger.debug("usb-net scan degraded", { err });
 		return false;
+	} finally {
+		if (inFlightUsbNetScan?.generation === generation) {
+			inFlightUsbNetScan = undefined;
+		}
 	}
-	return snapshotKey(cachedSets()) !== before;
+}
+
+/**
+ * Refresh the cached markers from the current interface set.
+ *
+ * Single-flight: an identical request already in flight is JOINED rather than
+ * re-read. Generation-fenced: a completion tagged with a stale generation is
+ * discarded, so overlapping sweeps can never commit out of order.
+ *
+ * @returns whether the observable state changed, so a caller may rebroadcast on
+ *   a real edge rather than every tick. A superseded sweep reports `false` — it
+ *   published nothing, and the sweep that fenced it out reports the edge.
+ *   NEVER throws.
+ */
+export function refreshUsbNetMarkers(
+	ifnames: readonly string[],
+	deps: RouterCellularScanDeps = defaultRouterCellularScanDeps,
+): Promise<boolean> {
+	const key = scanRequestKey(ifnames);
+	const pending = inFlightUsbNetScan;
+	if (pending && pending.key === key && pending.deps === deps) {
+		// The identical question is already being asked of the identical tree; a
+		// second sweep could only answer it twice and race its own twin.
+		return pending.result;
+	}
+	const generation = ++usbNetScanGeneration;
+	const result = runUsbNetScan(ifnames, deps, generation);
+	inFlightUsbNetScan = { generation, key, deps, result };
+	return result;
 }
 
 /** The marker for an interface, or `undefined` when it is not a router dongle. */
@@ -576,6 +653,10 @@ export function getUsbPhysicalDescriptor(
 
 /** Drop every cached marker (test isolation). */
 export function resetUsbNetMarkers(): void {
+	// A sweep still in flight describes the world BEFORE this reset, so it is
+	// fenced out rather than left to repopulate the caches this just cleared.
+	usbNetScanGeneration += 1;
+	inFlightUsbNetScan = undefined;
 	markers = new Map();
 	modemNetMarkers = new Map();
 	physicalDescriptors = new Map();

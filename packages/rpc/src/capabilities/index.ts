@@ -7,3 +7,4 @@ export * from './capability-matrix';
 export * from './device-mode-truth';
 export * from './intersect-caps';
 export * from './preview';
+export * from './sim-bond-eligibility';

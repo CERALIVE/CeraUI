@@ -186,6 +186,12 @@ function getMockModemInfo(modemId: number): string {
 		`modem.generic.carrier-configuration-revision: --`,
 		`modem.generic.hardware-revision: --`,
 		`modem.generic.equipment-identifier: ${modem.imei}`,
+		...(modem.ownNumber === undefined
+			? []
+			: [
+					`modem.generic.own-numbers.length: 1`,
+					`modem.generic.own-numbers.value[0]: ${modem.ownNumber}`,
+				]),
 		`modem.generic.device: /sys/devices/platform/usb/usb${modemId + 1}`,
 		`modem.generic.drivers.length: 2`,
 		`modem.generic.drivers.value[0]: qmi_wwan`,

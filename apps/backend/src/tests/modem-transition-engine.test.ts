@@ -110,11 +110,14 @@ function device(
 function scriptedBus(after: ReadonlyArray<Record<string, number | string>>): {
 	enumerate: () => Promise<readonly UsbDeviceSnapshot[]>;
 	readonly at: string[];
+	readonly inhibitPorts: string[];
 } {
 	const at: string[] = [];
+	const inhibitPorts: string[] = [];
 	let phase: "before" | "dropped" | "after" = "before";
 	return {
 		at,
+		inhibitPorts,
 		enumerate: () => {
 			if (phase === "before") {
 				// The AT command is what moves it on; until then it is present.
@@ -146,10 +149,13 @@ function engineDeps(bus: ReturnType<typeof scriptedBus>, activated: string[]) {
 				return Promise.resolve({});
 			},
 		} as never,
-		inhibitPort: {
-			inhibit: (uid: string) =>
-				Promise.resolve({ uid, acquiredAt: 0 as never }),
-			uninhibit: () => Promise.resolve(),
+		createInhibitPort: (atPort: string) => {
+			bus.inhibitPorts.push(atPort);
+			return {
+				inhibit: (uid: string) =>
+					Promise.resolve({ uid, acquiredAt: 0 as never }),
+				uninhibit: () => Promise.resolve(),
+			};
 		},
 		createAtSender: () => ({
 			send: (command: string) => {
@@ -214,9 +220,41 @@ afterEach(async () => {
 describe("the AT port is resolved from ModemManager's own list", () => {
 	test("the `(at)` entry is picked, and nothing else is", () => {
 		expect(findAtPort(["wwan0 (net)", "cdc-wdm0 (qmi)", "ttyUSB2 (at)"])).toBe(
-			"ttyUSB2",
+			"/dev/ttyUSB2",
 		);
 		expect(findAtPort(["wwan0 (net)", "cdc-wdm0 (qmi)"])).toBeUndefined();
+	});
+
+	test("MM's bare port NAME is returned as an openable PATH", () => {
+		// Given: the board's own list, where MM names the port `ttyUSB7`.
+		const board = [
+			"cdc-wdm2 (qmi)",
+			"ttyUSB5 (ignored)",
+			"ttyUSB6 (gps)",
+			"ttyUSB7 (at)",
+			"ttyUSB8 (at)",
+			"wwan2 (net)",
+		];
+
+		// When / Then: the opener gets a path, not the bare name that ENOENT'd.
+		expect(findAtPort(board)).toBe("/dev/ttyUSB7");
+		// An entry that already IS a path is left alone.
+		expect(findAtPort(["/dev/ttyACM0 (at)"])).toBe("/dev/ttyACM0");
+	});
+
+	test("the inhibition is bound to the tty the transaction will talk to", () => {
+		// Given: a modem whose AT port MM names by its bare kernel name.
+		const bus = scriptedBus(MBIM_IFACES);
+
+		// When: the engine is built.
+		createTransitionEngine(
+			{ stableKey: KEY, ports: ["wwan0 (net)", "ttyUSB7 (at)"] },
+			engineDeps(bus, []),
+		);
+
+		// Then: the inhibit port was handed that SAME openable path, so its
+		// readiness evidence can be about the port that actually gets written.
+		expect(bus.inhibitPorts).toEqual(["/dev/ttyUSB7"]);
 	});
 
 	test("a modem with NO AT port yields NO engine — never a fabricated one", () => {

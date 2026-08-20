@@ -79,6 +79,12 @@ const actionLabel = $derived(
 const stateLabel = $derived(
 	displayed ? m["network.view.inBond"]() : m["network.view.excluded"](),
 );
+// The word this control is NOT currently showing. It is rendered in the same
+// grid cell, `invisible`, purely so the slot measures the WIDER of the two in
+// whatever locale is active — see the reserve note on the markup below.
+const reservedLabel = $derived(
+	displayed ? m["network.view.excluded"]() : m["network.view.inBond"](),
+);
 const tooltipText = $derived(disabledReason ?? actionLabel);
 
 async function toggle(next: boolean) {
@@ -169,6 +175,24 @@ $effect(() => {
 				<p class="text-xs">{tooltipText}</p>
 			</Tooltip.Content>
 		</Tooltip.Root>
-		<span class="text-muted-foreground font-mono text-xs">{stateLabel}</span>
+		<!-- THE STATE WORD OCCUPIES A RESERVED SLOT, and that is layout, not decoration.
+		     This control sits inside a `shrink-0` instrument cluster whose SIGNAL glyph
+		     is laid out from the row's right edge, so every pixel of width variance here
+		     displaces that glyph. Measured on the bench board: "In Bond" and "Excluded"
+		     differ by 7px, which shifted four of seven Cellular rows' signal indicators
+		     relative to the other three — the "some moved left, some right" report.
+		     Both words are rendered into ONE grid cell, the inactive one `invisible`, so
+		     the slot measures max(both) in ANY locale with no magic number and no
+		     per-locale table. `invisible` is `visibility: hidden`, which still occupies
+		     layout — that is exactly the property being used. Do NOT swap it for
+		     `hidden`/`display:none` (reserves nothing) and do NOT replace it with a
+		     `min-w-[Npx]` (correct in `en`, wrong in the other nine). -->
+		<span
+			class="text-muted-foreground grid font-mono text-xs"
+			data-testid={`bond-state-${name}`}
+		>
+			<span class="col-start-1 row-start-1">{stateLabel}</span>
+			<span aria-hidden="true" class="invisible col-start-1 row-start-1">{reservedLabel}</span>
+		</span>
 	</div>
 </Tooltip.Provider>

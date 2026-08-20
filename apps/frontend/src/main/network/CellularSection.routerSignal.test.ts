@@ -236,7 +236,23 @@ describe("provenance — two instruments, never one surface", () => {
 });
 
 describe("honest states — a word, never a bare mark and never a spinner", () => {
-	it("says NO SIM for the real bench dongle instead of drawing zero bars", () => {
+	/*
+	  RETARGETED — the guarantee is unchanged and now held more strongly.
+
+	  This test's concern is in its own name: a SIM-less dongle reporting 0-of-5
+	  bars must NOT render as a zero-bars meter, which reads as "no coverage"
+	  rather than "no card". It used to hold that by making the CHIP say the words
+	  "No SIM". Those words are now the row's shared No-SIM tag — the same pill a
+	  directly-managed modem draws — so the chip saying them too put one fact on
+	  one row twice, in two different colours (found by visual QA on the board).
+
+	  The chip is therefore suppressed for THIS state only, which satisfies the
+	  original concern categorically: it cannot draw a misleading meter because it
+	  is not rendered. The row still says "No SIM", exactly once. Every OTHER
+	  non-reading state keeps its chip and its word — those say something the tag
+	  does not, and the `it.each` below is unchanged.
+	*/
+	it("never draws a zero-bars meter for a dongle with no card in it", () => {
 		const benchTruth = hilinkSignal({
 			bars: known(0),
 			max_bars: known(5),
@@ -248,11 +264,24 @@ describe("honest states — a word, never a bare mark and never a spinner", () =
 		const { container } = renderRows([
 			["1000", dongle(benchTruth, { sim: "absent" })],
 		]);
-		const el = chip(container);
 
-		expect(el?.dataset.signalState).toBe("no-sim");
-		expect(el?.dataset.signalTier).toBeUndefined();
-		expect(el?.textContent?.trim()).toBe("No SIM");
+		expect(chip(container)).toBeNull();
+
+		// The row still SAYS it — once, through the shared tag every modem class
+		// draws. (The disclosure's per-field admin inventory is a separate,
+		// collapsed surface and is deliberately untouched.)
+		const tags = container.querySelectorAll('[data-no-sim="true"]');
+		expect(tags).toHaveLength(1);
+		expect(tags[0]?.textContent?.trim()).toBe("No SIM");
+	});
+
+	it("keeps the chip for a dongle whose radio it can report on", () => {
+		const live = hilinkSignal({ bars: known(4), max_bars: known(5) });
+		const { container } = renderRows([
+			["1000", dongle(live, { sim: "present" })],
+		]);
+
+		expect(chip(container)?.dataset.signalState).toBe("reading");
 	});
 
 	it.each([
@@ -265,10 +294,17 @@ describe("honest states — a word, never a bare mark and never a spinner", () =
 			["1000", dongle(degraded(hilinkSignal(), reason))],
 		]);
 		const el = chip(container);
+		// The GLYPH is in the instrument slot beside where an MM radio draws its
+		// own; the WORD sits with the facts, which wrap. Both are still on screen
+		// and both still carry the machine reason — only the DOM seam moved.
+		const word = container.querySelector<HTMLElement>(
+			'[data-testid="modem-router-signal-state"]',
+		);
 
 		expect(el?.dataset.signalState).toBe("unknown");
 		expect(el?.dataset.unknownReason).toBe(reason);
-		expect(el?.textContent?.trim()).toBe(copy);
+		expect(word?.dataset.unknownReason).toBe(reason);
+		expect(word?.textContent?.trim()).toBe(copy);
 	});
 
 	it("renders NO digit and NO tier for any degraded state", () => {
@@ -300,12 +336,18 @@ describe("honest states — a word, never a bare mark and never a spinner", () =
 
 	it("keeps the state readable to assistive tech even when it is glyph-only", () => {
 		const { container } = renderRows([["1000", dongle(zteSignal())]]);
-		const word = chip(container)?.querySelector<HTMLElement>(
-			'[data-testid="modem-router-signal-state"]',
-		);
+		const el = chip(container);
 
-		expect(word?.className).toContain("sr-only");
-		expect(word?.textContent?.trim()).toBe("Good signal");
+		// A live reading is glyph-only on screen for BOTH device classes, so the
+		// tier reaches assistive tech the same way the MM glyph's does — through
+		// `role="img"` + `aria-label` — rather than through a second sr-only span
+		// that only this class had.
+		expect(el?.getAttribute("role")).toBe("img");
+		expect(el?.getAttribute("aria-label")).toContain("Good signal");
+		// And it still states WHERE the reading came from, in that same label.
+		expect(el?.getAttribute("aria-label")?.length ?? 0).toBeGreaterThan(
+			"Good signal".length,
+		);
 	});
 });
 

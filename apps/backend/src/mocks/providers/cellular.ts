@@ -142,6 +142,13 @@ export function readMockDongleFile(path: string): string | undefined {
  * any of it — that difference is the whole reason the backend is selectable, and
  * a dev fixture that omitted it would make the two backends indistinguishable in
  * the UI they are supposed to differentiate.
+ *
+ * It deliberately carries NO `config`. The NM profile is not a ModemManager
+ * fact, so `dbus-view-fold.ts` never sets one on real hardware; a fixture that
+ * did made the missing composition-root join invisible in dev and CI, and the
+ * defect reached a board — a save the device accepted could never be confirmed,
+ * because the wire had no `config` for the dialog's echo to match. The join
+ * (`withConnectionConfig`) supplies it here exactly as it does on a device.
  */
 export function getMockDbusModemViews(): readonly DbusModemView[] {
 	if (!shouldUseMocks()) return [];
@@ -167,18 +174,13 @@ export function getMockDbusModemViews(): readonly DbusModemView[] {
 			supportedNetworkTypes: modem.network_type.supported,
 			activeNetworkType: modem.network_type.active,
 			simLockRequired: "none",
-			config: {
-				apn: "internet",
-				username: "",
-				password: "",
-				roaming: false,
-				network: modem.operatorCode,
-				autoconfig: true,
-			},
 			deviceClass: modem.id === 1 ? "pcie-mhi" : "usb",
 			usbMode: "mbim",
 			recommendedUsbMode: "mbim",
 			firmwareRevision: `${modem.model}-MOCK01`,
+			...(modem.ownNumber === undefined
+				? {}
+				: { ownNumbers: [modem.ownNumber] }),
 			dataUsage: {
 				session_bytes: 1_572_864 * (modem.id + 1),
 				cycle_bytes: 1_342_177_280 * (modem.id + 1),

@@ -95,7 +95,7 @@ function fullModem(): Modem {
 
 function open(modem: Modem = fullModem()) {
 	return render(ModemConfigDialog, {
-		props: { open: true, modem, deviceId: "0", onUnlock: vi.fn() },
+		props: { open: true, modem, deviceId: "0" },
 	});
 }
 
@@ -183,13 +183,37 @@ describe("the Advanced disclosure holds every secondary block, and loses none", 
 		}
 	});
 
-	it("files the network-type lock — the one configuration control that moved", () => {
+	/*
+	  RETARGETED — the assertion is inverted BY DECISION, not weakened.
+
+	  This test used to pin network type INSIDE Advanced, on the theory that a
+	  radio-technology lock is a set-once-per-site decision. Operators reported
+	  otherwise: pinning a modem to 4G where 5G is marginal is routine field work,
+	  and it was the only thing in that disclosure an operator ever came to
+	  CHANGE — everything else down there is a read-only instrument or device
+	  surgery. It is now primary, and this pins it there so it cannot drift back.
+	*/
+	it("promotes the network-type lock OUT of Advanced", () => {
 		open();
-		const trigger = document.querySelector<HTMLElement>(
-			"[data-slot='select-trigger']",
-		);
-		expect(trigger).not.toBeNull();
-		expect(advancedBody().contains(trigger as Node)).toBe(true);
+		const networkType = screen.getByTestId("modem-network-type");
+
+		expect(advancedBody().contains(networkType)).toBe(false);
+	});
+
+	it("keeps it reachable without expanding anything", () => {
+		open();
+		const trigger = screen.getByTestId("modem-network-type-trigger");
+
+		// `inert` is what makes the collapsed body unreachable to a keyboard, so
+		// "outside every inert ancestor" IS the reachability claim — presence in
+		// the DOM alone is not. Walked as a PROPERTY: jsdom implements `inert` but
+		// never reflects it to an attribute, so a `[inert]` selector is vacuous.
+		let node: HTMLElement | null = trigger;
+		while (node) {
+			expect(node.inert).not.toBe(true);
+			node = node.parentElement;
+		}
+		expect(advancedBody().contains(trigger)).toBe(false);
 	});
 
 	it("files the usage-policy controls, still writable", () => {
@@ -255,5 +279,29 @@ describe("the Advanced disclosure is a real disclosure", () => {
 		expect(screen.getByTestId("modem-advanced-toggle").className).toContain(
 			"min-h-[44px]",
 		);
+	});
+
+	/*
+	  …AND WHILE COLLAPSED IT IS WITHDRAWN FROM HIT TESTING.
+
+	  `inert` (above) covers focus and the accessibility tree. It does NOT cover
+	  the pointer: `overflow: hidden` clips painting only, so every control down
+	  here keeps a full-size layout box at its uncollapsed coordinates and a
+	  pointer-driven caller is told it is reachable. The Cellular row measured
+	  exactly that on the board and fixed it on its own copy of this markup;
+	  `CollapsibleSection` carries the same guard now, and this pins that the
+	  DIALOG'S disclosure really gets it. The escaping BOX is a browser fact —
+	  jsdom lays nothing out — so it is proven in
+	  `tests/e2e/modem-advanced-disclosure.spec.ts`.
+	*/
+	it("hides the collapsed body from the pointer, not only from focus", async () => {
+		open();
+		const clip = advancedBody().firstElementChild;
+		if (!(clip instanceof HTMLElement)) throw new Error("no clipping wrapper");
+
+		expect(clip.style.visibility).toBe("hidden");
+
+		await fireEvent.click(screen.getByTestId("modem-advanced-toggle"));
+		expect(clip.style.visibility).toBe("visible");
 	});
 });

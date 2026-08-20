@@ -416,6 +416,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		mechanism:
 			"curl's own --max-time inside a spawnWithTimeout(DEVICE_PROBE_TIMEOUT_MS + 1s) outer cap; every failure mode (missing curl, timeout, non-204) resolves `false`, so a dead probe costs the interface an election round rather than throwing into the 2 s gateway loop",
 	},
+	{
+		id: "modems.idPathRead",
+		file: "modules/modems/modem-id-path-source.ts",
+		symbol: "readModemIdPaths",
+		command: "[udevadm, info, --export-db]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout(UDEV_EXPORT_TIMEOUT_MS); it runs on the boot discovery path and on every modem presence edge, and its caller (refreshModemIdPaths) RETAINS the previous map on any throw, so a failed read degrades identity resolution for one edge rather than clearing every modem's stable_key",
+	},
 ] as const;
 
 /**

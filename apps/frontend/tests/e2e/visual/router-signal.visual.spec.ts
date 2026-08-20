@@ -242,6 +242,61 @@ const DEGRADED_ROSTER: Record<string, unknown> = {
 	},
 };
 
+/**
+ * A roster built to break signal-glyph alignment, not to look pretty.
+ *
+ * Both row SHAPES appear (MM radio and router-ethernet dongle) AND both bond
+ * states appear on each shape, because the two defects this pins are orthogonal
+ * and each needs its own axis:
+ *
+ *   · the bond word — `In Bond` and `Excluded` differ in width, and the toggle
+ *     that prints them sits to the RIGHT of the glyph inside a `shrink-0`
+ *     cluster, so its width displaces the glyph. Measured on the bench board,
+ *     7px, splitting seven rows into two columns;
+ *   · the chip box — the dongle chip insets its bars by its own frame plus
+ *     `px-1.5` while the MM glyph's bars WERE its right edge, a further 6px.
+ *
+ * A roster whose rows are all bonded, or all one shape, passes on the broken
+ * tree.
+ */
+const ALIGNMENT_ROSTER: Record<string, unknown> = {
+	"align-mm-bonded": {
+		...MM_RADIO,
+		ifname: "wwan0",
+		name: "Quectel RM520N (bonded)",
+	},
+	"align-mm-excluded": {
+		...MM_RADIO,
+		ifname: "wwan1",
+		name: "Quectel RM520N (excluded)",
+	},
+	"align-zte-bonded": dongleRow(
+		"enx344b50000000",
+		"ZTE MF79U (bonded)",
+		zteSignal(),
+	),
+	"align-hilink-excluded": dongleRow(
+		"enx0c5b8f279a64",
+		"Huawei E3372 (excluded)",
+		hilinkSignal(),
+	),
+	"align-ufi-bonded": dongleRow(
+		"enx020754023235",
+		"Qualcomm 9024 (bonded)",
+		ufiSignal(),
+	),
+};
+
+/** Bonded rows get an address and `enabled`; excluded rows get neither. */
+const ALIGNMENT_NETIF: Record<string, unknown> = {
+	eth0: { ip: "192.168.1.50", tp: 0, enabled: true },
+	wwan0: { ip: "10.0.0.5", tp: 4, enabled: true },
+	wwan1: { tp: 0, enabled: false },
+	enx344b50000000: { ip: "192.168.0.169", tp: 12, enabled: true },
+	enx0c5b8f279a64: { tp: 0, enabled: false },
+	enx020754023235: { ip: "192.168.100.2", tp: 0, enabled: true },
+};
+
 const STALE_ROSTER: Record<string, unknown> = {
 	"dongle-live": dongleRow("enx344b50000000", "ZTE MF79U (live)", zteSignal()),
 	"dongle-stale": dongleRow(
@@ -382,6 +437,67 @@ for (const condition of CONDITIONS) {
 			}
 
 			await section.screenshot({ path: shot("router-signal-readings") });
+		});
+
+		test("every row's signal bars land in ONE column, whatever the row says", {
+			tag: "@visual",
+		}, async ({ page }) => {
+			serverConfig();
+			sendNetif(ALIGNMENT_NETIF);
+			sendModems(ALIGNMENT_ROSTER);
+
+			const section = cellularSection(page);
+			await expect(section).toBeVisible({ timeout: 15_000 });
+			await expect(page.getByTestId("modem-row")).toHaveCount(5);
+			await expect(page.getByTestId("modem-signal")).toHaveCount(2);
+			await expect(page.getByTestId("modem-router-signal")).toHaveCount(3);
+
+			// RENDERED GEOMETRY, not a class name. The tier glyph is the LAST svg in
+			// either indicator — the dongle chip leads with its `Router` provenance
+			// mark — so this measures the bars an operator actually scans down.
+			const offsets = await page.evaluate(() =>
+				Array.from(
+					document.querySelectorAll<HTMLElement>('[data-testid="modem-row"]'),
+				).map((row) => {
+					const indicator = row.querySelector<HTMLElement>(
+						'[data-testid="modem-signal"], [data-testid="modem-router-signal"]',
+					);
+					const svgs = indicator?.querySelectorAll("svg") ?? [];
+					const bars = svgs[svgs.length - 1];
+					return {
+						id: row.dataset.modemId ?? "?",
+						offRight:
+							bars === undefined
+								? null
+								: row.getBoundingClientRect().right -
+									bars.getBoundingClientRect().right,
+					};
+				}),
+			);
+
+			const measured = offsets.filter((o) => o.offRight !== null);
+			expect(measured).toHaveLength(5);
+
+			// Subpixel layout means exact equality is the wrong assertion; a 1px
+			// tolerance still fails the 6px and 7px regressions this pins.
+			const values = measured.map((o) => o.offRight as number);
+			const spread = Math.max(...values) - Math.min(...values);
+			expect(
+				spread,
+				`signal bars are not in one column: ${JSON.stringify(measured)}`,
+			).toBeLessThanOrEqual(1);
+
+			// And the reserve is REAL: the bond word's slot is as wide as the wider
+			// of the two states, so the two shapes measure the same box.
+			const bondWidths = await page.evaluate(() =>
+				Array.from(
+					document.querySelectorAll<HTMLElement>('[data-testid^="bond-state-"]'),
+				).map((el) => Math.round(el.getBoundingClientRect().width)),
+			);
+			expect(bondWidths.length).toBeGreaterThan(1);
+			expect(new Set(bondWidths).size).toBe(1);
+
+			await section.screenshot({ path: shot("signal-column-alignment") });
 		});
 
 		test("a degraded reading is an honest band — a word, no bars, no spinner", {

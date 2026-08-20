@@ -25,6 +25,7 @@ src/
 | Correlate a modem across a USB-mode transition | `schemas/modems.schema.ts` → `deriveModemStableKey()` / the `stable_key` field |
 | The shared modem MUTATION-SAFETY wire vocabulary (journal states, refusals, ack modes, the three operator procedures) | `schemas/modems.schema.ts` → `modemMutation*Schema`; section below → THE MUTATION-SAFETY VOCABULARY IS SHARED |
 | Identify a bonded LINK across a SIGHUP reload (`link_id` / `port_label` / `serial` on a telemetry row) + the one normalized bind-map disposition (`bond_mapping`) | `schemas/status.schema.ts` → `linkTelemetryEntrySchema`, `bondMappingSchema`; `conn_id` is a FILE POSITION and must never be a row identity |
+| Say that a link's device could NOT be identified (`identity_state: 'unmappable'`) | `schemas/status.schema.ts` → `bondLinkIdentityStateSchema` on `linkTelemetryEntrySchema`; section below → AN UNIDENTIFIABLE LINK SAYS SO |
 | Whether a capability module may be offered, mutated, or claimed | `schemas/capability-modules.schema.ts` + `capabilities/capability-matrix.ts` → `resolveSupportClaim` / `resolveCapabilityMatrix` / `mayRenderModule` / `mayClaimSupport`; section below → THE CAPABILITY FEATURE-GATE FRAMEWORK LIVES HERE, ONCE |
 | Read-only SMS inbox shapes (`modems.getSms`) | `schemas/modems.schema.ts` → `smsMessageSchema` / `modemSmsOutputSchema` / `SMS_INBOX_CAP`; section below → THE SMS INBOX SCHEMAS ARE READ-ONLY BY DESIGN |
 | Effective caps for a platform/source/mode | `capabilities/intersect-caps.ts` → `intersectCaps()` (pure) |
@@ -167,6 +168,17 @@ withdraws it. Collapsing absent into `false` hides a working control on every
 older device. `streaming.getConfig` echoes it too — the pull and the broadcast
 must not disagree.
 
+**`own_numbers` is an ARRAY that cannot be empty, and that is the contract.**
+The SIM's own number (MSISDN) is `z.array(z.string().min(1)).min(1).optional()`,
+so the schema can express "these numbers" and "not reported" — and deliberately
+NOT "an empty list", which a consumer would render as a finding rather than as
+silence. Most SIMs carry no MSISDN at all, so absence is the common case. It
+stays an ARRAY because MM's `Modem.OwnNumbers` is `as` and a dual-number SIM is
+expressible; collapsing to a first element would silently drop the tail. It is
+SENSITIVE — the device redacts it from every log (`helpers/logger.ts`
+`isOwnNumberSensitiveKey`) even though the UI displays it behind an explicit
+reveal; nothing about it being rendered makes it loggable.
+
 **`modems.configure` deliberately carries NO usage-policy write.**
 `modemDataUsageSchema` REPORTS `cycle_day` / `threshold_bytes`; the matching input
 fields are absent because `@ceralive/modem-control@0.2.0` publishes no
@@ -198,6 +210,27 @@ Coverage: `schemas/modems.schema.test.ts` — the legacy-payload byte-compat fix
 (a pre-Phase-B entry parses to a byte-identical payload and gains no defaulted
 field), the `stable_key` derivation table incl. the same-unit/different-port/
 non-USB/absent arms, and the strict-input negatives.
+
+## AN UNIDENTIFIABLE LINK SAYS SO, RATHER THAN BEING RENAMED
+
+`bondLinkIdentityStateSchema` (`resolved | unmappable`) is the wire vocabulary
+for "could the writer resolve which PHYSICAL device this bonded link is". It
+lives here rather than in the backend for the usual reason: the backend produces
+it and the operator surface renders it, and a second spelling of "unknown" is how
+a device that cannot be identified comes to look like one that simply has no
+telemetry yet.
+
+Two shape decisions carry weight:
+
+- **`identity_state` is emitted ONLY as `'unmappable'`.** `resolved` is proven by
+  the `link_id` beside it, and a legacy-`conn_id`-rung row makes no claim in
+  either direction — so absence means "nothing is being asserted here", never
+  "identified". Emitting `resolved` on every row would put a second, redundant
+  source of truth next to `link_id` for them to disagree on.
+- **It is a SIBLING of `link_id`, never a value of it.** The retired backend
+  fallback minted `lnk_<ifname>` for exactly this case: an id-shaped string keyed
+  on an interface name, which two same-model dongles swap on a replug. A state is
+  the honest answer; a plausible id is not.
 
 ## THE MUTATION-SAFETY VOCABULARY IS SHARED, NOT PER-PROCEDURE
 
@@ -321,8 +354,10 @@ with nothing behind it.
 - Don't add runtime handlers here. Handlers live in `apps/backend/src/`.
 - Don't duplicate schema definitions in `apps/` — always import from this package.
 - Don't use Zod v3 APIs (`z.string().nonempty()` etc.) — project is on Zod v4.
+- Don't publish `identity_state: 'resolved'` on a telemetry row, and don't fold the state INTO `link_id` as a sentinel value — `link_id` is minted by one authority or it is absent, and an id-shaped placeholder keyed on an interface name is the exact defect the state replaced.
 - Don't correlate a modem by its numeric id, its ifname, or its MAC — a USB-mode transition re-issues the first, the bench proves the second races on a duplicate factory MAC, and the third IS that duplicate. Use `stable_key` / `deriveModemStableKey()`, don't give an adapter its own derivation, and don't prefix or hash the key.
 - Don't feed a raw sysfs DEVPATH (`Modem.Physdev`, `Modem.Device`) anywhere a `stable_key` is compared without normalizing it — it names the same socket as a udev `ID_PATH` in a different vocabulary, and equality is the only operation the key supports, so the two never match (todo 24: two rows for one stick, 10/10 cycles). `deriveModemStableKey` normalizes for you; use `canonicalModemIdPath` when you also STORE the path. And don't "fix" a future instance of this with a fuzzy compare-time match or a third key format — normalize at the derivation, to the `ID_PATH` shape every other adapter already emits.
+- Don't publish `own_numbers` as an empty array, and don't collapse it to a single string — the schema's `.min(1)` is what keeps "not reported" and "none" from becoming the same wire value, and MM's property is `as`, so a first-element read silently drops a dual-number SIM's tail.
 - Don't promote any Phase-B modem field to required, and don't add `data_usage_cycle_day`/`data_usage_threshold_bytes` to `modemConfigInputSchema` until `@ceralive/modem-control` actually exports a usage-policy setter — an inert input field is a mutation the device accepts and drops.
 - Don't give a mutating modem procedure its own private refusal vocabulary — `modemMutationRefusalSchema` is shared so a blocked device reads the same on every surface, and a per-procedure generic error is how "waiting on your acknowledgement" becomes indistinguishable from "the transaction broke".
 - Don't make `mode` optional on `modemMutationAckInputSchema`, and don't drop its `.strict()`/`confirm` — those are the wire-level enforcement of "only VERIFIED-ROLLBACK or FORCE-REBASELINE may unblock a failed mutation".

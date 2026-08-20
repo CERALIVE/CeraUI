@@ -9,6 +9,7 @@
  */
 import { beforeEach, describe, expect, test } from "bun:test";
 
+import { mintLinkId } from "../modules/modems/physical-identity.ts";
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import {
 	type BindMapDegradedReason,
@@ -30,7 +31,7 @@ const TWIN_IP = "192.168.8.100";
 const entry = (ip: string, iface: string): BondEntry => ({
 	ip,
 	iface,
-	linkId: `lnk_${iface}`,
+	linkId: mintLinkId(`ifname:${iface}`),
 });
 
 const TWINS: BondEntry[] = [

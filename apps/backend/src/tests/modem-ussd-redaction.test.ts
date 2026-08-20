@@ -168,7 +168,9 @@ describe("the module itself is content-free", () => {
 					new Error(`error: couldn't send USSD command '${VOUCHER}': rejected`),
 				);
 			}
-			return Promise.resolve(`Reply: '${REPLY}'`);
+			return Promise.resolve(
+				`USSD session initiated; new reply from network: '${REPLY}'`,
+			);
 		};
 	}
 

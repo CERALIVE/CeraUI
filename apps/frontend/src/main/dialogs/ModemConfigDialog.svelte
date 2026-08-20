@@ -49,11 +49,24 @@
   they used no data. `modem-detail.ts` owns those decisions so the markup below
   only has to ask "is there a view".
 
-  No-SIM safety
-  -------------
-  A modem with `no_sim === true` OR a null/absent signal reading is treated as
-  having no SIM: a banner is shown and every input is disabled. `signal` is read
-  defensively (`== null`) so a missing `status` never crashes the render.
+  No-SIM safety — ONE PREDICATE, SHARED WITH THE ROW
+  --------------------------------------------------
+  The banner and the disabled fieldset are driven by `isSimlessModem`
+  (`main/network/cellular-row.ts`), which is the SAME function the Cellular row
+  reads and which delegates to `@ceraui/rpc`'s `isSimlessForBond` — the rule the
+  DEVICE's own bond gate applies. Do NOT re-derive it here.
+
+  It used to be a second copy: `no_sim === true || status.signal == null`. Both
+  halves were wrong in a different direction. The missing half is
+  `router_admin.sim`, the ONLY field a `router-ethernet` dongle reports its slot
+  through, so this surface could not see a SIM-less dongle at all. The extra half
+  is worse: a signal reading is a fact about the RADIO, not about the slot, so a
+  modem holding a perfectly good SIM that had not reported a signal yet — one
+  searching, or refused by the network — had its whole configuration form
+  disabled, including the APN field that is the reason an operator opens this
+  dialog. A missing `status` still cannot crash the render: the shared rule reads
+  `no_sim`/`router_admin.sim` optionally and answers `false` on absence, which is
+  the positive-evidence-only posture the bond gate requires.
 
   APN-required-when-manual
   ------------------------
@@ -78,6 +91,7 @@ import {
 	toUsagePolicyWireFields,
 } from './modem-usage-policy';
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import { toast } from 'svelte-sonner';
 import ModemFccUnlockSection from './ModemFccUnlockSection.svelte';
 import { fccUnlockErrorKey } from './modem-fcc-unlock';
 import ModemGpsSection from './ModemGpsSection.svelte';
@@ -103,10 +117,13 @@ import {
 } from '@ceraui/rpc/schemas';
 import {
 	ChevronDown,
+	Clock,
+	Copy,
+	Eye,
+	EyeOff,
 	Gauge,
 	Globe,
 	Inbox,
-	ListChecks,
 	Loader2,
 	MessageSquare,
 	Network as NetworkIcon,
@@ -114,7 +131,6 @@ import {
 	RadioTower,
 	RefreshCw,
 	ShieldAlert,
-	SignalZero,
 	Antenna,
 	Usb,
 	Zap,
@@ -123,6 +139,7 @@ import { einkGatedSlide as slide } from '$lib/transitions';
 
 import Badge from '$lib/components/custom/Badge.svelte';
 import CollapsibleSection from '$lib/components/custom/CollapsibleSection.svelte';
+import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
@@ -131,6 +148,7 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
+import { copyToClipboard } from '$lib/helpers/clipboard';
 import { renameSupportedModemNetwork } from '$lib/helpers/NetworkHelper';
 import { modemSignal } from '$lib/helpers/signal';
 import { rpc } from '$lib/rpc';
@@ -163,7 +181,7 @@ import {
 	usbOfferSuppressionKey,
 } from '$lib/rpc/usb-mode-offer';
 import { cn } from '$lib/utils';
-import { activeSimLock, isBlockingSimLock } from '../network/cellular-row';
+import { isSimlessModem } from '../network/cellular-row';
 import {
 	cellMetricRows,
 	cellObservedAtMs,
@@ -172,6 +190,9 @@ import {
 	firmwareRevision,
 	hasModemDetail,
 	isStandingUsbRefusal,
+	OWN_NUMBER_MASK,
+	ownNumbers,
+	simIccid,
 	usageView,
 } from './modem-detail';
 import {
@@ -184,28 +205,9 @@ interface Props {
 	open?: boolean;
 	modem: Modem;
 	deviceId: string | number;
-	/**
-	 * Hand off to the SIM-unlock flow. Only a NON-BLOCKING lock (`sim-pin2`) can
-	 * reach this dialog at all — a blocking lock is routed straight to unlock by
-	 * the row — so this is the PIN2 operator's path, offered beside the settings
-	 * they actually came for rather than in front of them.
-	 */
-	onUnlock?: () => void;
 }
 
-let { open = $bindable(false), modem, deviceId, onUnlock }: Props = $props();
-
-// Only a NON-BLOCKING lock is reported here, and the gate is what keeps the
-// band's copy honest: it tells the operator their service is unaffected, which
-// is true of `sim-pin2`/`sim-puk2` and false of the blocking pair. A blocking
-// lock cannot open this dialog anyway (the row routes it straight to unlock),
-// so if one appears mid-dialog the band simply stays away rather than lying.
-const pendingSimLock = $derived(activeSimLock(modem));
-const showLockBand = $derived(
-	pendingSimLock !== undefined &&
-		!isBlockingSimLock(pendingSimLock) &&
-		onUnlock !== undefined,
-);
+let { open = $bindable(false), modem, deviceId }: Props = $props();
 
 // Keyed async-operation domains. Scan and configure are tracked SEPARATELY so an
 // in-flight scan never gates a save and vice-versa. The `osCommand` re-entry
@@ -215,8 +217,12 @@ const showLockBand = $derived(
 const scanKey = $derived(`modem-scan:${deviceId}`);
 const configKey = $derived(`modem-config:${deviceId}`);
 
-// ── No-SIM detection (defensive: null OR undefined signal => no SIM) ──────────
-const noSim = $derived(modem.no_sim === true || modem.status?.signal == null);
+// ── No-SIM detection — the ROW's predicate, not a second one ──────────────────
+// `isSimlessModem` is the one answer every cellular surface reads, and it
+// delegates to `@ceraui/rpc`'s `isSimlessForBond` — the SAME rule the device's
+// own bond gate applies. See the header note above for why the copy that used
+// to live here (`no_sim === true || status.signal == null`) was wrong.
+const noSim = $derived(isSimlessModem(modem));
 const signalValue = $derived(modemSignal(modem));
 const operatorName = $derived(modem.status?.network || modem.sim_network || modem.name);
 const activeNetworkType = $derived(modem.status?.network_type ?? '');
@@ -271,6 +277,7 @@ $effect(() => {
 		saveExpected = undefined;
 		scanSignatureBaseline = undefined;
 		saveRefusal = undefined;
+		saveUnconfirmed = false;
 		advancedOpen = false;
 		resetSmsInbox();
 		void loadUsbModeOptions();
@@ -356,6 +363,20 @@ $effect(() => {
 	}
 });
 
+// The device ACCEPTED the write but never echoed it back inside the async-op
+// TTL. Distinct from `saveRefusal` in both directions: nothing was refused, so
+// calling it an error would be a lie, and nothing was confirmed, so closing on
+// success would be the other one. It is the honest third answer, and rendering
+// it is what bounds the spinner — the TTL always fires, but the phase it lands
+// in used to render NOTHING, so the operator watched the spinner stop and had
+// no way to tell a save that landed from one that vanished.
+let saveUnconfirmed = $state(false);
+// A refusal OUTRANKS it, and the guard has to be derived rather than a branch in
+// the effect: `osCommand`'s await lets Svelte flush between the op failing and
+// `handleSave` naming the reason, so an effect that read `saveRefusal` would
+// read it one microtask too early and band the same save twice.
+const showSaveUnconfirmed = $derived(saveUnconfirmed && saveRefusal === undefined);
+
 // Confirm a configure once a broadcast `modem` echo proves the device stored
 // what we sent (configure-echo predicate). A `connecting → connected` cycle on
 // any re-attach must NOT confirm — only a matching stored config does. Closes
@@ -369,8 +390,13 @@ $effect(() => {
 		open = false;
 		return;
 	}
-	if (phase === 'failed' || phase === 'timed_out' || phase === 'idle') {
+	if (phase === 'timed_out' || phase === 'failed' || phase === 'idle') {
+		// A terminal phase that named no refusal is the unconfirmed case: the TTL
+		// lapsed with no echo, or `osCommand` swallowed a thrown dispatch. Both
+		// leave the write's fate genuinely unknown, and both used to render
+		// nothing at all. A refusal already has its own band and outranks this.
 		saveExpected = undefined;
+		saveUnconfirmed = true;
 		return;
 	}
 	if (
@@ -387,6 +413,7 @@ $effect(() => {
 async function handleSave() {
 	if (primaryDisabled || isOperationPending(configKey)) return;
 	saveRefusal = undefined;
+	saveUnconfirmed = false;
 	const input = {
 		device: String(deviceId),
 		network_type: formData.selectedNetwork,
@@ -821,6 +848,40 @@ const firmware = $derived(firmwareRevision(modem.firmware_revision));
 const esim = $derived(esimView(modem.esim));
 const showDetailCard = $derived(hasModemDetail(modem));
 
+// The SIM's own number is HIDDEN BY DEFAULT and revealed only on request — the
+// same treatment `PasswordDialog`/`HotspotDialog` give a credential, for the same
+// reason: it identifies the subscriber, and this dialog is routinely on screen
+// while an operator screen-shares a stream. The reveal is per VIEWING, never
+// persisted, so it re-hides on close and whenever the dialog is pointed at a
+// different modem.
+const simNumbers = $derived(ownNumbers(modem.own_numbers));
+
+// The ICCID takes the OPPOSITE treatment: it is printed on the card and is what
+// the operator reads to a carrier rep to activate a line, so it renders plainly
+// and gains the copy affordance a 19-digit string needs.
+const iccid = $derived(simIccid(modem.iccid));
+
+async function copyIccid() {
+	if (!iccid) return;
+	if (await copyToClipboard(iccid)) {
+		toast.success(m["network.clipboard.iccidCopied"]());
+	} else {
+		toast.error(m["network.clipboard.copyFailed"](), {
+			description: m["network.clipboard.copyFailedDescription"](),
+		});
+	}
+}
+
+let revealOwnNumber = $state(false);
+let lastRevealScope: string | undefined;
+$effect(() => {
+	const scope = open ? `${deviceId}` : undefined;
+	if (scope !== lastRevealScope) {
+		revealOwnNumber = false;
+		lastRevealScope = scope;
+	}
+});
+
 const usage = $derived(usageView(modem.data_usage));
 
 // The usage POLICY is a SETTING, so it is published on every row whether or not
@@ -957,52 +1018,91 @@ function toggleSms(): void {
 			</div>
 		{/if}
 
-		{#if showLockBand}
-			<!-- ── Outstanding SIM lock ────────────────────────────────────────
-			     Calm INFO, deliberately not the amber no-SIM warning register:
-			     this modem registers and streams fine, so the band offers the
-			     unlock rather than warning about it, and gates nothing below. -->
+		{#if showSaveUnconfirmed}
+			<!-- Neither "saved" nor "refused" — the device took the settings and
+			     never echoed them back in time, so the only honest thing to
+			     report is that we do not know. Amber, never the destructive
+			     register: nothing is known to have failed. It also outlives the
+			     spinner deliberately, because the spinner stopping is exactly
+			     what used to leave the operator with no answer at all. -->
 			<div
-				class="border-status-info/40 bg-status-info/10 flex flex-wrap items-start gap-3 rounded-lg border p-3"
-				data-testid="modem-locked-band"
-				data-sim-lock={pendingSimLock}
+				class="border-status-warning/60 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3"
+				data-testid="modem-save-unconfirmed"
 				role="status"
 			>
-				<ListChecks class="text-status-info mt-0.5 size-5 shrink-0" aria-hidden="true" />
-				<div class="min-w-0 flex-1">
-					<p class="text-sm font-semibold">{m["network.cellular.lockBandTitle"]()}</p>
+				<Clock class="text-status-warning mt-0.5 size-5 shrink-0" aria-hidden="true" />
+				<div class="min-w-0">
+					<p class="text-sm font-semibold">{m["network.modem.saveUnconfirmedTitle"]()}</p>
 					<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-						{m["network.cellular.lockBandBody"]()}
+						{m["network.modem.saveUnconfirmedBody"]()}
 					</p>
 				</div>
-				<Button
-					class="min-h-[var(--touch-target-min)] shrink-0"
-					data-testid="modem-locked-unlock"
-					size="sm"
-					variant="outline"
-					onclick={() => onUnlock?.()}
-				>
-					{m["network.cellular.unlockAction"]()}
-				</Button>
 			</div>
 		{/if}
 
 		{#if noSim}
-			<!-- ── No-SIM banner ──────────────────────────────────────────────── -->
+			<!-- ── No-SIM banner ──────────────────────────────────────────────────
+			     The TAG is the shared pill every cellular surface draws; only the
+			     reasoning under it is dialog-specific. It used to lead with a third
+			     glyph (`SignalZero`) that appeared nowhere else, so the same fact
+			     wore a different face in the dialog than it did in the row behind
+			     it. -->
 			<div
 				class="border-status-warning/40 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3"
+				data-testid="modem-no-sim-banner"
 				role="status"
 			>
-				<SignalZero class="text-status-warning mt-0.5 size-5 shrink-0" aria-hidden="true" />
-				<div class="min-w-0">
+				<div class="min-w-0 space-y-1.5">
+					<NoSimBadge size="sm" testid="modem-no-sim-banner-badge" />
 					<p class="text-sm font-semibold">{m["network.modem.noSim"]()}</p>
-					<p class="text-muted-foreground mt-0.5 text-xs">{m["network.modem.noSimHint"]()}</p>
+					<p class="text-muted-foreground text-xs">{m["network.modem.noSimHint"]()}</p>
 				</div>
 			</div>
 		{/if}
 
 		<!-- All controls below are disabled when no SIM is present. -->
 		<fieldset class="space-y-4 disabled:pointer-events-none" disabled={noSim}>
+			<!-- ── Network type ────────────────────────────────────────────────────
+			     PRIMARY, and first: it locks which radio technologies the modem may
+			     use, so it is the coarsest of the three decisions this section makes
+			     (radio → registration → data session) and every control below it is
+			     read in its light. It spent a release inside the Advanced disclosure
+			     on the theory that it is set once per site; operators reported
+			     otherwise — pinning a modem to 4G is routine field work when 5G is
+			     marginal, and it was the only configuration control down there among
+			     read-only instruments and device surgery. -->
+			<div class="space-y-1.5" data-testid="modem-network-type">
+				<Label class="text-muted-foreground text-xs">{m["network.modem.networkType"]()}</Label>
+				<Select.Root
+					disabled={noSim}
+					onValueChange={(val) => {
+						if (val) formData.selectedNetwork = val;
+					}}
+					type="single"
+					value={formData.selectedNetwork}
+				>
+					<Select.Trigger class="h-10 w-full text-sm" data-testid="modem-network-type-trigger">
+						{formData.selectedNetwork
+							? renameSupportedModemNetwork(formData.selectedNetwork)
+							: '—'}
+					</Select.Trigger>
+					<Select.Content>
+						<Select.Group>
+							{#each modem.network_type?.supported ?? [] as networkType (networkType)}
+								<Select.Item value={networkType}>
+									{renameSupportedModemNetwork(networkType)}
+								</Select.Item>
+							{/each}
+							{#if (modem.network_type?.supported ?? []).length === 0}
+								<div class="text-muted-foreground px-2 py-1.5 text-xs">
+									{m["network.modem.noNetworksFound"]()}
+								</div>
+							{/if}
+						</Select.Group>
+					</Select.Content>
+				</Select.Root>
+			</div>
+
 			<!-- ── Roaming toggle ──────────────────────────────────────────────── -->
 			<div class="bg-muted/40 flex items-center justify-between gap-3 rounded-lg border p-3">
 				<div class="flex items-center gap-2.5">
@@ -1302,10 +1402,13 @@ function toggleSms(): void {
 
 		<!-- ── Advanced ─────────────────────────────────────────────────────────
 		     The single secondary surface. Everything inside it is either a
-		     set-once lock (network type), a read-only instrument (usage, cell
-		     detail, the inbox), or device surgery (USB composition) — none of it
-		     is what an operator opened this dialog to change, and together they
-		     were 783px of an 363px kiosk window. -->
+		     read-only instrument (usage, cell detail, the inbox), device surgery
+		     (USB composition), or a ranking WITHIN a choice made above it (the 5G
+		     preference refines the network type's allowed set) — none of it is
+		     what an operator opened this dialog to change, and together they were
+		     783px of a 363px kiosk window. Network type used to be here and was
+		     promoted; it was the one control down here an operator sets in the
+		     field. -->
 		<CollapsibleSection
 			bodyId="modem-advanced-body"
 			bodyTestid="modem-advanced-body"
@@ -1317,44 +1420,6 @@ function toggleSms(): void {
 			bind:open={advancedOpen}
 		>
 		<div class="space-y-4">
-		<!-- ── Network type ─────────────────────────────────────────────────────
-		     The one CONFIGURATION control down here. It locks which radio
-		     technologies the modem may use — a per-site decision made once, not
-		     the field an operator reopens this dialog for. Its own `disabled` is
-		     explicit rather than inherited, because it no longer sits inside the
-		     no-SIM fieldset. -->
-		<div class="space-y-1.5">
-			<Label class="text-muted-foreground text-xs">{m["network.modem.networkType"]()}</Label>
-			<Select.Root
-				disabled={noSim}
-				onValueChange={(val) => {
-					if (val) formData.selectedNetwork = val;
-				}}
-				type="single"
-				value={formData.selectedNetwork}
-			>
-				<Select.Trigger class="h-10 w-full text-sm">
-					{formData.selectedNetwork
-						? renameSupportedModemNetwork(formData.selectedNetwork)
-						: '—'}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#each modem.network_type?.supported ?? [] as networkType (networkType)}
-							<Select.Item value={networkType}>
-								{renameSupportedModemNetwork(networkType)}
-							</Select.Item>
-						{/each}
-						{#if (modem.network_type?.supported ?? []).length === 0}
-							<div class="text-muted-foreground px-2 py-1.5 text-xs">
-								{m["network.modem.noNetworksFound"]()}
-							</div>
-						{/if}
-					</Select.Group>
-				</Select.Content>
-			</Select.Root>
-		</div>
-
 		<!-- ── 5G preference ────────────────────────────────────────────────────
 		     The network-type selector above chooses the ALLOWED SET; this chooses
 		     the RANKING within it. They are two different questions and the second
@@ -1648,6 +1713,84 @@ function toggleSms(): void {
 					<div class="min-w-0">
 						<p class="text-muted-foreground text-xs">{m["network.modem.detail.firmware"]()}</p>
 						<p class="truncate font-mono text-sm" data-testid="modem-firmware">{firmware}</p>
+					</div>
+				{/if}
+
+				<!-- The SIM's ICCID, rendered PLAINLY — the deliberate opposite of the
+				     own-number field below. It is printed on the physical card and is
+				     what a carrier asks for over the phone to activate a line, so
+				     hiding it would obstruct the one job an operator opens this row
+				     to do. It gets a copy button instead: 19 digits are read wrong
+				     more often than not, and the value's destination is a phone call
+				     or a carrier chat window. -->
+				{#if iccid}
+					<div class="min-w-0">
+						<p class="text-muted-foreground text-xs">{m["network.modem.detail.iccid"]()}</p>
+						<div class="flex items-center gap-1.5">
+							<p
+								class="min-w-0 truncate font-mono text-sm tabular-nums"
+								data-testid="modem-iccid"
+								dir="ltr"
+							>
+								{iccid}
+							</p>
+							<Button
+								aria-label={m["network.modem.detail.iccidCopy"]()}
+								class="size-6 shrink-0 rounded-md"
+								data-testid="modem-iccid-copy"
+								onclick={copyIccid}
+								size="icon"
+								type="button"
+								variant="ghost"
+							>
+								<Copy class="size-3.5" />
+							</Button>
+						</div>
+					</div>
+				{/if}
+
+				<!-- The SIM's own number. HIDDEN BY DEFAULT: it identifies the
+				     subscriber, so it gets the credential treatment the password
+				     fields already use — a mask of FIXED width (a mask that tracked
+				     the real length would leak its digit count) and an explicit
+				     reveal. A modem whose carrier published no number renders
+				     NOTHING here: most SIMs carry none, so a placeholder would read
+				     as a failed read on the majority of devices. -->
+				{#if simNumbers}
+					<div class="min-w-0 space-y-1" data-testid="modem-own-number">
+						<div class="flex items-center gap-1.5">
+							<p class="text-muted-foreground text-xs">
+								{m["network.modem.detail.ownNumber"]()}
+							</p>
+							<Button
+								aria-label={revealOwnNumber
+									? m["network.modem.detail.ownNumberHide"]()
+									: m["network.modem.detail.ownNumberShow"]()}
+								aria-pressed={revealOwnNumber}
+								class="size-6 rounded-md"
+								data-testid="modem-own-number-toggle"
+								onclick={() => (revealOwnNumber = !revealOwnNumber)}
+								size="icon"
+								type="button"
+								variant="ghost"
+							>
+								{#if revealOwnNumber}
+									<EyeOff class="size-3.5" />
+								{:else}
+									<Eye class="size-3.5" />
+								{/if}
+							</Button>
+						</div>
+						{#each simNumbers as number, index (number)}
+							<p
+								class="truncate font-mono text-sm"
+								data-revealed={revealOwnNumber}
+								data-testid={`modem-own-number-value-${index}`}
+								dir="ltr"
+							>
+								{revealOwnNumber ? number : OWN_NUMBER_MASK}
+							</p>
+						{/each}
 					</div>
 				{/if}
 

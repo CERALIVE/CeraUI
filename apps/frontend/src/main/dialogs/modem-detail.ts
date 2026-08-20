@@ -289,11 +289,15 @@ export function hasModemDetail(input: {
 	cell_info?: ModemCellInfo | undefined;
 	esim?: ModemEsim | undefined;
 	firmware_revision?: string | undefined;
+	own_numbers?: readonly string[] | undefined;
+	iccid?: string | undefined;
 }): boolean {
 	return (
 		cellMetricRows(input.cell_info).length > 0 ||
 		text(input.firmware_revision) !== undefined ||
-		esimView(input.esim) !== undefined
+		esimView(input.esim) !== undefined ||
+		ownNumbers(input.own_numbers) !== undefined ||
+		simIccid(input.iccid) !== undefined
 	);
 }
 
@@ -301,6 +305,51 @@ export function hasModemDetail(input: {
 export function firmwareRevision(
 	value: string | undefined,
 ): string | undefined {
+	return text(value);
+}
+
+/**
+ * The SIM's own number(s), or `undefined` when the carrier published none.
+ *
+ * Most SIMs carry no MSISDN at all, so ABSENCE IS THE COMMON CASE and the field
+ * must render NOTHING for it — no "Unknown", no dash, no empty row. A
+ * placeholder here would read as a failed read on the majority of devices and
+ * would invite an operator to go looking for a number that does not exist.
+ *
+ * The value is hidden until the operator asks for it (`ModemConfigDialog`), for
+ * the reason a password is: this is the subscriber's telephone number, and a
+ * modem dialog is routinely on screen while someone screen-shares a stream.
+ */
+export function ownNumbers(
+	values: readonly string[] | undefined,
+): string[] | undefined {
+	const numbers = (values ?? [])
+		.map((value) => text(value))
+		.filter((value): value is string => value !== undefined);
+	return numbers.length > 0 ? numbers : undefined;
+}
+
+/**
+ * The masked stand-in shown before the operator reveals a number.
+ *
+ * The LENGTH is deliberately fixed rather than derived from the value: a mask
+ * whose width tracks the real number leaks its digit count, and a phone number
+ * is short enough for that to matter.
+ */
+export const OWN_NUMBER_MASK = "••••••••••";
+
+/**
+ * The SIM's ICCID, or `undefined` when the modem reported none.
+ *
+ * Deliberately NOT given the {@link ownNumbers} treatment. An ICCID is printed
+ * on the physical card and is what a carrier asks for over the phone to activate
+ * a line, so masking it would hide a value the operator opened this dialog to
+ * read aloud. It is rendered plainly, like the firmware revision beside it.
+ *
+ * Absence is still absence: a locked SIM withholds it and a router-mode dongle's
+ * host never sees one, so a modem without it renders NO row rather than a dash.
+ */
+export function simIccid(value: string | undefined): string | undefined {
 	return text(value);
 }
 

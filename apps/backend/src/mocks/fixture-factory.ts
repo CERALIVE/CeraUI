@@ -69,6 +69,7 @@ const DEFAULT_MODEM = {
 	imei: "867034057012345",
 	iccid: "89014103211118510720",
 	carrier: "T-Mobile",
+	ownNumber: "+15550100",
 	operatorCode: "310260",
 	network_type: { supported: ["5g", "4g", "3g"], active: "5g" },
 	interfaceName: "usb0",

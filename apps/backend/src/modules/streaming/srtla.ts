@@ -29,7 +29,11 @@ import {
 	type NetworkInterface,
 } from "../network/network-interfaces.ts";
 import { setup } from "../setup.ts";
-import { type BondEntry, isMappableEntry } from "./bind-map.ts";
+import {
+	type BondEntry,
+	isMappableEntry,
+	unmappableBondEntry,
+} from "./bind-map.ts";
 import {
 	type BindMapPublication,
 	defaultBindMapWriterDeps,
@@ -70,18 +74,39 @@ export function srtlaBindMapPath(): string {
 	return setup.bind_map_file ?? defaultSidecarPath(setup.ips_file ?? "");
 }
 
+/** Resolves a link's physical device. Injected so a failure is drivable. */
+export type BondIdentityResolver = typeof resolveModemPhysicalIdentity;
+
+let identityResolver: BondIdentityResolver = resolveModemPhysicalIdentity;
+
+/** Test seam: replace the identity resolver (null restores the real one). */
+export function setBondIdentityResolverForTest(
+	fn: BondIdentityResolver | null,
+): void {
+	identityResolver = fn ?? resolveModemPhysicalIdentity;
+}
+
 /**
  * Describe one bonded link the way the sidecar needs it.
  *
  * The `link_id` is MINTED BY TODO 10's identity module, never here — one id
  * authority, or the bind-map writer and the telemetry registry would attribute
- * the same operator's link to two different devices. A resolver failure falls
- * back to the ifname-anchored identity the resolver itself would have produced,
- * so a link always carries a stable id rather than none.
+ * the same operator's link to two different devices.
+ *
+ * A resolver failure therefore yields the EXPLICIT unmappable entry rather than
+ * a stand-in. The retired fallback minted `lnk_<ifname>`, which read as an
+ * identity, was shaped like one, and was keyed on the single property this fleet
+ * has already proven is NOT a device: the bench twins ship one factory MAC, so
+ * systemd can name only one of them predictably (`enx…`) and the other falls
+ * back to `eth1` — a replug can swap which is which, and that id follows the
+ * NAME, handing the next device in the socket the previous unit's telemetry row.
+ *
+ * The link keeps carrying traffic — the entry is still returned and its IP still
+ * goes in the list. What it loses is the claim that we know which device it is.
  */
 function describeBondEntry(ifname: string, ip: string): BondEntry {
 	try {
-		const record = resolveModemPhysicalIdentity(ifname);
+		const record = identityResolver(ifname);
 		return {
 			ip,
 			iface: ifname,
@@ -93,7 +118,7 @@ function describeBondEntry(ifname: string, ip: string): BondEntry {
 			ifname,
 			error,
 		});
-		return { ip, iface: ifname, linkId: `lnk_${ifname}` };
+		return unmappableBondEntry(ip, ifname);
 	}
 }
 

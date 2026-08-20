@@ -40,16 +40,56 @@
   publication lives in `bind-map-writer.ts`.
 */
 
+import type { BondLinkIdentityState } from "@ceraui/rpc/schemas";
+
 /** One bonded uplink, as the writer knows it before anything is published. */
 export interface BondEntry {
 	/** Source IPv4/IPv6 literal — the line that goes in `BIND_IPS_FILE`. */
 	readonly ip: string;
 	/** Kernel interface name the socket must egress through. */
 	readonly iface: string;
-	/** Opaque identity minted by todo 10's `mintLinkId`. Never invented here. */
-	readonly linkId: string;
+	/**
+	 * Opaque identity minted by todo 10's `mintLinkId`. Never invented here, and
+	 * ABSENT exactly when {@link BondEntry.identityState} says `unmappable`.
+	 */
+	readonly linkId?: string;
 	/** Writer provenance for a human debugging a bond; opaque to the sender. */
 	readonly idPath?: string;
+	/**
+	 * The EXPLICIT identity verdict. Absent means `resolved` — every caller that
+	 * carries a `linkId` says so by carrying one — and `unmappable` is the only
+	 * value ever written, by {@link unmappableBondEntry} alone.
+	 */
+	readonly identityState?: BondLinkIdentityState;
+}
+
+/** A {@link BondEntry} the writer can turn into a row: it carries a minted id. */
+export type MappedBondEntry = BondEntry & { readonly linkId: string };
+
+/**
+ * The entry for a link whose physical identity could NOT be resolved.
+ *
+ * There is deliberately no id here and no way to pass one in. The retired
+ * fallback minted `lnk_<ifname>` — a string shaped exactly like a real minted id
+ * but keyed on the INTERFACE NAME, which this fleet has already proven is not a
+ * device: two same-model dongles swap names on a replug (they ship one factory
+ * MAC, so systemd can only name one of them predictably), so that id follows the
+ * name and hands the next device the previous unit's telemetry row. Identity is
+ * minted by `physical-identity.ts` and by nothing else; when it cannot be, the
+ * honest answer is this state.
+ *
+ * The entry is KEPT rather than dropped: the link still carries traffic and the
+ * operator still has to be told it exists and that it cannot be told apart from
+ * a same-IP twin. What it cannot do is become a sidecar row — see
+ * {@link isMappableEntry}.
+ */
+export function unmappableBondEntry(ip: string, iface: string): BondEntry {
+	return { ip, iface, identityState: "unmappable" };
+}
+
+/** Did identity resolution positively FAIL for this entry? */
+export function isUnmappableEntry(entry: BondEntry): boolean {
+	return entry.identityState === "unmappable";
 }
 
 /** A row of the sidecar's `links[]`, in the sender's own field spelling. */
@@ -100,8 +140,9 @@ export function isValidLinkId(linkId: string): boolean {
  * a row is what lets the sender tell it from its twin. An entry that cannot be
  * described is not made eligible by wishing.
  */
-export function isMappableEntry(entry: BondEntry): boolean {
+export function isMappableEntry(entry: BondEntry): entry is MappedBondEntry {
 	if (entry.ip.trim() === "") return false;
+	if (entry.linkId === undefined || isUnmappableEntry(entry)) return false;
 	return isValidIfaceName(entry.iface) && isValidLinkId(entry.linkId);
 }
 
@@ -124,7 +165,7 @@ export function renderIpsFile(entries: readonly BondEntry[]): string {
  * distinguishable by it (the digest cannot see a mapping-only change).
  */
 export function buildBindMapDocument(
-	entries: readonly BondEntry[],
+	entries: readonly MappedBondEntry[],
 	generation: number,
 	ipsFileSha256: string,
 ): BindMapDocument {

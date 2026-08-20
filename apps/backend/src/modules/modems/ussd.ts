@@ -58,8 +58,9 @@ import {
 	respondUssd,
 	type UssdCliRunner,
 	type UssdTurnResult,
+	type UssdWaitDeps,
 } from "./mmcli-ussd.ts";
-import { defaultResolveIdentity } from "./usb-mode-identity.ts";
+import { resolveModemIdentityAnchor } from "./mutation-identity.ts";
 import {
 	IDLE_USSD_SESSION,
 	reduceUssdSession,
@@ -94,12 +95,15 @@ const defaultScheduler: UssdScheduler = (delayMs, run) => {
 
 /**
  * `resolveIdentity` is injected for the same reason `runCli` is: the default
- * reaches a live USB enumerator, and every rule worth pinning here is about the
- * SESSION and the GATE rather than about how a modem id becomes a stable key.
+ * reaches the live udev-derived ID_PATH map, and every rule worth pinning here is
+ * about the SESSION and the GATE rather than about how a modem id becomes a
+ * stable key.
  */
 export type ModemUssdDeps = {
 	readonly runCli?: UssdCliRunner;
 	readonly scheduler?: UssdScheduler;
+	/** The turn's bounded wait for the network's asynchronous answer. */
+	readonly wait?: UssdWaitDeps;
 	readonly resolveIdentity?: (
 		deviceId: string,
 	) => Promise<{ readonly stableKey: string } | undefined>;
@@ -220,7 +224,7 @@ export async function readModemUssd(
 	deviceId: string,
 	deps: ModemUssdDeps = {},
 ): Promise<ModemUssdOutput> {
-	const identity = await (deps.resolveIdentity ?? defaultResolveIdentity)(
+	const identity = await (deps.resolveIdentity ?? resolveModemIdentityAnchor)(
 		deviceId,
 	);
 	if (identity === undefined) {
@@ -262,7 +266,7 @@ async function runUssdVerb(
 	dispatch: (runCli: UssdCliRunner | undefined) => Promise<UssdTurnResult>,
 	deps: ModemUssdDeps,
 ): Promise<ModemUssdOutput> {
-	const identity = await (deps.resolveIdentity ?? defaultResolveIdentity)(
+	const identity = await (deps.resolveIdentity ?? resolveModemIdentityAnchor)(
 		deviceId,
 	);
 	if (identity === undefined) {
@@ -332,7 +336,7 @@ export function initiateModemUssd(
 	return runUssdVerb(
 		deviceId,
 		"initiate",
-		(runCli) => initiateUssd(deviceId, ussdCommand, runCli),
+		(runCli) => initiateUssd(deviceId, ussdCommand, runCli, deps.wait),
 		deps,
 	);
 }
@@ -345,7 +349,7 @@ export function respondModemUssd(
 	return runUssdVerb(
 		deviceId,
 		"respond",
-		(runCli) => respondUssd(deviceId, ussdResponse, runCli),
+		(runCli) => respondUssd(deviceId, ussdResponse, runCli, deps.wait),
 		deps,
 	);
 }

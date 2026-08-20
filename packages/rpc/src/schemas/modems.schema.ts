@@ -562,6 +562,36 @@ export const routerAdminDetailsSchema = z.object({
 	iccid: z.string().optional(),
 	ssid: z.string().optional(),
 	product: z.string().optional(),
+	registration: z.string().optional(),
+	pci: z.string().optional(),
+	mcc: z.string().optional(),
+	mnc: z.string().optional(),
+	roaming: z.string().optional(),
+	network_band: z.string().optional(),
+	bandwidth: z.string().optional(),
+	carrier_aggregation: z.string().optional(),
+	pcell_arfcn: z.string().optional(),
+	pcell_band: z.string().optional(),
+	pcell_bandwidth: z.string().optional(),
+	scell_arfcn: z.string().optional(),
+	scell_band: z.string().optional(),
+	scell_bandwidth: z.string().optional(),
+	/** The UFI's `bsid`, carried verbatim and OPAQUE — no meaning is claimed. */
+	station_id: z.string().optional(),
+	cpu_temp: z.string().optional(),
+	wifi_clients: z.string().optional(),
+	eth_clients: z.string().optional(),
+	web_version: z.string().optional(),
+	/** The DONGLE'S OWN local counters — never the bond rate, which the sender measures. */
+	monthly_tx_bytes: z.string().optional(),
+	monthly_rx_bytes: z.string().optional(),
+	monthly_time: z.string().optional(),
+	monthly_period: z.string().optional(),
+	session_tx_bytes: z.string().optional(),
+	session_rx_bytes: z.string().optional(),
+	session_tx_rate: z.string().optional(),
+	session_rx_rate: z.string().optional(),
+	session_time: z.string().optional(),
 });
 export type RouterAdminDetails = z.infer<typeof routerAdminDetailsSchema>;
 
@@ -1213,6 +1243,26 @@ export const modemSchema = z.object({
 	data_usage: modemDataUsageSchema.optional(),
 	data_usage_policy: modemDataUsagePolicySchema.optional(),
 	firmware_revision: z.string().optional(),
+	// The SIM's OWN number(s) — ModemManager's `Modem.OwnNumbers`. SENSITIVE: it
+	// is the subscriber's telephone number, so it is redacted from every log even
+	// though the UI DISPLAYS it behind an explicit reveal.
+	//
+	// An ARRAY, because MM's property is `as` and a dual-number SIM is expressible
+	// — collapsing to a first element would silently drop the tail. It is
+	// non-empty when present and OMITTED otherwise: most SIMs carry no MSISDN at
+	// all, so `[]` would invite a consumer to render "no numbers" as a finding
+	// rather than as silence.
+	own_numbers: z.array(z.string().min(1)).min(1).optional(),
+	// The SIM's ICCID — ModemManager's `Sim.SimIdentifier` (mmcli
+	// `sim.properties.iccid`). Deliberately NOT the same sensitivity class as
+	// `own_numbers`: an ICCID is printed on the physical card and is the number a
+	// carrier asks for over the phone to activate a line, so it is DISPLAYED
+	// plainly rather than behind a reveal. It is still absent-when-unreported —
+	// a locked SIM withholds it, and a router-mode dongle's host never sees one.
+	//
+	// Distinct from `routerAdminDetailsSchema.iccid`, which is a dongle's own
+	// admin API echoing what IT can see; this is the directly-managed radio's.
+	iccid: z.string().min(1).optional(),
 	esim: modemEsimSchema.optional(),
 	cell_info: modemCellInfoSchema.optional(),
 	// Why the radio is not registered, when the network said so. Absent means
@@ -1344,11 +1394,29 @@ export const modemScanInputSchema = z.object({
 });
 export type ModemScanInput = z.infer<typeof modemScanInputSchema>;
 
+/**
+ * Why a 3GPP scan produced no result.
+ *
+ * Machine-stable tokens keyed to operator copy, never rendered raw — the same
+ * contract every other refusal on this wire follows. They are DISTINCT because
+ * each points somewhere different: `timed_out` means the radio was still
+ * sweeping when the deadline expired (retry, or the radio is struggling to
+ * register at all), `already_scanning` means one is in flight (wait), and
+ * `failed` means the scan could not be run.
+ *
+ * A scan that completed and found NOTHING is `success: true` with an empty
+ * `networks` — deliberately not a failure, because "no networks in range" is a
+ * real answer and collapsing it into an error would misreport coverage.
+ */
+export const modemScanFailureSchema = z.enum(['timed_out', 'already_scanning', 'failed']);
+export type ModemScanFailure = z.infer<typeof modemScanFailureSchema>;
+
 // Modem scan output schema
 export const modemScanOutputSchema = z.object({
 	success: z.boolean(),
 	networks: z.record(z.string(), availableNetworkSchema).optional(),
 	error: z.string().optional(),
+	scanFailure: modemScanFailureSchema.optional(),
 	mutationRefusal: modemMutationRefusalSchema.optional(),
 });
 export type ModemScanOutput = z.infer<typeof modemScanOutputSchema>;
@@ -1966,3 +2034,60 @@ export const setModemBandsOutputSchema = z.object({
 	detail: z.string().optional(),
 });
 export type SetModemBandsOutput = z.infer<typeof setModemBandsOutputSchema>;
+
+/* ------------------------------------------------------------------------- *
+ * ROUTER-DONGLE ADMIN-UI REVERSE PROXY
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Path prefix of the CeraUI-hosted reverse proxy onto a router-mode dongle's
+ * OWN embedded admin web UI. A request is `<prefix>/<wireId>/<path…>`.
+ *
+ * The `wireId` — NOT a destination address — is what names the device. Two
+ * identical dongles ship one factory LAN subnet, so the bench pair both answer
+ * on `192.168.8.1` and a destination address selects a PAIR rather than a unit
+ * (board-measured: the ZTE on a different subnet answered `192.168.8.1` too,
+ * because the binding, not the address, is what routes). The id resolves to an
+ * INTERFACE, and the outbound request is bound to it.
+ */
+export const DONGLE_ADMIN_PATH_PREFIX = '/dongle-admin';
+
+/**
+ * Query parameter carrying the single-use token that opens an admin session.
+ * Minted over the already-authenticated RPC socket, exchanged once for an
+ * HttpOnly cookie scoped to {@link DONGLE_ADMIN_PATH_PREFIX} — the operator's
+ * password never rides the URL, and the browsing session that follows is
+ * cookie-authenticated like the rest of CeraUI's origin.
+ */
+export const DONGLE_ADMIN_TOKEN_PARAM = 'dongle_token';
+
+/** Cookie name carrying an opened admin session. */
+export const DONGLE_ADMIN_COOKIE = 'ceraui_dongle_admin';
+
+export const openRouterAdminInputSchema = z.object({ device: z.string().min(1) }).strict();
+export type OpenRouterAdminInput = z.infer<typeof openRouterAdminInputSchema>;
+
+/**
+ * Why an admin-UI session could not be opened.
+ *
+ *   unknown_device      — the id names no dongle the classifier currently holds.
+ *   interface_unresolved — the row exists but its interface could not be named,
+ *                          so nothing could be bound and a destination address
+ *                          alone cannot tell two identical units apart.
+ *   admin_unreachable   — no default gateway for that interface, i.e. the
+ *                         dongle has not leased this host an address yet.
+ */
+export const openRouterAdminRefusalSchema = z.enum([
+	'unknown_device',
+	'interface_unresolved',
+	'admin_unreachable',
+]);
+export type OpenRouterAdminRefusal = z.infer<typeof openRouterAdminRefusalSchema>;
+
+export const openRouterAdminOutputSchema = z.object({
+	success: z.boolean(),
+	/** Same-origin path to open. Absent on refusal. */
+	url: z.string().optional(),
+	error: openRouterAdminRefusalSchema.optional(),
+});
+export type OpenRouterAdminOutput = z.infer<typeof openRouterAdminOutputSchema>;

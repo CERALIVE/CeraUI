@@ -18,6 +18,7 @@
 
 /* Network interface list */
 import { EventEmitter } from "node:events";
+import { isSimlessForBond } from "@ceraui/rpc";
 import type WebSocket from "ws";
 
 import { ipToInt, isSameSubnet } from "../../helpers/ip-addresses.ts";
@@ -53,7 +54,11 @@ import {
 	getPolicyRouteVerdict,
 	refreshPolicyRouteFlags,
 } from "./policy-route-check.ts";
-import { refreshRouterCellularAdmin } from "./router-cellular-admin.ts";
+import {
+	getRouterCellularAdmin,
+	type RouterAdminSim,
+	refreshRouterCellularAdmin,
+} from "./router-cellular-admin.ts";
 import {
 	getModemNetMarker,
 	getRouterCellularMarker,
@@ -117,6 +122,11 @@ type ScopedAddress = { ip: string; prefix: number; scope: string };
 
 export const NETIF_ERR_DUPIPV4 = 0x01;
 export const NETIF_ERR_HOTSPOT = 0x02;
+// A SIM-less router dongle still leases the host a good address from its OWN
+// embedded router, so every rule that reads only an address considers it
+// bondable and the bond spends a slot on an uplink with no WAN behind it. Like
+// NETIF_ERR_HOTSPOT this marks "cannot carry bonded traffic", not a fault.
+export const NETIF_ERR_NOSIM = 0x04;
 
 let netif: Record<string, NetworkInterface> = {};
 
@@ -558,6 +568,10 @@ export function processIfconfigOutput(
 		}
 	}
 
+	// Ahead of the dup-IP and same-subnet passes so a SIM-less dongle is already
+	// disabled when they run, exactly as a dup-IP link is when grouping runs.
+	applyRouterSimBondGate(newInterfaces);
+
 	if (intsChanged) {
 		const intAddrs: Record<string, string | Array<string>> = {};
 
@@ -775,6 +789,7 @@ function computeSameSubnetGroups(
 const netIfErrors = {
 	2: "WiFi hotspot",
 	1: "duplicate IPv4 addr",
+	4: "no SIM",
 } as const;
 
 function setNetifError(int: NetworkInterface | undefined, err: number) {
@@ -799,6 +814,44 @@ function clearNetifDup(int: NetworkInterface | undefined) {
 
 export function setNetifHotspot(int: NetworkInterface | undefined) {
 	setNetifError(int, NETIF_ERR_HOTSPOT);
+}
+
+/*
+  THE SIM-LESS ROUTER DONGLE GATE.
+
+  A `router-ethernet` dongle is invisible to ModemManager, so the `no_sim` flag
+  the rest of the stack gates on never covers it. Its SIM state is knowable only
+  from its OWN admin API, which `router-cellular-admin.ts` already probes on its
+  30 s cadence — so the evidence was on the device the whole time and nothing
+  consulted it here. Measured on the bench: a SIM-less ZTE MF79U and a SIM-less
+  Qualcomm UFI were both in `genSrtlaIpList()` while their SIM-less Huawei
+  siblings were out, and the only thing separating the two pairs was that the
+  Huaweis happened to collide on `NETIF_ERR_DUPIPV4` as well.
+
+  It re-evaluates on EVERY pass rather than only on a topology change, because
+  the verdict moves on the admin probe's own cadence — the netif map is
+  byte-identical across a SIM being pulled from a dongle that keeps its lease.
+
+  `sim: "absent"` is the only gating answer, and it is reachable only from a
+  device-stated code the dialect parser was willing to justify: an unreachable
+  dongle carries no `sim` field at all and a doubtful one reads `unknown`, so a
+  missed probe cycle can never take a working uplink out of a live bond.
+*/
+export function applyRouterSimBondGate(
+	interfaces: Record<string, NetworkInterface>,
+	readAdmin: (ifname: string) => { sim?: RouterAdminSim } | undefined = (
+		ifname,
+	) => getRouterCellularAdmin(ifname),
+): void {
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int) continue;
+		if (isSimlessForBond({ routerSim: readAdmin(name)?.sim })) {
+			setNetifError(int, NETIF_ERR_NOSIM);
+		} else {
+			clearNetifError(int, NETIF_ERR_NOSIM);
+		}
+	}
 }
 
 const isValidNetworkInterfaceErrorCode = (

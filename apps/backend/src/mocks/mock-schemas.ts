@@ -52,6 +52,13 @@ const iccidSchema = z
 	.string()
 	.regex(/^\d{19,20}$/, "ICCID must be 19–20 digits");
 
+// MSISDN in E.164: a leading `+`, then 1–15 digits with no leading zero. The
+// board's own SIM (`+573115422359`) is the shape this pins; a fixture value must
+// stay in a reserved/fictional range so a dev binary never carries a real one.
+const msisdnSchema = z
+	.string()
+	.regex(/^\+[1-9]\d{1,14}$/, "Own number must be E.164 (+ then 2–15 digits)");
+
 // PLMN operator code: MCC (3 digits) + MNC (2–3 digits) = 5–6 digits.
 const operatorCodeSchema = z
 	.string()
@@ -84,6 +91,9 @@ export const mockModemConfigSchema = z
 		imei: imeiSchema,
 		iccid: iccidSchema,
 		carrier: z.string().min(1),
+		// Optional so the honest-absence path is exercisable in dev: only ONE mock
+		// modem publishes a number, exactly as only some real SIMs do.
+		ownNumber: msisdnSchema.optional(),
 		operatorCode: operatorCodeSchema,
 		network_type: z.object({
 			supported: z.array(z.string().min(1)).min(1),

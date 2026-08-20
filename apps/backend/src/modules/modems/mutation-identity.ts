@@ -73,3 +73,25 @@ export function modemStableKeyForMmTarget(target: string): string | undefined {
 	if (index === undefined) return undefined;
 	return modemStableKeyForId(Number(index));
 }
+
+/** The shape every capability module's `resolveIdentity` seam consumes. */
+export type ModemIdentityAnchor = { readonly stableKey: string };
+
+/**
+ * The capability modules' identity resolver.
+ *
+ * They correlate on the `stable_key` and on NOTHING else — a USSD dialogue, a
+ * GNSS session and the lease that guards them are all filed under it — so this
+ * answers with exactly that, through the SAME udev-net-record source
+ * `modemStableKeyForId` already reads. It is deliberately NOT
+ * `defaultResolveIdentity`: that one additionally enumerates USB to recover the
+ * catalog discriminators a composition switch needs, which a PCIe-attached or
+ * momentarily-unenumerable modem cannot supply — and a module that never looks
+ * at those fields must not be refused for their absence.
+ */
+export function resolveModemIdentityAnchor(
+	deviceId: string,
+): Promise<ModemIdentityAnchor | undefined> {
+	const stableKey = modemStableKeyForMmTarget(deviceId);
+	return Promise.resolve(stableKey === undefined ? undefined : { stableKey });
+}
