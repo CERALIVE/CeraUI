@@ -119,10 +119,21 @@ function installWsHarness(token: string): void {
 		inject(type: string, payload: any) {
 			const s = w.__cera.socket;
 			if (s && s.__appOnMessage) {
+				let delivered = payload;
+				if (type === "netif") {
+					const current = w.__cera.lastNetif ?? {};
+					delivered = { ...current };
+					for (const [name, patch] of Object.entries(payload)) {
+						if (patch && typeof patch === "object") {
+							delivered[name] = { ...(current[name] ?? {}), ...patch };
+						}
+					}
+					w.__cera.lastNetif = delivered;
+				}
 				s.__appOnMessage.call(
 					s,
 					new MessageEvent("message", {
-						data: JSON.stringify({ [type]: payload }),
+						data: JSON.stringify({ [type]: delivered }),
 					}),
 				);
 			}

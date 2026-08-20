@@ -150,7 +150,7 @@ function installWsHarness(token: string): void {
 				if (p === "network.configure" && w.__cera._dropFakeNetcfg) {
 					const mode = w.__cera._dropFakeNetcfg;
 					const id = msg.id;
-					setTimeout(() => {
+					requestAnimationFrame(() => {
 						this.dispatchEvent(
 							new MessageEvent("message", {
 								data: JSON.stringify(
@@ -166,7 +166,7 @@ function installWsHarness(token: string): void {
 								),
 							}),
 						);
-					}, 0);
+					});
 					return undefined;
 				}
 

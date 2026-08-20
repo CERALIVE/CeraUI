@@ -16,7 +16,7 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.j
  * state, so the PIN walk runs end-to-end against the genuinely-booted scenario.
  *
  * Walk (serial):
- *   A. Real PIN walk — the auto-prompted SimUnlockDialog: two wrong PINs decrement
+ *   A. Real PIN walk — the row-opened SimUnlockDialog: two wrong PINs decrement
  *      the visible remaining-attempts counter (3→2→1), then the correct "0000"
  *      unlocks and the dialog closes.
  *   B. PUK reachability — the PUK recovery form is reachable (inputs + decremented
@@ -113,7 +113,8 @@ test.describe("Audit A2 — SIM PIN/PUK walk (modem-pin-locked)", { tag: "@audit
 	test("real PIN walk: two wrong PINs decrement remaining attempts, then 0000 unlocks + closes", async ({
 		page,
 	}) => {
-		// modem 0 is PIN-locked in this scenario → the dialog auto-prompts.
+		// A SIM lock is reached from its own row, never by page-level interception.
+		await page.getByTestId("open-modem-unlock-dialog").first().click();
 		const input = page.getByTestId("sim-pin-input");
 		const submit = page.getByTestId("sim-pin-submit");
 		const error = page.getByTestId("sim-pin-error");
@@ -148,7 +149,7 @@ test.describe("Audit A2 — SIM PIN/PUK walk (modem-pin-locked)", { tag: "@audit
 				"Audit A2 — real SIM PIN unlock walk (modem-pin-locked)",
 				`Generated: ${new Date().toISOString()}`,
 				"",
-				"modem 0 PIN-locked → SimUnlockDialog auto-prompted.",
+				"modem 0 PIN-locked → row Unlock SIM action opened SimUnlockDialog.",
 				"Wrong PIN 1111 → real mockAttemptSimUnlock → remaining attempts 2 (asserted).",
 				"Wrong PIN 2222 → remaining attempts 1 (asserted); no PUK auto-escalation.",
 				"Correct fixture PIN 0000 → real unlock → dialog closed (sim-pin-input hidden).",
@@ -173,8 +174,9 @@ test.describe("Audit A2 — SIM PIN/PUK walk (modem-pin-locked)", { tag: "@audit
 			.toBeGreaterThan(0);
 
 		await injectPukModem(page);
+		await page.getByTestId("open-modem-unlock-dialog").first().click();
 
-		// The PUK recovery form auto-prompts: PUK + new-PIN inputs and submit render;
+		// The row action opens the PUK recovery form: PUK + new-PIN inputs and submit render;
 		// the PIN form is superseded (a PUK lock can no longer be cleared by a PIN).
 		await expect(page.getByTestId("sim-puk-required")).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId("sim-puk-input")).toBeVisible();
