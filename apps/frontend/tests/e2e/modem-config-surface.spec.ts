@@ -39,7 +39,6 @@ import {
  * MOCK_SCENARIO=multi-modem-wifi for the backend.
  */
 
-const BUSY_TEXT = "Device is busy, try again in a moment";
 const TYPED_APN = "internet.e2e.test";
 const EXPECTED_NETWORK_TYPE = "4g";
 
@@ -112,7 +111,7 @@ test.describe(
 				},
 			});
 
-			await openTargetModemDialog(page, MODEM_INDEX);
+			await openTargetModemDialog(page, MODEM_INDEX, key);
 			const dialog = page.getByRole("dialog");
 			await expect(dialog).toBeVisible();
 
@@ -175,7 +174,7 @@ test.describe(
 				},
 			});
 
-			await openTargetModemDialog(page, MODEM_INDEX);
+			await openTargetModemDialog(page, MODEM_INDEX, key);
 			const dialog = page.getByRole("dialog");
 			await expect(dialog).toBeVisible();
 
@@ -233,7 +232,7 @@ test.describe(
 			);
 		});
 
-		test("a configure DEVICE_BUSY result raises a calm busy toast and re-enables the modem Save button", async ({
+		test("a configure device_busy result raises a persistent refusal band and re-enables the modem Save button", async ({
 			page,
 		}) => {
 			record("── modem configure: DEVICE_BUSY ──");
@@ -250,7 +249,7 @@ test.describe(
 				},
 			});
 
-			await openTargetModemDialog(page, MODEM_INDEX);
+			await openTargetModemDialog(page, MODEM_INDEX, key);
 			const dialog = page.getByRole("dialog");
 			await expect(dialog).toBeVisible();
 
@@ -263,12 +262,16 @@ test.describe(
 
 			await armFake(page, "modems.configure", {
 				success: false,
-				error: "DEVICE_BUSY",
+				error: "device_busy",
 			});
 			await save.click();
 
-			await expect(page.getByText(BUSY_TEXT)).toBeVisible();
-			record("Save → DEVICE_BUSY → calm busy toast ✓");
+			const refusal = dialog.getByTestId("modem-save-refused");
+			await expect(refusal).toBeVisible();
+			await expect(refusal).toHaveAttribute("data-refusal", "device_busy");
+			await expect(refusal.locator("p").nth(1)).not.toBeEmpty();
+			await expect(refusal).not.toContainText("network.modem.saveRefused");
+			record("Save → DEVICE_BUSY → persistent refusal band ✓");
 
 			await expect(save).toBeEnabled();
 			await expect(dialog).toBeVisible();
