@@ -1440,96 +1440,237 @@ test.describe("Capability truthfulness (functional)", () => {
 
 	// ── DESIGN.md §1: the capability-truth matrix, in a real browser ──────────
 	//
+	// UI pass 1 asserted FOUR claims against ONE fixture modem. Pass 4 is the
+	// confirming round, so it runs the WHOLE matrix — every operation state the
+	// ladder can produce, against every fleet family whose devices reach this
+	// dialog at all — because a rule proven on one transport is a rule assumed
+	// on the other four.
+	//
 	// The claim ladder decides which of FOUR renderings a gated module gets, and
-	// three of the four are decidable from the claim alone — so they are asserted
-	// here exactly, at the desktop viewport this describe already pins. The
-	// `capable` arm additionally depends on what the device's own read answers,
+	// three of the four are decidable from the claim alone. The `capable`/
+	// `certified` arm additionally depends on what the device's own read answers,
 	// which a dev host cannot pin, so it is asserted as the DISJUNCTION the
 	// matrix actually promises: a control is offered, or a control is offered
 	// DISABLED with its reason on screen. What it may never be is `unknown` or
 	// absent, and that is what the assertion pins.
 	//
-	// The unit twin (`ModemConfigDialog.capabilityTruth.test.ts`) drives all four
-	// arms exactly against fixture reads; this proves the same contract survives
+	// The unit twin (`ModemConfigDialog.capabilityTruth.test.ts`) drives every
+	// arm exactly against fixture reads; this proves the same contract survives
 	// the real app, the real dialog chrome and the real disclosure.
-	const CAPABILITY_MATRIX = [
-		{ claim: "unavailable", expected: "absent" },
-		{ claim: "implemented", expected: "unknown" },
-		{ claim: "enabled", expected: "unknown" },
-		{ claim: "capable", expected: "offered" },
-	] as const;
+	type ExpectedRender = "absent" | "unknown" | "offered";
 
-	for (const { claim, expected } of CAPABILITY_MATRIX) {
-		test(`a gated capability module claiming ${claim} renders as ${expected}`, {
+	// A claim of `undefined` is a backend that never published the matrix at all.
+	// It is a real operation state on the wire, and it folds to `absent`
+	// fail-CLOSED — absence of a claim is not a claim.
+	const OPERATION_STATES: readonly {
+		readonly claim: string | undefined;
+		readonly label: string;
+		readonly expected: ExpectedRender;
+	}[] = [
+		{ claim: undefined, label: "no published matrix", expected: "absent" },
+		{ claim: "unavailable", label: "unavailable", expected: "absent" },
+		{ claim: "implemented", label: "implemented", expected: "unknown" },
+		{ claim: "enabled", label: "enabled", expected: "unknown" },
+		{ claim: "capable", label: "capable", expected: "offered" },
+		{ claim: "certified", label: "certified", expected: "offered" },
+	];
+
+	// Every transport ModemManager manages (`MM_MANAGED_CLASSES` in
+	// `cellular-row.ts`), plus the pre-Phase-B wire that carried no class at all —
+	// which `resolveClassBand` reads as mm-managed, so it too reaches this dialog
+	// and belongs in the matrix.
+	const MM_FLEET_FAMILIES: readonly {
+		readonly id: string;
+		readonly deviceClass: string | undefined;
+		readonly name: string;
+	}[] = [
+		{ id: "fleet-usb", deviceClass: "usb", name: "Quectel RM520N" },
+		{ id: "fleet-pcie-mhi", deviceClass: "pcie-mhi", name: "Fibocom FM350" },
+		{ id: "fleet-pcie-mtk", deviceClass: "pcie-mtk", name: "MediaTek T830" },
+		{ id: "fleet-soc-qrtr", deviceClass: "soc-qrtr", name: "Onboard QRTR radio" },
+		{ id: "fleet-legacy", deviceClass: undefined, name: "Legacy mmcli radio" },
+	];
+
+	// Both modules the dialog gates today. Their testids share one shape, so the
+	// matrix asserts the CONTRACT rather than one module's markup.
+	const GATED_MODULE_TESTIDS: readonly { readonly module: string; readonly testId: string }[] =
+		[
+			{ module: "fcc-auto-unlock", testId: "modem-fcc-unlock" },
+			{ module: "gps", testId: "modem-gps" },
+		];
+
+	async function expectCapabilityRender(
+		page: Page,
+		testId: string,
+		expected: ExpectedRender,
+		where: string,
+	): Promise<void> {
+		const section = page.getByTestId(testId);
+		const control = page.getByTestId(`${testId}-toggle`);
+		const unknown = page.getByTestId(`${testId}-unknown`);
+
+		if (expected === "absent") {
+			// CT-1: not a ghost, not a disabled row, not a tooltip. Nothing.
+			await expect(section, `${where}: CT-1 expects zero nodes`).toHaveCount(0);
+			await expect(control, `${where}: CT-1 expects no control`).toHaveCount(0);
+			await expect(unknown, `${where}: CT-1 expects no diagnostic`).toHaveCount(0);
+			return;
+		}
+
+		if (expected === "unknown") {
+			// CT-3 + CT-4: a distinct, announced diagnostic and NO control — below
+			// `capable` nobody has shown there is a capability to withhold.
+			await expect(unknown, `${where}: CT-3 expects a diagnostic`).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(unknown).toHaveAttribute("data-state", "unknown");
+			await expect(unknown).toHaveAttribute("role", "status");
+			await expect(unknown).toHaveText(/\S/);
+			await expect(unknown).not.toHaveText(/network\.modem/);
+			await expect(control, `${where}: CT-4 forbids a fake control`).toHaveCount(0);
+			await expect(section).toHaveAttribute("data-capability-state", "unknown");
+			return;
+		}
+
+		await expect(section, `${where}: a proven module must render`).toBeVisible({
+			timeout: 15_000,
+		});
+		const state = await section.getAttribute("data-capability-state");
+		expect(["available", "blocked"], `${where}: resolved as "${state}"`).toContain(
+			state,
+		);
+		await expect(control).toBeVisible();
+		if (state === "blocked") {
+			// CT-2: disabled, and the reason is ON SCREEN — the shipped kiosk
+			// touchscreen cannot hover to reveal a tooltip.
+			await expect(control).toBeDisabled();
+			const reason = page.getByTestId(`${testId}-reason`);
+			await expect(reason, `${where}: CT-2 expects a reason`).toBeVisible();
+			await expect(reason).toHaveText(/\S/);
+			await expect(reason).not.toHaveText(/network\.modem/);
+		} else {
+			await expect(control).toBeEnabled();
+		}
+	}
+
+	for (const { claim, label, expected } of OPERATION_STATES) {
+		test(`a gated capability module claiming ${label} renders as ${expected} on every mm-managed fleet family`, {
 			annotation: {
 				type: DROP_SERVER_STATUS_ANNOTATION,
 				description:
-					"injects its own status.modems so the fixture modem is the only cellular row",
+					"injects its own status.modems so the fixture roster is the only cellular content",
 			},
 		}, async ({ page }) => {
+			// Five dialogs, each asserting two modules — well past the default.
+			test.setTimeout(180_000);
+
 			serverConfig();
 			sendFullCaps();
-			sendModems({
-				[MM_MODEM_ID]: mmManagedModem({
-					capability_modules: { "fcc-auto-unlock": claim, gps: claim },
-				}),
-			});
+			// `claim: undefined` must OMIT the module keys rather than publish a
+			// null, which is what a backend with no matrix actually sends.
+			const claims =
+				claim === undefined
+					? undefined
+					: { "fcc-auto-unlock": claim, gps: claim };
+			sendModems(
+				Object.fromEntries(
+					MM_FLEET_FAMILIES.map((family, index) => [
+						family.id,
+						mmManagedModem({
+							name: family.name,
+							ifname: `wwan${index}`,
+							slot_label: `SIM ${index + 1}`,
+							stable_key: `pci-0000:00:14.0-usb-0:${index + 2}`,
+							device_class: family.deviceClass,
+							capability_modules: claims,
+						}),
+					]),
+				),
+			);
 
 			await navigateTo(page, "network");
-			const configure = modemRow(page, MM_MODEM_ID).getByTestId(
-				"open-modem-config-dialog",
+			await expect(page.getByTestId("modem-row")).toHaveCount(
+				MM_FLEET_FAMILIES.length,
+				{ timeout: 15_000 },
 			);
-			await expect(configure).toBeEnabled({ timeout: 15_000 });
-			await configure.click();
 
-			const dialog = page.getByRole("dialog", { name: MM_MODEM_NAME });
-			await expect(dialog).toBeVisible({ timeout: 15_000 });
-			await openModemAdvanced(dialog);
+			for (const family of MM_FLEET_FAMILIES) {
+				const where = `${family.deviceClass ?? "no device_class"} claiming ${label}`;
+				const row = modemRow(page, family.id);
+				// Every mm-managed family reaches the dialog — a family that could
+				// not would make its whole matrix column vacuously "absent".
+				const configure = row.getByTestId("open-modem-config-dialog");
+				await expect(configure, `${where}: expects a Configure action`).toBeEnabled({
+					timeout: 15_000,
+				});
+				await configure.click();
 
-			const section = page.getByTestId("modem-fcc-unlock");
-			const control = page.getByTestId("modem-fcc-unlock-toggle");
-			const unknown = page.getByTestId("modem-fcc-unlock-unknown");
+				const dialog = page.getByRole("dialog", { name: family.name });
+				await expect(dialog).toBeVisible({ timeout: 15_000 });
+				await openModemAdvanced(dialog);
 
-			if (expected === "absent") {
-				// CT-1: not a ghost, not a disabled row, not a tooltip. Nothing.
-				await expect(section).toHaveCount(0);
-				await expect(control).toHaveCount(0);
-				await expect(unknown).toHaveCount(0);
-			} else if (expected === "unknown") {
-				// CT-3 + CT-4: a distinct, announced diagnostic and NO control —
-				// below `capable` nobody has shown there is a capability to withhold.
-				await expect(unknown).toBeVisible({ timeout: 15_000 });
-				await expect(unknown).toHaveAttribute("data-state", "unknown");
-				await expect(unknown).toHaveAttribute("role", "status");
-				await expect(unknown).toHaveText(/\S/);
-				await expect(unknown).not.toHaveText(/network\.modem/);
-				await expect(control).toHaveCount(0);
-				await expect(section).toHaveAttribute(
-					"data-capability-state",
-					"unknown",
-				);
-			} else {
-				await expect(section).toBeVisible({ timeout: 15_000 });
-				const state = await section.getAttribute("data-capability-state");
-				expect(["available", "blocked"]).toContain(state);
-				await expect(control).toBeVisible();
-				if (state === "blocked") {
-					// CT-2: disabled, and the reason is ON SCREEN — the shipped kiosk
-					// touchscreen cannot hover to reveal a tooltip.
-					await expect(control).toBeDisabled();
-					const reason = page.getByTestId("modem-fcc-unlock-reason");
-					await expect(reason).toBeVisible();
-					await expect(reason).toHaveText(/\S/);
-					await expect(reason).not.toHaveText(/network\.modem/);
-				} else {
-					await expect(control).toBeEnabled();
+				for (const { module, testId } of GATED_MODULE_TESTIDS) {
+					await expectCapabilityRender(
+						page,
+						testId,
+						expected,
+						`${module} on ${where}`,
+					);
 				}
-			}
 
-			await page.keyboard.press("Escape");
-			await expect(dialog).toBeHidden();
+				await page.keyboard.press("Escape");
+				await expect(dialog).toBeHidden();
+			}
 		});
 	}
+
+	// The other two fleet families never reach that dialog, so CT-1 holds for
+	// them at the SURFACE: a device this build cannot control contributes zero
+	// capability nodes anywhere, however loudly its payload claims a module.
+	test("a fleet family with no config surface renders zero capability nodes, whatever it claims", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.modems so the fixture roster is the only cellular content",
+		},
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		const certified = { "fcc-auto-unlock": "certified", gps: "certified" };
+		sendModems({
+			[DONGLE_MODEM_ID]: {
+				...routerDongle("router_managed"),
+				capability_modules: certified,
+			},
+			"fleet-unmanaged": {
+				ifname: "wwx0",
+				name: "Unrecognised WWAN",
+				network_type: { supported: [], active: null },
+				device_class: "thunderbolt-wwan",
+				capability_modules: certified,
+			},
+		});
+
+		await navigateTo(page, "network");
+		await expect(page.getByTestId("modem-row")).toHaveCount(2, { timeout: 15_000 });
+
+		for (const id of [DONGLE_MODEM_ID, "fleet-unmanaged"]) {
+			const row = modemRow(page, id);
+			await expect(row).toBeVisible();
+			// Disabled-with-reason, never hidden: the row is the whole point.
+			const configure = row.getByTestId("open-modem-config-dialog");
+			await expect(configure, `${id}: expects a refused Configure`).toBeDisabled();
+			await expect(configure).toHaveAttribute("title", /\S/);
+			await expect(row.getByTestId("modem-note").first()).toHaveText(/\S/);
+		}
+
+		for (const { testId } of GATED_MODULE_TESTIDS) {
+			await expect(page.getByTestId(testId)).toHaveCount(0);
+			await expect(page.getByTestId(`${testId}-toggle`)).toHaveCount(0);
+			await expect(page.getByTestId(`${testId}-unknown`)).toHaveCount(0);
+		}
+		await expect(page.getByRole("dialog")).toHaveCount(0);
+	});
 
 	// DESIGN.md §3: the two engine vocabularies this surface renders — USB
 	// composition and radio band — are RELOCATED to a marked diagnostics block,
@@ -1729,10 +1870,39 @@ test.describe("Capability truthfulness (functional)", () => {
 		});
 
 		const domIds = await collectDomDebtIds(page);
-		// The surface really did render a live debt marker, so the orphan check
-		// below is not trivially passing on an empty DOM.
-		expect(domIds).toContain("TD-modem-usage-policy-write");
 		expect(findOrphanDebtIds(domIds, openIds)).toEqual([]);
+
+		// THESE SURFACES CARRY NO DEBT MARKER AT ALL, and that is a POSITIVE
+		// claim rather than a gap: the last one here was
+		// `TD-modem-usage-policy-write`, retired when the usage-policy write
+		// landed and its register entry flipped to `resolved`. Asserting the
+		// emptiness is what makes a future `ComingSoon` on the modem surfaces a
+		// deliberate, visible decision instead of a silent arrival.
+		expect(
+			domIds,
+			`the modem surfaces rendered a debt marker: ${domIds.join(", ")}. If that is intentional, its register entry must be \`open\` and this expectation updated.`,
+		).toEqual([]);
+
+		// NON-VACUITY: an empty result could equally mean the collector never
+		// reached these surfaces at all — the dialog is a PORTAL, so a collector
+		// scoped to the destination subtree would report zero on a dialog full of
+		// orphans. Plant one inside the open dialog and prove both halves see it.
+		const planted = "TD-pass4-modem-probe";
+		expect(openIds.has(planted)).toBe(false);
+		await page
+			.getByRole("dialog", { name: MM_MODEM_NAME })
+			.evaluate((node, id) => {
+				const probe = document.createElement("span");
+				probe.setAttribute("data-debt-id", id);
+				probe.dataset.pass4Probe = "true";
+				node.appendChild(probe);
+			}, planted);
+		const withProbe = await collectDomDebtIds(page);
+		expect(withProbe).toContain(planted);
+		expect(findOrphanDebtIds(withProbe, openIds)).toEqual([planted]);
+		await page.evaluate(() => {
+			document.querySelector('[data-pass4-probe="true"]')?.remove();
+		});
 
 		await page.keyboard.press("Escape");
 		await expect(page.getByRole("dialog", { name: MM_MODEM_NAME })).toBeHidden();
@@ -1884,13 +2054,31 @@ test.describe("Modem dialogs — responsive open/close contract", () => {
 		await page.keyboard.press("Escape");
 		await expect(configDialog).toBeHidden();
 
-		// ── SIM unlock dialog: auto-prompted, and closes the same way ─────────
+		// ── SIM unlock dialog: reached from the ROW, never by interception ────
+		//
+		// A blocking lock RENAMES the row's own control ("Unlock SIM") rather
+		// than popping a modal over the whole destination. The auto-prompt this
+		// leg used to assert was deliberately deleted (`0c9af22e`) and
+		// `src/tests/sim-unlock-trigger-gate.test.ts` fails the build if one
+		// returns — so the ABSENCE is asserted first, and only then the route
+		// that replaced it.
 		expect(firstId).not.toBeNull();
 		sendModems({
 			[String(firstId)]: {
 				sim_lock: { required: "sim-pin", remainingAttempts: 3 },
 			},
 		});
+
+		const unlock = firstRow.getByTestId("open-modem-unlock-dialog");
+		await expect(unlock).toBeEnabled({ timeout: 15_000 });
+		// The lock took over the row's action slot, so Configure is gone — the
+		// config form behind it could apply nothing to an unregistered radio.
+		await expect(firstRow.getByTestId("open-modem-config-dialog")).toHaveCount(0);
+		// NOTHING opened on the broadcast alone.
+		await expect(page.getByRole("dialog")).toHaveCount(0);
+		await expect(page.getByTestId("sim-pin-input")).toHaveCount(0);
+
+		await unlock.click();
 		const pinInput = page.getByTestId("sim-pin-input");
 		await expect(pinInput).toBeVisible({ timeout: 15_000 });
 		const simDialog = page
@@ -1899,6 +2087,9 @@ test.describe("Modem dialogs — responsive open/close contract", () => {
 		await expect(simDialog).toBeVisible();
 		await page.keyboard.press("Escape");
 		await expect(pinInput).toBeHidden();
+		// It stays closed: a dismissed dialog that re-opens itself would own every
+		// click on the destination beneath it.
+		await expect(page.getByTestId("sim-pin-input")).toHaveCount(0);
 
 		// No dialog is left mounted, on either surface.
 		await expect(page.getByRole("dialog")).toHaveCount(0);

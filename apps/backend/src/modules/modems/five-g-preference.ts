@@ -46,9 +46,29 @@ type ModeToken = (typeof MODE_ORDER)[number];
 
 import { modemControlFunction } from "../modem-control-compat.ts";
 
+/**
+ * The packaged twin shares this function's NAME and not its SIGNATURE: it takes
+ * the already-decoded RAT set, while this module is handed mmcli's `(allowed,
+ * preferred)` catalog. The structural probe casts, so a bare delegation
+ * type-checks and then throws `supportedRats.has is not a function` at runtime —
+ * a name match is not a contract match, and only the adapter below makes the two
+ * call-compatible.
+ */
+type PackagedFiveGPreferenceEvidence = (
+	supportedRats: ReadonlySet<string> | undefined,
+) => CapabilityEvidence;
+
 const packagedFiveGPreferenceEvidence = modemControlFunction<
-	typeof fiveGPreferenceEvidence | undefined
+	PackagedFiveGPreferenceEvidence | undefined
 >("fiveGPreferenceEvidence", undefined);
+
+/** mmcli's generation tokens → the package's RAT vocabulary. */
+const PACKAGE_RAT_BY_MODE = {
+	"5g": "5gnr",
+	"4g": "lte",
+	"3g": "umts",
+	"2g": "gsm",
+} as const satisfies Record<ModeToken, string>;
 
 const FIVE_G: ModeToken = "5g";
 const FOUR_G: ModeToken = "4g";
@@ -92,10 +112,14 @@ export function supportedModes(
 export function fiveGPreferenceEvidence(
 	radioModes: Modem["radio_modes"],
 ): CapabilityEvidence {
-	if (packagedFiveGPreferenceEvidence !== undefined) {
-		return packagedFiveGPreferenceEvidence(radioModes);
-	}
 	const modes = supportedModes(radioModes);
+	if (packagedFiveGPreferenceEvidence !== undefined) {
+		return packagedFiveGPreferenceEvidence(
+			modes === undefined
+				? undefined
+				: new Set(modes.map((mode) => PACKAGE_RAT_BY_MODE[mode])),
+		);
+	}
 	if (modes === undefined || modes.length === 0) return "unknown";
 	return modes.includes(FIVE_G) ? "present" : "absent";
 }
