@@ -29,6 +29,7 @@ import type {
 	LogoutOutput,
 	ModemBandsInput,
 	ModemBandsOutput,
+	ModemCapabilitiesOutput,
 	ModemConfigInput,
 	ModemConfigOutput,
 	ModemGpsInput,
@@ -58,6 +59,8 @@ import type {
 	SetIngestEnabledOutput,
 	SetModemBandsInput,
 	SetModemBandsOutput,
+	SetModemCapabilityInput,
+	SetModemCapabilityOutput,
 	SetModemGpsInput,
 	SetModemGpsOutput,
 	SetPasswordInput,
@@ -634,6 +637,20 @@ export interface TypedRPC {
 		 */
 		getBands: (input: ModemBandsInput) => Promise<ModemBandsOutput>;
 		setBands: (input: SetModemBandsInput) => Promise<SetModemBandsOutput>;
+		/**
+		 * The device-wide capability-module gates. `getCapabilities` also reports
+		 * which modules this build ships, which is the only way a surface can tell
+		 * "not implemented here" from "this hardware lacks it" — a modem row
+		 * resolves both to `unavailable`.
+		 *
+		 * `setCapabilities` arms a PRECONDITION, never a capability: it cannot
+		 * promote a module past `enabled` on an unprobed modem and cannot reach
+		 * `certified` at all, so it bypasses no evidence gate.
+		 */
+		getCapabilities: () => Promise<ModemCapabilitiesOutput>;
+		setCapabilities: (
+			input: SetModemCapabilityInput,
+		) => Promise<SetModemCapabilityOutput>;
 		/**
 		 * Whether ModemManager ships an FCC-unlock procedure for this MODEL, and
 		 * whether the operator opted in. A pure read of the same catalog the write

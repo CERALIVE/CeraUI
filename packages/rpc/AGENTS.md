@@ -336,10 +336,36 @@ Three shape decisions carry weight:
   read-only surface cannot be routed through the journaled mutation helper at all —
   CeraUI's permanent read-only SMS policy made structural rather than conventional.
 
-`IMPLEMENTED_CAPABILITY_MODULES` is EMPTY: this is the framework, and each module
-adds itself with its own probe and evidence. Until then every device resolves every
-module `unavailable`, which is what stops a config gate from surfacing a control
-with nothing behind it.
+`IMPLEMENTED_CAPABILITY_MODULES` is the framework's own default registry, and each
+module adds itself with its own probe and evidence. A module absent from the list
+the DEVICE passes (`IMPLEMENTED_MODEM_CAPABILITY_MODULES`, the backend's explicit
+argument) resolves `unavailable` on every modem, which is what stops a config gate
+from surfacing a control with nothing behind it.
+
+**The gates have a WRITE, and it cannot fabricate a claim.**
+`modemCapabilitiesOutputSchema` / `setModemCapabilityInputSchema` /
+`setModemCapabilityOutputSchema` back `modems.getCapabilities` /
+`setCapabilities` — the operator surface behind Settings → Cellular Features.
+Three shape decisions carry weight:
+
+- **`gates` is a TOTAL record** (`capabilityGateStatesSchema`), never the sparse
+  persisted object. The stored shape is default-absent, so an omitted key and a
+  `false` are the same thing on disk but indistinguishable from a LOWERED key on
+  any consumer that merges — the `policy_route_missing` latch, again.
+- **`implemented` rides the answer**, because a modem row resolves "this build
+  does not ship it" and "this hardware positively lacks it" both to `unavailable`,
+  and the two call for opposite renderings. It is also the only answer available
+  on a device with no modem attached.
+- **The input is ONE module and `.strict()`.** A whole-object write races itself
+  when two toggles are in flight, and an unknown extra key on a gate that arms
+  radio-mutating controls must be rejected rather than ignored.
+
+The write is a PRECONDITION, never a claim: it feeds `resolveSupportClaim` as one
+of four inputs, so it cannot promote a module past `enabled` on an unprobed modem
+and cannot reach `certified` at all. Device contract:
+[`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) → THE CAPABILITY
+FEATURE-GATE FRAMEWORK; operator surface: [`../../AGENTS.md`](../../AGENTS.md) →
+THE GATES HAVE AN OPERATOR SURFACE.
 
 ## CONVENTIONS
 
@@ -362,6 +388,7 @@ with nothing behind it.
 - Don't give a mutating modem procedure its own private refusal vocabulary — `modemMutationRefusalSchema` is shared so a blocked device reads the same on every surface, and a per-procedure generic error is how "waiting on your acknowledgement" becomes indistinguishable from "the transaction broke".
 - Don't make `mode` optional on `modemMutationAckInputSchema`, and don't drop its `.strict()`/`confirm` — those are the wire-level enforcement of "only VERIFIED-ROLLBACK or FORCE-REBASELINE may unblock a failed mutation".
 - Don't fold `module_disabled`/`module_unavailable` into `modemMutationRefusalSchema` — they are a SUPERSET (`capabilityMutationRefusalSchema`) because a gate refusal is a different fact from a mutation-safety one, and widening the shared enum breaks every consumer that maps from it.
+- Don't make `setModemCapabilityInputSchema` take a whole gate object, and don't drop its `.strict()` — one module per call is what stops two in-flight toggles restoring each other's previous value, and an unknown key on a gate that arms radio-mutating controls must be rejected rather than ignored. Don't answer `getCapabilities` with the sparse persisted object either: `capabilityGateStatesSchema` is total for the same reason `capabilityModuleClaimsSchema` is.
 - Don't publish a capability claim present-only-when-supported, and don't make `capabilityModuleClaimsSchema` partial — an omitted module is indistinguishable from a lowered claim on a merge that preserves absent fields.
 - Don't add a module to `IMPLEMENTED_CAPABILITY_MODULES` without its capability probe AND its certification evidence — listing it there is what makes a config gate able to surface a control.
 - Don't give SMS a mutation kind. Its absence from `MUTATING_CAPABILITY_MODULES` is what makes the permanent read-only policy structural.

@@ -265,3 +265,72 @@ export function readCapabilityGates(
 	}
 	return resolved;
 }
+
+// ── The operator's WRITE surface for those gates ─────────────────────────────
+/**
+ * The gates as a TOTAL record — every module, explicitly, never a sparse object.
+ *
+ * Same reason `capabilityModuleClaimsSchema` is total: the persisted shape is
+ * DEFAULT-ABSENT, so an omitted key and a `false` mean the same thing on disk but
+ * are indistinguishable from a LOWERED key on any consumer that merges. A wire
+ * answer that states every module cannot be misread.
+ */
+export const capabilityGateStatesSchema = z.record(capabilityModuleSchema, z.boolean());
+export type CapabilityGateStates = z.infer<typeof capabilityGateStatesSchema>;
+
+/**
+ * Output for `modems.getCapabilities` — what the operator has turned on, PLUS
+ * what this build actually ships.
+ *
+ * `implemented` is on the wire because the render rule needs it and cannot
+ * derive it: a module resolving `unavailable` on every attached modem is either
+ * unimplemented in this build OR positively absent on all of that hardware, and
+ * those are different facts with different honest renderings. It is also the only
+ * answer available on a device with no modem attached at all.
+ */
+export const modemCapabilitiesOutputSchema = z.object({
+	gates: capabilityGateStatesSchema,
+	implemented: z.array(capabilityModuleSchema),
+});
+export type ModemCapabilitiesOutput = z.infer<typeof modemCapabilitiesOutputSchema>;
+
+/**
+ * Input for `modems.setCapabilities` — ONE module per call.
+ *
+ * The mirror of `network.setIngestEnabled({protocol, enabled})`, and for the same
+ * reason: a whole-object write races itself when two toggles are in flight, and
+ * the second writer silently restores the first's previous value. `.strict()`
+ * because an unknown extra key on a gate that arms radio-mutating controls must
+ * be REJECTED rather than ignored.
+ */
+export const setModemCapabilityInputSchema = z
+	.object({
+		module: capabilityModuleSchema,
+		enabled: z.boolean(),
+	})
+	.strict();
+export type SetModemCapabilityInput = z.infer<typeof setModemCapabilityInputSchema>;
+
+/**
+ * Why a gate write was refused.
+ *
+ * `module_not_implemented` is the only member, and it is fail-CLOSED on purpose:
+ * persisting a gate for a module this build does not ship writes a key nothing
+ * reads, so the operator would be looking at a switch that can never do anything.
+ * Refusing is what keeps "the gate is on" and "a control may appear" the same
+ * statement.
+ */
+export const setModemCapabilityRefusalSchema = z.enum(['module_not_implemented']);
+export type SetModemCapabilityRefusal = z.infer<typeof setModemCapabilityRefusalSchema>;
+
+/**
+ * Output for `modems.setCapabilities`. `applied` is the FULL post-write gate
+ * record, never the request — the applied-state convention every setter follows,
+ * so a UI locks its switch to what the device persisted.
+ */
+export const setModemCapabilityOutputSchema = z.object({
+	success: z.boolean(),
+	applied: capabilityGateStatesSchema.optional(),
+	error: setModemCapabilityRefusalSchema.optional(),
+});
+export type SetModemCapabilityOutput = z.infer<typeof setModemCapabilityOutputSchema>;

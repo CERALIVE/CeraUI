@@ -4,6 +4,7 @@
  */
 
 import {
+	CAPABILITY_MODULE_CONFIG_KEY,
 	deriveModemStableKey,
 	fccUnlockOptionsInputSchema,
 	fccUnlockOptionsOutputSchema,
@@ -12,6 +13,7 @@ import {
 	type ModemMutationRefusal,
 	modemBandsInputSchema,
 	modemBandsOutputSchema,
+	modemCapabilitiesOutputSchema,
 	modemConfigInputSchema,
 	modemConfigOutputSchema,
 	modemGpsInputSchema,
@@ -28,12 +30,15 @@ import {
 	modemSmsOutputSchema,
 	modemUssdInputSchema,
 	modemUssdOutputSchema,
+	readCapabilityGates,
 	setFccUnlockInputSchema,
 	setFccUnlockOutputSchema,
 	setFiveGPreferenceInputSchema,
 	setFiveGPreferenceOutputSchema,
 	setModemBandsInputSchema,
 	setModemBandsOutputSchema,
+	setModemCapabilityInputSchema,
+	setModemCapabilityOutputSchema,
 	setModemGpsInputSchema,
 	setModemGpsOutputSchema,
 	setUsbModeInputSchema,
@@ -60,12 +65,13 @@ import {
 	mockAttemptSimUnlock,
 	shouldMockModems,
 } from "../../mocks/providers/modems.ts";
-import { getConfig } from "../../modules/config.ts";
+import { getConfig, saveConfig } from "../../modules/config.ts";
 import {
 	refreshBandCapability,
 	resolveBandSku,
 } from "../../modules/modems/band-capability.ts";
 import { applyBandLock, unlockedFrom } from "../../modules/modems/band-lock.ts";
+import { IMPLEMENTED_MODEM_CAPABILITY_MODULES } from "../../modules/modems/capability-evidence.ts";
 import {
 	readFccUnlockState,
 	setFccUnlockEnabled,
@@ -753,6 +759,57 @@ export const rebaselineMutationProcedure = modemProcedure
 	.input(modemMutationRebaselineInputSchema)
 	.output(modemMutationAckOutputSchema)
 	.handler(({ input }) => rebaselineMutation(input.stableKey));
+
+/**
+ * The device-wide capability-module gates — a pure READ of runtime config.
+ *
+ * It is `authedProcedure`, deliberately NOT `modemProcedure`: the gates are a
+ * property of the DEVICE, not of any modem, so an operator must be able to read
+ * and set them while the cellular stack is still initializing or while no modem
+ * is attached at all. Gating them behind the cellular readiness middleware would
+ * make the settings surface unreachable in exactly the state an operator opens it
+ * to fix.
+ */
+export const getModemCapabilitiesProcedure = authedProcedure
+	.output(modemCapabilitiesOutputSchema)
+	.handler(() => ({
+		gates: readCapabilityGates(getConfig().modem_capabilities),
+		implemented: [...IMPLEMENTED_MODEM_CAPABILITY_MODULES],
+	}));
+
+/**
+ * Turn ONE capability module's device-wide gate on or off.
+ *
+ * A module this build does not implement is REFUSED before anything is written:
+ * its gate key is read by nothing, so persisting it would leave the operator a
+ * switch that stays on and changes nothing forever.
+ *
+ * The write itself arms no capability and proves none. `resolveSupportClaim`
+ * takes the gate as ONE of four inputs, so a modem whose probe still answers
+ * `unknown` stops at `enabled` — surfaced by nothing — and `certified` remains
+ * unreachable from here entirely. Band-lock's stricter certification floor is
+ * likewise untouched: a fully-enabled gate on an unproven model+firmware still
+ * refuses.
+ *
+ * `broadcastModems()` re-resolves every row's claim matrix from the new gates, so
+ * the per-modem controls this unblocks flip on the device's own next answer
+ * rather than on this reply.
+ */
+export const setModemCapabilitiesProcedure = authedProcedure
+	.input(setModemCapabilityInputSchema)
+	.output(setModemCapabilityOutputSchema)
+	.handler(({ input }) => {
+		if (!IMPLEMENTED_MODEM_CAPABILITY_MODULES.includes(input.module)) {
+			return { success: false, error: "module_not_implemented" as const };
+		}
+		const config = getConfig();
+		const gates = { ...config.modem_capabilities };
+		gates[CAPABILITY_MODULE_CONFIG_KEY[input.module]] = input.enabled;
+		config.modem_capabilities = gates;
+		saveConfig();
+		broadcastModems();
+		return { success: true, applied: readCapabilityGates(gates) };
+	});
 
 /**
  * Which bands this modem advertises, uses, and may be OFFERED — a pure READ.

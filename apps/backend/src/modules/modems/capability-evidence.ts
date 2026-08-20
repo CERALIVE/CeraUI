@@ -34,6 +34,7 @@ import { deriveModemStableKey } from "@ceraui/rpc/schemas";
 import { bandLockEvidence, isBandLockCertified } from "./band-capability.ts";
 import {
 	type ModemCapabilityEvidence,
+	setCapabilityEvidenceChangeNotifier,
 	setModemCapabilityEvidenceReader,
 } from "./capability-gates.ts";
 import { fccUnlockEvidence } from "./fcc-unlock.ts";
@@ -112,6 +113,15 @@ export function readModemCapabilityEvidence(
 
 export function initModemCapabilityEvidence(): void {
 	setModemCapabilityEvidenceReader(readModemCapabilityEvidence);
+	// `modem-status.ts` reaches this module through the wire producer, so the
+	// import is DYNAMIC — a static edge back would cycle. Fire-and-forget: the
+	// next roster poll carries the same claim, so a failed re-publication costs
+	// latency and never correctness.
+	setCapabilityEvidenceChangeNotifier(() => {
+		void import("./modem-status.ts")
+			.then(({ broadcastModems }) => broadcastModems())
+			.catch(() => undefined);
+	});
 }
 
 // Installed at MODULE SCOPE rather than from a boot call site, the

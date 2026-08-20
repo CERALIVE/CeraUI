@@ -54,6 +54,7 @@ import type { CapabilityEvidence } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
 
 import { readModemBands } from "./band-mmcli.ts";
+import { noteCapabilityEvidenceChanged } from "./capability-gates.ts";
 import { defaultResolveIdentity } from "./usb-mode-identity.ts";
 
 export interface BandSku {
@@ -207,7 +208,11 @@ export async function refreshBandCapability(
 		current,
 		offerable,
 	};
+	const changed =
+		cache.get(stableKey)?.capability !== capability ||
+		cache.get(stableKey)?.certified !== certified;
 	cache.set(stableKey, snapshot);
+	if (changed) noteCapabilityEvidenceChanged();
 	return snapshot;
 }
 

@@ -4158,12 +4158,14 @@ transport).
 **Honest status:** none of this has been exercised against a real modem. Every
 fixture models the contract; the board drill is a separate, still-owed step.
 
-## THE CAPABILITY FEATURE-GATE FRAMEWORK [EXISTS — framework only]
+## THE CAPABILITY FEATURE-GATE FRAMEWORK [EXISTS]
 
-The seven gated capability modules (band-lock / SMS / 5G-pref / FCC-auto-unlock /
-GPS / USSD / eSIM) are not implemented here. What IS implemented is the framework
-they all route through, and the two halves of it live in different places for a
-reason: the LADDER is `@ceraui/rpc` (`capability-modules.schema.ts` +
+Seven modules are GATED (band-lock / SMS / 5G-pref / FCC-auto-unlock / GPS / USSD
+/ eSIM); FOUR of them ship a probe and a mutation path today
+(`IMPLEMENTED_MODEM_CAPABILITY_MODULES` — `five-g-pref`, `band-lock`, `gps`,
+`ussd`), and the rest resolve `unavailable` everywhere. What every one of them
+routes through is the framework below, whose two halves live in different places
+for a reason: the LADDER is `@ceraui/rpc` (`capability-modules.schema.ts` +
 `capabilities/capability-matrix.ts`), shared verbatim with the frontend and the
 support matrix; the DEVICE BINDING is `modules/modems/capability-gates.ts` +
 `capability-mutation.ts`.
@@ -4220,6 +4222,43 @@ suite: every refusal arm asserts BOTH the typed refusal AND that the effect
 provably never ran, with a NEGATIVE CONTROL proving a module that bypasses the
 helper mutates freely under identical conditions. Engine-side half:
 `modem-stack/control/src/capability/`.
+
+### …AND THE OPERATOR CAN ACTUALLY SET THOSE GATES [EXISTS]
+
+`modems.getCapabilities` / `modems.setCapabilities` are the write path. Before
+them `config.modem_capabilities` was default-absent with no RPC and no UI, so
+band-lock and GPS told operators to enable a feature "in settings" and pointed at
+nothing — a board sweep of `#settings` matched zero relevant testids
+(`.omo/evidence/task-49-full-stack-board-validation.md`).
+
+- **They are `authedProcedure`, NOT `modemProcedure`.** The gates belong to the
+  DEVICE, so they must answer while the cellular stack is still initializing and
+  with no modem attached; the readiness middleware would make the settings surface
+  unreachable in precisely the state an operator opens it to fix. They join
+  `modems.getAll` / `getSms` / `getUsbModeOptions` as non-entries in the
+  mutation-entrypoint inventory: they take no lease and touch no radio.
+- **A module absent from `IMPLEMENTED_MODEM_CAPABILITY_MODULES` is REFUSED**
+  (`module_not_implemented`) before anything is written. Its gate key is read by
+  nothing, so persisting it hands the operator a switch that can never act.
+- **Writing a gate proves nothing.** It is one of four `resolveSupportClaim`
+  inputs, so an enabled gate on an unprobed modem stops at `enabled`, on a
+  positively-absent one stays `unavailable`, and `certified` is unreachable from
+  here — band-lock's stricter certification floor included.
+- **`broadcastModems()` runs after `saveConfig()`**, so the control the gate
+  unblocks moves on the device's own next answer rather than on the reply.
+- **A PROBE that changes evidence re-publishes too, change-gated.**
+  `noteCapabilityEvidenceChanged` (`capability-gates.ts`) is called by
+  `gps.ts`'s `recordCapability` and `band-capability.ts`'s refresh when the stored
+  evidence actually MOVES. Without it a read that first proves a capability leaves
+  the claim stale until the 30 s poll — the window an operator lands in right
+  after enabling the gate. The notifier DEFAULTS TO INERT and is installed at
+  module scope by `capability-evidence.ts` through a DYNAMIC `import()` of
+  `modem-status.ts`: that module reaches this one via the wire producer, so a
+  static edge back would cycle. Re-reading an already-proven modem is silent.
+
+Coverage: `tests/modem-capability-settings.test.ts`. Operator surface and its
+render rules: [`../../AGENTS.md`](../../AGENTS.md) → THE GATES HAVE AN OPERATOR
+SURFACE.
 
 ### …AND THE IDENTITY IT GATES ON COMES FROM udev's NET RECORDS [EXISTS]
 
@@ -7231,6 +7270,8 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
 - Don't dispatch a capability module's mutation without `withCapabilityModuleMutation` — the gate check and the lease are one seam, and a module that takes the lease directly skips the feature gate while a module that checks the gate directly skips the lease. Don't move the gate check after the lease either (a doomed request must not contend for a device), don't give a journaled module a lease-only request shape (the union makes it a compile error, and keeping it that way is the point), and don't turn the unproven-capability arm into a pass — it fails closed on purpose.
 - Don't give `config.modem_capabilities` a `RUNTIME_CONFIG_DEFAULTS` entry, or an inner `.default(true)` — absent and `false` must be equally inert, or seven radio-mutating modules become reachable on every shipped device at once.
+- Don't route `modems.getCapabilities`/`setCapabilities` through `modemProcedure` — the gates belong to the DEVICE, and the readiness middleware would make the settings surface unreachable while the cellular stack is initializing or with no modem attached, which is exactly when an operator opens it. And don't persist a gate for a module `IMPLEMENTED_MODEM_CAPABILITY_MODULES` omits: its key is read by nothing, so the operator gets a switch that can never act — refuse it.
+- Don't fire `noteCapabilityEvidenceChanged()` on every probe read — it is change-gated so a dialog open does not re-broadcast the whole roster. Don't static-import `modem-status.ts` to install its notifier either (that module reaches `capability-gates.ts` through the wire producer, so the edge cycles), and don't drop the inert default: a suite that never installs one must stay byte-identical.
 - Don't add a modem-mutating path that does not route through `withModemMutation` / `withJournaledModemMutation` / `beginModemMutation` — the enforcement suite has one test per inventoried entrypoint and a new route with no test is a route with no lease. Don't build a second lease beside `getIsStreaming()` either: that check is false for the whole admission window, which is exactly the window a mutation must not land in.
 - Don't guess a mutation key for a device with no resolvable `stable_key` — the identity contract permits its absence, and a guessed key files one device's rollback under another's slot. Refuse with `identity_unresolved`, and don't turn that refusal into a throw at an RPC boundary.
 - Don't reorder or shorten the journal's `temp -> fsync(temp) -> rename -> fsync(parent)` sequence, and don't move the parent-directory fsync outside the commit boundary — until that entry is durable a power cut can lose the rename, and a mutation whose armed record can vanish is the exact case the journal exists to prevent.

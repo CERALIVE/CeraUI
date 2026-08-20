@@ -95,3 +95,40 @@ export function resolveCapabilityModuleState(
 ): SupportClaimState {
 	return resolveModemCapabilityClaims(stableKey, implemented)[module];
 }
+
+/**
+ * Announce that a probe moved a modem's capability EVIDENCE.
+ *
+ * The probes fill caches the SYNCHRONOUS wire build reads, so a read that first
+ * proves a capability leaves the claim on the wire stale until the 30 s roster
+ * poll. That window lands on an operator at the worst moment: having just turned
+ * a gate on in Settings, they open the modem dialog, its probe runs, and the
+ * control they unblocked keeps reporting `unproven` for half a minute with
+ * nothing to press.
+ *
+ * The notifier DEFAULTS TO INERT and is installed at module scope by
+ * `capability-evidence.ts`, beside the evidence reader itself. That keeps this
+ * module free of any edge back to the wire producer — which imports it — and
+ * leaves every suite that never installs one byte-identical.
+ */
+export type CapabilityEvidenceChangeNotifier = () => void;
+
+const INERT_NOTIFIER: CapabilityEvidenceChangeNotifier = () => undefined;
+
+let notifyEvidenceChanged: CapabilityEvidenceChangeNotifier = INERT_NOTIFIER;
+
+export function setCapabilityEvidenceChangeNotifier(
+	notifier: CapabilityEvidenceChangeNotifier | null,
+): void {
+	notifyEvidenceChanged = notifier ?? INERT_NOTIFIER;
+}
+
+/** Callers MUST have established that the evidence genuinely changed. */
+export function noteCapabilityEvidenceChanged(): void {
+	try {
+		notifyEvidenceChanged();
+	} catch {
+		// A re-publication is an enrichment: the next roster poll carries the same
+		// claim, so a failing notifier must never break the probe that called it.
+	}
+}

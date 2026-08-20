@@ -6,6 +6,7 @@ import { oc } from '@orpc/contract';
 import {
 	modemBandsInputSchema,
 	modemBandsOutputSchema,
+	modemCapabilitiesOutputSchema,
 	modemConfigInputSchema,
 	modemConfigOutputSchema,
 	modemGpsInputSchema,
@@ -24,6 +25,8 @@ import {
 	setFiveGPreferenceOutputSchema,
 	setModemBandsInputSchema,
 	setModemBandsOutputSchema,
+	setModemCapabilityInputSchema,
+	setModemCapabilityOutputSchema,
 	setModemGpsInputSchema,
 	setModemGpsOutputSchema,
 	setRouterControlInputSchema,
@@ -118,6 +121,32 @@ export const modemsContract = oc.router({
 	 * inside that window rolls the change back on its next boot from the journal.
 	 */
 	setBands: oc.input(setModemBandsInputSchema).output(setModemBandsOutputSchema),
+
+	/**
+	 * The device-wide capability-module gates, plus the modules this build ships.
+	 *
+	 * A pure read, and the ONLY way an operator surface can tell "this build does
+	 * not implement the module" apart from "every attached modem positively lacks
+	 * it" — both resolve `unavailable` on a modem row, and they call for opposite
+	 * renderings.
+	 */
+	getCapabilities: oc.output(modemCapabilitiesOutputSchema),
+
+	/**
+	 * Turn ONE capability module's device-wide gate on or off.
+	 *
+	 * The gate is a PRECONDITION, never a claim: it is one of four inputs to
+	 * `resolveSupportClaim`, so turning it on cannot promote a module past
+	 * `enabled` on a modem whose probe has not positively answered, and it cannot
+	 * reach `certified` at all. It therefore bypasses no evidence gate — including
+	 * band-lock's stricter certification floor, which still refuses an unproven
+	 * model+firmware with the gate fully on.
+	 *
+	 * A module this build does not implement is REFUSED rather than persisted:
+	 * writing a key nothing reads would leave the operator holding a switch that
+	 * can never do anything.
+	 */
+	setCapabilities: oc.input(setModemCapabilityInputSchema).output(setModemCapabilityOutputSchema),
 
 	/**
 	 * Change one setting on a router-mode dongle through its own HTTP admin API.

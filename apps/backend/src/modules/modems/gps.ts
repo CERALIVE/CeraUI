@@ -45,6 +45,7 @@ import type {
 	SetModemGpsOutput,
 } from "@ceraui/rpc/schemas";
 import { IMPLEMENTED_MODEM_CAPABILITY_MODULES } from "./capability-evidence.ts";
+import { noteCapabilityEvidenceChanged } from "./capability-gates.ts";
 import { withCapabilityModuleMutation } from "./capability-mutation.ts";
 import {
 	advanceGnssFixState,
@@ -94,10 +95,12 @@ function recordCapability(
 	status: LocationStatus,
 ): ModemGpsStatus {
 	const wire = toWireStatus(status);
-	capabilityCache.set(stableKey, {
-		capability: status.gnssCapable ? "present" : "absent",
-		status: wire,
-	});
+	const capability: CapabilityEvidence = status.gnssCapable
+		? "present"
+		: "absent";
+	const changed = capabilityCache.get(stableKey)?.capability !== capability;
+	capabilityCache.set(stableKey, { capability, status: wire });
+	if (changed) noteCapabilityEvidenceChanged();
 	return wire;
 }
 

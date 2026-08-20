@@ -150,7 +150,8 @@ CeraUI/
 | **Router-dongle netns metadata reader — PRODUCER RETIRED (phase-C todo 39), reader KEPT as the old-image degradation path** + the retractable `dongle` netif marker (wire-only union rows; bonding untouched by construction) | `apps/backend/src/modules/network/dongle-metadata.ts` + `network-interfaces.ts` (`applyDongleProjection`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND |
 | **Whether a modem-config save must re-establish the bearer (shared rule; the dialog's pre-save notice and the device's tear-down read the SAME one)** | `packages/rpc/src/schemas/modem-apply-scope.ts` (`normalizeModemConnectionFields`, `diffModemConnectionFields`, `decideModemReactivation`) → `apps/backend/src/modules/modems/modems.ts` (`applyModemConfig`, `ModemApplyDeps`) + `apps/frontend/src/main/dialogs/ModemConfigDialog.svelte` (`modem-reconnect-notice`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → A MODEM SAVE SPENDS A RECONNECT ONLY WHEN IT MUST |
 | **Every NM gsm profile bound to a modem's SIM carries the operator's answer (roaming enforcement + evidence-gated duplicate deletion)** | `apps/backend/src/modules/modems/gsm-duplicate-reconcile.ts` (`reconcileDuplicateGsmProfiles`, `classifyGsmDuplicate`, `auditGsmProfiles`) → `modems.ts` (`enforceAcrossProfiles`) + `modem-registration.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND EVERY PROFILE BOUND TO THE SIM CARRIES THE SAME ANSWER |
-| **Capability feature-gate framework + the FIVE-STATE support-claim taxonomy (band-lock / SMS / 5G-pref / FCC-auto-unlock / GPS / USSD / eSIM — framework only; no module implemented)** | ladder `packages/rpc/src/schemas/capability-modules.schema.ts` + `packages/rpc/src/capabilities/capability-matrix.ts`; device gates `apps/backend/src/helpers/config-schemas.ts` (`modem_capabilities`, default-absent) + `apps/backend/src/modules/modems/capability-gates.ts`; the SHARED mutation-enforcement helper `apps/backend/src/modules/modems/capability-mutation.ts` (wraps todo-25's lease); wire block `modem.capability_modules`; render side `apps/frontend/src/main/network/capability-modules.ts`; engine side `modem-stack/control/src/capability/`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE CAPABILITY FEATURE-GATE FRAMEWORK |
+| **Capability feature-gate framework + the FIVE-STATE support-claim taxonomy (band-lock / SMS / 5G-pref / FCC-auto-unlock / GPS / USSD / eSIM)** | ladder `packages/rpc/src/schemas/capability-modules.schema.ts` + `packages/rpc/src/capabilities/capability-matrix.ts`; device gates `apps/backend/src/helpers/config-schemas.ts` (`modem_capabilities`, default-absent) + `apps/backend/src/modules/modems/capability-gates.ts`; the SHARED mutation-enforcement helper `apps/backend/src/modules/modems/capability-mutation.ts` (wraps todo-25's lease); wire block `modem.capability_modules`; render side `apps/frontend/src/main/network/capability-modules.ts`; engine side `modem-stack/control/src/capability/`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE CAPABILITY FEATURE-GATE FRAMEWORK |
+| **…and the operator's WRITE for those gates (`modems.getCapabilities`/`setCapabilities` + the Settings dialog the band-lock/GPS copy points at)** | wire `packages/rpc/src/schemas/capability-modules.schema.ts` (`modemCapabilitiesOutputSchema`, `setModemCapabilityInputSchema`); device `apps/backend/src/rpc/procedures/modems.procedure.ts` (`get`/`setModemCapabilitiesProcedure`); the change-gated re-publication seam `apps/backend/src/modules/modems/capability-gates.ts` (`noteCapabilityEvidenceChanged`) installed by `capability-evidence.ts`; UI `apps/frontend/src/main/dialogs/ModemCapabilitiesDialog.svelte` via `SettingsView` → System; contract below → THE GATES HAVE AN OPERATOR SURFACE |
 | **modem-control compatibility projections (published 0.2.0 floor + additive 1.1 API probes)** | `apps/backend/src/modules/modem-control-compat.ts` + the 14 frozen pure projection modules; package mutation admission bridge `modules/modems/mutation-admission-port.ts`; boundary/floor gate `apps/backend/src/tests/modem-control-projections.test.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
 | **Whether a modem holds a SIM (`no_sim`) — read from MM's slot, NEVER from the presence of an NM connection profile** | `apps/backend/src/modules/modems/sim-presence.ts` (`deriveSimPresence`, `claimsNoSim`, `isSimObjectPath`) → `modem-status.ts` + `modem-wire-projection.ts`; D-Bus twin `apps/backend/src/modules/cellular/dbus-view-fold.ts` (`readSimPresence`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → `no_sim` REPORTS A SLOT, NOT A NETWORKMANAGER PROFILE |
 | **Read-only SMS inbox normalization routed through modem-stack's SMS port (migrate-then-remove seam; transport still `mmcli`)** | `apps/backend/src/modules/modems/sms-port.ts` (`resolveSmsNormalizer`, `setSmsNormalizerForTest`) + `mmcli-sms.ts` (`legacySmsNormalizer` — simultaneously the fallback AND the parity oracle); port half `modem-stack/control/src/ports/sms.ts` + `control/src/sms/`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND ITS NORMALIZATION NOW ROUTES THROUGH THE modem-stack PORT |
@@ -1113,6 +1114,66 @@ CeraUI and is NOT part of the `get-capabilities` response. Three enforcement lay
   and per-link stats for the completed session.
 - **EncoderDialog modal preview (#72)** — live encoder settings preview rendered inside
   the EncoderDialog modal before the user applies changes.
+
+## THE GATES HAVE AN OPERATOR SURFACE [EXISTS]
+
+The seven capability modules are DEFAULT-ABSENT on every device, and for a long
+time there was no way to turn one on. The band-lock and GPS controls said so
+correctly — *"Band locking is turned off on this device"*, *"Turn on location for
+this device in settings first"* — and pointed at a setting that existed nowhere:
+board validation swept `#settings` and matched **zero** testids against
+`modem|cellular|location|gps|band|capab`
+(`.omo/evidence/task-49-full-stack-board-validation.md`). Both controls were
+unreachable on every board regardless of what the hardware could do.
+
+`modems.getCapabilities` / `modems.setCapabilities` plus
+`apps/frontend/src/main/dialogs/ModemCapabilitiesDialog.svelte` (Settings →
+System → **Cellular Features**) are that surface. Five rules carry it:
+
+- **THE GATES ARE DEVICE-WIDE, so this is Settings and NOT a per-modem section.**
+  `config.modem_capabilities` is one object every modem's claim resolves against,
+  so a section inside `ModemConfigDialog` would imply the switch is scoped to the
+  row in front of the operator while silently arming the module on every other
+  modem too.
+- **A GATE IS A PRECONDITION, NEVER A CLAIM — this bypasses no evidence gate.**
+  It is one of four inputs to `resolveSupportClaim`, so an enabled gate cannot
+  promote a module past `enabled` on a modem whose probe has not positively
+  answered, cannot reach `certified` at all, and leaves band-lock's stricter
+  certification floor refusing exactly as before. The dialog SAYS so on screen
+  (`modem-capabilities-honesty`) rather than letting an on switch read as a
+  promise.
+- **ONLY IMPLEMENTED MODULES GET A ROW** (`DESIGN.md` CT-1). A module this build
+  does not ship renders ZERO nodes — never a disabled switch, which would imply a
+  capability being withheld — and a write for one is REFUSED
+  (`module_not_implemented`) rather than persisted, because its key is read by
+  nothing. This is why `implemented` rides the wire: a modem row resolves "not
+  built" and "this hardware lacks it" both to `unavailable`, and only the device
+  can tell them apart.
+- **The procedures are `authedProcedure`, deliberately NOT `modemProcedure`.**
+  The gates are a property of the DEVICE, so they must be readable and writable
+  while the cellular stack is still initializing or with no modem attached —
+  gating them behind the cellular readiness middleware would make the settings
+  surface unreachable in exactly the state an operator opens it to fix.
+- **A PROBE THAT PROVES A CAPABILITY RE-PUBLISHES THE ROSTER, change-gated.**
+  The probes fill caches the SYNCHRONOUS wire build reads, so a read that first
+  proves a capability would otherwise leave the claim stale until the 30 s poll —
+  landing on the operator at the worst moment, having just enabled the gate.
+  `noteCapabilityEvidenceChanged` (`capability-gates.ts`) is the seam; it DEFAULTS
+  TO INERT and is installed at module scope by `capability-evidence.ts` with a
+  DYNAMIC import of `modem-status.ts`, because a static edge back would cycle
+  through the wire producer. Re-reading an already-proven modem broadcasts
+  nothing.
+
+Coverage: `apps/backend/src/tests/modem-capability-settings.test.ts` (the total
+read, the per-module write and its config-key mapping, every refusal arm asserting
+the write provably never happened, the four not-a-bypass claims, the change-gated
+notifier, and a static wiring lock on the re-broadcast),
+`apps/frontend/src/main/dialogs/ModemCapabilitiesDialog.test.ts` (CT-1 both ways,
+the pessimistic switch, the calm refusal band, the read-failure band),
+`apps/frontend/src/tests/modem-capability-copy-completeness.test.ts` (copy for all
+SEVEN modules × 10 locales, derived from the wire enum), and
+`apps/frontend/tests/e2e/modem-capabilities-settings.spec.ts` (the audit's own
+`#settings` testid sweep, inverted, plus the real RPC round-trip).
 
 ## HOTSPOT QR SURFACE — ONE QR, AND IT IS ESCAPED [EXISTS]
 
