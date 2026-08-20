@@ -495,6 +495,10 @@ export const getConfigProcedure = authedProcedure
 			relay_protocol: config.relay_protocol,
 			selected_ingest_endpoint: config.selected_ingest_endpoint,
 			detectionMethod: config.detectionMethod,
+			// Read-only echo of the USB-composition provisioning gate. Absent here
+			// means the device never opted in, which the UI must NOT read as an
+			// explicit `false` (see configMessageSchema).
+			modem_provisioning: config.modem_provisioning,
 		};
 	});
 

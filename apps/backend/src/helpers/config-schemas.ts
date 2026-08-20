@@ -52,6 +52,7 @@ import {
 	kioskDisplaySchema,
 	kioskPerformanceSchema,
 	kioskStateSchema,
+	modemCapabilityGatesSchema,
 	namespacedRelayId,
 	parseNamespacedRelayId,
 	previewEncodeModeSchema,
@@ -156,6 +157,10 @@ export type VideoPassthrough = z.infer<typeof videoPassthroughSchema>;
 export const balancerSchema = z.enum(["adaptive", "fixed", "aimd"]);
 
 export type Balancer = z.infer<typeof balancerSchema>;
+
+export const modemBackendSchema = z.enum(["mmcli", "dbus"]);
+
+export type ModemBackend = z.infer<typeof modemBackendSchema>;
 
 // One persisted last-seen capture-device snapshot (C7 lost-device retention),
 // carrying exactly the fields `captureSourceSchema` needs to synthesize a `lost`
@@ -353,6 +358,34 @@ export const runtimeConfigSchema = z.object({
 	// so an existing config keeps today's behaviour exactly. The hotspot channel
 	// set is DERIVED from `iw phy` after this is applied, never from a table.
 	country: regulatoryCountrySchema.optional(),
+
+	// Opt-in gate for the guarded USB-composition-mode switch (`modems.setUsbMode`).
+	// DEFAULT-ABSENT ON PURPOSE and given NO entry in RUNTIME_CONFIG_DEFAULTS: a
+	// mode switch re-enumerates the modem and drops its bond link, so the mutation
+	// must be unreachable until an operator has deliberately provisioned the
+	// device. Absent and `false` both refuse with `provisioning_disabled`.
+	modem_provisioning: z.boolean().optional(),
+
+	// Which cellular-control backend the composition root commits at boot.
+	// DEFAULT-ABSENT ON PURPOSE, with NO entry in RUNTIME_CONFIG_DEFAULTS: absence
+	// resolves to `"mmcli"` inside `initCellularStack()` — the legacy one-shot-CLI
+	// path, synchronously ready, byte-identical to the behaviour before the seam
+	// existed. Only an explicit `"dbus"` loads the D-Bus transport at all.
+	modem_backend: modemBackendSchema.optional(),
+
+	// Opt-in read-only D-Bus observation BESIDE mmcli (Phase-B shadow mode).
+	// DEFAULT-ABSENT ON PURPOSE, NO default entry: absent and `false` are equally
+	// inert, so a device nobody deliberately opted in never opens the bus. Shadow
+	// mode is mutation-free by construction (`dbus-audit-transport.ts`).
+	modem_shadow: z.boolean().optional(),
+
+	// Per-module opt-in gates for the seven capability modules (band-lock, SMS,
+	// 5G-pref, FCC-auto-unlock, GPS, USSD, eSIM). DEFAULT-ABSENT with NO entry in
+	// RUNTIME_CONFIG_DEFAULTS — the `modem_provisioning` precedent, and for the
+	// same reason: each module either mutates the radio in a way that can cost the
+	// bond link or reaches a billable/irreversible surface, so absent and `false`
+	// must be equally inert. See `@ceraui/rpc` `capability-modules.schema.ts`.
+	modem_capabilities: modemCapabilityGatesSchema.optional(),
 });
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>;
@@ -507,6 +540,9 @@ export const setupConfigSchema = z.preprocess(
 		mmcli_binary: z.string().optional(),
 		killall_binary: z.string().optional(),
 		ips_file: z.string().optional(),
+		// The ADR-003 bind-map sidecar. Absent derives it from `ips_file`, so no
+		// shipped setup.json needs a new key for the mapping to be published.
+		bind_map_file: z.string().optional(),
 		// Legacy belaUI setup.json fields read at runtime (opt-in overrides).
 		ssh_user: z.string().optional(),
 		// Absent means ENABLED — see SETUP_CONFIG_DEFAULTS. Only an explicit

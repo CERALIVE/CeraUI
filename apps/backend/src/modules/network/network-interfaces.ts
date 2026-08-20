@@ -44,9 +44,24 @@ import {
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
 import {
+	type DongleMarker,
+	getDongleMarker,
+	getDongleRecords,
+	refreshDongleMetadata,
+} from "./dongle-metadata.ts";
+import {
 	getPolicyRouteVerdict,
 	refreshPolicyRouteFlags,
 } from "./policy-route-check.ts";
+import { refreshRouterCellularAdmin } from "./router-cellular-admin.ts";
+import {
+	getModemNetMarker,
+	getRouterCellularMarker,
+	getRouterCellularMarkers,
+	type RouterCellularMarker,
+	refreshUsbNetMarkers,
+	type UsbModemNetMarker,
+} from "./router-cellular-scan.ts";
 import { onNetifChange, setNetifState } from "./state/netif-state.ts";
 import type { MonitorEvent, NetifState } from "./state-types.ts";
 
@@ -118,11 +133,69 @@ export function setNetifDupIpSuppression(ifname: string, suppressed: boolean) {
 	}
 }
 
+/*
+  THE DUPLICATE-IP POLICY SPLIT.
+
+  `NETIF_ERR_DUPIPV4` used to answer two different questions with one bit:
+  "may this interface be used as a generic source-IP" and "may it join the bond".
+  Those have OPPOSITE correct answers once a bind-map exists.
+
+  The first stays NO, and must: an operation that steers by SOURCE ADDRESS —
+  the Internet connectivity probe, a route lookup — genuinely cannot tell two
+  interfaces holding `192.168.8.100` apart, so binding to that address picks one
+  of them arbitrarily. That is measured, not theoretical: the bench's two HiLink
+  twins ship ONE factory MAC and both lease the same address.
+
+  The second becomes YES whenever the writer can publish a MAPPING ROW for the
+  interface, because the row names the interface as well as the address and the
+  sender binds the socket with `SO_BINDTODEVICE` — the twins stop being
+  indistinguishable the moment egress is pinned by device rather than by address.
+  Two identical lines in `BIND_IPS_FILE` are LEGAL and are exactly what the
+  positional sidecar disambiguates.
+
+  So the flag stays raised (the operator still sees the warning band, and the
+  probe rules still refuse it), and bond membership asks a separate question.
+  `enabled` still governs membership — but a dup-IP interface's `enabled` is
+  forced false by the flag itself, so the operator's own choice is tracked apart
+  from it here rather than being read out of a bit the error path overwrites.
+*/
+const operatorBondOptOut = new Set<string>();
+
+export function resetBondOptOut(): void {
+	operatorBondOptOut.clear();
+}
+
+export function setBondOptOut(ifname: string, optOut: boolean): void {
+	if (optOut) operatorBondOptOut.add(ifname);
+	else operatorBondOptOut.delete(ifname);
+}
+
+export function isDupIpOnly(int: NetworkInterface): boolean {
+	return int.error === NETIF_ERR_DUPIPV4;
+}
+
+/**
+ * May this interface be offered to the bond?
+ *
+ * A duplicate-IP interface is offered — the caller still has to prove it can
+ * publish a mapping row for it, which is what actually makes it usable. Any
+ * OTHER error (a hotspot radio) disqualifies it outright, and an operator who
+ * toggled the link out of the bond is honoured in both cases.
+ */
+export function isBondCandidate(name: string, int: NetworkInterface): boolean {
+	if (!int.ip) return false;
+	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
+	if (operatorBondOptOut.has(name)) return false;
+	if (isDupIpOnly(int)) return true;
+	return int.enabled;
+}
+
 const networkInterfacesEventEmitter = new EventEmitter();
 
 // Reduced-cadence backstop poll: events are the primary driver now, this only
 // refreshes throughput + confirms IP after an event. The old 1s interval is gone.
 const NETIF_POLL_INTERVAL_MS = 5000;
+const ROUTER_ADMIN_POLL_INTERVAL_MS = 30_000;
 
 // Mirror legacy `netif` into the NetifState cache (mapping `enabled`→`up`).
 // setNetifState fires onNetifChange only on a real diff → that callback is the
@@ -148,6 +221,32 @@ export function triggerNetworkInterfacesChange() {
 	// marking) — broadcast fires only when the diff is non-empty.
 	syncNetifState();
 	networkInterfacesEventEmitter.emit("change");
+}
+
+// `updateGwQueue` (gateways.ts) is ONE-SHOT: it is cleared after a successful
+// election and the periodic caller then exits forever, so a default route lost
+// afterwards is never re-elected. Re-queueing on every topology edge — an
+// interface appearing or disappearing, and a dongle's up/gated transition — is
+// what makes default-route recovery ONGOING rather than boot-only.
+//
+// The hook is INSTALLED BY `initNetworkInterfaceMonitoring`, not statically
+// imported: `gateways.ts` imports this module, so a static edge back would
+// cycle, and an unwired default keeps a test that only drives the parser from
+// dialing real DNS through `updateGw`.
+let queueUpdateGwHook: (() => void) | null = null;
+
+/** Install (or clear, with `null`) the gateway re-election hook. */
+export function setQueueUpdateGwHook(fn: (() => void) | null): void {
+	queueUpdateGwHook = fn;
+}
+
+function notifyTopologyChange(): void {
+	if (!queueUpdateGwHook) return;
+	try {
+		queueUpdateGwHook();
+	} catch (err) {
+		logger.debug(`queueUpdateGw hook failed: ${err}`);
+	}
 }
 
 function isNetifUpState(state: string): boolean {
@@ -195,6 +294,7 @@ export function handleNetifMonitorEvent(event: MonitorEvent): void {
 
 	if (mutated) {
 		triggerNetworkInterfacesChange();
+		notifyTopologyChange();
 	}
 }
 
@@ -214,10 +314,38 @@ function broadcastNetif(): void {
 	broadcastMsg("netif", netIfBuildMsg(), getms() - ACTIVE_TO);
 }
 
+/**
+ * Poll the dongle runtime metadata on the netif cadence.
+ *
+ * A dongle's state changes WITHOUT the live `netif` map changing (a gated veth
+ * is not RUNNING, so it never enters that map at all), which means
+ * `triggerNetworkInterfacesChange`'s diff can never see it. On a real edge this
+ * therefore broadcasts directly, and re-queues gateway election because an
+ * `up`/gated transition changes which interfaces can carry a default route.
+ */
+async function refreshDongleState(): Promise<void> {
+	try {
+		if (!(await refreshDongleMetadata())) return;
+		broadcastNetif();
+		notifyTopologyChange();
+	} catch (err) {
+		logger.debug(`dongle metadata refresh degraded: ${err}`);
+	}
+}
+
 export function initNetworkInterfaceMonitoring() {
 	onNetifChange(broadcastNetif);
 	updateNetif();
 	setInterval(updateNetif, NETIF_POLL_INTERVAL_MS);
+	void import("./gateways.ts")
+		.then((m) => setQueueUpdateGwHook(() => m.queueUpdateGw()))
+		.catch((err: unknown) => {
+			logger.warn(`gateway re-election hook unavailable: ${err}`);
+		});
+	void refreshDongleState();
+	setInterval(() => {
+		void refreshDongleState();
+	}, NETIF_POLL_INTERVAL_MS);
 	// Policy-route self-check on the netif cadence: real-device only, cached, and
 	// degrade-to-null internally — it never spawns in dev/mock, never blocks, and
 	// never throws into this loop.
@@ -225,6 +353,71 @@ export function initNetworkInterfaceMonitoring() {
 	setInterval(() => {
 		void refreshPolicyRouteFlags(netif);
 	}, NETIF_POLL_INTERVAL_MS);
+	void refreshRouterCellularState();
+	setInterval(() => {
+		void refreshRouterCellularState();
+	}, NETIF_POLL_INTERVAL_MS);
+	void refreshRouterAdminState();
+	setInterval(() => {
+		void refreshRouterAdminState();
+	}, ROUTER_ADMIN_POLL_INTERVAL_MS);
+}
+
+/**
+ * The `modems` roster now contains a row per classified dongle, and that row is
+ * derived from data this module owns — so a marker or address edge has to push
+ * the roster too, or the Cellular section would sit up to a full modem poll
+ * behind the Ethernet-side truth it was relocated from.
+ *
+ * Imported lazily to keep the dependency one-directional: `modem-wire-producer`
+ * reads this module statically, so a static import back would close the cycle.
+ */
+async function broadcastModemRoster(): Promise<void> {
+	try {
+		const { broadcastModems } = await import("../modems/modem-status.ts");
+		broadcastModems();
+	} catch (err) {
+		logger.debug(`modem roster rebroadcast degraded: ${err}`);
+	}
+}
+
+/**
+ * Read each classified dongle's own admin API on its OWN slow cadence.
+ *
+ * It is deliberately NOT on the 5 s netif cadence: this one spawns `curl`
+ * against a device on the far side of a USB link, so it is the most expensive
+ * probe in this module and the least urgent — a dongle's SIM state and firmware
+ * name do not move between ticks.
+ */
+export async function refreshRouterAdminState(): Promise<void> {
+	try {
+		const targets = new Map<string, string>();
+		for (const [ifname, marker] of getRouterCellularMarkers()) {
+			targets.set(ifname, marker.vid_pid);
+		}
+		if (!(await refreshRouterCellularAdmin(targets))) return;
+		await broadcastModemRoster();
+	} catch (err) {
+		logger.debug(`router-cellular admin refresh degraded: ${err}`);
+	}
+}
+
+/**
+ * Re-read the USB descriptors behind the live interfaces on the netif cadence.
+ *
+ * A classification edge is invisible to `triggerNetworkInterfacesChange`'s diff
+ * — the netif map is byte-identical when a device merely re-enumerates into a
+ * different composition — so a real edge broadcasts directly, exactly as the
+ * dongle metadata refresh does.
+ */
+async function refreshRouterCellularState(): Promise<void> {
+	try {
+		if (!(await refreshUsbNetMarkers(Object.keys(netif)))) return;
+		broadcastNetif();
+		await broadcastModemRoster();
+	} catch (err) {
+		logger.debug(`router-cellular refresh degraded: ${err}`);
+	}
 }
 
 export function updateNetif() {
@@ -397,7 +590,11 @@ export function processIfconfigOutput(
 				if (msg !== "") {
 					msg += "; ";
 				}
-				msg += `Interfaces ${intAddrs[d].join(", ")} can't be used because they share the same IP address: ${d}`;
+				// NOT "can't be used": since the (ip,iface) bind map exists these
+				// links DO bond when a per-interface mapping is in force. What the
+				// shared address really costs is every operation that steers by
+				// source IP, which cannot tell the pair apart.
+				msg += `Interfaces ${intAddrs[d].join(", ")} share the same IP address: ${d}. Checks that steer by address can't tell them apart; they can still be bonded when per-interface link mapping is active`;
 			}
 		}
 
@@ -423,6 +620,7 @@ export function processIfconfigOutput(
 
 	if (intsChanged) {
 		triggerNetworkInterfacesChange();
+		notifyTopologyChange();
 	}
 
 	// Reconcile + broadcast (covers throughput-only deltas too); no-op when the
@@ -625,8 +823,21 @@ type NetworkInterfaceResponseMessage = {
 		policy_route_missing?: boolean;
 		tx_bps?: number;
 		rx_bps?: number;
+		dongle?: DongleMarker | null;
+		router_cellular?: RouterCellularMarker | null;
+		usb_modem_net?: UsbModemNetMarker | null;
 	};
 };
+
+// Interfaces that carried a dongle marker on the PREVIOUS projection. A name
+// that drops out of this set gets exactly one `dongle: null` frame, which is
+// what makes the marker retractable rather than a permanent latch.
+let lastDongleMarked = new Set<string>();
+
+/** Drop the retraction bookkeeping (test isolation). */
+export function resetDongleMarkerTracking(): void {
+	lastDongleMarked = new Set();
+}
 
 export function netIfBuildMsg() {
 	const m: NetworkInterfaceResponseMessage = {};
@@ -672,7 +883,134 @@ export function netIfBuildMsg() {
 			entry.policy_route_missing = policyRouteVerdict;
 		}
 	}
+
+	applyDongleProjection(m);
+	applyRouterCellularProjection(m);
+	applyModemNetProjection(m);
 	return m;
+}
+
+// Interfaces that carried a router-cellular marker on the PREVIOUS projection,
+// so a name that drops out gets exactly one `router_cellular: null` frame.
+let lastRouterCellularMarked = new Set<string>();
+
+/** Drop the retraction bookkeeping (test isolation). */
+export function resetRouterCellularTracking(): void {
+	lastRouterCellularMarked = new Set();
+}
+
+/**
+ * Stamp the router-cellular marker onto the WIRE PROJECTION only.
+ *
+ * Unlike the dongle marker this NEVER unions a row in: the classification is a
+ * statement about an interface the kernel already enumerated, so a device the
+ * netif scan cannot see is a device this has nothing to say about. And unlike
+ * the dongle marker its retraction is NOT the row's last frame — the interface
+ * is still there, it merely stopped classifying (a mode switch, a replug that
+ * re-enumerated it as an MM-managed modem), so the row must survive it.
+ */
+function applyRouterCellularProjection(
+	m: NetworkInterfaceResponseMessage,
+): void {
+	const marked = new Set<string>();
+
+	for (const name in m) {
+		const entry = m[name];
+		if (!entry) continue;
+		const marker = getRouterCellularMarker(name);
+		if (marker) {
+			entry.router_cellular = marker;
+			marked.add(name);
+		} else if (lastRouterCellularMarked.has(name)) {
+			entry.router_cellular = null;
+		}
+	}
+
+	lastRouterCellularMarked = marked;
+}
+
+// Interfaces that carried a modem-net marker on the PREVIOUS projection, so a
+// name that drops out gets exactly one `usb_modem_net: null` frame.
+let lastModemNetMarked = new Set<string>();
+
+/** Drop the retraction bookkeeping (test isolation). */
+export function resetModemNetTracking(): void {
+	lastModemNetMarked = new Set();
+}
+
+/**
+ * Stamp the modem-data-function marker onto the WIRE PROJECTION only.
+ *
+ * Same rules as the router-cellular projection above, for the same reasons: it
+ * never unions a row in, and its retraction keeps the row.
+ */
+function applyModemNetProjection(m: NetworkInterfaceResponseMessage): void {
+	const marked = new Set<string>();
+
+	for (const name in m) {
+		const entry = m[name];
+		if (!entry) continue;
+		const marker = getModemNetMarker(name);
+		if (marker) {
+			entry.usb_modem_net = marker;
+			marked.add(name);
+		} else if (lastModemNetMarked.has(name)) {
+			entry.usb_modem_net = null;
+		}
+	}
+
+	lastModemNetMarked = marked;
+}
+
+/**
+ * Stamp the dongle marker onto the WIRE PROJECTION only.
+ *
+ * Three things happen here and none of them touches the live `netif` map:
+ *
+ *  1. a live `dg<N>h` row gains its `{slot, state}` marker;
+ *  2. an `acquiring`/`down` dongle — whose veth is administratively DOWN and
+ *     address-less, so it is not RUNNING and never enters `netif` at all — is
+ *     UNIONED in as a wire-only row with no `ip`, `enabled: false` and zero
+ *     counters. `genSrtlaIpList` reads the live map's `enabled && ip`, so it is
+ *     untouched by construction rather than by a filter someone could remove;
+ *  3. any name marked on the previous projection but not on this one emits one
+ *     final `dongle: null` frame, on its live row when it still has one and as a
+ *     bare wire-only row when it does not.
+ */
+function applyDongleProjection(m: NetworkInterfaceResponseMessage): void {
+	const marked = new Set<string>();
+
+	for (const name in m) {
+		const marker = getDongleMarker(name);
+		const entry = m[name];
+		if (!entry) continue;
+		if (marker) {
+			entry.dongle = marker;
+			marked.add(name);
+		} else if (lastDongleMarked.has(name)) {
+			entry.dongle = null;
+		}
+	}
+
+	for (const [veth, record] of getDongleRecords()) {
+		if (m[veth]) continue;
+		if (record.state === "up") continue;
+		m[veth] = {
+			tp: 0,
+			enabled: false,
+			tx_bps: 0,
+			rx_bps: 0,
+			dongle: { slot: record.slot, state: record.state },
+		};
+		marked.add(veth);
+	}
+
+	for (const name of lastDongleMarked) {
+		if (marked.has(name) || m[name]) continue;
+		m[name] = { tp: 0, enabled: false, dongle: null };
+	}
+
+	lastDongleMarked = marked;
 }
 
 function countActiveNetif() {
@@ -693,6 +1031,17 @@ export function handleNetif(
 	if (int.ip !== msg.ip) return;
 
 	if (msg.enabled === true || msg.enabled === false) {
+		// A duplicate-IP link's `enabled` is forced false by the flag itself, so a
+		// toggle on it can only be recorded as the operator's bond choice. The flag
+		// (and its warning band) is deliberately left standing: the link is still
+		// unusable for a generic source-IP operation, which is a different claim.
+		if (isDupIpOnly(int)) {
+			setBondOptOut(msg.name, !msg.enabled);
+			triggerNetworkInterfacesChange();
+			conn.send(buildMsg("netif", netIfBuildMsg()));
+			return;
+		}
+
 		if (msg.enabled) {
 			const err = getNetifErrorMsg(int);
 			if (err) {
@@ -719,6 +1068,7 @@ export function handleNetif(
 		}
 
 		int.enabled = msg.enabled;
+		setBondOptOut(msg.name, !msg.enabled);
 		triggerNetworkInterfacesChange();
 	}
 

@@ -390,6 +390,13 @@ export type RequiresGateway = z.infer<typeof requiresGatewaySchema>;
 // disabled-with-reason / start-blocked message (never a raw string).
 export const GATEWAY_INACTIVE_ERROR = 'network_ingest_gateway_inactive';
 
+// Stable structured code returned by streaming.start when a USB-composition-mode
+// transition holds the lifecycle lease. The transition re-enumerates a modem and
+// drops its bond link, so admitting a start beside it would build a bond over an
+// interface that is about to disappear. The mirror refusal — a transition refused
+// because a stream is live — is `setUsbModeRefusalSchema`'s `streaming_active`.
+export const MODEM_TRANSITION_ACTIVE_ERROR = 'modem_transition_active';
+
 // Per-pipeline audio provenance (Task 4/13). `selectable` = ALSA/device audio the
 // operator picks (the legacy behavior); `embedded` = audio muxed into the incoming
 // network stream (rtmp/srt); `none` = the pipeline carries no audio. Additive +
@@ -829,6 +836,22 @@ export const configMessageSchema = z.object({
 	// Operator-declared regulatory country, echoed so the Settings dialog can
 	// show the saved selection on reload. Absent = the world domain '00'.
 	country: regulatoryCountrySchema.optional(),
+	// READ-ONLY echo of the opt-in USB-composition provisioning gate
+	// (`runtimeConfigSchema.modem_provisioning`). `streaming.setConfig` does NOT
+	// accept it — it is not on `streamingConfigInputSchema` — so this is a
+	// one-way projection of a device-level setting, never a UI-writable field.
+	//
+	// It is a TRISTATE, and all three arms are distinct on purpose:
+	//   `false`     — provisioning is OFF and the device SAID so. The USB-mode
+	//                 switch renders disabled-with-reason before any dispatch.
+	//   `true`      — provisioning is ON. The control is offered.
+	//   ABSENT      — an older backend that does not publish the key at all. We
+	//                 were told nothing, so the control stays OFFERED and the
+	//                 device's own typed `provisioning_disabled` refusal
+	//                 withdraws it (the pre-echo behaviour, byte-identical).
+	// Collapsing absent into `false` would hide a working control on every
+	// device running a backend that predates this field.
+	modem_provisioning: z.boolean().optional(),
 });
 export type ConfigMessage = z.infer<typeof configMessageSchema>;
 

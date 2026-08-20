@@ -119,27 +119,33 @@ describe("NetifDialog — definitive save feedback (Task 20)", () => {
 		configure.mockResolvedValueOnce({ success: false, error: "netif_failed" });
 
 		render(NetifDialog, {
-			props: { open: true, name: "eth0", iface: iface() },
+			props: { open: true, name: "eth0", iface: iface({ ip: "10.0.0.5" }) },
 		});
 
-		// Operator typed a static IP; it must survive a failed save.
-		const ipInput = screen.getByPlaceholderText(/./) as HTMLInputElement;
-		await fireEvent.input(ipInput, { target: { value: "10.0.0.5" } });
+		// The bond toggle is the dialog's ONLY editable field; the operator's
+		// choice must survive a failed save.
+		const bondToggle = screen.getByRole("switch");
+		await fireEvent.click(bondToggle);
 
 		await fireEvent.click(saveButton());
 
 		await waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+		// The address is ECHOED, never authored: the operator did not choose it,
+		// and it is what makes the backend's `int.ip !== msg.ip` guard pass so the
+		// bond change is applied instead of silently discarded.
 		expect(configure).toHaveBeenCalledWith({
 			name: "eth0",
 			ip: "10.0.0.5",
-			enabled: true,
+			enabled: false,
 		});
 		// osCommand owns the single failure toast; NetifDialog does not add one.
 		await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
 		expect(toastSuccess).not.toHaveBeenCalled();
-		// Dialog STAYS open (Save button present) and the typed IP is preserved.
+		// Dialog STAYS open (Save button present) and the choice is preserved.
 		expect(saveButton()).toBeTruthy();
-		expect(ipInput.value).toBe("10.0.0.5");
+		expect(screen.getByRole("switch").getAttribute("aria-checked")).toBe(
+			"false",
+		);
 	});
 
 	it("on RPC throw: keeps the dialog open and toasts once", async () => {

@@ -54,6 +54,20 @@ export type Modem = {
 		supported: Record<string, NetworkType>; // e.g. { '2g': '2g', '3g': '3g', '3g4g': '3g4g', '4g': '4g' }
 		active: string | null; // e.g. '3g4g'
 	};
+	/**
+	 * The UNFOLDED `(allowed, preferred)` catalog, as mmcli reported it.
+	 *
+	 * `network_type.supported` is keyed by the ALLOWED-SET label, so
+	 * `mmConvertNetworkTypes` keeps exactly one entry per label and discards every
+	 * other `preferred` the modem advertised for it. That fold is correct for the
+	 * coarse selector and destroys the one distinction the 5G-preference module
+	 * exists to offer — `allowed: 4g,5g; preferred: 5g` and `allowed: 4g,5g;
+	 * preferred: 4g` are one label. This is the same payload, unfolded.
+	 */
+	radio_modes?: {
+		supported: readonly NetworkType[];
+		current?: NetworkType;
+	};
 	is_scanning?: true;
 	inhibit?: true; // don't bring up automatically
 	config?: ModemConfig;

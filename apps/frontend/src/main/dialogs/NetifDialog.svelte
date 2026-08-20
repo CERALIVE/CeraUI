@@ -2,23 +2,38 @@
   NetifDialog.svelte — per-interface configuration dialog (Task 24).
 
   Opened from NetworkView's Ethernet section "Configure" trigger. Lets the
-  operator enable/disable a wired interface and set a static IPv4/IPv6 address
-  (or leave blank for DHCP). The IP is validated inline against the canonical
-  IP_ADDRESS_REGEX from @ceraui/rpc/schemas before the save is allowed.
+  operator include/exclude a wired interface from the bond, and REPORTS the
+  interface's address together with where that address came from.
 
-  Dirty-field guard: once the operator edits a field, incoming server pushes for
-  THAT field are ignored until the dialog is reopened, so in-progress edits are
-  never clobbered by live telemetry.
+  THE ADDRESS IS REPORTED, NOT EDITED, and that is a correction rather than a
+  reduction. The dialog used to offer a "Static IP address" field; measured on a
+  Rock 5B+ (2026-08-16), saving `192.168.0.222` onto a dongle at 192.168.0.169
+  toasted "Saved" and changed NOTHING — `ip -br addr` was byte-identical, the
+  NetworkManager profile still read `ipv4.method: auto` with an empty
+  `ipv4.addresses`, and the journal recorded not one line. The backend has no
+  apply path at all: `handleNetif` reads `msg.ip` ONLY as an echo guard
+  (`if (int.ip !== msg.ip) return;`) and mutates `enabled` and nothing else. So
+  the field could not work on ANY interface, dongle or real NIC.
+
+  Worse, that guard made the dead field destructive: a save that ALSO flipped the
+  bond toggle was discarded whole, because the edited IP no longer matched the
+  observed one. Board-proven — bonding toggled off + IP edited + "Saved" toast,
+  and the row still read "In Bond". Echoing the OBSERVED address keeps the guard's
+  concurrency meaning (this client's view of the interface is current) while
+  making it impossible for the operator to trip it.
+
+  Dirty-field guard: once the operator edits the bond toggle, incoming server
+  pushes for THAT field are ignored until the dialog is reopened, so an
+  in-progress edit is never clobbered by live telemetry.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import { IP_ADDRESS_REGEX, type NetifEntry } from '@ceraui/rpc/schemas';
+import type { NetifEntry } from '@ceraui/rpc/schemas';
 import { Info, Network } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import { AppDialog } from '$lib/components/dialogs';
-import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { rpc } from '$lib/rpc';
@@ -32,49 +47,46 @@ interface Props {
 
 let { open = $bindable(false), name, iface }: Props = $props();
 
-// A link-local (169.254/16) address is an automatic OS-assigned fallback, never a
-// saved static config, so it must NOT seed the "Static IP" field — echoing it there
-// makes it look like a stuck static IP the operator set (and "can't clear"). Treat
-// link-local as blank = DHCP.
-const staticIpSeed = (entry: NetifEntry | undefined): string =>
-	entry?.ip && !isLinkLocalIpv4(entry.ip) ? entry.ip : '';
-const showLinkLocalNotice = $derived(isLinkLocalIpv4(iface?.ip));
-
-// Local, editable copies. Initialised on the open edge so the form always
-// starts from the live interface state.
+// Local, editable copy. Initialised on the open edge so the form always starts
+// from the live interface state.
 let enabled = $state(false);
-let ip = $state('');
 
-// Dirty-field guard: per-field flags marking operator-edited fields.
+// Dirty-field guard: marks the operator-edited field.
 let dirtyEnabled = $state(false);
-let dirtyIp = $state(false);
 let wasOpen = false;
 let saving = $state(false);
 
 $effect(() => {
-	// Open edge → reset the form from the current interface, clear dirty flags.
+	// Open edge → reset the form from the current interface, clear the dirty flag.
 	if (open && !wasOpen) {
 		enabled = iface?.enabled ?? false;
-		ip = staticIpSeed(iface);
 		dirtyEnabled = false;
-		dirtyIp = false;
 	}
 	wasOpen = open;
 });
 
 $effect(() => {
-	// Live sync while open — but only for fields the operator hasn't touched.
+	// Live sync while open — but only while the operator hasn't touched it.
 	if (!open) return;
 	const serverEnabled = iface?.enabled;
-	const serverIp = staticIpSeed(iface);
 	if (!dirtyEnabled && serverEnabled !== undefined) enabled = serverEnabled;
-	if (!dirtyIp) ip = serverIp;
 });
 
-const trimmedIp = $derived(ip.trim());
-// Empty IP === DHCP (valid). A non-empty value must match the canonical regex.
-const ipValid = $derived(trimmedIp === '' || IP_ADDRESS_REGEX.test(trimmedIp));
-const ipInvalid = $derived(trimmedIp !== '' && !ipValid);
+// WHERE the address came from, which is the question the retired input begged.
+// Router-cellular is todo 43's classifier verdict, read off the SAME netif field
+// the row badge reads — no second classification signal is derived here.
+const observedIp = $derived(iface?.ip ?? '');
+const isRouterCellular = $derived(iface?.router_cellular != null);
+const isLinkLocal = $derived(isLinkLocalIpv4(iface?.ip));
+// The dongle case reuses the row's OWN sentence verbatim: same physical fact,
+// second surface, so a separate key would be a second vocabulary to drift.
+const addressSource = $derived(
+	isRouterCellular
+		? m["network.routerCellular.addressNote"]()
+		: isLinkLocal
+			? m["settings.dialogs.addressLinkLocal"]()
+			: m["settings.dialogs.addressFromDhcp"](),
+);
 
 // SHARED resource key with BondToggle (both mutate `rpc.network.configure` for
 // this interface), so a dialog save and a bond toggle on the same iface can never
@@ -82,7 +94,7 @@ const ipInvalid = $derived(trimmedIp !== '' && !ipValid);
 const netifKey = $derived(`netif:${name}`);
 
 async function save() {
-	if (!ipValid || saving) return;
+	if (saving) return;
 	// Cross-surface busy guard: a bond toggle (or another save) on THIS iface is
 	// in flight — refuse with the standard busy feedback, don't dispatch a second.
 	if (isOperationPending(netifKey)) {
@@ -90,7 +102,10 @@ async function save() {
 		return;
 	}
 	saving = true;
-	// DHCP path must OMIT ip (undefined), never send "" (fails backend regex).
+	// Echo the OBSERVED address so the backend's `int.ip !== msg.ip` guard reads
+	// as the concurrency check it is, and can never silently discard the bond
+	// change. An address-less interface must OMIT the field (`""` fails the
+	// backend regex), which the guard treats as its own no-address case.
 	const result = await osCommand({
 		key: netifKey,
 		target: { name, enabled },
@@ -98,7 +113,7 @@ async function save() {
 		rpc: () =>
 			rpc.network.configure({
 				name,
-				ip: trimmedIp === '' ? undefined : trimmedIp,
+				ip: observedIp === '' ? undefined : observedIp,
 				enabled,
 			}),
 		busyMessage: () => m["network.os.deviceBusy"](),
@@ -119,7 +134,6 @@ async function save() {
 	description={name}
 	icon={Network}
 	onPrimary={save}
-	primaryDisabled={ipInvalid}
 	primaryLabel={m["advanced.save"]()}
 	primaryLoading={saving}
 	title={m["network.view.configure"]()}
@@ -146,9 +160,31 @@ async function save() {
 			/>
 		</div>
 
-		{#if showLinkLocalNotice}
+		<!-- Address: reported with its provenance, never offered as an edit. It is
+		     deliberately UNBOXED — a bordered, filled value on a dialog with a Save
+		     button reads as a disabled text field, i.e. as an edit the operator
+		     could unlock. Bare label-over-value is a data row and cannot. -->
+		<div class="space-y-1">
+			<Label class="text-muted-foreground text-xs font-medium" for="netif-address">
+				{m["settings.dialogs.address"]()}
+			</Label>
+			<p id="netif-address" class="font-mono text-base" data-testid="netif-address">
+				{#if observedIp}
+					{observedIp}
+				{:else}
+					<span class="text-muted-foreground font-sans text-sm"
+						>{m["settings.dialogs.addressNone"]()}</span
+					>
+				{/if}
+			</p>
+			<p class="text-muted-foreground text-xs" data-testid="netif-address-source">
+				{addressSource}
+			</p>
+		</div>
+
+		{#if isLinkLocal}
 			<!-- Calm, informational: the shown 169.254/16 address is an automatic OS
-			     fallback (always kept for local access), NOT a saved static IP. -->
+			     fallback (always kept for local access), never a saved static IP. -->
 			<div
 				data-testid="netif-link-local-notice"
 				role="status"
@@ -158,33 +194,5 @@ async function save() {
 				<p class="text-muted-foreground text-xs">{m["settings.dialogs.linkLocalNotice"]()}</p>
 			</div>
 		{/if}
-
-		<!-- Static IP -->
-		<div class="space-y-2">
-			<Label class="text-sm font-medium" for="netif-ip">
-				{m["settings.dialogs.staticIp"]()}
-			</Label>
-			<Input
-				id="netif-ip"
-				aria-invalid={ipInvalid}
-				autocomplete="off"
-				inputmode="text"
-				oninput={(e) => {
-					ip = e.currentTarget.value;
-					dirtyIp = true;
-				}}
-				placeholder={m["settings.dialogs.ipPlaceholder"]()}
-				spellcheck={false}
-				value={ip}
-			/>
-			{#if ipInvalid}
-				<p class="text-destructive flex items-center gap-2 text-sm" role="alert">
-					<span class="bg-destructive size-1.5 shrink-0 rounded-full"></span>
-					{m["settings.dialogs.ipInvalid"]()}
-				</p>
-			{:else}
-				<p class="text-muted-foreground text-xs">{m["settings.dialogs.dhcpHint"]()}</p>
-			{/if}
-		</div>
 	</div>
 </AppDialog>

@@ -20,6 +20,7 @@
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
+	ambiguousSourceIps,
 	checkPolicyRoutes,
 	collectPolicyRouteCandidates,
 	defaultPolicyRouteCheckDeps,
@@ -405,5 +406,217 @@ describe("policy-route verdict across bond exclusion", () => {
 
 		expect(getPolicyRouteVerdict("eth0")).toBe(false);
 		expect(collectPolicyRouteCandidates(AP_MODE)).toEqual([]);
+	});
+});
+
+// ─── The netns dg-veth branch, RETIRED (Phase-C todo 39) ─────────────────────
+
+/*
+ * Todo 13 isolated the `dg<N>h` naming convention behind one predicate so that
+ * retiring the image's netns layer would be a single deletion here. Todo 39 made
+ * that deletion, and these are the locks that keep it made: `dg*` is no longer a
+ * bonded-class name, so it is no longer a candidate, so no verdict about it can
+ * ever be published again. Re-adding the predicate reddens all three.
+ */
+describe("the retired dg-veth seam", () => {
+	it("no dg-veth spelling is in the bonded class any more", () => {
+		for (const n of ["dg0h", "dg1h", "dg12h", "dg0", "dgh", "dg0h0", "dgxh"]) {
+			expect(isBondedModemOrWifiIface(n)).toBe(false);
+		}
+	});
+
+	it("the classes it never contained are untouched", () => {
+		for (const n of ["enx0c5b8f279a64", "eth1", "lo"]) {
+			expect(isBondedModemOrWifiIface(n)).toBe(false);
+		}
+		for (const n of ["wlan0", "usb0", "wwan0", "wwp0s1"]) {
+			expect(isBondedModemOrWifiIface(n)).toBe(true);
+		}
+	});
+});
+
+// ─── Source-IP inference: where it stops (Phase-C todo 13) ───────────────────
+
+describe("ambiguousSourceIps", () => {
+	it("names an address held by more than one interface", () => {
+		expect([
+			...ambiguousSourceIps({
+				eth0: { ip: "192.168.78.132", enabled: true },
+				enx0c5b8f279a64: { ip: "192.168.8.100", enabled: true },
+				eth1: { ip: "192.168.8.100", enabled: false },
+			}),
+		]).toEqual(["192.168.8.100"]);
+	});
+
+	it("counts a DISABLED holder too — it still owns the address", () => {
+		const ambiguous = ambiguousSourceIps({
+			usb0: { ip: "10.0.0.5", enabled: true },
+			usb1: { ip: "10.0.0.5", enabled: false },
+		});
+		expect(ambiguous.has("10.0.0.5")).toBe(true);
+	});
+
+	it("an ordinary roster and an addressless roster are both unambiguous", () => {
+		expect(ambiguousSourceIps(NETIF).size).toBe(0);
+		expect(
+			ambiguousSourceIps({
+				usb0: { ip: undefined, enabled: true },
+				usb1: { ip: undefined, enabled: true },
+			}).size,
+		).toBe(0);
+	});
+});
+
+describe("policy-route verdicts across ordinary / dup-IP / no-netns states", () => {
+	// (1) ORDINARY — distinct addresses, no dongle layer. The pre-existing
+	// behaviour, asserted here as the control the other two are compared against.
+	const ORDINARY = {
+		eth0: { ip: "192.168.1.100", enabled: true },
+		wlan0: { ip: "192.168.2.100", enabled: true },
+		usb0: { ip: "10.0.0.5", enabled: true },
+		usb1: { ip: "10.0.1.5", enabled: true },
+	};
+
+	// (2) DUP-IP — two SAME-MODEL modems in the candidate class both leasing the
+	// vendor-default address. `usb1` keeps its own rule in the fixture rules, so
+	// a source-IP match would confidently attribute usb1's table to usb0 as well.
+	const DUP_IP = {
+		...ORDINARY,
+		usb1: { ip: "10.0.0.5", enabled: true },
+	};
+
+	// (3) NO-NETNS — the shipped state: a classified dongle bonds on its own
+	// `enx…` interface and no `dg*` veth exists anywhere.
+	const NO_NETNS = {
+		...ORDINARY,
+		enx344b50000000: { ip: "192.168.0.169", enabled: true },
+	};
+
+	// An OLD-image board caught mid-retirement: the netns layer still holds a
+	// `dg0h` veth AND its source rule is still installed. Post-todo-39 that is
+	// somebody else's state to tear down, not a fault for this check to report.
+	const STALE_NETNS = {
+		...ORDINARY,
+		dg0h: { ip: "10.208.0.1", enabled: true },
+	};
+
+	const RULES = `0:\tfrom all lookup local
+100:\tfrom 192.168.2.100 lookup 110
+100:\tfrom 10.0.0.5 lookup 100
+100:\tfrom 10.0.1.5 lookup 101
+100:\tfrom 10.208.0.1 lookup dg0h
+32766:\tfrom all lookup main
+32767:\tfrom all lookup default
+`;
+
+	function depsFor(rules: string, tablesWithDefault: ReadonlySet<string>) {
+		const routeSpy = mock(async (table: string) =>
+			tablesWithDefault.has(table) ? `default via 10.0.0.1 dev x\n` : "",
+		);
+		return {
+			isRealDevice: async () => true,
+			shouldUseMocks: () => false,
+			resolveMockPolicyRouteMissing: () => null,
+			runIpRuleShow: mock(async () => rules),
+			runIpRouteShowTable: routeSpy,
+			routeSpy,
+		};
+	}
+
+	it("(1) ordinary: a missing default route still flags exactly that iface", async () => {
+		const deps = depsFor(RULES, new Set(["110", "101"]));
+		const flagged = await checkPolicyRoutes(ORDINARY, deps);
+		expect([...(flagged ?? [])]).toEqual(["usb0"]);
+	});
+
+	it("(2) dup-IP: NEITHER holder gets a verdict, and the guess is not made", async () => {
+		const deps = depsFor(RULES, new Set(["110", "101"]));
+		const flagged = await checkPolicyRoutes(DUP_IP, deps);
+
+		expect(flagged).not.toBeNull();
+		expect(flagged?.has("usb0")).toBe(false);
+		expect(flagged?.has("usb1")).toBe(false);
+		// The shared address's table is never even queried — there is nothing it
+		// could truthfully be attributed to.
+		expect(deps.routeSpy.mock.calls.flat()).not.toContain("100");
+	});
+
+	it("(2) dup-IP: an unrelated iface keeps its OWN true verdict alongside", async () => {
+		const deps = depsFor(RULES, new Set(["101"]));
+		const flagged = await checkPolicyRoutes(DUP_IP, deps);
+		expect([...(flagged ?? [])]).toEqual(["wlan0"]);
+	});
+
+	it("(2) dup-IP: a shared-address holder is never 'checked and faulty'", async () => {
+		const deps = depsFor(RULES, new Set(["110", "101"]));
+		await refreshPolicyRouteFlags(DUP_IP, deps);
+		expect(getPolicyRouteVerdict("usb0")).toBe(false);
+		expect(getPolicyRouteVerdict("usb1")).toBe(false);
+	});
+
+	it("(2) dup-IP: one source dispatching to TWO tables also withholds", async () => {
+		const conflicting = `0:\tfrom all lookup local
+100:\tfrom 10.0.0.5 lookup 100
+100:\tfrom 10.0.0.5 lookup 199
+32766:\tfrom all lookup main
+`;
+		const deps = depsFor(conflicting, new Set());
+		const flagged = await checkPolicyRoutes(
+			{ usb0: { ip: "10.0.0.5", enabled: true } },
+			deps,
+		);
+		expect([...(flagged ?? [])]).toEqual([]);
+	});
+
+	/*
+	 * The bench HiLink twins are `enx0c5b8f279a64` / `eth1`, and BOTH are outside
+	 * this check's candidate class — the `enx*` exclusion is deliberate (the NM
+	 * dispatcher maps only `enx*0`..`enx*7`) and `eth*` was never in it. So the
+	 * check has never published a verdict about them and the amber band cannot
+	 * be attributed to a twin. Pinned because the fixture above deliberately does
+	 * NOT use those names: a same-address pair only reaches the ambiguity guard
+	 * when it is IN the class, and todo 14's `.link` renaming prototype could move
+	 * cellular NICs into it.
+	 */
+	it("(2) the bench twins are out of the candidate class entirely", async () => {
+		const twins = {
+			enx0c5b8f279a64: { ip: "192.168.8.100", enabled: true },
+			eth1: { ip: "192.168.8.100", enabled: true },
+		};
+		expect(collectPolicyRouteCandidates(twins)).toEqual([]);
+
+		const deps = depsFor(RULES, new Set());
+		expect([...((await checkPolicyRoutes(twins, deps)) ?? [])]).toEqual([]);
+		expect(deps.runIpRuleShow).not.toHaveBeenCalled();
+	});
+
+	it("(3) no-netns: a board with no dg-veth behaves exactly like the control", async () => {
+		const deps = depsFor(RULES, new Set(["110", "101"]));
+		const flagged = await checkPolicyRoutes(NO_NETNS, deps);
+
+		expect([...(flagged ?? [])]).toEqual(["usb0"]);
+		expect(
+			collectPolicyRouteCandidates(NO_NETNS)
+				.map((c) => c.name)
+				.sort(),
+		).toEqual(["usb0", "usb1", "wlan0"]);
+	});
+
+	/*
+	 * Non-vacuous by construction: `RULES` still carries `from 10.208.0.1 lookup
+	 * dg0h`, and the fixture withholds a default route from that table — so a
+	 * check that still considered `dg0h` would have every reason to flag it. It
+	 * answers with the control's verdict instead, and never queries the table.
+	 */
+	it("(3) a STALE netns veth is not a candidate, so it gets no verdict", async () => {
+		const deps = depsFor(RULES, new Set(["110", "101"]));
+		const flagged = await checkPolicyRoutes(STALE_NETNS, deps);
+
+		expect([...(flagged ?? [])]).toEqual(["usb0"]);
+		expect(flagged?.has("dg0h")).toBe(false);
+		expect(deps.routeSpy.mock.calls.flat()).not.toContain("dg0h");
+		expect(
+			collectPolicyRouteCandidates(STALE_NETNS).map((c) => c.name),
+		).not.toContain("dg0h");
 	});
 });

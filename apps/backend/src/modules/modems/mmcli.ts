@@ -46,6 +46,11 @@ export type ModemInfo = {
 	"modem.generic.state": string;
 	"modem.generic.ports": Array<string>;
 	"modem.generic.model": string;
+	// Identity fields the row title falls back to when `model` is garbage (see
+	// modem-identity.ts). Optional because mmcli drops a field the device left
+	// empty — an absent revision is a quiet device, not drift.
+	"modem.generic.manufacturer"?: string;
+	"modem.generic.revision"?: string;
 	"modem.generic.current-modes": string;
 	"modem.generic.supported-modes": Array<string>;
 	"modem.generic.equipment-identifier": string;
@@ -54,7 +59,25 @@ export type ModemInfo = {
 	"modem.generic.signal-quality.value": number;
 	"modem.3gpp.operator-name"?: string;
 	"modem.3gpp.registration-state"?: string;
+	"modem.3gpp.packet-service-state"?: string;
+	"modem.3gpp.network-rejection-error"?: string;
+	"modem.3gpp.network-rejection-operator-id"?: string;
+	"modem.3gpp.network-rejection-operator-name"?: string;
+	"modem.3gpp.network-rejection-access-technology"?: string;
 };
+
+/**
+ * The 3GPP fields that say WHY a radio is not registered. All optional by
+ * nature — mmcli prints `--` (which `mmcliParseSep` drops) whenever the network
+ * stated nothing, which is the normal case for a registered modem.
+ */
+const REJECTION_KEYS = [
+	"modem.3gpp.packet-service-state",
+	"modem.3gpp.network-rejection-error",
+	"modem.3gpp.network-rejection-operator-id",
+	"modem.3gpp.network-rejection-operator-name",
+	"modem.3gpp.network-rejection-access-technology",
+] as const;
 
 export type SimInfo = {
 	"sim.properties.iccid": string;
@@ -66,7 +89,7 @@ type NetworkTypeWithLabel = NetworkType & {
 	label: string;
 };
 
-const mmcliBinary = setup.mmcli_binary ?? "mmcli";
+export const mmcliBinary: string = setup.mmcli_binary ?? "mmcli";
 
 // Allowlist the operator-pinned mmcli path (config-sourced, NOT RPC input) so
 // run()'s allowlist gate accepts it; default "mmcli" is already present.
@@ -74,6 +97,80 @@ ALLOWED.add(mmcliBinary);
 
 const mmcliKeyPattern = /\.length$/;
 const mmcliValuePattern = /\.value\[\d+]$/;
+
+/**
+ * The escapes `g_strescape()` emits, minus the octal form.
+ *
+ * mmcli's `-K` writer calls `g_strescape (value, NULL)` on EVERY value it
+ * prints (`cli/mmcli-output.c`, `dump_output_keyvalue`), so this table plus the
+ * 3-digit octal form is the complete grammar — there is no other escape mmcli
+ * can produce, which is why {@link mmcliUnescapeValue} can leave anything else
+ * untouched instead of guessing.
+ */
+const MMCLI_SIMPLE_ESCAPES: Readonly<Record<string, number>> = {
+	b: 0x08,
+	f: 0x0c,
+	n: 0x0a,
+	r: 0x0d,
+	t: 0x09,
+	v: 0x0b,
+	'"': 0x22,
+	"\\": 0x5c,
+};
+
+/** Octal triplet first: `\\302` is a byte, `\\\\302` is a backslash then "302". */
+const MMCLI_ESCAPE_RE = /\\(?:([0-7]{3})|([bfnrtv"\\]))/g;
+
+/**
+ * Undo `g_strescape()` on one `-K` value.
+ *
+ * WHY THIS EXISTS: mmcli does not print non-ASCII text — it prints the LITERAL
+ * ASCII characters of the octal escape. A Spanish SMS arrives on stdout as the
+ * eight characters `\`,`3`,`0`,`2`,`\`,`2`,`4`,`1` where the wire carried the
+ * two UTF-8 bytes `0xC2 0xA1` (confirmed on the bench board with `od -c`). The
+ * escapes are therefore per-BYTE, not per-character, and the only correct
+ * decode is: rebuild the byte sequence, then read it back as UTF-8. Decoding
+ * each escape to `String.fromCharCode` instead would turn `¡` into `Â¡`.
+ *
+ * TOTAL AND CONTENT-FREE: never throws, never logs. An escape outside the
+ * grammar above is passed through VERBATIM rather than dropped — mmcli cannot
+ * emit one, so encountering it means the value was never escaped, and copying
+ * it is the only lossless answer. (The predecessor of this function deleted
+ * every `\\<digits>` run outright, which silently truncated any non-ASCII
+ * operator name to its ASCII skeleton.)
+ */
+export function mmcliUnescapeValue(value: string): string {
+	if (!value.includes("\\")) return value;
+
+	const encoder = new TextEncoder();
+	const bytes: number[] = [];
+	const pushText = (text: string): void => {
+		for (const byte of encoder.encode(text)) bytes.push(byte);
+	};
+
+	let cursor = 0;
+	MMCLI_ESCAPE_RE.lastIndex = 0;
+	let match = MMCLI_ESCAPE_RE.exec(value);
+	while (match !== null) {
+		if (match.index > cursor) pushText(value.slice(cursor, match.index));
+		const octal = match[1];
+		const simple = match[2];
+		if (octal !== undefined) {
+			bytes.push(Number.parseInt(octal, 8));
+		} else if (simple !== undefined) {
+			const byte = MMCLI_SIMPLE_ESCAPES[simple];
+			if (byte !== undefined) bytes.push(byte);
+		}
+		cursor = match.index + match[0].length;
+		match = MMCLI_ESCAPE_RE.exec(value);
+	}
+	if (cursor < value.length) pushText(value.slice(cursor));
+
+	// Non-fatal: a byte run that is not valid UTF-8 becomes U+FFFD, which is an
+	// honest "undecodable here" mark. Failing the whole read would lose every
+	// other field over one bad byte.
+	return new TextDecoder().decode(new Uint8Array(bytes));
+}
 
 /**
  * Valid ModemManager mode tokens accepted by `--set-allowed-modes` /
@@ -107,8 +204,7 @@ export function validateModeSpec(value: string): string {
 
 export function mmcliParseSep(input: string) {
 	const output: Record<string, string | Array<string>> = {};
-	for (let line of input.split("\n")) {
-		line = line.replace(/\\\d+/g, ""); // strips special escaped characters
+	for (const line of input.split("\n")) {
 		if (!line) {
 			continue;
 		}
@@ -119,11 +215,14 @@ export function mmcliParseSep(input: string) {
 			continue;
 		}
 		let key = kv[0]?.trim();
-		const value = kv[1]?.trim();
-		if (key === undefined || value === undefined) {
+		const rawValue = kv[1]?.trim();
+		if (key === undefined || rawValue === undefined) {
 			logger.warn(`mmcliParseSep: error parsing line ${line}`);
 			continue;
 		}
+		// Unescaped AFTER the key/value split, never before: a decoded byte
+		// could otherwise forge the `:` this line was split on.
+		const value = mmcliUnescapeValue(rawValue);
 
 		// skip empty values
 		if (value === "--") {
@@ -351,6 +450,8 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 		);
 	}
 
+	const manufacturer = readOptionalString(parsed, "modem.generic.manufacturer");
+	const revision = readOptionalString(parsed, "modem.generic.revision");
 	const operatorName = readOptionalString(parsed, "modem.3gpp.operator-name");
 	const registrationState = readOptionalString(
 		parsed,
@@ -362,6 +463,10 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 		"modem.generic.state": readString(parsed, "modem.generic.state"),
 		"modem.generic.ports": readStringList(parsed, "modem.generic.ports"),
 		"modem.generic.model": readString(parsed, "modem.generic.model"),
+		...(manufacturer !== undefined
+			? { "modem.generic.manufacturer": manufacturer }
+			: {}),
+		...(revision !== undefined ? { "modem.generic.revision": revision } : {}),
 		"modem.generic.current-modes": readString(
 			parsed,
 			"modem.generic.current-modes",
@@ -395,8 +500,18 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 		...(registrationState !== undefined
 			? { "modem.3gpp.registration-state": registrationState }
 			: {}),
+		...rejectionKeys(parsed),
 		...unlockKeys(parsed),
 	});
+}
+
+function rejectionKeys(parsed: MmcliRecord): MmcliRecord {
+	const kept: MmcliRecord = {};
+	for (const key of REJECTION_KEYS) {
+		const value = readOptionalString(parsed, key);
+		if (value !== undefined) kept[key] = value;
+	}
+	return kept;
 }
 
 // buildSimLock reads the raw `modem.generic.unlock-required` / `.unlock-retries`
@@ -557,6 +672,28 @@ export async function mmSetNetworkTypes(
 	return undefined;
 }
 
+/**
+ * Re-run ModemManager's initialization for one modem.
+ *
+ * ModemManager runs its dispatchers — the FCC-unlock one among them — while a
+ * modem INITIALIZES, and never again. So a policy change that is meant to affect
+ * an already-enumerated modem needs the modem taken down and brought back up; a
+ * physical replug has the identical effect.
+ *
+ * A failed disable SHORT-CIRCUITS: enabling a modem that was never taken down
+ * would report success for a modem nothing re-probed.
+ */
+export async function mmReprobeModem(id: ModemId): Promise<boolean> {
+	try {
+		await run(mmcliBinary, ["-m", String(id), "--disable"]);
+		await run(mmcliBinary, ["-m", String(id), "--enable"]);
+		return true;
+	} catch (err) {
+		logger.error(`mmReprobeModem err: ${describeCliError(err)}`);
+		return false;
+	}
+}
+
 export type NetworkScanResult = {
 	"operator-code": string;
 	"operator-name": string;
@@ -653,6 +790,27 @@ export async function mmGetModemUnlockInfo(
 		return parseModemUnlockInfo(mmcliParseSep(stdout));
 	} catch (err) {
 		logger.error(`mmGetModemUnlockInfo err: ${describeCliError(err)}`);
+		return undefined;
+	}
+}
+
+/**
+ * Read a modem's control-port list (`modem.generic.ports`, e.g.
+ * `["cdc-wdm0 (qmi)", "ttyUSB2 (at)", …]`) via `mmcli -K -m <path>`.
+ *
+ * A pure READ, like {@link mmGetModemUnlockInfo}: it never registers or
+ * connects the modem. Exists so the PIN2 path can DERIVE its QMI device node
+ * from ModemManager's own view rather than guessing `/dev/cdc-wdm0`, which on a
+ * multi-modem board would submit one SIM's PIN2 against another's card.
+ */
+export async function mmGetModemPorts(
+	modemPath: string,
+): Promise<Array<string> | undefined> {
+	try {
+		const stdout = await run(mmcliBinary, ["-K", "-m", modemPath]);
+		return readStringList(mmcliParseSep(stdout), "modem.generic.ports");
+	} catch (err) {
+		logger.error(`mmGetModemPorts err: ${describeCliError(err)}`);
 		return undefined;
 	}
 }

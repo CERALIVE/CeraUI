@@ -43,7 +43,14 @@ export { MAX_LINKS, STALE_THRESHOLD_MS } from "./hud/constants";
 export { deriveHudState, isUpdateInProgress } from "./hud/derive";
 
 // Bonded-link signal derivation.
-export { buildLinks, modemConnectionState } from "./hud/link-status";
+export {
+	type BondSnapshot,
+	buildBond,
+	buildLinks,
+	isBondExcluded,
+	isBondMember,
+	modemConnectionState,
+} from "./hud/link-status";
 // SoC telemetry parsing.
 export {
 	parseCurrentAmps,

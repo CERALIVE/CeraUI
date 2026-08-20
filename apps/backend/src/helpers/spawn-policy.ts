@@ -107,7 +107,7 @@ export interface SpawnSite {
 }
 
 /**
- * THE REGISTRY — all 15 production spawn sites (T1 inventory). Test-only spawns
+ * THE REGISTRY — every production spawn site (T1 inventory, grown since). Test-only spawns
  * are excluded by design. `cerastream` is excluded: it is IPC-driven, not spawned.
  */
 export const SPAWN_POLICY: readonly SpawnSite[] = [
@@ -194,6 +194,40 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		status: "enforced",
 		mechanism:
 			"NmcliMonitorManager.stop() kills the child; restart loop is bounded-backoff supervised",
+	},
+	{
+		id: "monitor.udevMonitor",
+		file: "modules/cellular/udev-monitor.ts",
+		symbol: "spawnUdevMonitor / UdevMonitorSupervisor",
+		command: "[udevadm, monitor, --property, --udev, --subsystem-match=…]",
+		class: "watcher",
+		contract: {
+			timed: false,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: true,
+			lifetimeTimeoutExempt: true,
+		},
+		status: "enforced",
+		mechanism:
+			"UdevMonitorSupervisor.stop() kills the child; restart loop is bounded-backoff supervised (twin of monitor.nmcliMonitor)",
+	},
+	{
+		id: "modems.mmcliInhibit",
+		file: "modules/modems/transition-ports.ts",
+		symbol: "createInhibitPort (defaultInhibitPortDeps.spawn)",
+		command: "[mmcli, --inhibit-device=<uid>]",
+		class: "watcher",
+		contract: {
+			timed: false,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: true,
+			lifetimeTimeoutExempt: true,
+		},
+		status: "enforced",
+		mechanism:
+			"the child IS the inhibition lease — MM scopes an inhibit to the caller's bus connection, so it must outlive any wall-clock bound and is released by killing it; spawnWatcher's abort is `uninhibit`, and the transaction's AT watchdog force-releases it on a hang",
 	},
 	{
 		id: "system.power",
@@ -347,6 +381,40 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		status: "enforced",
 		mechanism:
 			"git rev-parse / `<exec> -v` quick probes; Bun.spawnSync timeout caps a hung probe → 'unknown revision'",
+	},
+	{
+		id: "srtlaSend.capabilityProbe",
+		file: "modules/streaming/srtla-capabilities.ts",
+		symbol: "probeSrtlaSenderCapabilities",
+		command: "[srtla_send, --capabilities-json]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout(CAPABILITY_PROBE_TIMEOUT_MS); the ADR-003 §7 caller contract turns a timeout — like any non-zero exit or unparseable output — into 'no bind-map support' and a legacy spawn, never a failed start",
+	},
+	{
+		id: "connectivity.deviceBoundProbe",
+		file: "modules/network/device-bound-probe.ts",
+		symbol: "checkConnectivityViaDevice",
+		command: "[curl, --interface, <ifname>, …, http://<addr>/generate_204]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"curl's own --max-time inside a spawnWithTimeout(DEVICE_PROBE_TIMEOUT_MS + 1s) outer cap; every failure mode (missing curl, timeout, non-204) resolves `false`, so a dead probe costs the interface an election round rather than throwing into the 2 s gateway loop",
 	},
 ] as const;
 

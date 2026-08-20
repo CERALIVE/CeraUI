@@ -16,11 +16,13 @@
 */
 
 import { invariant } from "../../helpers/invariant.ts";
+import { logger } from "../../helpers/logger.ts";
 
-import { setup } from "../setup.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 
+import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
 import type { ModemId } from "./mmcli.ts";
+import { buildProjectedModemsMessage } from "./modem-wire-producer.ts";
 import {
 	type AvailableNetwork,
 	getAvailableNetworksForModem,
@@ -30,6 +32,7 @@ import {
 	type ModemConfig,
 	type SimLock,
 } from "./modems-state.ts";
+import { evaluateRoamingAdvisoriesForWire } from "./roaming-advisory.ts";
 
 type ModemsResponseModemStatus = {
 	connection: string;
@@ -55,7 +58,7 @@ export type ModemsResponseModemFull = ModemsResponseModemBase & {
 	config?: Pick<
 		ModemConfig,
 		"apn" | "username" | "password" | "roaming" | "network" | "autoconfig"
-	>;
+	> & { autoconfig_supported: boolean };
 	no_sim?: true;
 	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
@@ -111,7 +114,8 @@ function buildModemMessage(
 				password: modem.config.password,
 				roaming: modem.config.roaming,
 				network: modem.config.network,
-				autoconfig: !!setup.has_gsm_autoconfig && modem.config.autoconfig,
+				autoconfig: resolveGsmAutoconfigSupport() && modem.config.autoconfig,
+				autoconfig_supported: resolveGsmAutoconfigSupport(),
 			};
 		} else {
 			fullState.no_sim = true;
@@ -126,6 +130,14 @@ function buildModemMessage(
 	return entry;
 }
 
+/**
+ * The PRE-PHASE-B builder: mmcli modems, legacy fields only. NOT what reaches
+ * the wire any more ({@link buildModemsWireMessage} is), and deliberately kept:
+ * it is the independent implementation `modem-wire-projection.test.ts` asserts
+ * the projection byte-matches — rewrite it in terms of the projection and that
+ * assertion compares the projector to itself — and it is the wire builder's
+ * fail-safe fallback.
+ */
 export function buildModemsMessage(
 	modemsFullState: Record<number, true> | undefined = undefined,
 ) {
@@ -140,8 +152,44 @@ export function buildModemsMessage(
 	return msg;
 }
 
+/**
+ * What actually reaches every `modems` consumer — broadcast, post-login push,
+ * and both pull procedures. The Phase-B projection: every legacy field
+ * byte-identical, plus `stable_key` on an anchorable mmcli row and a
+ * `router-ethernet` row per claimed netns dongle.
+ *
+ * FAIL-SAFE — a throwing projection falls back to the legacy builder rather
+ * than blanking the list: the additive fields are enrichment, the legacy ones
+ * are how an operator sees their modems at all.
+ */
+export function buildModemsWireMessage(
+	modemsFullState: Record<number, true> | undefined = undefined,
+) {
+	try {
+		return buildProjectedModemsMessage(modemsFullState);
+	} catch (error) {
+		logger.warn("modem wire projection failed; serving the legacy message", {
+			error,
+		});
+		return buildModemsMessage(modemsFullState);
+	}
+}
+
 export function broadcastModems(
 	modemsFullState: Record<number, true> | undefined = undefined,
 ) {
-	broadcastMsg("status", { modems: buildModemsMessage(modemsFullState) });
+	const modems = buildModemsWireMessage(modemsFullState);
+	broadcastMsg("status", { modems });
+
+	// The roaming advisory reconciles AFTER the payload is on the wire, and is
+	// fenced: it is informational, so a failure in it must cost an operator a
+	// badge — never the modem list itself. Reconciling against the message that
+	// actually went out (rather than against the state cache) is what makes
+	// absence from the broadcast the retraction evidence for a device that
+	// disappeared; see `roaming-advisory.ts`.
+	try {
+		evaluateRoamingAdvisoriesForWire(modems);
+	} catch (error) {
+		logger.warn("roaming advisory evaluation failed", { error });
+	}
 }

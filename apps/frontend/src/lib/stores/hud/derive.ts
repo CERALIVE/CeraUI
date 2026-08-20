@@ -15,7 +15,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import type { HudSources, HudState, HudTimestamps } from "$lib/types/hud";
 import { STALE_THRESHOLD_MS } from "./constants";
-import { buildLinks } from "./link-status";
+import { buildBond } from "./link-status";
 import {
 	parseCurrentAmps,
 	parseSensorNumber,
@@ -125,6 +125,17 @@ export function deriveHudState(
 	const ceilingKbps = sources.config?.max_br ?? null;
 	const bitrate = deriveBitrateReading(sources.engineBitrate, ceilingKbps);
 
+	const bond = buildBond(
+		sources.modems,
+		sources.wifi,
+		sources.netif,
+		modemsStale,
+		wifiStale,
+		isFullyStale,
+		staleInterfaces,
+		sources.isStreaming,
+	);
+
 	return {
 		isStreaming: sources.isStreaming,
 		isStreamingStale: streamingStale,
@@ -138,16 +149,8 @@ export function deriveHudState(
 		isBitrateBelowCeiling: sources.isStreaming && bitrate.belowCeiling,
 		isBitrateStale: streamingStale,
 
-		links: buildLinks(
-			sources.modems,
-			sources.wifi,
-			sources.netif,
-			modemsStale,
-			wifiStale,
-			isFullyStale,
-			staleInterfaces,
-			sources.isStreaming,
-		),
+		links: bond.links,
+		unbondedLinkCount: bond.unbondedCount,
 
 		staleInterfaces,
 

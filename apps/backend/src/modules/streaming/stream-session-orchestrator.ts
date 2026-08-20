@@ -6,6 +6,7 @@ import {
 	isLegalLifecycleTransition,
 	isTerminalConfigChangePhase,
 	type LifecycleState,
+	type StartFailureClass,
 	type StartResult,
 	type StopResult,
 } from "@ceraui/rpc/schemas";
@@ -24,10 +25,19 @@ import {
 } from "./config-change-bridge.ts";
 import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import {
+	type LifecycleAdmission,
+	type LifecycleLease,
+	MODEM_TRANSITION_ACTIVE,
+	streamingBlockingMutation,
+	tryAcquireLifecycle,
+} from "./lifecycle-admission.ts";
+import { awaitRecoveryBarrier, isRecoveryPending } from "./recovery-barrier.ts";
+import {
 	classifyStartFailure,
 	newAttemptId,
 	type RetryPolicy,
 	type SuppressionContext,
+	typedStartFailure,
 } from "./start-failure-taxonomy.ts";
 import {
 	RECONFIGURE_DEADLINE_MS,
@@ -166,7 +176,42 @@ export type StreamSessionOrchestratorDeps = {
 	 * restart a stream the operator deliberately ended.
 	 */
 	readonly onStreamStopped?: (cause: StreamStopCause) => void;
+	/**
+	 * The LifecycleInterlock acquisition (`lifecycle-admission.ts`). ABSENT means
+	 * "no interlock" — the lease is PROCESS-WIDE and `bun test` runs one process,
+	 * so defaulting it on here would let any unit test that leaves a start
+	 * pending strand every later test's admission. It is wired at the production
+	 * singleton and proven through the real `streaming.start` procedure instead.
+	 */
+	readonly admitLifecycle?: () => LifecycleAdmission;
+	/**
+	 * The modem-mutation replay barrier, wired at the production singleton for
+	 * the same process-wide-state reason as `admitLifecycle`.
+	 *
+	 * `awaitRecovery` is what an INTERNAL boot origin does instead of failing:
+	 * restoration converts an unhandled refusal into a terminal `start_failed`
+	 * and retires its one-shot marker, and autostart records a failed result with
+	 * no retry — so refusing either of them during replay does not defer the boot
+	 * intent, it destroys it. EXTERNAL arrivals get the typed `recovery_pending`
+	 * refusal instead, which costs the caller only a retry.
+	 */
+	readonly awaitRecovery?: () => Promise<void>;
+	readonly recoveryPending?: () => boolean;
+	/**
+	 * A modem whose failed rollback holds GLOBAL stream autostart. Fail-closed:
+	 * the device cannot say what state that modem is in, so it does not bond it.
+	 */
+	readonly blockingMutation?: () => { readonly stableKey: string } | undefined;
 };
+
+/**
+ * Origins that AWAIT recovery rather than being refused by it. Both are
+ * boot-time and one-shot: neither has a caller who can retry.
+ */
+const INTERNAL_LAUNCH_ORIGINS: ReadonlySet<StreamLaunchOrigin> = new Set([
+	"autostart",
+	"restoration",
+]);
 
 type ActiveAttempt = {
 	readonly attemptId: string;
@@ -280,8 +325,34 @@ export function createStreamSessionOrchestrator(
 		return { result: "cancelled", attemptId: attempt.attemptId };
 	};
 
+	const refuseStart = (
+		attemptId: string,
+		failureClass: StartFailureClass,
+		code: string,
+	): StartResult => ({
+		result: "failed",
+		attemptId,
+		failure: typedStartFailure(attemptId, "params", failureClass, code),
+	});
+
 	const start = async (request: StreamStartRequest): Promise<StartResult> => {
 		const attemptId = deps.createAttemptId();
+
+		// The barrier is consulted BEFORE the duplicate-start check, because it is
+		// the only gate whose internal answer is to WAIT: awaiting first means an
+		// internal origin is judged against the state replay left behind rather
+		// than the one it raced.
+		if (INTERNAL_LAUNCH_ORIGINS.has(request.origin)) {
+			await deps.awaitRecovery?.();
+		} else if (deps.recoveryPending?.() === true) {
+			return refuseStart(attemptId, "recovery_pending", "recovery_pending");
+		}
+
+		const blocked = deps.blockingMutation?.();
+		if (blocked !== undefined) {
+			return refuseStart(attemptId, "mutation_blocked", blocked.stableKey);
+		}
+
 		if (
 			(state === "streaming" || state === "stop_failed") &&
 			deps.getStreamingStatus?.() === false
@@ -292,6 +363,60 @@ export function createStreamSessionOrchestrator(
 		}
 		if (state !== "idle") return { result: "busy", attemptId };
 
+		// The interlock is consulted HERE and nowhere else: after the
+		// duplicate-start rejection above (so a genuine duplicate keeps its own
+		// `busy` → START_IN_PROGRESS rather than decaying into a generic
+		// lease-busy answer) and before the attempt goes in-flight below, because
+		// a modem re-enumeration admitted alongside it would tear a bond link out
+		// from under a launch that has already spawned the sender.
+		const admitLifecycle = deps.admitLifecycle;
+		if (admitLifecycle === undefined)
+			return await admittedStart(attemptId, request);
+
+		const admission = admitLifecycle();
+		if (!admission.admitted) {
+			// `start_invalid` renders as "check your settings", which is wrong
+			// advice for a modem that is re-enumerating — nothing is misconfigured.
+			const failureClass =
+				admission.refusal === MODEM_TRANSITION_ACTIVE
+					? "modem_transition_active"
+					: "start_invalid";
+			return {
+				result: "failed",
+				attemptId,
+				failure: typedStartFailure(
+					attemptId,
+					"params",
+					failureClass,
+					admission.refusal,
+				),
+			};
+		}
+		return await releasingLease(admission.lease, () =>
+			admittedStart(attemptId, request),
+		);
+	};
+
+	/**
+	 * The lease is released on EVERY exit of the admission — including a throw —
+	 * so a launch that blows up mid-flight can never leave a modem transition
+	 * permanently refused.
+	 */
+	const releasingLease = async (
+		lease: LifecycleLease,
+		run: () => Promise<StartResult>,
+	): Promise<StartResult> => {
+		try {
+			return await run();
+		} finally {
+			lease.release();
+		}
+	};
+
+	const admittedStart = async (
+		attemptId: string,
+		request: StreamStartRequest,
+	): Promise<StartResult> => {
 		generation += 1;
 		const attempt: ActiveAttempt = {
 			attemptId,
@@ -696,6 +821,13 @@ const productionOrchestrator = createStreamSessionOrchestrator({
 				logger.warn("stream restoration arming failed", { error }),
 			);
 	},
+	// Acquired at the orchestrator rather than in `streaming.procedure.ts`: every
+	// launch origin (ui / autostart / remote-control / set-profile / restoration)
+	// enters through this ONE mutex, so the UI procedure is not the only one held.
+	admitLifecycle: () => tryAcquireLifecycle("streaming"),
+	awaitRecovery: awaitRecoveryBarrier,
+	recoveryPending: isRecoveryPending,
+	blockingMutation: streamingBlockingMutation,
 	// Statically imported, unlike the arming hook: `armed-stream-marker.ts` holds
 	// no streaming-graph edges, and a SYNCHRONOUS clear is what guarantees an
 	// operator Stop has disarmed restoration before anything else can read the

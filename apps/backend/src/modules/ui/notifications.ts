@@ -28,7 +28,7 @@
   isDismissable - is the user allowed to hide it?
 */
 
-import type { NotificationAction } from "@ceraui/rpc/schemas";
+import type { NotificationAction, NotificationType } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import { getms } from "../../helpers/time.ts";
@@ -46,7 +46,12 @@ import {
 
 type Notification = {
 	name: string;
-	type: "success" | "warning" | "error";
+	// The SHARED wire enum, not a local re-spelling of it. The local union used
+	// to omit `info`, which the wire schema and BOTH render surfaces (the toast
+	// host's `toast[type]`, the panel's icon/tone maps) have always accepted —
+	// so a calm informational notification was unrepresentable here for no
+	// reason other than drift. Importing the type is what stops it recurring.
+	type: NotificationType;
 	msg: string;
 	key?: string;
 	params?: Record<string, unknown>;

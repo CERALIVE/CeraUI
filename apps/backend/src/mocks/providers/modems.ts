@@ -3,11 +3,14 @@
 	Simulates mmcli (ModemManager) output for development mode
 */
 
+import type { UsbModeOptionsOutput } from "@ceraui/rpc/schemas";
+
 import type {
 	SimPukUnlockResult,
 	SimUnlockResult,
 } from "../../modules/modems/mmcli.ts";
 import type { LockedModem } from "../../modules/modems/sim-autounlock.ts";
+import type { SimPin2UnlockResult } from "../../modules/modems/sim-pin2.ts";
 import {
 	MOCK_SIM_PIN_RETRIES,
 	MOCK_SIM_PUK_RETRIES,
@@ -55,10 +58,22 @@ export function handleMmcliCommand(args: string[]): string | null {
 		return getMockModemList();
 	}
 
+	// mmcli -K -m <id> -s <sms> (read one stored message). Checked BEFORE the
+	// generic `-m` branch, which would otherwise answer a modem-info block to an
+	// SMS read and hand the parser output it can only reject.
+	const smsIndex = args.indexOf("-s");
+	if (smsIndex !== -1 && args[smsIndex + 1]) {
+		return getMockSmsRecord(args[smsIndex + 1] as string);
+	}
+
 	// mmcli -K -m <id> (get modem info)
 	const modemIndex = args.indexOf("-m");
 	if (modemIndex !== -1 && args[modemIndex + 1]) {
 		const modemId = Number.parseInt(args[modemIndex + 1] as string, 10);
+
+		if (args.includes("--messaging-list-sms")) {
+			return getMockSmsList();
+		}
 
 		// Check for 3gpp-scan flag
 		if (args.includes("--3gpp-scan")) {
@@ -126,10 +141,13 @@ function getMockModemInfo(modemId: number): string {
 			? "sim-pin"
 			: simLock === "puk-locked"
 				? "sim-puk"
-				: "none";
+				: simLock === "pin2-locked"
+					? "sim-pin2"
+					: "none";
 	const unlockRetries = [
 		`sim-pin (${sim?.pinRetries ?? MOCK_SIM_PIN_RETRIES})`,
 		`sim-puk (${sim?.pukRetries ?? MOCK_SIM_PUK_RETRIES})`,
+		`sim-pin2 (${sim?.pin2Retries ?? MOCK_SIM_PIN_RETRIES})`,
 	];
 
 	const signal = Math.round(getModemSignal(modemId));
@@ -289,10 +307,88 @@ function getMockNetworkScan(modemId: number): string {
 }
 
 /**
+ * Dev-mode stand-in for a stored inbox. Deliberately banal fixture copy: a mock
+ * that shipped a realistic-looking one-time code would put a credential-shaped
+ * string into every developer's log ring for no benefit.
+ */
+const MOCK_SMS_FIXTURES: ReadonlyArray<{
+	index: number;
+	from: string;
+	timestamp: string;
+	text: string;
+	state: string;
+}> = [
+	{
+		index: 2,
+		from: "CERALIVE",
+		timestamp: "2026-08-16T09:12:44-05",
+		text: "Mock inbox message, newest.",
+		state: "received",
+	},
+	{
+		index: 1,
+		from: "44556",
+		timestamp: "2026-08-15T21:03:10-05",
+		text: "Mock inbox message, middle.",
+		state: "received",
+	},
+	{
+		index: 0,
+		from: "44556",
+		timestamp: "2026-08-14T07:55:02-05",
+		text: "Mock inbox message, oldest.",
+		state: "stored",
+	},
+];
+
+function getMockSmsList(): string {
+	const lines: string[] = [
+		`modem.messaging.sms.length: ${MOCK_SMS_FIXTURES.length}`,
+	];
+	MOCK_SMS_FIXTURES.forEach((sms, i) => {
+		lines.push(
+			`modem.messaging.sms.value[${i + 1}]: /org/freedesktop/ModemManager1/SMS/${sms.index}`,
+		);
+	});
+	return lines.join("\n");
+}
+
+function getMockSmsRecord(selector: string): string {
+	const index = Number.parseInt(selector.replace(/^.*\//, ""), 10);
+	const sms = MOCK_SMS_FIXTURES.find((entry) => entry.index === index);
+	if (!sms) {
+		return "";
+	}
+	return [
+		`sms.dbus-path                 : /org/freedesktop/ModemManager1/SMS/${sms.index}`,
+		`sms.content.number            : ${sms.from}`,
+		`sms.content.text              : ${sms.text}`,
+		"sms.content.data              : --",
+		"sms.properties.pdu-type       : deliver",
+		`sms.properties.state          : ${sms.state}`,
+		`sms.properties.timestamp      : ${sms.timestamp}`,
+	].join("\n");
+}
+
+/**
  * Check if we should mock modem commands
  */
 export function shouldMockModems(): boolean {
 	return shouldUseMocks();
+}
+
+/**
+ * The certified USB-mode targets a mocked modem offers.
+ *
+ * A dev host has no udev device to resolve and no firmware revision to match, so
+ * the real certification read would answer `identity_unresolved` for every row
+ * and the switch surface would be unreachable in dev and in e2e. This is the
+ * scenario's answer for it, in the same spirit as the other fixtures here: it
+ * exercises the OFFERED arm, and the withheld arms are reached by driving the
+ * RPC directly.
+ */
+export function getMockUsbModeOptions(_device: string): UsbModeOptionsOutput {
+	return { certified: ["mbim", "ecm-ncm"] };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,6 +428,7 @@ export function setMockSimLockState(modemId: number, lock: MockSimLock): void {
 		lock,
 		pinRetries: lock === "puk-locked" ? 0 : MOCK_SIM_PIN_RETRIES,
 		pukRetries: MOCK_SIM_PUK_RETRIES,
+		pin2Retries: MOCK_SIM_PIN_RETRIES,
 	});
 }
 
@@ -446,4 +543,52 @@ export function mockAttemptSimPukUnlock(
 	}
 	setMockSimState(String(modemId), { lock: "puk-locked", pukRetries });
 	return { success: false, error: "wrong-puk", remainingAttempts: pukRetries };
+}
+
+/**
+ * Fixture PIN2 the mock accepts. Deliberately DIFFERENT from
+ * {@link MOCK_SIM_PIN_FIXTURE}: a shared value would let a test pass while the
+ * UI submitted the PIN2 code through the PIN1 procedure, which is the exact
+ * conflation this whole flow exists to avoid.
+ */
+export const MOCK_SIM_PIN2_FIXTURE = "1111";
+
+/**
+ * Mock a SINGLE PIN2 submit, classified exactly like the real
+ * {@link unlockSimPin2}. Note what it does NOT do: a wrong PIN2 never trips the
+ * SIM to a PIN1/PUK1 state, because PIN2 has its own independent budget and
+ * exhausting it yields PUK2, not PUK.
+ */
+export function mockAttemptSimPin2Unlock(
+	modemPath: string,
+	pin2: string,
+): SimPin2UnlockResult {
+	const modemId = modemPathToId(modemPath);
+	if (modemId === null) {
+		return { state: "error" };
+	}
+	const sim = getMockSimState(modemId);
+	if (!sim) {
+		return { state: "error" };
+	}
+
+	if (sim.lock !== "pin2-locked") {
+		return { state: "no-pin2-lock" };
+	}
+
+	if (pin2 === MOCK_SIM_PIN2_FIXTURE) {
+		setMockSimLockState(modemId, "unlocked");
+		return { state: "success" };
+	}
+
+	const pin2Retries = Math.max(
+		0,
+		(sim.pin2Retries ?? MOCK_SIM_PIN_RETRIES) - 1,
+	);
+	if (pin2Retries === 0) {
+		setMockSimState(String(modemId), { lock: "pin2-locked", pin2Retries: 0 });
+		return { state: "puk2-required" };
+	}
+	setMockSimState(String(modemId), { lock: "pin2-locked", pin2Retries });
+	return { state: "wrong-pin2", remainingAttempts: pin2Retries };
 }

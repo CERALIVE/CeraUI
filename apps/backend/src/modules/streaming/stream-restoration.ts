@@ -64,6 +64,7 @@ import {
 	writeArmedStreamMarker,
 } from "./armed-stream-marker.ts";
 import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
+import { awaitRecoveryBarrier } from "./recovery-barrier.ts";
 import { getStreamSessionSnapshot } from "./stream-session-orchestrator.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
 
@@ -183,6 +184,14 @@ export interface StreamRestorationDeps {
 	readonly logger: RestorationLogger;
 	readonly pollIntervalMs: number;
 	readonly unknownDeadlineMs: number;
+	/**
+	 * Resolves once modem-mutation replay has finished. It is awaited BEFORE the
+	 * marker is read, not merely before the launch: this path terminalizes its
+	 * one-shot marker on an unhandled refusal, so judging a marker against a
+	 * half-recovered device would spend the single restoration attempt on a
+	 * verdict the recovery was about to change.
+	 */
+	readonly awaitRecovery: () => Promise<void>;
 }
 
 /**
@@ -301,6 +310,7 @@ function defaultDeps(): StreamRestorationDeps {
 		logger: defaultLogger,
 		pollIntervalMs: RESTORATION_POLL_MS,
 		unknownDeadlineMs: RESTORATION_UNKNOWN_DEADLINE_MS,
+		awaitRecovery: awaitRecoveryBarrier,
 	};
 }
 
@@ -345,6 +355,7 @@ let inflight: Promise<RestorationRunOutcome> | undefined;
 async function runOnce(
 	deps: StreamRestorationDeps,
 ): Promise<RestorationRunOutcome> {
+	await deps.awaitRecovery();
 	const startedAt = deps.now();
 	for (;;) {
 		const marker = readArmedStreamMarker(deps.marker);

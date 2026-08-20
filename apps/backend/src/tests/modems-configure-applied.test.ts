@@ -4,6 +4,10 @@ import { modemConfigOutputSchema } from "@ceraui/rpc/schemas";
 import { call } from "@orpc/server";
 
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
+import {
+	refreshModemIdPaths,
+	resetModemWireProducer,
+} from "../modules/modems/modem-wire-producer.ts";
 import { getModemIds, removeModem } from "../modules/modems/modems-state.ts";
 import { setModemsState } from "../modules/modems/state/modems-state-cache.ts";
 import { configureModemProcedure } from "../rpc/procedures/modems.procedure.ts";
@@ -30,10 +34,15 @@ function makeContext(): RPCContext {
 describe("modems.configure — applied echo", () => {
 	let priorMockMode: string | undefined;
 
-	beforeAll(() => {
+	beforeAll(async () => {
 		priorMockMode = process.env.MOCK_MODE;
 		process.env.MOCK_MODE = "true";
 		initMockService("multi-modem-wifi");
+		// A modem config write now takes the per-device mutation lease, which is
+		// keyed on the ID_PATH-derived stable key — so the scenario's id-path map
+		// has to be in the cache, exactly as the discovery loop puts it there on a
+		// real device.
+		await refreshModemIdPaths();
 	});
 
 	afterAll(() => {
@@ -44,6 +53,7 @@ describe("modems.configure — applied echo", () => {
 			removeModem(id);
 		}
 		setModemsState({});
+		resetModemWireProducer();
 		if (priorMockMode === undefined) {
 			delete process.env.MOCK_MODE;
 		} else {

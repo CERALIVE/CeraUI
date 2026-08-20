@@ -185,3 +185,98 @@ describe("BondedLinksSection — mock link-telemetry join (T5)", () => {
 		);
 	});
 });
+
+describe("BondedLinksSection — binary presence (todo 48)", () => {
+	// Todo 42 gave a non-carrying link a dimmed row plus an "Excluded" badge here.
+	// The operator's verdict was that a half-disabled ghost row is worse than no
+	// row: this panel is the BOND, so a link either carries traffic and appears,
+	// or it does not and is absent. Nothing is hidden — the count below states
+	// that such links exist, and their per-device row still owns the REASON.
+	it("renders a row for every link it is given and no excluded marker anywhere", () => {
+		const links = [linkFor("eth0", 0), linkFor("enx344b50000000", 1)];
+		const { container } = render(BondedLinksSection, {
+			props: { links, modemEntries: [], linkTelemetry: null },
+		});
+
+		expect(
+			container.querySelectorAll('[data-testid="bonded-link-card"]'),
+		).toHaveLength(2);
+		expect(
+			container.querySelector('[data-testid="bonded-link-excluded"]'),
+		).toBeNull();
+		expect(
+			cardFor(container, "eth0").getAttribute("data-bond-excluded"),
+		).toBeNull();
+	});
+
+	it("states how many links are NOT bonded so their absence is never silent", () => {
+		const { container, getByTestId } = render(BondedLinksSection, {
+			props: {
+				links: [linkFor("eth0", 0)],
+				modemEntries: [],
+				linkTelemetry: null,
+				unbondedCount: 3,
+			},
+		});
+
+		const note = getByTestId("bonded-links-not-bonded");
+		expect(note.getAttribute("data-not-bonded-count")).toBe("3");
+		expect(note.textContent).toContain("3");
+		expect(
+			container.querySelectorAll('[data-testid="bonded-link-card"]'),
+		).toHaveLength(1);
+	});
+
+	it("says it in the singular for exactly one", () => {
+		const { getByTestId } = render(BondedLinksSection, {
+			props: {
+				links: [linkFor("eth0", 0)],
+				modemEntries: [],
+				linkTelemetry: null,
+				unbondedCount: 1,
+			},
+		});
+
+		expect(getByTestId("bonded-links-not-bonded").textContent).toContain(
+			"1 link",
+		);
+	});
+
+	it("says nothing when every known link is bonded", () => {
+		const { queryByTestId } = render(BondedLinksSection, {
+			props: {
+				links: [linkFor("eth0", 0)],
+				modemEntries: [],
+				linkTelemetry: null,
+				unbondedCount: 0,
+			},
+		});
+
+		expect(queryByTestId("bonded-links-not-bonded")).toBeNull();
+	});
+
+	it("still explains an empty bond rather than reporting a bare 'no links'", () => {
+		const { getByTestId } = render(BondedLinksSection, {
+			props: {
+				links: [],
+				modemEntries: [],
+				linkTelemetry: null,
+				unbondedCount: 4,
+			},
+		});
+
+		expect(getByTestId("bonded-links-not-bonded").textContent).toContain("4");
+	});
+
+	it("keeps stale dimming — the one visual state a carrying link still has", () => {
+		const { container } = render(BondedLinksSection, {
+			props: {
+				links: [{ ...linkFor("eth0", 0), isStale: true }],
+				modemEntries: [],
+				linkTelemetry: null,
+			},
+		});
+
+		expect(cardFor(container, "eth0").className).toContain("opacity-50");
+	});
+});

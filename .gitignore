@@ -65,3 +65,6 @@ f3-qa/
 # Agent orchestration state (local only)
 .omo/
 *.tsbuildinfo
+
+# Dev/CI-only modem-mutation journal (the device writes /data/ceralive/modem-mutations)
+modem-mutations/

@@ -198,6 +198,10 @@ export const mockSimLockSchema = z.enum([
 	"unlocked",
 	"pin-locked",
 	"puk-locked",
+	// PIN2 is NOT a stronger "pin-locked". It leaves the modem fully operational
+	// (ModemManager never marks such a modem LOCKED), so it is its own state
+	// rather than a degree of the others — see modules/modems/sim-pin2.ts.
+	"pin2-locked",
 ]);
 export type MockSimLock = z.infer<typeof mockSimLockSchema>;
 
@@ -211,6 +215,7 @@ export const mockSimStateSchema = z.object({
 	lock: mockSimLockSchema,
 	pinRetries: z.number().int().min(0).max(3),
 	pukRetries: z.number().int().min(0).max(10),
+	pin2Retries: z.number().int().min(0).max(3).optional(),
 });
 export type MockSimState = z.infer<typeof mockSimStateSchema>;
 

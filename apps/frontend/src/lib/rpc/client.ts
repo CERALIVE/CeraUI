@@ -13,6 +13,8 @@ import type {
 	ClaimCodeOutput,
 	CompletePairingInput,
 	CompletePairingOutput,
+	FccUnlockOptionsInput,
+	FccUnlockOptionsOutput,
 	GetEngineOutput,
 	HotspotConfigInput,
 	HotspotToggleInput,
@@ -25,10 +27,18 @@ import type {
 	LoginInput,
 	LoginOutput,
 	LogoutOutput,
+	ModemBandsInput,
+	ModemBandsOutput,
 	ModemConfigInput,
 	ModemConfigOutput,
+	ModemGpsInput,
+	ModemGpsOutput,
 	ModemScanInput,
 	ModemScanOutput,
+	ModemSmsInput,
+	ModemSmsOutput,
+	ModemUssdInput,
+	ModemUssdOutput,
 	NetifConfigInput,
 	NetifConfigOutput,
 	PreviewTokenOutput,
@@ -38,13 +48,31 @@ import type {
 	ReloadAudioDelayOutput,
 	RemoteConfigInput,
 	Revisions,
+	SetFccUnlockInput,
+	SetFccUnlockOutput,
+	SetFiveGPreferenceInput,
+	SetFiveGPreferenceOutput,
 	SetIngestEnabledInput,
 	SetIngestEnabledOutput,
+	SetModemBandsInput,
+	SetModemBandsOutput,
+	SetModemGpsInput,
+	SetModemGpsOutput,
 	SetPasswordInput,
+	SetRouterControlInput,
+	SetRouterControlOutput,
+	SetRouterNetModeInput,
+	SetRouterNetModeOutput,
+	SetRouterSubnetInput,
+	SetRouterSubnetOutput,
 	SetSourceVisibilityInput,
 	SetSourceVisibilityOutput,
+	SetUsbModeInput,
+	SetUsbModeOutput,
 	SetWifiCountryInput,
 	SetWifiCountryOutput,
+	SimPin2UnlockInput,
+	SimPin2UnlockOutput,
 	SimPukUnlockInput,
 	SimPukUnlockOutput,
 	SimUnlockInput,
@@ -58,6 +86,11 @@ import type {
 	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
+	UsbModeOptionsInput,
+	UsbModeOptionsOutput,
+	UssdCancelInput,
+	UssdInitiateInput,
+	UssdRespondInput,
 	WifiConnectInput,
 	WifiDisconnectInput,
 	WifiForgetInput,
@@ -585,7 +618,86 @@ export interface TypedRPC {
 		configure: (input: ModemConfigInput) => Promise<ModemConfigOutput>;
 		scan: (input: ModemScanInput) => Promise<ModemScanOutput>;
 		unlockSim: (input: SimUnlockInput) => Promise<SimUnlockOutput>;
+		unlockSimPin2: (input: SimPin2UnlockInput) => Promise<SimPin2UnlockOutput>;
 		unlockSimPuk: (input: SimPukUnlockInput) => Promise<SimPukUnlockOutput>;
+		setUsbMode: (input: SetUsbModeInput) => Promise<SetUsbModeOutput>;
+		getUsbModeOptions: (
+			input: UsbModeOptionsInput,
+		) => Promise<UsbModeOptionsOutput>;
+		/**
+		 * The band surface. `getBands` is a pure read; `setBands` is the ONE
+		 * mutation, and `bands: ['any']` is its reset — ModemManager offers no
+		 * separate release verb, so there is deliberately no `resetBands` sibling
+		 * to keep in agreement with it.
+		 */
+		getBands: (input: ModemBandsInput) => Promise<ModemBandsOutput>;
+		setBands: (input: SetModemBandsInput) => Promise<SetModemBandsOutput>;
+		/**
+		 * Whether ModemManager ships an FCC-unlock procedure for this MODEL, and
+		 * whether the operator opted in. A pure read of the same catalog the write
+		 * gates on, so a toggle is never offered for a model the device refuses.
+		 */
+		getFccUnlock: (
+			input: FccUnlockOptionsInput,
+		) => Promise<FccUnlockOptionsOutput>;
+		/**
+		 * Opt this MODEL in or out. PER-MODEL, not per-unit: the mechanism is a
+		 * `<vid>:<pid>` symlink, so it applies to every attached device matching it.
+		 */
+		setFccUnlock: (input: SetFccUnlockInput) => Promise<SetFccUnlockOutput>;
+		/**
+		 * Rank 5G against LTE. `applied` is the posture the device READ BACK, never
+		 * the request — a radio is entitled to clamp a mode set it cannot honour,
+		 * so a UI locks its selection to `applied` and to nothing else.
+		 */
+		setFiveGPreference: (
+			input: SetFiveGPreferenceInput,
+		) => Promise<SetFiveGPreferenceOutput>;
+		/**
+		 * Read the GNSS module's state and its CURRENT fix. There is no history and
+		 * no upload: a fix exists only while it is on screen.
+		 */
+		getGps: (input: ModemGpsInput) => Promise<ModemGpsOutput>;
+		setGps: (input: SetModemGpsInput) => Promise<SetModemGpsOutput>;
+		setRouterControl: (
+			input: SetRouterControlInput,
+		) => Promise<SetRouterControlOutput>;
+		/**
+		 * Select one of the radio modes the dongle's OWN firmware advertised.
+		 *
+		 * Capability-gated on the device: a firmware that will not name a catalog
+		 * is refused before any request document is built, and answers with the
+		 * vendor's own error code rather than a generic failure.
+		 */
+		setRouterNetMode: (
+			input: SetRouterNetModeInput,
+		) => Promise<SetRouterNetModeOutput>;
+		/**
+		 * Move the dongle's LAN subnet. OPTIONAL HYGIENE, never a prerequisite —
+		 * two same-model dongles sharing one factory subnet already bond. The
+		 * device arms a durable rollback before the write and auto-restores when
+		 * it cannot be reached at its new address.
+		 */
+		setRouterSubnet: (
+			input: SetRouterSubnetInput,
+		) => Promise<SetRouterSubnetOutput>;
+		/**
+		 * Read-only. This entry has no `sendSms`/`deleteSms` sibling and is not
+		 * going to grow one — the backend grep-gates every such verb out of the
+		 * modem surface, so a type here would be the only place the promise
+		 * could quietly break.
+		 */
+		getSms: (input: ModemSmsInput) => Promise<ModemSmsOutput>;
+		/**
+		 * The gated USSD module. The three verbs are ONE session state machine:
+		 * a verb that is illegal for the session's current state answers a typed
+		 * refusal and dispatches nothing, and an LTE-only carrier refusal is
+		 * reported as `lte-only-unsupported` rather than as a device limit.
+		 */
+		getUssd: (input: ModemUssdInput) => Promise<ModemUssdOutput>;
+		ussdInitiate: (input: UssdInitiateInput) => Promise<ModemUssdOutput>;
+		ussdRespond: (input: UssdRespondInput) => Promise<ModemUssdOutput>;
+		ussdCancel: (input: UssdCancelInput) => Promise<ModemUssdOutput>;
 	};
 	wifi: {
 		getStatus: () => Promise<unknown>;

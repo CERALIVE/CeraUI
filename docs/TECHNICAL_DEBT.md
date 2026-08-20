@@ -383,6 +383,25 @@ delay slider is now enabled while streaming; the `coming-soon` affordance and
 
 ---
 
+```debt
+id: TD-modem-usage-policy-write
+title: Modem data-usage policy (cycle day + advisory limit) is read-only — no write path exists
+track: 2
+status: resolved
+exit_criteria: capability:modem_usage_policy_setter
+owner: ceraui-team
+registered_at: 2026-08-16
+resolved_at: 2026-08-16
+unblock: RESOLVED. `@ceralive/modem-control` gained `setUsagePolicy` (a versioned, 0600, fail-soft local policy store — ModemManager itself has no data-usage API, verified against a live MM 1.24.2 whose only threshold surface is `Signal.SetupThresholds` over RSSI). `modems.configure` now carries tri-state `data_usage_cycle_day` / `data_usage_threshold_bytes` with an applied echo, the wire carries `modem.data_usage_policy` (including an explicit `supported` capability, so a device pinned to a package without the setter renders the controls disabled-with-reason rather than accepting a write it would drop), and `ModemConfigDialog`'s usage card offers a real cycle-day picker and threshold input. The original blocker read: `@ceralive/modem-control@0.2.0` publishes no usage-policy setter — only `DesiredUsage`, a transient `UsageObservation.usage`, a planner receipt, and a sampler-counter store — so `modemConfigInputSchema` deliberately declares no `data_usage_cycle_day` / `data_usage_threshold_bytes` fields (see the note in `packages/rpc/src/schemas/modems.schema.ts`). The READ side already reports both values, so `ModemConfigDialog`'s usage card DISPLAYS them and offers no control: an input the device accepts and silently drops would show the operator's setting reverting with no explanation. Three layers must land together. (1) `modem-stack`'s `control/` package must export a usage-policy setter and be republished. (2) CeraUI must bump its `@ceralive/modem-control` pin and add the two additive input fields plus their applied echo to `modems.configure`. (3) `ModemConfigDialog`'s usage card replaces the `coming-soon` affordance with a real cycle-day picker and threshold input under the standard applied-echo field lock. When all three are in place, remove the `data-debt-id="TD-modem-usage-policy-write"` marker from `ModemConfigDialog.svelte` and flip this entry to resolved.
+```
+
+The usage card now carries both halves: the COUNTERS (`modem-usage-cycle-day` /
+`modem-usage-threshold`) render when the device reports them, and the POLICY
+controls (`modem-usage-policy`) render whenever the device publishes a policy
+block — which is every row, since a setting is knowable before a byte is counted.
+
+---
+
 ## Related Documents
 
 | Document | Scope |

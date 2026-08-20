@@ -46,6 +46,10 @@ const TERMINAL_NOTIFICATION_KEYS: Readonly<Record<StartFailureClass, string>> =
 		engine_internal: "notifications.streamStartInternalFailed",
 		audio_source_unavailable:
 			"notifications.streamStartAudioSourceUnavailableFailed",
+		modem_transition_active:
+			"notifications.streamStartModemTransitionActiveFailed",
+		recovery_pending: "notifications.streamStartRecoveryPendingFailed",
+		mutation_blocked: "notifications.streamStartMutationBlockedFailed",
 	};
 
 // A class whose terminal cause has nothing to do with the engine needs its own
@@ -53,6 +57,12 @@ const TERMINAL_NOTIFICATION_KEYS: Readonly<Record<StartFailureClass, string>> =
 const TERMINAL_FALLBACK_MESSAGES: Partial<Record<StartFailureClass, string>> = {
 	audio_source_unavailable:
 		"Stream failed to start: the selected audio input is not available. Reconnect it or choose another audio source.",
+	modem_transition_active:
+		"Stream failed to start: a modem is switching USB mode and its link is about to change. Wait for the switch to finish, then start again.",
+	recovery_pending:
+		"Stream failed to start: the device is still finishing modem recovery after a restart. Try again in a moment.",
+	mutation_blocked:
+		"Stream failed to start: a modem change could not be undone, so its state is unknown. Review the blocked modem in Settings before streaming.",
 };
 
 function notificationParams(

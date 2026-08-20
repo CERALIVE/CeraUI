@@ -40,6 +40,10 @@ import {
 	resolveAutoAsrcFromLiveState,
 	setResolvedAsrcFromStart,
 } from "../auto-audio.ts";
+import {
+	defaultBindMapSpawnDeps,
+	resolveBindMapArgs,
+} from "../bind-map-spawn.ts";
 import { getLastCapabilities } from "../capabilities.ts";
 import { SRTLA_LISTEN_PORT } from "../constants.ts";
 import { embeddedAudioActive } from "../embedded-audio.ts";
@@ -52,6 +56,7 @@ import {
 } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
 import { replayPreviewEncodeMode } from "../preview-encode-replay.ts";
+import { getLastPublishedBond } from "../srtla.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
@@ -215,21 +220,30 @@ export async function startStream(
 			phase: "params",
 		};
 	}
+	// ADR-003 §7: the capability probe runs BEFORE the argument vector is built,
+	// so a new CeraUI against an OLD sender emits the byte-identical legacy vector.
+	const bindMapArgs = await resolveBindMapArgs(
+		srtlaSendExec,
+		defaultBindMapSpawnDeps(getLastPublishedBond),
+	);
 	const transaction = createLaunchTransaction(attemptId, {
 		warn: (message, meta) => logger.warn(message, meta),
 	});
 	try {
 		const sender = spawnStreamingLoop(
 			srtlaSendExec,
-			buildSrtlaSendArgs({
-				listenPort: SRTLA_LISTEN_PORT,
-				srtlaHost: srtlaAddr,
-				srtlaPort,
-				ipsFile: setup.ips_file,
-				statsFile,
-				controlSocket,
-				execPath: setup.srtla_path,
-			}),
+			[
+				...buildSrtlaSendArgs({
+					listenPort: SRTLA_LISTEN_PORT,
+					srtlaHost: srtlaAddr,
+					srtlaPort,
+					ipsFile: setup.ips_file,
+					statsFile,
+					controlSocket,
+					execPath: setup.srtla_path,
+				}),
+				...bindMapArgs,
+			],
 			(err) => {
 				const resolved = resolveProcessError("srtla", err);
 				if (resolved) {

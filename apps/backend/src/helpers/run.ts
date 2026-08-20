@@ -130,6 +130,9 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"iw",
 	// Arms the transient restore timer that reverts an unattended regdomain change.
 	"systemd-run",
+	// SIM PIN2 verification only. ModemManager exposes no PIN2 operation of any
+	// kind, so this is the ONLY route to it; see modules/modems/sim-pin2.ts.
+	"qmicli",
 ]);
 
 /**
@@ -164,19 +167,30 @@ export function argMatch(re: RegExp, v: string): string {
 const SECRET_FLAG_RE = /pass(word)?|secret|psk|token|key|pin|puk/i;
 
 /**
- * Produce a log-safe rendering of argv: any token that immediately follows a
- * secret-looking flag is replaced with `***`. Best-effort only — callers that
- * handle secrets should also prefer runWithStdin().
+ * Produce a log-safe rendering of argv. Two shapes are redacted, because the
+ * binaries this backend drives disagree about where a secret goes:
+ *
+ *  - `--pin <secret>` (mmcli/nmcli) — the token AFTER a secret-looking flag.
+ *  - `--uim-verify-pin=PIN2,<secret>` (qmicli) — the secret rides INSIDE the
+ *    token, so the separate-token rule alone would log a live PIN verbatim.
+ *
+ * Best-effort only — callers handling secrets should also prefer runWithStdin().
  */
 function redactArgs(args: string[]): string {
 	const out: string[] = [];
 	for (let i = 0; i < args.length; i++) {
+		const arg = args[i] ?? "";
 		const prev = i > 0 ? args[i - 1] : undefined;
 		if (prev !== undefined && SECRET_FLAG_RE.test(prev)) {
 			out.push("***");
-		} else {
-			out.push(args[i] ?? "");
+			continue;
 		}
+		const eq = arg.indexOf("=");
+		if (eq > 0 && SECRET_FLAG_RE.test(arg.slice(0, eq))) {
+			out.push(`${arg.slice(0, eq)}=***`);
+			continue;
+		}
+		out.push(arg);
 	}
 	return out.join(" ");
 }

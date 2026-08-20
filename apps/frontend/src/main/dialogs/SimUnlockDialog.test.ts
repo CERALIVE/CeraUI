@@ -13,6 +13,7 @@
 
 import type {
 	Modem,
+	SimPin2UnlockOutput,
 	SimPukUnlockOutput,
 	SimUnlockOutput,
 } from "@ceraui/rpc/schemas";
@@ -25,12 +26,14 @@ import SimUnlockDialog from "./SimUnlockDialog.svelte";
 // test seam moves from the NetworkHelper wrappers to `rpc.modems.*`.
 const unlockSim = vi.hoisted(() => vi.fn());
 const unlockSimPuk = vi.hoisted(() => vi.fn());
+const unlockSimPin2 = vi.hoisted(() => vi.fn());
 
 vi.mock("$lib/rpc", () => ({
 	rpc: {
 		modems: {
 			unlockSim,
 			unlockSimPuk,
+			unlockSimPin2,
 		},
 	},
 }));
@@ -78,10 +81,15 @@ const newPinInput = () =>
 	screen.getByTestId("sim-puk-newpin-input") as HTMLInputElement;
 const pukSubmit = () =>
 	screen.getByTestId("sim-puk-submit") as HTMLButtonElement;
+const pin2Input = () =>
+	screen.getByTestId("sim-pin2-input") as HTMLInputElement;
+const pin2Submit = () =>
+	screen.getByTestId("sim-pin2-submit") as HTMLButtonElement;
 
 beforeEach(() => {
 	unlockSim.mockReset();
 	unlockSimPuk.mockReset();
+	unlockSimPin2.mockReset();
 });
 
 describe("SimUnlockDialog — PIN entry (Task 23)", () => {
@@ -352,5 +360,180 @@ describe("SimUnlockDialog — PUK recovery", () => {
 			expect(screen.queryByTestId("sim-puk-input")).not.toBeNull(),
 		);
 		expect(screen.queryByTestId("sim-pin-input")).toBeNull();
+	});
+});
+
+/**
+ * PIN2 is a DIFFERENT credential from the SIM PIN, and the dialog's job here is
+ * to make that unmistakable. These tests pin both halves: that the PIN2 code
+ * reaches the PIN2 procedure (never `unlockSim`, which would spend a PIN1
+ * attempt and walk a working SIM toward a PUK1 lockout), and that the copy the
+ * operator reads does not describe their data connection as blocked.
+ */
+describe("SimUnlockDialog — PIN2 (Fixed Dialling Number) entry", () => {
+	it("renders the PIN2 field, not the PIN1 field, for a sim-pin2 lock", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 3 }),
+			},
+		});
+
+		expect(pin2Input()).toBeTruthy();
+		expect(screen.queryByTestId("sim-pin-input")).toBeNull();
+		expect(screen.queryByTestId("sim-puk-input")).toBeNull();
+	});
+
+	it("submits through unlockSimPin2 and NEVER through unlockSim", async () => {
+		unlockSimPin2.mockResolvedValue({
+			state: "success",
+		} satisfies SimPin2UnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 3 }),
+			},
+		});
+
+		fireEvent.input(pin2Input(), { target: { value: "1111" } });
+		await fireEvent.click(pin2Submit());
+
+		expect(unlockSimPin2).toHaveBeenCalledWith({
+			modemPath: "2",
+			pin2: "1111",
+		});
+		// The conflation guard: a PIN2 code must never reach the PIN1 procedure.
+		expect(unlockSim).not.toHaveBeenCalled();
+		expect(unlockSimPuk).not.toHaveBeenCalled();
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-pin2-input")).toBeNull(),
+		);
+	});
+
+	it("leads with PIN2-specific copy, never the PIN1 'SIM is locked' sentence", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 3 }),
+			},
+		});
+
+		// Paraglide may resolve to the message KEY or to the resolved COPY here,
+		// depending on whether another spec in the run activated the namespace —
+		// so this asserts only what is true either way. The copy itself is swept
+		// across all 10 locales in `src/tests/sim-pin2-copy.test.ts`.
+		const explainer = screen.getByTestId("sim-pin2-explainer");
+		expect((explainer.textContent ?? "").trim().length).toBeGreaterThan(0);
+
+		// The PIN1 description ("This SIM card is locked. Enter its PIN…") must
+		// not reach a PIN2 operator, in either resolution form.
+		const body = document.body.textContent ?? "";
+		expect(body).not.toContain("simUnlock.description");
+		expect(body.toLowerCase()).not.toContain("sim card is locked");
+	});
+
+	it("gates submit on a valid PIN2 length", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 3 }),
+			},
+		});
+
+		expect(pin2Submit().disabled).toBe(true);
+		fireEvent.input(pin2Input(), { target: { value: "11" } });
+		expect(pin2Submit().disabled).toBe(true);
+		fireEvent.input(pin2Input(), { target: { value: "1111" } });
+		expect(pin2Submit().disabled).toBe(false);
+	});
+
+	it("surfaces the remaining PIN2 attempts without auto-resubmitting", async () => {
+		unlockSimPin2.mockResolvedValue({
+			state: "wrong-pin2",
+			remainingAttempts: 2,
+		} satisfies SimPin2UnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 3 }),
+			},
+		});
+
+		fireEvent.input(pin2Input(), { target: { value: "9999" } });
+		await fireEvent.click(pin2Submit());
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-pin2-error")).not.toBeNull(),
+		);
+		expect(screen.getByTestId("sim-pin2-attempts").textContent).toContain("2");
+		// Exactly one submit — a blind resubmit walks the SIM toward PUK2.
+		expect(unlockSimPin2).toHaveBeenCalledTimes(1);
+		expect(pin2Input().value).toBe("");
+	});
+
+	it("withdraws the form on a puk2-required terminal", async () => {
+		unlockSimPin2.mockResolvedValue({
+			state: "puk2-required",
+		} satisfies SimPin2UnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 1 }),
+			},
+		});
+
+		fireEvent.input(pin2Input(), { target: { value: "9999" } });
+		await fireEvent.click(pin2Submit());
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-pin2-puk2-required")).not.toBeNull(),
+		);
+		expect(screen.queryByTestId("sim-pin2-input")).toBeNull();
+		expect(screen.queryByTestId("sim-pin2-submit")).toBeNull();
+	});
+
+	it("states the modem has no PIN2 route rather than inviting a doomed retry", async () => {
+		unlockSimPin2.mockResolvedValue({
+			state: "unsupported",
+		} satisfies SimPin2UnlockOutput);
+
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-pin2", remainingAttempts: 3 }),
+			},
+		});
+
+		fireEvent.input(pin2Input(), { target: { value: "1111" } });
+		await fireEvent.click(pin2Submit());
+
+		await waitFor(() =>
+			expect(screen.queryByTestId("sim-pin2-unsupported")).not.toBeNull(),
+		);
+		expect(screen.queryByTestId("sim-pin2-submit")).toBeNull();
+	});
+
+	it("yields to the PUK branch when the lock has already become sim-puk2", () => {
+		render(SimUnlockDialog, {
+			props: {
+				open: true,
+				deviceId: "2",
+				modem: makeModem({ required: "sim-puk2", remainingAttempts: 10 }),
+			},
+		});
+
+		expect(screen.queryByTestId("sim-puk-input")).not.toBeNull();
+		expect(screen.queryByTestId("sim-pin2-input")).toBeNull();
 	});
 });

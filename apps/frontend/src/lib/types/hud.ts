@@ -106,7 +106,10 @@ export interface HudState {
 	isBitrateStale: boolean;
 
 	// Network links (up to 6 bonded links) -----------------------------------
+	/** ONLY the interfaces carrying bonded traffic — never a non-carrying link. */
 	links: LinkSignal[];
+	/** How many known interfaces are NOT in the bond, so their absence is stated. */
+	unbondedLinkCount: number;
 
 	/** ifnames whose own data aged past the global threshold while siblings stayed fresh. */
 	staleInterfaces: Set<string>;

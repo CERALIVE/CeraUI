@@ -40,8 +40,141 @@ const PASETO_RE = /v[0-9]+\.(?:public|local)\.[A-Za-z0-9\-_]+/;
 const JWT_RE = /eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/;
 const BEARER_RE = /\bBearer\s+[A-Za-z0-9\-._~+/]+=*/i;
 
+/**
+ * SMS content is its own redaction class, separate from {@link SENSITIVE_KEY_RE}
+ * because that regex is a SUBSTRING match and the honest key names here ("text",
+ * "from", "sender") are far too common to redact by substring — `smsCount` and a
+ * `from` range bound would both vanish. These are matched WHOLE, after case- and
+ * separator-folding, so only a key that genuinely names message content or an
+ * originator is scrubbed.
+ *
+ * A message body routinely carries one-time codes (the bench SIM's inbox holds a
+ * literal "Tu pin es: …") and a sender number identifies the subscriber, so both
+ * are treated exactly like a PIN: never rendered to any transport.
+ */
+const SMS_SENSITIVE_KEYS: ReadonlySet<string> = new Set<string>([
+	"smstext",
+	"smsbody",
+	"smsfrom",
+	"smssender",
+	"smsnumber",
+	"messagetext",
+	"messagebody",
+	"msisdn",
+	"sender",
+	"sms.content.text",
+	"sms.content.number",
+]);
+
+/** Whole-key SMS-content test, case- and separator-insensitive. */
+export function isSmsSensitiveKey(key: string): boolean {
+	return SMS_SENSITIVE_KEYS.has(key.toLowerCase().replace(/[_-]/g, ""));
+}
+
+/**
+ * USSD carrier text is its own class, for the reason SMS content is: a reply
+ * carries balances and voucher codes, and a command carries the code the
+ * operator dialled.
+ *
+ * Whole-key like {@link SMS_SENSITIVE_KEYS} and for the same reason — the
+ * SUBSTRING regex would scrub every unrelated `response`, `command` and `reply`
+ * in the process, including this module's OWN non-secret state fields
+ * (`ussdSessionState`, `outcome`, `refusal`).
+ */
+const USSD_SENSITIVE_KEYS: ReadonlySet<string> = new Set<string>([
+	"ussd",
+	"ussdcommand",
+	"ussdreply",
+	"ussdresponse",
+	"ussdtext",
+	"networknotification",
+	"networkrequest",
+	"modem.3gpp.ussd.networknotification",
+	"modem.3gpp.ussd.networkrequest",
+]);
+
+/** Whole-key USSD-content test, case- and separator-insensitive. */
+export function isUssdSensitiveKey(key: string): boolean {
+	return USSD_SENSITIVE_KEYS.has(key.toLowerCase().replace(/[_-]/g, ""));
+}
+
+/**
+ * GNSS coordinates are their own class, for the reason SMS content is: a fix
+ * says where the operator physically IS, and the GPS module's whole contract is
+ * that a fix lives in memory for a live display and is never persisted, uploaded
+ * — or logged.
+ *
+ * Whole-key like {@link SMS_SENSITIVE_KEYS} and for the same reason: `lat` and
+ * `lon` are far too short to hand to the SUBSTRING regex above, which would
+ * then scrub every unrelated `latency`, `translation` and `longPress` on the
+ * device.
+ *
+ * Coarse cell location (`3gpp-lac-ci`, the cell-info module's own gated output)
+ * is deliberately NOT here — it is a separate, already-shipping surface, and
+ * blanking it would be a silent regression rather than a privacy win.
+ */
+const GPS_SENSITIVE_KEYS: ReadonlySet<string> = new Set<string>([
+	"latitude",
+	"longitude",
+	"altitude",
+	"lat",
+	"lon",
+	"lng",
+	"nmea",
+	"nmeasentences",
+	"coordinates",
+	"gpsraw",
+	"gpsnmea",
+	"modemlocationgpsrawlatitude",
+	"modemlocationgpsrawlongitude",
+	"modemlocationgpsrawaltitude",
+	"modemlocationgpsnmea",
+]);
+
+/** Whole-key GNSS-coordinate test, case- and separator-insensitive. */
+export function isGpsSensitiveKey(key: string): boolean {
+	return GPS_SENSITIVE_KEYS.has(key.toLowerCase().replace(/[_.-]/g, ""));
+}
+
+/**
+ * Backstop for the VALUE side: a raw `mmcli -K -s <path>` record pasted into a
+ * free-text log line carries the body and the originator on its face. The
+ * backend's SMS module is content-free by construction, so this should never
+ * fire — it exists so that a future call site logging raw mmcli output cannot
+ * quietly reintroduce the leak.
+ */
+const SMS_RECORD_RE = /sms\.content\.(?:text|number)\s*:/i;
+
+/**
+ * The VALUE-side twin of {@link SMS_RECORD_RE}: a raw `mmcli --location-get`
+ * record, or a raw NMEA sentence, carries the position on its face. The GPS
+ * module never logs either, so this should never fire — it exists so a future
+ * call site that logs raw mmcli output cannot quietly reintroduce the leak.
+ */
+const LOCATION_RECORD_RE =
+	/modem\.location\.gps\.(?:raw\.)?(?:latitude|longitude|altitude|nmea)\s*:/i;
+const NMEA_SENTENCE_RE = /\$G[A-Z]{1,2}(?:GGA|RMC|GLL),/;
+
+/**
+ * The VALUE-side twin of {@link USSD_SENSITIVE_KEYS}: a raw
+ * `mmcli --3gpp-ussd-status` record carries the carrier's reply — a balance, a
+ * voucher code — on its face, whatever key it happens to be logged under. The
+ * USSD module never logs one, so this should never fire; it exists so a future
+ * call site that logs raw mmcli output cannot quietly reintroduce the leak.
+ */
+const USSD_RECORD_RE =
+	/modem\.3gpp\.ussd\.(?:status|network-request|network-notification)\s*:/i;
+
 function looksSecret(value: string): boolean {
-	return PASETO_RE.test(value) || JWT_RE.test(value) || BEARER_RE.test(value);
+	return (
+		PASETO_RE.test(value) ||
+		JWT_RE.test(value) ||
+		BEARER_RE.test(value) ||
+		SMS_RECORD_RE.test(value) ||
+		LOCATION_RECORD_RE.test(value) ||
+		NMEA_SENTENCE_RE.test(value) ||
+		USSD_RECORD_RE.test(value)
+	);
 }
 
 // Only literal `{}`-shaped objects are walked; Error and other class instances
@@ -72,7 +205,13 @@ function redactValue(value: unknown): unknown {
 	if (isRedactablePlainObject(value)) {
 		const out: Record<string, unknown> = {};
 		for (const [key, inner] of Object.entries(value)) {
-			out[key] = SENSITIVE_KEY_RE.test(key) ? REDACTED : redactValue(inner);
+			out[key] =
+				SENSITIVE_KEY_RE.test(key) ||
+				isSmsSensitiveKey(key) ||
+				isGpsSensitiveKey(key) ||
+				isUssdSensitiveKey(key)
+					? REDACTED
+					: redactValue(inner);
 		}
 		return out;
 	}
@@ -95,7 +234,13 @@ export function logRedact(value: unknown): unknown {
  */
 export const redact = winston.format((info) => {
 	for (const key of Object.keys(info)) {
-		info[key] = SENSITIVE_KEY_RE.test(key) ? REDACTED : redactValue(info[key]);
+		info[key] =
+			SENSITIVE_KEY_RE.test(key) ||
+			isSmsSensitiveKey(key) ||
+			isGpsSensitiveKey(key) ||
+			isUssdSensitiveKey(key)
+				? REDACTED
+				: redactValue(info[key]);
 	}
 	return info;
 });

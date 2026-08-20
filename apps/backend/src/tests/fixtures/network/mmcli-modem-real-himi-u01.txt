@@ -1,0 +1,87 @@
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/1
+modem.generic.device-identifier                 : 709b86e9710ed192d2842b19d3b6e1071c668cf7
+modem.generic.manufacturer                      : 1
+modem.generic.model                             : 0
+modem.generic.revision                          : HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]
+modem.generic.carrier-configuration             : ROW_Generic_3GPP
+modem.generic.carrier-configuration-revision    : 02010801
+modem.generic.hardware-revision                 : 10000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : 868837088254863
+modem.generic.device                            : /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.4/1-1.4.3
+modem.generic.physdev                           : /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb1/1-1/1-1.4/1-1.4.3
+modem.generic.drivers.length                    : 1
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.plugin                            : generic
+modem.generic.primary-port                      : cdc-wdm2
+modem.generic.ports.length                      : 2
+modem.generic.ports.value[1]                    : cdc-wdm2 (qmi)
+modem.generic.ports.value[2]                    : wwan2 (net)
+modem.generic.own-numbers                       : --
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries                    : --
+modem.generic.state                             : failed
+modem.generic.state-failed-reason               : sim-missing
+modem.generic.power-state                       : --
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 0
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 4
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.current-modes                     : allowed: 4g; preferred: none
+modem.generic.supported-bands.length            : 7
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-5
+modem.generic.supported-bands.value[3]          : utran-8
+modem.generic.supported-bands.value[4]          : eutran-1
+modem.generic.supported-bands.value[5]          : eutran-3
+modem.generic.supported-bands.value[6]          : eutran-5
+modem.generic.supported-bands.value[7]          : eutran-8
+modem.generic.current-bands.length              : 7
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-5
+modem.generic.current-bands.value[3]            : utran-8
+modem.generic.current-bands.value[4]            : eutran-1
+modem.generic.current-bands.value[5]            : eutran-3
+modem.generic.current-bands.value[6]            : eutran-5
+modem.generic.current-bands.value[7]            : eutran-8
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : 868837088254863
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : --
+modem.3gpp.operator-name                        : --
+modem.3gpp.registration-state                   : --
+modem.3gpp.packet-service-state                 : --
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : --
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : --
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : --
+modem.generic.primary-sim-slot                  : --
+modem.generic.sim-slots                         : --
+modem.generic.bearers                           : --

@@ -5,6 +5,7 @@ import type { Page, WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
+import { openModemAdvanced } from "./helpers/modem-advanced.js";
 
 /**
  * Capability-truthfulness regression gate (Task 20, ceraui-trustworthy-experience).
@@ -402,6 +403,81 @@ function networkSourceDisabledInSettings(
 function sendSources(sources: Record<string, unknown>[]): void {
 	send({ sources: { hardware: "rk3588", sources } });
 }
+
+// ── Cellular fixtures (modem-stack Phase B) ──────────────────────────────────
+// Injected over the same proxy as everything else, through `status.modems`. The
+// modem merge is field-by-field PER MODEM ID (`mergeModemList`), never a whole-map
+// replace, so a re-send carrying only the field under test keeps the rest of the
+// fixture — which is exactly how the state tables below flip one thing at a time.
+const MM_MODEM_ID = "modem-usb-0";
+const DONGLE_MODEM_ID = "modem-dongle-0";
+const MM_MODEM_NAME = "Quectel RM520N";
+
+// An MM-managed USB radio carrying everything the USB-mode card needs: a
+// `stable_key` (without one the switch is not offered AT ALL — it could never be
+// honestly confirmed) and an active mode that differs from the recommended one.
+function mmManagedModem(
+	extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+	return {
+		ifname: "wwan0",
+		name: MM_MODEM_NAME,
+		network_type: { supported: ["5g", "lte"], active: "lte" },
+		config: {
+			apn: "internet",
+			username: "",
+			password: "",
+			roaming: false,
+			network: "",
+			autoconfig: true,
+		},
+		status: {
+			connection: "connected",
+			network_type: "lte",
+			signal: 71,
+			roaming: false,
+			network: "Test Carrier",
+		},
+		available_networks: {},
+		no_sim: false,
+		device_class: "usb",
+		slot_label: "SIM 1",
+		stable_key: "pci-0000:00:14.0-usb-0:2",
+		usb_mode: "rndis",
+		recommended_usb_mode: "mbim",
+		...extra,
+	};
+}
+
+// A router-mode dongle. The backend deliberately OMITS its `status` block rather
+// than fabricating a zeroed one, so the fixture omits it too — the row's
+// "absence renders as absence" rule is only exercised by a payload that really
+// carries no radio telemetry.
+function routerDongle(
+	availability_reason: "router_managed" | "dongle_acquiring" | "dongle_down",
+): Record<string, unknown> {
+	return {
+		ifname: "dg0h",
+		name: "Cellular dongle",
+		network_type: { supported: [], active: null },
+		device_class: "router-ethernet",
+		availability_reason,
+		slot_label: "Dongle 0",
+	};
+}
+
+function sendModems(modems: Record<string, unknown>): void {
+	send({ status: { modems } });
+}
+
+// The backend publishes readiness as an EXPLICIT boolean on every frame, so the
+// fixture does too — a true-only flag could be raised and never lowered.
+function sendCellularInitializing(initializing: boolean): void {
+	send({ status: { cellular_initializing: initializing } });
+}
+
+const modemRow = (page: Page, id: string) =>
+	page.locator(`[data-testid="modem-row"][data-modem-id="${id}"]`);
 
 // The StreamSetupChain renders all four setup rows ALWAYS (no collapse, no ready
 // bar), so every migrated config-row edit trigger is permanently visible — just
@@ -1298,5 +1374,379 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(opus).toHaveAttribute("title", /\S/);
 		// AAC: the one proven codec — genuinely selectable, no disabled reason.
 		await expect(aac).not.toHaveAttribute("data-disabled", "");
+	});
+
+	// ── (Phase B, todo 28) Cellular truthfulness ─────────────────────────────
+	// The USB-composition switch is gated on `config.modem_provisioning`, echoed
+	// READ-ONLY on the config wire as a tristate. This drives the two arms that
+	// are decidable before any dispatch; ABSENT (an older backend) deliberately
+	// leaves the control offered and is covered by the unit suite.
+	test("the USB-mode switch is disabled-with-reason under a provisioning-disabled snapshot and flips enabled when provisioning is on", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.modems; the backend's multi-modem-wifi roster must be dropped so the fixture modem is the only row",
+		},
+	}, async ({ page }) => {
+		serverConfig({ modem_provisioning: false });
+		sendFullCaps();
+		sendModems({ [MM_MODEM_ID]: mmManagedModem() });
+
+		await navigateTo(page, "network");
+		const configure = page.getByTestId("open-modem-config-dialog");
+		await expect(configure).toBeEnabled({ timeout: 15_000 });
+		await configure.click();
+
+		const dialog = page.getByRole("dialog", { name: MM_MODEM_NAME });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+		// The card renders at all — so the assertions below are about the GATE,
+		// not about an additive field the fixture forgot. It lives behind the
+		// dialog's "Advanced" disclosure (todo 64), so open that first.
+		await openModemAdvanced(dialog);
+		await expect(page.getByTestId("modem-usb-mode-card")).toBeVisible();
+		await expect(page.getByTestId("modem-usb-mode-active")).toHaveText("rndis");
+
+		// PROVISIONING OFF → the control exists, is disabled, and the reason is on
+		// SCREEN as well as in its accessible name (a kiosk cannot hover).
+		const blockedSwitch = page.getByTestId("modem-usb-mode-switch");
+		await expect(blockedSwitch).toBeDisabled();
+		await expect(blockedSwitch).toHaveAttribute("title", /\S/);
+		const blockedHint = page.getByTestId("modem-usb-mode-provisioning-blocked");
+		await expect(blockedHint).toBeVisible();
+		await expect(blockedHint).toHaveText(/\S/);
+
+		// PROVISIONING ON → the SAME control genuinely flips to the real
+		// confirm-guarded switch: the blocked hint is gone and an enabled trigger
+		// carrying the switch label takes its place.
+		serverConfig({ modem_provisioning: true });
+		await expect(
+			page.getByTestId("modem-usb-mode-provisioning-blocked"),
+		).toHaveCount(0);
+		await expect(page.getByTestId("modem-usb-mode-switch")).toHaveCount(0);
+		const liveSwitch = page.getByRole("button", { name: /^Switch to/ });
+		await expect(liveSwitch).toBeVisible();
+		await expect(liveSwitch).toBeEnabled();
+
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
+	});
+
+	// A router dongle is a device this stack cannot control, so every state must
+	// be VISIBLE and disabled-with-reason — never hidden, and never a raw wire
+	// token rendered at the operator.
+	test("a router-dongle cellular row stays honest across up / acquiring / down", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.modems so the dongle fixture is the only cellular row",
+		},
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		sendModems({ [DONGLE_MODEM_ID]: routerDongle("router_managed") });
+
+		await navigateTo(page, "network");
+		const row = modemRow(page, DONGLE_MODEM_ID);
+		await expect(row).toBeVisible({ timeout: 15_000 });
+		await expect(row).toHaveAttribute("data-class-band", "router-ethernet");
+
+		const states = [
+			["router_managed", "router-up"],
+			["dongle_acquiring", "router-acquiring"],
+			["dongle_down", "router-down"],
+		] as const;
+
+		for (const [reason, expectedState] of states) {
+			sendModems({ [DONGLE_MODEM_ID]: routerDongle(reason) });
+
+			// The lifecycle word tracks the wire token…
+			await expect(row).toHaveAttribute("data-modem-state", expectedState);
+			await expect(
+				row.locator('[data-testid="modem-state-badge"]'),
+			).toHaveText(/\S/);
+
+			// …the row is dimmed-with-a-reason rather than dropped: Configure is
+			// disabled AND names why, in its accessible name and on screen.
+			const configure = row.getByTestId("open-modem-config-dialog");
+			await expect(configure).toBeDisabled();
+			await expect(configure).toHaveAttribute("title", /\S/);
+			const notes = row.locator('[data-testid="modem-note"]');
+			await expect(notes.first()).toHaveText(/\S/);
+
+			// The bond toggle is present-but-disabled in every state (its live
+			// control lives on the veth's own Ethernet row), never absent.
+			const bond = row.locator('[data-testid="bond-toggle-dg0h"]');
+			await expect(bond).toBeVisible();
+			await expect(bond).toBeDisabled();
+
+			// ABSENCE RENDERS AS ABSENCE: a dongle reports no radio status, so the
+			// row draws no signal glyph rather than an empty meter.
+			await expect(row.locator('[data-testid="modem-signal"]')).toHaveCount(0);
+
+			// A wire-stable machine token is NEVER rendered raw.
+			await expect(row).not.toContainText(reason);
+		}
+	});
+
+	// While the cellular composition root is still committing a backend the modem
+	// list is legitimately empty and every `modems.*` RPC refuses with the typed
+	// CELLULAR_STACK_INITIALIZING. That window must read as "starting up", not as
+	// "no SIM cards detected" — and must not take the view down with it.
+	test("an initializing cellular stack renders the calm band instead of a false empty state, and never crashes the view", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"drives status.cellular_initializing + an empty modem roster, the exact boot-window frame",
+		},
+	}, async ({ page }) => {
+		const pageErrors: string[] = [];
+		page.on("pageerror", (err) => pageErrors.push(String(err)));
+
+		serverConfig();
+		sendFullCaps();
+		send({ status: { cellular_initializing: true, modems: {} } });
+
+		await navigateTo(page, "network");
+		const band = page.getByTestId("cellular-initializing");
+		await expect(band).toBeVisible({ timeout: 15_000 });
+		await expect(band).toHaveAttribute("role", "status");
+		await expect(band).toHaveText(/\S/);
+		// The empty roster must NOT be reported as "no SIM cards detected" — that
+		// is a claim the device cannot make while its modem service is still up.
+		await expect(page.getByText("No SIM cards detected")).toHaveCount(0);
+		// …and the rest of the destination is intact.
+		await expect(page.getByRole("main").first()).toBeVisible();
+
+		// Once the stack commits, the band retracts and the roster renders.
+		sendCellularInitializing(false);
+		sendModems({ [MM_MODEM_ID]: mmManagedModem() });
+		await expect(page.getByTestId("cellular-initializing")).toHaveCount(0);
+		await expect(modemRow(page, MM_MODEM_ID)).toBeVisible();
+
+		expect(pageErrors, `uncaught exceptions: ${pageErrors.join(" | ")}`).toEqual(
+			[],
+		);
+	});
+
+	// ── (b) The debt cross-check extended over the modem surfaces ────────────
+	test("every rendered [data-debt-id] on the Network destination and the modem dialog maps to an open register entry", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.modems so the usage card renders from a known payload",
+		},
+	}, async ({ page }) => {
+		const openIds = parseOpenDebtIds(fs.readFileSync(REGISTER_PATH, "utf8"));
+		expect(openIds.size).toBeGreaterThan(0);
+
+		serverConfig({ modem_provisioning: true });
+		sendFullCaps();
+		sendModems({
+			[MM_MODEM_ID]: mmManagedModem({
+				data_usage: {
+					session_bytes: 1_234_567,
+					cycle_bytes: 8_765_432,
+					cycle_day: 1,
+					threshold_bytes: 50_000_000,
+				},
+				esim: { sim_type: "esim", esim_status: "with-profiles" },
+				firmware_revision: "RM520NGLAAR01A08M4G",
+			}),
+			[DONGLE_MODEM_ID]: routerDongle("dongle_acquiring"),
+		});
+
+		await navigateTo(page, "network");
+		const configure = modemRow(page, MM_MODEM_ID).getByTestId(
+			"open-modem-config-dialog",
+		);
+		await expect(configure).toBeEnabled({ timeout: 15_000 });
+		await configure.click();
+		await openModemAdvanced(page.getByRole("dialog", { name: MM_MODEM_NAME }));
+		await expect(page.getByTestId("modem-usage-card")).toBeVisible({
+			timeout: 15_000,
+		});
+
+		const domIds = await collectDomDebtIds(page);
+		// The surface really did render a live debt marker, so the orphan check
+		// below is not trivially passing on an empty DOM.
+		expect(domIds).toContain("TD-modem-usage-policy-write");
+		expect(findOrphanDebtIds(domIds, openIds)).toEqual([]);
+
+		await page.keyboard.press("Escape");
+		await expect(page.getByRole("dialog", { name: MM_MODEM_NAME })).toBeHidden();
+	});
+});
+
+/**
+ * Responsive modem-dialog contract (`ceraui-playwright-testing-standards`, an
+ * acceptance that was never closed).
+ *
+ * Every modem dialog must OPEN and CLOSE cleanly on BOTH viewports, because
+ * `AppDialog` renders two structurally different surfaces — a centered
+ * bits-ui Dialog under desktop chrome and a bottom Sheet otherwise — and only
+ * one of them was ever exercised. A Sheet that traps focus, leaves a scroll
+ * lock, or never unmounts is invisible to a desktop-only suite.
+ *
+ * Unlike the describe above this one does NOT skip a non-desktop project, and
+ * unlike the `@visual` suite it captures NO screenshots: every assertion is a
+ * DOM/state fact, so it fails on behaviour rather than on rendering drift.
+ *
+ * The modem under test is chosen from the RENDERED LIST, never from a
+ * hardcoded index into the fixture — which is what makes the same spec valid
+ * whatever roster the backend and the injected snapshot fold into.
+ */
+test.describe("Modem dialogs — responsive open/close contract", () => {
+	test.beforeEach(async ({ page, pageRpc }) => {
+		pageWs = null;
+		dropServerDevices = true;
+		dropServerCapabilities = true;
+		dropServerSources = true;
+		dropServerConfig = true;
+		// ALWAYS drop status here (not annotation-gated like the describe above):
+		// this suite's whole subject is the injected modem roster, and the
+		// per-worker backend's own multi-modem profile would race it.
+		dropServerStatus = true;
+		fakeSetConfig = false;
+		setConfigCalls.length = 0;
+
+		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+			pageWs = ws;
+			const server = ws.connectToServer();
+			pageRpc.bindConnectionLifecycle(ws, server);
+
+			ws.onMessage((m) => {
+				server.send(m);
+			});
+
+			server.onMessage((m) => {
+				pageRpc.acceptServerMessage(m);
+				const text = typeof m === "string" ? m : m.toString();
+				try {
+					const frame = JSON.parse(text) as object;
+					if (dropServerDevices && "devices" in frame) return;
+					if (dropServerCapabilities && "capabilities" in frame) return;
+					if (dropServerSources && "sources" in frame) return;
+					if (dropServerConfig && "config" in frame) return;
+					if (dropServerStatus && "status" in frame) return;
+				} catch {
+					/* non-JSON / binary frame */
+				}
+				ws.send(m);
+			});
+		});
+
+		await page.goto("/");
+		await ensureAuthenticated(page);
+		await navigateTo(page, "network");
+	});
+
+	test("every modem dialog opens and closes cleanly on this viewport, with the first surfaced modem selected dynamically", async ({
+		page,
+	}) => {
+		const consoleErrors: string[] = [];
+		const pageErrors: string[] = [];
+		page.on("pageerror", (err) => pageErrors.push(String(err)));
+		page.on("console", (msg) => {
+			if (msg.type() === "error") consoleErrors.push(msg.text());
+		});
+
+		serverConfig({ modem_provisioning: true });
+		sendFullCaps();
+		// TWO modems, so "the first one" is a real choice rather than the only
+		// row — and the fully-populated one is deliberately NOT first, so a spec
+		// that reached for index 0 of the fixture would pick the other device.
+		// BOTH rows carry the full Phase-B detail payload, because the row this
+		// spec drives is whichever one the app surfaces first — a roster where
+		// only one entry is populated would make the card assertions depend on
+		// the very ordering this test refuses to assume.
+		const fullDetail = {
+			data_usage: {
+				session_bytes: 1_234_567,
+				cycle_bytes: 8_765_432,
+				cycle_day: 1,
+				threshold_bytes: 50_000_000,
+			},
+			esim: { sim_type: "physical", esim_status: "unknown" },
+			firmware_revision: "RM520NGLAAR01A08M4G",
+			cell_info: { tech: "lte", cell_id: "0x01A2B3C4", band: "B3", rsrp: -92 },
+		} as const;
+		const roster: Record<string, Record<string, unknown>> = {
+			"modem-secondary": mmManagedModem({
+				ifname: "wwan1",
+				name: "Secondary Radio",
+				stable_key: "pci-0000:00:14.0-usb-0:3",
+				slot_label: "SIM 2",
+				...fullDetail,
+			}),
+			[MM_MODEM_ID]: mmManagedModem(fullDetail),
+		};
+		sendModems(roster);
+
+		const rows = page.locator('[data-testid="modem-row"]');
+		await expect(rows.first()).toBeVisible({ timeout: 15_000 });
+		await expect(rows).toHaveCount(2);
+
+		// DYNAMIC selection: whichever row the app actually surfaced first. The
+		// dialog's title is the DEVICE name while the row's headline is the
+		// CARRIER, so the expected title is looked up from the roster by the id
+		// the DOM reported — never assumed to be the row's visible text, and
+		// never a hardcoded index into the fixture.
+		const firstRow = rows.first();
+		const firstId = await firstRow.getAttribute("data-modem-id");
+		expect(firstId, "the first rendered modem row must carry its id").toBeTruthy();
+		const firstName = String(roster[String(firstId)]?.name ?? "");
+		expect(firstName.length).toBeGreaterThan(0);
+
+		// ── Config dialog: opens, renders its cards, closes, and can re-open ──
+		const configure = firstRow.getByTestId("open-modem-config-dialog");
+		await expect(configure).toBeEnabled();
+		await configure.click();
+
+		const configDialog = page.getByRole("dialog", { name: firstName });
+		await expect(configDialog).toBeVisible({ timeout: 15_000 });
+		// The dialog's own controls are reachable on BOTH surfaces — a Sheet that
+		// renders its header and clips its body would still pass a bare
+		// "is visible" check on the container alone.
+		await openModemAdvanced(configDialog);
+		await expect(configDialog.getByTestId("modem-usage-card")).toBeVisible();
+		await expect(configDialog.getByTestId("modem-detail-card")).toBeVisible();
+		await expect(configDialog.getByTestId("modem-usb-mode-card")).toBeVisible();
+
+		await page.keyboard.press("Escape");
+		await expect(configDialog).toBeHidden();
+		// CLEANLY closed: the trigger underneath is interactive again, which a
+		// leaked overlay / scroll lock / focus trap would prevent.
+		await expect(configure).toBeEnabled();
+		await configure.click();
+		await expect(configDialog).toBeVisible();
+		await page.keyboard.press("Escape");
+		await expect(configDialog).toBeHidden();
+
+		// ── SIM unlock dialog: auto-prompted, and closes the same way ─────────
+		expect(firstId).not.toBeNull();
+		sendModems({
+			[String(firstId)]: {
+				sim_lock: { required: "sim-pin", remainingAttempts: 3 },
+			},
+		});
+		const pinInput = page.getByTestId("sim-pin-input");
+		await expect(pinInput).toBeVisible({ timeout: 15_000 });
+		const simDialog = page
+			.getByRole("dialog")
+			.filter({ has: page.getByTestId("sim-pin-input") });
+		await expect(simDialog).toBeVisible();
+		await page.keyboard.press("Escape");
+		await expect(pinInput).toBeHidden();
+
+		// No dialog is left mounted, on either surface.
+		await expect(page.getByRole("dialog")).toHaveCount(0);
+
+		expect(pageErrors, `uncaught exceptions: ${pageErrors.join(" | ")}`).toEqual(
+			[],
+		);
+		expect(
+			consoleErrors,
+			`console errors during the modem dialog click-walk: ${consoleErrors.join(" | ")}`,
+		).toEqual([]);
 	});
 });

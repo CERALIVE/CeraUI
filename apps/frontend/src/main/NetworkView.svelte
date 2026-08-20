@@ -10,6 +10,7 @@ import {
 	getLinkTelemetry,
 	getModems,
 	getNetif,
+	getStatus,
 	getWifi,
 } from '$lib/rpc/subscriptions.svelte';
 import { getHudState } from '$lib/stores/hud.svelte';
@@ -18,10 +19,12 @@ import type { LinkSignal } from '$lib/types/hud';
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 
 import BondedLinksSection from './network/BondedLinksSection.svelte';
+import { activeSimLock, isBlockingSimLock } from './network/cellular-row';
 import CellularSection from './network/CellularSection.svelte';
 import CollisionBands from './network/CollisionBands.svelte';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
+import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
 import WifiSection from './network/WifiSection.svelte';
 
 // None of these is on the path to first paint — each is its own chunk, fetched
@@ -31,6 +34,7 @@ const WifiSelectorDialog = lazyDialog(() => import('./dialogs/WifiSelectorDialog
 const HotspotDialog = lazyDialog(() => import('./dialogs/HotspotDialog.svelte'));
 const ModemConfigDialog = lazyDialog(() => import('./dialogs/ModemConfigDialog.svelte'));
 const SimUnlockDialog = lazyDialog(() => import('./dialogs/SimUnlockDialog.svelte'));
+const RouterDongleDialog = lazyDialog(() => import('./dialogs/RouterDongleDialog.svelte'));
 
 // Getters — always from the non-deprecated subscriptions surface.
 const wifi = $derived<WifiStatus | undefined>(getWifi());
@@ -72,11 +76,21 @@ let hotspotDialogOpen = $state(false);
 
 const modemEntries = $derived(Object.entries(modems ?? {}) as [string, Modem][]);
 
+// Strictly `=== true`: absent is an older backend that never published the flag,
+// and reading that as "initializing" would band every such device forever.
+const cellularInitializing = $derived(getStatus()?.cellular_initializing === true);
+
 // Wired / other interfaces: anything in netif that is not a modem (ww*),
 // not a wifi radio (wl*), and not loopback.
+//
+// A cellular device's interface leaves this list for the Cellular section once
+// a modem row claims it — a router-mode dongle or an MM-managed modem's own
+// RNDIS data function alike. The rule lives in `section-assignment.ts` so it can
+// be tested without mounting this view.
+const claimedByModem = $derived(modemClaimedIfnames(modemEntries));
 const wiredEntries = $derived(
-	Object.entries(netif ?? {}).filter(
-		([name]) => !name.startsWith('ww') && !name.startsWith('wl') && name !== 'lo',
+	Object.entries(netif ?? {}).filter(([name, iface]) =>
+		isWiredSectionEntry(name, iface, claimedByModem),
 	) as [string, NetifEntry][],
 );
 
@@ -107,36 +121,77 @@ let modemDialogOpen = $state(false);
 let configModemId = $state<string | null>(null);
 const configModem = $derived(modemEntries.find(([id]) => id === configModemId)?.[1]);
 
-function openModemConfig(id: string) {
-	configModemId = id;
+// Router-dongle settings — one instance, keyed like the others.
+let dongleDialogOpen = $state(false);
+let dongleModemId = $state<string | null>(null);
+const dongleModem = $derived(modemEntries.find(([id]) => id === dongleModemId)?.[1]);
+
+// SIM unlock — one instance, keyed the same way. It is reached ONLY by an
+// operator action on the modem it belongs to; there is deliberately no
+// auto-open effect here anymore. See `openModemConfig` below.
+let simUnlockOpen = $state(false);
+let unlockModemId = $state<string | null>(null);
+const unlockModem = $derived(modemEntries.find(([id]) => id === unlockModemId)?.[1]);
+
+// The modem whose config dialog handed off to the unlock flow, or null when the
+// unlock was reached STANDALONE from a row. It is the whole distinction between
+// "go back" and "close": only the nested route has somewhere to go back to.
+let unlockReturnToConfigId = $state<string | null>(null);
+
+function openSimUnlock(id: string, returnToConfigId: string | null = null) {
+	unlockModemId = id;
+	unlockReturnToConfigId = returnToConfigId;
+	simUnlockOpen = true;
+}
+
+function returnFromSimUnlock() {
+	const returnTo = unlockReturnToConfigId;
+	if (returnTo === null) return;
+	unlockReturnToConfigId = null;
+	configModemId = returnTo;
 	modemDialogOpen = true;
 }
 
-// SIM PIN unlock — auto-prompt for the first modem reporting a SIM lock.
-// `promptedModemId` gates the auto-open so dismissing the dialog (while still
-// locked) does not immediately re-open it; it resets once the lock clears.
-const lockedModemEntry = $derived(
-	modemEntries.find(
-		([, m]) =>
-			m.sim_lock?.required === 'sim-pin' ||
-			m.sim_lock?.required === 'sim-puk' ||
-			m.sim_lock?.required === 'sim-puk2',
-	),
-);
-const lockedModemId = $derived(lockedModemEntry?.[0]);
-const lockedModem = $derived(lockedModemEntry?.[1]);
-
-let simUnlockOpen = $state(false);
-let promptedModemId = $state<string | null>(null);
-
-$effect(() => {
-	if (lockedModemId && promptedModemId !== lockedModemId) {
-		promptedModemId = lockedModemId;
-		simUnlockOpen = true;
-	} else if (!lockedModemId) {
-		promptedModemId = null;
+/**
+ * The row's primary action. It routes on the SAME lock the button was labelled
+ * from (`resolveRowAction`), so what the operator reads and where they land
+ * cannot disagree.
+ *
+ * This REPLACED a global `$effect` that popped the unlock dialog over the whole
+ * Network destination as soon as any modem reported a lock. Three things were
+ * wrong with it, and the third is why it is gone rather than merely debounced:
+ *
+ *  1. It hijacked a shared page for a device-scoped problem — an operator
+ *     opening Network mid-broadcast to check bonding got a modal PIN prompt.
+ *  2. It was `find()`-based, so with two locked modems the second was
+ *     unreachable no matter what the operator did.
+ *  3. A PIN2 unlock CANNOT be made to stick. `Sim.SendPin` verifies for the
+ *     current UICC power session only, ModemManager keeps no PIN cache, and the
+ *     one persistent mechanism (`EnablePin(pin,false)`) has no PIN2 equivalent
+ *     at all. So the lock returns on every single boot, forever, for something
+ *     that blocks no traffic — an auto-prompt the operator could never silence.
+ *
+ * The row's own "SIM locked" badge is the discovery surface instead, and it was
+ * already there.
+ */
+function openModemConfig(id: string) {
+	const modem = modemEntries.find(([entryId]) => entryId === id)?.[1];
+	if (modem && isBlockingSimLock(activeSimLock(modem))) {
+		openSimUnlock(id);
+		return;
 	}
-});
+	// A router dongle's settings live in its OWN admin API, not in ModemManager,
+	// so it gets its own dialog rather than a ModemConfigDialog full of controls
+	// that could never reach it. Routing on `device_class` keeps the choice on
+	// the same fact the row was rendered from.
+	if (modem?.device_class === 'router-ethernet') {
+		dongleModemId = id;
+		dongleDialogOpen = true;
+		return;
+	}
+	configModemId = id;
+	modemDialogOpen = true;
+}
 </script>
 
 <div class="mx-auto w-full max-w-5xl space-y-5 p-4 sm:p-6">
@@ -154,8 +209,13 @@ $effect(() => {
 			<Skeleton class="h-32 w-full rounded-xl" />
 		</div>
 	{:else}
-		<BondedLinksSection {links} {modemEntries} {linkTelemetry} />
-		<CollisionBands {netif} />
+		<BondedLinksSection
+			{links}
+			{modemEntries}
+			{linkTelemetry}
+			unbondedCount={hud.unbondedLinkCount}
+		/>
+		<CollisionBands {netif} bondMapping={getStatus()?.bond_mapping ?? null} />
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}
@@ -168,6 +228,7 @@ $effect(() => {
 			{netif}
 			{isFullyStale}
 			{staleInterfaces}
+			{cellularInitializing}
 			onConfigure={openModemConfig}
 		/>
 		<EthernetSection
@@ -207,20 +268,39 @@ $effect(() => {
 {/if}
 
 {#if configModem && configModemId}
+	<!-- Bound here so the handoff closure captures a narrowed id: the `{#if}`
+	     narrows the template, not a callback that outlives this evaluation. -->
+	{@const lockedConfigModemId = configModemId}
 	<LazyDialog
 		dialog={ModemConfigDialog}
 		bind:open={modemDialogOpen}
 		deviceId={configModemId}
 		modem={configModem}
+		onUnlock={() => {
+			modemDialogOpen = false;
+			openSimUnlock(lockedConfigModemId, lockedConfigModemId);
+		}}
 	/>
 {/if}
 
-<!-- SIM PIN unlock — auto-prompted when a PIN/PUK-locked modem is detected -->
-{#if lockedModem && lockedModemId}
+{#if dongleModem && dongleModemId}
+	<LazyDialog
+		dialog={RouterDongleDialog}
+		bind:open={dongleDialogOpen}
+		deviceId={dongleModemId}
+		modem={dongleModem}
+	/>
+{/if}
+
+<!-- SIM unlock — reached from the locked modem's own row (a blocking lock
+     renames that row's button to "Unlock SIM"), or from the locked band inside
+     the config dialog for a non-blocking PIN2. Never auto-opened. -->
+{#if unlockModem && unlockModemId}
 	<LazyDialog
 		dialog={SimUnlockDialog}
 		bind:open={simUnlockOpen}
-		deviceId={lockedModemId}
-		modem={lockedModem}
+		deviceId={unlockModemId}
+		modem={unlockModem}
+		onBack={unlockReturnToConfigId === null ? undefined : returnFromSimUnlock}
 	/>
 {/if}

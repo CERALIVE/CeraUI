@@ -19,7 +19,15 @@
  * credential and must never appear in any captured log line.
  */
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test";
+import {
+	afterAll,
+	afterEach,
+	beforeAll,
+	beforeEach,
+	describe,
+	expect,
+	it,
+} from "bun:test";
 
 import { logger } from "../helpers/logger.ts";
 import {
@@ -33,6 +41,8 @@ import {
 	getMockSimState,
 	handleMmcliCommand,
 	MOCK_SIM_PIN_FIXTURE,
+	MOCK_SIM_PIN2_FIXTURE,
+	mockAttemptSimPin2Unlock,
 	mockAttemptSimUnlock,
 	mockClearSimPinSecret,
 	mockLoadSimPinSecret,
@@ -284,5 +294,66 @@ describe("the fixture PIN never reaches a log line + failure-path evidence", () 
 		expect(calls.unlock.length).toBe(1);
 		expect(calls.clear).toBe(1);
 		expect(afterRetries).toBe(2);
+	});
+});
+
+describe("mock SIM PIN2 state machine", () => {
+	beforeEach(() => {
+		initMockService("modem-pin-locked");
+	});
+
+	it("reports sim-pin2 on the mmcli wire for a pin2-locked SIM", () => {
+		setMockSimLockState(0, "pin2-locked");
+
+		const out = handleMmcliCommand(["-K", "-m", "0"]) ?? "";
+
+		expect(out).toContain("modem.generic.unlock-required: sim-pin2");
+		expect(out).toContain("sim-pin2 (3)");
+	});
+
+	it("accepts the PIN2 fixture and clears the lock", () => {
+		setMockSimLockState(0, "pin2-locked");
+
+		expect(mockAttemptSimPin2Unlock("0", MOCK_SIM_PIN2_FIXTURE)).toEqual({
+			state: "success",
+		});
+		expect(getMockSimState(0)?.lock).toBe("unlocked");
+	});
+
+	it("burns exactly one PIN2 attempt on a wrong code", () => {
+		setMockSimLockState(0, "pin2-locked");
+
+		expect(mockAttemptSimPin2Unlock("0", "9999")).toEqual({
+			state: "wrong-pin2",
+			remainingAttempts: 2,
+		});
+		expect(getMockSimState(0)?.pin2Retries).toBe(2);
+	});
+
+	it("yields PUK2 — never PUK1 — when the PIN2 budget is exhausted", () => {
+		setMockSimLockState(0, "pin2-locked");
+
+		mockAttemptSimPin2Unlock("0", "9999");
+		mockAttemptSimPin2Unlock("0", "9999");
+		expect(mockAttemptSimPin2Unlock("0", "9999")).toEqual({
+			state: "puk2-required",
+		});
+
+		// The PIN1/PUK1 budgets are untouched: PIN2 has its own.
+		const sim = getMockSimState(0);
+		expect(sim?.lock).toBe("pin2-locked");
+		expect(sim?.pukRetries).toBe(10);
+	});
+
+	it("reports nothing to unlock when the SIM is not PIN2-locked", () => {
+		setMockSimLockState(0, "pin-locked");
+
+		expect(mockAttemptSimPin2Unlock("0", MOCK_SIM_PIN2_FIXTURE)).toEqual({
+			state: "no-pin2-lock",
+		});
+	});
+
+	it("keeps the PIN1 and PIN2 fixtures distinct", () => {
+		expect(MOCK_SIM_PIN2_FIXTURE).not.toBe(MOCK_SIM_PIN_FIXTURE);
 	});
 });

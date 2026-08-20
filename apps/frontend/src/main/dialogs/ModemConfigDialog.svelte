@@ -1,9 +1,53 @@
 <!--
-  ModemConfigDialog.svelte — per-modem cellular configuration dialog.
+  ModemConfigDialog.svelte — per-modem cellular configuration AND advanced detail.
 
   Opened from NetworkView's per-modem "Configure" trigger. One instance drives
   one modem (passed by `modem` + `deviceId`). Composes the shared AppDialog
   chrome (responsive Dialog/Sheet, RTL-safe, focus-trapped).
+
+  This is the ADVANCED surface: `CellularSection`'s row is the calm glance, and
+  everything it deliberately keeps off that row lives here — serving-cell
+  telemetry, firmware, the read-only eSIM facts, the data-usage meter, and the
+  USB-composition switch. Layout order follows Ground Control's dialog rule: the
+  thing the operator opened it for (configuration) is reachable without
+  scrolling, the read-only instrument panels sit under it, and the one
+  destructive action (a mode switch that drops the link) is last.
+
+  ...AND IT HAS ITS OWN FLOOR (todo 64)
+  -------------------------------------
+  "Reachable without scrolling" stopped being true. Measured on the bench board
+  at the 1024x600 kiosk viewport, this dialog's body was 783px of content in a
+  363px window — the operator scrolled past four instrument panels to reach a
+  Save button for the APN they came to change. So the dialog now splits the same
+  way the row does:
+
+    PRIMARY — the status strip, any band that is currently true (a refused save,
+      an outstanding lock, no SIM), and the settings an operator actually opens
+      this dialog to change: roaming, the operator scan that follows from it,
+      Automatic APN, and the manual APN + credentials behind it.
+    SECONDARY — ONE "Advanced" disclosure holding the network-type lock, the
+      data-usage meter and its policy, the serving-cell/firmware/eSIM detail,
+      the SMS inbox, and the USB-composition switch.
+
+  Network type is in there on purpose and it is the only CONFIGURATION control
+  that moved: it is a radio-technology lock an operator sets once for a site, not
+  a field they revisit — unlike the APN, which is the reason this dialog exists.
+
+  The SMS card keeps its OWN inner fold inside the disclosure, and that nesting
+  is load-bearing rather than redundant: this outer disclosure keeps its body
+  MOUNTED (clipped + `inert`), while the SMS fold is `{#if}`-gated because it
+  gates an expensive per-message mmcli read AND keeps one-time codes out of the
+  DOM entirely. Collapsing the two into one would silently undo both.
+
+  ADDITIVE-TOLERANT RENDERING
+  ---------------------------
+  Every card below `Save` is driven by a Phase-B additive-optional wire field.
+  An older backend, and the mmcli path on ANY backend, reports none of them —
+  so each card is absent ENTIRELY when its field is absent. Never an empty
+  frame, never a zero, never a dash standing in for a reading: an empty framed
+  section reads as a load failure, and a fabricated `0 B` tells the operator
+  they used no data. `modem-detail.ts` owns those decisions so the markup below
+  only has to ask "is there a view".
 
   No-SIM safety
   -------------
@@ -19,21 +63,69 @@
   the primary (Save) action is disabled.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
-import type { Modem } from '@ceraui/rpc/schemas';
+import { formatBytes, formatRelativeTime } from '@ceraui/i18n/formatters';
 import {
+	bandSelectionChanged,
+	deriveBandOffer,
+	initialBandSelection,
+	toggleBand,
+} from './modem-bands';
+import { fiveGFailureKey, fiveGViewForModem } from './modem-five-g';
+import {
+	CYCLE_DAY_OPTIONS,
+	isThresholdInvalid,
+	readUsagePolicyForm,
+	toUsagePolicyWireFields,
+} from './modem-usage-policy';
+import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import ModemFccUnlockSection from './ModemFccUnlockSection.svelte';
+import { fccUnlockErrorKey } from './modem-fcc-unlock';
+import ModemGpsSection from './ModemGpsSection.svelte';
+import { gpsErrorKey as gpsErrorKeyFor } from './modem-gps';
+import type {
+	FccUnlockState,
+	FiveGPreference,
+	GnssFixState,
+	Modem,
+	ModemConfigRefusal,
+	ModemGpsStatus,
+	ModemSmsRefusal,
+	SmsMessage,
+	ModemBandsOutput,
+	UsbCompositionMode,
+	UsbModeOptionsOutput,
+} from '@ceraui/rpc/schemas';
+import {
+	BAND_ANY,
+	diffModemConnectionFields,
+	normalizeModemConnectionFields,
+	SMS_INBOX_CAP,
+} from '@ceraui/rpc/schemas';
+import {
+	ChevronDown,
+	Gauge,
 	Globe,
+	Inbox,
+	ListChecks,
 	Loader2,
+	MessageSquare,
 	Network as NetworkIcon,
 	Radio,
+	RadioTower,
 	RefreshCw,
+	ShieldAlert,
 	SignalZero,
+	Antenna,
+	Usb,
 	Zap,
 } from '@lucide/svelte';
 import { einkGatedSlide as slide } from '$lib/transitions';
 
+import Badge from '$lib/components/custom/Badge.svelte';
+import CollapsibleSection from '$lib/components/custom/CollapsibleSection.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
@@ -53,15 +145,67 @@ import {
 	modemConfigEchoMatches,
 } from '$lib/rpc/modem-config-echo';
 import { modemScanSignature } from '$lib/rpc/modem-scan-signature';
+import { getConfig, getIsConnected, getModems } from '$lib/rpc/subscriptions.svelte';
+import {
+	beginUsbModeFlow,
+	canTrackUsbModeSwitch,
+	displayedUsbMode,
+	failUsbModeFlow,
+	isUsbModeFlowBusy,
+	observeUsbModeSnapshot,
+	resolveUsbModeFlow,
+	tickUsbModeFlow,
+	type UsbModeFlow,
+} from '$lib/rpc/usb-mode-flow';
+import {
+	deriveUsbModeOffer,
+	resolveUsbModeTarget,
+	usbOfferSuppressionKey,
+} from '$lib/rpc/usb-mode-offer';
 import { cn } from '$lib/utils';
+import { activeSimLock, isBlockingSimLock } from '../network/cellular-row';
+import {
+	cellMetricRows,
+	cellObservedAtMs,
+	defaultAutoApn,
+	esimView,
+	firmwareRevision,
+	hasModemDetail,
+	isStandingUsbRefusal,
+	usageView,
+} from './modem-detail';
+import {
+	isWithdrawingSmsRefusal,
+	smsRefusalKey,
+	smsWallClock,
+} from './modem-sms';
 
 interface Props {
 	open?: boolean;
 	modem: Modem;
 	deviceId: string | number;
+	/**
+	 * Hand off to the SIM-unlock flow. Only a NON-BLOCKING lock (`sim-pin2`) can
+	 * reach this dialog at all — a blocking lock is routed straight to unlock by
+	 * the row — so this is the PIN2 operator's path, offered beside the settings
+	 * they actually came for rather than in front of them.
+	 */
+	onUnlock?: () => void;
 }
 
-let { open = $bindable(false), modem, deviceId }: Props = $props();
+let { open = $bindable(false), modem, deviceId, onUnlock }: Props = $props();
+
+// Only a NON-BLOCKING lock is reported here, and the gate is what keeps the
+// band's copy honest: it tells the operator their service is unaffected, which
+// is true of `sim-pin2`/`sim-puk2` and false of the blocking pair. A blocking
+// lock cannot open this dialog anyway (the row routes it straight to unlock),
+// so if one appears mid-dialog the band simply stays away rather than lying.
+const pendingSimLock = $derived(activeSimLock(modem));
+const showLockBand = $derived(
+	pendingSimLock !== undefined &&
+		!isBlockingSimLock(pendingSimLock) &&
+		onUnlock !== undefined,
+);
 
 // Keyed async-operation domains. Scan and configure are tracked SEPARATELY so an
 // in-flight scan never gates a save and vice-versa. The `osCommand` re-entry
@@ -81,7 +225,7 @@ const activeNetworkType = $derived(modem.status?.network_type ?? '');
 function readModemConfig() {
 	return {
 		selectedNetwork: modem.network_type?.active ?? modem.network_type?.supported?.[0] ?? '',
-		autoconfig: modem.config?.autoconfig ?? false,
+		autoconfig: defaultAutoApn(modem.config),
 		apn: modem.config?.apn ?? '',
 		username: modem.config?.username ?? '',
 		password: modem.config?.password ?? '',
@@ -90,6 +234,7 @@ function readModemConfig() {
 			!modem.config?.network || modem.config.network === ''
 				? '-1'
 				: String(modem.config.network),
+		...readUsagePolicyForm(modem.data_usage_policy),
 	};
 }
 
@@ -112,6 +257,11 @@ const scanning = $derived(isOperationPending(scanKey));
 const scanError = $derived(getOperationPhase(scanKey) === 'failed');
 const savePending = $derived(isOperationPending(configKey));
 
+// The secondary surface is COLLAPSED on every open, never remembered. An
+// operator who expanded it once to read a cell metric is not asking to reopen
+// every future modem on the diagnostics panel.
+let advancedOpen = $state(false);
+
 // Re-seed the form from the live modem each time the dialog opens. Guarded off
 // while a save is in flight so a close/reopen race can't drop the snapshot.
 let prevOpen = false;
@@ -120,13 +270,70 @@ $effect(() => {
 		formData = readModemConfig();
 		saveExpected = undefined;
 		scanSignatureBaseline = undefined;
+		saveRefusal = undefined;
+		advancedOpen = false;
+		resetSmsInbox();
+		void loadUsbModeOptions();
+		bandOutcomeKey = undefined;
+		void loadBands();
+		void loadFccUnlock();
 	}
 	prevOpen = open;
 });
 
 // APN required when Automatic APN is disabled (mirrors backend zod refine).
 const apnError = $derived(!formData.autoconfig && formData.apn.trim().length === 0);
-const primaryDisabled = $derived(noSim || apnError);
+const thresholdInvalid = $derived(isThresholdInvalid(formData.thresholdGb));
+const primaryDisabled = $derived(noSim || apnError || thresholdInvalid);
+
+// Whether the DEVICE can honour Automatic APN at all. It is a tristate and the
+// arms are not interchangeable: `false` is the device saying it cannot, so the
+// switch is disabled WITH ITS REASON rather than accepting a choice it would
+// then discard (board-measured: the switch was turned on, the dialog reported
+// success and closed, and reopening it showed the switch off again). ABSENT is
+// a backend that predates the field — we were told nothing, so the control
+// stays offered exactly as before.
+const autoApnUnsupported = $derived(modem.config?.autoconfig_supported === false);
+
+// Which connect-time values the pending edit would change, by the SAME rule the
+// device applies (`@ceraui/rpc`) — a second copy here would let the dialog
+// promise no interruption while the device causes one.
+const pendingConnectChanges = $derived(
+	diffModemConnectionFields(
+		normalizeModemConnectionFields(modem.config ?? {}, !autoApnUnsupported),
+		normalizeModemConnectionFields(
+			{
+				autoconfig: formData.autoconfig,
+				apn: formData.apn,
+				username: formData.username,
+				password: formData.password,
+				roaming: formData.roaming,
+				network: formData.network === '-1' ? '' : formData.network,
+			},
+			!autoApnUnsupported,
+		),
+	),
+);
+
+// NetworkManager cannot hand a live bearer new gsm values (measured on the board
+// against NM 1.42.4 — reapply refuses every property outside its allowlist, and
+// no gsm one is on it), so a real edit on a CONNECTED modem costs a reconnect.
+// Say so before the operator commits rather than letting the link drop unasked;
+// with no bearer up there is nothing to interrupt and no warning to give.
+const reconnectExpected = $derived(
+	pendingConnectChanges.length > 0 && modem.status?.connection === 'connected',
+);
+
+// The typed refusal from the last save, held here rather than read off the
+// async-op phase: that phase decays to `idle` on its own, which is how a refused
+// save used to vanish before an operator could read it (the UpdatesDialog
+// precedent). Cleared on the next dispatch and on the open edge.
+let saveRefusal = $state<ModemConfigRefusal | undefined>(undefined);
+const saveRefusalKey = $derived(
+	saveRefusal === undefined
+		? undefined
+		: `network.modem.saveRefused.${saveRefusal}`,
+);
 
 // Available operators for manual selection (populated by a scan).
 const availableNetworks = $derived(
@@ -179,6 +386,7 @@ $effect(() => {
 
 async function handleSave() {
 	if (primaryDisabled || isOperationPending(configKey)) return;
+	saveRefusal = undefined;
 	const input = {
 		device: String(deviceId),
 		network_type: formData.selectedNetwork,
@@ -188,6 +396,7 @@ async function handleSave() {
 		apn: formData.apn,
 		username: formData.username,
 		password: formData.password,
+		...(usagePolicyWritable ? (toUsagePolicyWireFields(formData) ?? {}) : {}),
 	};
 	// Capture the dispatched config as the echo baseline BEFORE the broadcast can
 	// land, so the confirm compares against what we sent — never a later edit.
@@ -203,9 +412,19 @@ async function handleSave() {
 	const result = await osCommand({
 		key: configKey,
 		rpc: () => rpc.modems.configure(input),
+		// A REFUSAL resolves — it never throws — so without this the operation
+		// would settle as a success and the dialog would wait forever for an echo
+		// the device is never going to send.
+		classify: (r) => (r.success ? { ok: true } : { ok: false, reason: 'error' }),
+		silent: true,
 		busyMessage: () => m["network.os.deviceBusy"](),
 		failMessage: () => m["network.os.operationFailed"](),
 	});
+	if (result && result.success === false) {
+		saveExpected = undefined;
+		saveRefusal = result.error ?? 'write_failed';
+		return;
+	}
 	// Release the echo baseline to the server-APPLIED (post-clamp) config, never
 	// the intended draft, so the configure-echo confirm matches what the device
 	// stored (T9-envelope convention).
@@ -228,6 +447,14 @@ async function handleSave() {
 			username: a.username,
 			password: a.password,
 			network: a.network === '' ? '-1' : String(a.network),
+			...readUsagePolicyForm({
+				...(a.data_usage_cycle_day !== undefined
+					? { cycle_day: a.data_usage_cycle_day }
+					: {}),
+				...(a.data_usage_threshold_bytes !== undefined
+					? { threshold_bytes: a.data_usage_threshold_bytes }
+					: {}),
+			}),
 		};
 	}
 }
@@ -244,11 +471,439 @@ async function handleScan() {
 	});
 }
 
+// ── USB composition mode ─────────────────────────────────────────────────────
+// The switch re-enumerates the modem, so NOTHING here keys on `deviceId` (an MM
+// index the transition re-issues) or on `ifname` (which the composition changes).
+// `stable_key` is the only identifier that survives, and a modem without one
+// cannot be honestly confirmed — so it is not offered the switch at all.
+const stableKey = $derived(modem.stable_key ?? '');
+const usbSwitchTrackable = $derived(canTrackUsbModeSwitch(modem));
+
+let usbFlow = $state<UsbModeFlow | undefined>(undefined);
+
+const activeUsbMode = $derived(
+	displayedUsbMode(getModems(), stableKey, usbFlow) ?? modem.usb_mode,
+);
+const recommendedUsbMode = $derived(modem.recommended_usb_mode);
+const showUsbModeCard = $derived(
+	activeUsbMode !== undefined || recommendedUsbMode !== undefined,
+);
+const usbSwitching = $derived(isUsbModeFlowBusy(usbFlow));
+
+// WHICH modes may be offered is the DEVICE's answer, read once per open from the
+// same certified catalog `setUsbMode` gates on — never inferred from
+// `recommended_usb_mode`, which is an advisory about stability and carries no
+// certification claim at all. Absent (never asked, in flight, or the read threw)
+// renders NO control: a set we could not establish is not a set we may offer.
+let usbOptions = $state<UsbModeOptionsOutput | undefined>(undefined);
+let usbSelected = $state<UsbCompositionMode | undefined>(undefined);
+
+async function loadUsbModeOptions(): Promise<void> {
+	usbOptions = undefined;
+	usbSelected = undefined;
+	const requested = deviceId;
+	try {
+		const result = await rpc.modems.getUsbModeOptions({ device: String(deviceId) });
+		// A close/reopen onto another modem while this was in flight must not adopt
+		// the previous device's certified set.
+		if (requested === deviceId) usbOptions = result;
+	} catch {
+		usbOptions = undefined;
+	}
+}
+
+// ── FCC auto-unlock ──────────────────────────────────────────────────────────
+// Read on every open, for the same reason the USB-mode set is: the coverage
+// answer is a property of the thing in the port right now, and the persisted
+// opt-in is a property of THIS DEVICE that another surface can have changed.
+// `undefined` renders nothing rather than a guess.
+let fccState = $state<FccUnlockState | undefined>(undefined);
+let fccBusy = $state(false);
+let fccErrorKey = $state<string | undefined>(undefined);
+
+const fccClaim = $derived(modem.capability_modules?.["fcc-auto-unlock"]);
+
+async function loadFccUnlock(): Promise<void> {
+	fccState = undefined;
+	fccErrorKey = undefined;
+	const requested = deviceId;
+	try {
+		const result = await rpc.modems.getFccUnlock({ device: String(deviceId) });
+		// A close/reopen onto another modem while this was in flight must not adopt
+		// the previous device's answer.
+		if (requested === deviceId && result.success) fccState = result.state;
+	} catch {
+		fccState = undefined;
+	}
+}
+
+async function toggleFccUnlock(enabled: boolean): Promise<void> {
+	fccBusy = true;
+	fccErrorKey = undefined;
+	try {
+		const result = await rpc.modems.setFccUnlock({
+			device: String(deviceId),
+			enabled,
+			confirm: true,
+		});
+		if (result.success) {
+			fccState = result.state;
+		} else {
+			fccErrorKey = fccUnlockErrorKey(
+				"error" in result ? result.error : result.refusal,
+			);
+		}
+	} catch {
+		fccErrorKey = fccUnlockErrorKey("write_failed");
+	} finally {
+		fccBusy = false;
+	}
+}
+
+// ── GPS / location ───────────────────────────────────────────────────────────
+// Read on every open, and RE-read after every toggle, because this read is what
+// advances the device's bounded no-fix / stale-fix state machine — the state is
+// only ever computed while somebody is looking at it, which is what makes "a fix
+// exists only while it is on screen" true by construction rather than by policy.
+let gpsStatus = $state<ModemGpsStatus | undefined>(undefined);
+let gpsState = $state<GnssFixState | undefined>(undefined);
+let gpsBusy = $state(false);
+let gpsErrorKey = $state<string | undefined>(undefined);
+
+const gpsClaim = $derived(modem.capability_modules?.gps);
+
+async function loadGps(): Promise<void> {
+	gpsStatus = undefined;
+	gpsState = undefined;
+	gpsErrorKey = undefined;
+	const requested = deviceId;
+	try {
+		const result = await rpc.modems.getGps({ device: String(deviceId) });
+		// A close/reopen onto another modem while this was in flight must not adopt
+		// the previous device's position.
+		if (requested !== deviceId) return;
+		if (result.success) {
+			gpsStatus = result.status;
+			gpsState = result.state;
+		}
+	} catch {
+		gpsStatus = undefined;
+		gpsState = undefined;
+	}
+}
+
+async function toggleGps(enabled: boolean): Promise<void> {
+	gpsBusy = true;
+	gpsErrorKey = undefined;
+	try {
+		const result = await rpc.modems.setGps({ device: String(deviceId), enabled });
+		if (result.success) {
+			gpsStatus = result.status;
+			gpsState = result.state;
+		} else {
+			gpsErrorKey = gpsErrorKeyFor(
+				result.error ?? result.mutationRefusal ?? "read_failed",
+			);
+		}
+	} catch {
+		gpsErrorKey = gpsErrorKeyFor("read_failed");
+	} finally {
+		gpsBusy = false;
+	}
+}
+
+// ── Band lock ────────────────────────────────────────────────────────────────
+// Read on every open, like the USB-mode option set and for the same reason: the
+// certification, the advertised set and the current lock are all properties of
+// the thing in the port right now, and the thing in the port can change between
+// opens. `undefined` stays `unknown` — a read that has not answered claims
+// nothing about the device (`deriveBandOffer`).
+let bandResult = $state<ModemBandsOutput | undefined>(undefined);
+let bandSelection = $state<readonly string[]>([BAND_ANY]);
+let bandApplying = $state(false);
+let bandOutcomeKey = $state<string | undefined>(undefined);
+
+const bandOffer = $derived(deriveBandOffer(bandResult));
+const bandDirty = $derived(bandSelectionChanged(bandOffer.current, bandSelection));
+
+// Deliberately does NOT clear `bandOutcomeKey`: this runs as the CONFIRMING
+// re-read immediately after an apply, and clearing there would erase the outcome
+// the operator has to read — including `auto_restored`, the one that says their
+// request did not take effect. The open edge clears it instead.
+async function loadBands(): Promise<void> {
+	bandResult = undefined;
+	const requested = deviceId;
+	try {
+		const result = await rpc.modems.getBands({ device: String(deviceId) });
+		if (requested !== deviceId) return;
+		bandResult = result;
+		bandSelection = initialBandSelection(deriveBandOffer(result));
+	} catch {
+		bandResult = undefined;
+	}
+}
+
+async function applyBandLock(): Promise<void> {
+	bandApplying = true;
+	bandOutcomeKey = undefined;
+	try {
+		const result = await rpc.modems.setBands({
+			device: String(deviceId),
+			bands: [...bandSelection],
+			confirm: true,
+		});
+		// The outcome is the DEVICE's, never the request's: `auto_restored` and
+		// `readback_failed` both mean the operator's selection is NOT in force, and
+		// reporting either as a success would be the one lie this whole path exists
+		// to prevent.
+		bandOutcomeKey =
+			result.status === undefined
+				? 'network.modem.bands.outcome.refused'
+				: `network.modem.bands.outcome.${result.status}`;
+	} catch {
+		bandOutcomeKey = 'network.modem.bands.outcome.refused';
+	} finally {
+		bandApplying = false;
+		// Re-read rather than trusting the reply — the modem is the authority on
+		// what it is locked to, including after an automatic restore.
+		await loadBands();
+	}
+}
+
+// ── 5G preference ────────────────────────────────────────────────────────────
+// The device publishes the block ONLY where the capability ladder says the
+// control may be offered, so the gate is never re-derived here — a second
+// derivation could disagree with the backend's, and every way it could disagree
+// is a lie to the operator.
+const fiveG = $derived(fiveGViewForModem(modem));
+let fiveGApplying = $state(false);
+let fiveGFailure = $state<string | undefined>(undefined);
+
+async function applyFiveG(preference: FiveGPreference): Promise<void> {
+	fiveGApplying = true;
+	fiveGFailure = undefined;
+	try {
+		const result = await rpc.modems.setFiveGPreference({
+			device: String(deviceId),
+			preference,
+			confirm: true,
+		});
+		// PESSIMISTIC: nothing is assigned to a local selection on resolve. The
+		// rendered "In use" marker follows `modem.five_g_preference.active`, which
+		// is the device's own LIVE read arriving on the next broadcast — so a
+		// refused or clamped write leaves the previous posture marked, which is
+		// where the radio actually still is.
+		if (!result.success) {
+			fiveGFailure = fiveGFailureKey(result.refusal ?? result.error);
+		}
+	} catch {
+		fiveGFailure = fiveGFailureKey(undefined);
+	} finally {
+		fiveGApplying = false;
+	}
+}
+
+const usbOffer = $derived(
+	deriveUsbModeOffer({
+		options: usbOptions,
+		activeMode: activeUsbMode,
+		recommendedMode: recommendedUsbMode,
+	}),
+);
+const usbSwitchTarget = $derived(resolveUsbModeTarget(usbOffer, usbSelected));
+
+// The confirming snapshot may arrive at ANY point after dispatch — including
+// while the RPC is still pending, because the backend's post-success
+// re-discovery can legally beat the reply. A pre-resolution match is buffered
+// here and consumed at resolution.
+$effect(() => {
+	const flow = usbFlow;
+	if (!isUsbModeFlowBusy(flow) || !flow) return;
+	const next = observeUsbModeSnapshot(flow, getModems());
+	if (next !== flow) usbFlow = next;
+});
+
+// The 20 s bound covers re-discovery + broadcast latency only, so it is armed at
+// RPC RESOLUTION (`resolveUsbModeFlow`), never at dispatch — the RPC itself
+// awaits the whole server-side transaction.
+$effect(() => {
+	if (usbFlow?.phase !== 'awaiting' || usbFlow.deadlineAt === undefined) return;
+	const timer = setTimeout(
+		() => {
+			if (usbFlow) usbFlow = tickUsbModeFlow(usbFlow, Date.now());
+		},
+		Math.max(0, usbFlow.deadlineAt - Date.now()),
+	);
+	return () => clearTimeout(timer);
+});
+
+function usbModeLabel(mode: UsbCompositionMode | undefined): string {
+	return mode ?? m["network.modem.usbMode.unknown"]();
+}
+
+const usbFailureText = $derived.by(() => {
+	const flow = usbFlow;
+	if (flow?.phase !== 'refused') return undefined;
+	const head = flow.refusal
+		? resolveMessageKey(`network.modem.usbMode.error.${flow.refusal}`)
+		: m["network.modem.usbMode.error.transition_failed"]();
+	const detail = flow.reason
+		? resolveMessageKey(`network.modem.usbMode.reason.${flow.reason}`)
+		: undefined;
+	return detail ? `${head} ${detail}` : head;
+});
+
+async function handleUsbModeSwitch() {
+	const target = usbSwitchTarget;
+	if (!target || !usbSwitchTrackable || usbSwitching) return;
+
+	// BASELINE BEFORE DISPATCH: the feed is read now, so the confirmation
+	// compares against what was true when the operator acted.
+	usbFlow = beginUsbModeFlow({ stableKey, target, modems: getModems() });
+
+	try {
+		const result = await rpc.modems.setUsbMode({
+			device: String(deviceId),
+			mode: target,
+			confirm: true,
+		});
+		if (usbFlow) usbFlow = resolveUsbModeFlow(usbFlow, result, Date.now());
+	} catch {
+		if (usbFlow) usbFlow = failUsbModeFlow(usbFlow);
+	}
+}
+
+// A refusal the device will repeat verbatim on every retry (`uncertified`,
+// `provisioning_disabled`) is a STANDING PROPERTY, not a failure: the switch
+// control is withdrawn and the state renders calmly, because a retry button
+// beside it would be a lie about what pressing it does.
+const usbStandingRefusal = $derived(
+	usbFlow?.phase === 'refused' && isStandingUsbRefusal(usbFlow.refusal)
+		? usbFlow.refusal
+		: undefined,
+);
+const usbStandingBodyKey = $derived(
+	usbStandingRefusal === 'uncertified'
+		? 'network.modem.usbMode.uncertifiedBody'
+		: 'network.modem.usbMode.provisioningBody',
+);
+const offerUsbSwitch = $derived(usbOffer.phase === 'offered' && !usbStandingRefusal);
+
+// The device answered that no mode may be offered, and said why. It is the calm
+// muted band, never the destructive one: nothing failed — this device simply has
+// no certified transition, and the mode it is in keeps working.
+const usbWithheldReason = $derived(
+	usbOffer.phase === 'withheld' && !usbStandingRefusal ? usbOffer.reason : undefined,
+);
+
+// The provisioning gate is a DEVICE setting, echoed read-only on the config wire
+// as a tristate. `false` is the only arm that gates anything: the device has said
+// the mutation is off, so the switch renders disabled-with-reason instead of
+// making the operator discover it by dispatching one and reading the refusal.
+// ABSENT is not `false` — it is a backend that never published the key, and
+// treating it as off would hide a working control on every such device.
+const provisioningBlocked = $derived(getConfig()?.modem_provisioning === false);
+
 const selectedNetworkLabel = $derived(
 	formData.network === '-1'
 		? m["network.modem.automaticRoamingNetwork"]()
 		: (modem.available_networks?.[formData.network]?.name ?? formData.network),
 );
+
+// ── Read-only advanced detail ────────────────────────────────────────────────
+const t = resolveMessageKey;
+const locale = $derived(getLocale());
+const bytes = $derived(formatBytes(locale));
+
+const cellRows = $derived(cellMetricRows(modem.cell_info));
+const observedAt = $derived(cellObservedAtMs(modem.cell_info));
+const firmware = $derived(firmwareRevision(modem.firmware_revision));
+const esim = $derived(esimView(modem.esim));
+const showDetailCard = $derived(hasModemDetail(modem));
+
+const usage = $derived(usageView(modem.data_usage));
+
+// The usage POLICY is a SETTING, so it is published on every row whether or not
+// anything has counted a byte — unlike `data_usage`, which no shipped device
+// produces (the D-Bus backend that folds counters is not the default anywhere).
+// Gating the controls on the counters would therefore hide them on every board
+// in the field, which is the defect this replaced the roadmap pill to fix.
+const usagePolicy = $derived(modem.data_usage_policy);
+// Read STRICTLY `=== true`: absence means an older backend that was never asked,
+// and a device we were told nothing about is not a device that said yes.
+const usagePolicyWritable = $derived(usagePolicy?.supported === true);
+
+// The usage counters carry no observation timestamp of their own on this wire,
+// so the only honest freshness signal available is whether the socket that
+// delivers them is still up. A dropped connection therefore dims the figures
+// and says so, rather than presenting the last frame as a live reading
+// (`.impeccable.md` Live-Data Discipline).
+const usageStale = $derived(!getIsConnected());
+
+// ── Read-only SMS inbox ──────────────────────────────────────────────────────
+// FOLDED, AND THE FOLD DOES REAL WORK. Nothing is read until the operator opens
+// the section: `modems.getSms` costs up to one mmcli invocation per stored
+// message (bounded at SMS_INBOX_CAP, but not cheap — a full inbox is 50 of
+// them), so probing it on every dialog open would tax every operator who came
+// here to change an APN. Closed, the section holds no message text in the DOM
+// at all, which is also the only version of "general users never see it" that
+// survives a page-source read.
+let smsOpen = $state(false);
+let smsLoading = $state(false);
+let smsLoaded = $state(false);
+let smsMessages = $state<SmsMessage[]>([]);
+let smsRefusal = $state<ModemSmsRefusal | undefined>(undefined);
+
+// `unsupported` is the one refusal that describes the DEVICE rather than the
+// moment: this modem exposes no Messaging interface, so it can never have an
+// inbox and the whole section leaves rather than standing there offering a
+// refresh that would refuse identically forever (the `uncertified` USB-mode
+// precedent below). The verdict is per dialog session — reopening asks again,
+// because the thing in the USB port can change between opens.
+const smsWithdrawn = $derived(isWithdrawingSmsRefusal(smsRefusal));
+const smsRefusalCopyKey = $derived(smsRefusalKey(smsRefusal));
+const smsCapped = $derived(smsMessages.length >= SMS_INBOX_CAP);
+
+function resetSmsInbox(): void {
+	smsOpen = false;
+	smsLoading = false;
+	smsLoaded = false;
+	smsMessages = [];
+	smsRefusal = undefined;
+}
+
+async function loadSms(): Promise<void> {
+	if (smsLoading) return;
+	smsLoading = true;
+	smsRefusal = undefined;
+	try {
+		const result = await rpc.modems.getSms({ device: String(deviceId) });
+		if (result.success) {
+			// Rendered in WIRE ORDER. Newest-first is the procedure's contract and
+			// it sorts on the carrier timestamp with a tie-break this side cannot
+			// reproduce (ModemManager reuses freed object indices, so index order
+			// is not arrival order). Re-sorting here would be a second, worse
+			// implementation of the same rule.
+			smsMessages = result.messages ?? [];
+		} else {
+			// A refusal is never flattened into an empty inbox: `[]` means this
+			// modem HAS an inbox and it is empty, and nothing else.
+			smsMessages = [];
+			smsRefusal = result.error ?? 'read_failed';
+		}
+	} catch {
+		smsMessages = [];
+		smsRefusal = 'read_failed';
+	} finally {
+		smsLoaded = true;
+		smsLoading = false;
+	}
+}
+
+function toggleSms(): void {
+	smsOpen = !smsOpen;
+	if (smsOpen && !smsLoaded && !smsLoading) void loadSms();
+}
 </script>
 
 <AppDialog
@@ -281,6 +936,57 @@ const selectedNetworkLabel = $derived(
 			/>
 		</div>
 
+		{#if saveRefusalKey}
+			<!-- The device REFUSED the write. It is an error band, not a toast:
+			     the dialog is still open on the settings that did not land, and a
+			     toast that decays leaves the operator reading a form they believe
+			     was saved. The reason token is keyed copy, never rendered raw. -->
+			<div
+				class="border-status-error/40 bg-status-error/10 flex items-start gap-3 rounded-lg border p-3"
+				data-testid="modem-save-refused"
+				data-refusal={saveRefusal}
+				role="alert"
+			>
+				<ShieldAlert class="text-status-error mt-0.5 size-5 shrink-0" aria-hidden="true" />
+				<div class="min-w-0">
+					<p class="text-sm font-semibold">{m["network.modem.saveRefusedTitle"]()}</p>
+					<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+						{t(saveRefusalKey)}
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		{#if showLockBand}
+			<!-- ── Outstanding SIM lock ────────────────────────────────────────
+			     Calm INFO, deliberately not the amber no-SIM warning register:
+			     this modem registers and streams fine, so the band offers the
+			     unlock rather than warning about it, and gates nothing below. -->
+			<div
+				class="border-status-info/40 bg-status-info/10 flex flex-wrap items-start gap-3 rounded-lg border p-3"
+				data-testid="modem-locked-band"
+				data-sim-lock={pendingSimLock}
+				role="status"
+			>
+				<ListChecks class="text-status-info mt-0.5 size-5 shrink-0" aria-hidden="true" />
+				<div class="min-w-0 flex-1">
+					<p class="text-sm font-semibold">{m["network.cellular.lockBandTitle"]()}</p>
+					<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+						{m["network.cellular.lockBandBody"]()}
+					</p>
+				</div>
+				<Button
+					class="min-h-[var(--touch-target-min)] shrink-0"
+					data-testid="modem-locked-unlock"
+					size="sm"
+					variant="outline"
+					onclick={() => onUnlock?.()}
+				>
+					{m["network.cellular.unlockAction"]()}
+				</Button>
+			</div>
+		{/if}
+
 		{#if noSim}
 			<!-- ── No-SIM banner ──────────────────────────────────────────────── -->
 			<div
@@ -297,39 +1003,6 @@ const selectedNetworkLabel = $derived(
 
 		<!-- All controls below are disabled when no SIM is present. -->
 		<fieldset class="space-y-4 disabled:pointer-events-none" disabled={noSim}>
-			<!-- ── Network type ────────────────────────────────────────────────── -->
-			<div class="space-y-1.5">
-				<Label class="text-muted-foreground text-xs">{m["network.modem.networkType"]()}</Label>
-				<Select.Root
-					disabled={noSim}
-					onValueChange={(val) => {
-						if (val) formData.selectedNetwork = val;
-					}}
-					type="single"
-					value={formData.selectedNetwork}
-				>
-				<Select.Trigger class="h-10 w-full text-sm">
-					{formData.selectedNetwork
-						? renameSupportedModemNetwork(formData.selectedNetwork)
-						: '—'}
-				</Select.Trigger>
-				<Select.Content>
-					<Select.Group>
-						{#each modem.network_type?.supported ?? [] as networkType (networkType)}
-							<Select.Item value={networkType}>
-								{renameSupportedModemNetwork(networkType)}
-							</Select.Item>
-						{/each}
-						{#if (modem.network_type?.supported ?? []).length === 0}
-							<div class="text-muted-foreground px-2 py-1.5 text-xs">
-								{m["network.modem.noNetworksFound"]()}
-							</div>
-						{/if}
-					</Select.Group>
-				</Select.Content>
-				</Select.Root>
-			</div>
-
 			<!-- ── Roaming toggle ──────────────────────────────────────────────── -->
 			<div class="bg-muted/40 flex items-center justify-between gap-3 rounded-lg border p-3">
 				<div class="flex items-center gap-2.5">
@@ -428,13 +1101,32 @@ const selectedNetworkLabel = $derived(
 						aria-hidden="true"
 					/>
 					<div class="min-w-0">
-						<p class="text-sm font-medium">{m["network.modem.autoapn"]()}</p>
+						<div class="flex flex-wrap items-center gap-1.5">
+							<p class="text-sm font-medium">{m["network.modem.autoapn"]()}</p>
+							<Badge
+								variant="info"
+								size="micro"
+								class="text-(length:--text-micro)"
+								data-testid="modem-autoapn-recommended"
+								label={m["network.modem.autoApnRecommended"]()}
+							/>
+						</div>
 						<p class="text-muted-foreground text-xs">{m["network.modem.autoApnDescription"]()}</p>
+						{#if autoApnUnsupported}
+							<!-- On screen, not only in the accessible name: the shipped
+							     kiosk touchscreen cannot hover to reveal a tooltip. -->
+							<p
+								class="text-status-warning mt-1 text-xs"
+								data-testid="modem-autoapn-unsupported"
+							>
+								{m["network.modem.autoApnUnsupported"]()}
+							</p>
+						{/if}
 					</div>
 				</div>
 				<LabeledSwitch
 					checked={formData.autoconfig}
-					disabled={noSim}
+					disabled={noSim || autoApnUnsupported}
 					label={m["network.modem.autoapn"]()}
 					onCheckedChange={(checked) => (formData.autoconfig = checked)}
 				/>
@@ -484,5 +1176,940 @@ const selectedNetworkLabel = $derived(
 				</div>
 			{/if}
 		</fieldset>
+
+		{#if reconnectExpected}
+			<!-- Honest, not preventive: the change is worth making, it simply
+			     cannot reach a bearer that is already up, so the operator is told
+			     the cost BEFORE they pay it. Never shown for an unchanged form or
+			     an idle modem — nothing is interrupted in either case. -->
+			<div
+				class="border-status-info/40 bg-status-info/10 flex items-start gap-3 rounded-lg border p-3"
+				data-testid="modem-reconnect-notice"
+				data-changed={pendingConnectChanges.join(',')}
+				role="status"
+			>
+				<RefreshCw class="text-status-info mt-0.5 size-5 shrink-0" aria-hidden="true" />
+				<div class="min-w-0">
+					<p class="text-sm font-semibold">{m["network.modem.reconnectNoticeTitle"]()}</p>
+					<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+						{m["network.modem.reconnectNoticeBody"]()}
+					</p>
+				</div>
+			</div>
+		{/if}
+
+		<!-- ── Band lock ────────────────────────────────────────────────────────
+		     PRIMARY, by explicit product decision: an operator locking a band is
+		     working a specific coverage problem at a specific site, and burying
+		     that behind the diagnostics disclosure would make the fix harder to
+		     reach than the symptom.
+
+		     It renders NOTHING unless the device answered with a certified,
+		     offerable set. `withheld` states its reason and offers no control —
+		     never a disabled one, which would imply a capability being kept back
+		     when the truth is that this transition has never been reviewed for
+		     this model and firmware. `unknown` asserts nothing at all. -->
+		{#if bandOffer.phase === 'offered' && bandOffer.offerable.length > 0}
+			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-bands-card">
+				<div class="flex items-start gap-2.5">
+					<Antenna class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+					<div class="min-w-0">
+						<p class="text-sm font-medium">{m["network.modem.bands.title"]()}</p>
+						<p class="text-muted-foreground text-xs">{m["network.modem.bands.description"]()}</p>
+					</div>
+				</div>
+
+				<p class="text-muted-foreground text-xs" data-testid="modem-bands-current">
+					{bandOffer.unlocked
+						? m["network.modem.bands.currentAny"]()
+						: m["network.modem.bands.current"]({ bands: bandOffer.current.join(', ') })}
+				</p>
+
+				<div
+					class="flex flex-wrap gap-1.5"
+					role="group"
+					aria-label={m["network.modem.bands.title"]()}
+					data-testid="modem-bands-options"
+				>
+					<!-- `any` is the release, and it is always offered: an operator who
+					     locked a band they can no longer register on must be able to get
+					     back without hunting for the right one. -->
+					{#each [BAND_ANY, ...bandOffer.offerable] as band (band)}
+						<button
+							type="button"
+							role="checkbox"
+							aria-checked={bandSelection.includes(band)}
+							class={cn(
+								'min-h-[var(--touch-target-min)] rounded-md border px-2.5 py-1 font-mono text-xs',
+								bandSelection.includes(band)
+									? 'border-primary bg-primary/10 text-foreground'
+									: 'text-muted-foreground hover:bg-muted/50',
+							)}
+							data-testid="modem-band-option-{band}"
+							disabled={bandApplying}
+							onclick={() => {
+								bandSelection = toggleBand(bandSelection, band);
+							}}
+						>
+							{band === BAND_ANY ? m["network.modem.bands.any"]() : band}
+						</button>
+					{/each}
+				</div>
+
+				<!-- Offered only for a CHANGED selection: an Apply that would re-register
+				     the radio onto the bands it is already on costs a connection drop and
+				     buys nothing, so it is not a choice worth presenting. -->
+				{#if bandDirty}
+					<SimpleAlertDialog
+						buttonClasses="w-full"
+						buttonText={m["network.modem.bands.apply"]()}
+						confirmButtonText={m["network.modem.bands.confirmAction"]()}
+						confirmVariant="destructive"
+						disabledConfirmButton={bandApplying}
+						extraButtonClasses="min-h-[var(--touch-target-min)]"
+						title={m["network.modem.bands.confirmTitle"]()}
+						onconfirm={applyBandLock}
+					>
+						{#snippet dialogTitle()}
+							{m["network.modem.bands.confirmTitle"]()}
+						{/snippet}
+						{#snippet description()}
+							{m["network.modem.bands.confirmBody"]()}
+						{/snippet}
+					</SimpleAlertDialog>
+				{/if}
+
+				{#if bandApplying}
+					<p
+						class="text-muted-foreground flex items-center gap-2 text-xs"
+						data-testid="modem-bands-applying"
+						role="status"
+					>
+						<Loader2 class="size-3.5 animate-spin" aria-hidden="true" />
+						{m["network.modem.bands.applying"]()}
+					</p>
+				{:else if bandOutcomeKey}
+					<p class="text-xs" data-testid="modem-bands-outcome" role="status">
+						{resolveMessageKey(bandOutcomeKey)}
+					</p>
+				{/if}
+			</section>
+		{:else if bandOffer.phase === 'withheld' && bandOffer.reasonKey}
+			<p class="text-muted-foreground text-xs" data-testid="modem-bands-unavailable" role="status">
+				{resolveMessageKey(bandOffer.reasonKey)}
+			</p>
+		{/if}
+
+		<!-- ── Advanced ─────────────────────────────────────────────────────────
+		     The single secondary surface. Everything inside it is either a
+		     set-once lock (network type), a read-only instrument (usage, cell
+		     detail, the inbox), or device surgery (USB composition) — none of it
+		     is what an operator opened this dialog to change, and together they
+		     were 783px of an 363px kiosk window. -->
+		<CollapsibleSection
+			bodyId="modem-advanced-body"
+			bodyTestid="modem-advanced-body"
+			class="bg-transparent"
+			description={m["network.modem.advanced.description"]()}
+			testid="modem-advanced"
+			title={m["network.modem.advanced.title"]()}
+			toggleTestid="modem-advanced-toggle"
+			bind:open={advancedOpen}
+		>
+		<div class="space-y-4">
+		<!-- ── Network type ─────────────────────────────────────────────────────
+		     The one CONFIGURATION control down here. It locks which radio
+		     technologies the modem may use — a per-site decision made once, not
+		     the field an operator reopens this dialog for. Its own `disabled` is
+		     explicit rather than inherited, because it no longer sits inside the
+		     no-SIM fieldset. -->
+		<div class="space-y-1.5">
+			<Label class="text-muted-foreground text-xs">{m["network.modem.networkType"]()}</Label>
+			<Select.Root
+				disabled={noSim}
+				onValueChange={(val) => {
+					if (val) formData.selectedNetwork = val;
+				}}
+				type="single"
+				value={formData.selectedNetwork}
+			>
+				<Select.Trigger class="h-10 w-full text-sm">
+					{formData.selectedNetwork
+						? renameSupportedModemNetwork(formData.selectedNetwork)
+						: '—'}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Group>
+						{#each modem.network_type?.supported ?? [] as networkType (networkType)}
+							<Select.Item value={networkType}>
+								{renameSupportedModemNetwork(networkType)}
+							</Select.Item>
+						{/each}
+						{#if (modem.network_type?.supported ?? []).length === 0}
+							<div class="text-muted-foreground px-2 py-1.5 text-xs">
+								{m["network.modem.noNetworksFound"]()}
+							</div>
+						{/if}
+					</Select.Group>
+				</Select.Content>
+			</Select.Root>
+		</div>
+
+		<!-- ── 5G preference ────────────────────────────────────────────────────
+		     The network-type selector above chooses the ALLOWED SET; this chooses
+		     the RANKING within it. They are two different questions and the second
+		     is the one the coarse selector structurally cannot express, which is
+		     why both live here rather than folding into one control.
+
+		     It renders ONLY where the device published the block, so a modem with
+		     no 5G, an operator who never enabled the gate, and a build that never
+		     shipped the module all render nothing — no disabled control, because
+		     there is no capability being withheld. -->
+		{#if fiveG.kind === 'offered'}
+			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-five-g-card">
+				<div class="min-w-0">
+					<p class="text-sm font-medium">{m["network.modem.fiveG.title"]()}</p>
+					<p class="text-muted-foreground text-xs">{m["network.modem.fiveG.intro"]()}</p>
+				</div>
+
+				<div class="space-y-1.5" data-testid="modem-five-g-options" role="radiogroup"
+					aria-label={m["network.modem.fiveG.title"]()}>
+					{#each fiveG.options as option (option.preference)}
+						<button
+							aria-checked={option.active}
+							class="focus-visible:ring-ring flex w-full items-start gap-2.5 rounded-md border p-2.5 text-start focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
+							data-active={option.active}
+							data-testid="modem-five-g-option-{option.preference}"
+							disabled={noSim || fiveGApplying || option.active}
+							onclick={() => applyFiveG(option.preference)}
+							role="radio"
+							type="button"
+						>
+							<div class="min-w-0 flex-1">
+								<p class="text-sm">{resolveMessageKey(option.labelKey)}</p>
+								<p class="text-muted-foreground text-xs">
+									{resolveMessageKey(option.descriptionKey)}
+								</p>
+							</div>
+							{#if option.active}
+								<span
+									class="text-status-success shrink-0 text-xs"
+									data-testid="modem-five-g-active-{option.preference}"
+								>
+									{m["network.modem.fiveG.active"]()}
+								</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+
+				<!-- A REFUSAL IS A READING. SA/NSA is not a control this device can
+				     offer, and saying so is more useful than an absent row an
+				     operator goes hunting for. -->
+				<p class="text-muted-foreground text-xs" data-testid="modem-five-g-nr-mode">
+					{resolveMessageKey(fiveG.nrModeReasonKey)}
+				</p>
+
+				{#if fiveGApplying}
+					<p class="text-muted-foreground text-xs" data-testid="modem-five-g-applying" role="status">
+						{m["network.modem.fiveG.apply"]()}…
+					</p>
+				{/if}
+				{#if fiveGFailure}
+					<p class="text-status-warning text-xs" data-testid="modem-five-g-error" role="status">
+						{resolveMessageKey(fiveGFailure)}
+					</p>
+				{/if}
+			</section>
+		{/if}
+
+		<!-- ── Data usage ───────────────────────────────────────────────────────
+		     TWO HALVES WITH DIFFERENT PRESENCE, and that is why they are separately
+		     gated. The COUNTERS are cumulative wire bytes the device itself counted
+		     — never a rate, never the carrier's figure — so each states its own
+		     scope on screen rather than leaving "12.4 GB" to read as a monthly bill;
+		     they render only when the modem reports `data_usage`. The POLICY is the
+		     operator's own two numbers, knowable before a single byte is counted, so
+		     it renders whenever the device published one. Gating the controls on the
+		     counters would hide them on every board in the field, since no shipped
+		     device runs the backend that folds counters onto the wire. -->
+		{#if usage || usagePolicy}
+			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-usage-card">
+				<div class="flex items-start gap-2.5">
+					<Gauge class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+					<div class="min-w-0">
+						<p class="text-sm font-medium">{m["network.modem.usage.title"]()}</p>
+						<p class="text-muted-foreground text-xs">{m["network.modem.usage.description"]()}</p>
+					</div>
+				</div>
+
+				{#if usage}
+				<dl
+					class={cn('grid grid-cols-2 gap-3', usageStale && 'opacity-50')}
+					data-testid="modem-usage-figures"
+					data-stale={usageStale ? 'true' : undefined}
+				>
+					<!-- Each scope hint lives INSIDE its <dd>, not beside it: a <dl>'s
+					     grouping <div> may hold only <dt>/<dd>, and a sibling <p> there
+					     is a serious axe `definition-list` violation. The hint describes
+					     the same term, so the <dd> is where it belongs anyway. -->
+					<div class="min-w-0">
+						<dt class="text-muted-foreground text-xs">{m["network.modem.usage.session"]()}</dt>
+						<dd data-testid="modem-usage-session">
+							<span class="block font-mono text-sm tabular-nums">
+								{bytes(usage.sessionBytes)}
+							</span>
+							<span class="text-muted-foreground/80 block text-xs">
+								{m["network.modem.usage.sessionHint"]()}
+							</span>
+						</dd>
+					</div>
+					<div class="min-w-0">
+						<dt class="text-muted-foreground text-xs">{m["network.modem.usage.cycle"]()}</dt>
+						<dd data-testid="modem-usage-cycle">
+							<span class="block font-mono text-sm tabular-nums">
+								{bytes(usage.cycleBytes)}
+							</span>
+							<span class="text-muted-foreground/80 block text-xs">
+								{m["network.modem.usage.cycleHint"]()}
+							</span>
+						</dd>
+					</div>
+				</dl>
+
+				{#if usageStale}
+					<p class="text-muted-foreground text-xs" data-testid="modem-usage-stale" role="status">
+						{m["network.modem.usage.stale"]()}
+					</p>
+				{/if}
+
+				{#if usage.cycleDay !== undefined}
+					<p class="text-muted-foreground text-xs" data-testid="modem-usage-cycle-day">
+						{m["network.modem.usage.cycleDay"]({ day: String(usage.cycleDay) })}
+					</p>
+				{/if}
+
+				<!-- The limit is ADVISORY in both directions: the bar stops at full,
+				     the over-limit verdict does not, and neither one gates anything. -->
+				{#if usage.thresholdBytes !== undefined}
+					<div class="space-y-1.5" data-testid="modem-usage-threshold">
+						<div class="flex items-center justify-between gap-2">
+							<span class="text-muted-foreground text-xs">
+								{m["network.modem.usage.threshold"]()}
+							</span>
+							<span class="font-mono text-xs tabular-nums" data-testid="modem-usage-threshold-value">
+								{m["network.modem.usage.thresholdOf"]({
+									used: bytes(usage.cycleBytes),
+									limit: bytes(usage.thresholdBytes),
+								})}
+							</span>
+						</div>
+						{#if usage.thresholdPercent !== undefined}
+							<div class="bg-muted h-1.5 w-full overflow-hidden rounded-full" aria-hidden="true">
+								<div
+									class={cn(
+										'h-full rounded-full',
+										usage.overThreshold ? 'bg-status-warning' : 'bg-primary',
+									)}
+									data-testid="modem-usage-threshold-bar"
+									data-percent={usage.thresholdPercent}
+									style:inline-size={`${usage.thresholdPercent}%`}
+								></div>
+							</div>
+						{/if}
+						<p
+							class={cn('text-xs', usage.overThreshold ? 'text-status-warning' : 'text-muted-foreground/80')}
+							data-testid="modem-usage-threshold-note"
+							role="status"
+						>
+							{usage.overThreshold
+								? m["network.modem.usage.thresholdOver"]()
+								: m["network.modem.usage.thresholdAdvisory"]()}
+						</p>
+					</div>
+				{/if}
+				{/if}
+
+				<!-- The POLICY controls. A device whose pinned modem-control cannot
+				     apply a policy gets the amber disabled-with-reason treatment, not
+				     a hidden section and not a fake-interactive one: the capability is
+				     a property of THIS build, so the honest thing is to show the
+				     control and say why it cannot move right now. -->
+				{#if usagePolicy}
+					<div class="space-y-3 border-t pt-2.5" data-testid="modem-usage-policy">
+						<p class="text-muted-foreground text-xs">
+							{m["network.modem.usage.settings"]()}
+						</p>
+
+						{#if !usagePolicyWritable}
+							<p
+								class="text-status-warning text-xs"
+								data-testid="modem-usage-policy-unsupported"
+								role="status"
+							>
+								{m["network.modem.usage.policyUnsupported"]()}
+							</p>
+						{/if}
+
+						<div class="grid gap-3 sm:grid-cols-2">
+							<div class="space-y-1.5">
+								<Label class="text-xs" for={`modem-${deviceId}-cycle-day`}>
+									{m["network.modem.usage.cycleDayLabel"]()}
+								</Label>
+								<select
+									id={`modem-${deviceId}-cycle-day`}
+									class="border-input bg-background focus-visible:ring-ring flex h-11 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+									data-testid="modem-usage-cycle-day-select"
+									disabled={!usagePolicyWritable || savePending}
+									bind:value={formData.cycleDay}
+								>
+									<option value="">{m["network.modem.usage.cycleDayUnset"]()}</option>
+									{#each CYCLE_DAY_OPTIONS as day (day)}
+										<option value={String(day)}>{day}</option>
+									{/each}
+								</select>
+								<p class="text-muted-foreground/80 text-xs">
+									{m["network.modem.usage.cycleDayHelp"]()}
+								</p>
+							</div>
+
+							<div class="space-y-1.5">
+								<Label class="text-xs" for={`modem-${deviceId}-threshold`}>
+									{m["network.modem.usage.thresholdLabel"]()}
+								</Label>
+								<Input
+									id={`modem-${deviceId}-threshold`}
+									class="h-11"
+									data-testid="modem-usage-threshold-input"
+									inputmode="decimal"
+									aria-invalid={thresholdInvalid ? 'true' : undefined}
+									disabled={!usagePolicyWritable || savePending}
+									placeholder={m["network.modem.usage.thresholdUnset"]()}
+									bind:value={formData.thresholdGb}
+								/>
+								<p
+									class={cn('text-xs', thresholdInvalid ? 'text-status-warning' : 'text-muted-foreground/80')}
+									data-testid="modem-usage-threshold-help"
+									role={thresholdInvalid ? 'status' : undefined}
+								>
+									{thresholdInvalid
+										? m["network.modem.usage.thresholdInvalid"]()
+										: m["network.modem.usage.thresholdHelp"]()}
+								</p>
+							</div>
+						</div>
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		<!-- ── Serving-cell detail, firmware, eSIM ──────────────────────────────
+		     Read-only throughout. The eSIM block carries NO management
+		     affordance of any kind — no button, no click target, no editable
+		     field — because profile management belongs to the carrier's own flow
+		     and the EID is a redaction class that is not even on this wire. Data
+		     values are set in the mono face (Ground Control: figures are
+		     instrument readings, words are UI). -->
+		{#if showDetailCard}
+			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-detail-card">
+				<div class="flex items-start gap-2.5">
+					<RadioTower class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+					<div class="min-w-0">
+						<p class="text-sm font-medium">{m["network.modem.detail.title"]()}</p>
+						<p class="text-muted-foreground text-xs">{m["network.modem.detail.description"]()}</p>
+					</div>
+				</div>
+
+				{#if cellRows.length > 0}
+					<dl class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3" data-testid="modem-cell-info">
+						{#each cellRows as row (row.key)}
+							<div class="min-w-0">
+								<dt class="text-muted-foreground text-xs">{t(row.labelKey)}</dt>
+								<dd
+									class="truncate font-mono text-sm tabular-nums"
+									data-testid={`modem-cell-${row.key}`}
+								>
+									{#if row.valueKey}{t(row.valueKey)}{:else}{row.value}{#if row.unit}&nbsp;{row.unit}{/if}{/if}
+								</dd>
+							</div>
+						{/each}
+					</dl>
+
+					<p class="text-muted-foreground/80 text-xs" data-testid="modem-cell-observed">
+						{observedAt === undefined
+							? m["network.modem.detail.observedUnknown"]()
+							: m["network.modem.detail.observedAt"]({
+									when: formatRelativeTime(locale)(new Date(observedAt)),
+								})}
+					</p>
+				{/if}
+
+				{#if firmware}
+					<div class="min-w-0">
+						<p class="text-muted-foreground text-xs">{m["network.modem.detail.firmware"]()}</p>
+						<p class="truncate font-mono text-sm" data-testid="modem-firmware">{firmware}</p>
+					</div>
+				{/if}
+
+				{#if esim}
+					<div class="space-y-1" data-testid="modem-esim">
+						<p class="text-muted-foreground text-xs">{m["network.modem.detail.simType"]()}</p>
+						<div class="flex flex-wrap items-center gap-1.5">
+							<Badge
+								variant={esim.isEsim ? 'info' : 'neutral'}
+								size="micro"
+								class="text-(length:--text-micro)"
+								data-testid="modem-esim-type"
+								label={t(esim.typeKey)}
+							/>
+							{#if esim.statusKey}
+								<Badge
+									variant="neutral"
+									size="micro"
+									class="text-(length:--text-micro)"
+									data-testid="modem-esim-status"
+									label={t(esim.statusKey)}
+								/>
+							{/if}
+						</div>
+						<p class="text-muted-foreground/80 text-xs" data-testid="modem-esim-readonly">
+							{m["network.modem.detail.esimReadOnly"]()}
+						</p>
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		<!-- ── Messages: the read-only SMS inbox ────────────────────────────────
+		     PROGRESSIVE DISCLOSURE. This surface already carries three instrument
+		     panels, and a stored inbox is the one thing here that is neither
+		     telemetry nor configuration — so it stays folded, costs one calm
+		     header row, and reads nothing until the operator asks for it.
+
+		     READ-ONLY STRUCTURALLY, not by disabling. There is no compose field,
+		     no reply, no delete, no forward — not greyed-out ones, none at all.
+		     The procedure behind this is list + per-message read and the backend
+		     grep-gates it that way; an affordance here would be a promise the
+		     device cannot keep. `ModemConfigDialog.sms.test.ts` asserts the
+		     absence against the real DOM rather than against this comment.
+
+		     WITHDRAWS ENTIRELY on `unsupported` — see `smsWithdrawn`. -->
+		{#if !smsWithdrawn}
+			<section class="rounded-lg border" data-testid="modem-sms-card">
+				<button
+					type="button"
+					aria-controls="modem-sms-body"
+					aria-expanded={smsOpen}
+					class="flex min-h-[var(--touch-target-min)] w-full items-start gap-2.5 rounded-lg p-3 text-start"
+					data-testid="modem-sms-toggle"
+					onclick={toggleSms}
+				>
+					<MessageSquare
+						class="text-muted-foreground mt-0.5 size-4 shrink-0"
+						aria-hidden="true"
+					/>
+					<span class="min-w-0 flex-1">
+						<span class="block text-sm font-medium">{m["network.modem.sms.title"]()}</span>
+						<span class="text-muted-foreground block text-xs">
+							{m["network.modem.sms.description"]()}
+						</span>
+					</span>
+					{#if smsLoaded && smsRefusal === undefined}
+						<!-- The count is an instrument reading, so it is set in the mono
+						     face; the word it stands for is spoken, not printed. -->
+						<span class="mt-0.5 shrink-0" data-testid="modem-sms-count">
+							<!-- The digit is hidden from the accessible name, not merely
+							     duplicated by it: this span sits INSIDE the toggle, so
+							     name-from-content would otherwise concatenate both and a
+							     screen reader would hear "37 37 messages stored". -->
+							<span
+								class="text-muted-foreground font-mono text-sm tabular-nums"
+								aria-hidden="true"
+								dir="ltr"
+							>
+								{smsMessages.length}
+							</span>
+							<span class="sr-only">
+								{m["network.modem.sms.countLabel"]({ count: String(smsMessages.length) })}
+							</span>
+						</span>
+					{/if}
+					<ChevronDown
+						class={cn(
+							'text-muted-foreground mt-0.5 size-4 shrink-0 transition-transform',
+							smsOpen && 'rotate-180',
+						)}
+						aria-hidden="true"
+					/>
+				</button>
+
+				<!-- CSS-DRIVEN REVEAL (`grid-template-rows: 0fr → 1fr`), never a JS
+				     transition — the same rule `CollapsibleSection.svelte` states for
+				     the same reason: a JS transition compiles to the Web Animations
+				     API, which runs outside CSS and so escapes BOTH global motion
+				     freezes (`prefers-reduced-motion` and the e-ink `transition:
+				     none`). Driven from CSS, this disclosure is static-safe on
+				     e-paper for free.
+
+				     The CONTENT is still `{#if}`-gated inside the animated wrapper,
+				     so a closed inbox holds no message text in the DOM at all. That
+				     matters more here than a symmetric close animation: a real SIM's
+				     inbox carries one-time codes, and "collapsed" must not mean
+				     "present in the page, merely clipped". -->
+				<div
+					class="grid transition-[grid-template-rows] duration-200 ease-out"
+					data-testid="modem-sms-body"
+					style:grid-template-rows={smsOpen ? '1fr' : '0fr'}
+				>
+					<div class="min-h-0 overflow-hidden">
+						{#if smsOpen}
+							<div class="space-y-3 border-t p-3" id="modem-sms-body">
+								<div class="flex items-center justify-end">
+									<!-- The ONLY action in this section, and it is a re-read. The
+									     inbox is not live — the device pushes no message events —
+									     so a manual re-read is the honest alternative to a list
+									     that silently ages while the operator looks at it. -->
+									<Button
+										class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5 text-xs"
+										data-testid="modem-sms-refresh"
+										disabled={smsLoading}
+										onclick={loadSms}
+										size="sm"
+										type="button"
+										variant="outline"
+									>
+										{#if smsLoading}
+											<Loader2 class="size-3.5 motion-safe:animate-spin" aria-hidden="true" />
+										{:else}
+											<RefreshCw class="size-3.5" aria-hidden="true" />
+										{/if}
+										{m["network.modem.sms.refresh"]()}
+									</Button>
+								</div>
+
+								{#if smsLoading && !smsLoaded}
+									<p
+										class="text-muted-foreground flex items-center gap-2 text-xs"
+										data-testid="modem-sms-loading"
+										role="status"
+									>
+										<Loader2 class="size-3.5 motion-safe:animate-spin" aria-hidden="true" />
+										{m["network.modem.sms.loading"]()}
+									</p>
+								{:else if smsRefusalCopyKey}
+									<!-- Calm status, never a red alert: none of the three refusals
+									     that reach here means something broke on the operator's
+									     side, and all three are states the device can leave — which
+									     is exactly why the refresh above stays offered. -->
+									<div
+										class="bg-muted/40 space-y-1 rounded-md border p-2.5"
+										data-testid="modem-sms-refused"
+										data-sms-refusal={smsRefusal}
+										role="status"
+									>
+										<p class="text-sm font-medium">{m["network.modem.sms.refusedTitle"]()}</p>
+										<p class="text-muted-foreground text-xs leading-relaxed">
+											{t(smsRefusalCopyKey)}
+										</p>
+									</div>
+								{:else if smsMessages.length === 0}
+									<div
+										class="flex items-start gap-2.5"
+										data-testid="modem-sms-empty"
+										role="status"
+									>
+										<Inbox class="text-muted-foreground/60 mt-0.5 size-4 shrink-0" aria-hidden="true" />
+										<div class="min-w-0">
+											<p class="text-sm">{m["network.modem.sms.empty"]()}</p>
+											<p class="text-muted-foreground text-xs">{m["network.modem.sms.emptyHint"]()}</p>
+										</div>
+									</div>
+								{:else}
+									<ul class="divide-y" data-testid="modem-sms-list">
+										{#each smsMessages as message (message.id)}
+											{@const when = smsWallClock(message.timestamp)}
+											<li
+												class="space-y-1 py-2.5 first:pt-0 last:pb-0"
+												data-sms-id={message.id}
+												data-testid="modem-sms-message"
+											>
+												<div class="flex items-baseline justify-between gap-3">
+													<p class="min-w-0 truncate text-sm font-medium" data-testid="modem-sms-from">
+														{message.from ?? m["network.modem.sms.unknownSender"]()}
+													</p>
+													{#if when}
+														<!-- LTR-isolated: the reading is `YYYY-MM-DD HH:MM`
+														     and an RTL locale would otherwise reorder its
+														     runs around the separators. -->
+														<p
+															class="text-muted-foreground shrink-0 font-mono text-xs tabular-nums"
+															data-testid="modem-sms-time"
+															dir="ltr"
+														>
+															{when}
+														</p>
+													{:else}
+														<p
+															class="text-muted-foreground/70 shrink-0 text-xs"
+															data-testid="modem-sms-no-time"
+														>
+															{m["network.modem.sms.noTimestamp"]()}
+														</p>
+													{/if}
+												</div>
+												{#if message.text.trim().length > 0}
+													<p
+														class="text-muted-foreground text-sm leading-relaxed break-words whitespace-pre-line"
+														data-testid="modem-sms-text"
+													>
+														{message.text}
+													</p>
+												{:else}
+													<!-- A data-only (WAP/PDU) message really has no text.
+													     Saying so beats an empty row that reads as a
+													     rendering fault. -->
+													<p class="text-muted-foreground/70 text-xs" data-testid="modem-sms-no-text">
+														{m["network.modem.sms.noText"]()}
+													</p>
+												{/if}
+											</li>
+										{/each}
+									</ul>
+
+									<div class="text-muted-foreground/80 space-y-1 border-t pt-2.5 text-xs">
+										<p data-testid="modem-sms-hint">{m["network.modem.sms.hint"]()}</p>
+										{#if smsCapped}
+											<!-- At the cap the list is a WINDOW, not the inbox. Saying
+											     so is the difference between "50 messages" and "the 50
+											     most recent of however many the SIM holds". -->
+											<p data-testid="modem-sms-capped">
+												{m["network.modem.sms.capped"]({ count: String(SMS_INBOX_CAP) })}
+											</p>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+			</section>
+		{/if}
+
+		<!-- ── USB composition mode ─────────────────────────────────────────────
+		     Deliberately OUTSIDE the no-SIM fieldset: the composition is a property
+		     of the USB device, not of the SIM, so a modem with no SIM can still be
+		     switched. Absent entirely when the device reports no mode at all
+		     (older backend / mmcli path) — additive-tolerant rendering. -->
+		{#if showUsbModeCard}
+			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-usb-mode-card">
+				<div class="flex items-start gap-2.5">
+					<Usb class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
+					<div class="min-w-0">
+						<p class="text-sm font-medium">{m["network.modem.usbMode.title"]()}</p>
+						<p class="text-muted-foreground text-xs">
+							{m["network.modem.usbMode.description"]()}
+						</p>
+					</div>
+				</div>
+
+				<dl class="grid grid-cols-2 gap-2 text-xs">
+					<div>
+						<dt class="text-muted-foreground">{m["network.modem.usbMode.active"]()}</dt>
+						<dd class="font-mono text-sm" data-testid="modem-usb-mode-active">
+							{usbModeLabel(activeUsbMode)}
+						</dd>
+					</div>
+					{#if recommendedUsbMode}
+						<div>
+							<dt class="text-muted-foreground">{m["network.modem.usbMode.recommended"]()}</dt>
+							<dd class="font-mono text-sm" data-testid="modem-usb-mode-recommended">
+								{usbModeLabel(recommendedUsbMode)}
+							</dd>
+						</div>
+					{/if}
+				</dl>
+
+				{#if offerUsbSwitch && usbOffer.phase === 'offered' && !usbSwitchTrackable}
+					<!-- Certified, but unconfirmable: without a `stable_key` the device
+					     cannot be re-found after it re-enumerates, so every attempt would
+					     end in the "still transitioning" band. The modes are not listed
+					     either — an option that can never be acted on is not an option. -->
+					<p class="text-muted-foreground text-xs" data-testid="modem-usb-mode-untrackable">
+						{m["network.modem.usbMode.reason.identity_unresolved"]()}
+					</p>
+				{:else if offerUsbSwitch && usbOffer.phase === 'offered'}
+					<!-- ONLY the certified transitions, and every one of them. The list
+					     is the device's own answer for this exact model and firmware,
+					     so what is on screen is exactly what a dispatch would accept. -->
+					<div
+						class="space-y-1.5"
+						role="radiogroup"
+						aria-label={m["network.modem.usbMode.certifiedTargets"]()}
+						data-testid="modem-usb-mode-targets"
+					>
+						<p class="text-muted-foreground text-xs">
+							{m["network.modem.usbMode.certifiedTargets"]()}
+						</p>
+						<div class="flex flex-wrap gap-1.5">
+							{#each usbOffer.targets as target (target)}
+								<button
+									type="button"
+									role="radio"
+									aria-checked={target === usbSwitchTarget}
+									class={cn(
+										'min-h-[var(--touch-target-min)] rounded-md border px-2.5 py-1 font-mono text-xs',
+										target === usbSwitchTarget
+											? 'border-primary bg-primary/10 text-foreground'
+											: 'text-muted-foreground hover:bg-muted/50',
+									)}
+									data-testid="modem-usb-mode-target-{target}"
+									onclick={() => {
+										usbSelected = target;
+									}}
+								>
+									{target}
+									{#if target === recommendedUsbMode}
+										<span class="text-muted-foreground ml-1 font-sans">
+											{m["network.modem.usbMode.recommended"]()}
+										</span>
+									{/if}
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					{#if provisioningBlocked}
+						<!-- Disabled-with-reason, and the reason is ON SCREEN as well as in
+						     the accessible name: the device ships with a kiosk touchscreen
+						     that cannot hover to reveal a tooltip (the `netif-dongle` rule).
+						     Turning provisioning back on is something the operator can do,
+						     which is why this is the amber blocked treatment rather than the
+						     calm standing-refusal band a permanent refusal gets. -->
+						<div class="space-y-1.5" data-usb-mode-gate="provisioning-disabled">
+							<Button
+								class="min-h-[var(--touch-target-min)] w-full"
+								data-testid="modem-usb-mode-switch"
+								disabled
+								aria-label={m["network.modem.usbMode.provisioningDisabled"]()}
+								title={m["network.modem.usbMode.provisioningDisabled"]()}
+								variant="outline"
+							>
+								{m["network.modem.usbMode.switchTo"]({ mode: usbSwitchTarget })}
+							</Button>
+							<p
+								class="text-status-warning text-xs"
+								data-testid="modem-usb-mode-provisioning-blocked"
+							>
+								{m["network.modem.usbMode.provisioningDisabled"]()}
+							</p>
+						</div>
+					{:else}
+						<SimpleAlertDialog
+							buttonClasses="w-full"
+							buttonText={m["network.modem.usbMode.switchTo"]({ mode: usbSwitchTarget })}
+							confirmButtonText={m["network.modem.usbMode.confirmAction"]()}
+							confirmVariant="destructive"
+							disabledConfirmButton={usbSwitching}
+							extraButtonClasses="min-h-[var(--touch-target-min)]"
+							title={m["network.modem.usbMode.confirmTitle"]()}
+							onconfirm={handleUsbModeSwitch}
+						>
+							{#snippet dialogTitle()}
+								{m["network.modem.usbMode.confirmTitle"]()}
+							{/snippet}
+							{#snippet description()}
+								{m["network.modem.usbMode.confirmBody"]()}
+							{/snippet}
+						</SimpleAlertDialog>
+					{/if}
+				{/if}
+
+				<!-- The spinner is the ONLY optimistic element: the active mode above
+				     is read from the live feed, so an RPC success alone never moves it. -->
+				{#if usbSwitching}
+					<p
+						class="text-muted-foreground flex items-center gap-2 text-xs"
+						data-testid="modem-usb-mode-switching"
+						role="status"
+					>
+						<Loader2 class="size-3.5 motion-safe:animate-spin" aria-hidden="true" />
+						{m["network.modem.usbMode.switching"]()}
+					</p>
+				{:else if usbFlow?.phase === 'confirmed'}
+					<p
+						class="text-status-success text-xs"
+						data-testid="modem-usb-mode-confirmed"
+						role="status"
+					>
+						{m["network.modem.usbMode.switched"]()}
+					</p>
+				{:else if usbFlow?.phase === 'unconfirmed'}
+					<p
+						class="border-status-warning/40 bg-status-warning/10 rounded-md border p-2 text-xs"
+						data-testid="modem-usb-mode-pending"
+						role="status"
+					>
+						{m["network.modem.usbMode.pending"]()}
+					</p>
+				{:else if usbStandingRefusal}
+					<!-- A refusal that will answer identically forever is a standing
+					     property of this device, not an error. It gets the calm muted
+					     treatment (never the destructive red), it says what still
+					     works, and the switch control above is withdrawn — because a
+					     retry button beside a permanent refusal misrepresents what
+					     pressing it would do. `uncertified` is the one every real
+					     modem hits today: the certified catalog ships EMPTY pending
+					     real evidence bundles. -->
+					<div
+						class="bg-muted/40 space-y-1 rounded-md border p-2.5"
+						data-testid="modem-usb-mode-error"
+						data-usb-mode-refusal={usbStandingRefusal}
+						role="status"
+					>
+						<p class="text-sm font-medium">{usbFailureText}</p>
+						<p class="text-muted-foreground text-xs">{t(usbStandingBodyKey)}</p>
+					</div>
+				{:else if usbFailureText}
+					<p
+						class="text-status-error text-xs"
+						data-testid="modem-usb-mode-error"
+						role="alert"
+					>
+						{usbFailureText}
+					</p>
+				{:else if usbWithheldReason}
+					<!-- No mode may be offered, and the device said why. There is no
+					     control here at all — not a disabled one, which would imply a
+					     capability being withheld when the transition simply has not
+					     been certified for this model and firmware. The active mode
+					     above keeps working, which is what the body says. -->
+					<div
+						class="bg-muted/40 space-y-1 rounded-md border p-2.5"
+						data-testid="modem-usb-mode-unavailable"
+						data-usb-mode-withheld={usbWithheldReason}
+						role="status"
+					>
+						<p class="text-sm font-medium">
+							{t(usbOfferSuppressionKey(usbWithheldReason))}
+						</p>
+						{#if usbWithheldReason === 'uncertified'}
+							<p class="text-muted-foreground text-xs">
+								{m["network.modem.usbMode.uncertifiedBody"]()}
+							</p>
+						{/if}
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		<ModemFccUnlockSection
+			claim={fccClaim}
+			state={fccState}
+			busy={fccBusy}
+			failure={fccErrorKey === undefined ? undefined : t(fccErrorKey)}
+			onToggle={(next) => void toggleFccUnlock(next)}
+		/>
+		</div>
+		</CollapsibleSection>
 	</div>
 </AppDialog>

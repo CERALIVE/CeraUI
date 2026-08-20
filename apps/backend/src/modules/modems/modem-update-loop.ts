@@ -47,6 +47,8 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
+import { getDbusModemCache } from "../cellular/dbus-modem-cache.ts";
+import { getUdevProvisionalCache } from "../cellular/udev-provisional-cache.ts";
 import { createMonitorManager } from "../network/monitor/monitor-manager.ts";
 import { withModemUpdateLock } from "../network/state/device-lock.ts";
 import type {
@@ -65,6 +67,7 @@ import {
 	registerModemSafe,
 } from "./modem-registration.ts";
 import { broadcastModems } from "./modem-status.ts";
+import { refreshModemIdPaths } from "./modem-wire-producer.ts";
 import { getModem, getModemIds, removeModem } from "./modems-state.ts";
 import { maybeAutoUnlockSimPins } from "./sim-autounlock.ts";
 import {
@@ -74,9 +77,17 @@ import {
 	setModemsState,
 	triggerGsmConnectionsReset,
 } from "./state/modems-state-cache.ts";
+import { refreshUsagePolicies } from "./usage-policy.ts";
 
 // Retained status poll cadence. Reduced from the old 10s self-recursive loop:
 // signal/status only, no presence detection, no gsm reset.
+//
+// Under the D-Bus backend this is NO LONGER how an operator learns anything —
+// plug/unplug, state, registration, rejection and SIM events all arrive push-
+// driven from the observer. It is retained UNCHANGED, at this rate, purely as
+// the reconciliation backstop that keeps `modems-state` warm so a demotion to
+// mmcli has rows to serve immediately. Polling faster than the event source
+// buys nothing and costs an mmcli spawn per modem per tick.
 /** Interval (ms) for retained modem status poll (signal/status refresh only). */
 const STATUS_POLL_INTERVAL_MS = 30_000;
 
@@ -144,6 +155,7 @@ async function handleModemAdded(id: ModemId): Promise<void> {
 		} else {
 			await registerModemSafe(id);
 		}
+		await refreshModemIdPaths();
 		// Publish: a freshly registered modem reconciles as `added`, which the
 		// onModemsChange handler turns into a gsm reset + full broadcast.
 		publishModemsSnapshot();
@@ -221,6 +233,11 @@ export async function discoverModems(): Promise<void> {
 			}
 		}
 
+		// Presence edges only. An ID_PATH names where a device is PLUGGED IN, so
+		// the 30 s status poll cannot move it — refreshing there buys a udevadm
+		// spawn per tick and nothing else.
+		await refreshModemIdPaths();
+
 		publishModemsSnapshot();
 	});
 }
@@ -249,6 +266,8 @@ let monitorListener: ((event: MonitorEvent) => void) | null = null;
 let statusPollTimer: ReturnType<typeof setTimeout> | null = null;
 let unsubModemsChange: (() => void) | null = null;
 let unsubGsmReset: (() => void) | null = null;
+let unsubDbusViews: (() => void) | null = null;
+let unsubProvisional: (() => void) | null = null;
 
 // Serializes async work kicked off by sync monitor callbacks so callers (and
 // tests) can await the loop reaching a quiescent state.
@@ -307,6 +326,31 @@ export async function initModemUpdateLoop(
 		broadcastFromDiff(diff);
 	});
 
+	// The push half of the cutover. The D-Bus cache serves `readDbusViews()`,
+	// which the wire producer reads SYNCHRONOUSLY — so a changed observation only
+	// reaches an operator if something broadcasts. The mmcli diff engine above
+	// cannot see it: these rows never enter `modems-state`.
+	unsubDbusViews = getDbusModemCache().subscribe(() => {
+		try {
+			broadcastModems();
+		} catch (error) {
+			logger.warn("dbus modem broadcast failed", { error });
+		}
+	});
+
+	// Same seam, same reason, for the optimistic udev rows (todo 18): the whole
+	// point of an attach-time row is that it beats the 30 s poll, so it has to
+	// push. The one thing that differs is the failure cost — an optimistic row is
+	// a latency improvement, so a broadcast that throws must never take the
+	// authoritative modem list down with it.
+	unsubProvisional = getUdevProvisionalCache().subscribe(() => {
+		try {
+			broadcastModems();
+		} catch (error) {
+			logger.warn("provisional modem broadcast failed", { error });
+		}
+	});
+
 	const monitor =
 		options.monitor ??
 		createMonitorManager(() => {
@@ -320,6 +364,11 @@ export async function initModemUpdateLoop(
 	};
 	monitor.on("monitor-event", monitorListener);
 	monitor.start();
+
+	// BEFORE the first discovery, because that discovery's broadcast is the first
+	// `modems` payload a client sees and it must already carry the operator's
+	// persisted meter bounds rather than reporting them unset for one frame.
+	await refreshUsagePolicies();
 
 	if (autoDiscover) {
 		await discoverModems();
@@ -357,7 +406,11 @@ export function stopModemUpdateLoop(): void {
 	monitorListener = null;
 	unsubModemsChange?.();
 	unsubGsmReset?.();
+	unsubDbusViews?.();
+	unsubProvisional?.();
 	unsubModemsChange = null;
 	unsubGsmReset = null;
+	unsubDbusViews = null;
+	unsubProvisional = null;
 	initialized = false;
 }
