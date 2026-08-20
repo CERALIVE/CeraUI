@@ -119,6 +119,51 @@ export async function resolveModemNmDevice(
 }
 
 /**
+ * Resolve the post-re-enumeration NM modem device that can carry a saved
+ * connection. `GENERAL.CON-UUID` covers an already reactivated profile;
+ * `GENERAL.AVAILABLE-CONNECTIONS` breaks the activation chicken-and-egg when the
+ * new NM device exists but the transaction still needs to bring the profile up.
+ */
+export async function resolveModemNmDeviceForConnection(
+	connectionId: string,
+): Promise<string | undefined> {
+	if (connectionId === "") return undefined;
+
+	const reader = activeReader ?? defaultReader;
+	const rows = await reader.listDevices();
+	if (rows === undefined) return undefined;
+
+	for (const row of rows) {
+		const [device, type] = row.split(":");
+		if (
+			device === undefined ||
+			device === "" ||
+			type === undefined ||
+			!MODEM_NM_DEVICE_TYPES.has(type)
+		) {
+			continue;
+		}
+		const values = await reader.deviceProp(
+			device,
+			"GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS",
+		);
+		if (
+			values?.some((value) => {
+				const normalized = value.trim();
+				return (
+					normalized === connectionId ||
+					(normalized.startsWith(connectionId) &&
+						/\s/.test(normalized.charAt(connectionId.length)))
+				);
+			}) === true
+		) {
+			return device;
+		}
+	}
+	return undefined;
+}
+
+/**
  * Read NM properties of an already-resolved device through the SAME seam as the
  * resolution above, so a caller cannot resolve the device one way and read it
  * another.

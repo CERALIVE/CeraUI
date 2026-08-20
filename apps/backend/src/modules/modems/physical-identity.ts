@@ -157,7 +157,15 @@ const LINK_ID_DIGEST_CHARS = 16;
  *     means the published id reveals nothing about the hardware while remaining
  *     equality-comparable, which is the only operation consumers may perform.
  */
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedMintLinkId = modemControlFunction<typeof mintLinkId | undefined>(
+	"mintLinkId",
+	undefined,
+);
+
 export function mintLinkId(identityKey: string): string {
+	if (packagedMintLinkId !== undefined) return packagedMintLinkId(identityKey);
 	const digest = createHash("sha256").update(identityKey).digest("hex");
 	return `${LINK_ID_PREFIX}${digest.slice(0, LINK_ID_DIGEST_CHARS)}`;
 }

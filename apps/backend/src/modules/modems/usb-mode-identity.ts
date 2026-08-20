@@ -39,6 +39,7 @@ import {
 	deriveModemStableKey,
 	type UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
+import { modemControlFunction } from "../modem-control-compat.ts";
 
 import { type ModemGenericFacts, mmGetModemGenericFacts } from "./mmcli.ts";
 import {
@@ -110,7 +111,13 @@ export function skuOf(entry: CatalogEntry): SkuDiscriminator {
 }
 
 /** `vid:pid` in the catalog's lowercase, colon-separated form. */
+const packagedVidPidOf = modemControlFunction<typeof vidPidOf | undefined>(
+	"vidPidOf",
+	undefined,
+);
+
 export function vidPidOf(device: UsbDeviceSnapshot): string {
+	if (packagedVidPidOf !== undefined) return packagedVidPidOf(device);
 	return `${device.vendorId.toLowerCase()}:${device.productId.toLowerCase()}`;
 }
 

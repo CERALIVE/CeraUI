@@ -28,6 +28,7 @@ import type {
 import {
 	type ModemNmDeviceReader,
 	resolveModemNmDevice,
+	resolveModemNmDeviceForConnection,
 	setModemNmDeviceReaderForTest,
 } from "../modules/modems/modem-nm-device.ts";
 import {
@@ -68,6 +69,7 @@ const BOARD_PROPS: Readonly<Record<string, Readonly<Record<string, string>>>> =
 		"cdc-wdm2": {
 			"GENERAL.IP-IFACE": IFNAME,
 			"GENERAL.CON-UUID": CON_UUID,
+			"GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS": `${CON_UUID} | Movistar`,
 			"GENERAL.STATE": "100 (connected)",
 			"IP4.ADDRESS": "10.151.220.76/29",
 		},
@@ -192,6 +194,16 @@ describe("B7 — one NM-device resolution for both call sites", () => {
 		// Only modem-class devices are probed — never the four ethernet rows.
 		expect(probed).not.toContain("eth0");
 		expect(probed).not.toContain("eth1");
+	});
+
+	test("the saved connection resolves the new modem device before activation", async () => {
+		boardNm();
+		await expect(resolveModemNmDeviceForConnection(CON_UUID)).resolves.toBe(
+			NM_DEVICE,
+		);
+		await expect(
+			resolveModemNmDeviceForConnection("00000000-0000-0000-0000-000000000000"),
+		).resolves.toBeUndefined();
 	});
 
 	test("a netdev NM manages under its own name resolves to itself", async () => {

@@ -50,7 +50,13 @@
  * (`"1"`, `"0"`). Length-capped so a real numeric-ish designation could never be
  * swallowed whole, and anchored so `SIM7600` and friends never match.
  */
+import { modemControlFunction } from "../modem-control-compat.ts";
+
 const BARE_NUMERAL_RE = /^\d{1,4}$/;
+
+const packagedIsUninformativeIdentity = modemControlFunction<
+	typeof isUninformativeIdentity | undefined
+>("isUninformativeIdentity", undefined);
 
 /** mmcli prints `--` for a field the device left empty. */
 const MMCLI_EMPTY = "--";
@@ -63,6 +69,9 @@ const MMCLI_EMPTY = "--";
  * as one.
  */
 export function isUninformativeIdentity(value: string | undefined): boolean {
+	if (packagedIsUninformativeIdentity !== undefined) {
+		return packagedIsUninformativeIdentity(value);
+	}
 	const trimmed = value?.trim();
 	if (trimmed === undefined || trimmed === "" || trimmed === MMCLI_EMPTY) {
 		return true;

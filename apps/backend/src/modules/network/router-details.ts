@@ -236,7 +236,16 @@ export const ZTE_DETAIL_KEYS: readonly string[] = [
 	"realtime_time",
 ];
 
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedParseZteDetails = modemControlFunction<
+	typeof parseZteDetails | undefined
+>("parseZteDetails", undefined);
+
 export function parseZteDetails(body: string): RouterAdminDetails | undefined {
+	if (packagedParseZteDetails !== undefined) {
+		return packagedParseZteDetails(body);
+	}
 	const parsed = parseJsonObject(body);
 	if (parsed === undefined) return undefined;
 

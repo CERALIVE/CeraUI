@@ -29,6 +29,8 @@
  */
 
 /** MMModemAccessTechnology bits → the RAT tokens the wire adapter understands. */
+import { modemControlFunction } from "../modem-control-compat.ts";
+
 const ACCESS_TECH_BITS: ReadonlyArray<readonly [number, string]> = [
 	[1 << 1, "gsm"], // GSM
 	[1 << 2, "gsm"], // GSM_COMPACT
@@ -84,6 +86,11 @@ const MODE_BITS: ReadonlyArray<readonly [number, string]> = [
  * a backend switch. An empty mask yields `undefined`, never `""`.
  */
 export function modeMaskToLabel(mask: number | undefined): string | undefined {
+	const packaged = modemControlFunction<typeof modeMaskToLabel | undefined>(
+		"modeMaskToLabel",
+		undefined,
+	);
+	if (packaged !== undefined) return packaged(mask);
 	if (mask === undefined || mask <= 0) {
 		return undefined;
 	}

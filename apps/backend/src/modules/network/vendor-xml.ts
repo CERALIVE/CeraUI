@@ -29,7 +29,15 @@
  * neither states a value, and the caller must report both as unknown rather
  * than as a reading.
  */
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedXmlValue = modemControlFunction<typeof xmlValue | undefined>(
+	"parseHilinkXmlValue",
+	undefined,
+);
+
 export function xmlValue(body: string, tag: string): string | undefined {
+	if (packagedXmlValue !== undefined) return packagedXmlValue(body, tag);
 	const match = new RegExp(`<${tag}>([^<]*)</${tag}>`, "i").exec(body);
 	const value = match?.[1]?.trim();
 	return value === undefined || value === "" ? undefined : value;

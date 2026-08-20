@@ -49,6 +49,7 @@
  * no modem class silently stops reporting a genuinely missing SIM.
  */
 
+import { modemControlFunction } from "../modem-control-compat.ts";
 import type { ModemInfo } from "./mmcli.ts";
 
 export type SimPresence = "present" | "absent" | "unknown";
@@ -64,6 +65,16 @@ const SIM_OBJECT_PATH_RE = /^\/org\/freedesktop\/ModemManager1\/SIM\/\d+$/;
 /** MM's own token for "this modem failed because there is no SIM in it". */
 export const SIM_MISSING_FAILED_REASON = "sim-missing";
 
+type PackageSimPresenceFacts = {
+	readonly sim?: unknown;
+	readonly simSlots?: readonly unknown[];
+	readonly failedReason?: string;
+};
+
+const packagedDeriveSimPresence = modemControlFunction<
+	((facts: PackageSimPresenceFacts) => SimPresence) | undefined
+>("deriveSimPresence", undefined);
+
 export function isSimObjectPath(value: unknown): boolean {
 	return typeof value === "string" && SIM_OBJECT_PATH_RE.test(value.trim());
 }
@@ -78,6 +89,15 @@ export function isSimObjectPath(value: unknown): boolean {
  * is a card that is physically there.
  */
 export function deriveSimPresence(modemInfo: Readonly<ModemInfo>): SimPresence {
+	if (packagedDeriveSimPresence !== undefined) {
+		const simSlots = modemInfo["modem.generic.sim-slots"];
+		const failedReason = modemInfo["modem.generic.state-failed-reason"];
+		return packagedDeriveSimPresence({
+			sim: modemInfo["modem.generic.sim"],
+			...(simSlots === undefined ? {} : { simSlots }),
+			...(failedReason === undefined ? {} : { failedReason }),
+		});
+	}
 	if (isSimObjectPath(modemInfo["modem.generic.sim"])) {
 		return "present";
 	}

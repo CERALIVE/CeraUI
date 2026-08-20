@@ -311,9 +311,18 @@ function unknownReason(device: UsbNetDevice, hasStorage: boolean): string {
  *      2b. WITHOUT it ⇒ `wired-ethernet` — a USB network adapter, said plainly.
  *   3. anything else ⇒ `unknown`, with an honest reason.
  */
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedClassifyUsbNetDevice = modemControlFunction<
+	typeof classifyUsbNetDevice | undefined
+>("classifyUsbNetDevice", undefined);
+
 export function classifyUsbNetDevice(
 	device: UsbNetDevice,
 ): UsbNetClassification {
+	if (packagedClassifyUsbNetDevice !== undefined) {
+		return packagedClassifyUsbNetDevice(device);
+	}
 	const ifaces = device.interfaces;
 
 	const control = ifaces.find(

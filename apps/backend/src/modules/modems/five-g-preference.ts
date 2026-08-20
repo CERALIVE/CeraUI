@@ -44,6 +44,12 @@ import type { Modem } from "./modems-state.ts";
 const MODE_ORDER = ["5g", "4g", "3g", "2g"] as const;
 type ModeToken = (typeof MODE_ORDER)[number];
 
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedFiveGPreferenceEvidence = modemControlFunction<
+	typeof fiveGPreferenceEvidence | undefined
+>("fiveGPreferenceEvidence", undefined);
+
 const FIVE_G: ModeToken = "5g";
 const FOUR_G: ModeToken = "4g";
 
@@ -86,6 +92,9 @@ export function supportedModes(
 export function fiveGPreferenceEvidence(
 	radioModes: Modem["radio_modes"],
 ): CapabilityEvidence {
+	if (packagedFiveGPreferenceEvidence !== undefined) {
+		return packagedFiveGPreferenceEvidence(radioModes);
+	}
 	const modes = supportedModes(radioModes);
 	if (modes === undefined || modes.length === 0) return "unknown";
 	return modes.includes(FIVE_G) ? "present" : "absent";

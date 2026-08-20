@@ -114,6 +114,12 @@ const HILINK_ERROR_CODE_RE = /<error>[\s\S]*?<code>\s*(\d+)\s*<\/code>/i;
 const HILINK_AUTH_CODE = "125002";
 const HILINK_RESPONSE_RE = /<response>/i;
 
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedParseHilinkCapabilities = modemControlFunction<
+	typeof parseHilinkCapabilities | undefined
+>("parseHilinkCapabilities", undefined);
+
 /** Each `<NetworkMode>` block of a `<NetworkModeList>` document. */
 const NET_MODE_BLOCK = "<NetworkMode>";
 
@@ -192,5 +198,8 @@ function netModeCapability(
 export function parseHilinkCapabilities(
 	bodies: HilinkCapabilityBodies,
 ): RouterAdminCapabilities {
+	if (packagedParseHilinkCapabilities !== undefined) {
+		return packagedParseHilinkCapabilities(bodies);
+	}
 	return { net_mode: netModeCapability(bodies) };
 }

@@ -89,6 +89,7 @@ function makeContext(): RPCContext {
 
 function device(
 	interfaces: ReadonlyArray<Record<string, number | string>>,
+	ifname: string | undefined = "wwan0",
 ): UsbDeviceSnapshot {
 	return {
 		vendorId: "2c7c",
@@ -96,7 +97,7 @@ function device(
 		model: SKU.model,
 		firmwareRevision: SKU.firmwareRevision,
 		bDeviceClass: 0,
-		ifname: "wwan0",
+		...(ifname === undefined ? {} : { ifname }),
 		physicalUid: KEY,
 		interfaces,
 	} as unknown as UsbDeviceSnapshot;
@@ -107,7 +108,10 @@ function device(
  * port then drops, and the device returns with `after`. That is the exact shape
  * the transaction polls for (drop, then same-physical-UID re-enumeration).
  */
-function scriptedBus(after: ReadonlyArray<Record<string, number | string>>): {
+function scriptedBus(
+	after: ReadonlyArray<Record<string, number | string>>,
+	afterIfname: string | undefined = "wwan0",
+): {
 	enumerate: () => Promise<readonly UsbDeviceSnapshot[]>;
 	readonly at: string[];
 	readonly inhibitPorts: string[];
@@ -129,12 +133,18 @@ function scriptedBus(after: ReadonlyArray<Record<string, number | string>>): {
 				phase = "after";
 				return Promise.resolve([]);
 			}
-			return Promise.resolve([device(after)]);
+			return Promise.resolve([device(after, afterIfname)]);
 		},
 	};
 }
 
-function engineDeps(bus: ReturnType<typeof scriptedBus>, activated: string[]) {
+function engineDeps(
+	bus: ReturnType<typeof scriptedBus>,
+	activated: string[],
+	resolveReenumeratedIfname: () => Promise<string | undefined> = () =>
+		Promise.resolve("wwan0"),
+	reenumerationTimeoutMs = 500,
+) {
 	return {
 		actor: new (class {
 			run<T>(_key: string, task: () => Promise<T>): Promise<T> {
@@ -164,6 +174,9 @@ function engineDeps(bus: ReturnType<typeof scriptedBus>, activated: string[]) {
 			},
 		}),
 		enumerate: bus.enumerate,
+		resolveReenumeratedIfname,
+		reenumerationTimeoutMs,
+		pollIntervalMs: 1,
 	};
 }
 
@@ -266,13 +279,19 @@ describe("the AT port is resolved from ModemManager's own list", () => {
 
 describe("the full gate chain with the engine wired", () => {
 	test("a certified switch runs the transaction and cancels the armed rollback", async () => {
-		const bus = scriptedBus(MBIM_IFACES);
+		const bus = scriptedBus(MBIM_IFACES, undefined);
 		const activated: string[] = [];
+		let resolutionAttempts = 0;
 		useDispatch({
 			createEngine: (identity) =>
 				createTransitionEngine(
 					{ stableKey: identity.stableKey, ports: identity.ports },
-					engineDeps(bus, activated),
+					engineDeps(bus, activated, () => {
+						resolutionAttempts += 1;
+						return Promise.resolve(
+							resolutionAttempts >= 3 ? "cdc-wdm7" : undefined,
+						);
+					}),
 				),
 		});
 
@@ -287,9 +306,41 @@ describe("the full gate chain with the engine wired", () => {
 		expect(result).toEqual({ success: true });
 		// The catalog's AT command for qmi→mbim, sent exactly once.
 		expect(bus.at).toEqual(['AT+QCFG="usbnet",2']);
-		expect(activated).toEqual(["wwan0"]);
+		expect(activated).toEqual(["cdc-wdm7"]);
+		expect(resolutionAttempts).toBe(3);
 		// Confirmed ⇒ the armed journal entry is gone.
 		expect(await readMutationEntry(KEY)).toBeUndefined();
+	});
+
+	test("an NM interface that never appears times out and keeps the rollback armed", async () => {
+		const bus = scriptedBus(MBIM_IFACES, undefined);
+		useDispatch({
+			createEngine: (identity) =>
+				createTransitionEngine(
+					{ stableKey: identity.stableKey, ports: identity.ports },
+					engineDeps(bus, [], () => Promise.resolve(undefined), 15),
+				),
+		});
+
+		let result: unknown;
+		await withDeviceType("real", async () => {
+			result = await call(
+				setUsbModeProcedure,
+				{ device: "0", mode: "mbim", confirm: true },
+				{ context: makeContext() },
+			);
+		});
+
+		expect(result).toEqual({
+			success: false,
+			error: "transition_failed",
+			reason: "transaction_error",
+		});
+		const entry = await readMutationEntry(KEY);
+		expect(entry?.state).toBe("failed");
+		expect(entry?.detail).toContain(
+			"post-switch NetworkManager interface did not resolve within 15ms",
+		);
 	});
 
 	test("an OK that re-enumerates as the WRONG thing FAILS and stays blocked", async () => {

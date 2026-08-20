@@ -131,6 +131,12 @@ export const SHADOW_DIVERGENCE_MSG = "modem shadow divergence";
 /** Prefix making an opaque key recognisable in a record without decoding it. */
 export const OPAQUE_DEVICE_KEY_PREFIX = "d-";
 
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedClassifyShadowDivergences = modemControlFunction<
+	typeof classifyShadowDivergences | undefined
+>("classifyShadowDivergences", undefined);
+
 const OPAQUE_DEVICE_KEY_HEX_CHARS = 16;
 
 /**
@@ -156,6 +162,9 @@ export function classifyShadowDivergences(
 	mmcli: readonly ShadowModemState[],
 	dbus: readonly ShadowModemState[],
 ): ShadowModemDivergence[] {
+	if (packagedClassifyShadowDivergences !== undefined) {
+		return packagedClassifyShadowDivergences(mmcli, dbus);
+	}
 	const mmcliByKey = new Map(mmcli.map((s) => [s.deviceKey, s]));
 	const dbusByKey = new Map(dbus.map((s) => [s.deviceKey, s]));
 	const divergences: ShadowModemDivergence[] = [];

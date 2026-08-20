@@ -52,10 +52,19 @@ function keeper(current: string): (tag: string, fallback: string) => string {
  * flags to whatever the firmware defaults to. The other five values are
  * therefore echoed back exactly as the device just reported them.
  */
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedHilinkConnectionBody = modemControlFunction<
+	typeof hilinkConnectionBody | undefined
+>("hilinkConnectionBody", undefined);
+
 export function hilinkConnectionBody(
 	current: string,
 	roamingAutoconnect: boolean,
 ): string {
+	if (packagedHilinkConnectionBody !== undefined) {
+		return packagedHilinkConnectionBody(current, roamingAutoconnect);
+	}
 	const keep = keeper(current);
 	return (
 		`${XML_HEADER}<request>` +

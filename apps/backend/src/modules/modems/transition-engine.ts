@@ -48,12 +48,13 @@ import {
 	type TransitionInterlock,
 	type UsbDeviceSnapshot,
 	UsbModeTransition,
+	type UsbModeTransitionRequest,
 } from "@ceralive/modem-control";
 
 import { logger } from "../../helpers/logger.ts";
 import { isModemMutationHeld } from "../streaming/lifecycle-admission.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
-
+import { resolveModemNmDeviceForConnection } from "./modem-nm-device.ts";
 import {
 	createAtSender,
 	createInhibitPort,
@@ -61,8 +62,11 @@ import {
 	type InhibitPort,
 	waitForAtPortReady,
 } from "./transition-ports.ts";
+import type { UsbModeTransitionEngine } from "./usb-mode-contract.ts";
 
 const AT_PORT_RE = /^([\w./-]+)\s*\(at\)$/i;
+const REENUMERATION_TIMEOUT_MS = 60_000;
+const REENUMERATION_POLL_MS = 250;
 
 /**
  * The AT control port out of ModemManager's own `modem.generic.ports` list, as
@@ -128,6 +132,9 @@ export interface TransitionEngineDeps {
 	createInhibitPort(atPort: string): InhibitPort;
 	createAtSender(portPath: string): AtCommandSender;
 	enumerate(): Promise<readonly UsbDeviceSnapshot[]>;
+	resolveReenumeratedIfname(connectionId: string): Promise<string | undefined>;
+	readonly reenumerationTimeoutMs: number;
+	readonly pollIntervalMs: number;
 }
 
 // ONE actor per process, keyed on the stable key inside — two transitions on the
@@ -147,6 +154,9 @@ export function defaultTransitionEngineDeps(): TransitionEngineDeps {
 			}),
 		createAtSender: (portPath) => createAtSender(portPath),
 		enumerate: () => createUsbEnumerator().enumerate(),
+		resolveReenumeratedIfname: resolveModemNmDeviceForConnection,
+		reenumerationTimeoutMs: REENUMERATION_TIMEOUT_MS,
+		pollIntervalMs: REENUMERATION_POLL_MS,
 	};
 }
 
@@ -158,7 +168,7 @@ export interface TransitionEngineRequest {
 export function createTransitionEngine(
 	request: TransitionEngineRequest,
 	deps: TransitionEngineDeps = defaultTransitionEngineDeps(),
-): UsbModeTransition | undefined {
+): UsbModeTransitionEngine | undefined {
 	const atPort = findAtPort(request.ports);
 	if (atPort === undefined) {
 		logger.warn("no AT control port on this modem; no transition engine", {
@@ -167,13 +177,55 @@ export function createTransitionEngine(
 		});
 		return undefined;
 	}
+	const modemManager = deps.createInhibitPort(atPort);
+	const atSender = deps.createAtSender(atPort);
 
-	return new UsbModeTransition({
-		actor: deps.actor,
-		nm: deps.nm,
-		modemManager: deps.createInhibitPort(atPort),
-		atSender: deps.createAtSender(atPort),
-		enumerate: deps.enumerate,
-		interlock: createInterlockBridge(request.stableKey),
-	});
+	return {
+		async execute(transitionRequest: UsbModeTransitionRequest) {
+			let observedPortDrop = false;
+			const enumerate = async (): Promise<readonly UsbDeviceSnapshot[]> => {
+				const devices = await deps.enumerate();
+				const target = devices.find(
+					(device) =>
+						device.physicalUid === transitionRequest.cachedPhysicalUid,
+				);
+				if (target === undefined) {
+					observedPortDrop = true;
+					return devices;
+				}
+				if (!observedPortDrop) return devices;
+
+				const deadline = Date.now() + deps.reenumerationTimeoutMs;
+				while (Date.now() < deadline) {
+					const ifname = await deps.resolveReenumeratedIfname(
+						String(transitionRequest.connectionId),
+					);
+					if (ifname !== undefined) {
+						return devices.map((device) =>
+							device.physicalUid === transitionRequest.cachedPhysicalUid
+								? { ...device, ifname }
+								: device,
+						);
+					}
+					await new Promise((resolve) =>
+						setTimeout(resolve, deps.pollIntervalMs),
+					);
+				}
+				throw new Error(
+					`post-switch NetworkManager interface did not resolve within ${deps.reenumerationTimeoutMs}ms`,
+				);
+			};
+
+			return new UsbModeTransition({
+				actor: deps.actor,
+				nm: deps.nm,
+				modemManager,
+				atSender,
+				enumerate,
+				interlock: createInterlockBridge(request.stableKey),
+				reenumerationTimeoutMs: deps.reenumerationTimeoutMs,
+				pollIntervalMs: deps.pollIntervalMs,
+			}).execute(transitionRequest);
+		},
+	};
 }

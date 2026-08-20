@@ -55,6 +55,12 @@ export * from "./router-signal-model.ts";
 const HILINK_AUTH_REFUSED_RE = /<code>\s*125002\s*<\/code>/;
 const HILINK_RESPONSE_RE = /<response>/i;
 
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedParseZteSignal = modemControlFunction<
+	typeof parseZteSignal | undefined
+>("parseZteSignal", undefined);
+
 export function hilinkAuthRefused(body: string): boolean {
 	return HILINK_AUTH_REFUSED_RE.test(body);
 }
@@ -100,6 +106,7 @@ export function parseHilinkSignal(
 // ── ZTE ─────────────────────────────────────────────────────────────────────
 
 export function parseZteSignal(body: string): RouterSignalModel {
+	if (packagedParseZteSignal !== undefined) return packagedParseZteSignal(body);
 	const parsed = parseJsonObject(body);
 	if (parsed === undefined) {
 		// An empty body is nothing to parse; anything else was a body the device

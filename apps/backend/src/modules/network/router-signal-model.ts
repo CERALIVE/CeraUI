@@ -225,9 +225,17 @@ export function buildSignalModel(input: SignalModelInput): RouterSignalModel {
 	};
 }
 
+import { modemControlFunction } from "../modem-control-compat.ts";
+
+const packagedParseJsonObject = modemControlFunction<
+	typeof parseJsonObject | undefined
+>("parseJsonObject", undefined);
+
 export function parseJsonObject(
 	body: string,
 ): Record<string, unknown> | undefined {
+	if (packagedParseJsonObject !== undefined)
+		return packagedParseJsonObject(body);
 	if (body.trim() === "") return undefined;
 	try {
 		const value: unknown = JSON.parse(body);

@@ -77,6 +77,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Read-only SMS inbox (`modems.getSms`) — list + read, never send/delete** | `modules/modems/mmcli-sms.ts` (`readSmsInbox`, `parseSmsList`, `parseSmsRecord`, `SMS_PATH_RE`) → `rpc/procedures/modems.procedure.ts` → `getModemSmsProcedure`; contract below → THE READ-ONLY SMS INBOX |
 | **Streaming-admission ↔ modem-lifecycle interlock (process-wide fail-fast lease, both race orders)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireLifecycle`, `withLifecycleLock`, `leaseRefusal`) + `modules/streaming/stream-session-orchestrator.ts` (`admitLifecycle`); contract below → THE STREAMING-ADMISSION ↔ MODEM-LIFECYCLE INTERLOCK |
 | **The shared modem MUTATION-SAFETY contract (per-device lease, durable journal, replay barrier, both acknowledgement paths)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireModemMutation`, `setMutationBlocks`, `streamingBlockingMutation`) + `modules/streaming/recovery-barrier.ts` + `modules/modems/mutation-{journal,journal-state,lease,identity,blocks,rollback,acknowledge,replay}.ts`; contract below → THE MODEM MUTATION-SAFETY CONTRACT |
+| **The modem-control consumer cutover (0.2.0 floor, additive probes, frozen boundary gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
 | **The certified USB-mode transition ENGINE, wired** | `modules/modems/transition-engine.ts` (ports + interlock bridge) + `transition-ports.ts` (mmcli inhibit lease, AT sender) + `usb-mode-{transition,identity,contract,execute,rollback}.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
@@ -3262,6 +3263,19 @@ never a fabricated transition. The rollback is ARMED before the first
 connectivity-losing call and cancelled only after the engine's postcondition AND a
 confirmed re-registration with a live data path.
 
+**Re-enumeration is not complete until NetworkManager exposes the returned
+connection on a concrete device.** USB composition switches can make the physical
+modem visible before its replacement netdev appears in NetworkManager. The engine's
+request-scoped enumeration wrapper therefore withholds the returned target snapshot
+and polls `GENERAL.CON-UUID,GENERAL.AVAILABLE-CONNECTIONS` for the transaction's NM
+connection id. Only after that bounded resolver finds the owning interface is the
+snapshot returned with the resolved ifname injected. Expiry throws a transaction
+error, leaves the failed journal outcome intact, and never reports a switch as
+successful merely because the USB device reappeared. Coverage is split between
+`tests/modem-transition-engine.test.ts` (delayed success plus bounded timeout) and
+`tests/modem-usb-mode-nm-device.test.ts` (the production NM connection-to-device
+resolver).
+
 Historical note (superseded): `UsbModeTransition`
 needs MUTATION ports — MM inhibit/uninhibit, an AT sender, an NM quiesce/activate
 adapter — and CeraUI's only D-Bus surface is the deliberately mutation-FREE audited
@@ -3275,6 +3289,12 @@ live; wiring a real engine is a matter of supplying `createEngine`.
 a first-class rendered state rather than a stopgap: the shipped catalog carries one
 synthetic bench SKU because no shipping modem has a reviewed evidence bundle yet
 (Phase-A Must-NOT-Have 7 — no catalog entry without one).
+
+The RM530N-GL catalog entry remains **BLOCKED-ON-HARDWARE and belongs to Todo 42**.
+Do not infer or synthesize its discriminators, commands, or postconditions from model
+names: admission requires a captured `certify` bundle and human review. This deferral
+does not weaken the generic transition transaction or its post-re-enumeration race
+handling.
 
 Wire contract (strict input, `confirm: z.literal(true)`, the six switch-specific
 typed refusals plus the four shared mutation-safety ones, and the typed failure
@@ -3910,6 +3930,39 @@ refused and NEVER launches), race order B (a transition during an admitted start
 is refused until it settles), the duplicate-start ordering lock, finally-release
 under a throw, the idempotent/stale release, and the production `streaming.start`
 wiring driven through the REAL procedure.
+
+## MODEM-CONTROL COMPATIBILITY PROJECTIONS [EXISTS]
+
+Todo 29 moves the frozen Todo-17 pure-logic set behind the published
+`@ceralive/modem-control` package without raising CeraUI's install floor above
+`0.2.0`. `modules/modem-control-compat.ts` is the single structural probe: each
+of the 14 MIGRATE modules asks for its additive package function and retains its
+existing implementation as the compatibility fallback. Public CeraUI exports,
+wire fields, parser outcomes, and refusal strings remain unchanged. Todo 49 is
+the only step allowed to pin 1.1.0 and delete these probes and fallbacks.
+
+The 14 modules are exactly the frozen ledger entries: five under `modems`
+(`usb-mode-identity`, `sim-presence`, `five-g-preference`, `physical-identity`,
+`modem-identity`), two under `cellular` (`dbus-mm-enums`,
+`shadow-divergence`), and seven under `network` (`router-details`,
+`hilink-documents`, `router-capabilities`, `usb-net-classifier`,
+`router-signal-model`, `router-signal`, `vendor-xml`). No transport, session,
+cache, RPC, wire, or router-admin proxy ownership moved with them.
+
+Package operations receive CeraUI's existing stream-coupled policy through
+`modules/modems/mutation-admission-port.ts`. It implements the package's
+structural `MutationAdmissionPort` over `tryAcquireModemMutation`; a stream-active
+request is refused as `admission-refused` with detail `streaming_active`, and an
+admitted package lease releases the existing CeraUI lifecycle lease. The policy
+therefore remains consumer-owned rather than moving into modem-stack.
+
+`tests/modem-control-projections.test.ts` is the committed boundary gate. It
+asserts all 14 modules use the named seam, every projection imports against the
+exact 0.2.0 dependency floor, direct `dbus|mmcli|qmicli|goform|hilink` references
+remain inside the Todo-17 ledger allowlist, and stream-active admission preserves
+the refusal vocabulary. Never add a direct modem transport/model/dialect path
+outside that allowlist; add package consumption through a named projection
+instead. Never replace the registry pin with `link:` or `file:`.
 
 ## THE MODEM MUTATION-SAFETY CONTRACT [EXISTS]
 
