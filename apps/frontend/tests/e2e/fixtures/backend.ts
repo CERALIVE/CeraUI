@@ -151,6 +151,10 @@ function seedStateDir(stateDir: string): void {
 		string,
 		unknown
 	>;
+	// Scenario mutations (PIN retries/unlock included) are owned by the legacy
+	// mock modem state machine, so worker fixtures must opt out of the production
+	// D-Bus default rather than inheriting an unrelated read-only view.
+	cfg.modem_backend = "mmcli";
 	cfg.password_hash = passwordHash();
 	cfg.kiosk_enabled = false;
 	cfg.kiosk_last_state = "disabled";
