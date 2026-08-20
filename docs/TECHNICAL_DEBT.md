@@ -87,6 +87,22 @@ register is "empty" precisely when there are none.
 ## Open Debt
 
 ```debt
+id: TD-modem-phase-c-spa-size
+title: Modem Phase-C operator surfaces increased the aggregate SPA and precache footprint
+track: 1
+status: open
+exit_criteria: `bun run build:frontend && bun scripts/ci/bundle-report.mjs`
+owner: ceraui-team
+registered_at: 2026-08-20
+resolved_at: null
+unblock: The complete modem Phase-C control surface and shared wire schemas measured 982,392 B total SPA gzip and 1,123,271 B service-worker precache gzip at commit e5849653, versus the retained pre-feature baselines of 762,410 B and 903,286 B. Reduce this footprint in a dedicated bundle effort without removing capability-truth controls or weakening offline availability; keep the entry open until both accepted aggregate baselines can be lowered. The initial-route and largest-chunk baselines remain unchanged.
+```
+
+The Phase-C exception is limited to the two aggregate measurements. The initial-route
+and largest-chunk ceilings remain on their pre-feature baselines, and every run reports
+the displaced aggregate measurements so the accepted growth remains visible.
+
+```debt
 id: TD-federation-i18n-catalog-size
 title: Federation toast-host shared chunk carries an oversized static Paraglide catalog
 track: 1
