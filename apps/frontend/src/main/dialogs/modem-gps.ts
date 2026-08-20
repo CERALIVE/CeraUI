@@ -34,42 +34,54 @@ import type {
 	SupportClaimState,
 } from "@ceraui/rpc/schemas";
 
+import {
+	type CapabilityReasonKeys,
+	resolveCapabilityRender,
+} from "../network/capability-modules";
+
 export type GpsView =
-	| { readonly kind: "hidden" }
+	/** CT-1: positively unsupported or not shipped — ZERO DOM nodes. */
+	| { readonly kind: "absent" }
+	/** CT-3: nothing established about this modem — a distinct diagnostic, no control. */
+	| { readonly kind: "unknown"; readonly reasonKey: string }
+	/** CT-2: supported, refused right now — the control renders DISABLED with this reason. */
 	| { readonly kind: "blocked"; readonly reasonKey: string }
 	| { readonly kind: "toggle"; readonly enabled: boolean };
 
+const REASONS: CapabilityReasonKeys = {
+	moduleDisabled: "network.modem.gps.reason.moduleDisabled",
+	unproven: "network.modem.gps.reason.unproven",
+};
+
 /**
- * Resolve what to render for one modem. The ordering is the contract, and it is
- * `fccUnlockView`'s:
+ * Resolve what to render for one modem. The claim ladder routes through the
+ * shared `resolveCapabilityRender`, exactly as `fccUnlockView` does, so the two
+ * gated modules cannot answer the same claim two different ways.
  *
- * 1. `unavailable` HIDES the section — this build does not ship the module, OR
- *    the modem positively has no GNSS receiver. An operator can act on neither,
- *    and a permanent disabled row on every non-GNSS modem is noise.
- * 2. `implemented` is BLOCKED-with-a-reason: the device-config gate is off and
- *    turning it on is the fix, so the control must be visible.
- * 3. `enabled` is also blocked — the gate is on but the capability read has not
- *    landed, and offering a control on an unproven capability is exactly what the
- *    capability floor exists to prevent.
- * 4. `capable`/`certified` render the toggle.
+ * The one LOCAL fact is a ≥`capable` modem that has published no status block
+ * yet: the receiver is proven to exist, so the toggle is rendered DISABLED with
+ * its reason (CT-2) rather than withheld — withholding it would be
+ * indistinguishable from a modem that has no GNSS at all.
  */
 export function gpsView(
 	claim: SupportClaimState | undefined,
 	status: { readonly gnssEnabled: boolean } | undefined,
 ): GpsView {
-	if (claim === undefined || claim === "unavailable") {
-		return { kind: "hidden" };
+	const view = resolveCapabilityRender(
+		claim,
+		REASONS,
+		status === undefined ? "network.modem.gps.reason.notReported" : undefined,
+	);
+	switch (view.mode) {
+		case "absent":
+			return { kind: "absent" };
+		case "unknown":
+			return { kind: "unknown", reasonKey: view.reasonKey };
+		case "blocked":
+			return { kind: "blocked", reasonKey: view.reasonKey };
+		case "available":
+			return { kind: "toggle", enabled: status?.gnssEnabled === true };
 	}
-	if (claim === "implemented") {
-		return {
-			kind: "blocked",
-			reasonKey: "network.modem.gps.reason.moduleDisabled",
-		};
-	}
-	if (claim === "enabled" || status === undefined) {
-		return { kind: "blocked", reasonKey: "network.modem.gps.reason.unproven" };
-	}
-	return { kind: "toggle", enabled: status.gnssEnabled };
 }
 
 export type GpsStatusLine =

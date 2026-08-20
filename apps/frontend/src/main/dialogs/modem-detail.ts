@@ -62,6 +62,13 @@ export interface CellMetricRow {
 	readonly value?: string;
 	/** i18n dot-path for an ENUM-valued metric (`tech`). Never rendered raw. */
 	readonly valueKey?: string;
+	/**
+	 * The value is a WIRE TOKEN with its own operator vocabulary (`DESIGN.md`
+	 * OL-2), so the render site formats it rather than printing `value`. The raw
+	 * token stays on `value` for the diagnostics block, which is the whole of
+	 * OL-3: relocated, not deleted.
+	 */
+	readonly format?: "band";
 	/** SI unit symbol, appended verbatim — a symbol is not translated copy. */
 	readonly unit?: string;
 }
@@ -101,7 +108,12 @@ export function cellMetricRows(
 
 	const band = text(cell.band);
 	if (band !== undefined) {
-		rows.push({ key: "band", labelKey: `${DETAIL}.band`, value: band });
+		rows.push({
+			key: "band",
+			labelKey: `${DETAIL}.band`,
+			value: band,
+			format: "band",
+		});
 	}
 
 	const cellId = text(cell.cell_id);

@@ -180,6 +180,17 @@ import {
 	resolveUsbModeTarget,
 	usbOfferSuppressionKey,
 } from '$lib/rpc/usb-mode-offer';
+import {
+	type MutationOutcome,
+	mutationOutcome,
+} from '$lib/modem/mutation-outcome';
+import {
+	bandDiagnosticTokens,
+	bandListOperatorLabel,
+	bandOperatorLabel,
+	isMappedBandToken,
+	usbModeOperatorLabel,
+} from '$lib/modem/operator-labels';
 import { cn } from '$lib/utils';
 import { isSimlessModem } from '../network/cellular-row';
 import {
@@ -284,6 +295,7 @@ $effect(() => {
 		bandOutcomeKey = undefined;
 		void loadBands();
 		void loadFccUnlock();
+		void loadGps();
 	}
 	prevOpen = open;
 });
@@ -546,13 +558,16 @@ async function loadUsbModeOptions(): Promise<void> {
 // `undefined` renders nothing rather than a guess.
 let fccState = $state<FccUnlockState | undefined>(undefined);
 let fccBusy = $state(false);
-let fccErrorKey = $state<string | undefined>(undefined);
+// The outcome PERSISTS until the next dispatch or the next open, and it carries
+// the success as well as the refusal — a toggle that moved with no word anywhere
+// is an outcome an operator using a screen reader never receives (§8 LR-5/LR-6).
+let fccOutcome = $state<MutationOutcome | undefined>(undefined);
 
 const fccClaim = $derived(modem.capability_modules?.["fcc-auto-unlock"]);
 
 async function loadFccUnlock(): Promise<void> {
 	fccState = undefined;
-	fccErrorKey = undefined;
+	fccOutcome = undefined;
 	const requested = deviceId;
 	try {
 		const result = await rpc.modems.getFccUnlock({ device: String(deviceId) });
@@ -566,7 +581,7 @@ async function loadFccUnlock(): Promise<void> {
 
 async function toggleFccUnlock(enabled: boolean): Promise<void> {
 	fccBusy = true;
-	fccErrorKey = undefined;
+	fccOutcome = undefined;
 	try {
 		const result = await rpc.modems.setFccUnlock({
 			device: String(deviceId),
@@ -574,14 +589,27 @@ async function toggleFccUnlock(enabled: boolean): Promise<void> {
 			confirm: true,
 		});
 		if (result.success) {
+			// The reply CARRIES the device's own re-read state, so success here is
+			// already confirmed — there is nothing left to bound and no window to
+			// open, unlike a router write whose proof arrives on a later broadcast.
 			fccState = result.state;
+			fccOutcome = mutationOutcome(
+				"applied",
+				enabled
+					? m["network.modem.fccUnlock.outcome.enabled"]()
+					: m["network.modem.fccUnlock.outcome.disabled"](),
+			);
 		} else {
-			fccErrorKey = fccUnlockErrorKey(
-				"error" in result ? result.error : result.refusal,
+			fccOutcome = mutationOutcome(
+				"refused",
+				t(fccUnlockErrorKey("error" in result ? result.error : result.refusal)),
 			);
 		}
 	} catch {
-		fccErrorKey = fccUnlockErrorKey("write_failed");
+		fccOutcome = mutationOutcome(
+			"refused",
+			t(fccUnlockErrorKey("write_failed")),
+		);
 	} finally {
 		fccBusy = false;
 	}
@@ -595,14 +623,14 @@ async function toggleFccUnlock(enabled: boolean): Promise<void> {
 let gpsStatus = $state<ModemGpsStatus | undefined>(undefined);
 let gpsState = $state<GnssFixState | undefined>(undefined);
 let gpsBusy = $state(false);
-let gpsErrorKey = $state<string | undefined>(undefined);
+let gpsOutcome = $state<MutationOutcome | undefined>(undefined);
 
 const gpsClaim = $derived(modem.capability_modules?.gps);
 
 async function loadGps(): Promise<void> {
 	gpsStatus = undefined;
 	gpsState = undefined;
-	gpsErrorKey = undefined;
+	gpsOutcome = undefined;
 	const requested = deviceId;
 	try {
 		const result = await rpc.modems.getGps({ device: String(deviceId) });
@@ -621,19 +649,26 @@ async function loadGps(): Promise<void> {
 
 async function toggleGps(enabled: boolean): Promise<void> {
 	gpsBusy = true;
-	gpsErrorKey = undefined;
+	gpsOutcome = undefined;
 	try {
 		const result = await rpc.modems.setGps({ device: String(deviceId), enabled });
 		if (result.success) {
 			gpsStatus = result.status;
 			gpsState = result.state;
+			gpsOutcome = mutationOutcome(
+				"applied",
+				enabled
+					? m["network.modem.gps.outcome.enabled"]()
+					: m["network.modem.gps.outcome.disabled"](),
+			);
 		} else {
-			gpsErrorKey = gpsErrorKeyFor(
-				result.error ?? result.mutationRefusal ?? "read_failed",
+			gpsOutcome = mutationOutcome(
+				"refused",
+				t(gpsErrorKeyFor(result.error ?? result.mutationRefusal ?? "read_failed")),
 			);
 		}
 	} catch {
-		gpsErrorKey = gpsErrorKeyFor("read_failed");
+		gpsOutcome = mutationOutcome("refused", t(gpsErrorKeyFor("read_failed")));
 	} finally {
 		gpsBusy = false;
 	}
@@ -652,6 +687,21 @@ let bandOutcomeKey = $state<string | undefined>(undefined);
 
 const bandOffer = $derived(deriveBandOffer(bandResult));
 const bandDirty = $derived(bandSelectionChanged(bandOffer.current, bandSelection));
+
+// The band grammar is deliberately OPEN (`bandNameSchema` is a shape check, so
+// the modem stays the authority on what it advertises), which makes an
+// unrecognised token an expected case rather than a defect. It resolves to
+// honest generic copy, and these are what the diagnostics pointer is for.
+const unmappedOfferedBands = $derived(
+	[...bandOffer.offerable, ...bandOffer.current].filter(
+		(band) => !isMappedBandToken(band),
+	),
+);
+const bandDiagnostics = $derived(
+	bandDiagnosticTokens([
+		...new Set([...bandOffer.current, ...bandOffer.offerable]),
+	]),
+);
 
 // Deliberately does NOT clear `bandOutcomeKey`: this runs as the CONFIRMING
 // re-read immediately after an apply, and clearing there would erase the outcome
@@ -764,8 +814,18 @@ $effect(() => {
 	return () => clearTimeout(timer);
 });
 
+// OL-1: the WIRE token (`rndis`, `qmi`, …) never reaches operator copy. It names
+// a USB protocol, which is not something an operator can act on; the label names
+// the BEHAVIOUR instead, and the token itself is relocated to the diagnostics
+// block below (OL-3) rather than deleted.
 function usbModeLabel(mode: UsbCompositionMode | undefined): string {
-	return mode ?? m["network.modem.usbMode.unknown"]();
+	return usbModeOperatorLabel(mode, resolveMessageKey);
+}
+
+// OL-2: same rule for a band. `eutran-3` is a 3GPP table row; "4G band 3" is the
+// same fact in a vocabulary an operator shares with their carrier.
+function bandLabel(band: string): string {
+	return bandOperatorLabel(band, resolveMessageKey);
 }
 
 const usbFailureText = $derived.by(() => {
@@ -846,7 +906,21 @@ const cellRows = $derived(cellMetricRows(modem.cell_info));
 const observedAt = $derived(cellObservedAtMs(modem.cell_info));
 const firmware = $derived(firmwareRevision(modem.firmware_revision));
 const esim = $derived(esimView(modem.esim));
+
 const showDetailCard = $derived(hasModemDetail(modem));
+
+// OL-3 is a RELOCATION rule, so the diagnostics block is gated on its OWN
+// evidence — the presence of a suppressed token — rather than on the detail
+// card's. A raw value hidden from a label while its diagnostics home is gated
+// off by an unrelated reading is a value the field engineer simply lost.
+const rawServingBand = $derived(
+	cellRows.find((row) => row.format === 'band')?.value,
+);
+const hasRawDiagnostics = $derived(
+	activeUsbMode !== undefined ||
+		rawServingBand !== undefined ||
+		bandDiagnostics.length > 0,
+);
 
 // The SIM's own number is HIDDEN BY DEFAULT and revealed only on request — the
 // same treatment `PasswordDialog`/`HotspotDialog` give a credential, for the same
@@ -1322,7 +1396,9 @@ function toggleSms(): void {
 				<p class="text-muted-foreground text-xs" data-testid="modem-bands-current">
 					{bandOffer.unlocked
 						? m["network.modem.bands.currentAny"]()
-						: m["network.modem.bands.current"]({ bands: bandOffer.current.join(', ') })}
+						: m["network.modem.bands.current"]({
+								bands: bandListOperatorLabel(bandOffer.current, resolveMessageKey) ?? '',
+							})}
 				</p>
 
 				<div
@@ -1340,21 +1416,32 @@ function toggleSms(): void {
 							role="checkbox"
 							aria-checked={bandSelection.includes(band)}
 							class={cn(
-								'min-h-[var(--touch-target-min)] rounded-md border px-2.5 py-1 font-mono text-xs',
+								'min-h-[var(--touch-target-min)] rounded-md border px-2.5 py-1 text-xs',
 								bandSelection.includes(band)
 									? 'border-primary bg-primary/10 text-foreground'
 									: 'text-muted-foreground hover:bg-muted/50',
 							)}
 							data-testid="modem-band-option-{band}"
+							data-band={band}
 							disabled={bandApplying}
 							onclick={() => {
 								bandSelection = toggleBand(bandSelection, band);
 							}}
 						>
-							{band === BAND_ANY ? m["network.modem.bands.any"]() : band}
+							{bandLabel(band)}
 						</button>
 					{/each}
 				</div>
+
+				<!-- OL-5: an unmapped token is never printed raw as a fallback, so a
+				     chip this build could not name reads "Unrecognised band" — which is
+				     honest but not, on its own, actionable. The pointer is what makes it
+				     so: the exact value is one disclosure away, verbatim. -->
+				{#if unmappedOfferedBands.length > 0}
+					<p class="text-muted-foreground/80 text-xs" data-testid="modem-bands-unmapped-hint">
+						{m["network.modem.bands.unmappedHint"]()}
+					</p>
+				{/if}
 
 				<!-- Offered only for a CHANGED selection: an Apply that would re-register
 				     the radio onto the bands it is already on costs a connection drop and
@@ -1693,8 +1780,11 @@ function toggleSms(): void {
 								<dd
 									class="truncate font-mono text-sm tabular-nums"
 									data-testid={`modem-cell-${row.key}`}
+									data-raw={row.format ? row.value : undefined}
 								>
-									{#if row.valueKey}{t(row.valueKey)}{:else}{row.value}{#if row.unit}&nbsp;{row.unit}{/if}{/if}
+									{#if row.valueKey}{t(row.valueKey)}{:else if row.format === 'band' && row.value}{bandLabel(
+											row.value,
+										)}{:else}{row.value}{#if row.unit}&nbsp;{row.unit}{/if}{/if}
 								</dd>
 							</div>
 						{/each}
@@ -1820,6 +1910,75 @@ function toggleSms(): void {
 						</p>
 					</div>
 				{/if}
+
+			</section>
+		{/if}
+
+		<!-- ── Raw device values ────────────────────────────────────────────────
+		     OL-3/OL-4: the exact tokens the operator-facing labels above replaced,
+		     RELOCATED rather than deleted, in a block that names itself as
+		     diagnostics and that is already collapsed (it lives inside the
+		     Advanced disclosure). A field engineer comparing a composition or a
+		     band against a vendor table loses nothing; an operator reading the
+		     cards above never meets a protocol name.
+
+		     It is its OWN section rather than a tail on the detail card, because
+		     the two answer to different evidence: the detail card vanishes when
+		     the modem reported no cell/eSIM/firmware, and folding this into it
+		     would make a composition's raw value hostage to a reading that has
+		     nothing to do with it. Absence still renders as absence — with no
+		     suppressed token to relocate, this section does not exist. -->
+		{#if hasRawDiagnostics}
+			<section
+				class="space-y-2 rounded-lg border p-3"
+				data-testid="modem-raw-diagnostics"
+			>
+				<div class="min-w-0">
+					<p class="text-sm font-medium">
+						{m["network.modem.detail.diagnosticsTitle"]()}
+					</p>
+					<p class="text-muted-foreground text-xs">
+						{m["network.modem.detail.diagnosticsDescription"]()}
+					</p>
+				</div>
+				<dl class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+					{#if activeUsbMode}
+						<div class="min-w-0">
+							<dt class="text-muted-foreground text-xs">
+								{m["network.modem.detail.diagnosticsUsbMode"]()}
+							</dt>
+							<dd
+								class="truncate font-mono text-xs"
+								data-testid="modem-raw-usb-mode"
+								dir="ltr"
+							>{activeUsbMode}</dd>
+						</div>
+					{/if}
+					{#if rawServingBand}
+						<div class="min-w-0">
+							<dt class="text-muted-foreground text-xs">
+								{m["network.modem.detail.diagnosticsServingBand"]()}
+							</dt>
+							<dd
+								class="truncate font-mono text-xs"
+								data-testid="modem-raw-serving-band"
+								dir="ltr"
+							>{rawServingBand}</dd>
+						</div>
+					{/if}
+					{#if bandDiagnostics.length > 0}
+						<div class="min-w-0 sm:col-span-2">
+							<dt class="text-muted-foreground text-xs">
+								{m["network.modem.detail.diagnosticsBands"]()}
+							</dt>
+							<dd
+								class="font-mono text-xs break-words"
+								data-testid="modem-raw-bands"
+								dir="ltr"
+							>{bandDiagnostics.join(' ')}</dd>
+						</div>
+					{/if}
+				</dl>
 			</section>
 		{/if}
 
@@ -2058,14 +2217,22 @@ function toggleSms(): void {
 				<dl class="grid grid-cols-2 gap-2 text-xs">
 					<div>
 						<dt class="text-muted-foreground">{m["network.modem.usbMode.active"]()}</dt>
-						<dd class="font-mono text-sm" data-testid="modem-usb-mode-active">
+						<dd
+							class="text-sm"
+							data-testid="modem-usb-mode-active"
+							data-usb-mode={activeUsbMode}
+						>
 							{usbModeLabel(activeUsbMode)}
 						</dd>
 					</div>
 					{#if recommendedUsbMode}
 						<div>
 							<dt class="text-muted-foreground">{m["network.modem.usbMode.recommended"]()}</dt>
-							<dd class="font-mono text-sm" data-testid="modem-usb-mode-recommended">
+							<dd
+								class="text-sm"
+								data-testid="modem-usb-mode-recommended"
+								data-usb-mode={recommendedUsbMode}
+							>
 								{usbModeLabel(recommendedUsbMode)}
 							</dd>
 						</div>
@@ -2100,17 +2267,18 @@ function toggleSms(): void {
 									role="radio"
 									aria-checked={target === usbSwitchTarget}
 									class={cn(
-										'min-h-[var(--touch-target-min)] rounded-md border px-2.5 py-1 font-mono text-xs',
+										'min-h-[var(--touch-target-min)] rounded-md border px-2.5 py-1 text-xs',
 										target === usbSwitchTarget
 											? 'border-primary bg-primary/10 text-foreground'
 											: 'text-muted-foreground hover:bg-muted/50',
 									)}
 									data-testid="modem-usb-mode-target-{target}"
+									data-usb-mode={target}
 									onclick={() => {
 										usbSelected = target;
 									}}
 								>
-									{target}
+									{usbModeLabel(target)}
 									{#if target === recommendedUsbMode}
 										<span class="text-muted-foreground ml-1 font-sans">
 											{m["network.modem.usbMode.recommended"]()}
@@ -2137,7 +2305,7 @@ function toggleSms(): void {
 								title={m["network.modem.usbMode.provisioningDisabled"]()}
 								variant="outline"
 							>
-								{m["network.modem.usbMode.switchTo"]({ mode: usbSwitchTarget })}
+								{m["network.modem.usbMode.switchTo"]({ mode: usbModeLabel(usbSwitchTarget) })}
 							</Button>
 							<p
 								class="text-status-warning text-xs"
@@ -2149,7 +2317,7 @@ function toggleSms(): void {
 					{:else}
 						<SimpleAlertDialog
 							buttonClasses="w-full"
-							buttonText={m["network.modem.usbMode.switchTo"]({ mode: usbSwitchTarget })}
+							buttonText={m["network.modem.usbMode.switchTo"]({ mode: usbModeLabel(usbSwitchTarget) })}
 							confirmButtonText={m["network.modem.usbMode.confirmAction"]()}
 							confirmVariant="destructive"
 							disabledConfirmButton={usbSwitching}
@@ -2249,8 +2417,24 @@ function toggleSms(): void {
 			claim={fccClaim}
 			state={fccState}
 			busy={fccBusy}
-			failure={fccErrorKey === undefined ? undefined : t(fccErrorKey)}
+			outcome={fccOutcome}
 			onToggle={(next) => void toggleFccUnlock(next)}
+		/>
+
+		<!-- The GPS module's whole surface — component, read, toggle and typed
+		     failures — existed and was WIRED, but nothing ever mounted it and
+		     nothing ever ran the read. So a `capable` receiver contributed exactly
+		     as many DOM nodes as a modem with no GNSS at all: zero. That is the §1
+		     matrix collapsing two rows into one, which is the single failure the
+		     capability ladder exists to prevent, arrived at by omission rather
+		     than by a wrong rule. -->
+		<ModemGpsSection
+			claim={gpsClaim}
+			status={gpsStatus}
+			state={gpsState}
+			busy={gpsBusy}
+			outcome={gpsOutcome}
+			onToggle={(next) => void toggleGps(next)}
 		/>
 		</div>
 		</CollapsibleSection>

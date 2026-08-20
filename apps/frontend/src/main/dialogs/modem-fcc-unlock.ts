@@ -26,13 +26,18 @@
 
 import type { FccUnlockState, SupportClaimState } from "@ceraui/rpc/schemas";
 
+import {
+	type CapabilityReasonKeys,
+	resolveCapabilityRender,
+} from "../network/capability-modules";
+
 export type FccUnlockView =
-	| { readonly kind: "hidden" }
-	| {
-			readonly kind: "blocked";
-			/** Why the control cannot be used, as an i18n key. */
-			readonly reasonKey: string;
-	  }
+	/** CT-1: positively unsupported or not shipped — ZERO DOM nodes. */
+	| { readonly kind: "absent" }
+	/** CT-3: nothing established about this modem — a distinct diagnostic, no control. */
+	| { readonly kind: "unknown"; readonly reasonKey: string }
+	/** CT-2: supported, refused right now — the control renders DISABLED with this reason. */
+	| { readonly kind: "blocked"; readonly reasonKey: string }
 	| {
 			readonly kind: "toggle";
 			readonly enabled: boolean;
@@ -40,57 +45,52 @@ export type FccUnlockView =
 			readonly key: string;
 	  };
 
+const REASONS: CapabilityReasonKeys = {
+	moduleDisabled: "network.modem.fccUnlock.reason.moduleDisabled",
+	unproven: "network.modem.fccUnlock.reason.unproven",
+};
+
 /**
  * Resolve what to render for one modem.
  *
- * The ordering is the contract:
- *
- * 1. `unavailable` HIDES the section. That state means this build does not ship
- *    the module OR ModemManager positively has no procedure for this model — and
- *    on a fleet where 7 of 8 devices are uncovered, a permanent disabled row on
- *    every one of them is noise, not honesty. The operator can act on neither.
- * 2. `implemented` is BLOCKED-with-a-reason, not hidden. The device-config gate
- *    is off and turning it on is the fix, so the operator must be able to see the
- *    control exists — the same distinction `module_disabled` vs
- *    `module_unavailable` draws on the write side.
- * 3. `enabled` is also blocked: the gate is on but the coverage READ failed, so
- *    nothing here can be shown to work. Offering a toggle on an unproven
- *    capability is exactly what the capability floor exists to prevent.
- * 4. `capable`/`certified` render the toggle — but only once the device answered
- *    with a key. A state with no key has nothing to name a symlink after.
+ * The claim ladder is NOT re-derived here — it routes through the shared
+ * `resolveCapabilityRender`, so this surface and every other capability surface
+ * answer one question one way. What is local is only the CURRENT refusal: a
+ * covered model that answered with no key, and a model ModemManager has no
+ * procedure for, are both ≥`capable` modules the device is refusing right now,
+ * which is the disabled-with-reason class (CT-2) rather than a hidden one.
  */
 export function fccUnlockView(
 	claim: SupportClaimState | undefined,
 	state: FccUnlockState | undefined,
 ): FccUnlockView {
-	if (claim === undefined || claim === "unavailable") {
-		return { kind: "hidden" };
+	const view = resolveCapabilityRender(
+		claim,
+		REASONS,
+		fccCurrentRefusalKey(state),
+	);
+	switch (view.mode) {
+		case "absent":
+			return { kind: "absent" };
+		case "unknown":
+			return { kind: "unknown", reasonKey: view.reasonKey };
+		case "blocked":
+			return { kind: "blocked", reasonKey: view.reasonKey };
+		case "available":
+			return state?.key === undefined
+				? { kind: "unknown", reasonKey: REASONS.unproven }
+				: { kind: "toggle", enabled: state.enabled, key: state.key };
 	}
-	if (claim === "implemented") {
-		return {
-			kind: "blocked",
-			reasonKey: "network.modem.fccUnlock.reason.moduleDisabled",
-		};
-	}
-	if (claim === "enabled") {
-		return {
-			kind: "blocked",
-			reasonKey: "network.modem.fccUnlock.reason.unproven",
-		};
-	}
-	if (state === undefined || state.key === undefined) {
-		return {
-			kind: "blocked",
-			reasonKey: "network.modem.fccUnlock.reason.unproven",
-		};
-	}
+}
+
+function fccCurrentRefusalKey(
+	state: FccUnlockState | undefined,
+): string | undefined {
+	if (state === undefined || state.key === undefined) return REASONS.unproven;
 	if (state.coverage !== "present") {
-		return {
-			kind: "blocked",
-			reasonKey: "network.modem.fccUnlock.reason.notCovered",
-		};
+		return "network.modem.fccUnlock.reason.notCovered";
 	}
-	return { kind: "toggle", enabled: state.enabled, key: state.key };
+	return undefined;
 }
 
 /**

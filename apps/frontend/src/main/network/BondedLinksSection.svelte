@@ -99,7 +99,7 @@ const totalStale = $derived(
 					data-link-id={link.id}
 					data-link-key={linkRowKey(link, entry)}
 					class={cn(
-						'flex items-center gap-2.5 rounded-lg border px-3 py-1.5',
+						'flex flex-wrap items-center gap-2.5 rounded-lg border px-3 py-1.5',
 						link.isStale && 'opacity-50',
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
@@ -115,7 +115,15 @@ const totalStale = $derived(
 						connectionState={link.connectionState}
 						linkIndex={link.linkIndex}
 					/>
-					<div class="flex min-w-0 flex-1 flex-col leading-tight">
+					<!-- A REAL BASIS, not `flex-1`'s zero. Every instrument to the right is
+					     `shrink-0`, so a zero-basis identity column is the only thing in the
+					     row that can absorb a squeeze — and at 375px it absorbed all of it
+					     and measured 0, which is the known gap this pass closes. With a
+					     basis the instruments wrap to a second line instead, and the device
+					     name keeps its width. Written as ONE `flex` shorthand on purpose:
+					     `flex-1 basis-32` sets `flex-basis` twice and which one wins is
+					     decided by Tailwind's stylesheet order, not by the class attribute. -->
+					<div class="flex min-w-0 flex-[1_1_8rem] flex-col leading-tight">
 						<span class="truncate text-xs font-medium">{link.label}</span>
 						<span class="text-muted-foreground truncate text-[10px] uppercase tracking-wide">
 							{linkTypeLabel(link)}{#if identity}<!--
@@ -125,33 +133,40 @@ const totalStale = $derived(
 								>{/if}
 						</span>
 					</div>
-					{#if hasSignal}
-						<span
-							data-live-value
-							class="shrink-0 font-mono text-xs tabular-nums"
-							style="color: {color};"
-						>
-							{link.signal}%
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-							{m["network.view.noSimLink"]()}
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-							{m["network.modem.scanning"]()}
-						</span>
-					{/if}
-					<!-- per-link throughput (Task 18) -->
-					<Badge variant="speed" class="shrink-0" kbps={linkUpKbps(link)} stale={link.isStale} />
+					<!-- The instruments travel as ONE unit so a wrap cannot strand the
+					     speed badge on a line away from the telemetry it belongs with, and
+					     so the group wraps whole rather than item by item. Every member is
+					     `shrink-0`, so before this their combined min-content simply pushed
+					     the identity column above out of existence. -->
+					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2.5">
+						{#if hasSignal}
+							<span
+								data-live-value
+								class="shrink-0 font-mono text-xs tabular-nums"
+								style="color: {color};"
+							>
+								{link.signal}%
+							</span>
+						{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
+								{m["network.view.noSimLink"]()}
+							</span>
+						{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
+								{m["network.modem.scanning"]()}
+							</span>
+						{/if}
+						<!-- per-link throughput (Task 18) -->
+						<Badge variant="speed" class="shrink-0" kbps={linkUpKbps(link)} stale={link.isStale} />
 
-					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
-					     the same row via a left divider, at reduced size (Task 19). -->
-					<div
-						class="shrink-0 border-s ps-2.5"
-						style="border-color: color-mix(in oklab, {color} 20%, transparent);"
-					>
-						<LinkTelemetry class="gap-x-2.5" {entry} loading={telemetryLoading} />
+						<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
+						     the same row via a left divider, at reduced size (Task 19). -->
+						<div
+							class="min-w-0 border-s ps-2.5"
+							style="border-color: color-mix(in oklab, {color} 20%, transparent);"
+						>
+							<LinkTelemetry class="gap-x-2.5" {entry} loading={telemetryLoading} />
+						</div>
 					</div>
 				</div>
 			{/each}

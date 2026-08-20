@@ -124,7 +124,11 @@ import {
 	stateLabelKey,
 	stateTone,
 } from './cellular-row';
-import { detailFields, trafficFields } from '../dialogs/router-dongle-fields';
+import {
+	detailFields,
+	diagnosticFields,
+	trafficFields,
+} from '../dialogs/router-dongle-fields';
 import { openRouterAdminUi, routerAdminOpenReasonKey } from './router-admin-open';
 import type { RouterSignalReadout } from './router-signal';
 import {
@@ -475,6 +479,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 				{@const routerSignal = resolveRouterSignalReadout(modem)}
 				{@const routerSignalModel = admin?.signal}
 				{@const adminDetails = detailFields(admin)}
+				{@const adminDiagnostics = diagnosticFields(admin)}
 				{@const adminTraffic = trafficFields(admin)}
 				{@const detailsOpen = openDetails[id] === true}
 				{@const detailsId = `modem-details-${id}`}
@@ -506,21 +511,20 @@ async function openAdminUi(rowId: string): Promise<void> {
 						>
 							{primary}
 						</p>
-						<!-- Which slot it is in, where it is in its lifecycle, and who it is
-						     registered with. The CLASS band moved into the disclosure at
-						     todo 64: it says the same word on nearly every row, an operator
+						<!-- Where it is in its lifecycle, who it is registered with, and only
+						     THEN which slot it is in. The CLASS band moved into the disclosure
+						     at todo 64: it says the same word on nearly every row, an operator
 						     cannot act on it, and it was the single most-repeated pill on a
-						     seven-device bench. -->
+						     seven-device bench.
+
+						     THE SLOT LABEL COMES LAST, AND THE ORDER IS THE RULE (`DESIGN.md`
+						     IH-1): it is a HARDWARE TAG — which USB port this thing is in —
+						     and no hardware tag may precede the first state/signal/action
+						     element in DOM order. It used to lead the badge line, so the
+						     first pill an operator's eye and a screen reader both reached was
+						     the one fact on the row nothing can be done about, ahead of
+						     whether the modem is registered at all. -->
 						<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
-							{#if slot}
-								<Badge
-									variant="neutral"
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="modem-slot-badge"
-									label={slot}
-								/>
-							{/if}
 							<!-- A directly-managed modem COLLAPSES its no-SIM condition into
 							     the lifecycle badge (`resolveRowState` returns `no-sim`), while
 							     a router dongle keeps a truthful `Up` and carries the fact as
@@ -592,11 +596,12 @@ async function openAdminUi(rowId: string): Promise<void> {
 							     first. It lives HERE — inline with the other facts the DEVICE
 							     reported — rather than beside the MM tier glyph in the control
 							     cluster on the right, for two reasons. Most of its states carry
-							     a WORD, and the control cluster does not wrap (`shrink-0`), so
-							     at 390px a long one pushed Configure clean off the screen; and
-							     the separation is itself the provenance distinction, since the
-							     radio's own magnitude keeps the instrument column while this
-							     second-hand reading sits with the reported facts.
+							     a WORD, and a long one placed in the control cluster wraps that
+							     cluster onto a second line at 390px for a reading that is not
+							     a control; and the separation is itself the provenance
+							     distinction, since the radio's own magnitude keeps the
+							     instrument column while this second-hand reading sits with
+							     the reported facts.
 
 							     `signal === undefined` states the exclusion rather than relying
 							     on the two payloads never overlapping: an MM row has no
@@ -648,6 +653,16 @@ async function openAdminUi(rowId: string): Promise<void> {
 									</span>
 								{/if}
 							{/if}
+							{#if slot}
+								<Badge
+									variant="neutral"
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="modem-slot-badge"
+									data-hardware-tag="slot"
+									label={slot}
+								/>
+							{/if}
 						</div>
 						<!-- Why this device's controls are what they are, on screen — a
 						     machine token is never rendered raw, and a reason shared by two
@@ -664,7 +679,20 @@ async function openAdminUi(rowId: string): Promise<void> {
 							</p>
 						{/each}
 					</div>
-					<div class="ms-auto flex shrink-0 items-center gap-2">
+					<!-- THE CLUSTER WRAPS INTERNALLY RATHER THAN OVERFLOWING (`DESIGN.md`
+					     BP-1/LO-3). `shrink-0` pins a flex item at max-content, so once the
+					     parent had wrapped this onto its own line and that width still
+					     exceeded the row, it had no way left to fit and hung off the edge —
+					     measured in `ar` at 390px, `open-modem-config-dialog` at 20..91
+					     against a row of 25..350. An LTR locale hides it only because its
+					     control words are shorter; the defect is the layout rule.
+					     `flex-wrap` is what makes dropping `shrink-0` safe: a wrapping line
+					     moves an item to the next line rather than squeezing it, so every
+					     control keeps its full width AND its touch target (TT-4). Do NOT
+					     restore `shrink-0`, and do NOT substitute truncation or a
+					     `min-w-[Npx]` — the first hides a control's own label, the second is
+					     right in one locale and wrong in the other nine. -->
+					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
 						{#if signal}
 							{@const SignalIcon = SIGNAL_ICON[signal]}
 							<!-- Qualitative tier with a word behind it — no digits, no
@@ -839,6 +867,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 									size="micro"
 									class={MICRO_TEXT}
 									data-testid="modem-class-badge"
+									data-hardware-tag="class"
 									data-class-band={band}
 									label={t(classLabelKey(band))}
 								/>
@@ -853,6 +882,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 										ifaceStale && 'opacity-50',
 									)}
 									data-testid="modem-detail"
+									data-hardware-tag="detail"
 								>
 									{detail}
 								</p>
@@ -954,6 +984,38 @@ async function openAdminUi(rowId: string): Promise<void> {
 												{field.value}
 												<!-- On screen, never a `title`: the shipped kiosk
 												     touchscreen has no hover to reveal one. -->
+												{#if field.note}
+													<span
+														class="text-muted-foreground/80 block font-sans break-normal"
+														data-testid={`router-detail-${field.id}-note`}
+													>
+														{field.note}
+													</span>
+												{/if}
+											</dd>
+										{/each}
+									</dl>
+								</div>
+							{/if}
+							<!-- The same readings in the DEVICE's own spelling — a raw band
+							     token (`B4`, `LTE_BAND_3`), a serving-cell id, a vendor's
+							     numeric mode index. They are split out rather than dropped
+							     (§3 OL-3) and the block is MARKED as diagnostics (OL-4), so
+							     the operator-text scan can exclude it by selector instead of
+							     by knowing which of two dozen field ids happen to be raw. -->
+							{#if adminDiagnostics.length > 0}
+								<div class="space-y-1" data-testid="router-admin-diagnostics">
+									<p class="text-muted-foreground/80 text-xs font-medium">
+										{m["network.routerCellular.diagnosticsTitle"]()}
+									</p>
+									<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+										{#each adminDiagnostics as field (field.id)}
+											<dt class="text-muted-foreground/80">{field.label}</dt>
+											<dd
+												class="min-w-0 font-mono tabular-nums break-all"
+												data-testid={`router-detail-${field.id}`}
+											>
+												{field.value}
 												{#if field.note}
 													<span
 														class="text-muted-foreground/80 block font-sans break-normal"

@@ -70,22 +70,28 @@ const IDENTITY_FIELDS: ReadonlyArray<{
 	},
 ];
 
-/**
- * What its NETWORK is doing, ordered radio → carrier → cell, then the UFI's
- * WAN/SIM identifiers and its product record. The list is a SUPERSET of any one
- * dialect — the ZTE fills the first four and the UFI fills a different set — so
- * it is never a promise that a given row will appear.
- */
-const DETAIL_FIELDS: ReadonlyArray<{
+type DetailFieldSpec = {
 	id: keyof RouterDetailsView;
 	label: (value: string) => string;
 	note?: (value: string) => string | undefined;
-}> = [
+};
+
+/**
+ * What its NETWORK is doing, in the operator's own terms — ordered radio →
+ * carrier → address → local network. The list is a SUPERSET of any one dialect
+ * (the ZTE fills a handful and the UFI fills a different set), so it is never a
+ * promise that a given row will appear.
+ *
+ * WHAT IS NOT HERE IS THE POINT (`DESIGN.md` §3 OL-2/OL-3). Every row whose
+ * VALUE is a raw vendor or 3GPP token an operator cannot act on — the band
+ * family (`B4`, `LTE_BAND_3`), the serving-cell identifiers, the ARFCNs and
+ * bandwidths, the vendor's numeric `network_mode` index, the subscriber
+ * identifiers — moved to `DIAGNOSTIC_DETAIL_FIELDS` below. Nothing was deleted:
+ * a field engineer still reads every one of them, verbatim and in the device's
+ * own spelling, one disclosure away.
+ */
+const OPERATOR_DETAIL_FIELDS: ReadonlyArray<DetailFieldSpec> = [
 	{ id: "network_type", label: () => m["network.modem.networkType"]() },
-	{
-		id: "network_mode",
-		label: () => m["network.routerCellular.networkModeLabel"](),
-	},
 	// Whether the carrier ACCEPTED this radio, which is a different question from
 	// whether a SIM is seated — the bench HiLink twins hold a valid slot reading
 	// and answer `NO SERVICE` here.
@@ -123,6 +129,44 @@ const DETAIL_FIELDS: ReadonlyArray<{
 	{
 		id: "roaming",
 		label: () => m["network.routerCellular.detail.roaming"](),
+	},
+	{ id: "wan_ip", label: () => m["network.routerCellular.wanIpLabel"]() },
+	{ id: "ssid", label: () => m["network.routerCellular.ssidLabel"]() },
+	{
+		id: "cpu_temp",
+		label: () => m["network.routerCellular.detail.cpuTemp"](),
+	},
+	{
+		id: "wifi_clients",
+		label: () => m["network.routerCellular.detail.wifiClients"](),
+	},
+	{
+		id: "eth_clients",
+		label: () => m["network.routerCellular.detail.ethClients"](),
+	},
+	{ id: "product", label: () => m["network.routerCellular.productLabel"]() },
+];
+
+/**
+ * The same readings, in the device's own spelling — the DIAGNOSTICS half.
+ *
+ * Every row here has a value an operator cannot act on and, in most cases,
+ * cannot read: `band` arrives as `B4` from one dialect and `LTE_BAND_3` from
+ * another, `network_mode` as the vendor's numeric index (`1` on the bench UFI),
+ * `station_id` as an opaque `bsid` the device documents nothing about. Printing
+ * those beside "Registration: NO SERVICE" is exactly the raw-token leak §3
+ * forbids — a label an operator can read over a value only a field engineer can.
+ *
+ * THEY ARE RELOCATED, NEVER DELETED (OL-3). Values stay verbatim and in the
+ * device's own order; a diagnostics value that has been tidied is no longer the
+ * thing you compare against a vendor table. The block that renders them is
+ * marked and collapsed (OL-4), which is also what removes them from the
+ * operator-text scan the truthfulness gate runs.
+ */
+const DIAGNOSTIC_DETAIL_FIELDS: ReadonlyArray<DetailFieldSpec> = [
+	{
+		id: "network_mode",
+		label: () => m["network.routerCellular.networkModeLabel"](),
 	},
 	{ id: "cell_id", label: () => m["network.modem.detail.cellId"]() },
 	{
@@ -166,10 +210,8 @@ const DETAIL_FIELDS: ReadonlyArray<{
 		id: "scell_bandwidth",
 		label: () => m["network.routerCellular.detail.scellBandwidth"](),
 	},
-	{ id: "wan_ip", label: () => m["network.routerCellular.wanIpLabel"]() },
 	{ id: "imsi", label: () => m["network.routerCellular.imsiLabel"]() },
 	{ id: "iccid", label: () => m["network.routerCellular.iccidLabel"]() },
-	{ id: "ssid", label: () => m["network.routerCellular.ssidLabel"]() },
 	// The device names this `bsid` and documents nothing about it, so the row
 	// carries the caveat rather than a meaning the device never stated.
 	{
@@ -178,22 +220,9 @@ const DETAIL_FIELDS: ReadonlyArray<{
 		note: () => m["network.routerCellular.detail.stationIdNote"](),
 	},
 	{
-		id: "cpu_temp",
-		label: () => m["network.routerCellular.detail.cpuTemp"](),
-	},
-	{
-		id: "wifi_clients",
-		label: () => m["network.routerCellular.detail.wifiClients"](),
-	},
-	{
-		id: "eth_clients",
-		label: () => m["network.routerCellular.detail.ethClients"](),
-	},
-	{
 		id: "web_version",
 		label: () => m["network.routerCellular.detail.webVersion"](),
 	},
-	{ id: "product", label: () => m["network.routerCellular.productLabel"]() },
 ];
 
 /**
@@ -372,13 +401,14 @@ export function netModeCapability(
 	};
 }
 
-export function detailFields(
+function statedFrom(
 	admin: RouterAdminView | undefined,
+	specs: ReadonlyArray<DetailFieldSpec>,
 ): DongleField[] {
 	const reported = admin?.details;
 	if (reported === undefined) return [];
 	return stated(
-		DETAIL_FIELDS.map((field) => {
+		specs.map((field) => {
 			const value = reported[field.id];
 			if (value === undefined || value === "") {
 				return { id: field.id, label: "", value: undefined };
@@ -392,6 +422,18 @@ export function detailFields(
 			};
 		}),
 	);
+}
+
+export function detailFields(
+	admin: RouterAdminView | undefined,
+): DongleField[] {
+	return statedFrom(admin, OPERATOR_DETAIL_FIELDS);
+}
+
+export function diagnosticFields(
+	admin: RouterAdminView | undefined,
+): DongleField[] {
+	return statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS);
 }
 
 export function trafficFields(

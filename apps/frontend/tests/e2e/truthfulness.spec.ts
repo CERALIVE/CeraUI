@@ -1404,7 +1404,14 @@ test.describe("Capability truthfulness (functional)", () => {
 		// dialog's "Advanced" disclosure (todo 64), so open that first.
 		await openModemAdvanced(dialog);
 		await expect(page.getByTestId("modem-usb-mode-card")).toBeVisible();
-		await expect(page.getByTestId("modem-usb-mode-active")).toHaveText("rndis");
+		// The wire token identifies the composition for a MACHINE; the operator
+		// reads a behaviour (DESIGN.md OL-1). Both facts are asserted, because
+		// asserting only the label would let the attribute drift and asserting
+		// only the attribute would let the token creep back into the copy.
+		const activeMode = page.getByTestId("modem-usb-mode-active");
+		await expect(activeMode).toHaveAttribute("data-usb-mode", "rndis");
+		await expect(activeMode).not.toHaveText(/rndis/i);
+		await expect(activeMode).toHaveText(/\S/);
 
 		// PROVISIONING OFF → the control exists, is disabled, and the reason is on
 		// SCREEN as well as in its accessible name (a kiosk cannot hover).
@@ -1426,6 +1433,161 @@ test.describe("Capability truthfulness (functional)", () => {
 		const liveSwitch = page.getByRole("button", { name: /^Switch to/ });
 		await expect(liveSwitch).toBeVisible();
 		await expect(liveSwitch).toBeEnabled();
+
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
+	});
+
+	// ── DESIGN.md §1: the capability-truth matrix, in a real browser ──────────
+	//
+	// The claim ladder decides which of FOUR renderings a gated module gets, and
+	// three of the four are decidable from the claim alone — so they are asserted
+	// here exactly, at the desktop viewport this describe already pins. The
+	// `capable` arm additionally depends on what the device's own read answers,
+	// which a dev host cannot pin, so it is asserted as the DISJUNCTION the
+	// matrix actually promises: a control is offered, or a control is offered
+	// DISABLED with its reason on screen. What it may never be is `unknown` or
+	// absent, and that is what the assertion pins.
+	//
+	// The unit twin (`ModemConfigDialog.capabilityTruth.test.ts`) drives all four
+	// arms exactly against fixture reads; this proves the same contract survives
+	// the real app, the real dialog chrome and the real disclosure.
+	const CAPABILITY_MATRIX = [
+		{ claim: "unavailable", expected: "absent" },
+		{ claim: "implemented", expected: "unknown" },
+		{ claim: "enabled", expected: "unknown" },
+		{ claim: "capable", expected: "offered" },
+	] as const;
+
+	for (const { claim, expected } of CAPABILITY_MATRIX) {
+		test(`a gated capability module claiming ${claim} renders as ${expected}`, {
+			annotation: {
+				type: DROP_SERVER_STATUS_ANNOTATION,
+				description:
+					"injects its own status.modems so the fixture modem is the only cellular row",
+			},
+		}, async ({ page }) => {
+			serverConfig();
+			sendFullCaps();
+			sendModems({
+				[MM_MODEM_ID]: mmManagedModem({
+					capability_modules: { "fcc-auto-unlock": claim, gps: claim },
+				}),
+			});
+
+			await navigateTo(page, "network");
+			const configure = modemRow(page, MM_MODEM_ID).getByTestId(
+				"open-modem-config-dialog",
+			);
+			await expect(configure).toBeEnabled({ timeout: 15_000 });
+			await configure.click();
+
+			const dialog = page.getByRole("dialog", { name: MM_MODEM_NAME });
+			await expect(dialog).toBeVisible({ timeout: 15_000 });
+			await openModemAdvanced(dialog);
+
+			const section = page.getByTestId("modem-fcc-unlock");
+			const control = page.getByTestId("modem-fcc-unlock-toggle");
+			const unknown = page.getByTestId("modem-fcc-unlock-unknown");
+
+			if (expected === "absent") {
+				// CT-1: not a ghost, not a disabled row, not a tooltip. Nothing.
+				await expect(section).toHaveCount(0);
+				await expect(control).toHaveCount(0);
+				await expect(unknown).toHaveCount(0);
+			} else if (expected === "unknown") {
+				// CT-3 + CT-4: a distinct, announced diagnostic and NO control —
+				// below `capable` nobody has shown there is a capability to withhold.
+				await expect(unknown).toBeVisible({ timeout: 15_000 });
+				await expect(unknown).toHaveAttribute("data-state", "unknown");
+				await expect(unknown).toHaveAttribute("role", "status");
+				await expect(unknown).toHaveText(/\S/);
+				await expect(unknown).not.toHaveText(/network\.modem/);
+				await expect(control).toHaveCount(0);
+				await expect(section).toHaveAttribute(
+					"data-capability-state",
+					"unknown",
+				);
+			} else {
+				await expect(section).toBeVisible({ timeout: 15_000 });
+				const state = await section.getAttribute("data-capability-state");
+				expect(["available", "blocked"]).toContain(state);
+				await expect(control).toBeVisible();
+				if (state === "blocked") {
+					// CT-2: disabled, and the reason is ON SCREEN — the shipped kiosk
+					// touchscreen cannot hover to reveal a tooltip.
+					await expect(control).toBeDisabled();
+					const reason = page.getByTestId("modem-fcc-unlock-reason");
+					await expect(reason).toBeVisible();
+					await expect(reason).toHaveText(/\S/);
+					await expect(reason).not.toHaveText(/network\.modem/);
+				} else {
+					await expect(control).toBeEnabled();
+				}
+			}
+
+			await page.keyboard.press("Escape");
+			await expect(dialog).toBeHidden();
+		});
+	}
+
+	// DESIGN.md §3: the two engine vocabularies this surface renders — USB
+	// composition and radio band — are RELOCATED to a marked diagnostics block,
+	// never printed at the operator. The unit gate scans the jsdom tree; this
+	// proves it against the real dialog, where the diagnostics block is behind a
+	// disclosure an operator has to open.
+	test("no raw composition or band token reaches operator copy, and every one is still in diagnostics", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects its own status.modems so the fixture modem is the only cellular row",
+		},
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		sendModems({
+			[MM_MODEM_ID]: mmManagedModem({
+				cell_info: { tech: "nr", band: "ngran-78", rsrp: -92 },
+			}),
+		});
+
+		await navigateTo(page, "network");
+		const configure = modemRow(page, MM_MODEM_ID).getByTestId(
+			"open-modem-config-dialog",
+		);
+		await expect(configure).toBeEnabled({ timeout: 15_000 });
+		await configure.click();
+
+		const dialog = page.getByRole("dialog", { name: MM_MODEM_NAME });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+		await openModemAdvanced(dialog);
+
+		const diagnostics = page.getByTestId("modem-raw-diagnostics");
+		await expect(diagnostics).toBeVisible({ timeout: 15_000 });
+		// OL-3: relocated, not deleted — a field engineer still reads the exact
+		// values the labels above replaced.
+		await expect(page.getByTestId("modem-raw-usb-mode")).toHaveText("rndis");
+		await expect(page.getByTestId("modem-raw-serving-band")).toHaveText(
+			"ngran-78",
+		);
+
+		// OL-1/OL-2: and nowhere ELSE. The diagnostics subtree is removed before
+		// the scan, so this fails if a token leaks into any operator-facing string
+		// on the whole dialog.
+		const operatorText = await dialog.evaluate((node) => {
+			const clone = node.cloneNode(true) as HTMLElement;
+			for (const el of clone.querySelectorAll('[data-testid*="diagnostic"]')) {
+				el.remove();
+			}
+			return (clone.textContent ?? "").toLowerCase();
+		});
+		for (const token of ["rndis", "mbim", "qmi", "ecm-ncm", "ngran-78"]) {
+			expect(operatorText).not.toContain(token);
+		}
+		// NON-VACUITY: the scrub really removed something, so the scan above is
+		// asserting on a tree that DID carry the tokens.
+		const fullText = (await dialog.textContent())?.toLowerCase() ?? "";
+		expect(fullText).toContain("ngran-78");
 
 		await page.keyboard.press("Escape");
 		await expect(dialog).toBeHidden();

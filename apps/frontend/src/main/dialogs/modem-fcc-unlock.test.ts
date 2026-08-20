@@ -15,34 +15,38 @@ function state(overrides: Partial<FccUnlockState> = {}): FccUnlockState {
 }
 
 describe("fccUnlockView", () => {
-	it("Given a module this build or this modem cannot do, When resolved, Then the section is HIDDEN", () => {
-		expect(fccUnlockView("unavailable", state()).kind).toBe("hidden");
-		expect(fccUnlockView(undefined, state()).kind).toBe("hidden");
+	it("Given a module this build or this modem cannot do, When resolved, Then NOTHING renders", () => {
+		expect(fccUnlockView("unavailable", state()).kind).toBe("absent");
+		expect(fccUnlockView(undefined, state()).kind).toBe("absent");
 	});
 
-	// `implemented` means the gate is OFF and turning it on is the fix, so the
-	// control has to be visible — the same distinction `module_disabled` vs
-	// `module_unavailable` draws on the write side.
-	it("Given the device gate is off, When resolved, Then it is BLOCKED with the gate reason", () => {
+	// `implemented`/`enabled` are BELOW the `capable` floor, so nothing has been
+	// established about this modem. DESIGN.md CT-4 forbids a disabled control
+	// there — a disabled control implies a capability being withheld — so they
+	// resolve to the `unknown` diagnostic, which is visibly distinct from BOTH
+	// the offered and the absent renderings (CT-3) and keeps its own reason.
+	it("Given the device gate is off, When resolved, Then it is UNKNOWN with the gate reason", () => {
 		expect(fccUnlockView("implemented", state())).toEqual({
-			kind: "blocked",
+			kind: "unknown",
 			reasonKey: "network.modem.fccUnlock.reason.moduleDisabled",
 		});
 	});
 
-	it("Given the gate is on but the coverage read failed, When resolved, Then it is blocked as unproven", () => {
+	it("Given the gate is on but the coverage read failed, When resolved, Then it is unknown as unproven", () => {
 		expect(fccUnlockView("enabled", undefined)).toEqual({
-			kind: "blocked",
+			kind: "unknown",
 			reasonKey: "network.modem.fccUnlock.reason.unproven",
 		});
 	});
 
-	// A state with no key has nothing to name a symlink after, so there is nothing
-	// a toggle could act on even though the claim says `capable`.
-	it("Given a capable claim with no device key, When resolved, Then no toggle is offered", () => {
-		expect(fccUnlockView("capable", state({ key: undefined })).kind).toBe(
-			"blocked",
-		);
+	// A state with no key has nothing to name a symlink after — but the claim is
+	// already ≥ capable, so this is the DEVICE refusing right now, which is the
+	// disabled-with-reason class (CT-2) rather than a withheld one.
+	it("Given a capable claim with no device key, When resolved, Then the control is BLOCKED with a reason", () => {
+		expect(fccUnlockView("capable", state({ key: undefined }))).toEqual({
+			kind: "blocked",
+			reasonKey: "network.modem.fccUnlock.reason.unproven",
+		});
 	});
 
 	it("Given a capable claim on an uncovered model, When resolved, Then it says so rather than offering a toggle", () => {
@@ -62,6 +66,13 @@ describe("fccUnlockView", () => {
 			});
 		},
 	);
+
+	// CT-5: an unknown state must not degrade into a hidden one on a re-render.
+	it("Given the same unknown evidence twice, When resolved, Then the view is identical", () => {
+		expect(fccUnlockView("enabled", undefined)).toEqual(
+			fccUnlockView("enabled", undefined),
+		);
+	});
 });
 
 describe("fccUnlockErrorKey", () => {

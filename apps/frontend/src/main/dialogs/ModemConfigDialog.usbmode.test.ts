@@ -105,7 +105,7 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
 }
 
 async function openConfirm(): Promise<void> {
-	await fireEvent.click(await screen.findByText(/Switch to mbim/i));
+	await fireEvent.click(await screen.findByText(/^Switch to /));
 	await fireEvent.click(
 		await screen.findByRole("button", { name: /Switch mode/i }),
 	);
@@ -144,12 +144,15 @@ describe("the card", () => {
 			props: { open: true, modem: modem(), deviceId: "0" },
 		});
 
+		const active = await screen.findByTestId("modem-usb-mode-active");
+		expect(active.getAttribute("data-usb-mode")).toBe("qmi");
 		expect(
-			(await screen.findByTestId("modem-usb-mode-active")).textContent,
-		).toContain("qmi");
-		expect(
-			screen.getByTestId("modem-usb-mode-recommended").textContent,
-		).toContain("mbim");
+			screen
+				.getByTestId("modem-usb-mode-recommended")
+				.getAttribute("data-usb-mode"),
+		).toBe("mbim");
+		// OL-1: the wire token lives on the attribute, never in operator copy.
+		expect(active.textContent).not.toContain("qmi");
 	});
 
 	it("is absent entirely when the device reports no mode — additive-tolerant", () => {
@@ -240,7 +243,7 @@ describe("ONLY the certified transitions are rendered", () => {
 		await fireEvent.click(
 			await screen.findByTestId("modem-usb-mode-target-ecm-ncm"),
 		);
-		await fireEvent.click(await screen.findByText(/Switch to ecm-ncm/i));
+		await fireEvent.click(await screen.findByText(/^Switch to /));
 		await fireEvent.click(
 			await screen.findByRole("button", { name: /Switch mode/i }),
 		);
@@ -263,7 +266,7 @@ describe("ONLY the certified transitions are rendered", () => {
 		await screen.findByTestId("modem-usb-mode-target-ecm-ncm");
 		// `recommended_usb_mode` is `mbim`, and the device did not certify it.
 		expect(screen.queryByTestId("modem-usb-mode-target-mbim")).toBeNull();
-		expect(await screen.findByText(/Switch to ecm-ncm/i)).toBeTruthy();
+		expect(await screen.findByText(/^Switch to /)).toBeTruthy();
 	});
 });
 
@@ -316,7 +319,7 @@ describe("an uncertifiable device gets NO control — never a disabled one", () 
 	it("still reports the ACTIVE mode — only the control is withdrawn", async () => {
 		await renderWithSuppression("uncertified");
 		expect(
-			screen.getByTestId("modem-usb-mode-active").textContent?.trim(),
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
 		).toBe("qmi");
 	});
 
@@ -371,9 +374,9 @@ describe("the handler is REAL — and pessimistic", () => {
 		await openConfirm();
 
 		await screen.findByTestId("modem-usb-mode-switching");
-		expect(screen.getByTestId("modem-usb-mode-active").textContent).toContain(
-			"qmi",
-		);
+		expect(
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
+		).toBe("qmi");
 
 		pending.resolve({ success: true });
 	});
@@ -391,9 +394,9 @@ describe("the handler is REAL — and pessimistic", () => {
 		// The reply has landed and the feed has NOT — the card must still read the
 		// pre-switch mode and must still be holding the spinner.
 		await screen.findByTestId("modem-usb-mode-switching");
-		expect(screen.getByTestId("modem-usb-mode-active").textContent).toContain(
-			"qmi",
-		);
+		expect(
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
+		).toBe("qmi");
 		expect(screen.queryByTestId("modem-usb-mode-confirmed")).toBeNull();
 	});
 
@@ -419,9 +422,9 @@ describe("the handler is REAL — and pessimistic", () => {
 		});
 
 		await screen.findByTestId("modem-usb-mode-confirmed");
-		expect(screen.getByTestId("modem-usb-mode-active").textContent).toContain(
-			"mbim",
-		);
+		expect(
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
+		).toBe("mbim");
 	});
 
 	it("renders a typed refusal inline, with its reason", async () => {
@@ -440,9 +443,9 @@ describe("the handler is REAL — and pessimistic", () => {
 		const band = await screen.findByTestId("modem-usb-mode-error");
 		expect(band.textContent).toMatch(/didn't complete/i);
 		expect(band.textContent).toMatch(/different mode than expected/i);
-		expect(screen.getByTestId("modem-usb-mode-active").textContent).toContain(
-			"qmi",
-		);
+		expect(
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
+		).toBe("qmi");
 	});
 
 	it("renders the uncertified refusal — what every real modem gets today", async () => {
@@ -486,9 +489,9 @@ describe("the handler is REAL — and pessimistic", () => {
 		await vi.advanceTimersByTimeAsync(21_000);
 
 		await vi.waitFor(() => screen.getByTestId("modem-usb-mode-pending"));
-		expect(screen.getByTestId("modem-usb-mode-active").textContent).toContain(
-			"qmi",
-		);
+		expect(
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
+		).toBe("qmi");
 		expect(screen.queryByTestId("modem-usb-mode-confirmed")).toBeNull();
 	});
 });
@@ -503,7 +506,7 @@ describe("the provisioning gate", () => {
 	it("ABSENT offers the switch — an unpublished key is not a refusal", async () => {
 		configFeed.value = {};
 		renderCard();
-		expect(await screen.findByText(/Switch to mbim/i)).toBeTruthy();
+		expect(await screen.findByText(/^Switch to /)).toBeTruthy();
 		expect(
 			screen.queryByTestId("modem-usb-mode-provisioning-blocked"),
 		).toBeNull();
@@ -512,7 +515,7 @@ describe("the provisioning gate", () => {
 	it("`true` offers the switch", async () => {
 		configFeed.value = { modem_provisioning: true };
 		renderCard();
-		expect(await screen.findByText(/Switch to mbim/i)).toBeTruthy();
+		expect(await screen.findByText(/^Switch to /)).toBeTruthy();
 		expect(
 			screen.queryByTestId("modem-usb-mode-provisioning-blocked"),
 		).toBeNull();
@@ -544,7 +547,9 @@ describe("the provisioning gate", () => {
 		configFeed.value = { modem_provisioning: false };
 		renderCard();
 		expect(
-			(await screen.findByTestId("modem-usb-mode-active")).textContent?.trim(),
+			(await screen.findByTestId("modem-usb-mode-active")).getAttribute(
+				"data-usb-mode",
+			),
 		).toBe("qmi");
 	});
 });

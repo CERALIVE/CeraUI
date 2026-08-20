@@ -270,7 +270,12 @@ describe("cell detail", () => {
 		expect(screen.getByTestId("modem-cell-cell_id").textContent).toContain(
 			"0x1A2B3C",
 		);
-		expect(screen.getByTestId("modem-cell-band").textContent).toContain("n78");
+		// OL-2: the wire token is on `data-raw` and in the diagnostics block; the
+		// reading itself reads as a band an operator can name to their carrier.
+		const bandRow = screen.getByTestId("modem-cell-band");
+		expect(bandRow.getAttribute("data-raw")).toBe("n78");
+		expect(bandRow.textContent).not.toContain("n78");
+		expect(bandRow.textContent).toContain("78");
 	});
 
 	it("never renders a raw wire token for the radio technology", async () => {
@@ -611,7 +616,7 @@ describe("the `uncertified` USB refusal is a FIRST-CLASS state", () => {
 		publishModems({ "0": fullModem() });
 		mount(fullModem());
 
-		await fireEvent.click(await screen.findByText(/Switch to mbim/i));
+		await fireEvent.click(await screen.findByText(/^Switch to /));
 		await fireEvent.click(
 			await screen.findByRole("button", { name: /Switch mode/i }),
 		);
@@ -639,11 +644,11 @@ describe("the `uncertified` USB refusal is a FIRST-CLASS state", () => {
 		await refuseWith("uncertified");
 		await screen.findByTestId("modem-usb-mode-error");
 
-		expect(screen.queryByText(/Switch to mbim/i)).toBeNull();
+		expect(screen.queryByText(/^Switch to /)).toBeNull();
 		// The active mode is still reported, and still reads the pre-attempt value.
-		expect(screen.getByTestId("modem-usb-mode-active").textContent).toContain(
-			"qmi",
-		);
+		expect(
+			screen.getByTestId("modem-usb-mode-active").getAttribute("data-usb-mode"),
+		).toBe("qmi");
 	});
 
 	it("treats a provisioning-disabled device the same way", async () => {
@@ -653,7 +658,7 @@ describe("the `uncertified` USB refusal is a FIRST-CLASS state", () => {
 		expect(band.dataset.usbModeRefusal).toBe("provisioning_disabled");
 		expect(band.getAttribute("role")).toBe("status");
 		expect(band.textContent).toMatch(/turned off/i);
-		expect(screen.queryByText(/Switch to mbim/i)).toBeNull();
+		expect(screen.queryByText(/^Switch to /)).toBeNull();
 	});
 
 	it("a RECOVERABLE refusal keeps the red band AND keeps the button", async () => {
@@ -663,7 +668,7 @@ describe("the `uncertified` USB refusal is a FIRST-CLASS state", () => {
 		expect(band.dataset.usbModeRefusal).toBeUndefined();
 		expect(band.getAttribute("role")).toBe("alert");
 		expect(band.className).toContain("text-status-error");
-		expect(screen.getByText(/Switch to mbim/i)).toBeTruthy();
+		expect(screen.getByText(/^Switch to /)).toBeTruthy();
 	});
 });
 

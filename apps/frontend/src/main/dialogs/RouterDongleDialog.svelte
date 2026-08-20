@@ -30,6 +30,26 @@
   control at all. A refusal restores the switch to the device's last known truth
   and says which of the three things went wrong.
 
+  …AND THE WAIT FOR THAT RE-READ IS BOUNDED, WITH THE OUTCOME LEFT ON SCREEN.
+  Pessimism was the right posture and it had two holes, both of which this
+  surface's own design made worse rather than better:
+
+    · The outcome was a TOAST. On a surface where a refused write correctly
+      leaves the control unmoved, the toast was the ONLY thing separating
+      "refused" from "never attempted" — and it expired in seconds. Every write
+      now lands in a PERSISTENT band that is also announced (§8), and the toasts
+      for these two writes are gone so nothing is announced twice.
+    · The wait had NO BOUND. If the confirming broadcast never arrived, the
+      spinner simply stopped and the dialog looked untouched. `router-write-flow`
+      bounds it and renders the honest third answer — not applied, not refused,
+      NOT CONFIRMED — rather than silence.
+
+  A STALE READING IS MARKED AS STALE. `router_admin.signal.freshness` already
+  distinguishes a live reading from a carried-over one, and the Cellular row has
+  rendered that distinction since todo 21 — this dialog printed the same numbers
+  with no such marker at all, which is §2 IH-4's "staleness beats freshness
+  theatre" failing in the one place an operator goes to act on them.
+
   Each control applies on its own — there is no Save. The write is a live HTTP
   round-trip to a device on the far side of a USB link, so batching two of them
   behind one button would only make a slow operation ambiguous about which half
@@ -38,20 +58,37 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { Modem, RouterAdminControls } from '@ceraui/rpc/schemas';
-import { ExternalLink, Info, Router } from '@lucide/svelte';
+import { Clock, ExternalLink, Info, Router, Wrench } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
+import CollapsibleSection from '$lib/components/custom/CollapsibleSection.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
+import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import { Button } from '$lib/components/ui/button';
 import { AppDialog } from '$lib/components/dialogs';
 import { Label } from '$lib/components/ui/label';
+import { mutationOutcome } from '$lib/modem/mutation-outcome';
 import { rpc } from '$lib/rpc';
+import {
+	beginRouterWrite,
+	failRouterWrite,
+	isRouterWriteBusy,
+	observeRouterWrite,
+	resolveRouterWrite,
+	type RouterWriteFlow,
+	tickRouterWrite,
+} from '$lib/rpc/router-write-flow';
 
 import {
 	openRouterAdminUi,
 	routerAdminOpenReasonKey,
 } from '../network/router-admin-open';
-import { detailFields, identityFields, netModeCapability } from './router-dongle-fields';
+import {
+	detailFields,
+	diagnosticFields,
+	identityFields,
+	netModeCapability,
+} from './router-dongle-fields';
 
 interface Props {
 	open?: boolean;
@@ -66,15 +103,19 @@ type ControlId = keyof RouterAdminControls;
 const admin = $derived(modem.router_admin);
 const controls = $derived(admin?.controls);
 
-// The control currently in flight, so its own row shows the wait and its
-// SIBLING is locked out — two overlapping writes to one dongle would each open
-// their own session against a device that issues single-use tokens.
-let pending = $state<ControlId | undefined>(undefined);
+// ONE flow for the whole dialog, because ONE write may be in flight against a
+// dongle that issues single-use session tokens: two overlapping writes would
+// each open their own session and race. It carries which target it is for, so
+// the wait renders on the row that started it and locks out the siblings.
+let flow = $state<RouterWriteFlow | undefined>(undefined);
 
-// The mode currently being applied. Separate from `pending` because the two
-// surfaces are independent writes to one dongle, and a shared slot would let a
-// mode chip show the spinner a toggle started.
-let pendingMode = $state<string | undefined>(undefined);
+const busy = $derived(isRouterWriteBusy(flow));
+const pending = $derived(
+	busy && flow?.target.kind === 'control' ? flow.target.control : undefined,
+);
+const pendingMode = $derived(
+	busy && flow?.target.kind === 'net-mode' ? flow.target.mode : undefined,
+);
 
 /**
  * The value to render for a control.
@@ -89,7 +130,37 @@ function deviceValue(id: ControlId): boolean {
 
 const identity = $derived(identityFields(admin));
 const details = $derived(detailFields(admin));
+const diagnostics = $derived(diagnosticFields(admin));
 const netMode = $derived(netModeCapability(admin));
+
+// §2 IH-4. `unknown` is deliberately NOT marked: the device told us nothing
+// about this reading's age, and a "stale" badge over that would be a claim we
+// cannot make. Only a device-stated `stale` earns the marker.
+const readingStale = $derived(admin?.signal?.freshness === 'stale');
+
+// The confirming observation may arrive at ANY point after dispatch — the
+// backend re-broadcasts the moment it has verified, and that frame can beat the
+// RPC reply back. A pre-resolution match is buffered and consumed at resolution.
+$effect(() => {
+	const current = flow;
+	if (!isRouterWriteBusy(current) || !current) return;
+	const next = observeRouterWrite(current, modem.router_admin);
+	if (next !== current) flow = next;
+});
+
+// The bound is armed at RPC RESOLUTION, never at dispatch: the call itself
+// awaits a live HTTP round trip plus the backend's own read-back.
+$effect(() => {
+	const current = flow;
+	if (current?.phase !== 'awaiting' || current.deadlineAt === undefined) return;
+	const timer = setTimeout(
+		() => {
+			if (flow) flow = tickRouterWrite(flow, Date.now());
+		},
+		Math.max(0, current.deadlineAt - Date.now()),
+	);
+	return () => clearTimeout(timer);
+});
 
 async function openAdmin(): Promise<void> {
 	const outcome = await openRouterAdminUi(deviceId);
@@ -104,30 +175,6 @@ function refusalMessage(error: string | undefined): string {
 	return m["network.routerCellular.control.unsupported"]();
 }
 
-async function apply(control: ControlId, value: boolean) {
-	if (pending !== undefined) return;
-	pending = control;
-	try {
-		const result = await rpc.modems.setRouterControl({
-			device: deviceId,
-			control,
-			value,
-		});
-		if (result.success) {
-			toast.success(m["network.os.saved"]());
-		} else {
-			toast.error(refusalMessage(result.error));
-		}
-	} catch {
-		toast.error(m["network.routerCellular.control.unreachable"]());
-	} finally {
-		// The switch re-reads `controls` from the broadcast the backend sent after
-		// verifying the write, so nothing is assigned here — success and refusal
-		// both simply stop waiting and show whatever the device now reports.
-		pending = undefined;
-	}
-}
-
 function netModeRefusalMessage(error: string | undefined, code?: string): string {
 	if (error === 'capability_unavailable') {
 		return code === undefined
@@ -140,23 +187,65 @@ function netModeRefusalMessage(error: string | undefined, code?: string): string
 	return m["network.routerCellular.control.unsupported"]();
 }
 
+/**
+ * The terminal outcome of the last write, as the operator's own sentence.
+ *
+ * `undefined` while a write is still in flight, so the band never contradicts
+ * the spinner beside it — and, crucially, never renders a stale outcome from the
+ * PREVIOUS write while a new one runs.
+ */
+const outcome = $derived.by(() => {
+	const current = flow;
+	if (current === undefined || isRouterWriteBusy(current)) return undefined;
+	const isNetMode = current.target.kind === 'net-mode';
+	switch (current.phase) {
+		case 'applied':
+			return mutationOutcome('applied', m["network.routerCellular.outcome.applied"]());
+		case 'refused':
+			return mutationOutcome(
+				'refused',
+				isNetMode
+					? netModeRefusalMessage(current.error, current.code)
+					: refusalMessage(current.error),
+			);
+		case 'unconfirmed':
+			return mutationOutcome(
+				'unknown',
+				m["network.routerCellular.outcome.unconfirmed"](),
+			);
+		default:
+			return undefined;
+	}
+});
+
+/** Which surface the outcome band belongs under — the one that started it. */
+const outcomeOnNetMode = $derived(
+	outcome !== undefined && flow?.target.kind === 'net-mode',
+);
+
+async function apply(control: ControlId, value: boolean) {
+	if (busy) return;
+	flow = beginRouterWrite({ kind: 'control', control, value });
+	try {
+		const result = await rpc.modems.setRouterControl({
+			device: deviceId,
+			control,
+			value,
+		});
+		if (flow) flow = resolveRouterWrite(flow, result, Date.now());
+	} catch {
+		if (flow) flow = failRouterWrite(flow);
+	}
+}
+
 async function applyNetMode(mode: string) {
-	if (pendingMode !== undefined || pending !== undefined) return;
-	pendingMode = mode;
+	if (busy) return;
+	flow = beginRouterWrite({ kind: 'net-mode', mode });
 	try {
 		const result = await rpc.modems.setRouterNetMode({ device: deviceId, mode });
-		if (result.success) {
-			toast.success(m["network.os.saved"]());
-		} else {
-			toast.error(netModeRefusalMessage(result.error, result.code));
-		}
+		if (flow) flow = resolveRouterWrite(flow, result, Date.now());
 	} catch {
-		toast.error(m["network.routerCellular.control.unreachable"]());
-	} finally {
-		// Nothing is assigned: the chip re-reads `capabilities` from the broadcast
-		// the backend sent after PROVING the write, so a refused mode change leaves
-		// the device's own current selection marked, not the requested one.
-		pendingMode = undefined;
+		if (flow) flow = failRouterWrite(flow);
 	}
 }
 </script>
@@ -169,6 +258,39 @@ async function applyNetMode(mode: string) {
 	bind:open
 >
 	<div class="space-y-6">
+		{#if admin === undefined}
+			<!-- The read has produced nothing at all. That is a state, not an empty
+			     dialog: with no band here the operator meets a blank panel and
+			     cannot tell a dongle that answers nothing from a dialog that failed
+			     to load. Never a spinner — there is no pending read to wait on. -->
+			<div
+				class="bg-status-warning/10 border-status-warning/30 flex items-start gap-3 rounded-lg border p-3"
+				data-testid="dongle-unavailable"
+				role="status"
+			>
+				<Info class="text-status-warning mt-0.5 size-4 shrink-0" aria-hidden="true" />
+				<p class="text-muted-foreground text-xs">
+					{m["network.routerCellular.readingUnavailable"]()}
+				</p>
+			</div>
+		{:else if readingStale}
+			<!-- §2 IH-4. The device stated this reading is carried over rather than
+			     current, so it is MARKED — the values below still render (a blanked
+			     panel would be worse), but nothing on this surface presents an aged
+			     reading as a fresh one. -->
+			<div
+				class="bg-status-warning/10 border-status-warning/30 flex items-start gap-3 rounded-lg border p-3"
+				data-testid="dongle-stale"
+				data-freshness="stale"
+				role="status"
+			>
+				<Clock class="text-status-warning mt-0.5 size-4 shrink-0" aria-hidden="true" />
+				<p class="text-muted-foreground text-xs">
+					{m["network.routerCellular.readingStale"]()}
+				</p>
+			</div>
+		{/if}
+
 		{#if identity.length > 0}
 			<!-- Reported, never edited — the NetifDialog rule: an unboxed
 			     label-over-value reads as a data row, where a bordered filled one on
@@ -206,6 +328,34 @@ async function applyNetMode(mode: string) {
 			</div>
 		{/if}
 
+		{#if diagnostics.length > 0}
+			<CollapsibleSection
+				bodyId="dongle-diagnostics-body"
+				bodyTestid="dongle-diagnostics-body"
+				description={m["network.routerCellular.diagnosticsDescription"]()}
+				testid="dongle-diagnostics"
+				title={m["network.routerCellular.diagnosticsTitle"]()}
+				toggleTestid="dongle-diagnostics-toggle"
+			>
+				{#snippet icon()}
+					<Wrench class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+				{/snippet}
+				<dl class="grid grid-cols-2 gap-x-4 gap-y-3">
+					{#each diagnostics as field (field.id)}
+						<div class="min-w-0 space-y-0.5">
+							<dt class="text-muted-foreground text-xs font-medium">{field.label}</dt>
+							<dd class="truncate font-mono text-sm" data-testid={`dongle-detail-${field.id}`}>
+								{field.value}
+							</dd>
+							{#if field.note}
+								<p class="text-muted-foreground/80 text-xs">{field.note}</p>
+							{/if}
+						</div>
+					{/each}
+				</dl>
+			</CollapsibleSection>
+		{/if}
+
 		{#if netMode}
 			<!-- Discovered FIRST, offered second. The reason arm carries NO control of
 			     any kind — a firmware that declined to name its catalog says so in its
@@ -239,7 +389,7 @@ async function applyNetMode(mode: string) {
 									data-current={mode.current ? 'true' : undefined}
 									data-pending={pendingMode === mode.id ? 'true' : undefined}
 									data-testid={`dongle-net-mode-${mode.id}`}
-									disabled={mode.current || pendingMode !== undefined || pending !== undefined}
+									disabled={mode.current || busy}
 									onclick={() => applyNetMode(mode.id)}
 									type="button"
 								>
@@ -251,6 +401,13 @@ async function applyNetMode(mode: string) {
 						{/each}
 					</ul>
 				{/if}
+
+				<!-- LR-1: mounted with the surface, not with the outcome. A region
+				     created when the answer arrives announces nothing. -->
+				<MutationOutcomeBand
+					name="dongle-mode-write"
+					outcome={outcomeOnNetMode ? outcome : undefined}
+				/>
 			</div>
 		{/if}
 
@@ -272,7 +429,7 @@ async function applyNetMode(mode: string) {
 					</div>
 					<LabeledSwitch
 						checked={deviceValue('mobile_data')}
-						disabled={pending !== undefined}
+						disabled={busy}
 						label={m["network.routerCellular.control.mobileData"]()}
 						onCheckedChange={(v) => apply('mobile_data', v)}
 					/>
@@ -294,7 +451,7 @@ async function applyNetMode(mode: string) {
 					</div>
 					<LabeledSwitch
 						checked={deviceValue('roaming_autoconnect')}
-						disabled={pending !== undefined}
+						disabled={busy}
 						label={m["network.routerCellular.control.roaming"]()}
 						onCheckedChange={(v) => apply('roaming_autoconnect', v)}
 					/>
@@ -303,6 +460,12 @@ async function applyNetMode(mode: string) {
 				<p class="text-muted-foreground/80 text-xs" data-testid="dongle-controls-note">
 					{m["network.routerCellular.control.verifiedNote"]()}
 				</p>
+
+				<!-- LR-1: mounted with the surface, not with the outcome. -->
+				<MutationOutcomeBand
+					name="dongle-control-write"
+					outcome={outcomeOnNetMode ? undefined : outcome}
+				/>
 			</div>
 		{:else}
 			<div
