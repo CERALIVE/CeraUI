@@ -15,8 +15,8 @@ function syntheticSocket(): AppWebSocket {
 		publish: zero,
 		publishText: zero,
 		publishBinary: zero,
-		subscribe: noop,
-		unsubscribe: noop,
+		subscribe: () => false,
+		unsubscribe: () => false,
 		isSubscribed: () => false,
 		subscriptions: [],
 		cork: () => {

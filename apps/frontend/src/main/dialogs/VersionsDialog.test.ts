@@ -39,7 +39,7 @@ beforeAll(() => {
 const pushed: Revisions = {
 	ceralive: "abc1234",
 	srtla: "3.2.0 (main@974c8b9) [srtla_send]",
-	bun: "1.3.14",
+	bun: "1.4.0",
 	kernel: "6.1.115-vendor-rk35xx",
 	cerastream: "engine unreachable",
 };

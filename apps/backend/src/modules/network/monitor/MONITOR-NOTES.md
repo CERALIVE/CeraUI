@@ -20,7 +20,7 @@ implemented here** (that is T12's job).
 ```
 which nmcli  → not found
 which mmcli  → not found
-bun --version → 1.3.14
+bun --version → 1.4.0
 bash          → /usr/bin/bash (stand-in for the monitor binary)
 ```
 

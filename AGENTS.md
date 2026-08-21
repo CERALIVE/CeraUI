@@ -715,7 +715,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | Package | Version |
 |---------|---------|
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.27 — EXACT pin, see below |
-| Bun pin (`.bun-version`) | 1.3.14 |
+| Bun pin (`.bun-version`) | 1.4.0 |
 | `svelte` | 5.56.9 |
 | `vitest` | 4.1.10 |
 | `vite` | 8.2.1 |
