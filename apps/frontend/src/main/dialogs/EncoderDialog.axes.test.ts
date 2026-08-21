@@ -269,6 +269,13 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
+// Every case below mounts the WHOLE EncoderDialog, so this file is render/transform-bound
+// rather than assertion-bound: wall-clock tracks machine load, not what is asserted. On a
+// contended CI runner with no persisted transform cache the first mount measured 6371 ms
+// against vitest's 5000 ms default and timed out, while the same case passes locally in a
+// fraction of that. File-scoped because every case here does the same work.
+vi.setConfig({ testTimeout: 15000 });
+
 describe("EncoderDialog — pure-encoding source-tolerant axes", () => {
 	it("caps-full: reaches the 4K/60 ceiling and enables H.265", () => {
 		state.pipelines = pipelinesMessage("rk3588");

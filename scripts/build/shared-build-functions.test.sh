@@ -18,7 +18,7 @@ create_fixture() {
   cp "$script_under_test" "$fixture/scripts/build/shared-build-functions.sh"
   printf '{"scripts":{"build:frontend":"vite build"}}\n' > "$fixture/package.json"
   printf 'lockfile-v1\n' > "$fixture/bun.lock"
-  printf '1.3.14\n' > "$fixture/.bun-version"
+  printf '1.4.0\n' > "$fixture/.bun-version"
   printf '{"compilerOptions":{"strict":true}}\n' > "$fixture/tsconfig.json"
   printf '{"name":"frontend"}\n' > "$fixture/apps/frontend/package.json"
   printf '{"extends":"../../tsconfig.json"}\n' > "$fixture/apps/frontend/tsconfig.json"

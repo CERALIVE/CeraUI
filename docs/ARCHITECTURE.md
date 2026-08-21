@@ -61,7 +61,7 @@ All field constraints originate in `packages/rpc/src/schemas/` as exported const
 
 ### Dependency Notes
 
-- **bits-ui**: upgraded to v2.18.1; shadcn-svelte components regenerated against v2 API.
+- **bits-ui**: on the v2 line (2.19.0 at time of writing); shadcn-svelte components regenerated against the v2 API. The exact pin of record is the DEP BASELINE table in [`../AGENTS.md`](../AGENTS.md) — do not restate a version here.
 - **Custom components**: moved from `lib/components/ui/` to `lib/components/custom/` (`simple-alert-dialog`, `mode-toggle`, `locale-selector`, `mobile-link`, `pwa/`).
 - **Touch/kiosk foundation**: `data-layout-mode` attribute on `<html>` drives CSS token scaling (`--touch-target-min`, `--spacing-touch-scale`). Stored in `lib/stores/layout-mode.svelte.ts`.
 

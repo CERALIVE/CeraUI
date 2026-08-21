@@ -90,7 +90,7 @@ Promotion to `error` is deferred until Biome resolves imported-async returns or 
 
 > **Never put `//` or `/* */` comments in any CeraUI `biome.json`.** Biome 2.5.0
 > silently drops the entire `linter.rules` block when the config contains a comment
-> (only the formatter keeps running, with no parse error). Under Biome 2.5.8 the
+> (only the formatter keeps running, with no parse error). Since Biome 2.5.8 the
 > failure mode has changed but is no friendlier: the file stops parsing at all, so
 > `"root": false` is lost and the run dies with a misleading *"Found a nested root
 > configuration"* error that names neither the comment nor the line. Document rule
@@ -98,7 +98,7 @@ Promotion to `error` is deferred until Biome resolves imported-async returns or 
 
 ---
 
-## Svelte lint overrides — why exactly two rules stay off (2026-08-14)
+## Svelte lint overrides — why exactly two rules stay off (re-verified 2026-08-21, Biome 2.5.9)
 
 `apps/frontend/biome.json` disables **two** lint rules for `**/*.svelte`, and only two:
 
@@ -109,11 +109,18 @@ Promotion to `error` is deferred until Biome resolves imported-async returns or 
 
 Biome 2.5.3 (PR #10534) fixed `$store`/`$bindable` false positives **for
 `noUnusedVariables` only**, and 2.5.7 (PR #11198, issue #11171) fixed `{@attach}`
-for both unused-symbol rules. Both fixes are in 2.5.8 — and both are too narrow to
-retire the overrides. Re-enabling the pair on this tree currently produces **1,739
-errors and 13 warnings** in `apps/frontend`; the errors include Paraglide imports
-used only in markup (for example `BufferingIndicator.svelte`'s `m["hud.*"]()` calls)
-and cascading markup-only references. The general gap is still open upstream:
+for both unused-symbol rules. Both fixes shipped before 2.5.9 — and both are still
+too narrow to retire the overrides. Measured on this tree with Biome 2.5.9:
+
+| `biome check .` | Total | `noUnusedVariables` | `noUnusedImports` |
+|---|---|---|---|
+| overrides IN PLACE (baseline) | 33 warnings + 3 infos | 0 | 2 (both in `.ts`, unaffected by the Svelte override) |
+| overrides REMOVED (probe) | 1,933 warnings + 3 infos | **1,142** | **760** |
+
+That is **1,900 new Svelte-only findings**, and they are the same two shapes as
+before: Paraglide imports used only in markup (for example
+`BufferingIndicator.svelte`'s `m["hud.*"]()` calls) and cascading markup-only
+references. The general gap is still open upstream:
 [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590) ("Support for
 cross language lint rules"), with
 [#9193](https://github.com/biomejs/biome/issues/9193) (namespace import used as
@@ -144,7 +151,7 @@ reasons, both verified by probe rather than assumed:**
   `.svelte`, and re-enabling it found exactly one real finding (a vestigial
   `filename` parameter in `dev-tools/screenshot-utility.svelte`), now fixed.
 - `style/useImportType` and `style/useConst` — **the overrides were dead config.**
-  Both rules are inert on `.svelte` in Biome 2.5.8: a file carrying textbook
+  Both rules are inert on `.svelte` in Biome 2.5.8/2.5.9: a file carrying textbook
   violations of each reports nothing even when the rules are set to `"error"`
   directly in `apps/frontend/biome.json`, while the identical violations fire at
   `error` in a `.ts` file. This is rule-specific, not a blanket "no `style` rules on
@@ -157,5 +164,7 @@ parse Svelte control flow, so `.svelte` markup is still formatted by the Svelte 
 Code extension. Nothing above changes that.
 
 **Before re-attempting this:** re-read #8590 first. The check is a single command —
-delete the two entries, run `bunx biome check .`, and compare the count against the
-37-warning baseline. Anything in the thousands means the template gap is still open.
+delete the two entries from `apps/frontend/biome.json`, run `bunx biome check .`
+from the workspace root, and compare against the baseline row in the table above.
+Anything in the thousands means the template gap is still open. Restore the file
+afterwards; the probe is read-only by intent.

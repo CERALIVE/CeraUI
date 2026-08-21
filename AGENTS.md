@@ -714,24 +714,52 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 
 | Package | Version |
 |---------|---------|
-| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.27 — EXACT pin, see below |
-| Bun pin (`.bun-version`) | 1.3.14 |
-| `svelte` | 5.56.9 |
-| `vitest` | 4.1.10 |
-| `vite` | 8.2.1 |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.30 — EXACT pin, see below |
+| Bun pin (`.bun-version`) | 1.4.0 |
+| `svelte` | 5.56.10 |
+| `vitest` | 5.0.0-rc.2 — EXACT pin (a PRERELEASE; see the note below the table) |
+| `vite` | 8.2.2 |
 | `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
-| Node | **26 everywhere** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. |
+| Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` job is the one job with NO `setup-node` step — every command in it is Bun (see the Vitest note below). |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
-| `@biomejs/biome` (via `@ceralive/biome-config@2026.8.0` canon) | 2.5.8 |
+| `@biomejs/biome` (via the `@ceralive/biome-config` canon) | 2.5.9 — the config dep stays the range `^2026.8.0`; canon `2026.8.1` is committed in the root repo but NOT yet published, and a `^2026.8.1` pin would fail `bun install --frozen-lockfile` today. The caret absorbs it the moment the `biome-config-v2026.8.1` tag publishes. |
+| `bits-ui` | 2.19.0 |
 | `@playwright/test` | 1.62.1 |
-| `@lucide/svelte` | 1.31.0 |
+| `@lucide/svelte` | 1.33.0 |
+| `@inlang/paraglide-js` | 2.24.1 — EXACT pin (root `packages/i18n` + `apps/frontend`, kept in lockstep) |
 | `svelte-check` | 4.7.6 |
 | `@sveltejs/vite-plugin-svelte` | 7.3.0 |
 | `@axe-core/playwright` | 4.13.0 |
 | `@types/node` | 26.2.0 (matches the Node 26 runtime baseline) |
+| `zod` | 4.4.3 (workspace catalog) |
+| `winston` | 3.19.0 |
+| `vite-plugin-pwa` | 1.3.0 |
 | `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
 
-**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.27` would range forward across betas and into stable
+**`vitest` is on a 5.0 RELEASE CANDIDATE, pinned exact, and it earned that by flipping a
+runtime verdict — which is now ACTED ON, not merely recorded.** Under `vitest@4.1.10` the
+frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
+`undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
+why the frontend suite ran on Node for as long as it did. Under `5.0.0-rc.2` Bun 1.4.0 runs the
+suite at **281 files / 3,780 tests, 0 failures — identical to Node 26**, reproduced across
+separate runs. Nothing in the v5 migration guide needed a source or config change here:
+`clearMocks` now defaults to `true` and the suite is unaffected, and the repo uses none of the
+removed surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench`
+at module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). **The frontend
+`test` script therefore invokes `bun --bun vitest run`, and `test-fe` has no `setup-node` step.**
+The explicit `--bun` is load-bearing: `node_modules/.bin/vitest` carries a `#!/usr/bin/env node`
+shebang, so a bare `vitest run` under `bun run` still executes on Node — measured, a probe test
+reported `process.execPath` = node and `process.versions.bun` = `undefined` before the flip, and
+bun / `1.4.0` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
+exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
+
+The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
+same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
+before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
+Bun 1.4.0 like every other command in it. That job's own step ORDER is a separate, documented
+contract (vitest must stay immediately after `bun install`) and is untouched.
+
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.30` would range forward across betas and into stable
 2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
 serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
 WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
@@ -752,16 +780,19 @@ TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), wh
 one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 devDep with the rest of the
 non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
 `ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
-dep plus a `typescript-7` npm-alias `check` gate) no longer exists. A non-blocking `svelte-check --tsgo`
-canary runs against the frontend catalog (`@typescript/native` alias onto real `typescript@7`, installed
-`--no-save`); the current run reports **0 errors and 5 warnings in 4 files** (the
-`state_referenced_locally` warnings are in test fixtures and the slider component), while the required TS6 gate
-remains the blocking check — informative, not blocking.
+dep plus a `typescript-7` npm-alias `check` gate) no longer exists. The former non-blocking
+`svelte-check --tsgo` canary is retired: under Bun 1.4.0 with released `typescript@7.0.2` it reported the
+same **0 errors and 5 warnings in 4 files** as the required frontend check, so it added no independent signal.
+Revisit the frontend TS6→TS7 move when `svelte-check` accepts the TS7 peer range and the released compiler
+provides the programmatic API it consumes; do not restore an advisory native/compiler canary merely to watch
+that transition.
 
 Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
 would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
 which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
-selects the alias). `bun tsc` is likewise banned (oven-sh/bun#37152).
+selects the alias). The Bun 1.4.0 retest resolved the current TS 7 backend and TS 6
+frontend probes correctly, but `bun tsc` remains banned: only the wrapper guarantees
+package-local compiler selection (oven-sh/bun#37152).
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 
@@ -780,7 +811,7 @@ Both are unset by default, so the control channel stays gated until provisioned.
 
 - Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `bun run lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
 - Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. That formatter override is unrelated to the lint one below and is not up for review.
-- Svelte lint overrides are down to **exactly two** rules (2026-08-14, Biome 2.5.8): `correctness/noUnusedVariables` and `correctness/noUnusedImports`, both off for `**/*.svelte` because Biome still does not count template references — re-enabling the pair currently yields **1,739 errors and 13 warnings** in `apps/frontend` (the errors include Paraglide `m["<key>"]()` imports used only in markup, such as `BufferingIndicator.svelte`, plus cascading markup-only references). The upstream gap is [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590), open. 2.5.3 fixed `$store`/`$bindable` for `noUnusedVariables` only and 2.5.7 fixed `{@attach}`; both are in 2.5.8 and both are too narrow to retire the overrides. The other three historical entries are gone: `noUnusedFunctionParameters` was genuinely **re-enabled** (it found one real vestigial parameter, now fixed), while `useImportType`/`useConst` were **dead config** — both are inert on `.svelte` in 2.5.8 even when set to `"error"` directly, though `noNonNullAssertion` does fire, so this is rule-specific rather than a blanket exclusion. Full rationale, reproduction command, and the re-attempt checklist: [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Svelte lint overrides". Do NOT re-add a blanket disable for a rule that is not actually firing.
+- Svelte lint overrides are down to **exactly two** rules (re-verified 2026-08-21 against Biome 2.5.9): `correctness/noUnusedVariables` and `correctness/noUnusedImports`, both off for `**/*.svelte` because Biome still does not count template references — re-enabling the pair on 2.5.9 takes `biome check .` from **33 warnings + 3 infos** to **1,933 warnings**, i.e. **1,142 `noUnusedVariables` + 760 `noUnusedImports`** new findings (Paraglide `m["<key>"]()` imports used only in markup, such as `BufferingIndicator.svelte`, plus cascading markup-only references). The upstream gap is [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590), still open. 2.5.3 fixed `$store`/`$bindable` for `noUnusedVariables` only and 2.5.7 fixed `{@attach}`; both shipped before 2.5.9 and both are too narrow to retire the overrides. The other three historical entries are gone: `noUnusedFunctionParameters` was genuinely **re-enabled** (it found one real vestigial parameter, now fixed), while `useImportType`/`useConst` were **dead config** — both are inert on `.svelte` even when set to `"error"` directly, though `noNonNullAssertion` does fire, so this is rule-specific rather than a blanket exclusion. Full rationale, reproduction command, and the re-attempt checklist: [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Svelte lint overrides". Do NOT re-add a blanket disable for a rule that is not actually firing.
 - Strict TS: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are enabled in `tsconfig.json` (root), `apps/backend`, and `packages/rpc`. The frontend app (`apps/frontend/tsconfig.app.json`) and `tsconfig.node.json` enable `strict` + `noUncheckedIndexedAccess`; `exactOptionalPropertyTypes` is intentionally omitted there because it is incompatible with bits-ui v2 / shadcn-svelte and vite-plugin-pwa types (unfixable "union too complex" errors in CLI-managed components). The e2e tsconfig stays at baseline `strict` (ungated Playwright test code).
 - Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default). Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock paths.
 - `LOG_LEVEL` env var overrides the Winston transport level for ALL transports (console + file). Unset = per-transport defaults (dev console `info`, prod console `warn`, file `debug`). Set `LOG_LEVEL=debug` to enable per-RPC trace lines.
@@ -845,14 +876,25 @@ semantic YAML contract is
 
 Four further Build Check facts, all landed 2026-08-14:
 
-- **Node 26 is the required runtime** (`NODE_VERSION: "26"`), not a canary lane.
-  The frontend vitest suite was proven green on both Node 24 and 26 first.
-- **`tsgo-canary` is advisory and must stay that way** (`continue-on-error: true`,
-  `gate: perf` in the root manifest). It installs `@typescript/native` — an npm
-  alias onto `typescript@7`, NOT the `@typescript/native-preview` nightly — with
-  `--no-save` beside the workspace TS6 and runs `svelte-check --tsgo`
-  (`scripts/ci/tsgo-canary.sh`, `apps/frontend/tsconfig.tsgo.json`). Plain
-  `--tsgo`, never `--tsgo-experimental-api` (language-tools#3095 fails under Bun).
+- **The frontend Vitest lane runs on BUN; the Playwright lanes stay on Node 26**
+  (`NODE_VERSION: "26"`, still set at workflow level and still consumed by
+  `test-be`, `setup-e2e`, `test-e2e`, `merge-e2e-reports` and `build`). The Vitest
+  blocker was `vitest@4.1.10`'s collection failure, not Bun's: under the
+  `vitest@5.0.0-rc.2` pin the suite is green at **281 files / 3,780 tests —
+  identical to Node 26**, reproduced across separate runs, so the frontend `test`
+  script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
+  step at all. **The Playwright half is NOT flipped and has never produced a green
+  parity run** — that lane keeps Node 26, and nothing here authorises moving it.
+  Two consequences: this was a build-check RUN-STEP change, so the root
+  `ci-local.manifest.yaml` set-equality model must be resynced to match; and the
+  prerelease `vitest` pin is now load-bearing for a required lane, so bumping it to
+  stable 5.0 means re-confirming the same-lockfile parity counts, not just editing
+  the version.
+- **The former `tsgo-canary` is retired.** Released TypeScript 7 is already the
+  native compiler, and the Bun 1.4 probe produced no diagnostics beyond the
+  required TS6 frontend check. Revisit the frontend compiler when
+  `svelte-check` supports TS7's peer/API surface; do not recreate an advisory
+  canary without a demonstrated additional signal.
 - **`setup-e2e` typechecks and measures before it uploads**: `bun run --filter
   frontend check` gates the build, and `bun scripts/ci/bundle-report.mjs` fails
   the job when the initial-route JS gzip set exceeds its documented budget.

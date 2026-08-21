@@ -20,13 +20,13 @@
 		}
 	},
 	"scripts": {
-		"check": "node ../../scripts/tsc.mjs --noEmit",
+		"check": "bun ../../scripts/tsc.mjs --noEmit",
 		"test": "bun test",
 		"lint": "echo 'RPC linting handled by root Biome'",
 		"lint:fix": "echo 'RPC fixing handled by root Biome'"
 	},
 	"dependencies": {
-		"@orpc/contract": "2.0.0-beta.27",
+		"@orpc/contract": "2.0.0-beta.30",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

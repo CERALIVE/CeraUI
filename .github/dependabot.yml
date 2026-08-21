@@ -7,10 +7,10 @@ updates:
     groups:
       github-actions:
         patterns: ["*"]
-  - package-ecosystem: "npm"
+  - package-ecosystem: "bun"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
-      npm:
+      bun:
         patterns: ["*"]
