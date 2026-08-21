@@ -21,7 +21,7 @@
         "@ceralive/cerastream": "2026.7.6",
         "@ceralive/control-protocol": "2026.7.0",
         "@ceralive/modem-control": "1.1.0",
-        "@ceralive/srtla-send": "2026.6.2",
+        "@ceralive/srtla-send": "2026.8.0",
         "@ceraui/rpc": "workspace:*",
         "@orpc/server": "2.0.0-beta.27",
         "finalhandler": "^2.1.1",
@@ -343,7 +343,7 @@
 
     "@ceralive/modem-control": ["@ceralive/modem-control@1.1.0", "", { "dependencies": { "@httptoolkit/dbus-native": "0.1.5", "zod": "4.4.3" } }, "sha512-8Q7Qa0fFS8d42C0xcaWlOGswwE/3fuMk8+PHXCfED9DOhCP3LRPmrvdIyK47NUNaLZEcffN2z/BVTOekILAVfA=="],
 
-    "@ceralive/srtla-send": ["@ceralive/srtla-send@2026.6.2", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-uywRvQaTJvT2lADiwS3702lJsZv9CIG7JnQlLhabANeVPk8s2jXCpc7rTWCKoTjFxEGJd2DwiPJLKpiqiNgagg=="],
+    "@ceralive/srtla-send": ["@ceralive/srtla-send@2026.8.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-IJNFN3oNplaNbQVuE/9PA3QPNqsyo4UGGokEyd+iqkgm7FzEw+yNmTpgJKFGwvTmZOeRmIwwMPWONTotT1lXoQ=="],
 
     "@ceraui/i18n": ["@ceraui/i18n@workspace:packages/i18n"],
 
