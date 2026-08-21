@@ -77,7 +77,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Read-only SMS inbox (`modems.getSms`) — list + read, never send/delete** | `modules/modems/mmcli-sms.ts` (`readSmsInbox`, `parseSmsList`, `parseSmsRecord`, `SMS_PATH_RE`) → `rpc/procedures/modems.procedure.ts` → `getModemSmsProcedure`; contract below → THE READ-ONLY SMS INBOX |
 | **Streaming-admission ↔ modem-lifecycle interlock (process-wide fail-fast lease, both race orders)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireLifecycle`, `withLifecycleLock`, `leaseRefusal`) + `modules/streaming/stream-session-orchestrator.ts` (`admitLifecycle`); contract below → THE STREAMING-ADMISSION ↔ MODEM-LIFECYCLE INTERLOCK |
 | **The shared modem MUTATION-SAFETY contract (per-device lease, durable journal, replay barrier, both acknowledgement paths)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireModemMutation`, `setMutationBlocks`, `streamingBlockingMutation`) + `modules/streaming/recovery-barrier.ts` + `modules/modems/mutation-{journal,journal-state,lease,identity,blocks,rollback,acknowledge,replay}.ts`; contract below → THE MODEM MUTATION-SAFETY CONTRACT |
-| **The modem-control consumer cutover (0.2.0 floor, additive probes, frozen boundary gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
+| **The modem-control consumer cutover (exact 1.1.0 pin, static imports, frozen boundary gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
 | **The certified USB-mode transition ENGINE, wired** | `modules/modems/transition-engine.ts` (ports + interlock bridge) + `transition-ports.ts` (mmcli inhibit lease, AT sender) + `usb-mode-{transition,identity,contract,execute,rollback}.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
@@ -3366,13 +3366,15 @@ package (`modem-usage-policy.json`, beside `config.json` so it survives an OTA s
 swap). `Modem.Signal.Setup` is separately forbidden by the shadow-mode
 mutation-freedom contract; nothing here goes near it.
 
-- **The package is resolved at RUNTIME, never imported statically.**
-  `setUsagePolicy` landed in `@ceralive/modem-control@1.0.0` and the pin may still
-  be an earlier release, which a static import would turn into a build failure
-  rather than a degradation. The probe mirrors the lazy-import seams already used
-  for `createUsbEnumerator` and the Zod-stripped `platform.hardware_kind`. A
-  package with no setter answers the typed `usage_policy_unsupported` refusal — it
-  never accepts a write it would drop.
+- **The package is imported STATICALLY.** `setUsagePolicy` landed in
+  `@ceralive/modem-control@1.0.0`, so while `package.json` pinned the `0.2.0`
+  floor this module resolved it through a lazy `import()` plus a structural probe
+  and answered a typed `usage_policy_unsupported` refusal when the pinned release
+  did not publish it. The pin is now `1.1.0` EXACTLY, so `tsc` and `bun install`
+  answer that at build and install time — both strictly stronger than a
+  `typeof === "function"` check, which can only report the gap after a write has
+  been attempted. `isUsagePolicySupported()` is therefore constant, and it stays a
+  named function only because `supported` is an EXPLICIT wire field.
 - **`modem.data_usage_policy` is its OWN wire block, not more fields on
   `data_usage`.** `data_usage` is produced only by the D-Bus backend's observation
   fold, and no shipped device runs that backend, so on every board in the field it
@@ -3407,8 +3409,9 @@ Board-verified on `192.168.78.132` (Quectel RM530N-GL): set day 17 + 10 GiB → 
 in the applied echo and read back on `modems.getAll`; an APN-only save preserved
 them; an explicit-null save cleared both; the file landed mode `600` and the policy
 survived a `systemctl restart`. Coverage: `tests/modem-usage-policy.test.ts` (which
-drives the REAL pinned package, and asserts the honest refusal when that package
-predates the setter). Frontend half: `apps/frontend/src/main/dialogs/modem-usage-policy.ts`.
+drives the REAL pinned package throughout, and asserts that the exact pin
+GUARANTEES the write the wire advertises). Frontend half:
+`apps/frontend/src/main/dialogs/modem-usage-policy.ts`.
 
 ## THE READ-ONLY SMS INBOX [EXISTS]
 
@@ -3933,13 +3936,21 @@ wiring driven through the REAL procedure.
 
 ## MODEM-CONTROL COMPATIBILITY PROJECTIONS [EXISTS]
 
-Todo 29 moves the frozen Todo-17 pure-logic set behind the published
+Todo 29 moved the frozen Todo-17 pure-logic set behind the published
 `@ceralive/modem-control` package without raising CeraUI's install floor above
-`0.2.0`. `modules/modem-control-compat.ts` is the single structural probe: each
-of the 14 MIGRATE modules asks for its additive package function and retains its
-existing implementation as the compatibility fallback. Public CeraUI exports,
-wire fields, parser outcomes, and refusal strings remain unchanged. Todo 49 is
-the only step allowed to pin 1.1.0 and delete these probes and fallbacks.
+`0.2.0`. **The pin is now `1.1.0` EXACTLY** (todo 49), and the three probes that
+floor forced — the SMS port, the usage-policy setter, the band catalog — are
+STATIC imports with no runtime fallback left.
+
+`modules/modem-control-compat.ts` REMAINS, and that is deliberate rather than an
+unfinished cutover. It is already a static namespace import, so it is not a lazy
+`import()`; and two of its names — `hilinkConnectionBody` and `vidPidOf` — are
+exported by NO release, which `modem-control-skew-matrix.test.ts` pins and the
+installed 1.1.0 confirms. Their local implementations are PERMANENT, so deleting
+the seam would delete the implementation. Each of the 14 MIGRATE modules asks for
+its package function through it and keeps its own as the answer when the package
+has none. Public CeraUI exports, wire fields, parser outcomes, and refusal
+strings are unchanged.
 
 The 14 modules are exactly the frozen ledger entries: five under `modems`
 (`usb-mode-identity`, `sim-presence`, `five-g-preference`, `physical-identity`,
@@ -3958,7 +3969,9 @@ therefore remains consumer-owned rather than moving into modem-stack.
 
 `tests/modem-control-projections.test.ts` is the committed boundary gate. It
 asserts all 14 modules use the named seam, every projection imports against the
-exact 0.2.0 dependency floor, direct `dbus|mmcli|qmicli|goform|hilink` references
+exact `1.1.0` pin (asserted as a bare version, never a range — a resolved release
+missing the statically-imported exports must fail at import rather than degrade),
+direct `dbus|mmcli|qmicli|goform|hilink` references
 remain inside the Todo-17 ledger allowlist, and stream-active admission preserves
 the refusal vocabulary. Never add a direct modem transport/model/dialect path
 outside that allowlist; add package consumption through a named projection
@@ -7169,12 +7182,14 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't add `enx*` to the policy-route candidate set — the image dispatcher maps only `enx*0`..`enx*7` by the ifname's LAST character, so ~half of correctly-working adapters would false-flag amber for a documented dispatcher gap.
 - Don't statically import `gateways.ts` from `network-interfaces.ts` to call `queueUpdateGw` — that edge cycles, and an eagerly-wired default dials real DNS from a parser-only test. It is installed by `initNetworkInterfaceMonitoring`.
 - Don't derive `no_sim` from the absence of a NetworkManager GSM profile — a profile is provisioned only after a SIM has been READ and a connection created for it, so a working card that has not registered yet has none, and the board's Quectel was reported SIM-less while its own SMS inbox and PIN2 unlock were correctly offered. Route it through `sim-presence.ts` `claimsNoSim`. Don't collapse `unknown` into `absent` either (that is what keeps a modem class from silently losing a genuine no-SIM report), don't let an `unknown` poll overwrite a `present` already seen, and don't test a SIM slot for a non-empty string: an EMPTY slot is published as the bare path `/`, so only the object-path SHAPE tells the two apart.
-- Don't accept a usage-policy write without proving the pinned
-  `@ceralive/modem-control` can apply one — `setUsagePolicy` arrived at 1.0.0 and an
-  older pin must answer `usage_policy_unsupported`, not a silent success. Don't
-  import it statically (that turns an older pin into a build failure), don't make
-  `data_usage_policy.supported` present-only-when-true (the `policy_route_missing`
-  latch), and don't fold the policy into `data_usage` — no shipped device produces
+- Don't loosen the `@ceralive/modem-control` pin off an exact version, and don't
+  re-add a runtime probe in front of `setUsagePolicy`, the SMS port or the band
+  catalog. All three are STATIC imports now: the probes existed only because their
+  APIs post-dated the `0.2.0` floor, and a `^`/`~` that resolved a release without
+  them must fail at import rather than answer `usage_policy_unsupported` for
+  hardware that is fine. Don't make `data_usage_policy.supported`
+  present-only-when-true (the `policy_route_missing` latch), and don't fold the
+  policy into `data_usage` — no shipped device produces
   that block, so the controls would be unreachable on every board in the field.
   Don't collapse the tri-state input into two states either: `undefined` must leave
   a persisted bound alone, or an APN-only save silently clears the operator's meter.

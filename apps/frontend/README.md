@@ -20,7 +20,7 @@ The `backend` app consumes both streaming bindings as pinned public npm packages
 
 ```
 "@ceralive/cerastream": "2026.7.6"   (public npm, @ceralive scope)
-"@ceralive/srtla-send": "2026.6.2"   (public npm, @ceralive scope)
+"@ceralive/srtla-send": "2026.8.0"   (public npm, @ceralive scope)
 ```
 
 No sibling checkout or vendored tarball is required for CeraUI to install or
