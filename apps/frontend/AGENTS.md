@@ -85,7 +85,7 @@ src/
 │   │   │                      #   NetworkIngestSection.svelte — UNMOUNTED migration shim, kept-not-deleted
 │   │   │                      #     (`TD-unmounted-source-shims`); rows absorbed into SourceSection
 │   │   ├── streaming/         # ValidationAdapter.ts — FE constraint adapter (imports from @ceraui/rpc/schemas)
-│   │   └── ui/                # shadcn-svelte primitives (bits-ui v2.18.1) — CLI-managed, do not hand-edit
+│   │   └── ui/                # shadcn-svelte primitives (bits-ui v2.19.0) — CLI-managed, do not hand-edit
 │   └── env/ lib/helpers/ lib/config/ lib/types/
 ```
 

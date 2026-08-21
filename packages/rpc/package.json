@@ -26,7 +26,7 @@
 		"lint:fix": "echo 'RPC fixing handled by root Biome'"
 	},
 	"dependencies": {
-		"@orpc/contract": "2.0.0-beta.27",
+		"@orpc/contract": "2.0.0-beta.30",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

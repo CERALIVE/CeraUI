@@ -42,7 +42,7 @@
 		"clean:all": "bun run clean"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.8",
+		"@biomejs/biome": "2.5.9",
 		"@ceralive/biome-config": "^2026.8.0",
 		"@types/node": "^26.2.0",
 		"dotenv-cli": "^11.0.0",
