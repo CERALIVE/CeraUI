@@ -35,11 +35,15 @@
  * they may not be able to reach. The deviation is recorded in both repos'
  * AGENTS.md so it reads as a decision rather than as drift.
  *
- * THE CATALOG IS RESOLVED AT RUNTIME. The band API landed in
- * `@ceralive/modem-control` after the version pinned in `package.json`, so a
- * static import would fail the build rather than degrade. The probe mirrors
- * `usage-policy.ts` exactly, and it FAILS CLOSED: a package with no band catalog
- * certifies nothing, which hides the control.
+ * THE CATALOG IS IMPORTED STATICALLY. The band API landed in
+ * `@ceralive/modem-control` after the `0.2.0` floor `package.json` used to pin,
+ * so this module resolved it through a lazy `import()` plus a structural probe.
+ * The pin is now `1.1.0` EXACTLY, which publishes the whole band surface, so the
+ * probe is gone and `tsc` enforces what it used to test for. What is KEPT is the
+ * injection seam below: it is a test double for CERTIFICATION behaviour (a
+ * synthetic certified SKU, an empty catalog), not floor tolerance, and its
+ * `null` arm still pins the FAIL-CLOSED rule — no catalog certifies nothing,
+ * which hides the control.
  *
  * THE CACHE EXISTS BECAUSE THE WIRE BUILD IS SYNCHRONOUS. `buildModemsWireMessage`
  * cannot await an mmcli read, so this follows the `policy-route-check.ts`
@@ -49,9 +53,13 @@
  * hardware and does not move between reads.
  */
 
+import {
+	BAND_CERTIFICATION_CATALOG,
+	findBandCertification,
+	isBandControlCertified,
+	offerableBands,
+} from "@ceralive/modem-control";
 import type { CapabilityEvidence } from "@ceraui/rpc/schemas";
-
-import { logger } from "../../helpers/logger.ts";
 
 import { readModemBands } from "./band-mmcli.ts";
 import { noteCapabilityEvidenceChanged } from "./capability-gates.ts";
@@ -73,53 +81,30 @@ interface BandCatalogPackage {
 	) => readonly string[];
 }
 
-let injected: BandCatalogPackage | null | undefined;
-let resolved: BandCatalogPackage | null | undefined;
+const packagedCatalog: BandCatalogPackage = {
+	catalog: BAND_CERTIFICATION_CATALOG,
+	isCertified: (catalog, sku) =>
+		isBandControlCertified(catalog as typeof BAND_CERTIFICATION_CATALOG, sku),
+	findEntry: (catalog, sku) =>
+		findBandCertification(catalog as typeof BAND_CERTIFICATION_CATALOG, sku),
+	offerable: (entry, supported) =>
+		offerableBands(
+			entry as ReturnType<typeof findBandCertification>,
+			supported,
+		),
+};
 
-/** Test seam (the `set*Runner` convention). `null` pins the older-pin arm. */
+let injected: BandCatalogPackage | null | undefined;
+
+/** Test seam (the `set*Runner` convention). `null` pins the no-catalog arm. */
 export function setBandCatalogPackageForTest(
 	pkg: BandCatalogPackage | null | undefined,
 ): void {
 	injected = pkg;
-	resolved = undefined;
 }
 
-async function resolveCatalog(): Promise<BandCatalogPackage | null> {
-	if (injected !== undefined) return injected;
-	if (resolved !== undefined) return resolved;
-	try {
-		const mod = (await import("@ceralive/modem-control")) as Record<
-			string,
-			unknown
-		>;
-		const catalog = mod.BAND_CERTIFICATION_CATALOG;
-		const isCertified = mod.isBandControlCertified;
-		const findEntry = mod.findBandCertification;
-		const offerable = mod.offerableBands;
-		if (
-			catalog === undefined ||
-			typeof isCertified !== "function" ||
-			typeof findEntry !== "function" ||
-			typeof offerable !== "function"
-		) {
-			logger.info("the pinned modem-control publishes no band catalog", {
-				module: "modems",
-			});
-			resolved = null;
-			return null;
-		}
-		resolved = {
-			catalog,
-			isCertified: isCertified as BandCatalogPackage["isCertified"],
-			findEntry: findEntry as BandCatalogPackage["findEntry"],
-			offerable: offerable as BandCatalogPackage["offerable"],
-		};
-		return resolved;
-	} catch (err) {
-		logger.warn("resolving the band catalog failed", { module: "modems", err });
-		resolved = null;
-		return null;
-	}
+function resolveCatalog(): BandCatalogPackage | null {
+	return injected === undefined ? packagedCatalog : injected;
 }
 
 export interface BandCapabilitySnapshot {
@@ -134,7 +119,6 @@ const cache = new Map<string, BandCapabilitySnapshot>();
 
 export function resetBandCapabilityCache(): void {
 	cache.clear();
-	resolved = undefined;
 }
 
 export type BandIdentityResolver = typeof defaultResolveIdentity;
@@ -188,7 +172,7 @@ export async function refreshBandCapability(
 	const supported = read.ok ? read.supported : [];
 	const current = read.ok ? read.current : [];
 
-	const pkg = await resolveCatalog();
+	const pkg = resolveCatalog();
 	const identity = await resolveBandSku(deviceId);
 	const certified =
 		pkg !== null &&

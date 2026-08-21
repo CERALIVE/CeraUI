@@ -16,23 +16,24 @@
 */
 
 /**
- * The SMS-normalization seam: `@ceralive/modem-control`'s read-only SMS port
- * when the pinned package carries it, this backend's own parsers when it does
- * not.
+ * The SMS-normalization seam: `@ceralive/modem-control`'s read-only SMS port.
  *
- * WHY A SEAM RATHER THAN AN IMPORT. The port landed in modem-stack AFTER the
- * version `package.json` pins, and a static import of a symbol the pinned
- * release does not export fails the BUILD rather than degrading. This is the
- * same lazy, structurally-probed resolution `usage-policy.ts` uses for
- * `setUsagePolicy`, `modem-wire-producer.ts` uses for `createUsbEnumerator`, and
- * `hardware-kind.ts` uses for the Zod-stripped `platform.hardware_kind`.
+ * WHY IT IS A STATIC IMPORT NOW. This resolution used to be a lazy
+ * `import("@ceralive/modem-control")` behind a structural probe, because the
+ * port landed in modem-stack AFTER the version `package.json` pinned and a
+ * static import of a symbol the pinned release does not export fails the BUILD
+ * rather than degrading. `package.json` now pins `1.1.0` EXACTLY, which
+ * publishes the whole port, so the probe has nothing left to discover: the
+ * import is enforced by `tsc` at build time and by `bun install` at install
+ * time, which is strictly stronger than a runtime `typeof === "function"` check
+ * that could only ever report the gap after the fact.
  *
- * WHY THE LEGACY PARSERS STAY. They are not a second opinion — they are the
- * PARITY ORACLE. `mmcli-sms.parity.test.ts` pins their output against the exact
- * golden values modem-stack's own `sms/parse.test.ts` pins for the port, so
- * either side drifting reddens a test on both. Removing them is the LAST step of
- * migrate-then-remove and is gated on the pin actually carrying the port, not on
- * this seam existing.
+ * WHY THE LEGACY PARSERS STAY. They are no longer a fallback — nothing can fall
+ * back to them, because the port always resolves. They remain the PARITY ORACLE:
+ * `modem-sms-port-parity.test.ts` pins their output against the exact golden
+ * values modem-stack's own `sms/parse.test.ts` pins for the port, and its last
+ * case now drives BOTH implementations through `readSmsInbox` and asserts one
+ * inbox, so either side drifting reddens a test on both.
  *
  * THE SEAM IS NORMALIZATION ONLY, AND DELIBERATELY SO. The transport stays
  * `mmcli` — a client of the SAME ModemManager daemon the port's D-Bus adapter
@@ -42,7 +43,15 @@
  * blocked (no bench modem has an SMS-capable registered SIM).
  */
 
-import { logger } from "../../helpers/logger.ts";
+import {
+	classifySmsFailure,
+	parseSmsListOutput,
+	parseSmsRecordOutput,
+	SMS_INBOX_CAP,
+	selectReadablePaths,
+	sortAndCapSms,
+} from "@ceralive/modem-control";
+
 import type { SmsMessage, SmsReadRefusal, SmsState } from "./mmcli-sms.ts";
 
 /** The normalization surface `readSmsInbox` drives, whoever provides it. */
@@ -66,100 +75,42 @@ export type SmsNormalizeResult<T> =
 	| { readonly ok: true; readonly value: T }
 	| { readonly ok: false; readonly reason: string; readonly detail: string };
 
-/** The shape the pinned package must expose before it can be adopted. */
-interface SmsPortModule {
-	readonly parseSmsListOutput: (raw: string) => SmsNormalizeResult<string[]>;
-	readonly parseSmsRecordOutput: (
-		raw: string,
-	) => SmsNormalizeResult<SmsMessage>;
-	readonly classifySmsFailure: (description: string) => SmsReadRefusal;
-	readonly selectReadablePaths: (
-		paths: readonly string[],
-		cap?: number,
-	) => string[];
-	readonly sortAndCapSms: (
-		messages: readonly SmsMessage[],
-		cap?: number,
-	) => SmsMessage[];
-	readonly SMS_INBOX_CAP: number;
-}
-
-const isFn = (value: unknown): value is (...args: never[]) => unknown =>
-	typeof value === "function";
-
 /**
- * Every member must be present before the port is used. A partial match is a
- * package mid-migration, and half-adopting it would mean two implementations
- * answering different halves of one inbox read.
+ * The package's port, expressed as this seam's normalizer.
+ *
+ * The cap is the PORT's own `SMS_INBOX_CAP` and is passed explicitly to both
+ * bounded calls, so the read cap can never be one value in the selector and a
+ * different one in the sort.
  */
-function asSmsPort(loaded: unknown): SmsPortModule | undefined {
-	if (typeof loaded !== "object" || loaded === null) return undefined;
-	const candidate = loaded as Record<string, unknown>;
-	const complete =
-		isFn(candidate.parseSmsListOutput) &&
-		isFn(candidate.parseSmsRecordOutput) &&
-		isFn(candidate.classifySmsFailure) &&
-		isFn(candidate.selectReadablePaths) &&
-		isFn(candidate.sortAndCapSms) &&
-		typeof candidate.SMS_INBOX_CAP === "number";
-	return complete ? (candidate as unknown as SmsPortModule) : undefined;
-}
+export const smsPortNormalizer: SmsNormalizer = {
+	source: "port",
+	cap: SMS_INBOX_CAP,
+	parseList: (raw) => parseSmsListOutput(raw),
+	parseRecord: (raw) => parseSmsRecordOutput(raw),
+	classifyFailure: (description) => classifySmsFailure(description),
+	selectPaths: (paths) => selectReadablePaths(paths, SMS_INBOX_CAP),
+	sortAndCap: (messages) => sortAndCapSms(messages, SMS_INBOX_CAP),
+};
 
-function portNormalizer(port: SmsPortModule): SmsNormalizer {
-	return {
-		source: "port",
-		cap: port.SMS_INBOX_CAP,
-		parseList: (raw) => port.parseSmsListOutput(raw),
-		parseRecord: (raw) => port.parseSmsRecordOutput(raw),
-		classifyFailure: (description) => port.classifySmsFailure(description),
-		selectPaths: (paths) => port.selectReadablePaths(paths, port.SMS_INBOX_CAP),
-		sortAndCap: (messages) => port.sortAndCapSms(messages, port.SMS_INBOX_CAP),
-	};
-}
-
-let resolved: Promise<SmsNormalizer> | undefined;
 let override: SmsNormalizer | undefined;
 
 /**
- * Resolve the normalizer once per process, then serve the cache.
+ * The normalizer `readSmsInbox` drives.
  *
- * FAIL-SOFT IN ONE DIRECTION ONLY: a package that cannot be loaded, or that
- * predates the port, degrades to the legacy parsers — behaviour identical to
- * every release before this seam existed. It never degrades the other way.
+ * There is no resolution left to do and therefore no failure mode to degrade
+ * from — the port is a static import of an exactly-pinned dependency, so it is
+ * present or the build does not exist. The test override is the only thing that
+ * can answer differently.
  */
-export function resolveSmsNormalizer(
-	fallback: SmsNormalizer,
-): Promise<SmsNormalizer> {
-	if (override !== undefined) return Promise.resolve(override);
-	resolved ??= (async (): Promise<SmsNormalizer> => {
-		try {
-			const port = asSmsPort(await import("@ceralive/modem-control"));
-			if (port === undefined) {
-				logger.debug(
-					"SMS: pinned @ceralive/modem-control carries no SMS port; using the legacy parsers",
-				);
-				return fallback;
-			}
-			logger.debug(
-				"SMS: normalization resolved through @ceralive/modem-control",
-			);
-			return portNormalizer(port);
-		} catch {
-			return fallback;
-		}
-	})();
-	return resolved;
+export function resolveSmsNormalizer(): SmsNormalizer {
+	return override ?? smsPortNormalizer;
 }
 
-/** Test seam (the `set*Runner` convention). `null` restores real resolution. */
+/** Test seam (the `set*Runner` convention). `null` restores the real port. */
 export function setSmsNormalizerForTest(
 	normalizer: SmsNormalizer | null,
 ): void {
 	override = normalizer ?? undefined;
-	resolved = undefined;
 }
-
-/** Exported for the port-shape contract test. */
-export const smsPortShape = { asSmsPort, portNormalizer } as const;
 
 export type { SmsState };

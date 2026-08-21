@@ -1,9 +1,11 @@
 /**
  * The data-usage POLICY write path.
  *
- * The load-bearing case is the LAST describe: it drives the REAL pinned
- * `@ceralive/modem-control` against a real temp file, so this suite reports what
- * the installed package can actually do rather than what a double says it can.
+ * Every case drives the REAL pinned `@ceralive/modem-control` against a real
+ * temp file, so this suite reports what the installed package can actually do
+ * rather than what a double says it can. There is no package double left to
+ * inject: the `1.1.0` pin is exact and the setter is a static import, so
+ * "installed but without the setter" is not a state this build can reach.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -16,7 +18,6 @@ import {
 	isUsagePolicySupported,
 	refreshUsagePolicies,
 	resetUsagePolicyState,
-	setUsagePolicyPackageForTest,
 	usagePolicySlotKey,
 	writeUsagePolicy,
 } from "../modules/modems/usage-policy.ts";
@@ -30,7 +31,6 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-	setUsagePolicyPackageForTest(undefined);
 	resetUsagePolicyState();
 	delete process.env.CERALIVE_MODEM_USAGE_POLICY_PATH;
 	await rm(dir, { recursive: true, force: true });
@@ -52,37 +52,22 @@ describe("usagePolicySlotKey", () => {
 	});
 });
 
-describe("a package with no setter", () => {
-	beforeEach(() => {
-		setUsagePolicyPackageForTest(null);
-	});
-
-	test("reports the capability as false rather than pretending", async () => {
-		await refreshUsagePolicies();
-		expect(isUsagePolicySupported()).toBe(false);
-	});
-
-	test("REFUSES the write instead of accepting one it would drop", async () => {
-		const result = await writeUsagePolicy("modem:1", { cycleDay: 5 });
-
-		expect(result).toEqual({ ok: false, reason: "usage_policy_unsupported" });
-		expect(getCachedUsagePolicy("modem:1")).toBeUndefined();
-	});
-});
-
 describe("the REAL pinned @ceralive/modem-control", () => {
+	test("the exact pin GUARANTEES the write, so the wire never claims otherwise", async () => {
+		// `modem.data_usage_policy.supported` is published on every row, so this
+		// is the one place the wire's claim is checked against the package that
+		// has to honour it. A pin that could not write would have to fail here
+		// rather than reach an operator as a control that does nothing.
+		await refreshUsagePolicies();
+		expect(isUsagePolicySupported()).toBe(true);
+
+		const applied = await writeUsagePolicy("modem:1", { cycleDay: 5 });
+		expect(applied).toEqual({ ok: true, policy: { cycleDay: 5 } });
+		expect(getCachedUsagePolicy("modem:1")).toEqual({ cycleDay: 5 });
+	});
+
 	test("a write round-trips through a real file and reaches the sync cache", async () => {
 		await refreshUsagePolicies();
-		if (!isUsagePolicySupported()) {
-			// The pinned release predates `setUsagePolicy`. That is a legitimate
-			// state (the wire reports `supported: false` and the UI disables the
-			// controls), so the honest assertion is the refusal, not a skip.
-			expect(await writeUsagePolicy("modem:1", { cycleDay: 5 })).toEqual({
-				ok: false,
-				reason: "usage_policy_unsupported",
-			});
-			return;
-		}
 
 		const written = await writeUsagePolicy("stable:usb-1-1.4", {
 			cycleDay: 17,
@@ -108,7 +93,6 @@ describe("the REAL pinned @ceralive/modem-control", () => {
 
 	test("an OMITTED field is left alone and an explicit null clears it", async () => {
 		await refreshUsagePolicies();
-		if (!isUsagePolicySupported()) return;
 
 		await writeUsagePolicy("modem:1", {
 			cycleDay: 9,
@@ -131,7 +115,6 @@ describe("the REAL pinned @ceralive/modem-control", () => {
 
 	test("an out-of-range day is refused, and the stored policy is untouched", async () => {
 		await refreshUsagePolicies();
-		if (!isUsagePolicySupported()) return;
 
 		await writeUsagePolicy("modem:1", { cycleDay: 9 });
 		const refused = await writeUsagePolicy("modem:1", { cycleDay: 99 });
@@ -145,7 +128,6 @@ describe("the REAL pinned @ceralive/modem-control", () => {
 
 	test("one modem's policy never disturbs another's", async () => {
 		await refreshUsagePolicies();
-		if (!isUsagePolicySupported()) return;
 
 		await writeUsagePolicy("modem:1", { cycleDay: 1 });
 		await writeUsagePolicy("modem:2", { cycleDay: 20 });

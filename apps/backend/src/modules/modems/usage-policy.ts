@@ -28,14 +28,14 @@
  * policy is durable local state, owned by `@ceralive/modem-control`'s
  * `setUsagePolicy` (a versioned, 0600, fail-soft file), which this module drives.
  *
- * IT IS RESOLVED AT RUNTIME, NOT IMPORTED STATICALLY. `setUsagePolicy` landed in
- * `@ceralive/modem-control@1.0.0`; the pin in `package.json` may still be an
- * earlier release that does not publish it, and a static import would then fail
- * the build rather than degrade. The probe mirrors the lazy-import seams already
- * used for `createUsbEnumerator` (`modem-wire-producer.ts`) and the Zod-stripped
- * `platform.hardware_kind` (`hardware-kind.ts`): resolve, structurally check,
- * report the capability honestly. An unsupported package answers the typed
- * `usage_policy_unsupported` refusal — it never accepts a write it would drop.
+ * IT IS IMPORTED STATICALLY. `setUsagePolicy` landed in
+ * `@ceralive/modem-control@1.0.0`, so while `package.json` pinned the `0.2.0`
+ * floor this module resolved it through a lazy `import()` plus a structural
+ * probe and answered a typed `usage_policy_unsupported` refusal when the pinned
+ * release did not publish it. The pin is now `1.1.0` EXACTLY, so that question
+ * is settled at build time by `tsc` and at install time by `bun install` — both
+ * strictly stronger than a runtime `typeof === "function"` check, which could
+ * only report the gap after a write had already been attempted.
  *
  * THE CACHE EXISTS BECAUSE THE WIRE BUILD IS SYNCHRONOUS. `buildModemsWireMessage`
  * cannot await a file read, so this follows the `policy-route-check.ts` precedent
@@ -43,6 +43,13 @@
  */
 
 import { join } from "node:path";
+
+import {
+	createUsagePolicyFileStore,
+	type SetUsagePolicyResult,
+	setUsagePolicy,
+	type UsagePolicyStore,
+} from "@ceralive/modem-control";
 
 import { logger } from "../../helpers/logger.ts";
 
@@ -54,34 +61,7 @@ export interface ModemUsagePolicy {
 
 export type UsagePolicyWriteOutcome =
 	| { readonly ok: true; readonly policy: ModemUsagePolicy }
-	| {
-			readonly ok: false;
-			readonly reason: "usage_policy_unsupported" | "usage_policy_write_failed";
-	  };
-
-interface SetUsagePolicyResultLike {
-	readonly status: string;
-	readonly usage?: ModemUsagePolicy;
-	readonly reason?: string;
-}
-
-type SetUsagePolicyFn = (
-	deps: { store: unknown; now?: () => number },
-	request: {
-		logicalSlotId: string;
-		cycleDay?: number | null;
-		thresholdBytes?: number | null;
-	},
-) => Promise<SetUsagePolicyResultLike>;
-
-interface UsagePolicyPackage {
-	readonly setUsagePolicy: SetUsagePolicyFn;
-	readonly getUsagePolicy: (
-		deps: { store: unknown },
-		logicalSlotId: string,
-	) => Promise<ModemUsagePolicy>;
-	readonly store: unknown;
-}
+	| { readonly ok: false; readonly reason: "usage_policy_write_failed" };
 
 const DEFAULT_STORE_FILE = "modem-usage-policy.json";
 
@@ -94,63 +74,30 @@ function storePath(): string {
 	return join(process.cwd(), DEFAULT_STORE_FILE);
 }
 
-let resolved: UsagePolicyPackage | null | undefined;
-let injected: UsagePolicyPackage | null | undefined;
+let store: UsagePolicyStore | undefined;
 
 /**
- * Test seam (the `set*Runner` convention). `null` pins the "pinned package
- * publishes no setter" arm without needing a downgraded install.
+ * The store is built lazily rather than at module scope because
+ * {@link storePath} reads the environment, which a test sets per case.
  */
-export function setUsagePolicyPackageForTest(
-	pkg: UsagePolicyPackage | null | undefined,
-): void {
-	injected = pkg;
-	resolved = undefined;
-}
-
-async function resolvePackage(): Promise<UsagePolicyPackage | null> {
-	if (injected !== undefined) return injected;
-	if (resolved !== undefined) return resolved;
-	try {
-		const mod = (await import("@ceralive/modem-control")) as Record<
-			string,
-			unknown
-		>;
-		const setFn = mod.setUsagePolicy;
-		const getFn = mod.getUsagePolicy;
-		const createStore = mod.createUsagePolicyFileStore;
-		if (
-			typeof setFn !== "function" ||
-			typeof getFn !== "function" ||
-			typeof createStore !== "function"
-		) {
-			logger.warn(
-				"modem usage policy: pinned @ceralive/modem-control publishes no setUsagePolicy",
-			);
-			resolved = null;
-			return resolved;
-		}
-		resolved = {
-			setUsagePolicy: setFn as SetUsagePolicyFn,
-			getUsagePolicy: getFn as UsagePolicyPackage["getUsagePolicy"],
-			store: (createStore as (o: { path: string }) => unknown)({
-				path: storePath(),
-			}),
-		};
-		return resolved;
-	} catch (error) {
-		logger.warn("modem usage policy: package unavailable", { error });
-		resolved = null;
-		return resolved;
-	}
+function usagePolicyStore(): UsagePolicyStore {
+	store ??= createUsagePolicyFileStore({ path: storePath() });
+	return store;
 }
 
 let cache: ReadonlyMap<string, ModemUsagePolicy> = new Map();
-let supported = false;
 
-/** Whether the pinned package can actually apply a usage-policy write. */
+/**
+ * Whether this build can apply a usage-policy write.
+ *
+ * Constant, because the exact `1.1.0` pin makes it one. It stays a function
+ * because `modem.data_usage_policy.supported` is an EXPLICIT wire field — the
+ * modem merge preserves an omitted optional, so the claim must be published on
+ * every row — and a single named answer is what keeps the wire and this module
+ * from ever disagreeing about it.
+ */
 export function isUsagePolicySupported(): boolean {
-	return supported;
+	return true;
 }
 
 /** The cached policy for a slot key, or `undefined` when none is persisted. */
@@ -179,23 +126,8 @@ export function usagePolicySlotKey(
 
 /** Re-read the persisted policies into the sync cache. Never throws. */
 export async function refreshUsagePolicies(): Promise<void> {
-	const pkg = await resolvePackage();
-	if (pkg === null) {
-		supported = false;
-		return;
-	}
-	supported = true;
 	try {
-		const store = pkg.store as {
-			load(nowMs: number): Promise<{
-				slots: readonly {
-					logicalSlotId: string;
-					cycleDay?: number;
-					thresholdBytes?: number;
-				}[];
-			}>;
-		};
-		const state = await store.load(Date.now());
+		const state = await usagePolicyStore().load(Date.now());
 		const next = new Map<string, ModemUsagePolicy>();
 		for (const slot of state.slots) {
 			next.set(slot.logicalSlotId, {
@@ -226,16 +158,10 @@ export async function writeUsagePolicy(
 		thresholdBytes?: number | null;
 	},
 ): Promise<UsagePolicyWriteOutcome> {
-	const pkg = await resolvePackage();
-	if (pkg === null) {
-		supported = false;
-		return { ok: false, reason: "usage_policy_unsupported" };
-	}
-	supported = true;
-	let result: SetUsagePolicyResultLike;
+	let result: SetUsagePolicyResult;
 	try {
-		result = await pkg.setUsagePolicy(
-			{ store: pkg.store },
+		result = await setUsagePolicy(
+			{ store: usagePolicyStore() },
 			{
 				logicalSlotId: slotKey,
 				...(change.cycleDay !== undefined ? { cycleDay: change.cycleDay } : {}),
@@ -255,7 +181,7 @@ export async function writeUsagePolicy(
 		});
 		return { ok: false, reason: "usage_policy_write_failed" };
 	}
-	const policy = result.usage ?? {};
+	const policy: ModemUsagePolicy = result.usage;
 	const next = new Map(cache);
 	if (policy.cycleDay === undefined && policy.thresholdBytes === undefined) {
 		next.delete(slotKey);
@@ -266,9 +192,8 @@ export async function writeUsagePolicy(
 	return { ok: true, policy };
 }
 
-/** Test seam — drops the resolved package, the cache, and the capability flag. */
+/** Test seam — drops the open store and the cache, so the next call re-reads. */
 export function resetUsagePolicyState(): void {
-	resolved = undefined;
+	store = undefined;
 	cache = new Map();
-	supported = false;
 }

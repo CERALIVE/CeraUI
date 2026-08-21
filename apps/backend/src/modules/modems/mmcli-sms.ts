@@ -313,9 +313,9 @@ function toNormalizeResult<T>(result: ParseResult<T>): SmsNormalizeResult<T> {
 /**
  * This backend's own parsers, expressed as the seam's normalizer.
  *
- * It is BOTH the fallback for a pinned `@ceralive/modem-control` that predates
- * the SMS port AND the parity oracle the port is measured against — see
- * `sms-port.ts` for why it may not be deleted before the pin carries the port.
+ * It is the PARITY ORACLE the port is measured against, and that is now its only
+ * role: the `1.1.0` pin carries the port, so nothing falls back to it. Deleting
+ * it would delete the differential — see `sms-port.ts`.
  */
 export const legacySmsNormalizer: SmsNormalizer = {
 	source: "legacy",
@@ -403,7 +403,7 @@ export async function readSmsInbox(
 		return { ok: false, reason: "unknown_modem" };
 	}
 
-	const normalize = await resolveSmsNormalizer(legacySmsNormalizer);
+	const normalize = resolveSmsNormalizer();
 
 	let listOutput: string;
 	try {

@@ -119,11 +119,15 @@ describe("modem-control compatibility projections", () => {
 		}
 	});
 
-	test("the pinned 0.2.0 floor imports every projection without a newer API", async () => {
+	test("the EXACT 1.1.0 pin imports every projection", async () => {
+		// A bare version, never a range: the SMS port, usage-policy setter and
+		// band catalog are STATIC imports with no runtime probe behind them, so a
+		// `^`/`~` that resolved a release missing any of them fails at import
+		// instead of degrading.
 		const packageJson = await Bun.file(
 			join(BACKEND_ROOT, "..", "package.json"),
 		).json();
-		expect(packageJson.dependencies["@ceralive/modem-control"]).toBe("0.2.0");
+		expect(packageJson.dependencies["@ceralive/modem-control"]).toBe("1.1.0");
 		for (const module of MIGRATED_MODULES) {
 			await expect(import(join(BACKEND_ROOT, module))).resolves.toBeDefined();
 		}
