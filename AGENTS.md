@@ -761,7 +761,9 @@ remains the blocking check — informative, not blocking.
 Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
 would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
 which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
-selects the alias). `bun tsc` is likewise banned (oven-sh/bun#37152).
+selects the alias). The Bun 1.4.0 retest resolved the current TS 7 backend and TS 6
+frontend probes correctly, but `bun tsc` remains banned: only the wrapper guarantees
+package-local compiler selection (oven-sh/bun#37152).
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 

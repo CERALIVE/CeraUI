@@ -24,7 +24,7 @@
 		}
 	},
 	"scripts": {
-		"check": "bun run generate:i18n && node ../../scripts/tsc.mjs --noEmit",
+		"check": "bun run generate:i18n && bun ../../scripts/tsc.mjs --noEmit",
 		"test": "bun run generate:i18n && bun test",
 		"compile-messages": "bun scripts/compile-messages.ts",
 		"generate-registry": "bun scripts/generate-registry.ts",

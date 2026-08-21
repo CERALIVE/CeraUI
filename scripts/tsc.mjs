@@ -13,7 +13,9 @@
 // A bare `tsc` resolves through PATH, so whichever copy hoisting happened to leave in
 // `node_modules/.bin` wins — silently, and differently on a developer machine than in
 // CI. Resolving from the invoking package's own dependency graph makes the choice
-// explicit instead. (`bun tsc` is not an option here either: oven-sh/bun#37152.)
+// explicit instead. Bun 1.4.0 resolved both current package-major probes correctly,
+// but `bun tsc` remains banned: only this wrapper guarantees package-local compiler
+// selection (oven-sh/bun#37152).
 //
 // `<pkg>/package.json` is the anchor because TS 7 ships an `exports` map that does not
 // expose `./bin/tsc`: resolving that subpath directly throws
