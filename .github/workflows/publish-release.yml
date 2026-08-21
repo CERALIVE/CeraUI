@@ -227,6 +227,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-store-
 
+      - name: Cache Ruby gems (fpm)
+        uses: actions/cache@v6
+        with:
+          path: /var/lib/gems
+          key: ${{ runner.os }}-ruby-gems-fpm-v1
+          restore-keys: |
+            ${{ runner.os }}-ruby-gems-fpm-
+
+      # Two of the contracts this job runs BUILD a .deb to inspect its payload
+      # (deb-reconciler-staging, deb-sourcemap-policy), so fpm is a dependency of
+      # the gate itself — not only of build-debian-package, which installs it
+      # separately and runs later.
+      - name: Install Ruby and FPM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby-dev gcc g++
+          sudo gem install --no-document fpm
+
       - name: Install dependencies
         working-directory: CeraUI
         run: bun install --frozen-lockfile
