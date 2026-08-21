@@ -133,6 +133,14 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+// Every case below mounts the WHOLE EncoderDialog plus the PreviewCanvas it hosts, so this
+// file is render/transform-bound rather than assertion-bound: wall-clock tracks machine load,
+// not what is asserted. The first mount pays a one-time cost the later cases reuse — locally
+// ~220 ms against ~50 ms siblings, but 5763 ms on a CPU-contended runner with no persisted
+// transform cache, which exceeds vitest's 5000 ms default and fails. File-scoped because
+// every case here does the same work.
+vi.setConfig({ testTimeout: 15000 });
+
 describe("EncoderDialog — live preview (#72)", () => {
 	it("mounts a compact PreviewCanvas inside the open dialog", () => {
 		render(EncoderDialog, { props: { open: true } });

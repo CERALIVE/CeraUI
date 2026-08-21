@@ -142,6 +142,14 @@ function draftOf(overrides: Partial<ServerSetDraft> = {}): ServerSetDraft {
 	};
 }
 
+// Every case below mounts the WHOLE ServerDialog, so this file is render/transform-bound
+// rather than assertion-bound: wall-clock tracks machine load, not what is asserted. The
+// first mount pays a one-time cost the later cases reuse — locally ~181 ms against ~30 ms
+// siblings, but 5208 ms on a CPU-contended runner with no persisted transform cache, which
+// is already past vitest's 5000 ms default. File-scoped because every case here does the
+// same work.
+vi.setConfig({ testTimeout: 15000 });
+
 describe("ServerDialog — destination tiles + transport row", () => {
 	it("shows the transport row per-provider: CeraLive + Custom yes, BeLABOX no", async () => {
 		render(ServerDialog, { props: { open: true } });

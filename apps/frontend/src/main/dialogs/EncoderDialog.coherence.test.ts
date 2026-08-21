@@ -181,6 +181,14 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
+// Every case below mounts the WHOLE EncoderDialog, so this file is render/transform-bound
+// rather than assertion-bound: wall-clock tracks machine load, not what is asserted. The
+// first mount pays a one-time cost the later cases reuse — locally ~243 ms against ~70 ms
+// siblings, but 6094 ms on a CPU-contended runner with no persisted transform cache, which
+// exceeds vitest's 5000 ms default and fails. File-scoped because every case here does the
+// same work.
+vi.setConfig({ testTimeout: 15000 });
+
 describe("EncoderDialog — save-time re-validation (C7)", () => {
 	it("blocks save on a device-unplug-shrunken axes set + renders the inline reason", async () => {
 		// The saved config selects a 2160p encode, but the active USB source only
