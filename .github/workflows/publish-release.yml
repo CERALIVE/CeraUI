@@ -227,6 +227,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-store-
 
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      # FIRST, and that ordering is the point. Several frontend specs render a
+      # full dialog SYNCHRONOUSLY against vitest's 5 s default, so they are
+      # sensitive to how loaded the runner already is. Run after this job's .deb
+      # builds and lint, the heaviest of them took 5480-5544 ms and timed out on
+      # two consecutive release dispatches — while the same commit passed in
+      # build-check, whose test-fe job runs vitest immediately after `bun install`
+      # on a fresh runner. This reproduces those conditions exactly: nothing but
+      # checkout, Bun and install precede it. Do not move it below the packaging
+      # steps, and do not "tidy" the ruby/fpm install back above it.
+      - name: Frontend unit tests (vitest)
+        working-directory: CeraUI
+        run: bun run --filter frontend test
+
       - name: Cache Ruby gems (fpm)
         uses: actions/cache@v6
         with:
@@ -244,10 +261,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ruby-dev gcc g++
           sudo gem install --no-document fpm
-
-      - name: Install dependencies
-        working-directory: CeraUI
-        run: bun install --frozen-lockfile
 
       - name: Run release/package contracts
         working-directory: CeraUI
@@ -279,59 +292,20 @@ jobs:
       # suite deliberately lives in its own job below. These three run after a
       # .deb build, a full lint/typecheck and a service contract on this runner;
       # the frontend suite is the one that cannot absorb that (see that job).
-      - name: RPC unit tests
+      # Per-workspace rather than the combined `bun run test`, because the
+      # frontend suite has already run above, on a fresh runner. Together these
+      # cover exactly what `bun run test` chained: rpc, i18n, frontend, backend.
+      - name: Run unit tests
         working-directory: CeraUI
-        run: bun run --filter @ceraui/rpc test
-
-      - name: i18n unit tests
-        working-directory: CeraUI
-        run: bun run --filter @ceraui/i18n test
-
-      - name: Backend unit tests
-        working-directory: CeraUI
-        run: bun run --filter backend test
-
-  # Its OWN runner, mirroring build-check.yml's `test-fe`. The frontend suite is
-  # timing-sensitive: several specs render a full dialog synchronously against
-  # vitest's 5 s default. Sharing a runner with the contract gate's .deb builds
-  # and lint pushed the heaviest of them to 5480-5544 ms — over budget on two
-  # consecutive release dispatches, while the same commit passed in build-check,
-  # where this suite gets a runner to itself. Keep it isolated.
-  release-frontend-tests:
-    name: Frontend unit tests
-    runs-on: ubuntu-latest
-    needs: calculate-version
-    steps:
-      - name: Checkout CeraUI
-        uses: actions/checkout@v7
-        with:
-          path: CeraUI
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
-      - name: Cache Bun install
-        uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-store-
-
-      - name: Install dependencies
-        working-directory: CeraUI
-        run: bun install --frozen-lockfile
-
-      - name: Unit tests (vitest)
-        working-directory: CeraUI
-        run: bun run --filter frontend test
+        run: |
+          bun run --filter @ceraui/rpc test
+          bun run --filter @ceraui/i18n test
+          bun run --filter backend test
 
   build-ceraui-system:
     name: Build CeraUI Full System
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts, release-frontend-tests]
+    needs: [calculate-version, release-package-contracts]
     strategy:
       matrix:
         architecture: [arm64, amd64]
@@ -391,7 +365,7 @@ jobs:
   build-debian-package:
     name: Build Debian Package
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts, release-frontend-tests]
+    needs: [calculate-version, release-package-contracts]
     strategy:
       matrix:
         architecture: [arm64, amd64]
@@ -445,7 +419,7 @@ jobs:
   publish-federation:
     name: Publish Federation Bundles to R2
     runs-on: ubuntu-latest
-    needs: [calculate-version, release-package-contracts, release-frontend-tests]
+    needs: [calculate-version, release-package-contracts]
     permissions:
       contents: read
     steps:
