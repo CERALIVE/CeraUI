@@ -6,7 +6,7 @@
       "name": "ceralive-workspace",
       "devDependencies": {
         "@biomejs/biome": "2.5.9",
-        "@ceralive/biome-config": "^2026.8.0",
+        "@ceralive/biome-config": "^2026.8.1",
         "@types/node": "^26.2.0",
         "dotenv-cli": "^11.0.0",
         "glob": "^13.0.6",
@@ -333,7 +333,7 @@
 
     "@bramus/specificity": ["@bramus/specificity@2.4.2", "", { "dependencies": { "css-tree": "^3.0.0" }, "bin": { "specificity": "bin/cli.js" } }, "sha512-ctxtJ/eA+t+6q2++vj5j7FYX3nRu311q1wfYH3xjlLOsczhlhxAg2FWNUXhpGvAw3BWo1xBcvOV6/YLc2r5FJw=="],
 
-    "@ceralive/biome-config": ["@ceralive/biome-config@2026.8.0", "", {}, "sha512-TSlMbinvdzGriJWQwTwUUVtXXnRDp8OzE3w2848+1jl5I35tzf+rt8J4B3aSQvwhsLHkGqb93UBvD21+hQ8wQQ=="],
+    "@ceralive/biome-config": ["@ceralive/biome-config@2026.8.1", "", {}, "sha512-SAqNoi2sc21HMwtY1UqrVqJtNMdcfrjEqVI+RMbbr+nhRC/vPkbHfRzavrNA5IYXeL6wJNDVhFWlyWDw3R3TtA=="],
 
     "@ceralive/cerastream": ["@ceralive/cerastream@2026.7.6", "", { "dependencies": { "zod": "^4.3.5" } }, "sha512-Fa2/GAr3WJ2saXHWDnUUGcpDThKoPeUOl4mOyBLMUsdoFuZrqIKoNVNDd8aLYeAhSDx+v74Fl8ALsCQVY5Jn4A=="],
 
