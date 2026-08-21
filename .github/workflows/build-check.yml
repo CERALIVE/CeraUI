@@ -519,45 +519,6 @@ jobs:
       - name: All test jobs passed
         run: echo "FE unit, BE unit, and all E2E shards passed."
 
-  # NON-BLOCKING. Reports whether svelte-check can typecheck the frontend through
-  # the native Go compiler yet; the workspace stays on TypeScript 6 until it can
-  # (svelte-check 4.x refuses to start on TS 7). Never gates a merge.
-  tsgo-canary:
-    name: tsgo canary (advisory)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Checkout CeraUI
-        uses: actions/checkout@v7
-        with:
-          path: CeraUI
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.0
-
-      - name: Cache Bun install
-        uses: actions/cache@v6
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-store-
-
-      - name: Install dependencies
-        working-directory: CeraUI
-        run: bun install --frozen-lockfile
-
-      - name: svelte-check --tsgo against @typescript/native
-        working-directory: CeraUI
-        run: bash scripts/ci/tsgo-canary.sh
-
   build:
     name: Build ${{ matrix.arch }}
     runs-on: ubuntu-latest

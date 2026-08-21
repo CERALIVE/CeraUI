@@ -752,11 +752,12 @@ TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), wh
 one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 devDep with the rest of the
 non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
 `ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
-dep plus a `typescript-7` npm-alias `check` gate) no longer exists. A non-blocking `svelte-check --tsgo`
-canary runs against the frontend catalog (`@typescript/native` alias onto real `typescript@7`, installed
-`--no-save`); the current run reports **0 errors and 5 warnings in 4 files** (the
-`state_referenced_locally` warnings are in test fixtures and the slider component), while the required TS6 gate
-remains the blocking check — informative, not blocking.
+dep plus a `typescript-7` npm-alias `check` gate) no longer exists. The former non-blocking
+`svelte-check --tsgo` canary is retired: under Bun 1.4.0 with released `typescript@7.0.2` it reported the
+same **0 errors and 5 warnings in 4 files** as the required frontend check, so it added no independent signal.
+Revisit the frontend TS6→TS7 move when `svelte-check` accepts the TS7 peer range and the released compiler
+provides the programmatic API it consumes; do not restore an advisory native/compiler canary merely to watch
+that transition.
 
 Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
 would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
@@ -847,14 +848,16 @@ semantic YAML contract is
 
 Four further Build Check facts, all landed 2026-08-14:
 
-- **Node 26 is the required runtime** (`NODE_VERSION: "26"`), not a canary lane.
-  The frontend vitest suite was proven green on both Node 24 and 26 first.
-- **`tsgo-canary` is advisory and must stay that way** (`continue-on-error: true`,
-  `gate: perf` in the root manifest). It installs `@typescript/native` — an npm
-  alias onto `typescript@7`, NOT the `@typescript/native-preview` nightly — with
-  `--no-save` beside the workspace TS6 and runs `svelte-check --tsgo`
-  (`scripts/ci/tsgo-canary.sh`, `apps/frontend/tsconfig.tsgo.json`). Plain
-  `--tsgo`, never `--tsgo-experimental-api` (language-tools#3095 fails under Bun).
+- **Node 26 is the required frontend-test runtime** (`NODE_VERSION: "26"`), not
+  a canary lane. Bun 1.4 can launch Vitest and Playwright, but the full Vitest
+  collection fails in the shared Zod schema graph and the full Playwright probe
+  did not produce a green parity run. Keep both CI lanes on Node until a full
+  same-lockfile Bun run is green with identical file/case counts.
+- **The former `tsgo-canary` is retired.** Released TypeScript 7 is already the
+  native compiler, and the Bun 1.4 probe produced no diagnostics beyond the
+  required TS6 frontend check. Revisit the frontend compiler when
+  `svelte-check` supports TS7's peer/API surface; do not recreate an advisory
+  canary without a demonstrated additional signal.
 - **`setup-e2e` typechecks and measures before it uploads**: `bun run --filter
   frontend check` gates the build, and `bun scripts/ci/bundle-report.mjs` fails
   the job when the initial-route JS gzip set exceeds its documented budget.
