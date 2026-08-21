@@ -60,6 +60,11 @@ const NOT_I18N_KEYS = new Set<string>([
 	// nmcli connection property, `modules/wifi/wifi-hotspot-config.ts` /
 	// `wifi-hotspot-types.ts` — collides with the `connection.*` namespace.
 	"connection.autoconnect",
+	// nmcli connection property, `modules/modems/gsm-duplicate-reconcile.ts`
+	// `GSM_AUDIT_FIELDS` — a profile's last-successful-activation stamp, read to
+	// prove a duplicate was never used before it may be pruned (todo 63). Same
+	// `connection.*` collision as its sibling above.
+	"connection.timestamp",
 	// oRPC procedure path, `rpc/adapter.ts` post-login branch — collides with
 	// the `auth.*` namespace.
 	"auth.login",

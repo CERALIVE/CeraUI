@@ -9,8 +9,9 @@ import {
 	statusResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
+import { getCellularStack } from "../../modules/cellular/cellular-stack.ts";
 import { getConfig } from "../../modules/config.ts";
-import { buildModemsMessage } from "../../modules/modems/modem-status.ts";
+import { buildModemsWireMessage } from "../../modules/modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../../modules/network/network-ingest.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
 import {
@@ -31,6 +32,7 @@ import {
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { getDevicesMessage } from "../../modules/streaming/devices.ts";
 import { getEngineBitrateStatus } from "../../modules/streaming/engine-bitrate-status.ts";
+import { buildBondMapping } from "../../modules/streaming/link-mapping-report.ts";
 import { AUDIO_CODECS } from "../../modules/streaming/pipeline-sources.ts";
 import { getPipelinesMessage } from "../../modules/streaming/pipelines.ts";
 import { getPreviewEncoderRealizedStatus } from "../../modules/streaming/preview-encoder-status.ts";
@@ -62,7 +64,7 @@ const authedProcedure = baseProcedure.use(authMiddleware);
  * Get full status procedure
  *
  * The wifi/modems/netif snapshots are produced by `wifiBuildMsg`,
- * `buildModemsMessage` and `netIfBuildMsg`. These builders read the legacy
+ * `buildModemsWireMessage` and `netIfBuildMsg`. These builders read the legacy
  * source-of-truth maps that the synchronized state caches (getNetifState /
  * getWifiState / getModemsState, T9/T10/T11) are kept in step with by the
  * event-driven loops (T14/T15/T17), so the snapshot reflects the synchronized
@@ -80,17 +82,19 @@ export const getStatusProcedure = authedProcedure
 			update_state: getUpdateState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: modemListSchema.parse(buildModemsMessage()),
+			modems: modemListSchema.parse(buildModemsWireMessage()),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
 			resolved_asrc_reason: getResolvedAsrcReason(),
 			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
+			bond_mapping: buildBondMapping(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),
 			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
+			cellular_initializing: !getCellularStack().ready,
 		};
 	});
 
@@ -125,17 +129,19 @@ export function buildInitialStatus() {
 			update_state: getUpdateState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: modemListSchema.parse(buildModemsMessage()),
+			modems: modemListSchema.parse(buildModemsWireMessage()),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
 			resolved_asrc_reason: getResolvedAsrcReason(),
 			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
+			bond_mapping: buildBondMapping(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),
 			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
+			cellular_initializing: !getCellularStack().ready,
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),

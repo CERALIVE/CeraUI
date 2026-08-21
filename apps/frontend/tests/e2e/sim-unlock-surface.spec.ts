@@ -223,6 +223,7 @@ test.describe(
 				required: "sim-pin",
 				remainingAttempts: 3,
 			});
+			await page.getByTestId("open-modem-unlock-dialog").first().click();
 
 			const input = page.getByTestId("sim-pin-input");
 			const submit = page.getByTestId("sim-pin-submit");
@@ -270,6 +271,7 @@ test.describe(
 				required: "sim-puk",
 				remainingAttempts: 8,
 			});
+			await page.getByTestId("open-modem-unlock-dialog").first().click();
 
 			const puk = page.getByTestId("sim-puk-input");
 			const newPin = page.getByTestId("sim-puk-newpin-input");

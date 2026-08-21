@@ -18,6 +18,7 @@
 import type {
 	ActiveEncode,
 	AudioSource,
+	BondMapping,
 	BufferingStatus,
 	EngineBitrate,
 	NetworkIngest,
@@ -25,8 +26,9 @@ import type {
 	ResolvedAsrcReason,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
+import { getCellularStack } from "../cellular/cellular-stack.ts";
 import { getConfig } from "../config.ts";
-import { buildModemsMessage } from "../modems/modem-status.ts";
+import { buildModemsWireMessage } from "../modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
@@ -39,6 +41,7 @@ import {
 	getResolvedAsrcReason,
 } from "../streaming/auto-audio.ts";
 import { getEngineBitrateStatus } from "../streaming/engine-bitrate-status.ts";
+import { buildBondMapping } from "../streaming/link-mapping-report.ts";
 import {
 	buildLinkTelemetry,
 	type LinkTelemetryMessage,
@@ -72,7 +75,7 @@ export type StatusResponseMessage = {
 	update_state?: ReturnType<typeof getUpdateState>;
 	ssh?: ReturnType<typeof getCachedSshStatus>;
 	wifi?: ReturnType<typeof wifiBuildMsg>;
-	modems?: ReturnType<typeof buildModemsMessage>;
+	modems?: ReturnType<typeof buildModemsWireMessage>;
 	asrcs?: Array<keyof ReturnType<typeof getAudioDevices>>;
 	audio_sources?: AudioSource[];
 	resolved_asrc?: string | null;
@@ -82,11 +85,13 @@ export type StatusResponseMessage = {
 	set_password?: boolean;
 	remote?: true | { error: string };
 	linkTelemetry?: LinkTelemetryMessage | null;
+	bond_mapping?: BondMapping | null;
 	buffering?: BufferingStatus | null;
 	network_ingest?: NetworkIngest | null;
 	active_encode?: ActiveEncode | null;
 	engine_bitrate?: EngineBitrate | null;
 	preview_encoder_realized?: PreviewEncoderRealized | null;
+	cellular_initializing?: boolean;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -101,7 +106,7 @@ export function sendStatus(conn: WebSocket) {
 			update_state: getUpdateState(),
 			ssh: getCachedSshStatus(),
 			wifi: wifiBuildMsg(),
-			modems: buildModemsMessage(),
+			modems: buildModemsWireMessage(),
 			asrcs: Object.keys(getAudioDevices()),
 			audio_sources: deriveAudioSources(),
 			resolved_asrc: getResolvedAsrc(),
@@ -109,10 +114,12 @@ export function sendStatus(conn: WebSocket) {
 			resolved_asrc_candidates: getResolvedAsrcCandidates(),
 			pending_audio_follow_asrc: getPendingAudioFollowAsrc(),
 			linkTelemetry: buildLinkTelemetry(),
+			bond_mapping: buildBondMapping(),
 			network_ingest: getNetworkIngestInfo(),
 			active_encode: getActiveEncodeStatus(),
 			engine_bitrate: getEngineBitrateStatus(),
 			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
+			cellular_initializing: !getCellularStack().ready,
 		} satisfies StatusResponseMessage),
 	);
 }

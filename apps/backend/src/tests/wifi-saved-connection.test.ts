@@ -34,6 +34,7 @@ function makeInterface(id: number, ifname: string): WifiInterface {
 		hw: "Test Adapter",
 		available: new Map(),
 		saved: {},
+		savedAll: {},
 	};
 }
 

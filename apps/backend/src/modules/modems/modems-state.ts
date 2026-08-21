@@ -23,6 +23,7 @@ import type {
 	SimLockRequired,
 } from "./mmcli.ts";
 import type { ModemStatus } from "./modem-registration.ts";
+import type { SimPresence } from "./sim-presence.ts";
 
 export type SimLock = {
 	required: SimLockRequired;
@@ -54,10 +55,42 @@ export type Modem = {
 		supported: Record<string, NetworkType>; // e.g. { '2g': '2g', '3g': '3g', '3g4g': '3g4g', '4g': '4g' }
 		active: string | null; // e.g. '3g4g'
 	};
+	/**
+	 * The UNFOLDED `(allowed, preferred)` catalog, as mmcli reported it.
+	 *
+	 * `network_type.supported` is keyed by the ALLOWED-SET label, so
+	 * `mmConvertNetworkTypes` keeps exactly one entry per label and discards every
+	 * other `preferred` the modem advertised for it. That fold is correct for the
+	 * coarse selector and destroys the one distinction the 5G-preference module
+	 * exists to offer — `allowed: 4g,5g; preferred: 5g` and `allowed: 4g,5g;
+	 * preferred: 4g` are one label. This is the same payload, unfolded.
+	 */
+	radio_modes?: {
+		supported: readonly NetworkType[];
+		current?: NetworkType;
+	};
 	is_scanning?: true;
 	inhibit?: true; // don't bring up automatically
 	config?: ModemConfig;
 	status?: ModemStatus;
+	/**
+	 * Whether ModemManager can SEE a card in this modem. Absent means the read
+	 * could not answer — never "no SIM"; see `sim-presence.ts`, which owns the
+	 * distinction between this and the presence of an NM connection profile.
+	 */
+	sim_presence?: SimPresence;
+	/**
+	 * The SIM's own number(s), as mmcli reported them. SENSITIVE — never logged.
+	 * Absent means the carrier published none, which is the ordinary case.
+	 */
+	own_numbers?: Array<string>;
+	/**
+	 * The SIM's ICCID, from the SIM object rather than the modem's own `-K`
+	 * payload — so a status refresh cannot re-read it and it is PRESERVED across
+	 * polls (like `config`, its sibling from the same read). A card swap
+	 * re-registers the modem, which is what replaces it.
+	 */
+	iccid?: string;
 	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
 	removed?: true;

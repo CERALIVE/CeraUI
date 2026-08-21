@@ -378,11 +378,55 @@ export function setScanRefreshAction(action: () => void | Promise<void>): void {
 	scanRefreshAction = action;
 }
 
-export async function wifiRescan() {
-	await nmRescan();
+/*
+  A rescan spawns `nmcli device wifi rescan`, and every nmcli process opens its
+  own connection to the SYSTEM D-Bus. `wifi.scan` is an RPC any client may issue
+  as fast as it likes, so an unguarded `wifiRescan` lets a caller spawn nmcli
+  without bound — and root's `max_connections_per_user` (256 by default) is a
+  DEVICE-WIDE resource, not this module's. Once it is exhausted, every nmcli on
+  the box fails `Could not create NMClient object`, which takes down WiFi
+  connect / disconnect / forget, the gateway election and the modem profile
+  writes with it. Measured on a Rock 5B+ (2026-08-19): 250-330 concurrent
+  `nmcli device wifi rescan` processes and a bus so saturated `busctl` itself
+  could not list names.
 
-	/* A rescan request will fail if a previous one is in progress,
+  The client that produced that storm has been fixed (CeraUI's own WiFi dialog
+  re-triggered its own periodic scan on every RPC round-trip), but the guard
+  stays: a device must not be knockable over by a repeated read RPC, whoever
+  sends it. Concurrent callers JOIN the in-flight run rather than yielding —
+  their intent ("refresh the scan results") is exactly what that run delivers,
+  so joining serves them without a second spawn. Same discipline as
+  `signalRecheckInFlight` in `modules/streaming/sources.ts`.
+*/
+let rescanInFlight: Promise<void> | null = null;
+
+/* Mirrors `setScanRefreshAction`: lets a test count spawns without an nmcli. */
+let rescanAction: () => Promise<unknown> = nmRescan;
+
+export function setRescanActionForTest(action: () => Promise<unknown>): void {
+	rescanAction = action;
+}
+
+export function wifiRescan(): Promise<void> {
+	rescanInFlight ??= runRescan().finally(() => {
+		rescanInFlight = null;
+	});
+	return rescanInFlight;
+}
+
+async function runRescan(): Promise<void> {
+	try {
+		await rescanAction();
+
+		/* A rescan request will fail if a previous one is in progress,
      but we still attempt to update the results */
-	await wifiUpdateScanResult();
-	wifiScheduleScanRefresh();
+		await wifiUpdateScanResult();
+		wifiScheduleScanRefresh();
+	} catch (err) {
+		// A shared promise must not reject: every joined caller would raise its own
+		// unhandled rejection for one failed scan. Both collaborators already
+		// degrade internally (nmRescan catches, wifiUpdateScanResult retries then
+		// returns), so reaching here is drift worth logging, never worth throwing.
+		logger.warn(`wifiRescan failed: ${err}`);
+	}
 }

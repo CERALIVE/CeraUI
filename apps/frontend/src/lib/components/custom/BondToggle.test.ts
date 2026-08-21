@@ -217,4 +217,56 @@ describe("BondToggle — osCommand composition (Task 20)", () => {
 		await fireEvent.click(sw); // toggle again (disable) — must not be blocked
 		await waitFor(() => expect(configure).toHaveBeenCalledTimes(2));
 	});
+
+	it("reserves the wider of the two state words, so the slot never resizes", async () => {
+		// WHY THIS IS A LAYOUT INVARIANT AND NOT A COSMETIC ONE: this control sits
+		// inside the Cellular row's `shrink-0` instrument cluster, to the RIGHT of
+		// the signal glyph — so every pixel this word gains or loses displaces the
+		// radio reading beside it. Measured on the bench board, `In Bond` and
+		// `Excluded` differ by 7px, which split the section's rows into two
+		// misaligned columns (the "some moved left, some right" report).
+		//
+		// jsdom computes no layout, so the pixel proof is the rendered-geometry
+		// gate in `tests/e2e/visual/router-signal.visual.spec.ts`. What is pinned
+		// here is the MECHANISM: both words are always in the DOM, in one grid
+		// cell, so the slot measures max(both) in ANY locale with no magic number.
+		const enabled = render(BondToggle, {
+			props: { name: "bondalign0", enabled: true },
+		});
+		const onSlot = enabled.getByTestId("bond-state-bondalign0");
+		const onWords = Array.from(onSlot.children).map((c) => c.textContent);
+		expect(onWords).toHaveLength(2);
+		expect(new Set(onWords).size).toBe(2);
+
+		// Every child occupies the SAME grid cell, which is what makes the slot
+		// size to the widest rather than to their sum.
+		for (const child of onSlot.children) {
+			expect(child.className).toContain("col-start-1");
+			expect(child.className).toContain("row-start-1");
+		}
+
+		// Exactly one is painted; the reserve is `invisible` (visibility: hidden,
+		// which still occupies layout) and hidden from assistive tech, never
+		// `hidden`/`display:none` — that would reserve nothing.
+		const reserve = Array.from(onSlot.children).filter((c) =>
+			c.className.includes("invisible"),
+		);
+		expect(reserve).toHaveLength(1);
+		expect(reserve[0]?.getAttribute("aria-hidden")).toBe("true");
+
+		// The two states render the SAME pair of words, in swapped roles — so the
+		// reserved width is identical whichever state a row is in.
+		const excluded = render(BondToggle, {
+			props: { name: "bondalign1", enabled: false },
+		});
+		const offSlot = excluded.getByTestId("bond-state-bondalign1");
+		const offWords = Array.from(offSlot.children).map((c) => c.textContent);
+		expect(new Set(offWords)).toEqual(new Set(onWords));
+
+		// The visible word still differs between the two states.
+		const visible = (slot: HTMLElement) =>
+			Array.from(slot.children).find((c) => !c.className.includes("invisible"))
+				?.textContent;
+		expect(visible(onSlot)).not.toBe(visible(offSlot));
+	});
 });

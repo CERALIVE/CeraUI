@@ -7,8 +7,8 @@ import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers";
 /**
  * Task 23 — SIM PIN unlock UI, end-to-end.
  *
- * Drives the REAL frontend SimUnlockDialog (auto-prompted by NetworkView when a
- * modem reports `sim_lock.required === 'sim-pin'`) against the dev backend, with
+ * Drives the REAL frontend SimUnlockDialog (opened from the locked modem's own
+ * row) against the dev backend, with
  * deterministic terminal states injected via the WebSocket harness:
  *   - a PIN-locked modem is injected by cloning a live mock modem and adding
  *     `sim_lock`, then re-broadcasting it via `dev.emit('modems', …)`.
@@ -101,13 +101,6 @@ function installWsHarness(): void {
 	w.WebSocket = HookedWS;
 }
 
-function emit(page: Page, type: string, payload: unknown): Promise<void> {
-	return page.evaluate(
-		([t, p]) => (window as any).__cera.emit(t, p),
-		[type, payload] as const,
-	);
-}
-
 /** Clone a live mock modem, stamp on a SIM lock, and re-broadcast it. The clone
  *  keeps every field the cellular UI renders, so only the lock state changes. */
 async function injectLockedModem(
@@ -178,8 +171,8 @@ test.describe("SIM PIN unlock UI (Task 23, dev.emit driven)", () => {
 			required: "sim-pin",
 			remainingAttempts: 3,
 		});
+		await page.getByTestId("open-modem-unlock-dialog").first().click();
 
-		// The dialog auto-prompts: PIN field + submit are present for the locked modem.
 		const input = page.getByTestId("sim-pin-input");
 		const submit = page.getByTestId("sim-pin-submit");
 		await expect(input).toBeVisible();
@@ -223,6 +216,7 @@ test.describe("SIM PIN unlock UI (Task 23, dev.emit driven)", () => {
 		});
 
 		await injectLockedModem(page, { required: "sim-pin", remainingAttempts: 3 });
+		await page.getByTestId("open-modem-unlock-dialog").first().click();
 
 		const input = page.getByTestId("sim-pin-input");
 		const submit = page.getByTestId("sim-pin-submit");

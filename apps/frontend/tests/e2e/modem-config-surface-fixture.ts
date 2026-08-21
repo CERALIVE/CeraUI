@@ -1,4 +1,5 @@
 import type { Page } from "./fixtures/index.js";
+import { openModemAdvanced } from "./helpers/modem-advanced.js";
 
 type ModemPatch = Record<string, unknown>;
 
@@ -133,11 +134,20 @@ export function targetModemKey(
 	}, modemIndex);
 }
 
-export function openTargetModemDialog(
+export async function openTargetModemDialog(
 	page: Page,
 	modemIndex: number,
+	modemKey?: string,
 ): Promise<void> {
-	return page.getByTestId("open-modem-config-dialog").nth(modemIndex).click();
+	const targetKey = modemKey ?? (await targetModemKey(page, modemIndex));
+	const row = page.locator(`[data-modem-id=${JSON.stringify(targetKey)}]`);
+	await row.getByTestId("open-modem-config-dialog").click();
+	const dialog = page.getByRole("dialog").first();
+	await dialog.waitFor({ state: "visible" });
+	// The USB-mode / usage / detail cards moved behind the dialog's "Advanced"
+	// disclosure at todo 64. Expanding it here keeps every caller's assertions
+	// pointed at the same rendered surface they were written against.
+	await openModemAdvanced(dialog);
 }
 
 export function patchModem(

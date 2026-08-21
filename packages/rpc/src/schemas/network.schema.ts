@@ -6,6 +6,75 @@ import { z } from 'zod';
 // Accepts dotted-quad IPv4 or a colon-delimited IPv6 hextet string.
 export const IP_ADDRESS_REGEX = /^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$/;
 
+// A claimed router-mode USB dongle's runtime state, as reported by the device
+// image's netns manager (image-building-pipeline `docs/dongle-netns-contract.md`
+// §6.1). `slot` is the manager's durable 0..7 slot; `state` is the claim's
+// lifecycle. Only the two fields an operator surface needs cross the wire — the
+// full metadata record (usb_path, MAC, lease addresses) stays device-side.
+export const dongleStateSchema = z.enum(['acquiring', 'up', 'down']);
+export type DongleState = z.infer<typeof dongleStateSchema>;
+
+export const dongleMarkerSchema = z.object({
+	slot: z.number().int().min(0),
+	state: dongleStateSchema,
+});
+export type DongleMarker = z.infer<typeof dongleMarkerSchema>;
+
+// A USB network interface the device has PROVEN, from its USB descriptors, to be
+// a router-mode cellular dongle (Huawei HiLink, ZTE MF79U and relatives): an
+// Ethernet tether with no modem control port, carried by hardware with positive
+// cellular evidence. It is deliberately independent of the `dongle` marker
+// above: that one reports the device image's netns claim, which does not exist
+// on every image, while this one only needs the descriptors the kernel already
+// publishes — so a dongle is labelled honestly whether or not netns isolation is
+// deployed.
+//
+// The interface NAME is never an input to this classification. Two physically
+// distinct HiLink units on this bench ship one factory MAC, so one is named
+// `enx0c5b8f279a64` and its twin falls back to `eth1`; a prefix rule would badge
+// one and miss the other.
+export const routerCellularMarkerSchema = z.object({
+	/** The device's own `manufacturer` string descriptor, verbatim. */
+	vendor: z.string().min(1),
+	/** The device's own `product` string descriptor, verbatim. */
+	model: z.string().min(1),
+	/** Lowercase `xxxx:xxxx` USB vendor:product — the SKU discriminator. */
+	vid_pid: z.string().min(1),
+	kind: z.literal('router-cellular'),
+	/**
+	 * Another router-cellular device present on this host reports the SAME
+	 * `vid_pid`. Same model ⇒ same factory LAN subnet and same factory DHCP
+	 * offer, so both lease the host colliding addresses. MEASURED from the
+	 * devices actually attached, never assumed from the model.
+	 */
+	duplicate_model: z.boolean(),
+	/**
+	 * The device's own serial, published ONLY alongside `duplicate_model: true`.
+	 *
+	 * Two units of one SKU are indistinguishable by vendor, model and `vid_pid`
+	 * alike, so this is the only fact that separates them on screen. Absent for a
+	 * lone device (nothing to separate it from) and for a device that publishes
+	 * no serial of its own — never fabricated. Additive-optional.
+	 */
+	serial: z.string().min(1).optional(),
+});
+export type RouterCellularMarker = z.infer<typeof routerCellularMarkerSchema>;
+
+// The interface is an MM-managed modem's OWN data function, classified from the
+// same USB descriptors. A modem whose data path is RNDIS gets a MAC-derived
+// `enx…` name, so no ifname prefix can recognise it and it otherwise renders as
+// a second, unexplained adapter for a device the Cellular section already owns.
+export const usbModemNetMarkerSchema = z.object({
+	/** Operator-facing vendor, resolved exactly as a router dongle's is. */
+	vendor: z.string().min(1),
+	/** Operator-facing model, resolved exactly as a router dongle's is. */
+	model: z.string().min(1),
+	/** Lowercase `xxxx:xxxx` USB vendor:product — the SKU discriminator. */
+	vid_pid: z.string().min(1),
+	kind: z.literal('modem-net'),
+});
+export type UsbModemNetMarker = z.infer<typeof usbModemNetMarkerSchema>;
+
 // Network interface entry schema
 export const netifEntrySchema = z.object({
 	ip: z.string().optional(),
@@ -27,6 +96,24 @@ export const netifEntrySchema = z.object({
 	// interval and therefore cannot be rendered as a rate. Additive-optional.
 	tx_bps: z.number().optional(),
 	rx_bps: z.number().optional(),
+	// RETRACTABLE, not latch-prone: an object marks this row as a claimed
+	// dongle's host veth, an explicit `null` RETRACTS that claim for one frame,
+	// and plain absence means "not a dongle" only for a row never marked.
+	// Publishing it true-only would repeat the `policy_route_missing` latch —
+	// the ingestion merge preserves an omitted optional field, so a marker could
+	// be raised and never lowered.
+	dongle: dongleMarkerSchema.nullable().optional(),
+	// RETRACTABLE on the same terms as `dongle`, and for the same reason: the
+	// ingestion merge preserves an omitted optional field, so a true-only marker
+	// could be raised and never lowered. An explicit `null` clears the claim for
+	// one frame WITHOUT dropping the row — unlike `dongle`, whose retraction is
+	// the row's final frame, this device stays present and merely stops being
+	// classified.
+	router_cellular: routerCellularMarkerSchema.nullable().optional(),
+	// RETRACTABLE on exactly the terms `router_cellular` is, and for the same
+	// latch reason. An explicit `null` clears the claim for one frame and KEEPS
+	// the row — the interface is still there, it merely stopped classifying.
+	usb_modem_net: usbModemNetMarkerSchema.nullable().optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 

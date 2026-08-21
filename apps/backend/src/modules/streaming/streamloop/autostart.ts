@@ -28,6 +28,7 @@ import { isUpdating } from "../../system/software-updates.ts";
 import { notificationBroadcast } from "../../ui/notifications.ts";
 import { broadcastMsg } from "../../ui/websocket-server.ts";
 import type { Pipeline } from "../pipelines.ts";
+import { awaitRecoveryBarrier } from "../recovery-barrier.ts";
 import { genSrtlaIpList, resolveSrtla } from "../srtla.ts";
 import {
 	classifyStartFailure,
@@ -59,6 +60,11 @@ export async function checkAutoStartStream() {
 }
 
 export async function autoStartStream(linkAttempt = 1): Promise<void> {
+	// Autostart records a failed result and never retries, so it is invoked only
+	// once modem-mutation replay has finished — a refusal here is not a deferral,
+	// it is the whole boot intent being discarded.
+	await awaitRecoveryBarrier();
+
 	if (getIsStreaming() || isUpdating()) {
 		logger.info("autostart aborted");
 		return;

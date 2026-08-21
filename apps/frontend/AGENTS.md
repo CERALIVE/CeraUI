@@ -129,7 +129,7 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   the typed host adapter. Shared graph code is split into sibling chunks
   co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-  (CalVer, `2026.7.2` at time of writing) — the single source of truth, matching the platform's
+  (CalVer, `2026.8.0` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **The catalog is STATIC here, not lazy.** The SPA splits its ten-locale Paraglide
   catalog into per-namespace chunks it awaits in `main.ts`; a federation bundle is
@@ -282,8 +282,31 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 - Bonded-links bandwidth is MEASURED, not stream-gated [EXISTS]: `LinkSignal` carries two different throughput quantities. `throughputKbps` is the stream-gated HUD value (0 while idle — Live-Data Discipline, T6, unchanged). `rateTxKbps`/`rateRxKbps` are the interface's measured per-second rates, derived from the backend's additive-optional `netif.tx_bps`/`rx_bps` and NOT gated on streaming, because they are re-read from kernel byte counters every netif tick and therefore self-zero instead of going stale. `main/network/BondedLinksSection.svelte` renders the measured rate (falling back to `throughputKbps` for a backend that predates the fields) and its consolidated `TOTAL BANDWIDTH` row shows the enabled links' aggregate ↑ and ↓ (`total-bandwidth-up` / `total-bandwidth-down`). The aggregation is the pure `lib/helpers/bond-bandwidth.ts` (`linkUpKbps`, `aggregateBondBandwidth`) — do not re-derive it inline. Before this, the card's only source was the stream-gated value, so per-link kbps and the total read `0 kbps` on every idle device. Backend contract: `apps/backend/AGENTS.md` → MEASURED INTERFACE THROUGHPUT.
 - A new `netif` field reaches the store ONLY if the ingestion allowlist names it [EXISTS]: `subscriptions.svelte.ts`'s `case "netif"` rebuilds each interface entry from an EXPLICIT per-field allowlist (`tp`, `ip`, `error`, `mac`, `same_subnet_group`, `policy_route_missing`, `tx_bps`, `rx_bps`) rather than spreading the incoming entry, because the `enabled` field must stay guarded by the dirty-field registry. So adding a field to `netifEntrySchema` and to every consumer is NOT enough — an unlisted field is silently dropped between the socket and `getNetif()`. This is exactly how the measured rates shipped fully green and still rendered `0 kbps` on hardware: `buildLinks` never saw `tx_bps`, so `linkUpKbps` fell back to the stream-gated `throughputKbps`. When you add a `netif` field, add it here too (spread-when-present, so a tick that omits it keeps the prior value) and cover it in `src/tests/netif-rate-ingestion.test.ts`, which drives the REAL ingestion handler — a unit test aimed at `buildLinks` sits downstream of this seam and cannot catch it. **The preserve-on-omission half of that rule cuts both ways: a field the backend publishes only when it is `true` can be raised here but NEVER retracted.** That latched the amber policy-route band in a live operator's session long after the condition cleared, so `policy_route_missing` is now emitted as an explicit `false` whenever the backend's check completed, and omission means only "no verdict this tick" (root `AGENTS.md` → NETWORK COLLISION SURFACING). When you add a netif field that can RECOVER, give it the same tristate on the producer side — do not "fix" it by making this merge drop omitted fields, which would break the genuinely-indeterminate case that preserve-on-omission exists for.
 - WiFi AP-vs-client rows [EXISTS]: `lib/helpers/wifi-mode-outcome.ts` `isApRadio(iface)` is the SINGLE frontend predicate for "is this radio broadcasting rather than associated" — it trusts the backend's authoritative `iface.mode` FIRST and treats a `hotspot` payload only as a pre-`mode` fallback. `WifiSection.svelte` and `NetworkView.svelte`'s `hotspotInterfaces` split both route through it, and an AP row never renders "Connected · <ssid>", the "In Bond" toggle, or "Connect". Deriving this from `Boolean(iface.hotspot)` alone rendered a broadcasting radio as a client connection. Backend contract: `apps/backend/AGENTS.md` → WIFI AP-vs-CLIENT CLASSIFICATION.
+- **Bonded Links is THE BOND, and presence in it is BINARY [EXISTS]**: a link either carries bonded traffic and has exactly one entry here, or it carries none and has no entry at all. There is no dimmed half-row and no `Excluded` badge — todo 42 shipped one, and the operator's verdict on the board was that a ghost row reads worse than an absent one, because the badge carried the word without the reason. Membership is `isBondMember(netifEntry)` (`lib/stores/hud/link-status.ts`), the frontend MIRROR of the backend's own `genSrtlaIpList()` (`modules/streaming/srtla.ts`): `enabled && ip`, error-free. Both halves of exclusion collapse into it — an operator's `enabled:false` and a device condition (`isBondExcluded`: no entry, no address, a netif `error`) both mean the link carries nothing, so both leave the panel. `buildBond()` returns `{links, unbondedCount}` and `deriveHudState` puts the count on `HudState.unbondedLinkCount`; the panel states it (`data-testid="bonded-links-not-bonded"`, copy `network.view.notBondedOne`/`notBondedMany`) so removing the rows never hides that those links EXIST, while the REASON stays owned by the per-device row that can actually explain it. Three rules are load-bearing. **(1) The sweep for non-wifi/non-modem links is keyed on MEMBERSHIP, never on an `eth*` name.** The retired prefix filter is the missing-link bug the user reported: this bench's ZTE MF79U bonds as `enx344b50000000` (`enabled:true`, `192.168.0.169`, no error — the BACKEND was bonding it) and rendered no entry at all, while its HiLink twin is named `eth1` only because the pair ships one factory MAC. It is the same defect todo 43 removed from device CLASSIFICATION, here in bond MEMBERSHIP; an isolated dongle's `dg<N>h` veth was equally invisible. **(2) A wifi/modem id is CLAIMED before the sweep runs**, so one interface can never render twice. **(3) Loopback is skipped on its ADDRESS, not its name** (`isLoopbackIpv4`) — belt-and-braces, since the backend already drops `lo`. Because every rendered link now carries traffic, `LinkSignal.bondExcluded` is DELETED rather than left structurally `false`. This filters at the state source, so `HudBar`/`BondConstellation` and this panel cannot disagree about how many links are bonded. Coverage: `hud.test.ts` (`isBondMember` + the `buildBond` block driven by the board's verbatim netif payload) and `BondedLinksSection.test.ts` ("binary presence (todo 48)").
+- **Two identical modems must not render as one anonymous pair [EXISTS]**: the bench twins ship ONE factory MAC, ONE factory LAN subnet and ONE model name, so both rows read `Huawei E3372 HiLink · CELLULAR` with nothing separating them — and, because the backend used to resolve a row's interface from the SHARED source address, both rows also pointed at the same interface and one showed no telemetry at all. `main/network/link-disambiguation.ts` (pure, rune-free) is the rule `BondedLinksSection` applies: `linkRowKey` keys each row on the backend's minted `link_id` (`conn_id` is a FILE POSITION, so a SIGHUP reload moves it and a position-keyed row follows the position rather than the modem), and `linkDisambiguation` renders `iface · port label · serial` beside the type label. Four properties are load-bearing. It renders **only for a label more than one row shares** (`ambiguousLinkLabels`) — stamping every link with its ifname is noise that makes the one case that matters harder to notice. The interface name comes from the ROW, not from telemetry, so twins stay separable **before the first telemetry frame arrives**. A **serial appears only when the device reported one** — todo 10 measured the HiLink twins publishing none, and one is never invented for them. And a part equal to the label it is disambiguating is dropped, so an `eth1`-labelled row never reads `eth1 · eth1`. Backend half: `apps/backend/AGENTS.md` → …AND A TELEMETRY ROW IS A PHYSICAL DEVICE. Coverage: `link-disambiguation.test.ts` + `BondedLinksSection.twins.test.ts`. **The 375px label-column collapse is FIXED (UI pass 3):** the row's label column used to measure 0 — the device NAME was squeezed out by the telemetry cluster, because every instrument beside it is `shrink-0` and the identity column's `flex-1` (basis 0) made it the only thing in the row that could absorb a squeeze. The card now WRAPS (`flex-wrap`), the identity column carries a real basis (`flex-[1_1_8rem]`), and the trailing instruments travel as ONE wrapping group so a wrap cannot strand the speed badge away from its telemetry. Do NOT restore `flex-1` on the identity column and do NOT re-flatten the instrument group. Gated by `modem-a11y.spec.ts` → "at 375, 768, 1280 and the kiosk viewport", which asserts the label column's WIDTH (the text always rendered; only its box collapsed, so a visibility assertion passes on the broken tree); reverting the component reproduces `label column measured 0px`.
+- **The bind-map degradation band [EXISTS]**: `main/network/bond-mapping-band.ts` (pure) chooses copy for the ONE normalized disposition the backend publishes as `status.bond_mapping`, and `CollisionBands.svelte` renders it as a third band. `mapped` is the ONLY silent state; the three degraded dispositions say genuinely different things (`retained_last_valid` — both twins still running on the last valid mapping; `startup_collision_excluded` — names the colliding address and its `BIND_IPS_FILE` LINE positions, and refuses to claim WHICH physical twin survived; `legacy_unique_only` — unique links are bonded normally). The sender's machine-readable `reason` is resolved to keyed copy (`network.collision.bindMapReason.*`, 7 tokens × 10 locales) and NEVER rendered raw. It never infers a degradation from an absent field — that inference is how "two modems, one bonded link, no explanation" happened. `NetworkView` passes `getStatus()?.bond_mapping ?? null`, and the stop edge in `subscriptions.svelte.ts` clears it, because the status merge preserves an omitted field. Coverage: `CollisionBands.bondMapping.test.ts`.
 - BondedLinks-owns-telemetry rule [EXISTS]: `main/network/BondedLinksSection.svelte` is the documented SOLE owner of live per-link telemetry (RTT/NAK/weight) on the Network destination. The per-interface WiFi/Cellular/Ethernet section rows do NOT render their own signal-%/speed-Badge telemetry clusters — that would duplicate numbers already shown once, correctly, in `BondedLinksSection`. Do not re-add per-link numbers to the per-interface sections.
 - Link-local (169.254/16) address clarity (plan Todo 52) [EXISTS]: the wired control port on a CeraLive device ALWAYS carries an automatic `169.254.x.x` link-local address — the shipped image sets `ipv4.link-local=3` on `eth0` (`/etc/NetworkManager/conf.d/ceralive.conf`) so the device stays reachable at its `.local` name even without DHCP. `ifconfig` reports that address FIRST, so the backend netif scan (`network-interfaces.ts`, first-`inet`-match) surfaces it as the interface `ip`; to an operator it looks like a stuck / hardcoded static IP that "cannot be cleaned" (it re-appears on every reconnect because it is OS-managed, NOT a saved CeraUI config — CeraUI persists no static IP here). This is a UX/labelling issue, NOT a persistence bug. `lib/helpers/ip-classification.ts` `isLinkLocalIpv4(ip)` is the single source of truth; `main/network/EthernetSection.svelte` renders a calm `Badge variant="info"` (`data-testid="netif-link-local"`) + hint (`netif-link-local-hint`) next to such an address, and `main/dialogs/NetifDialog.svelte` (a) does NOT seed its "Static IP" field with a link-local address (blank = DHCP, so it never looks like a saved static config) and (b) shows a calm info notice (`netif-link-local-notice`). Copy: `network.view.linkLocal`/`linkLocalHint` + `settings.dialogs.linkLocalNotice` (10 locales). Never gate an interface or stream on this — it is informational only.
+- Router-mode cellular dongles live in the CELLULAR section, not Ethernet (todo 53) [EXISTS]: a todo-43-classified dongle (`netif.router_cellular`) is rendered as a `router-ethernet` modem row by `main/network/CellularSection.svelte`, and `main/NetworkView.svelte` drops it from `wiredEntries`. The rule is the pure `main/network/section-assignment.ts` (`isWiredSectionEntry`/`modemClaimedIfnames`) so it is testable without mounting the view, and it is **CLAIM-based, not marker-based**: the row leaves Ethernet only once a modem row actually NAMES that interface. `netif` and `modems` are independent broadcasts on different cadences, so dropping it on the marker alone would hide the device in the window before its modem row exists — trading a duplicated row for a disappeared one. `EthernetSection`'s router-cellular badge is therefore still live and still correct; it is the pre-claim state, not dead code. A dongle this stack reaches DIRECTLY (`availability_reason: "router_direct"`) owns a WORKING bond toggle — it has no veth row to defer to, and the bench ZTE is a bond member — so `bondDisabledReasonKey` returns `routerManagedLink` only for the netns case. The row's configuration surface is the backend's `modem.router_admin` reading: an ordered fact strip (`router-admin-facts`, one segment per field the DEVICE reported — SIM, connection, `signal_bars/max`, APN, serial) plus a note STATING the dongle's own admin address. The address is **stated, never linked**: it lives on the dongle's own network, which the operator's browser is not on, so an anchor would be a control that cannot work (todo 47's exact lesson). A field the dongle did not report renders NO segment — never a zero, never a dash that reads like a reading. The serial is the one field that separates two units of the same model, which this bench has a pair of. Copy: `network.routerCellular.*` (10 locales). Coverage: `CellularSection.routerCellular.test.ts`, `section-assignment.test.ts`. Backend contract: `apps/backend/AGENTS.md` → …AND IT IS LISTED AS A MODEM, WITH THE ONLY SURFACE IT REALLY HAS.
+- Isolated-dongle row (modem-stack Phase B) [PARTIAL — never rendered against a real dongle]: a `dg<N>h` row is the HOST side of a veth pair into a claimed router-mode USB dongle's own network namespace, marked by the backend's retractable `dongle: {slot, state}` netif field. `main/network/EthernetSection.svelte` renders TWO micro `Badge`s on such a row — the identity (`netif-dongle`, "Cellular dongle · isolated", the isolation explained in its `title`) and the lifecycle (`netif-dongle-state`, `data-dongle-state`). Because an `acquiring`/`down` dongle's veth is administratively down and address-less by the runtime contract, it structurally cannot carry bonded traffic, so its `BondToggle` is DISABLED and the reason is surfaced BOTH as the control's accessible name (`disabledReason` → tooltip + `aria-label`) AND as an on-screen line (`netif-dongle-blocked-hint`) — a kiosk touchscreen cannot hover to reveal a tooltip. An `up` dongle's veth DOES carry an address and IS bondable, so its toggle stays live: do not blanket-disable a dongle row. Each state carries its own WORD and its own GLYPH (`Check`/`Hourglass`/`CircleAlert`), so colour is only reinforcement; everything is static/CSS-only and therefore e-ink-freeze safe. **`size="micro"` alone cannot size a COLOURED badge** — `Badge` composes through `cn()`/tailwind-merge, which does not recognise the custom `text-micro` utility and files it under text-COLOUR, so the `text-status-*` class that follows silently wins and the badge falls back to the inherited 16px; the row passes the same token as a typed arbitrary value (`text-(length:--text-micro)`) to land it in the font-size group instead. That Badge-level defect is app-wide (every `size="micro"` status badge) and is NOT fixed here. Copy: `network.dongle.*` (10 locales). Coverage: `EthernetSection.dongle.test.ts`, incl. a shape-golden lock proving a plain wired row is unchanged (`__fixtures__/ethernet-plain-row.shape.txt`, serialized by `__fixtures__/element-shape.ts`). Backend contract: `apps/backend/AGENTS.md` → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND.
+- A dongle is named CELLULAR from its descriptors, not from the netns layer [EXISTS]: the row above needs the device image's netns manager, and no shipped image runs it — so on every board in the field a router-mode cellular dongle rendered as an anonymous row under "Ethernet". The backend now classifies it from the USB descriptors the kernel already publishes and stamps `router_cellular` on the netif entry; `EthernetSection.svelte` renders it. **The interface NAME is never part of that decision**, and this bench is why: its two Huawei HiLink units are physically distinct devices sharing ONE factory MAC, so one is named `enx0c5b8f279a64` and its twin falls back to `eth1` — an `enx*` rule badges one and misses the other. Four elements, in this order: the badge (`netif-router-cellular`, "Cellular (Router Mode)", `RadioTower` glyph, `data-vid-pid`, the concept explained in its `title`); the unit's own identity on the SAME line (`netif-router-cellular-identity`, mono, `{vendor} {model} · {vid:pid}` — an exact vendor/model duplicate collapses to one, because this bench's Huawei publishes `HUAWEI_MOBILE` for both and printing it twice is noise rather than honesty); an ALWAYS-visible line naming where the address came from (`netif-router-cellular-address-note` — the dongle's own DHCP server, which is the one thing an operator will otherwise try to change and cannot, and a `title` is unreachable on the kiosk touchscreen); and, ONLY when the backend has MEASURED a same-model sibling attached (`duplicate_model`), an amber `role="status"` collision band naming the model (`netif-router-cellular-collision`). The band is amber, never destructive: nothing is broken, this is factory-fixed LAN addressing and it is the exact defect the netns isolation layer exists to remove — it is also what finally explains the dup-IP exclusion the operator could previously only read as an unexplained "Off". `router_cellular: null` retracts the CLAIM but KEEPS the row (unlike `dongle`, whose `null` is the row's last frame) — `subscriptions.svelte.ts` deletes the field and leaves the entry. Copy: `network.routerCellular.*` (10 locales); the identity line carries no i18n string because device strings and hex ids are data, not translatable copy. Coverage: `EthernetSection.routerCellular.test.ts` (the real bench topology, the badge-regardless-of-name assertion, the identity dedup, the pair-vs-lone collision table, glyph-and-word, the retraction rendering as a plain row, and the untouched-neighbour shape lock). Backend contract: `apps/backend/AGENTS.md` → "…AND IT IS NAMED CELLULAR WITHOUT WAITING FOR THAT LAYER".
+- …and the identity it renders is a real MODEL, not a device class [EXISTS]: nothing changed in this component for it, which is the point — the identity line and the collision band both read `{model}` off the SAME `router_cellular` marker, so giving the backend a better name fixed both surfaces at once. Board-verified: both HiLink rows went from `HUAWEI_MOBILE · 12d1:14dc` to `Huawei E3372 LTE/UMTS/GSM HiLink Modem/Networkcard · 12d1:14dc`, and the band from "Another HUAWEI_MOBILE is attached" to the real model. The existing vendor/model dedup still fires for any device that publishes one string for both descriptors and has no `usb.ids` model to recover. Do NOT add a frontend rename map or a name-cleaning pass here — the resolution is a backend rule, exactly like `ONBOARD_VIDEO_DISPLAY_RULES`. Backend contract: `apps/backend/AGENTS.md` → "…AND A DONGLE THAT NAMES A CLASS IS GIVEN ITS REAL MODEL".
+- …and a device that names a CLASS is never named BY that class [EXISTS]: nothing changed in this component for that either — the identity line and the collision band both read `{model}` off the same `router_cellular` marker, and the Cellular row reads `modem.name`. Board-reported (2026-08-17): two Qualcomm reference RNDIS sticks (`05c6:9024`) publish `Android` for BOTH string descriptors, so both rows were titled **`Android`**. The backend's fallback chain now ends at the bare product id rather than re-printing the measured-generic string, and `RouterCellularMarker.serial` (additive-optional, published ONLY alongside `duplicate_model: true`) is what separates two units of one SKU — a lone device and a device that publishes no serial both get none, and none is invented. Do NOT add a frontend rename map or a name-cleaning pass; the resolution is a backend rule. Backend contract: `apps/backend/AGENTS.md` → "…AND A DONGLE THAT NAMES A CLASS IS GIVEN ITS REAL MODEL".
+- An MM-managed modem's data function is NOT a second device [EXISTS]: `usb_modem_net` marks a net interface whose USB device the classifier called `mm-managed` — ModemManager's, and therefore the Cellular section's. It exists because an RNDIS data path is named after its MAC, so `isWiredSectionEntry`'s `ww`/`wl` prefix tests cannot reach it: board-confirmed (2026-08-17), the Fibocom FM350-GL was fully represented as a modem AND rendered a bare, addressless second Ethernet row `enx000011121314`. `isWiredSectionEntry` now moves a row to Cellular when a modem row CLAIMS it (ModemManager names its own net port, and `modem-registration.ts` already reads that field) AND the row carries a cellular-device marker — `router_cellular` or `usb_modem_net`. **Both halves are load-bearing**: the claim alone would let a modem row naming an ordinary NIC take the board's management link off the list, and the marker alone would hide the device in the window before its modem row exists (the two broadcasts are independent). Nothing is hidden — the Cellular row is a strictly richer representation of the same device — and during the handover window `EthernetSection` NAMES the row from the same descriptors (`netif-modem-net` badge + `netif-modem-net-identity`) and states which modem it belongs to on screen (`netif-modem-net-note`, never only in a `title` — a kiosk touchscreen cannot hover). `null` retracts and KEEPS the row, exactly like `router_cellular`. Coverage: `section-assignment.test.ts`, `EthernetSection.modemNet.test.ts`. Backend contract: `apps/backend/AGENTS.md` → "…AND AN MM-MANAGED MODEM'S DATA FUNCTION IS NOT A SECOND DEVICE".
+- The interface address is REPORTED, never edited [EXISTS]: `main/dialogs/NetifDialog.svelte` (the Ethernet row's "Configure") shows the observed address plus WHERE it came from, and offers no address input at all. It used to carry a "Static IP address" field; board-measured, saving a different address toasted "Saved" and changed nothing — `ip -br addr` byte-identical, the NetworkManager profile still `ipv4.method: auto`, no journal line — because the backend has NO apply path for an address on any interface kind. The field was also destructive: a save that ALSO flipped the bond toggle was discarded whole by the backend's `int.ip !== msg.ip` echo guard, so the operator saw "Saved" over an unchanged row. Three rules. The save now ECHOES `iface.ip` so that guard reads as the concurrency check it is and cannot be tripped (an address-less interface still omits the field). The source line is classifier-driven and reuses todo 43's marker off the SAME `iface.router_cellular` the row badge reads — a dongle's address gets the row's OWN sentence verbatim (`network.routerCellular.addressNote`, no second key to drift), a 169.254/16 address gets `addressLinkLocal` and keeps its existing notice, everything else gets `addressFromDhcp`. And the value is deliberately UNBOXED (bare label-over-value, no border, no fill): a filled bordered value on a dialog with a Save button reads as a DISABLED text field, i.e. as an edit that could be unlocked, which is the same lie one step quieter. Do NOT re-add an address input before the backend has an apply path. Copy: `settings.dialogs.address{,None,FromDhcp,LinkLocal}` (10 locales; the four `staticIp`/`dhcpHint`/`ipInvalid`/`ipPlaceholder` keys were retired with the control). Coverage: `NetifDialog.address.test.ts` (the no-editable-control regression lock + the per-kind source table), `NetifDialog.linklocal.test.ts`, `NetifDialog.test.ts`. Backend contract: `apps/backend/AGENTS.md` → "THE INTERFACE ADDRESS IS REPORTED, NOT SET".
+- EVERY cellular device gets a row, and an uncontrollable one is DIMMED-WITH-A-REASON, never hidden (modem-stack Phase B, todo 26) [PARTIAL — never rendered against real cellular hardware]: `main/network/CellularSection.svelte` renders ONE calm summary row per device off the Wave-4 additive wire fields (`device_class`, `availability_reason`, `slot_label`), and `main/network/cellular-row.ts` is the pure, rune-free derivation behind it. Three classes share the row: `mm-managed` (`usb`/`pcie-mhi`/`pcie-mtk`/`soc-qrtr`, and an ABSENT `device_class` — the pre-Phase-B wire came from mmcli only, which lists nothing else), `router-ethernet`, and `unmanaged` for a transport this build does not recognise. The badge vocabulary is `docs/MODEM-SUPPORT-MATRIX.md` §1's, verbatim. Six rules are load-bearing:
+  1. **An unrecognised `device_class` resolves to `unmanaged`, never to a known band** — the honest generic row, not a guess. Likewise an unrecognised `availability_reason` never becomes `router-up`: a lifecycle claim drawn from a token we could not read is the fabrication the backend refused to make when it omitted the dongle's status block.
+  2. **`availability_reason` is a wire-stable machine token and is NEVER rendered raw** — `router_managed` / `dongle_acquiring` / `dongle_down` are keyed to copy (the last two REUSE `EthernetSection`'s existing sentences: same physical device, second surface, so the two must not describe it differently), and an unknown token resolves to a generic sentence. Every resolver returns an i18n DOT-PATH KEY, resolved at the component through `resolveMessageKey`.
+  3. **No control is ever removed, and none is bare.** The bond toggle renders on EVERY row — a modem with no address keeps it, disabled-with-reason, where the pre-redesign row simply omitted it and made "cannot bond" indistinguishable from "not a bonding candidate". A `router-ethernet` row's toggle is disabled even when `up`: its veth already owns a LIVE toggle on its own `EthernetSection` row, and two live controls for one link is how they disagree. Configure is disabled-with-reason for `router-ethernet`/`unmanaged` rather than opening a dialog with nothing in it.
+  4. **Reasons are DE-DUPLICATED into at most two lines** (`rowNoteKeys`). A router dongle's Configure reason is deliberately the SAME key its `router_managed` availability token resolves to, so the two collapse instead of restating one fact twice — rendered naively the row grew three sentences saying two things, which reads as a wall rather than as an instrument.
+  5. **Absence renders as absence.** A device that reported no `status` draws NO signal glyph; an empty meter reads as "no signal" on a dongle carrying traffic. The glyph itself is a qualitative tier with a word behind it — no digits, no `data-live-value` — so it does NOT re-add the per-row telemetry `BondedLinksSection` owns and T20 removed.
+  6. **The state dot is `self-start mt-1.5`, not centred** — a row with note lines is tall, and a vertically-centred dot floats away from the name it reports on. Every state carries its own WORD and GLYPH; colour is only reinforcement.
+  Copy: `network.cellular.*` (20 keys × 10 locales). Coverage: `cellular-row.test.ts` (the pure tables) + `CellularSection.test.ts` (the rendered state table — mm-managed healthy/registering/locked, router up/acquiring/down, unrecognised transport — plus the 44px touch-target, never-a-dotted-key and never-a-raw-token locks). **Known app-wide gap, NOT fixed here:** `app.css`'s `[data-layout-mode='touch']` 44px lift lists `[data-slot='button']` but not `[data-slot='switch']`, so every `BondToggle` switch measures 18px in touch mode across the WiFi, Ethernet and Cellular sections alike — an app-wide change, out of this row's scope.
+- …and the row now answers FOUR questions inline, not ten (todo 64) [EXISTS]: ten todos each deposited one fact on that row and nobody ever removed one. Measured on the bench board with its real seven-device roster, the Cellular section was **864 px** tall: an `MM-managed`/`Router-ethernet` class pill on all seven rows, a `·`-joined inventory strip carrying APN + firmware + IMEI + serial, and a 140-character sentence about a web interface the operator's browser is not on — repeated verbatim four times. The one line that mattered, "The carrier doesn't allow service in this area for this SIM.", was the shortest thing on screen. The row now splits: **PRIMARY** is WHICH device (`modem-name`, `modem-slot-badge`), WHAT it is doing (`modem-state-badge`, `modem-carrier-badge`, `modem-lock-badge`, `modem-roaming-badge`), HOW the radio is (`modem-signal`), and WHY it is not working (every `modem-note`); **SECONDARY** is one per-row disclosure (`modem-details-toggle` → `modem-details-body`) holding `modem-class-badge` + its now-VISIBLE hint, `modem-detail`, `router-admin-facts` and `router-admin-note`. Four rules are load-bearing. **(1) The reason lines DO NOT fold.** Every one of them is also a disabled control's reason, and rule 3 above requires those on screen because the shipped kiosk touchscreen cannot hover to reveal a tooltip — folding them would trade a real honesty invariant for pixels. **(2) The roaming badge DOES NOT fold**, but nothing else about roaming is inline: it renders only while the modem is ACTUALLY roaming, i.e. only while money is being spent, which is the definition of relevant. **(3) The body stays MOUNTED and goes `inert` while collapsed** — none of it is sensitive (unlike the SMS inbox, whose `{#if}` gate is a privacy property), so keeping it in the DOM makes it one paint away instead of one fetch away, and `inert` is what stops a keyboard operator tabbing into a zero-height panel they cannot see. Do NOT swap `inert` for `aria-hidden`: that hides the subtree from AT while leaving it focusable, which is the axe `aria-hidden-focus` violation rather than a fix for it. **(4) The reveal is the todo-39 CSS `grid-template-rows: 0fr → 1fr`, never a JS transition** — a JS transition compiles to the Web Animations API and escapes BOTH global motion freezes. Copy: `network.cellular.details.toggle` (10 locales). Coverage: `CellularSection.density.test.ts` (the ancestry-based primary/secondary matrix, the reachability lock proving every moved reading is still rendered, per-row independence, distinct body ids, and the 44 px touch target). NOTE for tests: jsdom implements `inert` as a property but never reflects it to an attribute, so assert `el.inert`, never `hasAttribute("inert")`.
+- …and a router dongle's OWN signal is a SECOND instrument, never ModemManager's (Phase-C todo 21) [EXISTS]: a `router-ethernet` row has no `status` block and never will, so it drew no signal glyph at all — "attached with a strong radio" and "attached with no SIM in it" were the same empty row. `main/network/router-signal.ts` (pure, rune-free) reads todo 20's normalized model off `modem.router_admin.signal` and answers `undefined` | `no-sim` | `reading` | `unknown` + reason; `CellularSection` renders it as `modem-router-signal`, inline with the state/carrier/lock badges, plus a per-metric strip (`router-signal-detail`) in the row's existing disclosure. **Six rules are load-bearing.** **(1) PROVENANCE IS CARRIED FOUR WAYS**, because a `title` is unreachable on the shipped kiosk touchscreen: position (badge row vs the MM glyph's instrument column), frame (dashed border + `Router` mark vs a bare glyph), `data-provenance`, and a prose sentence rendered ON SCREEN in the strip. One row can never draw both — the chip is guarded on `signal === undefined` and BOTH directions are asserted. **(2) A TIER IS A RATIO of the device's own scale**, never a raw bar count: 3-of-4 is `high` and 3-of-5 is `medium`, which is why `max_bars` rides the wire beside `bars`. **(3) `none` ("No signal") IS REACHABLE ONLY FROM A DEVICE-STATED ZERO bar count** — a published dBm figure, however weak, is a measurement that was taken, so any known dBm floors at `low`. Getting this wrong reports a working UFI (whose ONLY metric is dBm) as dead. **(4) AN `unsupported` METRIC RENDERS ABSENT, never a dash** — a `—` reads as "the radio reported nothing" when the truth is "this vendor's API has no such field", so the HiLink strip has no `SNR` row, the ZTE strip no `SINR` row, and the UFI strip exactly one. Every OTHER unknown reason renders the metric NAME plus its own word. **(5) A NON-READING IS A WORD** (`No SIM` / `Dongle didn't answer` / `Session refused` / `Unreadable reply` / `Not reported`), and there is deliberately NO spinner: a 30 s poll that has not answered is `not-reported`, a fact rather than a wait. **(6) A CARRIED-OVER READING KEEPS ITS VALUE AND LOSES ITS COLOUR** — todo 20 carries one cycle's last LIVE value so a missed poll does not blank the row, so it renders muted with a visible `Last known` word; the e2e asserts the RENDERED `getComputedStyle(el).color` live-vs-stale rather than a class name, which a CSS regression would walk straight through. The legacy `signal_bars`/`signal_max_bars` segment is SUPPRESSED when the model is present (the schema says it supersedes them) and kept when it is absent. The lifecycle badge is deliberately NOT overwritten for a SIM-less dongle: `router_direct` means the host holds a routable address (true) and `No SIM` is a fact about the radio, so collapsing them loses one — the same reasoning as the todo-46 `modem-lock-badge`. Copy: `network.routerCellular.signal.*` (15 keys × 10 locales; RSRP/RSRQ/SNR/SINR stay verbatim in every locale, and the tier words REUSE `network.cellular.signal.*`). Coverage: `router-signal.test.ts`, `CellularSection.routerSignal.test.ts`, `tests/e2e/visual/router-signal.visual.spec.ts` (desktop / 1024×600 kiosk / mobile). Backend half: `apps/backend/src/tests/router-cellular-wire.test.ts` → "the normalized signal reaches the wire, and only as itself".
+- …and its NETWORK MODE is a DISCOVERED capability, and the catalog it names is WRITABLE (Phase-C todo 22, Stages A+B) [EXISTS]: `netModeCapability` (`main/dialogs/router-dongle-fields.ts`, pure) resolves `router_admin.capabilities.net_mode` for `RouterDongleDialog.svelte` into either CHIPS (the firmware's own catalog, the in-use one marked with a WORD as well as colour) or an already-resolved REASON sentence — the bench unit's `112008` refusal reaches the operator naming `112008`, rather than as the blank surface it used to be. **`NetModeView.selectable` is the gate, and it is exactly "the capability read came back `reported`"** — the SAME condition the device re-applies in the write's own cycle before it builds any request document, so the offer and the write cannot disagree about what this dongle will discuss. In the REPORTED arm the chips are buttons that dispatch `modems.setRouterNetMode`; in the refusal arm there is no button, input, select or switch of any kind, which is asserted against the RENDERED DOM because absence has no syntax to grep. Three further rules: the mode the device is ALREADY on is rendered `disabled` (a control for the state you are in is a no-op dressed as a choice — the `LiveSourceSwitch` rule), APPLY IS PESSIMISTIC (nothing is assigned on resolve; the chip re-reads `capabilities` from the broadcast the backend sent after PROVING the write, so a refused change leaves the DEVICE's current selection marked), and a `capability_unavailable` refusal renders the firmware's own code rather than a CeraLive euphemism. The four non-refusal reasons REUSE `network.routerCellular.signal.reason.*`, so one dongle never explains an unreadable session two different ways. Copy: `network.routerCellular.netMode.*` (7 keys × 10 locales). Coverage: `RouterDongleDialog.capability.test.ts`. Backend half: `apps/backend/AGENTS.md` → …AND THE HiLINK CAPABILITY IS DISCOVERED BEFORE ANYTHING IS OFFERED, and → …AND THE WRITES IT GATES ARE STAGE B. **There is deliberately NO operator control for the LAN-subnet rewrite** — that RPC exists, capability-gated and journaled, but its auto-restore has never been exercised on hardware, and a button that can strand a dongle is the unproven control this surface refuses.
+- …but the KEY SET is authoritative, and that is a different rule from the field one (todo 53) [EXISTS]: the bullet above is about FIELDS — an entry legitimately omits an optional field, so the previous value is preserved per key. It is NOT about KEYS. `netIfBuildMsg()` is the only `netif` producer and it walks the whole interface map, and `buildModemsMessage()`/`projectModemWire()` likewise emit an entry for EVERY device (`modemsFullState` narrows what an entry CONTAINS, never which ids appear). Both merges used to seed themselves from the previous map, so a key the backend stopped publishing was never removed. **Proven on the bench:** downing `eth1` removed it from the wire while the UI went on rendering it at `192.168.8.100` — a link that no longer existed, still advertising an address. The mirror case is the one the operator reported: a modem row resolves its address by `netif[modem.ifname]`, so a modem id that outlived its hardware kept rendering an `ifname` no interface answers to, and said "No address yet, so this link can't join the bonding pool" about a device that was simply gone. The bench dongle pair makes that reachable in normal use — one factory MAC between them means they rename against each other (`enx0c5b8f279a64` ↔ `eth1`) on every replug. Both merges now build from the INCOMING key set and read the previous value per key, so preserve-on-omission is untouched and the ghost is impossible. Do NOT "simplify" this back to seeding from the previous map, and do not confuse it with the field rule above: dropping omitted FIELDS would break the genuinely-indeterminate case; dropping absent KEYS is what stops a dead device from speaking. Coverage: `src/tests/netif-modem-staleness.test.ts` (drop, re-add, empty frame, the field-preservation control, and the removed-modem→no-false-no-address case).
+- A BOOTING cellular stack is a STATE, not an empty list (modem-stack Phase B, todo 28) [EXISTS]: while the composition root has not committed a backend, every `modems.*` procedure answers the typed `CELLULAR_STACK_INITIALIZING` and the roster is legitimately empty — so `CellularSection`'s "No SIM cards detected" was a claim the device could not make. `NetworkView` reads `getStatus()?.cellular_initializing === true` (STRICTLY `=== true`: absent is an older backend, not an initializing one) and passes it as `cellularInitializing`; the section renders a calm `role="status"` band (`data-testid="cellular-initializing"`, copy `network.cellular.initializing{Title,Body}`) and, while it is up, SUPPRESSES the empty-state sentence. Three rules: the band is NOT gated on an empty roster (a partially-populated list during the window still needs explaining), the prop DEFAULTS to `false` so every existing mount and test is byte-identical, and the backend publishes the flag as an EXPLICIT boolean on every status frame — the frontend status merge preserves an omitted field, so a true-only flag could be raised and never lowered (the `policy_route_missing` latch). Backend contract: `apps/backend/AGENTS.md` → THE CELLULAR SUBSYSTEM. Coverage: `CellularSection.test.ts` → "the cellular stack is still initializing" (band, roster-independence, the absent-flag control, and the retraction) + `tests/e2e/truthfulness.spec.ts`.
 - relay.validate mock seam [EXISTS]: `relay.validate` in `apps/backend/src/rpc/procedures/relay.procedure.ts` runs ordered stages (`input` → `protocol` → `endpoint` → `dns` → `probe`). The `dns` and `probe` stages are stubbed by the mock seam (`shouldUseMocks()` gate in `apps/backend/src/mocks/providers/relay.ts`) so tests can exercise the full pipeline without real DNS or UDP reachability. See `apps/backend/AGENTS.md` for the mock subsystem contract.
 - Plain-SRT / RIST roadmap [EXISTS]: plain-SRT egress requires three layers (capability advertisement, real `srtAdapter`, `startStream` protocol branch). Full spec: [`../../docs/RECEIVER_MODEL.md`](../../docs/RECEIVER_MODEL.md). Tracked as `TD-plain-srt-egress` in [`../../docs/TECHNICAL_DEBT.md`](../../docs/TECHNICAL_DEBT.md). The `ServerDialog` reserved-SRT affordance carries `data-debt-id="TD-plain-srt-egress"` — do not remove it until all three layers land.
 - Device Health strip recorder (Settings → Device group) [EXISTS]: a READ-ONLY instrument — `main/dialogs/DeviceHealthDialog.svelte` is a thin AppDialog shell and `main/dialogs/device-health/DeviceHealthPanel.svelte` is the panel, split so the telemetry graph is read only while the operator is looking at it (SettingsView mounts every dialog permanently, and AppDialog renders children only when open — a `$derived` in the shell would subscribe on every Settings render). Four bands: now strip → trace field → encoder → power rails. Zero mutating controls, so the header close button is the whole interaction surface. **The right edge of the trace is wall-clock `now`, never the last sample** — a feed that stops does not freeze, it falls behind the playhead and leaves a widening void, which is staleness rendered as geometry rather than as a badge. Trace math is the pure, rune-free `lib/components/custom/health-trace-view.ts` (mirrors `ingest-link-view.ts`: fixed user-space `viewBox`, `preserveAspectRatio="none"`, `vector-effect="non-scaling-stroke"`, memoised per lane on the samples-buffer reference PLUS the clock tick — the right edge is genuinely part of the geometry). Rings + the 1 s playhead live in `lib/stores/device-health-history.svelte.ts`, initialised app-wide from `main.ts` (NOT on dialog open — a ring that started filling on open shows a blank instrument at the moment history is needed) and reading the EXISTING `subscriptions.svelte` getters, never a second `onMessage` owner. No chart library; GSAP drives one transform-only `repeat:-1` "paper advancing" tween under the `BondConstellation` guard set (matchMedia + e-ink `frozen` bail + `killTweensOf` before `revert()`). **A pen lift never eases in** — softening an absence is the visual form of the lie the panel exists to prevent.
@@ -305,9 +328,18 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 - The fan is a DUTY CYCLE with four honest states, and `absent` is a positive claim [EXISTS]: `lib/system/fan-status.ts` (pure `deriveFanState` / `fanDutyFraction`) renders `@ceraui/rpc` `fanSchema`, ingested by `subscriptions.svelte.ts` as `getFanSnapshot()` — the SAME single-`onMessage` owner, mirroring `getEncoderLoadSnapshot()`; do not add a second consumer. `running` shows `n %` + a filled bar, `off` shows `0 %` + an EMPTY bar (a MEASURED zero is a real reading and must never render as "no reading"), `absent` shows the words "No fan" plus a sentence (hiding the tile would make "this board has no fan" indistinguishable from "this build has no fan feature"), and `unknown` shows the WORD `unavailable` — all four states are words, none is a mark. An absent snapshot is `unknown`, never `absent`: the collector is `isRealDevice()`-gated, so a dev host publishes nothing and that silence IS the seam (no `import.meta.env.DEV` branch). **Never name or infer a speed.** The board's fan is 2-wire with no tachometer, so no `RPM`/`r/min`/"revolutions" may appear in any of the ten locales, in copy or in a `title` — `src/tests/no-rpm-copy.test.ts` sweeps `settings.deviceStats.*` and proves its own detector against planted violations. Do NOT derive a percentage from `cur_state`/`max_state` either (an index into a devicetree table, not a fraction of airflow); the frontend consumes `FanReading.dutyPercent` as the backend already computed it, and nothing else.
 - `HEALTH_COMPACT_QUERY` (`$lib/layout`) is a THREE-WAY coordination point [EXISTS]: the recorder's shorter two-lane geometry, the now strip collapsing its secondary lines into ` · ` fragments, and AppDialog's footer being dropped must pivot together or the panel scrolls on the 1024x600 kiosk touchscreen, which is a hard product requirement it must not do. Measured on the real surface: 510px dialog, 81px header, **77px footer**, leaving 352px of body for 451px of content — the footer alone was 77 of the 99px overflow, and it holds nothing but a second Close button on a panel with zero actions. The header's close button is already lifted to the 44px touch target by `app.css` under `data-layout-mode='touch'`.
 - E2E Testing: REQUIRED reading before writing E2E tests → [`tests/e2e/PLAYBOOK.md`](tests/e2e/PLAYBOOK.md)
-- Accessibility gate [EXISTS]: `tests/e2e/a11y.spec.ts` (`@axe-core/playwright`) runs axe on the live/network/settings destinations and gates CI on `critical` + `serious` impact only. Pre-existing violations are baselined per-page in `tests/e2e/a11y-baseline.json` (a rule-id allowlist) so the gate fails only on a NEW critical/serious rule — never on day-one debt. The current baseline is `color-contrast` (the spectral `--link-*` ramp on small mono labels + dev-only nav tabs); fixing it is a design-system-wide change, out of the gate's scope. Refresh the baseline with `UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop -g "axe gate"` (writes the allowlist + `test-results/task-7-a11y-baseline.json`, never fails); a normal run writes `test-results/task-7-a11y-gate.json`. The dedicated CI step is `Accessibility gate` in `build-check.yml`; the broad Functional E2E run grep-inverts `@a11y` to avoid double-booting.
+- Accessibility gate [EXISTS]: `tests/e2e/a11y.spec.ts` (`@axe-core/playwright`) runs axe on the live/network/settings destinations and gates CI on `critical` + `serious` impact only. Pre-existing violations are baselined per-page in `tests/e2e/a11y-baseline.json` (a rule-id allowlist) so the gate fails only on a NEW critical/serious rule — never on day-one debt. The current baseline is `color-contrast` (the spectral `--link-*` ramp on small mono labels + dev-only nav tabs); fixing it is a design-system-wide change, out of the gate's scope. Refresh the baseline with `UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop -g "axe gate"` (writes the allowlist + `test-results/task-7-a11y-baseline.json`, never fails); a normal run writes `test-results/task-7-a11y-gate.json`. The dedicated CI step is `Accessibility gate` in `build-check.yml`; the broad Functional E2E run grep-inverts `@a11y` to avoid double-booting. `runAxe(page, { include })` optionally SCOPES the run to selectors — a per-surface gate needs it, because the page-level run is baselined and therefore cannot express an absolute zero for one new surface.
+- Modem-surface a11y gate (modem-stack Phase B todo 29; extended to `DESIGN.md` Pass 3) [EXISTS]: `tests/e2e/modem-a11y.spec.ts` covers the cellular rows + the modem dialog with **seven** PASS/FAIL legs — scoped axe, a focus-trap + keyboard-only USB-confirm walk, an `ar`-locale RTL containment sweep asserted by `getBoundingClientRect()` (never a screenshot review), the same containment in the base locale at 375/768/1280 + the 1024x600 kiosk for rows AND dialog (BP-1…BP-3), the eight non-base catalogs at 375 (LO-1…LO-5), a `prefers-reduced-motion` leg (RM-1…RM-4), and a touch-target inventory (TT-1…TT-5). **The CI step's `a11y.spec.ts` filter is a path REGEX, so `modem-a11y.spec.ts` matches it as a substring and runs in that same job with no workflow change** — do not rename this file to something that stops matching.
+  **The containment probe itself now lives in `tests/e2e/helpers/modem-containment.ts`** (`probeContainment` / `expectContained` / `probeDialogOverflow` / `settleDestination` / `MANDATORY_BREAKPOINTS`), moved there VERBATIM in UI pass 4 so this gate and the pass-4 capture below measure the SAME §4/§5 contract. Do not re-inline it into either spec — a containment rule that exists twice can disagree with itself, which is the reason pass 3 wrote it as one probe in the first place.
+  Four measurement rules in that file are load-bearing and must not be "simplified":
+  **(1) Every probe SETTLES first.** `NavigationRenderer` flies the destination in with a `delay`, so a probe taken right after `navigateTo` catches `destination-content` translated ~287px and reports the whole page as overflowing. Awaiting `document.getAnimations()` alone does NOT cover it — Svelte registers that animation after the element is already in the DOM at its translated start, so an early snapshot sees an empty set. Arrival is asserted from the RENDERED position, then the animation set is drained (excluding infinite ones, or the skeleton pulses hang the gate forever).
+  **(2) Reduced motion is read from COMPUTED style on the live tree**, never from the stylesheet — the disclosures animate `grid-template-rows`/`visibility` via component-level utilities that `app.css`'s media block does not author. Flipping the emulation to `no-preference` reddens it, which is how the leg is kept non-vacuous.
+  **(3) Touch separation compares only CO-REACHABLE pairs** — same surface (an open dialog is its own layer above a modal scrim) and each control must win the hit test at its own centre (a control scrolled under the sticky dialog header still reports a box there). Both filters removed phantom findings; neither can hide a control a finger can reach.
+  **(4) LO-4 asserts a state badge's WIDTH, not its text.** Tofu and a dropped glyph both collapse the box while the text still reads back, so a text assertion passes on a locale that renders nothing. Two deviations are pinned as EXACT SETS so they redden in BOTH directions (a fix must update the pin; a new regression grows the set): (1) axe `color-contrast` on the semantic `Badge` palette — `text-status-<tone>` on a 10%-alpha `bg-status-<tone>` tint of the same hue trips the rule on EVERY status pill in the app (`netif-link-local`, the SourceSection pills and `AudioDialogContent` all predate wave 5 and use the identical pair), so this is the already-baselined app-wide token debt, not this effort's, and repairing it means re-toning `--status-*` app-wide; the gate additionally asserts every row's state badge carries a WORD and a GLYPH, so the palette can never be the sole carrier of a state. (2) `app.css`'s `[data-layout-mode='touch']` lift enumerates `[data-slot='button']`, the two alert-dialog actions and the nav tabs — but NOT `[data-slot='switch']` (measured 18.4px) or `[data-slot='select-trigger']` (measured 32px), while every lifted button measures exactly 44px. Todo 26 diagnosed the switch half; this gate found the select-trigger half.
+- `@visual` modem evidence [EXISTS]: `tests/e2e/visual/modem-ux.visual.spec.ts` captures the cellular state table, the initializing band, the dialog cards and the dongle rows at desktop / **1024×600 kiosk (in `?mode=touch`, applied at NAVIGATION — setting `data-layout-mode` after load measures the pre-lift geometry)** / mobile. The PNGs are evidence, never the check: every criterion is asserted. Two assertions replace eyeball work — the three USB-mode terminals (`provisioning-disabled` / `uncertified` / `transition_failed`) are proven pairwise distinct in TEXT and in non-colour STRUCTURE (role, gate attribute, whether an actionable control is offered at all), and the three dongle lifecycle states are proven to draw three different glyphs by comparing rendered SVG geometry rather than a class name. Both hold with colour removed, which is the property todo 28 asked this gate to close.
+- `@visual` **`DESIGN.md` pass-4 confirmation** [EXISTS]: `tests/e2e/visual/modem-pass4.visual.spec.ts` is the CONFIRMING round for the modem surfaces — it introduces no rule and changes nothing under `src/`. It walks eight state classes (`roster` · `no-sim` · `initializing` · `dialog-primary` · `dialog-advanced` · `capability-absent` · `capability-unknown` · `capability-offered`) at 375/768/1280 in `en`, at those widths again in `ar` (RTL) and `ja` (CJK), and on the 1024×600 kiosk in touch layout — **62 PNGs** into the gitignored `test-results/design-pass4/34/` (Rule D). A fifth leg asserts the set is complete ON DISK, because the stop condition says the screenshots must EXIST. Every capture is gated first by the shared containment probe, by IH-1 re-measured in pass 1's own selector vocabulary (`STATE_SIGNAL_ACTION` + `[data-hardware-tag]`), by row reachability, by dialog-box containment, and by a raw-token scan over operator text with the marked diagnostics subtrees removed BY SELECTOR. Three rules in it are load-bearing: **(1)** the viewport is set BEFORE a surface is staged, never resized under an open dialog — `AppDialog` swaps a centred Dialog for a bottom Sheet at the breakpoint, so a mid-capture resize produces a shot belonging to neither. **(2)** The reachability probe scrolls to the viewport CENTRE (the `sticky top-0` header owns the top 56px, and `scrollIntoViewIfNeeded` counts an element beneath it as visible) and accepts any hit inside the SAME row (the shadcn button base carries `disabled:pointer-events-none`, so a disabled control structurally cannot answer a hit test and its fall-through lands on its own row — a dock or scrim is not inside the row and still reddens). **(3)** The fixture publishes `cellular_initializing: false` on EVERY frame, because the status merge preserves an omitted field and a raise-only flag would latch the initializing band over every later capture. Note that an element screenshot of a taller-than-viewport section RE-COMPOSITES the fixed mobile dock into each stitched tile, so the PNG shows it crossing the roster where nothing on screen does — that is a capture artifact, and the reachability probe is what settles it mechanically.
 - Skip-to-content + live telemetry [EXISTS]: `MainView.svelte` renders the skip link as the first focusable element (`sr-only focus:not-sr-only`, `href="#main-content"`) and `<main>` carries `id="main-content" tabindex="-1"` as its target. `HudBar.svelte` exposes a DEBOUNCED polite live region (`<span role="status" aria-live="polite" data-testid="hud-telemetry-status">`, `TELEMETRY_ANNOUNCE_DEBOUNCE_MS=1500`) announcing a concise `state · bitrate · link-count` summary — raw HUD values tick too fast to announce each. Exactly one `HudBar` mounts at a time (the MediaQuery `{#if}` in `MainView`), so there is no duplicate live region. Skip-link copy: `a11y.skipToContent` (all 10 locales).
-- Async OS-operation optimism [EXISTS]: `lib/rpc/async-operation.svelte.ts` is the keyed status-domain transient layer for OS-mutating commands (WiFi connect/disconnect/forget/scan, mode switch, modem scan/configure, SIM PIN/PUK, hotspot start/stop/configure, SSH, software-update START, network-ingest enable/disable). It is a SIBLING of `streaming-optimism.svelte.ts` and `field-sync-state.svelte.ts` — NOT a replacement. Use `osCommand()` (same module) for every in-scope OS dispatch; it owns the re-entry guard, the `beginOperation`/`failOperation`/`confirmOperation` lifecycle, and the single failure-feedback path. `osCommand` also takes a `silent?: boolean` option (live-correctness-pass Todo #20) — suppresses the failure toast but still transitions the op to `failed`, so a calm inline band driven by the phase can still render; used by `WifiSelectorDialog`'s periodic background rescan (`{ silent: true, confirmOnResolve: true }`). `NetifDialog.save()` and `BondToggle.toggle()` deliberately share ONE `osCommand` resource key (`` `netif:${name}` `` — never split) so the two surfaces refuse each other's concurrent mutation as a cross-surface race guard. When to use: status-domain OS commands that are fire-and-forget (confirm via authoritative broadcast) or synchronous (use `confirmOnResolve`). When NOT to use: config-field writes (use `field-sync-state`), streaming start/stop (use `streaming-optimism`), netif enable/disable (use dirty-registry/BondToggle), power/reboot (direct raw-rpc). G4 status-field exclusion applies: status fields (`ssh`, `wifi`, `modems`, …) must NOT enter the dirty-registry — the async-operation transient layer is the correct approach for them. `initAsyncOperations()` MUST run at startup (in `main.ts`, beside `initSubscriptions()` and `initFieldSyncState()`).
+- Async OS-operation optimism [EXISTS]: `lib/rpc/async-operation.svelte.ts` is the keyed status-domain transient layer for OS-mutating commands (WiFi connect/disconnect/forget/scan, mode switch, modem scan/configure, SIM PIN/PUK, hotspot start/stop/configure, SSH, software-update START, network-ingest enable/disable). It is a SIBLING of `streaming-optimism.svelte.ts` and `field-sync-state.svelte.ts` — NOT a replacement. Use `osCommand()` (same module) for every in-scope OS dispatch; it owns the re-entry guard, the `beginOperation`/`failOperation`/`confirmOperation` lifecycle, and the single failure-feedback path. `osCommand` also takes a `silent?: boolean` option (live-correctness-pass Todo #20) — suppresses the failure toast but still transitions the op to `failed`, so a calm inline band driven by the phase can still render; used by `WifiSelectorDialog`'s periodic background rescan (`{ silent: true, confirmOnResolve: true }`). `NetifDialog.save()` and `BondToggle.toggle()` deliberately share ONE `osCommand` resource key (`` `netif:${name}` `` — never split) so the two surfaces refuse each other's concurrent mutation as a cross-surface race guard. When to use: status-domain OS commands that are fire-and-forget (confirm via authoritative broadcast) or synchronous (use `confirmOnResolve`). When NOT to use: config-field writes (use `field-sync-state`), streaming start/stop (use `streaming-optimism`), netif enable/disable (use dirty-registry/BondToggle), power/reboot (direct raw-rpc). G4 status-field exclusion applies: status fields (`ssh`, `wifi`, `modems`, …) must NOT enter the dirty-registry — the async-operation transient layer is the correct approach for them. `initAsyncOperations()` MUST run at startup (in `main.ts`, beside `initSubscriptions()` and `initFieldSyncState()`). **`osCommand` MUST NOT be called bare from an `$effect` body — `untrack` it.** It READS the op store (`isOperationPending`, its re-entry guard) and WRITES it (`beginOperation`) before its first `await`, so in Svelte 5 an effect that calls it synchronously becomes a SUBSCRIBER of the operation it dispatches: `confirmOnResolve` flips `pending → confirmed` on resolve, the effect re-runs, the now-not-pending guard admits a NEW dispatch, and its `begin` re-dirties the effect. The cadence becomes the RPC round-trip, not the timer sitting next to it. Board-measured on a Rock 5B+ (2026-08-19): `WifiSelectorDialog`'s 22 s silent rescan fired ~50 `wifi.scan` per second, spawning 250-330 concurrent `nmcli device wifi rescan` on the device and exhausting root's D-Bus `max_connections_per_user=256` — after which every nmcli on the box failed `Could not create NMClient object`, including the backend's own WiFi disconnect (`conn down`) and forget (`conn del`). That is the operator-reported "forgetting a network or disconnecting from a network is not working", and it ran exactly while the dialog they use for both was open. Every OTHER `osCommand` call site is in an event handler; keep it that way, and if an effect must dispatch, `untrack` it. Coverage: `WifiSelectorDialog.periodic-scan.test.ts`.
 - Unified update state machine + truthful failed-update UX (#184, #185) [EXISTS]: `UpdatesDialog.svelte` derives its Update button and in-progress state from the unified `update_state` machine, NOT the legacy `available_updates` field. **A start attempt now always ends somewhere visible (device-quality-wave2):** the dialog latches the outcome of the last `startUpdate` dispatch in its OWN `$state` rather than reading the async-op phase — that phase decays to `idle` after `ASYNC_OP_TERMINAL_LINGER_MS`, which is exactly how a refused start used to vanish. `osCommand` is called with `silent: true` (the sanctioned inline-band pattern) and the device's typed reason (`updates_disabled` / `streaming` / `already_updating` / `check_unavailable`, see `apps/backend/AGENTS.md` → SOFTWARE-UPDATE START CONTRACT) is rendered in a standing `update-start-refused` band; a start the device accepted but never reported progress for is called out by name, and `update_state.kind === 'success'` renders an explicit `update-succeeded` panel. **The full-screen `updating-overlay` is mounted globally by `Layout.svelte` off `status.updating` alone — it is trigger-agnostic and always was**, so Settings → Software Updates and the notification path show the identical percentage/phase/step counts; a live report that read as "the overlay only appears from the notification path" was really the start never firing. Locked by `Layout.updating-overlay.test.ts`. Do not make the overlay mount conditional on which surface started the update. The other legacy behaviour it replaced — a spec that injects only `available_updates` leaves `update_state` idle and the Update button never renders (both desktop update e2e specs now drive `update_state`). **The CHECK button reports that it ran (device-quality-wave2).** Clicking "Check for updates" used to change NOTHING observable for 11 s on a real board while the device's own log proved the check ran and succeeded in 1.8 s. The dialog cancelled its own spinner: it latched completion on "the state is no longer `checking`", and `checking` sits BELOW `available` in the state machine, so a device that already knows about an update never publishes a `checking` frame — the condition was already true on the first flush after the click. Completion is now latched on a NEW `checked_at` (stamped by every completed cycle regardless of which state it lands in), the up-to-date summary carries a `update-last-checked` line so a successful no-change check is distinguishable from a dead button, `check_failed` renders a typed `update-check-failed` band (`refresh_failed` / `discovery_failed`) INSTEAD of the old false "System is up to date", and a device that declines to run the check at all renders its typed reason in `update-check-refused`. Do NOT re-latch the spinner on a `checking` transition, and do NOT treat `check_failed` as `failed` — the latter is an install that ran and failed. Backend contract: `apps/backend/AGENTS.md` → SOFTWARE-UPDATE CHECK CONTRACT. Coverage: `UpdatesDialog.check.test.ts`.
 
 The persistent updating overlay previously derived ONE `isComplete` boolean from `details.result !== undefined` and unconditionally fired the green success toast + checkmark. `details.result` is a NUMBER (`0` = success) **or** a STRING (the apt failure message the update loop broadcasts before clearing state), so a genuinely failed update rendered "Successfully Updated" — the truthfulness bug behind the live report "updates are not working when I press update". The overlay now discriminates the numeric-zero success from the string-failure terminal and renders the failure message; update notifications additionally carry an action descriptor (#183) so the failure is actionable rather than a dead toast.
@@ -321,6 +353,787 @@ The persistent updating overlay previously derived ONE `isComplete` boolean from
 - HUD accessibility [EXISTS]: `HudBar.svelte` gives each telemetry badge (bitrate, per-link signal, SoC temp/voltage/current) an `aria-label` (`role="img"`) carrying the current value AND its staleness state, so assistive tech reads the same degradation the dimming conveys. A SECOND debounced polite region (`data-testid="hud-transition-status"`) announces only critical transitions — stream started/stopped, a bonded link dropping — edge-detected against the prior render (kept separate from the per-tick `hud-telemetry-status` summary). No visual/layout change; the 5-signal contract is untouched. Copy: `hud.announceStreamStarted/Stopped`, `hud.announceLinkDropped`. The HUD a11y assertions live in `tests/e2e/a11y.spec.ts` (the dedicated CI a11y gate).
 - Long-running dialog feedback [EXISTS]: `dialogs/LogsDialog.svelte` tracks a per-log `downloading`/`failed` state — the row button shows an in-flight spinner (`advanced.downloading`) and a failed download renders a calm inline amber retry band (`data-testid="log-download-error"`, `advanced.downloadFailed` + `advanced.retryDownload`) that re-invokes the same download, instead of a bare toast. `dialogs/WifiSelectorDialog.svelte`/`WifiNetworkList.svelte` already disable the Scan button + show `wifi-scan-status` while a scan op is `pending` (async-operation phase). Both use EXISTING async-op state — no new backend events. Covered by `LogsDialog.test.ts` + `WifiNetworkList.test.ts`.
 - Production-readiness signals [EXISTS]: `helpers/disk-warning.ts` (`isDiskLow`) DERIVES a low-disk warning from the EXISTING device-stats `disk` signal (NOT a sixth signal) at a FIXED `< 512 MiB` free floor (strict `<`: 512 MiB does not warn, 511 does); `custom/LowDiskBanner.svelte` renders a calm `role="status"` band in `SettingsView.svelte` that opens the Logs dialog. `dialogs/SimUnlockDialog.svelte` surfaces the remaining PUK retries (`sim-puk-attempts`, from the existing SIM status `pukRetries`), warns at ≤ 2, and disables submit at 0 (`pukExhausted`). Copy: `settings.deviceStats.lowDiskTitle/lowDiskBody/lowDiskAction`. Boundary + gating covered by `disk-warning.test.ts` + `SimUnlockDialog.test.ts`.
+
+## A SIM-LESS LINK CANNOT BE TOGGLED INTO THE BOND, ON EITHER MODEM CLASS [EXISTS]
+
+The two modem classes report an empty SIM slot through DIFFERENT wire fields —
+ModemManager's `no_sim` for a directly-managed radio, the dongle's own admin API
+as `router_admin.sim` for a `router-ethernet` unit — and `bondDisabledReasonKey`
+only ever read the first. So the same physical condition forced one class's
+toggle off and left the other's live and freely toggleable.
+
+Board-reported: of four SIM-less router dongles, two showed **In Bond** and two
+**Excluded**, and the two that were excluded were excluded by an unrelated rule
+(the Huawei pair shares one factory LAN subnet, so `NETIF_ERR_DUPIPV4` had
+already disabled them). Three outcomes, one condition.
+
+- **`isSimlessModem(modem)` (`main/network/cellular-row.ts`) is the row's answer**,
+  and it delegates to `@ceraui/rpc` `isSimlessForBond` — the SAME rule the device's
+  own bond gate applies. That sharing is the point: an offering the device refuses
+  and a refusal the device does not apply are both lies. Do NOT re-derive it from
+  `modem.no_sim` at a render site.
+- **…AND `ModemConfigDialog` READS THAT SAME FUNCTION (Phase-C todo 14) [EXISTS].**
+  It carried the last surviving second copy — `modem.no_sim === true ||
+  modem.status?.signal == null` — and both halves of it were wrong. The MISSING
+  half is `router_admin.sim`, so the dialog could not see a SIM-less dongle at
+  all. The EXTRA half is the one an operator meets: a signal reading is a fact
+  about the RADIO, not about the slot, so a modem holding a good SIM that had
+  not reported a signal yet — one searching, or refused by the network, which is
+  exactly when an APN is worth checking — had its whole configuration fieldset
+  disabled and drew the shared "No SIM" tag over a populated slot, contradicting
+  the row behind it. A modem with no `status` block still cannot crash the
+  render: the shared rule reads both fields optionally and answers `false` on
+  absence, which is its positive-evidence-only posture. Coverage:
+  `ModemConfigDialog.noSim.test.ts` — the delegation is proven by forcing the
+  row's predicate to answer AGAINST the wire fields and asserting the dialog
+  follows it (a faithful copy cannot, because it never asks), the parity table
+  compares rendered output to `isSimlessModem` across both classes and all three
+  dongle verdicts, and a comment-stripped source gate gives the "no second copy"
+  claim a mechanism instead of a promise. Rule-E proof: restoring the retired
+  copy reddens 11 of its 15 tests.
+- **The device is authoritative, and the UI agrees with it rather than substituting
+  for it.** The backend lowers `enabled` and stamps `NETIF_ERR_NOSIM`, so the link
+  leaves `genSrtlaIpList()` AND leaves `BondedLinksSection` on the next state read
+  with no operator action. The disabled toggle is the honest RENDER of that, not
+  the enforcement — a frontend-only fix would have left the dongle bonded.
+- **`unknown` never gates.** An unreachable dongle or an unjustifiable SIM code
+  leaves the toggle live, matching the device's own positive-evidence-only rule.
+
+Coverage: `CellularSection.routerCellular.test.ts` → "a SIM-less dongle cannot be
+toggled into the bond" (the pure verdict, the DISABLED toggle rendered against a
+netif entry that still reads `enabled: true`, "Excluded" rather than "In Bond",
+and the unknown-slot negative). Backend half: `apps/backend/AGENTS.md` → "…AND A
+SIM-LESS ONE NEVER JOINS THE BOND".
+
+## …AND THE "No SIM" TAG IS ONE COMPONENT [EXISTS]
+
+`lib/components/custom/NoSimBadge.svelte` is the ONLY "No SIM" tag. It replaced
+three: the directly-managed modem's lifecycle badge
+(`network.cellular.state.noSim`), the router dongle's router-signal chip
+(`network.routerCellular.simAbsent`), and the config dialog's banner, which led
+with a `SignalZero` glyph that appeared nowhere else. An operator comparing a
+SIM-less modem against a SIM-less dongle on one screen saw two colours, two icons
+and two words for one fact.
+
+- **The TAG is shared; the surrounding COPY is not.** A dongle keeps its "runs its
+  own router" explanation and a modem keeps its "cannot bond" reasoning — those
+  describe genuinely different devices. Only the pill is unified, so it cannot
+  drift again. Do not unify the explanatory text.
+- **Placement still differs, and that is deliberate.** A directly-managed modem
+  COLLAPSES no-SIM into its lifecycle badge (`resolveRowState` returns `no-sim`),
+  so the tag occupies that slot and keeps `data-testid="modem-state-badge"`. A
+  dongle's lifecycle badge is deliberately NOT overwritten — `router_direct` means
+  the host really does hold a routable address — so it carries the tag as a second
+  pill. The collapse decides WHERE the badge sits, never what it looks like.
+- **The PREDICATE behind the tag is shared too, as of Phase-C todo 14.** Unifying
+  the pill left the config dialog still deciding for itself WHEN to draw it, so
+  the same fact could still wear one face in two places — and did. See the
+  `isSimlessModem` bullet in the section above.
+- Every instance carries `data-no-sim="true"`.
+
+Coverage: `CellularSection.noSim.test.ts` — the two classes rendered in ONE
+section and compared against EACH OTHER (word, resolved `data-status-badge` tone,
+and SVG geometry, so an icon swap cannot pass), plus the "unifying the tag did not
+flatten the two classes" block.
+
+## …AND THE BADGE BESIDE IT REPORTS A LINK, NOT A CONNECTION [EXISTS]
+
+A `router-ethernet` row's lifecycle badge said **"Up"**, in the `live` register,
+behind the same `Check` glyph `connected` draws. It has only ever described the
+USB-Ethernet link the dongle presents to the board — layer 2, the one thing this
+stack can observe about a device whose whole class definition is that the modem
+inside it is unreachable. Read as a claim about the path, it contradicted the
+pill next to it: board-measured, all four bench dongles rendered a green `Up`
+beside `No SIM`. The operator's report is the specification — *"we could have
+Ethernet connection, but it doesn't mean that we are connected. That kind of
+collision in consistencies give a really bad UI UX."*
+
+- **The word NAMES what is up** — `network.cellular.state.routerLinkUp` ("Link
+  up"), in the class hint's own vocabulary ("the device sees it as an Ethernet
+  uplink"). It no longer borrows `network.dongle.stateUp`: those keys belong to
+  the `dg<N>h` veth row in `EthernetSection`, a different link on a different
+  surface. `router-acquiring`/`router-down` still share them — neither word can
+  make the promise this removes.
+- **The tone is `ready`, for the reason `registered` is.** `live` is the register
+  the BOND is drawn in, and phosphor-lime beside a `No SIM` pill is the colour
+  half of the same contradiction. It is NOT a claim of trouble: a good local link
+  with nothing yet behind it is exactly the resting-healthy state. Whether the
+  link carries bonded traffic stays `BondedLinksSection`'s question.
+- **The glyph is `EthernetPort`, not `Check`.** Sharing `connected`'s tick left
+  the two states differing by one word; the row now separates them by word,
+  colour AND shape.
+- **The SIM never changes this badge.** The link is a fact about the wire, the
+  SIM a fact about the radio behind it — a SIM-less and a SIM-bearing dongle read
+  IDENTICALLY here, and the `No SIM` pill beside it carries the difference.
+  Collapsing the two is what made one pill contradict the other.
+
+**…and the Configure refusal names WHY, in its own words.** The gating is
+UNCHANGED — Configure is refused exactly when `router_admin.controls` is absent,
+i.e. when no write to this dongle was ever proven to land. What changed is that
+the refusal stopped borrowing the generic `routerManaged` availability sentence:
+board-measured, two Huawei rows with WORKING Configure and a ZTE and a Qualcomm
+with REFUSED Configure all printed the identical "manages this connection
+itself", so the row answered every "why not this one?" the same way.
+`network.cellular.reason.routerControlsUnverified` states the real reason and
+still points at the dongle's own web interface. Because it CONTAINS the generic
+sentence's content, `rowNoteKeys` SUPERSEDES rather than stacks
+(`SUPERSEDED_NOTE_KEYS`) — the row keeps its two-line ceiling, and a verified
+dongle's generic line is untouched. Do NOT re-merge the keys to "save a
+translation": the distinction IS the answer to the operator's question.
+
+Coverage: `cellular-row.test.ts` ("the router link-state badge names the LINK…",
+the `configureDisabledReasonKey` distinctness block, and the `rowNoteKeys`
+supersede table) + `CellularSection.routerCellular.test.ts` ("the router link
+badge reports a LINK, not a connection", and the verified-vs-unverified two-row
+comparison). Live board evidence:
+`.omo/notepads/modem-phase-c-quality/evidence/session-amendment-router-badge-clarity.md`.
+
+## A DONGLE'S OWN WEB UI IS NOW REACHABLE, AND THE LINK CARRIES AN IDENTITY [EXISTS]
+
+The Cellular row and `RouterDongleDialog` used to STATE a dongle's admin address
+with an explicit note that it is not reachable from this page — correct at the
+time, because the operator's browser is not on the dongle's network. The backend
+now carries that page through CeraUI's own origin, so both surfaces gained an
+"Open dongle admin UI" button (`open-router-admin` on the row,
+`dongle-open-admin` in the dialog) and the copy that said the address was
+unreachable is retired.
+
+- **The button carries the ROW ID, never the address** (`data-device`). The bench
+  twins share one factory address, so an address-keyed link would open whichever
+  of the pair the kernel picked; the id resolves backend-side to an INTERFACE.
+  Pinned by a test that renders both twins and asserts the rendered markup
+  contains no `192.168.8.1` at all.
+- **A NEW TAB, not an iframe, and that is measured.** The bench E3372 answers
+  `X-Frame-Options: deny` and the ZTE `sameorigin`, so neither would render
+  embedded. The proxy strips those headers from what IT serves — a dongle must
+  not dictate framing policy for the device's origin — but embedding a whole
+  vendor SPA inside the control plane is a separate decision that was not made.
+- **THE TAB IS OPENED IN THE GESTURE, AND NEVER WITH `noopener`.** A popup
+  blocker only trusts a `window.open` inside the user gesture, so it is opened
+  BEFORE the RPC is awaited and navigated once the device answers (or closed
+  again on a refusal, so nothing strands a blank tab). `noopener` makes
+  `window.open` return `null` BY SPEC — found in a real browser, where the
+  operator's own tab navigated away to the dongle and took the Network page with
+  it. The opener link is severed immediately after instead, which costs nothing:
+  the proxied page is served from CeraUI's OWN origin, so it is same-origin
+  either way and `noopener` was never what governed it. A genuinely blocked popup
+  still falls back to a same-tab navigation rather than doing nothing.
+- **It lives in the row's DETAILS disclosure**, beside the admin note it acts on,
+  because todo 64 made `router-admin-note` secondary and a new primary-row button
+  would undo that density work. It renders for every `router-ethernet` row that
+  has a `router_admin` block — INCLUDING an unreachable one, since the address is
+  a routing fact and the last read may simply have been busy.
+- **A refusal is rendered, never swallowed**: the row shows a `role="status"`
+  band (`router-admin-open-error`) and the dialog a toast, both keyed through
+  `routerAdminOpenReasonKey` so a machine token never reaches the operator.
+
+The shared action is `main/network/router-admin-open.ts`, used by BOTH surfaces
+so they cannot drift into two open behaviours for one device. Coverage:
+`CellularSection.adminProxy.test.ts` (one button per dongle keyed on the id, the
+no-address assertion, the mm-managed and no-`router_admin` negatives, the
+gesture-ordering proof, the blocked-popup fallback, and the refusal table).
+Backend half: `apps/backend/AGENTS.md` → …AND ITS OWN WEB UI IS REACHED THROUGH A
+DEVICE-BOUND REVERSE PROXY.
+
+## THE CAPABILITY GATES ARE A SETTINGS SURFACE, NOT A MODEM SECTION [EXISTS]
+
+`main/dialogs/ModemCapabilitiesDialog.svelte` (Settings → System → **Cellular
+Features**) is where an operator turns a capability module on. It exists because
+the band-lock and GPS controls in `ModemConfigDialog` were telling operators to
+enable a feature "in settings" while a board sweep of `#settings` matched ZERO
+testids against `modem|cellular|location|gps|band|capab`
+(`.omo/evidence/task-49-full-stack-board-validation.md`) — the copy pointed at
+nothing, and both controls were unreachable on every board.
+
+- **It is Settings BECAUSE the gates are device-wide.** `config.modem_capabilities`
+  is one object every modem's claim resolves against, so a section inside
+  `ModemConfigDialog` would imply the switch is scoped to the row in front of the
+  operator while arming the module on every other modem too. Do not move it there.
+- **CT-1 — an unimplemented module renders ZERO nodes.** Not a disabled switch:
+  below `capable` nobody has shown there is a capability to withhold, and the
+  device REFUSES the write anyway. `implemented` therefore comes from
+  `modems.getCapabilities` and is never inferred from the modem rows, which
+  resolve "not built" and "this hardware lacks it" both to `unavailable`.
+- **Row ORDER is `CAPABILITY_MODULES`' own, filtered** — never the wire's arrival
+  order — so two devices shipping the same set list them identically.
+- **The switch is PESSIMISTIC** (the `NetworkIngestDialog` shape): it moves to the
+  `applied` record the device persisted, never to what was clicked, and only the
+  spinner is optimistic.
+- **A `module_not_implemented` refusal is a device FACT, not a failure** — it
+  renders the calm `modem-capabilities-refused` band and does NOT toast, so
+  `classify` keeps it `ok`. A failed READ renders its own distinct band and must
+  never be collapsed into the empty state: "we could not ask" and "this build
+  ships nothing" have different fixes.
+- **The honesty note is load-bearing copy, not decoration.** The gate is a
+  precondition and cannot promote a module past `enabled` on an unprobed modem, so
+  `modem-capabilities-honesty` says on screen that each modem is still checked on
+  its own. Without it an enabled switch reads as a promise the device never made.
+
+Entry rows in `SettingsView` carry `data-testid="settings-entry-<key>"` — added
+here because the audit's detection method WAS a testid sweep, so a surface that
+cannot be found that way is a surface the next audit will miss again.
+
+Coverage: `ModemCapabilitiesDialog.test.ts`,
+`src/tests/modem-capability-copy-completeness.test.ts` (all seven modules × 10
+locales, derived from the wire enum so an eighth fails until its copy lands), and
+`tests/e2e/modem-capabilities-settings.spec.ts`. Device half:
+[`../backend/AGENTS.md`](../backend/AGENTS.md) → …AND THE OPERATOR CAN ACTUALLY
+SET THOSE GATES.
+
+## A SIM LOCK IS REACHED FROM ITS OWN ROW, NEVER BY INTERCEPTION [EXISTS]
+
+`SimUnlockDialog` is opened by an OPERATOR ACTION on the modem it belongs to.
+There is no auto-open effect, and `src/tests/sim-unlock-trigger-gate.test.ts`
+fails the build if one reappears.
+
+It REPLACED a `$effect` in `NetworkView.svelte` that popped the dialog over the
+whole Network destination the moment any modem reported a lock. Three things were
+wrong with it, and the third is why it is GONE rather than debounced:
+
+1. It hijacked a shared page for a device-scoped problem — an operator opening
+   Network mid-broadcast to check bonding got a modal PIN prompt.
+2. It was `modemEntries.find(...)`-based, so with two locked modems the second
+   was unreachable no matter what the operator did.
+3. **A PIN2 unlock cannot be made to stick.** `Sim.SendPin` verifies for the
+   current UICC power session only, ModemManager caches no PIN, and the one
+   persistent mechanism (`EnablePin(pin,false)`) has no PIN2 equivalent — so the
+   lock returns on EVERY boot, forever, for something that blocks no traffic. An
+   auto-prompt for it is a nag the operator could never silence. Full evidence:
+   [`../backend/AGENTS.md`](../backend/AGENTS.md) → "AN UNLOCK DOES NOT PERSIST".
+
+**…AND PIN2/PUK2 IS NOT A SIM LOCK THIS UI HAS.** Point 3 above is now settled
+the other way round, by product decision rather than by routing: `sim-pin2` and
+`sim-puk2` are not surfaced ANYWHERE. Not a row state, not a badge, not a band,
+not a note. A modem carrying one and nothing else renders exactly as an unlocked
+modem does.
+
+The reasoning is the one this section already made, followed to its end. PIN2
+gates ONLY the SIM's Fixed-Dialling-Number list, and **this product exposes no
+calls and no contacts/FDN surface at all** — so the lock blocks nothing a CeraUI
+operator can reach, and an unlock would not even survive a reboot. Surfacing it
+therefore flagged a working modem as "locked" over a credential with nothing
+behind it: the bench Quectel RM530N-GL registers on its carrier with `sim-pin2`
+outstanding, and its row carried a warning pill saying `SIM locked` beside the
+truthful `Registered` one. The band in `ModemConfigDialog` had the same problem
+one step quieter — its copy said service was unaffected while its presence said
+"locked".
+
+**`BLOCKING_SIM_LOCKS` (`network/cellular-row.ts`) is now the WHOLE surfaced
+set**, and the two questions collapse into one: a lock this UI shows IS a lock
+that stopped the radio.
+
+| Lock | Row state | Row action | Destination |
+|---|---|---|---|
+| `sim-pin` / `sim-puk` | `locked` (`modem-state-badge`) | **"Unlock SIM"** (`open-modem-unlock-dialog`) | `SimUnlockDialog` |
+| `sim-pin2` / `sim-puk2` | its REAL state (`registered`, …) | "Configure" (`open-modem-config-dialog`) | `ModemConfigDialog`, with no band |
+
+- **A blocking lock RENAMES the control rather than repurposing it.** Until the
+  card is unlocked the radio cannot register, so the config form could apply
+  nothing — and a button reading "Configure" that opens a PIN prompt is the same
+  surprise this whole change removes. The testid follows the action so a spec
+  cannot assert one while the operator sees the other. **This path is entirely
+  unchanged.**
+- **`activeSimLock` answers `undefined` for a `2` variant.** It is the single
+  read every surface goes through, so nothing downstream can re-derive a lock the
+  row decided not to show. `resolveRowState` no longer has a "no connection
+  reported ⇒ locked" fallback for them either: "nothing was reported" is
+  `unknown`, and a lock this product cannot act on may not stand in for it.
+- **`lockBadgeLock` and `modem-lock-badge` are DELETED**, as are
+  `modem-locked-band` / `modem-locked-unlock`, `ModemConfigDialog`'s `onUnlock`
+  prop, and the config→unlock handoff in `NetworkView` (`unlockReturnToConfigId`
+  / `returnFromSimUnlock`). The row's own button is the only route into
+  `SimUnlockDialog`.
+- **This is a RENDERING decision, not a contract change.** ModemManager still
+  reports `sim-pin2` truthfully, the wire still carries it, and
+  `modems.unlockSimPin2` still exists. CeraUI simply declines to render it.
+- **`SimUnlockDialog`'s PIN2 branch is unreachable but KEPT**, deliberately. It
+  is not a separable branch — it shares that dialog's title, icon, open-edge
+  reseed, single keyed op, submit guard and footer with the blocking PIN/PUK
+  flow, so excising it means editing the blocking flow in half a dozen places.
+  Likewise the `sim-puk2` token inside `pukRequired` is one arm of the PUK1
+  predicate, not a PUK2 path (there has never been a distinct one — the PUK2
+  input is submitted through the PUK1 call). Both are documented in the
+  component's own header. Removing them is its own change, with its own gate.
+
+Do NOT add `sim-pin2`/`sim-puk2` back to `BLOCKING_SIM_LOCKS`, and do NOT
+reintroduce a second, non-blocking surface for them — the first makes a working
+modem's settings unreachable behind an FDN-credential prompt, and the second is
+what this removed. Copy: `network.cellular.unlockAction` (10 locales);
+`lockBandTitle` / `lockBandBody` are deleted. Coverage: `cellular-row.test.ts`
+("SIM-lock routing" + "a `sim-pin2`-only modem is indistinguishable from an
+unlocked one"), `CellularSection.test.ts` ("SIM-lock affordance"),
+`ModemConfigDialog.detail.test.ts` ("a `sim-pin2` modem is treated as unlocked"),
+and the trigger gate.
+
+## A USB-MODE SWITCH IS CONFIRMED BY THE DEVICE, NOT BY THE REPLY [EXISTS]
+
+`lib/rpc/usb-mode-flow.ts` (pure, rune-free) + the USB-mode card in
+`main/dialogs/ModemConfigDialog.svelte` own the `modems.setUsbMode` mutation.
+
+It does NOT use the ordinary `osCommand` confirm pattern, and the reason is
+timing: `osCommand`'s TTL starts at DISPATCH and expires at
+`ASYNC_OP_TTL_MS` (15 s), while this RPC *awaits the whole server-side
+transaction* — an NM quiesce, an AT command, a port drop and a full USB
+re-enumeration, which the transition engine bounds with its own deadlines and
+which can legitimately outlast that TTL. Reusing it would flip every healthy
+switch to `timed_out` mid-transaction. Four mechanics carry it instead:
+
+1. **BASELINE BEFORE DISPATCH.** The `modems` feed is read and the pre-switch
+   mode recorded BEFORE the RPC goes out, so the confirmation compares against
+   what was true when the operator acted, not against a later snapshot.
+2. **A MATCH IS ACCEPTED AT ANY POINT AFTER DISPATCH.** The backend fires ONE
+   immediate re-discovery + broadcast the moment the transition verifies, and
+   that broadcast can legally beat the RPC reply back to the browser. A match
+   observed while the RPC is still pending is BUFFERED and consumed at
+   resolution — drop it and the only later broadcast may be the 30 s poll.
+3. **THE 20 s BOUND STARTS AT RPC RESOLUTION** (`USB_MODE_CONFIRM_WINDOW_MS`),
+   never at dispatch, so it covers ONLY re-discovery + broadcast latency.
+4. **THE DEVICE IS MATCHED BY `stable_key`, AND BY NOTHING ELSE.** The legacy
+   numeric id is the MM index the transition itself re-issues and the ifname
+   changes with the composition, so both name a different device — or none — by
+   the time the confirming snapshot lands. A modem that publishes no
+   `stable_key` is NOT offered the switch at all (`canTrackUsbModeSwitch`):
+   dispatching one that could never be honestly confirmed would guarantee an
+   "unconfirmed" band on every attempt.
+
+**THE SPINNER IS THE ONLY OPTIMISTIC ELEMENT.** The displayed mode is read from
+the live feed (`displayedUsbMode`) and falls back to the recorded baseline —
+never to the flow's target — which is what makes RPC success alone structurally
+unable to move it. An expired window renders an honest "still transitioning"
+band: no flip, and no silent success. A typed refusal renders inline with its
+`reason` (`network.modem.usbMode.error.*` + `.reason.*`, 10 locales); the
+`uncertified` refusal is a first-class state, because it is what every real
+modem answers today.
+
+The card is deliberately OUTSIDE the dialog's `disabled={noSim}` fieldset — the
+composition is a property of the USB device, not of the SIM — and is absent
+entirely when the device reports neither `usb_mode` nor `recommended_usb_mode`
+(additive-tolerant, so an older backend renders nothing rather than "Unknown").
+
+Backend half: [`../backend/AGENTS.md`](../backend/AGENTS.md) → USB-COMPOSITION
+SWITCH. Coverage: `src/tests/usb-mode-flow.test.ts` (the pure machine),
+`src/main/dialogs/ModemConfigDialog.usbmode.test.ts` (the rendered card, incl.
+the RPC-success-alone-does-not-flip proof, driven against a RUNE-BACKED feed
+double — a plain `vi.fn()` is not reactive and would silently prove the
+opposite), and `tests/e2e/modem-usb-mode.spec.ts` (the round-trip).
+
+**A STANDING refusal withdraws the control instead of inviting a retry
+(modem-stack Phase B, todo 27) [EXISTS].** `uncertified` and
+`provisioning_disabled` are the two refusals the device will answer IDENTICALLY
+on every attempt — the first because the certified catalog ships EMPTY pending
+real evidence bundles (so it is what every real modem gets today, and the
+terminal answer until certification lands, not a stopgap), the second because it
+is a device-level setting. `isStandingUsbRefusal` (`main/dialogs/modem-detail.ts`)
+names exactly those two, and the card then renders a CALM `role="status"` band —
+muted, never the destructive red — carrying the existing typed head plus a
+`usbMode.uncertifiedBody` / `usbMode.provisioningBody` line stating that the
+active mode above keeps working, AND it hides the switch button. A retry button
+beside a permanent refusal misrepresents what pressing it does. Every OTHER
+refusal names a condition that can change, so it keeps the red `role="alert"`
+band AND keeps the button. The band's `data-testid` stays `modem-usb-mode-error`
+for both paths (existing selectors resolve either way); the discriminator is
+`data-usb-mode-refusal`. Coverage:
+`src/main/dialogs/ModemConfigDialog.detail.test.ts`.
+
+**THE PROVISIONING GATE IS PRE-RENDERED NOW, AND IT IS A TRISTATE (todo 28)
+[EXISTS].** `modem_provisioning` used to be a backend-only runtime key, so the
+control could only be offered and then withdrawn by the device's own
+`provisioning_disabled` refusal. It is now echoed READ-ONLY on
+`configMessageSchema` (and by `streaming.getConfig`), which is what lets the
+dialog answer before dispatching anything — but the three arms are NOT
+interchangeable and collapsing them is the whole hazard:
+
+- **`false`** — the device SAID provisioning is off. `provisioningBlocked`
+  renders the switch DISABLED with its reason (`usbMode.provisioningDisabled`)
+  both as the control's accessible name and as an on-screen line
+  (`modem-usb-mode-provisioning-blocked`), on a wrapper carrying
+  `data-usb-mode-gate="provisioning-disabled"`, and no RPC is ever dispatched.
+- **`true`** — the real confirm-guarded switch is offered, unchanged.
+- **ABSENT** — a backend that does not publish the key. We were told NOTHING, so
+  the control stays OFFERED and the standing-refusal path above still withdraws
+  it. Reading absent as `false` would hide a working control on every device
+  running an older backend, which is the exact dishonesty the pre-echo design
+  was avoiding.
+
+It is the AMBER disabled-with-reason treatment, deliberately NOT the calm
+standing-refusal band: provisioning is a setting an operator can turn back on, so
+the control is temporarily blocked rather than permanently withdrawn. The card
+still reports the ACTIVE mode in every arm. `streaming.setConfig` does not accept
+the field — there is no UI write path, and adding one is a separate decision.
+Coverage: `ModemConfigDialog.usbmode.test.ts` -> "the provisioning gate" (all
+three arms, the zero-dispatch proof, and the reason-on-screen lock) +
+`tests/e2e/truthfulness.spec.ts`.
+
+**…AND ONLY CERTIFIED MODES ARE OFFERED — `recommended_usb_mode` NEVER CONJURES A
+CONTROL (todo 28) [EXISTS].** The card used to derive its single switch target
+from `recommended_usb_mode`, which is a per-SKU ADVISORY about which composition
+is most stable and carries NO certification claim. So a control rendered for every
+modem on every board and the device answered `uncertified` to all of them. The
+offered set is now the DEVICE's own answer, read once per open via
+`rpc.modems.getUsbModeOptions` — the same catalog `setUsbMode` gates on — and
+folded by the pure rune-free `lib/rpc/usb-mode-offer.ts` (`deriveUsbModeOffer` /
+`resolveUsbModeTarget` / `usbOfferSuppressionKey`). The recommendation survives
+only as a PREFERENCE among certified targets and as a badge on one of them.
+
+FOUR phases, and the two that render nothing are NOT the same fact:
+
+| Phase | When | Renders |
+|---|---|---|
+| `offered` | the device named certified targets | `modem-usb-mode-targets` radiogroup + the confirm button |
+| `settled` | certified SKU, no certified way out of THIS mode | nothing — no control, no band |
+| `withheld` | the device said why not | NO control + a calm `modem-usb-mode-unavailable` band |
+| `unknown` | never asked, in flight, or the read THREW | nothing — and **no claim about the device** |
+
+- **A withheld offer renders NO control — never a disabled one.** A disabled
+  control implies a capability being withheld; here there is no capability, because
+  the transition has never been reviewed for this model and firmware. This is the
+  deliberate opposite of the provisioning gate above, which IS disabled-with-reason
+  because provisioning is a setting the operator can turn back on. Do not unify
+  them.
+- **`unknown` may never render `uncertified`.** "We could not establish the set" is
+  not "the set is empty"; stating a reason there asserts a device fact we do not
+  have.
+- **The suppression copy key is a TABLE (`usbOfferSuppressionKey`), never an
+  interpolation.** The three tokens span TWO enums — `identity_unresolved` is a
+  `setUsbModeFailureReasonSchema` member and resolves under `reason.*`, while
+  `uncertified`/`unavailable_in_emulated_mode` are `setUsbModeRefusalSchema`
+  members under `error.*`. Interpolating one namespace renders the raw dotted path
+  for the other, which the modem a11y gate forbids outright.
+- **…AND EVERY TOKEN IN BOTH ENUMS HAS COPY, PROVEN BY A GATE (Phase-C todo 14)
+  [EXISTS].** `setUsbModeRefusalSchema` grew the four shared mutation-safety
+  refusals (`mutation_blocked`, `recovery_pending`, `device_decommissioned`,
+  `rebaseline_required`) and no catalog ever gained a
+  `network.modem.usbMode.error.<token>` for any of them — so a device that
+  refused a switch because an earlier mutation had not been acknowledged printed
+  a RAW DOTTED KEY at the operator. The i18n locale-parity gate structurally
+  cannot catch this: a key missing from all ten catalogs is perfectly in parity.
+  `src/tests/usb-mode-copy-completeness.test.ts` closes it by DERIVING the
+  required key list from the wire enums and from `usbOfferSuppressionKey` itself
+  — never a re-typed list, so an eleventh refusal fails the gate until its copy
+  lands. The check is a pure function over one catalog specifically so its own
+  falsifiability is provable: it is handed a clone with a key deleted and must
+  report it, for every locale. The four values are the fccUnlock/gps
+  translations verbatim, which is the established rule that ONE machine token
+  gets ONE operator sentence across every modem-mutation surface — those two
+  namespaces have carried all four, byte-identical per locale, since the
+  mutation-safety contract landed.
+- **A device with no `stable_key` is refused the control AND the list**, because a
+  switch that could never be confirmed is not an option to display.
+- **A UFI/router-ethernet row gets no card at all** — it reports no composition, and
+  its Configure button is disabled-with-reason, so there is no surface a switch
+  could live on. `sethimiusbtether` is a PERMANENT fence, enforced by a repo-wide
+  grep gate (`apps/backend/src/tests/usb-tether-fence.test.ts`), not by a UI state.
+
+Coverage: `src/tests/usb-mode-offer.test.ts` (the pure rule),
+`ModemConfigDialog.usbmode.test.ts` -> "ONLY the certified transitions are
+rendered" + "an uncertifiable device gets NO control", and
+`tests/e2e/modem-usb-mode.spec.ts` -> the four device classes with screenshots.
+Backend half: [`../backend/AGENTS.md`](../backend/AGENTS.md) → WHICH MODES MAY BE
+OFFERED.
+
+## THE MODEM DIALOG IS THE ADVANCED SURFACE, AND EVERY CARD VANISHES ALONE [EXISTS]
+
+`main/dialogs/ModemConfigDialog.svelte` carries three read-only instrument cards
+beside its configuration form, all driven by Phase-B additive-optional wire
+fields, all derived by the pure rune-free `main/dialogs/modem-detail.ts`
+(`cellMetricRows` / `esimView` / `usageView` / `defaultAutoApn` /
+`hasModemDetail` / `isStandingUsbRefusal`). Order is configuration → usage →
+detail → USB mode: the operator opened it to configure, so that stays reachable
+without scrolling on the 1024×600 kiosk, and the one destructive action is last.
+
+**…AND EVERY ONE OF THEM IS NOW BEHIND ONE "Advanced" DISCLOSURE (todo 64)
+[EXISTS].** "Reachable without scrolling" stopped being true: measured on the
+bench board at the 1024×600 kiosk viewport, this dialog's body was **783 px of
+content in a 363 px window**, so the operator scrolled past four instrument
+panels to reach the Save button for the APN they came to change. The dialog now
+splits the same way the row does. **PRIMARY** — the status strip, whichever
+bands are currently true (`modem-save-refused`, `modem-locked-band`, the no-SIM
+banner), and the settings an operator actually opens this dialog to change:
+roaming, the operator scan that follows from it, Automatic APN, and the manual
+APN + credentials behind it, led by the network-type selector. **SECONDARY** —
+ONE `CollapsibleSection` (`modem-advanced-toggle` → `modem-advanced-body`)
+holding `modem-usage-card` (counters AND the writable policy controls),
+`modem-detail-card`, `modem-sms-card`, and `modem-usb-mode-card`. Four rules:
+**(1) Network type is PRIMARY, and it is first.** It briefly lived in Advanced on
+the theory that a radio-technology lock is set once per site; operators reported
+otherwise — pinning a modem to 4G where 5G is marginal is routine field work, and
+it was the only thing in that disclosure anyone ever opened it to CHANGE, the
+rest being read-only instruments and device surgery. It now leads the primary
+fieldset because it is the coarsest of that section's three decisions (radio →
+registration → data session) and every control under it is read in its light. It
+is back INSIDE the `disabled={noSim}` fieldset, and it keeps its own explicit
+`disabled={noSim}` as well; do not delete that as redundant. Do not move it back
+— `ModemConfigDialog.density.test.ts` pins it outside `modem-advanced-body` and
+outside every `inert` ancestor (asserted as a PROPERTY walk: jsdom never reflects
+`inert` to an attribute, so a `[inert]` selector is vacuous). **(2) The SMS card
+keeps its OWN inner fold**, and
+that nesting is load-bearing rather than redundant: the outer disclosure keeps
+its body MOUNTED (clipped + `inert`), while the SMS fold is `{#if}`-gated
+because it gates an expensive per-message mmcli read AND keeps one-time codes
+out of the DOM entirely. Collapsing the two would silently undo both. **(3) The
+disclosure is collapsed on EVERY open, never remembered** — an operator who
+expanded it once to read a cell metric is not asking to reopen every future
+modem on the diagnostics panel. **(4) Because the body stays mounted, every
+existing unit test that queries these cards by testid is byte-unchanged**; only
+Playwright's `toBeVisible()` needed a step, which is why
+`tests/e2e/helpers/modem-advanced.ts` exists — `openModemAdvanced(dialog)` is
+idempotent and is called from `openTargetModemDialog`, the visual spec's own
+`openModemDialog`, `modem-a11y.spec.ts` and `truthfulness.spec.ts`. Add it to any
+new spec that asserts one of those five blocks is VISIBLE. **A jsdom `getByRole`
+query now needs the same step** (Phase-C todo 14): the collapsed body carries the
+`visibility` hit-test guard, which Testing Library's `isInaccessible` honours —
+`src/tests/helpers/modem-advanced.ts` is that unit twin. `getByTestId` is still
+unaffected. Copy: `network.modem.advanced.{title,description}` (10 locales).
+Coverage: `ModemConfigDialog.density.test.ts`.
+
+**ABSENCE RENDERS AS ABSENCE.** The mmcli path reports none of these fields and
+an older backend reports none of them either, so each card is absent ENTIRELY
+when its field is absent, and each ROW inside a card is absent when its key is.
+Never an empty framed section (it reads as a load failure), never a `—`, and
+never a `0 B` (which tells the operator they used no data — a MEASURED zero is a
+different fact and IS rendered). The pure helpers answer with `[]`/`undefined`
+rather than a half-populated shape, so the markup only asks "is there a view".
+Pinned by the field-absent matrix in `ModemConfigDialog.detail.test.ts`, which
+drops each card independently and then all three at once.
+
+- **Detail card** (`modem-detail-card`) — serving-cell metrics in the JetBrains
+  Mono data face, ordered radio → location → quality, each with its OWN unit
+  (`rsrp` is dBm, the ratios are dB). `snr` and `sinr` are never folded together:
+  LTE reports signal-to-noise and NR reports signal-to-interference-plus-noise,
+  so one under the other's label is a number the radio never produced. `tech` is
+  keyed copy, never the raw wire token. The card states WHEN the readings were
+  taken from `cell_info.provenance.observed_at` (epoch seconds and milliseconds
+  are discriminated by magnitude) and says so honestly when the modem reported no
+  stamp. **The wire carries `cell_id`, NOT a `pci` field** — the card renders
+  `cell_id`; do not invent a PCI row. Firmware and the eSIM badge follow.
+- **eSIM badge is READ-ONLY, permanently.** `sim_type` + `esim_status` only. No
+  button, no link, no input, no click handler, no positive tabindex — asserted
+  against the real DOM, not by reading markup. The EID is a redaction class and
+  is not even on the wire, and profile management belongs to the carrier's flow,
+  so any affordance here could only lie about what it would do. Do not add one.
+- **Usage card** (`modem-usage-card`) — `session_bytes` + `cycle_bytes` via the
+  shared `formatBytes`, each stating its OWN scope on screen (since boot / since
+  the cycle started) so a cumulative counter is not read as a monthly bill. It is
+  staleness-aware through `getIsConnected()`: these counters carry no observation
+  timestamp of their own, so a dropped socket dims the figures and says so rather
+  than presenting the last frame as live. Each scope hint lives INSIDE its `<dd>`,
+  not as a sibling of it: a `<dl>`'s grouping `<div>` may hold only `<dt>`/`<dd>`,
+  and a sibling `<p>` there is a serious axe `definition-list` violation (found and
+  fixed by the todo-29 gate). Do not "tidy" it back out. `threshold_bytes` draws an ADVISORY bar
+  that gates nothing — the bar clamps at full, the over-limit VERDICT does not,
+  and a zero limit draws no bar while still reporting being past it.
+- **There is deliberately NO cycle-day picker and NO threshold input.**
+  `@ceralive/modem-control@0.2.0` publishes no usage-policy setter, so
+  `modemConfigInputSchema` declares no matching write fields (todo 17 omitted
+  them outright). A control here would be filled in, submitted, and dropped, and
+  the operator would watch their setting revert with no explanation. The VALUES
+  are reported, so they are DISPLAYED read-only, and the deferral is declared by
+  a `ComingSoon` pill bound to `TD-modem-usage-policy-write`. Do not add the
+  controls before the package ships the setter.
+
+**Auto-APN defaults to Automatic, but only for a genuinely unconfigured modem.**
+`defaultAutoApn` is deliberately NOT `autoconfig ?? true`: a config carrying a
+stored manual APN with no explicit flag predates the flag, and opening on
+Automatic would discard that APN on the very next Save, silently. An explicit
+flag always wins; absent a flag, a stored APN means manual and an empty one means
+unconfigured. The recommendation itself is a `Badge` pill
+(`modem-autoapn-recommended`), not a parenthetical in the switch's label — which
+keeps the control's accessible name and its visible text identical.
+
+## THE SIM'S OWN NUMBER IS HIDDEN BY DEFAULT [EXISTS]
+
+The detail card carries the SIM's own number (MSISDN) as a masked field with an
+explicit reveal (`modem-own-number` / `-toggle` / `-value-<n>`), driven by the
+pure `ownNumbers` + `OWN_NUMBER_MASK` in `main/dialogs/modem-detail.ts`.
+
+It takes the CREDENTIAL treatment `PasswordDialog` / `WifiConnectForm` /
+`HotspotDialog` already use, and reuses their shape rather than building a
+second one: local `$state` boolean, `Eye`/`EyeOff`, an `aria-label` that names
+what the control WILL do plus `aria-pressed` for what it currently is.
+
+Four properties are load-bearing:
+
+- **The number is NEVER in the DOM before the reveal.** Not `hidden`, not a CSS
+  mask — either would still put it in a screen share, a screenshot and the
+  accessibility tree. The value node renders `OWN_NUMBER_MASK` and swaps to the
+  number only on reveal, which is asserted against `document.body.textContent`.
+- **The mask has a FIXED width.** A mask that tracked the real length would leak
+  the digit count, and a phone number is short enough for that to matter.
+- **The reveal is per VIEWING.** It re-hides on close and whenever the dialog is
+  pointed at a different modem (`lastRevealScope`), so one operator's reveal
+  cannot outlive the moment. It is never persisted.
+- **ABSENCE RENDERS AS ABSENCE.** A modem whose carrier published none renders
+  NO label, NO dash and NO "Unknown" — most SIMs carry none, so a placeholder
+  would read as a failed read on the majority of devices. A number ALONE is
+  enough to open the detail card (`hasModemDetail`).
+
+Copy: `network.modem.detail.ownNumber{,Show,Hide}` (10 locales). The value is
+`dir="ltr"` in the mono face so an RTL locale cannot reorder its runs. Backend
+half — including the fact that it is redacted from every log regardless:
+`apps/backend/AGENTS.md` → THE SIM'S OWN NUMBER IS DISPLAYED, AND NEVER LOGGED.
+Coverage: `modem-detail.test.ts` (the pure helpers),
+`ModemConfigDialog.ownnumber.test.ts` (hidden-by-default, the fixed-width mask,
+the reveal round trip, the multi-number case, both re-hide scopes, and the three
+absence cases), and `tests/e2e/visual/modem-ux.visual.spec.ts` (hidden/revealed/
+absent evidence at desktop, 1024x600 kiosk and mobile).
+
+## THE SMS INBOX IS A FOLDED, PERMANENTLY READ-ONLY CARD (modem-stack Phase B, todo 39) [EXISTS]
+
+A fourth card, `modem-sms-card`, sits between the detail card and the USB-mode
+card in `main/dialogs/ModemConfigDialog.svelte`, backed by the pure rune-free
+`main/dialogs/modem-sms.ts` (`smsWallClock` / `smsRefusalKey` /
+`isWithdrawingSmsRefusal`) and by todo 38's `modems.getSms`. Its schema is
+consumed verbatim from `@ceraui/rpc` — `smsMessageSchema`, `SMS_INBOX_CAP`,
+`modemSmsRefusalSchema` — and is never re-declared here.
+
+**IT IS READ-ONLY STRUCTURALLY, NOT BY DISABLING.** There is no compose field,
+no reply, no forward, no delete — not greyed-out ones, none at all. The only two
+controls in the whole card are the disclosure toggle and a re-read. That is
+asserted against the rendered DOM in `ModemConfigDialog.sms.test.ts` (every
+button enumerated by testid, every form control counted at zero, every
+accessible name matched against a send/compose/delete vocabulary), because the
+backend's grep gate protects the DEVICE and this protects the promise the
+operator is shown. A disabled compose box would pass a grep and fail an
+operator. The typed `getSms` entry in `lib/rpc/client.ts` carries the same note:
+that table is the one place a `sendSms` could be added without tripping the
+backend gate.
+
+**IT READS NOTHING UNTIL IT IS OPENED, AND HOLDS NOTHING WHILE CLOSED.**
+`modems.getSms` costs up to one mmcli invocation per stored message (bounded at
+`SMS_INBOX_CAP`, but a full inbox is 50 of them), so probing on dialog open would
+tax every operator who came to change an APN. The reveal is a CSS
+`grid-template-rows: 0fr → 1fr` transition — never `transition:slide` — for the
+reason `CollapsibleSection.svelte` states: a JS transition compiles to the Web
+Animations API, which runs outside CSS and escapes BOTH global motion freezes
+(`prefers-reduced-motion` and the e-ink `transition: none`). The CONTENT stays
+`{#if}`-gated inside that animated wrapper, so a collapsed inbox holds no message
+text in the DOM at all — which matters because a real SIM's inbox carries
+one-time codes, and "collapsed" must not mean "present, merely clipped".
+
+**A REFUSAL IS NEVER AN EMPTY INBOX.** `{success: true, messages: []}` means this
+modem has an inbox and it is empty; each refusal means we do not know what it
+holds. `unsupported` is the ONE refusal that describes the device rather than the
+moment, so it WITHDRAWS the whole section (`isWithdrawingSmsRefusal`) — no
+header, no band, no refresh — the `uncertified` USB precedent applied to a
+capability instead of a mutation. It has no copy at all, deliberately: it is
+never rendered. The other three (`not_enabled` / `unknown_modem` / `read_failed`)
+each get their OWN sentence in a calm `role="status"` band with the re-read still
+offered, because they name conditions the device can leave. The verdict is per
+dialog session — reopening asks again, since the thing in the USB port can change
+between opens.
+
+**TIMESTAMPS ARE THE NETWORK'S, NOT THE BROWSER'S.** The wire carries mmcli's
+service-centre stamp verbatim (`2025-08-21T17:20:16-05` — an hours-only offset
+that is not valid ISO 8601 and that `Date.parse` rejects), specifically so it is
+not re-zoned. `smsWallClock` therefore matches the grammar and renders
+`YYYY-MM-DD HH:MM` in the JetBrains Mono data face, `tabular-nums`, `dir="ltr"`
+so an RTL locale cannot reorder its runs — it never goes through `Date`, which
+would move the reading to whatever machine rendered it. An unparseable or absent
+stamp renders "no time reported" rather than a raw token. Absence renders as
+absence throughout: no sender → "Unknown sender", empty `text` (a real WAP/PDU
+data-only message) → an explicit no-text line, and a list returned AT the cap says
+so, because 50 rows are a window and not the inbox.
+
+i18n: `network.modem.sms.*`, 16 keys × 10 locales. Coverage:
+`main/dialogs/modem-sms.test.ts` (the pure helpers, incl. the no-re-zoning proof)
+and `main/dialogs/ModemConfigDialog.sms.test.ts` (the state table + the
+zero-mutation-affordance DOM lock). Backend half:
+[`../backend/AGENTS.md`](../backend/AGENTS.md) → the read-only SMS inbox.
+
+## A MUTATION OUTCOME IS PERSISTENT, ANNOUNCED, AND BOUNDED (UI pass 2) [EXISTS]
+
+`DESIGN.md` §8 opens with the rule this section enforces: *an outcome the
+operator cannot see is an outcome that did not happen*. Three modem-surface
+mutations were failing it in three different ways, and one component and one
+state machine now carry all of them.
+
+**`lib/components/custom/MutationOutcomeBand.svelte` renders BOTH halves, and
+that is the whole point of it being one component.** A persistent visible band
+plus the two sr-only live regions, from one call site — because shipping either
+half alone is exactly what happened before. `RouterDongleDialog` answered every
+router write with a `toast`, which on a PESSIMISTIC surface (where a refused
+write correctly leaves the control unmoved) was the ONLY thing separating
+"refused" from "never attempted" — and it expired in seconds. The GPS and FCC
+toggles rendered their failures as a bare `<p>` with no role and their successes
+as nothing at all, so an operator using a screen reader flipped a switch and
+received silence. Six properties are load-bearing:
+
+1. **BOTH REGIONS MOUNT UNCONDITIONALLY (LR-1)** — outside every `{#if}`, with
+   the surface rather than with the outcome. A region created when the answer
+   arrives announces nothing, which is the commonest silent failure here.
+2. **THE VISIBLE BAND CARRIES NO LIVE ROLE (LR-3).** The announcement rides the
+   sr-only regions; a `role="status"` on the band too would announce every
+   outcome twice. `outcomeBandRole()` exists to write that down rather than
+   leave it as an absence someone "fixes".
+3. **POLITENESS FOLLOWS THE KIND, NOT THE SURFACE (LR-2)** —
+   `outcomeIsAssertive` in `lib/modem/mutation-outcome.ts`, resolved once.
+   Success is polite; a refusal and an unknown outcome interrupt.
+4. **THERE ARE THREE KINDS, AND `unknown` BORROWS NEITHER NEIGHBOUR.** Applied /
+   refused / unknown each get their own word, glyph, tone and `data-outcome`.
+   Colour is reinforcement; every band prints its sentence.
+5. **THE MESSAGE ARRIVES ALREADY LOCALIZED (LR-4).** The module never sees a
+   wire token, so it structurally cannot leak one — each caller resolves its own
+   typed refusal through its own keyed copy, which keeps the refusal
+   vocabularies where they already live instead of growing a second catalog.
+6. **IT IS STATIC CSS**, so both motion freezes cover it and no outcome is ever
+   carried by movement.
+
+**`lib/rpc/router-write-flow.ts` bounds the wait — the sibling of
+`usb-mode-flow.ts`, on the same three rules.** Pessimism was right and had no
+bound: with no confirming broadcast the spinner simply stopped and the dialog
+looked untouched. Now the observation confirms (`applied`), the RPC refusal
+refuses (`refused`), and the window expiring produces the honest third answer
+(`unconfirmed` → the `unknown` band), never a success and never a refusal.
+**The OBSERVATION is the authority, not the reply**: `result.controls` is
+deliberately NOT consumed as a confirming read, because that would let the band
+claim applied while the switch still showed the old value — the exact
+contradiction the pessimistic design exists to prevent. A match seen before the
+reply is BUFFERED; the bound is armed at RPC RESOLUTION, never at dispatch; and
+every settled phase is inert, so a late broadcast can neither resurrect a
+refusal nor retroactively upgrade an `unconfirmed` write the operator has
+already been told about.
+
+**GPS and FCC do NOT get a window, and that asymmetry is deliberate.** Their
+replies CARRY the device's own re-read state (`result.state`/`result.status`),
+so success is already confirmed at resolution and there is nothing left to
+bound. Do not add one.
+
+**A stale reading is MARKED (§2 IH-4).** `router_admin.signal.freshness` has
+distinguished a live reading from a carried-over one since todo 20 and the
+Cellular row has rendered that since todo 21; `RouterDongleDialog` printed the
+same numbers with no marker at all. It now bands `dongle-stale` — and the values
+still render beneath it, because a blanked panel is worse. `unknown` freshness
+marks NOTHING: the device told us nothing about the reading's age, and a "stale"
+badge over that is a claim we cannot make. A device that reported no
+`router_admin` at all gets `dongle-unavailable` rather than a blank dialog, and
+neither state is ever a spinner.
+
+**The raw tokens MOVED, they did not disappear (§3 OL-2/OL-3/OL-4).**
+`router-dongle-fields.ts` now splits its table in two: `detailFields()` is the
+operator half, `diagnosticFields()` is every row whose VALUE is a raw vendor or
+3GPP token — the band family (`B4`, `LTE_BAND_3`), serving-cell identifiers,
+ARFCNs and bandwidths, the vendor's numeric `network_mode` index, the subscriber
+identifiers. Both render in BOTH consumers (`RouterDongleDialog`'s
+`dongle-diagnostics` disclosure and the Cellular row's `router-admin-diagnostics`
+block), values verbatim, `data-testid="dongle-detail-<id>"` / `router-detail-<id>`
+unchanged. The blocks are marked by a testid containing `diagnostic` on purpose:
+the operator-text gate excludes them BY SELECTOR, so it never has to know which
+of two dozen field ids happen to be raw. Do not fold these rows back into the
+operator table, and do not rename those testids.
+
+**AN IN-PROGRESS EDIT SURVIVES AN INCOMING OBSERVATION.** `ModemConfigDialog`'s
+`formData` was already a one-shot snapshot seeded on the OPEN EDGE rather than
+live-synced from the `modem` prop — nothing pinned it, and
+`ModemConfigDialog.draft.test.ts` now does, typing into the rendered input and
+driving observation bursts through it. The mirror property is asserted too (a
+re-open DOES re-seed), or the suite would pass on a dialog that had stopped
+reading the device altogether.
+
+Coverage: `lib/modem/mutation-outcome.test.ts`, `lib/rpc/router-write-flow.test.ts`,
+`main/dialogs/RouterDongleDialog.outcomes.test.ts`,
+`main/dialogs/ModemConfigDialog.liveRegions.test.ts`,
+`main/dialogs/ModemConfigDialog.draft.test.ts`, plus the `@a11y` axe leg in
+`tests/e2e/modem-a11y.spec.ts`.
 
 ## CONNECTION RELIABILITY
 
@@ -357,6 +1170,8 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - No direct backend calls — everything through `rpc.*` or `rpcClient.onMessage`.
 - No manual UI primitive files in `lib/components/ui/` — use the shadcn-svelte CLI.
 - No `$:` reactive statements — Svelte 5 runes only.
+- Don't confirm a USB-mode switch on the RPC reply, and don't route it through `osCommand` — the reply proves the transaction ran, not that the device came back in the requested mode, and `osCommand`'s dispatch-anchored 15 s TTL is shorter than a healthy transition. Don't correlate the device by its numeric id or ifname either: the transition re-issues the first and changes the second (see A USB-MODE SWITCH IS CONFIRMED BY THE DEVICE).
+- Don't mock a reactive backend feed with a plain `vi.fn()` returning a mutable object — a component `$effect` never re-runs on it, so the test proves the component IGNORES late snapshots. Use a rune-backed double (`src/tests/helpers/modem-feed.svelte.ts`).
 - No hardcoded socket URL — RPC callers use `getRpcSocketUrl()` from `$lib/env`; preview callers use `getPreviewSocketUrl()`. Both derive same-origin URLs from `window.location` in production and ignore `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct a socket URL from `hostname` + a port literal.
 - Don't read connection state from `lib/stores/offline-state.svelte` in authed components — use `subscriptions.svelte` `getIsConnected()`/`getConnectionState()` (survives socket replacement on reconnect). `offline-state` is only reliable for the pre-auth strip.
 - Don't add inline validation literals to dialogs — import from `ValidationAdapter.ts`.
@@ -365,14 +1180,30 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't release field locks to the client's intended value — always use `result.applied` from the RPC response.
 - Don't add custom endpoint fields inline in `ServerDialog` — use `CustomEndpointForm.svelte` in `main/dialogs/server/` (fields driven by `receiverKindManifest(kind)`).
 - Don't derive receiver kind or build the `setConfig` field set inline in `ServerDialog` — use `resolveReceiverKind` and `buildServerSetConfig` from `lib/streaming/receiver-experience.ts`.
+- Don't call `osCommand` (or anything else that writes the async-operation store) from an `$effect` body without `untrack` — the effect subscribes to the very operation it dispatches and loops at RPC-round-trip speed, which on a real board became a 250-process nmcli storm that took the device's whole D-Bus down (see the Async OS-operation optimism entry).
+- Don't answer a modem or router-dongle mutation with a toast alone — route it through `MutationOutcomeBand`, which renders the persistent band AND the two live regions from one call site. And don't give that band a live role of its own: the sr-only regions already announce it, so a second one announces every outcome twice.
+- Don't confirm a router-dongle write on the RPC reply (`result.controls` included) — the observation is what moves the switch, so confirming on the reply lets the band claim applied while the control still shows the old value. Don't arm the bound at dispatch either, and don't let a late broadcast upgrade an `unconfirmed` write into a success.
+- Don't add a confirmation window to the GPS or FCC toggles — their replies carry the device's own re-read state, so success is already confirmed and a window could only invent a wait.
+- Don't render a `router_admin` reading with no freshness treatment, and don't mark an `unknown` freshness as stale — the device told us nothing about that reading's age.
+- Don't move a raw band/cell/ARFCN/`network_mode` row back into `detailFields()`, and don't rename the `*diagnostic*` testids — the operator-text gate excludes those blocks by selector, not by an enumerated id list.
+- Don't live-sync `ModemConfigDialog`'s `formData` from the `modem` prop — the feed re-broadcasts several times a minute and would discard a half-typed APN at a moment the operator cannot predict.
 - Don't re-add a `websocket-store` wrapper, a second `rpcClient.onMessage` owner, or a parallel auth-mutation path — `subscriptions.svelte.ts` and `auth-status.svelte.ts` are the only two allowed owners; the CI grep gate blocks the module name from reappearing.
 - Don't re-derive the "gateway inactive" (rtmp/srt requires-gateway) disabled-with-reason rule inline on a new surface — route through `lib/streaming/pipelineAvailability.ts`.
 - Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`GoLiveCard.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
+- Don't decide which interfaces the Bonded Links panel shows by NAME — no `eth*`, no `enx*`, no prefix of any kind. Route it through `isBondMember`, the mirror of the backend's `genSrtlaIpList`, or a genuinely bonded router-mode dongle (`enx344b50000000`) and every `dg<N>h` veth vanish from a panel that claims to be the bond. And don't re-add a dimmed "Excluded" ghost row: presence here is binary, and the operator rejected the half-row. What replaces it is the `bonded-links-not-bonded` COUNT — never drop that, or removing the rows really does hide that those links exist.
 - Don't re-add per-link RTT/NAK/weight numbers to the WiFi/Cellular/Ethernet per-interface sections — `BondedLinksSection.svelte` is the sole owner of that telemetry on the Network destination.
+- Don't key a Bonded Links row on its position (`linkIndex`) or render an identity line on every row — use `linkRowKey` (the minted `link_id`, ifname as the legacy fallback) and `linkDisambiguation`, which fires only for a label more than one row shares. And don't add a serial to that line for a device that reported none: the bench HiLink twins publish no usable USB serial, and fabricating one is worse than the ambiguity it papers over.
+- Don't render a bind-map `reason` token raw, and don't infer a degradation from an absent `bond_mapping` — the band is driven by the one normalized disposition the backend publishes, `mapped` is silent, and every reason resolves through keyed copy.
 - Don't render `LinkSignal.throughputKbps` on the Network destination — it is stream-gated and reads 0 on an idle device. Use `linkUpKbps`/`aggregateBondBandwidth` from `lib/helpers/bond-bandwidth.ts`.
 - Don't sum `links[].bytes_sent_total` for a "total transferred", don't integrate `bitrateKbps` into one, and don't render an absent counter as `0 B` — the first runs backwards on an IP-list reload, the second silently loses every byte from a missed tick or reconnect, and the third tells the operator they sent nothing. Forward the sender's own bond counter, and render `—` when it is absent. Don't fold it into the NAK/weight TOTAL grid either: that grid sums the CURRENT frame, this is an over-time count.
+- Don't gate the "Cellular (Router Mode)" badge on the `dongle` marker or on an `enx*` name — the netns layer that produces `dongle` runs on no shipped image, and the name is exactly what cannot distinguish a matched HiLink pair. It renders off `router_cellular`, which the backend derives from USB descriptors. Don't treat its `null` like `dongle`'s either: it retracts the claim and KEEPS the row.
+- Don't render the collision band for every router-cellular row — it is gated on the backend's MEASURED `duplicate_model`, and claiming a collision for a lone dongle is the same fabrication class as rendering a busy/idle encoder core as a percentage. Don't make it destructive-red either: nothing is broken, it is a known limitation of factory-fixed LAN addressing.
+- Don't hide the address note behind the badge's `title` — a kiosk touchscreen cannot hover, and where the address came from is the one fact an operator will otherwise try to change and cannot.
+- Don't build the dongle admin link from `router_admin.admin_url` — the address is shared by identical twins, so the link must carry the ROW ID and let the backend resolve the interface. And don't open it with `noopener`: that returns `null` by spec, so there is no handle to navigate and the operator's own tab is taken instead.
+- Don't re-add the "that address is not reachable from this page" copy, or turn the button into an `<iframe>` — the page IS reachable now (through CeraUI's proxy), and the bench dongles answer `X-Frame-Options: deny`/`sameorigin` so neither would render embedded.
 - Don't test a WiFi row for hotspot mode with `Boolean(iface.hotspot)` — use `isApRadio(iface)`, which trusts the backend's `mode`.
 - Don't add a device rename affordance (text field, button, or dialog) for ANY device or media type — device naming is code-level only (backend `ONBOARD_AUDIO_DISPLAY_RULES` / `ONBOARD_VIDEO_DISPLAY_RULES`); a pluggable audio device gets the read-only `isExternalAudioSource` "External" badge instead.
+- Don't move the capability-gate switches into `ModemConfigDialog` — `config.modem_capabilities` is device-wide, so a per-modem placement claims a scope the write does not have. Don't render a row for an unimplemented module either (CT-1: zero nodes, never a disabled switch), don't derive `implemented` from the modem rows (they resolve "not built" and "hardware lacks it" both to `unavailable`), and don't drop the honesty note — without it an enabled gate reads as a capability the device never claimed.
 - Don't make a selected-but-unavailable audio device re-pickable, and don't hide it either — `SourceSection`'s `audio-option-unavailable` entry stays LISTED (so the operator sees what is selected) but `disabled` + `aria-disabled` + a reason `title` (`settings.notAvailableAudioSourceHint`), matching the EncoderDialog disabled-rung pattern. Re-selecting it only buys another failed start (backend `audio_source_unavailable`).
 - Don't leave the audio meter rendering across an audio-source change — route the pick through `trackMeterSelection`/`isLevelSuperseded`, and don't lean on the staleness watchdog to clean it up (that is what made the bug look transient instead of wrong).
 - Don't compute a per-resolution framerate set from `DeviceMode[]` without also filtering on `media_type` — a device's per-format ladders are DISJOINT, and unioning them offers rates the active capture format cannot negotiate. Route through `OfferedAxes.activeMediaType` / `scopeModesToMediaType`, and don't "simplify" away the three fail-open guards (fewer than two advertised formats, an unmatched kind, and untagged modes all narrow nothing) — they are what keeps an old-engine payload byte-identical.
@@ -412,3 +1243,130 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't add a second QR to `HotspotDialog` (the connect-your-phone device-access QR was removed as noise), and don't interpolate a raw SSID/password into a `WIFI:` payload — `generateWifiQr` must escape `\ ; , :` via `escapeWifiQrField`. Full contract: `../../AGENTS.md` → HOTSPOT QR SURFACE.
 - Don't let `StreamControlButton` show a spinner beside the idle "Start Stream"/"Stop Stream" label — the label must switch to `live.starting`/`live.stopping` for the transient. That button is the only start-progress affordance on screen once `LiveView` swaps in `LiveCockpit`, and a start legitimately runs for seconds.
 - Don't reach for `--localstorage-file` when a `$persist` store misbehaves under vitest, and don't "fix" storage by editing `vitest.config.ts`. `vitest.setup.ts` installs a fresh in-memory spec-compliant `Storage` over `globalThis.localStorage`/`sessionStorage` (`Object.defineProperty`) before any store module loads, plus a `beforeEach` clear. WHY it exists: Node ≥ 25 owns a built-in `globalThis.localStorage` that is `undefined` unless the process was started with `--localstorage-file`; vitest's jsdom environment only copies a window key onto the global when the global does not already own it, and it aliases `globalThis.window` back to `globalThis` — so jsdom's real Storage was skipped and every `window.localStorage` read resolved to that empty built-in, making `$persist` (`display-profile.svelte.ts` ← `transitions.ts` ← `$lib/utils` ← every shadcn component) throw `TypeError: Cannot read properties of undefined (reading 'getItem')` at module load. Measured on this tree at `40cbad15`: **80 of 210 test files** failed to import under Node 26.7.0. WHY not the flag: one fixed path is a SQLite DB shared by every thread worker and persisted across runs — measured, a 2-worker run of the isolation pair failed `Error: database is locked`, and a second run read back the first run's value, i.e. it converts a hard failure into false-green cross-spec leakage. **The setup-file Storage override is the SOLE mechanism — no `NODE_OPTIONS` wrapper is required and none exists in the tree**; the Layer-1-only probe (`mise exec node@26 -- bun run --filter frontend test`) was green twice in a row at 212/212 files, matching the Node 24 baseline (evidence: `.omo/evidence/task-17-ts7-node26-i18n-quality.md`). `src/tests/persist-isolation-{a,b}.test.ts` pin the contract — run them concurrently with `bunx vitest run --pool=threads --maxWorkers=2` (CLI flags only; never edit the config).
+
+## A CLIPPED DISCLOSURE MUST BE HIDDEN, NOT MERELY UNPAINTED [EXISTS]
+
+The Cellular row's per-row disclosure keeps its body MOUNTED and `inert` while
+collapsed — that contract (todo 64 rule 3) is unchanged. What was wrong is the
+CLIP: `overflow: hidden` on the `min-h-0` wrapper removes the content from the
+PAINT, and nothing else. Every control inside keeps a full-size layout box at
+its uncollapsed coordinates.
+
+Measured on the bench board, collapsed: `open-router-admin` reported **173×32 at
+y=1433** from inside a clipping ancestor that was **0px tall**. That is a control
+no pointer can reach which nevertheless advertises itself as reachable, and it
+is a hard blocker for automation and a latent one for assistive tech:
+
+- `getBoundingClientRect()` is non-empty, so **Playwright answers "element is
+  visible, enabled and stable"** and proceeds to click.
+- It then hit-tests the box's centre, which resolves to whichever `modem-row` is
+  genuinely painted at those coordinates, and reports
+  `<div … data-testid="modem-row" …> intercepts pointer events` — **forever**,
+  because nothing about it is transient. This reads exactly like a re-render
+  race and is not one: measured over 20 s of idle poll, the section produced
+  **zero** childList mutations and every row kept its DOM node.
+
+The wrapper therefore also carries `visibility: hidden` while collapsed. That
+one property fixes both halves: `visibility` is INHERITED, it withdraws the
+subtree from hit testing, and a browser reports the descendants as not-visible,
+so Playwright waits honestly instead of retrying an impossible click.
+
+- **It is transitioned (`transition-[visibility] duration-200`), and that is
+  load-bearing.** A `visibility` transition whose start value is `visible` holds
+  `visible` for the whole duration, so the close still animates alongside the
+  `grid-template-rows` collapse and the open is instant. Do NOT drop the
+  transition and do NOT reach for `display: none` (which kills the animation) or
+  `content-visibility` (narrower support, and it does not solve the visibility
+  report).
+- **It stays pure CSS**, so both global motion freezes (`prefers-reduced-motion`
+  and the e-ink `transition: none`) still cover it — the same reason the reveal
+  itself is a `grid-template-rows` transition rather than a Svelte one.
+- **`inert` is NOT redundant with it and must stay.** `inert` governs focus and
+  the accessibility tree; `visibility` governs painting and hit testing. Neither
+  implies the other.
+
+**AND THE SHARED COLLAPSIBLE NOW CARRIES IT TOO (Phase-C todo 14) [EXISTS].**
+`lib/components/custom/CollapsibleSection.svelte` used the identical
+`grid-template-rows` + `overflow: hidden` + `inert` shape and therefore carried
+the identical escaping layout box — which mattered most on the modem dialog's
+own **Advanced** disclosure (`modem-advanced-body`), where four instrument cards
+and the USB-composition switch sit. It has the same one-line, transitioned
+`visibility` gate now, so every consumer gets it at once: the modem dialog and
+the three DevTools panels.
+
+`ModemConfigDialog`'s SMS card (`modem-sms-card`) is the deliberate exception
+and needs nothing: its CONTENT is `{#if}`-gated, so a collapsed inbox holds no
+element in the DOM at all and there is no box to escape. That gate exists for a
+privacy reason (one-time codes) and is what incidentally covers this too — do
+not "unify" it with the outer disclosure.
+
+**ONE CONSEQUENCE WORTH KNOWING BEFORE YOU WRITE A TEST.** `visibility: hidden`
+is honoured by Testing Library's `isInaccessible`, so a `getByRole` query can no
+longer reach into a COLLAPSED disclosure — correctly, since a collapsed body is
+`inert` and genuinely inaccessible, and jsdom simply could not see that before
+(it never reflects `inert` to an attribute). `getByTestId` is unaffected, which
+is why only role/accessible-name assertions needed a step. The unit twin of the
+e2e helper is `src/tests/helpers/modem-advanced.ts` (`openModemAdvanced()`,
+idempotent, no-ops when there is no disclosure); `ModemConfigDialog.sms.test.ts`
+and `.usbmode.test.ts` are its first two callers.
+
+Coverage: `CellularSection.density.test.ts` → "a collapsed disclosure hides its
+content from the pointer" (the row's copy); `CollapsibleSection.test.ts` (the
+shared component — the guard, its transition, and that it did NOT replace
+`inert` or the CSS reveal); `ModemConfigDialog.density.test.ts` → "hides the
+collapsed body from the pointer, not only from focus" (the dialog's disclosure);
+and `tests/e2e/modem-advanced-disclosure.spec.ts`, which is the only half that
+can prove the ESCAPING BOX — jsdom lays nothing out. That spec clicks through
+`page.mouse` at coordinates MEASURED from `boundingBox()`, asserts
+`document.elementFromPoint` at the trigger's centre AND all four edges, and
+proves a collapsed control does not answer a hit test at its own rect. Rule-E
+proof: removing the guard reddens 5 unit tests and both e2e tests (the collapsed
+`modem-sms-toggle` reports VISIBLE, which is the defect itself).
+
+**A hit-test assertion must distinguish "hit something else" from "hit
+nothing".** `elementFromPoint` answers `null` outside the viewport, and
+`hit?.closest(sel) !== null` is `true` for `null` — so the obvious boolean form
+passes VACUOUSLY. That is not hypothetical: this spec's first run measured an
+unscrolled `boundingBox()` for a disclosure below the fold in a scrolling
+dialog, and its whole hit-testing section proved nothing while reporting green.
+`hitOwner()` returns `"trigger" | "other" | "nothing"`, and every caller
+`scrollIntoViewIfNeeded()` first.
+
+## AN UNCHANGED TICK MUST BE A NO-OP [EXISTS]
+
+`lib/rpc/value-identity.ts` (`isSameWireValue` / `preserveWireIdentity`, pure and
+rune-free) is the rule both `subscriptions.svelte.ts` merges apply before they
+publish. Every broadcast is `JSON.parse`d, so a modem or an interface whose
+fields did not move still arrives as a brand-new object graph — and both merges
+allocated a fresh entry AND a fresh map for it unconditionally. `getModems()` and
+`getNetif()` therefore returned a different reference every 5 s on a completely
+idle board, invalidating every `$derived` beneath them and re-running each row's
+whole `{@const}` derivation block for data that had not changed.
+
+- **Equality is STRUCTURAL, not shallow.** A shallow compare cannot preserve
+  anything here: `modem.status` and `modem.router_admin` are freshly parsed
+  objects on every tick, so a reference check on them always differs. The wire is
+  Zod-parsed plain JSON — no cycles, no class instances — so a bounded recursive
+  compare is both correct and cheap.
+- **The key set stays AUTHORITATIVE.** Identity preservation applies to ENTRIES
+  and to the map only when the key COUNT also matches; an id or ifname the frame
+  stopped publishing is still a change, and `netif-modem-staleness.test.ts`
+  remains the contract for that half. Do not "simplify" the length check away.
+- **This is not what made the row unclickable** (see the disclosure contract
+  above) — it is the wasted-work half of the same report, and it is measured as
+  such, not assumed.
+
+## …AND THE ROW IS KEYED ON ITS ROSTER ID [EXISTS]
+
+`CellularSection`'s `{#each}` is keyed on `id` — the modem map's own key, unique
+by construction, and already what the row's disclosure state is filed under
+(`openDetails[id]`). It used to be `modem.ifname || id + '-' + index`, and both
+halves of that fallback are remount triggers: the bench HiLink twins ship ONE
+factory MAC between them so they rename against each other
+(`enx0c5b8f279a64` ↔ `eth1`) on replug, which SWAPS two rows' keys and makes
+Svelte destroy and rebuild both — discarding their open disclosures and detaching
+whatever the operator was reaching for — and an `ifname` that appears or
+disappears flips a row between the two halves. Do not key a row on an interface
+name anywhere; that is the same lesson `linkRowKey` already carries for
+`BondedLinksSection`. Coverage: `CellularSection.density.test.ts` → "a row
+survives its interface being renamed".

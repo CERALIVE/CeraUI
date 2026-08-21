@@ -47,6 +47,8 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
+import { getDbusModemCache } from "../cellular/dbus-modem-cache.ts";
+import { getUdevProvisionalCache } from "../cellular/udev-provisional-cache.ts";
 import { createMonitorManager } from "../network/monitor/monitor-manager.ts";
 import { withModemUpdateLock } from "../network/state/device-lock.ts";
 import type {
@@ -65,6 +67,7 @@ import {
 	registerModemSafe,
 } from "./modem-registration.ts";
 import { broadcastModems } from "./modem-status.ts";
+import { refreshModemIdPaths } from "./modem-wire-producer.ts";
 import { getModem, getModemIds, removeModem } from "./modems-state.ts";
 import { maybeAutoUnlockSimPins } from "./sim-autounlock.ts";
 import {
@@ -74,9 +77,17 @@ import {
 	setModemsState,
 	triggerGsmConnectionsReset,
 } from "./state/modems-state-cache.ts";
+import { refreshUsagePolicies } from "./usage-policy.ts";
 
 // Retained status poll cadence. Reduced from the old 10s self-recursive loop:
 // signal/status only, no presence detection, no gsm reset.
+//
+// Under the D-Bus backend this is NO LONGER how an operator learns anything —
+// plug/unplug, state, registration, rejection and SIM events all arrive push-
+// driven from the observer. It is retained UNCHANGED, at this rate, purely as
+// the reconciliation backstop that keeps `modems-state` warm so a demotion to
+// mmcli has rows to serve immediately. Polling faster than the event source
+// buys nothing and costs an mmcli spawn per modem per tick.
 /** Interval (ms) for retained modem status poll (signal/status refresh only). */
 const STATUS_POLL_INTERVAL_MS = 30_000;
 
@@ -144,6 +155,7 @@ async function handleModemAdded(id: ModemId): Promise<void> {
 		} else {
 			await registerModemSafe(id);
 		}
+		await refreshModemIdPaths();
 		// Publish: a freshly registered modem reconciles as `added`, which the
 		// onModemsChange handler turns into a gsm reset + full broadcast.
 		publishModemsSnapshot();
@@ -192,51 +204,127 @@ async function handleMonitorEvent(event: MonitorEvent): Promise<void> {
 	}
 }
 
+/** Effectful surface of the presence reconcile, injectable for tests. */
+export interface ModemPresenceDeps {
+	listModems: typeof mmListWithRetry;
+	registerModem: typeof registerModemSafe;
+	refreshStatus: typeof refreshModemStatus;
+	refreshIdPaths: typeof refreshModemIdPaths;
+}
+
+const defaultModemPresenceDeps: ModemPresenceDeps = {
+	listModems: mmListWithRetry,
+	registerModem: registerModemSafe,
+	refreshStatus: refreshModemStatus,
+	refreshIdPaths: refreshModemIdPaths,
+};
+
+let presenceDeps: ModemPresenceDeps = defaultModemPresenceDeps;
+
+/** Override the presence reconcile's effectful surface. `null` restores it. */
+export function setModemPresenceDepsForTest(
+	deps: Partial<ModemPresenceDeps> | null,
+): void {
+	presenceDeps =
+		deps === null
+			? defaultModemPresenceDeps
+			: { ...defaultModemPresenceDeps, ...deps };
+}
+
+/**
+ * The presence + status reconcile shared by the startup/resync discovery and
+ * the retained poll. The caller MUST already hold the modem update lock.
+ *
+ * A `mmcli -L` that could not be read is a statement about the READ, never
+ * about the hardware, so `undefined` RETAINS every modem and refreshes status
+ * only. Reading it as an empty roster would evict the whole registry — and with
+ * it every modem's resolved NM profile — on one transient failure, which at the
+ * 30 s cadence is a live hazard rather than the rare boot-time one it was while
+ * only discovery called this.
+ */
+async function reconcileModemPresenceLocked(
+	alwaysRefreshIdPaths: boolean,
+): Promise<void> {
+	const modemList = await presenceDeps.listModems();
+
+	if (modemList === undefined) {
+		for (const id of getModemIds()) {
+			await presenceDeps.refreshStatus(id);
+		}
+		publishModemsSnapshot();
+		return;
+	}
+
+	const present = new Set<ModemId>(modemList);
+	let presenceChanged = false;
+
+	for (const id of getModemIds()) {
+		if (!present.has(id)) {
+			logger.warn(`Modem ${id} removed`);
+			removeModem(id);
+			presenceChanged = true;
+		}
+	}
+
+	for (const id of modemList) {
+		if (getModem(id)) {
+			await presenceDeps.refreshStatus(id);
+		} else {
+			await presenceDeps.registerModem(id);
+			presenceChanged = true;
+		}
+	}
+
+	// An ID_PATH names where a device is PLUGGED IN, so only a presence EDGE can
+	// move it — refreshing on every quiet tick buys a udev read per tick and
+	// nothing else. Discovery refreshes unconditionally because it is also the
+	// boot seed, which has no earlier edge to have populated the map.
+	if (alwaysRefreshIdPaths || presenceChanged) {
+		await presenceDeps.refreshIdPaths();
+	}
+
+	publishModemsSnapshot();
+}
+
 /**
  * Full reconcile: list the modems currently present, register the new ones,
  * drop the gone ones, refresh the survivors, then publish. Used for the initial
  * startup state and on every monitor restart (`onResync`) — the monitor has no
  * historical replay, so a full poll is the only way to close the gap.
- *
- * This is NOT the retained status poll: it detects presence changes and so its
- * diff may carry add/remove entries (which reset gsm connections).
  */
 export async function discoverModems(): Promise<void> {
-	await withModemUpdateLock(async () => {
-		const modemList = (await mmListWithRetry()) ?? [];
-		const present = new Set<ModemId>(modemList);
-
-		for (const id of getModemIds()) {
-			if (!present.has(id)) {
-				logger.warn(`Modem ${id} removed`);
-				removeModem(id);
-			}
-		}
-
-		for (const id of modemList) {
-			if (getModem(id)) {
-				await refreshModemStatus(id);
-			} else {
-				await registerModemSafe(id);
-			}
-		}
-
-		publishModemsSnapshot();
-	});
+	await withModemUpdateLock(() => reconcileModemPresenceLocked(true));
 }
 
 /**
- * Retained status poll: refresh signal/status of EVERY known modem at the
- * reduced cadence. Never lists/registers (presence is event-driven) and never
- * resets gsm connections — its diff only ever contains `changed` entries.
+ * Retained poll: reconcile PRESENCE and refresh status for every modem, at the
+ * reduced cadence.
+ *
+ * It re-lists deliberately. `modem-added`/`modem-removed` are emitted ONLY by
+ * the scripted `MockMonitorEmitter`: the production monitor is
+ * `NmcliMonitorManager`, whose `parseMonitorLine` can answer with nothing but
+ * `connection-state` and `device-state`, because `nmcli monitor` reports
+ * NetworkManager devices and has no view of the ModemManager modem lifecycle at
+ * all. So on real hardware presence used to be discovered exactly ONCE, at
+ * boot, and a modem that appeared afterwards was never registered — never
+ * resolved an NM profile, and therefore could never be brought up.
+ *
+ * Board-measured on a Rock 5B+ (2026-08-19): ModemManager created modem9 at
+ * 23:59:52 and modem10 (a Fibocom FM350-GL) at 00:00:21, having dropped modems
+ * 3 and 5 at 23:58. An hour later CeraUI was still polling `mmcli -K -m 3` and
+ * `-m 5` — two indices that no longer existed — had logged not one line about 9
+ * or 10, and the FM350 sat `registered` with a real SIM, full signal and NO
+ * NetworkManager profile of any kind. `nmcli connection show` carried no GSM
+ * profile for its device id.
+ *
+ * Re-listing costs ONE `mmcli -L` spawn per tick and is the only signal on this
+ * device that can see a modem arrive. Do NOT "restore" the event-driven-only
+ * form without first giving the production monitor a real modem-lifecycle event
+ * source (the D-Bus observer or udev), and note that the mmcli backend — still
+ * the supported rollback value — has no such source at all.
  */
 export async function runModemStatusPoll(): Promise<void> {
-	await withModemUpdateLock(async () => {
-		for (const id of getModemIds()) {
-			await refreshModemStatus(id);
-		}
-		publishModemsSnapshot();
-	});
+	await withModemUpdateLock(() => reconcileModemPresenceLocked(false));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -249,6 +337,8 @@ let monitorListener: ((event: MonitorEvent) => void) | null = null;
 let statusPollTimer: ReturnType<typeof setTimeout> | null = null;
 let unsubModemsChange: (() => void) | null = null;
 let unsubGsmReset: (() => void) | null = null;
+let unsubDbusViews: (() => void) | null = null;
+let unsubProvisional: (() => void) | null = null;
 
 // Serializes async work kicked off by sync monitor callbacks so callers (and
 // tests) can await the loop reaching a quiescent state.
@@ -307,6 +397,31 @@ export async function initModemUpdateLoop(
 		broadcastFromDiff(diff);
 	});
 
+	// The push half of the cutover. The D-Bus cache serves `readDbusViews()`,
+	// which the wire producer reads SYNCHRONOUSLY — so a changed observation only
+	// reaches an operator if something broadcasts. The mmcli diff engine above
+	// cannot see it: these rows never enter `modems-state`.
+	unsubDbusViews = getDbusModemCache().subscribe(() => {
+		try {
+			broadcastModems();
+		} catch (error) {
+			logger.warn("dbus modem broadcast failed", { error });
+		}
+	});
+
+	// Same seam, same reason, for the optimistic udev rows (todo 18): the whole
+	// point of an attach-time row is that it beats the 30 s poll, so it has to
+	// push. The one thing that differs is the failure cost — an optimistic row is
+	// a latency improvement, so a broadcast that throws must never take the
+	// authoritative modem list down with it.
+	unsubProvisional = getUdevProvisionalCache().subscribe(() => {
+		try {
+			broadcastModems();
+		} catch (error) {
+			logger.warn("provisional modem broadcast failed", { error });
+		}
+	});
+
 	const monitor =
 		options.monitor ??
 		createMonitorManager(() => {
@@ -320,6 +435,11 @@ export async function initModemUpdateLoop(
 	};
 	monitor.on("monitor-event", monitorListener);
 	monitor.start();
+
+	// BEFORE the first discovery, because that discovery's broadcast is the first
+	// `modems` payload a client sees and it must already carry the operator's
+	// persisted meter bounds rather than reporting them unset for one frame.
+	await refreshUsagePolicies();
 
 	if (autoDiscover) {
 		await discoverModems();
@@ -357,7 +477,11 @@ export function stopModemUpdateLoop(): void {
 	monitorListener = null;
 	unsubModemsChange?.();
 	unsubGsmReset?.();
+	unsubDbusViews?.();
+	unsubProvisional?.();
 	unsubModemsChange = null;
 	unsubGsmReset = null;
+	unsubDbusViews = null;
+	unsubProvisional = null;
 	initialized = false;
 }

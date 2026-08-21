@@ -142,10 +142,11 @@ describe("modem migration — event-driven presence + retained status poll", () 
 	});
 
 	test("status poll refreshes signal without a full rebuild and does NOT reset gsm", async () => {
-		// Register modem 0 first (this fires its own add-time gsm reset, before
-		// our counters are attached below).
-		monitor.emit({ type: "modem-added", id: "0" });
-		await whenModemUpdatesSettled();
+		// Establish the FULL present set first. The retained poll reconciles
+		// presence, so a partially-registered baseline would make it correctly
+		// register the remainder and report those as additions — this test is
+		// about a poll across which presence does NOT change.
+		await discoverModems();
 
 		const baselineSignal = getModem(0)?.status?.signal;
 		expect(baselineSignal).toBeDefined();

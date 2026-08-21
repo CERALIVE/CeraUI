@@ -15,6 +15,12 @@
  */
 
 const LINK_LOCAL_IPV4 = /^169\.254\.(\d{1,3})\.(\d{1,3})$/;
+const LOOPBACK_IPV4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
+/** True when `ip` is an IPv4 loopback address (`127.0.0.0/8`, RFC 1122). */
+export function isLoopbackIpv4(ip: string | undefined | null): boolean {
+	return Boolean(ip) && LOOPBACK_IPV4.test((ip as string).trim());
+}
 
 /**
  * True when `ip` is an IPv4 link-local address (`169.254.0.0/16`). Tolerates

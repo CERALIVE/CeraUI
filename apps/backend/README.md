@@ -10,6 +10,33 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 **Shared contract**: `@ceraui/rpc` (workspace package at `packages/rpc/`)  
 **Engine/bindings**: `@ceralive/cerastream` (public-npm registry dep — JSON-RPC/UDS client), `@ceralive/srtla-send` (public-npm registry dep)
 
+### Modem-control compatibility
+
+The backend pins `@ceralive/modem-control` at `1.1.0` EXACTLY. The SMS port, the
+usage-policy setter and the band certification catalog are static imports: while
+the pin was the published `0.2.0` floor each was resolved through a lazy
+`import()` and a structural probe, because its API had landed in modem-stack
+after the pinned release and a static import would have failed the build rather
+than degrading. With an exact pin that question is settled by `tsc` and by
+`bun install`.
+
+Fourteen frozen projection modules still consume additive pure modem logic
+through `src/modules/modem-control-compat.ts`, which is a static namespace import
+rather than a probe. It is permanent: two of its names are exported by no release,
+so the local implementations behind it are the implementation, not a fallback.
+Modem-stack mutation operations receive CeraUI's existing stream-coupled admission
+policy through `src/modules/modems/mutation-admission-port.ts`; transport/session
+ownership and the device wire contract remain in CeraUI. The committed pin and
+boundary gate is `src/tests/modem-control-projections.test.ts`.
+
+USB composition transitions treat the modem's physical reappearance and its
+NetworkManager readiness as separate events. After re-enumeration, the backend
+boundedly resolves the transaction's NM connection id to its replacement interface
+before returning the target snapshot to the transition engine. If that interface
+never appears, the transaction fails and its journal records the failure rather than
+claiming success. Shipping-modem catalog admission remains evidence-gated; the
+RM530N-GL entry is deferred to the hardware-validation Todo 42.
+
 ## Structure
 
 ```

@@ -283,11 +283,24 @@ export function registerSavedWifiConnection(
 	const boundInterface = macAddress ? interfaces[macAddress] : undefined;
 	if (boundInterface) {
 		boundInterface.saved[ssid] = uuid;
+		rememberSavedUuid(boundInterface, ssid, uuid);
 		return;
 	}
 	for (const wifiInterface of Object.values(interfaces)) {
 		wifiInterface.saved[ssid] ??= uuid;
+		rememberSavedUuid(wifiInterface, ssid, uuid);
 	}
+}
+
+/* `saved` keeps ONE uuid per SSID; `savedAll` keeps every one, for Forget. */
+function rememberSavedUuid(
+	wifiInterface: WifiInterface,
+	ssid: SSID,
+	uuid: ConnectionUUID,
+): void {
+	wifiInterface.savedAll[ssid] ??= [];
+	const all = wifiInterface.savedAll[ssid];
+	if (!all.includes(uuid)) all.push(uuid);
 }
 
 export async function wifiUpdateSavedConns() {
@@ -306,6 +319,7 @@ export async function wifiUpdateSavedConns() {
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
 		wifiInterface.saved = {};
+		wifiInterface.savedAll = {};
 	}
 
 	for (const connection of connections) {
@@ -388,10 +402,34 @@ async function wifiDisconnect(uuid: ConnectionUUID) {
 	}
 }
 
+/*
+  Every profile the adapters hold for the SSID `uuid` belongs to — because
+  "Forget" means "remove this NETWORK", and the operator's row IS the SSID.
+  Deleting only `uuid` leaves a same-SSID sibling behind, which keeps the row
+  reading "Saved" and is indistinguishable from a Forget that did nothing.
+*/
+export function wifiSiblingConnections(uuid: ConnectionUUID): ConnectionUUID[] {
+	const uuids = new Set<ConnectionUUID>([uuid]);
+	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
+		for (const ssid in wifiInterface.saved) {
+			if (wifiInterface.saved[ssid] !== uuid) continue;
+			for (const sibling of wifiInterface.savedAll[ssid] ?? []) {
+				uuids.add(sibling);
+			}
+		}
+	}
+	return [...uuids];
+}
+
 async function wifiForget(uuid: ConnectionUUID) {
 	if (wifiSearchConnection(uuid) === undefined) return;
 
-	if (await nmConnDelete(uuid)) {
+	let deleted = false;
+	for (const target of wifiSiblingConnections(uuid)) {
+		if (await nmConnDelete(target)) deleted = true;
+	}
+
+	if (deleted) {
 		await wifiUpdateSavedConns();
 		await wifiUpdateScanResult();
 		wifiScheduleScanRefresh();

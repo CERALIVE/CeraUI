@@ -11,14 +11,26 @@ import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
+import {
+	ambiguousLinkLabels,
+	linkDisambiguation,
+	linkRowKey,
+} from './link-disambiguation';
 
 interface Props {
 	links: LinkSignal[];
 	modemEntries: [string, Modem][];
 	linkTelemetry?: LinkTelemetryMessage | null;
+	/** Known interfaces that carry no bonded traffic; stated, never listed here. */
+	unbondedCount?: number;
 }
 
-const { links, modemEntries, linkTelemetry = undefined }: Props = $props();
+const {
+	links,
+	modemEntries,
+	linkTelemetry = undefined,
+	unbondedCount = 0,
+}: Props = $props();
 
 // The feed is `undefined` only before the first status push lands. Distinguish
 // that "not arrived yet" state from a delivered-but-empty feed (null / no entry
@@ -26,13 +38,19 @@ const { links, modemEntries, linkTelemetry = undefined }: Props = $props();
 const telemetryLoading = $derived(linkTelemetry === undefined);
 
 // Index telemetry rows by their resolved interface name so each card can join
-// its own values. `link.id` is the kernel ifname, which the backend resolves
-// `conn_id` -> `iface` to (link-telemetry.ts). No match -> "--" placeholders.
+// its own values. `link.id` is the kernel ifname, which the backend resolves per
+// link from the id the bind-map writer published (link-telemetry.ts) rather than
+// from the shared source address — twins share an IP, so an address-resolved
+// name pointed BOTH of their rows at one interface. No match -> "--".
 const telemetryByIface = $derived(
 	new Map<string, LinkTelemetryEntry>(
 		(linkTelemetry?.links ?? []).map((entry) => [entry.iface, entry]),
 	),
 );
+
+// Two units of one model render identical labels; only then is the extra
+// identity line worth its noise.
+const ambiguousLabels = $derived(ambiguousLinkLabels(links));
 
 /** A short type tag for a bonded link (WiFi, Ethernet, or the modem's network generation). */
 function linkTypeLabel(link: LinkSignal): string {
@@ -66,18 +84,22 @@ const totalStale = $derived(
 
 	{#if links.length === 0}
 		<p class="text-muted-foreground text-sm">{m["network.view.noLinks"]()}</p>
+		{@render notBondedNote()}
 	{:else}
 		<!-- SOLE home of live per-link numbers on the Network page (Task 19): the
 		     per-interface sections no longer duplicate them (Task 20). -->
 		<div class="flex flex-col gap-1.5">
-			{#each links as link (link.linkIndex)}
+			{#each links as link (linkRowKey(link, telemetryByIface.get(link.id)))}
+				{@const entry = telemetryByIface.get(link.id)}
 				{@const color = `var(--link-${link.linkIndex + 1})`}
 				{@const hasSignal = link.signal !== null}
+				{@const identity = linkDisambiguation(link, entry, ambiguousLabels)}
 				<div
 					data-testid="bonded-link-card"
 					data-link-id={link.id}
+					data-link-key={linkRowKey(link, entry)}
 					class={cn(
-						'flex items-center gap-2.5 rounded-lg border px-3 py-1.5',
+						'flex flex-wrap items-center gap-2.5 rounded-lg border px-3 py-1.5',
 						link.isStale && 'opacity-50',
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
@@ -93,43 +115,58 @@ const totalStale = $derived(
 						connectionState={link.connectionState}
 						linkIndex={link.linkIndex}
 					/>
-					<div class="flex min-w-0 flex-1 flex-col leading-tight">
+					<!-- A REAL BASIS, not `flex-1`'s zero. Every instrument to the right is
+					     `shrink-0`, so a zero-basis identity column is the only thing in the
+					     row that can absorb a squeeze — and at 375px it absorbed all of it
+					     and measured 0, which is the known gap this pass closes. With a
+					     basis the instruments wrap to a second line instead, and the device
+					     name keeps its width. Written as ONE `flex` shorthand on purpose:
+					     `flex-1 basis-32` sets `flex-basis` twice and which one wins is
+					     decided by Tailwind's stylesheet order, not by the class attribute. -->
+					<div class="flex min-w-0 flex-[1_1_8rem] flex-col leading-tight">
 						<span class="truncate text-xs font-medium">{link.label}</span>
-						<span class="text-muted-foreground text-[10px] uppercase tracking-wide"
-							>{linkTypeLabel(link)}</span
-						>
+						<span class="text-muted-foreground truncate text-[10px] uppercase tracking-wide">
+							{linkTypeLabel(link)}{#if identity}<!--
+							-->&nbsp;·&nbsp;<!--
+							--><span data-testid="bonded-link-identity" dir="ltr" class="font-mono normal-case"
+									>{identity}</span
+								>{/if}
+						</span>
 					</div>
-					{#if hasSignal}
-						<span
-							data-live-value
-							class="shrink-0 font-mono text-xs tabular-nums"
-							style="color: {color};"
-						>
-							{link.signal}%
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
-						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-							{m["network.view.noSimLink"]()}
-						</span>
-					{:else if link.type === 'modem' && link.connectionState === 'scanning'}
-						<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
-							{m["network.modem.scanning"]()}
-						</span>
-					{/if}
-					<!-- per-link throughput (Task 18) -->
-					<Badge variant="speed" class="shrink-0" kbps={linkUpKbps(link)} stale={link.isStale} />
+					<!-- The instruments travel as ONE unit so a wrap cannot strand the
+					     speed badge on a line away from the telemetry it belongs with, and
+					     so the group wraps whole rather than item by item. Every member is
+					     `shrink-0`, so before this their combined min-content simply pushed
+					     the identity column above out of existence. -->
+					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2.5">
+						{#if hasSignal}
+							<span
+								data-live-value
+								class="shrink-0 font-mono text-xs tabular-nums"
+								style="color: {color};"
+							>
+								{link.signal}%
+							</span>
+						{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
+							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
+								{m["network.view.noSimLink"]()}
+							</span>
+						{:else if link.type === 'modem' && link.connectionState === 'scanning'}
+							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">
+								{m["network.modem.scanning"]()}
+							</span>
+						{/if}
+						<!-- per-link throughput (Task 18) -->
+						<Badge variant="speed" class="shrink-0" kbps={linkUpKbps(link)} stale={link.isStale} />
 
-					<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
-					     the same row via a left divider, at reduced size (Task 19). -->
-					<div
-						class="shrink-0 border-s ps-2.5"
-						style="border-color: color-mix(in oklab, {color} 20%, transparent);"
-					>
-						<LinkTelemetry
-							class="gap-x-2.5"
-							entry={telemetryByIface.get(link.id)}
-							loading={telemetryLoading}
-						/>
+						<!-- per-link srtla telemetry: RTT / NAK / weight (Task 22) — rides
+						     the same row via a left divider, at reduced size (Task 19). -->
+						<div
+							class="min-w-0 border-s ps-2.5"
+							style="border-color: color-mix(in oklab, {color} 20%, transparent);"
+						>
+							<LinkTelemetry class="gap-x-2.5" {entry} loading={telemetryLoading} />
+						</div>
 					</div>
 				</div>
 			{/each}
@@ -166,5 +203,27 @@ const totalStale = $derived(
 				{/if}
 			</span>
 		</div>
+
+		{@render notBondedNote()}
 	{/if}
 </section>
+
+<!--
+	The panel lists the bond and nothing else, so a link that carries no traffic
+	has no row here. Its EXISTENCE still has to be discoverable, so the count is
+	stated and the operator is pointed at the per-device row — the one surface
+	that can actually explain WHY, and that already does.
+-->
+{#snippet notBondedNote()}
+	{#if unbondedCount > 0}
+		<p
+			data-testid="bonded-links-not-bonded"
+			data-not-bonded-count={unbondedCount}
+			class="text-muted-foreground mt-3 text-xs"
+		>
+			{unbondedCount === 1
+				? m["network.view.notBondedOne"]()
+				: m["network.view.notBondedMany"]({ count: unbondedCount })}
+		</p>
+	{/if}
+{/snippet}

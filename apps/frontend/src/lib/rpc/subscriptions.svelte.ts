@@ -39,6 +39,7 @@ import {
 	pipelineSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
+import { preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import {
@@ -394,15 +395,37 @@ const seqTracker = createSeqTracker();
  * spurious no-SIM state until the next full snapshot. Merging field-by-field
  * per modem id keeps incremental updates non-destructive; a full snapshot still
  * overwrites every field it carries.
+ *
+ * The KEY SET, however, is authoritative on every frame. Values are partial;
+ * ids never are — `buildModemsMessage`/`projectModemWire` both walk the whole
+ * roster and emit an entry for every device, narrowing only what each entry
+ * CONTAINS when `modemsFullState` asks for a status-only push. Carrying ids
+ * forward was therefore not conservatism, it was a latch: a removed modem kept
+ * rendering with its last-known `ifname`, and a row correlates to its address
+ * by exactly that field — so the stale row resolved no netif entry and claimed
+ * "No address yet" about hardware that was simply gone.
  */
 function mergeModemList(
 	prev: ModemList | undefined,
 	incoming: ModemList,
 ): ModemList {
-	const next: ModemList = { ...prev };
+	const next: ModemList = {};
+	let changed = false;
 	for (const [id, modem] of Object.entries(incoming)) {
 		if (!modem) continue;
-		next[id] = { ...next[id], ...modem };
+		const previous = prev?.[id];
+		const kept = preserveWireIdentity(previous, { ...previous, ...modem });
+		if (kept !== previous) changed = true;
+		next[id] = kept;
+	}
+	// The key set stays authoritative: a roster that shed an id is a genuine
+	// change even when every surviving entry is byte-identical.
+	if (
+		!changed &&
+		prev !== undefined &&
+		Object.keys(next).length === Object.keys(prev).length
+	) {
+		return prev;
 	}
 	return next;
 }
@@ -508,6 +531,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 							active_encode: null,
 							engine_bitrate: null,
 							preview_encoder_realized: null,
+							// A stopped session makes no claim about a bond, and the
+							// merge above preserves an omitted field — so a degradation
+							// band raised mid-stream would otherwise stand forever.
+							bond_mapping: null,
 						}
 					: {}),
 			} as typeof statusState;
@@ -519,17 +546,32 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// BondToggle registers per-interface locks as `enabled_${name}` via
 			// markPending/onRpcResolved. Guard only `enabled` — all other fields
 			// (tp, ip, error, mac, same_subnet_group, policy_route_missing,
-			// tx_bps, rx_bps) flow through live without registry interaction.
+			// tx_bps, rx_bps, dongle, router_cellular) flow through live without
+			// registry interaction.
 			//
 			// This rebuilds each entry from an EXPLICIT allowlist rather than
 			// spreading `entry`, so a field added to `netifEntrySchema` reaches the
 			// store ONLY if it is added below too — omitting the measured rates is
 			// why Bonded Links read `0 kbps` on a board pushing ~95 Mbit/s.
+			//
+			// The key set is AUTHORITATIVE on every frame. `netIfBuildMsg()` is the
+			// only producer and it walks the whole interface map, so an ifname the
+			// frame omits is an interface the kernel no longer reports as RUNNING.
+			// Starting from the previous map preserved it forever instead: proven on
+			// the bench by downing `eth1`, which vanished from the wire while the UI
+			// went on rendering it at `192.168.8.100`. Per-FIELD merging is still
+			// required (an entry legitimately omits optional fields), so the previous
+			// value is read per key rather than seeded wholesale.
 			const incoming = data as NetifMessage;
-			const merged: NetifMessage = { ...netifState };
+			const merged: NetifMessage = {};
+			let netifChanged = false;
 			for (const [ifname, entry] of Object.entries(incoming)) {
 				if (!entry) continue;
-				const existing = merged[ifname] ?? ({} as NetifEntry);
+				// An explicit `dongle: null` is the backend RETRACTING a dongle claim,
+				// and it is the row's final frame — so the row goes NOW rather than
+				// surviving until the interface itself stops being reported.
+				if (entry.dongle === null) continue;
+				const existing = netifState?.[ifname] ?? ({} as NetifEntry);
 				// Each optional field is spread ONLY when present so a tick that omits
 				// it keeps the prior value via `...existing` (same as ip/error/mac).
 				// same_subnet_group/policy_route_missing MUST be here or CollisionBands
@@ -547,7 +589,21 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 						: {}),
 					...(entry.tx_bps !== undefined ? { tx_bps: entry.tx_bps } : {}),
 					...(entry.rx_bps !== undefined ? { rx_bps: entry.rx_bps } : {}),
+					...(entry.dongle ? { dongle: entry.dongle } : {}),
+					...(entry.router_cellular
+						? { router_cellular: entry.router_cellular }
+						: {}),
+					...(entry.usb_modem_net
+						? { usb_modem_net: entry.usb_modem_net }
+						: {}),
 				};
+				// An explicit `router_cellular: null` retracts the classification
+				// WITHOUT retiring the row — the interface is still enumerated, it
+				// merely stopped classifying. Deleting the key is what makes the
+				// marker retractable at all: `...existing` would otherwise preserve
+				// it forever, the `policy_route_missing` latch again.
+				const retractRouterCellular = entry.router_cellular === null;
+				const retractModemNet = entry.usb_modem_net === null;
 				// Guard the `enabled` field through the dirty-field registry.
 				const field = `enabled_${ifname}`;
 				let nextEnabled = existing.enabled ?? entry.enabled;
@@ -555,9 +611,26 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					reconcileReactive(field, entry.enabled, undefined, { strict: true });
 					nextEnabled = entry.enabled;
 				}
-				merged[ifname] = { ...existing, ...live, enabled: nextEnabled };
+				const next: NetifEntry = {
+					...existing,
+					...live,
+					enabled: nextEnabled,
+				};
+				if (retractRouterCellular) delete next.router_cellular;
+				if (retractModemNet) delete next.usb_modem_net;
+				const previous = netifState?.[ifname];
+				const kept = preserveWireIdentity(previous, next);
+				if (kept !== previous) netifChanged = true;
+				merged[ifname] = kept;
 			}
-			netifState = merged;
+			// Same key-set authority as the modem merge: an interface the frame
+			// dropped is a change even when every survivor is byte-identical.
+			netifState =
+				!netifChanged &&
+				netifState !== undefined &&
+				Object.keys(merged).length === Object.keys(netifState).length
+					? netifState
+					: merged;
 			break;
 		}
 

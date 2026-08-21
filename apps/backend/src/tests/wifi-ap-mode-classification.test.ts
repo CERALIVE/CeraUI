@@ -8,7 +8,7 @@
   polled ifconfig cache has not (yet) seen an address for the radio.
 */
 
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 
 import { getModeForInterface } from "../modules/wifi/state/wifi-state.ts";
 import { wifiBuildMsg } from "../modules/wifi/wifi.ts";
@@ -27,9 +27,26 @@ import {
 	parseWifiConnectionMode,
 	type WifiInterface,
 } from "../modules/wifi/wifi-interfaces.ts";
+import {
+	isolateWifiRegistry,
+	restoreWifiRegistry,
+} from "./helpers/wifi-registry.ts";
 
 const HOTSPOT_UUID = "hotspot-uuid";
 const CLIENT_UUID = "client-uuid";
+
+// `buildEntry` mounts into the process-wide interface registry, and `bun test`
+// loads every file into ONE process — so without this the last interface this
+// file mounts is inherited by every file that runs after it.
+let inheritedRegistry: ReturnType<typeof isolateWifiRegistry> = [];
+
+beforeAll(() => {
+	inheritedRegistry = isolateWifiRegistry();
+});
+
+afterAll(() => {
+	restoreWifiRegistry(inheritedRegistry);
+});
 
 function makeIface(
 	over: Partial<WifiInterfaceWithHotspot> & {
@@ -44,6 +61,7 @@ function makeIface(
 		hw: "Realtek RTL8852BE",
 		available: new Map(),
 		saved: {},
+		savedAll: {},
 		hotspot: {
 			...(hotspotConn ? { conn: hotspotConn } : {}),
 			name: "CERALIVE_test",
@@ -62,6 +80,7 @@ function makeStation(over: Partial<BaseWifiInterface> = {}): WifiInterface {
 		hw: "Generic WiFi",
 		available: new Map(),
 		saved: {},
+		savedAll: {},
 		...over,
 	};
 }

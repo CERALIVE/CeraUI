@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 
 import * as execMod from "../helpers/exec.ts";
+import { logger } from "../helpers/logger.ts";
 import {
 	ALLOWED,
 	argMatch,
@@ -186,5 +187,53 @@ describe("ALLOWED — Wave 2 binary coverage", () => {
 		]) {
 			expect(ALLOWED.has(bin)).toBe(true);
 		}
+	});
+
+	it("includes qmicli — the only route to a SIM's PIN2", () => {
+		expect(ALLOWED.has("qmicli")).toBe(true);
+	});
+});
+
+describe("run() — argv redaction covers BOTH secret shapes", () => {
+	/**
+	 * The debug line `run()` emits is the one place a live credential can reach
+	 * the journal, and the binaries this backend drives disagree about where the
+	 * secret sits. `qmicli` puts it INSIDE the token, which the separate-token
+	 * rule alone does not cover — so this asserts the rendered log line, not the
+	 * argv (which correctly still carries the real value).
+	 */
+	async function loggedCommandFor(args: string[]): Promise<string> {
+		spyOn(execMod, "execFileP").mockResolvedValue({ stdout: "", stderr: "" });
+		const lines: string[] = [];
+		spyOn(logger, "debug").mockImplementation(((...parts: unknown[]) => {
+			lines.push(parts.map((p) => String(p)).join(" "));
+		}) as never);
+
+		await run("qmicli", args);
+		return lines.join("\n");
+	}
+
+	it("masks a secret carried inside a --flag=value token (qmicli PIN2)", async () => {
+		const logged = await loggedCommandFor([
+			"-p",
+			"-d",
+			"/dev/cdc-wdm0",
+			"--uim-verify-pin=PIN2,4321",
+		]);
+
+		expect(logged).not.toContain("4321");
+		expect(logged).toContain("--uim-verify-pin=***");
+	});
+
+	it("leaves a non-secret --flag=value token readable", async () => {
+		const logged = await loggedCommandFor([
+			"-p",
+			"-d",
+			"/dev/cdc-wdm0",
+			"--uim-get-card-status",
+		]);
+
+		expect(logged).toContain("--uim-get-card-status");
+		expect(logged).toContain("/dev/cdc-wdm0");
 	});
 });

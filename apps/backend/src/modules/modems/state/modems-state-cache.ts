@@ -53,8 +53,9 @@ const gsmResetCallbacks = new Set<GsmConnectionsResetCallback>();
 
 /**
  * Stable signature of the volatile status fields used to detect a "changed"
- * modem: signal, connection, registration (surfaced as `roaming`), plus the
- * operator network + access-tech that ride along in the same status object.
+ * modem: signal, connection, registration (surfaced as `roaming`), the operator
+ * network + access-tech that ride along in the same status object, and the
+ * packet-service / network-rejection facts that explain a stuck registration.
  * Non-status fields (config, available_networks, …) are intentionally ignored —
  * config changes are signalled separately via `triggerGsmConnectionsReset`.
  */
@@ -69,6 +70,11 @@ function statusSignature(modem: Modem): string {
 		roaming: status.roaming,
 		network: status.network,
 		network_type: status.network_type,
+		// A radio can sit in `searching` for hours while only the network's stated
+		// rejection reason changes underneath it. Omit these and that new reason
+		// never reaches the operator, because no other field moved.
+		packet_service_state: status.packet_service_state,
+		registration_rejection: status.registration_rejection,
 	});
 }
 

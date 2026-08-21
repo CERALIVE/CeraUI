@@ -25,21 +25,22 @@
     binding's `watchTelemetry` and folds it into the WebSocket `status` flow as a
     `linkTelemetry` field. It owns three responsibilities:
 
-      1. conn_id -> interface-name mapping. srtla_send assigns each link a stable
-         `tlm_id` (stringified as `conn_id`) in source-IP-file order on first
-         appearance, monotonically, reset only when the process restarts. CeraUI
-         WROTE that file, so it is the ONLY component that can turn a numeric
-         conn_id back into a human interface name. We mirror srtla's assignment
-         exactly (see `registerSrtlaIpList`).
+      1. Watch lifecycle. `startLinkTelemetry` begins polling when srtla_send
+         spawns; `stopLinkTelemetry` halts it (and clears the registries,
+         mirroring the process-restart id reset) when the stream stops.
 
-      2. Watch lifecycle. `startLinkTelemetry` begins polling when srtla_send
-         spawns; `stopLinkTelemetry` halts it (and clears the registry, mirroring
-         the process-restart id reset) when the stream stops.
-
-      3. State derivation. Three observable states, matching the task contract:
+      2. State derivation. Three observable states, matching the task contract:
            - srtla_send not running         -> linkTelemetry: null
            - running, last read failed/stale -> links flagged `stale: true`
            - running, fresh read             -> values populated, `stale: false`
+
+      3. Carrying the ONE normalized bind-map disposition to the UI, and feeding
+         the sender's own verdict back into the producer boundary.
+
+    WHO A ROW BELONGS TO is `link-telemetry-rows.ts` (the identity ladder) over
+    `link-registry.ts` (what the writer published). Those live apart from the
+    lifecycle deliberately: "which physical modem is this" is the question this
+    file kept answering wrong when it answered it from a file position.
 */
 
 import {
@@ -54,12 +55,44 @@ import {
 } from "@ceralive/srtla-send/telemetry";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import type { BondEntry } from "./bind-map.ts";
+import { onBindMapReportChange } from "./bind-map-disposition.ts";
+import { announceBindMapReport } from "./bind-map-notification.ts";
 import {
-	IFACE_RESOLVER_MAX_RETRIES,
-	IFACE_RESOLVER_RETRY_DELAY_MS,
 	SRTLA_CONTROL_CONNECT_TIMEOUT_MS,
 	SRTLA_LISTEN_PORT,
 } from "./constants.ts";
+import {
+	buildBondMapping,
+	ingestSenderBindMapReport,
+	isBondMappingActive,
+	resetSenderBindMapReport,
+} from "./link-mapping-report.ts";
+import {
+	registerBondIdentities,
+	resetBondIdentities,
+} from "./link-registry.ts";
+import {
+	asCumulativeBytes,
+	buildLinkRows,
+	hasIfaceResolverOverride,
+	type LinkTelemetryMessage,
+	loadDefaultIfaceResolverWithRetry,
+	registerSrtlaIpList,
+	resetConnIdRegistry,
+} from "./link-telemetry-rows.ts";
+
+export type {
+	LinkTelemetryEntry,
+	LinkTelemetryMessage,
+} from "./link-telemetry-rows.ts";
+export {
+	ipForConnId,
+	loadDefaultIfaceResolverWithRetry,
+	registerSrtlaIpList,
+	setIfaceResolverForTest,
+	setResolverLoaderForTest,
+} from "./link-telemetry-rows.ts";
 
 // srtla_send listens for the local SRT encoder on this port; the stats file path
 // is derived from it (mirrors the receiver's /tmp/srtla-group-<PORT> convention).
@@ -69,48 +102,17 @@ export function srtlaStatsFile(listenPort: number = SRTLA_LISTEN_PORT): string {
 	return senderTelemetryPath(listenPort);
 }
 
-/** One per-link row surfaced to the UI via the WS status message. */
-export interface LinkTelemetryEntry {
-	conn_id: string;
-	/** Human interface name resolved from the backend-owned IP list. */
-	iface: string;
-	rtt_ms: number;
-	nak_count: number;
-	weight_percent: number;
-	/**
-	 * MEASURED wire throughput for this link, bits/s (ADR-001 `bitrate_bps`:
-	 * wire bytes × 8, protocol overhead and retransmits included). The only
-	 * bitrate on the wire that is an observation rather than a setpoint.
-	 */
-	bitrate_bps: number;
-	/**
-	 * Cumulative wire BYTES this uplink has sent this session (srtla_send
-	 * ADR-002). Bytes, not bits — no ×8, unlike `bitrate_bps` directly above.
-	 * Absent when the sender predates ADR-002: UNKNOWN, never zero.
-	 */
-	bytes_sent_total?: number;
-	/** True when the underlying snapshot is stale/absent but links are known. */
-	stale: boolean;
-}
-
-export interface LinkTelemetryMessage {
-	links: Array<LinkTelemetryEntry>;
-	/** Sum of every link's `bitrate_bps` — the bond's measured total, bits/s. */
-	measured_bps: number;
-	/**
-	 * Cumulative wire BYTES the whole bond has sent this session — the operator's
-	 * "total transferred" figure. Forwarded VERBATIM from the sender, which keeps
-	 * it monotonic across per-link reconnects and IP-list reloads; it is NOT the
-	 * sum of `links[].bytes_sent_total`, which regresses when a link is dropped.
-	 * Absent when the sender predates ADR-002: UNKNOWN, never zero.
-	 */
-	bytes_sent_total?: number;
-	/**
-	 * CeraUI-side wall-clock ms of the last SUCCESSFUL read — derived here, not
-	 * from the frozen srtla snapshot. Advances on a fresh tick, freezes when reads
-	 * go stale/absent, so the UI has an explicit staleness clock.
-	 */
-	lastReadMs: number;
+/**
+ * Adopt the bond the writer just published.
+ *
+ * ONE call site (`publishSrtlaBond`) keeps both registries in step with the
+ * exact file the sender is about to re-read: the identity registry so a row can
+ * be keyed on its device, and the legacy conn_id registry so a launch with no
+ * mapping still resolves an interface name.
+ */
+export function registerSrtlaBond(entries: readonly BondEntry[]): void {
+	registerBondIdentities(entries);
+	registerSrtlaIpList(entries.map((entry) => entry.ip));
 }
 
 // Dev/e2e seam: with no real srtla_send process the real sources never activate,
@@ -126,164 +128,6 @@ export function setMockLinkTelemetryProvider(
 	fn: MockLinkTelemetryProvider | null,
 ): void {
 	mockLinkTelemetryProvider = fn;
-}
-
-// ---------------------------------------------------------------------------
-// conn_id <-> interface mapping
-// ---------------------------------------------------------------------------
-
-// Mirrors srtla_send's `next_tlm_id` / per-link `tlm_id` assignment (sender.cpp).
-// Ids are assigned in source-IP-file order on first appearance, kept across
-// SIGHUP reloads for IPs that persist, and a NEW id is minted for a genuinely
-// new IP. Removed IPs are pruned (so a later re-add mints a fresh id, exactly
-// as srtla frees and re-creates the conn). The counter only resets when the
-// srtla_send process restarts — modeled here by clearing on stopLinkTelemetry.
-let connIdToIp = new Map<number, string>();
-let ipToConnId = new Map<string, number>();
-let nextConnId = 0;
-
-/** Dedup preserving first-appearance order (mirrors setup_conns dedup-by-src). */
-function dedupInOrder(ips: Array<string>): Array<string> {
-	const seen = new Set<string>();
-	const out: Array<string> = [];
-	for (const raw of ips) {
-		const ip = raw.trim();
-		if (!ip || seen.has(ip)) continue;
-		seen.add(ip);
-		out.push(ip);
-	}
-	return out;
-}
-
-/**
- * Fold a written source-IP list into the conn_id registry, mirroring srtla's
- * monotonic tlm_id assignment so a later telemetry `conn_id` maps back to the
- * correct interface. Call this whenever the IP list is (re)written.
- */
-export function registerSrtlaIpList(ips: Array<string>): void {
-	const ordered = dedupInOrder(ips);
-
-	for (const ip of ordered) {
-		if (!ipToConnId.has(ip)) {
-			const id = nextConnId++;
-			ipToConnId.set(ip, id);
-			connIdToIp.set(id, ip);
-		}
-	}
-
-	// Prune IPs no longer present (srtla frees the removed conn). Their ids are
-	// not reused; a re-add mints the next monotonic id.
-	const keep = new Set(ordered);
-	for (const [ip, id] of [...ipToConnId.entries()]) {
-		if (!keep.has(ip)) {
-			ipToConnId.delete(ip);
-			connIdToIp.delete(id);
-		}
-	}
-}
-
-function resetConnIdRegistry(): void {
-	connIdToIp = new Map();
-	ipToConnId = new Map();
-	nextConnId = 0;
-}
-
-/** IP currently mapped to a stringified conn_id, or undefined if unknown. */
-export function ipForConnId(connId: string): string | undefined {
-	const id = Number(connId);
-	if (!Number.isInteger(id)) return undefined;
-	return connIdToIp.get(id);
-}
-
-// Interface-name resolver: IP -> human interface name. Injected so tests do not
-// need the full network-interfaces graph (mirrors health.ts's test override).
-type IfaceResolver = (ip: string) => string | undefined;
-
-let defaultIfaceResolver: IfaceResolver | null = null;
-
-/** Lazy import keeps the network module out of the test-import graph. */
-async function importDefaultResolver(): Promise<IfaceResolver> {
-	const { getNetworkInterfaces } = await import(
-		"../network/network-interfaces.ts"
-	);
-	return (ip: string): string | undefined => {
-		const netif = getNetworkInterfaces();
-		for (const name in netif) {
-			if (netif[name]?.ip === ip) return name;
-		}
-		return undefined;
-	};
-}
-
-type ResolverLoader = () => Promise<IfaceResolver>;
-
-let resolverLoaderOverride: ResolverLoader | null = null;
-
-/** Test seam: replace the resolver loader (null restores the lazy import).
- *  Also clears the cached resolver so each test re-loads from a clean slate. */
-export function setResolverLoaderForTest(fn: ResolverLoader | null): void {
-	resolverLoaderOverride = fn;
-	defaultIfaceResolver = null;
-}
-
-async function loadDefaultIfaceResolver(): Promise<IfaceResolver> {
-	if (defaultIfaceResolver) return defaultIfaceResolver;
-	const loader = resolverLoaderOverride ?? importDefaultResolver;
-	defaultIfaceResolver = await loader();
-	return defaultIfaceResolver;
-}
-
-const sleep = (ms: number): Promise<void> =>
-	new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * Load the default iface resolver, retrying a transient failure (the network
- * module not yet importable at spawn) before giving up. Each failed attempt
- * logs at debug; exhausting all attempts logs one warn — the conn_id/IP
- * fallback still keeps the telemetry `iface` field populated, so this only
- * degrades the human-readable name, never the link rows.
- *
- * Returns true once the resolver is loaded, false if every attempt failed.
- * The delay source is injectable so the retry is unit-testable without waiting.
- */
-export async function loadDefaultIfaceResolverWithRetry(
-	maxRetries: number = IFACE_RESOLVER_MAX_RETRIES,
-	delayMs: number = IFACE_RESOLVER_RETRY_DELAY_MS,
-	delay: (ms: number) => Promise<void> = sleep,
-): Promise<boolean> {
-	for (let attempt = 1; attempt <= maxRetries; attempt++) {
-		try {
-			await loadDefaultIfaceResolver();
-			return true;
-		} catch (err) {
-			logger.debug("link-telemetry: iface resolver load failed", {
-				attempt,
-				maxRetries,
-				err,
-			});
-			if (attempt < maxRetries) await delay(delayMs);
-		}
-	}
-	logger.warn(
-		"link-telemetry: iface resolver unavailable after retries; using IP/conn_id fallback",
-		{ maxRetries },
-	);
-	return false;
-}
-
-let ifaceResolverOverride: IfaceResolver | null = null;
-
-/** Test seam: override the IP -> interface-name resolver (null clears it). */
-export function setIfaceResolverForTest(fn: IfaceResolver | null): void {
-	ifaceResolverOverride = fn;
-}
-
-function resolveIface(connId: string): string {
-	const ip = ipForConnId(connId);
-	const resolver = ifaceResolverOverride ?? defaultIfaceResolver;
-	const name = ip && resolver ? resolver(ip) : undefined;
-	// Fall back to the raw IP, then the conn_id, so the field is never empty.
-	return name ?? ip ?? `link-${connId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -321,6 +165,9 @@ export interface StartLinkTelemetryOptions {
 // Cleanup for the active stats subscription (control-socket cutover). Non-null
 // only while telemetry is sourced from the subscription rather than the poll.
 let subscriptionCleanup: (() => void) | null = null;
+// Cleanup for the disposition subscription: the operator band follows the ONE
+// normalized stream for the whole session rather than being re-announced per tick.
+let bindMapReportCleanup: (() => void) | null = null;
 
 type ControlClientFactory = typeof createControlClient;
 let controlClientFactoryOverride: ControlClientFactory | null = null;
@@ -342,6 +189,9 @@ function ingestTelemetry(telemetry: Telemetry | null): void {
 		lastSnapshot = telemetry;
 		lastTickFresh = true;
 		lastReadMs = nowFn();
+		// The sender's own verdict REPLACES the writer's synthesized one, and it
+		// is the only half that can observe a degraded reload.
+		ingestSenderBindMapReport(telemetry);
 	} else {
 		lastTickFresh = false;
 	}
@@ -372,17 +222,25 @@ export function startLinkTelemetry(
 	}
 
 	// Fresh process == fresh tlm_id sequence; seed from the spawn-time IP list.
+	// The identity registry is NOT reset here: `publishSrtlaBond` filled it with
+	// the exact rows this sender is about to read, and it outlives the watcher.
 	resetConnIdRegistry();
 	registerSrtlaIpList(initialIps);
+	resetSenderBindMapReport();
 
 	lastSnapshot = null;
 	lastTickFresh = false;
 	lastReadMs = 0;
 
+	if (bindMapReportCleanup) bindMapReportCleanup();
+	bindMapReportCleanup = onBindMapReportChange(() => {
+		announceBindMapReport();
+	});
+
 	// Resolve the default interface resolver eagerly (best-effort) so live reads
 	// can map conn_id -> iface without awaiting inside the broadcast path. Skip
 	// when a test override is active to avoid pulling the network graph.
-	if (!ifaceResolverOverride) {
+	if (!hasIfaceResolverOverride()) {
 		void loadDefaultIfaceResolverWithRetry();
 	}
 
@@ -473,11 +331,15 @@ async function attemptSubscriptionCutover(
 	}
 }
 
-/** Stop consuming telemetry (poll + subscription) and clear the conn_id registry. */
+/** Stop consuming telemetry (poll + subscription) and clear both registries. */
 export function stopLinkTelemetry(): void {
 	if (subscriptionCleanup) {
 		subscriptionCleanup();
 		subscriptionCleanup = null;
+	}
+	if (bindMapReportCleanup) {
+		bindMapReportCleanup();
+		bindMapReportCleanup = null;
 	}
 	if (handle) {
 		handle.stop();
@@ -487,43 +349,14 @@ export function stopLinkTelemetry(): void {
 	lastTickFresh = false;
 	lastReadMs = 0;
 	resetConnIdRegistry();
+	resetBondIdentities();
+	resetSenderBindMapReport();
 }
 
 // Telemetry is live while EITHER source feeds it: the file-poll watcher or the
 // control-socket subscription (which retires the watcher on cutover).
-function hasActiveTelemetrySource(): boolean {
-	return handle !== null || subscriptionCleanup !== null;
-}
-
 export function isLinkTelemetryActive(): boolean {
-	return hasActiveTelemetrySource();
-}
-
-/** One unreadable link contributes 0 rather than making the whole sum `NaN`. */
-function asMeasuredBps(value: number | undefined): number {
-	return typeof value === "number" && Number.isFinite(value) && value > 0
-		? value
-		: 0;
-}
-
-/**
- * Read the additive ADR-002 cumulative byte count off a snapshot.
- *
- * Read defensively (like the audio join keys in `sources.ts`) because the pinned
- * `@ceralive/srtla-send` build predates the field and its Zod reader STRIPS
- * unknown keys — so this is `undefined` on today's binding and lights up the
- * moment the binding is republished, with no further change here.
- *
- * Anything that is not a whole non-negative count yields `undefined` rather than
- * 0: a byte total is the one figure an operator may act on, so guessing is worse
- * than admitting it is unknown.
- */
-function asCumulativeBytes(source: unknown): number | undefined {
-	const value = (source as { bytes_sent_total?: unknown } | null | undefined)
-		?.bytes_sent_total;
-	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-		? value
-		: undefined;
+	return handle !== null || subscriptionCleanup !== null;
 }
 
 /**
@@ -538,25 +371,14 @@ export function buildLinkTelemetry(): LinkTelemetryMessage | null {
 	const mock = mockLinkTelemetryProvider?.();
 	if (mock) return mock;
 
-	if (!hasActiveTelemetrySource()) return null;
+	if (!isLinkTelemetryActive()) return null;
 	if (lastSnapshot === null) return null;
 
-	const stale = !lastTickFresh;
-	const links = lastSnapshot.connections.map((c) => {
-		const bytesSentTotal = asCumulativeBytes(c);
-		return {
-			conn_id: c.conn_id,
-			iface: resolveIface(c.conn_id),
-			rtt_ms: c.rtt_ms,
-			nak_count: c.nak_count,
-			weight_percent: c.weight_percent,
-			bitrate_bps: asMeasuredBps(c.bitrate_bps),
-			...(bytesSentTotal === undefined
-				? {}
-				: { bytes_sent_total: bytesSentTotal }),
-			stale,
-		};
-	});
+	const links = buildLinkRows(
+		lastSnapshot,
+		!lastTickFresh,
+		isBondMappingActive(),
+	);
 	// Forwarded verbatim, never summed from `links`: the sender's accumulator is
 	// what stays monotonic across a reconnect or an IP-list reload.
 	const bondBytesSentTotal = asCumulativeBytes(lastSnapshot);
@@ -583,10 +405,14 @@ export function resetLinkTelemetryBroadcastState(): void {
  */
 export function broadcastLinkTelemetryIfChanged(): LinkTelemetryMessage | null {
 	const payload = buildLinkTelemetry();
-	const json = JSON.stringify(payload);
+	const bondMapping = buildBondMapping();
+	const json = JSON.stringify({ payload, bondMapping });
 	if (json !== lastBroadcastJson) {
 		lastBroadcastJson = json;
-		broadcastMsg("status", { linkTelemetry: payload });
+		broadcastMsg("status", {
+			linkTelemetry: payload,
+			bond_mapping: bondMapping,
+		});
 	}
 	return payload;
 }

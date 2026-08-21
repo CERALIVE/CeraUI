@@ -63,6 +63,19 @@ export const START_FAILURE_CLASSES = [
 	'engine_internal',
 	'start_timeout',
 	'audio_source_unavailable',
+	'modem_transition_active',
+	// The device is still REPLAYING its durable modem-mutation journal, so it
+	// cannot yet say whether a modem is mid-rollback. Distinct from
+	// `modem_transition_active` (a mutation is provably running NOW) because the
+	// honest statement here is "ask again in a moment", not "a switch is running".
+	// Only EXTERNAL origins can ever see it: internal boot origins AWAIT the
+	// replay barrier instead of being refused, so a boot intent is never
+	// terminally discarded by a race with recovery.
+	'recovery_pending',
+	// A modem mutation failed and its rollback could not be completed, so the
+	// device's true modem state is UNKNOWN. Fail-closed: autostart stays blocked
+	// until an operator acknowledges through one of the two typed paths.
+	'mutation_blocked',
 ] as const;
 export const startFailureClassSchema = z.enum(START_FAILURE_CLASSES);
 export type StartFailureClass = z.infer<typeof startFailureClassSchema>;
@@ -225,6 +238,18 @@ export const START_FAILURE_RETRIABILITY: Record<
 	audio_source_unavailable: {
 		retriablePhases: [],
 		why: 'The selected audio input never appeared. The probe ALREADY spent its own grace window waiting for the device to come back, so a further retry re-runs the same wait against the same absent hardware — tell the operator to reconnect or pick another input instead of looping.',
+	},
+	modem_transition_active: {
+		retriablePhases: [],
+		why: 'A USB-composition-mode switch holds the lifecycle interlock and is re-enumerating a modem, so the bond link list is about to change underneath any launch. The transition is bounded and operator-initiated, so the honest answer is "wait for it and start again" — an automatic retry would race a mutation of the very links the start is bonding.',
+	},
+	recovery_pending: {
+		retriablePhases: [],
+		why: 'Modem-mutation journal replay has not finished, so the device cannot yet prove no modem is mid-rollback. Replay is bounded and completes on its own, and the INTERNAL boot origins await it rather than failing — so an external caller is told to ask again rather than being put on an automatic retry that would race the recovery it is waiting for.',
+	},
+	mutation_blocked: {
+		retriablePhases: [],
+		why: 'A modem mutation failed and its rollback did not complete, so that modem\u2019s true state is unknown and fail-closed policy holds autostart. Only an explicit operator acknowledgement (verified rollback, or an accepted rebaseline of the current hardware) can clear it — a retry cannot.',
 	},
 };
 

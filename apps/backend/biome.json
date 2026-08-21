@@ -7,6 +7,7 @@
 			"src/**/*.ts",
 			"src/**/*.js",
 			"src/**/*.json",
+			"scripts/**/*.ts",
 			"!**/config.json",
 			"!**/setup.json",
 			"!**/gsm_operator_cache.json"
@@ -30,6 +31,16 @@
 		}
 	},
 	"overrides": [
+		{
+			"includes": ["scripts/**/*.ts"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConsole": "off"
+					}
+				}
+			}
+		},
 		{
 			"includes": ["**/*.test.ts", "**/*.spec.ts"],
 			"linter": {

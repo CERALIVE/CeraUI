@@ -29,10 +29,13 @@ import { modemSignal } from "$lib/helpers/signal";
 import type { HudSources, HudTimestamps } from "$lib/types/hud";
 
 import {
+	buildBond,
 	buildLinks,
 	deriveHudState,
 	type InterfaceFreshnessMap,
 	interfaceFingerprints,
+	isBondExcluded,
+	isBondMember,
 	isUpdateInProgress,
 	MAX_LINKS,
 	modemConnectionState,
@@ -115,13 +118,37 @@ const netifFixture: NetifMessage = {
 	wlan0: { tp: 64_000, enabled: true, ip: "10.0.0.3" },
 };
 
-// eth0 (enabled + ip → link), eth1 (no ip → excluded), lo (non-eth → excluded).
+// eth0 (enabled + ip → link), eth1 (no ip → excluded), lo (loopback → excluded).
 const netifWithEthFixture: NetifMessage = {
 	...netifFixture,
 	eth0: { tp: 256_000, enabled: true, ip: "10.0.0.4" },
 	eth1: { tp: 0, enabled: true },
 	lo: { tp: 0, enabled: true, ip: "127.0.0.1" },
 };
+
+/**
+ * A netif payload that bonds every interface the given rosters name — the
+ * steady state on a healthy device. Tests about signal, staleness, ordering or
+ * the MAX_LINKS cap need their links to EXIST; bond membership itself has its
+ * own describe block and is not what they are asserting.
+ */
+function bondedNetifFor(
+	modems?: ModemList,
+	wifi?: WifiStatus,
+	extra: string[] = [],
+): NetifMessage {
+	const ids = [
+		...Object.entries(wifi ?? {}).map(([key, iface]) => iface.ifname || key),
+		...Object.entries(modems ?? {}).map(([key, modem]) => modem.ifname || key),
+		...extra,
+	];
+	return Object.fromEntries(
+		ids.map((id, index) => [
+			id,
+			{ tp: 0, enabled: true, ip: `10.9.0.${index + 1}` },
+		]),
+	);
+}
 
 function makeSources(overrides: Partial<HudSources> = {}): HudSources {
 	return {
@@ -369,6 +396,7 @@ describe("deriveHudState — no-SIM / null signal handling", () => {
 				modem1: makeModem({ no_sim: true, status: undefined }),
 			} as ModemList,
 			wifi: undefined,
+			netif: { wwan0: { tp: 0, enabled: true, ip: "10.9.0.1" } },
 		});
 
 		const state = deriveHudState(sources, makeTimestamps(T0), T0);
@@ -499,7 +527,7 @@ describe("buildLinks — multiple links & index mapping", () => {
 		const links = buildLinks(
 			modems,
 			wifiFixture,
-			undefined,
+			bondedNetifFor(modems, wifiFixture),
 			false,
 			false,
 			false,
@@ -516,16 +544,24 @@ describe("buildLinks — multiple links & index mapping", () => {
 		for (let i = 0; i < 10; i++) {
 			modems[`m${i}`] = makeModem({ ifname: `wwan${i}` });
 		}
-		const links = buildLinks(modems, undefined, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
 		expect(links).toHaveLength(6);
 		expect(links.map((l) => l.linkIndex)).toEqual([0, 1, 2, 3, 4, 5]);
 	});
 
 	it("propagates staleness flags onto links", () => {
+		const modems = { modem1: makeModem() } as ModemList;
 		const links = buildLinks(
-			{ modem1: makeModem() } as ModemList,
+			modems,
 			wifiFixture,
-			undefined,
+			bondedNetifFor(modems, wifiFixture),
 			true,
 			false,
 			false,
@@ -548,8 +584,8 @@ describe("buildLinks — multiple links & index mapping", () => {
 describe("buildLinks — ethernet links from netif", () => {
 	it("emits an ethernet link for an eth interface that is enabled with an IP", () => {
 		const links = buildLinks(
-			undefined,
-			undefined,
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			wifiFixture,
 			netifWithEthFixture,
 			false,
 			false,
@@ -562,10 +598,10 @@ describe("buildLinks — ethernet links from netif", () => {
 		expect(eth[0]?.isConnected).toBe(true);
 	});
 
-	it("excludes eth interfaces without an IP and non-eth entries (lo/wifi/modem)", () => {
+	it("excludes an address-less interface, loopback, and rows a roster claims", () => {
 		const links = buildLinks(
-			undefined,
-			undefined,
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			wifiFixture,
 			netifWithEthFixture,
 			false,
 			false,
@@ -574,6 +610,8 @@ describe("buildLinks — ethernet links from netif", () => {
 		const ethIds = links.filter((l) => l.type === "ethernet").map((l) => l.id);
 		expect(ethIds).not.toContain("eth1");
 		expect(ethIds).not.toContain("lo");
+		expect(ethIds).not.toContain("wwan0");
+		expect(ethIds).not.toContain("wlan0");
 	});
 
 	it("excludes a disabled eth interface even when it has an IP", () => {
@@ -608,11 +646,11 @@ describe("buildLinks — throughput join from netif.tp", () => {
 		}
 	});
 
-	it("defaults throughputKbps to convertBytesToKbids(0) when there is no netif entry", () => {
+	it("defaults throughputKbps to convertBytesToKbids(0) when the entry reports no tp", () => {
 		const links = buildLinks(
 			{ modem1: makeModem({ ifname: "wwan9" }) } as ModemList,
 			undefined,
-			netifFixture,
+			{ ...netifFixture, wwan9: { enabled: true, ip: "10.9.0.9" } },
 			false,
 			false,
 			false,
@@ -705,7 +743,7 @@ describe("buildLinks — enabled propagation from netif", () => {
 		expect(links.find((l) => l.type === "wifi")?.enabled).toBe(true);
 	});
 
-	it("defaults enabled to true when there is no matching netif entry", () => {
+	it("drops a modem with no matching netif entry — no address, no bonded traffic", () => {
 		const links = buildLinks(
 			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
 			undefined,
@@ -714,7 +752,7 @@ describe("buildLinks — enabled propagation from netif", () => {
 			false,
 			false,
 		);
-		expect(links[0]?.enabled).toBe(true);
+		expect(links).toHaveLength(0);
 	});
 });
 
@@ -755,10 +793,9 @@ describe("buildLinks — excludes bond-excluded wifi/modem links", () => {
 		expect(links.filter((l) => l.type === "wifi")).toHaveLength(0);
 	});
 
-	it("still includes a modem/wifi link with no netif entry yet (default-enabled fallback must not regress)", () => {
-		// Before the first netif snapshot lands, modems/wifi have no netif entry, so
-		// enabledFor defaults to true (`?? true`). Such links MUST still show — only
-		// an explicit enabled:false excludes.
+	it("also excludes a modem/wifi link with no netif entry at all", () => {
+		// Todo 48 reversed todo 42's asymmetry: an operator's exclusion and a device
+		// condition BOTH mean the link carries nothing, so both leave the panel.
 		const links = buildLinks(
 			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
 			wifiFixture,
@@ -767,8 +804,7 @@ describe("buildLinks — excludes bond-excluded wifi/modem links", () => {
 			false,
 			false,
 		);
-		expect(links.filter((l) => l.type === "modem")).toHaveLength(1);
-		expect(links.filter((l) => l.type === "wifi")).toHaveLength(1);
+		expect(links).toHaveLength(0);
 	});
 
 	it("keeps the enabled sibling while excluding a disabled modem of the same type", () => {
@@ -784,6 +820,168 @@ describe("buildLinks — excludes bond-excluded wifi/modem links", () => {
 		expect(links.filter((l) => l.type === "modem").map((l) => l.id)).toEqual([
 			"wwan1",
 		]);
+	});
+});
+
+describe("isBondExcluded — the device-condition half of bond membership", () => {
+	// The contradiction this closes: the Bonded Links panel listed the Quectel and
+	// SIMCom modems as active-looking L2/L3 entries while the Cellular section
+	// below rendered both as "Excluded". Neither modem had a netif entry at all
+	// (no address ⇒ no bonded traffic), and `enabledFor`'s `?? true` fallback let
+	// them through unannotated.
+	it("a link with no netif entry is excluded — no address means no bonded traffic", () => {
+		expect(isBondExcluded(undefined)).toBe(true);
+	});
+
+	it("a link with a netif entry but no address is excluded", () => {
+		expect(isBondExcluded({ tp: 0, enabled: true })).toBe(true);
+	});
+
+	it("a link carrying a netif error is excluded (the dup-IP HiLink pair)", () => {
+		expect(
+			isBondExcluded({
+				tp: 0,
+				enabled: false,
+				ip: "192.168.8.100",
+				error: "duplicate IPv4 addr",
+			}),
+		).toBe(true);
+	});
+
+	it("an addressed, error-free link is NOT excluded", () => {
+		expect(isBondExcluded({ tp: 0, enabled: true, ip: "192.168.0.169" })).toBe(
+			false,
+		);
+	});
+
+	it("an empty error string is not an error", () => {
+		expect(
+			isBondExcluded({ tp: 0, enabled: true, ip: "10.0.0.2", error: "" }),
+		).toBe(false);
+	});
+});
+
+describe("isBondMember — the frontend mirror of genSrtlaIpList", () => {
+	it("an enabled, addressed, error-free entry IS a bond member", () => {
+		expect(isBondMember({ tp: 0, enabled: true, ip: "192.168.0.169" })).toBe(
+			true,
+		);
+	});
+
+	it("no entry at all is not a member", () => {
+		expect(isBondMember(undefined)).toBe(false);
+	});
+
+	it("an operator-disabled entry is not a member even with an address", () => {
+		expect(isBondMember({ tp: 0, enabled: false, ip: "10.0.0.2" })).toBe(false);
+	});
+
+	it("an addressless entry is not a member", () => {
+		expect(isBondMember({ tp: 0, enabled: true })).toBe(false);
+	});
+
+	it("a dup-IP entry is not a member", () => {
+		expect(
+			isBondMember({
+				tp: 0,
+				enabled: false,
+				ip: "192.168.8.100",
+				error: "duplicate IPv4 addr",
+			}),
+		).toBe(false);
+	});
+});
+
+describe("buildBond — binary presence over the board's real roster", () => {
+	// The verbatim 2026-08-16 netif payload from 192.168.78.132, plus the wifi and
+	// modem rosters that produced the four rendered rows. `enx344b50000000` is the
+	// ZTE MF79U: enabled, addressed, error-free — so the BACKEND bonds it — while
+	// the panel showed no entry for it at all. Its HiLink twin is named `eth1`
+	// only because the pair ships one factory MAC, which is why no name rule can
+	// separate these devices.
+	const boardNetif: NetifMessage = {
+		enx0c5b8f279a64: {
+			tp: 0,
+			enabled: false,
+			ip: "192.168.8.100",
+			error: "duplicate IPv4 addr",
+		},
+		enx344b50000000: { tp: 4096, enabled: true, ip: "192.168.0.169" },
+		eth0: { tp: 8192, enabled: true, ip: "192.168.78.132" },
+		eth1: {
+			tp: 0,
+			enabled: false,
+			ip: "192.168.8.100",
+			error: "duplicate IPv4 addr",
+		},
+	};
+	const boardModems = {
+		modem1: makeModem({ ifname: "wwan0", name: "RM530N-GL" }),
+		modem2: makeModem({ ifname: "wwan1", name: "SIMCOM_SIM7600G-H" }),
+	} as ModemList;
+
+	const bond = () =>
+		buildBond(boardModems, wifiFixture, boardNetif, false, false, false);
+
+	it("renders the bonded router-mode dongle the eth* prefix filter dropped", () => {
+		expect(bond().links.map((l) => l.id)).toContain("enx344b50000000");
+	});
+
+	it("renders EXACTLY the interfaces the backend bonds — no more, no less", () => {
+		expect(bond().links.map((l) => l.id)).toEqual(["enx344b50000000", "eth0"]);
+	});
+
+	it("renders no ghost row for any non-carrying link", () => {
+		const ids = bond().links.map((l) => l.id);
+		for (const ghost of ["wlan0", "wwan0", "wwan1", "eth1", "enx0c5b8f279a64"])
+			expect(ids).not.toContain(ghost);
+	});
+
+	it("counts every non-carrying link so the panel can state their absence", () => {
+		expect(bond().unbondedCount).toBe(5);
+	});
+
+	it("re-indexes the survivors contiguously from L1", () => {
+		expect(bond().links.map((l) => l.linkIndex)).toEqual([0, 1]);
+	});
+
+	it("never renders one interface twice when a modem also has a netif row", () => {
+		const snapshot = buildBond(
+			{ modem1: makeModem({ ifname: "wwan0" }) } as ModemList,
+			undefined,
+			{ wwan0: { tp: 0, enabled: true, ip: "10.0.0.2" } },
+			false,
+			false,
+			false,
+		);
+		expect(snapshot.links.map((l) => l.id)).toEqual(["wwan0"]);
+		expect(snapshot.links[0]?.type).toBe("modem");
+		expect(snapshot.unbondedCount).toBe(0);
+	});
+
+	it("renders an isolated dongle's dg<N>h veth once it carries an address", () => {
+		const snapshot = buildBond(
+			undefined,
+			undefined,
+			{ dg0h: { tp: 0, enabled: true, ip: "10.208.0.1" } },
+			false,
+			false,
+			false,
+		);
+		expect(snapshot.links.map((l) => l.id)).toEqual(["dg0h"]);
+	});
+
+	it("ignores loopback in both directions — never a link, never a count", () => {
+		const snapshot = buildBond(
+			undefined,
+			undefined,
+			{ lo: { tp: 0, enabled: true, ip: "127.0.0.1" } },
+			false,
+			false,
+			false,
+		);
+		expect(snapshot.links).toHaveLength(0);
+		expect(snapshot.unbondedCount).toBe(0);
 	});
 });
 
@@ -854,7 +1052,14 @@ describe("S1 — buildLinks includes a no_sim modem with null signal + connectio
 			}),
 		};
 
-		const links = buildLinks(modems, undefined, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(1);
 		const link = links[0];
@@ -879,7 +1084,14 @@ describe("S1 — buildLinks includes a no_sim modem with null signal + connectio
 			}),
 		};
 
-		const links = buildLinks(modems, undefined, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(2);
 		const noSim = links.find((l) => l.id === "wwan1");
@@ -926,7 +1138,14 @@ describe("S2 — buildLinks marks a scanning modem with connectionState 'scannin
 			}),
 		};
 
-		const links = buildLinks(modems, undefined, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(1);
 		const link = links[0];
@@ -945,7 +1164,14 @@ describe("S5 — buildLinks caps the returned links at MAX_LINKS", () => {
 			modems[`m${i}`] = makeModem({ ifname: `wwan${i}`, name: `Carrier${i}` });
 		}
 
-		const links = buildLinks(modems, undefined, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(MAX_LINKS);
 		expect(links.map((l) => l.linkIndex)).toEqual(
@@ -962,7 +1188,7 @@ describe("S5 — buildLinks caps the returned links at MAX_LINKS", () => {
 		const links = buildLinks(
 			modems,
 			wifiFixture,
-			undefined,
+			bondedNetifFor(modems, wifiFixture),
 			false,
 			false,
 			false,
@@ -996,7 +1222,14 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 			},
 		};
 
-		const links = buildLinks(undefined, wifi, undefined, false, false, false);
+		const links = buildLinks(
+			undefined,
+			wifi,
+			bondedNetifFor(undefined, wifi),
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(1);
 		const link = links[0];
@@ -1032,7 +1265,14 @@ describe("S6 — wifi/ethernet null signal is valid, not an error", () => {
 			},
 		};
 
-		const links = buildLinks(undefined, wifi, undefined, false, false, false);
+		const links = buildLinks(
+			undefined,
+			wifi,
+			bondedNetifFor(undefined, wifi),
+			false,
+			false,
+			false,
+		);
 
 		expect(links).toHaveLength(1);
 		const link = links[0];
@@ -1135,7 +1375,14 @@ describe("connectionState — per-modem backend mapping", () => {
 			noSim: makeModem({ ifname: "wwan4", no_sim: true, status: undefined }),
 		};
 
-		const links = buildLinks(modems, undefined, undefined, false, false, false);
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
 		const byId = (id: string) => links.find((l) => l.id === id);
 
 		const link0 = byId("wwan0");
@@ -1359,7 +1606,7 @@ describe("per-interface staleness threads onto one link, not its siblings", () =
 		const links = buildLinks(
 			modems,
 			undefined,
-			undefined,
+			bondedNetifFor(modems),
 			false,
 			false,
 			false,

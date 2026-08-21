@@ -126,6 +126,9 @@ export const mockModems = [
 		imei: "867034057012345",
 		iccid: "89014103211118510720",
 		carrier: "T-Mobile",
+		// Reserved fictional range (NANP 555-01xx). A dev binary must never carry a
+		// real subscriber number; the board-evidence value lives in tests only.
+		ownNumber: "+15550100",
 		operatorCode: "310260",
 		network_type: {
 			supported: ["5g", "4g", "3g"],

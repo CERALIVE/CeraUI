@@ -15,7 +15,7 @@ The backend resolves both streaming deps as public-npm registry packages — no 
 
 ```
 "@ceralive/cerastream":  "2026.7.6"   (public npm, @ceralive scope)
-"@ceralive/srtla-send":  "2026.6.2"   (public npm, @ceralive scope)
+"@ceralive/srtla-send":  "2026.8.0"   (public npm, @ceralive scope)
 ```
 
 Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
@@ -127,6 +127,7 @@ CeraUI/
 | **Device/component versions (kernel + live cerastream engine read)** | `apps/backend/src/modules/system/revisions.ts` (`refreshEngineRevision`, `ENGINE_UNREACHABLE_REVISION`) |
 | **Versions row presentation (version promoted, build metadata demoted)** | `apps/frontend/src/lib/system/version-display.ts` (`splitVersionValue`) → `apps/frontend/src/main/dialogs/VersionsDialog.svelte` |
 | Design rules | `.impeccable.md` |
+| **The modem EVENT SOURCE beneath the wire producer** — observer adoption, the authority state machine, the MM-restart settle guard, the two SEPARATED failure classes, the shipped default cutover + rollback, and the startup cancellation contract | `docs/DBUS-OBSERVATION-CONTRACT.md`; code `apps/backend/src/modules/cellular/{dbus-modem-cache,dbus-view-fold,dbus-mm-enums,dbus-backend}.ts` |
 | **Receiver-kind model + Scope-B plain-SRT contract** | `docs/RECEIVER_MODEL.md` |
 | **ServerDialog protocol-first container** | `apps/frontend/src/main/dialogs/ServerDialog.svelte` |
 | **ServerDialog sub-components (DestinationSection, TransportRow, LatencySection, RelayServerSelector, CustomEndpointForm, ServerIngestSlots)** | `apps/frontend/src/main/dialogs/server/` |
@@ -145,7 +146,30 @@ CeraUI/
 | **WiFi adapter identity (permanent hardware address — NOT the scan-randomized operational one)** | `apps/backend/src/modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`) |
 | **Regulatory country + kernel-DERIVED hotspot channels (`iw reg set` / `iw phy`; never a country→channel table)** | `apps/backend/src/modules/wifi/regdomain.ts` + `wifi-country.ts`; UI `apps/frontend/src/main/dialogs/WifiCountryDialog.svelte` + `lib/helpers/countries.ts` |
 | **Durable per-adapter hotspot identity (SSID/password reused forever) + duplicate-profile consolidation** | `apps/backend/src/modules/wifi/hotspot-credentials.ts` + `wifi-hotspot-discovery.ts` (`findHotspotConnForAdapter`, `pruneDuplicateHotspotConns`) |
-| **Policy-route self-check for bonded wifi/modem interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
+| **Policy-route self-check for bonded wifi/modem/dongle interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
+| **Router-dongle netns metadata reader — PRODUCER RETIRED (phase-C todo 39), reader KEPT as the old-image degradation path** + the retractable `dongle` netif marker (wire-only union rows; bonding untouched by construction) | `apps/backend/src/modules/network/dongle-metadata.ts` + `network-interfaces.ts` (`applyDongleProjection`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND |
+| **Whether a modem-config save must re-establish the bearer (shared rule; the dialog's pre-save notice and the device's tear-down read the SAME one)** | `packages/rpc/src/schemas/modem-apply-scope.ts` (`normalizeModemConnectionFields`, `diffModemConnectionFields`, `decideModemReactivation`) → `apps/backend/src/modules/modems/modems.ts` (`applyModemConfig`, `ModemApplyDeps`) + `apps/frontend/src/main/dialogs/ModemConfigDialog.svelte` (`modem-reconnect-notice`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → A MODEM SAVE SPENDS A RECONNECT ONLY WHEN IT MUST |
+| **Every NM gsm profile bound to a modem's SIM carries the operator's answer (roaming enforcement + evidence-gated duplicate deletion)** | `apps/backend/src/modules/modems/gsm-duplicate-reconcile.ts` (`reconcileDuplicateGsmProfiles`, `classifyGsmDuplicate`, `auditGsmProfiles`) → `modems.ts` (`enforceAcrossProfiles`) + `modem-registration.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND EVERY PROFILE BOUND TO THE SIM CARRIES THE SAME ANSWER |
+| **Capability feature-gate framework + the FIVE-STATE support-claim taxonomy (band-lock / SMS / 5G-pref / FCC-auto-unlock / GPS / USSD / eSIM)** | ladder `packages/rpc/src/schemas/capability-modules.schema.ts` + `packages/rpc/src/capabilities/capability-matrix.ts`; device gates `apps/backend/src/helpers/config-schemas.ts` (`modem_capabilities`, default-absent) + `apps/backend/src/modules/modems/capability-gates.ts`; the SHARED mutation-enforcement helper `apps/backend/src/modules/modems/capability-mutation.ts` (wraps todo-25's lease); wire block `modem.capability_modules`; render side `apps/frontend/src/main/network/capability-modules.ts`; engine side `modem-stack/control/src/capability/`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE CAPABILITY FEATURE-GATE FRAMEWORK |
+| **…and the operator's WRITE for those gates (`modems.getCapabilities`/`setCapabilities` + the Settings dialog the band-lock/GPS copy points at)** | wire `packages/rpc/src/schemas/capability-modules.schema.ts` (`modemCapabilitiesOutputSchema`, `setModemCapabilityInputSchema`); device `apps/backend/src/rpc/procedures/modems.procedure.ts` (`get`/`setModemCapabilitiesProcedure`); the change-gated re-publication seam `apps/backend/src/modules/modems/capability-gates.ts` (`noteCapabilityEvidenceChanged`) installed by `capability-evidence.ts`; UI `apps/frontend/src/main/dialogs/ModemCapabilitiesDialog.svelte` via `SettingsView` → System; contract below → THE GATES HAVE AN OPERATOR SURFACE |
+| **modem-control compatibility projections (exact 1.1.0 pin; three former floor probes are now static imports)** | `apps/backend/src/modules/modem-control-compat.ts` + the 14 frozen pure projection modules; package mutation admission bridge `modules/modems/mutation-admission-port.ts`; boundary/floor gate `apps/backend/src/tests/modem-control-projections.test.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
+| **Whether a modem holds a SIM (`no_sim`) — read from MM's slot, NEVER from the presence of an NM connection profile** | `apps/backend/src/modules/modems/sim-presence.ts` (`deriveSimPresence`, `claimsNoSim`, `isSimObjectPath`) → `modem-status.ts` + `modem-wire-projection.ts`; D-Bus twin `apps/backend/src/modules/cellular/dbus-view-fold.ts` (`readSimPresence`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → `no_sim` REPORTS A SLOT, NOT A NETWORKMANAGER PROFILE |
+| **Read-only SMS inbox normalization routed through modem-stack's SMS port (static import; transport still `mmcli`)** | `apps/backend/src/modules/modems/sms-port.ts` (`resolveSmsNormalizer`, `setSmsNormalizerForTest`) + `mmcli-sms.ts` (`legacySmsNormalizer` — now the parity ORACLE only, no longer a fallback); port half `modem-stack/control/src/ports/sms.ts` + `control/src/sms/`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND ITS NORMALIZATION NOW ROUTES THROUGH THE modem-stack PORT |
+| **Operator-settable data-usage policy (cycle day + advisory limit) — a LOCAL write, because ModemManager exposes no data-usage API** | `apps/backend/src/modules/modems/usage-policy.ts` (static import of `@ceralive/modem-control`'s `setUsagePolicy`, versioned 0600 store) + `modems.configure`'s tri-state `data_usage_cycle_day` / `data_usage_threshold_bytes`; wire block `modem.data_usage_policy`; render side `apps/frontend/src/main/dialogs/ModemConfigDialog.svelte` + the pure `main/dialogs/modem-usage-policy.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE DATA-USAGE POLICY IS A LOCAL WRITE |
+| **Router-mode cellular dongles RENDERED AS MODEMS (classifier → `modems` roster; claim-based section handover)** | `apps/backend/src/modules/modems/modem-wire-producer.ts` (`collectRouterCellularSources`) + `modem-wire-adapters.ts` (`fromRouterCellularView` — NOT interchangeable with `fromRouterView`); render side `apps/frontend/src/main/network/CellularSection.svelte` + the pure `main/network/section-assignment.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND IT IS LISTED AS A MODEM, WITH THE ONLY SURFACE IT REALLY HAS |
+| **A router dongle's own ADMIN WEB UI, reverse-proxied through CeraUI's origin and BOUND to that unit's interface (identical twins share one address)** | `apps/backend/src/modules/network/router-admin-proxy.ts` (pure: path, argv, header parse, URL rewriting) + `apps/backend/src/modules/ui/dongle-admin-proxy.ts` (target resolution + `curl --interface`) + `apps/backend/src/modules/ui/dongle-admin-session.ts` (single-use token → scoped HttpOnly cookie); route forked in `apps/backend/src/rpc/server.ts`; RPC `modems.openRouterAdmin`; render side `apps/frontend/src/main/network/router-admin-open.ts` + `CellularSection.svelte` + `RouterDongleDialog.svelte`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND ITS OWN WEB UI IS REACHED THROUGH A DEVICE-BOUND REVERSE PROXY |
+| **A router dongle's own HTTP admin API (HiLink XML / ZTE goform / UFI himiapi; read-only by evidence; `curl --interface` is load-bearing)** | `apps/backend/src/modules/network/router-cellular-admin.ts` → the additive `modem.router_admin` wire block (`packages/rpc/src/schemas/modems.schema.ts`) |
+| **The ZTE/UFI non-signal detail block (ONE batched `multi_data` read; absent field ⇒ no row; write-fenced)** | `apps/backend/src/modules/network/router-details.ts` → `router_admin.details`; render side `apps/frontend/src/main/dialogs/router-dongle-fields.ts` + `RouterDongleDialog.svelte`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND THE ZTE/UFI READS EXPANDED WITHOUT GAINING A WRITE |
+| **HiLink network-mode CAPABILITY discovery (read-only; a `112008` refusal is a reading, never a control)** | `apps/backend/src/modules/network/router-capabilities.ts` → `router_admin.capabilities`; render side `apps/frontend/src/main/dialogs/router-dongle-fields.ts` (`netModeCapability`) + `RouterDongleDialog.svelte`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND THE HiLINK CAPABILITY IS DISCOVERED BEFORE ANYTHING IS OFFERED |
+| **The router-dongle WRITES it gates (net-mode + the OPTIONAL, journaled LAN-subnet hygiene rewrite) — Stage B** | `apps/backend/src/modules/network/router-cellular-control.ts` + `router-subnet-{plan,hygiene,rollback}.ts` over `hilink-{session,documents}.ts`; RPC `apps/backend/src/rpc/procedures/modems-router.procedure.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND THE WRITES IT GATES ARE STAGE B |
+| **Canonical physical-device identity + the `link_id` authority (serial ≻ ID_PATH ≻ ifname; feeds bonding AND naming)** | `apps/backend/src/modules/modems/physical-identity.ts` (pure resolver + `mintLinkId` + display-name precedence) + `physical-identity-source.ts` (binds it to the live caches) + `apps/backend/src/modules/network/router-cellular-scan.ts` (`UsbPhysicalDescriptor`, `getUsbPhysicalDescriptor`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND ONE RESOLVER DECIDES WHICH PHYSICAL DEVICE IT IS |
+| **ADR-003 bind-map WRITER (twin modems both bond) + the duplicate-IP policy split + the pre-spawn capability probe + the typed-disposition producer boundary** | `apps/backend/src/modules/streaming/bind-map.ts` (pure document/rows/collision groups) + `bind-map-writer.ts` (atomic two-file publication) + `bind-map-spawn.ts` (`--bind-map` only on a valid probe) + `srtla-capabilities.ts` (`--capabilities-json`, bounded) + `bind-map-disposition.ts` (ONE normalized stream, todo 8's exact value names) + `bind-map-notification.ts` (operator band) + `srtla.ts` (`genSrtlaBondEntries`, `publishSrtlaBond`) + `modules/network/network-interfaces.ts` (`isBondCandidate`, `setBondOptOut`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND THAT IDENTITY IS PUBLISHED AS A BIND-MAP |
+| **Router-mode cellular dongle classification (USB descriptors, NEVER the interface name; independent of the netns layer)** | `apps/backend/src/modules/network/usb-net-classifier.ts` (pure, Rule-D mirror of modem-stack) + `router-cellular-scan.ts` (sysfs read + cache); render side `apps/frontend/src/main/network/EthernetSection.svelte`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND IT IS NAMED CELLULAR WITHOUT WAITING FOR THAT LAYER |
+| **Dongle vendor/model resolution (udev-hwdb model for a device that publishes a class string; immune to the duplicate-MAC `ID_RENAMING` collision)** | `apps/backend/src/modules/network/usb-net-classifier.ts` (`publishesGenericIdentity`, `vendorLabel`, `modelLabel`) + `router-cellular-scan.ts` (`readUdevDatabaseNames`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND A DONGLE THAT NAMES A CLASS IS GIVEN ITS REAL MODEL |
+| **Dongle vendor/model HONEST FLOOR (a class string is never re-printed as a name) + the twin discriminator** | `apps/backend/src/modules/network/usb-net-classifier.ts` (`vendorLabel`, `modelLabel`, `unitDiscriminator`) + `router-cellular-scan.ts` + `modem-wire-adapters.ts` (`routerCellularDisplayName`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND A DONGLE THAT NAMES A CLASS IS GIVEN ITS REAL MODEL |
+| **An MM-managed modem's own data function (`usb_modem_net`) — the FM350's RNDIS interface is not a second device** | `apps/backend/src/modules/network/router-cellular-scan.ts` (`scanUsbNetMarkers`, `getModemNetMarker`) + `network-interfaces.ts` (`applyModemNetProjection`); render side `apps/frontend/src/main/network/section-assignment.ts` + `EthernetSection.svelte`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND AN MM-MANAGED MODEM'S DATA FUNCTION IS NOT A SECOND DEVICE |
+| **Interface address is reported, not set (no backend apply path exists; the retired static-IP field also discarded bond changes)** | `apps/backend/src/modules/network/network-interfaces.ts` (`handleNetif`) + `apps/frontend/src/main/dialogs/NetifDialog.svelte`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE INTERFACE ADDRESS IS REPORTED, NOT SET |
+| **Isolated-dongle ROW (identity + lifecycle badges, disabled-with-reason bond toggle)** | `apps/frontend/src/main/network/EthernetSection.svelte`; contract in [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) → Isolated-dongle row |
 | **Subnet-collision + policy-route info/warning bands (frontend)** | `apps/frontend/src/main/network/CollisionBands.svelte` |
 | **Connection/subscriptions store (sole `rpcClient.onMessage` owner — `websocket-store` fully deleted)** | `apps/frontend/src/lib/rpc/subscriptions.svelte.ts` |
 | **Auth-state single-mutation-path store (`ingestAuth`/`authenticate`/`createPassword`)** | `apps/frontend/src/lib/stores/auth-status.svelte.ts` |
@@ -161,6 +185,7 @@ CeraUI/
 | **Network-ingest operator enable/disable (topology-aware desired-state + systemctl apply + boot reconcile)** | `apps/backend/src/modules/network/network-ingest-control.ts` |
 | **Settings "Network ingest" dialog (per-protocol enable/disable toggle)** | `apps/frontend/src/main/dialogs/NetworkIngestDialog.svelte` |
 | **BondedLinksSection — sole owner of live per-link telemetry (RTT/NAK/weight) on the Network view** | `apps/frontend/src/main/network/BondedLinksSection.svelte` |
+| **Twin disambiguation — a telemetry row is a PHYSICAL device, not a file position (`link_id` registry, port label, `status.bond_mapping`)** | backend `apps/backend/src/modules/streaming/link-registry.ts` + `link-telemetry-rows.ts` + `link-mapping-report.ts`; frontend `apps/frontend/src/main/network/link-disambiguation.ts` + `bond-mapping-band.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → …AND A TELEMETRY ROW IS A PHYSICAL DEVICE |
 | **Lifecycle indicator gap matrix + recommendations register (31-row inventory: EXISTS/FIXED/RECOMMENDED per transition)** | `docs/LIFECYCLE-INDICATORS.md` |
 | **Deprecation-shim register entries (legacy broadcasts + unmounted GoLiveCard-migration files)** | `docs/TECHNICAL_DEBT.md` → `TD-legacy-source-broadcasts` / `TD-unmounted-source-shims` |
 | **`device.activeProfile` status-frame emitter (drift-detection loop)** | `apps/backend/src/modules/remote-control/active-profile-reporter.ts` (`reportActiveProfile({force?})` — reads the ACTUALLY-applied `StreamConfig` via injected `readActiveProfile`, de-dups on the 4 fields, emits `{config}` via injected `broadcast`) + `active-profile-wiring.ts` (`wireActiveProfileReporter()` — binds `readActiveProfile` to the persisted `stream_profile`/`srt_latency`/`fec_enabled`/`recovery_mode` config, `broadcast` to `broadcastMsg`; called from `main.ts` after `wireSetProfile()`). Three emit sites: `set-profile-wiring.ts` (after a successful `setProfile` apply), `rpc/procedures/streaming.procedure.ts` (after a UI Stream-Tuning config change), `modules/remote-control/channel.ts` `handleOpen()` (force re-emit on control-channel connect/reconnect — reseeds the hub, which loses its snapshot on disconnect). Frame type registered in `protocol.ts` `STATUS_TYPES` + `RELAYABLE_TYPES` (`status-relay.ts`) as `ACTIVE_PROFILE_STATUS = "device.activeProfile"`. Platform-side consumer: `ceralive-platform/apps/api/lib/remote-control/hub/internal-gate.ts` `applyActiveProfile` (see `ceralive-platform/AGENTS.md` → SRT-receive profile reconciliation) |
@@ -1089,6 +1114,66 @@ CeraUI and is NOT part of the `get-capabilities` response. Three enforcement lay
   and per-link stats for the completed session.
 - **EncoderDialog modal preview (#72)** — live encoder settings preview rendered inside
   the EncoderDialog modal before the user applies changes.
+
+## THE GATES HAVE AN OPERATOR SURFACE [EXISTS]
+
+The seven capability modules are DEFAULT-ABSENT on every device, and for a long
+time there was no way to turn one on. The band-lock and GPS controls said so
+correctly — *"Band locking is turned off on this device"*, *"Turn on location for
+this device in settings first"* — and pointed at a setting that existed nowhere:
+board validation swept `#settings` and matched **zero** testids against
+`modem|cellular|location|gps|band|capab`
+(`.omo/evidence/task-49-full-stack-board-validation.md`). Both controls were
+unreachable on every board regardless of what the hardware could do.
+
+`modems.getCapabilities` / `modems.setCapabilities` plus
+`apps/frontend/src/main/dialogs/ModemCapabilitiesDialog.svelte` (Settings →
+System → **Cellular Features**) are that surface. Five rules carry it:
+
+- **THE GATES ARE DEVICE-WIDE, so this is Settings and NOT a per-modem section.**
+  `config.modem_capabilities` is one object every modem's claim resolves against,
+  so a section inside `ModemConfigDialog` would imply the switch is scoped to the
+  row in front of the operator while silently arming the module on every other
+  modem too.
+- **A GATE IS A PRECONDITION, NEVER A CLAIM — this bypasses no evidence gate.**
+  It is one of four inputs to `resolveSupportClaim`, so an enabled gate cannot
+  promote a module past `enabled` on a modem whose probe has not positively
+  answered, cannot reach `certified` at all, and leaves band-lock's stricter
+  certification floor refusing exactly as before. The dialog SAYS so on screen
+  (`modem-capabilities-honesty`) rather than letting an on switch read as a
+  promise.
+- **ONLY IMPLEMENTED MODULES GET A ROW** (`DESIGN.md` CT-1). A module this build
+  does not ship renders ZERO nodes — never a disabled switch, which would imply a
+  capability being withheld — and a write for one is REFUSED
+  (`module_not_implemented`) rather than persisted, because its key is read by
+  nothing. This is why `implemented` rides the wire: a modem row resolves "not
+  built" and "this hardware lacks it" both to `unavailable`, and only the device
+  can tell them apart.
+- **The procedures are `authedProcedure`, deliberately NOT `modemProcedure`.**
+  The gates are a property of the DEVICE, so they must be readable and writable
+  while the cellular stack is still initializing or with no modem attached —
+  gating them behind the cellular readiness middleware would make the settings
+  surface unreachable in exactly the state an operator opens it to fix.
+- **A PROBE THAT PROVES A CAPABILITY RE-PUBLISHES THE ROSTER, change-gated.**
+  The probes fill caches the SYNCHRONOUS wire build reads, so a read that first
+  proves a capability would otherwise leave the claim stale until the 30 s poll —
+  landing on the operator at the worst moment, having just enabled the gate.
+  `noteCapabilityEvidenceChanged` (`capability-gates.ts`) is the seam; it DEFAULTS
+  TO INERT and is installed at module scope by `capability-evidence.ts` with a
+  DYNAMIC import of `modem-status.ts`, because a static edge back would cycle
+  through the wire producer. Re-reading an already-proven modem broadcasts
+  nothing.
+
+Coverage: `apps/backend/src/tests/modem-capability-settings.test.ts` (the total
+read, the per-module write and its config-key mapping, every refusal arm asserting
+the write provably never happened, the four not-a-bypass claims, the change-gated
+notifier, and a static wiring lock on the re-broadcast),
+`apps/frontend/src/main/dialogs/ModemCapabilitiesDialog.test.ts` (CT-1 both ways,
+the pessimistic switch, the calm refusal band, the read-failure band),
+`apps/frontend/src/tests/modem-capability-copy-completeness.test.ts` (copy for all
+SEVEN modules × 10 locales, derived from the wire enum), and
+`apps/frontend/tests/e2e/modem-capabilities-settings.spec.ts` (the audit's own
+`#settings` testid sweep, inverted, plus the real RPC round-trip).
 
 ## HOTSPOT QR SURFACE — ONE QR, AND IT IS ESCAPED [EXISTS]
 

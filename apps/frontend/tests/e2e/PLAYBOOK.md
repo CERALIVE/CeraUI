@@ -190,7 +190,7 @@ The `authedPage` fixture handles the full auth flow (first-run set-password or r
 
 ## Per-Worker Backend Scenario Override
 
-By default every worker backend boots on `MOCK_SCENARIO=multi-modem-wifi` (see `fixtures/backend.ts`). A spec that needs a *different* backend state — a PIN-locked modem, an engine-unavailable snapshot, etc. — opts in with the worker-scoped `backendScenario` option, set at **file top level**:
+By default every worker backend boots on `MOCK_SCENARIO=multi-modem-wifi` (see `fixtures/backend.ts`). Worker state explicitly selects `modem_backend: "mmcli"` because scenario mutations such as PIN retry/unlock live in the legacy mock modem state machine; production configs still default to D-Bus. Modem-config refusal fakes use the lowercase RPC enum (`device_busy`), not the WiFi async-operation token (`DEVICE_BUSY`), because the dialog resolves `network.modem.saveRefused.<enum>` verbatim. A spec that needs a *different* backend state — a PIN-locked modem, an engine-unavailable snapshot, etc. — opts in with the worker-scoped `backendScenario` option, set at **file top level**:
 
 ```typescript
 import { test, expect } from './fixtures/index.js';

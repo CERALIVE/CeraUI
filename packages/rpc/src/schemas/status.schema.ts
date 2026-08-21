@@ -97,9 +97,55 @@ export type RemoteStatus = z.infer<typeof remoteStatusSchema>;
 // Per-uplink srtla_send telemetry. Mirror of LinkTelemetryEntry in
 // apps/backend/src/modules/streaming/link-telemetry.ts. rtt_ms=0 and
 // weight_percent=100 are valid sender constants, not sentinels.
+// Whether a bonded link's PHYSICAL identity could be resolved at all.
+//
+// The `link_id` below is minted by ONE authority (the physical-identity module's
+// `mintLinkId`). When that resolution fails there is no honest id to publish, and
+// the answer is this explicit state rather than a plausible-looking one derived
+// from the interface name — an ifname is not a device, so an id shaped like a
+// minted one but keyed on a name silently follows the NAME across a replug and
+// attributes one operator's link to another device.
+//
+// `resolved` is the ordinary case and is never emitted (its evidence is the
+// `link_id` itself); `unmappable` is emitted so the operator surface can say
+// "this link's identity is unknown" instead of showing a fabricated id or an
+// unexplained blank.
+export const BOND_LINK_IDENTITY_STATES = ['resolved', 'unmappable'] as const;
+export const bondLinkIdentityStateSchema = z.enum(BOND_LINK_IDENTITY_STATES);
+export type BondLinkIdentityState = z.infer<typeof bondLinkIdentityStateSchema>;
+
 export const linkTelemetryEntrySchema = z.object({
 	conn_id: z.string(),
+	/**
+	 * Todo 10's minted per-device id — THE identity a rendered row is keyed on.
+	 *
+	 * `conn_id` above is a POSITION in `BIND_IPS_FILE`, so a SIGHUP that
+	 * republishes the bond in a different order hands the same modem a different
+	 * one; keying a row on it moves an operator's numbers onto the other twin.
+	 * Additive + optional: absent means the link resolved on the legacy
+	 * `conn_id` rung, never that it has no identity.
+	 */
+	link_id: z.string().optional(),
+	/**
+	 * Emitted ONLY as `'unmappable'`, and only when the writer positively failed
+	 * to resolve this link's physical identity. Absence is the ordinary case —
+	 * either the identity resolved (proven by `link_id`) or this row came off the
+	 * legacy `conn_id` rung, which makes no claim about identity either way.
+	 */
+	identity_state: bondLinkIdentityStateSchema.optional(),
 	iface: z.string(),
+	/**
+	 * The physical port this link's device sits in (`USB 0-1.3.1`), derived from
+	 * the writer's published `ID_PATH`. This is what tells two same-model dongles
+	 * apart when they share a factory MAC, a factory subnet and a model name.
+	 */
+	port_label: z.string().optional(),
+	/**
+	 * Present ONLY when the device itself reports a serial. The bench HiLink
+	 * twins do not, and one is never fabricated for them — their disambiguation
+	 * is `iface` + `port_label`.
+	 */
+	serial: z.string().optional(),
 	rtt_ms: z.number(),
 	nak_count: z.number(),
 	weight_percent: z.number(),
@@ -148,6 +194,53 @@ export const linkTelemetryMessageSchema = z.object({
 	bytes_sent_total: z.number().int().nonnegative().optional(),
 });
 export type LinkTelemetryMessage = z.infer<typeof linkTelemetryMessageSchema>;
+
+// ── The (ip,iface) bind-map disposition, as ONE normalized stream ────────────
+// The backend owns a typed-disposition producer boundary: the sender reports its
+// own verdict, and for the two launch paths it structurally cannot report (a
+// binary with no `--bind-map`, and a mapping the writer could not put on disk)
+// CeraUI synthesizes the SAME typed values. The UI therefore reads one stream
+// and NEVER infers a degradation from an absent field — inference is how "two
+// modems, one link, no explanation" happened in the first place.
+export const BIND_MAP_STATES = ['active', 'absent', 'degraded'] as const;
+
+// The seven ADR-003 §6.4 reasons, spelled exactly as the sender spells them.
+export const BIND_MAP_DEGRADED_REASONS = [
+	'hash_mismatch',
+	'malformed',
+	'unknown_iface',
+	'retry_exhausted',
+	'missing_file',
+	'unreadable',
+	'unsupported',
+] as const;
+
+export const BOND_MAPPING_DISPOSITIONS = [
+	'mapped',
+	'retained_last_valid',
+	'legacy_unique_only',
+	'startup_collision_excluded',
+] as const;
+
+// Indices are `BIND_IPS_FILE` LINE positions, NOT `conn_id`s: an excluded line
+// never becomes a connection, so the two numberings diverge exactly when this
+// group is non-empty.
+export const bondCollisionGroupSchema = z.object({
+	ip: z.string(),
+	effective_index: z.number().int().nonnegative(),
+	excluded_indices: z.array(z.number().int().nonnegative()),
+});
+export type BondCollisionGroup = z.infer<typeof bondCollisionGroupSchema>;
+
+export const bondMappingSchema = z.object({
+	state: z.enum(BIND_MAP_STATES),
+	reason: z.enum(BIND_MAP_DEGRADED_REASONS).optional(),
+	disposition: z.enum(BOND_MAPPING_DISPOSITIONS),
+	collisions: z.array(bondCollisionGroupSchema).optional(),
+	// Which half of the producer boundary answered. Diagnostic, never a gate.
+	source: z.enum(['sender', 'writer']),
+});
+export type BondMapping = z.infer<typeof bondMappingSchema>;
 
 // Engine store-and-forward (egress-spool) telemetry. Additive cerastream Status
 // fields (cerastream Task 32): present only when the engine advertises buffering.
@@ -321,10 +414,22 @@ export const statusResponseSchema = z.object({
 	set_password: z.boolean().optional(),
 	remote: remoteStatusSchema.optional(),
 	linkTelemetry: linkTelemetryMessageSchema.nullable().optional(),
+	// Published as an EXPLICIT value (null when there is no bond to describe) on
+	// every frame, never present-only-when-degraded: the frontend status merge
+	// preserves an omitted field, so a raise-only band could never be retracted —
+	// the `policy_route_missing` latch, exactly.
+	bond_mapping: bondMappingSchema.nullable().optional(),
 	buffering: bufferingStatusSchema.nullable().optional(),
 	active_encode: activeEncodeSchema.nullable().optional(),
 	engine_bitrate: engineBitrateSchema.nullable().optional(),
 	preview_encoder_realized: previewEncoderRealizedSchema.nullable().optional(),
 	network_ingest: networkIngestSchema.nullable().optional(),
+	// The cellular composition root has not committed a backend yet, so every
+	// `modems.*` procedure answers the typed CELLULAR_STACK_INITIALIZING and the
+	// modem list is legitimately empty. Published as an EXPLICIT boolean on every
+	// frame (never present-only-when-true): the frontend status merge preserves an
+	// omitted field, so a true-only flag could be raised and never lowered — the
+	// `policy_route_missing` latch, exactly. Absent = an older backend.
+	cellular_initializing: z.boolean().optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;

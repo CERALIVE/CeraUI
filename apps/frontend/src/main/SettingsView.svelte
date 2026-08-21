@@ -23,6 +23,7 @@ import {
 	Palette,
 	Power,
 	Radio,
+	RadioTower,
 	RefreshCw,
 	Rocket,
 	ScrollText,
@@ -59,6 +60,9 @@ const DeviceHealthDialog = lazyDialog(() => import('./dialogs/DeviceHealthDialog
 const OnDeviceDisplaySection = lazyDialog(() => import('./settings/OnDeviceDisplaySection.svelte'));
 const AddonsSection = lazyDialog(() => import('./settings/AddonsSection.svelte'));
 const WifiCountryDialog = lazyDialog(() => import('./dialogs/WifiCountryDialog.svelte'));
+const ModemCapabilitiesDialog = lazyDialog(
+	() => import('./dialogs/ModemCapabilitiesDialog.svelte'),
+);
 
 interface Entry {
 	key: string;
@@ -144,6 +148,12 @@ const groups = $derived<Group[]>([
 		entries: [
 			{ key: 'devicePassword', title: m["settings.index.devicePassword"](), desc: m["settings.index.devicePasswordDesc"](), icon: KeyRound },
 			{ key: 'wifiCountry', title: m["settings.index.wifiCountry"](), desc: m["settings.index.wifiCountryDesc"](), icon: Globe },
+			{
+				key: 'modemCapabilities',
+				title: m["settings.index.modemCapabilities"](),
+				desc: m["settings.index.modemCapabilitiesDesc"](),
+				icon: RadioTower,
+			},
 		],
 	},
 	{
@@ -209,6 +219,7 @@ let deviceHealthOpen = $state(false);
 let displayOpen = $state(false);
 let addonsOpen = $state(false);
 let wifiCountryOpen = $state(false);
+let modemCapabilitiesOpen = $state(false);
 
 // Fallback placeholder dialog for any not-yet-wired entries.
 let open = $state(false);
@@ -251,6 +262,9 @@ function openEntry(entry: Entry) {
 			return;
 		case 'wifiCountry':
 			wifiCountryOpen = true;
+			return;
+		case 'modemCapabilities':
+			modemCapabilitiesOpen = true;
 			return;
 		default:
 			active = entry;
@@ -359,6 +373,7 @@ $effect(() => {
 									'group flex w-full items-center gap-4 px-4 py-3.5 text-start transition-colors',
 									'hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-ring/50 focus-visible:ring-2 focus-visible:outline-none',
 								)}
+								data-testid={`settings-entry-${entry.key}`}
 								onclick={() => openEntry(entry)}
 							>
 								<span
@@ -427,3 +442,4 @@ $effect(() => {
 <LazyDialog dialog={OnDeviceDisplaySection} bind:open={displayOpen} />
 <LazyDialog dialog={AddonsSection} bind:open={addonsOpen} />
 <LazyDialog dialog={WifiCountryDialog} bind:open={wifiCountryOpen} />
+<LazyDialog dialog={ModemCapabilitiesDialog} bind:open={modemCapabilitiesOpen} />

@@ -466,6 +466,9 @@ function harness(options: {
 			logger: { info: () => {}, warn: () => {} },
 			pollIntervalMs: 1_000,
 			unknownDeadlineMs: 10_000,
+			// Already lowered: this suite is about the marker gates, and the
+			// barrier's own semantics have their own suite.
+			awaitRecovery: () => Promise.resolve(),
 		},
 	};
 }

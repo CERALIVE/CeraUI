@@ -34,6 +34,7 @@ import {
 	setMockEncoderConfig,
 	shouldUseMocks,
 } from "./mocks/mock-service.ts";
+import { getMockDbusModemViews } from "./mocks/providers/cellular.ts";
 import { startMockPreviewServer } from "./mocks/providers/preview.ts";
 import {
 	buildMockLinkTelemetry,
@@ -44,11 +45,17 @@ import {
 	getMockPreviewEncoderRealized,
 } from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
+import { initCellularStack } from "./modules/cellular/cellular-stack.ts";
+import { startModemShadowIfEnabled } from "./modules/cellular/shadow.ts";
+import { initUdevProvisionalMonitor } from "./modules/cellular/udev-monitor.ts";
 import { getConfig, loadConfig } from "./modules/config.ts";
 import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
+import { initFccUnlockModule } from "./modules/modems/fcc-unlock.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
+import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
+import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
 import {
@@ -93,6 +100,7 @@ import {
 } from "./modules/streaming/link-telemetry.ts";
 import { getPipelineList } from "./modules/streaming/pipelines.ts";
 import { setMockPreviewEncoderRealizedProvider } from "./modules/streaming/preview-encoder-status.ts";
+import { beginRecoveryBarrier } from "./modules/streaming/recovery-barrier.ts";
 import { refreshAndBroadcastSources } from "./modules/streaming/sources.ts";
 import { runStreamRestoration } from "./modules/streaming/stream-restoration.ts";
 import { reconcileStreamSession } from "./modules/streaming/stream-session-orchestrator.ts";
@@ -161,6 +169,7 @@ if (isDevelopment()) {
 	setMockActiveEncodeProvider(getMockActiveEncode);
 	setMockPreviewEncoderRealizedProvider(getMockPreviewEncoderRealized);
 	setMockAudioDevicesProvider(getMockAudioDevices);
+	setMockDbusModemViews(getMockDbusModemViews);
 	logger.info(`🎭 Development mode active with scenario: ${scenario}`);
 	logger.info(
 		"   Available scenarios: single-modem, multi-modem-wifi, streaming-active, caps-full, engine-starting, engine-unavailable",
@@ -187,6 +196,13 @@ if (shouldUseMocks()) {
 		setMockEncoderConfig({ pipeline: persistedPipeline });
 	}
 }
+
+// Raise the modem-mutation admission barrier BEFORE the WS server binds. The
+// server is the operator's lifeline and comes up first by design, so an RPC can
+// arrive while the journal is still being replayed — and until it has been, the
+// device cannot say whether a modem is mid-rollback. Internal boot origins await
+// this promise; external arrivals get the typed `recovery_pending` refusal.
+beginRecoveryBarrier();
 
 // Clean up orphaned atomic-write temp files from a prior crash (fail-soft).
 // This must run after config load so we know the config dir exists.
@@ -374,8 +390,44 @@ wifiStateInit(networkMonitor);
 // Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
 networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
 
+// MUST precede initModemUpdateLoop: the loop's first discovery + `modems`
+// broadcast fire immediately, and every modem RPC gates on the readiness
+// snapshot this commits — so a loop that wins the race publishes a snapshot
+// from the default backend rather than the configured one, and refuses every
+// modem procedure with CELLULAR_STACK_INITIALIZING until the stack lands. A
+// dbus failure falls back to mmcli INSIDE the stack, so reaching this guard
+// means the whole cellular subsystem is down and the device keeps its UI.
+await guardNonCritical("cellular-stack", initCellularStack);
+// Opt-in mutation-free D-Bus-vs-mmcli comparison (the mmcli-retirement evidence
+// collector). Also ahead of the loop so its first heartbeat window covers the
+// same modem roster the loop is about to publish. An unconfigured device
+// returns before the D-Bus client is imported at all.
+await guardNonCritical("cellular-shadow", startModemShadowIfEnabled);
+// The optimistic-row attach source (todo 18), deliberately armed BEFORE the
+// loop: an attach observed during the rest of boot is then already in the cache
+// when the loop's first discovery builds the first `modems` payload a client
+// sees. Nothing is lost by starting early — the cache holds the row until
+// something broadcasts, and the loop's own subscription takes over from there.
+await guardNonCritical("udev-provisional", initUdevProvisionalMonitor);
+
 // Event-driven modems share the SAME monitor (one nmcli monitor for all)
 void initModemUpdateLoop({ monitor: networkMonitor });
+
+// Replay the durable modem-mutation journal and LOWER the admission barrier.
+// It runs after the modem roster has been started because a rollback that needs
+// the certified reverse transition has to find the device; the presence and
+// state-comparison paths read the USB bus directly and need no roster at all.
+// `initMutationRecovery` never throws and lowers the barrier on every exit — a
+// barrier nobody will lower is worse than a device that reports its blocks.
+// Every capability module that JOURNALS registers its rollback handler BEFORE
+// replay runs. A journaled entry whose kind has no handler replays into
+// `unavailable`, which leaves the device blocked for a mutation that could in
+// fact have been undone.
+initFccUnlockModule();
+
+await guardNonCritical("modem-mutation-recovery", async () => {
+	await initMutationRecovery();
+});
 logger.info(bootTimer.phase("🌐", "network"));
 
 // check for Cam Links on USB2 at startup

@@ -31,6 +31,17 @@ function isGated(impact: string | null | undefined): impact is GatedImpact {
 	return impact === 'critical' || impact === 'serious';
 }
 
+export interface RunAxeOptions {
+	/**
+	 * CSS selectors to restrict the analysis to; omit for a whole-page run.
+	 *
+	 * The page-level run is baselined against pre-existing app-wide debt
+	 * (`a11y-baseline.json`), so a NEW surface can only be held to an absolute
+	 * zero by analysing that surface alone.
+	 */
+	readonly include?: readonly string[];
+}
+
 /**
  * Run axe-core against the current page state and return only the
  * critical/serious violations as a compact, serialisable summary.
@@ -39,10 +50,20 @@ function isGated(impact: string | null | undefined): impact is GatedImpact {
  * gates, so the impact filter is the single source of truth for "does this fail
  * the build".
  */
-export async function runAxe(page: Page): Promise<AxeViolationSummary[]> {
-	const results = await new AxeBuilder({ page })
-		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-		.analyze();
+export async function runAxe(
+	page: Page,
+	options: RunAxeOptions = {},
+): Promise<AxeViolationSummary[]> {
+	let builder = new AxeBuilder({ page }).withTags([
+		'wcag2a',
+		'wcag2aa',
+		'wcag21a',
+		'wcag21aa',
+	]);
+	for (const selector of options.include ?? []) {
+		builder = builder.include(selector);
+	}
+	const results = await builder.analyze();
 
 	return results.violations
 		.filter((v) => isGated(v.impact))

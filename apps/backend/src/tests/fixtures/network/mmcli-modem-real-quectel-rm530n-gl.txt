@@ -1,0 +1,230 @@
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/3
+modem.generic.device-identifier                 : b59f0594669e9a71267b592f4bfeff95d5d8f40b
+modem.generic.manufacturer                      : Quectel
+modem.generic.model                             : RM530N-GL
+modem.generic.revision                          : RM530NGLAAR05A01M4G
+modem.generic.carrier-configuration             : ROW_Commercial
+modem.generic.carrier-configuration-revision    : 0A010809
+modem.generic.hardware-revision                 : 20000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte, 5gnr
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte, 5gnr
+modem.generic.equipment-identifier              : 867978050016855
+modem.generic.device                            : /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb4/4-1/4-1.4/4-1.4.4
+modem.generic.physdev                           : /sys/devices/platform/fc400000.usb/xhci-hcd.0.auto/usb4/4-1/4-1.4/4-1.4.4
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.drivers.value[2]                  : option
+modem.generic.plugin                            : quectel
+modem.generic.primary-port                      : cdc-wdm3
+modem.generic.ports.length                      : 6
+modem.generic.ports.value[1]                    : cdc-wdm3 (qmi)
+modem.generic.ports.value[2]                    : ttyUSB5 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB6 (gps)
+modem.generic.ports.value[4]                    : ttyUSB7 (at)
+modem.generic.ports.value[5]                    : ttyUSB8 (at)
+modem.generic.ports.value[6]                    : wwan3 (net)
+modem.generic.own-numbers.length                : 1
+modem.generic.own-numbers.value[1]              : +570000000000
+modem.generic.unlock-required                   : sim-pin2
+modem.generic.unlock-retries.length             : 4
+modem.generic.unlock-retries.value[1]           : sim-pin (3)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.unlock-retries.value[3]           : sim-pin2 (2)
+modem.generic.unlock-retries.value[4]           : sim-puk2 (10)
+modem.generic.state                             : searching
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 81
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 5g; preferred: none
+modem.generic.supported-modes.value[6]          : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[7]          : allowed: 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[8]          : allowed: 3g, 5g; preferred: 5g
+modem.generic.supported-modes.value[9]          : allowed: 3g, 5g; preferred: 3g
+modem.generic.supported-modes.value[10]         : allowed: 3g, 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[11]         : allowed: 3g, 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[12]         : allowed: 3g, 4g, 5g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 71
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-4
+modem.generic.supported-bands.value[3]          : utran-6
+modem.generic.supported-bands.value[4]          : utran-5
+modem.generic.supported-bands.value[5]          : utran-8
+modem.generic.supported-bands.value[6]          : utran-2
+modem.generic.supported-bands.value[7]          : eutran-1
+modem.generic.supported-bands.value[8]          : eutran-2
+modem.generic.supported-bands.value[9]          : eutran-3
+modem.generic.supported-bands.value[10]         : eutran-4
+modem.generic.supported-bands.value[11]         : eutran-5
+modem.generic.supported-bands.value[12]         : eutran-7
+modem.generic.supported-bands.value[13]         : eutran-8
+modem.generic.supported-bands.value[14]         : eutran-12
+modem.generic.supported-bands.value[15]         : eutran-13
+modem.generic.supported-bands.value[16]         : eutran-14
+modem.generic.supported-bands.value[17]         : eutran-17
+modem.generic.supported-bands.value[18]         : eutran-18
+modem.generic.supported-bands.value[19]         : eutran-19
+modem.generic.supported-bands.value[20]         : eutran-20
+modem.generic.supported-bands.value[21]         : eutran-25
+modem.generic.supported-bands.value[22]         : eutran-26
+modem.generic.supported-bands.value[23]         : eutran-28
+modem.generic.supported-bands.value[24]         : eutran-29
+modem.generic.supported-bands.value[25]         : eutran-30
+modem.generic.supported-bands.value[26]         : eutran-32
+modem.generic.supported-bands.value[27]         : eutran-34
+modem.generic.supported-bands.value[28]         : eutran-38
+modem.generic.supported-bands.value[29]         : eutran-39
+modem.generic.supported-bands.value[30]         : eutran-40
+modem.generic.supported-bands.value[31]         : eutran-41
+modem.generic.supported-bands.value[32]         : eutran-42
+modem.generic.supported-bands.value[33]         : eutran-43
+modem.generic.supported-bands.value[34]         : eutran-46
+modem.generic.supported-bands.value[35]         : eutran-48
+modem.generic.supported-bands.value[36]         : eutran-66
+modem.generic.supported-bands.value[37]         : eutran-71
+modem.generic.supported-bands.value[38]         : utran-19
+modem.generic.supported-bands.value[39]         : ngran-1
+modem.generic.supported-bands.value[40]         : ngran-2
+modem.generic.supported-bands.value[41]         : ngran-3
+modem.generic.supported-bands.value[42]         : ngran-5
+modem.generic.supported-bands.value[43]         : ngran-7
+modem.generic.supported-bands.value[44]         : ngran-8
+modem.generic.supported-bands.value[45]         : ngran-12
+modem.generic.supported-bands.value[46]         : ngran-13
+modem.generic.supported-bands.value[47]         : ngran-14
+modem.generic.supported-bands.value[48]         : ngran-18
+modem.generic.supported-bands.value[49]         : ngran-20
+modem.generic.supported-bands.value[50]         : ngran-25
+modem.generic.supported-bands.value[51]         : ngran-26
+modem.generic.supported-bands.value[52]         : ngran-28
+modem.generic.supported-bands.value[53]         : ngran-29
+modem.generic.supported-bands.value[54]         : ngran-30
+modem.generic.supported-bands.value[55]         : ngran-38
+modem.generic.supported-bands.value[56]         : ngran-40
+modem.generic.supported-bands.value[57]         : ngran-41
+modem.generic.supported-bands.value[58]         : ngran-48
+modem.generic.supported-bands.value[59]         : ngran-66
+modem.generic.supported-bands.value[60]         : ngran-70
+modem.generic.supported-bands.value[61]         : ngran-71
+modem.generic.supported-bands.value[62]         : ngran-75
+modem.generic.supported-bands.value[63]         : ngran-76
+modem.generic.supported-bands.value[64]         : ngran-77
+modem.generic.supported-bands.value[65]         : ngran-78
+modem.generic.supported-bands.value[66]         : ngran-79
+modem.generic.supported-bands.value[67]         : ngran-257
+modem.generic.supported-bands.value[68]         : ngran-258
+modem.generic.supported-bands.value[69]         : (null)
+modem.generic.supported-bands.value[70]         : ngran-260
+modem.generic.supported-bands.value[71]         : ngran-261
+modem.generic.current-bands.length              : 65
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-4
+modem.generic.current-bands.value[3]            : utran-5
+modem.generic.current-bands.value[4]            : utran-8
+modem.generic.current-bands.value[5]            : utran-2
+modem.generic.current-bands.value[6]            : eutran-1
+modem.generic.current-bands.value[7]            : eutran-2
+modem.generic.current-bands.value[8]            : eutran-3
+modem.generic.current-bands.value[9]            : eutran-4
+modem.generic.current-bands.value[10]           : eutran-5
+modem.generic.current-bands.value[11]           : eutran-7
+modem.generic.current-bands.value[12]           : eutran-8
+modem.generic.current-bands.value[13]           : eutran-12
+modem.generic.current-bands.value[14]           : eutran-13
+modem.generic.current-bands.value[15]           : eutran-14
+modem.generic.current-bands.value[16]           : eutran-17
+modem.generic.current-bands.value[17]           : eutran-18
+modem.generic.current-bands.value[18]           : eutran-19
+modem.generic.current-bands.value[19]           : eutran-20
+modem.generic.current-bands.value[20]           : eutran-25
+modem.generic.current-bands.value[21]           : eutran-26
+modem.generic.current-bands.value[22]           : eutran-28
+modem.generic.current-bands.value[23]           : eutran-29
+modem.generic.current-bands.value[24]           : eutran-30
+modem.generic.current-bands.value[25]           : eutran-32
+modem.generic.current-bands.value[26]           : eutran-34
+modem.generic.current-bands.value[27]           : eutran-38
+modem.generic.current-bands.value[28]           : eutran-39
+modem.generic.current-bands.value[29]           : eutran-40
+modem.generic.current-bands.value[30]           : eutran-41
+modem.generic.current-bands.value[31]           : eutran-42
+modem.generic.current-bands.value[32]           : eutran-43
+modem.generic.current-bands.value[33]           : eutran-46
+modem.generic.current-bands.value[34]           : eutran-48
+modem.generic.current-bands.value[35]           : eutran-66
+modem.generic.current-bands.value[36]           : eutran-71
+modem.generic.current-bands.value[37]           : utran-19
+modem.generic.current-bands.value[38]           : ngran-1
+modem.generic.current-bands.value[39]           : ngran-2
+modem.generic.current-bands.value[40]           : ngran-3
+modem.generic.current-bands.value[41]           : ngran-5
+modem.generic.current-bands.value[42]           : ngran-7
+modem.generic.current-bands.value[43]           : ngran-8
+modem.generic.current-bands.value[44]           : ngran-12
+modem.generic.current-bands.value[45]           : ngran-13
+modem.generic.current-bands.value[46]           : ngran-14
+modem.generic.current-bands.value[47]           : ngran-18
+modem.generic.current-bands.value[48]           : ngran-20
+modem.generic.current-bands.value[49]           : ngran-25
+modem.generic.current-bands.value[50]           : ngran-26
+modem.generic.current-bands.value[51]           : ngran-28
+modem.generic.current-bands.value[52]           : ngran-29
+modem.generic.current-bands.value[53]           : ngran-30
+modem.generic.current-bands.value[54]           : ngran-38
+modem.generic.current-bands.value[55]           : ngran-40
+modem.generic.current-bands.value[56]           : ngran-41
+modem.generic.current-bands.value[57]           : ngran-48
+modem.generic.current-bands.value[58]           : ngran-66
+modem.generic.current-bands.value[59]           : ngran-70
+modem.generic.current-bands.value[60]           : ngran-71
+modem.generic.current-bands.value[61]           : ngran-75
+modem.generic.current-bands.value[62]           : ngran-76
+modem.generic.current-bands.value[63]           : ngran-77
+modem.generic.current-bands.value[64]           : ngran-78
+modem.generic.current-bands.value[65]           : ngran-79
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : 867978050016855
+modem.3gpp.enabled-locks.length                 : 1
+modem.3gpp.enabled-locks.value[1]               : fixed-dialing
+modem.3gpp.operator-code                        : 732103
+modem.3gpp.operator-name                        : TIGO
+modem.3gpp.registration-state                   : searching
+modem.3gpp.packet-service-state                 : detached
+modem.3gpp.network-rejection-error              : location-area-not-allowed
+modem.3gpp.network-rejection-operator-id        : 732103
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : umts
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-2
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : 
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/0
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 2
+modem.generic.sim-slots.value[1]                : /org/freedesktop/ModemManager1/SIM/0
+modem.generic.sim-slots.value[2]                : /
+modem.generic.bearers                           : --

@@ -21,7 +21,6 @@
 // orchestration that brings the engine down first, then the rest.
 
 import type WebSocket from "ws";
-import { isLocalIp } from "../../../helpers/ip-addresses.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { onNetworkInterfacesChange } from "../../network/network-interfaces.ts";
 import { isUpdating } from "../../system/software-updates.ts";
@@ -30,14 +29,11 @@ import { sendStatus } from "../../ui/status.ts";
 import { getSocketSenderId } from "../../ui/websocket-server.ts";
 import { clearAsrcProbeReject, isAsrcProbeRejectResolved } from "../audio.ts";
 import { setPendingAudioFollowAsrc } from "../auto-audio.ts";
+import { clearBindMapReport } from "../bind-map-disposition.ts";
+import { announceBindMapReport } from "../bind-map-notification.ts";
 import { stopLinkTelemetry } from "../link-telemetry.ts";
 import type { Pipeline } from "../pipelines.ts";
-import {
-	genSrtlaIpList,
-	genSrtlaIpListForLocalIpAddress,
-	restartSrtla,
-	setSrtlaIpList,
-} from "../srtla.ts";
+import { restartSrtla } from "../srtla.ts";
 import {
 	classifyStartFailure,
 	StreamStartFailure,
@@ -51,7 +47,13 @@ import {
 } from "../streaming.ts";
 import { getStreamingBackend } from "../streaming-engine.ts";
 import { getStreamingProcesses, stopProcessAndWait } from "./process-runner.ts";
+import { prepareSrtlaIpAddresses } from "./srtla-ip-preparation.ts";
 import { type StartStreamResult, startStream } from "./start-stream.ts";
+
+export {
+	prepareSrtlaIpAddresses,
+	type SrtlaIpPreparationDeps,
+} from "./srtla-ip-preparation.ts";
 
 type SessionResources = {
 	readonly generation: number;
@@ -59,33 +61,6 @@ type SessionResources = {
 };
 
 let sessionResources: SessionResources | undefined;
-
-export type SrtlaIpPreparationDeps = {
-	readonly isLocal: (address: string) => boolean;
-	readonly localList: (address: string) => string[];
-	readonly bondedList: () => string[];
-	readonly writeList: (addresses: string[]) => Promise<void>;
-};
-
-const defaultSrtlaIpPreparationDeps: SrtlaIpPreparationDeps = {
-	isLocal: isLocalIp,
-	localList: genSrtlaIpListForLocalIpAddress,
-	bondedList: genSrtlaIpList,
-	writeList: setSrtlaIpList,
-};
-
-export async function prepareSrtlaIpAddresses(
-	srtlaAddr: string,
-	deps: SrtlaIpPreparationDeps = defaultSrtlaIpPreparationDeps,
-): Promise<void> {
-	const srtlaIpList = deps.isLocal(srtlaAddr)
-		? deps.localList(srtlaAddr)
-		: deps.bondedList();
-	if (srtlaIpList.length === 0) {
-		throw new Error("no_available_network_connections");
-	}
-	await deps.writeList(srtlaIpList);
-}
 
 export async function start(
 	conn: WebSocket,
@@ -157,8 +132,12 @@ export async function start(
 	}
 	const refreshSrtlaIpAddresses = async () => {
 		try {
-			await prepareSrtlaIpAddresses(c.srtlaAddr);
-			if (getIsStreaming()) restartSrtla();
+			// `changed` is true for a MAPPING-ONLY republication too — moving a link
+			// from one interface to another leaves the IP bytes byte-identical, so a
+			// SIGHUP keyed on the list alone would skip the very reload that carries
+			// the new mapping.
+			const publication = await prepareSrtlaIpAddresses(c.srtlaAddr);
+			if (publication.changed && getIsStreaming()) restartSrtla();
 		} catch (error) {
 			logger.warn("Failed to refresh SRTLA IP addresses", { error });
 		}
@@ -239,6 +218,10 @@ export function stopGeneration(generation: number): Promise<void> {
 					),
 				);
 				stopLinkTelemetry();
+				// A stopped session makes no claim about a bond, so the degradation
+				// band is retracted rather than left standing over nothing.
+				clearBindMapReport();
+				announceBindMapReport();
 				updateStatus(false);
 				resolve();
 			})();

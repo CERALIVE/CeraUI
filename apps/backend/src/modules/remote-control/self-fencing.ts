@@ -22,6 +22,13 @@
  * The watchdog default is 30s and is NOT wire-negotiated in v2.0 (spec §7) — hub and
  * device hardcode the same {@link SELF_FENCING_WATCHDOG_MS}.
  *
+ * One op — `modem.reconfig` — additionally targets a subsystem that can still be
+ * coming up (the opt-in D-Bus cellular backend, before its first authoritative
+ * snapshot). It is refused BEFORE `snapshot`/`apply` while that stack is not ready,
+ * so nothing is half-applied and no watchdog is armed. The refusal is a normal
+ * `ok:false` result behind the delivery-ack the router already sent, never a silent
+ * drop. See {@link SELF_FENCING_NOT_READY_ERROR}.
+ *
  * The actual resource mutations are an injected seam ({@link SelfFencingOps}) so the
  * watchdog is unit-testable with a fake clock and fake ops — the same DI posture as
  * `channel.ts` / `command-router.ts`. The default ops persist+restore config (the safe
@@ -70,6 +77,32 @@ export type SelfFencingOp = RevertibleOp | NonRevertibleOp;
 export type SelfFencingOps = Record<SelfFencingType, SelfFencingOp>;
 
 /**
+ * Result `error` for a self_fencing op whose target subsystem is still initializing.
+ * Mirrors the `CELLULAR_STACK_INITIALIZING` refusal every modem RPC procedure already
+ * returns, in the control plane's snake_case error vocabulary.
+ */
+export const SELF_FENCING_NOT_READY_ERROR = "cellular_stack_initializing";
+
+/**
+ * Self_fencing ops whose subsystem must be READY before any mutation. Only the
+ * modem-scoped op is gated: the others touch config/lifecycle surfaces that are
+ * available for as long as the process is.
+ */
+const READINESS_GATED_TYPES: ReadonlySet<SelfFencingType> =
+	new Set<SelfFencingType>(["modem.reconfig"]);
+
+/**
+ * Default readiness predicate. The cellular module is imported at call time (the same
+ * deferred-import posture as the default ops) so this module still pulls no config or
+ * D-Bus graph at load. An ungated type never touches it at all.
+ */
+async function defaultSubsystemReady(type: SelfFencingType): Promise<boolean> {
+	if (!READINESS_GATED_TYPES.has(type)) return true;
+	const { getCellularStack } = await import("../cellular/cellular-stack.ts");
+	return getCellularStack().ready;
+}
+
+/**
  * Injectable collaborators (same DI posture as `channel.ts`). Defaults wire the live
  * channel `sendFrame`, the real op table, the 30s watchdog, and real timers; tests
  * override `sendResult`/`ops` to capture frames and a fake clock via `setTimer`.
@@ -81,9 +114,22 @@ export interface SelfFencingDeps {
 	ops: SelfFencingOps;
 	/** Watchdog window in milliseconds (spec §7 — defaults to 30s, not negotiated). */
 	watchdogMs: number;
+	/** Target-subsystem readiness, consulted before any mutation for gated types. */
+	isSubsystemReady: (type: SelfFencingType) => Promise<boolean>;
 	setTimer: (fn: () => void, ms: number) => TimerHandle;
 	clearTimer: (timer: TimerHandle) => void;
 	logger: { info: (message: string) => void; warn: (message: string) => void };
+	/**
+	 * Take the per-device mutation lease for a modem-scoped op. Non-modem ops
+	 * answer `{ok: true}` with NO lease — `network.reconfig`, a reboot and a
+	 * factory reset are not scoped to one physical modem, so keying them on one
+	 * would refuse them for a reason that does not apply.
+	 */
+	acquireMutationLease: (
+		frame: Command,
+	) => Promise<
+		{ ok: true; lease?: { release(): void } } | { ok: false; refusal: string }
+	>;
 }
 
 /**
@@ -99,11 +145,25 @@ interface PendingOp {
 	snapshot: unknown;
 	/** Post-apply state echoed on commit (revertible ops only). */
 	applied: unknown;
+	/**
+	 * The per-device mutation lease, held for the WHOLE transaction rather than
+	 * the handler call. `modem.reconfig` applies and then leaves a 30 s
+	 * confirm/auto-revert watchdog live after the handler returns, so releasing on
+	 * return would leave a stream admissible during exactly the window in which
+	 * the modem is half-applied or being rolled back.
+	 */
+	lease?: { release(): void } | undefined;
 }
 
 // Process-wide pending table (mirrors the module-state posture of channel.ts). A
 // confirm or a watchdog timeout resolves and removes its entry by `cid`.
 const pending = new Map<string, PendingOp>();
+
+/** Release a transaction's mutation lease exactly once, on every terminal path. */
+function releaseLease(entry: PendingOp): void {
+	entry.lease?.release();
+	entry.lease = undefined;
+}
 
 /**
  * Build the default op table. Each handler defers its heavy module import to call time
@@ -169,10 +229,55 @@ function defaultDeps(): SelfFencingDeps {
 		sendResult: sendFrame,
 		ops: defaultSelfFencingOps(),
 		watchdogMs: SELF_FENCING_WATCHDOG_MS,
+		isSubsystemReady: defaultSubsystemReady,
 		setTimer: (fn, ms) => setTimeout(fn, ms),
 		clearTimer: (timer) => clearTimeout(timer),
 		logger,
+		acquireMutationLease: defaultAcquireMutationLease,
 	};
+}
+
+const MODEM_SCOPED_TYPES: ReadonlySet<SelfFencingType> =
+	new Set<SelfFencingType>(["modem.reconfig"]);
+
+async function defaultAcquireMutationLease(
+	frame: Command,
+): Promise<
+	{ ok: true; lease?: { release(): void } } | { ok: false; refusal: string }
+> {
+	if (!MODEM_SCOPED_TYPES.has(frame.type as SelfFencingType)) {
+		return { ok: true };
+	}
+	// Lazily imported for the same fail-soft reason the op table is: this module
+	// must not pull the modem graph at load time.
+	const [{ beginModemMutation }, { modemStableKeyForMmTarget }, admission] =
+		await Promise.all([
+			import("../modems/mutation-lease.ts"),
+			import("../modems/mutation-identity.ts"),
+			import("../streaming/lifecycle-admission.ts"),
+		]);
+	const payload = frame.payload as { device?: unknown } | undefined;
+	const device =
+		typeof payload?.device === "string" ? payload.device : undefined;
+
+	// The wire payload for `modem.reconfig` is a WHOLE-SUBSYSTEM reconfig — the
+	// spec names no target device — so a payload without one takes the
+	// subsystem-wide holder instead. That still delivers the reciprocal
+	// guarantee (a stream admission is refused for the transaction's whole life);
+	// it simply cannot be narrowed to one physical modem. A payload that DOES
+	// name a device is keyed on it, and a named device whose identity cannot be
+	// resolved is refused rather than silently widened.
+	if (device === undefined) {
+		const held = admission.tryAcquireLifecycle("modem-transition");
+		return held.admitted
+			? { ok: true, lease: held.lease }
+			: { ok: false, refusal: held.refusal };
+	}
+
+	const acquired = beginModemMutation(modemStableKeyForMmTarget(device));
+	return acquired.ok
+		? { ok: true, lease: acquired.lease }
+		: { ok: false, refusal: acquired.refusal };
 }
 
 /**
@@ -211,22 +316,27 @@ async function autoRevert(cid: string): Promise<void> {
 	pending.delete(cid);
 
 	const { frame, deps, op, snapshot } = entry;
+	// Released only AFTER the revert has run — the rollback is itself a mutation.
 	try {
-		await op.revert(snapshot);
-		deps.logger.warn(
-			`self_fencing: ${frame.type} (${cid}) unconfirmed within watchdog, auto-reverted`,
-		);
-		deps.sendResult(
-			resultFrame(frame, { ok: true, applied: snapshot, reverted: true }),
-		);
-	} catch (err) {
-		const message = errorMessage(err);
-		deps.logger.warn(
-			`self_fencing: ${frame.type} (${cid}) revert failed: ${message}`,
-		);
-		deps.sendResult(
-			resultFrame(frame, { ok: false, applied: null, error: message }),
-		);
+		try {
+			await op.revert(snapshot);
+			deps.logger.warn(
+				`self_fencing: ${frame.type} (${cid}) unconfirmed within watchdog, auto-reverted`,
+			);
+			deps.sendResult(
+				resultFrame(frame, { ok: true, applied: snapshot, reverted: true }),
+			);
+		} catch (err) {
+			const message = errorMessage(err);
+			deps.logger.warn(
+				`self_fencing: ${frame.type} (${cid}) revert failed: ${message}`,
+			);
+			deps.sendResult(
+				resultFrame(frame, { ok: false, applied: null, error: message }),
+			);
+		}
+	} finally {
+		releaseLease(entry);
 	}
 }
 
@@ -238,6 +348,7 @@ function discardUnconfirmed(cid: string): void {
 	const entry = pending.get(cid);
 	if (entry === undefined || entry.op.revertible) return;
 	pending.delete(cid);
+	releaseLease(entry);
 
 	const { frame, deps } = entry;
 	deps.logger.warn(
@@ -275,6 +386,43 @@ export async function handleSelfFencingOp(
 		return;
 	}
 
+	// Refuse BEFORE snapshot/apply so a not-yet-ready subsystem leaves nothing
+	// half-applied and no watchdog armed. The router already sent the delivery.ack,
+	// so this refusal is what the operator sees instead of a silent drop.
+	if (!(await deps.isSubsystemReady(frame.type as SelfFencingType))) {
+		deps.logger.warn(
+			`self_fencing: ${frame.type} (${frame.cid}) refused, subsystem still initializing`,
+		);
+		deps.sendResult(
+			resultFrame(frame, {
+				ok: false,
+				applied: null,
+				error: SELF_FENCING_NOT_READY_ERROR,
+			}),
+		);
+		return;
+	}
+
+	// The mutation lease is taken BEFORE the snapshot and is NOT released when this
+	// handler returns — it is held through confirm, auto-revert, or an acknowledged
+	// terminal failure, because that whole window is one transaction against one
+	// physical modem. A refusal here leaves nothing applied and no watchdog armed.
+	const acquired = await deps.acquireMutationLease(frame);
+	if (!acquired.ok) {
+		deps.logger.warn(
+			`self_fencing: ${frame.type} (${frame.cid}) refused: ${acquired.refusal}`,
+		);
+		deps.sendResult(
+			resultFrame(frame, {
+				ok: false,
+				applied: null,
+				error: acquired.refusal,
+			}),
+		);
+		return;
+	}
+	const lease = acquired.lease;
+
 	if (op.revertible) {
 		// Snapshot → apply → arm the watchdog. On any failure before the timer is armed
 		// the op simply did not take effect, so report the error and arm nothing.
@@ -284,7 +432,15 @@ export async function handleSelfFencingOp(
 			const timer = deps.setTimer(() => {
 				void autoRevert(frame.cid);
 			}, deps.watchdogMs);
-			pending.set(frame.cid, { frame, deps, op, timer, snapshot, applied });
+			pending.set(frame.cid, {
+				frame,
+				deps,
+				op,
+				timer,
+				snapshot,
+				applied,
+				...(lease === undefined ? {} : { lease }),
+			});
 			deps.logger.info(
 				`self_fencing: ${frame.type} (${frame.cid}) applied, awaiting confirm`,
 			);
@@ -293,6 +449,7 @@ export async function handleSelfFencingOp(
 			);
 		} catch (err) {
 			const message = errorMessage(err);
+			lease?.release();
 			deps.logger.warn(
 				`self_fencing: ${frame.type} (${frame.cid}) apply failed: ${message}`,
 			);
@@ -315,6 +472,7 @@ export async function handleSelfFencingOp(
 		timer,
 		snapshot: undefined,
 		applied: undefined,
+		...(lease === undefined ? {} : { lease }),
 	});
 	deps.logger.info(
 		`self_fencing: ${frame.type} (${frame.cid}) pre-confirm required, not executing`,
@@ -342,31 +500,40 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 	const { frame, deps, op } = entry;
 	deps.clearTimer(entry.timer);
 
-	if (op.revertible) {
-		deps.logger.info(
-			`self_fencing: ${frame.type} (${cid}) confirmed, committed`,
-		);
-		deps.sendResult(
-			resultFrame(frame, { ok: true, applied: entry.applied, reverted: false }),
-		);
-		return;
-	}
-
-	// Non-revertible: the confirm authorizes execution. There is no rollback once run.
 	try {
-		await op.execute(frame.payload);
-		deps.logger.info(
-			`self_fencing: ${frame.type} (${cid}) confirmed, executed`,
-		);
-		deps.sendResult(resultFrame(frame, { ok: true, applied: null }));
-	} catch (err) {
-		const message = errorMessage(err);
-		deps.logger.warn(
-			`self_fencing: ${frame.type} (${cid}) execute failed: ${message}`,
-		);
-		deps.sendResult(
-			resultFrame(frame, { ok: false, applied: null, error: message }),
-		);
+		if (op.revertible) {
+			deps.logger.info(
+				`self_fencing: ${frame.type} (${cid}) confirmed, committed`,
+			);
+			deps.sendResult(
+				resultFrame(frame, {
+					ok: true,
+					applied: entry.applied,
+					reverted: false,
+				}),
+			);
+			return;
+		}
+
+		// Non-revertible: the confirm authorizes execution. There is no rollback
+		// once run.
+		try {
+			await op.execute(frame.payload);
+			deps.logger.info(
+				`self_fencing: ${frame.type} (${cid}) confirmed, executed`,
+			);
+			deps.sendResult(resultFrame(frame, { ok: true, applied: null }));
+		} catch (err) {
+			const message = errorMessage(err);
+			deps.logger.warn(
+				`self_fencing: ${frame.type} (${cid}) execute failed: ${message}`,
+			);
+			deps.sendResult(
+				resultFrame(frame, { ok: false, applied: null, error: message }),
+			);
+		}
+	} finally {
+		releaseLease(entry);
 	}
 }
 
@@ -377,6 +544,7 @@ export async function handleSelfFencingConfirm(cid: string): Promise<void> {
 export function resetSelfFencingState(): void {
 	for (const entry of pending.values()) {
 		entry.deps.clearTimer(entry.timer);
+		releaseLease(entry);
 	}
 	pending.clear();
 }

@@ -1,7 +1,20 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { NetifEntry } from '@ceraui/rpc/schemas';
-import { ChevronRight, Network as NetworkIcon } from '@lucide/svelte';
+import type {
+	DongleState,
+	NetifEntry,
+	RouterCellularMarker,
+	UsbModemNetMarker,
+} from '@ceraui/rpc/schemas';
+import {
+	Check,
+	ChevronRight,
+	CircleAlert,
+	Hourglass,
+	Network as NetworkIcon,
+	RadioTower,
+	TriangleAlert,
+} from '@lucide/svelte';
 
 import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
@@ -48,6 +61,85 @@ function settle(proceed: boolean) {
 	resolveConfirm = null;
 	confirmOpen = false;
 }
+
+// ───────────── Isolated-dongle row (Phase B) ─────────────
+//
+// A `dg<N>h` row is the HOST side of a veth pair into a claimed router-mode USB
+// dongle's own network namespace — so the thing an operator sees here is the
+// virtual link to the dongle, not the dongle's own `enx…` adapter. The backend
+// stamps `dongle: {slot, state}` on such a row (and unions a metadata-only row
+// for a dongle whose veth is still gated), so a marked row is authoritative.
+//
+// Every state carries its own WORD and its own GLYPH; colour only reinforces
+// them. All three are static — no animation, so the e-ink freeze has nothing to
+// still and the row reads identically on a paper display.
+const DONGLE_STATE_VARIANT: Record<DongleState, 'success' | 'warning' | 'error'> = {
+	up: 'success',
+	acquiring: 'warning',
+	down: 'error',
+};
+
+const DONGLE_STATE_ICON = {
+	up: Check,
+	acquiring: Hourglass,
+	down: CircleAlert,
+} satisfies Record<DongleState, unknown>;
+
+// `size="micro"` cannot deliver its own font size on a COLOURED badge: `Badge`
+// composes through `cn()`/tailwind-merge, which does not recognise the custom
+// `text-micro` utility and so files it under text-COLOUR — the `text-status-*`
+// class that follows it wins, and the badge silently falls back to the inherited
+// 16px, larger than the interface name it annotates. Passing the SAME design
+// token as a typed arbitrary value puts it in the font-size group, where it
+// coexists with the colour. The Badge-level defect is app-wide, not this row's.
+const MICRO_TEXT = 'text-(length:--text-micro)';
+
+function dongleStateLabel(state: DongleState): string {
+	if (state === 'up') return m["network.dongle.stateUp"]();
+	if (state === 'acquiring') return m["network.dongle.stateAcquiring"]();
+	return m["network.dongle.stateDown"]();
+}
+
+// An `acquiring` / `down` dongle's veth is administratively DOWN and
+// address-less by the runtime contract, so it structurally CANNOT carry bonded
+// traffic — `genSrtlaIpList()` never sees it. The toggle is therefore rendered
+// disabled, and NEVER bare: the reason rides BondToggle's tooltip + aria-label
+// AND a visible line under the row, because a touchscreen operator cannot hover
+// to discover why a control is dead.
+function dongleBondBlockedReason(state: DongleState): string | undefined {
+	if (state === 'acquiring') return m["network.dongle.blockedAcquiring"]();
+	if (state === 'down') return m["network.dongle.blockedDown"]();
+	return undefined;
+}
+
+// ───────────── Router-mode cellular dongle (VID:PID/descriptor classified) ─────────────
+//
+// This marker is INDEPENDENT of the dongle marker above: it comes from the USB
+// descriptors the kernel already publishes, so a HiLink/MF79U-class dongle is
+// named honestly on an image with no netns isolation deployed — which is every
+// shipped image today. The two can coexist on one row (a claimed dongle's veth
+// is not itself USB, so in practice they land on different rows).
+//
+// `vendor` and `model` are the device's OWN string descriptors, and a dongle is
+// entitled to publish the same text for both — this bench's Huawei units report
+// `HUAWEI_MOBILE` twice. Printing it twice is noise rather than honesty, so an
+// exact duplicate collapses to one.
+function routerCellularName(marker: RouterCellularMarker): string {
+	return marker.vendor === marker.model ? marker.model : `${marker.vendor} ${marker.model}`;
+}
+
+// ───────────── An MM-managed modem's own data function ─────────────
+//
+// Same shape of fact as the marker above, different owner: the classifier found
+// a recognized MBIM/QMI/AT control port, so the Cellular section owns this
+// device. Its modem row normally claims the interface and this row never
+// renders — but `netif` and `modems` are independent broadcasts, so during the
+// handover window (and on a modem the roster never registers) the interface is
+// still here. Naming it is what stops it reading as a mystery second adapter
+// for a device the operator can already see under Cellular.
+function modemNetName(marker: UsbModemNetMarker): string {
+	return marker.vendor === marker.model ? marker.model : `${marker.vendor} ${marker.model}`;
+}
 </script>
 
 <!-- ───────────── Ethernet / interfaces ───────────── -->
@@ -65,14 +157,105 @@ function settle(proceed: boolean) {
 			{#each wiredEntries as [name, iface] (name)}
 				{@const showStale = iface.enabled && (staleInterfaces.has(name) || isFullyStale)}
 				{@const linkLocal = isLinkLocalIpv4(iface.ip)}
+				<!-- `null` is the backend RETRACTING the claim; the ingestion merge prunes
+				     the row on that frame, so it is normalised away rather than rendered. -->
+				{@const dongle = iface.dongle ?? undefined}
+				{@const dongleBlocked = dongle ? dongleBondBlockedReason(dongle.state) : undefined}
+				<!-- `null` retracts the classification but KEEPS the row (unlike `dongle`),
+				     so it is normalised to "unclassified" rather than pruned. -->
+				{@const routerCellular = iface.router_cellular ?? undefined}
+				<!-- `null` retracts this claim and KEEPS the row too. -->
+				{@const modemNet = iface.usb_modem_net ?? undefined}
 				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
 				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+					<!-- `self-start` because a classified row is several lines tall: a
+					     vertically-centred dot floats away from the name it reports on.
+					     Same rule, same reason, as CellularSection's row dot. -->
 					<span
-						class={cn('size-2 shrink-0 rounded-full', iface.enabled ? 'bg-primary' : 'bg-muted-foreground/40')}
+						class={cn(
+							'mt-1.5 size-2 shrink-0 self-start rounded-full',
+							iface.enabled ? 'bg-primary' : 'bg-muted-foreground/40',
+						)}
 						aria-hidden="true"
 					></span>
-					<div class="min-w-0 flex-1">
+					<!-- `basis-72` is what makes the row RESPONSIVE rather than merely
+					     wrapping: with `flex-1` alone the control cluster never wraps, it
+					     just shrinks this column, and below ~500px the prose collapses to
+					     one word per line while the IP runs under the toggle. A basis wider
+					     than the remaining space forces the cluster onto its own line
+					     instead. Desktop is unchanged — `flex-1` still grows past it. -->
+					<div class="min-w-0 flex-1 basis-72">
 						<p class="truncate text-sm font-medium">{name}</p>
+						{#if dongle}
+							{@const StateIcon = DONGLE_STATE_ICON[dongle.state]}
+							<!-- What it IS, then where it is in its lifecycle — both in words. -->
+							<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
+								<Badge
+									variant="info"
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="netif-dongle"
+									data-dongle-slot={dongle.slot}
+									label={m["network.dongle.badge"]()}
+									title={m["network.dongle.isolationHint"]()}
+								/>
+								<Badge
+									variant={DONGLE_STATE_VARIANT[dongle.state]}
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="netif-dongle-state"
+									data-dongle-state={dongle.state}
+								>
+									<StateIcon class="size-3" aria-hidden="true" />
+									{dongleStateLabel(dongle.state)}
+								</Badge>
+							</div>
+						{/if}
+						{#if modemNet}
+							<div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+								<Badge
+									variant="info"
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="netif-modem-net"
+									data-vid-pid={modemNet.vid_pid}
+									title={m["network.modemNet.hint"]()}
+								>
+									<RadioTower class="size-3" aria-hidden="true" />
+									{m["network.modemNet.badge"]()}
+								</Badge>
+								<span
+									class="text-muted-foreground font-mono text-(length:--text-micro)"
+									data-testid="netif-modem-net-identity"
+								>
+									{modemNetName(modemNet)} · {modemNet.vid_pid}
+								</span>
+							</div>
+						{/if}
+						{#if routerCellular}
+							<!-- Identity rides the SAME line as the badge: the badge says what
+							     class of thing it is, the mono text says which unit — one glance,
+							     one line, no extra row height per dongle on the kiosk viewport. -->
+							<div class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+								<Badge
+									variant="info"
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="netif-router-cellular"
+									data-vid-pid={routerCellular.vid_pid}
+									title={m["network.routerCellular.hint"]()}
+								>
+									<RadioTower class="size-3" aria-hidden="true" />
+									{m["network.routerCellular.badge"]()}
+								</Badge>
+								<span
+									class="text-muted-foreground font-mono text-(length:--text-micro)"
+									data-testid="netif-router-cellular-identity"
+								>
+									{routerCellularName(routerCellular)} · {routerCellular.vid_pid}
+								</span>
+							</div>
+						{/if}
 						<p class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
 							{#if iface.ip}
 								<code class="font-mono">{iface.ip}</code>
@@ -89,6 +272,54 @@ function settle(proceed: boolean) {
 								{m["network.view.linkLocalHint"]()}
 							</p>
 						{/if}
+						{#if routerCellular}
+							<!-- ALWAYS present, because the address is the thing an operator
+							     will otherwise try to change and cannot: it is leased by the
+							     dongle's own DHCP server. A tooltip alone is unreachable on the
+							     kiosk touchscreen this device ships with. -->
+							<p
+								class="text-muted-foreground/80 mt-0.5 text-xs"
+								data-testid="netif-router-cellular-address-note"
+							>
+								{m["network.routerCellular.addressNote"]()}
+							</p>
+						{/if}
+						{#if routerCellular?.duplicate_model}
+							<!-- The collision is MEASURED, not predicted: a second unit of this
+							     exact vid:pid is attached right now. Amber, not destructive —
+							     nothing is broken, this is a known limitation of factory-fixed
+							     LAN addressing, and it is the defect the netns isolation layer
+							     exists to remove. -->
+							<p
+								class="border-status-warning/60 bg-status-warning/10 text-status-warning mt-1 flex items-start gap-1.5 rounded-md border px-2 py-1.5 text-xs"
+								role="status"
+								data-testid="netif-router-cellular-collision"
+							>
+								<TriangleAlert class="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+								<span>
+									<span class="font-medium">
+										{m["network.routerCellular.collisionTitle"]({ model: routerCellular.model })}
+									</span>
+									{' '}
+									{m["network.routerCellular.collisionBody"]()}
+								</span>
+							</p>
+						{/if}
+						{#if modemNet}
+							<!-- On screen, never only in the badge's `title`: the kiosk
+							     touchscreen cannot hover, and "this is one device, not two" is
+							     the whole reason this row stopped being a mystery. -->
+							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-modem-net-note">
+								{m["network.modemNet.note"]({ model: modemNetName(modemNet) })}
+							</p>
+						{/if}
+						{#if dongleBlocked}
+							<!-- The disabled toggle's reason, ON SCREEN — a tooltip alone is
+							     unreachable on the kiosk touchscreen this device ships with. -->
+							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-dongle-blocked-hint">
+								{dongleBlocked}
+							</p>
+						{/if}
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
@@ -98,6 +329,7 @@ function settle(proceed: boolean) {
 							name={name}
 							enabled={iface.enabled}
 							ip={iface.ip}
+							disabledReason={dongleBlocked}
 							onBeforeDisable={() => confirmDisable(name)}
 						/>
 						<Button

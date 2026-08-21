@@ -28,14 +28,24 @@ import {
 	notificationBroadcast,
 	notificationRemove,
 } from "../ui/notifications.ts";
+import {
+	decideConnectivityClaim,
+	deviceBoundProbeExclusionReason,
+	eligibleProbeCandidates,
+	parseDefaultRouteInterface,
+	probeExclusionReason,
+} from "./connectivity-candidates.ts";
+import {
+	describeBinding,
+	electConnectivityCandidate,
+} from "./connectivity-election.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
-import {
-	getNetifErrorMsg,
-	getNetworkInterfaces,
-} from "./network-interfaces.ts";
+import { getNetworkInterfaces } from "./network-interfaces.ts";
 
 export const UPDATE_GW_INT = 2000;
+
+export const NO_INTERNET_NOTIFICATION = "no_internet";
 
 let updateGwLock = false;
 let updateGwLastRun = 0;
@@ -99,6 +109,33 @@ export type GwDeps = {
 	clearDefaultGws: () => Promise<void>;
 };
 
+/*
+  THE TWIN-GATEWAY CASE: two interfaces, ONE gateway address.
+
+  Both HiLink twins run the same factory firmware, so both hand the host a lease
+  whose gateway is `192.168.8.1` — the SAME address, on the SAME subnet, from two
+  physically distinct dongles. `ip route show default` on the bench really does
+  print two `default via 192.168.8.1` lines that differ only in their `dev`
+  clause.
+
+  So NOTHING here may identify an uplink by an address:
+
+   - the ELECTION reads a PER-INTERFACE table (`ip route show table <ifname>`),
+     so the line it gets back is already the one belonging to that device;
+   - `parseDefaultRouteLine` tokenizes that line and `buildRouteAddArgv` replays
+     EVERY token, so the `dev <ifname>` clause survives into `ip route add`
+     verbatim and the installed route names the device, not just the gateway.
+     Two twins therefore produce two DIFFERENT argvs from two identical `via`
+     addresses;
+   - the PROBE that decides which interface won never dials `192.168.8.1` at all
+     — see {@link electConnectivityCandidate}. It targets the externally-resolved
+     connectivity address with the socket bound to one device.
+
+  Reaching a twin's admin gateway and reaching the Internet through that twin are
+  separate assertions, and a SIM-less dongle answers the first while
+  captive-portalling the second (board-measured). Neither may stand in for the
+  other.
+*/
 export async function setDefaultRoute(
 	goodIf: string,
 	deps: Partial<GwDeps> = {},
@@ -131,6 +168,22 @@ export function queueUpdateGw() {
 	void updateGwWrapper();
 }
 
+/**
+ * Which interface the kernel's active default route egresses through, or
+ * `undefined` when it cannot be determined. Never throws: an unreadable routing
+ * table must not be mistaken for an excluded interface.
+ */
+async function resolveDefaultRouteInterface(): Promise<string | undefined> {
+	try {
+		return parseDefaultRouteInterface(
+			await run("ip", ["route", "show", "default"]),
+		);
+	} catch (err) {
+		logger.debug(`Could not read the default route: ${err}`);
+		return undefined;
+	}
+}
+
 async function updateGw() {
 	let addrs: Array<string>;
 	let fromCache = false;
@@ -148,58 +201,85 @@ async function updateGw() {
 			if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
 
 			logger.info("Internet reachable via the default route");
-			notificationRemove("no_internet");
+			notificationRemove(NO_INTERNET_NOTIFICATION);
 
 			return true;
 		}
 	}
-
-	notificationBroadcast(
-		"no_internet",
-		"warning",
-		"No Internet connectivity via the default connection, re-checking all connections...",
-		10,
-		true,
-		false,
-	);
 
 	const netif = getNetworkInterfaces();
-	let goodIf: string | undefined;
-	for (const addr of addrs) {
-		for (const i in netif) {
-			const networkInterface = netif[i];
-			if (!networkInterface) continue;
+	const candidates = eligibleProbeCandidates(netif);
 
-			const error = getNetifErrorMsg(networkInterface);
-			if (error) {
-				logger.warn(
-					`Not probing internet connectivity via ${i} (${networkInterface.ip}): ${error}`,
-				);
-				continue;
-			}
+	const defaultIf = await resolveDefaultRouteInterface();
+	const claim = decideConnectivityClaim({
+		candidateCount: candidates.length,
+		defaultIfname: defaultIf,
+		defaultExclusionReason: defaultIf
+			? probeExclusionReason(netif[defaultIf])
+			: undefined,
+	});
 
-			logger.info(
-				`Probing internet connectivity via ${i} (${networkInterface.ip})`,
+	if (claim.kind === "suppressed") {
+		logger.info(
+			`Default route is on ${claim.ifname} (${claim.reason}) — not a connectivity verdict; re-electing from ${candidates.length} eligible interface(s)`,
+		);
+	} else {
+		notificationBroadcast(
+			NO_INTERNET_NOTIFICATION,
+			"warning",
+			claim.message,
+			10,
+			true,
+			false,
+		);
+	}
+
+	for (const name in netif) {
+		const reason = deviceBoundProbeExclusionReason(netif[name]);
+		if (reason) {
+			logger.warn(
+				`Not probing internet connectivity via ${name} (${netif[name]?.ip}): ${reason}`,
 			);
-			if (await checkConnectivity(addr, networkInterface.ip)) {
-				logger.info(`Internet reachable via ${i} (${networkInterface.ip})`);
-				if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
-
-				goodIf = i;
-				break;
-			}
 		}
 	}
 
+	const election = await electConnectivityCandidate(addrs, candidates);
+	for (const { candidate, reachable } of election.results) {
+		logger.info(
+			`Internet ${reachable ? "reachable" : "unreachable"} via ${candidate.name} (${describeBinding(candidate)})`,
+		);
+	}
+
+	const goodIf = election.elected?.name;
+	if (goodIf && !fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+
 	if (goodIf) {
+		// The notification claims the DEVICE has no Internet, and an eligible
+		// interface just proved otherwise — so retract it here, before and
+		// independently of installing a route. `setDefaultRoute` reads a
+		// per-interface routing table, and the shipped image provisions those only
+		// for modem*/wlan*: on a board reaching the Internet through eth0 it fails
+		// with "table id value is invalid", which used to leave "No Internet
+		// connectivity" standing over a working link.
+		notificationRemove(NO_INTERNET_NOTIFICATION);
+
 		try {
 			await setDefaultRoute(goodIf);
-			notificationRemove("no_internet");
-
-			return true;
 		} catch (err) {
-			logger.warn(`Error updating the default route: ${err}`);
+			logger.warn(`Error updating the default route via ${goodIf}: ${err}`);
 		}
+
+		return true;
+	}
+
+	// Deliberately NO notification here: the withheld claim stays withheld. A
+	// failed candidate probe is not evidence — it steers by source address, which
+	// selects a route only where the kernel supports policy routing (see
+	// ConnectivityClaim). Log it so the state is still diagnosable.
+	if (claim.kind === "suppressed") {
+		logger.warn(
+			`No eligible interface answered the connectivity check while the default route sits on ${claim.ifname} (${claim.reason}); not claiming the device is offline`,
+		);
 	}
 
 	return false;
