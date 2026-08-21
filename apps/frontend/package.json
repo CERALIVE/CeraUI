@@ -15,7 +15,7 @@
 		"lint": "echo 'Frontend linting handled by root Biome'",
 		"lint:fix": "echo 'Frontend fixing handled by root Biome'",
 		"fix": "echo 'Frontend fixing handled by root Biome'",
-		"test": "bun run generate:i18n && vitest run && bun run test:hardware-preflight",
+		"test": "bun run generate:i18n && bun --bun vitest run && bun run test:hardware-preflight",
 		"test:federation-abi": "vitest run --config vitest.federation.config.ts",
 		"test:hardware-preflight": "bun test ../../scripts/input-picker-hardware-preflight.test.mjs",
 		"test:watch": "vitest",

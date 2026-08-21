@@ -21,19 +21,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Deliberately has NO `Setup Node.js` step, unlike every other job here: every
+  # command it runs is Bun (vitest via `bun --bun`, the rest `bun`/`bun test`), and
+  # this tree has no install lifecycle script for `bun install` to shell out with.
+  # Do not re-add setup-node without a command that actually needs Node.
   test-fe:
-    name: FE unit (vitest) + tech-debt + spec guardrails
+    name: FE unit (vitest under Bun) + tech-debt + spec guardrails
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
         with:
           path: CeraUI
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

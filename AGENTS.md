@@ -720,7 +720,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `vitest` | 5.0.0-rc.2 — EXACT pin (a PRERELEASE; see the note below the table) |
 | `vite` | 8.2.2 |
 | `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
-| Node | **26 everywhere** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. |
+| Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` job is the one job with NO `setup-node` step — every command in it is Bun (see the Vitest note below). |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
 | `@biomejs/biome` (via the `@ceralive/biome-config` canon) | 2.5.9 — the config dep stays the range `^2026.8.0`; canon `2026.8.1` is committed in the root repo but NOT yet published, and a `^2026.8.1` pin would fail `bun install --frozen-lockfile` today. The caret absorbs it the moment the `biome-config-v2026.8.1` tag publishes. |
 | `bits-ui` | 2.19.0 |
@@ -737,16 +737,27 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
 
 **`vitest` is on a 5.0 RELEASE CANDIDATE, pinned exact, and it earned that by flipping a
-runtime verdict.** Under `vitest@4.1.10` the frontend suite could not be collected under Bun at
-all — 110 of 281 files died on a shared `undefined is not an object (evaluating 'z.enum')` in the
-Zod schema import graph — which is why the required frontend-test runtime is Node. Under
-`5.0.0-rc.2` Bun 1.4.0 runs the suite at **281 files / 3,780 tests, identical to Node 26**, twice
-in a row. Nothing in the v5 migration guide needed a source or config change here: `clearMocks`
-now defaults to `true` and the suite is unaffected, and the repo uses none of the removed
-surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench` at
-module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). The runtime is
-DELIBERATELY still Node — see "Four further Build Check facts" below for why the flip waits for
-5.0 stable. A caret would range forward into stable 5.0.0 unreviewed, so the pin is exact.
+runtime verdict — which is now ACTED ON, not merely recorded.** Under `vitest@4.1.10` the
+frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
+`undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
+why the frontend suite ran on Node for as long as it did. Under `5.0.0-rc.2` Bun 1.4.0 runs the
+suite at **281 files / 3,780 tests, 0 failures — identical to Node 26**, reproduced across
+separate runs. Nothing in the v5 migration guide needed a source or config change here:
+`clearMocks` now defaults to `true` and the suite is unaffected, and the repo uses none of the
+removed surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench`
+at module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). **The frontend
+`test` script therefore invokes `bun --bun vitest run`, and `test-fe` has no `setup-node` step.**
+The explicit `--bun` is load-bearing: `node_modules/.bin/vitest` carries a `#!/usr/bin/env node`
+shebang, so a bare `vitest run` under `bun run` still executes on Node — measured, a probe test
+reported `process.execPath` = node and `process.versions.bun` = `undefined` before the flip, and
+bun / `1.4.0` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
+exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
+
+The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
+same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
+before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
+Bun 1.4.0 like every other command in it. That job's own step ORDER is a separate, documented
+contract (vitest must stay immediately after `bun install`) and is untouched.
 
 **oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.30` would range forward across betas and into stable
 2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
@@ -865,18 +876,20 @@ semantic YAML contract is
 
 Four further Build Check facts, all landed 2026-08-14:
 
-- **Node 26 is the required frontend-test runtime** (`NODE_VERSION: "26"`), not
-  a canary lane — but the reason narrowed on 2026-08-21 and the exit condition is
-  now in sight. The Vitest half of the original blocker is GONE: the collection
-  failure was `vitest@4.1.10`'s, not Bun's, and under the `vitest@5.0.0-rc.2` pin
-  `bunx --bun vitest run` is green at **281 files / 3,780 tests — identical to
-  Node 26**, reproduced twice. What still holds the lane on Node is (a) the
-  Playwright half, which has never produced a green parity run, and (b) the
-  refusal to gate a REQUIRED CI lane on a prerelease dependency. **Flip the
-  `frontend` `test` script and the build-check test step to Bun when `vitest@5.0`
-  goes STABLE and the same-lockfile parity run is re-confirmed** — and treat that
-  flip as a build-check run-step change, so the root `ci-local.manifest.yaml`
-  set-equality model has to move with it.
+- **The frontend Vitest lane runs on BUN; the Playwright lanes stay on Node 26**
+  (`NODE_VERSION: "26"`, still set at workflow level and still consumed by
+  `test-be`, `setup-e2e`, `test-e2e`, `merge-e2e-reports` and `build`). The Vitest
+  blocker was `vitest@4.1.10`'s collection failure, not Bun's: under the
+  `vitest@5.0.0-rc.2` pin the suite is green at **281 files / 3,780 tests —
+  identical to Node 26**, reproduced across separate runs, so the frontend `test`
+  script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
+  step at all. **The Playwright half is NOT flipped and has never produced a green
+  parity run** — that lane keeps Node 26, and nothing here authorises moving it.
+  Two consequences: this was a build-check RUN-STEP change, so the root
+  `ci-local.manifest.yaml` set-equality model must be resynced to match; and the
+  prerelease `vitest` pin is now load-bearing for a required lane, so bumping it to
+  stable 5.0 means re-confirming the same-lockfile parity counts, not just editing
+  the version.
 - **The former `tsgo-canary` is retired.** Released TypeScript 7 is already the
   native compiler, and the Bun 1.4 probe produced no diagnostics beyond the
   required TS6 frontend check. Revisit the frontend compiler when
