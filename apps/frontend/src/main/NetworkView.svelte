@@ -6,6 +6,7 @@ import { Network as NetworkIcon } from '@lucide/svelte';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import {
+	getBluetooth,
 	getIsConnected,
 	getLinkTelemetry,
 	getModems,
@@ -18,6 +19,7 @@ import type { LinkSignal } from '$lib/types/hud';
 
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 
+import BluetoothSection from './network/BluetoothSection.svelte';
 import BondedLinksSection from './network/BondedLinksSection.svelte';
 import { activeSimLock, isBlockingSimLock } from './network/cellular-row';
 import CellularSection from './network/CellularSection.svelte';
@@ -46,6 +48,7 @@ const modems = $derived(getModems());
 const netif = $derived<NetifMessage | undefined>(getNetif());
 const isConnected = $derived(getIsConnected());
 const linkTelemetry = $derived(getLinkTelemetry());
+const bluetooth = $derived(getBluetooth());
 
 // Bonded links come from the HUD store so colour identity (--link-N) is
 // IDENTICAL to the persistent HUD bar — link.linkIndex (0-based) → --link-{n+1}.
@@ -234,6 +237,7 @@ function openModemConfig(id: string) {
 			onConfigure={configureNetif}
 		/>
 		<HotspotSection {hotspotInterfaces} {hotspotTarget} onSetup={() => (hotspotDialogOpen = true)} />
+		<BluetoothSection status={bluetooth} />
 	{/if}
 </div>
 

@@ -212,7 +212,9 @@ test('modem 0 is PIN-locked', async ({ page }) => {
 - **No production test backdoors.** Worker selection is fixture-owned, CI-preview-gated, and absent from the production application bundle. Do not add worker-routing logic, a global, or a test-only API to application source. Local Vite dev retains the existing `window.__ceraSocketPort` override and does not accept the routing cookie.
 - **Self-test:** `backend-scenario-fixture.spec.ts` (the positive: a `modem-pin-locked` worker reports `sim_lock.required === 'sim-pin'` in the modems broadcast) plus `backend-scenario-default.spec.ts` (the negative: a default worker does not) prove the override actually changes backend state. The two live in separate files by necessity (one scenario per file, per the rule above); shared page-WS capture is in `helpers/modem-capture.ts`. Extend that pattern rather than re-deriving the WS capture.
 
-Valid scenarios are the `MockScenario` union in `apps/backend/src/mocks/mock-config.ts`: `multi-modem-wifi`, `single-modem`, `streaming-active`, `modem-pin-locked`, `caps-full`, `engine-starting`, `engine-unavailable`.
+Valid scenarios are the `MockScenario` union in `apps/backend/src/mocks/mock-config.ts`: `multi-modem-wifi`, `single-modem`, `streaming-active`, `modem-pin-locked`, `bt-mic-paired`, `caps-full`, `engine-starting`, `engine-unavailable`.
+
+**A scenario only reaches the wire if the device consults its provider.** `bt-mic-paired` is the current counter-example and is worth knowing before you write a Bluetooth spec: the scenario boots, `apps/backend/src/mocks/providers/bluetooth.ts` seeds its roster, and nothing reads it — `modules/bluetooth/bluetooth-runtime.ts` builds the `bluetooth` broadcast straight from the real `BluetoothStack`, so a worker on that scenario still publishes the dev host's honest `{enabled:false}`. `bluetooth.spec.ts` therefore keeps the scenario AND injects the payload over the page socket (`helpers/bluetooth-wire.ts`), the same drop-and-inject shape `modem-ux.visual.spec.ts` uses for its roster. Delete the injection, not the scenario, once the device seam lands.
 
 ---
 
