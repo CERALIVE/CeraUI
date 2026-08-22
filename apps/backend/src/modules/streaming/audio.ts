@@ -52,6 +52,13 @@ import {
 	refreshResolvedAsrcPreview,
 	resolveAutoAsrcFromLiveState,
 } from "./auto-audio.ts";
+import {
+	type BluetoothAudioSource,
+	describeBluetoothAudioTarget,
+	getBluetoothAudioSources,
+	isBluetoothAudioSourceId,
+	refreshBluetoothAudioSources,
+} from "./bluetooth-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
 import { getEngineAudioDevices } from "./sources.ts";
@@ -102,7 +109,16 @@ export function resolveAudioMode(
 	if (asrc === NO_AUDIO_ID) return { mode: "none" };
 	if (asrc === DEFAULT_AUDIO_ID) return { mode: "default" };
 	if (embeddedAudioActive) return { mode: "default" };
-	return { mode: "device", device: toAlsaCaptureDevice(getAudioSrcId(asrc)) };
+	// The device map is consulted FIRST so a source whose picker key is not its
+	// own ALSA string — a Bluetooth microphone, whose value is an opaque
+	// `bluealsa:` PCM spec — resolves to what the engine must open. For every
+	// scanned card the key IS the card id, so this is byte-identical to the
+	// alias-only lookup it replaces, and `resolveMeterPreference` has always
+	// resolved the same way: the two can no longer disagree about a pick.
+	return {
+		mode: "device",
+		device: toAlsaCaptureDevice(audioDevices[asrc] ?? getAudioSrcId(asrc)),
+	};
 }
 
 /**
@@ -314,6 +330,14 @@ function getAudioSrcReverseAliases(): Record<string, string> {
 	return reverse;
 }
 
+// The sysfs half of the picker, kept apart from the composed map so a Bluetooth
+// refresh can re-fold WITHOUT re-walking `/sys/class/sound` — a rescan there
+// would raise a spurious lost-device verdict and re-blink the meter for a change
+// that happened on the D-Bus side (the same rule `reresolveAudioForEngineChange`
+// follows for the engine join).
+let scannedAudioCards: Record<string, string> = {};
+let scannedCaptureCardIds: ReadonlySet<string> = new Set();
+
 let audioDevices: Record<string, string> = {};
 addAudioCardById(audioDevices, NO_AUDIO_ID);
 addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
@@ -323,6 +347,59 @@ addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
 // picker (the operator picked that PORT, and a signal can arrive at any moment) —
 // only claims about it being able to deliver audio are gated on this set.
 let audioCaptureCardIds: ReadonlySet<string> = new Set();
+
+/**
+ * Rebuild the picker map from the scanned cards plus the SELECTABLE Bluetooth
+ * microphones, then the two pipeline pseudo-sources.
+ *
+ * Only a row the engine can actually be told to open is folded in: a row gated
+ * by `unavailableReason` is LISTED by `deriveAudioSources` and deliberately kept
+ * OUT of this map, so it can never be probed, routed, metered, or resolved by
+ * "Auto" — a disabled row that could still be selected by a direct RPC would be
+ * exactly the runtime surprise the feature gate exists to prevent.
+ */
+function composeAudioDevices(): void {
+	const composed: Record<string, string> = { ...scannedAudioCards };
+	const captureIds = new Set(scannedCaptureCardIds);
+	for (const source of getBluetoothAudioSources()) {
+		if (source.unavailableReason !== undefined) continue;
+		composed[source.id] = source.pcmSpec;
+		// A BlueALSA capture PCM is the whole presence oracle, so a published row
+		// IS capture-capable by construction — no sysfs node exists to ask.
+		captureIds.add(source.pcmSpec);
+	}
+	addAudioCardById(composed, NO_AUDIO_ID);
+	addAudioCardById(composed, DEFAULT_AUDIO_ID);
+	audioDevices = composed;
+	audioCaptureCardIds = captureIds;
+}
+
+/**
+ * Re-read the BlueALSA PCM objects and re-fold them into the picker.
+ *
+ * The sysfs scan is deliberately NOT re-run (see `scannedAudioCards`). Wakes any
+ * pending start probe so a microphone that connects mid-start is picked up on
+ * the spot rather than at the next poll tick. Never throws.
+ */
+export async function refreshBluetoothAudioDevices(): Promise<void> {
+	let changed = false;
+	try {
+		changed = await refreshBluetoothAudioSources();
+	} catch (err) {
+		logger.debug(`audio: bluetooth source refresh failed: ${String(err)}`);
+		return;
+	}
+	// Composed unconditionally, broadcast only on change: composing is a cheap
+	// spread over a handful of keys, and making it conditional would leave the
+	// pick map holding a microphone the refresh had already retracted whenever
+	// the cache and the map were reset out of step.
+	composeAudioDevices();
+	if (!changed) return;
+	await broadcastAudioSources();
+	refreshResolvedAsrcPreview();
+	syncAudioMeterPreference();
+	asrcProbeWake?.();
+}
 
 // Dev/e2e seam merged into the list WITHOUT touching the real /sys/class/sound
 // scan; injected at boot under shouldUseMocks(), unset (no-op) in production.
@@ -435,14 +512,34 @@ export function reconcileConfiguredAudioIdentity(
 // `id` MUST equal the device-map key (the asrc wire string) so it stays byte-equal
 // to the matching `asrcs` entry and `config.asrc` semantics are unchanged. Only the
 // two pseudo-sources carry a `labelKey`; hardware device names are never translated.
+function bluetoothAudioSourceEntry(source: BluetoothAudioSource): AudioSource {
+	return {
+		id: source.id,
+		kind: "device",
+		label: source.displayName,
+		transport: "bluetooth",
+		pcm_spec: source.pcmSpec,
+		...(source.quality !== undefined ? { quality: source.quality } : {}),
+		...(source.unavailableReason !== undefined
+			? { unavailable_reason: source.unavailableReason }
+			: {}),
+	};
+}
+
 export function deriveAudioSources(
 	devices: Record<string, string> = getAudioDevices(),
 	displays: Map<string, AudioDeviceDisplay> | undefined = lastAudioDisplays,
 	identities:
 		| Map<string, AudioDeviceIdentity>
 		| undefined = lastAudioIdentities,
+	bluetooth: readonly BluetoothAudioSource[] = getBluetoothAudioSources(),
 ): AudioSource[] {
-	return Object.keys(devices).map((name): AudioSource => {
+	const bluetoothById = new Map(bluetooth.map((source) => [source.id, source]));
+	const entries = Object.keys(devices).map((name): AudioSource => {
+		const bluetoothSource = bluetoothById.get(name);
+		if (bluetoothSource !== undefined) {
+			return bluetoothAudioSourceEntry(bluetoothSource);
+		}
 		if (name === NO_AUDIO_ID) {
 			return { id: name, kind: "none", labelKey: "audio.sources.noAudio" };
 		}
@@ -472,6 +569,18 @@ export function deriveAudioSources(
 				: {}),
 		};
 	});
+
+	// A gated Bluetooth row is absent from the picker MAP by design, so it is
+	// appended here — LISTED, so the operator can see the microphone their board
+	// really has and why it cannot be used, rather than having it silently
+	// withheld (the disabled-with-reason house rule).
+	const gated = bluetooth
+		.filter(
+			(source) =>
+				source.unavailableReason !== undefined && !(source.id in devices),
+		)
+		.map(bluetoothAudioSourceEntry);
+	return [...entries, ...gated];
 }
 
 function getAudioSrcName(id: string) {
@@ -607,12 +716,9 @@ export async function updateAudioDevices(dir?: string) {
 		addAudioCardById(sortedList, id);
 	}
 
-	// Always add 'no audio' and default audio options
-	addAudioCardById(sortedList, NO_AUDIO_ID);
-	addAudioCardById(sortedList, DEFAULT_AUDIO_ID);
-
-	audioDevices = sortedList;
-	audioCaptureCardIds = captureCards;
+	scannedAudioCards = sortedList;
+	scannedCaptureCardIds = captureCards;
+	composeAudioDevices();
 	logger.debug("audio devices:", audioDevices);
 
 	// Migrate BEFORE the lost verdict below: a card that only changed ALSA id is
@@ -680,16 +786,37 @@ export function clearAsrcProbeReject() {
 	asrcProbeDeadlineAt = undefined;
 }
 
+/**
+ * The probe's failure detail for a Bluetooth microphone.
+ *
+ * ENRICHMENT ONLY — the terminal class stays the existing
+ * `audio_source_unavailable`, because the fact is the same one: the selected
+ * input could not be opened. What the message adds is which microphone it was
+ * and whether BlueZ still sees it, so "the headset is off" and "Bluetooth audio
+ * is not running" stop reading identically. The registry state is REPORTED here
+ * and is never consulted to decide whether the probe passes.
+ */
+function audioProbeFailureDetail(asrc: string): string {
+	if (!isBluetoothAudioSourceId(asrc)) return `Audio device '${asrc}'`;
+	const target = describeBluetoothAudioTarget(asrc);
+	if (target === undefined) return `Bluetooth microphone '${asrc}'`;
+	const link = target.connected
+		? "still connected, but it published no Bluetooth audio capture stream"
+		: "no longer connected";
+	return `Bluetooth microphone '${target.displayName}' (${link})`;
+}
+
 export class AudioProbeTimeoutError extends Error {
 	constructor(public readonly device: string) {
 		super(
-			`Audio device '${device}' did not appear within ${AUDIO_PROBE_TIMEOUT_MS}ms`,
+			`${audioProbeFailureDetail(device)} did not appear within ${AUDIO_PROBE_TIMEOUT_MS}ms`,
 		);
 		this.name = "AudioProbeTimeoutError";
 	}
 }
 
 export async function asrcProbe(asrc: string): Promise<string> {
+	if (isBluetoothAudioSourceId(asrc)) await refreshBluetoothAudioDevices();
 	let audioSrcId: string | undefined = audioDevices[asrc];
 	if (audioSrcId) return audioSrcId;
 
@@ -712,6 +839,12 @@ export async function asrcProbe(asrc: string): Promise<string> {
 
 		const poll = async () => {
 			while (asrcProbeReject) {
+				// A BlueALSA PCM appears on D-Bus, not in `/sys/class/sound`, so no
+				// udev hotplug can reveal it — the probe has to ask. Bounded by the
+				// same grace window as every other selection.
+				if (isBluetoothAudioSourceId(asrc)) {
+					await refreshBluetoothAudioDevices();
+				}
 				audioSrcId = audioDevices[asrc];
 				if (audioSrcId) {
 					clearTimeout(timeoutHandle);

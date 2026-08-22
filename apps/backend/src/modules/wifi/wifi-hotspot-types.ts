@@ -19,7 +19,16 @@ import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
-import type { DerivedApChannel, WifiChannel } from "./wifi-channels.ts";
+import type {
+	AutoWifiChannel,
+	DerivedApChannel,
+	WifiChannel,
+} from "./wifi-channels.ts";
+import {
+	DEFAULT_HOTSPOT_SECURITY,
+	type HotspotSecurityId,
+	hotspotSecurityFields,
+} from "./wifi-hotspot-security.ts";
 import type { BaseWifiInterface, WifiInterface } from "./wifi-interfaces.ts";
 
 export type WifiHotspotMessage = {
@@ -31,6 +40,7 @@ export type WifiHotspotMessage = {
 			name: unknown;
 			channel: unknown;
 			password?: unknown;
+			security?: unknown;
 		};
 	};
 };
@@ -47,8 +57,25 @@ export type WifiHotspot = {
 	 * absent from it.
 	 */
 	availableChannels: WifiChannel[];
+	/**
+	 * The adapter's OWN band capability, as nmcli reported it. Kept apart from
+	 * {@link availableChannels} because the regulatory rules can withhold a rung
+	 * from the offering — and a capability recovered from the OFFERED set would
+	 * then forget the radio has that band at all, permanently.
+	 */
+	bandCapability?: AutoWifiChannel[];
 	/** Last `iw phy` derivation, kept for the channel→NetworkManager band mapping. */
 	derivedChannels?: DerivedApChannel[];
+	/**
+	 * The configured security mode. Absent means the adapter has never been given
+	 * one, which resolves to {@link DEFAULT_HOTSPOT_SECURITY} — the behaviour
+	 * every hotspot had before the mode was selectable.
+	 *
+	 * There is no cached `availableSecurity` beside it: the offered set is
+	 * derived from the live capability read on every use (see
+	 * `wifi-hotspot-security.ts`), so it cannot go stale against the radio.
+	 */
+	security?: HotspotSecurityId;
 	warnings: Record<string, boolean>;
 	/**
 	 * Set while a station↔hotspot switch is in flight. The interface is NOT yet
@@ -96,14 +123,20 @@ export type ExistingHotspotConn = {
  * stable one, and NetworkManager rejects a profile whose `interface-name` names
  * a device the MAC binding excludes. The empty string (rather than an omitted
  * arg) is required by the Bun runtime's CLI argument handling.
+ *
+ * The PMF value follows the SECURITY selection rather than being fixed: this
+ * runs on every start, so a hardcoded `disable` would re-pin a WPA3-SAE profile
+ * to a value SAE forbids and the activation would fail every time. An unset
+ * selection resolves to WPA2, which reproduces the previous field set exactly.
  */
 export function hotspotBindingFields(
 	permanentMacAddress: string,
+	security: HotspotSecurityId = DEFAULT_HOTSPOT_SECURITY,
 ): Record<string, string> {
 	return {
 		"connection.interface-name": "",
 		"802-11-wireless.mac-address": permanentMacAddress,
-		"802-11-wireless-security.pmf": "disable",
+		...hotspotSecurityFields(security),
 	};
 }
 

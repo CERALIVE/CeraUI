@@ -60,6 +60,13 @@ const PERM_MAC = "58:02:05:e1:79:1c";
 /** One of the scan-time randomized addresses observed on that same board. */
 const RANDOM_MAC = "26:c3:93:b6:9c:a7";
 const SECOND_PERM_MAC = "dc:a6:32:aa:bb:cc";
+const PASSWORD_PROOF_MACS = [
+	PERM_MAC,
+	SECOND_PERM_MAC,
+	"dc:a6:32:11:22:33",
+	"58:02:05:ff:ee:dd",
+	"02:00:00:00:00:01",
+] as const;
 
 function makeHotspotIface(
 	over: { ifname?: string; hotspotConn?: string } = {},
@@ -355,6 +362,109 @@ describe("hotspot identity — multiple adapters", () => {
 		expect(b?.ssid).toBe("CERALIVE_bbcc");
 		expect(a?.password).not.toBe(b?.password);
 		expect(a?.conn).not.toBe(b?.conn);
+	});
+
+	/*
+	  The SSID is DERIVED from the permanent address (its last two octets), so it
+	  is deterministic by design and two adapters can legitimately collide on it.
+	  The password must not share that property: if it were a function of the
+	  address, every CeraLive device would carry a guessable pre-shared key and a
+	  collided pair would be joinable with one another's credentials.
+
+	  Collision-avoidance is asserted here against the REAL CSPRNG; the
+	  non-derivation half is asserted separately, against a PINNED one, because
+	  it is not observable in random output — see the test below.
+	*/
+	test("distinct adapters never share a generated password", async () => {
+		const rec = makeRecorder();
+
+		for (const [index, mac] of PASSWORD_PROOF_MACS.entries()) {
+			await startHotspotForInterface(
+				mac,
+				makeHotspotIface({ ifname: `wlan${index}` }),
+				rec.deps,
+			);
+		}
+
+		const passwords = PASSWORD_PROOF_MACS.map(
+			(mac) => rec.store.get(mac)?.password,
+		);
+		for (const password of passwords) {
+			expect(typeof password).toBe("string");
+			// `randomBase64(9)` — 12 base64 characters, no padding.
+			expect(password).toMatch(/^[A-Za-z0-9+/]{12}$/);
+		}
+		expect(new Set(passwords).size).toBe(PASSWORD_PROOF_MACS.length);
+	});
+
+	/*
+	  The non-derivation property the retired per-octet containment check was
+	  reaching for, asserted so it can actually hold.
+
+	  That check searched genuinely-random output for a two-character substring —
+	  30 lookups (6 octets × 5 addresses) against a 12-character base64 string —
+	  which a 200k-run simulation puts at a 13.6% failure rate PER RUN. CI duly
+	  caught `"aa8kybjku22s"` containing the `22` of `dc:a6:32:11:22:33`, and the
+	  hit proved nothing: `randomBase64` (helpers/crypto.ts) is `getRandomValues`
+	  with no input at all, so the substring was noise, not a leak.
+
+	  PINNING the entropy makes the real property observable: with every call
+	  handed identical bytes, a generator that mixed ANY address material would
+	  still produce five different passwords. Five identical ones prove the
+	  address is not an input.
+	*/
+	test("a generated password is entropy alone, never a function of the address", async () => {
+		const realGetRandomValues = crypto.getRandomValues;
+		crypto.getRandomValues = <T extends ArrayBufferView | null>(buf: T): T => {
+			if (buf) {
+				const bytes = new Uint8Array(
+					buf.buffer,
+					buf.byteOffset,
+					buf.byteLength,
+				);
+				for (let i = 0; i < bytes.length; i++) bytes[i] = i;
+			}
+			return buf;
+		};
+
+		const rec = makeRecorder();
+		try {
+			for (const [index, mac] of PASSWORD_PROOF_MACS.entries()) {
+				await startHotspotForInterface(
+					mac,
+					makeHotspotIface({ ifname: `wlan${index}` }),
+					rec.deps,
+				);
+			}
+		} finally {
+			crypto.getRandomValues = realGetRandomValues;
+		}
+
+		// base64 of the pinned bytes 0x00..0x08 — reviewed once, pinned forever.
+		const expected = "AAECAwQFBgcI";
+		for (const mac of PASSWORD_PROOF_MACS) {
+			expect(rec.store.get(mac)?.password).toBe(expected);
+		}
+	});
+
+	test("two adapters colliding on SSID still get distinct passwords", async () => {
+		const rec = makeRecorder();
+		// Same last two octets ⇒ the SAME derived SSID.
+		const first = "dc:a6:32:00:79:1c";
+		const second = "58:02:05:11:79:1c";
+
+		await startHotspotForInterface(first, makeHotspotIface(), rec.deps);
+		await startHotspotForInterface(
+			second,
+			makeHotspotIface({ ifname: "wlan1" }),
+			rec.deps,
+		);
+
+		expect(rec.store.get(first)?.ssid).toBe("CERALIVE_791c");
+		expect(rec.store.get(second)?.ssid).toBe("CERALIVE_791c");
+		expect(rec.store.get(first)?.password).not.toBe(
+			rec.store.get(second)?.password,
+		);
 	});
 
 	test("both identities survive a restart, each adapter keeping its own", async () => {

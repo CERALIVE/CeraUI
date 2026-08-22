@@ -16,6 +16,18 @@ import {
 	logoutProcedure,
 	setPasswordProcedure,
 } from "./procedures/auth.procedure.ts";
+import {
+	bluetoothConnectProcedure,
+	bluetoothDisableProcedure,
+	bluetoothDisconnectProcedure,
+	bluetoothEnableProcedure,
+	bluetoothForgetProcedure,
+	bluetoothPairProcedure,
+	bluetoothScanStartProcedure,
+	bluetoothScanStopProcedure,
+	bluetoothTrustProcedure,
+	getBluetoothStatusProcedure,
+} from "./procedures/bluetooth.procedure.ts";
 import { devEmitProcedure } from "./procedures/dev.procedure.ts";
 import {
 	acknowledgeMutationProcedure,
@@ -203,6 +215,19 @@ const stableRoutes = {
 		hotspotStop: hotspotStopProcedure,
 		hotspotConfigure: hotspotConfigureProcedure,
 		setCountry: setWifiCountryProcedure,
+	}),
+
+	bluetooth: base.router({
+		getStatus: getBluetoothStatusProcedure,
+		enable: bluetoothEnableProcedure,
+		disable: bluetoothDisableProcedure,
+		scanStart: bluetoothScanStartProcedure,
+		scanStop: bluetoothScanStopProcedure,
+		pair: bluetoothPairProcedure,
+		trust: bluetoothTrustProcedure,
+		forget: bluetoothForgetProcedure,
+		connect: bluetoothConnectProcedure,
+		disconnect: bluetoothDisconnectProcedure,
 	}),
 
 	network: base.router({

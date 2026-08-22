@@ -8,7 +8,7 @@
  * fs.writeFileSync → Bun.write migration now pin the two-file publisher: adding
  * a sidecar must not have moved a single byte of the file beside it.
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +17,9 @@ import { setup } from "../modules/setup.ts";
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import { publishSrtlaBond } from "../modules/streaming/srtla.ts";
 
-const ipsFile = setup.ips_file ?? "/tmp/srtla_ips";
+let ipsFile: string;
+let previousIpsFile: string | undefined;
+let previousBindMapFile: string | undefined;
 
 const entries = (...ips: string[]): BondEntry[] =>
 	ips.map((ip, index) => ({
@@ -27,6 +29,20 @@ const entries = (...ips: string[]): BondEntry[] =>
 	}));
 
 describe("srtla ips-file writer (Task 13 Bun.write migration)", () => {
+	beforeEach(() => {
+		const dir = mkdtempSync(join(tmpdir(), "srtla-ips-test-"));
+		ipsFile = join(dir, "ips");
+		previousIpsFile = setup.ips_file;
+		previousBindMapFile = setup.bind_map_file;
+		setup.ips_file = ipsFile;
+		setup.bind_map_file = join(dir, "bind-map.json");
+	});
+
+	afterEach(() => {
+		setup.ips_file = previousIpsFile;
+		setup.bind_map_file = previousBindMapFile;
+	});
+
 	it("writes byte-identical content vs pre-migration fs.writeFileSync", async () => {
 		const addresses = ["192.168.1.1", "192.168.1.2", "10.0.0.5"];
 		const list = addresses.join("\n");

@@ -6,13 +6,45 @@
  * connect-handler logic (parent) and the list rendering (child) reference one
  * source of truth — no behaviour change.
  */
-import type { AvailableWifiNetwork } from "@ceraui/rpc/schemas";
+import { wifiJoinRefusal } from "@ceraui/rpc";
+import type {
+	AvailableWifiNetwork,
+	WifiAdapterCapabilities,
+} from "@ceraui/rpc/schemas";
 
 import { getSignalCategory } from "$lib/helpers/signal";
 
 /** A secured network advertises a WPA variant. */
 export function isSecured(network: AvailableWifiNetwork): boolean {
 	return network.security.includes("WPA");
+}
+
+export type WifiRowBlock = {
+	readonly titleKey: string;
+	readonly bodyKey: string;
+};
+
+/**
+ * Maps `@ceraui/rpc`'s `wifiJoinRefusal` — the SAME verdict the device's join
+ * path uses to decide whether to pin `key-mgmt sae` — onto operator copy. It
+ * decides nothing itself, so an offering the device would refuse cannot exist.
+ *
+ * It therefore inherits that rule's FAIL-OPEN posture: only a positive
+ * `wpa3Sae: 'unsupported'` withholds a row. `unknown` is the shipped fleet's
+ * answer under NM 1.42.4, so refusing on it would take WPA3 away from every
+ * board — the attempt is offered and the device's own typed auth failure is
+ * what tells the truth on refusal.
+ */
+export function wifiRowBlock(
+	network: AvailableWifiNetwork,
+	capabilities: WifiAdapterCapabilities | undefined,
+): WifiRowBlock | undefined {
+	const refusal = wifiJoinRefusal(network.security, capabilities?.wpa3Sae);
+	if (refusal === undefined) return undefined;
+	return {
+		titleKey: "wifiSelector.blocked.wpa3Title",
+		bodyKey: "wifiSelector.blocked.wpa3Body",
+	};
 }
 
 /** Human band label for a channel frequency. */

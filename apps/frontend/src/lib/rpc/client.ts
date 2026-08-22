@@ -10,6 +10,14 @@ import type {
 	AutostartOutput,
 	BitrateInput,
 	BitrateOutput,
+	BluetoothDeviceInput,
+	BluetoothMutationOutput,
+	BluetoothScanStartInput,
+	BluetoothScanStopInput,
+	BluetoothStatus,
+	BluetoothToggleInput,
+	BluetoothToggleOutput,
+	BluetoothTrustInput,
 	ClaimCodeOutput,
 	CompletePairingInput,
 	CompletePairingOutput,
@@ -749,6 +757,30 @@ export interface TypedRPC {
 		setIngestEnabled: (
 			input: SetIngestEnabledInput,
 		) => Promise<SetIngestEnabledOutput>;
+	};
+	/**
+	 * The BlueZ operator surface. Every mutation answers the ONE shared
+	 * `bluetoothMutationRefusalSchema` enum, so a surface renders a refusal the
+	 * same way whichever verb produced it — there is deliberately no
+	 * per-procedure error vocabulary to special-case.
+	 */
+	bluetooth: {
+		getStatus: () => Promise<BluetoothStatus>;
+		enable: (input: BluetoothToggleInput) => Promise<BluetoothToggleOutput>;
+		disable: (input: BluetoothToggleInput) => Promise<BluetoothToggleOutput>;
+		scanStart: (
+			input: BluetoothScanStartInput,
+		) => Promise<BluetoothMutationOutput>;
+		scanStop: (
+			input: BluetoothScanStopInput,
+		) => Promise<BluetoothMutationOutput>;
+		pair: (input: BluetoothDeviceInput) => Promise<BluetoothMutationOutput>;
+		trust: (input: BluetoothTrustInput) => Promise<BluetoothMutationOutput>;
+		forget: (input: BluetoothDeviceInput) => Promise<BluetoothMutationOutput>;
+		connect: (input: BluetoothDeviceInput) => Promise<BluetoothMutationOutput>;
+		disconnect: (
+			input: BluetoothDeviceInput,
+		) => Promise<BluetoothMutationOutput>;
 	};
 	system: {
 		getRevisions: () => Promise<Revisions>;

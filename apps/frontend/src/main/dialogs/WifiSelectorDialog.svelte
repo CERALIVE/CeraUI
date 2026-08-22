@@ -26,13 +26,13 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiStatus } from '@ceraui/rpc/schemas';
-import { Wifi } from '@lucide/svelte';
+import { TriangleAlert, Wifi } from '@lucide/svelte';
 import { untrack } from 'svelte';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { getWifiUUID, networkRename } from '$lib/helpers/NetworkHelper';
-import { isSecured } from '$lib/helpers/wifi-selector';
+import { isSecured, wifiRowBlock } from '$lib/helpers/wifi-selector';
 import {
 	deriveWifiDisconnectOutcome,
 	deriveWifiForgetOutcome,
@@ -40,6 +40,7 @@ import {
 import {
 	confirmOperation,
 	getOperationPhase,
+	getOperationReason,
 	isOperationPending,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
@@ -117,6 +118,13 @@ let password = $state('');
 let showPassword = $state(false);
 let confirmForget = $state<string | undefined>(undefined);
 
+// The device's own TYPED refusal for the last join this surface dispatched.
+// Latched locally rather than read off the async-op phase, which decays to
+// `idle` after ASYNC_OP_TERMINAL_LINGER_MS — the UpdatesDialog precedent. Before
+// this, an `auth` refusal resolved the op and rendered NOTHING, so a wrong
+// password was indistinguishable from a join that never happened.
+let joinFailure = $state<string | undefined>(undefined);
+
 // Local intent for the two ops that share `wifiOpKey`: which uuid this surface
 // dispatched a disconnect / forget for. The shared key can't tell connect from
 // disconnect/forget apart, so the confirm $effects below gate on these flags and
@@ -140,6 +148,7 @@ function resetInteraction() {
 // $effect below adds a snapshot-based secondary confirm and owns close-on-success.
 async function connectVia(ssid: string, run: () => Promise<unknown>) {
 	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
+	joinFailure = undefined;
 	connecting = ssid;
 	await osCommand({
 		key: wifiOpKey,
@@ -162,7 +171,7 @@ async function handleScan() {
 }
 
 function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
-	if (ifaceBusy) return;
+	if (ifaceBusy || wifiRowBlock(network, iface?.capabilities)) return;
 	resetInteraction();
 	void connectVia(network.ssid, () => rpc.wifi.connect({ uuid }));
 }
@@ -181,7 +190,7 @@ async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
 
 /** New (unsaved) network: secured → reveal inline password form; open → connect now. */
 function handleConnectNew(network: AvailableWifiNetwork) {
-	if (ifaceBusy) return;
+	if (ifaceBusy || wifiRowBlock(network, iface?.capabilities)) return;
 	confirmForget = undefined;
 	if (isSecured(network)) {
 		pendingNew = network;
@@ -189,8 +198,9 @@ function handleConnectNew(network: AvailableWifiNetwork) {
 		showPassword = false;
 	} else {
 		const ssid = network.ssid;
+		const security = network.security;
 		void connectVia(ssid, () =>
-			rpc.wifi.connectNew({ device: deviceId, ssid, password: '' }),
+			rpc.wifi.connectNew({ device: deviceId, ssid, password: '', security }),
 		);
 	}
 }
@@ -199,12 +209,13 @@ function submitNew() {
 	if (!pendingNew || ifaceBusy) return;
 	if (isSecured(pendingNew) && password.length < PASSWORD_MIN) return;
 	const ssid = pendingNew.ssid;
+	const security = pendingNew.security;
 	const pw = password;
 	pendingNew = undefined;
 	password = '';
 	showPassword = false;
 	void connectVia(ssid, () =>
-		rpc.wifi.connectNew({ device: deviceId, ssid, password: pw }),
+		rpc.wifi.connectNew({ device: deviceId, ssid, password: pw, security }),
 	);
 }
 
@@ -237,6 +248,7 @@ $effect(() => {
 		return;
 	}
 	if (phase === 'failed' || phase === 'idle') {
+		if (phase === 'failed') joinFailure = getOperationReason(wifiOpKey) ?? 'generic';
 		connecting = undefined;
 		return;
 	}
@@ -350,6 +362,7 @@ $effect(() => {
 		disconnecting = undefined;
 		forgetting = undefined;
 		scanBaseline = undefined;
+		joinFailure = undefined;
 	}
 });
 </script>
@@ -361,6 +374,29 @@ $effect(() => {
 	icon={Wifi}
 	title={m["wifiSelector.dialog.availableNetworks"]()}
 >
+	{#if joinFailure}
+		<div
+			class="border-status-warning/30 bg-status-warning/10 mb-3 flex items-start gap-2 rounded-lg border px-3 py-2.5"
+			data-reason={joinFailure}
+			data-testid="wifi-join-failed"
+			role="alert"
+		>
+			<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-4 shrink-0" />
+			<div class="min-w-0">
+				<p class="text-status-warning text-sm font-semibold">
+					{joinFailure === 'auth'
+						? m["wifiSelector.error.authFailed"]()
+						: m["wifiSelector.error.connectionFailed"]()}
+				</p>
+				<p class="text-muted-foreground mt-0.5 text-xs">
+					{joinFailure === 'auth'
+						? m["wifiSelector.error.authFailedDescription"]()
+						: m["wifiSelector.error.connectionFailedDescription"]()}
+				</p>
+			</div>
+		</div>
+	{/if}
+
 	<WifiNetworkList
 		{confirmForget}
 		{connecting}

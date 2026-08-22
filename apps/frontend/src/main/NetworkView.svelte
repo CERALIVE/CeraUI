@@ -6,6 +6,7 @@ import { Network as NetworkIcon } from '@lucide/svelte';
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import {
+	getBluetooth,
 	getIsConnected,
 	getLinkTelemetry,
 	getModems,
@@ -18,6 +19,7 @@ import type { LinkSignal } from '$lib/types/hud';
 
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 
+import BluetoothSection from './network/BluetoothSection.svelte';
 import BondedLinksSection from './network/BondedLinksSection.svelte';
 import { activeSimLock, isBlockingSimLock } from './network/cellular-row';
 import CellularSection from './network/CellularSection.svelte';
@@ -25,6 +27,7 @@ import CollisionBands from './network/CollisionBands.svelte';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
 import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
+import UnclaimedAdaptersBand from './network/UnclaimedAdaptersBand.svelte';
 import WifiSection from './network/WifiSection.svelte';
 
 // None of these is on the path to first paint — each is its own chunk, fetched
@@ -35,6 +38,9 @@ const HotspotDialog = lazyDialog(() => import('./dialogs/HotspotDialog.svelte'))
 const ModemConfigDialog = lazyDialog(() => import('./dialogs/ModemConfigDialog.svelte'));
 const SimUnlockDialog = lazyDialog(() => import('./dialogs/SimUnlockDialog.svelte'));
 const RouterDongleDialog = lazyDialog(() => import('./dialogs/RouterDongleDialog.svelte'));
+// Reached from a Wi-Fi radio whose 6 GHz band its regulatory domain forbids —
+// the same dialog Settings mounts, opened where the operator met the block.
+const WifiCountryDialog = lazyDialog(() => import('./dialogs/WifiCountryDialog.svelte'));
 
 // Getters — always from the non-deprecated subscriptions surface.
 const wifi = $derived<WifiStatus | undefined>(getWifi());
@@ -42,6 +48,7 @@ const modems = $derived(getModems());
 const netif = $derived<NetifMessage | undefined>(getNetif());
 const isConnected = $derived(getIsConnected());
 const linkTelemetry = $derived(getLinkTelemetry());
+const bluetooth = $derived(getBluetooth());
 
 // Bonded links come from the HUD store so colour identity (--link-N) is
 // IDENTICAL to the persistent HUD bar — link.linkIndex (0-based) → --link-{n+1}.
@@ -73,6 +80,7 @@ const hotspotTarget = $derived(
 );
 
 let hotspotDialogOpen = $state(false);
+let wifiCountryOpen = $state(false);
 
 const modemEntries = $derived(Object.entries(modems ?? {}) as [string, Modem][]);
 
@@ -205,12 +213,14 @@ function openModemConfig(id: string) {
 			unbondedCount={hud.unbondedLinkCount}
 		/>
 		<CollisionBands {netif} bondMapping={getStatus()?.bond_mapping ?? null} />
+		<UnclaimedAdaptersBand adapters={getStatus()?.unclaimed_adapters} />
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}
 			{isFullyStale}
 			{staleInterfaces}
 			onConnect={openWifiSelector}
+			onOpenCountry={() => (wifiCountryOpen = true)}
 		/>
 		<CellularSection
 			{modemEntries}
@@ -227,6 +237,7 @@ function openModemConfig(id: string) {
 			onConfigure={configureNetif}
 		/>
 		<HotspotSection {hotspotInterfaces} {hotspotTarget} onSetup={() => (hotspotDialogOpen = true)} />
+		<BluetoothSection status={bluetooth} />
 	{/if}
 </div>
 
@@ -255,6 +266,8 @@ function openModemConfig(id: string) {
 		iface={hotspotTarget[1]}
 	/>
 {/if}
+
+<LazyDialog dialog={WifiCountryDialog} bind:open={wifiCountryOpen} />
 
 {#if configModem && configModemId}
 	<LazyDialog

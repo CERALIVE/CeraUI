@@ -9,11 +9,12 @@
 		"bun": ">=1.3.0"
 	},
 	"dependencies": {
-		"@ceralive/cerastream": "2026.7.6",
+		"@ceralive/cerastream": "2026.8.0",
 		"@ceralive/control-protocol": "2026.7.0",
 		"@ceralive/modem-control": "1.1.0",
 		"@ceralive/srtla-send": "2026.8.0",
 		"@ceraui/rpc": "workspace:*",
+		"@httptoolkit/dbus-native": "0.1.5",
 		"@orpc/server": "2.0.0-beta.30",
 		"finalhandler": "^2.1.1",
 		"zod": "catalog:",
@@ -38,6 +39,7 @@
 		"dev:single-modem": "NODE_ENV=development MOCK_SCENARIO=single-modem bun --watch run src/main.ts",
 		"dev:streaming": "NODE_ENV=development MOCK_SCENARIO=streaming-active bun --watch run src/main.ts",
 		"dev:modem-pin-locked": "NODE_ENV=development MOCK_SCENARIO=modem-pin-locked bun --watch run src/main.ts",
+		"dev:bt-mic-paired": "NODE_ENV=development MOCK_SCENARIO=bt-mic-paired bun --watch run src/main.ts",
 		"build": "rm -rf ../../dist/ && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; NODE_ENV=production bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive' && cd ../.. && bun run build:frontend",
 		"build:backend-only": "rm -rf ../../dist/ceralive ../../dist/deployment && bash -c 'BUN_TARGET=${BUILD_ARCH:-arm64}; case $BUN_TARGET in amd64) BUN_TARGET=\"bun-linux-x64\" ;; arm64) BUN_TARGET=\"bun-linux-arm64\" ;; *) echo \"Unsupported architecture: $BUN_TARGET\"; exit 1 ;; esac; NODE_ENV=production bun build --compile --minify --sourcemap --target=$BUN_TARGET src/main.ts --outfile ../../dist/ceralive'",
 		"test": "bun test",

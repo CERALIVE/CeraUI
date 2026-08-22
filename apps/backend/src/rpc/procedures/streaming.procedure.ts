@@ -69,6 +69,7 @@ import {
 	resolveAutoAsrcFromLiveState,
 	setPendingAudioFollowAsrc,
 } from "../../modules/streaming/auto-audio.ts";
+import { isBluetoothAudioSourceId } from "../../modules/streaming/bluetooth-audio.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
 import {
@@ -1198,6 +1199,15 @@ export const switchAudioProcedure = authedProcedure
 	.input(switchAudioInputSchema)
 	.output(switchAudioOutputSchema)
 	.handler(async ({ input }) => {
+		// The engine's live switch resolves a REGISTRY ID; a Bluetooth microphone
+		// is addressed by an opaque BlueALSA PCM string that names no registry
+		// entry, so the engine would answer `device_not_found` for a device that
+		// is present and working. Refused ahead of every other gate — including
+		// the mock branch, so dev and e2e render the same honest refusal a board
+		// gives rather than a success the hardware cannot deliver.
+		if (isBluetoothAudioSourceId(input.audio_input_id)) {
+			return { success: false, error: SWITCH_AUDIO_ERRORS.NOT_LIVE_SWITCHABLE };
+		}
 		if (shouldUseMocks()) {
 			return {
 				success: true,

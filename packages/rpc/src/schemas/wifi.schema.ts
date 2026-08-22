@@ -63,6 +63,172 @@ export const setWifiCountryOutputSchema = z.object({
 });
 export type SetWifiCountryOutput = z.infer<typeof setWifiCountryOutputSchema>;
 
+// ─── per-adapter capability truth (nl80211 / `iw phy`) ──────────────────────
+//
+// THE RULE: these values are READ BACK from the kernel's own nl80211 answer for
+// a specific wiphy, never inferred from a marketing name, a NetworkManager flag,
+// or the position of an adapter in a list. NetworkManager's WIFI-PROPERTIES is
+// deliberately coarse (WPA/RSN, AP, band presence) — it carries no HE/EHT, no
+// channel widths, and no SAE proof — so it is a CROSS-CHECK here and never the
+// source.
+//
+// `wifiBandSchema` above is NOT extended by any of this. That enum is the
+// hotspot's NetworkManager band selector, and NM's `802-11-wireless.band` has no
+// 6 GHz value at all; 6 GHz here is capability / scan / STA-display truth ONLY.
+
+// The bands a radio can carry, as capability truth. Distinct from
+// `wifiBandSchema` on purpose — see the note above.
+export const wifiCapabilityBandSchema = z.enum(['2.4', '5', '6']);
+export type WifiCapabilityBand = z.infer<typeof wifiCapabilityBandSchema>;
+
+// Derived from the kernel's own capability structures, never from a name:
+//   HE present                 ⇒ wifi6
+//   HE present + a 6 GHz band  ⇒ wifi6e
+//   EHT present AND NON-ZERO   ⇒ wifi7
+// An all-zero EHT structure is a KERNEL STUB, not a Wi-Fi 7 radio: the shipped
+// RTL8852BE prints `EHT MAC Capabilities (0x0000)` with every MCS/NSS at 0.
+export const wifiGenerationSchema = z.enum(['wifi4', 'wifi5', 'wifi6', 'wifi6e', 'wifi7']);
+export type WifiGeneration = z.infer<typeof wifiGenerationSchema>;
+
+// WPA3-SAE is TRI-STATE and `unknown` is a first-class answer. Absence of an
+// SAE advertisement is NOT proof of absence (a full-MAC driver may offload SAE
+// and advertise nothing), so an unprovable radio reports `unknown` rather than
+// a guess in either direction.
+export const wifiSaeSupportSchema = z.enum(['supported', 'unsupported', 'unknown']);
+export type WifiSaeSupport = z.infer<typeof wifiSaeSupportSchema>;
+
+// Max operating channel width the radio itself advertises, per band. A band the
+// radio does not carry is OMITTED — never zero-filled, which would read as a
+// measured "no width".
+export const wifiBandMaxWidthSchema = z.object({
+	'2.4': z.number().int().positive().optional(),
+	'5': z.number().int().positive().optional(),
+	'6': z.number().int().positive().optional(),
+});
+export type WifiBandMaxWidth = z.infer<typeof wifiBandMaxWidthSchema>;
+
+// STA+AP concurrency, read from the wiphy's `valid interface combinations`.
+// `sameChannelOnly` is what `#channels <= 1` means: the AP is pinned to whatever
+// channel the station leg is already on.
+export const wifiStaApComboSchema = z.object({
+	supported: z.boolean(),
+	sameChannelOnly: z.boolean(),
+});
+export type WifiStaApCombo = z.infer<typeof wifiStaApComboSchema>;
+
+// The regulatory state OBSERVED for this wiphy after any apply — never the
+// country that was requested. A self-managed wiphy (firmware-regulated Intel /
+// MediaTek parts) intersects or ignores a user hint entirely, so applied ≠
+// effective has to stay visible.
+//
+// `self_managed` is emitted as an EXPLICIT `false` when false. It is a
+// recoverable field, and the frontend status merge preserves an omitted optional
+// key — a present-only-when-true flag can be raised and never lowered (the
+// `policy_route_missing` latch).
+export const wifiRegulatoryStateSchema = z.object({
+	country: z.string(),
+	is6GhzLegal: z.boolean(),
+	self_managed: z.boolean(),
+});
+export type WifiRegulatoryState = z.infer<typeof wifiRegulatoryStateSchema>;
+
+export const wifiAdapterCapabilitiesSchema = z.object({
+	// The wiphy this describes (`phy0`), resolved from
+	// /sys/class/net/<ifname>/phy80211 — never from an adapter's position.
+	phy: z.string(),
+	generation: wifiGenerationSchema,
+	bands: z.array(wifiCapabilityBandSchema),
+	maxWidthMhz: wifiBandMaxWidthSchema,
+	// The AP interface type intersected with the bands the radio carries.
+	apModes: z.array(wifiCapabilityBandSchema),
+	staApCombo: wifiStaApComboSchema,
+	wpa3Sae: wifiSaeSupportSchema,
+	regulatory: wifiRegulatoryStateSchema,
+});
+export type WifiAdapterCapabilities = z.infer<typeof wifiAdapterCapabilitiesSchema>;
+
+// ─── live link telemetry (`iw dev <ifname> link`) ───────────────────────────
+//
+// What the STATION LEG negotiated, which is a different fact from what the
+// radio CAN do. A Wi-Fi 7 adapter associated to an 802.11ac access point is
+// running VHT right now, and `wifiAdapterCapabilitiesSchema.generation` would
+// still — correctly — say `wifi7`. Collapsing the two would report the radio's
+// ceiling as the operator's live connection.
+//
+// Read back from the kernel's own link report and never inferred from the
+// capability block.
+export const wifiLinkTelemetrySchema = z.object({
+	// The generation the LINK negotiated, decided by the rate line's own
+	// EHT-/HE-/VHT- tokens. Never the adapter's `capabilities.generation`.
+	generation: wifiGenerationSchema,
+	// OMITTED when the kernel printed no width token at all — a 20 MHz HT link
+	// prints none, so a defaulted 20 would be a value nothing measured.
+	channelWidthMhz: z.number().int().positive().optional(),
+	// Strictly positive: `iw` prints `0.0 MBit/s` for a link that has not
+	// negotiated, and a zero reads as a stalled connection rather than as an
+	// unreported one — the same rule `hotspotClientSchema` states for a station.
+	bitrateMbps: z.number().positive(),
+});
+export type WifiLinkTelemetry = z.infer<typeof wifiLinkTelemetrySchema>;
+
+// ─── hotspot security offering ──────────────────────────────────────────────
+//
+// The two security modes a CeraLive hotspot may be configured with. WPA2 is
+// always offered; `wpa3-sae` is offered ONLY when the adapter's own capability
+// read proved SAE on THIS radio (`wifiAdapterCapabilitiesSchema.wpa3Sae ===
+// 'supported'`) — `unknown` is not proof, so it never offers WPA3.
+//
+// There is deliberately NO `wpa2-wpa3-mixed` member. A transition-mode profile
+// has never been brought up on a board against NM 1.42, and an option that
+// cannot be shown to work is not shipped. Adding one is a separate, evidenced
+// change — not a widening of this enum.
+export const hotspotSecurityIdSchema = z.enum(['wpa2', 'wpa3-sae']);
+export type HotspotSecurityId = z.infer<typeof hotspotSecurityIdSchema>;
+
+// READ-ONLY display truth: the widest channel the radio advertises for each band
+// a hotspot may use. It is NOT a configurable width — NetworkManager 1.42
+// exposes no hotspot channel-width property at all, so a settable field here
+// would be a control that cannot act.
+//
+// 2.4/5 GHz ONLY, and that is a hard limit rather than a consequence of what
+// this radio happens to carry: `802-11-wireless.band` has no 6 GHz value, so a
+// 6 GHz hotspot is unrepresentable however capable the adapter is. The key is
+// absent from the schema entirely, so it cannot be emitted by mistake.
+export const hotspotBandMaxWidthSchema = z.object({
+	'2.4': z.number().int().positive().optional(),
+	'5': z.number().int().positive().optional(),
+});
+export type HotspotBandMaxWidth = z.infer<typeof hotspotBandMaxWidthSchema>;
+
+// ─── joined-client roster ───────────────────────────────────────────────────
+//
+// One station the AP interface's own `iw dev <ifname> station dump` named. The
+// MAC is the only required field BY DESIGN: everything else is a reading the
+// station may not have produced yet, and an absent bitrate must render as
+// absent rather than as a measured zero (which reads as a stalled client).
+export const hotspotClientSchema = z.object({
+	mac: z.string(),
+	signal_dbm: z.number().optional(),
+	tx_bitrate_mbps: z.number().positive().optional(),
+	rx_bitrate_mbps: z.number().positive().optional(),
+});
+export type HotspotClient = z.infer<typeof hotspotClientSchema>;
+
+// How many station rows ride the wire. `count` stays the TRUE total, so a
+// capped roster is visibly capped rather than silently truncated — the same
+// shape, for the same reason, as the SMS inbox's own cap.
+export const HOTSPOT_CLIENTS_ROW_CAP = 32;
+
+// `count` is deliberately NOT `stations.length`: the rows are a bounded window
+// onto a total that may exceed it. A device that has never been read omits this
+// block entirely — `count: 0` is a MEASURED "nobody is connected" and must stay
+// distinguishable from "we never asked".
+export const hotspotClientsSchema = z.object({
+	count: z.number().int().nonnegative(),
+	stations: z.array(hotspotClientSchema).max(HOTSPOT_CLIENTS_ROW_CAP),
+});
+export type HotspotClients = z.infer<typeof hotspotClientsSchema>;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -84,6 +250,19 @@ export const hotspotConfigSchema = z.object({
 	// set: a channel absent from it is rejected by the device.
 	available_channels: z.record(wifiChannelIdSchema, z.object({ name: z.string() })),
 	channel: wifiChannelIdSchema.optional(),
+	// The security modes the DEVICE derived for this adapter, on exactly the
+	// terms `available_channels` is offered: this map IS the offered set, and a
+	// value absent from it is rejected. Optional on the wire because a device
+	// predating this field omits it — absent means "not derived", which the UI
+	// must read as WPA2-only rather than as an empty offering.
+	available_security: z.record(hotspotSecurityIdSchema, z.object({ name: z.string() })).optional(),
+	security: hotspotSecurityIdSchema.optional(),
+	// Display only. There is no configurable width anywhere in this contract.
+	max_width_mhz: hotspotBandMaxWidthSchema.optional(),
+	// Who is joined RIGHT NOW, from the AP interface's own station dump. Absent
+	// means the device has not read it (an older backend, or an AP whose first
+	// read has not landed); `count: 0` means it read and nobody is connected.
+	clients: hotspotClientsSchema.optional(),
 });
 export type HotspotConfig = z.infer<typeof hotspotConfigSchema>;
 
@@ -100,6 +279,16 @@ export const wifiInterfaceSchema = z.object({
 	supports_hotspot: z.boolean().optional(),
 	transition: z.enum(['activating', 'deactivating']).optional(),
 	mode: z.enum(['station', 'hotspot']).optional(),
+	// Absent means NOT COMPUTED — no `iw` on the image, a wiphy that could not be
+	// resolved for this interface, or a dump that failed its named parser. Once
+	// computed it is emitted on EVERY tick, so a consumer never has to decide
+	// whether a missing block means "unchanged" or "withdrawn".
+	capabilities: wifiAdapterCapabilitiesSchema.optional(),
+	// The station leg's LIVE negotiated rate. Absent on an AP-mode radio (which
+	// has no station leg to report), on a station holding no connection, on a
+	// read that failed its named parser, and on a backend predating the field —
+	// so a consumer must read absence as "not measured", never as a dead link.
+	link: wifiLinkTelemetrySchema.optional(),
 });
 export type WifiInterface = z.infer<typeof wifiInterfaceSchema>;
 
@@ -119,11 +308,19 @@ export const wifiDisconnectInputSchema = z.object({
 });
 export type WifiDisconnectInput = z.infer<typeof wifiDisconnectInputSchema>;
 
-// WiFi new connection input schema
+// WiFi new connection input schema.
+//
+// `security` is the scanned row's own nmcli SECURITY token list, forwarded
+// verbatim so the device can decide whether the profile must pin `key-mgmt sae`
+// (see `capabilities/wifi-station-security.ts`). It reuses the free-form
+// `wifiSecuritySchema` for that schema's own stated reason — an enum rejected
+// real open/enterprise rows — and is optional, so a client that omits it gets
+// the byte-identical pre-WPA3 behaviour.
 export const wifiNewInputSchema = z.object({
 	device: z.string(),
 	ssid: z.string().min(1, 'SSID cannot be empty'),
 	password: z.string().min(WIFI_PASSWORD_MIN, 'Password must be at least 8 characters'),
+	security: wifiSecuritySchema.optional(),
 });
 export type WifiNewInput = z.infer<typeof wifiNewInputSchema>;
 
@@ -157,6 +354,10 @@ export const hotspotConfigInputSchema = z.object({
 		.min(HOTSPOT_PASSWORD_MIN, 'Password must be at least 8 characters')
 		.max(HOTSPOT_PASSWORD_MAX, 'Password must be at most 63 characters'),
 	channel: wifiChannelIdSchema,
+	// Omitted leaves the adapter's current selection alone, so an existing
+	// caller keeps its exact behaviour. A stated value is still checked against
+	// the device's own offered set before anything is written.
+	security: hotspotSecurityIdSchema.optional(),
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 

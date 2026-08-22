@@ -7,16 +7,37 @@
 
   • Name / password / channel form, schema-driven bounds from ValidationAdapter
     (HOTSPOT_NAME_MIN/MAX, HOTSPOT_PASSWORD_MIN/MAX) — single source of truth.
+  • Security is offered from the DEVICE's own `available_security` map and never
+    from a local table; the read-only radio line states the width/generation the
+    same capability read produced. Both derive in `hotspot-options.ts`, and both
+    render NOTHING when the device did not report them — which is what keeps an
+    older backend showing exactly the name/password/channel set it always did.
+    There is deliberately no width SELECTOR: NetworkManager 1.42 publishes no
+    hotspot channel-width property, so the control could not act.
   • Save  → rpc.wifi.hotspotConfigure, Start → rpc.wifi.hotspotStart,
     Stop → rpc.wifi.hotspotStop — all dispatched through `osCommand` (the single
     OS-op feedback path: keyed spinner, DEVICE_BUSY + failure toasts).
-  • When the hotspot is active, a QR encoding the live credentials
-    (WIFI:T:WPA;S:<name>;P:<password>;;) is rendered so phones can join by scan.
+  • When the hotspot is active, ONE QR encoding the live credentials is rendered
+    so phones can join by scan. Its `T:` token follows the LIVE security mode
+    (`hotspotQrSecurity`): a WPA3-SAE AP advertised as `T:WPA` yields a code that
+    scans perfectly and then refuses to join.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
-import type { WifiInterface } from '@ceraui/rpc/schemas';
-import { Copy, Eye, EyeOff, Loader2, Power, QrCode, Router, Save, Wifi } from '@lucide/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import type { HotspotSecurityId, WifiInterface } from '@ceraui/rpc/schemas';
+import {
+	Copy,
+	Eye,
+	EyeOff,
+	Loader2,
+	Power,
+	QrCode,
+	Radio,
+	Router,
+	Save,
+	ShieldCheck,
+	Wifi,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -26,7 +47,7 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { copyToClipboard } from '$lib/helpers/clipboard';
-import { generateWifiQr } from '$lib/helpers/NetworkHelper';
+import { generateWifiQr, hotspotQrSecurity } from '$lib/helpers/NetworkHelper';
 import {
 	confirmOperation,
 	getOperationPhase,
@@ -35,6 +56,12 @@ import {
 import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
 import { cn } from '$lib/utils';
+
+import {
+	deriveHotspotRadioTruth,
+	deriveHotspotSecurityChoice,
+	type HotspotSecurityOption,
+} from './hotspot-options';
 
 interface Props {
 	open?: boolean;
@@ -69,6 +96,14 @@ let name = $state('');
 let password = $state('');
 let channel = $state('auto');
 let showPassword = $state(false);
+// `undefined` until the one-time sync runs AND the device offers a real choice;
+// a save then omits `security` entirely, which the device reads as "leave the
+// adapter's current selection alone".
+let security = $state<HotspotSecurityId | undefined>(undefined);
+
+// ── Capability-derived options (device truth only — see hotspot-options.ts) ──
+const securityChoice = $derived(deriveHotspotSecurityChoice(iface?.hotspot));
+const radioTruth = $derived(deriveHotspotRadioTruth(iface?.hotspot, iface?.capabilities));
 
 let initialized = false;
 $effect.pre(() => {
@@ -76,9 +111,20 @@ $effect.pre(() => {
 		name = iface?.hotspot?.name ?? '';
 		password = iface?.hotspot?.password ?? '';
 		channel = iface?.hotspot?.channel ?? 'auto';
+		// Seeded from the DEVICE's resolved selection, so the control never opens
+		// on a mode the device would refuse.
+		const choice = deriveHotspotSecurityChoice(iface?.hotspot);
+		security = choice?.kind === 'select' ? choice.selected : undefined;
 		initialized = true;
 	}
 });
+
+const securityLabel = $derived(
+	securityChoice?.kind === 'select'
+		? (securityChoice.options.find((o: HotspotSecurityOption) => o.id === security)?.name ??
+				m["hotspotConfigurator.hotspot.selectSecurity"]())
+		: '',
+);
 
 // ── Channel options: prefer device-reported channels, else common bands ──
 const channelOptions = $derived.by(() => {
@@ -134,7 +180,9 @@ let qrDataUrl = $state('');
 $effect(() => {
 	const hs = iface?.hotspot;
 	if (hs?.name && hs?.password) {
-		generateWifiQr(hs.name, hs.password, 'WPA')
+		// The LIVE mode, not the draft: this QR carries the credentials the AP is
+		// broadcasting right now, so its auth token must describe that AP too.
+		generateWifiQr(hs.name, hs.password, hotspotQrSecurity(hs.security))
 			.then((url) => {
 				qrDataUrl = url;
 			})
@@ -155,7 +203,16 @@ async function handleSave() {
 	if (!isFormValid || configuring) return;
 	await osCommand({
 		key: configKey,
-		rpc: () => rpc.wifi.hotspotConfigure({ device: deviceId, name, password, channel }),
+		rpc: () =>
+			rpc.wifi.hotspotConfigure({
+				device: deviceId,
+				name,
+				password,
+				channel,
+				// Omitted unless the device offered a real choice, so a save on an
+				// adapter with one mode cannot re-state a selection it never made.
+				...(security !== undefined ? { security } : {}),
+			}),
 		failMessage: () => m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		// NO confirmOnResolve — confirm comes from the deferred hotspot.config event.
@@ -361,6 +418,79 @@ async function copyPassword() {
 			</Select.Root>
 			<p class="text-muted-foreground text-xs">{m["hotspotConfigurator.help.channelHelp"]()}</p>
 		</div>
+
+		<!--
+			Security. Rendered ONLY from the device's own offered map:
+			 · two or more modes → a real selector
+			 · exactly one       → stated, because one option is not a choice
+			 · none reported     → nothing at all (older backend / no derivation)
+		-->
+		{#if securityChoice?.kind === 'select'}
+			<div class="space-y-1.5" data-testid="hotspot-security-select">
+				<Label class="text-sm font-medium" for="hotspot-security">
+					{m["hotspotConfigurator.hotspot.security"]()}
+				</Label>
+				<Select.Root
+					onValueChange={(v) => {
+						// Narrowed rather than cast: the wire enum is the acceptance set,
+						// so a value outside it is refused instead of persisted.
+						if (v === 'wpa2' || v === 'wpa3-sae') security = v;
+					}}
+					type="single"
+					value={security ?? ''}
+				>
+					<Select.Trigger id="hotspot-security" class="w-full">{securityLabel}</Select.Trigger>
+					<Select.Content>
+						{#each securityChoice.options as option (option.id)}
+							<Select.Item
+								data-testid="hotspot-security-option-{option.id}"
+								label={option.name}
+								value={option.id}
+							/>
+						{/each}
+					</Select.Content>
+				</Select.Root>
+				<p class="text-muted-foreground text-xs">
+					{m["hotspotConfigurator.help.securityHelp"]()}
+				</p>
+			</div>
+		{:else if securityChoice?.kind === 'stated'}
+			<div
+				class="text-muted-foreground flex items-center gap-2 text-xs"
+				data-testid="hotspot-security-stated"
+			>
+				<ShieldCheck aria-hidden="true" class="size-3.5 shrink-0" />
+				<span>{m["hotspotConfigurator.hotspot.security"]()}</span>
+				<span class="text-foreground font-medium">{securityChoice.option.name}</span>
+			</div>
+		{/if}
+
+		<!--
+			READ-ONLY radio truth. Width has no selector anywhere in this contract —
+			NetworkManager 1.42 exposes no hotspot channel-width property, so one
+			could not act. Demoted per DESIGN.md §2 (hardware tags, muted, never the
+			phosphor-lime accent, which stays reserved for the live signal).
+		-->
+		{#if radioTruth}
+			<div
+				class="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"
+				data-testid="hotspot-radio-truth"
+			>
+				<Radio aria-hidden="true" class="size-3.5 shrink-0" />
+				{#if radioTruth.generationLabelKey}
+					<span data-testid="hotspot-radio-generation">
+						{resolveMessageKey(radioTruth.generationLabelKey)}
+					</span>
+				{/if}
+				{#each radioTruth.bands as band (band.band)}
+					<span data-testid="hotspot-radio-width-{band.band}">
+						{resolveMessageKey(band.labelKey)}
+						·
+						{m["network.wifiCapability.width"]({ mhz: band.widthMhz })}
+					</span>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- Live QR for the active hotspot credentials -->
 		{#if isActive && qrDataUrl}

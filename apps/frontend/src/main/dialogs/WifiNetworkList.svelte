@@ -10,7 +10,7 @@
   WifiConnectForm.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiInterface } from '@ceraui/rpc/schemas';
 import {
 	Check,
@@ -29,7 +29,12 @@ import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import { Button } from '$lib/components/ui/button';
 import { getWifiUUID } from '$lib/helpers/NetworkHelper';
 import { getOperationPhase, isOperationPending } from '$lib/rpc/async-operation.svelte';
-import { frequencyBand, isSecured, signalTextClass } from '$lib/helpers/wifi-selector';
+import {
+	frequencyBand,
+	isSecured,
+	signalTextClass,
+	wifiRowBlock,
+} from '$lib/helpers/wifi-selector';
 import { cn } from '$lib/utils';
 
 import WifiConnectForm from './WifiConnectForm.svelte';
@@ -145,6 +150,10 @@ let {
 			{@const osBusy = !!connecting || !!disconnecting || !!forgetting}
 			{@const expanded = pendingNew?.ssid === network.ssid}
 			{@const confirming = confirmForget === network.ssid}
+			<!-- CT-2, not CT-1: the network is genuinely in the air, so the row stays
+			     visible and disabled-with-reason rather than being hidden. -->
+			{@const block = wifiRowBlock(network, iface?.capabilities)}
+			{@const blockReason = block ? resolveMessageKey(block.bodyKey) : undefined}
 			<div
 				class={cn(
 					'flex flex-col gap-3 px-3 py-3 transition-colors',
@@ -252,9 +261,10 @@ let {
 								<Button
 									aria-label={`${m["wifiSelector.button.connect"]()} ${network.ssid}`}
 									class="gap-1.5"
-									disabled={ifaceBusy || osBusy}
+									disabled={ifaceBusy || osBusy || !!block}
 									onclick={() => onConnectSaved(uuid, network)}
 									size="sm"
+									title={blockReason}
 								>
 									<Plug class="size-4" />
 									<span class="hidden sm:inline">{m["wifiSelector.button.connect"]()}</span>
@@ -274,9 +284,10 @@ let {
 							<Button
 								aria-label={`${m["wifiSelector.button.connect"]()} ${network.ssid}`}
 								class="gap-1.5"
-								disabled={ifaceBusy || osBusy}
+								disabled={ifaceBusy || osBusy || !!block}
 								onclick={() => onConnectNew(network)}
 								size="sm"
+								title={blockReason}
 								variant={expanded ? 'outline' : 'default'}
 							>
 								<Plug class="size-4" />
@@ -285,6 +296,26 @@ let {
 						{/if}
 					</div>
 				</div>
+
+				<!-- Why this adapter cannot be offered this network (CT-2 reason) -->
+				{#if block}
+					<div
+						class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-md border px-2.5 py-2"
+						data-ssid={network.ssid}
+						data-testid="wifi-row-blocked"
+						role="status"
+					>
+						<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
+						<div class="min-w-0">
+							<p class="text-status-warning text-xs font-semibold">
+								{resolveMessageKey(block.titleKey)}
+							</p>
+							<p class="text-muted-foreground mt-0.5 text-xs">
+								{resolveMessageKey(block.bodyKey)}
+							</p>
+						</div>
+					</div>
+				{/if}
 
 				<!-- Inline password form for a new secured network -->
 				{#if expanded}

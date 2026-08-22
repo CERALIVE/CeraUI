@@ -24,13 +24,19 @@ import type {
 	NetworkIngest,
 	PreviewEncoderRealized,
 	ResolvedAsrcReason,
+	UnclaimedAdapter,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
+import {
+	BLUETOOTH_EVENT,
+	getBluetoothStatusMessage,
+} from "../bluetooth/bluetooth-runtime.ts";
 import { getCellularStack } from "../cellular/cellular-stack.ts";
 import { getConfig } from "../config.ts";
 import { buildModemsWireMessage } from "../modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../network/network-ingest.ts";
 import { netIfBuildMsg } from "../network/network-interfaces.ts";
+import { getUnclaimedAdapters } from "../network/unclaimed-adapters.ts";
 import { buildRelaysMsg, getRelays } from "../remote/remote-relays.ts";
 import { getActiveEncodeStatus } from "../streaming/active-encode-status.ts";
 import { deriveAudioSources, getAudioDevices } from "../streaming/audio.ts";
@@ -92,6 +98,10 @@ export type StatusResponseMessage = {
 	engine_bitrate?: EngineBitrate | null;
 	preview_encoder_realized?: PreviewEncoderRealized | null;
 	cellular_initializing?: boolean;
+	// Explicitly `| undefined`: the field carries a THIRD state beyond present /
+	// absent-because-empty — "the probe has not answered yet" — and under
+	// `exactOptionalPropertyTypes` that is the only shape that can express it.
+	unclaimed_adapters?: UnclaimedAdapter[] | undefined;
 };
 
 export function sendStatus(conn: WebSocket) {
@@ -120,6 +130,7 @@ export function sendStatus(conn: WebSocket) {
 			engine_bitrate: getEngineBitrateStatus(),
 			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 			cellular_initializing: !getCellularStack().ready,
+			unclaimed_adapters: getUnclaimedAdapters(),
 		} satisfies StatusResponseMessage),
 	);
 }
@@ -136,6 +147,7 @@ export function sendInitialStatus(conn: WebSocket) {
 	conn.send(buildMsg(ENCODER_LOAD_EVENT, getEncoderLoad()));
 	conn.send(buildMsg(FAN_EVENT, getFan()));
 	conn.send(buildMsg(CPU_EVENT, getCpuInfo()));
+	conn.send(buildMsg(BLUETOOTH_EVENT, getBluetoothStatusMessage()));
 	conn.send(buildMsg("revisions", getRevisions()));
 	conn.send(buildMsg("acodecs", AUDIO_CODECS));
 	notificationSendPersistent(conn, true);

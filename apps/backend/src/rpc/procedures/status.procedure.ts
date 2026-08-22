@@ -14,6 +14,7 @@ import { getConfig } from "../../modules/config.ts";
 import { buildModemsWireMessage } from "../../modules/modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../../modules/network/network-ingest.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
+import { getUnclaimedAdapters } from "../../modules/network/unclaimed-adapters.ts";
 import {
 	buildRelaysMsg,
 	getRelays,
@@ -95,6 +96,7 @@ export const getStatusProcedure = authedProcedure
 			engine_bitrate: getEngineBitrateStatus(),
 			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 			cellular_initializing: !getCellularStack().ready,
+			unclaimed_adapters: getUnclaimedAdapters(),
 		};
 	});
 
@@ -142,6 +144,7 @@ export function buildInitialStatus() {
 			engine_bitrate: getEngineBitrateStatus(),
 			preview_encoder_realized: getPreviewEncoderRealizedStatus(),
 			cellular_initializing: !getCellularStack().ready,
+			unclaimed_adapters: getUnclaimedAdapters(),
 		},
 		netif: netIfBuildMsg(),
 		sensors: getSensors(),

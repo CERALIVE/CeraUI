@@ -4,6 +4,12 @@ import path from "node:path";
 import type { Page, WebSocketRoute } from "@playwright/test";
 
 import { expect, test } from "./fixtures/index.js";
+import {
+	BT_ADAPTER_PATH,
+	btMicPairedStatus,
+	type WireDevice,
+	type WireStatus,
+} from "./helpers/bluetooth-wire.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
 import { openModemAdvanced } from "./helpers/modem-advanced.js";
 
@@ -46,6 +52,20 @@ import { openModemAdvanced } from "./helpers/modem-advanced.js";
  * Plus a NEGATIVE FIXTURE ("the debt-id cross-check catches an orphan") that
  * injects a controlled orphan `data-debt-id` node and proves the SAME check
  * that powers assertion (b) flags it — so (b) is not vacuous.
+ *
+ * The `dynamic-wifi-bt-foundation` effort extends the SAME three assertions over
+ * the Network destination's radios, because a capability-driven Wi-Fi/Bluetooth
+ * surface can lie in exactly the ways this file already gates against. Four
+ * capability snapshots are walked — `wifi6` (the board-captured Rock RTL8852BE),
+ * `wifi7` (the MT7925-shape twin), NO ADAPTER, and LEGACY/no-capabilities (a
+ * backend that never computed a report) — asserting real DOM flips for the band
+ * options, the generation badge, the hotspot security control, the read-only
+ * channel-width line, and the Bluetooth card's own gating. Two rules from
+ * DESIGN.md §1 carry it, and they are genuinely different facts: a POSITIVELY
+ * UNSUPPORTED thing contributes ZERO nodes (CT-1 — a Wi-Fi 6 radio gets no 6 GHz
+ * chip, a board with no controller gets no scan button), while a SUPPORTED thing
+ * that is currently BLOCKED stays visible with a reason (CT-2 — a 6 GHz radio
+ * under a domain that forbids it).
  *
  * PLAYBOOK.md compliance: role / testid / web-first assertions only — no
  * pixel-screenshot capture, no fixed-delay waits, no hardcoded nav-tab selectors.
@@ -151,6 +171,14 @@ let dropServerConfig = false;
 // backend's typed `audio_sources` beats a test's asrcs-only injection).
 let dropServerStatus = false;
 const DROP_SERVER_STATUS_ANNOTATION = "drop-server-status";
+// The `bluetooth` broadcast is blanket-dropped like caps/devices/sources/config:
+// the dev host has no controller, so the device's own honest
+// `{enabled:false, available:false}` would race every injected roster. No test in
+// this file reads the backend's own Bluetooth state, so there is nothing to lose.
+// (`helpers/bluetooth-wire.ts` does the same drop-and-inject, but installs its OWN
+// `routeWebSocket` over this file's pattern — only one handler wins, so its
+// fixture FACTORY is reused here and its installer deliberately is not.)
+let dropServerBluetooth = false;
 // Fake-resolve every `streaming.setConfig` client-side with success so a config
 // write is proven to succeed WITHOUT depending on the per-worker backend accepting the
 // injected (backend-unknown) source ids — the injected sources are the DOM truth
@@ -479,6 +507,100 @@ function sendCellularInitializing(initializing: boolean): void {
 const modemRow = (page: Page, id: string) =>
 	page.locator(`[data-testid="modem-row"][data-modem-id="${id}"]`);
 
+// ── Wi-Fi capability fixtures (dynamic-wifi-bt-foundation, todos 2 / 7 / 9) ───
+// Both objects are VERBATIM todo 2's shapes — the same literals the unit gate
+// (`WifiSection.capability.test.ts`), the backend parser gate
+// (`wifi-capabilities.test.ts`) and the `@visual` evidence spec assert against,
+// so no two gates can disagree about what a radio reported. Do NOT invent a
+// fourth copy here, and do NOT "tidy" a value: `2.4`'s 40 MHz and `5`'s 80 MHz
+// are what the shipped Rock 5B+ adapter actually published.
+
+/** Rock 5B+ / RTL8852BE — a real Wi-Fi 6 radio that positively lacks Band 4. */
+const ROCK_RTL8852BE = {
+	phy: "phy0",
+	generation: "wifi6",
+	bands: ["2.4", "5"],
+	maxWidthMhz: { "2.4": 40, "5": 80 },
+	apModes: ["2.4", "5"],
+	staApCombo: { supported: true, sameChannelOnly: true },
+	wpa3Sae: "supported",
+	regulatory: { country: "00", is6GhzLegal: false, self_managed: false },
+};
+
+/** MT7925-class — EHT, a real 6 GHz band, and a domain that permits it. */
+const MT7925 = {
+	phy: "phy0",
+	generation: "wifi7",
+	bands: ["2.4", "5", "6"],
+	maxWidthMhz: { "2.4": 40, "5": 160, "6": 320 },
+	apModes: ["2.4", "5", "6"],
+	staApCombo: { supported: true, sameChannelOnly: false },
+	wpa3Sae: "supported",
+	regulatory: { country: "US", is6GhzLegal: true, self_managed: true },
+};
+
+/**
+ * A station-mode radio. `capabilities` is OMITTED when none is passed, and that
+ * absence IS the LEGACY snapshot the gate below walks — no `iw` on the image, an
+ * unresolvable wiphy, a dump that failed its parser, or a backend predating the
+ * field. The row must then render exactly as it did before the strip existed.
+ */
+function wifiRadio(capabilities?: unknown): Record<string, unknown> {
+	return {
+		ifname: "wlan0",
+		conn: "home-uuid",
+		hw: "Realtek RTL8852BE",
+		saved: {},
+		available: [
+			{ active: true, ssid: "CERALIVE", signal: 72, security: "WPA2", freq: 5180 },
+		],
+		...(capabilities ? { capabilities } : {}),
+	};
+}
+
+/**
+ * An AP-mode radio. The device attaches a `hotspot` block ONLY in AP mode
+ * (`wifi.ts`'s `isApMode` branch), so the hotspot dialog's offering is injected
+ * exactly as it is really published rather than bolted onto a station row.
+ */
+function hotspotRadio(
+	hotspot: Record<string, unknown>,
+	capabilities?: unknown,
+): Record<string, unknown> {
+	return {
+		ifname: "wlan1",
+		conn: "hotspot-uuid",
+		hw: "Realtek RTL8852BE",
+		saved: {},
+		mode: "hotspot",
+		hotspot: {
+			name: "CERALIVE_03f6",
+			available_channels: { auto: { name: "Automatic" } },
+			...hotspot,
+		},
+		...(capabilities ? { capabilities } : {}),
+	};
+}
+
+// The frontend REPLACES `status.wifi` wholesale, so one frame is the whole
+// roster — and `{}` is a board with no Wi-Fi radio at all.
+function sendWifi(radios: Record<string, Record<string, unknown>>): void {
+	send({ status: { wifi: radios } });
+}
+
+// The shipped fleet's offering: NetworkManager 1.42 publishes no SAE key, so the
+// device derives WPA2 alone. One option is not a choice.
+const WPA2_ONLY = { wpa2: { name: "WPA2 (Personal)" } };
+const WPA2_AND_WPA3 = {
+	wpa2: { name: "WPA2 (Personal)" },
+	"wpa3-sae": { name: "WPA3 (SAE)" },
+};
+const HOTSPOT_WIDTHS = { "2.4": 40, "5": 80 };
+
+function sendBluetooth(status: WireStatus): void {
+	send({ bluetooth: status });
+}
+
 // The StreamSetupChain renders all four setup rows ALWAYS (no collapse, no ready
 // bar), so every migrated config-row edit trigger is permanently visible — just
 // wait for the trigger and click it.
@@ -506,6 +628,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		dropServerStatus = testInfo.annotations.some(
 			(a) => a.type === DROP_SERVER_STATUS_ANNOTATION,
 		);
+		dropServerBluetooth = true;
 		fakeSetConfig = false;
 		setConfigCalls.length = 0;
 
@@ -553,6 +676,7 @@ test.describe("Capability truthfulness (functional)", () => {
 					if (dropServerSources && "sources" in frame) return;
 					if (dropServerConfig && "config" in frame) return;
 					if (dropServerStatus && "status" in frame) return;
+					if (dropServerBluetooth && "bluetooth" in frame) return;
 				} catch {
 					/* non-JSON / binary frame */
 				}
@@ -1906,6 +2030,426 @@ test.describe("Capability truthfulness (functional)", () => {
 
 		await page.keyboard.press("Escape");
 		await expect(page.getByRole("dialog", { name: MM_MODEM_NAME })).toBeHidden();
+	});
+
+	// ── (a) Wi-Fi: the band options and the generation badge follow the RADIO ───
+	const wifiBand = (page: Page, band: string) =>
+		page.locator(`[data-testid="wifi-band-option"][data-band="${band}"]`);
+
+	const WIFI_ROSTER_ANNOTATION = {
+		type: DROP_SERVER_STATUS_ANNOTATION,
+		description:
+			"injects its own status.wifi; the backend's multi-modem-wifi roster must be dropped so the fixture radio is the only row",
+	};
+
+	test("the Wi-Fi capability strip flips its band options and generation badge between a Wi-Fi 6 and a Wi-Fi 7 radio", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
+
+		await navigateTo(page, "network");
+
+		const strip = page.getByTestId("wifi-capabilities");
+		await expect(strip).toBeVisible({ timeout: 15_000 });
+		await expect(strip).toHaveAttribute("data-generation", "wifi6");
+
+		// The badge is the wire's own verdict and nothing else — the shipped
+		// RTL8852BE prints all-zero EHT structures, so a UI that inferred it from
+		// "does it mention EHT" would stamp Wi-Fi 7 on a Wi-Fi 6 radio.
+		const badge = page.getByTestId("wifi-generation-badge");
+		await expect(badge).toHaveText("Wi-Fi 6");
+
+		const bands = page.getByTestId("wifi-band-option");
+		await expect(bands).toHaveCount(2);
+		await expect(wifiBand(page, "2.4")).toHaveAttribute("data-available", "true");
+		await expect(wifiBand(page, "2.4")).toContainText("2.4 GHz");
+		await expect(wifiBand(page, "2.4")).toContainText("40 MHz");
+		await expect(wifiBand(page, "5")).toHaveAttribute("data-available", "true");
+		await expect(wifiBand(page, "5")).toContainText("80 MHz");
+
+		// THE REGRESSION LOCK. This radio positively lacks Band 4, so 6 GHz
+		// contributes ZERO nodes (CT-1) — not a greyed chip, and not a reason
+		// blaming the regulatory domain. Mutating the fixture above to claim
+		// 6 GHz is what must turn this spec RED.
+		await expect(wifiBand(page, "6")).toHaveCount(0);
+		await expect(page.getByTestId("wifi-band-blocked-reason")).toHaveCount(0);
+		await expect(page.getByTestId("wifi-sta-ap-combo")).toHaveAttribute(
+			"data-same-channel",
+			"true",
+		);
+
+		// The SAME strip genuinely flips when the radio does — a third band
+		// appears, its own advertised width with it, and the combo note changes
+		// because this wiphy can host an AP on a different channel.
+		sendWifi({ 0: wifiRadio(MT7925) });
+		await expect(strip).toHaveAttribute("data-generation", "wifi7");
+		await expect(badge).toHaveText("Wi-Fi 7");
+		await expect(bands).toHaveCount(3);
+		await expect(wifiBand(page, "6")).toHaveAttribute("data-available", "true");
+		await expect(wifiBand(page, "6")).toContainText("320 MHz");
+		await expect(wifiBand(page, "5")).toContainText("160 MHz");
+		await expect(page.getByTestId("wifi-band-blocked-reason")).toHaveCount(0);
+		await expect(page.getByTestId("wifi-sta-ap-combo")).toHaveAttribute(
+			"data-same-channel",
+			"false",
+		);
+	});
+
+	// ── (a, CT-2) A band the radio HAS but cannot use stays visible with a reason ─
+	test("a forbidden 6 GHz band is disabled-with-reason rather than hidden, and only a domain block offers the country dialog", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		// A domain block is ACTIONABLE: the operator picks a country and the
+		// kernel re-derives what is legal.
+		sendWifi({
+			0: wifiRadio({
+				...MT7925,
+				regulatory: { country: "CO", is6GhzLegal: false, self_managed: false },
+			}),
+		});
+
+		await navigateTo(page, "network");
+
+		const six = wifiBand(page, "6");
+		await expect(six).toBeVisible({ timeout: 15_000 });
+		await expect(six).toHaveAttribute("data-available", "false");
+		await expect(six).toHaveAttribute("aria-disabled", "true");
+		await expect(six).toHaveAttribute("data-blocked-by", "regulatory-domain");
+
+		const reason = page.getByTestId("wifi-band-blocked-reason");
+		await expect(reason).toBeVisible();
+		await expect(reason).toHaveAttribute("role", "status");
+		await expect(reason).toContainText("CO");
+		await expect(reason).not.toHaveText(/network\.wifiCapability/);
+		await expect(page.getByTestId("wifi-open-country")).toBeVisible();
+
+		// A SELF-MANAGED wiphy is the same band and a DIFFERENT fact: its own
+		// firmware sets the rules, so the country dialog could not move it and
+		// must NOT be offered — a control that cannot act. The band still stays
+		// on screen with its own reason.
+		sendWifi({
+			0: wifiRadio({
+				...MT7925,
+				regulatory: { country: "US", is6GhzLegal: false, self_managed: true },
+			}),
+		});
+		await expect(six).toHaveAttribute("data-blocked-by", "self-managed");
+		await expect(six).toHaveAttribute("data-available", "false");
+		await expect(reason).toBeVisible();
+		await expect(reason).toHaveText(/\S/);
+		await expect(page.getByTestId("wifi-open-country")).toHaveCount(0);
+	});
+
+	// ── (a, CT-1) No adapter, and a radio whose capabilities were never computed ─
+	test("a board with no Wi-Fi radio says so, and a radio with no capability report makes no capability claim at all", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		sendWifi({});
+
+		await navigateTo(page, "network");
+
+		const empty = page.getByTestId("wifi-no-adapter");
+		await expect(empty).toBeVisible({ timeout: 15_000 });
+		await expect(empty).toHaveAttribute("role", "status");
+		await expect(empty).toHaveText(/\S/);
+		await expect(page.getByTestId("wifi-capabilities")).toHaveCount(0);
+
+		// LEGACY: a REAL radio whose `capabilities` block the device never
+		// computed (no `iw` on the image, an unresolvable wiphy, a failed parse,
+		// or a backend predating the field). The row must be byte-identical to
+		// what it rendered before the strip existed — never a blank section,
+		// never a "capabilities unavailable" placeholder, and never mistaken for
+		// the no-adapter state above.
+		sendWifi({ 0: wifiRadio() });
+		await expect(page.getByTestId("open-wifi-selector-dialog")).toBeVisible();
+		await expect(page.getByTestId("wifi-no-adapter")).toHaveCount(0);
+		for (const testId of [
+			"wifi-capabilities",
+			"wifi-generation-badge",
+			"wifi-band-option",
+			"wifi-wpa3",
+			"wifi-sta-ap-combo",
+			"wifi-band-blocked-reason",
+		]) {
+			await expect(
+				page.getByTestId(testId),
+				`${testId} must contribute nothing without a capability report`,
+			).toHaveCount(0);
+		}
+	});
+
+	// ── (a) Hotspot: the security control is the DEVICE's map, the width is read-only ─
+	test("the hotspot security control offers exactly what the device derived, and the channel-width line carries no control at all", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		sendWifi({
+			0: hotspotRadio(
+				{ available_security: WPA2_ONLY, max_width_mhz: HOTSPOT_WIDTHS },
+				ROCK_RTL8852BE,
+			),
+		});
+
+		await navigateTo(page, "network");
+		const setup = page.getByTestId("open-hotspot-dialog");
+		await expect(setup).toBeEnabled({ timeout: 15_000 });
+		await setup.click();
+
+		const dialog = page.getByRole("dialog", { name: "Configure Hotspot" });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+		// ONE offered mode is not a choice, so it is STATED — never a one-item
+		// select the operator can move but not change.
+		const stated = page.getByTestId("hotspot-security-stated");
+		await expect(stated).toBeVisible();
+		await expect(stated).toContainText("WPA2 (Personal)");
+		await expect(page.getByTestId("hotspot-security-select")).toHaveCount(0);
+		await expect(page.getByTestId("hotspot-security-option-wpa3-sae")).toHaveCount(
+			0,
+		);
+
+		// READ-ONLY radio truth. The width is DISPLAYED and has no selector
+		// anywhere in this contract — NetworkManager 1.42 exposes no hotspot
+		// channel-width property, so a control could not act — and 6 GHz never
+		// appears at all, because `802-11-wireless.band` has no value for it.
+		const truth = page.getByTestId("hotspot-radio-truth");
+		await expect(truth).toBeVisible();
+		await expect(page.getByTestId("hotspot-radio-generation")).toHaveText(
+			"Wi-Fi 6",
+		);
+		await expect(page.getByTestId("hotspot-radio-width-2.4")).toContainText(
+			"40 MHz",
+		);
+		await expect(page.getByTestId("hotspot-radio-width-5")).toContainText("80 MHz");
+		await expect(page.getByTestId("hotspot-radio-width-6")).toHaveCount(0);
+		expect(
+			await truth
+				.locator('input, select, button, [role="switch"], [role="combobox"]')
+				.count(),
+			"the read-only width line must carry no interactive control",
+		).toBe(0);
+
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
+
+		// TWO offered modes → a REAL selector carrying exactly the device's map.
+		sendWifi({
+			0: hotspotRadio(
+				{ available_security: WPA2_AND_WPA3, max_width_mhz: HOTSPOT_WIDTHS },
+				ROCK_RTL8852BE,
+			),
+		});
+		await setup.click();
+		await expect(dialog).toBeVisible();
+		await expect(page.getByTestId("hotspot-security-select")).toBeVisible();
+		await expect(page.getByTestId("hotspot-security-stated")).toHaveCount(0);
+		await dialog.locator("#hotspot-security").click();
+		await expect(page.getByTestId("hotspot-security-option-wpa2")).toBeVisible();
+		await expect(
+			page.getByTestId("hotspot-security-option-wpa3-sae"),
+		).toBeVisible();
+		await page.keyboard.press("Escape");
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
+
+		// ABSENT IS NOT EMPTY. A device that derived no offering omits the map,
+		// and the dialog must then render as it did BEFORE this existed: no
+		// selector, no stated line, and no read-only radio line either.
+		sendWifi({ 0: hotspotRadio({}) });
+		await setup.click();
+		await expect(dialog).toBeVisible();
+		await expect(page.getByTestId("hotspot-security-select")).toHaveCount(0);
+		await expect(page.getByTestId("hotspot-security-stated")).toHaveCount(0);
+		await expect(page.getByTestId("hotspot-radio-truth")).toHaveCount(0);
+		// …and the dialog itself still rendered, so those three zeros are real
+		// absences rather than a dialog that failed to open.
+		await expect(dialog.locator("#hotspot-channel")).toBeVisible();
+
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
+	});
+
+	// ── (a) Bluetooth: the card gates on what the stack actually reported ───────
+	test("the Bluetooth card withholds a control it has no capability for, never blames the service for an operator's switch, and gates the audio hint on CONNECTED", async ({
+		page,
+	}) => {
+		serverConfig();
+		sendFullCaps();
+		const base = btMicPairedStatus();
+		const mic = base.devices[0];
+		expect(mic, "the shared BT fixture must carry the seeded microphone").toBeDefined();
+		if (!mic) return;
+
+		sendBluetooth(base);
+		await navigateTo(page, "network");
+
+		await expect(page.getByTestId("bluetooth-section")).toBeVisible({
+			timeout: 15_000,
+		});
+		await expect(page.getByTestId("bluetooth-enable")).toHaveAttribute(
+			"aria-checked",
+			"true",
+		);
+		await expect(page.getByTestId("bluetooth-scan")).toBeVisible();
+		await expect(page.getByTestId("bluetooth-adapter")).toHaveAttribute(
+			"data-powered",
+			"true",
+		);
+		// A CONNECTED audio-input device has a PCM behind it, so the row may point
+		// at the Live source list, and it reports the level the device published.
+		await expect(page.getByTestId("bluetooth-audio-source-hint")).toBeVisible();
+		await expect(page.getByTestId("bluetooth-chip-battery")).toBeVisible();
+
+		// STILL BONDED, NO LONGER CONNECTED. BlueZ retracts the whole `Battery1`
+		// interface on disconnect, so the chip disappears rather than retaining a
+		// level nothing measured — and the audio hint goes with it, because
+		// naming a mic with no PCM as an available source is a claim the device
+		// cannot honour. `undefined` here is the wire shape: JSON drops the key.
+		sendBluetooth({
+			...base,
+			devices: [{ ...mic, connected: false, battery: undefined }],
+		});
+		await expect(page.getByTestId("bluetooth-chip-connected")).toHaveCount(0);
+		await expect(page.getByTestId("bluetooth-chip-paired")).toBeVisible();
+		await expect(page.getByTestId("bluetooth-chip-battery")).toHaveCount(0);
+		await expect(page.getByTestId("bluetooth-audio-source-hint")).toHaveCount(0);
+
+		// NO ADAPTER: there is no capability being withheld, so the scan control
+		// contributes ZERO nodes (CT-1) rather than rendering disabled — and the
+		// cause is stated in words, never as its own dotted path.
+		sendBluetooth({
+			...base,
+			available: false,
+			unavailable: { cause: "no_adapter" },
+			adapters: [],
+			devices: [],
+		});
+		const unavailable = page.getByTestId("bluetooth-unavailable");
+		await expect(unavailable).toBeVisible();
+		await expect(unavailable).toHaveAttribute("data-cause", "no_adapter");
+		await expect(unavailable).toHaveAttribute("role", "status");
+		await expect(unavailable).toHaveText(/\S/);
+		await expect(unavailable).not.toHaveText(/network\.bluetooth/);
+		await expect(page.getByTestId("bluetooth-scan")).toHaveCount(0);
+
+		// "THE OPERATOR SWITCHED IT OFF" OUTRANKS THE STACK'S OWN CAUSE.
+		// `BluetoothStack` records an operator-disabled device as
+		// `bluez_unavailable` — true from its point of view (it is not observing
+		// BlueZ) and the opposite fact to an operator. The card must say "off",
+		// never band a healthy service as unresponsive over a setting.
+		sendBluetooth({
+			...base,
+			enabled: false,
+			available: false,
+			unavailable: { cause: "bluez_unavailable" },
+			adapters: [],
+			devices: [],
+		});
+		await expect(page.getByTestId("bluetooth-off")).toBeVisible();
+		await expect(page.getByTestId("bluetooth-unavailable")).toHaveCount(0);
+		await expect(page.getByTestId("bluetooth-enable")).toHaveAttribute(
+			"aria-checked",
+			"false",
+		);
+		await expect(page.getByTestId("bluetooth-scan")).toHaveCount(0);
+
+		// THE PAIRING-AGENT GAP is stated BEFORE the operator taps Pair — this
+		// build exports no `org.bluez.Agent1`, so it is the state on every real
+		// board — but only while an unpaired device is on screen, or it is a
+		// warning about nothing. Pairing is still OFFERED: a peer needing no
+		// authorization can complete one.
+		const unpaired: WireDevice = {
+			...mic,
+			path: `${BT_ADAPTER_PATH}/dev_AA_BB_CC_DD_EE_22`,
+			address: "AA:BB:CC:DD:EE:22",
+			name: "Pixel 8 Pro",
+			paired: false,
+			trusted: false,
+			connected: false,
+			battery: undefined,
+		};
+		const agentGap = {
+			registered: false,
+			isDefaultAgent: false,
+			reason: "exporter_unavailable",
+		};
+		sendBluetooth({ ...base, agent: agentGap, devices: [unpaired] });
+		await expect(page.getByTestId("bluetooth-agent-gap")).toBeVisible();
+		await expect(page.getByTestId("bluetooth-action-pair")).toBeVisible();
+
+		sendBluetooth({ ...base, agent: agentGap });
+		await expect(page.getByTestId("bluetooth-agent-gap")).toHaveCount(0);
+	});
+
+	// ── (b) The debt cross-check extended over the Wi-Fi + Bluetooth surfaces ───
+	test("every rendered [data-debt-id] on the Wi-Fi and Bluetooth surfaces maps to an open register entry", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		const openIds = parseOpenDebtIds(fs.readFileSync(REGISTER_PATH, "utf8"));
+		expect(openIds.size).toBeGreaterThan(0);
+
+		serverConfig();
+		sendFullCaps();
+		sendWifi({
+			0: wifiRadio(MT7925),
+			1: hotspotRadio(
+				{ available_security: WPA2_AND_WPA3, max_width_mhz: HOTSPOT_WIDTHS },
+				ROCK_RTL8852BE,
+			),
+		});
+		sendBluetooth(btMicPairedStatus());
+
+		await navigateTo(page, "network");
+		await expect(page.getByTestId("wifi-capabilities").first()).toBeVisible({
+			timeout: 15_000,
+		});
+		await expect(page.getByTestId("bluetooth-section")).toBeVisible();
+		await page.getByTestId("open-hotspot-dialog").click();
+		const dialog = page.getByRole("dialog", { name: "Configure Hotspot" });
+		await expect(dialog).toBeVisible({ timeout: 15_000 });
+
+		const domIds = await collectDomDebtIds(page);
+		expect(findOrphanDebtIds(domIds, openIds)).toEqual([]);
+
+		// THESE SURFACES CARRY NO DEBT MARKER, and that is a POSITIVE claim
+		// rather than a gap: nothing the dynamic-wifi-bt-foundation effort
+		// shipped is a coming-soon affordance. LE Audio is out of v1 scope and is
+		// recorded in docs/TECHNICAL_DEBT.md as a MARKER-LESS entry precisely so
+		// it never becomes a fake affordance here. Asserting the emptiness is
+		// what makes a future `ComingSoon` on these surfaces a deliberate,
+		// visible decision instead of a silent arrival.
+		expect(
+			domIds,
+			`the Wi-Fi/Bluetooth surfaces rendered a debt marker: ${domIds.join(", ")}. If that is intentional, its register entry must be \`open\` and this expectation updated.`,
+		).toEqual([]);
+
+		// NON-VACUITY: an empty result could equally mean the collector never
+		// reached the open dialog, which is a PORTAL. Plant a controlled orphan
+		// inside it and prove both halves see it.
+		const planted = "TD-wifi-bt-probe";
+		expect(openIds.has(planted)).toBe(false);
+		await dialog.evaluate((node, id) => {
+			const probe = document.createElement("span");
+			probe.setAttribute("data-debt-id", id);
+			probe.dataset.wifiBtProbe = "true";
+			node.appendChild(probe);
+		}, planted);
+		const withProbe = await collectDomDebtIds(page);
+		expect(withProbe).toContain(planted);
+		expect(findOrphanDebtIds(withProbe, openIds)).toEqual([planted]);
+		await page.evaluate(() => {
+			document.querySelector('[data-wifi-bt-probe="true"]')?.remove();
+		});
+
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
 	});
 });
 

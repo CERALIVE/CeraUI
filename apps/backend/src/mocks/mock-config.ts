@@ -20,6 +20,7 @@ export type MockScenario =
 	| "multi-modem-wifi"
 	| "streaming-active"
 	| "modem-pin-locked"
+	| "bt-mic-paired"
 	| "caps-full"
 	| "engine-starting"
 	| "engine-unavailable";
@@ -45,12 +46,40 @@ export interface ScenarioCapabilities {
 	deviceModes?: Record<string, DeviceModeGroup>;
 }
 
+/**
+ * The Bluetooth shape a scenario simulates, read by `providers/bluetooth.ts`.
+ *
+ * ABSENT means the scenario simulates NO Bluetooth at all — the honest dev-host
+ * floor, reported as the `emulated` cause. It is deliberately not the same as
+ * `{adapter:false}` (a board that HAS the stack and no controller) or
+ * `{enabled:false}` (a controller the operator switched off): those are three
+ * different sentences to an operator, and the BlueZ path keeps them apart.
+ */
+export interface ScenarioBluetooth {
+	/** Whether the board carries a controller at all. */
+	adapter: boolean;
+	/** The operator's persisted preference — the gate every mutation checks. */
+	enabled: boolean;
+	/** Seed the BT mic already paired + trusted + connected (battery 80%). */
+	micPaired: boolean;
+	/**
+	 * Whether an `org.bluez.Agent1` is registered.
+	 *
+	 * Every REAL device answers `false` today (this build ships no D-Bus object
+	 * server, so `agent.reason` is `exporter_unavailable`). The scenarios seed
+	 * `true` so the pairing surface is reachable in dev at all; the honest gap is
+	 * driven through `setMockBtAgentRegistered()`.
+	 */
+	agent: boolean;
+}
+
 export interface ScenarioConfig {
 	modems: number;
 	wifi: boolean;
 	streaming: boolean;
 	description: string;
 	capabilities?: ScenarioCapabilities;
+	bluetooth?: ScenarioBluetooth;
 }
 
 export const scenarios: Record<MockScenario, ScenarioConfig> = {
@@ -64,11 +93,21 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 		modems: 3,
 		wifi: true,
 		streaming: false,
-		description: "3 modems (4G/5G mix), WiFi with hotspot capability",
+		description:
+			"3 modems (4G/5G mix), WiFi with hotspot capability, Bluetooth on with nothing paired",
 		// Dev default resolves the FULL engine profile (H265 + hw accel +
 		// audio-capable HDMI source) so the Live UI exercises every capability-gated
 		// control out of the box. engine-starting / engine-unavailable keep the floor.
 		capabilities: { fullProfile: true },
+		// BT-present with an EMPTY registry: the dev default is the state a board
+		// spends most of its life in, so the scan → discover → pair flow is what a
+		// developer lands on rather than a pre-populated list nobody had to build.
+		bluetooth: {
+			adapter: true,
+			enabled: true,
+			micPaired: false,
+			agent: true,
+		},
 	},
 	"streaming-active": {
 		modems: 2,
@@ -87,6 +126,23 @@ export const scenarios: Record<MockScenario, ScenarioConfig> = {
 			"2 modems, WiFi off — modem 0 SIM PIN-locked (fixture PIN 0000) to exercise the SIM unlock/PUK flow in dev",
 		// modem 0 seeded lock:"pin-locked" scenario-conditionally in initMockService
 		// (mock-service.ts); no other scenario seeds a locked SIM (would auto-open SimUnlockDialog).
+	},
+	"bt-mic-paired": {
+		modems: 1,
+		wifi: true,
+		streaming: false,
+		description:
+			"Bluetooth on with an HFP mic already paired, trusted and connected (battery 80%) — the steady state a source surface renders",
+		// The already-bonded arm of the BT surface. It is a SEPARATE scenario rather
+		// than a flag on the default one because the two exercise opposite halves:
+		// multi-modem-wifi has to be scanned into existence, this one is what an
+		// operator comes back to on the next boot.
+		bluetooth: {
+			adapter: true,
+			enabled: true,
+			micPaired: true,
+			agent: true,
+		},
 	},
 	"caps-full": {
 		modems: 2,

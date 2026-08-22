@@ -17,6 +17,8 @@
 
 /* NetworkManager / nmcli based Wifi Manager */
 
+import type { WifiAdapterCapabilities } from "@ceraui/rpc/schemas";
+
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
@@ -30,7 +32,10 @@ import {
 	mockWifiUuidForSsid,
 	shouldUseMocks,
 } from "../../mocks/mock-service.ts";
-import { getMockHotspotConfig } from "../../mocks/providers/wifi.ts";
+import {
+	getMockHotspotClients,
+	getMockHotspotConfig,
+} from "../../mocks/providers/wifi.ts";
 import {
 	type ConnectionUUID,
 	type MacAddress,
@@ -41,13 +46,22 @@ import {
 	nmConnsGet,
 	nmcliParseSep,
 	nmDisconnect,
+	parseNmConnActivated,
+	parseNmConnAddUuid,
 } from "../network/network-manager.ts";
+import { logParseError } from "../system/cli-parse.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import {
 	broadcastMsg,
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
+import {
+	getWifiCapabilitiesForInterface,
+	getWifiLinkTelemetryForInterface,
+	refreshWifiLinkTelemetry,
+	type WifiLinkTelemetry,
+} from "./wifi-capabilities.ts";
 import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
@@ -57,8 +71,19 @@ import {
 	wifiUpdateScanResult,
 } from "./wifi-connections.ts";
 import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
+import {
+	buildHotspotClients,
+	getHotspotClientsForInterface,
+	type HotspotClients,
+} from "./wifi-hotspot-clients.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
+import {
+	getHotspotSecurityMap,
+	type HotspotBandMaxWidth,
+	offeredHotspotMaxWidth,
+	offeredHotspotSecurity,
+} from "./wifi-hotspot-security.ts";
 import {
 	canHotspot,
 	isApMode,
@@ -73,6 +98,11 @@ import {
 	type WifiInterface,
 	type WifiInterfaceId,
 } from "./wifi-interfaces.ts";
+import {
+	planWifiStationJoin,
+	saeActivateArgs,
+	type WifiStationJoinPlan,
+} from "./wifi-station-security.ts";
 
 type WifiConnectMessage = {
 	connect: ConnectionUUID;
@@ -87,6 +117,7 @@ type WifiNewMessage = {
 		device: WifiInterfaceId;
 		ssid: SSID;
 		password?: string;
+		security?: string;
 	};
 };
 
@@ -128,13 +159,25 @@ export type WifiInterfaceResponseMessage = Pick<
 	// uses); the real path coerces BaseWifiInterface.conn's null to "" to match.
 	conn: string;
 	available?: Array<WifiNetwork>;
-	hotspot?: Pick<WifiHotspot, "name" | "password" | "channel"> & {
+	hotspot?: Pick<WifiHotspot, "name" | "password" | "channel" | "security"> & {
 		available_channels: Record<string, { name: string }>;
+		available_security: Record<string, { name: string }>;
+		// DISPLAY ONLY — there is no configurable width in this contract.
+		max_width_mhz?: HotspotBandMaxWidth;
+		// Absent until the AP's own station dump has been read once; a read that
+		// found nobody publishes an explicit `count: 0`.
+		clients?: HotspotClients;
 		warnings?: string[];
 	};
 	supports_hotspot?: true;
 	mode?: "station" | "hotspot";
 	transition?: "activating" | "deactivating";
+	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
+	// failed its named parser); once computed it rides EVERY tick.
+	capabilities?: WifiAdapterCapabilities;
+	// The STATION leg's live negotiated rate. Absent on an AP-mode radio, on a
+	// station holding no connection, and until the first read has landed.
+	link?: WifiLinkTelemetry;
 };
 
 export function wifiBuildMsg() {
@@ -163,6 +206,12 @@ export function wifiBuildMsg() {
 							"auto_24",
 							"auto_50",
 						]),
+						// A dev host proves no SAE, so the mock offers exactly what
+						// the real derivation would offer for an unprovable radio.
+						available_security: getHotspotSecurityMap(
+							offeredHotspotSecurity(undefined),
+						),
+						clients: buildHotspotClients(getMockHotspotClients(radio.device)),
 					},
 				} satisfies WifiInterfaceResponseMessage;
 				return;
@@ -201,6 +250,10 @@ export function wifiBuildMsg() {
 	}
 
 	const ifs: Record<string, WifiInterfaceResponseMessage> = {};
+	// The interfaces eligible for a link read, collected as the rows are built
+	// so the refresh below is driven by exactly what this build decided is a
+	// connected station — never by a guess made inside the reader.
+	const stationIfnames: string[] = [];
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const macAddress in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
@@ -217,6 +270,15 @@ export function wifiBuildMsg() {
 		ifs[id] = entry;
 
 		if (isApMode(wifiInterface)) {
+			// One capability read backs both derivations, so the security the
+			// device OFFERS and the width it REPORTS can never describe different
+			// radios.
+			const hotspotCaps = getWifiCapabilitiesForInterface(wifiInterface.ifname);
+			const maxWidthMhz = offeredHotspotMaxWidth(hotspotCaps);
+			// Asked for THIS interface, which is the AP's own: a shared-wiphy board
+			// would otherwise report the station leg's peers as hotspot clients.
+			const clients = getHotspotClientsForInterface(wifiInterface.ifname);
+
 			const hotspot: NonNullable<WifiInterfaceResponseMessage["hotspot"]> = {
 				...(wifiInterface.hotspot.name !== undefined
 					? { name: wifiInterface.hotspot.name }
@@ -228,9 +290,19 @@ export function wifiBuildMsg() {
 					wifiInterface.hotspot.availableChannels,
 					wifiInterface.hotspot.derivedChannels ?? [],
 				),
+				available_security: getHotspotSecurityMap(
+					offeredHotspotSecurity(hotspotCaps),
+				),
 				...(wifiInterface.hotspot.channel !== undefined
 					? { channel: wifiInterface.hotspot.channel }
 					: {}),
+				...(wifiInterface.hotspot.security !== undefined
+					? { security: wifiInterface.hotspot.security }
+					: {}),
+				...(Object.keys(maxWidthMhz).length > 0
+					? { max_width_mhz: maxWidthMhz }
+					: {}),
+				...(clients !== undefined ? { clients } : {}),
 			};
 
 			const warnings = Object.keys(wifiInterface.hotspot.warnings);
@@ -244,13 +316,34 @@ export function wifiBuildMsg() {
 			if (canHotspot(wifiInterface)) {
 				entry.supports_hotspot = true;
 			}
+			// Only a station leg that HOLDS a connection has a negotiated rate to
+			// report, and the AP branch above never reaches here — so `iw link` is
+			// structurally unreachable for a hotspot radio rather than filtered
+			// out of one, which is what keeps a shared-wiphy board honest.
+			if (wifiInterface.conn !== null) {
+				stationIfnames.push(wifiInterface.ifname);
+				const link = getWifiLinkTelemetryForInterface(wifiInterface.ifname);
+				if (link !== undefined) {
+					entry.link = link;
+				}
+			}
 		}
 
 		entry.mode = isApMode(wifiInterface) ? "hotspot" : "station";
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
 			entry.transition = wifiInterface.hotspot.transition;
 		}
+
+		const capabilities = getWifiCapabilitiesForInterface(wifiInterface.ifname);
+		if (capabilities !== undefined) {
+			entry.capabilities = capabilities;
+		}
 	}
+
+	// Fire-and-forget, after the snapshot is assembled: the read is bounded by
+	// its own TTL and never throws, so a broadcast is never blocked on a spawn
+	// and the next build serves whatever this one produced.
+	void refreshWifiLinkTelemetry(stationIfnames);
 
 	return ifs;
 }
@@ -436,10 +529,35 @@ async function wifiForget(uuid: ConnectionUUID) {
 	}
 }
 
-async function wifiDeleteFailedConns() {
-	const connections = (await nmConnsGet(
-		"uuid,type,timestamp",
-	)) as Array<string>;
+/*
+  `nmConnsGet` REPORTS a failure by resolving `undefined` — it never throws — so
+  a missing or erroring nmcli arrives here as a non-array, and the retired
+  `as Array<string>` cast turned that into `undefined is not an object`. This is
+  best-effort cleanup on `runWifiNew`'s FAILURE path, so the crash replaced the
+  typed refusal the operator was owed with an unhandled rejection. A sweep that
+  cannot enumerate has nothing to delete: say so and return.
+*/
+export type WifiFailedConnsDeps = {
+	listConns: (fields: string) => Promise<string[] | undefined>;
+	deleteConn: (uuid: ConnectionUUID) => Promise<boolean>;
+};
+
+const defaultFailedConnsDeps: WifiFailedConnsDeps = {
+	listConns: nmConnsGet,
+	deleteConn: nmConnDelete,
+};
+
+export async function wifiDeleteFailedConns(
+	deps: WifiFailedConnsDeps = defaultFailedConnsDeps,
+) {
+	const connections = await deps.listConns("uuid,type,timestamp");
+	if (!Array.isArray(connections)) {
+		logger.warn(
+			"wifiDeleteFailedConns: could not list connections; skipping cleanup",
+		);
+		return;
+	}
+
 	for (const connection of connections) {
 		const [uuid, type, ts] = nmcliParseSep(connection) as [
 			string,
@@ -448,13 +566,138 @@ async function wifiDeleteFailedConns() {
 		];
 		if (type !== "802-11-wireless") continue;
 		if (ts === "0") {
-			await nmConnDelete(uuid);
+			await deps.deleteConn(uuid);
 		}
 	}
 }
 
+export type NmcliRun = {
+	readonly stdout: string;
+	readonly stderr: string;
+	readonly exitCode: number;
+};
+
+export type WifiJoinNmcliRunner = (args: string[]) => Promise<NmcliRun>;
+
+async function spawnJoinNmcli(args: string[]): Promise<NmcliRun> {
+	try {
+		const proc = Bun.spawn(["nmcli", ...args], {
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		// bounded-command (spawn-policy): cap a hung nmcli connect at the
+		// wall-clock budget so a stuck join never leaves the request pending
+		// forever.
+		const killTimer = setTimeout(() => {
+			try {
+				proc.kill();
+			} catch {
+				// best-effort: the process may have already exited
+			}
+		}, DEFAULT_SPAWN_TIMEOUT_MS);
+		const [stdout, stderr] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+		]);
+		const exitCode = await proc.exited;
+		clearTimeout(killTimer);
+		return { stdout, stderr, exitCode };
+	} catch (err) {
+		// A missing/unspawnable nmcli must reach the operator as a failed join
+		// rather than an unhandled rejection on this `void`-dispatched path.
+		return {
+			stdout: "",
+			stderr: err instanceof Error ? err.message : String(err),
+			exitCode: 1,
+		};
+	}
+}
+
+let joinNmcliRunner: WifiJoinNmcliRunner = spawnJoinNmcli;
+
+/** Test seam, mirroring `setRegdomainRunner` / `setSshServiceRunner`. */
+export function setWifiJoinNmcliRunner(
+	runner: WifiJoinNmcliRunner | null,
+): void {
+	joinNmcliRunner = runner ?? spawnJoinNmcli;
+}
+
+type WifiJoinOutcome = {
+	readonly ok: boolean;
+	readonly uuid?: string;
+	readonly authFailed: boolean;
+	readonly stdout: string;
+	readonly stderr: string;
+};
+
+const wantedSecrets = (output: string) =>
+	output.includes("Secrets were required, but not provided");
+
+async function joinViaNmAuto(args: string[]): Promise<WifiJoinOutcome> {
+	const { stdout, stderr, exitCode } = await joinNmcliRunner(args);
+	if (exitCode !== 0 || /^Error:/.test(stdout)) {
+		return { ok: false, authFailed: wantedSecrets(stdout), stdout, stderr };
+	}
+	const success = stdout.match(/successfully activated with '(.+)'/);
+	const uuid = success?.[1];
+	return uuid === undefined
+		? { ok: true, authFailed: false, stdout, stderr }
+		: { ok: true, uuid, authFailed: false, stdout, stderr };
+}
+
+/**
+ * A failed activation leaves a never-activated profile behind; the caller's
+ * `wifiDeleteFailedConns()` removes it, because NetworkManager reports its
+ * timestamp as `0`.
+ */
+async function joinViaSaeProfile(addArgs: string[]): Promise<WifiJoinOutcome> {
+	const added = await joinNmcliRunner(addArgs);
+	if (added.exitCode !== 0) {
+		return {
+			ok: false,
+			authFailed: false,
+			stdout: added.stdout,
+			stderr: added.stderr,
+		};
+	}
+
+	const parsed = parseNmConnAddUuid(added.stdout);
+	if (!parsed.ok) {
+		logParseError(parsed);
+		return {
+			ok: false,
+			authFailed: false,
+			stdout: added.stdout,
+			stderr: added.stderr,
+		};
+	}
+
+	const uuid = parsed.value;
+	const activated = await joinNmcliRunner(saeActivateArgs(uuid));
+	if (activated.exitCode !== 0 || !parseNmConnActivated(activated.stdout)) {
+		return {
+			ok: false,
+			uuid,
+			authFailed: wantedSecrets(`${activated.stdout}${activated.stderr}`),
+			stdout: activated.stdout,
+			stderr: activated.stderr,
+		};
+	}
+	return {
+		ok: true,
+		uuid,
+		authFailed: false,
+		stdout: activated.stdout,
+		stderr: activated.stderr,
+	};
+}
+
 function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
-	if (!msg.device || !msg.ssid) return;
+	// NOT `!msg.device`: `wifiIfId` starts at 0, so the first adapter on every
+	// single-radio board is id 0 and a truthiness guard drops it — no nmcli ran,
+	// while the procedure's mock branch still fabricated success, so dev/e2e
+	// stayed green while hardware could not join a new network at all.
+	if (msg.device === undefined || !msg.ssid) return;
 
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return;
@@ -462,101 +705,67 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
 
-	const args = [
-		"-w",
-		"15",
-		"device",
-		"wifi",
-		"connect",
-		msg.ssid,
-		"ifname",
-		wifiInterface.ifname,
-	];
-
-	if (msg.password) {
-		args.push("password");
-		args.push(msg.password);
-	}
+	const plan = planWifiStationJoin({
+		ssid: msg.ssid,
+		ifname: wifiInterface.ifname,
+		password: msg.password,
+		security: msg.security,
+	});
 
 	const senderId = getSocketSenderId(conn);
 
-	void runWifiNew(conn, msg, macAddress, args, senderId);
+	void runWifiNew(conn, msg, macAddress, plan, senderId);
 }
 
 async function runWifiNew(
 	conn: MessageSocket,
 	msg: WifiNewMessage["new"],
 	macAddress: string,
-	args: string[],
+	plan: WifiStationJoinPlan,
 	senderId: ReturnType<typeof getSocketSenderId>,
 ) {
-	const proc = Bun.spawn(["nmcli", ...args], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	// bounded-command (spawn-policy): cap a hung nmcli connect at the wall-clock
-	// budget so a stuck join never leaves the request pending forever.
-	const killTimer = setTimeout(() => {
-		try {
-			proc.kill();
-		} catch {
-			// best-effort: the process may have already exited
-		}
-	}, DEFAULT_SPAWN_TIMEOUT_MS);
-	const [stdout, stderr] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-	]);
-	const exitCode = await proc.exited;
-	clearTimeout(killTimer);
-	const error = exitCode !== 0;
+	const outcome =
+		plan.mode === "sae"
+			? await joinViaSaeProfile(plan.addArgs)
+			: await joinViaNmAuto(plan.connectArgs);
 
-	if (error || stdout.match("^Error:")) {
+	if (!outcome.ok) {
 		await wifiDeleteFailedConns();
 
-		if (stdout.match("Secrets were required, but not provided")) {
-			conn.send(
-				buildMsg(
-					"wifi",
-					{ new: { error: "auth", device: msg.device } },
-					senderId,
-				),
-			);
-		} else {
-			conn.send(
-				buildMsg(
-					"wifi",
-					{ new: { error: "generic", device: msg.device } },
-					senderId,
-				),
-			);
-		}
-	} else {
-		const success = stdout.match(/successfully activated with '(.+)'/);
-		if (success?.[1]) {
-			const uuid = success[1];
-			if (!(await nmConnSetWifiMacAddress(uuid, macAddress))) {
-				logger.warn(
-					"Failed to set the MAC address for the newly created connection",
-				);
-			}
-
-			await wifiUpdateSavedConns();
-			await wifiUpdateScanResult();
-
-			conn.send(
-				buildMsg(
-					"wifi",
-					{ new: { success: true, device: msg.device } },
-					senderId,
-				),
-			);
-		} else {
-			logger.warn(
-				`wifiNew: no error but not matching a successful connection msg in:\n${stdout}\n${stderr}`,
-			);
-		}
+		conn.send(
+			buildMsg(
+				"wifi",
+				{
+					new: {
+						error: outcome.authFailed ? "auth" : "generic",
+						device: msg.device,
+					},
+				},
+				senderId,
+			),
+		);
+		return;
 	}
+
+	if (outcome.uuid === undefined) {
+		logger.warn(
+			`wifiNew: no error but not matching a successful connection msg in:\n${outcome.stdout}\n${outcome.stderr}`,
+		);
+		return;
+	}
+
+	if (!(await nmConnSetWifiMacAddress(outcome.uuid, macAddress))) {
+		logger.warn(
+			"Failed to set the MAC address for the newly created connection",
+		);
+	}
+
+	await wifiUpdateSavedConns();
+	await wifiUpdateScanResult();
+
+	conn.send(
+		buildMsg("wifi", { new: { success: true, device: msg.device } }, senderId),
+	);
 }
 
 async function wifiConnect(conn: MessageSocket, uuid: ConnectionUUID) {

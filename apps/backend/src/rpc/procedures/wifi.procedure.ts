@@ -204,6 +204,7 @@ export const wifiConnectNewProcedure = authedProcedure
 				device: Number(input.device),
 				ssid: input.ssid,
 				password: input.password,
+				...(input.security !== undefined ? { security: input.security } : {}),
 			},
 		});
 		if (shouldUseMocks()) {
@@ -343,6 +344,9 @@ export const hotspotConfigureProcedure = authedProcedure
 						name: input.name,
 						password: input.password,
 						channel: input.channel,
+						...(input.security !== undefined
+							? { security: input.security }
+							: {}),
 					},
 				},
 			});

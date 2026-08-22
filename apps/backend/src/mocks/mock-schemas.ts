@@ -22,6 +22,8 @@ import type { RuntimeErrorEvent } from "@ceralive/cerastream";
 import {
 	AddonDescriptorSchema,
 	AddonStateSchema,
+	bluetoothAdapterSchema,
+	bluetoothDeviceSchema,
 	type DeviceModeGroup,
 	deviceModeGroupSchema,
 	framerateSchema,
@@ -32,6 +34,10 @@ import {
 import { z } from "zod";
 import { mockModems, mockWifiNetworks, mockWifiRadios } from "./mock-config.ts";
 import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
+import {
+	mockBtAdapterFixtures,
+	mockBtDeviceFixtures,
+} from "./providers/bluetooth.ts";
 import { MOCK_DEVICE_STATS } from "./providers/device-stats.ts";
 import {
 	MOCK_COG_DISPLAY_DESCRIPTOR,
@@ -143,6 +149,38 @@ export const mockDeviceModesSchema = z.record(
 	deviceModeGroupSchema,
 );
 export type MockDeviceModes = Record<string, DeviceModeGroup>;
+
+/**
+ * A mock Bluetooth device fixture: the WIRE shape, plus the two things a fixture
+ * must be concrete about.
+ *
+ * `bluetoothDeviceSchema.address` is `z.string().min(1)` because BlueZ publishes
+ * an address only once it has one, and the wire must be able to say "not yet".
+ * A FIXTURE has no such excuse: it is a device somebody wrote down, so it must
+ * carry a real 48-bit MAC and a path that encodes it. BlueZ derives a device
+ * path from the address (`…/dev_AA_BB_CC_DD_EE_FF`), so a fixture whose two
+ * disagree describes a device that cannot exist — and, worse, one whose path
+ * would resolve to a DIFFERENT device on a board. Both constraints exist so a
+ * drifted MAC fails loudly at init instead of surfacing as a mock that pairs the
+ * wrong row.
+ */
+export const mockBtDeviceSchema = bluetoothDeviceSchema
+	.extend({ address: macAddressSchema })
+	.refine((d) => d.path.endsWith(bluezDeviceSuffix(d.address)), {
+		message: "Device path must encode its own address (…/dev_AA_BB_…)",
+		path: ["path"],
+	});
+export type MockBtDevice = z.infer<typeof mockBtDeviceSchema>;
+
+/** The same concreteness rule for a controller — an adapter always has a MAC. */
+export const mockBtAdapterSchema = bluetoothAdapterSchema.extend({
+	address: macAddressSchema,
+});
+export type MockBtAdapter = z.infer<typeof mockBtAdapterSchema>;
+
+function bluezDeviceSuffix(address: string): string {
+	return `/dev_${address.toUpperCase().replace(/:/g, "_")}`;
+}
 
 // ─── Runtime mock-state schemas ──────────────────────────────────────────────
 // These describe the mutable session-state slots seeded by `initMockService`.
@@ -409,6 +447,23 @@ export function validateMockFixtures(): void {
 	if (!deviceStatsResult.success) {
 		errors.push(...formatIssues("MOCK_DEVICE_STATS", deviceStatsResult.error));
 	}
+
+	// The BT fixtures are validated through their PRODUCTION wire projection, so
+	// this checks the fixture data and `projectBluetoothDevice` in one step — a
+	// projection that stopped emitting a schema-valid row fails at init too.
+	mockBtAdapterFixtures().forEach((adapter, index) => {
+		const result = mockBtAdapterSchema.safeParse(adapter);
+		if (!result.success) {
+			errors.push(...formatIssues(`mockBtAdapters[${index}]`, result.error));
+		}
+	});
+
+	mockBtDeviceFixtures().forEach((device, index) => {
+		const result = mockBtDeviceSchema.safeParse(device);
+		if (!result.success) {
+			errors.push(...formatIssues(`mockBtDevices[${index}]`, result.error));
+		}
+	});
 
 	if (errors.length > 0) {
 		throw new Error(

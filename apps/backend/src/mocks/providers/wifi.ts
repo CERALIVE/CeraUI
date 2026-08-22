@@ -84,6 +84,37 @@ export function setMockHotspotConfig(
 	mockHotspotConfigs[device] = next;
 }
 
+/**
+ * A dev host has no AP and no `iw`, so the real station-dump reader publishes
+ * nothing there. This roster is the ONE mocking mechanism for the joined-client
+ * list — deliberately non-empty, because an empty one is indistinguishable from
+ * the reader never having run and would leave the surface unexercisable in dev.
+ */
+const mockHotspotClients: Record<string, MockHotspotClient[]> = {
+	wlan0: [
+		{
+			mac: "8c:85:90:1a:2b:3c",
+			signal_dbm: -47,
+			tx_bitrate_mbps: 144.4,
+			rx_bitrate_mbps: 130,
+		},
+		// No bitrate yet: proves an absent reading renders as absent, never a 0.
+		{ mac: "3c:22:fb:0e:91:7d", signal_dbm: -71 },
+	],
+	wlan1: [],
+};
+
+export interface MockHotspotClient {
+	mac: string;
+	signal_dbm?: number;
+	tx_bitrate_mbps?: number;
+	rx_bitrate_mbps?: number;
+}
+
+export function getMockHotspotClients(device: string): MockHotspotClient[] {
+	return mockHotspotClients[device] ?? [];
+}
+
 function mockHotspotDeviceForUuid(uuid: string): string | undefined {
 	for (const device in mockHotspotConfigs) {
 		if (mockHotspotConfigs[device]?.uuid === uuid) return device;

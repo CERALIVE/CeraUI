@@ -15,6 +15,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import type { WifiAdapterCapabilities } from "@ceraui/rpc/schemas";
+
 import { setNetifDupIpSuppression } from "../network/network-interfaces.ts";
 import {
 	nmConnect,
@@ -26,6 +28,7 @@ import type { MessageSocket } from "../ui/message-socket.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
+import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	type DerivedApChannel,
 	isChannelOffered,
@@ -38,6 +41,13 @@ import {
 	wifiRescan,
 } from "./wifi-connections.ts";
 import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
+import {
+	DEFAULT_HOTSPOT_SECURITY,
+	type HotspotSecurityId,
+	isSecurityOffered,
+	nmSettingsForSecurity,
+	offeredHotspotSecurity,
+} from "./wifi-hotspot-security.ts";
 import {
 	HOTSPOT_UP_TO,
 	isHotspot,
@@ -105,26 +115,75 @@ async function stopHotspotLocked(
 
 // ─── config ──────────────────────────────────────────────────────────────────
 
+/**
+ * Effectful surface of the reconfigure path, injected so the whole flow —
+ * including the exact nmcli field set a WPA3 selection produces — is drivable
+ * without a NetworkManager on the host. Mirrors {@link HotspotActivationDeps}.
+ */
+export type HotspotConfigDeps = {
+	nmConnSetFields: (
+		uuid: string,
+		fields: Record<string, string>,
+	) => Promise<unknown>;
+	nmConnect: (uuid: string, timeout?: number) => Promise<unknown>;
+	wifiUpdateSavedConns: () => Promise<void>;
+	broadcastState: () => void;
+	rememberCredentials: (
+		macAddress: string,
+		credentials: {
+			ssid: string;
+			password: string;
+			channel: WifiChannel;
+			conn?: string;
+		},
+	) => void;
+	/** The adapter's own capability read — the sole evidence for a WPA3 offer. */
+	getCapabilities: (ifname: string) => WifiAdapterCapabilities | undefined;
+};
+
+export const defaultHotspotConfigDeps: HotspotConfigDeps = {
+	nmConnSetFields,
+	nmConnect,
+	wifiUpdateSavedConns,
+	broadcastState: broadcastWifiState,
+	rememberCredentials: rememberHotspotCredentials,
+	getCapabilities: getWifiCapabilitiesForInterface,
+};
+
+function offeredSecurityFor(
+	wifiInterface: WifiInterfaceWithHotspot,
+	deps: HotspotConfigDeps,
+): HotspotSecurityId[] {
+	return offeredHotspotSecurity(deps.getCapabilities(wifiInterface.ifname));
+}
+
 function nmConnSetHotspotFields(
 	uuid: string,
 	name: string,
 	password: string,
 	channel: string,
+	security: HotspotSecurityId,
 	derived: readonly DerivedApChannel[],
+	offeredSecurity: readonly HotspotSecurityId[],
+	deps: HotspotConfigDeps,
 ) {
 	// An underived channel has no band/number mapping BY CONSTRUCTION, so an
 	// illegal channel can never reach nmcli even if validation were bypassed.
 	const nmSettings = nmSettingsForChannel(channel, derived);
 	if (!nmSettings) return;
+	// Same rule for security: an unoffered mode resolves to no field set at all.
+	const securityFields = nmSettingsForSecurity(security, offeredSecurity);
+	if (!securityFields) return;
 
 	const settingsToChange = {
 		"802-11-wireless.ssid": name,
 		"802-11-wireless-security.psk": password,
 		"802-11-wireless.band": nmSettings.nmBand,
 		"802-11-wireless.channel": nmSettings.nmChannel,
+		...securityFields,
 	};
 
-	return nmConnSetFields(uuid, settingsToChange);
+	return deps.nmConnSetFields(uuid, settingsToChange);
 }
 
 function isHotspotConfigComplete(
@@ -143,6 +202,7 @@ function isHotspotConfigComplete(
 export async function wifiHotspotConfig(
 	conn: MessageSocket,
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["config"]>,
+	deps: HotspotConfigDeps = defaultHotspotConfigDeps,
 ) {
 	// Find the Wifi interface
 	const macAddress = getMacAddressForWifiInterface(msg.device);
@@ -204,9 +264,30 @@ export async function wifiHotspotConfig(
 		return;
 	}
 
+	// The offered set is DERIVED from THIS adapter's capability read, so this
+	// rejects a mode that is merely well-formed as well as one the radio has
+	// never been shown to support. An omitted selection keeps the current one.
+	const offeredSecurity = offeredSecurityFor(wifiInterface, deps);
+	if (
+		msg.security !== undefined &&
+		(typeof msg.security !== "string" ||
+			!isSecurityOffered(msg.security, offeredSecurity))
+	) {
+		conn.send(
+			buildMsg(
+				"wifi",
+				{ hotspot: { config: { device: msg.device, error: "security" } } },
+				senderId,
+			),
+		);
+		return;
+	}
+
 	const name = msg.name;
 	const password = msg.password;
 	const channel = msg.channel;
+	const security =
+		msg.security ?? wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
 	// Serialize the reconfigure against other hotspot operations on this device.
 	const lock = await withDeviceLock(wifiInterface.ifname, () =>
@@ -216,6 +297,8 @@ export async function wifiHotspotConfig(
 			name,
 			password,
 			channel,
+			security,
+			deps,
 		),
 	);
 
@@ -260,9 +343,14 @@ export async function reconfigureHotspotForRegdomain(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	channel: WifiChannel,
+	deps: HotspotConfigDeps = defaultHotspotConfigDeps,
 ): Promise<boolean> {
 	const { name, password } = wifiInterface.hotspot;
 	if (!name || !password) return false;
+
+	// A domain change moves the CHANNEL and nothing else, so the security mode
+	// is carried through unexamined rather than re-derived.
+	const security = wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
 	const lock = await withDeviceLock(wifiInterface.ifname, () =>
 		reconfigureHotspotLocked(
@@ -271,6 +359,8 @@ export async function reconfigureHotspotForRegdomain(
 			name,
 			password,
 			channel,
+			security,
+			deps,
 		),
 	);
 
@@ -285,8 +375,19 @@ async function reconfigureHotspotLocked(
 	name: string,
 	password: string,
 	channel: string,
+	security: HotspotSecurityId,
+	deps: HotspotConfigDeps,
 ): Promise<ReconfigureResult> {
 	const derived = wifiInterface.hotspot.derivedChannels ?? [];
+	const offeredSecurity = offeredSecurityFor(wifiInterface, deps);
+	// The mode already in force is always restorable, even on an adapter whose
+	// capability read has since stopped proving it — a rollback must never be
+	// refused by the offering that admitted the value in the first place.
+	const previousSecurity =
+		wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
+	const restorableSecurity = offeredSecurity.includes(previousSecurity)
+		? offeredSecurity
+		: [...offeredSecurity, previousSecurity];
 
 	// Update the NM connection
 	if (
@@ -296,7 +397,10 @@ async function reconfigureHotspotLocked(
 			name,
 			password,
 			channel,
+			security,
 			derived,
+			offeredSecurity,
+			deps,
 		))
 	) {
 		return "saving";
@@ -304,11 +408,11 @@ async function reconfigureHotspotLocked(
 
 	// Restart the connection with the updated config
 	wifiInterface.hotspot.transition = "activating";
-	broadcastWifiState();
+	deps.broadcastState();
 
 	if (
 		isHotspotConfigComplete(wifiInterface) &&
-		!(await nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO))
+		!(await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO))
 	) {
 		// Failed to bring up the hotspot with the new settings; restore it.
 		await nmConnSetHotspotFields(
@@ -316,23 +420,27 @@ async function reconfigureHotspotLocked(
 			wifiInterface.hotspot.name,
 			wifiInterface.hotspot.password,
 			wifiInterface.hotspot.channel,
+			previousSecurity,
 			derived,
+			restorableSecurity,
+			deps,
 		);
 
-		await nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
+		await deps.nmConnect(wifiInterface.hotspot.conn, HOTSPOT_UP_TO);
 
 		delete wifiInterface.hotspot.transition;
-		broadcastWifiState();
+		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
 		return "activating";
 	}
 
 	// Successfully brought up the hotspot with the new settings, reload the conn.
 	delete wifiInterface.hotspot.transition;
+	wifiInterface.hotspot.security = security;
 	// The operator's chosen credentials are now the adapter's durable identity —
 	// a later recreate must restore these, not the originally generated pair.
 	if (isWifiChannelName(channel)) {
-		rememberHotspotCredentials(macAddress, {
+		deps.rememberCredentials(macAddress, {
 			ssid: name,
 			password,
 			channel,
@@ -341,8 +449,8 @@ async function reconfigureHotspotLocked(
 				: {}),
 		});
 	}
-	await wifiUpdateSavedConns();
-	broadcastWifiState();
+	await deps.wifiUpdateSavedConns();
+	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 	return "ok";
 }

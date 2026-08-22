@@ -37,6 +37,7 @@ import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 } from "./wifi-connections.ts";
+import { HOTSPOT_SECURITY, securityFromNM } from "./wifi-hotspot-security.ts";
 import { canHotspot, type ExistingHotspotConn } from "./wifi-hotspot-types.ts";
 
 // ─── NM connection discovery (hotspot bootstrap) ─────────────────────────────
@@ -186,13 +187,22 @@ export async function handleHotspotConn(
 		channel: wifiInterface.hotspot.channel,
 	});
 
+	// The profile itself is the truth about which security mode is in force, so
+	// it is ADOPTED here rather than assumed from memory — the same rule the
+	// channel above follows. A key-mgmt this build does not manage adopts
+	// nothing and falls through to the modification warning.
+	const observedSecurity = securityFromNM(fields[6]);
+	if (observedSecurity !== undefined) {
+		wifiInterface.hotspot.security = observedSecurity;
+	}
+
 	if (
 		fields[5] !== "no" ||
-		fields[6] !== "wpa-psk" ||
+		observedSecurity === undefined ||
 		fields[7] !== "ccmp" ||
 		fields[8] !== "ccmp" ||
 		fields[9] !== "rsn" ||
-		fields[10] !== "1"
+		fields[10] !== HOTSPOT_SECURITY[observedSecurity].nmPmfObserved
 	) {
 		wifiInterface.hotspot.warnings.modified = true;
 	}

@@ -69,6 +69,10 @@ import {
 } from "./router-cellular-scan.ts";
 import { onNetifChange, setNetifState } from "./state/netif-state.ts";
 import type { MonitorEvent, NetifState } from "./state-types.ts";
+import {
+	getUnclaimedAdapters,
+	refreshUnclaimedAdapters,
+} from "./unclaimed-adapters.ts";
 
 export type NetworkInterface = {
 	ip?: string;
@@ -206,6 +210,11 @@ const networkInterfacesEventEmitter = new EventEmitter();
 // refreshes throughput + confirms IP after an event. The old 1s interval is gone.
 const NETIF_POLL_INTERVAL_MS = 5000;
 const ROUTER_ADMIN_POLL_INTERVAL_MS = 30_000;
+// A driverless adapter does not move between ticks: nothing on the device can
+// bind a driver to it without a package install or a reboot, both of which are
+// far slower than this. So it rides its own slow cadence rather than the 5 s
+// netif poll, and walks two sysfs bus directories at each one.
+const UNCLAIMED_ADAPTER_POLL_INTERVAL_MS = 30_000;
 
 // Mirror legacy `netif` into the NetifState cache (mapping `enabled`→`up`).
 // setNetifState fires onNetifChange only on a real diff → that callback is the
@@ -371,6 +380,27 @@ export function initNetworkInterfaceMonitoring() {
 	setInterval(() => {
 		void refreshRouterAdminState();
 	}, ROUTER_ADMIN_POLL_INTERVAL_MS);
+	void refreshUnclaimedAdapterState();
+	setInterval(() => {
+		void refreshUnclaimedAdapterState();
+	}, UNCLAIMED_ADAPTER_POLL_INTERVAL_MS);
+}
+
+/**
+ * Re-probe the buses for adapters no driver has claimed.
+ *
+ * An undriven adapter owns no network interface at all — that IS the condition —
+ * so it is invisible to `triggerNetworkInterfacesChange`'s diff and to every
+ * other producer on this wire. The edge therefore broadcasts `status` directly,
+ * exactly as the router-cellular refresh broadcasts `netif`.
+ */
+async function refreshUnclaimedAdapterState(): Promise<void> {
+	try {
+		if (!(await refreshUnclaimedAdapters())) return;
+		broadcastMsg("status", { unclaimed_adapters: getUnclaimedAdapters() });
+	} catch (err) {
+		logger.debug(`unclaimed-adapter refresh degraded: ${err}`);
+	}
 }
 
 /**

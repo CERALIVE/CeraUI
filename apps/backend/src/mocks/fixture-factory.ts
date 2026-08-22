@@ -27,6 +27,7 @@ import {
 	AddonDescriptorSchema,
 	type AddonState,
 	AddonStateSchema,
+	type BluetoothDevice,
 	type StreamSource,
 	streamSourceSchema,
 } from "@ceraui/rpc/schemas";
@@ -48,6 +49,7 @@ import {
 	type MockWifiNetwork,
 	type MockWifiRadio,
 	mockAudioDevicesSchema,
+	mockBtDeviceSchema,
 	mockDeviceModesSchema,
 	mockKioskTokenSchema,
 	mockModemConfigSchema,
@@ -104,6 +106,27 @@ const DEFAULT_SIM_STATE = {
 	pinRetries: MOCK_SIM_PIN_RETRIES,
 	pukRetries: MOCK_SIM_PUK_RETRIES,
 } satisfies MockSimState;
+
+// The BONDED BT mic — the `bt-mic-paired` seed. An independent literal of
+// `providers/bluetooth.ts`'s derived fixture (that module cannot import this one
+// without closing a cycle through mock-schemas), pinned against it by the
+// factory test. `deviceClass`/`scoCapable`/`transport` are what the production
+// derivation answers for an HFP+HSP device; a builder that let a caller override
+// one of them into a contradiction is what the schema is there to refuse.
+const DEFAULT_BT_DEVICE = {
+	path: "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_11",
+	adapterPath: "/org/bluez/hci0",
+	address: "AA:BB:CC:DD:EE:11",
+	name: "Jabra Talk 65",
+	deviceClass: "audio-input",
+	transport: "bredr",
+	paired: true,
+	trusted: true,
+	connected: true,
+	blocked: false,
+	scoCapable: true,
+	battery: 80,
+} satisfies BluetoothDevice;
 
 // Dual USB audio cards: two distinct ALSA card IDs with real product display
 // names. Exercises T4's engine-join tier (alsa_card_id match + human-name
@@ -285,6 +308,20 @@ export function buildMockSimState(
 	overrides: Partial<MockSimState> = {},
 ): MockSimState {
 	return mockSimStateSchema.parse({ ...DEFAULT_SIM_STATE, ...overrides });
+}
+
+/**
+ * Build a schema-valid mock Bluetooth device (defaults = the bonded HFP mic).
+ *
+ * Validated against `mockBtDeviceSchema` — `bluetoothDeviceSchema` plus the two
+ * things a FIXTURE must be concrete about (a real 48-bit MAC, and a BlueZ path
+ * that encodes it). So an override with a drifted address throws at the build
+ * site rather than producing a device whose path names a different one.
+ */
+export function buildMockBtDevice(
+	overrides: Partial<BluetoothDevice> = {},
+): BluetoothDevice {
+	return mockBtDeviceSchema.parse({ ...DEFAULT_BT_DEVICE, ...overrides });
 }
 
 /** Build a schema-valid mock audio-device map (defaults = the USB-audio seed). */

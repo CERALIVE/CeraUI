@@ -183,7 +183,10 @@ async function startHotspotLocked(
 	};
 
 	if (conn) {
-		await deps.nmConnSetFields(conn, hotspotBindingFields(macAddress));
+		await deps.nmConnSetFields(
+			conn,
+			hotspotBindingFields(macAddress, wifiInterface.hotspot.security),
+		);
 		prune(conn);
 		if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
 			return rollback();
@@ -211,7 +214,10 @@ async function startHotspotLocked(
 			return rollback();
 		}
 
-		await deps.nmConnSetFields(uuid, hotspotBindingFields(macAddress));
+		await deps.nmConnSetFields(
+			uuid,
+			hotspotBindingFields(macAddress, wifiInterface.hotspot.security),
+		);
 		// The updated settings let the connection be recognised as our hotspot.
 		await deps.wifiUpdateSavedConns();
 		prune(uuid);

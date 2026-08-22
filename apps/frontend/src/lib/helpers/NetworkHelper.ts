@@ -1,11 +1,11 @@
 import { m } from "@ceraui/i18n/svelte";
 import type {
+	HotspotSecurityId,
 	NetifMessage,
 	SimPukUnlockOutput,
 	SimUnlockOutput,
 	StatusMessage,
 	WifiBand,
-	WifiSecurity,
 } from "@ceraui/rpc/schemas";
 import QRCode from "qrcode";
 
@@ -183,10 +183,39 @@ function escapeWifiQrField(value: string): string {
 	return value.replace(/[\\;,:]/g, "\\$&");
 }
 
+/**
+ * The `T:` token of a WIFI-QR payload, and it is a CLOSED set on purpose.
+ *
+ * It is deliberately NOT `WifiSecurity`, which is the free-form nmcli SECURITY
+ * string (`"WPA2"`, `"WPA1 WPA2 802.1X"`, `""` for open) a scan row carries.
+ * That string is a DESCRIPTION of somebody else's network; this is an
+ * INSTRUCTION to a phone's camera, and the two vocabularies do not overlap — a
+ * scanner handed `WPA1 WPA2 802.1X` here reads an unknown auth type and refuses
+ * the join. Narrowing the parameter is what makes an unhandled security mode a
+ * compile error rather than an unjoinable QR.
+ */
+export type WifiQrSecurity = "WPA" | "SAE" | "WEP" | "nopass";
+
+/**
+ * The QR token for a hotspot's configured security mode.
+ *
+ * A WPA3-SAE access point advertised as `T:WPA` produces a QR that SCANS
+ * PERFECTLY and then fails to join — the phone offers a PSK handshake the AP
+ * will not accept — so the operator sees a working code and a device that will
+ * not connect, with nothing on screen linking the two. An unset mode is WPA2
+ * (`DEFAULT_HOTSPOT_SECURITY`), which is the token every hotspot emitted before
+ * the mode became selectable.
+ */
+export function hotspotQrSecurity(
+	security: HotspotSecurityId | undefined,
+): WifiQrSecurity {
+	return security === "wpa3-sae" ? "SAE" : "WPA";
+}
+
 export async function generateWifiQr(
 	ssid: string,
 	password: string,
-	encryption: WifiSecurity = "WPA",
+	encryption: WifiQrSecurity = "WPA",
 ): Promise<string> {
 	if (!ssid) throw new Error("SSID is required");
 

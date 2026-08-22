@@ -342,6 +342,28 @@ not fail the parity gate; this register entry is the durable record that the
 device-side fan-out is a known, benign mismatch pending an explicit no-op consumer.
 
 ```debt
+id: TD-bt-le-audio
+title: Bluetooth LE Audio (BAP/LC3) — HFP/mSBC is the shipped floor, and it is labelled as such
+track: 1
+status: open
+exit_criteria: capability:bluetooth_le_audio
+owner: ceraui-team
+registered_at: 2026-08-22
+resolved_at: null
+unblock: The dynamic-wifi-bt-foundation effort ships BR/EDR HFP/mSBC as the Bluetooth-microphone floor and puts LE Audio (BAP/LC3) out of v1 scope by explicit Must-NOT-Have. This entry is the durable record of that deferral, not a marker binding — see the note below. Three layers must land together before LE Audio is real, and none of them exists today. (1) A DEVICE-IMAGE layer: BlueZ must be built with LE Audio support and the image must carry a transport that can actually carry an LC3 stream, which the shipped BlueALSA-based audio path cannot — the PipeWire seam this effort deliberately left unwired (Must-NOT-Have "No PipeWire in v1") is the likely home for it. (2) A DETECTION layer: bluetoothDeviceSchema's `transport` field is POSITIVE-EVIDENCE-ONLY, and `le`/`dual` exist precisely so a future read that can prove them has somewhere to say so — today nothing on a registry row proves LE, so every device reads `bredr` or `unknown`, and `scoCapable` describes the BR/EDR SCO leg alone. A capability probe that can positively identify a BAP-capable device is owed before any surface may claim one. (3) A SURFACE layer: `BLUETOOTH_CAPABILITY_FEATURES` (packages/rpc/src/schemas/bluetooth.schema.ts) would gain a fifth feature resolved through the SAME five-state support-claim ladder the other four use, so an LE Audio control could only ever render at `capable`/`certified`. Until all three land, the honest rendering is the CURRENT one: no LE Audio control, no ComingSoon pill, and no mention of LC3 anywhere in the Bluetooth surface — a roadmap pill for a capability whose detection layer does not exist would be a promise the device cannot qualify. To clear, land the three layers, then flip this entry to resolved.
+```
+
+This entry carries no source `data-debt-id` marker, deliberately and by the same
+reasoning as `TD-live-audio-follow` and the three router-dongle write entries
+above: there is no UI affordance to bind one to, and building a `ComingSoon` pill
+ahead of the detection layer would misrepresent unbuilt capability as a roadmap
+promise on a card that currently cannot tell an LE-capable device from a BR/EDR
+one. The rendered-DOM gate depends on that: `tests/e2e/truthfulness.spec.ts`
+asserts the Wi-Fi and Bluetooth surfaces carry ZERO `data-debt-id` nodes as a
+POSITIVE claim, so a marker arriving here must be a deliberate, visible decision
+that updates both this entry and that expectation.
+
+```debt
 id: TD-hilink-write-actions
 title: Huawei HiLink (E3372) write-capable dongle actions — reconnect, net-mode/band lock, reboot, APN profiles, PIN/PUK, manual PLMN, antenna settings
 track: 1

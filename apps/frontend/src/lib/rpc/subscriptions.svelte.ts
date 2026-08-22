@@ -8,6 +8,7 @@
 import type {
 	AddonState,
 	AudioLevelMessage,
+	BluetoothStatus,
 	CapabilitiesMessage,
 	CaptureDevice,
 	ConfigMessage,
@@ -115,6 +116,14 @@ let updateStateState = $state<UpdateState | undefined>(undefined);
 let netifState = $state<NetifMessage | undefined>(undefined);
 let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
+
+// The whole BlueZ surface in one payload. `undefined` means no snapshot has
+// arrived — distinct from a delivered `{available:false}`, which is the device
+// positively naming a cause. The payload is REPLACED wholesale rather than
+// merged: `paired`/`trusted`/`connected` are required booleans precisely so a
+// device that disconnects can say so, and a field-preserving merge would
+// re-create the latch those required fields exist to prevent.
+let bluetoothState = $state<BluetoothStatus | undefined>(undefined);
 
 // Per-uplink srtla_send telemetry, folded into the `status` flow. `null` while
 // srtla_send is not running or no fresh snapshot has arrived; `undefined` before
@@ -266,6 +275,10 @@ export function getWifi() {
 
 export function getModems() {
 	return modemsState;
+}
+
+export function getBluetooth(): BluetoothStatus | undefined {
+	return bluetoothState;
 }
 
 export function getLinkTelemetry() {
@@ -704,6 +717,12 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// Modems data is usually part of status, but can come separately
 			if (data && typeof data === "object") {
 				modemsState = mergeModemList(modemsState, data as ModemList);
+			}
+			break;
+
+		case "bluetooth":
+			if (data && typeof data === "object") {
+				bluetoothState = data as BluetoothStatus;
 			}
 			break;
 
