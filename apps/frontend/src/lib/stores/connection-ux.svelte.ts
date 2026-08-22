@@ -34,6 +34,7 @@
  * `getIsConnected()` surface (`subscriptions.svelte`) the HUD uses, so the
  * banner and the HUD staleness model never disagree.
  */
+// allow: SIZE_OK — one connection UX state machine; pure transitions and their sole reactive owner stay co-located.
 import type { ConnectionState } from "$lib/rpc/client";
 import { rpcClient } from "$lib/rpc/client";
 import { createStalenessClock } from "./hud/staleness";
@@ -89,6 +90,17 @@ export interface ConnectionUx {
 	mode: ConnectionUxMode;
 	/** Whether the disconnect banner should be visible at all. */
 	showBanner: boolean;
+}
+
+export interface ConnectionSurfaceUx {
+	showOfflineBanner: boolean;
+	showAuthTimeout: boolean;
+	showConnectionLostToast: boolean;
+}
+
+export interface ConnectionSurfaceUxInput {
+	authTimedOut: boolean;
+	disconnectedSince: number | null;
 }
 
 export interface ConnectionUxInput {
@@ -262,6 +274,46 @@ export function hasOutlastedBannerGrace(
 	return now - disconnectedSince >= RECONNECT_BANNER_GRACE_MS;
 }
 
+export function reduceBrowserOfflineSince(
+	previous: number | null,
+	browserOnline: boolean,
+	now: number,
+): number | null {
+	if (browserOnline) return null;
+	return previous ?? now;
+}
+
+export function effectiveDisconnectedSince(
+	socketDisconnectedSince: number | null,
+	browserOfflineSince: number | null,
+): number | null {
+	if (socketDisconnectedSince === null) return browserOfflineSince;
+	if (browserOfflineSince === null) return socketDisconnectedSince;
+	return Math.min(socketDisconnectedSince, browserOfflineSince);
+}
+
+/**
+ * Apply the reconnect banner's existing grace verdict to every other loud
+ * connection-loss surface. An auth-only stall remains visible when no socket
+ * drop is active; only connection-driven noise is delayed.
+ */
+export function deriveConnectionSurfaceUx(
+	input: ConnectionSurfaceUxInput,
+	now: number,
+): ConnectionSurfaceUx {
+	const showConnectionLoss = hasOutlastedBannerGrace(
+		input.disconnectedSince,
+		now,
+	);
+	return {
+		showOfflineBanner: showConnectionLoss,
+		showAuthTimeout:
+			input.authTimedOut &&
+			(input.disconnectedSince === null || showConnectionLoss),
+		showConnectionLostToast: showConnectionLoss,
+	};
+}
+
 /**
  * Whether the grace clock still needs to tick. It runs ONLY inside the grace
  * window: before it, nothing can transition; after it, the banner is already up
@@ -310,6 +362,7 @@ export function wasAuthenticated(): boolean {
 
 interface ConnectionUxStore {
 	getReconnectAttempts(): number;
+	getHasConnected(): boolean;
 	getIsRebooting(): boolean;
 	getSessionExpired(): boolean;
 	getDisconnectedSince(): number | null;
@@ -327,11 +380,21 @@ function createConnectionUxStore(): ConnectionUxStore {
 	let reconnect = $state<ReconnectState>(initialReconnectState());
 	let sessionExpired = $state(false);
 	let graceNow = $state(Date.now());
+	let browserOfflineSince = $state<number | null>(
+		typeof navigator !== "undefined" && navigator.onLine === false
+			? Date.now()
+			: null,
+	);
+	const disconnectedSince = (): number | null =>
+		effectiveDisconnectedSince(
+			reconnect.disconnectedSince,
+			browserOfflineSince,
+		);
 
 	// A drop fires no further connection events of its own, so without a tick the
 	// grace window could never elapse and the banner would never appear.
 	const graceClock = createStalenessClock(
-		() => shouldRunBannerGraceClock(reconnect.disconnectedSince, Date.now()),
+		() => shouldRunBannerGraceClock(disconnectedSince(), Date.now()),
 		() => {
 			graceNow = Date.now();
 		},
@@ -345,12 +408,38 @@ function createConnectionUxStore(): ConnectionUxStore {
 		graceNow = now;
 		graceClock.sync();
 	});
+	const handleBrowserOffline = (): void => {
+		const now = Date.now();
+		browserOfflineSince = reduceBrowserOfflineSince(
+			browserOfflineSince,
+			false,
+			now,
+		);
+		graceNow = now;
+		graceClock.sync();
+	};
+	const handleBrowserOnline = (): void => {
+		const now = Date.now();
+		browserOfflineSince = reduceBrowserOfflineSince(
+			browserOfflineSince,
+			true,
+			now,
+		);
+		graceNow = now;
+		graceClock.sync();
+	};
+	if (typeof window !== "undefined") {
+		window.addEventListener("offline", handleBrowserOffline);
+		window.addEventListener("online", handleBrowserOnline);
+		graceClock.sync();
+	}
 
 	return {
 		getReconnectAttempts: () => reconnect.attempts,
+		getHasConnected: () => reconnect.hasConnected,
 		getIsRebooting: () => reconnect.rebooting,
 		getSessionExpired: () => sessionExpired,
-		getDisconnectedSince: () => reconnect.disconnectedSince,
+		getDisconnectedSince: disconnectedSince,
 		getGraceNow: () => graceNow,
 		isGraceClockRunning: () => graceClock.isRunning(),
 		markRebooting: () => {
@@ -372,6 +461,10 @@ function createConnectionUxStore(): ConnectionUxStore {
 		},
 		destroy: () => {
 			off();
+			if (typeof window !== "undefined") {
+				window.removeEventListener("offline", handleBrowserOffline);
+				window.removeEventListener("online", handleBrowserOnline);
+			}
 			graceClock.stop();
 		},
 	};
@@ -399,6 +492,11 @@ function store(): ConnectionUxStore {
 /** Reconnect attempts since the last successful connection. */
 export function getReconnectAttempts(): number {
 	return store().getReconnectAttempts();
+}
+
+/** Whether this page load has completed at least one socket connection. */
+export function getHasConnected(): boolean {
+	return store().getHasConnected();
 }
 
 /** Whether a reboot/poweroff is in progress (cleared automatically on reconnect). */

@@ -23,15 +23,18 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: vi.fn(() => "disconnected"),
 }));
 
-import type { HudSources, HudTimestamps } from "$lib/types/hud";
+import type { HudSources, HudTimestamps } from "../types/hud";
 
 import {
+	deriveConnectionSurfaceUx,
 	deriveConnectionUx,
+	effectiveDisconnectedSince,
 	hasOutlastedBannerGrace,
 	initialReconnectState,
 	MAX_RECONNECT_ATTEMPTS,
 	RECONNECT_BANNER_GRACE_MS,
 	type ReconnectState,
+	reduceBrowserOfflineSince,
 	reduceConnection,
 	shouldExpireSession,
 	shouldRunBannerGraceClock,
@@ -162,6 +165,37 @@ describe("shouldRunBannerGraceClock", () => {
 	});
 });
 
+describe("browser-offline grace input", () => {
+	it("stamps the browser-offline edge once and clears it on recovery", () => {
+		// Given no active browser-offline stamp.
+		let stamp: number | null = null;
+
+		// When repeated offline events arrive, followed by online recovery.
+		stamp = reduceBrowserOfflineSince(stamp, false, CONN_T0);
+		stamp = reduceBrowserOfflineSince(stamp, false, CONN_T0 + 1000);
+		expect(stamp).toBe(CONN_T0);
+		stamp = reduceBrowserOfflineSince(stamp, true, CONN_T0 + 2000);
+
+		// Then the original drop time was stable and recovery clears it.
+		expect(stamp).toBeNull();
+	});
+
+	it("uses the earliest browser-or-socket loss as the shared grace origin", () => {
+		// Given browser network loss precedes the WebSocket close event.
+		const browserOfflineSince = CONN_T0;
+		const socketDisconnectedSince = CONN_T0 + 500;
+
+		// When the shared grace origin is selected.
+		const stamp = effectiveDisconnectedSince(
+			socketDisconnectedSince,
+			browserOfflineSince,
+		);
+
+		// Then browser loss starts the one grace window; no second timer is created.
+		expect(stamp).toBe(browserOfflineSince);
+	});
+});
+
 // ============================================
 // deriveConnectionUx
 // ============================================
@@ -271,6 +305,65 @@ describe("deriveConnectionUx", () => {
 	});
 });
 
+describe("deriveConnectionSurfaceUx", () => {
+	it("keeps every pre-auth interruption surface silent inside the shared grace window", () => {
+		// Given a stalled saved-session check during a fresh socket drop.
+		const input = {
+			authTimedOut: true,
+			disconnectedSince: CONN_T0,
+		};
+
+		// When the drop heals before the shared reconnect grace elapses.
+		const ux = deriveConnectionSurfaceUx(
+			input,
+			CONN_T0 + RECONNECT_BANNER_GRACE_MS - 1,
+		);
+
+		// Then none of the three loud pre-auth surfaces is eligible to render.
+		expect(ux).toEqual({
+			showOfflineBanner: false,
+			showAuthTimeout: false,
+			showConnectionLostToast: false,
+		});
+	});
+
+	it("surfaces every existing pre-auth interruption treatment after the shared grace", () => {
+		// Given the same stalled saved-session check and a sustained socket drop.
+		const input = {
+			authTimedOut: true,
+			disconnectedSince: CONN_T0,
+		};
+
+		// When the shared reconnect grace has elapsed.
+		const ux = deriveConnectionSurfaceUx(
+			input,
+			CONN_T0 + RECONNECT_BANNER_GRACE_MS,
+		);
+
+		// Then the existing top banner, auth card, and toast all remain available.
+		expect(ux).toEqual({
+			showOfflineBanner: true,
+			showAuthTimeout: true,
+			showConnectionLostToast: true,
+		});
+	});
+
+	it("keeps an auth-only timeout visible when the socket is not in a drop", () => {
+		// Given an auth request that stalled while transport stayed connected.
+		const input = { authTimedOut: true, disconnectedSince: null };
+
+		// When the auth timeout expires independently of connection loss.
+		const ux = deriveConnectionSurfaceUx(input, CONN_T0);
+
+		// Then only the existing auth recovery card appears.
+		expect(ux).toEqual({
+			showOfflineBanner: false,
+			showAuthTimeout: true,
+			showConnectionLostToast: false,
+		});
+	});
+});
+
 // ============================================
 // shouldExpireSession (auth-token expiry mid-session)
 // ============================================
@@ -291,12 +384,12 @@ describe("shouldExpireSession", () => {
 
 	it("models a reconnect whose re-auth fails → session expired", () => {
 		// connect → authenticated → drop → reconnect → token rejected
-		let s = reduceConnection(initialReconnectState(), "connecting");
-		s = reduceConnection(s, "connected");
+		let s = reduceConnection(initialReconnectState(), "connecting", CONN_T0);
+		s = reduceConnection(s, "connected", CONN_T0 + 1);
 		const wasAuthed = true; // markAuthenticated() ran on the first success
-		s = reduceConnection(s, "disconnected");
-		s = reduceConnection(s, "connecting");
-		s = reduceConnection(s, "connected"); // socket back, but auth re-sent
+		s = reduceConnection(s, "disconnected", CONN_T0 + 2);
+		s = reduceConnection(s, "connecting", CONN_T0 + 3);
+		s = reduceConnection(s, "connected", CONN_T0 + 4); // socket back, but auth re-sent
 		// Backend rejects the stale token:
 		expect(shouldExpireSession(false, wasAuthed)).toBe(true);
 	});
@@ -314,6 +407,7 @@ function makeSources(overrides: Partial<HudSources> = {}): HudSources {
 		config: { max_br: 6000 },
 		modems: undefined,
 		wifi: undefined,
+		netif: undefined,
 		sensors: { "SoC temperature": "50.0°C" },
 		updating: false,
 		...overrides,
