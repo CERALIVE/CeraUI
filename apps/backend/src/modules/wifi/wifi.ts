@@ -87,6 +87,7 @@ import {
 import {
 	canHotspot,
 	isApMode,
+	isConcurrentHotspot,
 	type WifiHotspot,
 	type WifiHotspotMessage,
 } from "./wifi-hotspot-types.ts";
@@ -170,6 +171,7 @@ export type WifiInterfaceResponseMessage = Pick<
 		warnings?: string[];
 	};
 	supports_hotspot?: true;
+	supports_ap_sta_concurrency?: true;
 	mode?: "station" | "hotspot";
 	transition?: "activating" | "deactivating";
 	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
@@ -267,9 +269,12 @@ export function wifiBuildMsg() {
 			hw: wifiInterface.hw,
 			saved: {},
 		};
+		if (wifiInterface.supportsApStaConcurrency === true) {
+			entry.supports_ap_sta_concurrency = true;
+		}
 		ifs[id] = entry;
 
-		if (isApMode(wifiInterface)) {
+		if (isApMode(wifiInterface) || isConcurrentHotspot(wifiInterface)) {
 			// One capability read backs both derivations, so the security the
 			// device OFFERS and the width it REPORTS can never describe different
 			// radios.
@@ -310,7 +315,8 @@ export function wifiBuildMsg() {
 				hotspot.warnings = warnings;
 			}
 			entry.hotspot = hotspot;
-		} else {
+		}
+		if (!isApMode(wifiInterface)) {
 			entry.available = Array.from(wifiInterface.available.values());
 			entry.saved = wifiInterface.saved;
 			if (canHotspot(wifiInterface)) {

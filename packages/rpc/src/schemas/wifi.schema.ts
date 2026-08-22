@@ -277,6 +277,7 @@ export const wifiInterfaceSchema = z.object({
 	available: z.array(availableWifiNetworkSchema).optional(),
 	saved: z.record(z.string(), z.string()),
 	supports_hotspot: z.boolean().optional(),
+	supports_ap_sta_concurrency: z.boolean().optional(),
 	transition: z.enum(['activating', 'deactivating']).optional(),
 	mode: z.enum(['station', 'hotspot']).optional(),
 	// Absent means NOT COMPUTED — no `iw` on the image, a wiphy that could not be
