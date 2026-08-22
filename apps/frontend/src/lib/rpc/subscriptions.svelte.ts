@@ -970,16 +970,6 @@ function handleConnectionChange(state: ConnectionState): void {
 			});
 			void runReconnectReauth();
 		}
-	} else if (state === "disconnected") {
-		pushNotification({
-			name: "connection-lost",
-			type: "error",
-			key: "notifications.connectionLost",
-			msg: "Connection lost",
-			is_dismissable: true,
-			is_persistent: false,
-			duration: 3,
-		});
 	}
 }
 
