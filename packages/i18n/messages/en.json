@@ -1950,6 +1950,8 @@
 	"wifiSelector.accessibility.openNetwork": "Open network",
 	"wifiSelector.accessibility.secured": "Secured network",
 	"wifiSelector.accessibility.showPassword": "Show password",
+	"wifiSelector.blocked.wpa3Body": "This adapter can't join WPA3 networks. Choose a network that also offers WPA2.",
+	"wifiSelector.blocked.wpa3Title": "WPA3-only network",
 	"wifiSelector.button.connect": "Connect",
 	"wifiSelector.button.disconnect": "Disconnect",
 	"wifiSelector.button.forget": "Forget",

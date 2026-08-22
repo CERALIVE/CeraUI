@@ -1905,6 +1905,8 @@
 	"wifiSelector.accessibility.openNetwork": "オープンネットワーク",
 	"wifiSelector.accessibility.secured": "保護されたネットワーク",
 	"wifiSelector.accessibility.showPassword": "パスワードを表示",
+	"wifiSelector.blocked.wpa3Body": "このアダプターは WPA3 ネットワークに接続できません。WPA2 にも対応したネットワークを選んでください。",
+	"wifiSelector.blocked.wpa3Title": "WPA3 専用ネットワーク",
 	"wifiSelector.button.connect": "接続",
 	"wifiSelector.button.disconnect": "切断",
 	"wifiSelector.button.forget": "削除",

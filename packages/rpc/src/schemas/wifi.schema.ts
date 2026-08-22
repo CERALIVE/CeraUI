@@ -176,6 +176,35 @@ export const hotspotBandMaxWidthSchema = z.object({
 });
 export type HotspotBandMaxWidth = z.infer<typeof hotspotBandMaxWidthSchema>;
 
+// ─── joined-client roster ───────────────────────────────────────────────────
+//
+// One station the AP interface's own `iw dev <ifname> station dump` named. The
+// MAC is the only required field BY DESIGN: everything else is a reading the
+// station may not have produced yet, and an absent bitrate must render as
+// absent rather than as a measured zero (which reads as a stalled client).
+export const hotspotClientSchema = z.object({
+	mac: z.string(),
+	signal_dbm: z.number().optional(),
+	tx_bitrate_mbps: z.number().positive().optional(),
+	rx_bitrate_mbps: z.number().positive().optional(),
+});
+export type HotspotClient = z.infer<typeof hotspotClientSchema>;
+
+// How many station rows ride the wire. `count` stays the TRUE total, so a
+// capped roster is visibly capped rather than silently truncated — the same
+// shape, for the same reason, as the SMS inbox's own cap.
+export const HOTSPOT_CLIENTS_ROW_CAP = 32;
+
+// `count` is deliberately NOT `stations.length`: the rows are a bounded window
+// onto a total that may exceed it. A device that has never been read omits this
+// block entirely — `count: 0` is a MEASURED "nobody is connected" and must stay
+// distinguishable from "we never asked".
+export const hotspotClientsSchema = z.object({
+	count: z.number().int().nonnegative(),
+	stations: z.array(hotspotClientSchema).max(HOTSPOT_CLIENTS_ROW_CAP),
+});
+export type HotspotClients = z.infer<typeof hotspotClientsSchema>;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -206,6 +235,10 @@ export const hotspotConfigSchema = z.object({
 	security: hotspotSecurityIdSchema.optional(),
 	// Display only. There is no configurable width anywhere in this contract.
 	max_width_mhz: hotspotBandMaxWidthSchema.optional(),
+	// Who is joined RIGHT NOW, from the AP interface's own station dump. Absent
+	// means the device has not read it (an older backend, or an AP whose first
+	// read has not landed); `count: 0` means it read and nobody is connected.
+	clients: hotspotClientsSchema.optional(),
 });
 export type HotspotConfig = z.infer<typeof hotspotConfigSchema>;
 
@@ -246,11 +279,19 @@ export const wifiDisconnectInputSchema = z.object({
 });
 export type WifiDisconnectInput = z.infer<typeof wifiDisconnectInputSchema>;
 
-// WiFi new connection input schema
+// WiFi new connection input schema.
+//
+// `security` is the scanned row's own nmcli SECURITY token list, forwarded
+// verbatim so the device can decide whether the profile must pin `key-mgmt sae`
+// (see `capabilities/wifi-station-security.ts`). It reuses the free-form
+// `wifiSecuritySchema` for that schema's own stated reason — an enum rejected
+// real open/enterprise rows — and is optional, so a client that omits it gets
+// the byte-identical pre-WPA3 behaviour.
 export const wifiNewInputSchema = z.object({
 	device: z.string(),
 	ssid: z.string().min(1, 'SSID cannot be empty'),
 	password: z.string().min(WIFI_PASSWORD_MIN, 'Password must be at least 8 characters'),
+	security: wifiSecuritySchema.optional(),
 });
 export type WifiNewInput = z.infer<typeof wifiNewInputSchema>;
 

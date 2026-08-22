@@ -1905,6 +1905,8 @@
 	"wifiSelector.accessibility.openNetwork": "开放网络",
 	"wifiSelector.accessibility.secured": "加密网络",
 	"wifiSelector.accessibility.showPassword": "显示密码",
+	"wifiSelector.blocked.wpa3Body": "此适配器无法加入 WPA3 网络。请选择同时提供 WPA2 的网络。",
+	"wifiSelector.blocked.wpa3Title": "仅 WPA3 网络",
 	"wifiSelector.button.connect": "连接",
 	"wifiSelector.button.disconnect": "断开连接",
 	"wifiSelector.button.forget": "忘记",

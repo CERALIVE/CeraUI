@@ -1950,6 +1950,8 @@
 	"wifiSelector.accessibility.openNetwork": "खुला नेटवर्क",
 	"wifiSelector.accessibility.secured": "सुरक्षित नेटवर्क",
 	"wifiSelector.accessibility.showPassword": "पासवर्ड दिखाएं",
+	"wifiSelector.blocked.wpa3Body": "यह अडैप्टर WPA3 नेटवर्क से नहीं जुड़ सकता। ऐसा नेटवर्क चुनें जो WPA2 भी देता हो।",
+	"wifiSelector.blocked.wpa3Title": "केवल WPA3 नेटवर्क",
 	"wifiSelector.button.connect": "कनेक्ट करें",
 	"wifiSelector.button.disconnect": "डिस्कनेक्ट करें",
 	"wifiSelector.button.forget": "भूल जाएं",

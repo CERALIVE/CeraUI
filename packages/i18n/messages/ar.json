@@ -1962,6 +1962,8 @@
 	"wifiSelector.accessibility.openNetwork": "شبكة مفتوحة",
 	"wifiSelector.accessibility.secured": "شبكة محمية",
 	"wifiSelector.accessibility.showPassword": "إظهار كلمة المرور",
+	"wifiSelector.blocked.wpa3Body": "لا يستطيع هذا المحوّل الانضمام إلى شبكات WPA3. اختر شبكة تدعم WPA2 أيضًا.",
+	"wifiSelector.blocked.wpa3Title": "شبكة WPA3 فقط",
 	"wifiSelector.button.connect": "اتصال",
 	"wifiSelector.button.disconnect": "قطع الاتصال",
 	"wifiSelector.button.forget": "نسيان",

@@ -1953,6 +1953,8 @@
 	"wifiSelector.accessibility.openNetwork": "Rede aberta",
 	"wifiSelector.accessibility.secured": "Rede segura",
 	"wifiSelector.accessibility.showPassword": "Mostrar senha",
+	"wifiSelector.blocked.wpa3Body": "Este adaptador não consegue entrar em redes WPA3. Escolha uma rede que também ofereça WPA2.",
+	"wifiSelector.blocked.wpa3Title": "Rede somente WPA3",
 	"wifiSelector.button.connect": "Conectar",
 	"wifiSelector.button.disconnect": "Desconectar",
 	"wifiSelector.button.forget": "Esquecer",
