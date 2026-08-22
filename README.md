@@ -45,6 +45,10 @@ A dev-only DevTools destination is available in development builds.
 - **Internationalization**: 10 languages with full RTL support
 - **Touch/kiosk mode**: `?mode=touch` URL flag scales touch targets to 44px minimum
 - **Responsive**: desktop and mobile layouts with a persistent bottom HUD dock on mobile
+- **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
+  hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
+  switch. Physical-radio validation is still pending; see
+  [`docs/AP-STA-CONCURRENT-MODE.md`](docs/AP-STA-CONCURRENT-MODE.md).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted
