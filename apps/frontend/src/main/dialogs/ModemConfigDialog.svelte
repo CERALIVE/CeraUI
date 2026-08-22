@@ -105,6 +105,7 @@ import ModemFccUnlockSection from './ModemFccUnlockSection.svelte';
 import { fccUnlockErrorKey } from './modem-fcc-unlock';
 import ModemGpsSection from './ModemGpsSection.svelte';
 import { gpsErrorKey as gpsErrorKeyFor } from './modem-gps';
+import ModemUssdSection from './ModemUssdSection.svelte';
 import type {
 	FccUnlockState,
 	FiveGPreference,
@@ -636,6 +637,7 @@ let gpsBusy = $state(false);
 let gpsOutcome = $state<MutationOutcome | undefined>(undefined);
 
 const gpsClaim = $derived(modem.capability_modules?.gps);
+const ussdClaim = $derived(modem.capability_modules?.ussd);
 
 async function loadGps(): Promise<void> {
 	gpsStatus = undefined;
@@ -2409,6 +2411,11 @@ const cardView = (present: boolean): CapabilityView =>
 			outcome={gpsOutcome}
 			onToggle={(next) => void toggleGps(next)}
 		/>
+
+		<!-- Unlike the two sections above, this one owns its session state and its
+		     own RPC. Do not hoist them here for consistency: closing the dialog
+		     unmounts the component, which is what drops the carrier's text. -->
+		<ModemUssdSection claim={ussdClaim} deviceId={String(deviceId)} />
 		</div>
 		</CollapsibleSection>
 	</div>

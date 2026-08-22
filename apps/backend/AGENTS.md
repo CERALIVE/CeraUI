@@ -3778,6 +3778,32 @@ the manual `mmcli` walk. Coverage: `tests/modem-ussd.test.ts` (both real shapes,
 the empty-respond negative, the two-turn dialogue over the board captures, and the
 answer-never-lands case asserting NO reply rather than the retained one).
 
+### …AND THE READ THAT PROVES THE CAPABILITY RE-PUBLISHES IT [EXISTS]
+
+`readModemUssd` wrote `capabilityCache` directly and never called
+`noteCapabilityEvidenceChanged()` — the one implemented capability module that
+did not. `gps.ts`'s `recordCapability` and `band-capability.ts`'s refresh both
+do, for the reason `capability-gates.ts` states: the wire build is SYNCHRONOUS,
+so a probe that first proves a capability only reaches an operator on the next
+30 s roster poll.
+
+That window is not cosmetic for USSD, because the verbs are gated on the SAME
+evidence. Until the claim moves, `withCapabilityModuleMutation` refuses every
+one of them `module_unavailable` — so CeraUI's USSD section, which reads on
+open and is withheld below `capable`, reported "not established yet" with no
+control for up to half a minute on hardware that supports USSD, and any verb
+forced through in that window was refused.
+
+`recordUssdCapability` is that notifier, mirroring `gps.ts` exactly: it is
+CHANGE-GATED, so the dialog's read-on-open costs one map lookup once the modem
+is proven and broadcasts nothing. Both call sites go through it — the
+`unsupported` read that records `absent` as well as the successful one that
+records `present` — because a modem that positively LOSES the capability must
+lower the claim just as promptly as one that gains it.
+
+Frontend half: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) → USSD IS A
+SESSION, SO IT CARRIES A SECOND MACHINE.
+
 ## `no_sim` REPORTS A SLOT, NOT A NETWORKMANAGER PROFILE [EXISTS]
 
 `modules/modems/sim-presence.ts` (pure) is the ONE rule behind the wire's
