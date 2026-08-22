@@ -30,6 +30,7 @@ import {
 	handleWifi,
 	type NmcliRun,
 	setWifiJoinNmcliRunner,
+	wifiDeleteFailedConns,
 } from "../modules/wifi/wifi.ts";
 import {
 	addWifiInterface,
@@ -287,6 +288,56 @@ test("adapter id 0 is a real adapter, not an absent one", async () => {
 	// adapter of every single-radio board — and the procedure's mock branch
 	// fabricates success regardless, which is how it stayed invisible.
 	expect(await join("WPA2")).toHaveLength(1);
+});
+
+/*
+  The cleanup `runWifiNew` awaits before it can report a failed join.
+
+  `nmConnsGet` signals its own failure by resolving `undefined` rather than
+  throwing — which is exactly what a host with no `nmcli` on `$PATH` produces —
+  so the sweep must treat a non-list as "nothing to enumerate". It used to cast
+  the result to an array and iterate it, and the resulting
+  `undefined is not an object` escaped through the very failure path that owed
+  the operator a typed refusal.
+*/
+describe("wifiDeleteFailedConns", () => {
+	const listed = [
+		"keep-me:802-11-wireless:1712345678",
+		"never-activated:802-11-wireless:0",
+		"a-modem:gsm:0",
+		"",
+	];
+
+	test("an unlistable nmcli is survived, and deletes nothing", async () => {
+		const deleted: string[] = [];
+
+		await wifiDeleteFailedConns({
+			listConns: async () => undefined,
+			deleteConn: async (uuid) => {
+				deleted.push(uuid);
+				return true;
+			},
+		});
+
+		expect(deleted).toEqual([]);
+	});
+
+	test("a listable nmcli still deletes exactly the never-activated wifi profiles", async () => {
+		const deleted: string[] = [];
+
+		await wifiDeleteFailedConns({
+			listConns: async (fields) => {
+				expect(fields).toBe("uuid,type,timestamp");
+				return listed;
+			},
+			deleteConn: async (uuid) => {
+				deleted.push(uuid);
+				return true;
+			},
+		});
+
+		expect(deleted).toEqual(["never-activated"]);
+	});
 });
 
 test("the SAE field record is the one both halves share", () => {

@@ -529,10 +529,35 @@ async function wifiForget(uuid: ConnectionUUID) {
 	}
 }
 
-async function wifiDeleteFailedConns() {
-	const connections = (await nmConnsGet(
-		"uuid,type,timestamp",
-	)) as Array<string>;
+/*
+  `nmConnsGet` REPORTS a failure by resolving `undefined` — it never throws — so
+  a missing or erroring nmcli arrives here as a non-array, and the retired
+  `as Array<string>` cast turned that into `undefined is not an object`. This is
+  best-effort cleanup on `runWifiNew`'s FAILURE path, so the crash replaced the
+  typed refusal the operator was owed with an unhandled rejection. A sweep that
+  cannot enumerate has nothing to delete: say so and return.
+*/
+export type WifiFailedConnsDeps = {
+	listConns: (fields: string) => Promise<string[] | undefined>;
+	deleteConn: (uuid: ConnectionUUID) => Promise<boolean>;
+};
+
+const defaultFailedConnsDeps: WifiFailedConnsDeps = {
+	listConns: nmConnsGet,
+	deleteConn: nmConnDelete,
+};
+
+export async function wifiDeleteFailedConns(
+	deps: WifiFailedConnsDeps = defaultFailedConnsDeps,
+) {
+	const connections = await deps.listConns("uuid,type,timestamp");
+	if (!Array.isArray(connections)) {
+		logger.warn(
+			"wifiDeleteFailedConns: could not list connections; skipping cleanup",
+		);
+		return;
+	}
+
 	for (const connection of connections) {
 		const [uuid, type, ts] = nmcliParseSep(connection) as [
 			string,
@@ -541,7 +566,7 @@ async function wifiDeleteFailedConns() {
 		];
 		if (type !== "802-11-wireless") continue;
 		if (ts === "0") {
-			await nmConnDelete(uuid);
+			await deps.deleteConn(uuid);
 		}
 	}
 }
