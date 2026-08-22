@@ -145,6 +145,13 @@ CeraUI/
 | **WiFi AP-vs-client classification (`isApMode` backend / `isApRadio` frontend)** | `apps/backend/src/modules/wifi/wifi-hotspot-types.ts` + `apps/frontend/src/lib/helpers/wifi-mode-outcome.ts` |
 | **WiFi adapter identity (permanent hardware address — NOT the scan-randomized operational one)** | `apps/backend/src/modules/wifi/wifi-permanent-mac.ts` (`resolveWifiPermanentMac`) |
 | **Regulatory country + kernel-DERIVED hotspot channels (`iw reg set` / `iw phy`; never a country→channel table)** | `apps/backend/src/modules/wifi/regdomain.ts` + `wifi-country.ts`; UI `apps/frontend/src/main/dialogs/WifiCountryDialog.svelte` + `lib/helpers/countries.ts` |
+| **Per-adapter Wi-Fi CAPABILITY MODEL (nl80211 truth: bands, generation, widths, SAE, regulatory; `ifname → wiphy` via `/sys/class/net/<if>/phy80211`)** | `apps/backend/src/modules/wifi/wifi-capabilities.ts` over `regdomain.ts`'s single `runIw` seam; wire `wifiInterfaceSchema.capabilities?`; render side `apps/frontend/src/main/network/wifi-capability-view.ts` → `WifiSection.svelte`; contract below → THE WI-FI OFFERING IS DERIVED FROM THE RADIO |
+| **Whether an AP may INITIATE on a band (rule-level `PASSIVE-SCAN`/`NO-IR`, not the per-channel flag) — the gate BOTH channel producers ask** | `apps/backend/src/modules/wifi/wifi-regulatory-rules.ts` (`parseRegulatoryRuleLine`, `buildApInitiationGate`) consulted by `regdomain.ts` (`parseIwPhyChannels`, `deriveApInitiationBands`) AND by `wifi-interfaces.ts` (the `auto_*` rungs); `WifiHotspot.bandCapability` is the un-latched memory of the adapter's own band answer |
+| **Capability-derived hotspot security offering + read-only negotiated width** | `apps/backend/src/modules/wifi/wifi-hotspot-security.ts` (read-time derivation, deliberately NOT a cached field); UI `apps/frontend/src/main/dialogs/hotspot-options.ts` → `HotspotDialog.svelte` |
+| **Connected hotspot clients (`iw dev <if> station dump`; dBm tiers, NOT the 0-100 nmcli ramp)** | `apps/backend/src/modules/wifi/wifi-hotspot-clients.ts`; render side `apps/frontend/src/main/network/hotspot-clients-view.ts` → `HotspotSection.svelte` |
+| **Detected-but-driverless wireless/BT adapters (PCI class + USB INTERFACE-node scan, parent-coalesced)** | `apps/backend/src/modules/network/` sysfs probe → additive `status.unclaimed_adapters[]`; band in `apps/frontend/src/main/network/NetworkView.svelte` |
+| **BLUETOOTH foundation (BlueZ D-Bus, pairing agent, device registry, class model, service enablement, boot reconcile)** | `apps/backend/src/modules/bluetooth/` (`bluetooth-stack.ts`, `bluetooth-registry.ts`, `bluetooth-classes.ts`, `bluetooth-services.ts`, `bluez-agent.ts`, `bluez-agent-exporter.ts`, `bluetooth-runtime.ts`, `bluetooth-wire.ts`); RPC `apps/backend/src/rpc/procedures/bluetooth.procedure.ts` + `packages/rpc/src/{contracts,schemas}/bluetooth.*`; render side `apps/frontend/src/main/network/bluetooth-view.ts` → `BluetoothSection.svelte`; contract below → THE BLUETOOTH FOUNDATION |
+| **BT MICROPHONE as an audio source (`org.bluealsa` PCM presence is the oracle, NOT BlueZ `Connected`)** | `apps/backend/src/modules/bluetooth/` (PCM probe) + `apps/backend/src/modules/streaming/audio.ts`; loss/reconnect `apps/backend/src/modules/streaming/bluetooth-audio-resilience.ts`; render side `apps/frontend/src/lib/streaming/bluetooth-audio-source.ts` → `SourceSection.svelte`; contract below → THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE |
 | **Durable per-adapter hotspot identity (SSID/password reused forever) + duplicate-profile consolidation** | `apps/backend/src/modules/wifi/hotspot-credentials.ts` + `wifi-hotspot-discovery.ts` (`findHotspotConnForAdapter`, `pruneDuplicateHotspotConns`) |
 | **Policy-route self-check for bonded wifi/modem/dongle interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
 | **Router-dongle netns metadata reader — PRODUCER RETIRED (phase-C todo 39), reader KEPT as the old-image degradation path** + the retractable `dongle` netif marker (wire-only union rows; bonding untouched by construction) | `apps/backend/src/modules/network/dongle-metadata.ts` + `network-interfaces.ts` (`applyDongleProjection`); contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND |
@@ -2394,11 +2401,262 @@ re-derived from bus-path string matching. Frontend label precedence is
 `product_name · TRANSPORT` → `label` → `labelKey` → `id`. Full contract:
 `apps/backend/AGENTS.md` → AUDIO-DEVICE NAMING.
 
+## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
+
+The three-value band enum (`auto` / `auto_24` / `auto_50`) is still the **wire
+vocabulary** and did not change. What changed is that nothing hardcodes which rungs are
+*offered*. `wifi-capabilities.ts` derives per-adapter truth from `iw phy` and
+`iw reg get` — bands, generation, per-band max width, SAE support, regulatory domain —
+and publishes it on the additive, optional `wifiInterfaceSchema.capabilities?`. Absent
+means "older device", and the UI must render today's legacy set for it, never an empty
+offering. A DOM byte-comparison regression lock pins exactly that.
+
+**Bind the adapter to its wiphy, never by position.** `iw dev` lists phys in
+*descending* order (`phy#1` before `phy#0` on a dual board), so any positional read
+binds the wrong radio. The binding is `basename(readlink('/sys/class/net/<if>/phy80211'))`,
+which resolves for a virtual AP interface too.
+
+**Generation keys on non-zero EHT, not on EHT presence.** The shipped RTL8852BE prints
+`EHT MAC Capabilities (0x0000)` with every MCS/NSS `Rx=0, Tx=0` — an all-zero stub.
+Keying on presence claims Wi-Fi 7 for a Wi-Fi 6 part; dropping the non-zero check
+reddens six tests.
+
+**A parse failure drops the cache; a spawn failure retains it.** The first says the
+shape we knew how to read is gone. The second is a statement about the *read*, not
+about the hardware. Self-managed wiphys get a shorter TTL (60 s vs 5 min) because their
+domain moves with no operator action.
+
+**Three degraded states, and collapsing any pair is the bug.** A radio that does not
+carry a band renders **zero** nodes. A radio that carries it under a non-permitting,
+non-self-managed domain keeps the chip, marks it `aria-disabled`, and offers "Set
+country". A **self-managed** wiphy keeps the chip with a calm info band and **no
+button** — it intersects or ignores a country hint, so the dialog is a control that
+provably cannot act. Pointing the reason chip at the country dialog for a radio with no
+6 GHz band at all would be the mirror error: blaming regulation for missing silicon.
+
+**`00` is a kernel token, not a country.** The world-domain case gets its own sentence
+rather than interpolating `00` into "the domain in force here ({country})".
+
+### …AND A BAND'S AP RIGHTS COME FROM THE RULES, NOT THE CHANNEL FLAGS
+
+Board-proven twice, and the second half is the part worth remembering. Under the
+kernel's world domain `00` an RTL8852BE lists 5180/5200/5220/5745 with **no `no IR`
+marker at all** — the per-channel flags are clean — yet every 5 GHz *rule* in
+`iw reg get` reads `PASSIVE-SCAN` and the AP dies `Failed to start AP functionality`.
+`PASSIVE-SCAN`, `NO-IR` and the ancient `NO-IBSS` are three spellings of one nl80211
+flag published at rule level. `buildApInitiationGate` (`wifi-regulatory-rules.ts`) is
+the single predicate, and four of its properties are load-bearing:
+
+- **Band-scoped, not channel-scoped.** The world domain's `(2457 - 2482)` rule is also
+  PASSIVE-SCAN, so a per-channel check would silently retire `ch_12`/`ch_13` — 2.4 GHz
+  behaviour this defect does not touch.
+- **Not a hardcoded 5 GHz block.** Replacing the rule-derived gate with `band !== "a"`
+  reddens nine tests, including three pre-existing ES/US derivation cases.
+- **Fails OPEN.** An unreadable or silent `iw reg get`, and any span no rule mentions,
+  permits the band.
+- **A per-phy section outranks the global one.** A self-managed wiphy can legally
+  initiate on 5 GHz while the global scope still reads `00`.
+
+**Two producers write into one offered list, so the gate is asked twice.**
+`parseIwPhyChannels` builds the explicit `ch_*` entries; `wifi-interfaces.ts` pushes the
+band-wide `auto_*` rungs from the adapter's *nmcli* band capability, one layer above.
+A fix applied to the first alone left `auto_50` offered, accepted, and failing exactly
+as the original defect did. `deriveApInitiationBands()` asks the same predicate one
+layer up. **Only a rung that NAMES a band may be retired with that band** — the plain
+`auto` rung was measured on the board before the fix was designed (it writes no band,
+NM settles on 2462 MHz, activates cleanly), so withholding it would remove a control
+that works. The suite refuses an over-reaching gate as well as an under-reaching one.
+
+**`WifiHotspot.bandCapability` exists to avoid a one-way door.** `refreshHotspotChannels`
+used to recover the adapter's band capability by filtering the autos out of
+`hotspot.availableChannels`. The moment a rung is withheld from that list, the next
+refresh reads a list that no longer contains it — the radio's 5 GHz capability is
+forgotten **permanently** and the rung can never return when the operator sets a
+permitting country. Any time a derived list is both the output and the input of a
+recomputation, filtering it latches.
+
+**Hosting and joining WPA3 are deliberately asymmetric.** Hosting needs positive proof
+(`wpa3Sae: "supported"`); joining needs only the absence of disproof, so only a positive
+`"unsupported"` withholds a row. NM 1.42.4 publishes no SAE key at all, so `unknown` is
+the shipped fleet's answer and refusing on it would take WPA3 away from every board.
+And `WPA2 WPA3` transition-mode APs must NOT pin `sae` — the AP accepts a plain WPA2
+association, so pinning refuses the very leg a SAE-incapable adapter uses.
+
+**6 GHz hotspot is refused STRUCTURALLY, not by a filter.** `HOTSPOT_BANDS` is
+`["2.4","5"]` and the wire schema has no `'6'` key to emit into, so a Wi-Fi 7 adapter
+with a self-managed US domain and `is6GhzLegal: true` still yields zero 6 GHz entries.
+This is a NetworkManager/hostapd capability limit on the AP path, **not** a legal or
+regulatory decision — see `docs/DIY-POSTURE.md` in the workspace root.
+
+## THE BLUETOOTH FOUNDATION [EXISTS]
+
+`modules/bluetooth/` observes BlueZ over the system D-Bus and publishes one snapshot:
+adapter rows, the device registry, service/observation state, the pairing-agent state,
+and a total capability-claims registry. Ten `bluetooth.*` procedures sit on top.
+
+**Bluetooth reuses the five-state claim VOCABULARY without joining `CAPABILITY_MODULES`.**
+That enum is closed, modem-only and default-off-forever, so registering Bluetooth in it
+would put a headset behind a *cellular* feature gate — invisible by design. What is
+shared is `supportClaimStateSchema` and `resolveSupportClaim`;
+`bluetoothCapabilityClaimsSchema` is its own total registry
+(`adapter`/`pairing`/`audio-input`/`battery`), gated on the operator's persisted
+preference.
+
+**The unit name is `bluealsa.service`; `bluealsad` is the binary.** Debian's
+`bluez-alsa-utils` renamed the daemon upstream in bluez-alsa 4.x and kept the unit name.
+Getting it wrong fails in the invisible direction: `systemctl enable --now
+bluealsad.service` exits non-zero, the preference is still persisted, and the board comes
+up with Bluetooth on and no ALSA PCM behind it. Bookworm's 4.0.0-2 actually installs
+`/usr/bin/bluealsa`, so `BLUEALSA_BINARIES` accepts both spellings.
+
+**`systemctl is-enabled` prints NOTHING on stdout for a unit systemd cannot find.** An
+inline `stdout.trim() === "enabled"` reads that as "disabled", the reconciler reports
+success forever, and nothing ever says the unit does not exist.
+`parseUnitEnabledState` types the empty case separately and turns it into a
+`unit_missing` record.
+
+**Operator disable MUST be `disable --now`.** A stop-only disable leaves the unit
+enabled, so "Bluetooth off" survives exactly until the next reboot and then reverses
+itself — with `bluealsad` holding a headset's SCO leg on a device whose UI says
+Bluetooth is off.
+
+**`deviceClass` and `scoCapable` are two questions and the split is load-bearing.**
+`audio-input` asks "can this be a source of audio at all"; `scoCapable` asks "can the
+board open its mic over `PROFILE=sco`", which needs HFP (`111e`/`111f`) or HSP
+(`1108`/`1112`) specifically. The forcing case is an A2DP-**source**-only device
+(`110a` alone): genuinely an audio input, no SCO leg, so deriving `scoCapable` from "has
+an audio UUID" publishes a row whose every open fails. `shortUuid` refuses to fold a
+UUID outside the SIG base.
+
+**BlueZ's `PropertiesChanged` is a DELTA.** An omitted key means *unchanged*, never
+`false` — writing defaults for absent keys is how a headset that merely reported a new
+RSSI publishes as un-paired and un-trusted. An unknown path is dropped rather than
+minting a device from a partial view. And `InterfacesRemoved` is not a whole-object
+delete: BlueZ retracts a single `Battery1` as readily as the whole device, so only
+`Device1` removal retires a row.
+
+**Board-proven: the projection tracks live BlueZ, and the fix was not where it looked.**
+The registry delta rules were correct all along. Every live signal was being discarded
+one layer earlier, in the shared transport's local sender filter: D-Bus accepts
+`sender='org.bluez'` in `AddMatch` and then delivers with BlueZ's **unique** name
+(`:1.x`), which `signalMatches` compared literally against `org.bluez`. Bluetooth
+subscriptions now omit that predicate and keep the interface/member filters.
+
+**The pairing agent is a real exported D-Bus object, on its own connection.**
+`@httptoolkit/dbus-native` — already transitive — ships `exportInterface`, inbound
+dispatch and `requestName`; the shared `DbusTransport` merely hides them.
+`bluez-agent-exporter.ts` uses that object-server surface, and the **same** connection
+both exports Agent1 and issues `RegisterAgent`/`RequestDefaultAgent`, because BlueZ
+binds an agent path to the registering caller's unique bus name. No well-known name is
+needed. `exportAgent` completes before `RegisterAgent`; an export failure returns
+`export_failed` and registers **nothing** — registering a path nobody answers makes
+BlueZ block on every callback until it times out, which is strictly worse than no agent.
+
+**`NoInputNoOutput` ⇒ Just Works ⇒ `RequestAuthorization` is the only security gate**,
+and it is gated on operator *intent*: the window is opened by `stack.pair(devicePath)`
+for that device only and closed in a `finally`. Without that gate the agent accepts any
+pairing from anyone in radio range, silently. Every PIN/passkey arm rejects rather than
+inventing `0000`.
+
+**The S5 lock keys on the ADAPTER path, not the device path** — two devices on one
+controller contend for the same radio. Refusal (`ADAPTER_BUSY`, naming the holder)
+rather than a queue: a "Forget" queued behind a "Pair" completes by forgetting the
+device that was just paired, seconds after the operator stopped looking. Boot reconnect
+is sequential for the same reason, and latched to once per process.
+
+**The stack's `bt_unavailable` is NOT the operator's answer, and BOTH the mutation path
+and the read path have to re-apply the gate order.** `BluetoothStack` records an
+operator-disabled device as `bluez_unavailable`, truthful from its own point of view and
+the exact opposite fact to an operator. A card rendering `unavailable.cause` literally
+would band "the Bluetooth service isn't responding" over a radio the operator switched
+off two seconds ago. One documented divergence in the ladder: `emulated` is answered
+*before* the preference gate, because telling someone to switch Bluetooth on when the
+host has no radio is advice they cannot act on.
+
+**All thirteen typed refusals render INLINE, so `osCommand` gets `classify: () => ({ok:true})`.**
+A structured `{success:false}` must stay `ok` as far as the async-op store is concerned,
+or the operator gets the reason twice — once inline, once uselessly in a toast. A
+*thrown* RPC still takes the toast path, correctly. `bluetoothRefusalKey` is typed
+`Record<BluetoothMutationRefusal, string>`, so a fourteenth refusal fails `tsc` rather
+than reaching an operator as its own dotted path.
+
+**Absent is not `false` for the persisted preference.** `read()` answers `undefined`
+when the operator has never decided, and the boot reconciler does **nothing** for it —
+otherwise the first boot after an update disables `bluetooth.service` on every board in
+the field on the strength of a file nobody has written yet.
+
+**Ordering contracts, all pinned by tests:** reconcile the units *before* observing
+BlueZ (a field board's `bluetooth.service` is disabled by the old image policy, so the
+bus name has no owner and observation would report broken hardware); subscribe *before*
+snapshot; export the agent object *before* `RegisterAgent`; write the BlueALSA drop-in
+*before* `bluealsa.service` starts.
+
+**Known gap, deliberately not papered over:** the dev mock provider
+(`mocks/providers/bluetooth.ts`) has **no consumer** — `getBluetoothStatusMessage()`
+builds the live payload from the real stack with no `shouldUseMocks()` seam, so a
+session booted on `bt-mic-paired` broadcasts the dev host's honest "Bluetooth is off".
+The e2e specs drop-and-inject over the page socket
+(`tests/e2e/helpers/bluetooth-wire.ts`) and keep the scenario annotation so wiring the
+seam is a one-file deletion. A boot-the-mock-service parity test is owed with it.
+
+## THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE [EXISTS]
+
+**The presence oracle is the `org.bluealsa` capture PCM object, never BlueZ
+`Connected`.** A device can be connected with no PCM behind it, and naming it as an
+available source is a claim the device cannot honour. `scoCapable` + PCM present yields
+the row; connected-but-no-PCM yields none; A2DP-only yields none.
+
+The address is `bluealsa:DEV=<MAC>,PROFILE=sco`, routed through `AudioConfig.device`
+unchanged: `toAlsaCaptureDevice` passes it through untouched because it already carries
+`:`/`=`, so the opaque spec reaches the engine's `alsasrc device=` **verbatim**. The
+engine half is cerastream's `AlsaPcmSpec::Opaque` seam, gated on the `audio-pcm-spec`
+features token; the gate reads a `z.array(z.string())` wire field and **fails closed**
+on the minimal-safe fallback rung, which carries no `features` at all. See
+`cerastream/AGENTS.md` → OPAQUE ALSA PCM SPECS.
+
+**The mic hint is gated on CONNECTED, not on paired.** A bonded-but-disconnected mic has
+no PCM behind it — the same rule the `audio_source_unavailable` start class enforces one
+layer down.
+
+**`dropped` and `gone` are different BlueZ facts and must not be one band.**
+`PropertiesChanged{Connected:false}` is expected back (the engine is already rebuilding
+for it) and gets a retractable warning; `InterfacesRemoved(Device1)` needs a human and
+gets a **terminal** error that REPLACES the warning in place rather than stacking. And
+"we never saw it connected" is a third, silent state: a trusted mic switched off at boot
+sits in the registry `connected:false` forever, and claiming it was *lost* would put a
+standing error on a device that is merely off.
+
+**Recovery is the ENGINE's; CeraUI only speaks.** There is no re-promote RPC anywhere on
+the engine surface — `ProgramAudioBranch` is a device⇄silence `fallbackswitch` whose
+actuator polls every 250 ms (silence at 1100 ms, rebuild on the 3 s cadence). A radio
+flaps, so the verdict needs hysteresis and the re-assert needs a floor, and the two
+bounds answer different questions: `BLUETOOTH_SOURCE_LOSS_GRACE_MS` (3 000) is sized
+against the engine's own failover cadence so a drop the actuator absorbs stays silent,
+while `BLUETOOTH_REASSERT_INTERVAL_MS` (5 000) is leading-edge. A 5-events-in-2 s storm
+costs 1 re-assert, 0 notifications, and zero engine calls beyond the meter
+`reload-config`.
+
+**The publish order in `bluetooth-runtime.ts` is source-order-locked**: registry
+projection → picker re-fold → presence reconcile. Getting it wrong is invisible in
+steady state and only bites at boot, where the previous registry view is the empty one
+and a trusted mic that just reconnected would be missing from the first source list an
+operator sees.
+
+**Board validation status:** the software path is fixture- and injection-proven and the
+Bluetooth registry/pairing halves are board-proven, but **no physical BT microphone
+exists at the bench**, so the picker → meter → stream → power-cycle drill has not run.
+Recorded as a hardware gap, not a code gap, in
+`docs/RELIABILITY-FINDINGS.md` → B4.
+
 ## ANTI-PATTERNS
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
 - Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
+- Don't decide a channel or band is AP-usable from the per-channel `iw phy` flags alone — board-proven, an RTL8852BE under the world domain lists 5180/5200/5220 with no `no IR` marker while every 5 GHz rule in `iw reg get` reads `PASSIVE-SCAN`. Ask `buildApInitiationGate`, ask it at **both** producers (the `ch_*` map and the `auto_*` rungs), don't "simplify" it into a hardcoded 5 GHz block, don't make it channel-scoped, and don't make it fail closed.
+- Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.
+- Don't build the `org.bluez.Agent1` object on the shared `DbusTransport` — it is client-only. Use `bluez-agent-exporter.ts`'s dedicated connection, and never `RegisterAgent` a path before its object is exported: BlueZ then blocks on every callback until it times out, which is worse than having no agent.
+- Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the `org.bluealsa` capture-PCM object; a connected device with no PCM must yield no source row.
 - Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
