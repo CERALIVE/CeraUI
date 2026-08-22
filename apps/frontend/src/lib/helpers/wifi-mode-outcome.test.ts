@@ -48,6 +48,9 @@ describe("isApRadio", () => {
 
 	it("classifies a station-mode radio as a client, even with an active connection", () => {
 		expect(isApRadio({ mode: "station" })).toBe(false);
+		expect(
+			isApRadio({ mode: "station", hotspot: { available_channels: {} } }),
+		).toBe(false);
 	});
 
 	it("falls back to the hotspot payload when the backend reports no mode", () => {

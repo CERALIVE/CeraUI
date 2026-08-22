@@ -28,7 +28,8 @@ import type { WifiInterface } from "@ceraui/rpc/schemas";
 export function isApRadio(
 	iface: Pick<WifiInterface, "mode" | "hotspot">,
 ): boolean {
-	return iface.mode === "hotspot" || Boolean(iface.hotspot);
+	if (iface.mode !== undefined) return iface.mode === "hotspot";
+	return Boolean(iface.hotspot);
 }
 
 /** The mode a switch is driving toward. */
