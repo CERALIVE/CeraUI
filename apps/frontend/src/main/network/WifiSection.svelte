@@ -319,7 +319,6 @@ $effect(() => {
 										<Router class="size-3.5" />
 									</Button>
 								{:else}
-							{#if iface.supports_hotspot}
 								{#if isSwitching}
 									<!-- Switch confirmed at the click; hold a spinner until the
 									     authoritative snapshot flips the label to hotspot. Icon-only
@@ -356,7 +355,6 @@ $effect(() => {
 										{/snippet}
 									</SimpleAlertDialog>
 								{/if}
-							{/if}
 								{/if}
 							{/if}
 						{/if}
