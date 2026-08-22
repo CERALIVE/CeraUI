@@ -54,6 +54,7 @@ import { initIdentity } from "./modules/identity/index.ts";
 import { initRTMPIngestStats } from "./modules/ingest/rtmp.ts";
 import { initSRTIngest, stopSRTIngest } from "./modules/ingest/srt.ts";
 import { initFccUnlockModule } from "./modules/modems/fcc-unlock.ts";
+import { initModemCredentials } from "./modules/modems/modem-credentials.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
 import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
@@ -399,6 +400,11 @@ networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
 // dbus failure falls back to mmcli INSIDE the stack, so reaching this guard
 // means the whole cellular subsystem is down and the device keeps its UI.
 await guardNonCritical("cellular-stack", initCellularStack);
+// The router-WebUI credential store. Ahead of the loop for the same reason the
+// stack is: the first `modems` payload carries every row's lock state, and a
+// store that has not loaded yet reports a device with a stored login as having
+// none. It never throws — a missing or damaged file starts an empty store.
+await guardNonCritical("modem-credentials", () => initModemCredentials());
 // Opt-in mutation-free D-Bus-vs-mmcli comparison (the mmcli-retirement evidence
 // collector). Also ahead of the loop so its first heartbeat window covers the
 // same modem roster the loop is about to publish. An unconfigured device

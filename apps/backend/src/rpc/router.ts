@@ -58,6 +58,11 @@ import {
 	ussdRespondProcedure,
 } from "./procedures/modems.procedure.ts";
 import {
+	clearModemCredentialsProcedure,
+	setModemCredentialsProcedure,
+	verifyModemCredentialsProcedure,
+} from "./procedures/modems-credentials.procedure.ts";
+import {
 	openRouterAdminProcedure,
 	setRouterControlProcedure,
 	setRouterNetModeProcedure,
@@ -186,6 +191,9 @@ const stableRoutes = {
 		setBands: setModemBandsProcedure,
 		getCapabilities: getModemCapabilitiesProcedure,
 		setCapabilities: setModemCapabilitiesProcedure,
+		setCredentials: setModemCredentialsProcedure,
+		clearCredentials: clearModemCredentialsProcedure,
+		verifyCredentials: verifyModemCredentialsProcedure,
 		setFiveGPreference: setFiveGPreferenceProcedure,
 		openRouterAdmin: openRouterAdminProcedure,
 		setRouterControl: setRouterControlProcedure,

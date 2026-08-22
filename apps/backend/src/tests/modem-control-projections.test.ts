@@ -55,6 +55,10 @@ const TRANSPORT_KEEP_ALLOWLIST = new Set([
 	"modules/modems/mmcli-ussd.ts",
 	"modules/modems/mmcli.parsers.test.ts",
 	"modules/modems/mmcli.ts",
+	// KEEP, not MIGRATE: it owns a dialect LOGIN — a session, a token and a
+	// credential derivation — which is transport ownership the package's pure
+	// parsers deliberately exclude.
+	"modules/modems/modem-credential-verify.ts",
 	"modules/modems/modem-identity.test.ts",
 	"modules/modems/modem-identity.ts",
 	"modules/modems/modem-network-scan.ts",

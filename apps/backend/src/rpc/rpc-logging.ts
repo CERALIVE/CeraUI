@@ -29,6 +29,23 @@ import type { RPCContext } from "./types.ts";
  */
 const SENSITIVE_NAMESPACES: ReadonlySet<string> = new Set(["auth"]);
 
+/**
+ * Individual procedures whose ARGS must never be logged, outside a namespace
+ * that is sensitive as a whole.
+ *
+ * The `modems.*` namespace is overwhelmingly ordinary — an APN, a band list, a
+ * device id — so blanking all of it would throw away the diagnostics the rest of
+ * the surface exists to give. These three carry a router-WebUI login instead,
+ * which is the same class of secret as an `auth.*` password: `setCredentials`
+ * carries it outright, and the other two name the device it belongs to, which is
+ * the one field the credential store keys on.
+ */
+const SENSITIVE_PROCEDURES: ReadonlySet<string> = new Set([
+	"modems.setCredentials",
+	"modems.clearCredentials",
+	"modems.verifyCredentials",
+]);
+
 /** Length of the per-call correlation id (first hex chars of a UUIDv4). */
 const CORRELATION_ID_LENGTH = 8;
 
@@ -68,9 +85,15 @@ export function newCorrelationId(): string {
 	return crypto.randomUUID().slice(0, CORRELATION_ID_LENGTH);
 }
 
-/** True when the procedure path is in a credential-bearing namespace (`auth.*`). */
+/** True when the procedure carries credentials — by namespace (`auth.*`) or by name. */
 export function isSensitiveProcedure(path: readonly string[]): boolean {
-	return path.length > 0 && SENSITIVE_NAMESPACES.has(path[0] ?? "");
+	if (path.length === 0) {
+		return false;
+	}
+	return (
+		SENSITIVE_NAMESPACES.has(path[0] ?? "") ||
+		SENSITIVE_PROCEDURES.has(path.join("."))
+	);
 }
 
 /**

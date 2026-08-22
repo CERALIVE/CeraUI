@@ -144,8 +144,10 @@ import type { RPCContext } from "../types.ts";
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
 
-// Authenticated procedure
-const authedProcedure = baseProcedure.use(authMiddleware);
+// Authenticated procedure. Exported because the credential/lock surface must
+// build from it directly — see `modems-credentials.procedure.ts` for why those
+// three deliberately skip the cellular readiness gate below.
+export const authedProcedure = baseProcedure.use(authMiddleware);
 
 // EVERY modem procedure builds from this, never from `authedProcedure` directly:
 // the readiness gate has to be uniform, because a single ungated procedure is one

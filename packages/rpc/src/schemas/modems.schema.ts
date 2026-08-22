@@ -794,6 +794,134 @@ export const setRouterSubnetOutputSchema = z.object({
 });
 export type SetRouterSubnetOutput = z.infer<typeof setRouterSubnetOutputSchema>;
 
+// ── THE DEVICE LOCK MODEL — FIVE STATES, AND `open` IS ONE OF THEM ───────────
+//
+// A router-mode dongle's own admin API is the only surface that can answer for
+// its configuration, and some units gate it behind a login. `lock_state` is the
+// wire vocabulary for where that login stands, and it has EXACTLY five members
+// because collapsing any pair of them loses a fact an operator must act on
+// differently:
+//
+//   `open`        the device requires no authentication and already exposes its
+//                 full capability set. It is the COMMON case on this fleet — all
+//                 three bench dialects answered unauthenticated — and it must be
+//                 DETECTED, never assumed. A provider whose protocol cannot say
+//                 so resolves `locked` instead of guessing.
+//   `locked`      a credential is required and none has been accepted.
+//   `unlocked`    a stored credential was verified THIS SESSION.
+//   `auth-failed` a credential was tried and the device rejected it.
+//   `locked-out`  the device itself reports a lockout window.
+//
+// `auth-failed` and `locked-out` are never folded together: the first invites a
+// re-entry, the second forbids one until the window clears. And a dialect that
+// answered a shape this build cannot drive is NEITHER — that is
+// `unsupported-profile`, carried alongside a `locked` state on {@link
+// modemLockDetailSchema}, because reporting it as `auth-failed` would tell an
+// operator their password is wrong when it was never presented.
+export const MODEM_LOCK_STATES = [
+	'open',
+	'locked',
+	'unlocked',
+	'auth-failed',
+	'locked-out',
+] as const;
+export const modemLockStateSchema = z.enum(MODEM_LOCK_STATES);
+export type ModemLockState = z.infer<typeof modemLockStateSchema>;
+
+/**
+ * Why a lock state is what it is, when the bare state cannot say.
+ *
+ * `unsupported-profile` is todo 6's `protocol-mismatch` on the wire: the dialect
+ * answered a login shape this build ships no proven implementation for. It rides
+ * BESIDE the state rather than as a sixth state, because the device is still
+ * simply `locked` — what changed is that a credential will not help.
+ */
+export const modemLockSubReasonSchema = z.enum(['unsupported-profile']);
+export type ModemLockSubReason = z.infer<typeof modemLockSubReasonSchema>;
+
+/**
+ * The lock detail block. `credential_configured` is REQUIRED and therefore
+ * always explicit: it is a RETRACTABLE fact (an operator clears a stored login),
+ * and the modem merge preserves an omitted optional field, so a
+ * present-only-when-true flag could be raised and never lowered — the
+ * `policy_route_missing` latch, exactly.
+ *
+ * The secret itself has no representation here, so a projection cannot leak one
+ * by omission.
+ */
+export const modemLockDetailSchema = z.object({
+	credential_configured: z.boolean(),
+	sub_reason: modemLockSubReasonSchema.optional(),
+	/** Epoch ms of the last attempt the device ACCEPTED. */
+	last_verified_at: z.number().optional(),
+	/** Epoch ms the device's own lockout window is expected to clear. */
+	lockout_until: z.number().optional(),
+});
+export type ModemLockDetail = z.infer<typeof modemLockDetailSchema>;
+
+/** Bounds on what an operator may type into a router-WebUI login. */
+export const MODEM_CREDENTIAL_USERNAME_MAX = 64;
+export const MODEM_CREDENTIAL_PASSWORD_MAX = 128;
+
+/**
+ * Store (or replace) one device's router-WebUI login.
+ *
+ * `.strict()` because an unknown extra key on a surface carrying a secret must
+ * be REJECTED rather than ignored. The username MAY be empty (several dialects
+ * have a single implicit account); the password may not, because an empty pair
+ * is not a credential and an `open` device is a DETECTED state rather than an
+ * empty row in a secrets file.
+ */
+export const setModemCredentialsInputSchema = z
+	.object({
+		device: z.string().min(1),
+		username: z.string().max(MODEM_CREDENTIAL_USERNAME_MAX),
+		password: z.string().min(1).max(MODEM_CREDENTIAL_PASSWORD_MAX),
+	})
+	.strict();
+export type SetModemCredentialsInput = z.infer<typeof setModemCredentialsInputSchema>;
+
+export const modemCredentialsInputSchema = z.object({ device: z.string().min(1) }).strict();
+export type ModemCredentialsInput = z.infer<typeof modemCredentialsInputSchema>;
+
+/**
+ * The refusals, none of which is a synonym for another.
+ *
+ * `device_open` is a REFUSAL rather than a silent success: storing a login for a
+ * device that needs none leaves a secret on disk that nothing will ever present.
+ * `unsupported_profile` is the `protocol-mismatch` case — the credential was
+ * never presented, so it is emphatically not `auth_failed`. `locked_out` means
+ * the device refused BEFORE any request left this host.
+ */
+export const modemCredentialsRefusalSchema = z.enum([
+	'unknown_device',
+	'identity_unresolved',
+	'device_open',
+	'unsupported_profile',
+	'locked_out',
+	'auth_failed',
+	'unreachable',
+	'no_credential',
+	'unavailable_in_emulated_mode',
+]);
+export type ModemCredentialsRefusal = z.infer<typeof modemCredentialsRefusalSchema>;
+
+/**
+ * The one answer shape all three credential procedures share.
+ *
+ * It carries the RESOLVED lock state rather than an echo of the request, so a
+ * caller locks its surface to what the device is now in — and it carries NO
+ * password, no username and no derivative of either. `z.object` strips unknown
+ * keys, so a field added upstream by mistake cannot reach a client through here.
+ */
+export const modemCredentialsOutputSchema = z.object({
+	success: z.boolean(),
+	error: modemCredentialsRefusalSchema.optional(),
+	lock_state: modemLockStateSchema.optional(),
+	lock_detail: modemLockDetailSchema.optional(),
+});
+export type ModemCredentialsOutput = z.infer<typeof modemCredentialsOutputSchema>;
+
 // Read-only serving-cell telemetry (Phase-A A3.3). The two noise figures are NOT
 // interchangeable and must not be folded into one key: LTE reports a
 // signal-to-noise ratio (`snr`), NR reports signal-to-interference-plus-noise
@@ -1272,6 +1400,15 @@ export const modemSchema = z.object({
 	// The dongle's own admin API, for a `router-ethernet` row that has no
 	// `status` and never will. Absent for every ModemManager-managed device.
 	router_admin: routerAdminSchema.optional(),
+	// Where the device's own admin login stands. Emitted for every row that HAS
+	// an admin surface, and always as one of the five EXPLICIT values — `open` in
+	// particular is a stated value rather than the absence of the field, because
+	// encoding it as absence is the `policy_route_missing` latch: a row that went
+	// `locked` → `open` could never lower the claim on a merging consumer.
+	// Absent means the device has no admin-auth surface at all (every
+	// ModemManager-managed modem), the same way `router_admin` is absent for one.
+	lock_state: modemLockStateSchema.optional(),
+	lock_detail: modemLockDetailSchema.optional(),
 	// Produced by `deriveModemStableKey`; omitted when the device reports no
 	// ID_PATH. Correlate a device across a USB-mode transition with THIS and
 	// nothing else — see the derivation block above for why the numeric id,

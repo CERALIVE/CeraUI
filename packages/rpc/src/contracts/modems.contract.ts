@@ -9,6 +9,8 @@ import {
 	modemCapabilitiesOutputSchema,
 	modemConfigInputSchema,
 	modemConfigOutputSchema,
+	modemCredentialsInputSchema,
+	modemCredentialsOutputSchema,
 	modemGpsInputSchema,
 	modemGpsOutputSchema,
 	modemListSchema,
@@ -27,6 +29,7 @@ import {
 	setModemBandsOutputSchema,
 	setModemCapabilityInputSchema,
 	setModemCapabilityOutputSchema,
+	setModemCredentialsInputSchema,
 	setModemGpsInputSchema,
 	setModemGpsOutputSchema,
 	setRouterControlInputSchema,
@@ -147,6 +150,32 @@ export const modemsContract = oc.router({
 	 * can never do anything.
 	 */
 	setCapabilities: oc.input(setModemCapabilityInputSchema).output(setModemCapabilityOutputSchema),
+
+	/**
+	 * Store a router-WebUI login for one device.
+	 *
+	 * The password reaches the device-local credential store and NOTHING else —
+	 * it is absent from the answer, from every broadcast, and from every log. A
+	 * device DETECTED as `open` is refused `device_open` rather than quietly
+	 * accepting a secret nothing will ever present.
+	 */
+	setCredentials: oc.input(setModemCredentialsInputSchema).output(modemCredentialsOutputSchema),
+
+	/**
+	 * Forget a device's stored login. Idempotent, and it also drops any session
+	 * unlock — a credential that no longer exists cannot keep a row `unlocked`.
+	 */
+	clearCredentials: oc.input(modemCredentialsInputSchema).output(modemCredentialsOutputSchema),
+
+	/**
+	 * Present the stored login to the device ONCE, and report where that left it.
+	 *
+	 * There is deliberately no retry: `auth-failed` means the device rejected the
+	 * credential, and re-presenting it spends one of the attempts a lockout
+	 * counts. A device already reporting a lockout window is refused BEFORE any
+	 * request leaves this host.
+	 */
+	verifyCredentials: oc.input(modemCredentialsInputSchema).output(modemCredentialsOutputSchema),
 
 	/**
 	 * Change one setting on a router-mode dongle through its own HTTP admin API.

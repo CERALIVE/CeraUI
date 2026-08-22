@@ -53,11 +53,15 @@ import type {
 	ModemDeviceClass,
 	ModemEsim,
 	ModemFiveGPreference,
+	ModemLockDetail,
+	ModemLockState,
 	ModemRecoveryState,
 	ModemRegistrationRejection,
 	RouterAdmin,
 	UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
+
+import type { ResolvedModemLock } from "./modem-lock-state.ts";
 
 // NOT the schema's same-named type. This union is wider (it also spells mmcli's
 // `current`/`forbidden`/`unknown`); `modem-network-scan.ts` normalizes those away
@@ -253,6 +257,8 @@ export type WireModemEntry = {
 	stable_key?: string;
 	capability_modules?: CapabilityModuleClaims;
 	five_g_preference?: ModemFiveGPreference;
+	lock_state?: ModemLockState;
+	lock_detail?: ModemLockDetail;
 };
 
 /** The projected wire message — `Record<numericId(string), entry>`. */
@@ -278,6 +284,7 @@ interface ProjectedLocalState {
 	readonly capabilityModules?: CapabilityModuleClaims | undefined;
 	readonly fiveGPreference?: ModemFiveGPreference | undefined;
 	readonly usbMode?: UsbCompositionMode | undefined;
+	readonly lock?: ResolvedModemLock | undefined;
 }
 
 export interface ProjectModemWireDeps {
@@ -315,6 +322,15 @@ export interface ProjectModemWireDeps {
 	 * source observes (ModemManager does not report a USB composition at all).
 	 */
 	readonly usbModeFor?: (stableKey?: string) => UsbCompositionMode | undefined;
+	/**
+	 * Where this row's own admin login stands, or `undefined` for a device with
+	 * no admin-auth surface. Injected like the four above — it is resolved from
+	 * the credential store plus a protocol observation, neither of which any
+	 * source adapter carries.
+	 */
+	readonly lockFor?: (
+		source: ProjectedModemSource,
+	) => ResolvedModemLock | undefined;
 	/**
 	 * Prior `allocationKey → synthetic id` allocations, retained across
 	 * snapshots so a replugged device gets its OLD id back. Optional; an empty
@@ -592,6 +608,16 @@ function appendAdditive(
 	if (entry.usb_mode === undefined && local.usbMode !== undefined) {
 		entry.usb_mode = local.usbMode;
 	}
+
+	// EXPLICIT on every row that HAS an admin surface, `open` included. Encoding
+	// `open` as the ABSENCE of the field would be the `policy_route_missing`
+	// latch: the merge preserves an omitted optional field, so a row that went
+	// `locked` → `open` could never lower the claim. A device with no admin-auth
+	// surface at all emits neither key, exactly as it emits no `router_admin`.
+	if (local.lock !== undefined) {
+		entry.lock_state = local.lock.state;
+		entry.lock_detail = local.lock.detail;
+	}
 }
 
 /**
@@ -638,6 +664,7 @@ export function projectModemWire(
 					capabilityModules: deps.capabilityModulesFor?.(source.stableKey),
 					fiveGPreference: deps.fiveGPreferenceFor?.(source.stableKey),
 					usbMode: deps.usbModeFor?.(source.stableKey),
+					lock: deps.lockFor?.(source),
 				}
 			: {};
 		message[String(id)] = buildWireEntry(

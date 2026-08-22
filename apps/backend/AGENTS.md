@@ -1559,6 +1559,107 @@ before the restore has been exercised on hardware would be the unproven control
 this surface refuses. Coverage: `tests/router-net-mode-write.test.ts`,
 `tests/router-subnet-hygiene.test.ts`, `tests/router-stage-b-interlock.test.ts`.
 
+### …AND WHETHER IT NEEDS A LOGIN IS ONE OF FIVE STATES [EXISTS — UNPROVEN ON A LOCKED DEVICE]
+
+`modules/modems/modem-lock-state.ts` (the pure model + its session) and
+`modem-credential-verify.ts` (the device-facing attempt) turn todo 7's credential
+store into a state an operator can act on. The wire fields are
+**`modem.lock_state`** — exactly `open` / `locked` / `unlocked` / `auth-failed` /
+`locked-out` — and **`modem.lock_detail`**.
+
+**`open` IS DETECTED, AND ITS ONLY EVIDENCE IS A DOCUMENT THAT STATES IT.** Every
+dongle on this bench answers unauthenticated, so `open` is the COMMON case and
+prompting for a password at one of them is the dishonesty this surface exists to
+remove — but "nobody refused us" is not the same claim, because a refusal can
+also be a read that never happened. HiLink's `/api/user/state-login` answers the
+question directly (`State: 0` ⇒ usable with no credential presented, `-1` ⇒ a
+login is required), so it rides the batch the 30 s admin cycle already spawns and
+is read on a FRESH session — which is what makes `0` mean "no credential needed"
+rather than "somebody logged in earlier". ZTE goform and Qualcomm HIMI publish no
+equivalent, so they resolve `locked`. An UNANSWERABLE read DROPS the cached
+evidence rather than retaining it — the deliberate opposite of this codebase's
+usual retain-on-failure rule, because `open` is the only value that WIDENS what a
+row offers and a claim we can no longer support must be withdrawn.
+
+**`protocol-mismatch` IS NOT `auth-failed`.** Todo 6's ZTE vocabulary
+(`lockout` / `auth-rejection` / `protocol-mismatch` / `auth-accepted`) maps onto
+the states through `classifyAuthAttempt`, and three of the four map directly. The
+fourth does not: the dialect answered a login shape this build ships no proven
+implementation for, so the credential was never presented and reporting it as a
+rejection would tell an operator their password is wrong. It resolves `locked`
+carrying `lock_detail.sub_reason: "unsupported-profile"`.
+
+**THE RESOLUTION ORDER IS THE CONTRACT.** A live lockout outranks everything (it
+is the only state that forbids an action rather than describing one, and an
+`open` device can never have produced a lockout record); positive open evidence
+then outranks any session history, because a device that currently states it
+needs no login needs none whatever was tried at it earlier; below that it is the
+session's own last word, and a device that has said nothing is `locked` — the
+honest floor.
+
+**`unlocked` MEANS THIS SESSION, so the session map is in memory.** Todo 7's
+persisted `lastOutcome` is the right shape for "what this credential last did"
+and survives a reboot; a boot that has presented nothing has unlocked nothing.
+
+**THE CAPABILITY EXPANSION RIDES THE EXISTING SURFACE, NOT A NEW ONE.**
+`gateRouterAdminByLock` withholds `router_admin.capabilities` and
+`router_admin.controls` — the two blocks that describe what an operator may DO to
+the dongle — while the lock does not permit an authenticated session, and the
+same rebuild offers them again the moment a verify lands. Every OBSERVATION on
+the block (admin URL, model, SIM, signal) passes through untouched: those are
+facts rather than offers, and withholding them would report a reachable device as
+unreadable. Today's fleet detects as `open`, so the reading is byte-unchanged for
+every device currently on the bench.
+
+**The three procedures are `authedProcedure`, NOT `modemProcedure`**
+(`rpc/procedures/modems-credentials.procedure.ts`), for the reason
+`modems.getCapabilities` is: a router dongle is architecturally invisible to
+ModemManager, and an operator most needs to fix a credential exactly while the
+cellular stack is initializing — which is when `cellularReadyMiddleware` refuses
+everything. They take no lease and touch no radio.
+
+- **`verifyCredentials` presents the credential EXACTLY ONCE.** There is no
+  retry: every dialect here counts a failed login toward a lockout the operator
+  cannot clear, so a retry spends the attempts that would have let them fix a
+  typo. A device already inside a lockout window is refused BEFORE a transport is
+  opened, so it costs ZERO device requests.
+- **`setCredentials` performs zero device requests too** — it reads the open
+  verdict the admin cycle already observed — and REFUSES an `open` device
+  (`device_open`) rather than storing a secret nothing will ever present.
+- **Clearing a credential drops the session verdict with it**: a credential that
+  no longer exists cannot keep a row `unlocked`.
+- **No output carries a password.** `modemCredentialsOutputSchema` is a plain
+  `z.object`, so a field added upstream by mistake is STRIPPED, and
+  `rpc-logging.ts` omits these three procedures' args entirely (a per-PROCEDURE
+  set beside the `auth.*` namespace one, because the rest of `modems.*` is
+  ordinary and blanking all of it would throw away real diagnostics).
+- **`initModemCredentials()` is wired at boot**, beside `initCellularStack` and
+  ahead of the modem loop: the first `modems` payload carries every row's lock
+  state, and an unloaded store reports a device with a stored login as having
+  none.
+
+**HONEST STATUS: no locked device exists on this bench.** All three dialects
+answered unauthenticated, so the `open` path is the only one hardware has
+exercised. The HiLink login derivation is modem-stack's certified one
+(`providers/huawei-hilink/session.ts`, password types 3 and 4) re-stated for Rule
+D and NOT run against a device that demands it; ZTE and HIMI ship no login at all
+and answer `protocol-mismatch` deliberately, because an unproven credential
+derivation would burn a real operator's attempts against a real lockout counter.
+
+Coverage: `tests/modem-credential-unlock.test.ts` — all five states reachable and
+EXPLICIT on the wire (including the no-admin-surface negative), the resolution
+ladder with its withdraw-the-open-claim case, the four refusal mappings with the
+`protocol-mismatch` ≠ `auth-failed` assertion, the capability withhold/offer pair
+and its observations-survive control, the zero-request lockout, the no-retry
+proof by attempt count, the password-absence assertions (schema strip, real
+verify outcome, and the derived login document), the rpc-logging omission with
+its diagnosable-namespace control, and static locks that the SHIPPED producer
+really calls the gate and the SHIPPED admin cycle really reads the login-state
+document. Rule-E proof in both directions: neutering the capability gate reddens
+2, folding `protocol-mismatch` into `auth-failed` reddens 2, moving the lockout
+check below the transport reddens 1, dropping the procedures from the log
+omission set reddens 1, and encoding `open` as absence reddens 2.
+
 ## …AND ONE RESOLVER DECIDES WHICH PHYSICAL DEVICE IT IS [EXISTS]
 
 `modules/modems/physical-identity.ts` is the SINGLE resolver of a physical-device
@@ -7380,6 +7481,12 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't import modem-stack's `device-classifier.ts` across the sibling boundary (Rule D) — `usb-net-classifier.ts` is a re-derived MIRROR with its own bench-captured fixtures. And don't drop the cellular-evidence gate on top of it: modem-stack's `router-mode` verdict means "a tether with no control port", which is equally true of a plain USB-to-Ethernet adapter, so claiming CELLULAR on that alone would put the word on a wired NIC.
 - Don't read only the netdev's OWN USB interface — the vendor ids, the AT/QMI ports and the ZeroCD mass-storage companion all live on the PARENT device, and those are exactly the descriptors the classification turns on.
 - Don't proxy a dongle's admin UI by DESTINATION ADDRESS — identical units share one factory address, and the bench ZTE answered a request addressed to its twins' gateway, so the address selects nothing. Resolve `wire id -> interface -> that interface's own default route` and bind with `curl --interface`; a hardcoded `192.168.8.1` or a best-guess interface reaches whichever unit the kernel picks.
+- Don't assume a dongle is `open` because nothing refused a read — a refusal can also be a read that never happened. `open` needs a document that STATES it (HiLink's `/api/user/state-login`, on a FRESH session); a dialect that cannot say so resolves `locked`. And don't RETAIN a cached open verdict whose read stopped answering: `open` is the only value that widens what a row offers, so this one case is the deliberate opposite of the retain-on-failure rule everywhere else.
+- Don't publish `lock_state: "open"` as the ABSENCE of the field — the modem merge preserves an omitted optional field, so a row that went `locked` → `open` could never lower the claim (the `policy_route_missing` latch, exactly). All five values are stated explicitly on every row that has an admin surface; only a device with NO admin-auth surface omits the key.
+- Don't fold `protocol-mismatch` into `auth-failed` — the credential was never presented, so reporting a rejection tells an operator their password is wrong when it was not tried. It is `locked` + `lock_detail.sub_reason: "unsupported-profile"`.
+- Don't retry a failed `verifyCredentials`, and don't attempt one while the device reports a lockout — every dialect counts a failed login toward a window the operator cannot clear, so a retry spends the attempts that would have let them fix a typo. The lockout check reads only local state and MUST stay ahead of the transport, so a locked-out device costs zero requests.
+- Don't store a credential for a device DETECTED as `open`, and don't route the three credential procedures through `modemProcedure` — a router dongle is invisible to ModemManager, and the readiness gate makes the fix unreachable in exactly the state it exists for.
+- Don't log the credential procedures' args, and don't "simplify" the per-procedure omission set into a whole-namespace one — the rest of `modems.*` carries APNs, band lists and device ids that are the diagnostics the trace exists to give.
 - Don't drop `--compressed` from the admin proxy, and don't forward or set an `Accept-Encoding` header — the dongle serves pre-gzipped assets and ignores `identity`, and a header set here overrides the flag and leaves curl unable to decode the reply. Stripping `content-encoding` is correct ONLY while that flag is present.
 - Don't route curl's `--dump-header` to `/dev/stderr` under `Bun.spawn` — against a PIPE it never completes (`exitCode: null`, both streams empty), even though the same argv works under a shell redirect to a file.
 - Don't widen the admin-UI URL rewriter. `(` is a delimiter in CSS only (in JS it opens a regex), a path must name a DIRECTORY outside CSS (a regex literal can end in a quote — jQuery's `replace(/'/g, …)` is byte-identical to a quoted path), a bare `"/"` is a separator as often as a link, and an XML/JSON body is data whatever its content-type says. Each of those refusals is a page that rendered blank on the bench before it existed.

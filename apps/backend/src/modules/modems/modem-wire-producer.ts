@@ -65,7 +65,14 @@ import {
 } from "./capability-gates.ts";
 import { buildFiveGPreferenceView } from "./five-g-preference.ts";
 import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
+import { projectModemCredential } from "./modem-credentials.ts";
 import { readModemIdPaths } from "./modem-id-path-source.ts";
+import type { ResolvedModemLock } from "./modem-lock-state.ts";
+import {
+	gateRouterAdminByLock,
+	readLockOpenEvidence,
+	resolveModemLock,
+} from "./modem-lock-state.ts";
 import {
 	modemUsbModeForStableKey,
 	refreshModemUsbModes,
@@ -91,6 +98,7 @@ import {
 	getModems,
 	type Modem,
 } from "./modems-state.ts";
+import type { PhysicalDeviceRecord } from "./physical-identity.ts";
 import { resetPhysicalIdentityRegistry } from "./physical-identity.ts";
 import { resolveModemPhysicalIdentity } from "./physical-identity-source.ts";
 import {
@@ -105,6 +113,14 @@ export type ModemIdPathReader = () => Promise<ReadonlyMap<string, string>>;
 let idPaths: ReadonlyMap<string, string> = new Map();
 let retainedSyntheticIds: ReadonlyMap<string, number> = new Map();
 const routerCellularIfnames = new Map<string, string>();
+
+/**
+ * The identity behind each classified dongle in the LAST collection, keyed by
+ * interface. It is what lets the lock projector answer for a `router` row that
+ * has an admin surface without answering for one that does not — the retired
+ * netns rows share the same `kind` and have no admin API to be locked out of.
+ */
+const routerCellularIdentities = new Map<string, PhysicalDeviceRecord>();
 
 /**
  * The real reader lives in `modem-id-path-source.ts` — see that module's header
@@ -346,14 +362,28 @@ function collectRouterCellularSources(): ProjectedModemSource[] {
 	const netif = getNetworkInterfaces();
 	const sources: ProjectedModemSource[] = [];
 	routerCellularIfnames.clear();
+	routerCellularIdentities.clear();
 	for (const [ifname, marker] of getRouterCellularMarkers()) {
 		const entry = netif[ifname];
 		if (entry === undefined) continue;
-		const admin = getRouterCellularAdmin(ifname) as RouterAdmin | undefined;
+		const observed = getRouterCellularAdmin(ifname) as RouterAdmin | undefined;
 		const identity = resolveModemPhysicalIdentity(ifname, {
-			...(admin !== undefined ? { routerAdmin: admin } : {}),
+			...(observed !== undefined ? { routerAdmin: observed } : {}),
 			...(marker.serial !== undefined ? { unitLabel: marker.serial } : {}),
 		});
+		// THE CAPABILITY GATE. A row that cannot authenticate must not advertise
+		// the operations that need a session — and the same row offers them again
+		// the moment a verify lands, through this same rebuild. The reading's
+		// OBSERVATIONS (admin URL, model, SIM, signal) pass through untouched:
+		// those are facts rather than offers, and withholding them would report a
+		// reachable device as unreadable.
+		const admin =
+			observed === undefined
+				? undefined
+				: gateRouterAdminByLock(
+						observed,
+						resolveRouterCellularLock(ifname, identity).state,
+					);
 		const view: RouterCellularView = {
 			ifname,
 			vendor: marker.vendor,
@@ -365,9 +395,31 @@ function collectRouterCellularSources(): ProjectedModemSource[] {
 			...(admin !== undefined ? { admin } : {}),
 		};
 		routerCellularIfnames.set(identity.stableKey ?? routerKey(ifname), ifname);
+		routerCellularIdentities.set(ifname, identity);
 		sources.push(fromRouterCellularView(view));
 	}
 	return sources;
+}
+
+function resolveRouterCellularLock(
+	ifname: string,
+	identity: PhysicalDeviceRecord,
+): ResolvedModemLock {
+	return resolveModemLock({
+		identityKey: identity.identityKey,
+		openEvidence: readLockOpenEvidence(ifname),
+		credential: projectModemCredential(identity),
+	});
+}
+
+/** The lock block for a row, or `undefined` for a device with no admin surface. */
+function projectModemLock(
+	source: ProjectedModemSource,
+): ResolvedModemLock | undefined {
+	const identity = routerCellularIdentities.get(source.ifname);
+	return identity === undefined
+		? undefined
+		: resolveRouterCellularLock(source.ifname, identity);
 }
 
 /**
@@ -455,6 +507,7 @@ export function buildProjectedModemsMessage(
 			),
 		fiveGPreferenceFor: projectFiveGPreference,
 		usbModeFor: modemUsbModeForStableKey,
+		lockFor: projectModemLock,
 		...(fullState !== undefined ? { fullState } : {}),
 	});
 	retainedSyntheticIds = result.syntheticIds;
@@ -550,6 +603,7 @@ export function resetModemWireProducer(): void {
 	idPaths = new Map();
 	retainedSyntheticIds = new Map();
 	routerCellularIfnames.clear();
+	routerCellularIdentities.clear();
 	resetPhysicalIdentityRegistry();
 	readIdPaths = readModemIdPaths;
 	resetModemUsbModes();
