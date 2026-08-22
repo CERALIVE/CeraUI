@@ -88,6 +88,12 @@ import { AUDIO_SOURCE_AUTO } from '@ceraui/rpc/schemas';
 import { hasEffectiveSource } from '$lib/streaming/effective-source';
 import { captureModeCodecs } from '$lib/streaming/passthrough';
 import {
+	audioQualityChip,
+	audioSourceUnavailableHintKey,
+	audioSourceUnavailableReasonKey,
+	isBluetoothAudioSource,
+} from '$lib/streaming/bluetooth-audio-source';
+import {
 	audioSourceLabel,
 	deriveActiveSummary,
 	deriveCapabilitySummary,
@@ -517,6 +523,15 @@ const displayedAudioDetail = $derived(displayedAudioEntry?.detail);
 // Driven by the engine `transport` field — never re-derived from the bus path.
 const displayedAudioExternal = $derived(
 	displayedAudioEntry !== undefined && isExternalAudioSource(displayedAudioEntry),
+);
+const displayedAudioQuality = $derived(
+	displayedAudioEntry ? audioQualityChip(displayedAudioEntry) : undefined,
+);
+// The engine's live audio switch resolves a REGISTRY ID, and a Bluetooth
+// microphone has none — so switching to or away from one mid-stream is refused
+// by the device. Said here rather than left to a failed attempt.
+const audioLiveSwitchBlocked = $derived(
+	isStreaming && displayedAudioEntry !== undefined && isBluetoothAudioSource(displayedAudioEntry),
 );
 const notAvailableAudioSource = $derived(
 	displayedAudioSource && !pickerEntries.some((e) => e.id === displayedAudioSource)
@@ -1260,6 +1275,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 							variant="info"
 						/>
 					{/if}
+					{#if displayedAudioQuality}
+						<span
+							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 font-mono text-xs"
+							data-quality={displayedAudioQuality.kind}
+							data-testid="audio-source-quality"
+						>
+							{t(displayedAudioQuality.key, displayedAudioQuality.params)}
+						</span>
+					{/if}
 					{#if notAvailableAudioSource}
 						<span
 							class="bg-muted text-muted-foreground rounded-full px-2 py-0.5 text-xs font-medium"
@@ -1269,6 +1293,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 						</span>
 					{/if}
 				</div>
+				{#if audioLiveSwitchBlocked}
+					<p
+						class="text-status-warning text-xs"
+						data-testid="audio-bluetooth-live-switch"
+						role="status"
+					>
+						{m["live.source.audioBluetoothLiveSwitch"]()}
+					</p>
+				{/if}
 			{:else}
 				<!-- Multiple sources, pre-start → selectable. -->
 				<Select.Root
@@ -1296,6 +1329,15 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 										variant="info"
 									/>
 								{/if}
+								{#if displayedAudioQuality}
+									<span
+										class="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 font-mono text-xs"
+										data-quality={displayedAudioQuality.kind}
+										data-testid="audio-source-quality"
+									>
+										{t(displayedAudioQuality.key, displayedAudioQuality.params)}
+									</span>
+								{/if}
 							</span>
 						{/if}
 					</Select.Trigger>
@@ -1308,9 +1350,14 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 								value={AUDIO_SOURCE_AUTO}
 							></Select.Item>
 							{#each groupedAudio.devices as entry (entry.id)}
+								{@const quality = audioQualityChip(entry)}
+								{@const blockedKey = audioSourceUnavailableReasonKey(entry)}
+								{@const blockedHintKey = audioSourceUnavailableHintKey(entry)}
 								<Select.Item
+									aria-disabled={blockedKey ? 'true' : undefined}
+									disabled={blockedKey !== undefined}
 									label={audioSourceLabel(entry, t)}
-									title={entry.detail}
+									title={blockedHintKey ? t(blockedHintKey) : entry.detail}
 									value={entry.id}
 								>
 									<span class="flex min-w-0 items-center gap-2">
@@ -1322,6 +1369,23 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 												size="micro"
 												variant="info"
 											/>
+										{/if}
+										{#if quality}
+											<span
+												class="bg-muted text-muted-foreground shrink-0 rounded-full px-2 py-0.5 font-mono text-xs"
+												data-quality={quality.kind}
+												data-testid="audio-option-quality-{entry.id}"
+											>
+												{t(quality.key, quality.params)}
+											</span>
+										{/if}
+										{#if blockedKey}
+											<span
+												class="text-status-warning shrink-0 text-xs"
+												data-testid="audio-option-blocked-{entry.id}"
+											>
+												{t(blockedKey)}
+											</span>
 										{/if}
 									</span>
 								</Select.Item>

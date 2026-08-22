@@ -130,6 +130,37 @@ export type AudioSourceKind = z.infer<typeof audioSourceKindSchema>;
 export const audioTransportSchema = z.enum(['usb', 'hdmi', 'bluetooth', 'onboard']);
 export type AudioTransport = z.infer<typeof audioTransportSchema>;
 
+// The SCO codec a Bluetooth microphone negotiated. CVSD is the narrowband
+// mandatory codec (8 kHz mono); mSBC is HFP 1.6 wideband (16 kHz mono). Nothing
+// else can ride a `PROFILE=sco` capture leg, so the enum is closed.
+export const bluetoothMicCodecSchema = z.enum(['cvsd', 'msbc']);
+export type BluetoothMicCodec = z.infer<typeof bluetoothMicCodecSchema>;
+
+// The NEGOTIATED quality of a device source, present ONLY when the device
+// actually reported it. Its absence is the honest "we do not know yet" state
+// the UI renders as a ceiling ("up to 16 kHz mono") rather than a claim — a
+// fabricated rate here would be the same class of lie as rendering a busy/idle
+// encoder core as a percentage.
+export const audioSourceQualitySchema = z.object({
+	codec: bluetoothMicCodecSchema,
+	sample_rate_hz: z.number().int().positive(),
+	channels: z.number().int().positive(),
+});
+export type AudioSourceQuality = z.infer<typeof audioSourceQualitySchema>;
+
+// Why a LISTED audio source cannot be selected. Closed on purpose: every member
+// needs its own operator copy, and a free string would let a machine token reach
+// the picker. `engine_update_required` is the todo-16 feature gate — the device
+// has a working Bluetooth capture PCM but the engine does not advertise the
+// `audio-pcm-spec` token, so it could not be told which PCM to open.
+export const AUDIO_SOURCE_UNAVAILABLE_REASONS = {
+	ENGINE_UPDATE_REQUIRED: 'engine_update_required',
+} as const;
+export const audioSourceUnavailableReasonSchema = z.enum([
+	AUDIO_SOURCE_UNAVAILABLE_REASONS.ENGINE_UPDATE_REQUIRED,
+]);
+export type AudioSourceUnavailableReason = z.infer<typeof audioSourceUnavailableReasonSchema>;
+
 export const audioSourceSchema = z.object({
 	id: z.string(),
 	kind: audioSourceKindSchema,
@@ -144,6 +175,16 @@ export const audioSourceSchema = z.object({
 	product_name: z.string().optional(),
 	// Physical transport tag rendered beside the product name.
 	transport: audioTransportSchema.optional(),
+	// The opaque ALSA PCM string the engine opens for this source (todo 4's
+	// `AlsaPcmSpec::Opaque`), e.g. `bluealsa:DEV=AA:BB:CC:DD:EE:FF,PROFILE=sco`.
+	// Present only for a source that is NOT a kernel card; a card source keeps
+	// its `hw:CARD=` form resolved backend-side and carries nothing here.
+	pcm_spec: z.string().optional(),
+	quality: audioSourceQualitySchema.optional(),
+	// Present ONLY on a listed-but-unselectable row. The whole `audio_sources`
+	// array is replaced on every broadcast, so present-only-when-true carries no
+	// latch risk here (unlike a per-key merged field such as `policy_route_missing`).
+	unavailable_reason: audioSourceUnavailableReasonSchema.optional(),
 	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). The UI
 	// selection binds to this; the persisted `config.asrc` wire value is
 	// unchanged (still the asrc key), so the engine ALSA path is untouched.
@@ -1111,13 +1152,20 @@ export type SwitchAudioInput = z.infer<typeof switchAudioInputSchema>;
 
 // `AUDIO_DEVICE_NOT_FOUND` maps the engine's `cerastream.audio.device_not_found`
 // (-32006); `SWITCH_FAILED` covers any other dispatch failure.
+// `NOT_LIVE_SWITCHABLE` is the todo-16 refusal: the engine's live audio switch is
+// REGISTRY-ID-based, and a Bluetooth microphone is addressed by an opaque
+// BlueALSA PCM string that names no registry entry — so it is start-time
+// selectable only. Distinct from `AUDIO_DEVICE_NOT_FOUND`, which means the
+// engine looked and the device was gone.
 export const SWITCH_AUDIO_ERRORS = {
 	AUDIO_DEVICE_NOT_FOUND: 'AUDIO_DEVICE_NOT_FOUND',
+	NOT_LIVE_SWITCHABLE: 'NOT_LIVE_SWITCHABLE',
 	NOT_STREAMING: 'NOT_STREAMING',
 	SWITCH_FAILED: 'SWITCH_FAILED',
 } as const;
 export const switchAudioErrorSchema = z.enum([
 	SWITCH_AUDIO_ERRORS.AUDIO_DEVICE_NOT_FOUND,
+	SWITCH_AUDIO_ERRORS.NOT_LIVE_SWITCHABLE,
 	SWITCH_AUDIO_ERRORS.NOT_STREAMING,
 	SWITCH_AUDIO_ERRORS.SWITCH_FAILED,
 ]);

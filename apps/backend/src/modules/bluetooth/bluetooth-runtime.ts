@@ -94,6 +94,43 @@ export function broadcastBluetoothIfChanged(): void {
 	if (serialized === lastPayload) return;
 	lastPayload = serialized;
 	broadcastMsg(BLUETOOTH_EVENT, payload);
+	publishBluetoothAudioDevices();
+}
+
+/**
+ * Hand the registry's audio-relevant projection to the streaming audio module
+ * and let it re-fold the picker.
+ *
+ * The import is LAZY and the direction is one-way: `modules/streaming/audio.ts`
+ * reaches this module's graph through the sources builder, so a static edge back
+ * would cycle — the same shape `commitEngineDevices` uses for its audio handler.
+ * Fire-and-forget: an audio refresh must never break a Bluetooth broadcast.
+ *
+ * The projection carries the registry row's OWN `scoCapable` rather than any
+ * re-derivation, so an A2DP-source-only device can never reach the audio module
+ * as a microphone candidate through a second, driftable copy of the UUID rule.
+ */
+function publishBluetoothAudioDevices(): void {
+	void import("../streaming/bluetooth-audio.ts")
+		.then(async (mod) => {
+			const state = getBluetoothStack().state();
+			mod.noteBluetoothRegistryDevices(
+				state.devices.map((device) => ({
+					address: device.address,
+					alias: device.name,
+					name: device.name,
+					connected: device.connected,
+					scoCapable: device.scoCapable,
+				})),
+			);
+			const audio = await import("../streaming/audio.ts");
+			await audio.refreshBluetoothAudioDevices();
+		})
+		.catch((err: unknown) => {
+			logger.debug(
+				`bluetooth: could not refresh the audio source list: ${String(err)}`,
+			);
+		});
 }
 
 /** Collapse an edge burst onto one trailing send. */
