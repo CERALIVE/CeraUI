@@ -43,14 +43,17 @@ import {
 	nmcliSaeClaim,
 	parseInterfaceCombination,
 	parseIwDevPhyMap,
+	parseIwLinkTelemetry,
 	parseIwPhyCapabilities,
 	parseIwRegDomains,
 	parseNmcliWifiProperties,
 	refreshWifiCapabilities,
+	refreshWifiLinkTelemetry,
 	resetWifiCapabilitiesForTest,
 	resolveWpa3Sae,
 	setWifiCapabilityDepsForTest,
 	WIFI_CAPABILITIES_TTL_MS,
+	WIFI_LINK_TELEMETRY_TTL_MS,
 	type WifiCapabilityDeps,
 } from "../modules/wifi/wifi-capabilities.ts";
 import {
@@ -72,12 +75,22 @@ const IW_PHY_DUAL = fixture("iw-phy-dual-wiphy.txt");
 const IW_REG_DUAL = fixture("iw-reg-get-dual-wiphy.txt");
 const IW_DEV_DUAL = fixture("iw-dev-dual-wiphy-virtual-ap.txt");
 const IW_PHY_TRUNCATED = fixture("iw-phy-truncated.txt");
+const IW_LINK_HE80 = fixture("iw-dev-wlan0-link-he80.txt");
+const IW_LINK_NOT_CONNECTED = fixture("iw-dev-wlan0-link-not-connected.txt");
+const IW_LINK_VHT80 = fixture("iw-dev-wlan0-link-vht80.txt");
+const IW_LINK_MALFORMED = fixture("iw-dev-wlan0-link-malformed.txt");
 
 const IW_DEV_MT7925 = `phy#0\n\tInterface wlan0\n\t\tifindex 3\n\t\ttype managed\n`;
 
-type IwAnswers = { phy: string; reg: string; dev: string };
+type IwAnswers = { phy: string; reg: string; dev: string; link?: string };
 
 let iwCalls: string[][] = [];
+
+function linkReads(): string[] {
+	return iwCalls
+		.filter((args) => args[0] === "dev" && args[2] === "link")
+		.map((args) => args[1] ?? "");
+}
 
 function installDeps(
 	answers: IwAnswers,
@@ -90,6 +103,11 @@ function installDeps(
 			iwCalls.push(args);
 			if (args[0] === "phy") return answers.phy;
 			if (args[0] === "reg") return answers.reg;
+			// `iw dev <ifname> link` and the bare `iw dev` roster share a verb, so
+			// the third argument is what separates them.
+			if (args[0] === "dev" && args[2] === "link") {
+				return answers.link ?? IW_LINK_NOT_CONNECTED;
+			}
 			if (args[0] === "dev") return answers.dev;
 			throw new Error(`unexpected iw invocation: ${args.join(" ")}`);
 		},
@@ -116,6 +134,18 @@ function stationInterface(id: number, ifname: string): WifiInterface {
 		available: new Map(),
 		saved: {},
 		savedAll: {},
+	};
+}
+
+function connectedStationInterface(id: number, ifname: string): WifiInterface {
+	return { ...stationInterface(id, ifname), conn: "home-uuid" };
+}
+
+function hotspotInterface(id: number, ifname: string): WifiInterface {
+	return {
+		...stationInterface(id, ifname),
+		conn: "ap-uuid",
+		hotspot: { conn: "ap-uuid", warnings: {}, availableChannels: ["auto"] },
 	};
 }
 
@@ -592,6 +622,272 @@ describe("cache invalidation", () => {
 });
 
 // ─── the pure sub-rules ──────────────────────────────────────────────────────
+
+describe("live station link telemetry", () => {
+	test("reads the connected generation, channel width, and transmit bitrate", () => {
+		const parsed = parseIwLinkTelemetry(IW_LINK_HE80);
+
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		expect(parsed.value).toEqual({
+			generation: "wifi6",
+			channelWidthMhz: 80,
+			bitrateMbps: 573.5,
+		});
+	});
+
+	test("treats a valid disconnected reply as no telemetry", () => {
+		const parsed = parseIwLinkTelemetry(IW_LINK_NOT_CONNECTED);
+
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		expect(parsed.value).toBeUndefined();
+	});
+
+	test("a LEGACY link with no HE-/EHT- token reads as the generation it negotiated", () => {
+		// Non-vacuity: the fixture really does carry no HE/EHT token at all, so a
+		// parser that defaulted to the adapter's own generation would claim
+		// Wi-Fi 6 for a link running VHT.
+		expect(IW_LINK_VHT80).not.toContain("HE-");
+		expect(IW_LINK_VHT80).not.toContain("EHT-");
+
+		const parsed = parseIwLinkTelemetry(IW_LINK_VHT80);
+
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		expect(parsed.value).toEqual({
+			generation: "wifi5",
+			channelWidthMhz: 80,
+			bitrateMbps: 433.3,
+		});
+	});
+
+	test("an HT link at 20 MHz prints NO width token, and none is invented", () => {
+		const parsed = parseIwLinkTelemetry(
+			"Connected to 34:ce:94:12:34:56 (on wlan0)\n\tSSID: CERALIVE\n\trx bitrate: 65.0 MBit/s MCS 7\n",
+		);
+
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) return;
+		expect(parsed.value?.generation).toBe("wifi4");
+		expect(parsed.value?.bitrateMbps).toBe(65);
+		expect(parsed.value?.channelWidthMhz).toBeUndefined();
+		expect(Object.hasOwn(parsed.value ?? {}, "channelWidthMhz")).toBe(false);
+	});
+
+	test("rejects a connected reply with no readable bitrate", () => {
+		const parsed = parseIwLinkTelemetry(
+			"Connected to 34:ce:94:12:34:56 (on wlan0)\n\tSSID: CERALIVE\n",
+		);
+
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) return;
+		expect(parsed.parser).toBe("parseIwLinkTelemetry");
+	});
+
+	test("a rate that has not negotiated is DRIFT, never a published zero", () => {
+		const parsed = parseIwLinkTelemetry(
+			"Connected to 34:ce:94:12:34:56 (on wlan0)\n\trx bitrate: 0.0 MBit/s\n",
+		);
+
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) return;
+		expect(parsed.parser).toBe("parseIwLinkTelemetry");
+	});
+
+	test("a drifted reply yields a named parse error", () => {
+		const parsed = parseIwLinkTelemetry(IW_LINK_MALFORMED);
+
+		expect(parsed.ok).toBe(false);
+		if (parsed.ok) return;
+		expect(parsed.kind).toBe("parse-error");
+		expect(parsed.parser).toBe("parseIwLinkTelemetry");
+	});
+});
+
+// ─── the wire: only a CONNECTED STATION is read, and drift omits the field ───
+
+describe("wifi.getStatus — live link telemetry on the wire", () => {
+	function installLinkDeps(link?: string): void {
+		installDeps(
+			{
+				phy: IW_PHY_ROCK,
+				reg: IW_REG_ROCK,
+				dev: IW_DEV_ROCK,
+				...(link === undefined ? {} : { link }),
+			},
+			{ wlan0: "phy0" },
+		);
+	}
+
+	test("a connected station's row carries the link and validates against the schema", async () => {
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		installLinkDeps(IW_LINK_HE80);
+
+		await refreshWifiLinkTelemetry(["wlan0"]);
+
+		const entry = wifiBuildMsg()["0"];
+		expect(entry?.link).toEqual({
+			generation: "wifi6",
+			channelWidthMhz: 80,
+			bitrateMbps: 573.5,
+		});
+		expect(wifiInterfaceSchema.safeParse(entry).success).toBe(true);
+	});
+
+	test("the LINK generation is reported as itself, not as the radio's ceiling", async () => {
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		// The MT7925 fixture is a Wi-Fi 7 radio; the link it is holding is VHT.
+		installDeps(
+			{
+				phy: IW_PHY_MT7925,
+				reg: IW_REG_SELF_MANAGED,
+				dev: IW_DEV_MT7925,
+				link: IW_LINK_VHT80,
+			},
+			{ wlan0: "phy0" },
+		);
+		await refreshWifiCapabilities(["wlan0"]);
+		await refreshWifiLinkTelemetry(["wlan0"]);
+
+		const entry = wifiBuildMsg()["0"];
+		expect(entry?.capabilities?.generation).toBe("wifi7");
+		expect(entry?.link?.generation).toBe("wifi5");
+	});
+
+	test("a DISCONNECTED station is never read, and its row omits the field", async () => {
+		addWifiInterface("aa:bb:cc:dd:ee:ff", stationInterface(0, "wlan0"));
+		installLinkDeps(IW_LINK_HE80);
+
+		const entry = wifiBuildMsg()["0"];
+		// The build fires the refresh itself; drain it before asserting nothing
+		// was spawned, or the assertion would pass vacuously.
+		await refreshWifiLinkTelemetry([]);
+
+		expect(linkReads()).toEqual([]);
+		expect(entry?.link).toBeUndefined();
+		expect(Object.hasOwn(entry ?? {}, "link")).toBe(false);
+		expect(wifiInterfaceSchema.safeParse(entry).success).toBe(true);
+	});
+
+	test("an AP-mode radio is never read for a station link", async () => {
+		addWifiInterface("aa:bb:cc:dd:ee:ff", hotspotInterface(0, "wlan0"));
+		installLinkDeps(IW_LINK_HE80);
+
+		const entry = wifiBuildMsg()["0"];
+		await refreshWifiLinkTelemetry([]);
+
+		expect(entry?.mode).toBe("hotspot");
+		expect(linkReads()).toEqual([]);
+		expect(entry?.link).toBeUndefined();
+	});
+
+	// The QA failure control: drift must omit the field, name its parser, and
+	// leave the read loop able to recover on the very next pass.
+	test("a malformed link reply OMITS the field, never throws, and the loop stays alive", async () => {
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		installLinkDeps(IW_LINK_MALFORMED);
+
+		await expect(refreshWifiLinkTelemetry(["wlan0"])).resolves.toBeUndefined();
+
+		const drifted = wifiBuildMsg()["0"];
+		expect(drifted?.link).toBeUndefined();
+		expect(Object.hasOwn(drifted ?? {}, "link")).toBe(false);
+		expect(wifiInterfaceSchema.safeParse(drifted).success).toBe(true);
+
+		// Drain the build's own fire-and-forget read before swapping the answer:
+		// the refresh is single-flight, so a later call would JOIN the drifted
+		// read still in flight rather than start a fresh one.
+		await refreshWifiLinkTelemetry(["wlan0"]);
+
+		// The very next read recovers: nothing latched, nothing tore the loop down.
+		installLinkDeps(IW_LINK_HE80);
+		await refreshWifiLinkTelemetry(["wlan0"]);
+		expect(wifiBuildMsg()["0"]?.link?.bitrateMbps).toBe(573.5);
+	});
+
+	test("a SPAWN failure RETAINS the last reading — the link did not change", async () => {
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		installLinkDeps(IW_LINK_HE80);
+		await refreshWifiLinkTelemetry(["wlan0"]);
+
+		setWifiCapabilityDepsForTest({
+			runIw: async () => {
+				throw new Error("iw: command not found");
+			},
+			now: () => 1_000,
+		});
+		await refreshWifiLinkTelemetry(["wlan0"], { force: true });
+
+		expect(wifiBuildMsg()["0"]?.link?.generation).toBe("wifi6");
+	});
+
+	test("a MEASURED disconnected reply is a reading, and publishes nothing", async () => {
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		installLinkDeps(IW_LINK_NOT_CONNECTED);
+
+		await refreshWifiLinkTelemetry(["wlan0"]);
+
+		expect(wifiBuildMsg()["0"]?.link).toBeUndefined();
+		expect(linkReads()).toEqual(["wlan0"]);
+	});
+
+	test("a second read inside the TTL spawns nothing further", async () => {
+		installLinkDeps(IW_LINK_HE80);
+		await refreshWifiLinkTelemetry(["wlan0"]);
+		expect(linkReads()).toEqual(["wlan0"]);
+
+		await refreshWifiLinkTelemetry(["wlan0"]);
+		expect(linkReads()).toEqual(["wlan0"]);
+	});
+
+	test("the TTL bound expires, and the next read re-measures", async () => {
+		let clock = 1_000;
+		installDeps(
+			{
+				phy: IW_PHY_ROCK,
+				reg: IW_REG_ROCK,
+				dev: IW_DEV_ROCK,
+				link: IW_LINK_HE80,
+			},
+			{ wlan0: "phy0" },
+			{ now: () => clock },
+		);
+		await refreshWifiLinkTelemetry(["wlan0"]);
+
+		clock += WIFI_LINK_TELEMETRY_TTL_MS;
+		await refreshWifiLinkTelemetry(["wlan0"]);
+		expect(linkReads()).toEqual(["wlan0", "wlan0"]);
+	});
+
+	test("an interface that stopped being a connected station stops being described", async () => {
+		addWifiInterface(
+			"aa:bb:cc:dd:ee:ff",
+			connectedStationInterface(0, "wlan0"),
+		);
+		installLinkDeps(IW_LINK_HE80);
+		await refreshWifiLinkTelemetry(["wlan0"]);
+		expect(wifiBuildMsg()["0"]?.link).toBeDefined();
+
+		await refreshWifiLinkTelemetry([]);
+		expect(wifiBuildMsg()["0"]?.link).toBeUndefined();
+	});
+});
 
 describe("interface combinations", () => {
 	test("the board's own combination allows STA+AP on ONE channel", () => {

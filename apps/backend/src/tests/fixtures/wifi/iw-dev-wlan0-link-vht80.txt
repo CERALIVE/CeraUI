@@ -1,0 +1,11 @@
+Connected to 34:ce:94:aa:bb:cc (on wlan0)
+	SSID: CERALIVE
+	freq: 5180
+	RX: 1204331 bytes (4102 packets)
+	TX: 483902 bytes (1633 packets)
+	signal: -55 dBm
+	rx bitrate: 433.3 MBit/s VHT-MCS 9 80MHz VHT-NSS 2
+	tx bitrate: 390.0 MBit/s VHT-MCS 8 80MHz VHT-NSS 2
+	bss flags:	short-slot-time
+	dtim period:	2
+	beacon int:	100

@@ -1430,6 +1430,8 @@
 	"network.wifiCapability.band5": "5 غيغاهرتز",
 	"network.wifiCapability.band6": "6 غيغاهرتز",
 	"network.wifiCapability.width": "{mhz} ميغاهرتز",
+	"network.wifiCapability.linkLabel": "الوصلة",
+	"network.wifiCapability.linkRate": "{mbps} ميغابت/ث",
 	"network.wifiCapability.wpa3.supported": "WPA3",
 	"network.wifiCapability.wpa3.unknown": "لم يُبلَّغ عن WPA3",
 	"network.wifiCapability.combo.sameChannel": "يمكنه تشغيل نقطة اتصال مع البقاء متصلاً، لكن كليهما يتشاركان قناة واحدة.",

@@ -1418,6 +1418,8 @@
 	"network.wifiCapability.band5": "5 GHz",
 	"network.wifiCapability.band6": "6 GHz",
 	"network.wifiCapability.width": "{mhz} MHz",
+	"network.wifiCapability.linkLabel": "लिंक",
+	"network.wifiCapability.linkRate": "{mbps} Mbit/s",
 	"network.wifiCapability.wpa3.supported": "WPA3",
 	"network.wifiCapability.wpa3.unknown": "WPA3 की जानकारी नहीं",
 	"network.wifiCapability.combo.sameChannel": "जुड़े रहते हुए हॉटस्पॉट चला सकता है, पर दोनों एक ही चैनल साझा करेंगे।",

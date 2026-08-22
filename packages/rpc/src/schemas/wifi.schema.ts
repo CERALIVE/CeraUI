@@ -147,6 +147,30 @@ export const wifiAdapterCapabilitiesSchema = z.object({
 });
 export type WifiAdapterCapabilities = z.infer<typeof wifiAdapterCapabilitiesSchema>;
 
+// ─── live link telemetry (`iw dev <ifname> link`) ───────────────────────────
+//
+// What the STATION LEG negotiated, which is a different fact from what the
+// radio CAN do. A Wi-Fi 7 adapter associated to an 802.11ac access point is
+// running VHT right now, and `wifiAdapterCapabilitiesSchema.generation` would
+// still — correctly — say `wifi7`. Collapsing the two would report the radio's
+// ceiling as the operator's live connection.
+//
+// Read back from the kernel's own link report and never inferred from the
+// capability block.
+export const wifiLinkTelemetrySchema = z.object({
+	// The generation the LINK negotiated, decided by the rate line's own
+	// EHT-/HE-/VHT- tokens. Never the adapter's `capabilities.generation`.
+	generation: wifiGenerationSchema,
+	// OMITTED when the kernel printed no width token at all — a 20 MHz HT link
+	// prints none, so a defaulted 20 would be a value nothing measured.
+	channelWidthMhz: z.number().int().positive().optional(),
+	// Strictly positive: `iw` prints `0.0 MBit/s` for a link that has not
+	// negotiated, and a zero reads as a stalled connection rather than as an
+	// unreported one — the same rule `hotspotClientSchema` states for a station.
+	bitrateMbps: z.number().positive(),
+});
+export type WifiLinkTelemetry = z.infer<typeof wifiLinkTelemetrySchema>;
+
 // ─── hotspot security offering ──────────────────────────────────────────────
 //
 // The two security modes a CeraLive hotspot may be configured with. WPA2 is
@@ -260,6 +284,11 @@ export const wifiInterfaceSchema = z.object({
 	// computed it is emitted on EVERY tick, so a consumer never has to decide
 	// whether a missing block means "unchanged" or "withdrawn".
 	capabilities: wifiAdapterCapabilitiesSchema.optional(),
+	// The station leg's LIVE negotiated rate. Absent on an AP-mode radio (which
+	// has no station leg to report), on a station holding no connection, on a
+	// read that failed its named parser, and on a backend predating the field —
+	// so a consumer must read absence as "not measured", never as a dead link.
+	link: wifiLinkTelemetrySchema.optional(),
 });
 export type WifiInterface = z.infer<typeof wifiInterfaceSchema>;
 

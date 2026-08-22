@@ -1421,6 +1421,8 @@
 	"network.wifiCapability.band5": "5 GHz",
 	"network.wifiCapability.band6": "6 GHz",
 	"network.wifiCapability.width": "{mhz} MHz",
+	"network.wifiCapability.linkLabel": "Enlace",
+	"network.wifiCapability.linkRate": "{mbps} Mbit/s",
 	"network.wifiCapability.wpa3.supported": "WPA3",
 	"network.wifiCapability.wpa3.unknown": "WPA3 sin informar",
 	"network.wifiCapability.combo.sameChannel": "Puede crear un punto de acceso sin desconectarse, pero ambos comparten un mismo canal.",

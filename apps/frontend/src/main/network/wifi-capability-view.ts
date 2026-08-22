@@ -29,6 +29,7 @@ import type {
 	WifiAdapterCapabilities,
 	WifiCapabilityBand,
 	WifiGeneration,
+	WifiLinkTelemetry,
 	WifiSaeSupport,
 } from "@ceraui/rpc/schemas";
 import { WORLD_REGULATORY_DOMAIN } from "@ceraui/rpc/schemas";
@@ -185,4 +186,41 @@ export function blockIsOperatorActionable(option: WifiBandOption): boolean {
 export function wpa3ChipKey(support: WifiSaeSupport): string | undefined {
 	if (support === "unsupported") return undefined;
 	return `network.wifiCapability.wpa3.${support}`;
+}
+
+export interface WifiLinkView {
+	readonly generation: WifiGeneration;
+	readonly generationLabelKey: string;
+	/** Omitted exactly when the kernel printed no width token (a 20 MHz HT link). */
+	readonly channelWidthMhz?: number;
+	/** Whole megabits — `573.5` invites a precision the reading does not carry. */
+	readonly bitrateMbps: number;
+}
+
+/**
+ * What the station leg NEGOTIATED, or `undefined` when nothing should render.
+ *
+ * This is deliberately a second derivation rather than a field on
+ * {@link WifiCapabilityView}: the capability block is the radio's CEILING and
+ * this is its live connection, so a Wi-Fi 7 adapter associated to an 802.11ac
+ * access point legitimately reports `wifi7` there and `wifi5` here. Folding
+ * them would report the ceiling as the operator's connection.
+ *
+ * ABSENCE IS THE REGRESSION LOCK, on the same terms as `capabilities`: an
+ * AP-mode radio, a disconnected station, a read that failed its named parser
+ * and a backend predating the field all send nothing, and the row must then be
+ * byte-identical to what it rendered before this existed.
+ */
+export function deriveWifiLinkView(
+	link: WifiLinkTelemetry | undefined,
+): WifiLinkView | undefined {
+	if (!link) return undefined;
+	return {
+		generation: link.generation,
+		generationLabelKey: `network.wifiCapability.generation.${link.generation}`,
+		...(link.channelWidthMhz === undefined
+			? {}
+			: { channelWidthMhz: link.channelWidthMhz }),
+		bitrateMbps: Math.round(link.bitrateMbps),
+	};
 }

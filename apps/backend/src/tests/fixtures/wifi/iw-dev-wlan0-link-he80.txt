@@ -1,0 +1,8 @@
+Connected to 34:ce:94:12:34:56 (on wlan0)
+	SSID: CERALIVE
+	freq: 5180
+	RX: 698914 bytes (698.9 KB)
+	TX: 582130 bytes (582.1 KB)
+	signal: -48 dBm
+	rx bitrate: 573.5 MBit/s HE-MCS 7 HE-NSS 2 HE-GI 0 HE-DCM 0 80MHz
+	tx bitrate: 573.5 MBit/s HE-MCS 7 HE-NSS 2 HE-GI 0 HE-DCM 0 80MHz

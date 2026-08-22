@@ -1373,6 +1373,8 @@
 	"network.wifiCapability.band5": "5GHz",
 	"network.wifiCapability.band6": "6GHz",
 	"network.wifiCapability.width": "{mhz}MHz",
+	"network.wifiCapability.linkLabel": "링크",
+	"network.wifiCapability.linkRate": "{mbps}Mbit/s",
 	"network.wifiCapability.wpa3.supported": "WPA3",
 	"network.wifiCapability.wpa3.unknown": "WPA3 보고되지 않음",
 	"network.wifiCapability.combo.sameChannel": "연결을 유지한 채 핫스팟을 운영할 수 있지만 둘이 한 채널을 함께 씁니다.",

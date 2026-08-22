@@ -13,6 +13,7 @@ import {
 	blockIsOperatorActionable,
 	CAPABILITY_BAND_ORDER,
 	deriveWifiCapabilityView,
+	deriveWifiLinkView,
 	wpa3ChipKey,
 } from "./wifi-capability-view";
 
@@ -238,5 +239,51 @@ describe("wpa3ChipKey — unknown is a first-class answer", () => {
 
 	it("draws nothing for a radio that positively cannot do WPA3", () => {
 		expect(wpa3ChipKey("unsupported")).toBeUndefined();
+	});
+});
+
+describe("deriveWifiLinkView — the live link, never the radio's ceiling", () => {
+	it("reads the negotiated generation, width and rate", () => {
+		expect(
+			deriveWifiLinkView({
+				generation: "wifi6",
+				channelWidthMhz: 80,
+				bitrateMbps: 573.5,
+			}),
+		).toEqual({
+			generation: "wifi6",
+			generationLabelKey: "network.wifiCapability.generation.wifi6",
+			channelWidthMhz: 80,
+			// Whole megabits: a glanceable rate, not a measurement to four digits.
+			bitrateMbps: 574,
+		});
+	});
+
+	it("omits the width the kernel never printed, rather than defaulting one", () => {
+		const view = deriveWifiLinkView({ generation: "wifi4", bitrateMbps: 65 });
+
+		expect(view?.channelWidthMhz).toBeUndefined();
+		expect(Object.hasOwn(view ?? {}, "channelWidthMhz")).toBe(false);
+		expect(view?.generationLabelKey).toBe(
+			"network.wifiCapability.generation.wifi4",
+		);
+	});
+
+	it("reports the LINK's generation even when the radio can do more", () => {
+		// The MT7925 is a Wi-Fi 7 radio; associated to an 802.11ac access point it
+		// is running VHT, and reporting `wifi7` here would be the radio's ceiling
+		// presented as the operator's connection.
+		expect(deriveWifiCapabilityView(MT7925)?.generation).toBe("wifi7");
+		expect(
+			deriveWifiLinkView({
+				generation: "wifi5",
+				channelWidthMhz: 80,
+				bitrateMbps: 433.3,
+			})?.generation,
+		).toBe("wifi5");
+	});
+
+	it("renders nothing at all when the device measured nothing", () => {
+		expect(deriveWifiLinkView(undefined)).toBeUndefined();
 	});
 });

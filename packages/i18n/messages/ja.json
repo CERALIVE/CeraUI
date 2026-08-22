@@ -1373,6 +1373,8 @@
 	"network.wifiCapability.band5": "5 GHz",
 	"network.wifiCapability.band6": "6 GHz",
 	"network.wifiCapability.width": "{mhz} MHz",
+	"network.wifiCapability.linkLabel": "リンク",
+	"network.wifiCapability.linkRate": "{mbps} Mbit/s",
 	"network.wifiCapability.wpa3.supported": "WPA3",
 	"network.wifiCapability.wpa3.unknown": "WPA3 は未報告",
 	"network.wifiCapability.combo.sameChannel": "接続したままホットスポットを実行できますが、両方が同じチャンネルを共有します。",

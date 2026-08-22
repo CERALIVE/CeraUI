@@ -56,7 +56,12 @@ import {
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
-import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
+import {
+	getWifiCapabilitiesForInterface,
+	getWifiLinkTelemetryForInterface,
+	refreshWifiLinkTelemetry,
+	type WifiLinkTelemetry,
+} from "./wifi-capabilities.ts";
 import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
@@ -170,6 +175,9 @@ export type WifiInterfaceResponseMessage = Pick<
 	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
 	// failed its named parser); once computed it rides EVERY tick.
 	capabilities?: WifiAdapterCapabilities;
+	// The STATION leg's live negotiated rate. Absent on an AP-mode radio, on a
+	// station holding no connection, and until the first read has landed.
+	link?: WifiLinkTelemetry;
 };
 
 export function wifiBuildMsg() {
@@ -242,6 +250,10 @@ export function wifiBuildMsg() {
 	}
 
 	const ifs: Record<string, WifiInterfaceResponseMessage> = {};
+	// The interfaces eligible for a link read, collected as the rows are built
+	// so the refresh below is driven by exactly what this build decided is a
+	// connected station — never by a guess made inside the reader.
+	const stationIfnames: string[] = [];
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
 	for (const macAddress in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
@@ -304,6 +316,17 @@ export function wifiBuildMsg() {
 			if (canHotspot(wifiInterface)) {
 				entry.supports_hotspot = true;
 			}
+			// Only a station leg that HOLDS a connection has a negotiated rate to
+			// report, and the AP branch above never reaches here — so `iw link` is
+			// structurally unreachable for a hotspot radio rather than filtered
+			// out of one, which is what keeps a shared-wiphy board honest.
+			if (wifiInterface.conn !== null) {
+				stationIfnames.push(wifiInterface.ifname);
+				const link = getWifiLinkTelemetryForInterface(wifiInterface.ifname);
+				if (link !== undefined) {
+					entry.link = link;
+				}
+			}
 		}
 
 		entry.mode = isApMode(wifiInterface) ? "hotspot" : "station";
@@ -316,6 +339,11 @@ export function wifiBuildMsg() {
 			entry.capabilities = capabilities;
 		}
 	}
+
+	// Fire-and-forget, after the snapshot is assembled: the read is bounded by
+	// its own TTL and never throws, so a broadcast is never blocked on a spawn
+	// and the next build serves whatever this one produced.
+	void refreshWifiLinkTelemetry(stationIfnames);
 
 	return ifs;
 }

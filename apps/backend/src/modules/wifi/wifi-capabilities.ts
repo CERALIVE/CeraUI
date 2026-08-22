@@ -52,6 +52,7 @@ import type {
 	WifiBandMaxWidth,
 	WifiCapabilityBand,
 	WifiGeneration,
+	WifiLinkTelemetry,
 	WifiSaeSupport,
 } from "@ceraui/rpc/schemas";
 
@@ -65,6 +66,8 @@ import {
 	parseOk,
 } from "../system/cli-parse.ts";
 import { runIw } from "./regdomain.ts";
+
+export type { WifiLinkTelemetry };
 
 // ─── pure parsing: `iw phy` ──────────────────────────────────────────────────
 
@@ -539,6 +542,64 @@ export function parseNmcliWifiProperties(
 	return parseOk(props);
 }
 
+// ─── pure parsing: `iw dev <ifname> link` ────────────────────────────────────
+
+const IW_LINK_CONNECTED_RE = /^Connected to\s+[0-9a-f:]+\s+\(on\s+\S+\)\s*$/im;
+const IW_LINK_BITRATE_RE =
+	/^\s*(?:rx|tx) bitrate:\s*([0-9]+(?:\.[0-9]+)?)\s+MBit\/s\b(.*)$/im;
+const IW_LINK_WIDTH_RE = /\b(20|40|80|160|320)MHz\b/;
+
+/**
+ * Read the link's actual negotiated mode. This is deliberately independent from
+ * the PHY capability cache: a Wi-Fi 7 capable radio can currently be associated
+ * over HE, VHT, or HT, and only the link report answers which one is in use.
+ *
+ * `Not connected.` is a first-class SUCCESS carrying no telemetry — the same
+ * rule `parseIwPhyCapabilities` states for a board with no Wi-Fi hardware. A
+ * connected link whose rate line is missing, unreadable, or not yet negotiated
+ * (`0.0 MBit/s`) is DRIFT and fails loud rather than publishing a zero, which
+ * an operator reads as a stalled connection.
+ */
+export function parseIwLinkTelemetry(
+	output: string,
+): ParseResult<WifiLinkTelemetry | undefined> {
+	if (output.trim() === "Not connected.") return parseOk(undefined);
+	if (!IW_LINK_CONNECTED_RE.test(output)) {
+		return parseFail(
+			"parseIwLinkTelemetry",
+			"no `Connected to <BSSID> (on <ifname>)` header",
+			output,
+		);
+	}
+
+	const bitrate = IW_LINK_BITRATE_RE.exec(output);
+	const bitrateMbps = Number(bitrate?.[1]);
+	if (!Number.isFinite(bitrateMbps) || bitrateMbps <= 0) {
+		return parseFail(
+			"parseIwLinkTelemetry",
+			"no readable receive or transmit bitrate",
+			output,
+		);
+	}
+
+	const details = bitrate?.[2] ?? "";
+	const generation: WifiGeneration = /\bEHT-/.test(details)
+		? "wifi7"
+		: /\bHE-/.test(details)
+			? "wifi6"
+			: /\bVHT-/.test(details)
+				? "wifi5"
+				: "wifi4";
+	const widthMatch = IW_LINK_WIDTH_RE.exec(details);
+	return parseOk({
+		generation,
+		...(widthMatch?.[1] === undefined
+			? {}
+			: { channelWidthMhz: Number(widthMatch[1]) }),
+		bitrateMbps,
+	});
+}
+
 /**
  * NetworkManager's own SAE claim, when it makes one.
  *
@@ -676,6 +737,8 @@ export function resetWifiCapabilitiesForTest(): void {
 	cache = undefined;
 	inFlight = undefined;
 	lastIfnames = [];
+	linkCache.clear();
+	linkInFlight.clear();
 	deps = defaultDeps;
 }
 
@@ -879,4 +942,116 @@ export function getWifiCapabilitiesForInterface(
  */
 export async function refreshWifiCapabilitiesAfterRegulatoryChange(): Promise<void> {
 	await refreshWifiCapabilities(lastIfnames, { force: true });
+}
+
+// ─── live link telemetry (`iw dev <ifname> link`) ────────────────────────────
+
+/**
+ * How long one link reading is served before the next build re-reads it.
+ *
+ * Far shorter than the capability TTL, and for the opposite reason: a wiphy's
+ * bands are hardware, while the rate a station negotiated moves with the
+ * operator walking around the room — which is precisely what they are watching
+ * it for. It still bounds the spawn to at most one per interface per window.
+ */
+export const WIFI_LINK_TELEMETRY_TTL_MS = 5_000;
+
+type LinkTelemetryCache = {
+	/** Absent for a MEASURED `Not connected.`, which is a reading, not a gap. */
+	telemetry: WifiLinkTelemetry | undefined;
+	readAtMs: number;
+};
+
+const linkCache = new Map<string, LinkTelemetryCache>();
+const linkInFlight = new Map<string, Promise<void>>();
+
+async function readLinkTelemetry(ifname: string): Promise<void> {
+	let dump: string;
+	try {
+		dump = await deps.runIw(["dev", argMatch(ID_RE, ifname), "link"]);
+	} catch (err) {
+		// A statement about the READ, not about the link. The previous reading
+		// stands — the same spawn-vs-parse split `computeCapabilities` draws.
+		logger.debug(`wifi link telemetry: ${ifname} link read failed: ${err}`);
+		return;
+	}
+
+	const parsed = parseIwLinkTelemetry(dump);
+	if (!parsed.ok) {
+		logParseError(parsed);
+		// The shape we knew how to read is gone, so the reading derived from it
+		// can no longer be vouched for. Dropping it OMITS the wire field rather
+		// than serving a stale claim under a shape we can no longer read.
+		linkCache.delete(ifname);
+		return;
+	}
+
+	linkCache.set(ifname, { telemetry: parsed.value, readAtMs: deps.now() });
+}
+
+/**
+ * Re-read the negotiated link for every CONNECTED STATION interface.
+ *
+ * The caller owns that set — an AP interface has no station leg to report, and
+ * a station holding no connection has nothing to negotiate — so nothing here
+ * guesses one, exactly as `getHotspotClientsForInterface` is handed the AP's
+ * own interface rather than picking it.
+ *
+ * Single-flight PER INTERFACE (two radios are independent reads) and never
+ * throws: this runs behind a broadcast, so a failed read must cost one reading
+ * rather than the whole Wi-Fi status or the poll that produced it.
+ */
+export async function refreshWifiLinkTelemetry(
+	ifnames: readonly string[],
+	opts?: { force?: boolean },
+): Promise<void> {
+	// An interface that stopped being a connected station stops being described.
+	for (const ifname of [...linkCache.keys()]) {
+		if (!ifnames.includes(ifname)) linkCache.delete(ifname);
+	}
+
+	const nowMs = deps.now();
+	const pending: Array<Promise<void>> = [];
+	for (const ifname of ifnames) {
+		const entry = linkCache.get(ifname);
+		if (
+			opts?.force !== true &&
+			entry !== undefined &&
+			nowMs - entry.readAtMs < WIFI_LINK_TELEMETRY_TTL_MS
+		) {
+			continue;
+		}
+		const existing = linkInFlight.get(ifname);
+		if (existing !== undefined) {
+			pending.push(existing);
+			continue;
+		}
+		const run = readLinkTelemetry(ifname)
+			.catch((err) => {
+				logger.debug(
+					`wifi link telemetry: refresh failed for ${ifname}: ${err}`,
+				);
+			})
+			.finally(() => {
+				linkInFlight.delete(ifname);
+			});
+		linkInFlight.set(ifname, run);
+		pending.push(run);
+	}
+
+	await Promise.all(pending);
+}
+
+/**
+ * The negotiated link for ONE interface, or `undefined` when nothing has been
+ * measured for it.
+ *
+ * A pure cache read: unlike the capability getter this schedules nothing, so
+ * the wire builder decides which interfaces are eligible and drives the refresh
+ * with exactly that set. `undefined` reaches the wire as an OMITTED field.
+ */
+export function getWifiLinkTelemetryForInterface(
+	ifname: string,
+): WifiLinkTelemetry | undefined {
+	return linkCache.get(ifname)?.telemetry;
 }

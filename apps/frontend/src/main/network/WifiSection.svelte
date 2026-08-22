@@ -21,6 +21,7 @@ import HotspotDialog from '../dialogs/HotspotDialog.svelte';
 import {
 	blockIsOperatorActionable,
 	deriveWifiCapabilityView,
+	deriveWifiLinkView,
 	wpa3ChipKey,
 } from './wifi-capability-view';
 
@@ -151,6 +152,10 @@ $effect(() => {
 				     that predates the field). The strip then contributes NOTHING and the
 				     row is byte-identical to what it rendered before this existed. -->
 				{@const cap = deriveWifiCapabilityView(iface.capabilities)}
+				<!-- The radio's CEILING is `cap`; this is what the station leg
+				     negotiated. A Wi-Fi 7 adapter on an 802.11ac access point is
+				     genuinely running VHT, so the two can differ and must. -->
+				{@const link = deriveWifiLinkView(iface.link)}
 				{@const blocked = cap?.blockedBands[0]}
 				{@const wpa3Key = cap ? wpa3ChipKey(cap.wpa3Sae) : undefined}
 				<!-- Single-line row: identity (dot · name · status) left; bond + actions right. -->
@@ -184,6 +189,27 @@ $effect(() => {
 								{m["network.view.disconnected"]()}
 							{/if}
 						</p>
+						{#if !displayIsHotspot && link}
+							<p
+								class={cn(
+									'text-muted-foreground mt-0.5 truncate text-xs transition-opacity',
+									ifaceStale && 'opacity-50',
+								)}
+								data-testid="wifi-link-telemetry"
+								data-device={id}
+								data-generation={link.generation}
+								data-width-mhz={link.channelWidthMhz}
+							>
+								<span class="opacity-70">{m["network.wifiCapability.linkLabel"]()}</span>
+								<span class="font-mono" dir="ltr">
+									{resolveMessageKey(link.generationLabelKey)}
+									{#if link.channelWidthMhz !== undefined}
+										&middot; {m["network.wifiCapability.width"]({ mhz: link.channelWidthMhz })}
+									{/if}
+									&middot; {m["network.wifiCapability.linkRate"]({ mbps: link.bitrateMbps })}
+								</span>
+							</p>
+						{/if}
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
