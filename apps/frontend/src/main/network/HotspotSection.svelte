@@ -80,7 +80,9 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 						<span
 							class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 text-xs font-medium"
 						>
-							{m["network.view.active"]()}
+							{iface.supports_ap_sta_concurrency
+								? m["network.view.concurrentModeBadge"]()
+								: m["network.view.active"]()}
 						</span>
 					</div>
 

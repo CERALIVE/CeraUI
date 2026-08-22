@@ -5,6 +5,7 @@ import { Network as NetworkIcon } from '@lucide/svelte';
 
 import { Skeleton } from '$lib/components/ui/skeleton';
 import { isApRadio } from '$lib/helpers/wifi-mode-outcome';
+import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
 import {
 	getBluetooth,
 	getIsConnected,
@@ -69,7 +70,7 @@ const isLoading = $derived(
 // WiFi interfaces split so hotspot + station can be shown SIMULTANEOUSLY
 // (never one-or-the-other): a hotspot-mode interface carries a `hotspot` field.
 const wifiEntries = $derived(Object.entries(wifi ?? {}) as [string, WifiInterface][]);
-const hotspotInterfaces = $derived(wifiEntries.filter(([, iface]) => isApRadio(iface)));
+const hotspotInterfaces = $derived(wifiEntries.filter(([, iface]) => hotspotIsActive(iface)));
 
 // Hotspot target for the configurator dialog: prefer an already-active hotspot
 // interface, else the first hotspot-capable WiFi radio, else any WiFi radio.
