@@ -78,4 +78,16 @@ describe("wifi.getStatus output-validation parity", () => {
 			expect(wifiStatusSchema.safeParse(network).success).toBe(true);
 		}
 	});
+
+	it("keeps AP+STA capability additive and optional", () => {
+		const legacy = {
+			"0": { ifname: "wlan0", conn: "", hw: "radio", saved: {} },
+		};
+		expect(wifiStatusSchema.safeParse(legacy).success).toBe(true);
+		expect(
+			wifiStatusSchema.safeParse({
+				"0": { ...legacy["0"], supports_ap_sta_concurrency: true },
+			}).success,
+		).toBe(true);
+	});
 });

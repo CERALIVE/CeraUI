@@ -43,8 +43,14 @@ import {
 	type WifiNetwork,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
+import { supportsApStaConcurrency } from "./wifi-ap-sta-capability.ts";
 import { refreshWifiCapabilities } from "./wifi-capabilities.ts";
 import type { AutoWifiChannel } from "./wifi-channels.ts";
+import {
+	concurrentApIfname,
+	ensureConcurrentApInterface,
+	isConcurrentApIfname,
+} from "./wifi-concurrent-interface.ts";
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
@@ -110,6 +116,11 @@ export type BaseWifiInterface = {
 	*/
 	savedAll: Record<SSID, ConnectionUUID[]>;
 	removed?: true;
+	supportsApStaConcurrency?: boolean;
+	concurrentHotspot?: {
+		ifname: string;
+		activeConn: ConnectionUUID | null;
+	};
 };
 
 export type WifiInterface = BaseWifiInterface | WifiInterfaceWithHotspot;
@@ -266,6 +277,7 @@ export async function wifiUpdateDevices() {
 	// Rebuild the id to mac address map
 	wifiIdToMacAddress = {};
 	const seenIfnames: string[] = [];
+	const concurrentDevices = new Map<string, ConnectionUUID | null>();
 
 	for (const networkDevice of networkDevices) {
 		try {
@@ -277,6 +289,10 @@ export async function wifiUpdateDevices() {
 			];
 
 			if (type !== "wifi") continue;
+			if (isConcurrentApIfname(ifname)) {
+				concurrentDevices.set(ifname, connUuid !== "" ? connUuid : null);
+				continue;
+			}
 			if (state === "unavailable") {
 				unavailableDevices = true;
 				continue;
@@ -328,7 +344,7 @@ export async function wifiUpdateDevices() {
 					continue;
 				}
 
-				const newInterface = {
+				const newInterface: WifiInterface = {
 					id,
 					ifname,
 					hw: parsedProps.value.hw,
@@ -339,6 +355,16 @@ export async function wifiUpdateDevices() {
 				};
 
 				if (parsedProps.value.supportsAp) {
+					newInterface.supportsApStaConcurrency =
+						await supportsApStaConcurrency(ifname);
+					if (newInterface.supportsApStaConcurrency) {
+						const concurrentInterface =
+							await ensureConcurrentApInterface(ifname);
+						if (concurrentInterface === undefined) {
+							newInterface.supportsApStaConcurrency = false;
+						}
+					}
+
 					const bandCapability: AutoWifiChannel[] = ["auto"];
 					if (parsedProps.value.supports5Ghz) bandCapability.push("auto_50");
 					if (parsedProps.value.supports2Ghz) bandCapability.push("auto_24");
@@ -373,6 +399,31 @@ export async function wifiUpdateDevices() {
 					`Error getting the nmcli WiFi device information: ${err.message}`,
 				);
 			}
+		}
+	}
+
+	for (const wifiInterface of Object.values(getWifiInterfacesByMacAddress())) {
+		if (wifiInterface?.supportsApStaConcurrency !== true) continue;
+		const virtualIfname = concurrentApIfname(wifiInterface.ifname);
+		if (!concurrentDevices.has(virtualIfname)) {
+			if (wifiInterface.concurrentHotspot !== undefined) {
+				delete wifiInterface.concurrentHotspot;
+				statusChange = true;
+			}
+			continue;
+		}
+
+		const activeConn = concurrentDevices.get(virtualIfname) ?? null;
+		if (activeConn && canHotspot(wifiInterface)) {
+			await handleHotspotConn(undefined, activeConn, { active: true });
+		}
+		const previous = wifiInterface.concurrentHotspot;
+		wifiInterface.concurrentHotspot = { ifname: virtualIfname, activeConn };
+		if (
+			previous?.ifname !== virtualIfname ||
+			previous.activeConn !== activeConn
+		) {
+			statusChange = true;
 		}
 	}
 

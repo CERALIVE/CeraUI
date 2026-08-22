@@ -318,6 +318,28 @@ async function copyPassword() {
 			></span>
 		</div>
 
+		<div
+			class={cn(
+				'rounded-lg border px-3 py-2.5 text-sm',
+				iface?.supports_ap_sta_concurrency
+					? 'border-status-info/30 bg-status-info/5'
+					: 'border-status-warning/30 bg-status-warning/5',
+			)}
+			data-testid="hotspot-concurrency-status"
+			role="status"
+		>
+			<p class="font-medium">
+				{iface?.supports_ap_sta_concurrency
+					? m["network.view.concurrentModeTitle"]()
+					: m["network.view.exclusiveModeTitle"]()}
+			</p>
+			<p class="text-muted-foreground mt-0.5 text-xs">
+				{iface?.supports_ap_sta_concurrency
+					? m["network.view.concurrentModeHelp"]()
+					: m["network.view.concurrentModeUnavailable"]()}
+			</p>
+		</div>
+
 		<!-- Name -->
 		<div class="space-y-1.5">
 			<Label class="text-sm font-medium" for="hotspot-name">{m["network.hotspot.name"]()}</Label>

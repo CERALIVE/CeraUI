@@ -88,6 +88,11 @@ export type WifiHotspot = {
 
 export type WifiInterfaceWithHotspot = BaseWifiInterface & {
 	hotspot: WifiHotspot;
+	supportsApStaConcurrency?: boolean;
+	concurrentHotspot?: {
+		ifname: string;
+		activeConn: string | null;
+	};
 };
 
 /**
@@ -191,6 +196,10 @@ export type HotspotActivationDeps = {
 	) => Promise<ExistingHotspotConn | undefined>;
 	/** Best-effort removal of superseded CeraUI-generated AP profiles. */
 	pruneHotspotConns: (macAddress: string, keepUuid: string) => Promise<void>;
+	ensureConcurrentInterface?: (
+		ifname: string,
+	) => Promise<{ ifname: string; created: boolean } | undefined>;
+	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
 	/**
 	 * Optional bounded confirmation poll. When provided, it is retried with
 	 * backoff until it returns `true` (confirming the hotspot is up) or attempts
@@ -228,6 +237,20 @@ export function isHotspot(
 		wifiInterface.conn === hotspotConn ||
 		wifiInterface.activeConn === hotspotConn
 	);
+}
+
+export function isConcurrentHotspot(
+	wifiInterface: WifiInterface,
+): wifiInterface is WifiInterfaceWithHotspot {
+	if (!canHotspot(wifiInterface)) return false;
+	const hotspotConn = wifiInterface.hotspot.conn;
+	return Boolean(
+		hotspotConn && wifiInterface.concurrentHotspot?.activeConn === hotspotConn,
+	);
+}
+
+export function isHotspotActive(wifiInterface: WifiInterface): boolean {
+	return isHotspot(wifiInterface) || isConcurrentHotspot(wifiInterface);
 }
 
 /**

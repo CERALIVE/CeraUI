@@ -15,6 +15,7 @@ import {
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
+import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
 import { cn } from '$lib/utils';
 
 import HotspotDialog from '../dialogs/HotspotDialog.svelte';
@@ -109,7 +110,7 @@ async function switchToStation(device: string) {
 $effect(() => {
 	for (const [id, iface] of wifiRadios) {
 		if (getOperationPhase(`hotspot:${id}`) !== 'pending') continue;
-		if (deriveWifiModeOutcome(switchTargets[id], isApRadio(iface)) === 'confirmed') {
+		if (deriveWifiModeOutcome(switchTargets[id], hotspotIsActive(iface)) === 'confirmed') {
 			confirmOperation(`hotspot:${id}`);
 		}
 	}
@@ -138,10 +139,16 @@ $effect(() => {
 			{#each wifiRadios as [id, iface] (id)}
 				{@const entry = netif?.[iface.ifname]}
 				{@const isHotspot = isApRadio(iface)}
+				{@const concurrentCapable = iface.supports_ap_sta_concurrency === true}
+				{@const concurrentActive = concurrentCapable && hotspotIsActive(iface)}
 				{@const isSwitching = isOperationPending(`hotspot:${id}`)}
 				<!-- Hold the label on the CURRENT mode while a switch is pending: a raw
 				     `wifi` broadcast must not flip it before the op is confirmed. -->
-				{@const displayIsHotspot = isSwitching ? switchTargets[id] === 'station' : isHotspot}
+				{@const displayIsHotspot = concurrentCapable
+					? false
+					: isSwitching
+						? switchTargets[id] === 'station'
+						: isHotspot}
 				{@const net = activeWifiNetwork(iface)}
 				{@const connected = !isHotspot && Boolean(iface.conn && net)}
 				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
@@ -268,7 +275,50 @@ $effect(() => {
 								{m["network.view.connect"]()}
 								<ChevronRight class="size-3.5 rtl:rotate-180" />
 							</Button>
-							{#if iface.supports_hotspot}
+							{#if concurrentActive}
+								<Badge
+									variant="info"
+									data-testid="concurrent-hotspot-active"
+									label={m["network.view.concurrentModeActive"]()}
+								/>
+								<Button
+									class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
+									disabled={isSwitching}
+									size="sm"
+									variant="ghost"
+									onclick={() => openHotspotSetup(id)}
+								>
+									<Settings2 class="size-3.5" />
+									{m["network.view.setup"]()}
+								</Button>
+								<Button
+									class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
+									disabled={isSwitching}
+									size="sm"
+									variant="secondary"
+									onclick={() => switchToStation(id)}
+								>
+									{#if isSwitching}
+										<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
+									{:else}
+										<Router class="size-3.5" />
+									{/if}
+									{m["network.status.turnOff"]()}
+								</Button>
+							{:else if iface.supports_hotspot}
+								{#if concurrentCapable && !isSwitching}
+									<Button
+										class="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none"
+										aria-label={m["network.view.switchToHotspot"]()}
+										data-testid="start-concurrent-hotspot"
+										title={m["network.view.concurrentModeHelp"]()}
+										size="sm"
+										variant="ghost"
+										onclick={() => switchToHotspot(id)}
+									>
+										<Router class="size-3.5" />
+									</Button>
+								{:else}
 								{#if isSwitching}
 									<!-- Switch confirmed at the click; hold a spinner until the
 									     authoritative snapshot flips the label to hotspot. Icon-only
@@ -304,6 +354,7 @@ $effect(() => {
 											{m["network.view.hotspotSwitchBody"]()}
 										{/snippet}
 									</SimpleAlertDialog>
+								{/if}
 								{/if}
 							{/if}
 						{/if}

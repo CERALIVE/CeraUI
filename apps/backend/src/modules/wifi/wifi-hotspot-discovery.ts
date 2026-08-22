@@ -33,6 +33,7 @@ import {
 	rememberHotspotCredentials,
 } from "./hotspot-credentials.ts";
 import { channelFromNM } from "./wifi-channels.ts";
+import { concurrentApIfname } from "./wifi-concurrent-interface.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
@@ -153,6 +154,7 @@ export async function handleHotspotConn(
 	const fields = await nmConnGetFields(uuid, [
 		...settingsFields,
 		...checkFields,
+		"connection.interface-name",
 		"802-11-wireless.mac-address",
 	] as const);
 
@@ -171,7 +173,10 @@ export async function handleHotspotConn(
 	  address. NetworkManager matches this property against the PERMANENT address,
 	  so a profile carrying a randomized one can never be activated again.
 	*/
-	if (fields[11].toLowerCase() !== macAddress) {
+	const concurrentProfile =
+		wifiInterface.supportsApStaConcurrency === true &&
+		fields[11] === concurrentApIfname(wifiInterface.ifname);
+	if (!concurrentProfile && fields[12].toLowerCase() !== macAddress) {
 		await nmConnSetWifiMacAddress(uuid, macAddress);
 	}
 
@@ -218,17 +223,25 @@ async function findMacAddressForConnection(uuid: string) {
 	for (const macAddress in wifiInterfacesByMacAddress) {
 		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
 
+		const concurrentProfile =
+			wifiInterface?.supportsApStaConcurrency === true &&
+			connIfName === concurrentApIfname(wifiInterface.ifname);
 		if (
 			!wifiInterface ||
 			!canHotspot(wifiInterface) ||
 			(wifiInterface.hotspot.conn !== uuid &&
-				wifiInterface.ifname !== connIfName)
+				wifiInterface.ifname !== connIfName &&
+				!concurrentProfile)
 		) {
 			continue;
 		}
 
 		// If we can match the connection against a certain interface
 		if (!wifiInterface.hotspot.conn) {
+			if (concurrentProfile) {
+				wifiInterface.hotspot.conn = uuid;
+				return macAddress;
+			}
 			// And if this interface doesn't already have a hotspot connection
 			// Try to update the connection to match the MAC address
 			if (await nmConnSetWifiMacAddress(uuid, macAddress)) {

@@ -36,6 +36,7 @@ import {
 	nmSettingsForChannel,
 	type WifiChannel,
 } from "./wifi-channels.ts";
+import { releaseConcurrentApInterface } from "./wifi-concurrent-interface.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	wifiRescan,
@@ -49,8 +50,9 @@ import {
 	offeredHotspotSecurity,
 } from "./wifi-hotspot-security.ts";
 import {
+	canHotspot,
 	HOTSPOT_UP_TO,
-	isHotspot,
+	isHotspotActive,
 	type WifiHotspotMessage,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
@@ -77,40 +79,74 @@ export async function wifiHotspotStop(
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
-	if (!isHotspot(wifiInterface)) return; // not in hotspot mode, nothing to do
+	if (!canHotspot(wifiInterface)) return;
+	if (!isHotspotActive(wifiInterface)) return; // not in hotspot mode, nothing to do
 	if (!wifiInterface.hotspot.conn) return;
 
-	// Any in-flight confirmation for this device is now moot.
-	settlePending(wifiInterface.ifname, false);
+	await stopHotspotForInterface(macAddress, wifiInterface);
+}
 
+export type HotspotStopDeps = {
+	nmConnSetFields: typeof nmConnSetFields;
+	nmDisconnect: typeof nmDisconnect;
+	releaseConcurrentInterface: typeof releaseConcurrentApInterface;
+	broadcastState: typeof broadcastWifiState;
+	setDupIpSuppression: typeof setNetifDupIpSuppression;
+	rescan: typeof wifiRescan;
+};
+
+const defaultHotspotStopDeps: HotspotStopDeps = {
+	nmConnSetFields,
+	nmDisconnect,
+	releaseConcurrentInterface: releaseConcurrentApInterface,
+	broadcastState: broadcastWifiState,
+	setDupIpSuppression: setNetifDupIpSuppression,
+	rescan: wifiRescan,
+};
+
+export async function stopHotspotForInterface(
+	macAddress: string,
+	wifiInterface: WifiInterfaceWithHotspot,
+	deps: HotspotStopDeps = defaultHotspotStopDeps,
+): Promise<void> {
+	settlePending(wifiInterface.ifname, false);
 	await withDeviceLock(wifiInterface.ifname, () =>
-		stopHotspotLocked(macAddress, wifiInterface),
+		stopHotspotLocked(macAddress, wifiInterface, deps),
 	);
 }
 
 async function stopHotspotLocked(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
+	deps: HotspotStopDeps,
 ): Promise<void> {
 	const conn = wifiInterface.hotspot.conn;
 	if (!conn) return;
 
 	wifiInterface.hotspot.transition = "deactivating";
-	broadcastWifiState();
+	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 
-	await nmConnSetFields(conn, { "connection.autoconnect": "no" });
+	await deps.nmConnSetFields(conn, { "connection.autoconnect": "no" });
 
-	if (await nmDisconnect(conn)) {
-		wifiInterface.conn = null;
-		wifiInterface.available.clear();
+	if (await deps.nmDisconnect(conn)) {
+		if (wifiInterface.concurrentHotspot) {
+			const virtualIfname = wifiInterface.concurrentHotspot.ifname;
+			delete wifiInterface.concurrentHotspot;
+			await deps.releaseConcurrentInterface(virtualIfname);
+		} else {
+			wifiInterface.conn = null;
+			wifiInterface.available.clear();
+		}
 	}
 
 	delete wifiInterface.hotspot.transition;
-	setNetifDupIpSuppression(wifiInterface.ifname, false);
-	broadcastWifiState();
+	if (wifiInterface.supportsApStaConcurrency !== true) {
+		deps.setDupIpSuppression(wifiInterface.ifname, false);
+	}
+	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
-	void wifiRescan();
+	void deps.rescan();
 }
 
 // ─── config ──────────────────────────────────────────────────────────────────
@@ -210,7 +246,8 @@ export async function wifiHotspotConfig(
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 	if (!wifiInterface) return;
-	if (!isHotspot(wifiInterface)) return; // Make sure the interface is already in hotspot mode
+	if (!canHotspot(wifiInterface)) return;
+	if (!isHotspotActive(wifiInterface)) return; // Make sure the interface is already in hotspot mode
 
 	const senderId = getSocketSenderId(conn);
 
