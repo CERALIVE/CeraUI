@@ -18,6 +18,8 @@ import type { NetifMessage, WifiInterface } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { clearOperation } from "$lib/rpc/async-operation.svelte";
+import { rpc } from "$lib/rpc/client";
 
 import WifiSection from "./WifiSection.svelte";
 
@@ -69,6 +71,7 @@ function renderSection(iface: Partial<WifiInterface> = {}) {
 }
 
 afterEach(() => {
+	clearOperation("hotspot:wifi0");
 	document.documentElement.removeAttribute("data-layout-mode");
 	vi.clearAllMocks();
 });
@@ -120,5 +123,36 @@ describe("WifiSection — icon-only Switch-to-Hotspot trigger", () => {
 		expect(placeholder.textContent?.trim()).toBe("");
 		expect(placeholder.querySelector("svg")).not.toBeNull();
 		expect(placeholder.className).toContain(TOUCH_MIN_CLASS);
+	});
+});
+
+describe("WifiSection — AP+STA concurrent mode", () => {
+	it("starts a proven concurrent hotspot without the destructive mode-switch dialog", async () => {
+		const { getByTestId, queryByRole } = renderSection({
+			mode: "station",
+			supports_ap_sta_concurrency: true,
+		});
+
+		await fireEvent.click(getByTestId("start-concurrent-hotspot"));
+		await tick();
+
+		expect(queryByRole("alertdialog")).toBeNull();
+		expect(rpc.wifi.hotspotStart).toHaveBeenCalledWith({ device: "wifi0" });
+	});
+
+	it("keeps station controls visible while the concurrent hotspot is active", () => {
+		const { getByRole, getByTestId } = renderSection({
+			mode: "station",
+			supports_ap_sta_concurrency: true,
+			hotspot: {
+				name: "CERALIVE_TEST",
+				password: "password1",
+				available_channels: {},
+			},
+		});
+
+		expect(getByRole("button", { name: "Connect" })).toBeTruthy();
+		expect(getByTestId("concurrent-hotspot-active")).toBeTruthy();
+		expect(getByRole("button", { name: "Turn Off" })).toBeTruthy();
 	});
 });
