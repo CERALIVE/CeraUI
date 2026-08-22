@@ -19,6 +19,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Fan presence + PWM duty cycle (`pwm-fan` discovered by TYPE string, never an index; `fan` broadcast) | `modules/system/fan.ts` (`discoverPwmFanCoolingDevice`, `parsePwmDuty`, `collectFan`, `initFan`); contract below → FAN |
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
+| Bluetooth operator surface (the 10 `bluetooth.*` procedures, the live stack singleton, the `bluetooth` broadcast) | `rpc/procedures/bluetooth.procedure.ts` + `modules/bluetooth/bluetooth-runtime.ts` + `modules/bluetooth/bluetooth-wire.ts`; contract below → THE BLUETOOTH DOMAIN IS WIRED |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
 | Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
 | Transport resolver + protocol registry (srtla/rist active, srt reserved; RIST capability-gated via `ristAvailable`) | `modules/streaming/transport/` (`resolveStreamEndpoint`, `registry.ts`, `rist-adapter.ts`) |
@@ -2517,6 +2518,62 @@ missing feature.
    not intercept the operator with one. That decision and its rationale live in
    `apps/frontend/src/main/NetworkView.svelte` (`openModemConfig`) and
    `apps/frontend/AGENTS.md` → "A SIM LOCK IS REACHED FROM ITS OWN ROW".
+
+## THE BLUETOOTH DOMAIN IS WIRED [EXISTS]
+
+`modules/bluetooth/` shipped as a drivable foundation that nothing called. This
+is its first live wiring: one process-wide `BluetoothStack`
+(`bluetooth-runtime.ts`), a boot phase, a `bluetooth` broadcast, and the ten
+`bluetooth.*` procedures. Wire contract:
+[`packages/rpc/AGENTS.md`](../../packages/rpc/AGENTS.md) → THE BLUETOOTH DOMAIN
+REUSES THE LADDER WITHOUT JOINING THE REGISTRY.
+
+**The RPC layer TRANSLATES and GATES; it never re-implements.** The per-adapter
+S5 lock, the S7 pending stamps, the bounded discovery window and every typed
+BlueZ degradation are applied INSIDE the stack, so a handler that took its own
+lock would be a second, drifting guard over one radio. `bluetooth-wire.ts` is the
+pure projection (the Bluetooth twin of `modem-wire-projection.ts`).
+
+Five decisions carry weight:
+
+- **"The operator switched it off" is checked BEFORE the stack's own
+  unavailability.** The stack records an operator-disabled device as
+  `bt_unavailable{bluez_unavailable}` — correct from its own point of view (it is
+  not observing BlueZ) and misleading to an operator, for whom a switch they can
+  flip and a service fault are opposite facts. Every mutating handler answers
+  `bluetooth_disabled` first, and only past that gate does a cause mean what it
+  says. `unit_missing` is the one cause that folds (into `service_start_failed`),
+  because both mean the switch did not take.
+- **A pairing is ATTEMPTED, not pre-refused, when no agent is registered.** A
+  host that registers its own agent, or a peer needing no authorization, can
+  still complete one, so refusing up front would withdraw a control that
+  sometimes works. What changes is the LABEL: a BlueZ rejection with
+  `agent.reason === "exporter_unavailable"` answers
+  `pairing_agent_unavailable`, and `getStatus().agent` carries the same fact
+  before the operator ever taps. This build ships no D-Bus object server, so that
+  is the state on every device today — see `.omo/notepads/` on the exporter gap;
+  do not paper over it and do not build the exporter here.
+- **The broadcast is on-change and trailing-debounced.** `onChange` fires on
+  every registry edge and a discovery window turns every advertisement into one,
+  so edges collapse onto a 250 ms trailing timer and the payload is compared
+  before it is sent — the same on-change cadence `sources` follows. The timer is
+  `unref`'d: a scan window must never hold the event loop open.
+- **`enable`/`disable` REBUILD the stack rather than re-`start()`ing it.** The
+  boot-reconnect latch is per-instance, and an operator who has just switched
+  Bluetooth back on wants their trusted devices reconnected — the one moment
+  "once per process" would be wrong.
+- **The boot phase is FIRE-AND-FORGET behind `guardNonCritical`.** It enables
+  systemd units and dials the system bus, so awaiting it would put a radio on the
+  boot critical path. A dev host, a board with no controller and a masked
+  `bluetoothd` all resolve to a typed `bt_unavailable` inside the stack, and the
+  payload is also seeded into the post-auth initial-state push
+  (`modules/ui/status.ts`) so a fresh client never waits for an edge.
+
+Coverage: `tests/bluetooth-wire.test.ts` (the explicit recoverable booleans, the
+omitted-vs-measured battery, the positive-evidence transport table, the claim
+matrix incl. `no_adapter` ⇒ `unavailable` vs an unread stack ⇒ `enabled`, the
+agent gap ⇒ `unavailable`, and the whole payload parsed against the published
+schema) plus `packages/rpc/src/schemas/bluetooth.schema.test.ts`.
 
 ## THE CELLULAR SUBSYSTEM — ONE COMPOSITION ROOT, ONE WIRE [PARTIAL]
 
@@ -7283,6 +7340,9 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't rebuild a refreshed modem by spreading the previous one and replacing only `status`/`sim_lock` — `current-modes` rides the SAME `-K` payload, and carrying discovery's answer forward latched the reported radio mode for the process lifetime AND made `applyModemConfig`'s skip guard compare against it, so re-saving the mode the dialog was showing skipped mmcli entirely and still toasted "Saved" (board-measured: wire `5g4g`, radio `allowed: 3g`). Route through `deriveNetworkTypes`/`mergeRefreshedModem`, and keep `undefined` meaning "this READ could not answer" — a payload with no mode fields, or an unparsable `current-modes`, must retain the previous block rather than blank a modem's whole mode list.
 - Don't swallow a falsy `setNetworkTypes` result — mmcli answers `false` when it did not confirm and `undefined` when the spawn threw, the configure-echo parrots the REQUEST rather than the device, and the dialog locks its form to that echo. A refused radio-mode write is the wire-stable `write_failed` refusal.
 - Don't add HTTP REST endpoints — all device control goes through oRPC over WebSocket.
+- Don't take a lock, stamp a pending marker, or bound a discovery window in a `bluetooth.*` handler — all four are applied INSIDE `BluetoothStack`, and a second guard over one radio drifts. Don't read the stack's `bt_unavailable` as the operator's answer either: an operator-disabled device records `bluez_unavailable`, so the preference gate (`bluetooth_disabled`) must be checked first or a flipped switch reads as a broken service.
+- Don't pre-refuse a `bluetooth.pair` because no `org.bluez.Agent1` is registered — a host agent or a no-auth peer can still complete one; re-LABEL the BlueZ rejection `pairing_agent_unavailable` instead. And don't build a D-Bus object exporter as a side effect of an RPC change; that is its own reviewed piece of work.
+- Don't broadcast `bluetooth` straight off `onChange` — a discovery window makes an edge per advertisement per device. Route it through the debounced, payload-compared `broadcastBluetoothIfChanged`, and don't await `initBluetooth` at boot: it enables systemd units and dials the system bus.
 - Don't dispatch a capability module's mutation without `withCapabilityModuleMutation` — the gate check and the lease are one seam, and a module that takes the lease directly skips the feature gate while a module that checks the gate directly skips the lease. Don't move the gate check after the lease either (a doomed request must not contend for a device), don't give a journaled module a lease-only request shape (the union makes it a compile error, and keeping it that way is the point), and don't turn the unproven-capability arm into a pass — it fails closed on purpose.
 - Don't give `config.modem_capabilities` a `RUNTIME_CONFIG_DEFAULTS` entry, or an inner `.default(true)` — absent and `false` must be equally inert, or seven radio-mutating modules become reachable on every shipped device at once.
 - Don't route `modems.getCapabilities`/`setCapabilities` through `modemProcedure` — the gates belong to the DEVICE, and the readiness middleware would make the settings surface unreachable while the cellular stack is initializing or with no modem attached, which is exactly when an operator opens it. And don't persist a gate for a module `IMPLEMENTED_MODEM_CAPABILITY_MODULES` omits: its key is read by nothing, so the operator gets a switch that can never act — refuse it.

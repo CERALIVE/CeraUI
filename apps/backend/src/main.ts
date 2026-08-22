@@ -45,6 +45,7 @@ import {
 	getMockPreviewEncoderRealized,
 } from "./mocks/providers/streaming.ts";
 import { runAddonReconciler } from "./modules/addons/reconciler.ts";
+import { initBluetooth } from "./modules/bluetooth/bluetooth-runtime.ts";
 import { initCellularStack } from "./modules/cellular/cellular-stack.ts";
 import { startModemShadowIfEnabled } from "./modules/cellular/shadow.ts";
 import { initUdevProvisionalMonitor } from "./modules/cellular/udev-monitor.ts";
@@ -507,6 +508,14 @@ process.on("SIGUSR1", function reconcileAddons() {
 // Reconciles the baked-in rtmp/srt gateway units to the operator's persisted
 // enable/disable choice; no-ops on a dev/emulated host and swallows all failures.
 void reconcileIngestDesiredState();
+
+// Bluetooth: reconcile the units to the operator's persisted preference, observe
+// BlueZ, register the pairing agent and run the one bounded boot reconnect.
+// Fire-and-forget behind guardNonCritical for the same reason the two above are:
+// it enables systemd units and dials the system bus, so awaiting it would put a
+// radio on the boot critical path. A dev host, a board with no controller and a
+// masked bluetoothd all resolve to a typed `bt_unavailable` inside the stack.
+void guardNonCritical("bluetooth", initBluetooth);
 
 process.on("SIGTERM", () =>
 	handleTerminationSignal("SIGTERM", {

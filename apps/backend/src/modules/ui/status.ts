@@ -27,6 +27,10 @@ import type {
 	UnclaimedAdapter,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
+import {
+	BLUETOOTH_EVENT,
+	getBluetoothStatusMessage,
+} from "../bluetooth/bluetooth-runtime.ts";
 import { getCellularStack } from "../cellular/cellular-stack.ts";
 import { getConfig } from "../config.ts";
 import { buildModemsWireMessage } from "../modems/modem-status.ts";
@@ -143,6 +147,7 @@ export function sendInitialStatus(conn: WebSocket) {
 	conn.send(buildMsg(ENCODER_LOAD_EVENT, getEncoderLoad()));
 	conn.send(buildMsg(FAN_EVENT, getFan()));
 	conn.send(buildMsg(CPU_EVENT, getCpuInfo()));
+	conn.send(buildMsg(BLUETOOTH_EVENT, getBluetoothStatusMessage()));
 	conn.send(buildMsg("revisions", getRevisions()));
 	conn.send(buildMsg("acodecs", AUDIO_CODECS));
 	notificationSendPersistent(conn, true);

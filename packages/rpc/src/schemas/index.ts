@@ -4,6 +4,7 @@
 export * from './addons.schema';
 export * from './audio-level.schema';
 export * from './auth.schema';
+export * from './bluetooth.schema';
 export * from './broadcast.schema';
 export * from './capability-modules.schema';
 export * from './cloud-provider.schema';
