@@ -111,12 +111,20 @@ export function registerPendingConfirmation(
 	const connName = wifiInterface.hotspot.name ?? ifname;
 
 	const confirm = () => {
-		if (wifiInterface.hotspot.conn) {
+		if (
+			wifiInterface.hotspot.conn &&
+			wifiInterface.supportsApStaConcurrency === true &&
+			wifiInterface.concurrentHotspot
+		) {
+			wifiInterface.concurrentHotspot.activeConn = wifiInterface.hotspot.conn;
+		} else if (wifiInterface.hotspot.conn) {
 			// Reflect the NM-confirmed active connection so isHotspot() is true.
 			wifiInterface.conn = wifiInterface.hotspot.conn;
 		}
 		delete wifiInterface.hotspot.transition;
-		deps.setDupIpSuppression(ifname, false);
+		if (wifiInterface.supportsApStaConcurrency !== true) {
+			deps.setDupIpSuppression(ifname, false);
+		}
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface); // now mode: 'hotspot'
 	};
@@ -125,7 +133,9 @@ export function registerPendingConfirmation(
 		// Confirmation never arrived — clear the transition (soft rollback). The
 		// next NM poll will reconcile if the hotspot did in fact come up.
 		delete wifiInterface.hotspot.transition;
-		deps.setDupIpSuppression(ifname, false);
+		if (wifiInterface.supportsApStaConcurrency !== true) {
+			deps.setDupIpSuppression(ifname, false);
+		}
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
 	};

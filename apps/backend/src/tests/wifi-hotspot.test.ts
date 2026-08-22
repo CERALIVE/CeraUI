@@ -6,9 +6,11 @@ import {
 	setWifiState,
 } from "../modules/wifi/state/wifi-state.ts";
 import { startHotspotForInterface } from "../modules/wifi/wifi-hotspot-activation.ts";
+import { stopHotspotForInterface } from "../modules/wifi/wifi-hotspot-config.ts";
 import { handleWifiMonitorEvent } from "../modules/wifi/wifi-hotspot-monitor.ts";
 import {
 	type HotspotActivationDeps,
+	isConcurrentHotspot,
 	isHotspot,
 	type WifiInterfaceWithHotspot,
 } from "../modules/wifi/wifi-hotspot-types.ts";
@@ -26,6 +28,7 @@ function makeHotspotIface(opts: {
 	ifname: string;
 	conn?: string | null;
 	hotspotConn?: string;
+	supportsApStaConcurrency?: boolean;
 }): WifiInterfaceWithHotspot {
 	return {
 		id: 0,
@@ -34,6 +37,10 @@ function makeHotspotIface(opts: {
 		hw: "Realtek RTL8812AU",
 		available: new Map(),
 		saved: {},
+		savedAll: {},
+		...(opts.supportsApStaConcurrency
+			? { supportsApStaConcurrency: true }
+			: {}),
 		hotspot: {
 			...(opts.hotspotConn ? { conn: opts.hotspotConn } : {}),
 			availableChannels: ["auto"],
@@ -61,6 +68,91 @@ beforeEach(() => {
 	// Reset the shared wifiState cache + neutralize the change callback.
 	setWifiState({});
 	onWifiChange(() => {});
+});
+
+describe("wifiHotspotStart — AP+STA concurrent mode", () => {
+	test("starts the AP on a virtual interface and keeps the station connection", async () => {
+		const mac = "dc:a6:32:aa:bb:cc";
+		const iface = makeHotspotIface({
+			ifname: "wlan0",
+			conn: "station-uuid",
+			supportsApStaConcurrency: true,
+		});
+		setWifiState({ [mac]: { ...iface, mode: "station" } });
+
+		const hotspotDevices: string[] = [];
+		const fieldWrites: Array<Record<string, string>> = [];
+		const dupCalls: Array<[string, boolean]> = [];
+		const deps = makeDeps({
+			ensureConcurrentInterface: async () => ({
+				ifname: "clap-wlan0",
+				created: true,
+			}),
+			nmHotspot: async (device) => {
+				hotspotDevices.push(device);
+				return "hotspot-uuid";
+			},
+			nmConnSetFields: async (_uuid, fields) => {
+				fieldWrites.push(fields);
+				return true;
+			},
+			wifiUpdateSavedConns: async () => {
+				iface.hotspot.conn = "hotspot-uuid";
+			},
+			setDupIpSuppression: (ifname, value) => dupCalls.push([ifname, value]),
+		});
+
+		expect(await startHotspotForInterface(mac, iface, deps)).toEqual({
+			success: true,
+		});
+		expect(hotspotDevices).toEqual(["clap-wlan0"]);
+		expect(fieldWrites).toContainEqual({
+			"connection.interface-name": "clap-wlan0",
+			"802-11-wireless.mac-address": "",
+			"802-11-wireless-security.pmf": "disable",
+		});
+		expect(iface.conn).toBe("station-uuid");
+		expect(dupCalls).toEqual([]);
+
+		handleWifiMonitorEvent({
+			type: "connection-state",
+			connection: iface.hotspot.name ?? "",
+			state: "activated",
+		});
+		expect(isConcurrentHotspot(iface)).toBe(true);
+		expect(iface.conn).toBe("station-uuid");
+		expect(getWifiState()[mac]?.mode).toBe("station");
+	});
+
+	test("stops only the virtual AP and preserves the station", async () => {
+		const mac = "dc:a6:32:aa:bb:cd";
+		const iface = makeHotspotIface({
+			ifname: "wlan0",
+			conn: "station-uuid",
+			hotspotConn: "hotspot-uuid",
+			supportsApStaConcurrency: true,
+		});
+		iface.concurrentHotspot = {
+			ifname: "clap-wlan0",
+			activeConn: "hotspot-uuid",
+		};
+		const released: string[] = [];
+
+		await stopHotspotForInterface(mac, iface, {
+			nmConnSetFields: async () => true,
+			nmDisconnect: async () => true,
+			releaseConcurrentInterface: async (ifname) => released.push(ifname),
+			broadcastState: () => {},
+			setDupIpSuppression: () => {
+				throw new Error("station suppression must stay untouched");
+			},
+			rescan: async () => true,
+		});
+
+		expect(iface.conn).toBe("station-uuid");
+		expect(iface.concurrentHotspot).toBeUndefined();
+		expect(released).toEqual(["clap-wlan0"]);
+	});
 });
 
 // ─── 1. failed start rolls back to station ───────────────────────────────────

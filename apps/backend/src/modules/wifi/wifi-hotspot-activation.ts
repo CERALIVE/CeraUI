@@ -27,6 +27,11 @@ import { withDeviceLock } from "../network/state/device-lock.ts";
 import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
+import {
+	concurrentHotspotBindingFields,
+	ensureConcurrentApInterface,
+	releaseConcurrentApInterface,
+} from "./wifi-concurrent-interface.ts";
 import { getWifiInterfaceByMacAddress } from "./wifi-connections.ts";
 import {
 	findHotspotConnForAdapter,
@@ -43,7 +48,7 @@ import {
 	type HotspotActivationDeps,
 	type HotspotStartResult,
 	hotspotBindingFields,
-	isHotspot,
+	isHotspotActive,
 	type WifiHotspotMessage,
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
@@ -65,11 +70,13 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	pruneHotspotConns: async (macAddress, keepUuid) => {
 		await pruneDuplicateHotspotConns(macAddress, keepUuid);
 	},
+	ensureConcurrentInterface: ensureConcurrentApInterface,
+	releaseConcurrentInterface: releaseConcurrentApInterface,
 	pollHotspotActive: async (iface) => {
 		// Re-poll authoritative NM device state, then check whether the active
 		// connection now matches our hotspot connection.
 		await wifiUpdateDevices();
-		return isHotspot(iface);
+		return isHotspotActive(iface);
 	},
 };
 
@@ -113,13 +120,34 @@ async function startHotspotLocked(
 	deps: HotspotActivationDeps,
 ): Promise<HotspotStartResult> {
 	const ifname = wifiInterface.ifname;
-
-	// Already in hotspot mode for this exact connection — nothing to do.
 	if (
 		wifiInterface.hotspot.conn &&
-		wifiInterface.hotspot.conn === wifiInterface.conn
+		(wifiInterface.conn === wifiInterface.hotspot.conn ||
+			wifiInterface.activeConn === wifiInterface.hotspot.conn ||
+			wifiInterface.concurrentHotspot?.activeConn ===
+				wifiInterface.hotspot.conn)
 	) {
 		return { success: true };
+	}
+	const concurrentInterface =
+		wifiInterface.supportsApStaConcurrency === true
+			? await deps.ensureConcurrentInterface?.(ifname)
+			: undefined;
+	if (
+		wifiInterface.supportsApStaConcurrency === true &&
+		concurrentInterface === undefined
+	) {
+		return { success: false, error: "activation-failed" };
+	}
+	const activationIfname = concurrentInterface?.ifname ?? ifname;
+	const bindingFields = concurrentInterface
+		? concurrentHotspotBindingFields(ifname)
+		: hotspotBindingFields(macAddress, wifiInterface.hotspot.security);
+	if (concurrentInterface) {
+		wifiInterface.concurrentHotspot = {
+			ifname: concurrentInterface.ifname,
+			activeConn: null,
+		};
 	}
 
 	// Snapshot prior state for rollback. getWifiState() returns the live cache
@@ -130,16 +158,20 @@ async function startHotspotLocked(
 	// Begin the transition: broadcast `activating` immediately (responsive UI),
 	// suppress dup-IP warnings for the window, but DO NOT flip mode yet.
 	wifiInterface.hotspot.transition = "activating";
-	deps.setDupIpSuppression(ifname, true);
+	if (!concurrentInterface) deps.setDupIpSuppression(ifname, true);
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface); // still station (isHotspot false)
 
 	const rollback = (): HotspotStartResult => {
 		delete wifiInterface.hotspot.transition;
 		wifiInterface.conn = priorConn;
-		deps.setDupIpSuppression(ifname, false);
+		if (!concurrentInterface) deps.setDupIpSuppression(ifname, false);
 		// Restore the cached state so it is NEVER left in hotspot mode on failure.
 		setWifiState(priorCache);
+		if (concurrentInterface?.created) {
+			void deps.releaseConcurrentInterface?.(concurrentInterface.ifname);
+		}
+		delete wifiInterface.concurrentHotspot;
 		deps.broadcastState();
 		return { success: false, error: "activation-failed" };
 	};
@@ -183,10 +215,7 @@ async function startHotspotLocked(
 	};
 
 	if (conn) {
-		await deps.nmConnSetFields(
-			conn,
-			hotspotBindingFields(macAddress, wifiInterface.hotspot.security),
-		);
+		await deps.nmConnSetFields(conn, bindingFields);
 		prune(conn);
 		if (!(await deps.nmConnect(conn, HOTSPOT_UP_TO))) {
 			return rollback();
@@ -209,15 +238,17 @@ async function startHotspotLocked(
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
 
-		const uuid = await deps.nmHotspot(ifname, name, password, HOTSPOT_UP_TO);
+		const uuid = await deps.nmHotspot(
+			activationIfname,
+			name,
+			password,
+			HOTSPOT_UP_TO,
+		);
 		if (!uuid) {
 			return rollback();
 		}
 
-		await deps.nmConnSetFields(
-			uuid,
-			hotspotBindingFields(macAddress, wifiInterface.hotspot.security),
-		);
+		await deps.nmConnSetFields(uuid, bindingFields);
 		// The updated settings let the connection be recognised as our hotspot.
 		await deps.wifiUpdateSavedConns();
 		prune(uuid);
