@@ -46,6 +46,16 @@
   a bordered `<div>` and put the glyph outside the heading it belongs to — which
   is a second layout for the same object, i.e. exactly the drift this component
   removes. Both default to nothing, so every existing call site is byte-identical.
+
+  ── SO IS `reason`, AND IT IS THE SAME BARGAIN AS `DiagnosticsBlock.extra` ───
+
+  A refusal is normally a KEY, resolved here. Some refusals are not: the router
+  dongle's network-mode capability answers with the FIRMWARE's own error code
+  interpolated into copy (`…refuses to report its network modes (error 112008)`),
+  so the caller already holds an operator sentence and has no key left to hand
+  over. `reason` takes that sentence verbatim and wins over `view.reasonKey`.
+  Do NOT pass a raw wire token through it — the point of the key path is that a
+  machine token can never reach an operator, and that rule is unchanged.
 -->
 <script lang="ts">
 import { resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -77,6 +87,12 @@ interface Props {
 	busy?: boolean;
 	/** The last terminal outcome of a write — SUCCESS INCLUDED (§8 LR-5). */
 	outcome?: MutationOutcome | undefined;
+	/**
+	 * An ALREADY-LOCALIZED refusal sentence, for a caller whose reason carries a
+	 * device-supplied value and is therefore no longer a key. Wins over
+	 * `view.reasonKey` at `unknown` and `blocked`.
+	 */
+	reason?: string;
 	/** Extra section classes, so a host card keeps its own frame. */
 	class?: string;
 	/** Optional leading glyph, rendered beside the heading it belongs to. */
@@ -95,6 +111,7 @@ let {
 	controlId,
 	busy = false,
 	outcome,
+	reason: reasonOverride,
 	class: className,
 	icon,
 	control,
@@ -106,7 +123,7 @@ const Icon = $derived(icon);
 const reasonId = $derived(`${name}-reason`);
 const reason = $derived(
 	view.mode === 'unknown' || view.mode === 'blocked'
-		? resolveMessageKey(view.reasonKey)
+		? (reasonOverride ?? resolveMessageKey(view.reasonKey))
 		: undefined,
 );
 /*

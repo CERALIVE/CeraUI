@@ -96,6 +96,7 @@ import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import NoSimBadge from '$lib/components/custom/NoSimBadge.svelte';
 import { Button } from '$lib/components/ui/button';
+import { DiagnosticsBlock } from '$lib/modem/sections';
 import { cn } from '$lib/utils';
 import type { ModemRowState, ModemRowTone, ModemSignalTier } from './cellular-row';
 import {
@@ -384,6 +385,14 @@ let openDetails = $state<Record<string, boolean>>({});
 function toggleDetails(rowId: string): void {
 	openDetails = { ...openDetails, [rowId]: !openDetails[rowId] };
 }
+
+/**
+ * The three router reading tables carry ONLY the rows the dongle's own admin API
+ * stated, so they pass no derived model. The shared modem diagnostics belong to
+ * the DIALOG, which has room for them; this row already files them behind its
+ * own disclosure as the class band, the detail line and the note strip.
+ */
+const NO_DERIVED_ROWS = { rows: [] } as const;
 
 let adminOpenFailure = $state<Record<string, string>>({});
 
@@ -964,38 +973,26 @@ async function openAdminUi(rowId: string): Promise<void> {
 									{/if}
 								</div>
 							{/if}
-							<!-- Everything else the dongle said about its own radio and its own
+							<!-- The next three tables are the SAME `DiagnosticsBlock`
+							     `RouterDongleDialog` renders, so the row and the dialog cannot
+							     drift into two shapes for one device's readings. `rowPrefix` is
+							     what lets two of them share the `router-detail-` row vocabulary
+							     while keeping the distinct section ids the operator-text scan
+							     excludes by selector.
+
+							     Everything else the dongle said about its own radio and its own
 							     box. Every row is a field the DEVICE published; a field it did
 							     not state produces no row at all, so this block is as short as
 							     the device is quiet — on the bench that is four rows for a
 							     SIM-less HiLink and a dozen for a registered UFI. -->
 							{#if adminDetails.length > 0}
-								<div class="space-y-1" data-testid="router-admin-details">
-									<p class="text-xs font-medium">
-										{m["network.routerCellular.detail.title"]()}
-									</p>
-									<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-										{#each adminDetails as field (field.id)}
-											<dt class="text-muted-foreground/80">{field.label}</dt>
-											<dd
-												class="min-w-0 font-mono tabular-nums break-all"
-												data-testid={`router-detail-${field.id}`}
-											>
-												{field.value}
-												<!-- On screen, never a `title`: the shipped kiosk
-												     touchscreen has no hover to reveal one. -->
-												{#if field.note}
-													<span
-														class="text-muted-foreground/80 block font-sans break-normal"
-														data-testid={`router-detail-${field.id}-note`}
-													>
-														{field.note}
-													</span>
-												{/if}
-											</dd>
-										{/each}
-									</dl>
-								</div>
+								<DiagnosticsBlock
+									diagnostics={NO_DERIVED_ROWS}
+									extra={adminDetails}
+									name="router-admin-details"
+									rowPrefix="router-detail"
+									title={m["network.routerCellular.detail.title"]()}
+								/>
 							{/if}
 							<!-- The same readings in the DEVICE's own spelling — a raw band
 							     token (`B4`, `LTE_BAND_3`), a serving-cell id, a vendor's
@@ -1004,30 +1001,13 @@ async function openAdminUi(rowId: string): Promise<void> {
 							     the operator-text scan can exclude it by selector instead of
 							     by knowing which of two dozen field ids happen to be raw. -->
 							{#if adminDiagnostics.length > 0}
-								<div class="space-y-1" data-testid="router-admin-diagnostics">
-									<p class="text-muted-foreground/80 text-xs font-medium">
-										{m["network.routerCellular.diagnosticsTitle"]()}
-									</p>
-									<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-										{#each adminDiagnostics as field (field.id)}
-											<dt class="text-muted-foreground/80">{field.label}</dt>
-											<dd
-												class="min-w-0 font-mono tabular-nums break-all"
-												data-testid={`router-detail-${field.id}`}
-											>
-												{field.value}
-												{#if field.note}
-													<span
-														class="text-muted-foreground/80 block font-sans break-normal"
-														data-testid={`router-detail-${field.id}-note`}
-													>
-														{field.note}
-													</span>
-												{/if}
-											</dd>
-										{/each}
-									</dl>
-								</div>
+								<DiagnosticsBlock
+									diagnostics={NO_DERIVED_ROWS}
+									extra={adminDiagnostics}
+									name="router-admin-diagnostics"
+									rowPrefix="router-detail"
+									title={m["network.routerCellular.diagnosticsTitle"]()}
+								/>
 							{/if}
 							<!-- The dongle's OWN accounting. It is labelled as the device's
 							     rather than CeraLive's, and stated NOT to be the bond's rate,
@@ -1035,25 +1015,14 @@ async function openAdminUi(rowId: string): Promise<void> {
 							     what an operator would otherwise read as throughput —
 							     BondedLinksSection owns that, from what the sender measured. -->
 							{#if adminTraffic.length > 0}
-								<div class="space-y-1" data-testid="router-admin-traffic">
-									<p class="text-xs font-medium">
-										{m["network.routerCellular.traffic.title"]()}
-									</p>
-									<p class="text-muted-foreground/80 text-xs">
-										{m["network.routerCellular.traffic.note"]()}
-									</p>
-									<dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-										{#each adminTraffic as field (field.id)}
-											<dt class="text-muted-foreground/80">{field.label}</dt>
-											<dd
-												class="min-w-0 font-mono tabular-nums break-all"
-												data-testid={`router-traffic-${field.id}`}
-											>
-												{field.value}
-											</dd>
-										{/each}
-									</dl>
-								</div>
+								<DiagnosticsBlock
+									description={m["network.routerCellular.traffic.note"]()}
+									diagnostics={NO_DERIVED_ROWS}
+									extra={adminTraffic}
+									name="router-admin-traffic"
+									rowPrefix="router-traffic"
+									title={m["network.routerCellular.traffic.title"]()}
+								/>
 							{/if}
 							<!-- The address is STATED, and the page it names is now REACHABLE —
 							     not by linking to it (the operator's browser is not on the

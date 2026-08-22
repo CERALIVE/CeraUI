@@ -338,10 +338,19 @@ export function identityFields(
  * at all. A firmware that declined the question (the bench unit answers `112008`)
  * yields the reason arm below and no chips, so it can never render a control that
  * promises an action nothing behind it performs.
+ *
+ * `label` IS NEVER THE RAW `id` (§3 OL-2). `name` is optional in the firmware's
+ * own catalog, so the former `mode.name ?? mode.id` fallback printed a vendor
+ * machine token — `lte-only`, `0302` — as the operator's word for that mode,
+ * giving a button an accessible name nobody can read before pressing it. An
+ * unnamed mode takes a positional label, and its raw id is RELOCATED (never
+ * deleted, OL-3) into the marked diagnostics table by {@link diagnosticFields}.
  */
 export type NetModeChip = {
 	readonly id: string;
 	readonly label: string;
+	/** Did the FIRMWARE name this mode, or is `label` the positional stand-in? */
+	readonly named: boolean;
 	readonly current: boolean;
 };
 
@@ -393,12 +402,48 @@ export function netModeCapability(
 	}
 	return {
 		selectable: true,
-		modes: capability.modes.map((mode) => ({
-			id: mode.id,
-			label: mode.name ?? mode.id,
-			current: mode.id === capability.current,
-		})),
+		modes: capability.modes.map((mode, index) => {
+			const named = mode.name?.trim() ?? "";
+			return {
+				id: mode.id,
+				label:
+					named === ""
+						? m["network.routerCellular.netMode.unnamed"]({
+								index: String(index + 1),
+							})
+						: named,
+				named: named !== "",
+				current: mode.id === capability.current,
+			};
+		}),
 	};
+}
+
+/**
+ * The firmware's own network-mode catalog, in its own spelling.
+ *
+ * This is the other half of the OL-3 bargain the chip labels make: a mode the
+ * firmware did not name is shown positionally, and the identifier it withheld a
+ * name for is still on screen, verbatim, one disclosure away.
+ */
+function netModeDiagnosticRows(admin: RouterAdminView): DongleField[] {
+	const capability = admin.capabilities?.net_mode;
+	if (capability === undefined || capability.state !== "reported") return [];
+	const rows: DongleField[] = [
+		{
+			id: "net_mode_catalog",
+			label: m["network.routerCellular.netMode.catalogLabel"](),
+			value: capability.modes.map((mode) => mode.id).join(" "),
+		},
+	];
+	if (capability.current !== undefined && capability.current !== "") {
+		rows.push({
+			id: "net_mode_current",
+			label: m["network.routerCellular.netMode.currentIdLabel"](),
+			value: capability.current,
+		});
+	}
+	return rows.filter((row) => row.value !== "");
 }
 
 function statedFrom(
@@ -433,7 +478,11 @@ export function detailFields(
 export function diagnosticFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
-	return statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS);
+	if (admin === undefined) return [];
+	return [
+		...statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS),
+		...netModeDiagnosticRows(admin),
+	];
 }
 
 export function trafficFields(
