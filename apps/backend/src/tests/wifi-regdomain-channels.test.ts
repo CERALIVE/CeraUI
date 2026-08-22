@@ -65,6 +65,11 @@ import {
 	nmSettingsForChannel,
 	type WifiChannel,
 } from "../modules/wifi/wifi-channels.ts";
+import {
+	parseRegulatoryRules,
+	permitsApInitiationInRange,
+	rulesForPhy,
+} from "../modules/wifi/wifi-regulatory-rules.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "wifi");
 const fixture = (name: string) => readFileSync(join(FIXTURES, name), "utf8");
@@ -76,6 +81,9 @@ const IW_PHY_LEGACY = fixture("iw-phy-legacy-flags.txt");
 const IW_PHY_6GHZ = fixture("iw-phy-6ghz.txt");
 const IW_REG_GET_ES = fixture("iw-reg-get-es.txt");
 const IW_REG_GET_WORLD = fixture("iw-reg-get-world.txt");
+const IW_PHY_ROCK5BPLUS = fixture("iw-phy-rock5bplus-rtl8852be.txt");
+const IW_REG_GET_ROCK5BPLUS = fixture("iw-reg-get-rock5bplus.txt");
+const IW_REG_GET_SELF_MANAGED = fixture("iw-reg-get-self-managed.txt");
 
 const channels = (output: string, phy?: string) =>
 	deriveApChannels(output, phy).map((c) => c.channel);
@@ -166,6 +174,130 @@ describe("iw phy derivation — the channel set comes from the kernel, never a t
 	test("garbage input derives nothing instead of throwing", () => {
 		expect(deriveApChannels("")).toEqual([]);
 		expect(deriveApChannels("command not found: iw")).toEqual([]);
+	});
+});
+
+describe("W1 — a PASSIVE-SCAN-only band is withheld from the AP offering", () => {
+	const HOTSPOT_AUTOS = ["auto", "auto_24", "auto_50"] as const;
+	const bandsOf = (derived: readonly DerivedApChannel[]) =>
+		new Set(derived.map((c) => c.band));
+
+	test("the board's own `iw phy` really does NOT mark these 5 GHz channels", () => {
+		// The premise of the whole defect: with no rule data the per-channel flags
+		// offer 5 GHz, because the kernel never wrote `no IR` on them. If this ever
+		// stops being true the gate below is testing nothing.
+		const ungated = deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0");
+		expect(ungated.map((c) => c.channel)).toContain(36);
+		expect(bandsOf(ungated)).toEqual(new Set(["bg", "a"]));
+	});
+
+	test("world domain `00` withholds every 5 GHz AP channel", () => {
+		const derived = deriveApChannels(
+			IW_PHY_ROCK5BPLUS,
+			"phy0",
+			IW_REG_GET_ROCK5BPLUS,
+		);
+
+		expect(derived.filter((c) => c.band === "a")).toEqual([]);
+		expect(bandsOf(derived)).toEqual(new Set(["bg"]));
+
+		const offered = offeredHotspotChannels(HOTSPOT_AUTOS, derived);
+		for (const withheld of ["ch_36", "ch_40", "ch_44", "ch_149", "ch_161"]) {
+			expect(offered).not.toContain(withheld);
+		}
+	});
+
+	test("the same world-domain dump leaves the 2.4 GHz offering untouched", () => {
+		// `(2402 - 2472 @ 40)` carries no PASSIVE-SCAN, so the band is permitted and
+		// the per-channel flags remain the only 2.4 GHz filter (12/13/14 stay out).
+		const ungated = deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0");
+		const gated = deriveApChannels(
+			IW_PHY_ROCK5BPLUS,
+			"phy0",
+			IW_REG_GET_ROCK5BPLUS,
+		);
+
+		const twoFour = (list: readonly DerivedApChannel[]) =>
+			list.filter((c) => c.band === "bg");
+		expect(twoFour(gated)).toEqual(twoFour(ungated));
+		expect(twoFour(gated).map((c) => c.channel)).toEqual([
+			1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+		]);
+	});
+
+	test("a domain that permits 5 GHz AP initiation still offers those channels", () => {
+		// The per-phy US section covers 5 GHz with rules carrying NO initiation
+		// flag, and it outranks a global scope that is still the world domain.
+		const derived = deriveApChannels(
+			IW_PHY_ROCK5BPLUS,
+			"phy0",
+			IW_REG_GET_SELF_MANAGED,
+		);
+
+		expect(derived.map((c) => c.channel)).toEqual(
+			deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0").map((c) => c.channel),
+		);
+		expect(offeredHotspotChannels(HOTSPOT_AUTOS, derived)).toContain("ch_36");
+	});
+
+	test("ES derives exactly as it did before the gate existed", () => {
+		expect(deriveApChannels(IW_PHY_ES, undefined, IW_REG_GET_ES)).toEqual(
+			deriveApChannels(IW_PHY_ES),
+		);
+	});
+
+	test("an unreadable regulatory dump withholds NOTHING", () => {
+		// A failed read is a statement about the READ, never a legality verdict.
+		const ungated = deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0");
+		for (const reg of [undefined, "", "   ", "Failed to connect to nl80211"]) {
+			expect(deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0", reg)).toEqual(ungated);
+		}
+	});
+
+	test("a range no rule mentions is permitted, not refused", () => {
+		const rules = parseRegulatoryRules(IW_REG_GET_ES);
+		// The ES per-phy section states 2.4 GHz and says nothing about 5 GHz.
+		expect(rulesForPhy(rules, "phy0")).toHaveLength(1);
+		expect(
+			permitsApInitiationInRange(rulesForPhy(rules, "phy0"), 4900, 5925),
+		).toBe(true);
+	});
+
+	test("every spelling of NL80211_RRF_NO_IR blocks, and readings do not", () => {
+		const scopes = parseRegulatoryRules(
+			[
+				"global",
+				"country 00: DFS-UNSET",
+				"\t(2402 - 2472 @ 40), (6, 20), (N/A)",
+				"\t(5170 - 5250 @ 80), (6, 20), (N/A), AUTO-BW, PASSIVE-SCAN",
+				"\t(5250 - 5330 @ 80), (6, 20), (0 ms), DFS, NO-IR",
+				"\t(5735 - 5835 @ 80), (N/A, 20), (N/A), NO-IBSS",
+			].join("\n"),
+		);
+
+		// (6, 20) and (0 ms) are power/CAC readings — never restriction flags.
+		expect(scopes.global[0]?.flags).toEqual([]);
+		expect(permitsApInitiationInRange(scopes.global, 2400, 2500)).toBe(true);
+		expect(permitsApInitiationInRange(scopes.global, 4900, 5925)).toBe(false);
+		for (const [start, end] of [
+			[5170, 5250],
+			[5250, 5330],
+			[5735, 5835],
+		] as const) {
+			expect(permitsApInitiationInRange(scopes.global, start, end)).toBe(false);
+		}
+	});
+
+	test("ONE permitting rule is enough to keep the band offered", () => {
+		const scopes = parseRegulatoryRules(
+			[
+				"global",
+				"country XX: DFS-ETSI",
+				"\t(5170 - 5250 @ 80), (N/A, 23), (N/A), NO-OUTDOOR, AUTO-BW",
+				"\t(5250 - 5330 @ 80), (N/A, 20), (0 ms), DFS, PASSIVE-SCAN",
+			].join("\n"),
+		);
+		expect(permitsApInitiationInRange(scopes.global, 4900, 5925)).toBe(true);
 	});
 });
 

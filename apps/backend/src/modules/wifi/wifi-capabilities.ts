@@ -66,6 +66,7 @@ import {
 	parseOk,
 } from "../system/cli-parse.ts";
 import { runIw } from "./regdomain.ts";
+import { parseRegulatoryRuleLine } from "./wifi-regulatory-rules.ts";
 
 export type { WifiLinkTelemetry };
 
@@ -381,7 +382,6 @@ function parsePhyBlock(block: PhyBlock): ParseResult<WifiPhyCapabilities> {
 
 const REG_PHY_RE = /^phy#(\d+)(\s+\(self-managed\))?\s*$/;
 const REG_COUNTRY_RE = /^country\s+([A-Z0-9]{2}):/;
-const REG_RULE_RE = /^\(\s*(\d+)\s*-\s*(\d+)\s*@/;
 
 /** The 6 GHz allocation. 60 GHz rules (57240-63720) are deliberately outside it. */
 const SIX_GHZ_START_MHZ = 5925;
@@ -452,11 +452,11 @@ export function parseIwRegDomains(output: string): ParseResult<IwRegState> {
 			sawCountry = true;
 			continue;
 		}
-		const rule = REG_RULE_RE.exec(line);
-		if (rule?.[1] && rule[2]) {
-			const start = Number(rule[1]);
-			const end = Number(rule[2]);
-			if (start < SIX_GHZ_END_MHZ && end > SIX_GHZ_START_MHZ) sixGhz = true;
+		const rule = parseRegulatoryRuleLine(line);
+		if (rule !== undefined) {
+			if (rule.startMhz < SIX_GHZ_END_MHZ && rule.endMhz > SIX_GHZ_START_MHZ) {
+				sixGhz = true;
+			}
 		}
 	}
 	commit();
