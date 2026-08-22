@@ -109,22 +109,33 @@ export function broadcastBluetoothIfChanged(): void {
  * The projection carries the registry row's OWN `scoCapable` rather than any
  * re-derivation, so an A2DP-source-only device can never reach the audio module
  * as a microphone candidate through a second, driftable copy of the UUID rule.
+ *
+ * ORDER IS THE CONTRACT, and there are now three steps rather than two:
+ * publish the registry projection, then re-fold the picker from it, then tell
+ * the resilience layer. Refreshing before publishing would re-derive the picker
+ * from the PREVIOUS registry view — at boot that is the empty one, so a trusted
+ * microphone that just reconnected would be absent from the first source list an
+ * operator sees. Reconciling presence before the refresh would likewise judge a
+ * device against a picker that has not caught up with it yet.
  */
 function publishBluetoothAudioDevices(): void {
 	void import("../streaming/bluetooth-audio.ts")
 		.then(async (mod) => {
 			const state = getBluetoothStack().state();
-			mod.noteBluetoothRegistryDevices(
-				state.devices.map((device) => ({
-					address: device.address,
-					alias: device.name,
-					name: device.name,
-					connected: device.connected,
-					scoCapable: device.scoCapable,
-				})),
-			);
+			const projection = state.devices.map((device) => ({
+				address: device.address,
+				alias: device.name,
+				name: device.name,
+				connected: device.connected,
+				scoCapable: device.scoCapable,
+			}));
+			mod.noteBluetoothRegistryDevices(projection);
 			const audio = await import("../streaming/audio.ts");
 			await audio.refreshBluetoothAudioDevices();
+			const resilience = await import(
+				"../streaming/bluetooth-audio-resilience.ts"
+			);
+			resilience.noteBluetoothAudioPresence(projection);
 		})
 		.catch((err: unknown) => {
 			logger.debug(

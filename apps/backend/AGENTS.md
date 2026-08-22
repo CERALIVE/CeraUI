@@ -20,6 +20,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
 | Bluetooth operator surface (the 10 `bluetooth.*` procedures, the live stack singleton, the `bluetooth` broadcast) | `rpc/procedures/bluetooth.procedure.ts` + `modules/bluetooth/bluetooth-runtime.ts` + `modules/bluetooth/bluetooth-wire.ts`; contract below → THE BLUETOOTH DOMAIN IS WIRED |
+| **A Bluetooth microphone dropping mid-stream (operator bands + the two reconnect duties; recovery itself is ENGINE-owned)** | `modules/streaming/bluetooth-audio-resilience.ts` (`classifyBluetoothSourcePresence`, `noteBluetoothAudioPresence`) + the 3-step publish order in `modules/bluetooth/bluetooth-runtime.ts`; contract below → …AND A MICROPHONE THAT DROPS MID-STREAM IS TOLD, NOT REPAIRED |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
 | Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
 | Transport resolver + protocol registry (srtla/rist active, srt reserved; RIST capability-gated via `ristAvailable`) | `modules/streaming/transport/` (`resolveStreamEndpoint`, `registry.ts`, `rist-adapter.ts`) |
@@ -2574,6 +2575,67 @@ omitted-vs-measured battery, the positive-evidence transport table, the claim
 matrix incl. `no_adapter` ⇒ `unavailable` vs an unread stack ⇒ `enabled`, the
 agent gap ⇒ `unavailable`, and the whole payload parsed against the published
 schema) plus `packages/rpc/src/schemas/bluetooth.schema.test.ts`.
+
+### …AND A MICROPHONE THAT DROPS MID-STREAM IS TOLD, NOT REPAIRED [EXISTS]
+
+`modules/streaming/bluetooth-audio-resilience.ts` is the operator-facing half of
+a Bluetooth microphone vanishing. It repairs NOTHING, and that is the design.
+
+**The engine already survives this, unasked.** cerastream's program audio is a
+device⇄silence `fallbackswitch` whose actuator loop
+(`cerastream/crates/cerastream/src/engine/audio.rs` `audio_actuator_loop`, over
+the table-tested `crates/cerastream/src/audio.rs` `AudioActuator::poll`) polls
+the device leg's `is-healthy` every 250 ms and answers `SelectSilence` on a
+starve, `RebuildDevice` on a 3 s cadence while failed, and `SelectDevice` the
+moment the leg is healthy again. The rebuild is opaque-spec aware and its failure
+log is rate-limited to `OPAQUE_REBUILD_LOG_INTERVAL` (30 s), so a BlueALSA PCM
+that is permanently gone costs one line per 30 s rather than an `eprintln` per
+retry. **Do NOT add a second silence-on-disconnect mechanism in CeraUI, and do
+NOT add a "re-promote the device leg" RPC** — none exists on the engine, and one
+issued from here would race the actuator that already owns the decision.
+
+**A reconnect therefore costs EXACTLY TWO things**: re-assert the idle-meter
+preference (the engine holds none across a device leaving its registry, and
+`set_preferred_device` early-returns on an unchanged value), and clear/emit the
+notifications. `tests/bluetooth-audio-resilience.test.ts` proves the absence of
+everything else against a REAL `audio-meter-bridge` over an injected engine
+client: the only method that ever reaches it is `reload-config`.
+
+- **`dropped` and `gone` are different registry facts.** BlueZ flips `Connected`
+  for a link that dropped and retires the whole `Device1` row for a device that
+  is gone. A drop the engine is still rebuilding for gets a retractable
+  `bluetooth-source-dropped` warning; a retired row gets the TERMINAL
+  `bluetooth-source-lost` error, which REPLACES a standing drop band in place
+  rather than stacking on it. Both are `isDismissable` — the documented safety
+  net, never the mechanism; the retraction evidence is the device's own return.
+- **The verdict is HYSTERETIC, mirroring `capture-presence.ts`.**
+  `BLUETOOTH_SOURCE_LOSS_GRACE_MS` (3 000) is sized against the ENGINE's own
+  failover cadence, so a drop the actuator absorbs is silent. The clock starts at
+  the FIRST degraded observation and a later edge inside the window never extends
+  it. `BLUETOOTH_REASSERT_INTERVAL_MS` (5 000) is a leading-edge floor, so a
+  radio that flaps five times in two seconds costs ONE re-assert, zero
+  notifications and zero extra engine calls.
+- **A device we never saw CONNECTED can never be "lost".** A trusted microphone
+  simply switched off at boot is exactly that case and must stay silent — the
+  same "absence is not evidence" rule the capture-presence grace follows.
+- **DROPPED is stream-gated, GONE is not.** A drop is a claim about the live
+  program leg; a retired row is a standing fact whether or not a stream is up.
+- **The publish order in `bluetooth-runtime.ts` is the contract**: registry
+  projection → picker re-fold → presence reconcile. Refreshing before publishing
+  would re-derive the picker from the PREVIOUS registry view — at boot the empty
+  one, so a trusted mic that just reconnected would be missing from the first
+  source list an operator sees. Pinned by a source-order lock.
+
+Coverage: `tests/bluetooth-audio-resilience.test.ts` (the presence table, both
+hysteresis directions, the terminal escalation and its no-downgrade rule, the
+never-seen-connected and non-Bluetooth-pick negatives, the exactly-two reconnect
+duties, the storm bound, the engine-surface measurement, the boot reconnect's
+once-per-process latch plus its re-arm on a module re-init, and the publish-order
+lock). Rule-E proof in both directions: neutering the grace window reddens 2
+tests, neutering the re-assert floor reddens 2.
+
+**Honest status:** no claim here has been exercised against a real Bluetooth
+microphone — every fixture models the BlueZ registry contract.
 
 ## THE CELLULAR SUBSYSTEM — ONE COMPOSITION ROOT, ONE WIRE [PARTIAL]
 
@@ -7358,6 +7420,9 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't take a lock, stamp a pending marker, or bound a discovery window in a `bluetooth.*` handler — all four are applied INSIDE `BluetoothStack`, and a second guard over one radio drifts. Don't read the stack's `bt_unavailable` as the operator's answer either: an operator-disabled device records `bluez_unavailable`, so the preference gate (`bluetooth_disabled`) must be checked first or a flipped switch reads as a broken service.
 - Don't pre-refuse a `bluetooth.pair` because no `org.bluez.Agent1` is registered — a host agent or a no-auth peer can still complete one; re-LABEL the BlueZ rejection `pairing_agent_unavailable` instead. And don't build a D-Bus object exporter as a side effect of an RPC change; that is its own reviewed piece of work.
 - Don't broadcast `bluetooth` straight off `onChange` — a discovery window makes an edge per advertisement per device. Route it through the debounced, payload-compared `broadcastBluetoothIfChanged`, and don't await `initBluetooth` at boot: it enables systemd units and dials the system bus.
+- Don't add a silence-on-disconnect path, a device-leg re-promote RPC, or any other audio-path repair for a Bluetooth microphone — cerastream's `audio_actuator_loop` already fails over to the silence companion, rebuilds the `alsasrc` on a 3 s cadence and re-selects the device leg the moment it is healthy, and a CeraUI-side actuator would race it. CeraUI's reconnect duties are EXACTLY the meter-preference re-assert and the notification transitions (see …AND A MICROPHONE THAT DROPS MID-STREAM IS TOLD, NOT REPAIRED).
+- Don't collapse `dropped` into `gone` for a Bluetooth source, and don't raise either without the grace window — BlueZ flips `Connected` for a link that dropped and retires the row for one that is gone, and a radio flaps, so an unguarded raise/clear pair turns one bad minute into a stream of toasts. And never report a device "lost" that this process has not observed CONNECTED: a trusted mic switched off at boot is exactly that case.
+- Don't reorder `bluetooth-runtime.ts`'s publish steps — registry projection, then picker re-fold, then presence reconcile. Refreshing first re-derives the picker from the PREVIOUS registry view (at boot, the empty one), so a trusted microphone that just reconnected is missing from the first source list the operator sees.
 - Don't dispatch a capability module's mutation without `withCapabilityModuleMutation` — the gate check and the lease are one seam, and a module that takes the lease directly skips the feature gate while a module that checks the gate directly skips the lease. Don't move the gate check after the lease either (a doomed request must not contend for a device), don't give a journaled module a lease-only request shape (the union makes it a compile error, and keeping it that way is the point), and don't turn the unproven-capability arm into a pass — it fails closed on purpose.
 - Don't give `config.modem_capabilities` a `RUNTIME_CONFIG_DEFAULTS` entry, or an inner `.default(true)` — absent and `false` must be equally inert, or seven radio-mutating modules become reachable on every shipped device at once.
 - Don't route `modems.getCapabilities`/`setCapabilities` through `modemProcedure` — the gates belong to the DEVICE, and the readiness middleware would make the settings surface unreachable while the cellular stack is initializing or with no modem attached, which is exactly when an operator opens it. And don't persist a gate for a module `IMPLEMENTED_MODEM_CAPABILITY_MODULES` omits: its key is read by nothing, so the operator gets a switch that can never act — refuse it.
