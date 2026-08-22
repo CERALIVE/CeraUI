@@ -1,0 +1,59 @@
+Station 8c:85:90:1a:2b:3c (on wlan0)
+	inactive time:	1204 ms
+	rx bytes:	9182734
+	rx packets:	41205
+	tx bytes:	118293042
+	tx packets:	92014
+	tx retries:	812
+	tx failed:	3
+	beacon loss:	0
+	beacon rx:	3011
+	rx drop misc:	17
+	signal:  	-47 [-50, -53] dBm
+	signal avg:	-49 [-52, -55] dBm
+	beacon signal avg:	-48 dBm
+	tx bitrate:	144.4 MBit/s MCS 15 short GI
+	tx duration:	0 us
+	rx bitrate:	130.0 MBit/s MCS 15
+	rx duration:	0 us
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	short
+	WMM/WME:	yes
+	MFP:		no
+	TDLS peer:	no
+	DTIM period:	2
+	beacon interval:100
+	short preamble:	yes
+	short slot time:yes
+	connected time:	1843 seconds
+	associated at [boottime]:	4213.216s
+	associated at:	1755823102841 ms
+	current time:	1755824945913 ms
+Station 3c:22:fb:0e:91:7d (on wlan0)
+	inactive time:	312 ms
+	rx bytes:	14022
+	rx packets:	119
+	tx bytes:	38104
+	tx packets:	204
+	tx retries:	9
+	tx failed:	0
+	beacon loss:	0
+	beacon rx:	40
+	rx drop misc:	0
+	signal:  	-71 [-74, -77] dBm
+	signal avg:	-70 [-73, -76] dBm
+	tx bitrate:	6.0 MBit/s
+	rx bitrate:	1.0 MBit/s
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	long
+	WMM/WME:	yes
+	MFP:		no
+	TDLS peer:	no
+	DTIM period:	2
+	beacon interval:100
+	short slot time:yes
+	connected time:	42 seconds
