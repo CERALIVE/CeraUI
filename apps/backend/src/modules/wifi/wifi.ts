@@ -63,6 +63,12 @@ import { wifiHotspotStart } from "./wifi-hotspot-activation.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
 import {
+	getHotspotSecurityMap,
+	type HotspotBandMaxWidth,
+	offeredHotspotMaxWidth,
+	offeredHotspotSecurity,
+} from "./wifi-hotspot-security.ts";
+import {
 	canHotspot,
 	isApMode,
 	type WifiHotspot,
@@ -131,8 +137,11 @@ export type WifiInterfaceResponseMessage = Pick<
 	// uses); the real path coerces BaseWifiInterface.conn's null to "" to match.
 	conn: string;
 	available?: Array<WifiNetwork>;
-	hotspot?: Pick<WifiHotspot, "name" | "password" | "channel"> & {
+	hotspot?: Pick<WifiHotspot, "name" | "password" | "channel" | "security"> & {
 		available_channels: Record<string, { name: string }>;
+		available_security: Record<string, { name: string }>;
+		// DISPLAY ONLY — there is no configurable width in this contract.
+		max_width_mhz?: HotspotBandMaxWidth;
 		warnings?: string[];
 	};
 	supports_hotspot?: true;
@@ -169,6 +178,11 @@ export function wifiBuildMsg() {
 							"auto_24",
 							"auto_50",
 						]),
+						// A dev host proves no SAE, so the mock offers exactly what
+						// the real derivation would offer for an unprovable radio.
+						available_security: getHotspotSecurityMap(
+							offeredHotspotSecurity(undefined),
+						),
 					},
 				} satisfies WifiInterfaceResponseMessage;
 				return;
@@ -223,6 +237,12 @@ export function wifiBuildMsg() {
 		ifs[id] = entry;
 
 		if (isApMode(wifiInterface)) {
+			// One capability read backs both derivations, so the security the
+			// device OFFERS and the width it REPORTS can never describe different
+			// radios.
+			const hotspotCaps = getWifiCapabilitiesForInterface(wifiInterface.ifname);
+			const maxWidthMhz = offeredHotspotMaxWidth(hotspotCaps);
+
 			const hotspot: NonNullable<WifiInterfaceResponseMessage["hotspot"]> = {
 				...(wifiInterface.hotspot.name !== undefined
 					? { name: wifiInterface.hotspot.name }
@@ -234,8 +254,17 @@ export function wifiBuildMsg() {
 					wifiInterface.hotspot.availableChannels,
 					wifiInterface.hotspot.derivedChannels ?? [],
 				),
+				available_security: getHotspotSecurityMap(
+					offeredHotspotSecurity(hotspotCaps),
+				),
 				...(wifiInterface.hotspot.channel !== undefined
 					? { channel: wifiInterface.hotspot.channel }
+					: {}),
+				...(wifiInterface.hotspot.security !== undefined
+					? { security: wifiInterface.hotspot.security }
+					: {}),
+				...(Object.keys(maxWidthMhz).length > 0
+					? { max_width_mhz: maxWidthMhz }
 					: {}),
 			};
 

@@ -357,6 +357,67 @@ describe("hotspot identity — multiple adapters", () => {
 		expect(a?.conn).not.toBe(b?.conn);
 	});
 
+	/*
+	  The SSID is DERIVED from the permanent address (its last two octets), so it
+	  is deterministic by design and two adapters can legitimately collide on it.
+	  The password must not share that property: if it were a function of the
+	  address, every CeraLive device would carry a guessable pre-shared key and a
+	  collided pair would be joinable with one another's credentials.
+	*/
+	test("distinct adapters never share a generated password", async () => {
+		const rec = makeRecorder();
+		const macs = [
+			PERM_MAC,
+			SECOND_PERM_MAC,
+			"dc:a6:32:11:22:33",
+			"58:02:05:ff:ee:dd",
+			"02:00:00:00:00:01",
+		];
+
+		for (const [index, mac] of macs.entries()) {
+			await startHotspotForInterface(
+				mac,
+				makeHotspotIface({ ifname: `wlan${index}` }),
+				rec.deps,
+			);
+		}
+
+		const passwords = macs.map((mac) => rec.store.get(mac)?.password);
+		for (const password of passwords) {
+			expect(typeof password).toBe("string");
+			expect(password?.length).toBeGreaterThan(0);
+		}
+		expect(new Set(passwords).size).toBe(macs.length);
+
+		// No password may contain any octet of the address that produced it.
+		for (const [index, mac] of macs.entries()) {
+			const password = passwords[index] ?? "";
+			for (const octet of mac.split(":")) {
+				expect(password.toLowerCase()).not.toContain(octet);
+			}
+		}
+	});
+
+	test("two adapters colliding on SSID still get distinct passwords", async () => {
+		const rec = makeRecorder();
+		// Same last two octets ⇒ the SAME derived SSID.
+		const first = "dc:a6:32:00:79:1c";
+		const second = "58:02:05:11:79:1c";
+
+		await startHotspotForInterface(first, makeHotspotIface(), rec.deps);
+		await startHotspotForInterface(
+			second,
+			makeHotspotIface({ ifname: "wlan1" }),
+			rec.deps,
+		);
+
+		expect(rec.store.get(first)?.ssid).toBe("CERALIVE_791c");
+		expect(rec.store.get(second)?.ssid).toBe("CERALIVE_791c");
+		expect(rec.store.get(first)?.password).not.toBe(
+			rec.store.get(second)?.password,
+		);
+	});
+
 	test("both identities survive a restart, each adapter keeping its own", async () => {
 		const rec = makeRecorder();
 		await startHotspotForInterface(PERM_MAC, makeHotspotIface(), rec.deps);

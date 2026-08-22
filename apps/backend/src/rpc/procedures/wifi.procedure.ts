@@ -343,6 +343,9 @@ export const hotspotConfigureProcedure = authedProcedure
 						name: input.name,
 						password: input.password,
 						channel: input.channel,
+						...(input.security !== undefined
+							? { security: input.security }
+							: {}),
 					},
 				},
 			});

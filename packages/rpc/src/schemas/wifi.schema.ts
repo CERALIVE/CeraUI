@@ -147,6 +147,35 @@ export const wifiAdapterCapabilitiesSchema = z.object({
 });
 export type WifiAdapterCapabilities = z.infer<typeof wifiAdapterCapabilitiesSchema>;
 
+// ─── hotspot security offering ──────────────────────────────────────────────
+//
+// The two security modes a CeraLive hotspot may be configured with. WPA2 is
+// always offered; `wpa3-sae` is offered ONLY when the adapter's own capability
+// read proved SAE on THIS radio (`wifiAdapterCapabilitiesSchema.wpa3Sae ===
+// 'supported'`) — `unknown` is not proof, so it never offers WPA3.
+//
+// There is deliberately NO `wpa2-wpa3-mixed` member. A transition-mode profile
+// has never been brought up on a board against NM 1.42, and an option that
+// cannot be shown to work is not shipped. Adding one is a separate, evidenced
+// change — not a widening of this enum.
+export const hotspotSecurityIdSchema = z.enum(['wpa2', 'wpa3-sae']);
+export type HotspotSecurityId = z.infer<typeof hotspotSecurityIdSchema>;
+
+// READ-ONLY display truth: the widest channel the radio advertises for each band
+// a hotspot may use. It is NOT a configurable width — NetworkManager 1.42
+// exposes no hotspot channel-width property at all, so a settable field here
+// would be a control that cannot act.
+//
+// 2.4/5 GHz ONLY, and that is a hard limit rather than a consequence of what
+// this radio happens to carry: `802-11-wireless.band` has no 6 GHz value, so a
+// 6 GHz hotspot is unrepresentable however capable the adapter is. The key is
+// absent from the schema entirely, so it cannot be emitted by mistake.
+export const hotspotBandMaxWidthSchema = z.object({
+	'2.4': z.number().int().positive().optional(),
+	'5': z.number().int().positive().optional(),
+});
+export type HotspotBandMaxWidth = z.infer<typeof hotspotBandMaxWidthSchema>;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -168,6 +197,15 @@ export const hotspotConfigSchema = z.object({
 	// set: a channel absent from it is rejected by the device.
 	available_channels: z.record(wifiChannelIdSchema, z.object({ name: z.string() })),
 	channel: wifiChannelIdSchema.optional(),
+	// The security modes the DEVICE derived for this adapter, on exactly the
+	// terms `available_channels` is offered: this map IS the offered set, and a
+	// value absent from it is rejected. Optional on the wire because a device
+	// predating this field omits it — absent means "not derived", which the UI
+	// must read as WPA2-only rather than as an empty offering.
+	available_security: z.record(hotspotSecurityIdSchema, z.object({ name: z.string() })).optional(),
+	security: hotspotSecurityIdSchema.optional(),
+	// Display only. There is no configurable width anywhere in this contract.
+	max_width_mhz: hotspotBandMaxWidthSchema.optional(),
 });
 export type HotspotConfig = z.infer<typeof hotspotConfigSchema>;
 
@@ -246,6 +284,10 @@ export const hotspotConfigInputSchema = z.object({
 		.min(HOTSPOT_PASSWORD_MIN, 'Password must be at least 8 characters')
 		.max(HOTSPOT_PASSWORD_MAX, 'Password must be at most 63 characters'),
 	channel: wifiChannelIdSchema,
+	// Omitted leaves the adapter's current selection alone, so an existing
+	// caller keeps its exact behaviour. A stated value is still checked against
+	// the device's own offered set before anything is written.
+	security: hotspotSecurityIdSchema.optional(),
 });
 export type HotspotConfigInput = z.infer<typeof hotspotConfigInputSchema>;
 
