@@ -15,6 +15,10 @@ import {
 } from '$lib/stores/auth-status.svelte';
 import {
 	clearSessionExpired,
+	deriveConnectionSurfaceUx,
+	getDisconnectedSince,
+	getGraceNow,
+	getHasConnected,
 	markAuthenticated,
 	markSessionExpired,
 	shouldExpireSession,
@@ -36,8 +40,20 @@ let isCheckingAuthStatus = $state(true);
 let authTimedOut = $state(false);
 let updatingStatus: StatusMessage['updating'] = $state(false);
 
-// Derived offline state for reactivity
-const showOfflinePage = $derived(getShouldShowOfflinePage());
+const offlinePageRequested = $derived(getShouldShowOfflinePage());
+const connectionSurfaces = $derived(
+	deriveConnectionSurfaceUx(
+		{ authTimedOut, disconnectedSince: getDisconnectedSince() },
+		getGraceNow(),
+	),
+);
+// Initial offline launches keep their immediate recovery page. Once this page
+// has connected, a transient loss must outlast the shared grace before the same
+// full-page takeover is allowed.
+const showOfflinePage = $derived(
+	offlinePageRequested &&
+		(!getHasConnected() || connectionSurfaces.showOfflineBanner),
+);
 
 // Svelte 5: Use $effect for side effects
 $effect(() => {
@@ -186,7 +202,7 @@ $effect(() => {
 		<UpdateBanner />
 		<DisconnectedBanner />
 		<Main></Main>
-	{:else if authTimedOut}
+	{:else if connectionSurfaces.showAuthTimeout}
 		<!-- Auth check stalled (offline device / dropped socket): a calm retry
 		     surface instead of a blank screen, mirroring DisconnectedBanner. -->
 		<div class="flex min-h-screen items-center justify-center p-4">
