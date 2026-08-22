@@ -168,6 +168,53 @@ export function isOwnNumberSensitiveKey(key: string): boolean {
 }
 
 /**
+ * A DEVICE LOGIN — the router-WebUI credential store's class, and the APN
+ * credential that has always ridden beside it.
+ *
+ * The PASSWORD half was already covered by {@link SENSITIVE_KEY_RE}, and the
+ * other half was not: `username` matches none of `pin|password|token|secret|
+ * paseto|bcrp|auth`, so a credential logged as a pair leaked exactly half of
+ * itself. The CONTAINER names are the same hole one level up — a
+ * `{ credential: { username, password } }` object logged under its own key was
+ * walked into rather than blanked.
+ *
+ * It CANNOT join {@link SENSITIVE_KEY_RE}: that regex is a SUBSTRING match, so
+ * `user` there would eat `userAgent`, and `login` would eat every `loginAttempt`
+ * counter on the device. These are matched WHOLE after case-, separator- AND
+ * dot-folding, so `gsm.username` and `username` are caught by one rule while
+ * `usernameRequired`, `hasUsername` and `credentialsSupported` survive intact.
+ *
+ * `username` is deliberately included even though an APN username is not itself
+ * a secret: `shadow-redaction.ts` already blanks it as PII in the mutation-free
+ * evidence collector, so treating it differently here would be the two halves of
+ * one policy disagreeing.
+ */
+const CREDENTIAL_SENSITIVE_KEYS: ReadonlySet<string> = new Set<string>([
+	"username",
+	"usernames",
+	"credential",
+	"credentials",
+	"modemcredential",
+	"modemcredentials",
+	"routercredential",
+	"routercredentials",
+	"admincredential",
+	"admincredentials",
+	"webuiusername",
+	"webuipassword",
+	"adminusername",
+	"routerusername",
+	"modemusername",
+	"loginusername",
+	"gsmusername",
+]);
+
+/** Whole-key device-login test, case-, separator- and dot-insensitive. */
+export function isCredentialSensitiveKey(key: string): boolean {
+	return CREDENTIAL_SENSITIVE_KEYS.has(key.toLowerCase().replace(/[_.-]/g, ""));
+}
+
+/**
  * Backstop for the VALUE side: a raw `mmcli -K -s <path>` record pasted into a
  * free-text log line carries the body and the originator on its face. The
  * backend's SMS module is content-free by construction, so this should never
@@ -253,7 +300,8 @@ function redactValue(value: unknown): unknown {
 				isSmsSensitiveKey(key) ||
 				isGpsSensitiveKey(key) ||
 				isUssdSensitiveKey(key) ||
-				isOwnNumberSensitiveKey(key)
+				isOwnNumberSensitiveKey(key) ||
+				isCredentialSensitiveKey(key)
 					? REDACTED
 					: redactValue(inner);
 		}
@@ -283,7 +331,8 @@ export const redact = winston.format((info) => {
 			isSmsSensitiveKey(key) ||
 			isGpsSensitiveKey(key) ||
 			isUssdSensitiveKey(key) ||
-			isOwnNumberSensitiveKey(key)
+			isOwnNumberSensitiveKey(key) ||
+			isCredentialSensitiveKey(key)
 				? REDACTED
 				: redactValue(info[key]);
 	}
