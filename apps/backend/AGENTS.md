@@ -4646,6 +4646,21 @@ Three `MOCK_SCENARIO` values seed the engine-capability state:
 re-broadcasts the `capabilities` event. Gated by `shouldUseMocks()`. Use in tests
 that need a specific capability combination without switching the full scenario.
 
+### Bluetooth dev seam (`mocks/providers/bluetooth.ts`)
+
+An in-memory BlueZ stand-in — adapter, discoverable roster, pair/trust state
+machine, bounded TIMED scan window — so the whole surface is drivable with no
+controller. It is a PARALLEL layer: `modules/bluetooth/` never imports it, and it
+imports only that module's PURE halves (`deriveCapability`,
+`buildBluetoothStatus`) so the mock's `deviceClass` / `scoCapable` / `transport`
+and its whole wire payload come from the production derivations rather than from
+a second, driftable copy. Its refusals are the shared
+`bluetoothMutationRefusalSchema` set, in `bluetooth.procedure.ts`'s own gate
+order. `setMockBtScenario(partial)` / `setMockBtAgentRegistered(bool)` are the
+override seams; `resetMockBluetoothState()` is wired into `resetMockState()` and
+drops every scan timer. Full contract: [`../../AGENTS.md`](../../AGENTS.md) →
+MOCK SUBSYSTEM.
+
 ### Kiosk dev-seam gate (T6)
 
 `resolveActiveKioskDeps()` (`modules/system/kiosk.ts`) returns the mock kiosk

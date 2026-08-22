@@ -89,6 +89,7 @@ Mock hardware scenarios are available via `MOCK_SCENARIO`:
 | `bun run dev:single-modem` | Single modem, no WiFi |
 | `bun run dev:streaming` | Active streaming simulation |
 | `bun run dev:modem-pin-locked` | 2 modems, modem 0 SIM PIN-locked (fixture PIN `0000`) |
+| `bun run dev:bt-mic-paired` | Bluetooth on with an HFP mic already paired, trusted and connected |
 
 ### Type-check
 

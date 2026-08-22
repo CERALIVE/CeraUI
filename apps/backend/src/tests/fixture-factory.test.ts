@@ -9,6 +9,7 @@ import { relayServerSchema } from "../helpers/config-schemas.ts";
 import {
 	buildMockAddonDescriptor,
 	buildMockAddonState,
+	buildMockBtDevice,
 	buildMockDeviceModes,
 	buildMockKioskToken,
 	buildMockModem,
@@ -27,6 +28,7 @@ import {
 	MOCK_SIM_PUK_RETRIES,
 } from "../mocks/mock-constants.ts";
 import {
+	mockBtDeviceSchema,
 	mockDeviceModesSchema,
 	mockKioskTokenSchema,
 	mockModemConfigSchema,
@@ -38,6 +40,7 @@ import {
 	MockAddonDescriptor,
 	MockAddonState,
 } from "../mocks/providers/addons.ts";
+import { mockBtPairedMicFixture } from "../mocks/providers/bluetooth.ts";
 import { MOCK_KIOSK_TOKEN } from "../mocks/providers/kiosk.ts";
 import {
 	getMockRelaysCache,
@@ -303,5 +306,30 @@ describe("buildMockSimState", () => {
 
 	test("throws when pinRetries exceeds the budget", () => {
 		expect(() => buildMockSimState({ pinRetries: 5 })).toThrow();
+	});
+});
+
+describe("buildMockBtDevice", () => {
+	test("default is schema-valid and matches the shipped bonded mic", () => {
+		expect(mockBtDeviceSchema.safeParse(buildMockBtDevice()).success).toBe(
+			true,
+		);
+		expect(buildMockBtDevice()).toEqual(mockBtPairedMicFixture());
+	});
+
+	test("overrides apply", () => {
+		const device = buildMockBtDevice({ connected: false, trusted: false });
+		expect(device.connected).toBe(false);
+		expect(device.trusted).toBe(false);
+		expect(device.paired).toBe(true);
+	});
+
+	test("throws on a drifted MAC and on an out-of-range battery", () => {
+		expect(() => buildMockBtDevice({ address: "not-a-mac" })).toThrow();
+		expect(() => buildMockBtDevice({ battery: 101 })).toThrow();
+	});
+
+	test("throws when the path stops encoding its own address", () => {
+		expect(() => buildMockBtDevice({ address: "AA:BB:CC:DD:EE:99" })).toThrow();
 	});
 });

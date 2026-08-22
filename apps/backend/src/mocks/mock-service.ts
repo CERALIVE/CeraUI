@@ -73,6 +73,7 @@ import type {
 } from "./mock-schemas.ts";
 import { validateMockFixtures } from "./mock-schemas.ts";
 import { MockAddonDescriptor, MockAddonState } from "./providers/addons.ts";
+import { resetMockBluetoothState } from "./providers/bluetooth.ts";
 import { resetMockKioskState } from "./providers/kiosk.ts";
 import { getMockRelaysCache } from "./providers/relays.ts";
 import { resetMockWifiFaults } from "./providers/wifi.ts";
@@ -375,6 +376,13 @@ export function initMockService(scenarioName?: string): void {
 	mockState.mockAddons = {
 		[MockAddonDescriptor.id]: structuredClone(MockAddonState),
 	};
+
+	// Bluetooth state is seeded OUTSIDE `mockState`: it owns scan timers, which
+	// `structuredClone` cannot capture, so the pristine snapshot below could
+	// neither hold nor restore them. Its seed is a pure function of the active
+	// scenario, so re-deriving it IS the pristine state — see
+	// `resetMockBluetoothState()`, which both this and `resetMockState()` call.
+	resetMockBluetoothState();
 
 	startPeriodicUpdates();
 
@@ -720,14 +728,17 @@ export function updateMockState(partial: Partial<MockState>): void {
 
 /**
  * Restore the active scenario's pristine seeded state and clear every running
- * timer. Side-effect-clean (no broadcasts, no new timers) so unit tests get
- * per-test isolation without leaking intervals. No-op until initMockService has
- * captured a snapshot.
+ * timer — the periodic-fluctuation and relay ones here, plus the Bluetooth scan
+ * window's. Side-effect-clean (no broadcasts, no new timers) so unit tests get
+ * per-test isolation without leaking intervals. The `mockState` restore is a
+ * no-op until initMockService has captured a snapshot; the subsystem resets
+ * above it are not, so a leaked timer is cleared either way.
  */
 export function resetMockState(): void {
 	clearMockTimers();
 	resetMockKioskState();
 	resetMockWifiFaults();
+	resetMockBluetoothState();
 	resetAudioNamingDiagnostics();
 	lastEmittedModemFingerprint = null;
 	lastEmittedWifiFingerprint = null;

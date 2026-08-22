@@ -408,6 +408,31 @@ All writes to `mockState` funnel through the typed `updateMockState(partial)` mu
 `setMockWifiConnection`, `setMockNetifConfig`, `setMockEncoderConfig`) are thin
 wrappers that compute the next slice and delegate to it.
 
+**Bluetooth mocks (`providers/bluetooth.ts`):**
+Dev/e2e parity for the BlueZ path with no controller: an adapter, a discoverable
+roster, a pair/trust state machine and a bounded, TIMED scan window, all in
+memory. Three rules carry it:
+
+- **Nothing states `deviceClass` / `scoCapable` / `transport`.** All three are
+  DERIVED through the production code that derives them on a board
+  (`deriveCapability()` + `buildBluetoothStatus()`), so a fixture claiming a SCO
+  leg beside an A2DP-source-only UUID is unexpressible rather than merely
+  discouraged. The roster spans all four outcomes on purpose: an HFP mic
+  (`audio-input` + `scoCapable`, battery 80%), an A2DP-source-only phone
+  (`audio-input`, NO SCO leg — the forcing case), a playback-only speaker and a
+  bare advertisement (both `unknown`).
+- **The state is OUTSIDE `mockState`, and that is deliberate.** It owns scan
+  timers, which `structuredClone` cannot capture, so the pristine snapshot could
+  neither hold nor restore them. Its seed is a pure function of the active
+  scenario, so `resetMockBluetoothState()` — called by BOTH `initMockService()`
+  and `resetMockState()` — re-derives the pristine state and drops every timer.
+- **Refusals use the SHARED `bluetoothMutationRefusalSchema` vocabulary**, in the
+  same gate order `bluetooth.procedure.ts` applies, so a dev refusal a surface
+  renders is the string a board would answer with. `setMockBtScenario(partial)`
+  is the test/dev override seam (the `setMockEngineCapabilities` pattern) that
+  makes the adapter-absent and operator-disabled arms reachable without a
+  scenario per combination.
+
 **Add-on + kiosk mocks (`providers/addons.ts`, `providers/kiosk.ts`):**
 `MockAddonDescriptor` and `MockAddonState` are the canonical fixtures for add-on
 tests. `MOCK_KIOSK_STATUS`, `MOCK_KIOSK_TOKEN`, and `MOCK_COG_DISPLAY_DESCRIPTOR`
@@ -474,6 +499,7 @@ stream is idle; the override is cleared by `resetMockState()`.
 | `single-modem` | 1 modem, no WiFi |
 | `streaming-active` | Active streaming simulation with live telemetry |
 | `modem-pin-locked` | 2 modems, WiFi off, modem 0 SIM PIN-locked (fixture PIN `0000`) — drives the SIM unlock/PUK flow end-to-end in dev; the `unlockSim`/`unlockSimPuk` RPCs route to the mock SIM state machine |
+| `bt-mic-paired` | Bluetooth on with an HFP mic already paired/trusted/connected (battery 80%) — the steady state a source surface renders. The default `multi-modem-wifi` is the OTHER half: BT on with an empty registry, so the scan → discover → pair flow is what a developer lands on |
 | `caps-full` | Full engine caps: H265 + hw accel, audio-capable source, live audio switch, SRT transport (idle) |
 | `engine-starting` | Engine still booting — minimal safe floor + `engineStarting` flag |
 | `engine-unavailable` | Engine unreachable — cached/minimal snapshot + `engineUnavailable` flag |
