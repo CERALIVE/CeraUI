@@ -391,6 +391,39 @@ export const networkIngestSchema = z.object({
 });
 export type NetworkIngest = z.infer<typeof networkIngestSchema>;
 
+// ─── enumerated-but-driverless wireless / Bluetooth adapters ────────────────
+//
+// An adapter the kernel enumerated but bound NO driver to produces no network
+// interface, no wiphy and no modem, so every other surface on the wire is
+// structurally blind to it and the operator reads an empty Wi-Fi/Bluetooth
+// section as "nothing is plugged in". These rows exist to say otherwise.
+//
+// SCOPE: sysfs can only report what the kernel ENUMERATED. A PCIe function that
+// never comes up at all is invisible here — that is documented, not a gap.
+export const UNCLAIMED_ADAPTER_BUSES = ['pci', 'usb'] as const;
+export const unclaimedAdapterBusSchema = z.enum(UNCLAIMED_ADAPTER_BUSES);
+export type UnclaimedAdapterBus = z.infer<typeof unclaimedAdapterBusSchema>;
+
+// A GUESS, and named as one: a class code says what the silicon registered
+// itself as, never what the part is. `wireless` is the honest floor for a USB
+// device in the Wireless Controller class whose subclass/protocol pair does not
+// name the Bluetooth programming interface.
+export const UNCLAIMED_ADAPTER_KINDS = ['wifi', 'bluetooth', 'wireless'] as const;
+export const unclaimedAdapterKindSchema = z.enum(UNCLAIMED_ADAPTER_KINDS);
+export type UnclaimedAdapterKind = z.infer<typeof unclaimedAdapterKindSchema>;
+
+const HEX_ID_RE = /^[0-9a-f]{4}$/;
+
+export const unclaimedAdapterSchema = z.object({
+	bus: unclaimedAdapterBusSchema,
+	/** Lowercase 4-hex PCI/USB vendor id — the only identity such a device has. */
+	vendorId: z.string().regex(HEX_ID_RE),
+	/** Lowercase 4-hex PCI device / USB product id. */
+	deviceId: z.string().regex(HEX_ID_RE),
+	kind: unclaimedAdapterKindSchema,
+});
+export type UnclaimedAdapter = z.infer<typeof unclaimedAdapterSchema>;
+
 // Status response message schema (what server sends)
 export const statusResponseSchema = z.object({
 	is_streaming: z.boolean().optional(),
@@ -431,5 +464,11 @@ export const statusResponseSchema = z.object({
 	// omitted field, so a true-only flag could be raised and never lowered — the
 	// `policy_route_missing` latch, exactly. Absent = an older backend.
 	cellular_initializing: z.boolean().optional(),
+	// Every enumerated wireless/BT adapter this host bound NO driver to. Emitted
+	// as an EXPLICIT array — `[]` included — from the moment the probe has run,
+	// so a consumer can tell "every adapter is driven" (a positive answer) from
+	// "this device never answered" (an older backend, or a boot that has not
+	// reached the first probe). Absence therefore means UNASKED, never all-clear.
+	unclaimed_adapters: z.array(unclaimedAdapterSchema).optional(),
 });
 export type StatusResponse = z.infer<typeof statusResponseSchema>;

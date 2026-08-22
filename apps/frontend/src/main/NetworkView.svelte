@@ -25,6 +25,7 @@ import CollisionBands from './network/CollisionBands.svelte';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
 import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
+import UnclaimedAdaptersBand from './network/UnclaimedAdaptersBand.svelte';
 import WifiSection from './network/WifiSection.svelte';
 
 // None of these is on the path to first paint — each is its own chunk, fetched
@@ -205,6 +206,7 @@ function openModemConfig(id: string) {
 			unbondedCount={hud.unbondedLinkCount}
 		/>
 		<CollisionBands {netif} bondMapping={getStatus()?.bond_mapping ?? null} />
+		<UnclaimedAdaptersBand adapters={getStatus()?.unclaimed_adapters} />
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}
