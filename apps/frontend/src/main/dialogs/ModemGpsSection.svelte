@@ -13,27 +13,23 @@
   answers "no fix" forever, quite correctly, and an unbounded wait would render
   as a spinner that never resolves.
 
-  It renders one of FOUR states (`DESIGN.md` §1), and the machine-readable
-  `data-capability-state` is what makes them distinguishable to a gate rather
-  than only to a reader:
-
-    absent    — nothing at all, not one node (CT-1).
-    unknown   — a `role="status"` diagnostic and NO control (CT-3/CT-4): below
-                `capable` nobody has shown there is a receiver to switch on, and
-                a disabled switch would claim there is.
-    blocked   — the switch, DISABLED, with its reason ON SCREEN beside it (CT-2)
-                — never a bare disabled control, and never a reason that lives
-                only in a `title` the kiosk touchscreen cannot hover to reveal.
-    available — the switch, live.
+  THE FOUR-STATE LADDER IS `CapabilitySection`'s, NOT THIS FILE'S. This section
+  and `ModemFccUnlockSection` each wrote it out by hand and each got it right,
+  which is precisely how a third copy eventually gets it wrong. `gpsView` still
+  decides WHICH state this modem is in — that rule is GPS-specific and stays
+  here — and the shared primitive owns what each state renders: zero nodes at
+  `absent`, a `role="status"` diagnostic and NO control at `unknown` (CT-3/CT-4),
+  the control DISABLED with its reason ON SCREEN at `blocked` (CT-2), and the
+  live control plus these readings at `available`. Every test id is unchanged:
+  `modem-gps`, `-toggle`, `-reason`, `-unknown`, and the outcome band's own.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { GnssFixState, ModemGpsStatus, SupportClaimState } from '@ceraui/rpc/schemas';
 
-import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
-import { Label } from '$lib/components/ui/label';
 import { Switch } from '$lib/components/ui/switch';
 import type { MutationOutcome } from '$lib/modem/mutation-outcome';
+import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
 
 import { gnssFixLine, gpsStatusLine, gpsView } from './modem-gps';
 
@@ -58,94 +54,76 @@ let { claim, status, state, busy = false, outcome, onToggle }: Props = $props();
 
 const view = $derived(gpsView(claim, status));
 const line = $derived(gpsStatusLine(state));
-const capabilityState = $derived(
-	view.kind === 'toggle' ? 'available' : view.kind,
-);
-const blockedReason = $derived(
-	view.kind === 'blocked' ? resolveMessageKey(view.reasonKey) : undefined,
-);
+const capability = $derived.by((): CapabilityView => {
+	switch (view.kind) {
+		case 'absent':
+			return { mode: 'absent' };
+		case 'unknown':
+			return { mode: 'unknown', reasonKey: view.reasonKey };
+		case 'blocked':
+			return { mode: 'blocked', reasonKey: view.reasonKey };
+		case 'toggle':
+			return { mode: 'available' };
+	}
+});
 </script>
 
-{#if view.kind !== 'absent'}
-	<section class="space-y-2" data-testid="modem-gps" data-capability-state={capabilityState}>
-		<div class="flex items-start justify-between gap-3">
-			<div class="space-y-1">
-				<Label for="modem-gps-toggle">{m['network.modem.gps.title']()}</Label>
-				<p class="text-muted-foreground text-xs">
-					{m['network.modem.gps.description']()}
-				</p>
-			</div>
-			<!--
-			  A DISABLED switch is offered only at `blocked`, where the claim is
-			  already ≥ capable — CT-4's "no fake control". At `unknown` there is no
-			  switch at all, disabled or otherwise.
-			-->
-			{#if view.kind === 'toggle' || view.kind === 'blocked'}
-				<Switch
-					id="modem-gps-toggle"
-					data-testid="modem-gps-toggle"
-					checked={view.kind === 'toggle' && view.enabled}
-					disabled={busy || view.kind === 'blocked'}
-					aria-label={blockedReason}
-					title={blockedReason}
-					onCheckedChange={(next) => onToggle(next)}
-				/>
-			{/if}
-		</div>
+<CapabilitySection
+	name="modem-gps"
+	view={capability}
+	{busy}
+	{outcome}
+	controlId="modem-gps-toggle"
+	title={m['network.modem.gps.title']()}
+	description={m['network.modem.gps.description']()}
+>
+	<!--
+	  WRITTEN ONCE, RENDERED IN TWO STATES. `CapabilitySection` renders this at
+	  `available` and at `blocked` with `disabled` flipped, and never at `unknown`
+	  — so there is no disabled twin to keep in step by hand.
+	-->
+	{#snippet control(ctx)}
+		<Switch
+			id="modem-gps-toggle"
+			data-testid="modem-gps-toggle"
+			checked={view.kind === 'toggle' && view.enabled}
+			disabled={ctx.disabled}
+			aria-label={ctx.reason}
+			aria-describedby={ctx.reasonId}
+			title={ctx.reason}
+			onCheckedChange={(next) => onToggle(next)}
+		/>
+	{/snippet}
 
-		{#if view.kind === 'unknown'}
-			<!--
-			  Visibly distinct from BOTH the offered and the withheld renderings, and
-			  announced: "we have not established this" is a different fact from
-			  "this modem cannot do it", and rendering it as the latter is the one
-			  substitution the capability ladder exists to prevent.
-			-->
-			<p
-				class="text-muted-foreground text-xs"
-				data-testid="modem-gps-unknown"
-				data-state="unknown"
-				role="status"
-			>
-				{resolveMessageKey(view.reasonKey)}
-			</p>
-		{:else if view.kind === 'blocked'}
-			<p class="text-status-warning text-xs" data-testid="modem-gps-reason">
-				{blockedReason}
-			</p>
+	<!--
+	  The privacy statement renders whenever the control is LIVE, never behind a
+	  `title` — the shipped kiosk touchscreen cannot hover to reveal one.
+	-->
+	<p class="text-muted-foreground text-xs" data-testid="modem-gps-privacy">
+		{m['network.modem.gps.privacyNotice']()}
+	</p>
+
+	<div class="text-xs" data-testid="modem-gps-state" data-gps-state={line.kind}>
+		{#if line.kind === 'off'}
+			<span class="text-muted-foreground">{m['network.modem.gps.state.off']()}</span>
+		{:else if line.kind === 'acquiring'}
+			<span class="text-muted-foreground" data-testid="modem-gps-acquiring">
+				{m['network.modem.gps.state.acquiring']()}
+			</span>
+		{:else if line.kind === 'no-fix'}
+			<span class="text-status-warning" data-testid="modem-gps-no-fix">
+				{resolveMessageKey(line.reasonKey)}
+			</span>
+		{:else if line.kind === 'fix'}
+			<span
+				class="font-mono tabular-nums"
+				dir="ltr"
+				data-testid="modem-gps-fix"
+			>{gnssFixLine(line.fix)}</span>
 		{:else}
-			<!--
-			  The privacy statement renders whenever the control does, never behind a
-			  `title` — the shipped kiosk touchscreen cannot hover to reveal one.
-			-->
-			<p class="text-muted-foreground text-xs" data-testid="modem-gps-privacy">
-				{m['network.modem.gps.privacyNotice']()}
-			</p>
-
-			<div class="text-xs" data-testid="modem-gps-state" data-gps-state={line.kind}>
-				{#if line.kind === 'off'}
-					<span class="text-muted-foreground">{m['network.modem.gps.state.off']()}</span>
-				{:else if line.kind === 'acquiring'}
-					<span class="text-muted-foreground" data-testid="modem-gps-acquiring">
-						{m['network.modem.gps.state.acquiring']()}
-					</span>
-				{:else if line.kind === 'no-fix'}
-					<span class="text-status-warning" data-testid="modem-gps-no-fix">
-						{resolveMessageKey(line.reasonKey)}
-					</span>
-				{:else if line.kind === 'fix'}
-					<span
-						class="font-mono tabular-nums"
-						dir="ltr"
-						data-testid="modem-gps-fix"
-					>{gnssFixLine(line.fix)}</span>
-				{:else}
-					<span class="text-status-warning" data-testid="modem-gps-unavailable">
-						{m['network.modem.gps.state.unavailable']()}
-					</span>
-				{/if}
-			</div>
+			<span class="text-status-warning" data-testid="modem-gps-unavailable">
+				{m['network.modem.gps.state.unavailable']()}
+			</span>
 		{/if}
-
-		<MutationOutcomeBand name="modem-gps" {outcome} />
-	</section>
-{/if}
+	</div>
+</CapabilitySection>

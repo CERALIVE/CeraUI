@@ -38,14 +38,23 @@
 
   Nothing in this file — or anywhere under `lib/modem/sections/` — asks what
   KIND of device it is rendering for.
+
+  ── `class` AND `icon` ARE ADDITIVE, AND THAT IS WHY THEY EXIST ─────────────
+
+  A host renders this as one of several stacked CARDS, each with its own frame
+  and leading glyph. Without those two props a caller has to wrap the section in
+  a bordered `<div>` and put the glyph outside the heading it belongs to — which
+  is a second layout for the same object, i.e. exactly the drift this component
+  removes. Both default to nothing, so every existing call site is byte-identical.
 -->
 <script lang="ts">
 import { resolveMessageKey } from '@ceraui/i18n/svelte';
-import type { Snippet } from 'svelte';
+import type { Component, Snippet } from 'svelte';
 
 import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import { Label } from '$lib/components/ui/label';
 import type { MutationOutcome } from '$lib/modem/mutation-outcome';
+import { cn } from '$lib/utils';
 
 import type { CapabilityControlContext, CapabilityView } from './types';
 
@@ -68,6 +77,10 @@ interface Props {
 	busy?: boolean;
 	/** The last terminal outcome of a write — SUCCESS INCLUDED (§8 LR-5). */
 	outcome?: MutationOutcome | undefined;
+	/** Extra section classes, so a host card keeps its own frame. */
+	class?: string;
+	/** Optional leading glyph, rendered beside the heading it belongs to. */
+	icon?: Component;
 	/** Rendered at `available` and `blocked`. NEVER at `unknown` or `absent`. */
 	control?: Snippet<[CapabilityControlContext]>;
 	/** Rendered at `available` only — readings that only make sense when live. */
@@ -82,9 +95,13 @@ let {
 	controlId,
 	busy = false,
 	outcome,
+	class: className,
+	icon,
 	control,
 	children,
 }: Props = $props();
+
+const Icon = $derived(icon);
 
 const reasonId = $derived(`${name}-reason`);
 const reason = $derived(
@@ -107,17 +124,26 @@ const controlContext = $derived<CapabilityControlContext>({
 </script>
 
 {#if view.mode !== 'absent'}
-	<section class="space-y-2" data-testid={name} data-capability-state={view.mode}>
+	<section
+		class={cn('space-y-2', className)}
+		data-testid={name}
+		data-capability-state={view.mode}
+	>
 		<div class="flex items-start justify-between gap-3">
-			<div class="min-w-0 space-y-1">
-				{#if controlId}
-					<Label for={controlId}>{title}</Label>
-				{:else}
-					<p class="text-sm leading-none font-medium">{title}</p>
+			<div class="flex min-w-0 items-start gap-2.5">
+				{#if Icon}
+					<Icon class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
 				{/if}
-				{#if description}
-					<p class="text-muted-foreground text-xs">{description}</p>
-				{/if}
+				<div class="min-w-0 space-y-1">
+					{#if controlId}
+						<Label for={controlId}>{title}</Label>
+					{:else}
+						<p class="text-sm leading-none font-medium">{title}</p>
+					{/if}
+					{#if description}
+						<p class="text-muted-foreground text-xs">{description}</p>
+					{/if}
+				</div>
 			</div>
 			{#if control && offersControl}
 				<div class="shrink-0" data-testid={`${name}-control`}>

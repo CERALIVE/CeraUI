@@ -39,8 +39,8 @@
   gates an expensive per-message mmcli read AND keeps one-time codes out of the
   DOM entirely. Collapsing the two into one would silently undo both.
 
-  ADDITIVE-TOLERANT RENDERING
-  ---------------------------
+  ADDITIVE-TOLERANT RENDERING, THROUGH ONE SHARED PRIMITIVE
+  ---------------------------------------------------------
   Every card below `Save` is driven by a Phase-B additive-optional wire field.
   An older backend, and the mmcli path on ANY backend, reports none of them —
   so each card is absent ENTIRELY when its field is absent. Never an empty
@@ -48,6 +48,15 @@
   section reads as a load failure, and a fabricated `0 B` tells the operator
   they used no data. `modem-detail.ts` owns those decisions so the markup below
   only has to ask "is there a view".
+
+  Each of those cards is a `CapabilitySection` (`$lib/modem/sections`), so
+  "absent" is the primitive's ZERO-NODE state rather than a per-card `{#if}`,
+  and the four-state ladder — absent / unknown / blocked / available, and what
+  each one may render — is stated ONCE, in a module the router dialog shares,
+  instead of once per card here. Read the ladder there; the comments below state
+  only what is specific to the card they sit on. The two claim-gated modules
+  (location, FCC unlock) resolve their own state in their own components and
+  route through the same primitive.
 
   No-SIM safety — ONE PREDICATE, SHARED WITH THE ROW
   --------------------------------------------------
@@ -184,6 +193,7 @@ import {
 	type MutationOutcome,
 	mutationOutcome,
 } from '$lib/modem/mutation-outcome';
+import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
 import {
 	bandDiagnosticTokens,
 	bandListOperatorLabel,
@@ -753,6 +763,11 @@ async function applyBandLock(): Promise<void> {
 // derivation could disagree with the backend's, and every way it could disagree
 // is a lie to the operator.
 const fiveG = $derived(fiveGViewForModem(modem));
+// The section's own gate is its `CapabilitySection` view, so the markup can no
+// longer narrow the union with an `{#if}`. These two read the offered arm and
+// answer empty otherwise; neither is reachable while the section is `absent`.
+const fiveGOptions = $derived(fiveG.kind === 'offered' ? fiveG.options : []);
+const fiveGNrModeKey = $derived(fiveG.kind === 'offered' ? fiveG.nrModeReasonKey : '');
 let fiveGApplying = $state(false);
 let fiveGFailure = $state<string | undefined>(undefined);
 
@@ -1039,6 +1054,14 @@ function toggleSms(): void {
 	smsOpen = !smsOpen;
 	if (smsOpen && !smsLoaded && !smsLoading) void loadSms();
 }
+
+// The instrument cards are gated on the DEVICE having published a reading, not
+// on a capability CLAIM, so they take the two-state form of the shared ladder:
+// the evidence is there and the card renders, or it is not and the card is
+// `absent` — zero nodes. See the header note for the rest.
+const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
+const cardView = (present: boolean): CapabilityView =>
+	present ? { mode: 'available' } : { mode: 'absent' };
 </script>
 
 <AppDialog
@@ -1376,23 +1399,13 @@ function toggleSms(): void {
 		     PRIMARY, by explicit product decision: an operator locking a band is
 		     working a specific coverage problem at a specific site, and burying
 		     that behind the diagnostics disclosure would make the fix harder to
-		     reach than the symptom.
-
-		     It renders NOTHING unless the device answered with a certified,
-		     offerable set. `withheld` states its reason and offers no control —
-		     never a disabled one, which would imply a capability being kept back
-		     when the truth is that this transition has never been reviewed for
-		     this model and firmware. `unknown` asserts nothing at all. -->
-		{#if bandOffer.phase === 'offered' && bandOffer.offerable.length > 0}
-			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-bands-card">
-				<div class="flex items-start gap-2.5">
-					<Antenna class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
-					<div class="min-w-0">
-						<p class="text-sm font-medium">{m["network.modem.bands.title"]()}</p>
-						<p class="text-muted-foreground text-xs">{m["network.modem.bands.description"]()}</p>
-					</div>
-				</div>
-
+		     reach than the symptom. It renders nothing unless the device answered
+		     with a certified, offerable set. -->
+		<CapabilitySection
+			name="modem-bands-card" icon={Antenna} class={CARD_FRAME}
+			view={cardView(bandOffer.phase === 'offered' && bandOffer.offerable.length > 0)}
+			title={m["network.modem.bands.title"]()}
+			description={m["network.modem.bands.description"]()}>
 				<p class="text-muted-foreground text-xs" data-testid="modem-bands-current">
 					{bandOffer.unlocked
 						? m["network.modem.bands.currentAny"]()
@@ -1480,8 +1493,14 @@ function toggleSms(): void {
 						{resolveMessageKey(bandOutcomeKey)}
 					</p>
 				{/if}
-			</section>
-		{:else if bandOffer.phase === 'withheld' && bandOffer.reasonKey}
+		</CapabilitySection>
+
+		<!-- A WITHHELD offer keeps its OWN test id rather than becoming the
+		     primitive's `blocked` state, and that is deliberate: `blocked` renders
+		     a DISABLED control, and there is no control to withhold here — this
+		     transition has never been reviewed for this model and firmware. So the
+		     section is `absent` (zero nodes) and the reason stands alone. -->
+		{#if bandOffer.phase === 'withheld' && bandOffer.reasonKey}
 			<p class="text-muted-foreground text-xs" data-testid="modem-bands-unavailable" role="status">
 				{resolveMessageKey(bandOffer.reasonKey)}
 			</p>
@@ -1511,22 +1530,16 @@ function toggleSms(): void {
 		     The network-type selector above chooses the ALLOWED SET; this chooses
 		     the RANKING within it. They are two different questions and the second
 		     is the one the coarse selector structurally cannot express, which is
-		     why both live here rather than folding into one control.
-
-		     It renders ONLY where the device published the block, so a modem with
-		     no 5G, an operator who never enabled the gate, and a build that never
-		     shipped the module all render nothing — no disabled control, because
-		     there is no capability being withheld. -->
-		{#if fiveG.kind === 'offered'}
-			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-five-g-card">
-				<div class="min-w-0">
-					<p class="text-sm font-medium">{m["network.modem.fiveG.title"]()}</p>
-					<p class="text-muted-foreground text-xs">{m["network.modem.fiveG.intro"]()}</p>
-				</div>
-
+		     why both live here rather than folding into one control. The device
+		     publishes the block only where the ladder says the control may be
+		     offered, so the gate is never re-derived here. -->
+		<CapabilitySection
+			name="modem-five-g-card" class={CARD_FRAME} view={cardView(fiveG.kind === 'offered')}
+			title={m["network.modem.fiveG.title"]()}
+			description={m["network.modem.fiveG.intro"]()}>
 				<div class="space-y-1.5" data-testid="modem-five-g-options" role="radiogroup"
 					aria-label={m["network.modem.fiveG.title"]()}>
-					{#each fiveG.options as option (option.preference)}
+					{#each fiveGOptions as option (option.preference)}
 						<button
 							aria-checked={option.active}
 							class="focus-visible:ring-ring flex w-full items-start gap-2.5 rounded-md border p-2.5 text-start focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60"
@@ -1559,7 +1572,7 @@ function toggleSms(): void {
 				     offer, and saying so is more useful than an absent row an
 				     operator goes hunting for. -->
 				<p class="text-muted-foreground text-xs" data-testid="modem-five-g-nr-mode">
-					{resolveMessageKey(fiveG.nrModeReasonKey)}
+					{resolveMessageKey(fiveGNrModeKey)}
 				</p>
 
 				{#if fiveGApplying}
@@ -1572,8 +1585,7 @@ function toggleSms(): void {
 						{resolveMessageKey(fiveGFailure)}
 					</p>
 				{/if}
-			</section>
-		{/if}
+		</CapabilitySection>
 
 		<!-- ── Data usage ───────────────────────────────────────────────────────
 		     TWO HALVES WITH DIFFERENT PRESENCE, and that is why they are separately
@@ -1585,16 +1597,11 @@ function toggleSms(): void {
 		     it renders whenever the device published one. Gating the controls on the
 		     counters would hide them on every board in the field, since no shipped
 		     device runs the backend that folds counters onto the wire. -->
-		{#if usage || usagePolicy}
-			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-usage-card">
-				<div class="flex items-start gap-2.5">
-					<Gauge class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
-					<div class="min-w-0">
-						<p class="text-sm font-medium">{m["network.modem.usage.title"]()}</p>
-						<p class="text-muted-foreground text-xs">{m["network.modem.usage.description"]()}</p>
-					</div>
-				</div>
-
+		<CapabilitySection
+			name="modem-usage-card" icon={Gauge} class={CARD_FRAME}
+			view={cardView(usage !== undefined || usagePolicy !== undefined)}
+			title={m["network.modem.usage.title"]()}
+			description={m["network.modem.usage.description"]()}>
 				{#if usage}
 				<dl
 					class={cn('grid grid-cols-2 gap-3', usageStale && 'opacity-50')}
@@ -1687,12 +1694,10 @@ function toggleSms(): void {
 				     a hidden section and not a fake-interactive one: the capability is
 				     a property of THIS build, so the honest thing is to show the
 				     control and say why it cannot move right now. -->
-				{#if usagePolicy}
-					<div class="space-y-3 border-t pt-2.5" data-testid="modem-usage-policy">
-						<p class="text-muted-foreground text-xs">
-							{m["network.modem.usage.settings"]()}
-						</p>
-
+				<CapabilitySection
+					name="modem-usage-policy" class="space-y-3 border-t pt-2.5"
+					view={cardView(usagePolicy !== undefined)}
+					title={m["network.modem.usage.settings"]()}>
 						{#if !usagePolicyWritable}
 							<p
 								class="text-status-warning text-xs"
@@ -1750,10 +1755,8 @@ function toggleSms(): void {
 								</p>
 							</div>
 						</div>
-					</div>
-				{/if}
-			</section>
-		{/if}
+				</CapabilitySection>
+		</CapabilitySection>
 
 		<!-- ── Serving-cell detail, firmware, eSIM ──────────────────────────────
 		     Read-only throughout. The eSIM block carries NO management
@@ -1762,16 +1765,11 @@ function toggleSms(): void {
 		     and the EID is a redaction class that is not even on this wire. Data
 		     values are set in the mono face (Ground Control: figures are
 		     instrument readings, words are UI). -->
-		{#if showDetailCard}
-			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-detail-card">
-				<div class="flex items-start gap-2.5">
-					<RadioTower class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
-					<div class="min-w-0">
-						<p class="text-sm font-medium">{m["network.modem.detail.title"]()}</p>
-						<p class="text-muted-foreground text-xs">{m["network.modem.detail.description"]()}</p>
-					</div>
-				</div>
-
+		<CapabilitySection
+			name="modem-detail-card" icon={RadioTower} class={CARD_FRAME}
+			view={cardView(showDetailCard)}
+			title={m["network.modem.detail.title"]()}
+			description={m["network.modem.detail.description"]()}>
 				{#if cellRows.length > 0}
 					<dl class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3" data-testid="modem-cell-info">
 						{#each cellRows as row (row.key)}
@@ -1910,9 +1908,7 @@ function toggleSms(): void {
 						</p>
 					</div>
 				{/if}
-
-			</section>
-		{/if}
+		</CapabilitySection>
 
 		<!-- ── Raw device values ────────────────────────────────────────────────
 		     OL-3/OL-4: the exact tokens the operator-facing labels above replaced,
@@ -1926,21 +1922,12 @@ function toggleSms(): void {
 		     the two answer to different evidence: the detail card vanishes when
 		     the modem reported no cell/eSIM/firmware, and folding this into it
 		     would make a composition's raw value hostage to a reading that has
-		     nothing to do with it. Absence still renders as absence — with no
-		     suppressed token to relocate, this section does not exist. -->
-		{#if hasRawDiagnostics}
-			<section
-				class="space-y-2 rounded-lg border p-3"
-				data-testid="modem-raw-diagnostics"
-			>
-				<div class="min-w-0">
-					<p class="text-sm font-medium">
-						{m["network.modem.detail.diagnosticsTitle"]()}
-					</p>
-					<p class="text-muted-foreground text-xs">
-						{m["network.modem.detail.diagnosticsDescription"]()}
-					</p>
-				</div>
+		     nothing to do with it. -->
+		<CapabilitySection
+			name="modem-raw-diagnostics" class="rounded-lg border p-3"
+			view={cardView(hasRawDiagnostics)}
+			title={m["network.modem.detail.diagnosticsTitle"]()}
+			description={m["network.modem.detail.diagnosticsDescription"]()}>
 				<dl class="grid grid-cols-1 gap-2 sm:grid-cols-2">
 					{#if activeUsbMode}
 						<div class="min-w-0">
@@ -1979,8 +1966,7 @@ function toggleSms(): void {
 						</div>
 					{/if}
 				</dl>
-			</section>
-		{/if}
+		</CapabilitySection>
 
 		<!-- ── Messages: the read-only SMS inbox ────────────────────────────────
 		     PROGRESSIVE DISCLOSURE. This surface already carries three instrument
@@ -2200,20 +2186,12 @@ function toggleSms(): void {
 		<!-- ── USB composition mode ─────────────────────────────────────────────
 		     Deliberately OUTSIDE the no-SIM fieldset: the composition is a property
 		     of the USB device, not of the SIM, so a modem with no SIM can still be
-		     switched. Absent entirely when the device reports no mode at all
-		     (older backend / mmcli path) — additive-tolerant rendering. -->
-		{#if showUsbModeCard}
-			<section class="space-y-3 rounded-lg border p-3" data-testid="modem-usb-mode-card">
-				<div class="flex items-start gap-2.5">
-					<Usb class="text-muted-foreground mt-0.5 size-4 shrink-0" aria-hidden="true" />
-					<div class="min-w-0">
-						<p class="text-sm font-medium">{m["network.modem.usbMode.title"]()}</p>
-						<p class="text-muted-foreground text-xs">
-							{m["network.modem.usbMode.description"]()}
-						</p>
-					</div>
-				</div>
-
+		     switched. -->
+		<CapabilitySection
+			name="modem-usb-mode-card" icon={Usb} class={CARD_FRAME}
+			view={cardView(showUsbModeCard)}
+			title={m["network.modem.usbMode.title"]()}
+			description={m["network.modem.usbMode.description"]()}>
 				<dl class="grid grid-cols-2 gap-2 text-xs">
 					<div>
 						<dt class="text-muted-foreground">{m["network.modem.usbMode.active"]()}</dt>
@@ -2410,8 +2388,7 @@ function toggleSms(): void {
 						{/if}
 					</div>
 				{/if}
-			</section>
-		{/if}
+		</CapabilitySection>
 
 		<ModemFccUnlockSection
 			claim={fccClaim}
@@ -2421,13 +2398,9 @@ function toggleSms(): void {
 			onToggle={(next) => void toggleFccUnlock(next)}
 		/>
 
-		<!-- The GPS module's whole surface — component, read, toggle and typed
-		     failures — existed and was WIRED, but nothing ever mounted it and
-		     nothing ever ran the read. So a `capable` receiver contributed exactly
-		     as many DOM nodes as a modem with no GNSS at all: zero. That is the §1
-		     matrix collapsing two rows into one, which is the single failure the
-		     capability ladder exists to prevent, arrived at by omission rather
-		     than by a wrong rule. -->
+		<!-- The GPS module's whole surface existed and was WIRED, but nothing ever
+		     mounted it, so a `capable` receiver contributed exactly as many DOM
+		     nodes as a modem with no GNSS at all: zero. Keep this mount. -->
 		<ModemGpsSection
 			claim={gpsClaim}
 			status={gpsStatus}
