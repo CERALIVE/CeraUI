@@ -36,6 +36,9 @@ const HotspotDialog = lazyDialog(() => import('./dialogs/HotspotDialog.svelte'))
 const ModemConfigDialog = lazyDialog(() => import('./dialogs/ModemConfigDialog.svelte'));
 const SimUnlockDialog = lazyDialog(() => import('./dialogs/SimUnlockDialog.svelte'));
 const RouterDongleDialog = lazyDialog(() => import('./dialogs/RouterDongleDialog.svelte'));
+// Reached from a Wi-Fi radio whose 6 GHz band its regulatory domain forbids —
+// the same dialog Settings mounts, opened where the operator met the block.
+const WifiCountryDialog = lazyDialog(() => import('./dialogs/WifiCountryDialog.svelte'));
 
 // Getters — always from the non-deprecated subscriptions surface.
 const wifi = $derived<WifiStatus | undefined>(getWifi());
@@ -74,6 +77,7 @@ const hotspotTarget = $derived(
 );
 
 let hotspotDialogOpen = $state(false);
+let wifiCountryOpen = $state(false);
 
 const modemEntries = $derived(Object.entries(modems ?? {}) as [string, Modem][]);
 
@@ -213,6 +217,7 @@ function openModemConfig(id: string) {
 			{isFullyStale}
 			{staleInterfaces}
 			onConnect={openWifiSelector}
+			onOpenCountry={() => (wifiCountryOpen = true)}
 		/>
 		<CellularSection
 			{modemEntries}
@@ -257,6 +262,8 @@ function openModemConfig(id: string) {
 		iface={hotspotTarget[1]}
 	/>
 {/if}
+
+<LazyDialog dialog={WifiCountryDialog} bind:open={wifiCountryOpen} />
 
 {#if configModem && configModemId}
 	<LazyDialog

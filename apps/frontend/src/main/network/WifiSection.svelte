@@ -1,7 +1,7 @@
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
-import { ChevronRight, Loader2, Router, Settings2, Wifi } from '@lucide/svelte';
+import { Ban, ChevronRight, Globe, Loader2, Router, Settings2, Wifi } from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
@@ -18,6 +18,11 @@ import { rpc } from '$lib/rpc/client';
 import { cn } from '$lib/utils';
 
 import HotspotDialog from '../dialogs/HotspotDialog.svelte';
+import {
+	blockIsOperatorActionable,
+	deriveWifiCapabilityView,
+	wpa3ChipKey,
+} from './wifi-capability-view';
 
 interface Props {
 	/** Every WiFi radio (record key → interface) — both station and hotspot mode. */
@@ -29,9 +34,24 @@ interface Props {
 	/** ifnames whose own telemetry aged out while siblings stayed fresh (Task 22). */
 	staleInterfaces: Set<string>;
 	onConnect: (deviceId: string) => void;
+	/**
+	 * Open the regulatory-country surface. Required rather than optional: it is
+	 * the only thing an operator can do about a 6 GHz band their domain forbids,
+	 * and a missing handler would render that reason band with no way out.
+	 */
+	onOpenCountry: () => void;
 }
 
-const { wifiRadios, netif, isFullyStale, staleInterfaces, onConnect }: Props = $props();
+const { wifiRadios, netif, isFullyStale, staleInterfaces, onConnect, onOpenCountry }: Props =
+	$props();
+
+// Chip vocabulary for the per-adapter capability strip. Everything here is a
+// §2 tier-5 hardware tag, so it renders BELOW the row's state/action elements,
+// one step smaller, and never in the phosphor-lime accent — that colour is
+// reserved for the live signal.
+const CHIP = 'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs';
+const CHIP_NEUTRAL = 'border-border/70 bg-muted/40 text-muted-foreground';
+const CHIP_BLOCKED = 'border-status-warning/40 bg-status-warning/10 text-status-warning';
 
 function activeWifiNetwork(iface: WifiInterface) {
 	return iface.available?.find((network) => network.active);
@@ -103,9 +123,16 @@ $effect(() => {
 	</div>
 	<div class="divide-y">
 		{#if wifiRadios.length === 0}
-			<p class="text-muted-foreground px-4 py-6 text-center text-sm">
-				{m["network.view.noWifi"]()}
-			</p>
+			<!-- Zero radios is a REAL board state, not a loading gap: some boards ship
+			     without one, and on others the radio needs a driver the image does not
+			     carry yet (the band above names that second case when it applies). It
+			     says so rather than leaving an unexplained blank section. -->
+			<div class="px-4 py-6 text-center" data-testid="wifi-no-adapter" role="status">
+				<p class="text-sm font-medium">{m["network.view.noWifi"]()}</p>
+				<p class="text-muted-foreground mx-auto mt-1 max-w-prose text-sm">
+					{m["network.wifiCapability.noAdapterBody"]()}
+				</p>
+			</div>
 		{:else}
 			{#each wifiRadios as [id, iface] (id)}
 				{@const entry = netif?.[iface.ifname]}
@@ -119,6 +146,13 @@ $effect(() => {
 				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
 				{@const showStale = ifaceStale && !displayIsHotspot && connected}
 				{@const hasIp = Boolean(entry?.ip)}
+				<!-- `undefined` here is the device saying it never computed a capability
+				     report (no `iw`, an unresolvable wiphy, a failed parse, or a backend
+				     that predates the field). The strip then contributes NOTHING and the
+				     row is byte-identical to what it rendered before this existed. -->
+				{@const cap = deriveWifiCapabilityView(iface.capabilities)}
+				{@const blocked = cap?.blockedBands[0]}
+				{@const wpa3Key = cap ? wpa3ChipKey(cap.wpa3Sae) : undefined}
 				<!-- Single-line row: identity (dot · name · status) left; bond + actions right. -->
 				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
 					<span
@@ -248,6 +282,116 @@ $effect(() => {
 							{/if}
 						{/if}
 					</div>
+
+					{#if cap}
+						<div
+							class="basis-full space-y-1.5 ps-5"
+							data-testid="wifi-capabilities"
+							data-device={id}
+							data-generation={cap.generation}
+							data-phy={cap.phy}
+						>
+							<div class="flex flex-wrap items-center gap-1.5">
+								<!-- NEVER inferred: the shipped RTL8852BE prints all-zero EHT
+								     structures, so anything but the wire's own verdict would
+								     stamp Wi-Fi 7 on a Wi-Fi 6 radio. -->
+								<span
+									class={cn(CHIP, 'border-border bg-muted/60 text-foreground font-semibold')}
+									data-testid="wifi-generation-badge"
+									data-generation={cap.generation}
+								>
+									{resolveMessageKey(cap.generationLabelKey)}
+								</span>
+
+								{#each cap.bands as band (band.band)}
+									<span
+										class={cn(CHIP, band.available ? CHIP_NEUTRAL : CHIP_BLOCKED)}
+										data-testid="wifi-band-option"
+										data-band={band.band}
+										data-available={band.available}
+										data-blocked-by={band.blockedBy}
+										aria-disabled={band.available ? undefined : 'true'}
+									>
+										{#if !band.available}
+											<Ban aria-hidden="true" class="size-3 shrink-0" />
+										{/if}
+										{resolveMessageKey(band.labelKey)}
+										{#if band.maxWidthMhz !== undefined}
+											<span class="font-mono opacity-70" dir="ltr"
+												>{m["network.wifiCapability.width"]({ mhz: band.maxWidthMhz })}</span
+											>
+										{/if}
+									</span>
+								{/each}
+
+								{#if wpa3Key}
+									<span
+										class={cn(CHIP, CHIP_NEUTRAL)}
+										data-testid="wifi-wpa3"
+										data-state={cap.wpa3Sae}
+									>
+										{resolveMessageKey(wpa3Key)}
+									</span>
+								{/if}
+							</div>
+
+							{#if blocked}
+								<!-- The band exists on this radio and is unavailable right now, so
+								     it stays on screen with its reason. Hiding it would be
+								     indistinguishable from a radio that cannot do 6 GHz at all. -->
+								{@const actionable = blockIsOperatorActionable(blocked)}
+								<div
+									class={cn(
+										'flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-2.5 py-1.5',
+										actionable
+											? 'border-status-warning/30 bg-status-warning/10'
+											: 'border-status-info/30 bg-status-info/10',
+									)}
+									data-testid="wifi-band-blocked-reason"
+									data-band={blocked.band}
+									data-blocked-by={blocked.blockedBy}
+									role="status"
+								>
+									<span class="text-xs">
+										{#if blocked.blockedBy === 'self-managed'}
+											{m["network.wifiCapability.blocked.selfManaged"]()}
+										{:else if cap.countryIsWorld}
+											{m["network.wifiCapability.blocked.worldDomain"]()}
+										{:else}
+											{m["network.wifiCapability.blocked.regulatory"]({ country: cap.country })}
+										{/if}
+									</span>
+									{#if actionable}
+										<!-- Offered ONLY for a domain block. A self-managed wiphy
+										     carries its own regulatory rules, so the country dialog
+										     could not move it and the button would be a control that
+										     cannot act. -->
+										<Button
+											class="h-7 min-h-[var(--touch-target-min)] gap-1.5 px-2"
+											data-testid="wifi-open-country"
+											data-device={id}
+											size="sm"
+											variant="secondary"
+											onclick={onOpenCountry}
+										>
+											<Globe class="size-3.5" />
+											{m["network.wifiCapability.setCountry"]()}
+										</Button>
+									{/if}
+								</div>
+							{/if}
+
+							{#if cap.comboNoteKey}
+								<p
+									class="text-muted-foreground text-xs"
+									data-testid="wifi-sta-ap-combo"
+									data-same-channel={cap.comboNoteKey.endsWith('sameChannel')}
+								>
+									{resolveMessageKey(cap.comboNoteKey)}
+								</p>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{/each}
 		{/if}
