@@ -1,0 +1,146 @@
+Wiphy phy0
+	wiphy index: 0
+	max # scan SSIDs: 4
+	max scan IEs length: 2257 bytes
+	Supported Ciphers:
+		* WEP40 (00-0f-ac:1)
+		* TKIP (00-0f-ac:2)
+		* CCMP-128 (00-0f-ac:4)
+		* GCMP-256 (00-0f-ac:9)
+	Available Antennas: TX 0x3 RX 0x3
+	Supported interface modes:
+		 * managed
+		 * AP
+		 * AP/VLAN
+		 * monitor
+		 * P2P-client
+		 * P2P-GO
+	Band 1:
+		Capabilities: 0x19ef
+			RX LDPC
+			HT20/HT40
+			RX HT20 SGI
+			RX HT40 SGI
+			TX STBC
+			RX STBC 1-stream
+			Max AMSDU length: 7935 bytes
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		HT TX/RX MCS rate indexes supported: 0-15
+		HE Iftypes: managed
+			HE MAC Capabilities (0x0801100a8060):
+				+HTC HE Supported
+				BSR
+			HE PHY Capabilities: (0x02701e1f0dc0270e91bd00):
+				HE40/2.4GHz
+				LDPC Coding in Payload
+		EHT Iftypes: managed
+			EHT MAC Capabilities (0x0008):
+				EPCS Priority Access Supported
+			EHT PHY Capabilities: (0x1008000fe0000000):
+				Support 242-tone RU in BW larger than 20MHz
+			EHT MCS/NSS: (0x22 22 22):
+			EHT bw=20 MHz, max NSS for MCS 0-7: Rx=2, Tx=2
+			EHT bw=20 MHz, max NSS for MCS 8-9: Rx=2, Tx=2
+		HE Iftypes: AP
+			HE MAC Capabilities (0x0001120a0060):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x02701e580dc0270e91b900):
+				HE40/2.4GHz
+		EHT Iftypes: AP
+			EHT MAC Capabilities (0x0008):
+			EHT PHY Capabilities: (0x1008000fe0000000):
+			EHT MCS/NSS: (0x22 22 22):
+		Frequencies:
+			* 2412 MHz [1] (20.0 dBm)
+			* 2437 MHz [6] (20.0 dBm)
+			* 2462 MHz [11] (20.0 dBm)
+	Band 2:
+		Capabilities: 0x19ef
+			RX LDPC
+			HT20/HT40
+			Max AMSDU length: 7935 bytes
+		Maximum RX AMPDU length 65535 bytes (exponent: 0x003)
+		VHT Capabilities (0x33d071b2):
+			Max MPDU length: 11454
+			Supported Channel Width: 160 MHz
+			RX LDPC
+			short GI (80 MHz)
+			short GI (160/80+80 MHz)
+			SU Beamformee
+		VHT RX MCS set:
+			1 streams: MCS 0-9
+			2 streams: MCS 0-9
+		HE Iftypes: managed
+			HE MAC Capabilities (0x0801100a8060):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x0c701e1f0dc0270e91bd00):
+				HE40/HE80/5GHz
+				HE160/5GHz
+				LDPC Coding in Payload
+		EHT Iftypes: managed
+			EHT MAC Capabilities (0x0008):
+			EHT PHY Capabilities: (0x1008000fe0000000):
+			EHT MCS/NSS: (0x22 22 22):
+			EHT bw <= 80 MHz, max NSS for MCS 8-9: Rx=2, Tx=2
+		HE Iftypes: AP
+			HE MAC Capabilities (0x0001120a0060):
+			HE PHY Capabilities: (0x0c701e580dc0270e91b900):
+				HE40/HE80/5GHz
+				HE160/5GHz
+		EHT Iftypes: AP
+			EHT MAC Capabilities (0x0008):
+			EHT PHY Capabilities: (0x1008000fe0000000):
+		Frequencies:
+			* 5180 MHz [36] (23.0 dBm)
+			* 5500 MHz [100] (23.0 dBm) (radar detection)
+			* 5745 MHz [149] (23.0 dBm)
+	Band 4:
+		HE Iftypes: managed
+			HE MAC Capabilities (0x0801100a8060):
+				+HTC HE Supported
+			HE PHY Capabilities: (0x1c701e1f0dc0270e91bd00):
+				HE40/HE80/5GHz
+				HE160/5GHz
+				LDPC Coding in Payload
+		EHT Iftypes: managed
+			EHT MAC Capabilities (0x0008):
+			EHT PHY Capabilities: (0x1008000fe0000002):
+				320MHz in 6GHz
+				Support 242-tone RU in BW larger than 20MHz
+			EHT MCS/NSS: (0x22 22 22):
+			EHT bw=320 MHz, max NSS for MCS 0-9: Rx=2, Tx=2
+			EHT bw=320 MHz, max NSS for MCS 10-11: Rx=2, Tx=2
+		HE Iftypes: AP
+			HE MAC Capabilities (0x0001120a0060):
+			HE PHY Capabilities: (0x1c701e580dc0270e91b900):
+				HE40/HE80/5GHz
+				HE160/5GHz
+		EHT Iftypes: AP
+			EHT MAC Capabilities (0x0008):
+			EHT PHY Capabilities: (0x1008000fe0000002):
+				320MHz in 6GHz
+		Frequencies:
+			* 5955 MHz [1] (23.0 dBm)
+			* 6115 MHz [33] (23.0 dBm)
+			* 6435 MHz [97] (23.0 dBm)
+			* 7115 MHz [233] (23.0 dBm)
+	Supported commands:
+		 * new_interface
+		 * set_interface
+		 * new_key
+		 * start_ap
+		 * connect
+		 * disconnect
+	software interface modes (can always be added):
+		 * AP/VLAN
+		 * monitor
+	valid interface combinations:
+		 * #{ managed } <= 2, #{ AP } <= 1, #{ P2P-client, P2P-GO } <= 1,
+		   total <= 4, #channels <= 2
+	Device supports T-DLS.
+	Device supports scan flush.
+	Supported extended features:
+		* [ RRM ]: RRM
+		* [ SAE_OFFLOAD ]: SAE offload support
+		* [ SAE_OFFLOAD_AP ]: AP mode SAE offload support
+		* [ BEACON_RATE_LEGACY ]: legacy beacon rate setting

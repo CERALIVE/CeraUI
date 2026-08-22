@@ -403,6 +403,35 @@ export function resetRegdomainStateForTest(): void {
 	derivedChannels = [];
 }
 
+/**
+ * Absolute-path fallback for `iw`. A systemd unit whose PATH omits /usr/sbin
+ * cannot resolve the bare name, and the failure is indistinguishable from "this
+ * image has no iw" unless the full path is tried.
+ */
+export const IW_FALLBACK_PATH = "/usr/sbin/iw";
+
+function isBinaryMissing(err: unknown): boolean {
+	const code = (err as { code?: unknown } | null)?.code;
+	if (code === "ENOENT") return true;
+	const message = err instanceof Error ? err.message : "";
+	return /ENOENT|No such file or directory|command not found/.test(message);
+}
+
+/**
+ * The ONE `iw` invocation path. Every caller — this module's regulatory
+ * get/set and the per-adapter capability model — routes through it, so the
+ * injected {@link setRegdomainRunner} seam covers the binary exactly once and a
+ * test can never reach the host's radios through a second layer.
+ */
+export async function runIw(args: string[]): Promise<string> {
+	try {
+		return await runner("iw", args);
+	} catch (err) {
+		if (!isBinaryMissing(err)) throw err;
+		return await runner(IW_FALLBACK_PATH, args);
+	}
+}
+
 function normalizeCountry(country: string): string | undefined {
 	const normalized = country.trim().toUpperCase();
 	return REGULATORY_COUNTRY_RE.test(normalized) ? normalized : undefined;
@@ -420,7 +449,7 @@ export async function applyRegulatoryDomain(country: string): Promise<boolean> {
 	}
 
 	try {
-		await runner("iw", ["reg", "set", normalized]);
+		await runIw(["reg", "set", normalized]);
 		logger.info(`regulatory domain set to ${normalized}`);
 		return true;
 	} catch (err) {
@@ -432,7 +461,7 @@ export async function applyRegulatoryDomain(country: string): Promise<boolean> {
 /** The kernel's currently-active country code, or `undefined` when unreadable. */
 export async function readRegulatoryDomain(): Promise<string | undefined> {
 	try {
-		return parseRegulatoryDomain(await runner("iw", ["reg", "get"]));
+		return parseRegulatoryDomain(await runIw(["reg", "get"]));
 	} catch (err) {
 		logger.debug(`failed to read regulatory domain: ${err}`);
 		return undefined;
@@ -444,7 +473,7 @@ export async function probeApChannels(
 	phy?: string,
 ): Promise<DerivedApChannel[]> {
 	try {
-		return deriveApChannels(await runner("iw", ["phy"]), phy);
+		return deriveApChannels(await runIw(["phy"]), phy);
 	} catch (err) {
 		logger.debug(`failed to enumerate wiphy channels: ${err}`);
 		return [];

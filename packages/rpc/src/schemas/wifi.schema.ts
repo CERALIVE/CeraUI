@@ -63,6 +63,90 @@ export const setWifiCountryOutputSchema = z.object({
 });
 export type SetWifiCountryOutput = z.infer<typeof setWifiCountryOutputSchema>;
 
+// ─── per-adapter capability truth (nl80211 / `iw phy`) ──────────────────────
+//
+// THE RULE: these values are READ BACK from the kernel's own nl80211 answer for
+// a specific wiphy, never inferred from a marketing name, a NetworkManager flag,
+// or the position of an adapter in a list. NetworkManager's WIFI-PROPERTIES is
+// deliberately coarse (WPA/RSN, AP, band presence) — it carries no HE/EHT, no
+// channel widths, and no SAE proof — so it is a CROSS-CHECK here and never the
+// source.
+//
+// `wifiBandSchema` above is NOT extended by any of this. That enum is the
+// hotspot's NetworkManager band selector, and NM's `802-11-wireless.band` has no
+// 6 GHz value at all; 6 GHz here is capability / scan / STA-display truth ONLY.
+
+// The bands a radio can carry, as capability truth. Distinct from
+// `wifiBandSchema` on purpose — see the note above.
+export const wifiCapabilityBandSchema = z.enum(['2.4', '5', '6']);
+export type WifiCapabilityBand = z.infer<typeof wifiCapabilityBandSchema>;
+
+// Derived from the kernel's own capability structures, never from a name:
+//   HE present                 ⇒ wifi6
+//   HE present + a 6 GHz band  ⇒ wifi6e
+//   EHT present AND NON-ZERO   ⇒ wifi7
+// An all-zero EHT structure is a KERNEL STUB, not a Wi-Fi 7 radio: the shipped
+// RTL8852BE prints `EHT MAC Capabilities (0x0000)` with every MCS/NSS at 0.
+export const wifiGenerationSchema = z.enum(['wifi4', 'wifi5', 'wifi6', 'wifi6e', 'wifi7']);
+export type WifiGeneration = z.infer<typeof wifiGenerationSchema>;
+
+// WPA3-SAE is TRI-STATE and `unknown` is a first-class answer. Absence of an
+// SAE advertisement is NOT proof of absence (a full-MAC driver may offload SAE
+// and advertise nothing), so an unprovable radio reports `unknown` rather than
+// a guess in either direction.
+export const wifiSaeSupportSchema = z.enum(['supported', 'unsupported', 'unknown']);
+export type WifiSaeSupport = z.infer<typeof wifiSaeSupportSchema>;
+
+// Max operating channel width the radio itself advertises, per band. A band the
+// radio does not carry is OMITTED — never zero-filled, which would read as a
+// measured "no width".
+export const wifiBandMaxWidthSchema = z.object({
+	'2.4': z.number().int().positive().optional(),
+	'5': z.number().int().positive().optional(),
+	'6': z.number().int().positive().optional(),
+});
+export type WifiBandMaxWidth = z.infer<typeof wifiBandMaxWidthSchema>;
+
+// STA+AP concurrency, read from the wiphy's `valid interface combinations`.
+// `sameChannelOnly` is what `#channels <= 1` means: the AP is pinned to whatever
+// channel the station leg is already on.
+export const wifiStaApComboSchema = z.object({
+	supported: z.boolean(),
+	sameChannelOnly: z.boolean(),
+});
+export type WifiStaApCombo = z.infer<typeof wifiStaApComboSchema>;
+
+// The regulatory state OBSERVED for this wiphy after any apply — never the
+// country that was requested. A self-managed wiphy (firmware-regulated Intel /
+// MediaTek parts) intersects or ignores a user hint entirely, so applied ≠
+// effective has to stay visible.
+//
+// `self_managed` is emitted as an EXPLICIT `false` when false. It is a
+// recoverable field, and the frontend status merge preserves an omitted optional
+// key — a present-only-when-true flag can be raised and never lowered (the
+// `policy_route_missing` latch).
+export const wifiRegulatoryStateSchema = z.object({
+	country: z.string(),
+	is6GhzLegal: z.boolean(),
+	self_managed: z.boolean(),
+});
+export type WifiRegulatoryState = z.infer<typeof wifiRegulatoryStateSchema>;
+
+export const wifiAdapterCapabilitiesSchema = z.object({
+	// The wiphy this describes (`phy0`), resolved from
+	// /sys/class/net/<ifname>/phy80211 — never from an adapter's position.
+	phy: z.string(),
+	generation: wifiGenerationSchema,
+	bands: z.array(wifiCapabilityBandSchema),
+	maxWidthMhz: wifiBandMaxWidthSchema,
+	// The AP interface type intersected with the bands the radio carries.
+	apModes: z.array(wifiCapabilityBandSchema),
+	staApCombo: wifiStaApComboSchema,
+	wpa3Sae: wifiSaeSupportSchema,
+	regulatory: wifiRegulatoryStateSchema,
+});
+export type WifiAdapterCapabilities = z.infer<typeof wifiAdapterCapabilitiesSchema>;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -100,6 +184,11 @@ export const wifiInterfaceSchema = z.object({
 	supports_hotspot: z.boolean().optional(),
 	transition: z.enum(['activating', 'deactivating']).optional(),
 	mode: z.enum(['station', 'hotspot']).optional(),
+	// Absent means NOT COMPUTED — no `iw` on the image, a wiphy that could not be
+	// resolved for this interface, or a dump that failed its named parser. Once
+	// computed it is emitted on EVERY tick, so a consumer never has to decide
+	// whether a missing block means "unchanged" or "withdrawn".
+	capabilities: wifiAdapterCapabilitiesSchema.optional(),
 });
 export type WifiInterface = z.infer<typeof wifiInterfaceSchema>;
 

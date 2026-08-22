@@ -1,0 +1,15 @@
+global
+country 00: DFS-UNSET
+	(2402 - 2472 @ 40), (6, 20), (N/A)
+	(2457 - 2482 @ 20), (6, 20), (N/A), AUTO-BW, PASSIVE-SCAN
+	(5170 - 5250 @ 80), (6, 20), (N/A), AUTO-BW, PASSIVE-SCAN
+	(5250 - 5330 @ 80), (6, 20), (0 ms), DFS, AUTO-BW, PASSIVE-SCAN
+	(5735 - 5835 @ 80), (6, 20), (N/A), PASSIVE-SCAN
+
+phy#1 (self-managed)
+country US: DFS-FCC
+	(2402 - 2472 @ 40), (N/A, 30), (N/A)
+	(5170 - 5250 @ 80), (N/A, 24), (N/A), AUTO-BW
+	(5250 - 5330 @ 80), (N/A, 24), (0 ms), DFS, AUTO-BW
+	(5735 - 5895 @ 80), (N/A, 30), (N/A), AUTO-BW
+	(5945 - 7125 @ 320), (N/A, 12), (N/A), NO-OUTDOOR, AUTO-BW

@@ -1,0 +1,11 @@
+Wiphy phy0
+	wiphy index: 0
+	max # scan SSIDs: 8
+	max scan IEs length: 394 bytes
+	Retry short limit: 7
+	Retry long limit: 4
+	Coverage class: 0 (up to 0m)
+	Supported Ciphers:
+		* WEP40 (00-0f-ac:1)
+		* CCMP-128 (00-0f-ac:4)
+	Available Antennas: TX 0x3 RX 0x3

@@ -127,7 +127,10 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"reboot",
 	"dmesg",
 	// Regulatory domain get/set + the AP-channel enumeration read back from it.
+	// The absolute path is the SAME binary, allowlisted for the one case a bare
+	// name cannot cover: a unit PATH without /usr/sbin (regdomain.ts runIw).
 	"iw",
+	"/usr/sbin/iw",
 	// Arms the transient restore timer that reverts an unattended regdomain change.
 	"systemd-run",
 	// SIM PIN2 verification only. ModemManager exposes no PIN2 operation of any

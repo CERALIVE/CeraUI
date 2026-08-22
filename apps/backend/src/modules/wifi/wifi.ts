@@ -17,6 +17,8 @@
 
 /* NetworkManager / nmcli based Wifi Manager */
 
+import type { WifiAdapterCapabilities } from "@ceraui/rpc/schemas";
+
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
 import { DEFAULT_SPAWN_TIMEOUT_MS } from "../../helpers/spawn-policy.ts";
@@ -48,6 +50,7 @@ import {
 	buildMsg,
 	getSocketSenderId,
 } from "../ui/websocket-server.ts";
+import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
@@ -135,6 +138,9 @@ export type WifiInterfaceResponseMessage = Pick<
 	supports_hotspot?: true;
 	mode?: "station" | "hotspot";
 	transition?: "activating" | "deactivating";
+	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
+	// failed its named parser); once computed it rides EVERY tick.
+	capabilities?: WifiAdapterCapabilities;
 };
 
 export function wifiBuildMsg() {
@@ -249,6 +255,11 @@ export function wifiBuildMsg() {
 		entry.mode = isApMode(wifiInterface) ? "hotspot" : "station";
 		if (canHotspot(wifiInterface) && wifiInterface.hotspot.transition) {
 			entry.transition = wifiInterface.hotspot.transition;
+		}
+
+		const capabilities = getWifiCapabilitiesForInterface(wifiInterface.ifname);
+		if (capabilities !== undefined) {
+			entry.capabilities = capabilities;
 		}
 	}
 

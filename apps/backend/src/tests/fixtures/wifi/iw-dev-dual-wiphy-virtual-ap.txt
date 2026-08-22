@@ -1,0 +1,22 @@
+phy#1
+	Interface ap0
+		ifindex 5
+		wdev 0x100000002
+		addr 02:11:22:33:44:56
+		ssid CERALIVE_ap
+		type AP
+		channel 36 (5180 MHz), width: 80 MHz, center1: 5210 MHz
+		txpower 23.00 dBm
+	Interface wlan1
+		ifindex 4
+		wdev 0x100000001
+		addr 02:11:22:33:44:55
+		type managed
+		txpower 23.00 dBm
+phy#0
+	Interface wlan0
+		ifindex 3
+		wdev 0x1
+		addr a6:7c:f3:78:ab:22
+		type managed
+		txpower 20.00 dBm

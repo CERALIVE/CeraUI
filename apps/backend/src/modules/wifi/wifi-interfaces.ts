@@ -43,6 +43,7 @@ import {
 	type WifiNetwork,
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
+import { refreshWifiCapabilities } from "./wifi-capabilities.ts";
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
@@ -375,6 +376,9 @@ export async function wifiUpdateDevices() {
 	}
 
 	retainWifiPermanentMacs(seenIfnames);
+	// Fire-and-forget: the capability read is bounded and never throws, and the
+	// wire builder serves whatever the last successful read produced.
+	void refreshWifiCapabilities(seenIfnames);
 
 	// delete removed adapters
 	const wifiInterfacesByMacAddress = getWifiInterfacesByMacAddress();
