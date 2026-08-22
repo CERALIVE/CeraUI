@@ -19,7 +19,11 @@ import type {
 	HotspotCredentials,
 	HotspotCredentialsStore,
 } from "./hotspot-credentials.ts";
-import type { DerivedApChannel, WifiChannel } from "./wifi-channels.ts";
+import type {
+	AutoWifiChannel,
+	DerivedApChannel,
+	WifiChannel,
+} from "./wifi-channels.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
 	type HotspotSecurityId,
@@ -53,6 +57,13 @@ export type WifiHotspot = {
 	 * absent from it.
 	 */
 	availableChannels: WifiChannel[];
+	/**
+	 * The adapter's OWN band capability, as nmcli reported it. Kept apart from
+	 * {@link availableChannels} because the regulatory rules can withhold a rung
+	 * from the offering — and a capability recovered from the OFFERED set would
+	 * then forget the radio has that band at all, permanently.
+	 */
+	bandCapability?: AutoWifiChannel[];
 	/** Last `iw phy` derivation, kept for the channel→NetworkManager band mapping. */
 	derivedChannels?: DerivedApChannel[];
 	/**

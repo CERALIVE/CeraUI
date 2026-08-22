@@ -44,6 +44,7 @@ import {
 	wifiUpdateSavedConns,
 } from "./wifi.ts";
 import { refreshWifiCapabilities } from "./wifi-capabilities.ts";
+import type { AutoWifiChannel } from "./wifi-channels.ts";
 import {
 	addWifiInterface,
 	getWifiInterfaceByMacAddress,
@@ -338,17 +339,17 @@ export async function wifiUpdateDevices() {
 				};
 
 				if (parsedProps.value.supportsAp) {
+					const bandCapability: AutoWifiChannel[] = ["auto"];
+					if (parsedProps.value.supports5Ghz) bandCapability.push("auto_50");
+					if (parsedProps.value.supports2Ghz) bandCapability.push("auto_24");
+
 					const hotspot: WifiHotspot = {
 						warnings: {},
-						availableChannels: ["auto"],
+						bandCapability,
+						availableChannels: [...bandCapability],
 					};
-					if (parsedProps.value.supports5Ghz) {
-						hotspot.availableChannels.push("auto_50");
-					}
-					if (parsedProps.value.supports2Ghz) {
-						hotspot.availableChannels.push("auto_24");
-					}
-					// Fold in the concrete channels the kernel currently permits.
+					// Fold in the concrete channels the kernel currently permits, and
+					// retire any band its regulatory rules forbid initiating on.
 					refreshHotspotChannels(hotspot, getDerivedApChannels());
 					(newInterface as WifiInterfaceWithHotspot).hotspot = hotspot;
 				}

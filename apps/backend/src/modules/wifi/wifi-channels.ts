@@ -61,6 +61,21 @@ export const isAutoWifiChannelName = (
 	channel: string,
 ): channel is AutoWifiChannel => channel in AUTO_WIFI_CHANNELS;
 
+/**
+ * The band an auto rung PINS, or `undefined` for the any-band rung.
+ *
+ * BOARD-PROVEN (Rock 5B+, world domain `00`, 2026-08-22): `auto_50` writes
+ * `band=a` and dies with `Failed to start AP functionality`, while `auto` writes
+ * no band, lets NetworkManager settle on `frequency 2462`, and activates. So a
+ * withheld band may only retire the rungs that NAME it.
+ */
+export function autoChannelBand(
+	auto: AutoWifiChannel,
+): DerivedApChannel["band"] | undefined {
+	const nmBand = AUTO_WIFI_CHANNELS[auto].nmBand;
+	return nmBand === "" ? undefined : nmBand;
+}
+
 export const explicitChannelId = (channel: number): ExplicitWifiChannel =>
 	`ch_${channel}` as ExplicitWifiChannel;
 

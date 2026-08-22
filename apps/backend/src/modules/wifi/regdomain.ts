@@ -60,6 +60,7 @@ import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
 import {
 	type AutoWifiChannel,
+	autoChannelBand,
 	type DerivedApChannel,
 	explicitChannelId,
 	explicitChannelNumber,
@@ -163,6 +164,41 @@ export function buildApInitiationGate(
 	};
 }
 
+/** Whether an AP may INITIATE on each band, judged from the regulatory rules. */
+export type ApBandPermissions = Record<DerivedApChannel["band"], boolean>;
+
+/** The verdict before any dump has been read: fail open, like the gate itself. */
+export const PERMIT_ALL_AP_BANDS: ApBandPermissions = { bg: true, a: true };
+
+function firstWiphyName(output: string): string | undefined {
+	for (const line of output.split("\n")) {
+		const wiphy = WIPHY_RE.exec(line);
+		if (wiphy?.[1]) return wiphy[1];
+	}
+	return undefined;
+}
+
+/**
+ * The SAME {@link buildApInitiationGate} predicate `parseIwPhyChannels` runs,
+ * asked one layer up so the band-wide `auto_*` rungs can be gated too.
+ *
+ * Those rungs never came from the derived channel map — they are pushed from the
+ * adapter's nmcli band capability — so narrowing the map alone left `auto_50`
+ * offered on a PASSIVE-SCAN-only band (board-proven W1r). Phy resolution mirrors
+ * {@link deriveApChannels}: the named radio, else the first wiphy in the dump.
+ */
+export function deriveApInitiationBands(
+	phyOutput: string,
+	phy?: string,
+	regOutput?: string,
+): ApBandPermissions {
+	const name = phy ?? firstWiphyName(phyOutput);
+	if (name === undefined) return PERMIT_ALL_AP_BANDS;
+
+	const gate = buildApInitiationGate(regOutput);
+	return { bg: gate(name, "bg"), a: gate(name, "a") };
+}
+
 function isApUsable(tail: string): boolean {
 	PAREN_GROUP_RE.lastIndex = 0;
 	for (const match of tail.matchAll(PAREN_GROUP_RE)) {
@@ -247,41 +283,62 @@ export function parseRegulatoryDomain(output: string): string | undefined {
  * first, then every derived channel whose band the adapter actually supports.
  * The band gate matters — a 2.4-only radio must never be offered a 5 GHz channel
  * the dump reported for a different band.
+ *
+ * `permitted` withholds a rung whose band the regulatory RULES forbid initiating
+ * on, which the adapter's own band capability cannot know. It defaults to
+ * permitting everything: a caller that never asked has learnt no prohibition.
  */
 export function offeredHotspotChannels(
 	autoChannels: readonly AutoWifiChannel[],
 	derived: readonly DerivedApChannel[],
+	permitted: ApBandPermissions = PERMIT_ALL_AP_BANDS,
 ): WifiChannel[] {
+	const autos = autoChannels.filter((auto) => {
+		const band = autoChannelBand(auto);
+		return band === undefined || permitted[band];
+	});
+
 	const bands = new Set<DerivedApChannel["band"]>();
-	if (autoChannels.includes("auto_24")) bands.add("bg");
-	if (autoChannels.includes("auto_50")) bands.add("a");
+	if (autos.includes("auto_24")) bands.add("bg");
+	if (autos.includes("auto_50")) bands.add("a");
 
 	const explicit = derived
 		.filter((c) => bands.has(c.band))
 		.map((c) => explicitChannelId(c.channel));
 
-	return [...autoChannels, ...explicit];
+	return [...autos, ...explicit];
 }
 
 /**
  * Recompute an adapter's offered channels against a fresh derivation. Dropping
  * the previous explicit channels first is what makes this idempotent — keeping
  * them would carry an old regdomain's now-illegal channels into the new set.
+ *
+ * `bandCapability` is the adapter's OWN nmcli band answer, recorded on the first
+ * refresh. It has to be stored rather than recovered from `availableChannels`,
+ * because a rung the regulatory rules withheld is no longer in there — recovering
+ * from the offered set would forget the radio can do 5 GHz at all, and the rung
+ * could never come back when the operator sets a country that permits it.
  */
 export function refreshHotspotChannels(
 	hotspot: {
 		availableChannels: WifiChannel[];
 		derivedChannels?: DerivedApChannel[];
+		bandCapability?: AutoWifiChannel[];
 	},
 	derived: readonly DerivedApChannel[],
+	permitted: ApBandPermissions = getApInitiationBands(),
 ): void {
-	const adapterBandCapability = hotspot.availableChannels.filter(
-		isAutoWifiChannelName,
-	);
+	const adapterBandCapability =
+		hotspot.bandCapability ??
+		hotspot.availableChannels.filter(isAutoWifiChannelName);
+
+	hotspot.bandCapability = [...adapterBandCapability];
 	hotspot.derivedChannels = [...derived];
 	hotspot.availableChannels = offeredHotspotChannels(
 		adapterBandCapability,
 		derived,
+		permitted,
 	);
 }
 
@@ -473,6 +530,7 @@ const defaultRegdomainRunner: RegdomainRunner = (bin, args) => run(bin, args);
 
 let runner: RegdomainRunner = defaultRegdomainRunner;
 let derivedChannels: DerivedApChannel[] = [];
+let apInitiationBands: ApBandPermissions = PERMIT_ALL_AP_BANDS;
 
 /** Test seam — mirrors `setSshServiceRunner` / `setSoftwareUpdateRunner`. */
 export function setRegdomainRunner(next: RegdomainRunner | null): void {
@@ -483,6 +541,7 @@ export function setRegdomainRunner(next: RegdomainRunner | null): void {
 export function resetRegdomainStateForTest(): void {
 	runner = defaultRegdomainRunner;
 	derivedChannels = [];
+	apInitiationBands = PERMIT_ALL_AP_BANDS;
 }
 
 /**
@@ -582,14 +641,19 @@ function bandsWithheldByRules(
 	return [...withheld];
 }
 
+/** One radio's post-regdomain AP answer: its channels AND its band permissions. */
+export type ApChannelProbe = {
+	channels: DerivedApChannel[];
+	bands: ApBandPermissions;
+};
+
 /** AP-usable channels for one radio, read back from the kernel post-regdomain. */
-export async function probeApChannels(
-	phy?: string,
-): Promise<DerivedApChannel[]> {
+export async function probeApChannels(phy?: string): Promise<ApChannelProbe> {
 	try {
 		const phyOutput = await runIw(["phy"]);
 		const regOutput = await probeRegulatoryRules();
 		const derived = deriveApChannels(phyOutput, phy, regOutput);
+		const bands = deriveApInitiationBands(phyOutput, phy, regOutput);
 
 		const withheld = bandsWithheldByRules(phyOutput, phy, derived);
 		if (withheld.length > 0) {
@@ -600,10 +664,10 @@ export async function probeApChannels(
 			);
 		}
 
-		return derived;
+		return { channels: derived, bands };
 	} catch (err) {
 		logger.debug(`failed to enumerate wiphy channels: ${err}`);
-		return [];
+		return { channels: [], bands: PERMIT_ALL_AP_BANDS };
 	}
 }
 
@@ -611,12 +675,18 @@ export async function probeApChannels(
  * Re-derive and cache the AP channel set. Called after boot-apply and after
  * every country change; RETAINS the previous derivation when the probe answers
  * nothing, because an empty answer is a failed probe, not a legal verdict.
+ *
+ * The band permissions are committed under the SAME rule, for the same reason —
+ * a failed read must not be allowed to retire a band.
  */
 export async function refreshDerivedApChannels(
 	phy?: string,
 ): Promise<DerivedApChannel[]> {
 	const probed = await probeApChannels(phy);
-	if (probed.length > 0) derivedChannels = probed;
+	if (probed.channels.length > 0) {
+		derivedChannels = probed.channels;
+		apInitiationBands = probed.bands;
+	}
 	return derivedChannels;
 }
 
@@ -630,6 +700,19 @@ export function setDerivedApChannels(
 	channels: readonly DerivedApChannel[],
 ): void {
 	derivedChannels = [...channels];
+}
+
+/**
+ * Which bands the rules last permitted an AP to initiate on. Permits everything
+ * until a probe says otherwise — an unread dump is not a prohibition.
+ */
+export function getApInitiationBands(): ApBandPermissions {
+	return apInitiationBands;
+}
+
+/** Test/boot seam: seed the band verdict without probing. */
+export function setApInitiationBands(next: ApBandPermissions): void {
+	apInitiationBands = { ...next };
 }
 
 /**

@@ -40,21 +40,27 @@ import {
 	buildRegdomainRestoreCommand,
 	checkWirelessRegdbSupport,
 	deriveApChannels,
+	deriveApInitiationBands,
+	getApInitiationBands,
 	LEGACY_CRDA_DB_PATH,
 	offeredHotspotChannels,
+	PERMIT_ALL_AP_BANDS,
 	parseIwPhyChannels,
 	parseRegulatoryDomain,
 	planHotspotRegdomainChange,
+	probeApChannels,
 	REGDOMAIN_RESTORE_DELAY,
 	REGDOMAIN_RESTORE_UNIT,
 	REGULATORY_DB_PATH,
 	readRegulatoryDomain,
+	refreshDerivedApChannels,
 	refreshHotspotChannels,
 	resetRegdomainStateForTest,
 	setRegdomainRunner,
 	WORLD_REGULATORY_DOMAIN,
 } from "../modules/wifi/regdomain.ts";
 import {
+	autoChannelBand,
 	channelFromNM,
 	type DerivedApChannel,
 	explicitChannelId,
@@ -298,6 +304,165 @@ describe("W1 — a PASSIVE-SCAN-only band is withheld from the AP offering", () 
 			].join("\n"),
 		);
 		expect(permitsApInitiationInRange(scopes.global, 4900, 5925)).toBe(true);
+	});
+});
+
+describe("W1r — the band-wide `auto_*` rungs are gated by the SAME rules", () => {
+	// W1 narrowed the DERIVED channel map. The auto rungs never came from it —
+	// `wifi-interfaces.ts` pushes them from the adapter's nmcli band capability —
+	// so `auto_50` stayed offered on a PASSIVE-SCAN-only band and reproduced the
+	// original board failure verbatim (`frequency 5220` -> `Failed to start AP
+	// functionality` -> `supplicant-timeout`).
+	const ROCK_AUTOS = ["auto", "auto_24", "auto_50"] as const;
+
+	const worldBands = () =>
+		deriveApInitiationBands(IW_PHY_ROCK5BPLUS, "phy0", IW_REG_GET_ROCK5BPLUS);
+
+	test("the rungs really do split into band-naming and band-less", () => {
+		// The premise: only a rung that PINS a band can be retired with it.
+		expect(autoChannelBand("auto")).toBeUndefined();
+		expect(autoChannelBand("auto_24")).toBe("bg");
+		expect(autoChannelBand("auto_50")).toBe("a");
+	});
+
+	test("world domain `00` withholds the `auto_50` rung", () => {
+		expect(worldBands()).toEqual({ bg: true, a: false });
+
+		const derived = deriveApChannels(
+			IW_PHY_ROCK5BPLUS,
+			"phy0",
+			IW_REG_GET_ROCK5BPLUS,
+		);
+		const offered = offeredHotspotChannels(ROCK_AUTOS, derived, worldBands());
+
+		expect(offered).not.toContain("auto_50");
+		expect(offered).toContain("auto");
+		expect(offered).toContain("auto_24");
+	});
+
+	test("the any-band `auto` rung SURVIVES a withheld 5 GHz band", () => {
+		// BOARD-PROVEN on the same board, same domain: `auto` writes no band,
+		// NetworkManager settles on `frequency 2462`, and the AP activates. It is
+		// a truthful offering and withholding it would remove a working control.
+		const offered = offeredHotspotChannels(
+			ROCK_AUTOS,
+			deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0", IW_REG_GET_ROCK5BPLUS),
+			worldBands(),
+		);
+		expect(offered[0]).toBe("auto");
+	});
+
+	test("a domain that permits 5 GHz AP initiation still offers `auto_50`", () => {
+		const bands = deriveApInitiationBands(
+			IW_PHY_ROCK5BPLUS,
+			"phy0",
+			IW_REG_GET_SELF_MANAGED,
+		);
+		expect(bands).toEqual({ bg: true, a: true });
+
+		const offered = offeredHotspotChannels(
+			ROCK_AUTOS,
+			deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0", IW_REG_GET_SELF_MANAGED),
+			bands,
+		);
+		expect(offered).toContain("auto_50");
+		expect(offered).toContain("ch_36");
+	});
+
+	test("an unreadable regulatory dump withholds NO rung", () => {
+		for (const reg of [undefined, "", "   ", "Failed to connect to nl80211"]) {
+			expect(deriveApInitiationBands(IW_PHY_ROCK5BPLUS, "phy0", reg)).toEqual(
+				PERMIT_ALL_AP_BANDS,
+			);
+		}
+		expect(offeredHotspotChannels(ROCK_AUTOS, [], PERMIT_ALL_AP_BANDS)).toEqual(
+			["auto", "auto_24", "auto_50"],
+		);
+	});
+
+	test("a dump naming no wiphy permits every band", () => {
+		expect(
+			deriveApInitiationBands("", undefined, IW_REG_GET_ROCK5BPLUS),
+		).toEqual(PERMIT_ALL_AP_BANDS);
+	});
+
+	test("an unnamed radio is judged by the FIRST wiphy, like the channel map", () => {
+		expect(
+			deriveApInitiationBands(
+				IW_PHY_ROCK5BPLUS,
+				undefined,
+				IW_REG_GET_ROCK5BPLUS,
+			),
+		).toEqual(worldBands());
+	});
+
+	test("a withheld rung RETURNS when the domain starts permitting the band", () => {
+		// The latch this must not have: recovering the adapter's band capability
+		// from the OFFERED set would forget the radio has 5 GHz at all, so the
+		// rung could never come back from a country change.
+		const hotspot: {
+			availableChannels: WifiChannel[];
+			bandCapability?: Array<"auto" | "auto_24" | "auto_50">;
+			derivedChannels?: DerivedApChannel[];
+		} = { availableChannels: [...ROCK_AUTOS] };
+
+		refreshHotspotChannels(
+			hotspot,
+			deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0", IW_REG_GET_ROCK5BPLUS),
+			worldBands(),
+		);
+		expect(hotspot.availableChannels).not.toContain("auto_50");
+		expect(hotspot.bandCapability).toContain("auto_50");
+
+		refreshHotspotChannels(
+			hotspot,
+			deriveApChannels(IW_PHY_ROCK5BPLUS, "phy0", IW_REG_GET_SELF_MANAGED),
+			{ bg: true, a: true },
+		);
+		expect(hotspot.availableChannels).toContain("auto_50");
+		expect(hotspot.availableChannels).toContain("ch_36");
+	});
+
+	test("the probe commits the band verdict, and a failed probe retains it", async () => {
+		setRegdomainRunner(async (_bin, args) => {
+			if (args[0] === "phy") return IW_PHY_ROCK5BPLUS;
+			if (args[0] === "reg" && args[1] === "get") return IW_REG_GET_ROCK5BPLUS;
+			return "";
+		});
+
+		expect(getApInitiationBands()).toEqual(PERMIT_ALL_AP_BANDS);
+		const probe = await probeApChannels("phy0");
+		expect(probe.bands).toEqual({ bg: true, a: false });
+
+		await refreshDerivedApChannels("phy0");
+		expect(getApInitiationBands()).toEqual({ bg: true, a: false });
+
+		// A read that answered nothing is a statement about the READ: it must not
+		// hand 5 GHz back, exactly as it must not hand the channels back.
+		setRegdomainRunner(async () => {
+			throw new Error("nl80211 not found");
+		});
+		await refreshDerivedApChannels("phy0");
+		expect(getApInitiationBands()).toEqual({ bg: true, a: false });
+	});
+
+	test("the live cache reaches `refreshHotspotChannels` with no call-site change", async () => {
+		setRegdomainRunner(async (_bin, args) => {
+			if (args[0] === "phy") return IW_PHY_ROCK5BPLUS;
+			if (args[0] === "reg" && args[1] === "get") return IW_REG_GET_ROCK5BPLUS;
+			return "";
+		});
+		const derived = await refreshDerivedApChannels("phy0");
+
+		const hotspot: {
+			availableChannels: WifiChannel[];
+			bandCapability?: Array<"auto" | "auto_24" | "auto_50">;
+			derivedChannels?: DerivedApChannel[];
+		} = { availableChannels: [...ROCK_AUTOS] };
+		refreshHotspotChannels(hotspot, derived);
+
+		expect(hotspot.availableChannels).not.toContain("auto_50");
+		expect(hotspot.availableChannels).toContain("auto_24");
 	});
 });
 
