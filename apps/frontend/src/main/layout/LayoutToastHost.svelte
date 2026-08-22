@@ -8,7 +8,17 @@ import {
 	startStreaming as startStreamingFn,
 	stopStreaming as stopStreamingFn,
 } from '$lib/helpers/SystemHelper';
-import { clearNotifications, dismiss, getActive } from '$lib/stores/notifications.svelte';
+import {
+	clearNotifications,
+	dismiss,
+	getActive,
+	push,
+} from '$lib/stores/notifications.svelte';
+import {
+	deriveConnectionSurfaceUx,
+	getDisconnectedSince,
+	getGraceNow,
+} from '$lib/stores/connection-ux.svelte';
 
 // Resolve the action label i18n key against the live message registry, falling
 // back to the raw key so an unknown label never blocks the deep-link affordance.
@@ -22,6 +32,32 @@ const resolveActionLabel = resolveMessageKey;
 // This is plain bookkeeping, not reactive state — the only reactive dependency
 // is `getActive()`.
 const renderedAt = new Map<string, number>();
+let connectionLossNotified = false;
+
+const connectionSurfaces = $derived(
+	deriveConnectionSurfaceUx(
+		{ authTimedOut: false, disconnectedSince: getDisconnectedSince() },
+		getGraceNow(),
+	),
+);
+
+$effect(() => {
+	if (connectionSurfaces.showConnectionLostToast && !connectionLossNotified) {
+		connectionLossNotified = true;
+		push({
+			name: 'connection-lost',
+			type: 'error',
+			key: 'notifications.connectionLost',
+			msg: 'Connection lost',
+			is_dismissable: true,
+			is_persistent: false,
+			duration: 3,
+		});
+	} else if (!connectionSurfaces.showConnectionLostToast && connectionLossNotified) {
+		connectionLossNotified = false;
+		dismiss('connection-lost');
+	}
+});
 
 $effect(() => {
 	const active = getActive();

@@ -35,29 +35,26 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { Download, Share, WifiOff } from '@lucide/svelte';
-import { onDestroy } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { push } from '$lib/stores/notifications.svelte';
 import {
+	deriveConnectionSurfaceUx,
+	getDisconnectedSince,
+	getGraceNow,
+} from '$lib/stores/connection-ux.svelte';
+import {
 	getCanInstall,
-	getIsOnline,
 	installApp,
 	setShowIOSInstallPrompt,
 } from '$lib/stores/pwa.svelte';
-import { rpcClient, type ConnectionState } from '$lib/rpc/client';
 
-// Seed from the client's transport-level signal, then track via onConnectionChange
-// (survives socket replacement on reconnect — no captured socket reference).
-let connectionState = $state<ConnectionState>(rpcClient.getConnectionState());
-
-const unsubscribeConnection = rpcClient.onConnectionChange((state) => {
-	connectionState = state;
-});
-
-onDestroy(unsubscribeConnection);
-
-let showOfflineBanner = $state(false);
+const showOfflineBanner = $derived(
+	deriveConnectionSurfaceUx(
+		{ authTimedOut: false, disconnectedSince: getDisconnectedSince() },
+		getGraceNow(),
+	).showOfflineBanner,
+);
 
 let showIOSBanner = $state(false);
 
@@ -81,22 +78,6 @@ const isMobile = $derived(() => {
 
 	// Combine touch capability with user agent detection
 	return hasTouchScreen || isMobileUA;
-});
-
-// Reactive statements - consider both browser online state AND WebSocket connection
-$effect(() => {
-	const online = getIsOnline();
-	const isFullyOffline =
-		!online || connectionState === 'disconnected' || connectionState === 'error';
-
-	if (isFullyOffline) {
-		showOfflineBanner = true;
-	} else if (connectionState === 'connected' && online) {
-		// Hide offline banner after a short delay when both are back online
-		setTimeout(() => {
-			showOfflineBanner = false;
-		}, 2000);
-	}
 });
 
 // Track banner state more carefully

@@ -219,6 +219,15 @@ The function guarantees a finite, non-negative number for every input. `2^attemp
 
 The transport (`client.ts`) retries forever regardless of what the banner shows. Failed-UI state and transport state are independent state machines.
 
+### Shared reconnect-surface grace
+
+`RECONNECT_BANNER_GRACE_MS = 3000` is one presentation threshold shared by every ordinary connection-loss surface. `reduceConnection(prev, state, now)` stamps the socket drop once, `reduceBrowserOfflineSince(prev, online, now)` does the same for the browser network edge, and `effectiveDisconnectedSince` selects the earlier non-null stamp. This matters because a browser offline event does not guarantee an already-open WebSocket closes. One `createStalenessClock` advances the injected clock only while that effective drop is inside the grace, and the two pure projections consume the same timestamp:
+
+- `deriveConnectionUx(input, now)` gates the authenticated reconnecting banner.
+- `deriveConnectionSurfaceUx(input, now)` gates the pre-auth top offline banner, stalled saved-session card, and connection-lost toast.
+
+`LayoutToastHost` creates the toast only after the shared verdict becomes visible; `subscriptions.svelte.ts` does not push a toast on the raw disconnect edge. `Layout.svelte` also withholds a post-connect offline-page takeover during the grace, while preserving the immediate recovery page when the browser started offline and has never connected. No component owns a second timer. A socket that reconnects inside the window is therefore silent across authenticated and pre-auth UI; a sustained drop reveals the existing treatments after the window.
+
 ### Banner modes
 
 | Mode | Condition |
@@ -248,6 +257,7 @@ The `"failed"` mode shows a "Retry now" button. Clicking it calls `retryConnecti
 | Function | Description |
 |---|---|
 | `getReconnectAttempts()` | Attempts since last successful connection |
+| `getHasConnected()` | Whether this page load completed at least one socket connection |
 | `getIsRebooting()` | Whether a reboot/poweroff is in progress |
 | `getSessionExpired()` | Whether the session expired mid-session |
 | `markRebooting()` | Flag that a reboot was triggered |

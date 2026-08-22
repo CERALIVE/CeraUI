@@ -60,16 +60,26 @@ const authState = vi.hoisted(() => ({
 	auth: undefined as unknown,
 	status: false as unknown,
 }));
+const connectionSurfaceState = vi.hoisted(() => ({ lossVisible: true }));
+const offlineState = vi.hoisted(() => ({ requested: false }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => authState.status,
 }));
 
 vi.mock("$lib/stores/offline-state.svelte", () => ({
-	getShouldShowOfflinePage: () => false,
+	getShouldShowOfflinePage: () => offlineState.requested,
 }));
 
 vi.mock("$lib/stores/connection-ux.svelte", () => ({
+	deriveConnectionSurfaceUx: (input: { authTimedOut: boolean }) => ({
+		showOfflineBanner: connectionSurfaceState.lossVisible,
+		showAuthTimeout: input.authTimedOut && connectionSurfaceState.lossVisible,
+		showConnectionLostToast: connectionSurfaceState.lossVisible,
+	}),
+	getDisconnectedSince: () => 0,
+	getGraceNow: () => 3000,
+	getHasConnected: () => true,
 	markAuthenticated: vi.fn(),
 	clearSessionExpired: vi.fn(),
 	markSessionExpired: vi.fn(),
@@ -115,6 +125,8 @@ beforeEach(() => {
 	authenticate.mockImplementation(() => new Promise<void>(() => {}));
 	authState.auth = undefined;
 	authState.status = false;
+	connectionSurfaceState.lossVisible = true;
+	offlineState.requested = false;
 	// A stored token makes the component run the auth-check branch.
 	localStorage.setItem("auth", "token-abc");
 });
@@ -125,6 +137,32 @@ afterEach(() => {
 });
 
 describe("Layout — auth-check timeout surface", () => {
+	it("keeps the full offline takeover silent during a post-connect grace window", () => {
+		// Given a page that connected before, then received an offline-page request during a short drop.
+		localStorage.removeItem("auth");
+		offlineState.requested = true;
+		connectionSurfaceState.lossVisible = false;
+
+		// When Layout renders while the shared reconnect grace is still active.
+		render(Layout);
+
+		// Then the ordinary pre-auth screen remains instead of the offline takeover.
+		expect(screen.getByTestId("auth-screen")).not.toBeNull();
+	});
+
+	it("keeps the auth recovery card silent while the shared reconnect grace suppresses it", async () => {
+		// Given the shared connection-surface verdict is still inside its grace.
+		connectionSurfaceState.lossVisible = false;
+		render(Layout);
+
+		// When Layout's independent auth timer expires.
+		await vi.advanceTimersByTimeAsync(3000);
+		await tick();
+
+		// Then the pre-auth recovery card follows the shared verdict and stays hidden.
+		expect(screen.queryByTestId("auth-timeout")).toBeNull();
+	});
+
 	it("renders the calm retry band on timeout and re-runs the check on retry", async () => {
 		render(Layout);
 

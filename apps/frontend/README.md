@@ -127,6 +127,7 @@ src/
 - **RPC only**: all backend calls go through `rpc.*` or `rpcClient.onMessage`. No direct hardware access.
 - **Validation bounds**: import from `ValidationAdapter.ts` (which sources from `@ceraui/rpc/schemas`). No inline numeric literals in dialog components.
 - **Stores**: Svelte 5 runes only. Files named `*.svelte.ts`.
+- **Reconnect UX**: `connection-ux.svelte.ts` owns the shared 3-second grace for authenticated and pre-auth connection-loss surfaces; do not add component-local disconnect timers.
 - **UI primitives**: add via `bunx shadcn-svelte@latest add <component>`, not by hand.
 - **Custom components**: go in `lib/components/custom/`, not `lib/components/ui/`.
 - **i18n**: all user-visible strings via `m["<key>"]()` from `@ceraui/i18n/svelte` (Paraglide); resolve a dynamic dot-path key through `resolveMessageKey`.
