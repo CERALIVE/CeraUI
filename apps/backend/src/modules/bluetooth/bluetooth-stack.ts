@@ -35,9 +35,9 @@
  *    has no owner and the observation would fail with `bluez_unavailable` —
  *    reporting broken hardware for a service nobody had started yet.
  * 3. Observe. The client subscribes before it snapshots (see `bluez-dbus.ts`).
- * 4. Register the pairing agent — BEST EFFORT. A missing object server leaves
- *    the module fully able to observe, trust and forget; only interactive
- *    pairing depends on it, so its absence must not fail the whole stack.
+ * 4. Register the pairing agent — BEST EFFORT. The production object server
+ *    answers inbound Agent1 calls; an export/refusal failure still leaves the
+ *    module able to observe, trust and forget.
  * 5. Boot reconnect (e), ONCE, bounded — after the snapshot, because the
  *    trusted set comes FROM the snapshot.
  *
@@ -78,6 +78,7 @@ import {
 	type BluezAgentExporter,
 	registerPairingAgent,
 } from "./bluez-agent.ts";
+import { createBluezAgentExporter } from "./bluez-agent-exporter.ts";
 import {
 	type BluetoothResult,
 	type BluezClient,
@@ -128,7 +129,6 @@ export interface BluetoothStackDeps {
 		registry: BluetoothRegistry,
 		onChange: () => void,
 	) => BluezClient;
-	/** ABSENT by default — see `bluez-agent.ts`. */
 	agentExporter?: BluezAgentExporter;
 	onChange?: () => void;
 	log: (msg: string) => void;
@@ -142,6 +142,9 @@ export const defaultBluetoothStackDeps: BluetoothStackDeps = {
 		createDbusTransport({ busAddress: resolveSystemBusAddress() }),
 	createClient: (transport, registry, onChange) =>
 		createBluezClient({ transport, registry, onChange }),
+	agentExporter: createBluezAgentExporter({
+		busAddress: resolveSystemBusAddress(),
+	}),
 	log: (msg) => logger.info(msg),
 	warn: (msg) => logger.warn(msg),
 };

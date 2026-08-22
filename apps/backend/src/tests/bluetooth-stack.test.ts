@@ -48,6 +48,7 @@ import { resetBluetoothServiceReconcileForTest } from "../modules/bluetooth/blue
 import {
 	BluetoothStack,
 	type BluetoothStackDeps,
+	defaultBluetoothStackDeps,
 } from "../modules/bluetooth/bluetooth-stack.ts";
 import {
 	type AgentCallHandler,
@@ -174,7 +175,11 @@ class FakeTransport implements DbusTransport {
 
 	emit(event: SignalEvent): void {
 		for (const { spec, listener } of [...this.listeners]) {
-			if (spec.interface === event.interface && spec.member === event.member) {
+			if (
+				spec.interface === event.interface &&
+				spec.member === event.member &&
+				(spec.sender === undefined || spec.sender === event.sender)
+			) {
 				listener(event);
 			}
 		}
@@ -555,7 +560,7 @@ describe("trust and forget are idempotent", () => {
 		const result = await h.stack.setTrusted(HEADSET, false);
 
 		expect(result.ok).toBe(true);
-		const last = h.transport.calls.at(-1);
+		const last = h.transport.calls[h.transport.calls.length - 1];
 		expect(last?.member).toBe("Set");
 		expect(last?.args?.[2]).toEqual(variant("b", false));
 	});
@@ -645,6 +650,10 @@ describe("boot reconnect (e) is bounded and happens once", () => {
 });
 
 describe("the NoInputNoOutput pairing agent", () => {
+	test("the production stack wires a live object exporter by default", () => {
+		expect(defaultBluetoothStackDeps.agentExporter).toBeDefined();
+	});
+
 	test("it registers with BlueZ as NoInputNoOutput and asks to be default", async () => {
 		const h = makeHarness({ withAgent: true });
 		const state = await h.stack.start();
@@ -827,6 +836,47 @@ describe("teardown", () => {
 });
 
 describe("the registry is fed by live signals", () => {
+	test("a live scan follows BlueZ's unique sender for Discovering and InterfacesAdded", async () => {
+		const h = makeHarness();
+		await h.stack.start();
+
+		h.transport.emit({
+			path: ADAPTER,
+			interface: "org.freedesktop.DBus.Properties",
+			member: "PropertiesChanged",
+			sender: ":1.42",
+			signature: "sa{sv}as",
+			body: [
+				ADAPTER_IFACE,
+				props({ Discovering: ["b", true] }),
+				[],
+			] as unknown as DbusValue[],
+		});
+		h.transport.emit({
+			path: "/",
+			interface: "org.freedesktop.DBus.ObjectManager",
+			member: "InterfacesAdded",
+			sender: ":1.42",
+			signature: "oa{sa{sv}}",
+			body: [
+				OTHER,
+				[
+					[
+						DEVICE_IFACE,
+						props({
+							Address: ["s", "11:22:33:44:55:66"],
+							Name: ["s", "Live advertiser"],
+						}),
+					],
+				],
+			] as unknown as DbusValue[],
+		});
+
+		const state = h.stack.state();
+		expect(state.adapters[0]?.discovering).toBe(true);
+		expect(state.devices.some((device) => device.path === OTHER)).toBe(true);
+	});
+
 	test("an InterfacesAdded during discovery reaches the rows", async () => {
 		const h = makeHarness();
 		await h.stack.start();

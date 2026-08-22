@@ -115,6 +115,10 @@ export {
 	registerPairingAgent,
 } from "./bluez-agent.ts";
 export {
+	type BluezAgentExporterDeps,
+	createBluezAgentExporter,
+} from "./bluez-agent-exporter.ts";
+export {
 	type BluetoothRefusal,
 	type BluetoothRefusalCode,
 	type BluetoothResult,

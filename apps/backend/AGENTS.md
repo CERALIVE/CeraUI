@@ -2535,7 +2535,7 @@ BlueZ degradation are applied INSIDE the stack, so a handler that took its own
 lock would be a second, drifting guard over one radio. `bluetooth-wire.ts` is the
 pure projection (the Bluetooth twin of `modem-wire-projection.ts`).
 
-Five decisions carry weight:
+Seven decisions carry weight:
 
 - **"The operator switched it off" is checked BEFORE the stack's own
   unavailability.** The stack records an operator-disabled device as
@@ -2545,15 +2545,28 @@ Five decisions carry weight:
   `bluetooth_disabled` first, and only past that gate does a cause mean what it
   says. `unit_missing` is the one cause that folds (into `service_start_failed`),
   because both mean the switch did not take.
+- **The pairing agent is a real inbound D-Bus object.** The production
+  `bluez-agent-exporter.ts` uses `@httptoolkit/dbus-native`'s existing
+  `exportInterface` capability and issues `RegisterAgent` from that same
+  connection, because BlueZ keys the registration on the caller's unique bus
+  name. Export happens first; if it fails, no path is registered. The
+  `NoInputNoOutput` policy answers `RequestAuthorization` only for the device in
+  the operator-opened pairing window and rejects passkey/PIN requests.
 - **A pairing is ATTEMPTED, not pre-refused, when no agent is registered.** A
   host that registers its own agent, or a peer needing no authorization, can
   still complete one, so refusing up front would withdraw a control that
   sometimes works. What changes is the LABEL: a BlueZ rejection with
   `agent.reason === "exporter_unavailable"` answers
   `pairing_agent_unavailable`, and `getStatus().agent` carries the same fact
-  before the operator ever taps. This build ships no D-Bus object server, so that
-  is the state on every device today — see `.omo/notepads/` on the exporter gap;
-  do not paper over it and do not build the exporter here.
+  before the operator ever taps. `exporter_unavailable` remains a valid injected
+  degradation, but the production default now supplies the exporter.
+- **Live BlueZ signals omit a local sender predicate.** D-Bus `AddMatch` accepts
+  the well-known `org.bluez` sender, but delivered messages identify the daemon
+  by its unique `:1.x` name. The shared transport compares that sender literally
+  after the daemon match, so naming `org.bluez` in the local spec discarded every
+  `PropertiesChanged` / `InterfacesAdded` / `InterfacesRemoved` event.
+  Interface+member matching keeps the live registry current; the initial
+  `GetManagedObjects` snapshot remains unchanged.
 - **The broadcast is on-change and trailing-debounced.** `onChange` fires on
   every registry edge and a discovery window turns every advertisement into one,
   so edges collapse onto a 250 ms trailing timer and the payload is compared

@@ -42,7 +42,7 @@
  * that asked.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE EXPORTER IS A PORT, AND ITS ABSENCE IS REPORTED — NEVER FAKED
+ * THE EXPORTER MUST BE LIVE BEFORE BLUEZ SEES ITS PATH
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * An agent is a D-Bus object BlueZ calls INTO, so registering one needs an
@@ -52,15 +52,17 @@
  * call and subscribe, and it exports nothing. Building a second D-Bus client
  * abstraction to gain that is exactly what this module must not do.
  *
- * So the object server is an injected {@link BluezAgentExporter} port, and the
- * production default is ABSENT. When it is absent the module registers NOTHING
- * and reports `exporter_unavailable`. It deliberately does NOT register the path
- * anyway: an `AgentManager1.RegisterAgent` naming an object nobody answers makes
- * BlueZ block on every callback until it times out, which is strictly worse than
- * having no agent at all — a pairing that fails slowly and blames the peer.
+ * The production exporter uses the object-server capability already present in
+ * the D-Bus library beneath the shared transport. The port remains injectable;
+ * when absent the module registers NOTHING and reports `exporter_unavailable`.
+ * Registering a path before its answering object exists would make BlueZ block
+ * on every callback until timeout, which is strictly worse than no agent.
  */
 
-import type { DbusTransport } from "@ceralive/modem-control/transport";
+import type {
+	DbusTransport,
+	MethodCall,
+} from "@ceralive/modem-control/transport";
 
 import { logger } from "../../helpers/logger.ts";
 
@@ -187,13 +189,18 @@ export interface AgentExportHandle {
 
 /**
  * The object-server port. Supplying one is what makes the agent live; see the
- * module header for why the production default is absent.
+ * module header for the production implementation and fail-safe absence path.
  */
 export interface BluezAgentExporter {
 	exportAgent(
 		path: string,
 		handler: AgentCallHandler,
 	): Promise<AgentExportHandle>;
+	/**
+	 * AgentManager calls made by the SAME connection that exported the object.
+	 * BlueZ keys registrations on the caller's unique bus name.
+	 */
+	callAgentManager?(call: MethodCall): Promise<void>;
 }
 
 export const AGENT_REGISTER_FAILURES = [
@@ -222,7 +229,6 @@ export type AgentRegistration =
 
 export interface PairingAgentDeps {
 	readonly transport: DbusTransport;
-	/** ABSENT by default — see the module header. */
 	readonly exporter?: BluezAgentExporter;
 	/** Reads live operator intent at call time, never a snapshot. */
 	readonly context: () => AgentPolicyContext;
@@ -270,9 +276,15 @@ export async function registerPairingAgent(
 		warn(`bluetooth: could not export the pairing agent: ${String(err)}`);
 		return { ok: false, reason: "export_failed", detail: String(err) };
 	}
+	const exporter = deps.exporter;
+	const managerCall = exporter.callAgentManager;
+	const callAgentManager = managerCall
+		? (call: MethodCall) => managerCall.call(exporter, call)
+		: (call: MethodCall) =>
+				deps.transport.callMethod(call).then(() => undefined);
 
 	try {
-		await deps.transport.callMethod({
+		await callAgentManager({
 			destination: BLUEZ_SERVICE,
 			path: BLUEZ_MANAGER_PATH,
 			interface: AGENT_MANAGER_IFACE,
@@ -293,7 +305,7 @@ export async function registerPairingAgent(
 
 	let isDefaultAgent = true;
 	try {
-		await deps.transport.callMethod({
+		await callAgentManager({
 			destination: BLUEZ_SERVICE,
 			path: BLUEZ_MANAGER_PATH,
 			interface: AGENT_MANAGER_IFACE,
@@ -319,7 +331,7 @@ export async function registerPairingAgent(
 		isDefaultAgent,
 		unregister: async () => {
 			try {
-				await deps.transport.callMethod({
+				await callAgentManager({
 					destination: BLUEZ_SERVICE,
 					path: BLUEZ_MANAGER_PATH,
 					interface: AGENT_MANAGER_IFACE,

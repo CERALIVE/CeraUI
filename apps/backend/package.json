@@ -14,6 +14,7 @@
 		"@ceralive/modem-control": "1.1.0",
 		"@ceralive/srtla-send": "2026.8.0",
 		"@ceraui/rpc": "workspace:*",
+		"@httptoolkit/dbus-native": "0.1.5",
 		"@orpc/server": "2.0.0-beta.30",
 		"finalhandler": "^2.1.1",
 		"zod": "catalog:",

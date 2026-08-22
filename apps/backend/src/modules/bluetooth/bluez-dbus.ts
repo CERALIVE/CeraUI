@@ -41,6 +41,11 @@
  * deliver a signal for an object the snapshot then also describes, and the fold
  * is idempotent, so the overlap costs nothing.
  *
+ * Signal specs deliberately omit `sender`. The bus daemon resolves a match-rule
+ * sender such as `org.bluez`, but delivered messages carry BlueZ's unique sender
+ * (`:1.x`); the shared transport also compares that delivered sender literally,
+ * which would discard every otherwise-matched live signal locally.
+ *
  * S1: every call carries an explicit `timeoutMs`. S5: every mutation runs inside
  * the per-adapter lock. S7: every mutation stamps a pending record for exactly
  * the window it is in flight. S4: nothing is caught silently.
@@ -377,7 +382,6 @@ export function createBluezClient(deps: BluezClientDeps): BluezClient {
 						{
 							interface: OBJECT_MANAGER_IFACE,
 							member: "InterfacesAdded",
-							sender: BLUEZ_SERVICE,
 						},
 						onInterfacesAdded,
 					),
@@ -385,7 +389,6 @@ export function createBluezClient(deps: BluezClientDeps): BluezClient {
 						{
 							interface: OBJECT_MANAGER_IFACE,
 							member: "InterfacesRemoved",
-							sender: BLUEZ_SERVICE,
 						},
 						onInterfacesRemoved,
 					),
@@ -393,7 +396,6 @@ export function createBluezClient(deps: BluezClientDeps): BluezClient {
 						{
 							interface: PROPERTIES_IFACE,
 							member: "PropertiesChanged",
-							sender: BLUEZ_SERVICE,
 						},
 						onPropertiesChanged,
 					),
