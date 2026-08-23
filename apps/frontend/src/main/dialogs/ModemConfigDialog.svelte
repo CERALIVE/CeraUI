@@ -118,9 +118,10 @@ import {
 } from './modem-radio-selectors';
 import {
 	CYCLE_DAY_OPTIONS,
+	diffUsagePolicyWireFields,
 	isThresholdInvalid,
 	readUsagePolicyForm,
-	toUsagePolicyWireFields,
+	type UsagePolicyForm,
 } from './modem-usage-policy';
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
@@ -164,6 +165,7 @@ import {
 	ShieldAlert,
 	Antenna,
 	Usb,
+	Wrench,
 	Zap,
 } from '@lucide/svelte';
 import { einkGatedSlide as slide } from '$lib/transitions';
@@ -220,8 +222,10 @@ import {
 	CapabilitySection,
 	type CapabilityView,
 	deriveSim,
+	DiagnosticsBlock,
 	SimBlock,
 } from '$lib/modem/sections';
+import { modemDiagnosticRows } from './modem-diagnostics';
 import {
 	bandDiagnosticTokens,
 	bandListOperatorLabel,
@@ -297,6 +301,11 @@ function readModemConfig() {
 	};
 }
 
+/** The seed baseline the tri-state save diffs against — never a second read. */
+function usagePolicyOf(form: UsagePolicyForm): UsagePolicyForm {
+	return { cycleDay: form.cycleDay, thresholdGb: form.thresholdGb };
+}
+
 // `formData` is a one-shot SNAPSHOT seeded on the open edge — it is NOT live-
 // synced from the `modem` prop, so an incremental `mergeModemList` broadcast can
 // never clobber an in-progress edit (the configure-echo confirm below reads the
@@ -304,6 +313,13 @@ function readModemConfig() {
 // the save-time form guard: the snapshot of what we sent (`saveExpected`) is
 // captured at dispatch, so the confirm compares against intent, not a later edit.
 let formData = $state(readModemConfig());
+// The usage-policy half of that snapshot, kept separately because the SAVE needs
+// to know which of the two bounds the operator actually touched. A field still
+// holding its seeded value is one nobody answered, and it must reach the wire as
+// `undefined` (leave it alone) rather than as the `null` that clears it — the
+// dialog is seeded once on the open edge, so an empty field routinely means "the
+// policy block had not arrived yet", not "no limit".
+let usagePolicySeed = $state<UsagePolicyForm>(usagePolicyOf(readModemConfig()));
 // The config we dispatched, captured at save time; drives the echo confirm and
 // is cleared once the op settles. Absent ⇒ no save in flight.
 let saveExpected = $state<ModemConfigSent | undefined>(undefined);
@@ -327,6 +343,7 @@ let prevOpen = false;
 $effect(() => {
 	if (open && !prevOpen && !savePending) {
 		formData = readModemConfig();
+		usagePolicySeed = usagePolicyOf(formData);
 		saveExpected = undefined;
 		scanSignatureBaseline = undefined;
 		saveRefusal = undefined;
@@ -523,7 +540,9 @@ async function handleSave() {
 		apn: formData.apn,
 		username: formData.username,
 		password: formData.password,
-		...(usagePolicyWritable ? (toUsagePolicyWireFields(formData) ?? {}) : {}),
+		...(usagePolicyWritable
+			? (diffUsagePolicyWireFields(usagePolicySeed, formData) ?? {})
+			: {}),
 	};
 	// Capture the dispatched config as the echo baseline BEFORE the broadcast can
 	// land, so the confirm compares against what we sent — never a later edit.
@@ -583,6 +602,10 @@ async function handleSave() {
 					: {}),
 			}),
 		};
+		// The applied echo is the device's own post-write policy, so it becomes the
+		// new baseline: without this, a second save would re-send the first save's
+		// edit as if the operator had just made it.
+		usagePolicySeed = usagePolicyOf(formData);
 	}
 }
 
@@ -1012,14 +1035,22 @@ const showDetailCard = $derived(
 // evidence — the presence of a suppressed token — rather than on the detail
 // card's. A raw value hidden from a label while its diagnostics home is gated
 // off by an unrelated reading is a value the field engineer simply lost.
-const rawServingBand = $derived(
-	cellRows.find((row) => row.format === 'band')?.value,
-);
-const hasRawDiagnostics = $derived(
-	activeUsbMode !== undefined ||
-		rawServingBand !== undefined ||
-		bandDiagnostics.length > 0,
-);
+//
+// The two rows this dialog contributes are the ones the modem ROW cannot supply:
+// the live composition (which follows an in-flight switch) and the band
+// capability read's own token list (which is a separate RPC, not a wire field).
+// Everything else comes from `modemDiagnosticRows`, already redacted.
+const diagnosticRows = $derived([
+	...(activeUsbMode === undefined
+		? []
+		: [{ id: 'usb-mode', label: 'usb_mode', value: activeUsbMode }]),
+	...modemDiagnosticRows(modem),
+	...(bandDiagnostics.length === 0
+		? []
+		: [{ id: 'bands', label: 'bands', value: bandDiagnostics.join(' ') }]),
+]);
+const hasRawDiagnostics = $derived(diagnosticRows.length > 0);
+const NO_DERIVED_DIAGNOSTIC_ROWS = { rows: [] } as const;
 
 // The SIM's own number is HIDDEN BY DEFAULT and revealed only on request — the
 // same treatment `PasswordDialog`/`HotspotDialog` give a credential, for the same
@@ -2061,60 +2092,56 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 		<!-- ── Raw device values ────────────────────────────────────────────────
 		     OL-3/OL-4: the exact tokens the operator-facing labels above replaced,
 		     RELOCATED rather than deleted, in a block that names itself as
-		     diagnostics and that is already collapsed (it lives inside the
-		     Advanced disclosure). A field engineer comparing a composition or a
-		     band against a vendor table loses nothing; an operator reading the
-		     cards above never meets a protocol name.
+		     diagnostics. A field engineer comparing a composition or a band
+		     against a vendor table loses nothing; an operator reading the cards
+		     above never meets a protocol name.
+
+		     IT IS BEHIND ITS OWN DISCLOSURE, and that is a second gate rather than
+		     a duplicate one. Living inside Advanced made it "already collapsed"
+		     only for as long as nothing else opens Advanced — and the operator who
+		     opens Advanced is reaching for the usage counters or the composition
+		     switch, not for a dump. The dongle dialog reached the same conclusion
+		     (`dongle-diagnostics`), so both families now fold their raw values the
+		     same way. `CollapsibleSection` rather than `CapabilitySection` for the
+		     reason that dialog records: a header that IS its own control cannot be
+		     split into heading-plus-control without either losing the chevron's
+		     accessible name or printing the title twice.
 
 		     It is its OWN section rather than a tail on the detail card, because
 		     the two answer to different evidence: the detail card vanishes when
 		     the modem reported no cell/eSIM/firmware, and folding this into it
 		     would make a composition's raw value hostage to a reading that has
-		     nothing to do with it. -->
-		<CapabilitySection
-			name="modem-raw-diagnostics" class="rounded-lg border p-3"
-			view={cardView(hasRawDiagnostics)}
-			title={m["network.modem.detail.diagnosticsTitle"]()}
-			description={m["network.modem.detail.diagnosticsDescription"]()}>
-				<dl class="grid grid-cols-1 gap-2 sm:grid-cols-2">
-					{#if activeUsbMode}
-						<div class="min-w-0">
-							<dt class="text-muted-foreground text-xs">
-								{m["network.modem.detail.diagnosticsUsbMode"]()}
-							</dt>
-							<dd
-								class="truncate font-mono text-xs"
-								data-testid="modem-raw-usb-mode"
-								dir="ltr"
-							>{activeUsbMode}</dd>
-						</div>
-					{/if}
-					{#if rawServingBand}
-						<div class="min-w-0">
-							<dt class="text-muted-foreground text-xs">
-								{m["network.modem.detail.diagnosticsServingBand"]()}
-							</dt>
-							<dd
-								class="truncate font-mono text-xs"
-								data-testid="modem-raw-serving-band"
-								dir="ltr"
-							>{rawServingBand}</dd>
-						</div>
-					{/if}
-					{#if bandDiagnostics.length > 0}
-						<div class="min-w-0 sm:col-span-2">
-							<dt class="text-muted-foreground text-xs">
-								{m["network.modem.detail.diagnosticsBands"]()}
-							</dt>
-							<dd
-								class="font-mono text-xs break-words"
-								data-testid="modem-raw-bands"
-								dir="ltr"
-							>{bandDiagnostics.join(' ')}</dd>
-						</div>
-					{/if}
-				</dl>
-		</CapabilitySection>
+		     nothing to do with it.
+
+		     The ROWS come from `modemDiagnosticRows`, which returns through the
+		     shared redaction boundary — so the identifiers this modem published
+		     are retained as rows and masked as values. -->
+		{#if hasRawDiagnostics}
+			<CollapsibleSection
+				bodyId="modem-raw-diagnostics-body"
+				bodyTestid="modem-raw-diagnostics-body"
+				class="rounded-lg border"
+				description={m["network.modem.detail.diagnosticsDescription"]()}
+				testid="modem-raw-diagnostics"
+				title={m["network.modem.detail.diagnosticsTitle"]()}
+				toggleTestid="modem-raw-diagnostics-toggle"
+			>
+				{#snippet icon()}
+					<Wrench class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+				{/snippet}
+				<div class="space-y-2">
+					<DiagnosticsBlock
+						diagnostics={NO_DERIVED_DIAGNOSTIC_ROWS}
+						extra={diagnosticRows}
+						name="modem-raw-diagnostic-readings"
+						rowPrefix="modem-raw"
+					/>
+					<p class="text-muted-foreground/80 text-xs" data-testid="modem-raw-redaction-note">
+						{m["network.modem.detail.diagnosticsRedacted"]()}
+					</p>
+				</div>
+			</CollapsibleSection>
+		{/if}
 
 		<!-- ── Messages: the read-only SMS inbox ────────────────────────────────
 		     PROGRESSIVE DISCLOSURE. This surface already carries three instrument

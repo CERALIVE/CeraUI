@@ -1055,6 +1055,7 @@
 	"network.modem.detail.diagnosticsUsbMode": "Composição USB",
 	"network.modem.detail.diagnosticsBands": "Faixas de rádio",
 	"network.modem.detail.diagnosticsServingBand": "Faixa em uso",
+	"network.modem.detail.diagnosticsRedacted": "Os identificadores do assinante são mascarados nesta lista.",
 	"network.modem.detail.esimNoProfiles": "Nenhum perfil instalado",
 	"network.modem.detail.esimReadOnly": "Informado pelo modem. Perfis eSIM são gerenciados pela sua operadora, não aqui.",
 	"network.modem.detail.esimStatusUnknown": "Estado do perfil desconhecido",

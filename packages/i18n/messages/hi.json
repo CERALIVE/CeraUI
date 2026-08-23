@@ -1052,6 +1052,7 @@
 	"network.modem.detail.diagnosticsUsbMode": "USB संरचना",
 	"network.modem.detail.diagnosticsBands": "रेडियो बैंड",
 	"network.modem.detail.diagnosticsServingBand": "सर्विंग बैंड",
+	"network.modem.detail.diagnosticsRedacted": "इस सूची में सब्सक्राइबर पहचानकर्ता छिपाए गए हैं।",
 	"network.modem.detail.esimNoProfiles": "कोई प्रोफ़ाइल इंस्टॉल नहीं",
 	"network.modem.detail.esimReadOnly": "मॉडेम द्वारा बताया गया। eSIM प्रोफ़ाइल आपके ऑपरेटर से प्रबंधित होती हैं, यहाँ से नहीं।",
 	"network.modem.detail.esimStatusUnknown": "प्रोफ़ाइल स्थिति अज्ञात",

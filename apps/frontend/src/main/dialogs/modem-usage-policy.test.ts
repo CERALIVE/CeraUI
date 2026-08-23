@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	CYCLE_DAY_OPTIONS,
+	diffUsagePolicyWireFields,
 	formatThresholdGb,
 	isThresholdInvalid,
 	readUsagePolicyForm,
@@ -118,6 +119,77 @@ describe("toUsagePolicyWireFields", () => {
 			data_usage_cycle_day: 28,
 			data_usage_threshold_bytes: 3 * GB,
 		});
+	});
+});
+
+describe("diffUsagePolicyWireFields — the three states, kept apart", () => {
+	const seeded = readUsagePolicyForm({
+		cycle_day: 17,
+		threshold_bytes: 10 * GB,
+	});
+
+	// THE ACCEPTANCE CRITERION. `undefined` means "leave the persisted bound
+	// alone"; the backend's `applyUsagePolicyChange` gates on `!== undefined`,
+	// so an OMITTED key is what makes a threshold-only save preserve the day.
+	it("a threshold-only save mentions the threshold and NOTHING else", () => {
+		const change = diffUsagePolicyWireFields(seeded, {
+			...seeded,
+			thresholdGb: "20",
+		});
+
+		expect(change).toEqual({ data_usage_threshold_bytes: 20 * GB });
+		expect(change).not.toHaveProperty("data_usage_cycle_day");
+	});
+
+	// The mirror: an operator who empties a field that HELD a value is clearing
+	// it, and only an explicit null clears.
+	it("an explicit clear sends null for the field that was emptied", () => {
+		expect(
+			diffUsagePolicyWireFields(seeded, { ...seeded, cycleDay: "" }),
+		).toEqual({ data_usage_cycle_day: null });
+	});
+
+	// THE DEFECT THIS REPLACES. The form is seeded once on the open edge, so a
+	// dialog opened before the policy block arrived holds an EMPTY cycle-day for
+	// a modem that has one. Projecting both fields unconditionally stated that
+	// empty field as `null` and cleared a bound nobody touched.
+	it("an untouched EMPTY field is omitted, never sent as a clear", () => {
+		const unseeded = { cycleDay: "", thresholdGb: "" };
+		const change = diffUsagePolicyWireFields(unseeded, {
+			...unseeded,
+			thresholdGb: "5",
+		});
+
+		expect(change).toEqual({ data_usage_threshold_bytes: 5 * GB });
+		expect(change).not.toHaveProperty("data_usage_cycle_day");
+	});
+
+	it("a save that changed neither bound mentions neither", () => {
+		expect(diffUsagePolicyWireFields(seeded, { ...seeded })).toEqual({});
+	});
+
+	it("a zero limit is a real value and is never collapsed into a clear", () => {
+		expect(
+			diffUsagePolicyWireFields(seeded, { ...seeded, thresholdGb: "0" }),
+		).toEqual({ data_usage_threshold_bytes: 0 });
+	});
+
+	it("whitespace-only churn is not a change", () => {
+		expect(
+			diffUsagePolicyWireFields(seeded, {
+				cycleDay: " 17 ",
+				thresholdGb: " 10 ",
+			}),
+		).toEqual({});
+	});
+
+	it("refuses to project a value the device would reject anyway", () => {
+		expect(
+			diffUsagePolicyWireFields(seeded, { ...seeded, cycleDay: "32" }),
+		).toBeUndefined();
+		expect(
+			diffUsagePolicyWireFields(seeded, { ...seeded, thresholdGb: "-1" }),
+		).toBeUndefined();
 	});
 });
 

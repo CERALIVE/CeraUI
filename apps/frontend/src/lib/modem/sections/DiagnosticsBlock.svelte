@@ -111,19 +111,18 @@ const rows = $derived([
 			{#each rows as row (row.id)}
 				<div class="flex flex-wrap items-baseline gap-x-2">
 					<dt class="text-muted-foreground shrink-0">{row.label}</dt>
+					<!-- The value and the `{#if}` sit on ONE line deliberately: a value on
+					     its own line leaves a trailing text node, so `textContent` reads
+					     `"rndis "` and an exact-equality assertion on a row fails for a
+					     reason that has nothing to do with the row. -->
 					<dd
 						class="min-w-0 font-mono break-all tabular-nums"
 						data-testid={`${rowStem}-${row.id}`}
 						dir="ltr"
-					>
-						{row.value}
-						{#if row.note}
-							<span
-								class="text-muted-foreground block font-sans break-normal"
-								data-testid={`${rowStem}-${row.id}-note`}
-							>{row.note}</span>
-						{/if}
-					</dd>
+					>{row.value}{#if row.note}<span
+							class="text-muted-foreground block font-sans break-normal"
+							data-testid={`${rowStem}-${row.id}-note`}
+						>{row.note}</span>{/if}</dd>
 				</div>
 			{/each}
 		</dl>

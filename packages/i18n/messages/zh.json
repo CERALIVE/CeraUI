@@ -1007,6 +1007,7 @@
 	"network.modem.detail.diagnosticsUsbMode": "USB 组合",
 	"network.modem.detail.diagnosticsBands": "无线频段",
 	"network.modem.detail.diagnosticsServingBand": "服务频段",
+	"network.modem.detail.diagnosticsRedacted": "此列表中的用户标识符已被隐藏。",
 	"network.modem.detail.esimNoProfiles": "未安装配置文件",
 	"network.modem.detail.esimReadOnly": "由调制解调器上报。eSIM 配置文件由运营商管理，不在此处。",
 	"network.modem.detail.esimStatusUnknown": "配置文件状态未知",

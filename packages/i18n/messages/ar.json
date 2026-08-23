@@ -1064,6 +1064,7 @@
 	"network.modem.detail.diagnosticsUsbMode": "تركيب USB",
 	"network.modem.detail.diagnosticsBands": "نطاقات الراديو",
 	"network.modem.detail.diagnosticsServingBand": "نطاق الخدمة",
+	"network.modem.detail.diagnosticsRedacted": "تُخفى معرّفات المشترك في هذه القائمة.",
 	"network.modem.detail.esimNoProfiles": "لا يوجد ملف تعريف مثبّت",
 	"network.modem.detail.esimReadOnly": "أبلغ عنها المودم. تُدار ملفات eSIM لدى مشغّل الشبكة، وليس من هنا.",
 	"network.modem.detail.esimStatusUnknown": "حالة ملف التعريف غير معروفة",

@@ -1007,6 +1007,7 @@
 	"network.modem.detail.diagnosticsUsbMode": "USB コンポジション",
 	"network.modem.detail.diagnosticsBands": "無線バンド",
 	"network.modem.detail.diagnosticsServingBand": "在圏バンド",
+	"network.modem.detail.diagnosticsRedacted": "加入者識別子はこの一覧では伏せられます。",
 	"network.modem.detail.esimNoProfiles": "プロファイル未インストール",
 	"network.modem.detail.esimReadOnly": "モデムからの報告です。eSIM プロファイルはここではなく通信事業者で管理します。",
 	"network.modem.detail.esimStatusUnknown": "プロファイルの状態は不明です",

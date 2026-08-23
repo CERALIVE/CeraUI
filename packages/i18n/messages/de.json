@@ -1052,6 +1052,7 @@
 	"network.modem.detail.diagnosticsUsbMode": "USB-Komposition",
 	"network.modem.detail.diagnosticsBands": "Funkbänder",
 	"network.modem.detail.diagnosticsServingBand": "Versorgungsband",
+	"network.modem.detail.diagnosticsRedacted": "Teilnehmerkennungen werden in dieser Liste maskiert.",
 	"network.modem.detail.esimNoProfiles": "Kein Profil installiert",
 	"network.modem.detail.esimReadOnly": "Vom Modem gemeldet. eSIM-Profile werden über Ihren Anbieter verwaltet, nicht hier.",
 	"network.modem.detail.esimStatusUnknown": "Profilstatus unbekannt",

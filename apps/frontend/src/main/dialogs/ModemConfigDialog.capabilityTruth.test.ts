@@ -39,6 +39,7 @@ import {
 	vi,
 } from "vitest";
 
+import { DIAGNOSTIC_REDACTED } from "$lib/modem/diagnostics-redaction";
 import { USB_MODE_RAW_TOKENS } from "$lib/modem/operator-labels";
 import {
 	publishModems,
@@ -397,8 +398,10 @@ describe("OL-1/OL-2/OL-3 — no raw wire token outside a marked diagnostics bloc
 		expect(operatorText()).not.toContain("eutran-3");
 	});
 
-	// OL-4: the block is marked AND collapsed — it lives inside the Advanced
-	// disclosure, which opens closed on every open.
+	// OL-4: the block is marked AND collapsed, behind TWO gates rather than one.
+	// Advanced opens closed on every open, and the diagnostics disclosure inside
+	// it opens closed too — because the operator who opens Advanced is reaching
+	// for the usage counters or the composition switch, not for a dump.
 	it("OL-4: the diagnostics block is marked as such and starts collapsed", async () => {
 		mount(modem());
 		await screen.findByTestId("modem-raw-diagnostics");
@@ -410,8 +413,36 @@ describe("OL-1/OL-2/OL-3 — no raw wire token outside a marked diagnostics bloc
 				.getByTestId("modem-raw-diagnostics")
 				.closest('[data-testid="modem-advanced-body"]'),
 		).not.toBeNull();
+
+		expect(
+			screen
+				.getByTestId("modem-raw-diagnostics-toggle")
+				.getAttribute("aria-expanded"),
+		).toBe("false");
 	});
 
+	// The boundary, asserted where an operator meets it: the dump lists the
+	// identifiers this modem published and shows none of their values.
+	//
+	// The grep is scoped to the DUMP, not to the document, and that scoping is
+	// the contract rather than a convenience. The SIM group above renders this
+	// ICCID in full on purpose — it is printed on the card and is what a carrier
+	// asks for over the phone — so a document-wide grep would assert the opposite
+	// of a documented, separately-justified affordance.
+	it("OL-3: a subscriber identifier is listed in the dump and masked in it", async () => {
+		mount(modem({ iccid: "8931086518104172482" }));
+		const dump = await screen.findByTestId("modem-raw-diagnostics");
+
+		expect(screen.getByTestId("modem-raw-iccid").textContent).toBe(
+			DIAGNOSTIC_REDACTED,
+		);
+		expect(dump.textContent).not.toContain("8931086518104172482");
+	});
+
+	// `stable_key` joined the override list when the block widened from three
+	// hand-picked values to every raw token the modem row published: it IS a
+	// relocatable token (a udev-derived identity string no operator label shows),
+	// so a fixture carrying one no longer expresses this test's own premise.
 	it("absence renders as absence: nothing to relocate means no diagnostics block", async () => {
 		getBands.mockResolvedValue({ success: false, error: "unsupported" });
 		mount(
@@ -419,6 +450,7 @@ describe("OL-1/OL-2/OL-3 — no raw wire token outside a marked diagnostics bloc
 				usb_mode: undefined,
 				recommended_usb_mode: undefined,
 				cell_info: undefined,
+				stable_key: undefined,
 			}),
 		);
 		await screen.findByTestId("modem-advanced-toggle");

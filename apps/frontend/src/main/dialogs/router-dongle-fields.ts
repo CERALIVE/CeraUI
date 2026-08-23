@@ -14,6 +14,8 @@
 import { m } from "@ceraui/i18n/svelte";
 import type { Modem } from "@ceraui/rpc/schemas";
 
+import { redactDiagnosticRows } from "$lib/modem/diagnostics-redaction";
+
 export type RouterAdminView = NonNullable<Modem["router_admin"]>;
 type RouterDetailsView = NonNullable<RouterAdminView["details"]>;
 type NetModeCapabilityView = NonNullable<
@@ -321,12 +323,17 @@ export function identityFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
 	if (admin === undefined) return [];
-	return stated(
-		IDENTITY_FIELDS.map((field) => ({
-			id: field.id,
-			label: field.label(),
-			value: field.value(admin),
-		})),
+	// The IMEI in this table is a subscriber-adjacent identifier and crosses the
+	// SAME disclosure boundary as the diagnostics dump below — the unit table is
+	// a quieter dump, not a different kind of surface.
+	return redactDiagnosticRows(
+		stated(
+			IDENTITY_FIELDS.map((field) => ({
+				id: field.id,
+				label: field.label(),
+				value: field.value(admin),
+			})),
+		),
 	);
 }
 
@@ -479,10 +486,14 @@ export function diagnosticFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
 	if (admin === undefined) return [];
-	return [
+	// `DIAGNOSTIC_DETAIL_FIELDS` deliberately collects `imsi` and `iccid`, so this
+	// return is the disclosure boundary rather than a precaution: retaining a
+	// subscriber identifier and DISPLAYING it are separate decisions, and only
+	// the first is this table's to make.
+	return redactDiagnosticRows([
 		...statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS),
 		...netModeDiagnosticRows(admin),
-	];
+	]);
 }
 
 export function trafficFields(
