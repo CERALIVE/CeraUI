@@ -56,6 +56,7 @@ import {
 	deriveLockView,
 	lockWithholdsCapabilities,
 } from "$lib/modem/lock-state";
+import { accessTechnologyDisplay } from "$lib/modem/operator-labels";
 
 /**
  * Does this device report an empty SIM slot, whichever class it belongs to?
@@ -732,13 +733,21 @@ export function carrierLabel(modem: Modem): string | undefined {
  * Secondary identity line: the hardware name (when it is not already the
  * headline) and the active network type. Empty ⇒ the component renders no line
  * at all rather than an empty one.
+ *
+ * The access technology is passed through `accessTechnologyDisplay`, which
+ * answers `undefined` for a token the backend could not fold into "2G" … "5G".
+ * `mmConvertAccessTech` returns an unrecognised technology VERBATIM, so this
+ * field arrives as `hspa-plus` on exactly the modems whose radio nobody folded —
+ * and a wire token is not a network type an operator can act on (§3 OL-1).
+ * Omitting it here is a RELOCATION, not a deletion: `deriveDiagnostics` carries
+ * the value into the marked diagnostics block, verbatim (OL-3).
  */
 export function detailLine(modem: Modem, primary: string): string | undefined {
 	const parts: string[] = [];
 	const name = modem.name?.trim() ?? "";
 	if (name !== "" && name !== primary) parts.push(name);
-	const networkType = modem.status?.network_type?.trim();
-	if (networkType !== undefined && networkType !== "") parts.push(networkType);
+	const networkType = accessTechnologyDisplay(modem.status?.network_type);
+	if (networkType !== undefined) parts.push(networkType);
 	return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 

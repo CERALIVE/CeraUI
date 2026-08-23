@@ -183,7 +183,6 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
 import { copyToClipboard } from '$lib/helpers/clipboard';
-import { renameSupportedModemNetwork } from '$lib/helpers/NetworkHelper';
 import { modemSignal } from '$lib/helpers/signal';
 import { rpc } from '$lib/rpc';
 import {
@@ -230,10 +229,12 @@ import {
 } from '$lib/modem/sections';
 import { modemDiagnosticRows } from './modem-diagnostics';
 import {
+	accessTechnologyDisplay,
 	bandDiagnosticTokens,
 	bandListOperatorLabel,
 	bandOperatorLabel,
 	isMappedBandToken,
+	networkModeOperatorLabel,
 	usbModeOperatorLabel,
 } from '$lib/modem/operator-labels';
 import { cn } from '$lib/utils';
@@ -285,7 +286,24 @@ const configKey = $derived(`modem-config:${deviceId}`);
 const noSim = $derived(isSimlessModem(modem));
 const signalValue = $derived(modemSignal(modem));
 const operatorName = $derived(modem.status?.network || modem.sim_network || modem.name);
-const activeNetworkType = $derived(modem.status?.network_type ?? '');
+// OL-1 again, on the status strip: `mmConvertAccessTech` passes an access
+// technology it could not fold through VERBATIM, so this field is "4G" on one
+// modem and `hspa-plus` on the next. A token states nothing an operator can act
+// on, so the strip renders no second line at all and the raw value is relocated
+// to the diagnostics block below (OL-3).
+const activeNetworkType = $derived(
+	accessTechnologyDisplay(modem.status?.network_type) ?? '',
+);
+
+const supportedNetworkModes = $derived(modem.network_type?.supported ?? []);
+
+function networkModeLabel(mode: string): string {
+	return networkModeOperatorLabel(
+		mode,
+		supportedNetworkModes.indexOf(mode),
+		resolveMessageKey,
+	);
+}
 
 // ── Form state ────────────────────────────────────────────────────────────────
 function readModemConfig() {
@@ -1076,6 +1094,18 @@ const diagnosticRows = $derived([
 	...(bandDiagnostics.length === 0
 		? []
 		: [{ id: 'bands', label: 'bands', value: bandDiagnostics.join(' ') }]),
+	// The selector's own catalog, in the modem's spelling. The label above it is
+	// positional for any entry this build cannot read (OL-2), so without this row
+	// that entry would have no spelling left anywhere.
+	...(supportedNetworkModes.length === 0
+		? []
+		: [
+				{
+					id: 'network-modes',
+					label: 'network_type.supported',
+					value: supportedNetworkModes.join(' '),
+				},
+			]),
 ]);
 const hasRawDiagnostics = $derived(diagnosticRows.length > 0);
 const NO_DERIVED_DIAGNOSTIC_ROWS = { rows: [] } as const;
@@ -1390,16 +1420,16 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 							data-testid="modem-network-type-trigger"
 							id="modem-network-type-select">
 							{formData.selectedNetwork
-								? renameSupportedModemNetwork(formData.selectedNetwork)
+								? networkModeLabel(formData.selectedNetwork)
 								: '—'}
 						</Select.Trigger>
 						<Select.Content>
 							<Select.Group>
-								{#each modem.network_type?.supported ?? [] as networkType (networkType)}
+								{#each supportedNetworkModes as networkType (networkType)}
 									<Select.Item
 										data-testid="modem-network-type-option-{networkType}"
 										value={networkType}>
-										{renameSupportedModemNetwork(networkType)}
+										{networkModeLabel(networkType)}
 									</Select.Item>
 								{/each}
 							</Select.Group>

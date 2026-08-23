@@ -15,6 +15,7 @@ import { m } from "@ceraui/i18n/svelte";
 import type { Modem } from "@ceraui/rpc/schemas";
 
 import { redactDiagnosticRows } from "$lib/modem/diagnostics-redaction";
+import { isMachineIdentifier } from "$lib/modem/operator-labels";
 
 export type RouterAdminView = NonNullable<Modem["router_admin"]>;
 type RouterDetailsView = NonNullable<RouterAdminView["details"]>;
@@ -76,6 +77,18 @@ type DetailFieldSpec = {
 	id: keyof RouterDetailsView;
 	label: (value: string) => string;
 	note?: (value: string) => string | undefined;
+	/**
+	 * The device answers this field from a VOCABULARY of its own, so a value that
+	 * turns out to be a wire token is rerouted into the diagnostics table rather
+	 * than printed (§3 OL-2). One dialect answers `network_type` with `LTE` and
+	 * the next with `hspa-plus`; only the value can say which.
+	 *
+	 * It is opt-in per field because most of this table is NOT a vocabulary. An
+	 * `ssid` is the operator's own text, a `provider` is a carrier's name, a
+	 * `wan_ip` is an address — rerouting one of those on its shape would hide the
+	 * operator's own setting from them, which is the opposite of this rule.
+	 */
+	vocabulary?: true;
 };
 
 /**
@@ -93,13 +106,18 @@ type DetailFieldSpec = {
  * own spelling, one disclosure away.
  */
 const OPERATOR_DETAIL_FIELDS: ReadonlyArray<DetailFieldSpec> = [
-	{ id: "network_type", label: () => m["network.modem.networkType"]() },
+	{
+		id: "network_type",
+		label: () => m["network.modem.networkType"](),
+		vocabulary: true,
+	},
 	// Whether the carrier ACCEPTED this radio, which is a different question from
 	// whether a SIM is seated — the bench HiLink twins hold a valid slot reading
 	// and answer `NO SERVICE` here.
 	{
 		id: "registration",
 		label: () => m["network.routerCellular.detail.registration"](),
+		vocabulary: true,
 	},
 	// A DIALECT MAY ANSWER THIS WITH A NAME OR WITH A NUMBER, AND THE ROW MUST
 	// NOT CALL THE NUMBER A NAME. See `decomposePlmn` — the label and the caveat
@@ -131,6 +149,7 @@ const OPERATOR_DETAIL_FIELDS: ReadonlyArray<DetailFieldSpec> = [
 	{
 		id: "roaming",
 		label: () => m["network.routerCellular.detail.roaming"](),
+		vocabulary: true,
 	},
 	{ id: "wan_ip", label: () => m["network.routerCellular.wanIpLabel"]() },
 	{ id: "ssid", label: () => m["network.routerCellular.ssidLabel"]() },
@@ -476,10 +495,37 @@ function statedFrom(
 	);
 }
 
+/**
+ * A `vocabulary` field whose value came back as a wire token belongs in the
+ * OTHER table. Split rather than filtered, so the two callers below cannot
+ * disagree about where a given row went — which is what would turn a relocation
+ * into a deletion.
+ */
+function partitionOperatorRows(admin: RouterAdminView | undefined): {
+	operator: DongleField[];
+	relocated: DongleField[];
+} {
+	const tokenized = new Set(
+		OPERATOR_DETAIL_FIELDS.filter((field) => field.vocabulary === true).map(
+			(field) => field.id as string,
+		),
+	);
+	const operator: DongleField[] = [];
+	const relocated: DongleField[] = [];
+	for (const row of statedFrom(admin, OPERATOR_DETAIL_FIELDS)) {
+		if (tokenized.has(row.id) && isMachineIdentifier(row.value)) {
+			relocated.push(row);
+		} else {
+			operator.push(row);
+		}
+	}
+	return { operator, relocated };
+}
+
 export function detailFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
-	return statedFrom(admin, OPERATOR_DETAIL_FIELDS);
+	return partitionOperatorRows(admin).operator;
 }
 
 export function diagnosticFields(
@@ -493,6 +539,7 @@ export function diagnosticFields(
 	return redactDiagnosticRows([
 		...statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS),
 		...netModeDiagnosticRows(admin),
+		...partitionOperatorRows(admin).relocated,
 	]);
 }
 

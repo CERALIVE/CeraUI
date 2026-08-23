@@ -504,22 +504,6 @@ async function applySubnet() {
 					title={m["network.modem.sections.sim.title"]()}
 				/>
 			</div>
-			{#if identity.length > 0}
-				<!-- Who this UNIT is — the fields that separate two same-model twins.
-				     Reported, never edited: the shared reading table is an unboxed
-				     label-over-value, where a bordered filled one on a settings
-				     surface reads as an input the operator could unlock.
-
-				     It is `dongle-unit-*` and NOT `dongle-identity-*` so the shared
-				     `IdentityBlock` above owns that vocabulary alone — one prefix
-				     covering both would make "which block failed" unanswerable from a
-				     selector. -->
-				<DiagnosticsBlock
-					diagnostics={{ rows: [] }}
-					extra={identity}
-					name="dongle-unit"
-				/>
-			{/if}
 		</div>
 
 		{#if details.length > 0}
@@ -537,15 +521,16 @@ async function applySubnet() {
 			</div>
 		{/if}
 
-		{#if diagnostics.length > 0}
+		{#if diagnostics.length > 0 || identity.length > 0}
 			<!-- A header that IS its own control stays a `CollapsibleSection`:
 			     `CapabilitySection` splits heading from control, and both ways out are
 			     regressions (a chevron with no accessible name, or the title twice).
 
-			     The GATE is the DONGLE's own raw readings. The shared derived rows
-			     ride along inside but never decide whether the block exists — every
-			     device has an interface name, so gating on those would hang an
-			     always-open disclosure on a dongle that reported nothing. -->
+			     The GATE is the DONGLE's own raw readings, now including its unit
+			     identifiers. The shared derived rows ride along inside but never
+			     decide whether the block exists — every device has an interface name,
+			     so gating on those would hang an always-open disclosure on a dongle
+			     that reported nothing. -->
 			<CollapsibleSection
 				bodyId="dongle-diagnostics-body"
 				bodyTestid="dongle-diagnostics-body"
@@ -557,12 +542,39 @@ async function applySubnet() {
 				{#snippet icon()}
 					<Wrench class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 				{/snippet}
-				<DiagnosticsBlock
-					diagnostics={sections.diagnostics}
-					extra={diagnostics}
-					name="dongle-diagnostic-readings"
-					rowPrefix="dongle-detail"
-				/>
+				{#if identity.length > 0}
+					<!-- Who this UNIT is — model, firmware, hardware revision, the
+					     identifiers that separate two same-model twins. It is HARDWARE
+					     TRIVIA, which §2 ranks below state, signal and actions, and it
+					     used to sit in the status card above the network readings and
+					     above every control: the first table an operator met on a dongle
+					     whose mobile data was off was its firmware revision.
+
+					     It is not a different KIND of surface from the block beneath it —
+					     `identityFields` already crosses the same redaction boundary,
+					     because the IMEI in it is subscriber-adjacent. Filing the two
+					     together is what that shared boundary always implied. They stay
+					     two BLOCKS because `firmware` is an id in both row sets and one
+					     `{#each}` cannot key it twice.
+
+					     It is `dongle-unit-*` and NOT `dongle-identity-*` so the shared
+					     `IdentityBlock` above owns that vocabulary alone — one prefix
+					     covering both would make "which block failed" unanswerable from
+					     a selector. -->
+					<DiagnosticsBlock
+						diagnostics={{ rows: [] }}
+						extra={identity}
+						name="dongle-unit"
+					/>
+				{/if}
+				{#if diagnostics.length > 0 || sections.diagnostics.rows.length > 0}
+					<DiagnosticsBlock
+						diagnostics={sections.diagnostics}
+						extra={diagnostics}
+						name="dongle-diagnostic-readings"
+						rowPrefix="dongle-detail"
+					/>
+				{/if}
 			</CollapsibleSection>
 		{/if}
 

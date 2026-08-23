@@ -107,6 +107,10 @@ export function modemDiagnosticRows(modem: Modem): ModemDiagnosticRow[] {
 		stated([
 			{ id: "device_class", value: modem.device_class },
 			{ id: "availability_reason", value: modem.availability_reason },
+			// Where the status strip's second line GOES when the backend could not
+			// fold the access technology into "2G" … "5G" and passed the token
+			// through. Drop this row and that omission becomes a deletion.
+			{ id: "status.network_type", value: modem.status?.network_type },
 			{ id: "stable_key", value: modem.stable_key },
 			{ id: "recommended_usb_mode", value: modem.recommended_usb_mode },
 			{ id: "radio_power", value: modem.radio_power },

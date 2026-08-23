@@ -442,7 +442,10 @@ describe("OL-1/OL-2/OL-3 — no raw wire token outside a marked diagnostics bloc
 	// `stable_key` joined the override list when the block widened from three
 	// hand-picked values to every raw token the modem row published: it IS a
 	// relocatable token (a udev-derived identity string no operator label shows),
-	// so a fixture carrying one no longer expresses this test's own premise.
+	// so a fixture carrying one no longer expresses this test's own premise. The
+	// access technology and the network-mode catalog joined it for the same
+	// reason — both are now rendered through an operator label, so both need the
+	// dump to keep their own spelling.
 	it("absence renders as absence: nothing to relocate means no diagnostics block", async () => {
 		getBands.mockResolvedValue({ success: false, error: "unsupported" });
 		mount(
@@ -451,6 +454,8 @@ describe("OL-1/OL-2/OL-3 — no raw wire token outside a marked diagnostics bloc
 				recommended_usb_mode: undefined,
 				cell_info: undefined,
 				stable_key: undefined,
+				network_type: { supported: [], active: null },
+				status: { connection: "connected", signal: 72, roaming: false },
 			}),
 		);
 		await screen.findByTestId("modem-advanced-toggle");

@@ -142,6 +142,7 @@ const DIAGNOSTIC_LABEL_KEYS = {
 	packetService: "network.modem.sections.diagnostics.packetService",
 	stableKey: "network.modem.sections.diagnostics.stableKey",
 	adminLogin: "network.modem.sections.diagnostics.lockState",
+	accessTech: "network.modem.sections.diagnostics.accessTech",
 	usbComposition: "network.modem.detail.diagnosticsUsbMode",
 	firmware: "network.modem.detail.firmware",
 	simId: "network.modem.detail.iccid",
@@ -355,6 +356,13 @@ export function deriveDiagnostics(modem: Modem): DiagnosticsModel {
 			id: "packet-service",
 			labelKey: DIAGNOSTIC_LABEL_KEYS.packetService,
 			value: modem.packet_service_state,
+		},
+		// This row is where `detailLine`'s unfoldable access technology GOES. Drop
+		// it and that omission becomes a deletion, which OL-3 forbids.
+		{
+			id: "access-tech",
+			labelKey: DIAGNOSTIC_LABEL_KEYS.accessTech,
+			value: modem.status?.network_type,
 		},
 		{
 			id: "usb-composition",
