@@ -1201,6 +1201,92 @@ including a real-browser console grep).
 `implemented-but-uncertified` — no bench modem can open a session (BLOCKER B4) —
 so the live carrier drill has not run from this surface.
 
+## THE DONGLE LOGIN IS TYPED HERE, AND THE CAPABILITY EXPANSION IS VISIBLE [EXISTS]
+
+`lib/modem/lock-state.ts` (pure, rune-free) + `main/dialogs/ModemLockSection.svelte`
+are the operator half of todo 10's five-state `modem.lock_state`. Until now the
+only answer CeraUI had for a gated dongle was "go and use the vendor's page";
+that page is still reachable (`dongle-open-admin`) as the SECONDARY affordance,
+and is no longer the primary one.
+
+**`open` IS THE COMMON CASE, AND IT GETS NO PROMPT.** Every bench dialect
+answered unauthenticated, so most fleet devices have no password at all — a
+prompt at one of them is exactly the dishonesty this surface exists to remove.
+`offersEntryFor` is the gate, and it withholds the field in FOUR situations, not
+one: `open` (nothing to ask), `unlocked` (nothing left to ask), `locked-out`
+(see below), and a `locked` row carrying `sub_reason: "unsupported-profile"` —
+where the dialect asked for a login shape this build ships no proven
+implementation for, so a password would never be sent to the device at all and
+offering the field invites an operator to blame their own typing for a
+limitation of this build. The field is WITHHELD rather than rendered disabled,
+because a disabled password box still says "there is a password here".
+
+**SIX SITUATIONS, SIX SENTENCES — and three of them are the failure causes.**
+`lockMessageKey` is a table over the wire vocabulary, not branches in the
+component. Wrong password (`auth-failed`), unsupported firmware profile
+(`locked` + `unsupported-profile`) and device lockout (`locked-out`) call for
+three different actions — retype it, stop and use the vendor's page, wait — so
+folding any pair is a lie about what to do next. `dongle-lock-body` carries
+`data-lock-state`, so all six are distinguishable to a gate as well as to a
+reader, and every state prints its own words (colour is reinforcement only).
+
+**`locked-out` RENDERS THE WAIT, NOT A RETRY.** Every dialect counts a failed
+login toward a window the operator cannot clear, so a retry there spends the
+attempts that would have let them fix a typo: no entry, no submit, nothing that
+reads as "try again". `lockoutRemainingMinutes` renders the device's OWN
+`lock_detail.lockout_until`, rounded UP and floored at 1 (a wait shown as
+"0 min" reads as "try now"), and answers `undefined` — the honest "it did not
+say" — both when the device named no window AND when that window has elapsed on
+THIS host's clock, because only the dongle can see that counter. **"Forget
+stored login" DOES remain**, deliberately: clearing performs ZERO device
+requests, so it is a removal rather than a retry, and during a lockout it is the
+one useful thing an operator can do (it stops the rejected credential being
+presented again on the next cycle).
+
+**THE CREDENTIAL IS HELD BY THE MOUNT, AND NOTHING ELSE.** The password lives in
+the section's own `$state` — never a store, never `$persist`, never
+`localStorage`, never a URL — and `AppDialog` renders children only while open,
+so the retention bound is the mount rather than a cleanup somebody has to
+remember (the `ModemUssdSection` rule, for the same reason). It is additionally
+cleared BEFORE the await, so it is out of the component the instant it is
+dispatched and can never be echoed into a heading, an outcome band or a retry
+affordance. There is no reveal toggle and no autofill: `type="password"` +
+`autocomplete="off"`, and no `value` ATTRIBUTE, so the secret is never in the
+serialized document.
+
+**THE EXPANSION RIDES `router_admin`, NOT A NEW WIRE FIELD.** The device's
+`gateRouterAdminByLock` withholds `capabilities` + `controls` while a lock
+stands and serves them again after a verify, so a control that was hidden
+arrives through the SAME uniform sections (`dongle-net-mode`, `dongle-controls`)
+every other reading on this dialog uses. Two consequences are load-bearing and
+were both defects before they were rules:
+
+1. **The no-controls band must not blame the hardware.** A withheld control set
+   is byte-identical on the wire to "no write was ever proven", so
+   `dongle-no-controls` reads `lock.controlsWithheld` (with `data-locked="true"`)
+   while `lockWithholdsCapabilities` holds, and keeps `control.none` otherwise.
+2. **A locked dongle's Configure must still open.** `configureDisabledReasonKey`
+   read that same absence as an unverified write and DISABLED the row's
+   Configure — so the operator was refused entry to the only surface carrying
+   the login. A lock now opens the dialog; `open`/`unlocked` are unchanged.
+
+Copy: `network.routerCellular.lock.*` (29 keys × 10 locales). Coverage:
+`lib/modem/lock-state.test.ts` (the entry/clear/withhold tables swept over
+`MODEM_LOCK_STATES`, the three-distinct-causes proof, and the lockout rounding
+incl. both `undefined` arms), `main/dialogs/RouterDongleDialog.lock.test.ts`
+(the five rendered states, the `open` absence sweep WITH its positive control,
+the retry-affordance enumeration at `locked-out`, the withheld→served control
+transition, and the DOM/storage/URL credential sweep with the RPC-received
+non-vacuity check), `tests/modem-lock-copy-completeness.test.ts` (derived from
+the wire enums; asserts the six sentences are DISTINCT within every locale, not
+merely present), `main/network/cellular-row.test.ts` (the reachability rule both
+ways), and `tests/e2e/modem-credential-unlock.spec.ts` (locked → enter →
+unlocked → expanded, plus the lockout and `open` legs, in a real browser).
+
+**Honest status:** fixture-proven only. No locked device exists on this bench —
+all three dialects answer unauthenticated — so `open` is the only state hardware
+has exercised, and the locked→unlocked drill is owed against a real ZTE MF79U.
+
 ## A MUTATION OUTCOME IS PERSISTENT, ANNOUNCED, AND BOUNDED (UI pass 2) [EXISTS]
 
 `DESIGN.md` §8 opens with the rule this section enforces: *an outcome the
@@ -1351,6 +1437,11 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't fold `lte-only-unsupported` into the generic refusal line — it is a CARRIER policy, not a device fault, and rendered generically it sends an operator hunting for a firmware fix. It has its own band, its own copy and its own `data-ussd-policy` marker.
 - Don't hoist `ModemUssdSection`'s session state or its RPC into `ModemConfigDialog` "for consistency" with the GPS/FCC sections — closing the dialog unmounts the component, and that unmount is what drops the carrier's text. Don't echo the command anywhere either: it is cleared BEFORE the await precisely so it can never reach a heading, a toast title or a retry affordance.
 - Don't drop the USSD section's read-on-mount. The device fills its USSD capability evidence FROM that read and gates every verb on it, so without it the first dialogue after a boot is refused `module_unavailable` whatever the hardware can do.
+- Don't render a password field for a dongle whose lock does not need one — `open` is the COMMON case on this fleet and a prompt there is the dishonesty the whole surface removes. Ask `offersEntryFor`, and don't "helpfully" render it disabled instead: a disabled password box still claims there is a password to type. The same rule withholds it at `unlocked`, at `locked-out`, and at a `locked` row carrying `unsupported-profile`, where the credential would never leave this host.
+- Don't offer a retry while a dongle reports `locked-out` — every dialect counts a failed login toward a window the operator cannot clear, so a retry spends the attempts that would have fixed a typo. Render the device's own wait, and don't invent an expiry from THIS host's clock when the window has elapsed: only the dongle can see that counter. "Forget stored login" is deliberately NOT a retry (zero device requests) and stays.
+- Don't hold a dongle password anywhere but `ModemLockSection`'s own `$state`, and don't skip clearing it BEFORE the await — no store, no `$persist`, no `localStorage`, no URL, no `value` attribute, no reveal toggle, no autofill. The mount is the retention bound, exactly as it is for the USSD command.
+- Don't fold the three credential failure causes into one message. Wrong password, unsupported firmware profile and device lockout call for three different actions, and `lockMessageKey` is a table over the wire vocabulary precisely so a component branch cannot quietly merge two of them.
+- Don't read an absent `router_admin.controls` as "no write was ever proven" without asking `lockWithholdsCapabilities` first — a signed-out dongle withholds the same block, so that reading both blamed the hardware in the no-controls band AND disabled the row's Configure, which is the only way into the dialog carrying the login.
 - Don't confirm a router-dongle write on the RPC reply (`result.controls` included) — the observation is what moves the switch, so confirming on the reply lets the band claim applied while the control still shows the old value. Don't arm the bound at dispatch either, and don't let a late broadcast upgrade an `unconfirmed` write into a success.
 - Don't add a confirmation window to the GPS or FCC toggles — their replies carry the device's own re-read state, so success is already confirmed and a window could only invent a wait.
 - Don't render a `router_admin` reading with no freshness treatment, and don't mark an `unknown` freshness as stale — the device told us nothing about that reading's age.

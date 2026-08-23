@@ -345,19 +345,19 @@ export const BACKEND_RPC_PARITY: ParityRecord = {
 			"ModemConfigDialog's 5G-preference control writes the selected posture.",
 	},
 	"modems.setCredentials": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Stores a router-WebUI login against the device's physical identity; the five-state lock model reaches the wire and no operator surface offers the entry form yet.",
+			"RouterDongleDialog's lock section stores the operator's typed router-WebUI login, offered only where presenting one could help.",
 	},
 	"modems.clearCredentials": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Forgets a stored login and drops the session unlock with it; no operator surface offers it yet.",
+			"The same section's 'forget stored login' removal — zero device requests, so it is offered during a lockout too.",
 	},
 	"modems.verifyCredentials": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"Presents the stored login once and reports the resolved lock state; no operator surface dispatches it yet.",
+			"The same section presents the stored login exactly once and renders the resolved lock state, never a retry.",
 	},
 	"modems.openRouterAdmin": {
 		disposition: "wired",

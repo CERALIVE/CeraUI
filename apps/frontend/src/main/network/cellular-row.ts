@@ -52,6 +52,11 @@
 import { isSimlessForBond } from "@ceraui/rpc";
 import type { ConnectionStatus, Modem } from "@ceraui/rpc/schemas";
 
+import {
+	deriveLockView,
+	lockWithholdsCapabilities,
+} from "$lib/modem/lock-state";
+
 /**
  * Does this device report an empty SIM slot, whichever class it belongs to?
  *
@@ -603,12 +608,23 @@ export function bondDisabledReasonKey(
  * only one of them offers settings. The distinction IS the answer to their
  * question, so it has to be on screen. {@link rowNoteKeys} keeps the row's
  * two-line ceiling by superseding the generic line instead of collapsing it.
+ *
+ * ── A WITHHELD CONTROL SET IS NOT ALWAYS A DEVICE LIMITATION ────────────────
+ *
+ * `router_admin.controls` is ALSO absent while the dongle's own login stands:
+ * the device's `gateRouterAdminByLock` withholds the capability and control
+ * blocks below `open`/`unlocked`. Reading that as "no write was ever proven"
+ * disabled Configure on exactly the devices whose dialog now carries the login
+ * form — so the one control that can fix the state was unreachable, and the row
+ * additionally blamed the hardware for it. A lock therefore OPENS the dialog:
+ * there is genuinely something to do in there.
  */
 export function configureDisabledReasonKey(
 	band: ModemClassBand,
 	modem?: Modem,
 ): string | undefined {
 	if (band === "router-ethernet") {
+		if (lockWithholdsCapabilities(deriveLockView(modem))) return undefined;
 		return modem?.router_admin?.controls === undefined
 			? "network.cellular.reason.routerControlsUnverified"
 			: undefined;

@@ -89,6 +89,7 @@ import {
 	SignalBlock,
 	SimBlock,
 } from '$lib/modem/sections';
+import { deriveLockView, lockWithholdsCapabilities } from '$lib/modem/lock-state';
 import { mutationOutcome } from '$lib/modem/mutation-outcome';
 import { rpc } from '$lib/rpc';
 import {
@@ -106,6 +107,7 @@ import {
 	routerAdminOpenReasonKey,
 } from '../network/router-admin-open';
 import ModemGpsSection from './ModemGpsSection.svelte';
+import ModemLockSection from './ModemLockSection.svelte';
 import {
 	detailFields,
 	diagnosticFields,
@@ -203,6 +205,19 @@ const identity = $derived(identityFields(admin));
 const details = $derived(detailFields(admin));
 const diagnostics = $derived(diagnosticFields(admin));
 const netMode = $derived(netModeCapability(admin));
+
+/**
+ * The dongle's login, and whether it is why the two operation blocks are absent.
+ *
+ * Derived ONCE here and handed down, so the section that renders the lock and
+ * the band that explains a missing control cannot disagree about which state
+ * the device is in. `lockWithholdsCapabilities` is the device's own
+ * `gateRouterAdminByLock` seen from this side: below `open`/`unlocked` the
+ * backend withholds `capabilities` and `controls`, so "nothing here is provably
+ * settable" would be a true sentence about the wrong device.
+ */
+const lock = $derived(deriveLockView(modem));
+const controlsLocked = $derived(lockWithholdsCapabilities(lock));
 
 /**
  * The net-mode capability as the shared four-state ladder sees it.
@@ -464,6 +479,13 @@ async function applyNetMode(mode: string) {
 			</CollapsibleSection>
 		{/if}
 
+		<!-- The login, ABOVE the two blocks it gates — so the expansion reads as one
+		     movement: sign in here, and the dongle's own capability and control
+		     sections arrive below through the same uniform surface every other
+		     reading on this dialog uses. `absent` renders zero nodes, so a device
+		     with no admin-auth surface is byte-unchanged by this mount. -->
+		<ModemLockSection {deviceId} {lock} />
+
 		{#if netMode}
 			<!-- Discovered FIRST, offered second, through the SHARED four-state
 			     ladder. The refusal arm carries NO control of any kind — the chips are
@@ -574,14 +596,23 @@ async function applyNetMode(mode: string) {
 				/>
 			</div>
 		{:else}
+			<!-- WHY there is no control here is TWO different facts, and they must not
+			     share a sentence. A signed-out dongle withholds its operation blocks
+			     (`gateRouterAdminByLock`), so "nothing here applies a setting we could
+			     verify" would be a true statement about a device we have not asked
+			     yet — and it would send the operator looking for a hardware
+			     limitation instead of at the login directly above. -->
 			<div
 				class="bg-status-info/10 border-status-info/30 flex items-start gap-3 rounded-lg border p-3"
 				data-testid="dongle-no-controls"
+				data-locked={controlsLocked ? 'true' : undefined}
 				role="status"
 			>
 				<Info class="text-status-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
 				<p class="text-muted-foreground text-xs">
-					{m["network.routerCellular.control.none"]()}
+					{controlsLocked
+						? m["network.routerCellular.lock.controlsWithheld"]()
+						: m["network.routerCellular.control.none"]()}
 				</p>
 			</div>
 		{/if}

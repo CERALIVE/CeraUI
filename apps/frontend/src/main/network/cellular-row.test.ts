@@ -504,6 +504,54 @@ describe("configureDisabledReasonKey", () => {
 			"network.cellular.reason.routerControlsUnverified",
 		);
 	});
+
+	/**
+	 * A LOCK IS NOT A DEVICE LIMITATION, AND IT MUST NOT CLOSE THE DOOR.
+	 *
+	 * `gateRouterAdminByLock` withholds `router_admin.controls` while the
+	 * dongle's own login stands, which is byte-identical on the wire to "no
+	 * write was ever proven". Read that way, Configure was disabled on exactly
+	 * the devices whose dialog now carries the login form — so the operator was
+	 * refused entry to the one surface that could fix the state, and the row
+	 * additionally blamed the hardware for it.
+	 */
+	function locked(state: string): Modem {
+		return {
+			router_admin: { admin_url: "http://192.168.8.1", reachable: true },
+			lock_state: state,
+			lock_detail: { credential_configured: false },
+		} as unknown as Modem;
+	}
+
+	it.each(["locked", "auth-failed", "locked-out"])(
+		"a %s dongle stays configurable — the dialog carries its login",
+		(state) => {
+			expect(
+				configureDisabledReasonKey("router-ethernet", locked(state)),
+			).toBeUndefined();
+		},
+	);
+
+	it("…but an `open` dongle with no proven write is still refused", () => {
+		// The lock exemption must not become a blanket one: `open` and `unlocked`
+		// are the states the device DOES serve its control block in, so absence
+		// there really is "nothing here is provably settable".
+		expect(configureDisabledReasonKey("router-ethernet", locked("open"))).toBe(
+			"network.cellular.reason.routerControlsUnverified",
+		);
+		expect(
+			configureDisabledReasonKey("router-ethernet", locked("unlocked")),
+		).toBe("network.cellular.reason.routerControlsUnverified");
+	});
+
+	it("…and a dongle with no login surface at all is unchanged", () => {
+		const noLock = {
+			router_admin: { admin_url: "http://192.168.0.1", reachable: true },
+		} as unknown as Modem;
+		expect(configureDisabledReasonKey("router-ethernet", noLock)).toBe(
+			"network.cellular.reason.routerControlsUnverified",
+		);
+	});
 });
 
 describe("rowNoteKeys", () => {
