@@ -69,7 +69,7 @@ import type { ResolvedModemLock } from "./modem-lock-state.ts";
 // before anything is stored, so the WIRE is schema-valid either way. The reason
 // to use this one is that `getAvailableNetworksForModem` and the live builder are
 // typed with it — swapping in the schema type just relocates the cast.
-import type { AvailableNetwork } from "./modems-state.ts";
+import type { AvailableNetwork, Modem } from "./modems-state.ts";
 import { claimsNoSim, type SimPresence } from "./sim-presence.ts";
 
 /** Wire status block — identical shape to `modem-status.ts`'s internal type. */
@@ -241,6 +241,7 @@ export type WireModemEntry = {
 	sim_presence?: SimPresence;
 	sim_lock?: WireSimLock;
 	available_networks?: Record<string, AvailableNetwork>;
+	network_scan?: Modem["network_scan"];
 	device_class?: ModemDeviceClass;
 	availability_reason?: string;
 	slot_label?: string;
@@ -284,6 +285,7 @@ export const SYNTHETIC_ID_BASE = 1000;
  * rather than growing a positional parameter per additive local field.
  */
 interface ProjectedLocalState {
+	readonly networkScan?: Modem["network_scan"];
 	readonly usagePolicy?: ModemDataUsagePolicy | undefined;
 	readonly capabilityModules?: CapabilityModuleClaims | undefined;
 	readonly fiveGPreference?: ModemFiveGPreference | undefined;
@@ -294,6 +296,7 @@ interface ProjectedLocalState {
 export interface ProjectModemWireDeps {
 	/** `setup.has_gsm_autoconfig` — gates the wire `autoconfig` value. */
 	readonly hasGsmAutoconfig: boolean;
+	readonly networkScanFor?: (runtimeId: number) => Modem["network_scan"];
 	/**
 	 * The operator's persisted data-usage policy for a row, injected because it is
 	 * durable LOCAL state rather than anything a source observed — so no adapter
@@ -521,6 +524,9 @@ function buildWireEntry(
 	if (source.availableNetworks !== undefined) {
 		entry.available_networks = source.availableNetworks;
 	}
+	if (local.networkScan !== undefined) {
+		entry.network_scan = local.networkScan;
+	}
 
 	appendAdditive(entry, source, local);
 
@@ -672,6 +678,8 @@ export function projectModemWire(
 			deps.fullState[mmId] === true;
 		const local: ProjectedLocalState = sendFull
 			? {
+					networkScan:
+						mmId === undefined ? undefined : deps.networkScanFor?.(mmId),
 					usagePolicy: deps.usagePolicyFor?.(String(id), source.stableKey),
 					capabilityModules: deps.capabilityModulesFor?.(source.stableKey),
 					fiveGPreference: deps.fiveGPreferenceFor?.(source.stableKey),

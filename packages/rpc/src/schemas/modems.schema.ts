@@ -1393,6 +1393,13 @@ export const modemSchema = z.object({
 	}),
 	config: modemConfigSchema.optional(),
 	available_networks: z.record(z.string(), availableNetworkSchema).optional(),
+	network_scan: z
+		.object({
+			generation: z.number().int().nonnegative(),
+			phase: z.enum(['scanning', 'completed', 'failed']),
+			failure: z.enum(['timed_out', 'failed']).optional(),
+		})
+		.optional(),
 	status: modemStatusSchema.optional(),
 	no_sim: z.boolean().optional(),
 	sim_presence: simPresenceSchema.optional(),
@@ -1597,6 +1604,7 @@ export type ModemScanFailure = z.infer<typeof modemScanFailureSchema>;
 // Modem scan output schema
 export const modemScanOutputSchema = z.object({
 	success: z.boolean(),
+	scanGeneration: z.number().int().nonnegative().optional(),
 	networks: z.record(z.string(), availableNetworkSchema).optional(),
 	error: z.string().optional(),
 	scanFailure: modemScanFailureSchema.optional(),

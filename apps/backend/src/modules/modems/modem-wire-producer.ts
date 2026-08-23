@@ -493,6 +493,7 @@ export function buildProjectedModemsMessage(
 ): WireModemsMessage {
 	const result = projectModemWire(collectSources(), {
 		hasGsmAutoconfig: resolveGsmAutoconfigSupport(),
+		networkScanFor: (runtimeId) => getModem(runtimeId)?.network_scan,
 		previousSyntheticIds: retainedSyntheticIds,
 		usagePolicyFor: projectUsagePolicy,
 		// The implemented list is passed EXPLICITLY rather than left to the

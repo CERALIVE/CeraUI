@@ -1520,6 +1520,16 @@ After any RPC setter resolves, the frontend reads `result.applied` (not the clie
 
 The backend broadcasts modem updates incrementally: a full snapshot carries every field, but targeted broadcasts (`configure`, network-scan completion) send only the changed modem(s), and for those only a subset of fields (e.g. just `available_networks`, or status-only entries for unchanged modems). `subscriptions.svelte.ts` therefore merges `modems`/`status.modems` payloads **field-by-field per modem id** (`mergeModemList`), never replacing the whole map — a wholesale replace would wipe the untouched fields (`status`, `config`, `name`) and flip a live modem to a spurious no-SIM state until the next full snapshot.
 
+Network scans additionally carry `network_scan {generation, phase, failure?}`.
+`generation` is monotonic and crosses both `status.modems` targeted updates and
+full `modems` snapshots. `mergeModemList` refuses an older generation together
+with its `available_networks`, so separate event-type sequence counters cannot
+let a late older scan overwrite a newer result. The dialog settles on the
+lifecycle marker, not on list-content change: an unchanged successful scan is
+still `completed`, a device failure is `failed`, and absence of either reaches
+the scan-specific 270 s unknown-outcome bound. A second client receives the
+typed `already_scanning` refusal; it is never silently dropped.
+
 See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATTERNS.md) for the full connection-pattern reference.
 
 ## ANTI-PATTERNS

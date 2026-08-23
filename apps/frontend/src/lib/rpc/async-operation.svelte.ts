@@ -64,6 +64,7 @@ interface AsyncOpEntry {
 	reason?: string;
 	/** Timestamp (ms) the key entered `phase`; drives the TTL valve + terminal decay. */
 	ts: number;
+	ttlMs?: number;
 }
 
 /** The async-operation registry: a plain map of key → {@link AsyncOpEntry}. */
@@ -166,8 +167,9 @@ export function begin(
 	key: string,
 	target: unknown,
 	now: number,
+	ttlMs?: number,
 ): boolean {
-	reg.ops[key] = { phase: "pending", target, ts: now };
+	reg.ops[key] = { phase: "pending", target, ts: now, ttlMs };
 	return true;
 }
 
@@ -242,7 +244,7 @@ export function clear(reg: AsyncOpRegistry, key: string): void {
 export function sweep(
 	reg: AsyncOpRegistry,
 	now: number,
-	ttlMs: number = ASYNC_OP_TTL_MS,
+	ttlMs?: number,
 ): string[] {
 	const changed: string[] = [];
 	for (const key of Object.keys(reg.ops)) {
@@ -250,7 +252,7 @@ export function sweep(
 		if (!entry) continue;
 		const age = now - entry.ts;
 		if (entry.phase === "pending") {
-			if (age > ttlMs) {
+			if (age > (ttlMs ?? entry.ttlMs ?? ASYNC_OP_TTL_MS)) {
 				entry.phase = "timed_out";
 				entry.ts = now;
 				changed.push(key);
@@ -293,7 +295,7 @@ interface AsyncOpStore {
 	getPhase: (key: string) => AsyncOpPhase;
 	isPending: (key: string) => boolean;
 	getReason: (key: string) => string | undefined;
-	begin: (key: string, target?: unknown, now?: number) => void;
+	begin: (key: string, target?: unknown, now?: number, ttlMs?: number) => void;
 	confirm: (key: string, now?: number) => void;
 	fail: (key: string, reason: string, now?: number) => void;
 	timeout: (key: string, now?: number) => void;
@@ -322,7 +324,16 @@ function createAsyncOpStore(): AsyncOpStore {
 	const stopRoot = $effect.root(() => {
 		$effect(() => {
 			const tick = setInterval(() => {
-				sweep(registry, Date.now(), resolveAsyncOpTtlMs());
+				const override =
+					typeof window !== "undefined"
+						? (window as unknown as { __ceraAsyncOpTtlMs?: number })
+								.__ceraAsyncOpTtlMs
+						: undefined;
+				sweep(
+					registry,
+					Date.now(),
+					typeof override === "number" && override > 0 ? override : undefined,
+				);
 			}, TICK_INTERVAL_MS);
 			return () => clearInterval(tick);
 		});
@@ -332,8 +343,8 @@ function createAsyncOpStore(): AsyncOpStore {
 		getPhase: (key) => getPhase(registry, key),
 		isPending: (key) => isPending(registry, key),
 		getReason: (key) => getReason(registry, key),
-		begin: (key, target, now = Date.now()) => {
-			begin(registry, key, target, now);
+		begin: (key, target, now = Date.now(), ttlMs) => {
+			begin(registry, key, target, now, ttlMs);
 		},
 		confirm: (key, now = Date.now()) => {
 			confirm(registry, key, now);
@@ -401,8 +412,12 @@ export function getOperationReason(key: string): string | undefined {
  * this the moment the OS command is dispatched. Re-`begin` on any phase re-arms
  * the entry, so a Retry on a stale-pending/terminal op is safe.
  */
-export function beginOperation(key: string, target?: unknown): void {
-	store().begin(key, target);
+export function beginOperation(
+	key: string,
+	target?: unknown,
+	ttlMs?: number,
+): void {
+	store().begin(key, target, undefined, ttlMs);
 }
 
 /** Resolve `key` to `confirmed` (the device reported success). */
@@ -528,6 +543,7 @@ function defaultClassify(r: unknown): OsCommandVerdict {
 export async function osCommand<T>(opts: {
 	key: string;
 	target?: unknown;
+	pendingTtlMs?: number;
 	rpc: () => Promise<T>;
 	classify?: (r: T) => OsCommandVerdict;
 	confirmOnResolve?: boolean;
@@ -539,7 +555,7 @@ export async function osCommand<T>(opts: {
 	// Re-entry guard: never dispatch a second RPC for an in-flight key.
 	if (isOperationPending(opts.key)) return undefined;
 
-	beginOperation(opts.key, opts.target);
+	beginOperation(opts.key, opts.target, opts.pendingTtlMs);
 	try {
 		const r = await opts.rpc();
 		const v = opts.classify?.(r) ?? defaultClassify(r);

@@ -187,6 +187,7 @@ import { modemSignal } from '$lib/helpers/signal';
 import { rpc } from '$lib/rpc';
 import {
 	confirmOperation,
+	failOperation,
 	getOperationPhase,
 	isOperationPending,
 	osCommand,
@@ -195,7 +196,6 @@ import {
 	type ModemConfigSent,
 	modemConfigEchoMatches,
 } from '$lib/rpc/modem-config-echo';
-import { modemScanSignature } from '$lib/rpc/modem-scan-signature';
 import { getConfig, getIsConnected, getModems } from '$lib/rpc/subscriptions.svelte';
 import {
 	beginUsbModeFlow,
@@ -218,7 +218,7 @@ import {
 	type MutationOutcome,
 	mutationOutcome,
 } from '$lib/modem/mutation-outcome';
-import { loadWithinBound } from '$lib/modem/async-surface';
+import { loadWithinBound, modemBoundMs } from '$lib/modem/async-surface';
 import { modemRefusalCopyKey } from '$lib/modem/refusal-taxonomy';
 import {
 	CapabilitySection,
@@ -272,9 +272,8 @@ let { open = $bindable(false), modem, deviceId }: Props = $props();
 
 // Keyed async-operation domains. Scan and configure are tracked SEPARATELY so an
 // in-flight scan never gates a save and vice-versa. The `osCommand` re-entry
-// guard on each key is the real anti-double-dispatch protection — in particular
-// the modem GLOBAL lock SILENTLY DROPS a re-entrant scan (returns success-shaped,
-// no-op), and the keyed guard is what stops that from leaving a stuck spinner.
+// guard on each key is the local anti-double-dispatch protection; a second client
+// is still answered with the device's visible `already_scanning` refusal.
 const scanKey = $derived(`modem-scan:${deviceId}`);
 const configKey = $derived(`modem-config:${deviceId}`);
 
@@ -344,13 +343,13 @@ let usagePolicySeed = $state<UsagePolicyForm>(usagePolicyOf(readModemConfig()));
 // The config we dispatched, captured at save time; drives the echo confirm and
 // is cleared once the op settles. Absent ⇒ no save in flight.
 let saveExpected = $state<ModemConfigSent | undefined>(undefined);
-// Signature of the available-operator set captured at scan dispatch. A later
-// broadcast whose signature DIFFERS confirms the scan (a new/removed operator);
-// mere re-presence of the same set on a periodic broadcast must not confirm.
-let scanSignatureBaseline = $state<string | undefined>(undefined);
+// The latest scan generation visible when this attempt was dispatched. Only a
+// newer lifecycle marker may settle it, even when the operator list is unchanged.
+let scanGenerationBaseline = $state(0);
 
 const scanning = $derived(isOperationPending(scanKey));
 const scanError = $derived(getOperationPhase(scanKey) === 'failed');
+const scanUnconfirmed = $derived(getOperationPhase(scanKey) === 'timed_out');
 // The device's OWN typed answer, held beside the phase. The band used to print
 // one generic "the scan failed" for all three: "the radio was still sweeping"
 // (retry), "one is already running" (wait) and "it could not be run at all" are
@@ -377,7 +376,7 @@ $effect(() => {
 		formData = readModemConfig();
 		usagePolicySeed = usagePolicyOf(formData);
 		saveExpected = undefined;
-		scanSignatureBaseline = undefined;
+		scanGenerationBaseline = modem.network_scan?.generation ?? 0;
 		scanFailure = undefined;
 		saveRefusal = undefined;
 		saveUnconfirmed = false;
@@ -455,17 +454,15 @@ const availableNetworks = $derived(
 	),
 );
 
-// Confirm a scan when its operator-set signature changes (a new/removed
-// operator), NOT on a mere `modems` reference change — a periodic full-state
-// re-broadcast re-sends the same `available_networks` and must not clear the
-// spinner. An environment that yields no new operators legitimately produces no
-// change: the absolute TTL valve then flips the op to `timed_out`.
 $effect(() => {
 	if (getOperationPhase(scanKey) !== 'pending') return;
-	const sig = modemScanSignature(modem.available_networks);
-	if (scanSignatureBaseline !== undefined && sig !== scanSignatureBaseline) {
+	const lifecycle = modem.network_scan;
+	if (lifecycle === undefined || lifecycle.generation <= scanGenerationBaseline) return;
+	if (lifecycle.phase === 'completed') {
 		confirmOperation(scanKey);
-		scanSignatureBaseline = undefined;
+	} else if (lifecycle.phase === 'failed') {
+		scanFailure = lifecycle.failure ?? 'failed';
+		failOperation(scanKey, scanFailure);
 	}
 });
 
@@ -645,11 +642,11 @@ async function handleSave() {
 
 async function handleScan() {
 	if (noSim || isOperationPending(scanKey)) return;
-	// Capture the baseline BEFORE dispatch so a fresh result is detectable.
-	scanSignatureBaseline = modemScanSignature(modem.available_networks);
+	scanGenerationBaseline = modem.network_scan?.generation ?? 0;
 	scanFailure = undefined;
 	await osCommand({
 		key: scanKey,
+		pendingTtlMs: modemBoundMs('scan'),
 		rpc: () => rpc.modems.scan({ device: Number(deviceId) }),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		failMessage: () => m["network.os.operationFailed"](),
@@ -1514,6 +1511,10 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					{#if scanError}
 						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert" data-scan-failure={scanFailure}>
 							{t(scanFailureKey)}
+						</p>
+					{:else if scanUnconfirmed}
+						<p class="text-status-warning text-xs" data-testid="modem-scan-unconfirmed" role="alert">
+							{t(modemRefusalCopyKey('timed_out'))}
 						</p>
 					{:else if scanning}
 						<p class="text-muted-foreground text-xs" data-testid="modem-scanning-state">

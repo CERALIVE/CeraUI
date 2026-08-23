@@ -49,11 +49,12 @@ describe("the registry itself", () => {
 		}
 	});
 
-	it("bounds every surface below the transport's own 30 s rejection", () => {
+	it("bounds every RPC wait below transport unless completion arrives by broadcast", () => {
 		// A surface bound at or above the client timeout is not a bound the surface
 		// owns — it is `client.ts` answering, and the operator meets a generic
 		// transport error instead of the surface's own honest terminal.
 		for (const id of SURFACE_IDS) {
+			if (MODEM_ASYNC_SURFACES[id].bound === "scan-lifecycle") continue;
 			expect(
 				MODEM_ASYNC_SURFACES[id].boundMs,
 				`${id} does not bound the wait before the transport does`,

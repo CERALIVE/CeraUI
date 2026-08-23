@@ -192,6 +192,14 @@ opaque); `absent` is reachable only from a device-stated fact, so everything not
 what keeps this additive — `isSimlessForBond` is unchanged, and routing it through
 `sim_presence` would change which links bond.
 
+**A network scan is an attempt, not a changed list.** `modem.network_scan`
+carries a monotonic `generation` and `scanning | completed | failed` phase, with
+the typed terminal failure where applicable. `modems.scan` returns the admitted
+`scanGeneration`; completion arrives later on the modem broadcast. This is what
+lets a consumer confirm a successful scan whose operator list is byte-identical,
+and fence a late older result across the independent `status` and `modems`
+sequence domains. Absence remains legacy-compatible.
+
 **`modems.configure` deliberately carries NO usage-policy write.**
 `modemDataUsageSchema` REPORTS `cycle_day` / `threshold_bytes`; the matching input
 fields are absent because `@ceralive/modem-control@0.2.0` publishes no

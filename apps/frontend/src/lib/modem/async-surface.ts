@@ -64,6 +64,8 @@
  *   explicitly-unconfirmed phase.
  * - `async-op-ttl` — `lib/rpc/async-operation.svelte.ts`, whose sweep flips a
  *   stale `pending` to `timed_out` at `ASYNC_OP_TTL_MS`.
+ * - `scan-lifecycle` — the same keyed operation store with the modem scan's
+ *   device-declared 240 s work budget plus transport/broadcast grace.
  * - `ussd-session` — the dialogue's own machine, which folds the device's
  *   `timed-out` state onto the `unknown` outcome band.
  * - `reply-bounded` — the reply CARRIES the device's own re-read, so there is
@@ -77,6 +79,7 @@ export type ModemBoundKind =
 	| "usb-mode-flow"
 	| "router-write-flow"
 	| "async-op-ttl"
+	| "scan-lifecycle"
 	| "ussd-session"
 	| "reply-bounded";
 
@@ -150,6 +153,7 @@ export const MODEM_SMS_BOUND_MS = 25_000;
  * on the device is not passed off as current.
  */
 export const MODEM_READING_STALE_AFTER_MS = 60_000;
+export const MODEM_NETWORK_SCAN_BOUND_MS = 270_000;
 
 /**
  * Every `rpc.modems.*` procedure the shipped frontend calls, and what bounds it.
@@ -183,8 +187,8 @@ export const MODEM_ASYNC_SURFACES = {
 	},
 	scan: {
 		what: "the operator-initiated network scan",
-		bound: "async-op-ttl",
-		boundMs: 15_000,
+		bound: "scan-lifecycle",
+		boundMs: MODEM_NETWORK_SCAN_BOUND_MS,
 		terminal: ["applied", "refused", "failed", "timed-out"],
 		staleAfterMs: undefined,
 	},

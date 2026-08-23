@@ -101,6 +101,14 @@ describe("async-operation pure core", () => {
 		});
 	});
 
+	it("honours an operation-specific confirmation bound", () => {
+		const reg = createRegistry();
+		begin(reg, "modem-scan", undefined, 0, 270_000);
+		expect(sweep(reg, ASYNC_OP_TTL_MS + 1)).toEqual([]);
+		expect(sweep(reg, 270_001)).toEqual(["modem-scan"]);
+		expect(getPhase(reg, "modem-scan")).toBe("timed_out");
+	});
+
 	// 4. terminal phases decay to idle after ASYNC_OP_TERMINAL_LINGER_MS (entry deleted)
 	describe("terminal decay", () => {
 		it("deletes a confirmed op past the linger window", () => {

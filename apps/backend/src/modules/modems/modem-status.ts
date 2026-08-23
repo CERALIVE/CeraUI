@@ -64,6 +64,7 @@ export type ModemsResponseModemFull = ModemsResponseModemBase & {
 	sim_presence?: SimPresence;
 	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
+	network_scan?: Modem["network_scan"];
 };
 
 export type ModemsResponseMessageEntry =
@@ -133,6 +134,9 @@ function buildModemMessage(
 			fullState.sim_lock = modem.sim_lock;
 		}
 		fullState.available_networks = getAvailableNetworksForModem(modem);
+		if (modem.network_scan !== undefined) {
+			fullState.network_scan = modem.network_scan;
+		}
 
 		Object.assign(entry, fullState);
 	}
