@@ -122,6 +122,7 @@ import {
 	rowNoteKeys,
 	signalLabelKey,
 	slotBadgeLabel,
+	sortModemEntries,
 	stateLabelKey,
 	stateTone,
 } from './cellular-row';
@@ -382,6 +383,8 @@ function buildAdminSegments(modem: Modem): AdminSegment[] {
 // anything, correct (the operator asked to see that device's detail).
 let openDetails = $state<Record<string, boolean>>({});
 
+const orderedEntries = $derived(sortModemEntries(modemEntries));
+
 function toggleDetails(rowId: string): void {
 	openDetails = { ...openDetails, [rowId]: !openDetails[rowId] };
 }
@@ -450,8 +453,13 @@ async function openAdminUi(rowId: string): Promise<void> {
 			     they rename against each other (`enx0c5b8f279a64` <-> `eth1`) on
 			     replug, which SWAPS two rows' keys and destroys both; and an
 			     `ifname` that appears or disappears flips a row between the two
-			     halves of the fallback. -->
-			{#each modemEntries as [id, modem] (id)}
+			     halves of the fallback.
+
+			     The ORDER is `sortModemEntries`, not the wire's: the roster is
+			     rebuilt from each broadcast's incoming key set, so a replug moves
+			     a device to the bottom and an MM restart renumbers everything.
+			     See `cellular-row.ts` -> `modemRowSortKey`. -->
+			{#each orderedEntries as [id, modem] (id)}
 				{@const band = resolveClassBand(modem.device_class)}
 				{@const state = resolveRowState(modem, band)}
 				{@const tone = stateTone(state)}

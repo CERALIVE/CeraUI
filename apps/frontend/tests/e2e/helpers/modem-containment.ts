@@ -48,10 +48,20 @@ export async function probeContainment(page: Page): Promise<ContainmentReport> {
 		// BP-2 gates STATE, SIGNAL and ACTION. The device name and the hardware
 		// tags are the demoted tier (§2) and MAY truncate, so they are absent here
 		// on purpose — `modem-name` carries `truncate` by design.
+		//
+		// `modem-class-badge` is the one demoted-tier element that IS gated, and
+		// it is here because todo 29 rewrote its copy: it now carries a translated
+		// SENTENCE FRAGMENT (`Gerenciado diretamente`, `Gestionado directamente`)
+		// where it used to carry a wire token, and a clipped badge reads as a
+		// different word rather than as an obviously-truncated one. It lives in
+		// the row's disclosure, so `laidOut()` skips it until a caller has opened
+		// that disclosure (see `openRowDisclosures`) — which makes adding it here
+		// inert for every leg that does not.
 		const GATED = [
 			'modem-state-badge',
 			'modem-carrier-badge',
 			'modem-roaming-badge',
+			'modem-class-badge',
 			'modem-signal',
 			'modem-router-signal',
 			'modem-details-toggle',
@@ -216,6 +226,54 @@ export async function settleDestination(page: Page): Promise<void> {
 			settling.map((animation) => animation.finished.catch(() => undefined)),
 		);
 	});
+}
+
+/**
+ * Open every modem row's per-row disclosure, and wait for the reveal to settle.
+ *
+ * The disclosure keeps its body MOUNTED and clips it with `overflow: hidden` +
+ * `visibility: hidden`, so its content has NO measurable geometry while
+ * collapsed — `probeContainment`'s `laidOut()` filter skips it, correctly and
+ * silently. Anything that only exists down there (the class badge, the detail
+ * line, the router fact strip) is therefore unmeasured until a caller opens it,
+ * which is what this does.
+ *
+ * Both waits are load-bearing. The reveal is a 200 ms CSS transition on
+ * `grid-template-rows` AND on `visibility`, so a probe taken on the click's own
+ * turn measures a track that is still 0fr; and `data-open` flips synchronously
+ * while the transition has not started, so waiting on the attribute alone is not
+ * enough either. The attribute settles the STATE and `getAnimations()` settles
+ * the GEOMETRY.
+ */
+export async function openRowDisclosures(page: Page): Promise<number> {
+	const toggles = page.getByTestId('modem-details-toggle');
+	const count = await toggles.count();
+	for (let i = 0; i < count; i++) {
+		const toggle = toggles.nth(i);
+		if ((await toggle.getAttribute('aria-expanded')) === 'true') continue;
+		await toggle.click();
+	}
+	await page.waitForFunction(
+		() =>
+			[...document.querySelectorAll('[data-testid="modem-details-body"]')].every(
+				(el) => el.getAttribute('data-open') === 'true',
+			),
+		undefined,
+		{ timeout: 15_000 },
+	);
+	await page.evaluate(async () => {
+		await Promise.all(
+			document
+				.getAnimations()
+				.filter(
+					(animation) =>
+						animation.effect?.getComputedTiming().iterations !==
+						Number.POSITIVE_INFINITY,
+				)
+				.map((animation) => animation.finished.catch(() => undefined)),
+		);
+	});
+	return count;
 }
 
 /** Test-ids of dialog content laid out outside the dialog's own box. */

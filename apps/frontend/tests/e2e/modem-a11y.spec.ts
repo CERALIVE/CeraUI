@@ -13,6 +13,7 @@ import {
 	expectContained,
 	KIOSK_VIEWPORT,
 	MANDATORY_BREAKPOINTS,
+	openRowDisclosures,
 	probeContainment,
 	probeDialogOverflow,
 } from "./helpers/modem-containment.js";
@@ -27,7 +28,9 @@ import {
  * Legs 3b-3d discharge `DESIGN.md` Pass 3 (harden/adapt) and cite its rule ids:
  *
  *   1. axe (critical+serious) on the Network destination carrying the full modem
- *      roster, and again with the modem dialog OPEN. The two NEW surfaces are
+ *      roster, and again with EACH modem dialog OPEN — `ModemConfigDialog` and
+ *      `RouterDongleDialog`, which a Configure button reaches by
+ *      `device_class`. The NEW surfaces are
  *      held to an ABSOLUTE zero via a scoped run; the whole page is additionally
  *      held to "no new rule beyond the documented `a11y-baseline.json`" so the
  *      pre-existing app-wide contrast debt cannot false-fail this gate, and a
@@ -38,6 +41,11 @@ import {
  *      never a screenshot review, at every mandatory width.
  *   3b. the same containment in the base locale at 375 / 768 / 1280 and the
  *      1024x600 kiosk, for the rows AND the dialog (BP-1…BP-3).
+ *   3e. the same containment at FLEET SCALE — the 8-device hardware-verified
+ *      fleet — plus a measured no-collapse check on every row's box and its
+ *      identity column, and the class badge measured with the disclosures OPEN.
+ *   3f. identity stability: an MM restart that renumbers the whole roster, and a
+ *      same-MAC twin pair renaming against each other, must move no row.
  *   3c. the eight non-base catalogs at the narrowest width — no overflow, no
  *      unresolved dotted key, and a state badge that MEASURES the word it says,
  *      which is what makes the CJK fallback claim falsifiable (LO-1…LO-5).
@@ -153,6 +161,61 @@ function fullRoster(): Record<string, unknown> {
 			device_class: "thunderbolt-wwan",
 		},
 	};
+}
+
+/**
+ * The fleet a real bench has run. HARDWARE-VERIFIED.
+ *
+ * modem-stack's `control/src/providers/conformance-scale.test.ts` additionally
+ * carries a SIXTEEN-modem bound, and says in as many words that it is a FIXTURE
+ * result which must never be reported as hardware. The rendered-tree proof at
+ * that bound lives in `CellularSection.scale.test.ts`, which labels it as such;
+ * this browser leg deliberately drives the number a board has actually produced.
+ */
+const HARDWARE_VERIFIED_FLEET = 8;
+
+/**
+ * A fleet in the shape the renderer actually receives.
+ *
+ * Every wire id is `String(number)`, so the object's own key semantics hand the
+ * roster over in ASCENDING NUMERIC ID order whatever the backend emitted — a
+ * fixture built on emission order is canonicalised away before anything can
+ * observe it, and proves nothing. What IS variable is which PORT each id
+ * describes, because mmcli re-issues the index. `descending` inverts that
+ * relationship, so an unsorted render reads exactly backwards; every unit is
+ * anchored on its own `stable_key`, the only thing separating two units of one
+ * SKU.
+ */
+function scaleRoster(
+	size: number,
+	{ idBase = 100, descending = true }: { idBase?: number; descending?: boolean } = {},
+): Record<string, unknown> {
+	return Object.fromEntries(
+		Array.from({ length: size }, (_unused, i) => {
+			const port = descending ? size - 1 - i : i;
+			return [
+				`${idBase + i}`,
+				mmManaged({
+					ifname: `wwan${port}`,
+					name: `RM520N-GL - ${port}`,
+					slot_label: `SIM ${port + 1}`,
+					stable_key: `pci-0000:00:14.0-usb-0:1.${port}`,
+				}),
+			];
+		}),
+	);
+}
+
+/** The rendered rows, in DOM order, with the two facts an operator navigates by. */
+function readRowOrder(
+	page: Page,
+): Promise<{ id: string | null; ifname: string | null }[]> {
+	return page.evaluate(() =>
+		[...document.querySelectorAll('[data-testid="modem-row"]')].map((row) => ({
+			id: row.getAttribute("data-modem-id"),
+			ifname: row.getAttribute("data-ifname"),
+		})),
+	);
 }
 
 const DONGLE_NETIF: Record<string, unknown> = {
@@ -371,6 +434,62 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 			`NEW critical/serious a11y violations inside ModemConfigDialog:\n${JSON.stringify(dialogScoped, null, 2)}`,
 		).toEqual([]);
 
+		// …AND THE OTHER DIALOG. `ModemConfigDialog` is one of TWO modem surfaces
+		// a Configure button can open: `NetworkView.openModemConfig` routes on
+		// `device_class`, so a `router-ethernet` row opens `RouterDongleDialog`
+		// instead — a whole second dialog (lock section, net-mode catalog, the
+		// action surface) that no scoped axe run had ever reached. Its Configure
+		// is refused unless a write was PROVEN, which is why the roster above
+		// cannot reach it and this leg injects a dongle that publishes `controls`.
+		await page.keyboard.press("Escape");
+		await expect(page.getByRole("dialog")).toHaveCount(0);
+
+		const DONGLE_ID = "dongle-verified";
+		send({
+			status: {
+				modems: {
+					[DONGLE_ID]: {
+						...routerDongle("router_managed", 9),
+						name: "Huawei E3372",
+						availability_reason: "router_direct",
+						stable_key: "pci-0000:00:14.0-usb-0:1.4.1",
+						router_admin: {
+							admin_url: "http://192.168.8.1",
+							reachable: true,
+							sim: "present",
+							connection: "connected",
+							signal_bars: 3,
+							signal_max_bars: 5,
+							apn: "3gnet",
+							serial: "Y4QDU17621000872",
+							controls: [
+								{
+									id: "mobile_data",
+									kind: "toggle",
+									value: "on",
+									writable: true,
+								},
+							],
+						},
+					},
+				},
+			},
+		});
+
+		const dongleConfigure = page
+			.locator(`[data-testid="modem-row"][data-modem-id="${DONGLE_ID}"]`)
+			.getByTestId("open-modem-config-dialog");
+		await expect(dongleConfigure).toBeEnabled({ timeout: 15_000 });
+		await dongleConfigure.click();
+		const dongleDialog = page.getByRole("dialog", { name: "Huawei E3372" });
+		await expect(dongleDialog).toBeVisible({ timeout: 15_000 });
+
+		const dongleScoped = await runAxe(page, { include: ['[role="dialog"]'] });
+		expect(
+			ruleIdsOf(dongleScoped).filter((id) => !allowed.has(id)),
+			`NEW critical/serious a11y violations inside RouterDongleDialog:\n${JSON.stringify(dongleScoped, null, 2)}`,
+		).toEqual([]);
+
 		const evidence: {
 			generatedAt: string;
 			gatedImpacts: readonly string[];
@@ -465,6 +584,27 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 
 		const confirm = page.getByRole("button", { name: /Switch mode/i });
 		await expect(confirm).toBeVisible();
+		// bits-ui moves focus INTO the alert dialog itself as it opens, and its
+		// focus trap takes focus back from anything that grabbed it first. Taking
+		// focus before that lands is a race — observed failing once as
+		// `toBeFocused() … Received: inactive` under load — so wait for the
+		// dialog's own focus management to settle, and only then take it. This
+		// asserts strictly MORE than the bare `.focus()` did: the trap must have
+		// engaged, and the confirm button must then be able to hold focus anyway.
+		await expect
+			.poll(() =>
+				page.evaluate(() => {
+					const surface = document.querySelector(
+						'[data-slot="alert-dialog-content"]',
+					);
+					return Boolean(
+						surface &&
+							document.activeElement &&
+							surface.contains(document.activeElement),
+					);
+				}),
+			)
+			.toBe(true);
 		await confirm.focus();
 		await expect(confirm).toBeFocused();
 		await page.keyboard.press("Enter");
@@ -584,6 +724,216 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		writeEvidence("breakpoint-containment.json", report);
 	});
 
+	// ── 3e. FLEET SCALE — the roster an operator actually plugs in ───────────
+	test("a fleet-scale roster contains every row at every mandatory width @a11y", async ({
+		authedPage: page,
+	}) => {
+		test.setTimeout(120_000);
+		await navigateTo(page, "network");
+		serverConfig({ modem_provisioning: true });
+		send({ status: { modems: scaleRoster(HARDWARE_VERIFIED_FLEET) } });
+		await expect(cellularSection(page)).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("modem-row")).toHaveCount(HARDWARE_VERIFIED_FLEET);
+		// The fixture's ids describe its ports BACKWARDS, so this both proves the
+		// inversion is real and pins the order the rest of the leg measures.
+		expect((await readRowOrder(page)).map((row) => row.ifname)).toEqual(
+			Array.from({ length: HARDWARE_VERIFIED_FLEET }, (_unused, i) => `wwan${i}`),
+		);
+
+		const report: Record<string, unknown> = {};
+		for (const viewport of BREAKPOINTS) {
+			await page.setViewportSize(viewport);
+			const label = `fleet@${viewport.width}x${viewport.height}`;
+			const measured = await probeContainment(page);
+			expectContained(measured, label);
+			expect(measured.rows, `${label}: every device must draw a row`).toBe(
+				HARDWARE_VERIFIED_FLEET,
+			);
+
+			// COLLAPSE, measured rather than eyeballed. Every instrument beside the
+			// identity column is `shrink-0` and the column itself is `flex-1`
+			// (basis 0), which is exactly the shape that measured 0px on the bonded
+			// link card at 375px — the row wraps instead, and this is what proves
+			// it still does with eight rows competing for the same width.
+			const boxes = await page.evaluate(() =>
+				[...document.querySelectorAll('[data-testid="modem-row"]')].map((row) => {
+					const rect = row.getBoundingClientRect();
+					const name = row.querySelector('[data-testid="modem-name"]');
+					return {
+						id: row.getAttribute("data-modem-id"),
+						width: Math.round(rect.width),
+						height: Math.round(rect.height),
+						nameWidth: Math.round(name?.getBoundingClientRect().width ?? 0),
+					};
+				}),
+			);
+			for (const box of boxes) {
+				expect(box.height, `${label}: row ${box.id} collapsed vertically`).toBeGreaterThan(24);
+				expect(box.width, `${label}: row ${box.id} collapsed horizontally`).toBeGreaterThan(200);
+				expect(
+					box.nameWidth,
+					`${label}: row ${box.id} squeezed its name column to ${box.nameWidth}px`,
+				).toBeGreaterThan(40);
+			}
+
+			// Eight identical-model rows must stay eight distinguishable rows.
+			const ids = boxes.map((box) => box.id);
+			expect(new Set(ids).size, `${label}: rows share a modem id`).toBe(
+				HARDWARE_VERIFIED_FLEET,
+			);
+
+			report[label] = { ...measured, boxes };
+		}
+
+		// The DISCLOSURE half. `modem-class-badge` is the element todo 29 flagged:
+		// its copy is now a translated sentence fragment, and it is unmeasurable
+		// while the disclosure is shut. 375px is the width that bites.
+		await page.setViewportSize({ width: 375, height: 812 });
+		const opened = await openRowDisclosures(page);
+		expect(opened).toBe(HARDWARE_VERIFIED_FLEET);
+		const disclosed = await probeContainment(page);
+		expectContained(disclosed, "fleet@375 (disclosures open)");
+		const badges = await page.evaluate(() =>
+			[...document.querySelectorAll('[data-testid="modem-class-badge"]')].map(
+				(el) => ({
+					text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+					width: Math.round(el.getBoundingClientRect().width),
+					// A collapsed disclosure still lays its content out at full size —
+					// it is CLIPPED, not unlaid — so a width alone would pass with the
+					// disclosures shut and prove nothing. `visibility` is the property
+					// the collapse actually flips, and it is what `probeContainment`'s
+					// own `laidOut()` filter reads.
+					visible: getComputedStyle(el as HTMLElement).visibility === "visible",
+				}),
+			),
+		);
+		expect(badges).toHaveLength(HARDWARE_VERIFIED_FLEET);
+		for (const badge of badges) {
+			expect(badge.visible, `class badge "${badge.text}" is still clipped`).toBe(true);
+			expect(badge.text.length).toBeGreaterThan(0);
+			expect(badge.width, `class badge "${badge.text}" measured 0px`).toBeGreaterThan(16);
+		}
+		report["fleet@375 (disclosures open)"] = { ...disclosed, badges };
+
+		writeEvidence("fleet-scale-containment.json", report);
+	});
+
+	// ── 3f. IDENTITY STABILITY — a replug must move nothing ──────────────────
+	test("a replug and an MM renumber leave every row where the operator left it @a11y", async ({
+		authedPage: page,
+	}) => {
+		await navigateTo(page, "network");
+		serverConfig({ modem_provisioning: true });
+		send({ status: { modems: scaleRoster(HARDWARE_VERIFIED_FLEET) } });
+		await expect(cellularSection(page)).toBeVisible({ timeout: 15_000 });
+		await expect(page.getByTestId("modem-row")).toHaveCount(HARDWARE_VERIFIED_FLEET);
+
+		const before = await readRowOrder(page);
+		expect(before.map((row) => row.ifname)).toEqual([
+			"wwan0",
+			"wwan1",
+			"wwan2",
+			"wwan3",
+			"wwan4",
+			"wwan5",
+			"wwan6",
+			"wwan7",
+		]);
+
+		// A ModemManager restart re-issues the WHOLE roster's ids (board-measured:
+		// 11,13,14,15 -> 0,1,2,3) in whatever order it re-probes the ports, so the
+		// id no longer describes the same port it did a moment ago — here the
+		// relationship inverts outright. Nothing about the operator's hardware
+		// changed, so nothing on screen may move.
+		send({
+			status: {
+				modems: scaleRoster(HARDWARE_VERIFIED_FLEET, {
+					idBase: 500,
+					descending: false,
+				}),
+			},
+		});
+		await expect
+			.poll(async () => (await readRowOrder(page)).map((row) => row.id))
+			.toEqual(
+				Array.from({ length: HARDWARE_VERIFIED_FLEET }, (_unused, i) => `${500 + i}`),
+			);
+		const afterRenumber = await readRowOrder(page);
+		expect(afterRenumber.map((row) => row.ifname)).toEqual(
+			before.map((row) => row.ifname),
+		);
+
+		// THE FAILURE SCENARIO: two physically distinct HiLink units publish ONE
+		// factory MAC, so systemd names only one of them predictably and the loser
+		// falls back to `eth1` — and which one loses can change on any replug.
+		// They must neither merge into one row nor swap places.
+		const twin = (port: string, ifname: string): Record<string, unknown> => ({
+			...routerDongle("router_managed", 0),
+			ifname,
+			name: "Huawei E3372",
+			availability_reason: "router_direct",
+			stable_key: `pci-0000:00:14.0-usb-0:${port}`,
+		});
+
+		send({
+			status: {
+				modems: {
+					"3001": twin("1.4.1", "enx0c5b8f279a64"),
+					"3002": twin("1.4.3", "eth1"),
+				},
+			},
+		});
+		await expect(page.getByTestId("modem-row")).toHaveCount(2);
+		expect(await readRowOrder(page)).toEqual([
+			{ id: "3001", ifname: "enx0c5b8f279a64" },
+			{ id: "3002", ifname: "eth1" },
+		]);
+
+		// (a) They rename against each other and keep their ids. The `{#each}` key
+		//     is the id, so neither row may remount, merge or swap.
+		send({
+			status: {
+				modems: {
+					"3001": twin("1.4.1", "eth1"),
+					"3002": twin("1.4.3", "enx0c5b8f279a64"),
+				},
+			},
+		});
+		await expect
+			.poll(async () => (await readRowOrder(page)).map((row) => row.ifname))
+			.toEqual(["eth1", "enx0c5b8f279a64"]);
+		expect(await page.getByTestId("modem-row").count()).toBe(2);
+		expect((await readRowOrder(page)).map((row) => row.id)).toEqual(["3001", "3002"]);
+
+		// (b) A dongle's id is an ALLOCATED index, so a backend restart that
+		//     re-walks the sources can hand the unit at 1.4.3 the lower one. The
+		//     port decides, so the rows must not swap.
+		send({
+			status: {
+				modems: {
+					"3001": twin("1.4.3", "enx0c5b8f279a64"),
+					"3002": twin("1.4.1", "eth1"),
+				},
+			},
+		});
+		await expect
+			.poll(async () => (await readRowOrder(page)).map((row) => row.id))
+			.toEqual(["3002", "3001"]);
+		expect((await readRowOrder(page)).map((row) => row.ifname)).toEqual([
+			"eth1",
+			"enx0c5b8f279a64",
+		]);
+		expect(await page.getByTestId("modem-row").count()).toBe(2);
+
+		writeEvidence("replug-identity.json", {
+			generatedAt: new Date().toISOString(),
+			fleet: HARDWARE_VERIFIED_FLEET,
+			beforeRenumber: before,
+			afterRenumber,
+			twinsAfterRenameAndIdSwap: await readRowOrder(page),
+		});
+	});
+
 	// ── 3c. LO-1 / LO-4 / LO-5 — the nine non-base catalogs ──────────────────
 	test("every shipped locale contains its content on the modem surfaces at the narrowest width @a11y", async ({
 		authedPage: page,
@@ -593,7 +943,7 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		// that only holds for the locales someone remembered to name is not a rule.
 		const LOCALES = ["es", "de", "fr", "pt-BR", "hi", "ja", "ko", "zh"] as const;
 		const report: Record<string, unknown> = {};
-		test.setTimeout(180_000);
+		test.setTimeout(300_000);
 
 		await page.setViewportSize({ width: 375, height: 812 });
 		for (const locale of LOCALES) {
@@ -621,7 +971,48 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 				).toBeGreaterThan(16);
 			}
 
-			report[locale] = { ...measured, badges: badgeWidths };
+			// The DISCLOSURE half, and it is where the long strings live. Todo 29
+			// reworded the class band from a wire token into a translated sentence
+			// fragment (`Gerenciado diretamente`, `Gestionado directamente`), and
+			// filed it behind the per-row disclosure — so the probe above cannot
+			// see it at all. `openRowDisclosures` is what makes it measurable, and
+			// `modem-class-badge` is a GATED id, so a clipped one fails here.
+			await openRowDisclosures(page);
+			const disclosed = await probeContainment(page);
+			expectContained(disclosed, `${locale} @ 375x812 (disclosures open)`);
+
+			const classBadges = await page.evaluate(() =>
+				[...document.querySelectorAll('[data-testid="modem-class-badge"]')].map(
+					(el) => ({
+						band: el.getAttribute("data-class-band"),
+						text: (el.textContent ?? "").replace(/\s+/g, " ").trim(),
+						width: el.getBoundingClientRect().width,
+						visible:
+							getComputedStyle(el as HTMLElement).visibility === "visible",
+					}),
+				),
+			);
+			expect(classBadges.length, `${locale}: class badges must be laid out`).toBe(5);
+			for (const badge of classBadges) {
+				expect(
+					badge.visible,
+					`${locale}: the ${badge.band} class badge is still clipped`,
+				).toBe(true);
+				expect(
+					badge.text.length,
+					`${locale}: the ${badge.band} class badge rendered no word`,
+				).toBeGreaterThan(0);
+				expect(
+					badge.width,
+					`${locale}: class badge "${badge.text}" measured ${badge.width}px`,
+				).toBeGreaterThan(16);
+			}
+
+			report[locale] = {
+				...measured,
+				badges: badgeWidths,
+				disclosed: { ...disclosed, classBadges },
+			};
 		}
 
 		writeEvidence("locale-containment.json", report);
