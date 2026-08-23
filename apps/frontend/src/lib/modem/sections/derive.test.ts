@@ -16,6 +16,8 @@ import type {
 import { CAPABILITY_MODULES } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
+import { isSimlessModem } from "$main/network/cellular-row";
+
 import {
 	BASELINE_UNAVAILABLE_KEY,
 	DEFAULT_CAPABILITY_REASONS,
@@ -262,6 +264,80 @@ describe("the SIM answer comes from the shared predicate, for every class", () =
 		expect(deriveModemSections({ modem: UNRECOGNIZED }).sim).toEqual({
 			presence: "unknown",
 		});
+	});
+});
+
+/*
+  `no_sim` is the BOND fold, and it is lossy by design: the device answers
+  `presence !== "present"`, so a slot it could not read leaves it as the same
+  `true` an empty slot does. That is right for a pool a link either joins or does
+  not; rendering it as `absent` asserts a device fact nobody established.
+
+  `sim_presence` is the reading that fold consumes, published beside it, and it
+  is preferred here. The last two cases are the ones that keep this a RENDERING
+  fix: the bond predicate is re-asserted against the very same fixture, and the
+  legacy path is proven byte-unchanged for a backend that publishes no such field.
+*/
+describe("the device's own slot evidence outranks the bond fold", () => {
+	const UNREADABLE_SLOT = modem({
+		no_sim: true,
+		sim_presence: "unknown",
+	} as Partial<Modem>);
+
+	it("renders `unknown` for a slot the device could not read", () => {
+		expect(deriveModemSections({ modem: UNREADABLE_SLOT }).sim).toEqual({
+			presence: "unknown",
+		});
+	});
+
+	it("still keeps that link OUT of the bond, by the unchanged predicate", () => {
+		expect(isSimlessModem(UNREADABLE_SLOT)).toBe(true);
+	});
+
+	it("renders `absent` only where the device positively said so", () => {
+		const set = deriveModemSections({
+			modem: modem({ no_sim: true, sim_presence: "absent" } as Partial<Modem>),
+		});
+		expect(set.sim).toEqual({ presence: "absent" });
+	});
+
+	it("lets a blocking lock outrank a populated slot, as before", () => {
+		const set = deriveModemSections({
+			modem: modem({
+				sim_presence: "present",
+				sim_lock: { required: "sim-puk" },
+			} as Partial<Modem>),
+		});
+		expect(set.sim).toEqual({ presence: "locked", lock: "sim-puk" });
+	});
+
+	it("falls back to the fold for a backend that publishes no reading", () => {
+		expect(deriveModemSections({ modem: modem({ no_sim: true }) }).sim).toEqual(
+			{
+				presence: "absent",
+			},
+		);
+		expect(
+			deriveModemSections({ modem: modem({ no_sim: false }) }).sim,
+		).toEqual({ presence: "present" });
+	});
+
+	/*
+	  A `router-ethernet` dongle has no slot reading of its own and publishes no
+	  `sim_presence` at all, so its whole answer must still come from the field it
+	  does publish. This is the class the shared predicate was introduced for.
+	*/
+	it("leaves the router-dongle class on its own field", () => {
+		expect(
+			deriveModemSections({
+				modem: modem({ router_admin: { sim: "absent" } } as Partial<Modem>),
+			}).sim,
+		).toEqual({ presence: "absent" });
+		expect(
+			deriveModemSections({
+				modem: modem({ router_admin: { sim: "present" } } as Partial<Modem>),
+			}).sim,
+		).toEqual({ presence: "present" });
 	});
 });
 

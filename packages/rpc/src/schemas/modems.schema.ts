@@ -1340,6 +1340,25 @@ export const modemUssdOutputSchema = z.object({
 });
 export type ModemUssdOutput = z.infer<typeof modemUssdOutputSchema>;
 
+/**
+ * WHETHER THERE IS A CARD IN THE SLOT, as EVIDENCE rather than as a claim.
+ *
+ * `no_sim` is a BOND question — a link either may join the pool or may not — so
+ * it is binary by necessity and the device folds `absent` and `unknown` onto the
+ * same `true`. Correct for bonding, wrong for reporting: "we know there is no
+ * card" and "the read could not answer" are different facts, and rendering the
+ * second as the first is the unknown-as-absent defect class.
+ *
+ * This is that fold's INPUT (`sim-presence.ts` `deriveSimPresence`), published so
+ * a consumer can tell the two apart. ADDITIVE — it does NOT supersede `no_sim`,
+ * and the bond gate keeps reading the binary claim unchanged. `absent` is
+ * reachable ONLY from a device that positively said so (ModemManager's own
+ * `sim-missing` failure reason); everything else that is not `present` is
+ * `unknown`, including a read that never happened.
+ */
+export const simPresenceSchema = z.enum(['present', 'absent', 'unknown']);
+export type SimPresence = z.infer<typeof simPresenceSchema>;
+
 // Modem schema
 export const modemSchema = z.object({
 	ifname: z.string(),
@@ -1355,6 +1374,7 @@ export const modemSchema = z.object({
 	available_networks: z.record(z.string(), availableNetworkSchema).optional(),
 	status: modemStatusSchema.optional(),
 	no_sim: z.boolean().optional(),
+	sim_presence: simPresenceSchema.optional(),
 	sim_lock: simLockSchema.optional(),
 
 	// Phase-B additive-optional detail — see the block above. All eleven are

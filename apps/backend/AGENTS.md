@@ -1869,7 +1869,7 @@ correct answers once a mapping exists:
 | may it be a generic SOURCE-IP? | still **NO** | an operation steering by source address cannot tell the twins apart. `probeExclusionReason` is unchanged, and a test asserts it. |
 | may it join the BOND? | **YES**, when a row can be published | the row names the INTERFACE too, and the sender binds `SO_BINDTODEVICE` |
 
-The flag stays raised (the warning band is unchanged), and `isBondCandidate`
+The flag stays raised on the per-interface `netif` wire, and `isBondCandidate`
 answers bond membership separately. **Two identical lines in `BIND_IPS_FILE` are
 LEGAL** and covered. `enabled` still governs membership — but a dup-IP link's
 `enabled` is forced false by the flag itself, so the operator's own choice lives
@@ -1877,6 +1877,40 @@ in `operatorBondOptOut` (`setBondOptOut`, written by `handleNetif`) rather than 
 a bit the error path overwrites. A link that cannot be DESCRIBED
 (`isMappableEntry`: valid iface name, valid `link_id`, non-empty ip) is not made
 eligible by wishing.
+
+**…AND THE NOTICE THE OPERATOR SEES IS A SEPARATE, RE-EVALUATED DECISION.**
+The flag above answers a policy question; `netif_dup_ip` answers an honesty one,
+and it is decided by `decideDupIpNotice(groups, deps)`
+(`network-interfaces.ts`) rather than read back off the flag. Three properties
+are load-bearing, and each was a defect before it was one:
+
+- **It is a WARNING, never an error.** An excluded twin is a DEGRADATION of the
+  bond, not a failure of the device — and the retired band asserted a fault at
+  `"error"` severity while its own message ended "…they can still be bonded when
+  per-interface link mapping is active", i.e. it raised an alarm and then
+  explained the alarm was handled.
+- **A FULLY MAPPED GROUP IS SILENT.** The notice consults `isBondMappingActive()`
+  — the ONE authority on whether the (ip,iface) mapping is really in force — and
+  then `isBondLinkMappable()` per member, so a band is produced only for a group
+  that is genuinely still ambiguous: no mapping (the sender collapses duplicate
+  source IPs and one link really is missing), or a mapping in force with an
+  `unmappable` member (no row can be published for it, so it is excluded from the
+  very mechanism that would have disambiguated it). Silence loses nothing: the
+  per-interface `error: "duplicate IPv4 addr"` still rides the `netif` wire and
+  the Network page still renders it.
+- **IT IS DECIDED ON EVERY PASS, OUTSIDE `intsChanged`.** Both the raise and the
+  retraction used to sit inside that branch, and a bond-mapping transition moves
+  no interface, no address and no flag — so nothing re-evaluated and the band
+  could never clear. Same raise-but-never-retract family as
+  `policy_route_missing`. `duplicateIpGroups()` is likewise recomputed from the
+  live addresses each pass rather than read back off `NETIF_ERR_DUPIPV4`, whose
+  flags are only refreshed on a topology change.
+
+`DupIpNoticeDeps` is installed (`wireDupIpNoticeDeps`) rather than statically
+imported, because both facts live under `modules/streaming/`, which imports this
+module. The defaults answer NO to both, which is the fail-safe direction: an
+unwired process REPORTS the collision rather than silently claiming it is
+handled.
 
 ### THE PRE-SPAWN CAPABILITY PROBE — the backward-compat guarantee
 
@@ -3845,20 +3879,56 @@ inference from silence), and `unknown` (neither — the read could not answer).
   whether a modem holds a card. This matters more on the D-Bus path than on
   mmcli: the fold never populates `config` at all, so under the old rule EVERY
   D-Bus-backed row claimed `no_sim`.
-- **A SIM-present modem with no profile emits NEITHER key** — no `config`, no
-  `no_sim` — which is the honest "SIM present, not yet configured" state. The row
-  then renders the radio's real state (`searching` plus the network's own
-  rejection reason), its PIN2 lock badge, and a usable config dialog.
+- **A SIM-present modem with no profile emits no `config` and no `no_sim`** —
+  the honest "SIM present, not yet configured" state. The row then renders the
+  radio's real state (`searching` plus the network's own rejection reason), its
+  PIN2 lock badge, and a usable config dialog.
 - The `simVisibility: "opaque"` router-dongle rule is UNCHANGED and orthogonal:
-  it still emits neither key for a device whose SIM the host cannot see at all.
+  it still emits NONE of the slot keys for a device whose SIM the host cannot see
+  at all.
+
+### …AND THE READING THE FOLD CONSUMES NOW RIDES THE WIRE BESIDE IT
+
+`claimsNoSim` is `presence !== "present"`, so `absent` and `unknown` leave this
+module as ONE `no_sim: true`. That fold is correct for its consumer — bonding is
+binary, a link either joins the pool or does not — and lossy for every other
+consumer: "we know the slot is empty" and "the read could not answer" are
+different facts with different operator actions, and a modem with no NM profile
+AND an unreadable slot published the same claim as a genuinely empty one.
+
+`modemSchema.sim_presence` (`present` / `absent` / `unknown`,
+additive-optional) is that fold's INPUT, published beside it by BOTH wire
+builders. Four rules:
+
+- **`claimsNoSim`, `isSimlessForBond` and bond membership are UNTOUCHED.** The
+  gate still reads the binary claim, so the same device is refused exactly as
+  before. Making `claimsNoSim` positive-evidence-only would change which links
+  bond and is still its own change; this one is additive by construction.
+- **It is emitted EXPLICITLY, including `unknown`.** The internal `Modem` state
+  OMITS `sim_presence` when the read could not answer (that omission is what
+  `mergeRefreshedModem`'s retain-on-unknown rule needs), so the builders resolve
+  absence to `"unknown"` rather than dropping the key — the consumer merge
+  preserves an omitted optional field, so a present-only-when-known field could
+  be raised and never lowered (the `policy_route_missing` latch, exactly).
+- **It rides the `simVisibility === "visible"` branch**, so an opaque device
+  emits it no more than it emits `no_sim`: its slot is not unknown, it is
+  unreadable from this host, which is a different claim.
+- **The legacy oracle emits it too**, because `buildModemsMessage` is asserted
+  byte-identical to the projection. A field added to one and not the other is a
+  red suite, which is the point of keeping the oracle.
 
 `ModemInfo` gained `modem.generic.state-failed-reason` and
 `modem.generic.sim-slots` (both optional — mmcli drops a `--` value), and `Modem`
 gained `sim_presence`. Coverage: `tests/modem-sim-presence.test.ts`, driven
 through the REAL parser, the REAL refresh merge and BOTH wire builders against
 verbatim board captures — the Quectel for `present`, and the SIMCom /
-HiMi U01 / Fibocom FM350-GL for `absent`. Rule-E proof: forcing `claimsNoSim`
-to `true` reddens 4 tests.
+HiMi U01 / Fibocom FM350-GL for `absent` — plus "the pre-collapse reading rides
+the wire beside the fold" (the unreadable slot carrying `unknown` AND `no_sim`,
+the re-asserted `isSimlessForBond` verdict on that same fixture, the stated
+`absent`/`present` pair, and the opaque-device negative). Rule-E proof: forcing
+`claimsNoSim` to `true` reddens 4 tests; dropping the explicit `unknown` emission
+reddens 1. Frontend half: `apps/frontend/AGENTS.md` → "…AND THE `unknown`-AS-
+`absent` ASYMMETRY IS NOW CLOSED".
 
 ## THE SIM'S OWN NUMBER IS DISPLAYED, AND NEVER LOGGED [EXISTS]
 
@@ -7528,7 +7598,8 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't index by file line while the mapping is NOT in force — without one the sender collapses duplicate source IPs, so its ids count unique addresses rather than lines. Gate it on `isBondMappingActive()` (the normalized disposition), never on whether a telemetry field happens to be present.
 - Don't treat an ABSENT `bind_map_status` as a retraction — the pinned binding strips those keys, so absence means "this sender build does not report it" and the writer's synthesized verdict must stand. And don't hand the sender's verdict to `noteSenderBindMapReport` on every tick: the boundary notifies on every write, so an unchanged verdict re-broadcasts the operator band once a second.
 - Don't publish `status.bond_mapping` present-only-when-degraded — the frontend status merge preserves an omitted field, so a raise-only band can be raised and never lowered (the `policy_route_missing` latch, exactly). It is an explicit value, `null` when no bond is described.
-- Don't tell an operator a duplicate-IP pair "can't be used" — since the bind map those links DO bond when a per-interface mapping is in force. What the shared address really costs is every operation that steers by source address, and the `netif_dup_ip` copy now says exactly that.
+- Don't tell an operator a duplicate-IP pair "can't be used" — since the bind map those links DO bond when a per-interface mapping is in force. What the shared address really costs is every operation that steers by source address, and the `netif_dup_ip` copy now says exactly that. Don't raise it at `"error"` severity either: an excluded twin degrades the bond, it does not break the device, so the band is a WARNING.
+- Don't decide the `netif_dup_ip` band inside the `intsChanged` branch, and don't derive its groups from `NETIF_ERR_DUPIPV4` — a bond-mapping transition moves no interface, no address and no flag, so a topology-gated decision can never retract the band (the `policy_route_missing` latch, exactly). `decideDupIpNotice` runs on EVERY pass against `duplicateIpGroups()` recomputed from the live addresses. And don't band a group the mapping already disambiguated: a fully mapped group is SILENT, because the per-interface `error` still rides the `netif` wire and telling an operator a handled condition is a fault is the defect this replaced.
 - Don't mint a `link_id` from a counter or from array position — it must be stable across a reload with no persisted state and across a composition change, which is exactly what the `sha256(identityKey)` derivation buys. And don't publish the USB serial itself: the digest is what keeps an identity anchor off the wire.
 - Don't filter the descriptor/hwdb model through `isUninformativeIdentity` — that rule judges mmcli's identity answers, where a bare numeral is measured garbage; here the bare numeral is the PRODUCT ID the classifier chose as its honest floor, so filtering it degrades `Qualcomm 9024` to `Qualcomm 05c6:9024`.
 - Don't parse a router row's allocation key back into an interface name — once it carries a real `stable_key` that key is an `ID_PATH`, which names a PORT. Read the mapping the last collection recorded.

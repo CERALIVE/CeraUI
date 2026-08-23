@@ -281,18 +281,37 @@ export function deriveSignal(modem: Modem): SignalModel {
 }
 
 /**
- * WHETHER THERE IS A CARD IN IT, through the SHARED predicate.
+ * WHETHER THERE IS A CARD IN IT — the device's own evidence, then the bond claim.
  *
- * `isSimlessModem` is the rule the device's own bond gate applies, and reading
- * it here rather than testing a wire field is what keeps this answer identical
- * across every class of device — the exact defect that once left one class's
- * bond toggle live while the other's was forced off.
+ * `sim_presence` is the reading `no_sim` is FOLDED from, and it is preferred
+ * whenever the device published it. The fold is binary because BONDING is binary
+ * — a link either may join the pool or may not — so it resolves `absent` and
+ * `unknown` onto one `true`, and a modem with no NetworkManager profile and an
+ * unreadable slot arrives here claiming no SIM. Rendering that as `absent` is the
+ * unknown-as-absent lie this block exists to refuse.
+ *
+ * The `no_sim` path below stays the fallback for a backend publishing only the
+ * fold, and is the ONLY path a `router-ethernet` dongle takes — that class has no
+ * slot reading of its own and is answered by `router_admin.sim` as before. This
+ * is a SECOND, richer READING of the same wire and never a second authority over
+ * it: `isSimlessModem` still drives the gate, the toggle and the primary banner.
  */
 export function deriveSim(modem: Modem): SimModel {
-	if (isSimlessModem(modem)) return { presence: "absent" };
+	const stated = modem.sim_presence;
+
+	if (stated === "absent") return { presence: "absent" };
+	if (stated === undefined && isSimlessModem(modem)) {
+		return { presence: "absent" };
+	}
 
 	const lock = activeSimLock(modem);
 	if (lock !== undefined) return { presence: "locked", lock };
+
+	if (stated !== undefined) {
+		return stated === "present"
+			? { presence: "present" }
+			: { presence: "unknown" };
+	}
 
 	// Positive evidence only. `no_sim === false` is a device stating the slot is
 	// populated; anything else is a device that did not say.

@@ -33,7 +33,7 @@ import {
 	type SimLock,
 } from "./modems-state.ts";
 import { evaluateRoamingAdvisoriesForWire } from "./roaming-advisory.ts";
-import { claimsNoSim } from "./sim-presence.ts";
+import { claimsNoSim, type SimPresence } from "./sim-presence.ts";
 
 type ModemsResponseModemStatus = {
 	connection: string;
@@ -61,6 +61,7 @@ export type ModemsResponseModemFull = ModemsResponseModemBase & {
 		"apn" | "username" | "password" | "roaming" | "network" | "autoconfig"
 	> & { autoconfig_supported: boolean };
 	no_sim?: true;
+	sim_presence?: SimPresence;
 	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
 };
@@ -124,6 +125,10 @@ function buildModemMessage(
 			// missing card — see `sim-presence.ts` for the board measurement.
 			fullState.no_sim = true;
 		}
+		// The pre-collapse reading beside the fold above. State ABSENCE here means
+		// the read never answered, so it is `unknown` — never omitted (which the
+		// merging consumer would read as the previous value) and never "present".
+		fullState.sim_presence = modem.sim_presence ?? "unknown";
 		if (modem.sim_lock) {
 			fullState.sim_lock = modem.sim_lock;
 		}

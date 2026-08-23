@@ -976,21 +976,42 @@ first, and the block states all four in the SIM group.
   `@ceraui/rpc`'s `isSimlessForBond`. This is a second, richer READING of the
   same wire fields, not a second authority over them.
 
-**KNOWN, OUT-OF-SCOPE ASYMMETRY (device-side, recorded so it is not re-derived
-wrongly):** the backend's `claimsNoSim` answers `presence !== "present"`, so a
-modem with no NetworkManager profile AND an `unknown` slot reading still
-publishes `no_sim: true`. That is the documented conservative carry-over in
-`apps/backend/src/modules/modems/sim-presence.ts`, and it means the frontend
-cannot yet distinguish those two on that one path — it renders what the device
-claimed. Closing it means either putting `sim_presence` on the wire or making
-`claimsNoSim` positive-evidence-only, and the second changes bond membership, so
-it belongs to its own change.
+**…AND THE `unknown`-AS-`absent` ASYMMETRY IS NOW CLOSED, ON THE WIRE.** The
+backend's `claimsNoSim` answers `presence !== "present"`, so a modem with no
+NetworkManager profile AND an `unknown` slot reading published `no_sim: true` and
+the frontend could only render what the device claimed — `absent`, for a slot
+nobody had read. Of the two ways out this doc named, the taken one is the ADDITIVE
+one: `sim_presence` (`present` / `absent` / `unknown`) now rides `modemSchema`
+beside `no_sim`, sourced from the SAME `deriveSimPresence` evidence model the fold
+consumes. `claimsNoSim` / `isSimlessForBond` are UNTOUCHED — the second route
+would have changed bond MEMBERSHIP, which is still its own change.
+
+`deriveSim` prefers the reading and falls back to the `no_sim` inference for a
+backend that publishes none, so a `router-ethernet` dongle (which has no slot
+reading of its own and emits no `sim_presence`) is answered by `router_admin.sim`
+exactly as before. Two consequences worth stating plainly:
+
+- **The block and the banner may now DISAGREE for one input class, deliberately.**
+  On an unreadable slot the SIM block says `unknown` while `isSimlessModem` still
+  raises the primary no-SIM banner, the disabled fieldset and the forced-off bond
+  toggle — because the device really is refusing that link. The block is the
+  richer READING; the predicate is the bond AUTHORITY, and the toggle must not
+  offer a link the device refuses. Do not "fix" the divergence by routing
+  `isSimlessModem` through `sim_presence`.
+- **An OPAQUE device emits neither key**, so nothing changed for the class whose
+  slot this host structurally cannot see.
 
 Coverage: `ModemConfigDialog.simSms.test.ts` (the four-state table, the
 `unknown`-is-not-absence pair with its `data-no-sim` sweep and its negative
 control, the card-opening rule, and the reachability walk through the real
-disclosure). Rule-E proof both directions: removing the `SimBlock` render reddens
-9 of its 21 tests; falling back to `absent` instead of `unknown` reddens 2.
+disclosure) + `lib/modem/sections/derive.test.ts` → "the device's own slot
+evidence outranks the bond fold" (the preferred reading, the re-asserted bond
+predicate on the SAME fixture, the legacy fallback, and the router-class
+negative). Rule-E proof both directions: removing the `SimBlock` render reddens
+9 of `simSms`'s 21 tests; falling back to `absent` instead of `unknown` reddens 2;
+dropping `deriveSim`'s preference for `sim_presence` reddens 1; and making
+`isSimlessForBond` positive-evidence-only — the change this one deliberately did
+NOT make — reddens 4, including the explicit bond-membership lock.
 
 ## THE SIM'S OWN NUMBER IS HIDDEN BY DEFAULT [EXISTS]
 

@@ -236,6 +236,7 @@ export type WireModemEntry = {
 	network_type?: { supported: string[]; active: string | null };
 	config?: WireModemConfig;
 	no_sim?: true;
+	sim_presence?: SimPresence;
 	sim_lock?: WireSimLock;
 	available_networks?: Record<string, AvailableNetwork>;
 	device_class?: ModemDeviceClass;
@@ -496,14 +497,19 @@ function buildWireEntry(
 		active: source.networkType.active,
 	};
 
-	// The legacy binary is preserved for every device whose SIM CeraUI can see;
-	// an opaque device emits neither key rather than guessing which lie to tell.
+	// Both slot keys are for a device whose SIM CeraUI can see. An opaque device
+	// emits NONE of them rather than guessing which lie to tell — its slot is not
+	// unknown, it is unreadable from this host, which is a different claim.
 	if (source.simVisibility === "visible") {
 		if (source.config) {
 			entry.config = resolveWireConfig(source.config, hasGsmAutoconfig);
 		} else if (claimsNoSim(source.simPresence)) {
 			entry.no_sim = true;
 		}
+		// The pre-collapse reading beside the fold above. Source ABSENCE here means
+		// the read never answered, so it is `unknown` — never omitted (which the
+		// merging consumer would read as the previous value) and never "present".
+		entry.sim_presence = source.simPresence ?? "unknown";
 	}
 
 	if (source.simLock) {
