@@ -369,13 +369,14 @@ export function simIccid(value: string | undefined): string | undefined {
  * Refusals that will answer IDENTICALLY on every retry, so the control that
  * triggers them must stop being offered once the device has said so.
  *
- * `uncertified` is the important one and is not a stopgap: the certified
- * catalog ships EMPTY pending real evidence bundles, so it is what every real
- * modem answers today and will keep answering until certification lands. A red
- * "error" band that invites a retry would be a lie about what a retry does —
- * this is a standing property of the device, rendered calmly, with the active
- * mode still working. `provisioning_disabled` is the same shape: a device-level
- * setting, not a transient failure.
+ * `uncertified` is a DISPATCH refusal and reaches this path only from one: the
+ * offer read stopped answering it for any device this build can interrogate, so
+ * a modem that lands here asked for a transition its catalog entry does not
+ * permit, and it will refuse that same transition forever. A red "error" band
+ * that invites a retry would be a lie about what a retry does — this is a
+ * standing property of the device, rendered calmly, with the active mode still
+ * working. `provisioning_disabled` is the same shape: a device-level setting,
+ * not a transient failure.
  *
  * Everything else (`streaming_active`, `transition_in_progress`,
  * `transition_failed`, …) names a condition that can change, so those keep the

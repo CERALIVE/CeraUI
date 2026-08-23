@@ -582,13 +582,17 @@ export const setModemGpsProcedure = modemProcedure
  *
  * It takes NO mutation lease (it mutates nothing — the `modems.getAll`/`getSms`
  * rule) and it runs through {@link getUsbModeDispatchDeps}, so the set it offers
- * is resolved by the SAME identity resolver and matched against the SAME catalog
- * `setUsbMode` will gate on.
+ * is resolved by the SAME identity resolver, gated on the SAME provisioning and
+ * live-state reads, and matched against the SAME catalog `setUsbMode` will gate
+ * on.
  *
- * It does NOT answer the provisioning question. That gate is a device SETTING
- * the operator can turn back on, so its control renders disabled-with-reason
- * rather than absent; folding it in here would withdraw a control that is merely
- * blocked and make the two states indistinguishable.
+ * It DOES answer the provisioning question, and answering it does not collapse
+ * the two states — the distinction moved from "which surface knows" to "which
+ * treatment the suppression gets". `provisioning-disabled` and
+ * `blocked-by-state` are LIFTABLE conditions and render as a disabled control
+ * carrying its reason; every other suppression is a property of the device and
+ * renders no control at all. The frontend's own `config.modem_provisioning`
+ * tristate is retained beside it for a backend that predates this answer.
  */
 export const getUsbModeOptionsProcedure = modemProcedure
 	.input(usbModeOptionsInputSchema)

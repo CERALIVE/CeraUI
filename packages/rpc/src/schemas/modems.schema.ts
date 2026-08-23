@@ -1763,13 +1763,81 @@ export type UsbModeOptionsInput = z.infer<typeof usbModeOptionsInputSchema>;
 //                                  a USB composition to switch.
 //   uncertified                  — the device resolved, and its exact
 //                                  model + firmware has no reviewed catalog entry.
+//                                  RETAINED for the catalog path and for wire
+//                                  compat, and NO LONGER the answer for a device
+//                                  this build knows how to interrogate — see the
+//                                  runtime vocabulary directly below.
 //   unavailable_in_emulated_mode — not real hardware.
+//
+// The RUNTIME half of the vocabulary is mirrored VERBATIM from modem-stack's
+// `resolveRuntimeCompositionCapability` (`control/src/usb-mode/runtime-capability.ts`).
+// Its four literals are hyphenated because they are that model's own strings, and
+// re-spelling them in this file's snake_case would put two vocabularies on the two
+// sides of one seam for a consumer to reconcile. They answer four DIFFERENT
+// questions, and no pair of them may be collapsed back into `uncertified`: that
+// token asserts "your model was never reviewed", which is false of every device
+// whose own firmware will enumerate its compositions on request.
+//
+//   unknown-vendor        — this build has no reviewed way to ASK this device what
+//                           compositions it has. Honest, and no control at all.
+//   no-return-path        — the device enumerated targets, and its own enumeration
+//                           does NOT contain the mode it is in right now, so
+//                           nothing proves a route back. Withheld, with the reason.
+//   blocked-by-state      — a live condition (a stream, another mutation) forbids
+//                           asking right now. Visible, disabled, with the reason.
+//   provisioning-disabled — `modem_provisioning` is off. Visible, disabled, and the
+//                           reason points at the setting the operator can flip.
+export const USB_MODE_RUNTIME_SUPPRESSIONS = [
+	'unknown-vendor',
+	'no-return-path',
+	'blocked-by-state',
+	'provisioning-disabled',
+] as const;
+export const usbModeRuntimeSuppressionSchema = z.enum(USB_MODE_RUNTIME_SUPPRESSIONS);
+export type UsbModeRuntimeSuppression = z.infer<typeof usbModeRuntimeSuppressionSchema>;
+
 export const usbModeOfferSuppressionSchema = z.enum([
 	'identity_unresolved',
 	'uncertified',
 	'unavailable_in_emulated_mode',
+	...USB_MODE_RUNTIME_SUPPRESSIONS,
 ]);
 export type UsbModeOfferSuppression = z.infer<typeof usbModeOfferSuppressionSchema>;
+
+// The two suppressions that describe a condition the operator can LIFT, rather
+// than a property of the device. They render as a disabled control carrying its
+// reason; everything else renders no control at all, because a disabled control
+// claims a capability is being withheld and for the others there is none to
+// withhold. Exported so the render rule and the device's own ladder cannot drift.
+export const USB_MODE_LIFTABLE_SUPPRESSIONS = [
+	'blocked-by-state',
+	'provisioning-disabled',
+] as const satisfies readonly UsbModeOfferSuppression[];
+
+// The device's OWN enumeration, carried verbatim beside the offer. It is EVIDENCE,
+// never an offer: the values are the vendor's private vocabulary (`40`, `41`,
+// `"9011"`), which the dispatch — whose confirmation compares the canonical
+// `modem.usb_mode` — has no way to act on. Publishing it is what lets an operator
+// (and a support transcript) see WHY a device with a working radio is being told
+// its composition cannot be switched, without anyone re-deriving it from a log.
+export const usbRuntimeCompositionModeSchema = z.union([
+	z.number().int().min(0),
+	z.string().min(1).max(32),
+]);
+export type UsbRuntimeCompositionMode = z.infer<typeof usbRuntimeCompositionModeSchema>;
+
+export const usbModeRuntimeEvidenceSchema = z.object({
+	// The vendor family this build knows how to ask — never a marketing name.
+	vendor: z.string().min(1),
+	current: usbRuntimeCompositionModeSchema,
+	// Every mode the device itself enumerated, verbatim and in its own order.
+	enumerated: z.array(usbRuntimeCompositionModeSchema),
+	// Whether `enumerated` contains `current`. FALSE is what produces
+	// `no-return-path`, and it is published rather than inferred so a consumer
+	// never has to re-run the membership test to explain the suppression.
+	return_path_proven: z.boolean(),
+});
+export type UsbModeRuntimeEvidence = z.infer<typeof usbModeRuntimeEvidenceSchema>;
 
 // `certified` is ALWAYS present and is the certified TARGET set — the `to` side
 // of every permitted transition leading OUT of the mode the device is in right
@@ -1783,6 +1851,7 @@ export const usbModeOptionsOutputSchema = z.object({
 	certified: z.array(usbCompositionModeSchema),
 	active: usbCompositionModeSchema.optional(),
 	suppressed: usbModeOfferSuppressionSchema.optional(),
+	runtime: usbModeRuntimeEvidenceSchema.optional(),
 });
 export type UsbModeOptionsOutput = z.infer<typeof usbModeOptionsOutputSchema>;
 

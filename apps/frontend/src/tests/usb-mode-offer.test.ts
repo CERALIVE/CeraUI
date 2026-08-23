@@ -12,8 +12,10 @@ import { describe, expect, it } from "vitest";
 
 import {
 	deriveUsbModeOffer,
+	isLiftableSuppression,
 	isOfferedTarget,
 	resolveUsbModeTarget,
+	usbOfferSuppressionBodyKey,
 	usbOfferSuppressionKey,
 } from "$lib/rpc/usb-mode-offer";
 
@@ -166,5 +168,106 @@ describe("usbOfferSuppressionKey", () => {
 		expect(usbOfferSuppressionKey("unavailable_in_emulated_mode")).toBe(
 			"network.modem.usbMode.error.unavailable_in_emulated_mode",
 		);
+	});
+
+	it("re-spells the hyphenated runtime literals into snake_case keys", () => {
+		// The wire literals are modem-stack's own and carry hyphens; every message
+		// key in this catalog is snake_case. Interpolating the token would resolve
+		// to a missing key, which renders as the raw dotted path.
+		expect(usbOfferSuppressionKey("unknown-vendor")).toBe(
+			"network.modem.usbMode.error.unknown_vendor",
+		);
+		expect(usbOfferSuppressionKey("no-return-path")).toBe(
+			"network.modem.usbMode.error.no_return_path",
+		);
+		expect(usbOfferSuppressionKey("blocked-by-state")).toBe(
+			"network.modem.usbMode.error.blocked_by_state",
+		);
+	});
+
+	it("gives `provisioning-disabled` the sentence the REFUSAL already has", () => {
+		// One machine token, one operator sentence, whichever surface produced it.
+		// A runtime-specific twin would let the offer and the dispatch describe the
+		// same setting two different ways.
+		expect(usbOfferSuppressionKey("provisioning-disabled")).toBe(
+			"network.modem.usbMode.error.provisioning_disabled",
+		);
+	});
+});
+
+describe("a liftable condition renders a DISABLED control, not an absent one", () => {
+	it.each(["blocked-by-state", "provisioning-disabled"] as const)(
+		"%s is `blocked`",
+		(reason) => {
+			expect(
+				deriveUsbModeOffer({
+					options: options({ certified: [], suppressed: reason }),
+					activeMode: "qmi",
+					recommendedMode: undefined,
+				}),
+			).toEqual({ phase: "blocked", reason });
+			expect(isLiftableSuppression(reason)).toBe(true);
+		},
+	);
+
+	it.each([
+		"unknown-vendor",
+		"no-return-path",
+		"uncertified",
+		"identity_unresolved",
+		"unavailable_in_emulated_mode",
+	] as const)("%s is `withheld` — no control at all", (reason) => {
+		// A disabled control claims a capability is being kept back. For these
+		// there is none to keep back: this build cannot ask the device, or the
+		// device's own answer proves no route home. Rendering them the same way as
+		// a lifted-in-one-tap condition is the collapse this split exists to undo.
+		expect(
+			deriveUsbModeOffer({
+				options: options({ certified: [], suppressed: reason }),
+				activeMode: "qmi",
+				recommendedMode: undefined,
+			}),
+		).toEqual({ phase: "withheld", reason });
+		expect(isLiftableSuppression(reason)).toBe(false);
+	});
+
+	it("neither phase can be dispatched from", () => {
+		// The MUST-NOT this file guards: no switch is rendered for a device with no
+		// proven return path, so no target resolves out of either suppressed phase.
+		for (const reason of ["no-return-path", "blocked-by-state"] as const) {
+			const offer = deriveUsbModeOffer({
+				options: options({ certified: [], suppressed: reason }),
+				activeMode: "qmi",
+				recommendedMode: "mbim",
+			});
+			expect(resolveUsbModeTarget(offer, "mbim")).toBeUndefined();
+			expect(isOfferedTarget(offer, "mbim")).toBe(false);
+		}
+	});
+});
+
+describe("usbOfferSuppressionBodyKey", () => {
+	it("explains the states an operator can act on", () => {
+		expect(usbOfferSuppressionBodyKey("unknown-vendor")).toBe(
+			"network.modem.usbMode.unknownVendorBody",
+		);
+		expect(usbOfferSuppressionBodyKey("no-return-path")).toBe(
+			"network.modem.usbMode.noReturnPathBody",
+		);
+		expect(usbOfferSuppressionBodyKey("blocked-by-state")).toBe(
+			"network.modem.usbMode.blockedByStateBody",
+		);
+		expect(usbOfferSuppressionBodyKey("provisioning-disabled")).toBe(
+			"network.modem.usbMode.provisioningBody",
+		);
+	});
+
+	it("stays silent where the head sentence is already the whole answer", () => {
+		// `identity_unresolved` names its own remedy and an emulated host has no
+		// operator action at all, so a second line there would be filler.
+		expect(usbOfferSuppressionBodyKey("identity_unresolved")).toBeUndefined();
+		expect(
+			usbOfferSuppressionBodyKey("unavailable_in_emulated_mode"),
+		).toBeUndefined();
 	});
 });

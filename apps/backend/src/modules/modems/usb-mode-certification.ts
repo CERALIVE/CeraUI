@@ -19,12 +19,23 @@
  * WHICH composition modes may be offered for one modem — the pure-read half of
  * the USB-mode contract, asked before a control is rendered.
  *
- * It answers with the SAME lookup {@link runUsbModeTransition} gates on: the
- * device is resolved by `resolveIdentity`, matched against the catalog by
- * `matchCertifiedEntry`, and the answer is that entry's own
- * `permittedTransitions`. There is deliberately no second certification rule
- * here — a UI gated on a rule the dispatch does not share is a UI that offers
- * what the device refuses, which is the defect this closes.
+ * THE DEVICE IS ASKED WHAT IT HAS; A MODEL LIST IS NOT CONSULTED FOR THE ANSWER.
+ * The offer is gated on the device's OWN enumeration proving a route back to the
+ * mode it is in right now, and the reason an offer is withheld comes from the
+ * four-state runtime vocabulary (`usb-mode-runtime.ts`) rather than the single
+ * word `uncertified`. That word asserted "your model was never reviewed" and was
+ * the answer for every real modem on the fleet, including ones whose firmware
+ * answers `AT+GTUSBMODE=?` on request — four genuinely different situations
+ * collapsed into one sentence an operator could do nothing with.
+ *
+ * WHAT THE CATALOG STILL DECIDES is the DISPATCHABLE set, and only that. A
+ * transition is dispatched through `runUsbModeTransition`, whose engine is
+ * catalog-driven and whose confirmation compares the canonical `modem.usb_mode`;
+ * a raw vendor target (`40`, `"9011"`) has neither a reviewed command nor a
+ * canonical form to confirm against. So the runtime answer gates the offer, the
+ * catalog supplies its members, and the two are read through the SAME deps the
+ * dispatch runs with — a UI gated on a rule the dispatch does not share is a UI
+ * that offers what the device refuses.
  */
 
 import type {
@@ -38,6 +49,11 @@ import {
 	matchCertifiedEntry,
 	type ResolvedModemIdentity,
 } from "./usb-mode-identity.ts";
+import {
+	foldRuntimeCapability,
+	resolveRuntimeCompositionCapability,
+	resolveRuntimeVendor,
+} from "./usb-mode-runtime.ts";
 
 /**
  * The certified TARGET modes reachable from the device's CURRENT mode.
@@ -79,10 +95,12 @@ export function certifiedUsbTargets(
  * a router-mode dongle, and a device that has gone away all fail to resolve,
  * and none of them has a USB composition a switch could act on.
  *
- * A device that resolves but matches no catalog entry reports `uncertified`.
- * A device that matches an entry with no way OUT of its current mode reports an
- * empty set and NO reason: its model was reviewed, so naming it uncertified
- * would be false.
+ * THE LADDER IS TRANSPORT-SAFE, AND ITS ORDER IS THE CONTRACT. The three
+ * suppressions that need no device contact — an unknown AT dialect, a disabled
+ * provisioning switch, a live condition holding the modem — are resolved BEFORE a
+ * single byte is written to a tty. Only past all three is the device asked, and
+ * `no-return-path` is the one suppression that can only be decided from its
+ * reply. Every suppressed state carries ZERO offerable targets.
  */
 export async function resolveUsbModeOptions(
 	deviceId: string,
@@ -96,10 +114,57 @@ export async function resolveUsbModeOptions(
 	const active = identity.currentMode;
 	const base = active !== undefined ? { active } : {};
 
+	const query = deps.queryRuntimeComposition;
+	if (query === undefined) {
+		return catalogOnlyOptions(base, deps, identity);
+	}
+
+	const vendor = resolveRuntimeVendor(identity);
+	if (vendor === undefined) {
+		return { ...base, certified: [], suppressed: "unknown-vendor" };
+	}
+	if (deps.isProvisioningEnabled?.() === false) {
+		return { ...base, certified: [], suppressed: "provisioning-disabled" };
+	}
+	if (deps.isBlockedByLiveState?.() === true) {
+		return { ...base, certified: [], suppressed: "blocked-by-state" };
+	}
+
+	const response = await query(identity, vendor);
+	if (response === undefined) {
+		return { ...base, certified: [], suppressed: "unknown-vendor" };
+	}
+
+	const folded = foldRuntimeCapability(
+		vendor,
+		resolveRuntimeCompositionCapability(response),
+	);
+	if (!folded.ok) {
+		return { ...base, certified: [], suppressed: folded.suppressed };
+	}
+
+	return {
+		...base,
+		certified: [...certifiedUsbTargets(deps.catalog, identity)],
+		runtime: folded.evidence,
+	};
+}
+
+/**
+ * The pre-runtime answer, retained verbatim for a build with no AT path wired.
+ *
+ * `uncertified` survives HERE and nowhere else. It is a true statement on this
+ * branch — nothing interrogated the device, so the catalog really is the only
+ * evidence there is — and it is the branch no production caller takes.
+ */
+function catalogOnlyOptions(
+	base: { active?: UsbCompositionMode },
+	deps: UsbModeDispatchDeps,
+	identity: ResolvedModemIdentity,
+): UsbModeOptionsOutput {
 	if (matchCertifiedEntry(deps.catalog, identity) === undefined) {
 		return { ...base, certified: [], suppressed: "uncertified" };
 	}
-
 	return {
 		...base,
 		certified: [...certifiedUsbTargets(deps.catalog, identity)],

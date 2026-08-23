@@ -188,6 +188,7 @@ import {
 import {
 	deriveUsbModeOffer,
 	resolveUsbModeTarget,
+	usbOfferSuppressionBodyKey,
 	usbOfferSuppressionKey,
 } from '$lib/rpc/usb-mode-offer';
 import {
@@ -895,10 +896,23 @@ const offerUsbSwitch = $derived(usbOffer.phase === 'offered' && !usbStandingRefu
 
 // The device answered that no mode may be offered, and said why. It is the calm
 // muted band, never the destructive one: nothing failed — this device simply has
-// no certified transition, and the mode it is in keeps working.
+// no transition to offer, and the mode it is in keeps working.
 const usbWithheldReason = $derived(
 	usbOffer.phase === 'withheld' && !usbStandingRefusal ? usbOffer.reason : undefined,
 );
+
+// …and the OTHER half of that answer: a condition the operator can lift. It gets
+// the amber disabled-with-reason treatment instead, because a control that is
+// merely blocked and a capability this device does not have are different facts,
+// and rendering both as the same calm band is what made every real modem read as
+// "your model was never reviewed".
+const usbBlockedReason = $derived(
+	usbOffer.phase === 'blocked' && !usbStandingRefusal ? usbOffer.reason : undefined,
+);
+const usbSuppressionBodyKey = $derived.by(() => {
+	const reason = usbWithheldReason ?? usbBlockedReason;
+	return reason === undefined ? undefined : usbOfferSuppressionBodyKey(reason);
+});
 
 // The provisioning gate is a DEVICE setting, echoed read-only on the config wire
 // as a tristate. `false` is the only arm that gates anything: the device has said
@@ -2348,9 +2362,10 @@ const cardView = (present: boolean): CapabilityView =>
 					     treatment (never the destructive red), it says what still
 					     works, and the switch control above is withdrawn — because a
 					     retry button beside a permanent refusal misrepresents what
-					     pressing it would do. `uncertified` is the one every real
-					     modem hits today: the certified catalog ships EMPTY pending
-					     real evidence bundles. -->
+					     pressing it would do. `uncertified` reaches here only from a
+					     DISPATCH: the offer read no longer answers it for a device it
+					     can interrogate, so a modem that reaches this band asked for a
+					     transition its catalog entry does not permit. -->
 					<div
 						class="bg-muted/40 space-y-1 rounded-md border p-2.5"
 						data-testid="modem-usb-mode-error"
@@ -2368,12 +2383,33 @@ const cardView = (present: boolean): CapabilityView =>
 					>
 						{usbFailureText}
 					</p>
+				{:else if usbBlockedReason}
+					<!-- A CONDITION, not a property of the device: provisioning is off,
+					     or something live is holding this modem. The control area stays
+					     visible and disabled and the reason is ON SCREEN rather than in
+					     a `title` — the shipped kiosk touchscreen cannot hover — and it
+					     is the amber blocked register rather than the calm withheld one,
+					     because this is something the operator can go and lift. -->
+					<div
+						class="border-status-warning/40 bg-status-warning/10 space-y-1 rounded-md border p-2.5"
+						data-testid="modem-usb-mode-blocked"
+						data-usb-mode-gate={usbBlockedReason}
+						role="status"
+					>
+						<p class="text-sm font-medium">
+							{t(usbOfferSuppressionKey(usbBlockedReason))}
+						</p>
+						{#if usbSuppressionBodyKey}
+							<p class="text-muted-foreground text-xs">{t(usbSuppressionBodyKey)}</p>
+						{/if}
+					</div>
 				{:else if usbWithheldReason}
 					<!-- No mode may be offered, and the device said why. There is no
 					     control here at all — not a disabled one, which would imply a
-					     capability being withheld when the transition simply has not
-					     been certified for this model and firmware. The active mode
-					     above keeps working, which is what the body says. -->
+					     capability being withheld when there is none to withhold: this
+					     build cannot ask this device, or the device's own answer proves
+					     no route back. The active mode above keeps working, which is
+					     what the body says. -->
 					<div
 						class="bg-muted/40 space-y-1 rounded-md border p-2.5"
 						data-testid="modem-usb-mode-unavailable"
@@ -2383,10 +2419,8 @@ const cardView = (present: boolean): CapabilityView =>
 						<p class="text-sm font-medium">
 							{t(usbOfferSuppressionKey(usbWithheldReason))}
 						</p>
-						{#if usbWithheldReason === 'uncertified'}
-							<p class="text-muted-foreground text-xs">
-								{m["network.modem.usbMode.uncertifiedBody"]()}
-							</p>
+						{#if usbSuppressionBodyKey}
+							<p class="text-muted-foreground text-xs">{t(usbSuppressionBodyKey)}</p>
 						{/if}
 					</div>
 				{/if}
