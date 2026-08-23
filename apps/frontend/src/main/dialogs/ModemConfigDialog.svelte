@@ -94,6 +94,12 @@ import {
 } from './modem-bands';
 import { fiveGFailureKey, fiveGViewForModem } from './modem-five-g';
 import {
+	bandCapabilityView,
+	fiveGCapabilityView,
+	networkModeCapabilityView,
+	USB_MODE_OPTIONS_UNKNOWN_KEY,
+} from './modem-radio-selectors';
+import {
 	CYCLE_DAY_OPTIONS,
 	isThresholdInvalid,
 	readUsagePolicyForm,
@@ -701,6 +707,14 @@ let bandOutcomeKey = $state<string | undefined>(undefined);
 const bandOffer = $derived(deriveBandOffer(bandResult));
 const bandDirty = $derived(bandSelectionChanged(bandOffer.current, bandSelection));
 
+// THE FOUR-STATE VERDICT, and the fix for the defect this card carried: a read
+// that threw left `bandResult` undefined, which the retired two-state helper
+// rendered as `absent` — no control AND no message, indistinguishable from a
+// modem that positively has no bands. It is `unknown` with its reason now, and
+// an `uncertified` SKU is `blocked` rather than hidden, because the modem DID
+// advertise bands and it is the certification catalog that refuses the write.
+const bandView = $derived(bandCapabilityView(bandResult));
+
 // The band grammar is deliberately OPEN (`bandNameSchema` is a shape check, so
 // the modem stays the authority on what it advertises), which makes an
 // unrecognised token an expected case rather than a defect. It resolves to
@@ -771,6 +785,12 @@ const fiveG = $derived(fiveGViewForModem(modem));
 // answer empty otherwise; neither is reachable while the section is `absent`.
 const fiveGOptions = $derived(fiveG.kind === 'offered' ? fiveG.options : []);
 const fiveGNrModeKey = $derived(fiveG.kind === 'offered' ? fiveG.nrModeReasonKey : '');
+// A published block wins outright; with none, the CLAIM is what separates "this
+// radio advertised no posture" (absent — the FM350's honest answer) from "the
+// gate is off" or "nobody has probed it" (unknown, with the reason on screen).
+const fiveGView = $derived(
+	fiveGCapabilityView(fiveG, modem.capability_modules?.["five-g-pref"], noSim),
+);
 let fiveGApplying = $state(false);
 let fiveGFailure = $state<string | undefined>(undefined);
 
@@ -806,6 +826,12 @@ const usbOffer = $derived(
 	}),
 );
 const usbSwitchTarget = $derived(resolveUsbModeTarget(usbOffer, usbSelected));
+
+// The same `catch { options = undefined }` collapse the band card carried: the
+// certified set could not be established, which is NOT "this device has no
+// switch". The active mode above still renders; only the offer is unknown, and
+// it says so instead of leaving the card silently short of a control.
+const usbOptionsUnknown = $derived(usbOffer.phase === 'unknown');
 
 // The confirming snapshot may arrive at ANY point after dispatch — including
 // while the RPC is still pending, because the backend's post-success
@@ -1078,6 +1104,14 @@ function toggleSms(): void {
 const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
 const cardView = (present: boolean): CapabilityView =>
 	present ? { mode: 'available' } : { mode: 'absent' };
+
+// The three RADIO selectors do NOT take that two-state form. Each of them can
+// be in a state nobody has established — a read that threw, a gate that is off,
+// a catalog the modem never published — and `absent` is a positive claim about
+// the device. `modem-radio-selectors.ts` owns the full ladder for all three.
+const networkTypeView = $derived(
+	networkModeCapabilityView(modem.network_type, noSim),
+);
 </script>
 
 <AppDialog
@@ -1184,37 +1218,48 @@ const cardView = (present: boolean): CapabilityView =>
 			     otherwise — pinning a modem to 4G is routine field work when 5G is
 			     marginal, and it was the only configuration control down there among
 			     read-only instruments and device surgery. -->
-			<div class="space-y-1.5" data-testid="modem-network-type">
-				<Label class="text-muted-foreground text-xs">{m["network.modem.networkType"]()}</Label>
-				<Select.Root
-					disabled={noSim}
-					onValueChange={(val) => {
-						if (val) formData.selectedNetwork = val;
-					}}
-					type="single"
-					value={formData.selectedNetwork}
-				>
-					<Select.Trigger class="h-10 w-full text-sm" data-testid="modem-network-type-trigger">
-						{formData.selectedNetwork
-							? renameSupportedModemNetwork(formData.selectedNetwork)
-							: '—'}
-					</Select.Trigger>
-					<Select.Content>
-						<Select.Group>
-							{#each modem.network_type?.supported ?? [] as networkType (networkType)}
-								<Select.Item value={networkType}>
-									{renameSupportedModemNetwork(networkType)}
-								</Select.Item>
-							{/each}
-							{#if (modem.network_type?.supported ?? []).length === 0}
-								<div class="text-muted-foreground px-2 py-1.5 text-xs">
-									{m["network.modem.noNetworksFound"]()}
-								</div>
-							{/if}
-						</Select.Group>
-					</Select.Content>
-				</Select.Root>
-			</div>
+			<!-- The one radio selector whose offer is a SINGLE control, so `blocked`
+			     renders it DISABLED beside its reason (CT-2). The retired bare
+			     `<div>` opened onto "Scan to search for operators" when the catalog
+			     was empty — copy about a different question, in a control that
+			     could not act on either. -->
+			<CapabilitySection
+				name="modem-network-type"
+				view={networkTypeView}
+				title={m["network.modem.networkType"]()}
+				controlId="modem-network-type-select">
+				{#snippet control({ disabled, reasonId })}
+					<Select.Root
+						disabled={disabled || noSim}
+						onValueChange={(val) => {
+							if (val) formData.selectedNetwork = val;
+						}}
+						type="single"
+						value={formData.selectedNetwork}
+					>
+						<Select.Trigger
+							aria-describedby={reasonId}
+							class="h-10 w-40 max-w-full text-sm"
+							data-testid="modem-network-type-trigger"
+							id="modem-network-type-select">
+							{formData.selectedNetwork
+								? renameSupportedModemNetwork(formData.selectedNetwork)
+								: '—'}
+						</Select.Trigger>
+						<Select.Content>
+							<Select.Group>
+								{#each modem.network_type?.supported ?? [] as networkType (networkType)}
+									<Select.Item
+										data-testid="modem-network-type-option-{networkType}"
+										value={networkType}>
+										{renameSupportedModemNetwork(networkType)}
+									</Select.Item>
+								{/each}
+							</Select.Group>
+						</Select.Content>
+					</Select.Root>
+				{/snippet}
+			</CapabilitySection>
 
 			<!-- ── Roaming toggle ──────────────────────────────────────────────── -->
 			<div class="bg-muted/40 flex items-center justify-between gap-3 rounded-lg border p-3">
@@ -1419,7 +1464,7 @@ const cardView = (present: boolean): CapabilityView =>
 		     with a certified, offerable set. -->
 		<CapabilitySection
 			name="modem-bands-card" icon={Antenna} class={CARD_FRAME}
-			view={cardView(bandOffer.phase === 'offered' && bandOffer.offerable.length > 0)}
+			view={bandView}
 			title={m["network.modem.bands.title"]()}
 			description={m["network.modem.bands.description"]()}>
 				<p class="text-muted-foreground text-xs" data-testid="modem-bands-current">
@@ -1511,16 +1556,7 @@ const cardView = (present: boolean): CapabilityView =>
 				{/if}
 		</CapabilitySection>
 
-		<!-- A WITHHELD offer keeps its OWN test id rather than becoming the
-		     primitive's `blocked` state, and that is deliberate: `blocked` renders
-		     a DISABLED control, and there is no control to withhold here — this
-		     transition has never been reviewed for this model and firmware. So the
-		     section is `absent` (zero nodes) and the reason stands alone. -->
-		{#if bandOffer.phase === 'withheld' && bandOffer.reasonKey}
-			<p class="text-muted-foreground text-xs" data-testid="modem-bands-unavailable" role="status">
-				{resolveMessageKey(bandOffer.reasonKey)}
-			</p>
-		{/if}
+
 
 		<!-- ── Advanced ─────────────────────────────────────────────────────────
 		     The single secondary surface. Everything inside it is either a
@@ -1550,7 +1586,7 @@ const cardView = (present: boolean): CapabilityView =>
 		     publishes the block only where the ladder says the control may be
 		     offered, so the gate is never re-derived here. -->
 		<CapabilitySection
-			name="modem-five-g-card" class={CARD_FRAME} view={cardView(fiveG.kind === 'offered')}
+			name="modem-five-g-card" class={CARD_FRAME} view={fiveGView}
 			title={m["network.modem.fiveG.title"]()}
 			description={m["network.modem.fiveG.intro"]()}>
 				<div class="space-y-1.5" data-testid="modem-five-g-options" role="radiogroup"
@@ -2232,6 +2268,19 @@ const cardView = (present: boolean): CapabilityView =>
 						</div>
 					{/if}
 				</dl>
+
+				{#if usbOptionsUnknown}
+					<!-- The ACTIVE mode above is still the device's own, so the card
+					     stays; only the OFFER is unknown. Saying so is what stops it
+					     reading as "this modem has no switch". -->
+					<p
+						class="text-muted-foreground text-xs"
+						data-testid="modem-usb-mode-options-unknown"
+						role="status"
+					>
+						{resolveMessageKey(USB_MODE_OPTIONS_UNKNOWN_KEY)}
+					</p>
+				{/if}
 
 				{#if offerUsbSwitch && usbOffer.phase === 'offered' && !usbSwitchTrackable}
 					<!-- Certified, but unconfirmable: without a `stable_key` the device

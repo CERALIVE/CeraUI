@@ -383,7 +383,9 @@ describe("an uncertifiable device gets NO control — never a disabled one", () 
 
 	it("a read that THREW renders no control AND no claim about the device", async () => {
 		// "We could not establish the set" is not "the set is empty" — stating
-		// `uncertified` here would assert a device fact we do not have.
+		// `uncertified` here would assert a device fact we do not have. Silence
+		// is equally wrong: it renders identically to a device with no switch at
+		// all. The card speaks about the READ, and only about the read.
 		usbModeOptions.mockRejectedValue(new Error("socket closed"));
 		render(ModemConfigDialog, {
 			props: { open: true, modem: modem(), deviceId: "0" },
@@ -393,7 +395,14 @@ describe("an uncertifiable device gets NO control — never a disabled one", () 
 		await waitFor(() => expect(usbModeOptions).toHaveBeenCalled());
 		expect(screen.queryByTestId("modem-usb-mode-targets")).toBeNull();
 		expect(screen.queryByTestId("modem-usb-mode-unavailable")).toBeNull();
-		expect(screen.queryByText(/Switch to/i)).toBeNull();
+		// By ROLE, not by text: operator copy on this card legitimately contains
+		// the words "switch to", so a text match cannot mean "no affordance".
+		expect(screen.queryByRole("radio")).toBeNull();
+		expect(screen.queryByRole("button", { name: /Switch to/i })).toBeNull();
+
+		const line = await screen.findByTestId("modem-usb-mode-options-unknown");
+		expect(line.getAttribute("role")).toBe("status");
+		expect(line.textContent).not.toMatch(/network\.modem/);
 	});
 });
 
