@@ -483,9 +483,20 @@ async function applySubnet() {
 
 		<!-- The five questions every device on this page answers, answered here by
 		     the SAME components the Cellular row and the MM dialog render them
-		     with. Nothing below asks what family this device belongs to. -->
+		     with. Nothing below asks what family this device belongs to.
+
+		     ORDER IS §2's, NOT THE ORDER THE BLOCKS WERE WRITTEN IN. State →
+		     signal → identity: the card used to open with `IdentityBlock`, so the
+		     first thing an operator read inside a dialog they reached by tapping
+		     that device's own row was its NAME — restating the dialog title
+		     directly above it — and the state and the radio sat below it. Identity
+		     is tier 4 of the hierarchy and it is the tier this surface needs
+		     least: the header already answers "which device", and the only thing
+		     in this block the header does NOT carry (the class hint, and the note
+		     for a device that named itself nothing) is context for the readings
+		     above rather than a lead. Nothing is removed — the block keeps every
+		     row it had, one position lower. -->
 		<div class={CARD_FRAME} data-testid="dongle-status">
-			<IdentityBlock identity={sections.identity} name="dongle-identity" />
 			<ConnectionStateBlock
 				connection={sections.connection}
 				name="dongle-connection"
@@ -504,6 +515,7 @@ async function applySubnet() {
 					title={m["network.modem.sections.sim.title"]()}
 				/>
 			</div>
+			<IdentityBlock identity={sections.identity} name="dongle-identity" />
 		</div>
 
 		{#if details.length > 0}

@@ -875,59 +875,13 @@ async function openAdminUi(rowId: string): Promise<void> {
 						style:visibility={detailsOpen ? 'visible' : 'hidden'}
 					>
 						<div class="mt-2 space-y-1.5 border-t pt-2 ps-5">
-							<!-- The class band's explanation was only ever a `title`, which
-							     the shipped kiosk touchscreen can never reveal. Down here
-							     there is room to simply print it. -->
-							<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-								<Badge
-									variant="info"
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="modem-class-badge"
-									data-hardware-tag="class"
-									data-class-band={band}
-									label={t(classLabelKey(band))}
-								/>
-								<p class="text-muted-foreground/80 min-w-0 flex-1 text-xs">
-									{t(classHintKey(band))}
-								</p>
-							</div>
-							{#if detail}
-								<p
-									class={cn(
-										'text-muted-foreground text-xs transition-opacity',
-										ifaceStale && 'opacity-50',
-									)}
-									data-testid="modem-detail"
-									data-hardware-tag="detail"
-								>
-									{detail}
-								</p>
-							{/if}
-							<!-- What the dongle itself said. This row has no `status` block
-							     by construction, so without it an operator cannot tell a
-							     dongle with no SIM in it from one that is simply idle — the
-							     two look identical from this side of the USB link. Every
-							     segment is a real reading; an unread field renders nothing
-							     rather than a placeholder. -->
-							{#if adminSegments.length > 0}
-								<p
-									class="text-muted-foreground/80 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
-									data-testid="router-admin-facts"
-								>
-									{#each adminSegments as segment, segmentIndex (segment.id)}
-										{#if segmentIndex > 0}
-											<span aria-hidden="true">·</span>
-										{/if}
-										<span data-testid={segment.id}>
-											{segment.label}
-											{#if segment.value}
-												<code class="font-mono">{segment.value}</code>
-											{/if}
-										</span>
-									{/each}
-								</p>
-							{/if}
+							<!-- ── ORDERED BY §2, NOT BY THE ORDER THE TODOS LANDED ─────────
+							     Signal (tier 2) → the row's one ACTION (tier 3) → identity and
+							     hardware tags (tiers 4-5). The admin button used to come LAST,
+							     below three tables that run to a dozen rows on a talkative
+							     dongle, so the affordance this disclosure exists to reach was
+							     the furthest thing in it from the toggle that opened it.
+							     Nothing folds and nothing is removed. -->
 							<!-- The full normalized reading, per metric, with its own unit.
 							     `rsrp` is a received POWER (dBm) and the three ratios are dB —
 							     folding them onto one unit is the same class of error as
@@ -981,6 +935,100 @@ async function openAdminUi(rowId: string): Promise<void> {
 									{/if}
 								</div>
 							{/if}
+							<!-- The address is STATED, and the page it names is now REACHABLE —
+							     not by linking to it (the operator's browser is not on the
+							     dongle's network, which is why todo 47 removed the dead anchor)
+							     but through CeraUI's own proxy, which carries the page over the
+							     interface this exact unit is plugged into. The button is keyed
+							     on the row id, never on the address: two identical units share
+							     one factory address, so an address-keyed link would open
+							     whichever of the pair the kernel happened to pick. -->
+							{#if admin}
+								<p
+									class="text-muted-foreground/80 text-xs"
+									data-testid="router-admin-note"
+									data-reachable={admin.reachable ? 'true' : 'false'}
+								>
+									{#if admin.reachable}
+										{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
+									{:else}
+										{m["network.routerCellular.adminUnreachable"]()}
+									{/if}
+								</p>
+								<Button
+									class="h-8 min-h-[var(--touch-target-min)] w-fit gap-1 px-2.5"
+									data-testid="open-router-admin"
+									data-device={id}
+									size="sm"
+									variant="outline"
+									onclick={() => openAdminUi(id)}
+								>
+									<ExternalLink class="size-3.5" aria-hidden="true" />
+									{m["network.routerCellular.adminOpen"]()}
+								</Button>
+								{#if adminOpenFailure[id]}
+									<p
+										class="text-status-warning text-xs"
+										data-testid="router-admin-open-error"
+										role="status"
+									>
+										{t(adminOpenFailure[id])}
+									</p>
+								{/if}
+							{/if}
+							<!-- The class band's explanation was only ever a `title`, which
+							     the shipped kiosk touchscreen can never reveal. Down here
+							     there is room to simply print it. -->
+							<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+								<Badge
+									variant="info"
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="modem-class-badge"
+									data-hardware-tag="class"
+									data-class-band={band}
+									label={t(classLabelKey(band))}
+								/>
+								<p class="text-muted-foreground/80 min-w-0 flex-1 text-xs">
+									{t(classHintKey(band))}
+								</p>
+							</div>
+							{#if detail}
+								<p
+									class={cn(
+										'text-muted-foreground text-xs transition-opacity',
+										ifaceStale && 'opacity-50',
+									)}
+									data-testid="modem-detail"
+									data-hardware-tag="detail"
+								>
+									{detail}
+								</p>
+							{/if}
+							<!-- What the dongle itself said. This row has no `status` block
+							     by construction, so without it an operator cannot tell a
+							     dongle with no SIM in it from one that is simply idle — the
+							     two look identical from this side of the USB link. Every
+							     segment is a real reading; an unread field renders nothing
+							     rather than a placeholder. -->
+							{#if adminSegments.length > 0}
+								<p
+									class="text-muted-foreground/80 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs"
+									data-testid="router-admin-facts"
+								>
+									{#each adminSegments as segment, segmentIndex (segment.id)}
+										{#if segmentIndex > 0}
+											<span aria-hidden="true">·</span>
+										{/if}
+										<span data-testid={segment.id}>
+											{segment.label}
+											{#if segment.value}
+												<code class="font-mono">{segment.value}</code>
+											{/if}
+										</span>
+									{/each}
+								</p>
+							{/if}
 							<!-- The next three tables are the SAME `DiagnosticsBlock`
 							     `RouterDongleDialog` renders, so the row and the dialog cannot
 							     drift into two shapes for one device's readings. `rowPrefix` is
@@ -1031,47 +1079,6 @@ async function openAdminUi(rowId: string): Promise<void> {
 									rowPrefix="router-traffic"
 									title={m["network.routerCellular.traffic.title"]()}
 								/>
-							{/if}
-							<!-- The address is STATED, and the page it names is now REACHABLE —
-							     not by linking to it (the operator's browser is not on the
-							     dongle's network, which is why todo 47 removed the dead anchor)
-							     but through CeraUI's own proxy, which carries the page over the
-							     interface this exact unit is plugged into. The button is keyed
-							     on the row id, never on the address: two identical units share
-							     one factory address, so an address-keyed link would open
-							     whichever of the pair the kernel happened to pick. -->
-							{#if admin}
-								<p
-									class="text-muted-foreground/80 text-xs"
-									data-testid="router-admin-note"
-									data-reachable={admin.reachable ? 'true' : 'false'}
-								>
-									{#if admin.reachable}
-										{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
-									{:else}
-										{m["network.routerCellular.adminUnreachable"]()}
-									{/if}
-								</p>
-								<Button
-									class="h-8 min-h-[var(--touch-target-min)] w-fit gap-1 px-2.5"
-									data-testid="open-router-admin"
-									data-device={id}
-									size="sm"
-									variant="outline"
-									onclick={() => openAdminUi(id)}
-								>
-									<ExternalLink class="size-3.5" aria-hidden="true" />
-									{m["network.routerCellular.adminOpen"]()}
-								</Button>
-								{#if adminOpenFailure[id]}
-									<p
-										class="text-status-warning text-xs"
-										data-testid="router-admin-open-error"
-										role="status"
-									>
-										{t(adminOpenFailure[id])}
-									</p>
-								{/if}
 							{/if}
 						</div>
 					</div>

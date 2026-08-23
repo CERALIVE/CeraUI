@@ -223,6 +223,8 @@ import { modemRefusalCopyKey } from '$lib/modem/refusal-taxonomy';
 import {
 	CapabilitySection,
 	type CapabilityView,
+	ConnectionStateBlock,
+	deriveConnection,
 	deriveSim,
 	DiagnosticsBlock,
 	SimBlock,
@@ -238,7 +240,11 @@ import {
 	usbModeOperatorLabel,
 } from '$lib/modem/operator-labels';
 import { cn } from '$lib/utils';
-import { isSimlessModem } from '../network/cellular-row';
+import {
+	isSimlessModem,
+	resolveClassBand,
+	resolveRowState,
+} from '../network/cellular-row';
 import {
 	cellMetricRows,
 	cellObservedAtMs,
@@ -284,7 +290,15 @@ const configKey = $derived(`modem-config:${deviceId}`);
 // to live here (`no_sim === true || status.signal == null`) was wrong.
 const noSim = $derived(isSimlessModem(modem));
 const signalValue = $derived(modemSignal(modem));
-const operatorName = $derived(modem.status?.network || modem.sim_network || modem.name);
+// §2 tier 1. The strip used to lead with the carrier name and never state the
+// connection at all, so the dialog an operator opens FROM a row badged
+// "Registration denied" answered a different question than the row did — and
+// the rejection sentence explaining it existed only on the row behind. This is
+// the SAME derivation and the SAME component `RouterDongleDialog` renders, so
+// the two families cannot describe one state in two registers.
+const connectionModel = $derived(
+	deriveConnection(modem, resolveRowState(modem, resolveClassBand(modem.device_class))),
+);
 // OL-1 again, on the status strip: `mmConvertAccessTech` passes an access
 // technology it could not fold through VERBATIM, so this field is "4G" on one
 // modem and `hspa-plus` on the next. A token states nothing an operator can act
@@ -1272,10 +1286,10 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 	bind:open
 >
 	<div class="space-y-4">
-		<!-- ── Status strip: operator · network type · signal ────────────────── -->
-		<div class="bg-muted/40 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
-			<div class="min-w-0">
-				<p class="truncate text-sm font-medium">{operatorName}</p>
+		<!-- ── Status strip: state · carrier · network type · signal ─────────── -->
+		<div class="bg-muted/40 flex items-start justify-between gap-3 rounded-lg border px-3 py-2.5">
+			<div class="min-w-0 space-y-1">
+				<ConnectionStateBlock connection={connectionModel} />
 				{#if !noSim && activeNetworkType}
 					<p class="text-muted-foreground text-xs">{activeNetworkType}</p>
 				{/if}
