@@ -470,3 +470,31 @@ export function deriveCapabilityView(
   `…fccUnlock.reason.*`, `…ussd.reason.*`) and resolves one module at a time, so
   a total map under the generic reasons answers a question nobody asks.
 */
+
+/**
+ * The TWO-state form of the ladder, for a block gated on "did the device
+ * publish a reading" rather than on a capability CLAIM.
+ *
+ * A reading is on the wire or it is not, and there is no third answer: no probe
+ * to have failed, no gate to be off, no claim nobody has established. So these
+ * blocks legitimately collapse to `available`/`absent`, and this is the one
+ * place that collapse is written down.
+ *
+ * ── DO NOT REACH FOR IT ON ANYTHING THAT CAN BE `unknown` ───────────────────
+ *
+ * That is the whole boundary, and crossing it has already cost this surface a
+ * defect: rendering `deriveBandOffer`'s `unknown` phase through this helper
+ * collapsed "nobody has established whether this modem locks bands" onto ZERO
+ * nodes — byte-identical to a modem that positively has none. A capability goes
+ * through `deriveCapabilityView` / `gatedSurfaceCapability`; only a published
+ * READING comes here.
+ *
+ * It is shared rather than re-declared because three surfaces had written the
+ * identical adapter by hand (`ModemConfigDialog`, `RouterDongleDialog`, and
+ * `ModemLockSection` inline) — one of them with a comment saying it was copied
+ * verbatim. A boundary restated in three places is a boundary three files are
+ * free to move independently.
+ */
+export function readingView(present: boolean): CapabilityView {
+	return present ? { mode: "available" } : { mode: "absent" };
+}

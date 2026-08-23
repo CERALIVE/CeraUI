@@ -40,6 +40,22 @@
   useful thing an operator can do, because it stops the rejected credential from
   being presented again on the next cycle.
 
+  ── AND IT IS THE ONE DESTRUCTIVE ACTION HERE, SO IT IS CONFIRMED ──────────
+
+  Clearing DELETES a secret this device cannot re-derive. There is no reveal
+  toggle and no copy anywhere else, by design — so an operator who no longer
+  knows the password loses the dongle's whole settings surface until they find
+  it again. That is a real blast radius behind a single-tap outline button
+  sitting directly under a password field, on a kiosk touchscreen.
+
+  The confirmation is INLINE (arm, then confirm), copying `RouterDongleDialog`'s
+  own subnet rewrite rather than the modal `SimpleAlertDialog` the band-lock and
+  USB-mode switches use. Two reasons, and both are about proportion: a modal
+  inside an already-portalled dialog puts the consequence on a layer a
+  touchscreen must dismiss before it can re-read what it is confirming, and the
+  radius here is one stored credential rather than a device that drops off the
+  network. Arming dispatches nothing.
+
   ── THE CREDENTIAL IS HELD BY THE MOUNT, AND NOTHING ELSE ──────────────────
 
   The password lives in this component's own `$state` — never a store, never a
@@ -63,7 +79,7 @@
 <script lang="ts">
 import { m, resolveMessageKey as t } from '@ceraui/i18n/svelte';
 import type { ModemCredentialsOutput } from '@ceraui/rpc/schemas';
-import { KeyRound, Loader2, LockKeyhole } from '@lucide/svelte';
+import { KeyRound, Loader2, LockKeyhole, TriangleAlert } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
@@ -74,7 +90,7 @@ import {
 	type LockView,
 } from '$lib/modem/lock-state';
 import { type MutationOutcome, mutationOutcome } from '$lib/modem/mutation-outcome';
-import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
+import { CapabilitySection, readingView } from '$lib/modem/sections';
 import { rpc } from '$lib/rpc';
 
 interface Props {
@@ -124,9 +140,7 @@ $effect(() => {
 	return () => clearInterval(timer);
 });
 
-const view = $derived<CapabilityView>(
-	lock === undefined ? { mode: 'absent' } : { mode: 'available' },
-);
+const view = $derived(readingView(lock !== undefined));
 const waitMinutes = $derived(
 	lock?.state === 'locked-out'
 		? lockoutRemainingMinutes(lock.lockoutUntil, now)
@@ -135,6 +149,9 @@ const waitMinutes = $derived(
 const canSubmit = $derived(
 	!busy && lock?.offersEntry === true && password.length > 0,
 );
+
+/** Armed by the first tap; nothing is dispatched until the second one. */
+let clearConfirming = $state(false);
 
 function refuse(result: ModemCredentialsOutput): void {
 	outcome = mutationOutcome('refused', t(lockErrorKey(result.error)));
@@ -186,6 +203,7 @@ async function unlock(): Promise<void> {
 /** Remove the stored login. Zero device requests, so it is never a retry. */
 async function forget(): Promise<void> {
 	if (busy) return;
+	clearConfirming = false;
 	busy = true;
 	outcome = undefined;
 	try {
@@ -311,17 +329,65 @@ async function forget(): Promise<void> {
 			{/if}
 
 			{#if lock.offersClear}
-				<Button
-					class="min-h-[var(--touch-target-min)] w-fit"
-					data-testid="dongle-lock-clear"
-					disabled={busy}
-					onclick={() => void forget()}
-					size="sm"
-					variant="outline"
-					type="button"
-				>
-					{m['network.routerCellular.lock.clear']()}
-				</Button>
+				{#if clearConfirming}
+					<div
+						aria-labelledby="dongle-lock-clear-confirm-title"
+						class="bg-status-warning/10 border-status-warning/30 space-y-3 rounded-lg border p-3"
+						data-testid="dongle-lock-clear-confirm"
+						role="group"
+					>
+						<div class="flex items-start gap-2">
+							<TriangleAlert
+								class="text-status-warning mt-0.5 size-4 shrink-0"
+								aria-hidden="true"
+							/>
+							<div class="min-w-0 space-y-1">
+								<p class="text-sm font-medium" id="dongle-lock-clear-confirm-title">
+									{m['network.routerCellular.lock.clearConfirmTitle']()}
+								</p>
+								<p class="text-muted-foreground text-xs">
+									{m['network.routerCellular.lock.clearConfirmBody']()}
+								</p>
+							</div>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							<Button
+								class="min-h-[var(--touch-target-min)]"
+								data-testid="dongle-lock-clear-apply"
+								disabled={busy}
+								onclick={() => void forget()}
+								size="sm"
+								variant="destructive"
+								type="button"
+							>
+								{m['network.routerCellular.lock.clearConfirmAction']()}
+							</Button>
+							<Button
+								class="min-h-[var(--touch-target-min)]"
+								data-testid="dongle-lock-clear-cancel"
+								disabled={busy}
+								onclick={() => (clearConfirming = false)}
+								size="sm"
+								variant="outline"
+								type="button"
+							>
+								{m['dialog.cancel']()}
+							</Button>
+						</div>
+					</div>
+				{:else}
+					<Button
+						class="min-h-[var(--touch-target-min)] w-fit"
+						data-testid="dongle-lock-clear"
+						disabled={busy}
+						onclick={() => (clearConfirming = true)}
+						size="sm"
+						variant="outline"
+						type="button"
+					>
+						{m['network.routerCellular.lock.clear']()}
+					</Button>
+				{/if}
 			{/if}
 		</div>
 	{/if}

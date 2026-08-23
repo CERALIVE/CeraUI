@@ -227,6 +227,7 @@ import {
 	deriveConnection,
 	deriveSim,
 	DiagnosticsBlock,
+	readingView,
 	SimBlock,
 } from '$lib/modem/sections';
 import { modemDiagnosticRows } from './modem-diagnostics';
@@ -1252,12 +1253,9 @@ function toggleSms(): void {
 }
 
 // The instrument cards are gated on the DEVICE having published a reading, not
-// on a capability CLAIM, so they take the two-state form of the shared ladder:
-// the evidence is there and the card renders, or it is not and the card is
-// `absent` — zero nodes. See the header note for the rest.
+// on a capability CLAIM, so they take `readingView`, the two-state form of the
+// shared ladder. See its own header for the boundary it must not cross.
 const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
-const cardView = (present: boolean): CapabilityView =>
-	present ? { mode: 'available' } : { mode: 'absent' };
 
 // The three RADIO selectors do NOT take that two-state form. Each of them can
 // be in a state nobody has established — a read that threw, a gate that is off,
@@ -1843,7 +1841,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 		     device runs the backend that folds counters onto the wire. -->
 		<CapabilitySection
 			name="modem-usage-card" icon={Gauge} class={CARD_FRAME}
-			view={cardView(usage !== undefined || usagePolicy !== undefined)}
+			view={readingView(usage !== undefined || usagePolicy !== undefined)}
 			title={m["network.modem.usage.title"]()}
 			description={m["network.modem.usage.description"]()}>
 				{#if usage}
@@ -1940,7 +1938,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 				     control and say why it cannot move right now. -->
 				<CapabilitySection
 					name="modem-usage-policy" class="space-y-3 border-t pt-2.5"
-					view={cardView(usagePolicy !== undefined)}
+					view={readingView(usagePolicy !== undefined)}
 					title={m["network.modem.usage.settings"]()}>
 						{#if !usagePolicyWritable}
 							<p
@@ -2011,7 +2009,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 		     instrument readings, words are UI). -->
 		<CapabilitySection
 			name="modem-detail-card" icon={RadioTower} class={CARD_FRAME}
-			view={cardView(showDetailCard)}
+			view={readingView(showDetailCard)}
 			title={m["network.modem.detail.title"]()}
 			description={m["network.modem.detail.description"]()}>
 				{#if cellRows.length > 0}
@@ -2467,7 +2465,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 		     switched. -->
 		<CapabilitySection
 			name="modem-usb-mode-card" icon={Usb} class={CARD_FRAME}
-			view={cardView(showUsbModeCard)}
+			view={readingView(showUsbModeCard)}
 			title={m["network.modem.usbMode.title"]()}
 			description={m["network.modem.usbMode.description"]()}>
 				<dl class="grid grid-cols-2 gap-2 text-xs">
@@ -2732,7 +2730,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 		     is being withheld when in fact there is none to withhold. -->
 		<CapabilitySection
 			name="modem-power-card" icon={Power} class={CARD_FRAME}
-			view={cardView(true)}
+			view={readingView(true)}
 			title={m["network.modem.power.title"]()}
 			description={m["network.modem.power.description"]()}>
 				<div class="space-y-1" data-testid="modem-power-state">

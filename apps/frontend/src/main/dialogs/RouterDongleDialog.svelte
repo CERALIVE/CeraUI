@@ -91,11 +91,11 @@ import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import {
 	CapabilitySection,
-	type CapabilityView,
 	ConnectionStateBlock,
 	deriveModemSections,
 	DiagnosticsBlock,
 	IdentityBlock,
+	readingView,
 	SignalBlock,
 	SimBlock,
 } from '$lib/modem/sections';
@@ -170,15 +170,6 @@ const gpsClaim = $derived(modem.capability_modules?.gps);
 
 /** Every card on this dialog is the same bordered panel the MM dialog uses. */
 const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
-
-/**
- * The two-state form of the shared ladder, copied VERBATIM from
- * `ModemConfigDialog`. A read-only block is gated on "did the device publish
- * this", which is available-or-absent and nothing else — there is no capability
- * claim behind it to be unknown about, and no control to withhold.
- */
-const cardView = (present: boolean): CapabilityView =>
-	present ? { mode: 'available' } : { mode: 'absent' };
 
 const sections = $derived(
 	deriveModemSections({
@@ -652,7 +643,7 @@ async function applySubnet() {
 			<div class="space-y-5 border-t pt-5">
 				<CapabilitySection
 					name="dongle-controls" icon={Sliders} class="space-y-5"
-					view={cardView(true)}
+					view={readingView(true)}
 					title={m["network.routerCellular.control.title"]()}
 					description={m["network.routerCellular.control.verifiedNote"]()}>
 					<div
@@ -743,7 +734,7 @@ async function applySubnet() {
 			<div class="space-y-4 border-t pt-5">
 				<CapabilitySection
 					name="dongle-actions" icon={Wrench} class="space-y-4"
-					view={cardView(true)}
+					view={readingView(true)}
 					title={m["network.routerCellular.actions.title"]()}
 					description={m["network.routerCellular.actions.description"]()}>
 					<!-- The address is stated, and the page it names is reachable through

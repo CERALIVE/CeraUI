@@ -53,12 +53,11 @@ import {
  *      style of the live tree rather than from the stylesheet, plus the proof
  *      that stilling took no state with it (RM-1…RM-4).
  *   4. a 44px touch-target inventory PIN, plus the >= 8px separation rule and
- *      the disabled-controls-keep-their-size rule (TT-1…TT-5). Every lifted
- *      control is asserted at the target; the one KNOWN app-wide deviation
- *      (`[data-slot='switch']` is absent from `app.css`'s touch lift —
- *      diagnosed in todo 26, deliberately not fixed there) is pinned as an
- *      exact set, so this gate reports it once as known rather than as a fresh
- *      regression, AND reddens the moment the set changes in either direction.
+ *      the disabled-controls-keep-their-size rule (TT-1…TT-5). The pin is an
+ *      EXACT SET of sanctioned deviations and it is empty, so any control that
+ *      falls short reddens here. The measurement is the HIT AREA rather than
+ *      the box, because a switch carries its target on an `::after` overlay
+ *      that `getBoundingClientRect()` structurally cannot see.
  *
  * Determinism mirrors `visual/modem-ux.visual.spec.ts`: the page socket is
  * proxied, the backend's `status`/`config`/`netif` echoes are dropped so the
@@ -386,8 +385,9 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		// The cellular redesign added MORE instances of an already-baselined token
 		// defect; it did not introduce a rule. Repairing it means re-toning
 		// `--status-*` app-wide, which is a design-system change with its own QA
-		// pass — the same call todos 19 and 26 made for the `Badge size="micro"` and
-		// 44px-switch defects.
+		// pass — the same call todo 19 made for the `Badge size="micro"` defect. It
+		// is NOT the call made for the 44px touch targets, which leg 4 below now
+		// holds at zero: that fix is a hit area, and it changes no colour.
 		//
 		// Pinning as an exact SET is what keeps that honest: a NEW rule (an unlabelled
 		// control, a focus trap escape) grows the set and reddens, and re-toning the
@@ -1138,12 +1138,46 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 				["dialog", document.querySelector('[role="dialog"]')],
 			];
 
+			// TT-1 says HIT AREA, and on this surface those are two different
+			// numbers: a switch keeps an 18.4px painted track and carries its
+			// target on an `::after` overlay, which `getBoundingClientRect()`
+			// structurally cannot see.
+			//
+			// The overlay's extent is read from the pseudo's own resolved style
+			// rather than probed with `elementFromPoint`, and that is not a
+			// shortcut. This gate measures with the modem dialog OPEN, so the
+			// section behind it sits under a scrim and part of the dialog's own
+			// body is scrolled past — most controls answer no hit test at all at
+			// the moment of measurement (`reachable` below already records that,
+			// and TT-2 already filters on it). A declared target is the property
+			// TT-1 is about; whether a given pixel is momentarily covered is not.
+			//
+			// An absolutely-positioned pseudo resolves its insets against the
+			// PADDING box, so the overlay's height is that box minus both insets.
+			// A control with no overlay reports `content: none` and static
+			// position, falls through, and is measured on its box as before.
+			const overlayHeight = (node: HTMLElement, rect: DOMRect): number => {
+				const after = getComputedStyle(node, "::after");
+				if (after.position !== "absolute" || after.content === "none") return 0;
+				const style = getComputedStyle(node);
+				const padded =
+					rect.height -
+					Number.parseFloat(style.borderTopWidth) -
+					Number.parseFloat(style.borderBottomWidth);
+				const height =
+					padded -
+					Number.parseFloat(after.insetBlockStart) -
+					Number.parseFloat(after.insetBlockEnd);
+				return Number.isFinite(height) ? height : 0;
+			};
+
 			const seen = new Set<Element>();
 			const out: {
 				scope: string;
 				slot: string;
 				reachable: boolean;
 				height: number;
+				hitHeight: number;
 				label: string;
 				disabled: boolean;
 				box: { left: number; right: number; top: number; bottom: number };
@@ -1167,6 +1201,7 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 						slot,
 						reachable: atCentre !== null && node.contains(atCentre),
 						height: rect.height,
+						hitHeight: Math.max(rect.height, overlayHeight(node, rect)),
 						disabled:
 							node.hasAttribute("disabled") ||
 							node.getAttribute("aria-disabled") === "true",
@@ -1189,40 +1224,55 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		expect(measured.length, "no interactive controls were measured").toBeGreaterThan(0);
 
 		const TARGET_PX = 44;
-		const short = measured.filter((c) => c.height < TARGET_PX - 0.5);
+		const short = measured.filter((c) => c.hitHeight < TARGET_PX - 0.5);
 		const shortSlots = [...new Set(short.map((c) => c.slot))].sort();
 
-		// THE PIN. `app.css`'s `[data-layout-mode='touch']` lift enumerates
-		// `[data-slot='button']`, the two alert-dialog actions and the nav tabs —
-		// and nothing else. So `[data-slot='switch']` (every BondToggle, and the
-		// dialog's Roaming / Automatic-APN toggles) and `[data-slot='select-trigger']`
-		// (the network-operator picker) both sit at ~18px and ~32px in touch mode,
-		// app-wide across WiFi, Ethernet and Cellular alike. Todo 26 diagnosed the
-		// switch half and deliberately left it unfixed — the fix is one stylesheet
-		// line but it resizes every toggle and select in the app, which needs its
-		// own QA pass. This gate found the select-trigger half as well.
+		// THE PIN: no control on these surfaces is sanctioned below the target.
 		//
-		// Pinning the deviation as an EXACT SET is what makes this a gate rather
-		// than a running complaint: lifting either slot shrinks the set and reddens
-		// here (update the pin), and a NEW control regressing grows it and reddens
-		// here too. Neither can pass silently.
-		const KNOWN_SHORT_SLOTS: readonly string[] = ["select-trigger", "switch"];
+		// It is an EXACT SET rather than a floor, which is what makes it a gate and
+		// not a running complaint — any control that regresses grows the set and
+		// reddens here, and it cannot be silenced without an explicit edit.
+		//
+		// `[data-slot='switch']` and `[data-slot='select-trigger']` are the two the
+		// `[data-layout-mode='touch']` lift in `app.css` reaches LAST, and they are
+		// reached differently on purpose. A select trigger takes `min-height` like
+		// every other control. A switch may not: growing its box stretches the
+		// painted track into a 44px pill and strands the thumb, whose checked
+		// position is a translate off its own width. A switch therefore carries its
+		// target on the `::after` overlay the component ships — a HIT AREA, which is
+		// what TT-1 asks for and why `hitHeight` above is measured rather than read
+		// off the box.
+		const KNOWN_SHORT_SLOTS: readonly string[] = [];
 		expect(
 			shortSlots,
 			`touch-target inventory changed. Controls under ${TARGET_PX}px:\n${JSON.stringify(short, null, 2)}\n` +
-				"If [data-slot='switch'] was lifted in app.css, remove it from KNOWN_SHORT_SLOTS. " +
-				"If a NEW slot appeared, that is a regression — fix the control, not this list.",
+				"There is no sanctioned deviation left — fix the control, not this list.",
 		).toEqual([...KNOWN_SHORT_SLOTS]);
 
-		// Everything NOT on the pinned list is genuinely at the target, including
-		// every modem row's Configure button and the USB-mode switch trigger.
+		// Every control is genuinely at the target, including each modem row's
+		// Configure button, the USB-mode switch trigger and every toggle.
 		const lifted = measured.filter((c) => !KNOWN_SHORT_SLOTS.includes(c.slot));
 		expect(lifted.length, "no lifted controls were measured").toBeGreaterThan(0);
 		for (const control of lifted) {
 			expect(
-				control.height,
-				`${control.slot} "${control.label}" measures ${control.height}px, below the ${TARGET_PX}px target`,
+				control.hitHeight,
+				`${control.slot} "${control.label}" reaches ${control.hitHeight}px, below the ${TARGET_PX}px target`,
 			).toBeGreaterThanOrEqual(TARGET_PX - 0.5);
+		}
+
+		// A switch reaches the target through its overlay and NOT through its box,
+		// so its box must stay small. Asserting both bounds is what stops the
+		// tempting one-line "fix" of listing it beside the `min-height` controls.
+		const switches = measured.filter((c) => c.slot === "switch");
+		expect(
+			switches.length,
+			"the roster must render at least one switch, or the rule below is vacuous",
+		).toBeGreaterThan(0);
+		for (const control of switches) {
+			expect(
+				control.height,
+				`switch "${control.label}" was grown to ${control.height}px — lift its ::after hit area, not its box`,
+			).toBeLessThan(TARGET_PX - 0.5);
 		}
 
 		// TT-4: a DISABLED control keeps its full target. It must not shrink, because
@@ -1236,8 +1286,8 @@ test.describe("modem UX a11y gate (modem-stack Phase B)", () => {
 		).toBeGreaterThan(0);
 		for (const control of disabledLifted) {
 			expect(
-				control.height,
-				`disabled ${control.slot} "${control.label}" shrank to ${control.height}px`,
+				control.hitHeight,
+				`disabled ${control.slot} "${control.label}" shrank to ${control.hitHeight}px`,
 			).toBeGreaterThanOrEqual(TARGET_PX - 0.5);
 		}
 

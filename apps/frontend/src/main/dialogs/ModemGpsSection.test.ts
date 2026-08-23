@@ -30,6 +30,7 @@ import type {
 	SupportClaimState,
 } from "@ceraui/rpc/schemas";
 import { cleanup, render, screen, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import {
 	afterEach,
 	beforeAll,
@@ -212,6 +213,74 @@ describe("a fresh boot has not probed this modem yet", () => {
 		expect((await screen.findByTestId("modem-gps-unknown")).outerHTML).toBe(
 			inFlight,
 		);
+	});
+});
+
+/**
+ * THE F9 REGRESSION LOCK, AS AN ASSERTION RATHER THAN A HANG.
+ *
+ * The read effect writes `status`; `status` feeds `gpsView` → the resolved
+ * capability, and both deriveds return fresh object literals, so Svelte's `===`
+ * reports a change on every pass. An effect gated on the RESOLVED capability is
+ * therefore a subscriber of the operation it dispatches, and re-issues itself at
+ * RPC-round-trip cadence forever — the same defect class as the documented
+ * `osCommand`-in-an-`$effect` nmcli storm.
+ *
+ * That defect used to be caught only by this FILE failing to terminate (14.9 s
+ * healthy, >180 s mutated). A timeout is a real red but it names nothing, so a
+ * reader meeting it suspects the runner before the component. The count below
+ * says what is wrong in one line.
+ *
+ * The mock must mint a FRESH payload per call or the lock is vacuous: a shared
+ * `mockResolvedValue` object re-assigns the identical reference, which Svelte
+ * treats as no change, so even the looping build would settle after one pass.
+ */
+describe("the read dispatch may not subscribe to its own result", () => {
+	function freshRead() {
+		return Promise.resolve({
+			success: true,
+			status: {
+				gnssCapable: true,
+				gnssEnabled: false,
+				capabilities: [],
+				enabledSources: [],
+			},
+			state: { kind: "off" } as GnssFixState,
+		});
+	}
+
+	it("issues EXACTLY one read, however many times its own result re-derives", async () => {
+		getGps.mockImplementation(freshRead);
+
+		mountSection("capable");
+		await waitFor(() => expect(getGps).toHaveBeenCalledTimes(1));
+
+		// Twenty flushes: a re-entrant effect needs one, and a loop compounds.
+		for (let turn = 0; turn < 20; turn += 1) {
+			await tick();
+		}
+
+		expect(
+			getGps.mock.calls.length,
+			"the read effect re-fired on its own result — gate it on the CLAIM " +
+				"(`gpsView(claim, undefined).kind`), never on the resolved capability",
+		).toBe(1);
+	});
+
+	/*
+	  NON-VACUITY. A frozen counter would pass the assertion above for the wrong
+	  reason, so prove the harness still observes a read this surface SHOULD
+	  issue: pointing the host at another modem.
+	*/
+	it("still re-reads when the host is pointed at a different modem", async () => {
+		getGps.mockImplementation(freshRead);
+
+		const { rerender } = mountSection("capable");
+		await waitFor(() => expect(getGps).toHaveBeenCalledTimes(1));
+
+		await rerender({ claim: "capable", deviceId: "modem-2" });
+		await waitFor(() => expect(getGps).toHaveBeenCalledTimes(2));
+		expect(getGps).toHaveBeenLastCalledWith({ device: "modem-2" });
 	});
 });
 

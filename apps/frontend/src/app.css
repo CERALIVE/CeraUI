@@ -239,11 +239,30 @@
 		[data-slot='button'],
 		[data-slot='alert-dialog-action'],
 		[data-slot='alert-dialog-cancel'],
+		[data-slot='select-trigger'],
 		[id^='nav-tab-'],
 		[id^='mobile-nav-tab-']
 	) {
 		min-height: var(--touch-target-min);
 	}
+
+}
+
+/* A switch is the one control that must NOT grow: `min-height` would stretch the
+   painted track into a 44px pill and strand the thumb, whose checked position is
+   a translate off its own width. So the HIT AREA grows instead — the component
+   already ships an `::after` overlay for exactly this, and this widens it to the
+   token. Percentages on an absolutely-positioned pseudo resolve against the
+   switch's own box, so `(100% - 44px) / 2` is the overhang each side needs;
+   `min()` keeps whichever of the shipped inset and the token reaches further, so
+   the default -12px horizontal is not shrunk.
+
+   UNLAYERED on purpose. The inset it overrides is Tailwind's `after:-inset-y-2`,
+   which lives in `@layer utilities` — layer order beats specificity, so the same
+   rule inside `@layer base` loses no matter how it is written. */
+[data-layout-mode='touch'] [data-slot='switch']::after {
+	inset-block: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
+	inset-inline: min(-0.75rem, calc((100% - var(--touch-target-min)) / 2));
 }
 
 /* ── Global Base ──────────────────────────────── */

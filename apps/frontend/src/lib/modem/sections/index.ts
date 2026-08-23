@@ -40,6 +40,7 @@ export {
 	deriveSim,
 	deriveUnavailability,
 	type ModemSectionInput,
+	readingView,
 	SIGNAL_UNREADABLE_KEY,
 	UNNAMED_NOTE_KEY,
 	UNNAMED_TITLE_KEY,

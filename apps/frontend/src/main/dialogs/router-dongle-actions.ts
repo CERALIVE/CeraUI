@@ -56,7 +56,7 @@
 
 import type { SetRouterSubnetOutput } from "@ceraui/rpc/schemas";
 
-import type { CapabilityView } from "$lib/modem/sections";
+import { type CapabilityView, readingView } from "$lib/modem/sections";
 
 import type { NetModeView, RouterAdminView } from "./router-dongle-fields";
 
@@ -138,9 +138,7 @@ export const ROUTER_UNAVAILABLE_OPERATIONS: readonly RouterUnavailableOperation[
 export function subnetRewriteView(
 	admin: RouterAdminView | undefined,
 ): CapabilityView {
-	return admin?.controls === undefined
-		? { mode: "absent" }
-		: { mode: "available" };
+	return readingView(admin?.controls !== undefined);
 }
 
 const DOTTED_QUAD = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;

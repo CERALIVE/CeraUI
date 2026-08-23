@@ -538,6 +538,7 @@ describe("the credential reaches the RPC and nothing else", () => {
 			dongle({ state: "auth-failed", detail: { credential_configured: true } }),
 		);
 		await fireEvent.click(testid("dongle-lock-clear") as HTMLElement);
+		await fireEvent.click(testid("dongle-lock-clear-apply") as HTMLElement);
 		await screen.findByTestId("dongle-lock-outcome");
 
 		expect(clearCredentials).toHaveBeenCalledWith({ device: "router-1" });
@@ -546,6 +547,69 @@ describe("the credential reaches the RPC and nothing else", () => {
 		expect(band?.textContent?.trim()).toBe(
 			m["network.routerCellular.lock.outcome.cleared"](),
 		);
+	});
+});
+
+/*
+  Clearing DELETES a secret this device cannot re-derive — there is no reveal
+  toggle and no second copy anywhere — so an operator who has forgotten the
+  password loses the dongle's whole settings surface until they find it again.
+  That is the one destructive action on this surface, and until pass 3 it sat
+  behind a single tap on a kiosk touchscreen.
+*/
+describe("forgetting a stored login is confirmed before anything is deleted", () => {
+	function armed() {
+		open(
+			dongle({ state: "auth-failed", detail: { credential_configured: true } }),
+		);
+		return fireEvent.click(testid("dongle-lock-clear") as HTMLElement);
+	}
+
+	it("ARMING dispatches nothing", async () => {
+		await armed();
+
+		expect(clearCredentials).not.toHaveBeenCalled();
+		expect(testid("dongle-lock-clear-confirm")).not.toBeNull();
+	});
+
+	it("names the consequence, and says the dongle itself is untouched", async () => {
+		await armed();
+
+		const text = testid("dongle-lock-clear-confirm")?.textContent ?? "";
+		expect(text).toContain(
+			m["network.routerCellular.lock.clearConfirmTitle"](),
+		);
+		expect(text).toContain(m["network.routerCellular.lock.clearConfirmBody"]());
+		expect(text).not.toContain("network.routerCellular.");
+	});
+
+	it("CANCEL restores the untouched surface and still dispatches nothing", async () => {
+		await armed();
+		await fireEvent.click(testid("dongle-lock-clear-cancel") as HTMLElement);
+
+		expect(clearCredentials).not.toHaveBeenCalled();
+		expect(testid("dongle-lock-clear-confirm")).toBeNull();
+		expect(testid("dongle-lock-clear")).not.toBeNull();
+	});
+
+	/*
+	  The confirmation must not become a second way to spend an attempt. A clear
+	  performs ZERO device requests, so it stays reachable during a lockout — the
+	  one useful thing an operator can do there — and the arm/confirm pair may not
+	  read as a retry either.
+	*/
+	it("is reachable during a lockout, and neither step reads as a retry", async () => {
+		open(
+			dongle({ state: "locked-out", detail: { credential_configured: true } }),
+		);
+		await fireEvent.click(testid("dongle-lock-clear") as HTMLElement);
+
+		expect(testid("dongle-lock-clear-confirm")).not.toBeNull();
+		expect(
+			controlLabels().filter((label) =>
+				/retry|try again|unlock|sign in|submit|lock-submit/.test(label),
+			),
+		).toEqual([]);
 	});
 });
 

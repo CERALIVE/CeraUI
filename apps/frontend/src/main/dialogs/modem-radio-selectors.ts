@@ -52,7 +52,11 @@ import type {
 	SupportClaimState,
 } from "@ceraui/rpc/schemas";
 
-import { type CapabilityView, deriveCapabilityView } from "$lib/modem/sections";
+import {
+	type CapabilityView,
+	deriveCapabilityView,
+	readingView,
+} from "$lib/modem/sections";
 import { deriveBandOffer } from "./modem-bands";
 import type { FiveGView } from "./modem-five-g";
 
@@ -117,11 +121,10 @@ export function bandCapabilityView(
 ): CapabilityView {
 	const offer = deriveBandOffer(result);
 	if (offer.phase === "offered") {
-		// The modem answered with a certified set. An EMPTY one is a real answer:
-		// there is no band to select, so there is nothing to render.
-		return offer.offerable.length > 0
-			? { mode: "available" }
-			: { mode: "absent" };
+		// The modem answered with a certified set, so THIS sub-question really is
+		// a reading: an EMPTY set is a real answer and there is nothing to render.
+		// Only the arms below can be unknown.
+		return readingView(offer.offerable.length > 0);
 	}
 
 	const refusal = result?.success === false ? result.error : undefined;
