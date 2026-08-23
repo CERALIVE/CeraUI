@@ -35,6 +35,7 @@ import { m, resolveMessageKey, resolveMessageKey as t } from '@ceraui/i18n/svelt
 import type { GnssFixState, ModemGpsStatus, SupportClaimState } from '@ceraui/rpc/schemas';
 
 import { Switch } from '$lib/components/ui/switch';
+import { loadWithinBound } from '$lib/modem/async-surface';
 import { type MutationOutcome, mutationOutcome } from '$lib/modem/mutation-outcome';
 import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
 import { rpc } from '$lib/rpc';
@@ -103,20 +104,22 @@ function adoptState(next: GnssFixState | undefined): void {
 
 async function read(): Promise<void> {
 	const requested = deviceId;
-	try {
-		const result = await rpc.modems.getGps({ device: deviceId });
-		// A close/reopen onto another modem while this was in flight must not adopt
-		// the previous device's position.
-		if (requested !== deviceId) return;
-		if (result.success) {
-			status = result.status;
-			adoptState(result.state);
-		}
-	} catch {
-		// A failed read claims nothing about the device — the ladder already
-		// withholds the control below `capable`, so this must not additionally
-		// invent a verdict.
-	}
+	// The read is BOUNDED, and its expiry is the same non-verdict as a failure.
+	// Without the bound the acquisition re-read below could be issued against a
+	// modem that never answers, and each one would sit in flight for the
+	// transport's own 30 s while the section reported an active wait.
+	const outcome = await loadWithinBound('getGps', () =>
+		rpc.modems.getGps({ device: deviceId }),
+	);
+	// A close/reopen onto another modem while this was in flight must not adopt
+	// the previous device's position.
+	if (requested !== deviceId) return;
+	// A failed or expired read claims nothing about the device — the ladder
+	// already withholds the control below `capable`, and an absent `status`
+	// renders the `notReported` reason, so neither may invent a verdict here.
+	if (outcome.phase !== 'loaded' || !outcome.value.success) return;
+	status = outcome.value.status;
+	adoptState(outcome.value.state);
 }
 
 async function toggle(enabled: boolean): Promise<void> {

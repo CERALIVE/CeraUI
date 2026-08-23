@@ -46,6 +46,9 @@ const SURFACE_KEYS: readonly string[] = [
 	"settings.modemCapabilities.refused",
 	"settings.modemCapabilities.loadFailed",
 	"settings.modemCapabilities.saveFailed",
+	"settings.modemCapabilities.loading",
+	"settings.modemCapabilities.loadTimedOut",
+	"settings.modemCapabilities.retry",
 ];
 
 const REQUIRED_KEYS: readonly string[] = [

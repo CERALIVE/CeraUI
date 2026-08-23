@@ -54,6 +54,7 @@ import { Loader2, MessageSquareMore, Send } from '@lucide/svelte';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import { loadWithinBound } from '$lib/modem/async-surface';
 import { type MutationOutcome, mutationOutcome } from '$lib/modem/mutation-outcome';
 import { CapabilitySection } from '$lib/modem/sections';
 import {
@@ -174,21 +175,25 @@ function failClosed(): void {
 
 async function read(): Promise<void> {
 	const requested = deviceId;
-	try {
-		const result = await rpc.modems.getUssd({ device: deviceId });
-		// A close/reopen onto another modem while this was in flight must not adopt
-		// the previous device's dialogue.
-		if (requested !== deviceId) return;
-		if (result.success) {
-			session = result.session;
-			standingRefusal = undefined;
-		} else if (result.error !== undefined) {
-			standingRefusal = result.error;
-		}
-	} catch {
-		// A failed READ claims nothing about the device: the capability ladder
-		// already withholds the control until the claim reaches `capable`, so an
-		// unreachable read must not additionally invent a refusal.
+	// This read fills the evidence every USSD verb is gated on, so a call that
+	// never answers would leave the section permanently unable to open a
+	// dialogue with no word about why. The bound turns that into a settled
+	// non-answer the ladder already knows how to render.
+	const outcome = await loadWithinBound('getUssd', () =>
+		rpc.modems.getUssd({ device: deviceId }),
+	);
+	// A close/reopen onto another modem while this was in flight must not adopt
+	// the previous device's dialogue.
+	if (requested !== deviceId) return;
+	// A failed or expired READ claims nothing about the device: the capability
+	// ladder already withholds the control until the claim reaches `capable`, so
+	// an unanswered read must not additionally invent a refusal.
+	if (outcome.phase !== 'loaded') return;
+	if (outcome.value.success) {
+		session = outcome.value.session;
+		standingRefusal = undefined;
+	} else if (outcome.value.error !== undefined) {
+		standingRefusal = outcome.value.error;
 	}
 }
 

@@ -219,6 +219,7 @@ import {
 	type MutationOutcome,
 	mutationOutcome,
 } from '$lib/modem/mutation-outcome';
+import { loadWithinBound } from '$lib/modem/async-surface';
 import { modemRefusalCopyKey } from '$lib/modem/refusal-taxonomy';
 import {
 	CapabilitySection,
@@ -671,14 +672,16 @@ async function loadUsbModeOptions(): Promise<void> {
 	usbOptions = undefined;
 	usbSelected = undefined;
 	const requested = deviceId;
-	try {
-		const result = await rpc.modems.getUsbModeOptions({ device: String(deviceId) });
-		// A close/reopen onto another modem while this was in flight must not adopt
-		// the previous device's certified set.
-		if (requested === deviceId) usbOptions = result;
-	} catch {
-		usbOptions = undefined;
-	}
+	// A read that outruns its bound leaves `usbOptions` undefined, which
+	// `deriveUsbModeOffer` already reports as the `unknown` phase — "we could not
+	// establish the set", which is a terminal state and NOT `uncertified`.
+	const outcome = await loadWithinBound('getUsbModeOptions', () =>
+		rpc.modems.getUsbModeOptions({ device: String(deviceId) }),
+	);
+	// A close/reopen onto another modem while this was in flight must not adopt
+	// the previous device's certified set.
+	if (requested !== deviceId) return;
+	usbOptions = outcome.phase === 'loaded' ? outcome.value : undefined;
 }
 
 // ── FCC auto-unlock ──────────────────────────────────────────────────────────
@@ -699,14 +702,14 @@ async function loadFccUnlock(): Promise<void> {
 	fccState = undefined;
 	fccOutcome = undefined;
 	const requested = deviceId;
-	try {
-		const result = await rpc.modems.getFccUnlock({ device: String(deviceId) });
-		// A close/reopen onto another modem while this was in flight must not adopt
-		// the previous device's answer.
-		if (requested === deviceId && result.success) fccState = result.state;
-	} catch {
-		fccState = undefined;
-	}
+	const outcome = await loadWithinBound('getFccUnlock', () =>
+		rpc.modems.getFccUnlock({ device: String(deviceId) }),
+	);
+	// A close/reopen onto another modem while this was in flight must not adopt
+	// the previous device's answer.
+	if (requested !== deviceId) return;
+	fccState =
+		outcome.phase === 'loaded' && outcome.value.success ? outcome.value.state : undefined;
 }
 
 async function toggleFccUnlock(enabled: boolean): Promise<void> {
@@ -797,14 +800,20 @@ const bandDiagnostics = $derived(
 async function loadBands(): Promise<void> {
 	bandResult = undefined;
 	const requested = deviceId;
-	try {
-		const result = await rpc.modems.getBands({ device: String(deviceId) });
-		if (requested !== deviceId) return;
-		bandResult = result;
-		bandSelection = initialBandSelection(deriveBandOffer(result));
-	} catch {
+	const outcome = await loadWithinBound('getBands', () =>
+		rpc.modems.getBands({ device: String(deviceId) }),
+	);
+	if (requested !== deviceId) return;
+	if (outcome.phase !== 'loaded') {
+		// Neither a failed nor an expired read has established a catalog, and the
+		// band card's absent state is what says so. Seeding a selection from a
+		// catalog nobody read is how a lock gets offered for bands the radio may
+		// not have.
 		bandResult = undefined;
+		return;
 	}
+	bandResult = outcome.value;
+	bandSelection = initialBandSelection(deriveBandOffer(outcome.value));
 }
 
 async function applyBandLock(): Promise<void> {
@@ -1137,6 +1146,10 @@ let smsLoading = $state(false);
 let smsLoaded = $state(false);
 let smsMessages = $state<SmsMessage[]>([]);
 let smsRefusal = $state<ModemSmsRefusal | undefined>(undefined);
+// A read that outran its bound is NOT a refusal and NOT an empty inbox: the
+// device never told us what it holds, so it gets its own terminal rather than
+// borrowing `read_failed`'s sentence or rendering as zero messages.
+let smsTimedOut = $state(false);
 
 // `unsupported` is the one refusal that describes the DEVICE rather than the
 // moment: this modem exposes no Messaging interface, so it can never have an
@@ -1154,34 +1167,42 @@ function resetSmsInbox(): void {
 	smsLoaded = false;
 	smsMessages = [];
 	smsRefusal = undefined;
+	smsTimedOut = false;
 }
 
 async function loadSms(): Promise<void> {
 	if (smsLoading) return;
 	smsLoading = true;
 	smsRefusal = undefined;
-	try {
-		const result = await rpc.modems.getSms({ device: String(deviceId) });
-		if (result.success) {
-			// Rendered in WIRE ORDER. Newest-first is the procedure's contract and
-			// it sorts on the carrier timestamp with a tie-break this side cannot
-			// reproduce (ModemManager reuses freed object indices, so index order
-			// is not arrival order). Re-sorting here would be a second, worse
-			// implementation of the same rule.
-			smsMessages = result.messages ?? [];
-		} else {
-			// A refusal is never flattened into an empty inbox: `[]` means this
-			// modem HAS an inbox and it is empty, and nothing else.
-			smsMessages = [];
-			smsRefusal = result.error ?? 'read_failed';
-		}
-	} catch {
+	smsTimedOut = false;
+	// The bound is the SMS read's OWN, and longer than every other read here,
+	// because `getSms` spends up to one mmcli invocation per stored message. Its
+	// `finally` used to be the only terminal, which is not a terminal at all: a
+	// call that never settles never reaches one, and the spinner simply stayed.
+	const outcome = await loadWithinBound('getSms', () =>
+		rpc.modems.getSms({ device: String(deviceId) }),
+	);
+	if (outcome.phase === 'loaded' && outcome.value.success) {
+		// Rendered in WIRE ORDER. Newest-first is the procedure's contract and
+		// it sorts on the carrier timestamp with a tie-break this side cannot
+		// reproduce (ModemManager reuses freed object indices, so index order
+		// is not arrival order). Re-sorting here would be a second, worse
+		// implementation of the same rule.
+		smsMessages = outcome.value.messages ?? [];
+	} else if (outcome.phase === 'loaded') {
+		// A refusal is never flattened into an empty inbox: `[]` means this
+		// modem HAS an inbox and it is empty, and nothing else.
+		smsMessages = [];
+		smsRefusal = outcome.value.error ?? 'read_failed';
+	} else if (outcome.phase === 'timed-out') {
+		smsMessages = [];
+		smsTimedOut = true;
+	} else {
 		smsMessages = [];
 		smsRefusal = 'read_failed';
-	} finally {
-		smsLoaded = true;
-		smsLoading = false;
 	}
+	smsLoaded = true;
+	smsLoading = false;
 }
 
 function toggleSms(): void {
@@ -2199,7 +2220,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 							{m["network.modem.sms.description"]()}
 						</span>
 					</span>
-					{#if smsLoaded && smsRefusal === undefined}
+					{#if smsLoaded && smsRefusal === undefined && !smsTimedOut}
 						<!-- The count is an instrument reading, so it is set in the mono
 						     face; the word it stands for is spoken, not printed. -->
 						<span class="mt-0.5 shrink-0" data-testid="modem-sms-count">
@@ -2281,6 +2302,21 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 										<Loader2 class="size-3.5 motion-safe:animate-spin" aria-hidden="true" />
 										{m["network.modem.sms.loading"]()}
 									</p>
+								{:else if smsTimedOut}
+									<!-- Distinct from BOTH neighbours on purpose. A refusal is the
+									     device answering no; an empty inbox is the device answering
+									     nothing; this is the device not answering, so it may not
+									     borrow either sentence. The refresh above is the repair. -->
+									<div
+										class="bg-muted/40 space-y-1 rounded-md border p-2.5"
+										data-testid="modem-sms-timed-out"
+										role="status"
+									>
+										<p class="text-sm font-medium">{m["network.modem.readTimedOutTitle"]()}</p>
+										<p class="text-muted-foreground text-xs leading-relaxed">
+											{m["network.modem.readTimedOut"]()}
+										</p>
+									</div>
 								{:else if smsRefusalCopyKey}
 									<!-- Calm status, never a red alert: none of the three refusals
 									     that reach here means something broke on the operator's
