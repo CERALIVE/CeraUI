@@ -59,6 +59,7 @@ import {
 	decodeMmState,
 	decodeNetworkRejectionError,
 	decodePacketServiceState,
+	decodeRadioPower,
 	decodeRegistrationState,
 	decodeSimType,
 	decodeUnlockRequired,
@@ -332,6 +333,7 @@ function foldOne(
 	const packetServiceState = decodePacketServiceState(
 		numberProp(modem3gpp, "PacketServiceState"),
 	);
+	const radioPower = decodeRadioPower(numberProp(modem, "PowerState"));
 
 	return {
 		runtimeId,
@@ -364,6 +366,7 @@ function foldOne(
 		...(iccid !== undefined ? { iccid } : {}),
 		...(registrationRejection !== undefined ? { registrationRejection } : {}),
 		...(packetServiceState !== undefined ? { packetServiceState } : {}),
+		...(radioPower !== undefined ? { radioPower } : {}),
 		...(simLockRequired !== undefined ? { simLockRequired } : {}),
 		...(retries !== undefined ? { simLockRemainingAttempts: retries } : {}),
 		...(esim !== undefined ? { esim } : {}),

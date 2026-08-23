@@ -465,6 +465,27 @@ export type ModemRegistrationRejection = z.infer<typeof modemRegistrationRejecti
 export const modemPacketServiceStateSchema = z.string();
 
 /**
+ * The radio's own power state — ModemManager's `Modem.PowerState`, folded onto
+ * `@ceralive/modem-control`'s `RadioPower` vocabulary.
+ *
+ * IT IS A READING, AND THERE IS NO WRITE BEHIND IT. The pinned control package
+ * exposes power as a `ContextReadOperation<RadioPower>` and publishes no setter,
+ * so nothing in this stack can turn a radio off, put it in low-power, or bring
+ * it back. Publishing the state anyway is the point: an operator looking at a
+ * modem that reports nothing needs to be able to tell a radio that is powered
+ * down from one that is simply searching, and today neither surface could say.
+ *
+ * `unknown` is a STATED value, not the absence of the field — MM publishes
+ * `MM_MODEM_POWER_STATE_UNKNOWN` for a modem it has not finished probing, and
+ * collapsing that into absence would make "the modem said it does not know" and
+ * "this backend does not report power" the same wire value. Absence means the
+ * latter alone: an older device, or a `router-ethernet` dongle whose embedded
+ * router hides the radio entirely.
+ */
+export const modemRadioPowerSchema = z.enum(['unknown', 'off', 'low', 'on']);
+export type ModemRadioPower = z.infer<typeof modemRadioPowerSchema>;
+
+/**
  * What a router-mode cellular dongle's OWN admin API reported.
  *
  * A dongle running its own embedded router is invisible to ModemManager, so
@@ -1417,6 +1438,11 @@ export const modemSchema = z.object({
 	// "the network stated no rejection", never "there is no problem".
 	registration_rejection: modemRegistrationRejectionSchema.optional(),
 	packet_service_state: modemPacketServiceStateSchema.optional(),
+	// The radio's power state, READ-ONLY. There is no matching input field and
+	// there never will be from this package: `power` is a read operation with no
+	// setter beside it, so an input here would be a control that accepts a value
+	// and drops it. See `modemRadioPowerSchema` for why `unknown` is stated.
+	radio_power: modemRadioPowerSchema.optional(),
 	// The dongle's own admin API, for a `router-ethernet` row that has no
 	// `status` and never will. Absent for every ModemManager-managed device.
 	router_admin: routerAdminSchema.optional(),

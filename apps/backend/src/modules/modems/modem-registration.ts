@@ -30,7 +30,11 @@
   loop publishes snapshots and broadcasts — none of that lives here.
 */
 
-import type { ModemRegistrationRejection } from "@ceraui/rpc/schemas";
+import {
+	type ModemRadioPower,
+	type ModemRegistrationRejection,
+	modemRadioPowerSchema,
+} from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import { pollWithBackoff } from "../../helpers/retry.ts";
@@ -80,6 +84,7 @@ export type ModemStatus = {
 	// registers stops reporting a rejection and the stale reason cannot survive.
 	packet_service_state?: string;
 	registration_rejection?: ModemRegistrationRejection;
+	radio_power?: ModemRadioPower;
 };
 
 // Bounded retry for transient mmcli failures (mock mode never retries — the
@@ -186,6 +191,7 @@ function buildModemStatus(
 		: modemInfo["modem.generic.state"];
 	const packetServiceState = modemInfo["modem.3gpp.packet-service-state"];
 	const rejection = buildRegistrationRejection(modemInfo);
+	const radioPower = deriveRadioPower(modemInfo);
 
 	return {
 		connection,
@@ -197,7 +203,28 @@ function buildModemStatus(
 			? { packet_service_state: packetServiceState }
 			: {}),
 		...(rejection !== undefined ? { registration_rejection: rejection } : {}),
+		...(radioPower !== undefined ? { radio_power: radioPower } : {}),
 	};
+}
+
+/**
+ * mmcli's `modem.generic.power-state` token, admitted only when it names a value
+ * the wire vocabulary already has.
+ *
+ * The token IS the wire vocabulary, so `modemRadioPowerSchema` is the whole
+ * normalizer — a second lookup table here would be one spelling of the enum able
+ * to drift from the other. A token this build does not recognize OMITS the
+ * field: absence means "this backend did not report a power state", which is the
+ * honest answer for a reading nobody could place, and is a different claim from
+ * the `unknown` the modem itself states.
+ */
+export function deriveRadioPower(
+	modemInfo: ModemInfo,
+): ModemRadioPower | undefined {
+	const parsed = modemRadioPowerSchema.safeParse(
+		modemInfo["modem.generic.power-state"],
+	);
+	return parsed.success ? parsed.data : undefined;
 }
 
 /**

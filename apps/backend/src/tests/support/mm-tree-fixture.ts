@@ -65,6 +65,8 @@ export interface ModemFixture {
 	readonly simType?: number;
 	readonly esimStatus?: number;
 	readonly packetServiceState?: number;
+	/** `Modem.PowerState` (`MMModemPowerState`). Omitted ⇒ the property is absent. */
+	readonly powerState?: number;
 	readonly networkRejection?: {
 		readonly error: number;
 		readonly operatorId?: string;
@@ -110,6 +112,9 @@ function modemProps(fixture: ModemFixture): [string, ReturnType<typeof v>][] {
 		],
 		["UnlockRequired", v("u", fixture.unlockRequired ?? MM_LOCK_NONE)],
 	];
+	if (fixture.powerState !== undefined) {
+		props.push(["PowerState", v("u", fixture.powerState)]);
+	}
 	if (fixture.unlockRetries !== undefined) {
 		props.push([
 			"UnlockRetries",

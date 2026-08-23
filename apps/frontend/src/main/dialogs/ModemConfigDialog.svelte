@@ -157,6 +157,7 @@ import {
 	Loader2,
 	MessageSquare,
 	Network as NetworkIcon,
+	Power,
 	Radio,
 	RadioTower,
 	RefreshCw,
@@ -244,6 +245,10 @@ import {
 	usageView,
 } from './modem-detail';
 import {
+	POWER_UNAVAILABLE_OPERATIONS,
+	radioPowerReading,
+} from './modem-power-recovery';
+import {
 	isWithdrawingSmsRefusal,
 	smsRefusalKey,
 	smsWallClock,
@@ -326,6 +331,8 @@ $effect(() => {
 		scanSignatureBaseline = undefined;
 		saveRefusal = undefined;
 		saveUnconfirmed = false;
+		unconfirmedExpectation = undefined;
+		reconcileUnresolved = false;
 		advancedOpen = false;
 		resetSmsInbox();
 		void loadUsbModeOptions();
@@ -425,6 +432,17 @@ let saveUnconfirmed = $state(false);
 // read it one microtask too early and band the same save twice.
 const showSaveUnconfirmed = $derived(saveUnconfirmed && saveRefusal === undefined);
 
+// The echo baseline RETAINED past the unconfirmed edge, which `saveExpected`
+// cannot be: that slot is released the moment the phase goes terminal, and
+// reconciling needs to know what we were waiting for. Without it the band could
+// only ever say "unknown" and never resolve, which is a reconcile state with no
+// way out of it.
+let unconfirmedExpectation = $state<ModemConfigSent | undefined>(undefined);
+// Set only when a re-check ran and the device STILL had not echoed. Absent means
+// nobody has asked yet — a different fact, and rendering the two the same way
+// would tell an operator their check failed before they made one.
+let reconcileUnresolved = $state(false);
+
 // Confirm a configure once a broadcast `modem` echo proves the device stored
 // what we sent (configure-echo predicate). A `connecting → connected` cycle on
 // any re-attach must NOT confirm — only a matching stored config does. Closes
@@ -443,6 +461,11 @@ $effect(() => {
 		// lapsed with no echo, or `osCommand` swallowed a thrown dispatch. Both
 		// leave the write's fate genuinely unknown, and both used to render
 		// nothing at all. A refusal already has its own band and outranks this.
+		// The baseline is RETAINED here rather than dropped with `saveExpected`:
+		// it is the only record of what we were waiting for, and the reconcile
+		// affordance has nothing to compare against without it.
+		unconfirmedExpectation = expected;
+		reconcileUnresolved = false;
 		saveExpected = undefined;
 		saveUnconfirmed = true;
 		return;
@@ -458,10 +481,39 @@ $effect(() => {
 	}
 });
 
+/**
+ * Re-check an unconfirmed save against the device's own latest reading.
+ *
+ * The subscription keeps `modem` current, so this compares the SAME echo
+ * predicate the confirm path uses against whatever the device has said since
+ * the TTL lapsed — a broadcast that arrived one tick too late resolves the band
+ * here instead of leaving it standing for the rest of the session. It dispatches
+ * NOTHING: re-sending the write would be a second mutation on a bearer whose
+ * state nobody knows, which is the one thing an unknown outcome must not do.
+ */
+function reconcileSave() {
+	const expected = unconfirmedExpectation;
+	if (!expected) return;
+	if (
+		modemConfigEchoMatches(expected, {
+			networkTypeActive: modem.network_type?.active ?? null,
+			config: modem.config,
+		})
+	) {
+		saveUnconfirmed = false;
+		unconfirmedExpectation = undefined;
+		reconcileUnresolved = false;
+		return;
+	}
+	reconcileUnresolved = true;
+}
+
 async function handleSave() {
 	if (primaryDisabled || isOperationPending(configKey)) return;
 	saveRefusal = undefined;
 	saveUnconfirmed = false;
+	unconfirmedExpectation = undefined;
+	reconcileUnresolved = false;
 	const input = {
 		device: String(deviceId),
 		network_type: formData.selectedNetwork,
@@ -1102,6 +1154,12 @@ const cardView = (present: boolean): CapabilityView =>
 const networkTypeView = $derived(
 	networkModeCapabilityView(modem.network_type, noSim),
 );
+
+// The radio's power state. A READING with no write under it — the control
+// package publishes `power` as a read operation and no setter — so the card is
+// rendered with no control of any kind, and the unavailability rows below it
+// say so out loud rather than leaving an operator hunting for a switch.
+const powerReading = $derived(radioPowerReading(modem.radio_power));
 </script>
 
 <AppDialog
@@ -1168,11 +1226,36 @@ const networkTypeView = $derived(
 				role="status"
 			>
 				<Clock class="text-status-warning mt-0.5 size-5 shrink-0" aria-hidden="true" />
-				<div class="min-w-0">
-					<p class="text-sm font-semibold">{m["network.modem.saveUnconfirmedTitle"]()}</p>
-					<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
-						{m["network.modem.saveUnconfirmedBody"]()}
-					</p>
+				<div class="min-w-0 space-y-2">
+					<div>
+						<p class="text-sm font-semibold">{m["network.modem.saveUnconfirmedTitle"]()}</p>
+						<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+							{m["network.modem.saveUnconfirmedBody"]()}
+						</p>
+					</div>
+					<!-- The reconcile. It re-reads the device's own latest broadcast
+					     against the same echo predicate the confirm path uses, and
+					     dispatches nothing — re-sending the write would be a second
+					     mutation on a bearer whose state nobody knows. Without it the
+					     band can only ever say "unknown" and never resolve. -->
+					<Button
+						class="h-8"
+						data-testid="modem-save-reconcile"
+						onclick={reconcileSave}
+						size="sm"
+						variant="outline"
+					>
+						{m["network.modem.saveReconcile"]()}
+					</Button>
+					{#if reconcileUnresolved}
+						<p
+							class="text-muted-foreground text-xs leading-relaxed"
+							data-testid="modem-save-reconcile-unresolved"
+							role="status"
+						>
+							{m["network.modem.saveReconcileUnresolved"]()}
+						</p>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -2508,6 +2591,62 @@ const networkTypeView = $derived(
 		<!-- Same shape, same reason: closing the dialog unmounts the component,
 		     which is what drops the carrier's text. -->
 		<ModemUssdSection claim={ussdClaim} deviceId={String(deviceId)} />
+
+		<!-- ── Power & recovery ────────────────────────────────────────────────
+		     READ-ONLY BY CONSTRUCTION. `@ceralive/modem-control` publishes `power`
+		     as a read operation with no setter and no reset beside it, and ships
+		     `UhubctlPort` with no adapter on any device — so this card renders the
+		     state, states what it cannot do, and offers NOTHING pressable. It is
+		     routed as available/absent rather than `blocked`, because `blocked`
+		     renders a DISABLED control, and a disabled control claims a capability
+		     is being withheld when in fact there is none to withhold. -->
+		<CapabilitySection
+			name="modem-power-card" icon={Power} class={CARD_FRAME}
+			view={cardView(true)}
+			title={m["network.modem.power.title"]()}
+			description={m["network.modem.power.description"]()}>
+				<div class="space-y-1" data-testid="modem-power-state">
+					<p class="text-muted-foreground text-xs">
+						{m["network.modem.power.stateLabel"]()}
+					</p>
+					{#if powerReading}
+						<p class="text-sm" data-radio-power={powerReading.state}>
+							{t(powerReading.labelKey)}
+						</p>
+						<p class="text-muted-foreground/80 text-xs leading-relaxed">
+							{t(powerReading.provenanceKey)}
+						</p>
+					{:else}
+						<p class="text-muted-foreground text-sm" data-testid="modem-power-unreported">
+							{m["network.modem.power.unreported"]()}
+						</p>
+					{/if}
+				</div>
+
+				<!-- The ONE recovery this device performs. It is reached by SAVING a
+				     connect-time setting, not by a button here, so this points at
+				     that path rather than minting a second one that would need its
+				     own confirmation and could disagree with the first. -->
+				<div class="space-y-1" data-testid="modem-power-recovery">
+					<p class="text-sm font-medium">
+						{m["network.modem.power.recovery.title"]()}
+					</p>
+					<p class="text-muted-foreground text-xs leading-relaxed">
+						{m["network.modem.power.recovery.body"]()}
+					</p>
+				</div>
+
+				<ul class="space-y-2" data-testid="modem-power-unavailable">
+					{#each POWER_UNAVAILABLE_OPERATIONS as op (op.id)}
+						<li class="space-y-0.5" data-testid="modem-power-unavailable-{op.id}">
+							<p class="text-sm">{t(op.titleKey)}</p>
+							<p class="text-muted-foreground text-xs leading-relaxed">
+								{t(op.reasonKey)}
+							</p>
+						</li>
+					{/each}
+				</ul>
+		</CapabilitySection>
 		</div>
 		</CollapsibleSection>
 	</div>

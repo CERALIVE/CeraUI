@@ -73,6 +73,12 @@ export type ModemInfo = {
 	 * their elementary files, so mmcli prints `--` and `mmcliParseSep` drops it.
 	 */
 	"modem.generic.own-numbers"?: Array<string>;
+	/**
+	 * The radio's own power state (`MM_MODEM_POWER_STATE`, rendered as
+	 * `unknown` / `off` / `low` / `on`). Optional because a modem MM has not
+	 * finished probing prints `--`, which `mmcliParseSep` drops.
+	 */
+	"modem.generic.power-state"?: string;
 	"modem.generic.access-technologies": Array<string>;
 	"modem.generic.signal-quality.value": number;
 	"modem.3gpp.operator-name"?: string;
@@ -481,6 +487,7 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 	const ownNumbers = readStringList(parsed, "modem.generic.own-numbers")
 		.map((value) => value.trim())
 		.filter((value) => value.length > 0);
+	const powerState = readOptionalString(parsed, "modem.generic.power-state");
 	const operatorName = readOptionalString(parsed, "modem.3gpp.operator-name");
 	const registrationState = readOptionalString(
 		parsed,
@@ -518,6 +525,9 @@ export function parseModemInfo(parsed: MmcliRecord): ParseResult<ModemInfo> {
 		),
 		...(ownNumbers.length > 0
 			? { "modem.generic.own-numbers": ownNumbers }
+			: {}),
+		...(powerState !== undefined
+			? { "modem.generic.power-state": powerState }
 			: {}),
 		"modem.generic.access-technologies": readStringList(
 			parsed,

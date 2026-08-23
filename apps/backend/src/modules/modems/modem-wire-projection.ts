@@ -55,6 +55,7 @@ import type {
 	ModemFiveGPreference,
 	ModemLockDetail,
 	ModemLockState,
+	ModemRadioPower,
 	ModemRecoveryState,
 	ModemRegistrationRejection,
 	RouterAdmin,
@@ -149,6 +150,7 @@ export interface ProjectedModemAdditive {
 	readonly cell_info?: ModemCellInfo;
 	readonly registration_rejection?: ModemRegistrationRejection;
 	readonly packet_service_state?: string;
+	readonly radio_power?: ModemRadioPower;
 	readonly router_admin?: RouterAdmin;
 }
 
@@ -254,6 +256,7 @@ export type WireModemEntry = {
 	cell_info?: ModemCellInfo;
 	registration_rejection?: ModemRegistrationRejection;
 	packet_service_state?: string;
+	radio_power?: ModemRadioPower;
 	router_admin?: RouterAdmin;
 	stable_key?: string;
 	capability_modules?: CapabilityModuleClaims;
@@ -581,6 +584,9 @@ function appendAdditive(
 		}
 		if (additive.packet_service_state !== undefined) {
 			entry.packet_service_state = additive.packet_service_state;
+		}
+		if (additive.radio_power !== undefined) {
+			entry.radio_power = additive.radio_power;
 		}
 		if (additive.router_admin !== undefined) {
 			entry.router_admin = additive.router_admin;
