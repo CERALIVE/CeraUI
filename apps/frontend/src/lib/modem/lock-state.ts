@@ -63,6 +63,8 @@ import type {
 	ModemLockSubReason,
 } from "@ceraui/rpc/schemas";
 
+import { modemRefusalCopyKey } from "./refusal-taxonomy";
+
 /** The i18n stem every key on this surface hangs off. */
 export const LOCK_COPY_PREFIX = "network.routerCellular.lock";
 
@@ -212,11 +214,22 @@ export function lockoutRemainingMinutes(
 	return Math.max(1, Math.ceil(remainingMs / 60_000));
 }
 
-/** Keyed copy for a typed credential refusal — never the raw wire token. */
+/**
+ * Keyed copy for a typed credential refusal — never the raw wire token.
+ *
+ * The nine typed refusals resolve through the shared taxonomy, which is a total
+ * table rather than the interpolation this used to be: a tenth
+ * `modemCredentialsRefusalSchema` member now fails the build instead of
+ * rendering its own dotted path at an operator.
+ *
+ * `undefined` deliberately keeps a LOCAL key. It is reached when the transport
+ * gave out before the device answered anything, so it is OUR fallback and must
+ * not borrow a device claim from the shared table.
+ */
 export function lockErrorKey(
 	error: ModemCredentialsRefusal | undefined,
 ): string {
 	return error === undefined
 		? `${LOCK_COPY_PREFIX}.error.generic`
-		: `${LOCK_COPY_PREFIX}.error.${error}`;
+		: modemRefusalCopyKey(error);
 }

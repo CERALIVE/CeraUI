@@ -25,7 +25,7 @@
  * here goes through `document`/`screen` — a `container`-scoped absence sweep
  * would pass on whatever rendered.
  */
-import { m } from "@ceraui/i18n/svelte";
+import { m, resolveMessageKey } from "@ceraui/i18n/svelte";
 import type {
 	Modem,
 	ModemLockDetail,
@@ -43,6 +43,7 @@ import {
 	vi,
 } from "vitest";
 
+import { lockErrorKey } from "$lib/modem/lock-state";
 import RouterDongleDialog from "./RouterDongleDialog.svelte";
 
 const setCredentials = vi.hoisted(() => vi.fn());
@@ -498,7 +499,7 @@ describe("the credential reaches the RPC and nothing else", () => {
 		const band = testid("dongle-lock-outcome");
 		expect(band?.getAttribute("data-outcome")).toBe("refused");
 		expect(band?.textContent?.trim()).toBe(
-			m["network.routerCellular.lock.error.auth_failed"](),
+			resolveMessageKey(lockErrorKey("auth_failed")),
 		);
 		expect(document.body.innerHTML).not.toContain(SECRET);
 	});
@@ -513,7 +514,7 @@ describe("the credential reaches the RPC and nothing else", () => {
 
 		expect(verifyCredentials).not.toHaveBeenCalled();
 		expect(testid("dongle-lock-outcome")?.textContent?.trim()).toBe(
-			m["network.routerCellular.lock.error.device_open"](),
+			resolveMessageKey(lockErrorKey("device_open")),
 		);
 	});
 

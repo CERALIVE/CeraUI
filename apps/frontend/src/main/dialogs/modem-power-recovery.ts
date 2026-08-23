@@ -62,6 +62,7 @@
 import type { ModemConfigRefusal, ModemRadioPower } from "@ceraui/rpc/schemas";
 
 import type { MutationOutcomeKind } from "$lib/modem/mutation-outcome";
+import { modemRefusalCopyKey } from "$lib/modem/refusal-taxonomy";
 
 const POWER = "network.modem.power";
 
@@ -160,16 +161,16 @@ export interface RecoveryOutcomeView {
 	readonly reconcilable: boolean;
 }
 
-const REFUSAL = "network.modem.saveRefused";
-
 /**
  * Turn the save path's own answer into an outcome the band can render.
  *
- * The refusal token is keyed rather than interpolated into one generic
- * sentence: `streaming_active` ("stop the stream"), `mutation_blocked` ("resolve
- * the earlier change") and `write_failed` ("read the logs") are three different
- * things for an operator to do, and a recovery that re-establishes a bearer is
- * exactly the operation a running stream must refuse.
+ * The refusal token resolves through the SHARED taxonomy rather than being
+ * interpolated into one namespace: `streaming_active` ("stop the stream"),
+ * `mutation_blocked` ("resolve the earlier change") and `write_failed` ("read
+ * the logs") are three different things for an operator to do, and a recovery
+ * that re-establishes a bearer is exactly the operation a running stream must
+ * refuse. Routing through the table is what makes a NEW `ModemConfigRefusal`
+ * member a build failure here instead of a dotted path on screen.
  */
 export function recoveryOutcome(
 	result:
@@ -179,7 +180,7 @@ export function recoveryOutcome(
 	if (result.status === "refused") {
 		return {
 			kind: "refused",
-			key: `${REFUSAL}.${result.refusal}`,
+			key: modemRefusalCopyKey(result.refusal),
 			reconcilable: false,
 		};
 	}

@@ -23,6 +23,7 @@
 import { modemConfigRefusalSchema } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
+import { modemRefusalCopyKey } from "$lib/modem/refusal-taxonomy";
 import { CATALOGS } from "../../tests/helpers/catalog";
 import {
 	isStreamingRecoveryRefusal,
@@ -31,11 +32,16 @@ import {
 	recoveryOutcome,
 } from "./modem-power-recovery";
 
-/** Every dotted key a refused modem-config save can resolve to. */
-const REQUIRED_REFUSAL_KEYS: readonly string[] =
-	modemConfigRefusalSchema.options.map(
-		(refusal) => `network.modem.saveRefused.${refusal}`,
-	);
+/**
+ * Every dotted key a refused modem-config save can resolve to.
+ *
+ * Derived through the SHARED refusal taxonomy rather than by interpolating a
+ * namespace: sixteen tokens now resolve onto nine classes, because two tokens
+ * share a sentence exactly when they share a remedy.
+ */
+const REQUIRED_REFUSAL_KEYS: readonly string[] = [
+	...new Set(modemConfigRefusalSchema.options.map(modemRefusalCopyKey)),
+];
 
 /** Every dotted key the power/recovery card renders. */
 const REQUIRED_POWER_KEYS: readonly string[] = [
@@ -163,7 +169,8 @@ describe("a recovery outcome", () => {
 		});
 
 		expect(view.kind).toBe("refused");
-		expect(view.key).toBe("network.modem.saveRefused.streaming_active");
+		expect(view.key).toBe(modemRefusalCopyKey("streaming_active"));
+		expect(view.key).not.toContain("streaming_active");
 		expect(view.reconcilable).toBe(false);
 	});
 
@@ -176,13 +183,29 @@ describe("a recovery outcome", () => {
 	});
 
 	it.each(modemConfigRefusalSchema.options)(
-		"`%s` resolves to its own sentence, never a shared one",
+		"`%s` resolves to keyed copy, never to the raw token",
 		(refusal) => {
-			expect(recoveryOutcome({ status: "refused", refusal }).key).toBe(
-				`network.modem.saveRefused.${refusal}`,
-			);
+			const { key } = recoveryOutcome({ status: "refused", refusal });
+			expect(key).toBe(modemRefusalCopyKey(refusal));
+			expect(key).not.toContain(refusal);
+			expect(typeof lookup(CATALOGS.en, key)).toBe("string");
 		},
 	);
+
+	it("tokens with DIFFERENT remedies never share a sentence", () => {
+		// The taxonomy's whole claim, asserted where the surface reads it: "stop
+		// the stream", "wait for the running change", "resolve the earlier one"
+		// and "read the logs" are four actions and must stay four sentences.
+		const keys = (
+			[
+				"streaming_active",
+				"mutation_in_progress",
+				"mutation_blocked",
+				"write_failed",
+			] as const
+		).map((refusal) => recoveryOutcome({ status: "refused", refusal }).key);
+		expect(new Set(keys).size).toBe(keys.length);
+	});
 
 	it("names the streaming interlock as its own operator action", () => {
 		expect(isStreamingRecoveryRefusal("streaming_active")).toBe(true);
@@ -195,11 +218,12 @@ describe("every refusal and every power string has copy, in all ten locales", ()
 	const ALL = [...REQUIRED_REFUSAL_KEYS, ...REQUIRED_POWER_KEYS];
 
 	it("the derived list is non-trivial", () => {
-		// Sixteen refusals — nine of which carried NO copy before this todo — plus
-		// the card's own strings. The SET is what matters, not the sum.
+		// Sixteen refusals folded onto nine classes, plus the card's own strings.
+		// The SET is what matters, not the sum.
 		expect(modemConfigRefusalSchema.options.length).toBe(16);
+		expect(REQUIRED_REFUSAL_KEYS).toHaveLength(9);
 		expect(REQUIRED_REFUSAL_KEYS).toContain(
-			"network.modem.saveRefused.streaming_active",
+			modemRefusalCopyKey("streaming_active"),
 		);
 		expect(new Set(ALL).size).toBe(ALL.length);
 	});
@@ -209,24 +233,21 @@ describe("every refusal and every power string has copy, in all ten locales", ()
 	});
 
 	it("the check is falsifiable — a removed key is reported, per locale", () => {
+		const key = modemRefusalCopyKey("streaming_active");
 		for (const locale of Object.keys(CATALOGS)) {
-			const crippled = withoutKey(
-				CATALOGS[locale],
-				"network.modem.saveRefused.streaming_active",
-			);
+			const crippled = withoutKey(CATALOGS[locale], key);
 
-			expect(missingCopyKeys(crippled, ALL)).toEqual([
-				"network.modem.saveRefused.streaming_active",
-			]);
+			expect(missingCopyKeys(crippled, ALL)).toEqual([key]);
 		}
 	});
 
-	it("the seven shared mutation refusals reuse ONE sentence per token", () => {
-		// The established rule: one machine token, one operator sentence, across
-		// every modem-mutation surface. A second wording for the same refusal is
-		// how the same fact comes to read differently depending on which control
-		// produced it.
-		for (const token of [
+	it("the seven shared mutation refusals resolve through ONE table", () => {
+		// The rule this suite has always guarded — one machine token, one operator
+		// sentence — used to be checked by comparing two namespaces' strings, which
+		// only ever caught drift AFTER it happened. The taxonomy makes it
+		// structural instead: this surface cannot mint a wording at all, because
+		// the key it renders IS the table's answer.
+		const SHARED = [
 			"identity_unresolved",
 			"mutation_in_progress",
 			"streaming_active",
@@ -234,12 +255,25 @@ describe("every refusal and every power string has copy, in all ten locales", ()
 			"mutation_blocked",
 			"device_decommissioned",
 			"rebaseline_required",
-		] as const) {
-			for (const locale of Object.keys(CATALOGS)) {
-				expect(
-					lookup(CATALOGS[locale], `network.modem.saveRefused.${token}`),
-				).toBe(lookup(CATALOGS[locale], `network.modem.gps.error.${token}`));
-			}
+		] as const;
+
+		for (const token of SHARED) {
+			expect(recoveryOutcome({ status: "refused", refusal: token }).key).toBe(
+				modemRefusalCopyKey(token),
+			);
+		}
+
+		// …and the fold is the claimed one: the seven collapse onto exactly four
+		// remedies — replug it, stop the stream, wait for the running change,
+		// resolve the earlier one — which stay four sentences in every locale. A
+		// fold that quietly became three would pass the loop above.
+		const classes = new Set(SHARED.map(modemRefusalCopyKey));
+		expect(classes.size).toBe(4);
+		for (const locale of Object.keys(CATALOGS)) {
+			const sentences = [...classes].map((key) =>
+				lookup(CATALOGS[locale], key),
+			);
+			expect(new Set(sentences).size).toBe(4);
 		}
 	});
 });

@@ -134,6 +134,7 @@ import type {
 	FiveGPreference,
 	Modem,
 	ModemConfigRefusal,
+	ModemScanFailure,
 	ModemSmsRefusal,
 	SmsMessage,
 	ModemBandsOutput,
@@ -218,6 +219,7 @@ import {
 	type MutationOutcome,
 	mutationOutcome,
 } from '$lib/modem/mutation-outcome';
+import { modemRefusalCopyKey } from '$lib/modem/refusal-taxonomy';
 import {
 	CapabilitySection,
 	type CapabilityView,
@@ -330,6 +332,17 @@ let scanSignatureBaseline = $state<string | undefined>(undefined);
 
 const scanning = $derived(isOperationPending(scanKey));
 const scanError = $derived(getOperationPhase(scanKey) === 'failed');
+// The device's OWN typed answer, held beside the phase. The band used to print
+// one generic "the scan failed" for all three: "the radio was still sweeping"
+// (retry), "one is already running" (wait) and "it could not be run at all" are
+// three different next steps, and collapsing them cost the operator the
+// difference.
+let scanFailure = $state<ModemScanFailure | undefined>(undefined);
+const scanFailureKey = $derived(
+	scanFailure === undefined
+		? 'network.modem.scanFailed'
+		: modemRefusalCopyKey(scanFailure),
+);
 const savePending = $derived(isOperationPending(configKey));
 
 // The secondary surface is COLLAPSED on every open, never remembered. An
@@ -346,6 +359,7 @@ $effect(() => {
 		usagePolicySeed = usagePolicyOf(formData);
 		saveExpected = undefined;
 		scanSignatureBaseline = undefined;
+		scanFailure = undefined;
 		saveRefusal = undefined;
 		saveUnconfirmed = false;
 		unconfirmedExpectation = undefined;
@@ -408,10 +422,11 @@ const reconnectExpected = $derived(
 // save used to vanish before an operator could read it (the UpdatesDialog
 // precedent). Cleared on the next dispatch and on the open edge.
 let saveRefusal = $state<ModemConfigRefusal | undefined>(undefined);
+// Resolved through the SHARED refusal taxonomy rather than interpolated into
+// `saveRefused.<token>`: a seventeenth `modemConfigRefusalSchema` member used to
+// render its own dotted path at the operator, and now fails the build instead.
 const saveRefusalKey = $derived(
-	saveRefusal === undefined
-		? undefined
-		: `network.modem.saveRefused.${saveRefusal}`,
+	saveRefusal === undefined ? undefined : modemRefusalCopyKey(saveRefusal),
 );
 
 // Available operators for manual selection (populated by a scan).
@@ -613,11 +628,15 @@ async function handleScan() {
 	if (noSim || isOperationPending(scanKey)) return;
 	// Capture the baseline BEFORE dispatch so a fresh result is detectable.
 	scanSignatureBaseline = modemScanSignature(modem.available_networks);
+	scanFailure = undefined;
 	await osCommand({
 		key: scanKey,
 		rpc: () => rpc.modems.scan({ device: Number(deviceId) }),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		failMessage: () => m["network.os.operationFailed"](),
+		onResult: (result) => {
+			scanFailure = result.success ? undefined : result.scanFailure;
+		},
 	});
 }
 
@@ -1237,7 +1256,10 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 				<ShieldAlert class="text-status-error mt-0.5 size-5 shrink-0" aria-hidden="true" />
 				<div class="min-w-0">
 					<p class="text-sm font-semibold">{m["network.modem.saveRefusedTitle"]()}</p>
-					<p class="text-muted-foreground mt-0.5 text-xs leading-relaxed">
+					<p
+						class="text-muted-foreground mt-0.5 text-xs leading-relaxed"
+						data-testid="modem-save-refused-reason"
+					>
 						{t(saveRefusalKey)}
 					</p>
 				</div>
@@ -1439,8 +1461,8 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					</Select.Root>
 
 					{#if scanError}
-						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert">
-							{m["network.modem.scanFailed"]()}
+						<p class="text-status-error text-xs" data-testid="modem-scan-error" role="alert" data-scan-failure={scanFailure}>
+							{t(scanFailureKey)}
 						</p>
 					{:else if scanning}
 						<p class="text-muted-foreground text-xs" data-testid="modem-scanning-state">

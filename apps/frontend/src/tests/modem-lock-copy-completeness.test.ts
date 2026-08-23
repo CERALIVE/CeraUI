@@ -80,10 +80,18 @@ const ERROR_KEYS: readonly string[] = [
 	...modemCredentialsRefusalSchema.options.map((token) => lockErrorKey(token)),
 ];
 
+/**
+ * De-duplicated as a whole, not per group.
+ *
+ * The three credential CAUSES and the three matching typed REFUSALS now resolve
+ * to the same key: `lockErrorKey` routes through the shared refusal taxonomy,
+ * which deliberately points `auth-failed`, `unsupported-profile` and
+ * `locked-out` back at this section's own `lock.cause.*` copy rather than
+ * minting a second wording for one fact. A key listed twice would be reported
+ * twice by the falsifiability proof below.
+ */
 const REQUIRED_KEYS: readonly string[] = [
-	...SURFACE_KEYS,
-	...new Set(SITUATION_KEYS),
-	...ERROR_KEYS,
+	...new Set([...SURFACE_KEYS, ...SITUATION_KEYS, ...ERROR_KEYS]),
 ];
 
 /**

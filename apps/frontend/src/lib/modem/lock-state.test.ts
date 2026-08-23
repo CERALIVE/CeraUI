@@ -238,8 +238,10 @@ describe("a typed refusal is keyed copy, never a raw wire token", () => {
 		expect(new Set(keys).size).toBe(
 			modemCredentialsRefusalSchema.options.length,
 		);
+		// Broadened, not weakened: the shared taxonomy owns these sentences now
+		// and points the three credential causes back at `lock.cause.*`.
 		for (const key of keys) {
-			expect(key.startsWith("network.routerCellular.lock.error.")).toBe(true);
+			expect(key.startsWith("network.")).toBe(true);
 		}
 	});
 
