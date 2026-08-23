@@ -1145,7 +1145,7 @@
 	"network.modem.gps.privacyNotice": "Apenas a posição atual é exibida. Nada é registrado, salvo ou enviado para lugar algum.",
 	"network.modem.gps.reason.moduleDisabled": "Primeiro ative a localização para este dispositivo nas configurações.",
 	"network.modem.gps.reason.notReported": "Este modem ainda não informou seu receptor de localização.",
-	"network.modem.gps.reason.unproven": "Não foi possível confirmar que este modem tem receptor de satélite.",
+	"network.modem.gps.reason.unproven": "Ainda estamos verificando se este modem tem receptor de satélite.",
 	"network.modem.gps.state.acquiring": "Procurando satélites. Ao ar livre isso pode levar alguns minutos.",
 	"network.modem.gps.state.off": "O receptor está desligado.",
 	"network.modem.gps.state.unavailable": "Não foi possível consultar a posição no modem.",

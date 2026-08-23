@@ -105,6 +105,7 @@ import {
 	openRouterAdminUi,
 	routerAdminOpenReasonKey,
 } from '../network/router-admin-open';
+import ModemGpsSection from './ModemGpsSection.svelte';
 import {
 	detailFields,
 	diagnosticFields,
@@ -138,6 +139,14 @@ type ControlId = keyof RouterAdminControls;
 
 const admin = $derived(modem.router_admin);
 const controls = $derived(admin?.controls);
+
+/**
+ * A capability module is a property of the MODEM, not of the dialog that happens
+ * to be rendering it. `capability_modules` is stamped onto every row the wire
+ * producer emits — this family included — so reading it here is what stops the
+ * choice of dialog silently deciding which claims an operator can ever reach.
+ */
+const gpsClaim = $derived(modem.capability_modules?.gps);
 
 /** Every card on this dialog is the same bordered panel the MM dialog uses. */
 const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
@@ -576,6 +585,12 @@ async function applyNetMode(mode: string) {
 				</p>
 			</div>
 		{/if}
+
+		<!-- The SAME section the MM dialog mounts, not a router-flavoured copy of
+		     it. A claim that only one family's dialog knows how to render is a
+		     claim half the fleet can never act on, and `absent` renders zero nodes —
+		     so a dongle that reports no receiver is byte-unchanged by this mount. -->
+		<ModemGpsSection claim={gpsClaim} {deviceId} />
 
 		{#if admin}
 			<!-- The address is stated, and the page it names is reachable through

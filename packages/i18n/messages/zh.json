@@ -1097,7 +1097,7 @@
 	"network.modem.gps.privacyNotice": "仅显示当前位置。不会记录、保存或发送到任何地方。",
 	"network.modem.gps.reason.moduleDisabled": "请先在设置中为本设备启用定位。",
 	"network.modem.gps.reason.notReported": "此调制解调器尚未上报其定位接收器。",
-	"network.modem.gps.reason.unproven": "无法确认该调制解调器是否有卫星接收器。",
+	"network.modem.gps.reason.unproven": "仍在确认该调制解调器是否有卫星接收器。",
 	"network.modem.gps.state.acquiring": "正在搜索卫星。即使在户外也可能需要几分钟。",
 	"network.modem.gps.state.off": "接收器已关闭。",
 	"network.modem.gps.state.unavailable": "无法向调制解调器查询位置。",

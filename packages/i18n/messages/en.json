@@ -1142,7 +1142,7 @@
 	"network.modem.gps.privacyNotice": "Only the current position is shown. Nothing is recorded, saved, or sent anywhere.",
 	"network.modem.gps.reason.moduleDisabled": "Turn on location for this device in settings first.",
 	"network.modem.gps.reason.notReported": "This modem has not reported its location receiver yet.",
-	"network.modem.gps.reason.unproven": "We couldn't confirm this modem has a satellite receiver.",
+	"network.modem.gps.reason.unproven": "Still establishing whether this modem has a satellite receiver.",
 	"network.modem.gps.state.acquiring": "Searching for satellites. This can take a couple of minutes outdoors.",
 	"network.modem.gps.state.off": "Receiver is off.",
 	"network.modem.gps.state.unavailable": "The modem couldn't be asked for a position.",

@@ -1145,7 +1145,7 @@
 	"network.modem.gps.privacyNotice": "Solo se muestra la posición actual. No se registra, guarda ni envía nada a ningún sitio.",
 	"network.modem.gps.reason.moduleDisabled": "Primero activa la ubicación para este dispositivo en la configuración.",
 	"network.modem.gps.reason.notReported": "Este módem aún no ha informado de su receptor de ubicación.",
-	"network.modem.gps.reason.unproven": "No pudimos confirmar que este módem tenga receptor satelital.",
+	"network.modem.gps.reason.unproven": "Aún estamos comprobando si este módem tiene receptor satelital.",
 	"network.modem.gps.state.acquiring": "Buscando satélites. Al aire libre esto puede tardar un par de minutos.",
 	"network.modem.gps.state.off": "El receptor está apagado.",
 	"network.modem.gps.state.unavailable": "No se pudo consultar la posición al módem.",

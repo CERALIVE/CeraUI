@@ -127,15 +127,12 @@ import { toast } from 'svelte-sonner';
 import ModemFccUnlockSection from './ModemFccUnlockSection.svelte';
 import { fccUnlockErrorKey } from './modem-fcc-unlock';
 import ModemGpsSection from './ModemGpsSection.svelte';
-import { gpsErrorKey as gpsErrorKeyFor } from './modem-gps';
 import ModemUssdSection from './ModemUssdSection.svelte';
 import type {
 	FccUnlockState,
 	FiveGPreference,
-	GnssFixState,
 	Modem,
 	ModemConfigRefusal,
-	ModemGpsStatus,
 	ModemSmsRefusal,
 	SmsMessage,
 	ModemBandsOutput,
@@ -335,7 +332,6 @@ $effect(() => {
 		bandOutcomeKey = undefined;
 		void loadBands();
 		void loadFccUnlock();
-		void loadGps();
 	}
 	prevOpen = open;
 });
@@ -656,64 +652,12 @@ async function toggleFccUnlock(enabled: boolean): Promise<void> {
 }
 
 // ── GPS / location ───────────────────────────────────────────────────────────
-// Read on every open, and RE-read after every toggle, because this read is what
-// advances the device's bounded no-fix / stale-fix state machine — the state is
-// only ever computed while somebody is looking at it, which is what makes "a fix
-// exists only while it is on screen" true by construction rather than by policy.
-let gpsStatus = $state<ModemGpsStatus | undefined>(undefined);
-let gpsState = $state<GnssFixState | undefined>(undefined);
-let gpsBusy = $state(false);
-let gpsOutcome = $state<MutationOutcome | undefined>(undefined);
-
+// The claim is all this dialog owns. The section holds its own state, its own
+// RPC and the coordinate itself, so the fix is dropped when `AppDialog` unmounts
+// it rather than parked in a dialog the view keeps mounted forever — and so the
+// router family can mount the same surface without a second copy of the rules.
 const gpsClaim = $derived(modem.capability_modules?.gps);
 const ussdClaim = $derived(modem.capability_modules?.ussd);
-
-async function loadGps(): Promise<void> {
-	gpsStatus = undefined;
-	gpsState = undefined;
-	gpsOutcome = undefined;
-	const requested = deviceId;
-	try {
-		const result = await rpc.modems.getGps({ device: String(deviceId) });
-		// A close/reopen onto another modem while this was in flight must not adopt
-		// the previous device's position.
-		if (requested !== deviceId) return;
-		if (result.success) {
-			gpsStatus = result.status;
-			gpsState = result.state;
-		}
-	} catch {
-		gpsStatus = undefined;
-		gpsState = undefined;
-	}
-}
-
-async function toggleGps(enabled: boolean): Promise<void> {
-	gpsBusy = true;
-	gpsOutcome = undefined;
-	try {
-		const result = await rpc.modems.setGps({ device: String(deviceId), enabled });
-		if (result.success) {
-			gpsStatus = result.status;
-			gpsState = result.state;
-			gpsOutcome = mutationOutcome(
-				"applied",
-				enabled
-					? m["network.modem.gps.outcome.enabled"]()
-					: m["network.modem.gps.outcome.disabled"](),
-			);
-		} else {
-			gpsOutcome = mutationOutcome(
-				"refused",
-				t(gpsErrorKeyFor(result.error ?? result.mutationRefusal ?? "read_failed")),
-			);
-		}
-	} catch {
-		gpsOutcome = mutationOutcome("refused", t(gpsErrorKeyFor("read_failed")));
-	} finally {
-		gpsBusy = false;
-	}
-}
 
 // ── Band lock ────────────────────────────────────────────────────────────────
 // Read on every open, like the USB-mode option set and for the same reason: the
@@ -2554,19 +2498,15 @@ const networkTypeView = $derived(
 
 		<!-- The GPS module's whole surface existed and was WIRED, but nothing ever
 		     mounted it, so a `capable` receiver contributed exactly as many DOM
-		     nodes as a modem with no GNSS at all: zero. Keep this mount. -->
-		<ModemGpsSection
-			claim={gpsClaim}
-			status={gpsStatus}
-			state={gpsState}
-			busy={gpsBusy}
-			outcome={gpsOutcome}
-			onToggle={(next) => void toggleGps(next)}
-		/>
+		     nodes as a modem with no GNSS at all: zero. Keep this mount — and keep
+		     its twin in `RouterDongleDialog`, or the same claim is unreachable for
+		     half the fleet. Like the USSD surface below it, this one owns its state
+		     and its RPC: do not hoist them here for consistency, because unmounting
+		     is what drops the coordinate. -->
+		<ModemGpsSection claim={gpsClaim} deviceId={String(deviceId)} />
 
-		<!-- Unlike the two sections above, this one owns its session state and its
-		     own RPC. Do not hoist them here for consistency: closing the dialog
-		     unmounts the component, which is what drops the carrier's text. -->
+		<!-- Same shape, same reason: closing the dialog unmounts the component,
+		     which is what drops the carrier's text. -->
 		<ModemUssdSection claim={ussdClaim} deviceId={String(deviceId)} />
 		</div>
 		</CollapsibleSection>

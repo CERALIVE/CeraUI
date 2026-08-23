@@ -1097,7 +1097,7 @@
 	"network.modem.gps.privacyNotice": "表示されるのは現在地のみです。記録・保存・送信は一切行いません。",
 	"network.modem.gps.reason.moduleDisabled": "先に設定でこの端末の位置情報を有効にしてください。",
 	"network.modem.gps.reason.notReported": "このモデムはまだ位置情報受信機を報告していません。",
-	"network.modem.gps.reason.unproven": "このモデムに衛星受信機があるか確認できませんでした。",
+	"network.modem.gps.reason.unproven": "このモデムに衛星受信機があるかどうかを確認中です。",
 	"network.modem.gps.state.acquiring": "衛星を検索しています。屋外でも数分かかることがあります。",
 	"network.modem.gps.state.off": "受信機はオフです。",
 	"network.modem.gps.state.unavailable": "モデムに位置を問い合わせられませんでした。",

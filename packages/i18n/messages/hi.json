@@ -1142,7 +1142,7 @@
 	"network.modem.gps.privacyNotice": "सिर्फ़ मौजूदा जगह दिखाई जाती है। कुछ भी रिकॉर्ड, सेव या कहीं भेजा नहीं जाता।",
 	"network.modem.gps.reason.moduleDisabled": "पहले सेटिंग में इस डिवाइस के लिए स्थान चालू करें।",
 	"network.modem.gps.reason.notReported": "इस मॉडेम ने अभी तक अपना लोकेशन रिसीवर रिपोर्ट नहीं किया है।",
-	"network.modem.gps.reason.unproven": "हम पुष्टि नहीं कर सके कि इस मॉडेम में सैटेलाइट रिसीवर है।",
+	"network.modem.gps.reason.unproven": "यह अभी पता लगाया जा रहा है कि इस मॉडेम में सैटेलाइट रिसीवर है या नहीं।",
 	"network.modem.gps.state.acquiring": "सैटेलाइट खोजे जा रहे हैं। खुले में भी इसमें कुछ मिनट लग सकते हैं।",
 	"network.modem.gps.state.off": "रिसीवर बंद है।",
 	"network.modem.gps.state.unavailable": "मॉडेम से स्थान नहीं पूछा जा सका।",

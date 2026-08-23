@@ -1154,7 +1154,7 @@
 	"network.modem.gps.privacyNotice": "يُعرض الموقع الحالي فقط. لا يُسجَّل أي شيء ولا يُحفظ ولا يُرسل إلى أي جهة.",
 	"network.modem.gps.reason.moduleDisabled": "فعّل الموقع لهذا الجهاز من الإعدادات أولاً.",
 	"network.modem.gps.reason.notReported": "لم يبلّغ هذا المودم بعد عن مستقبل تحديد الموقع.",
-	"network.modem.gps.reason.unproven": "تعذّر التأكد من وجود مستقبِل أقمار صناعية في هذا المودم.",
+	"network.modem.gps.reason.unproven": "ما زلنا نتحقّق ممّا إذا كان هذا المودم يحتوي على مستقبِل أقمار صناعية.",
 	"network.modem.gps.state.acquiring": "جارٍ البحث عن الأقمار الصناعية. قد يستغرق ذلك بضع دقائق في الهواء الطلق.",
 	"network.modem.gps.state.off": "المستقبِل متوقف.",
 	"network.modem.gps.state.unavailable": "تعذّر الاستعلام عن الموقع من المودم.",

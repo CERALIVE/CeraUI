@@ -1097,7 +1097,7 @@
 	"network.modem.gps.privacyNotice": "현재 위치만 표시됩니다. 어떤 것도 기록하거나 저장하거나 어디로도 전송하지 않습니다.",
 	"network.modem.gps.reason.moduleDisabled": "먼저 설정에서 이 장치의 위치 기능을 켜세요.",
 	"network.modem.gps.reason.notReported": "이 모뎀이 아직 위치 수신기를 보고하지 않았습니다.",
-	"network.modem.gps.reason.unproven": "이 모뎀에 위성 수신기가 있는지 확인하지 못했습니다.",
+	"network.modem.gps.reason.unproven": "이 모뎀에 위성 수신기가 있는지 아직 확인하고 있습니다.",
 	"network.modem.gps.state.acquiring": "위성을 검색하는 중입니다. 실외에서도 몇 분 걸릴 수 있습니다.",
 	"network.modem.gps.state.off": "수신기가 꺼져 있습니다.",
 	"network.modem.gps.state.unavailable": "모뎀에 위치를 요청할 수 없었습니다.",

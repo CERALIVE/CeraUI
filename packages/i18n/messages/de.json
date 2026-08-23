@@ -1142,7 +1142,7 @@
 	"network.modem.gps.privacyNotice": "Es wird nur die aktuelle Position angezeigt. Nichts wird aufgezeichnet, gespeichert oder irgendwohin gesendet.",
 	"network.modem.gps.reason.moduleDisabled": "Aktivieren Sie zuerst den Standort für dieses Gerät in den Einstellungen.",
 	"network.modem.gps.reason.notReported": "Dieses Modem hat seinen Standortempfänger noch nicht gemeldet.",
-	"network.modem.gps.reason.unproven": "Wir konnten nicht bestätigen, dass dieses Modem einen Satellitenempfänger hat.",
+	"network.modem.gps.reason.unproven": "Es wird noch ermittelt, ob dieses Modem einen Satellitenempfänger hat.",
 	"network.modem.gps.state.acquiring": "Suche nach Satelliten. Im Freien kann das ein paar Minuten dauern.",
 	"network.modem.gps.state.off": "Empfänger ist aus.",
 	"network.modem.gps.state.unavailable": "Das Modem konnte nicht nach einer Position gefragt werden.",

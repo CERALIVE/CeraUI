@@ -8,52 +8,73 @@
   location receiver on is entitled to know what the device does with the answer
   before they act, not after.
 
-  NOTHING HERE IS EVER A SPINNER. Acquisition is BOUNDED, so the waiting state
-  states the bound and then becomes an honest "no fix" — a modem with no antenna
-  answers "no fix" forever, quite correctly, and an unbounded wait would render
-  as a spinner that never resolves.
+  IT OWNS ITS OWN STATE AND ITS OWN RPC, and that is the fence too — the same
+  reason `ModemUssdSection` does. A host dialog is mounted permanently by the
+  view behind it, so a coordinate parked in the host outlives every close;
+  `AppDialog` renders children only while open, so holding the fix HERE makes the
+  retention bound the mount rather than a cleanup somebody has to remember. It is
+  also what makes the section mountable by any modem family without a second copy
+  of the load/toggle/expiry rules — see the mount in `RouterDongleDialog`.
 
-  THE FOUR-STATE LADDER IS `CapabilitySection`'s, NOT THIS FILE'S. This section
-  and `ModemFccUnlockSection` each wrote it out by hand and each got it right,
-  which is precisely how a third copy eventually gets it wrong. `gpsView` still
-  decides WHICH state this modem is in — that rule is GPS-specific and stays
-  here — and the shared primitive owns what each state renders: zero nodes at
-  `absent`, a `role="status"` diagnostic and NO control at `unknown` (CT-3/CT-4),
+  NOTHING HERE IS EVER A SPINNER. Acquisition is BOUNDED twice: the device's own
+  state machine expires the wait, and — because that machine is advanced only by
+  a read, so a modem that stops answering would leave it on `acquiring` forever —
+  this surface re-states the same declared window at render time. A modem with no
+  antenna answers "no fix", quite correctly, and it answers it in finite time.
+
+  THE FOUR-STATE LADDER IS `CapabilitySection`'s, NOT THIS FILE'S. `gpsView`
+  still decides WHICH state this modem is in — that rule is GPS-specific and
+  stays here — and the shared primitive owns what each state renders: zero nodes
+  at `absent`, a `role="status"` diagnostic and NO control at `unknown` (CT-3/CT-4),
   the control DISABLED with its reason ON SCREEN at `blocked` (CT-2), and the
   live control plus these readings at `available`. Every test id is unchanged:
   `modem-gps`, `-toggle`, `-reason`, `-unknown`, and the outcome band's own.
 -->
 <script lang="ts">
-import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey, resolveMessageKey as t } from '@ceraui/i18n/svelte';
 import type { GnssFixState, ModemGpsStatus, SupportClaimState } from '@ceraui/rpc/schemas';
 
 import { Switch } from '$lib/components/ui/switch';
-import type { MutationOutcome } from '$lib/modem/mutation-outcome';
+import { type MutationOutcome, mutationOutcome } from '$lib/modem/mutation-outcome';
 import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
+import { rpc } from '$lib/rpc';
 
-import { gnssFixLine, gpsStatusLine, gpsView } from './modem-gps';
+import {
+	gnssAcquireExpired,
+	gnssAcquirePollDelay,
+	gnssAcquireWindow,
+	gnssFixLine,
+	gpsErrorKey,
+	gpsStatusLine,
+	gpsView,
+} from './modem-gps';
 
 interface Props {
 	claim: SupportClaimState | undefined;
-	status: ModemGpsStatus | undefined;
-	state: GnssFixState | undefined;
-	busy?: boolean;
-	/**
-	 * The last terminal outcome of a toggle — SUCCESS INCLUDED.
-	 *
-	 * It replaced a failure-only string, which meant a screen-reader operator who
-	 * turned the receiver on learned nothing at all: the toggle they had just
-	 * moved simply stayed where it was and no text appeared anywhere. §8 LR-5
-	 * requires the terminal outcome of an in-flight operation either way.
-	 */
-	outcome?: MutationOutcome | undefined;
-	onToggle: (enabled: boolean) => void;
+	/** The device selector both GPS procedures take. */
+	deviceId: string;
 }
 
-let { claim, status, state, busy = false, outcome, onToggle }: Props = $props();
+let { claim, deviceId }: Props = $props();
+
+let status = $state<ModemGpsStatus | undefined>(undefined);
+let fixState = $state<GnssFixState | undefined>(undefined);
+let busy = $state(false);
+/**
+ * The last terminal outcome of a toggle — SUCCESS INCLUDED. A failure-only
+ * string meant a screen-reader operator who turned the receiver on learned
+ * nothing at all: the toggle they had just moved simply stayed where it was and
+ * no text appeared anywhere. §8 LR-5 requires the terminal outcome either way.
+ */
+let outcome = $state<MutationOutcome | undefined>(undefined);
+let acquireObservedAt = $state(0);
+let acquireSince = $state<number | undefined>(undefined);
+let now = $state(Date.now());
 
 const view = $derived(gpsView(claim, status));
-const line = $derived(gpsStatusLine(state));
+const acquireWindow = $derived(gnssAcquireWindow(fixState, acquireObservedAt));
+const acquireExpired = $derived(gnssAcquireExpired(acquireWindow, now));
+const line = $derived(gpsStatusLine(fixState, acquireExpired));
 const capability = $derived.by((): CapabilityView => {
 	switch (view.kind) {
 		case 'absent':
@@ -65,6 +86,93 @@ const capability = $derived.by((): CapabilityView => {
 		case 'toggle':
 			return { mode: 'available' };
 	}
+});
+
+function adoptState(next: GnssFixState | undefined): void {
+	if (next?.kind === 'acquiring') {
+		if (acquireSince !== next.since) {
+			acquireSince = next.since;
+			acquireObservedAt = Date.now();
+		}
+	} else {
+		acquireSince = undefined;
+	}
+	fixState = next;
+	now = Date.now();
+}
+
+async function read(): Promise<void> {
+	const requested = deviceId;
+	try {
+		const result = await rpc.modems.getGps({ device: deviceId });
+		// A close/reopen onto another modem while this was in flight must not adopt
+		// the previous device's position.
+		if (requested !== deviceId) return;
+		if (result.success) {
+			status = result.status;
+			adoptState(result.state);
+		}
+	} catch {
+		// A failed read claims nothing about the device — the ladder already
+		// withholds the control below `capable`, so this must not additionally
+		// invent a verdict.
+	}
+}
+
+async function toggle(enabled: boolean): Promise<void> {
+	busy = true;
+	outcome = undefined;
+	try {
+		const result = await rpc.modems.setGps({ device: deviceId, enabled });
+		if (result.success) {
+			status = result.status;
+			adoptState(result.state);
+			outcome = mutationOutcome(
+				'applied',
+				enabled
+					? m['network.modem.gps.outcome.enabled']()
+					: m['network.modem.gps.outcome.disabled'](),
+			);
+		} else {
+			outcome = mutationOutcome(
+				'refused',
+				t(gpsErrorKey(result.error ?? result.mutationRefusal ?? 'read_failed')),
+			);
+		}
+	} catch {
+		outcome = mutationOutcome('refused', t(gpsErrorKey('read_failed')));
+	} finally {
+		busy = false;
+	}
+}
+
+/*
+  The read is issued for every claim that renders ANYTHING, and that is the
+  point: the capability evidence each GPS mutation gates on is process-local and
+  resets on boot, so a surface that waited for the claim to say `capable` could
+  never make it say so — the operator would meet a section that is permanently
+  unproven. The one claim it skips is `absent`, which renders zero nodes: a
+  surface that says nothing asks nothing. It tracks `deviceId`, so pointing the
+  host at another modem re-reads.
+*/
+$effect(() => {
+	if (claim === undefined || claim === 'unavailable') return;
+	void read();
+});
+
+/*
+  Re-armed once per read rather than a standing interval, so the timer that
+  survives to fire IS "the wait is still live". It arms only while acquiring and
+  never past the declared window, so the poll cannot outlive the bound it serves.
+*/
+$effect(() => {
+	const delay = gnssAcquirePollDelay(acquireWindow, Date.now());
+	if (delay === undefined) return;
+	const timer = setTimeout(() => {
+		now = Date.now();
+		void read();
+	}, delay);
+	return () => clearTimeout(timer);
 });
 </script>
 
@@ -91,7 +199,7 @@ const capability = $derived.by((): CapabilityView => {
 			aria-label={ctx.reason}
 			aria-describedby={ctx.reasonId}
 			title={ctx.reason}
-			onCheckedChange={(next) => onToggle(next)}
+			onCheckedChange={(next) => void toggle(next)}
 		/>
 	{/snippet}
 
