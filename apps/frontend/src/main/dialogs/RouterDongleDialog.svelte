@@ -70,7 +70,16 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { Modem, RouterAdminControls } from '@ceraui/rpc/schemas';
-import { Clock, ExternalLink, Info, Router, Sliders, Wrench } from '@lucide/svelte';
+import {
+	Ban,
+	Clock,
+	ExternalLink,
+	Info,
+	Router,
+	Sliders,
+	TriangleAlert,
+	Wrench,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import CollapsibleSection from '$lib/components/custom/CollapsibleSection.svelte';
@@ -78,6 +87,7 @@ import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import { Button } from '$lib/components/ui/button';
 import { AppDialog } from '$lib/components/dialogs';
+import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import {
 	CapabilitySection,
@@ -108,6 +118,14 @@ import {
 } from '../network/router-admin-open';
 import ModemGpsSection from './ModemGpsSection.svelte';
 import ModemLockSection from './ModemLockSection.svelte';
+import {
+	isSubnetTargetValid,
+	netModeSectionView,
+	ROUTER_UNAVAILABLE_OPERATIONS,
+	subnetOutcome,
+	subnetRewriteRequest,
+	subnetRewriteView,
+} from './router-dongle-actions';
 import {
 	detailFields,
 	diagnosticFields,
@@ -161,13 +179,6 @@ const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
  */
 const cardView = (present: boolean): CapabilityView =>
 	present ? { mode: 'available' } : { mode: 'absent' };
-
-/**
- * The refusal the net-mode section falls back to if its resolved sentence is
- * ever dropped. It is the GENERIC form of the same fact, so the degradation is
- * a loss of the firmware's error code and never a loss of the truth.
- */
-const NET_MODE_REFUSAL_KEY = 'network.routerCellular.netMode.refusedUnknown';
 
 const sections = $derived(
 	deriveModemSections({
@@ -227,13 +238,46 @@ const controlsLocked = $derived(lockWithholdsCapabilities(lock));
  * and `blocked` when it declined the question. `blocked` renders the refusal
  * with NO control, which is only true because this call site passes no `control`
  * snippet: the chips are `children`, and `children` render at `available` alone.
+ *
+ * The rule itself is `router-dongle-actions.ts`, so "a 112008 refusal renders
+ * blocked-with-the-code rather than hiding the control" is assertable without
+ * mounting this dialog.
  */
-const netModeView = $derived<CapabilityView>(
-	netMode === undefined
-		? { mode: 'absent' }
-		: netMode.selectable
-			? { mode: 'available' }
-			: { mode: 'blocked', reasonKey: NET_MODE_REFUSAL_KEY },
+const netModeView = $derived(netModeSectionView(netMode));
+
+/**
+ * The LAN-subnet rewrite: offered ONLY for a dongle whose writes were proven,
+ * and never as a switch.
+ *
+ * `absent` renders zero nodes, so a dialect this build performs no write for —
+ * and a dongle whose login is still outstanding, which withholds `controls` —
+ * is byte-unchanged by this surface.
+ */
+const subnetView = $derived(subnetRewriteView(admin));
+
+/** The operator's target address. Local, never persisted, cleared on apply. */
+let subnetTarget = $state('');
+/**
+ * The two-step confirmation, INLINE rather than a modal.
+ *
+ * The write can leave the dongle at an address nothing here can reach, so it
+ * needs an explicit second act — but a modal inside an already-portalled dialog
+ * puts the consequence on a layer the shipped kiosk touchscreen has to dismiss
+ * before it can re-read the address it is confirming. The panel below states the
+ * consequence beside the field that produced it.
+ */
+let subnetConfirming = $state(false);
+let subnetBusy = $state(false);
+let subnetResult = $state<
+	{ readonly kind: 'applied' | 'refused' | 'unknown'; readonly message: string } | undefined
+>(undefined);
+
+const subnetTargetValid = $derived(isSubnetTargetValid(subnetTarget));
+
+const subnetBand = $derived(
+	subnetResult === undefined
+		? undefined
+		: mutationOutcome(subnetResult.kind, subnetResult.message),
 );
 
 // §2 IH-4. `unknown` is deliberately NOT marked: the device told us nothing
@@ -349,6 +393,49 @@ async function applyNetMode(mode: string) {
 		if (flow) flow = resolveRouterWrite(flow, result, Date.now());
 	} catch {
 		if (flow) flow = failRouterWrite(flow);
+	}
+}
+
+/**
+ * Move the dongle's LAN subnet — the ONE journaled write on this surface.
+ *
+ * It carries `confirm: true` because the device's own input schema is `.strict()`
+ * with a `z.literal(true)` there: a request without it is rejected before the
+ * handler runs, which is the write's TOCTOU boundary rather than a formality.
+ * `subnetRewriteRequest` is the only shape this call site can build.
+ *
+ * Every terminal answer is rendered, `blocked` included. That outcome means the
+ * dongle answered at NEITHER address, so it maps onto the outcome band's
+ * `unknown` kind — claiming a refusal there would assert the old settings are
+ * intact, and claiming success would assert the new ones are.
+ */
+async function applySubnet() {
+	if (subnetBusy || !subnetTargetValid) return;
+	subnetConfirming = false;
+	subnetBusy = true;
+	subnetResult = undefined;
+	try {
+		const result = await rpc.modems.setRouterSubnet(
+			subnetRewriteRequest(deviceId, subnetTarget),
+		);
+		const outcome = subnetOutcome(result);
+		subnetResult = {
+			kind: outcome.kind,
+			message:
+				outcome.conflict === undefined
+					? resolveMessageKey(outcome.key)
+					: m['network.routerCellular.subnet.refused.subnet_conflict']({
+							iface: outcome.conflict,
+						}),
+		};
+		if (result.status === 'applied') subnetTarget = '';
+	} catch {
+		subnetResult = {
+			kind: 'unknown',
+			message: m['network.routerCellular.subnet.blocked'](),
+		};
+	} finally {
+		subnetBusy = false;
 	}
 }
 </script>
@@ -624,28 +711,162 @@ async function applyNetMode(mode: string) {
 		<ModemGpsSection claim={gpsClaim} {deviceId} />
 
 		{#if admin}
-			<!-- The address is stated, and the page it names is reachable through
-			     CeraUI's own proxy rather than by linking to it: the operator's
-			     browser is not on the dongle's network. The proxy is addressed by
-			     `deviceId`, which resolves to an INTERFACE — an address would name
-			     both units of an identical pair. -->
-			<p class="text-muted-foreground/80 text-xs" data-testid="dongle-admin-note">
-				{#if admin.reachable}
-					{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
-				{:else}
-					{m["network.routerCellular.adminUnreachable"]()}
-				{/if}
-			</p>
-			<Button
-				class="w-fit gap-1"
-				data-testid="dongle-open-admin"
-				size="sm"
-				variant="outline"
-				onclick={openAdmin}
-			>
-				<ExternalLink class="size-3.5" aria-hidden="true" />
-				{m["network.routerCellular.adminOpen"]()}
-			</Button>
+			<!-- Three operations, three different answers: a proven action, a
+			     journaled one behind a confirmation, and two no provider ships at
+			     all. The third is STATED rather than omitted — an operator who came
+			     looking for the Wi-Fi switch the vendor's own page has needs to be
+			     told this device will not offer one. -->
+			<div class="space-y-4 border-t pt-5">
+				<CapabilitySection
+					name="dongle-actions" icon={Wrench} class="space-y-4"
+					view={cardView(true)}
+					title={m["network.routerCellular.actions.title"]()}
+					description={m["network.routerCellular.actions.description"]()}>
+					<!-- The address is stated, and the page it names is reachable through
+					     CeraUI's own proxy rather than by linking to it: the operator's
+					     browser is not on the dongle's network. The proxy is addressed by
+					     `deviceId`, which resolves to an INTERFACE — an address would name
+					     both units of an identical pair. -->
+					<p class="text-muted-foreground/80 text-xs" data-testid="dongle-admin-note">
+						{#if admin.reachable}
+							{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
+						{:else}
+							{m["network.routerCellular.adminUnreachable"]()}
+						{/if}
+					</p>
+					<Button
+						class="w-fit gap-1"
+						data-testid="dongle-open-admin"
+						size="sm"
+						variant="outline"
+						onclick={openAdmin}
+					>
+						<ExternalLink class="size-3.5" aria-hidden="true" />
+						{m["network.routerCellular.adminOpen"]()}
+					</Button>
+
+					<!-- The ONE journaled write here, and the only one that can cost the
+					     path to the device receiving it — so it is deliberately not a
+					     switch. The device re-checks everything this validates. -->
+					<div class="border-t pt-4">
+						<CapabilitySection
+							name="dongle-subnet"
+							view={subnetView}
+							title={m["network.routerCellular.subnet.title"]()}
+							description={m["network.routerCellular.subnet.description"]()}
+							busy={subnetBusy}
+							outcome={subnetBand}>
+							<div class="space-y-3" data-testid="dongle-subnet-form">
+								<div class="space-y-1.5">
+									<Label class="text-xs" for="dongle-subnet-address">
+										{m["network.routerCellular.subnet.addressLabel"]()}
+									</Label>
+									<Input
+										autocomplete="off"
+										class="font-mono"
+										data-testid="dongle-subnet-address"
+										disabled={subnetBusy}
+										id="dongle-subnet-address"
+										placeholder={m["network.routerCellular.subnet.addressPlaceholder"]()}
+										bind:value={subnetTarget}
+									/>
+									{#if subnetTarget.trim() !== '' && !subnetTargetValid}
+										<p class="text-status-warning text-xs" data-testid="dongle-subnet-invalid">
+											{m["network.routerCellular.subnet.addressInvalid"]()}
+										</p>
+									{/if}
+								</div>
+
+								{#if subnetConfirming}
+									<div
+										aria-labelledby="dongle-subnet-confirm-title"
+										class="bg-status-warning/10 border-status-warning/30 space-y-3 rounded-lg border p-3"
+										data-testid="dongle-subnet-confirm"
+										role="group"
+									>
+										<div class="flex items-start gap-2">
+											<TriangleAlert
+												class="text-status-warning mt-0.5 size-4 shrink-0"
+												aria-hidden="true"
+											/>
+											<div class="min-w-0 space-y-1">
+												<p class="text-sm font-medium" id="dongle-subnet-confirm-title">
+													{m["network.routerCellular.subnet.confirmTitle"]({
+														address: subnetTarget.trim(),
+													})}
+												</p>
+												<p class="text-muted-foreground text-xs">
+													{m["network.routerCellular.subnet.confirmBody"]()}
+												</p>
+											</div>
+										</div>
+										<div class="flex flex-wrap gap-2">
+											<Button
+												data-testid="dongle-subnet-apply"
+												disabled={subnetBusy || !subnetTargetValid}
+												onclick={applySubnet}
+												size="sm"
+												variant="destructive"
+											>
+												{m["network.routerCellular.subnet.confirmAction"]()}
+											</Button>
+											<Button
+												data-testid="dongle-subnet-cancel"
+												disabled={subnetBusy}
+												onclick={() => (subnetConfirming = false)}
+												size="sm"
+												variant="outline"
+											>
+												{m["dialog.cancel"]()}
+											</Button>
+										</div>
+									</div>
+								{:else}
+									<Button
+										class="w-fit"
+										data-testid="dongle-subnet-start"
+										disabled={!subnetTargetValid || subnetBusy || busy}
+										onclick={() => (subnetConfirming = true)}
+										size="sm"
+										variant="outline"
+									>
+										{m["network.routerCellular.subnet.action"]()}
+									</Button>
+								{/if}
+							</div>
+						</CapabilitySection>
+					</div>
+
+					<!-- No provider in the pinned control package exposes a Wi-Fi or a
+					     restart operation for any router dialect, so there is no write to
+					     gate — and READING the dongle's Wi-Fi name is not evidence that
+					     name can be changed. -->
+					<div class="space-y-2 border-t pt-4" data-testid="dongle-unavailable-operations">
+						<p class="text-sm leading-none font-medium">
+							{m["network.routerCellular.unavailable.title"]()}
+						</p>
+						<ul class="space-y-2">
+							{#each ROUTER_UNAVAILABLE_OPERATIONS as operation (operation.id)}
+								<li
+									class="flex items-start gap-2"
+									data-testid={`dongle-unavailable-${operation.id}`}
+								>
+									<Ban class="text-muted-foreground mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+									<div class="min-w-0 space-y-0.5">
+										<p class="text-xs font-medium">{resolveMessageKey(operation.titleKey)}</p>
+										<p
+											class="text-muted-foreground text-xs"
+											data-testid={`dongle-unavailable-${operation.id}-reason`}
+										>
+											{resolveMessageKey(operation.reasonKey)}
+										</p>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				</CapabilitySection>
+			</div>
 		{/if}
 	</div>
 </AppDialog>

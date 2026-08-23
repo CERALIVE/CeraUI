@@ -1552,12 +1552,22 @@ owed).
 **HONEST STATUS: none of this has been exercised against a real dongle.** The
 `112008` code is a real bench measurement; every document shape is derived from
 the dialect. The auto-restore path in particular is fixture-proven only, and the
-`nmcli device disconnect`/`connect` renewal has never run on a board. There is
-also deliberately NO operator UI for the subnet rewrite yet — the RPC exists,
-capability-gated and interlocked, and shipping a button that can strand a dongle
-before the restore has been exercised on hardware would be the unproven control
-this surface refuses. Coverage: `tests/router-net-mode-write.test.ts`,
-`tests/router-subnet-hygiene.test.ts`, `tests/router-stage-b-interlock.test.ts`.
+`nmcli device disconnect`/`connect` renewal has never run on a board.
+
+**The subnet rewrite DOES have an operator surface now, and the shape it takes is
+what carries that honest status.** It is not a toggle: the operator names the
+target address, and an explicit second act confirms it against a sentence that
+SAYS the restore has been proven against recorded replies and never yet against
+real hardware. It is offered only where `router_admin.controls` is published —
+i.e. only for the dialect whose writes were round-trip-proven, which is the same
+dialect `prepareSubnetRewrite` accepts — so a dongle that would be answered
+`unsupported` never renders the field. Nothing about the device side changed:
+`confirm: z.literal(true)`, the per-device lease, the durable journal and the
+armed rollback are exactly as described above, and the UI is a caller like any
+other. Coverage: `tests/router-net-mode-write.test.ts`,
+`tests/router-subnet-hygiene.test.ts`, `tests/router-stage-b-interlock.test.ts`;
+operator half: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) → THE ROUTER
+ACTION SURFACE.
 
 ### …AND WHETHER IT NEEDS A LOGIN IS ONE OF FIVE STATES [EXISTS — UNPROVEN ON A LOCKED DEVICE]
 

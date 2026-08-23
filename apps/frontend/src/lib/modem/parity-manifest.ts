@@ -375,9 +375,9 @@ export const BACKEND_RPC_PARITY: ParityRecord = {
 			"RouterDongleDialog's network-mode chips write through it, offered only when the firmware's capability read reported a catalog.",
 	},
 	"modems.setRouterSubnet": {
-		disposition: "unwired",
+		disposition: "wired",
 		reason:
-			"The capability-gated, journaled LAN-subnet rewrite ships server-side with no operator control, because its auto-restore has never been exercised on hardware.",
+			"RouterDongleDialog's subnet rewrite writes through it behind an explicit confirmation, offered only for a dongle whose writes were proven, and renders all four terminal outcomes including the fail-closed blocked one.",
 	},
 	"modems.getSms": {
 		disposition: "wired",
