@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * THE STATIC GATE: nothing under `lib/modem/sections/` may know what KIND of
  * device it is rendering for.
@@ -53,6 +55,9 @@ const BANNED = [
 	"fibocom",
 	"mm-managed",
 	"router-ethernet",
+	"unrecognized",
+	"unrecognised",
+	"unmanaged",
 ] as const;
 
 const SECTIONS_DIR = join(
@@ -148,6 +153,22 @@ describe("the scanner itself", () => {
 		]);
 
 		expect(planted).toEqual([{ path: "planted.ts", token: "router-ethernet" }]);
+	});
+
+	it("trips on every family vocabulary, including the guaranteed baseline", () => {
+		const planted = scanForFamilyBranching([
+			{ path: "a.ts", source: 'const family = "mm-managed";' },
+			{ path: "b.ts", source: 'const family = "router-ethernet";' },
+			{ path: "c.ts", source: 'const family = "unrecognized";' },
+			{ path: "d.ts", source: 'const family = "unmanaged";' },
+		]);
+
+		expect(planted.map((violation) => violation.token).sort()).toEqual([
+			"mm-managed",
+			"router-ethernet",
+			"unmanaged",
+			"unrecognized",
+		]);
 	});
 
 	it("trips on a vendor branch however it is spelled", () => {
