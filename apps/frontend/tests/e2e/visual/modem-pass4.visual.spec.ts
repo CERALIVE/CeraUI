@@ -375,6 +375,70 @@ async function stageCapabilityDialog(
 	return openDialog(page, true);
 }
 
+const DONGLE_LOCK_ID = "pass4-dongle-lock";
+
+type WireLockState = "open" | "locked" | "unlocked" | "auth-failed" | "locked-out";
+
+/**
+ * A locked dongle exists on no bench and in no mock scenario — every dialect
+ * answers unauthenticated, so `open` is the only state hardware has ever
+ * produced. The roster is injected for the same reason, and in the same shape,
+ * as `modem-credential-unlock.spec.ts` injects its own.
+ */
+function lockDongle(
+	lock: WireLockState,
+	options: { controls?: boolean; lockoutUntil?: number } = {},
+): Record<string, unknown> {
+	return {
+		ifname: "enx0c5b8f279a64",
+		name: "Huawei E3372",
+		network_type: { supported: [], active: null },
+		device_class: "router-ethernet",
+		availability_reason: "router_direct",
+		slot_label: "Dongle 1",
+		lock_state: lock,
+		lock_detail: {
+			credential_configured: lock !== "locked" && lock !== "open",
+			...(options.lockoutUntil === undefined
+				? {}
+				: { lockout_until: options.lockoutUntil }),
+		},
+		router_admin: {
+			admin_url: "http://192.168.8.1",
+			reachable: true,
+			model: "E3372",
+			...(options.controls === true
+				? { controls: { mobile_data: false, roaming_autoconnect: false } }
+				: {}),
+		},
+	};
+}
+
+async function stageLock(
+	page: Page,
+	lock: WireLockState,
+	options: { controls?: boolean; lockoutUntil?: number } = {},
+): Promise<StagedSurface> {
+	sendModems({ [DONGLE_LOCK_ID]: lockDongle(lock, options) });
+	const row = modemRow(page, DONGLE_LOCK_ID);
+	await expect(row).toBeVisible({ timeout: 15_000 });
+
+	// A lock must not disable the one control that opens the surface carrying
+	// the login — the reachability half of todo 22's contract, re-measured here
+	// at every width rather than assumed from the functional spec's one.
+	const configure = row.getByTestId("open-modem-config-dialog");
+	await expect(configure).toBeEnabled({ timeout: 15_000 });
+	await configure.click();
+
+	const dialog = page.getByRole("dialog").first();
+	await expect(dialog).toBeVisible({ timeout: 15_000 });
+	await expect(dialog.getByTestId("dongle-lock-body")).toHaveAttribute(
+		"data-lock-state",
+		lock,
+	);
+	return { shot: dialog, kind: "dialog" };
+}
+
 /**
  * Every state class passes 1-3 produced on these surfaces. Ordered so the
  * section classes are captured before any dialog opens over them.
@@ -467,6 +531,96 @@ const CAPABILITY_SURFACES: readonly SurfaceDef[] = [
 			return staged;
 		},
 	},
+];
+
+/**
+ * The dongle credential surface — six render classes, and every one of them
+ * differs in what it OFFERS rather than only in its wording, which is why they
+ * are captured apart. `clear-armed` is the newest: todo 34 gave the one
+ * irreversible action here an inline confirmation, and nothing had ever
+ * photographed it.
+ */
+const LOCK_SURFACES: readonly SurfaceDef[] = [
+	{
+		id: "lock-open",
+		hasRows: true,
+		stage: async (page) => {
+			// `controls` is not decoration here. Configure is refused whenever no
+			// write to this dongle was ever proven, and only a LOCK overrides that
+			// — so an `open` dongle without them cannot reach its own dialog.
+			const staged = await stageLock(page, "open", { controls: true });
+			// The common case on this fleet, so the absence is the assertion: a
+			// prompt where there is no password is the dishonesty todo 22 removed.
+			await expect(page.getByTestId("dongle-lock-form")).toHaveCount(0);
+			return staged;
+		},
+	},
+	{
+		id: "lock-locked",
+		hasRows: true,
+		stage: async (page) => {
+			const staged = await stageLock(page, "locked");
+			await expect(page.getByTestId("dongle-lock-password")).toBeVisible();
+			await expect(page.getByTestId("dongle-no-controls")).toHaveAttribute(
+				"data-locked",
+				"true",
+			);
+			return staged;
+		},
+	},
+	{
+		id: "lock-auth-failed",
+		hasRows: true,
+		stage: async (page) => {
+			const staged = await stageLock(page, "auth-failed");
+			await expect(page.getByTestId("dongle-lock-password")).toBeVisible();
+			return staged;
+		},
+	},
+	{
+		id: "lock-locked-out",
+		hasRows: true,
+		stage: async (page) => {
+			const staged = await stageLock(page, "locked-out", {
+				lockoutUntil: Date.now() + 300_000,
+			});
+			await expect(page.getByTestId("dongle-lock-wait")).toBeVisible();
+			// A retry here spends an attempt the operator cannot get back.
+			await expect(page.getByTestId("dongle-lock-submit")).toHaveCount(0);
+			return staged;
+		},
+	},
+	{
+		id: "lock-unlocked",
+		hasRows: true,
+		stage: async (page) => {
+			const staged = await stageLock(page, "unlocked", { controls: true });
+			await expect(page.getByTestId("dongle-controls")).toBeVisible();
+			return staged;
+		},
+	},
+	{
+		id: "lock-clear-armed",
+		hasRows: true,
+		stage: async (page) => {
+			const staged = await stageLock(page, "unlocked", { controls: true });
+			await page.getByTestId("dongle-lock-clear").click();
+			await expect(page.getByTestId("dongle-lock-clear-confirm")).toBeVisible();
+			await expect(page.getByTestId("dongle-lock-clear-apply")).toBeVisible();
+			return staged;
+		},
+	},
+];
+
+/**
+ * The kiosk leg and the on-disk completeness leg walk the SAME set. They were
+ * two copies of one literal, which is one edit away from a capture the
+ * completeness check does not know to demand.
+ */
+const KIOSK_SURFACES: readonly SurfaceDef[] = [
+	...SURFACES,
+	...CAPABILITY_SURFACES,
+	...LOCK_SURFACES,
 ];
 
 async function closeAnyDialog(page: Page): Promise<void> {
@@ -584,13 +738,15 @@ const BREAKPOINTS = [
 
 /**
  * `en` is the full state-class sweep; `ar` (RTL) and `ja` (CJK) confirm the
- * catalog-sensitive half. The capability renderings are claim-driven and
- * catalog-independent, so they are captured once in the base locale — the
- * per-locale gate that matters for them (their reason copy) is `modem-a11y`'s
- * ten-catalog sweep, which this pass does not duplicate.
+ * catalog-sensitive half. The capability and lock renderings are driven by a
+ * claim and a lock state rather than by a catalog, so they are captured once in
+ * the base locale — the per-locale gate that matters for them is their own copy
+ * sweep (`modem-a11y`'s ten catalogs, and `modem-lock-copy-completeness`, which
+ * additionally proves the six lock sentences are DISTINCT inside every locale).
+ * This pass does not duplicate either.
  */
 const LOCALE_SURFACES: Record<string, readonly SurfaceDef[]> = {
-	en: [...SURFACES, ...CAPABILITY_SURFACES],
+	en: [...SURFACES, ...CAPABILITY_SURFACES, ...LOCK_SURFACES],
 	ar: SURFACES,
 	ja: SURFACES,
 };
@@ -673,7 +829,7 @@ test.describe("@visual DESIGN.md pass 4 — modem surface confirmation", () => {
 		await navigateTo(page, "network");
 		serverConfig();
 
-		for (const surface of [...SURFACES, ...CAPABILITY_SURFACES]) {
+		for (const surface of KIOSK_SURFACES) {
 			await captureSurface(
 				page,
 				surface,
@@ -699,7 +855,7 @@ test.describe("@visual DESIGN.md pass 4 — modem surface confirmation", () => {
 				}
 			}
 		}
-		for (const surface of [...SURFACES, ...CAPABILITY_SURFACES]) {
+		for (const surface of KIOSK_SURFACES) {
 			expected.push(`${surface.id}-kiosk-touch-1024.png`);
 		}
 

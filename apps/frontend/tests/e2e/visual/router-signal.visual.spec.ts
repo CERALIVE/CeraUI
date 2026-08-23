@@ -328,6 +328,16 @@ const modemRow = (page: Page, id: string): Locator =>
 const routerSignal = (page: Page, id: string): Locator =>
 	modemRow(page, id).getByTestId("modem-router-signal");
 
+/**
+ * The glyph and the WORD are two elements. `CellularSection` puts the glyph in
+ * the instrument column beside where an MM radio draws its own, and leaves the
+ * word in the badge row, which wraps freely so a long sentence cannot squeeze
+ * the controls off a 390px screen. So a state's TEXT is read here, never off
+ * `routerSignal` — which is glyph-only and answers "".
+ */
+const routerSignalState = (page: Page, id: string): Locator =>
+	modemRow(page, id).getByTestId("modem-router-signal-state");
+
 type Condition = {
 	readonly name: string;
 	readonly project: "desktop" | "mobile";
@@ -527,10 +537,21 @@ for (const condition of CONDITIONS) {
 				// No fabricated magnitude, in any degraded state.
 				await expect(chip).not.toHaveAttribute("data-signal-tier", /.*/);
 				await expect(chip).toHaveAttribute("data-unknown-reason", reason);
+				// …and none smuggled in as text either, which is what keeps the
+				// glyph a glyph.
+				expect(
+					(await chip.innerText()).trim(),
+					`${id}'s glyph carried a magnitude`,
+				).not.toMatch(/\d/);
 
 				// The state is carried by a WORD, not by a mark or a colour — the
-				// shipped kiosk touchscreen cannot hover to reveal a title.
-				const text = (await chip.innerText()).trim();
+				// shipped kiosk touchscreen cannot hover to reveal a title. It is
+				// asserted on the element that OWNS it (see `routerSignalState`);
+				// aimed at the chip, this reads "" and passes only vacuously.
+				const state = routerSignalState(page, id);
+				await expect(state).toBeVisible();
+				await expect(state).toHaveAttribute("data-unknown-reason", reason);
+				const text = (await state.innerText()).trim();
 				expect(text.length, `${id} rendered no word`).toBeGreaterThan(0);
 				expect(text, `${id} rendered a digit`).not.toMatch(/\d/);
 				words.add(text);
