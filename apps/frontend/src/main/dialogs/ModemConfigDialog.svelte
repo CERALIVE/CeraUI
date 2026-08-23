@@ -26,8 +26,9 @@
       this dialog to change: roaming, the operator scan that follows from it,
       Automatic APN, and the manual APN + credentials behind it.
     SECONDARY — ONE "Advanced" disclosure holding the network-type lock, the
-      data-usage meter and its policy, the serving-cell/firmware/eSIM detail,
-      the SMS inbox, and the USB-composition switch.
+      data-usage meter and its policy, the serving-cell/firmware detail and the
+      SIM identity group beside it (presence, ICCID, own number, eSIM), the SMS
+      inbox, and the USB-composition switch.
 
   Network type is in there on purpose and it is the only CONFIGURATION control
   that moved: it is a radio-technology lock an operator sets once for a site, not
@@ -76,6 +77,22 @@
   dialog. A missing `status` still cannot crash the render: the shared rule reads
   `no_sim`/`router_admin.sim` optionally and answers `false` on absence, which is
   the positive-evidence-only posture the bond gate requires.
+
+  ...AND THE BANNER IS NOT THE WHOLE STATE
+  ----------------------------------------
+  That predicate is BINARY because bonding is binary — a link either may join
+  the pool or may not. SIM PRESENCE is not: `deriveSim` resolves four states,
+  and the two the banner cannot express are the ones an operator needs most.
+  `present` and `unknown` both render no banner, so a healthy slot and a slot
+  nothing could read looked identical here, and the only surface that showed a
+  SIM state at all was a warning that fires for one of the four.
+
+  The SIM identity group inside the Advanced disclosure now leads with the
+  SHARED `SimBlock` — the same component `RouterDongleDialog` renders — so both
+  families state presence in one vocabulary, `unknown` renders as its own
+  visibly distinct line rather than as a pill, and absence is claimed ONLY where
+  the device positively claimed it. The banner is unchanged and still owns the
+  `absent` case in the primary column, where an operator meets it first.
 
   APN-required-when-manual
   ------------------------
@@ -201,7 +218,12 @@ import {
 	type MutationOutcome,
 	mutationOutcome,
 } from '$lib/modem/mutation-outcome';
-import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
+import {
+	CapabilitySection,
+	type CapabilityView,
+	deriveSim,
+	SimBlock,
+} from '$lib/modem/sections';
 import {
 	bandDiagnosticTokens,
 	bandListOperatorLabel,
@@ -964,7 +986,31 @@ const observedAt = $derived(cellObservedAtMs(modem.cell_info));
 const firmware = $derived(firmwareRevision(modem.firmware_revision));
 const esim = $derived(esimView(modem.esim));
 
-const showDetailCard = $derived(hasModemDetail(modem));
+// WHETHER THERE IS A CARD IN THE SLOT — the stack's EVIDENCE model, rendered
+// through the SAME primitive the router dialog draws, so the two families state
+// one fact in one vocabulary.
+//
+// It is four-valued on purpose, and the fourth value is the point. `deriveSim`
+// resolves `absent` ONLY from a device that positively said so — ModemManager's
+// `sim-missing` failure reason, carried on the wire as `no_sim`, or a dongle's
+// own `router_admin.sim` — and everything else that is not positively `present`
+// resolves `unknown`. A blank SIM object path is not an answer, so it must not
+// become one on the last hop: "we could not tell" and "there is no card" call
+// for opposite operator actions, and the dialog previously rendered neither
+// (only the binary banner), so an operator could not tell a healthy slot from
+// an unread one.
+const simIdentity = $derived(deriveSim(modem));
+
+// A POSITIVELY-STATED SIM is worth the card even when the modem reported
+// nothing else. `absent` is deliberately NOT in that set — it already has its
+// own primary banner above, and a second, otherwise-empty card restating it is
+// the density regression todo 64 removed. `unknown` is not in it either: on its
+// own it has nothing to add, and the card would say only that it knows nothing.
+const showDetailCard = $derived(
+	hasModemDetail(modem) ||
+		simIdentity.presence === 'present' ||
+		simIdentity.presence === 'locked',
+);
 
 // OL-3 is a RELOCATION rule, so the diagnostics block is gated on its OWN
 // evidence — the presence of a suppressed token — rather than on the detail
@@ -1810,7 +1856,7 @@ const networkTypeView = $derived(
 				</CapabilitySection>
 		</CapabilitySection>
 
-		<!-- ── Serving-cell detail, firmware, eSIM ──────────────────────────────
+		<!-- ── Serving-cell detail, firmware, and the SIM identity group ────────
 		     Read-only throughout. The eSIM block carries NO management
 		     affordance of any kind — no button, no click target, no editable
 		     field — because profile management belongs to the carrier's own flow
@@ -1856,13 +1902,36 @@ const networkTypeView = $derived(
 					</div>
 				{/if}
 
+				<!-- ── SIM identity ─────────────────────────────────────────────
+				     Presence first, then the two identifiers and the eSIM facts.
+				     They are ONE group because they answer one question — which
+				     card is in this modem — and presence is the only one of them
+				     that is always answerable, so it leads.
+
+				     The pill is the SHARED `SimBlock`, the same component the
+				     router dialog renders, which is what makes the two families
+				     say one thing in one register rather than two. It states
+				     `unknown` as its own visibly distinct line rather than as a
+				     pill: "the device did not say" is not a status the device
+				     reported, so it must not wear the chrome of one. -->
+				<SimBlock
+					name="modem-sim"
+					sim={simIdentity}
+					title={m["network.modem.sections.sim.title"]()}
+				/>
+
 				<!-- The SIM's ICCID, rendered PLAINLY — the deliberate opposite of the
 				     own-number field below. It is printed on the physical card and is
 				     what a carrier asks for over the phone to activate a line, so
 				     hiding it would obstruct the one job an operator opens this row
 				     to do. It gets a copy button instead: 19 digits are read wrong
 				     more often than not, and the value's destination is a phone call
-				     or a carrier chat window. -->
+				     or a carrier chat window.
+
+				     Both identifiers sit inside the Advanced disclosure, which is
+				     collapsed on EVERY open — so neither is on screen until the
+				     operator asks for it, and the own number below needs a second,
+				     explicit reveal on top of that. -->
 				{#if iccid}
 					<div class="min-w-0">
 						<p class="text-muted-foreground text-xs">{m["network.modem.detail.iccid"]()}</p>

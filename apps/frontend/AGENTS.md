@@ -943,6 +943,55 @@ unconfigured. The recommendation itself is a `Badge` pill
 (`modem-autoapn-recommended`), not a parenthetical in the switch's label — which
 keeps the control's accessible name and its visible text identical.
 
+## …AND THE SIM IDENTITY GROUP LEADS WITH THE SHARED PRESENCE BLOCK [EXISTS]
+
+The detail card's SIM identity group (presence → ICCID → own number → eSIM) now
+opens with `SimBlock` (`$lib/modem/sections`) resolved by `deriveSim(modem)` —
+the SAME component and the SAME derivation `RouterDongleDialog` renders, so the
+two modem families state one fact in one register.
+
+**It exists because the banner only ever answered ONE of four states.**
+`isSimlessModem` is binary because BONDING is binary — a link either may join
+the pool or may not — and the dialog stated SIM presence exclusively through the
+warning that predicate raises. So `present` and `unknown` rendered identically
+(as nothing), and an operator could not tell a healthy slot from a slot nothing
+could read. Both halves are now on screen, and neither replaces the other: the
+banner still owns `absent` in the PRIMARY column, where an operator meets it
+first, and the block states all four in the SIM group.
+
+- **`unknown` is the absence of an answer, and must never be rendered as one.**
+  `deriveSim` reaches `absent` only from a device that positively said so —
+  ModemManager's `sim-missing` reason, carried on the wire as `no_sim`, or a
+  dongle's own `router_admin.sim` — and anything not positively `present`
+  resolves `unknown`. A blank SIM object path is not evidence; `SimBlock` renders
+  that state as its own muted `role="status"` line rather than as a pill, because
+  "the device did not say" is not a status the device reported.
+- **The card OPENS on a positively-stated slot** (`present` / `locked`) even when
+  the modem reported nothing else, so a SIM-bearing modem is never mute. `absent`
+  is deliberately NOT in that set — it already has the primary banner, and a
+  second otherwise-empty card restating it is the density regression todo 64
+  removed — and `unknown` is not either, since on its own it has nothing to add.
+- **Nothing about the bond gate changed.** `isSimlessModem` still drives the
+  banner, the disabled fieldset and the toggle, and still delegates to
+  `@ceraui/rpc`'s `isSimlessForBond`. This is a second, richer READING of the
+  same wire fields, not a second authority over them.
+
+**KNOWN, OUT-OF-SCOPE ASYMMETRY (device-side, recorded so it is not re-derived
+wrongly):** the backend's `claimsNoSim` answers `presence !== "present"`, so a
+modem with no NetworkManager profile AND an `unknown` slot reading still
+publishes `no_sim: true`. That is the documented conservative carry-over in
+`apps/backend/src/modules/modems/sim-presence.ts`, and it means the frontend
+cannot yet distinguish those two on that one path — it renders what the device
+claimed. Closing it means either putting `sim_presence` on the wire or making
+`claimsNoSim` positive-evidence-only, and the second changes bond membership, so
+it belongs to its own change.
+
+Coverage: `ModemConfigDialog.simSms.test.ts` (the four-state table, the
+`unknown`-is-not-absence pair with its `data-no-sim` sweep and its negative
+control, the card-opening rule, and the reachability walk through the real
+disclosure). Rule-E proof both directions: removing the `SimBlock` render reddens
+9 of its 21 tests; falling back to `absent` instead of `unknown` reddens 2.
+
 ## THE SIM'S OWN NUMBER IS HIDDEN BY DEFAULT [EXISTS]
 
 The detail card carries the SIM's own number (MSISDN) as a masked field with an
@@ -1286,6 +1335,10 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't render a `router_admin` reading with no freshness treatment, and don't mark an `unknown` freshness as stale — the device told us nothing about that reading's age.
 - Don't move a raw band/cell/ARFCN/`network_mode` row back into `detailFields()`, and don't rename the `*diagnostic*` testids — the operator-text gate excludes those blocks by selector, not by an enumerated id list.
 - Don't live-sync `ModemConfigDialog`'s `formData` from the `modem` prop — the feed re-broadcasts several times a minute and would discard a half-typed APN at a moment the operator cannot predict.
+- Don't render an `unknown` SIM presence as absence anywhere — not as the `NoSimBadge`, not as a "No SIM" word, not as a disabled configuration form. `deriveSim` reaches `absent` only from a device that positively said so, and treating a blank slot reading as a verdict is the inference this surface exists to refuse. Don't collapse the block back into the banner either: the banner is binary because BONDING is binary, and it answers one of four states.
+- Don't open the modem detail card for an `absent` or `unknown` slot with no other reading — the first already has its primary banner and the second has nothing to add, so either one produces an otherwise-empty card in the secondary column.
+- Don't render an empty SMS inbox and a refused read the same way, and don't show a message COUNT beside a refusal — `{success: true, messages: []}` means the inbox is empty and a refusal means we do not know what it holds, so a count there asserts knowledge the device withheld.
+- Don't assert an ABSENCE against `render()`'s `container` on a dialog surface — `AppDialog` portals its content out of that subtree, so a `container`-scoped sweep for a missing marker passes whatever rendered. Query `document`, and pair the sweep with a positive control.
 - Don't re-add a `websocket-store` wrapper, a second `rpcClient.onMessage` owner, or a parallel auth-mutation path — `subscriptions.svelte.ts` and `auth-status.svelte.ts` are the only two allowed owners; the CI grep gate blocks the module name from reappearing.
 - Don't re-derive the "gateway inactive" (rtmp/srt requires-gateway) disabled-with-reason rule inline on a new surface — route through `lib/streaming/pipelineAvailability.ts`.
 - Don't delete `StreamSettingsCard.svelte`/`OnboardingChecklist.svelte`/`ServerReadiness.svelte`/`GoLiveCard.svelte`/`NetworkIngestSection.svelte` yet — they're unmounted-but-kept migration shims (`TD-unmounted-source-shims`); wait for the register entry's exit condition.
