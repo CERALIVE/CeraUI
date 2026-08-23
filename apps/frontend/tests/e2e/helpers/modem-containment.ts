@@ -276,6 +276,111 @@ export async function openRowDisclosures(page: Page): Promise<number> {
 	return count;
 }
 
+export type FoldReport = {
+	missing: string[];
+	/** Scrollable ancestors already scrolled — the probe's own vacuity guard. */
+	preScrolled: string[];
+	/** `testid (Npx above|below the fold)` for anything not fully on screen. */
+	offscreen: string[];
+};
+
+/**
+ * Is each of these reachable WITHOUT scrolling?
+ *
+ * The gap todo 35 recorded with F4: `probeContainment` measures the horizontal
+ * contract and `probeDialogOverflow` asks whether content escapes the dialog
+ * BOX — nothing asked whether a surface's primary action is on screen when the
+ * operator arrives. On the shipped 1024x600 kiosk the dongle login's heading was
+ * clipped at the bottom edge and `locked-out`'s wait was fully below it, and
+ * every existing gate stayed green.
+ *
+ * Three measurement rules are load-bearing:
+ *
+ *  1. **Nothing is scrolled first.** Playwright's own visibility check and every
+ *     `boundingBox()` helper will happily scroll an element into view, which
+ *     answers a different question. `preScrolled` reports any scrollable
+ *     ancestor already offset, so a caller cannot accidentally measure a
+ *     surface some earlier step had scrolled — an empty `offscreen` on a
+ *     scrolled surface would be the vacuous pass.
+ *  2. **The fold is an INTERSECTION, not the viewport.** A dialog body is its
+ *     own scroll container, so an element can sit inside the viewport and still
+ *     be clipped by the panel it lives in. The visible band is the viewport
+ *     narrowed by every clipping ancestor.
+ *  3. **Partly visible is offscreen.** A heading clipped mid-glyph is exactly
+ *     the F4 symptom, so the whole box must be inside the band; the report names
+ *     the direction and the number of pixels so a failure is actionable without
+ *     re-measuring by hand.
+ */
+export async function probeFold(
+	page: Page,
+	testids: readonly string[],
+): Promise<FoldReport> {
+	return page.evaluate((ids) => {
+		const SCROLLED = /auto|scroll/;
+		const CLIPPED = /auto|scroll|hidden|clip/;
+		const missing: string[] = [];
+		const preScrolled: string[] = [];
+		const offscreen: string[] = [];
+
+		for (const id of ids) {
+			const el = document.querySelector<HTMLElement>(
+				`[data-testid="${id}"]`,
+			);
+			if (el === null) {
+				missing.push(id);
+				continue;
+			}
+
+			let top = 0;
+			let bottom = window.innerHeight;
+			for (
+				let node: HTMLElement | null = el.parentElement;
+				node !== null;
+				node = node.parentElement
+			) {
+				const style = getComputedStyle(node);
+				const overflow = `${style.overflowY} ${style.overflow}`;
+				if (SCROLLED.test(overflow) && node.scrollTop > 1) {
+					preScrolled.push(
+						`${id}: ancestor ${node.getAttribute("data-testid") ?? node.tagName} is scrolled ${Math.round(node.scrollTop)}px`,
+					);
+				}
+				if (!CLIPPED.test(overflow)) continue;
+				const box = node.getBoundingClientRect();
+				top = Math.max(top, box.top);
+				bottom = Math.min(bottom, box.bottom);
+			}
+
+			const rect = el.getBoundingClientRect();
+			const above = Math.round(top - rect.top);
+			const below = Math.round(rect.bottom - bottom);
+			if (above > 1) offscreen.push(`${id} (${above}px above the fold)`);
+			else if (below > 1) offscreen.push(`${id} (${below}px below the fold)`);
+		}
+
+		return { missing, preScrolled, offscreen };
+	}, testids);
+}
+
+/** Assert one measured surface: every named element is on screen, unscrolled. */
+export function expectReachableWithoutScrolling(
+	report: FoldReport,
+	label: string,
+): void {
+	expect(
+		report.missing,
+		`${label}: element(s) never rendered: ${report.missing.join(", ")}`,
+	).toEqual([]);
+	expect(
+		report.preScrolled,
+		`${label}: the surface was already scrolled, so "without scrolling" was never measured:\n${report.preScrolled.join("\n")}`,
+	).toEqual([]);
+	expect(
+		report.offscreen,
+		`${label}: the operator must scroll to reach:\n${report.offscreen.join("\n")}`,
+	).toEqual([]);
+}
+
 /** Test-ids of dialog content laid out outside the dialog's own box. */
 export function probeDialogOverflow(page: Page): Promise<string[]> {
 	return page.evaluate(() => {

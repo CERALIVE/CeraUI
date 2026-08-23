@@ -613,6 +613,77 @@ describe("forgetting a stored login is confirmed before anything is deleted", ()
 	});
 });
 
+/*
+  F4. On the shipped 1024x600 kiosk a locked dongle opened on its Connection
+  card — copy reading "its network settings live in its own web interface, not
+  here" — with the "Dongle login" heading itself clipped at the bottom edge, and
+  `locked-out` fully off-screen, because the wait IS that state's whole payload.
+  DOM order is the half a jsdom test can prove; the geometry is measured at the
+  kiosk viewport by `tests/e2e/modem-lock-fold.spec.ts`.
+*/
+describe("a dongle that wants a credential opens on the credential", () => {
+	/** `true` when `first` precedes `second` in document order. */
+	function precedes(first: string, second: string): boolean {
+		const a = testid(first);
+		const b = testid(second);
+		if (a === null || b === null) return false;
+		return (
+			(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+		);
+	}
+
+	const LEADING: readonly {
+		state: ModemLockState;
+		detail?: ModemLockDetail;
+	}[] = [
+		{ state: "locked" },
+		{ state: "auth-failed", detail: { credential_configured: true } },
+		{ state: "locked-out", detail: { credential_configured: true } },
+		{ state: "unlocked", detail: { credential_configured: true } },
+	];
+
+	it.each(LEADING)("$state leads the dialog", (lock) => {
+		open(dongle(lock, SERVED_CONTROLS));
+
+		expect(precedes("dongle-lock", "dongle-status")).toBe(true);
+		// Reordered, never removed.
+		expect(testid("dongle-status")).not.toBeNull();
+	});
+
+	it("NEGATIVE CONTROL — `open` keeps the original position", () => {
+		// The rule is CONDITIONAL, so a leading-only assertion would pass on a
+		// dialog that had simply moved the section for every device. `open` asks
+		// for nothing, so leading with it would push the readings an operator did
+		// come for down the page for no gain.
+		open(dongle({ state: "open" }, SERVED_CONTROLS));
+
+		expect(precedes("dongle-status", "dongle-lock")).toBe(true);
+		expect(precedes("dongle-lock", "dongle-controls")).toBe(true);
+	});
+
+	it("a device with no lock at all is byte-unchanged by the rule", () => {
+		open(dongle(undefined, SERVED_CONTROLS));
+
+		expect(testid("dongle-lock")).toBeNull();
+		expect(testid("dongle-status")).not.toBeNull();
+		expect(testid("dongle-controls")).not.toBeNull();
+	});
+
+	it("a band still qualifies the login it sits above", () => {
+		// `dongle-unavailable` says the read produced nothing at all, which is a
+		// fact about this login too — so the leading position is BELOW it.
+		open({
+			ifname: "eth1",
+			name: "Huawei E3372",
+			lock_state: "locked",
+			lock_detail: { credential_configured: false },
+		} as unknown as Modem);
+
+		expect(testid("dongle-unavailable")).not.toBeNull();
+		expect(precedes("dongle-unavailable", "dongle-lock")).toBe(true);
+	});
+});
+
 describe("the vendor's own page stays available, as the SECONDARY affordance", () => {
 	it("a locked dongle still offers the admin-UI button beside the login", () => {
 		// The proxied page is the fallback, not the primary path — but it must not

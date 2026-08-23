@@ -334,6 +334,7 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 - Accessibility gate [EXISTS]: `tests/e2e/a11y.spec.ts` (`@axe-core/playwright`) runs axe on the live/network/settings destinations and gates CI on `critical` + `serious` impact only. Pre-existing violations are baselined per-page in `tests/e2e/a11y-baseline.json` (a rule-id allowlist) so the gate fails only on a NEW critical/serious rule — never on day-one debt. The current baseline is `color-contrast` (the spectral `--link-*` ramp on small mono labels + dev-only nav tabs); fixing it is a design-system-wide change, out of the gate's scope. Refresh the baseline with `UPDATE_A11Y_BASELINE=1 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop -g "axe gate"` (writes the allowlist + `test-results/task-7-a11y-baseline.json`, never fails); a normal run writes `test-results/task-7-a11y-gate.json`. The dedicated CI step is `Accessibility gate` in `build-check.yml`; the broad Functional E2E run grep-inverts `@a11y` to avoid double-booting. `runAxe(page, { include })` optionally SCOPES the run to selectors — a per-surface gate needs it, because the page-level run is baselined and therefore cannot express an absolute zero for one new surface.
 - Modem-surface a11y gate (modem-stack Phase B todo 29; extended to `DESIGN.md` Pass 3) [EXISTS]: `tests/e2e/modem-a11y.spec.ts` covers the cellular rows + the modem dialog with **seven** PASS/FAIL legs — scoped axe, a focus-trap + keyboard-only USB-confirm walk, an `ar`-locale RTL containment sweep asserted by `getBoundingClientRect()` (never a screenshot review), the same containment in the base locale at 375/768/1280 + the 1024x600 kiosk for rows AND dialog (BP-1…BP-3), the eight non-base catalogs at 375 (LO-1…LO-5), a `prefers-reduced-motion` leg (RM-1…RM-4), and a touch-target inventory (TT-1…TT-5). **The CI step's `a11y.spec.ts` filter is a path REGEX, so `modem-a11y.spec.ts` matches it as a substring and runs in that same job with no workflow change** — do not rename this file to something that stops matching.
   **The containment probe itself now lives in `tests/e2e/helpers/modem-containment.ts`** (`probeContainment` / `expectContained` / `probeDialogOverflow` / `settleDestination` / `MANDATORY_BREAKPOINTS`), moved there VERBATIM in UI pass 4 so this gate and the pass-4 capture below measure the SAME §4/§5 contract. Do not re-inline it into either spec — a containment rule that exists twice can disagree with itself, which is the reason pass 3 wrote it as one probe in the first place.
+  **`probeFold` / `expectReachableWithoutScrolling` (same file) answer the ONE question none of the above did**: is a surface's primary action on screen when the operator ARRIVES? `probeContainment` measures the horizontal contract and `probeDialogOverflow` asks whether content escapes the dialog BOX, so both stayed green while the dongle login sat below the kiosk fold (F4, below). Three rules in it are load-bearing. It refuses to answer at all if a scrollable ancestor is ALREADY scrolled (`preScrolled`) — Playwright's own visibility check and every `boundingBox()` helper will happily scroll an element into view first, which answers a different question and would pass vacuously. The fold is the viewport INTERSECTED with every clipping ancestor, because a dialog body is its own scroll container and an element can sit inside the viewport while clipped by the panel it lives in. And partly-visible counts as offscreen, since a heading clipped mid-glyph is the exact symptom. Its own non-vacuity is proven in-spec, both ways.
   Four measurement rules in that file are load-bearing and must not be "simplified":
   **(1) Every probe SETTLES first.** `NavigationRenderer` flies the destination in with a `delay`, so a probe taken right after `navigateTo` catches `destination-content` translated ~287px and reports the whole page as overflowing. Awaiting `document.getAnimations()` alone does NOT cover it — Svelte registers that animation after the element is already in the DOM at its translated start, so an early snapshot sees an empty set. Arrival is asserted from the RENDERED position, then the animation set is drained (excluding infinite ones, or the skeleton pulses hang the gate forever).
   **(2) Reduced motion is read from COMPUTED style on the live tree**, never from the stylesheet — the disclosures animate `grid-template-rows`/`visibility` via component-level utilities that `app.css`'s media block does not author. Flipping the emulation to `no-preference` reddens it, which is how the leg is kept non-vacuous.
@@ -433,6 +434,24 @@ and two words for one fact.
   the same fact could still wear one face in two places — and did. See the
   `isSimlessModem` bullet in the section above.
 - Every instance carries `data-no-sim="true"`.
+- **…AND IT IS TRANSLATED, WHICH THE LOCALE-PARITY GATE COULD NOT SEE.**
+  `network.view.noSimLink` (this tag) and `network.view.noSimBond` (the bond
+  toggle's disabled REASON) shipped in all ten catalogs carrying the IDENTICAL
+  English value, which is *perfectly in parity* — the exact mirror of the
+  `usb-mode-copy-completeness` trap, in the other direction, and invisible by eye
+  because their properly-translated siblings sit right beside them. It surfaced
+  only in an RTL capture, as Latin-script "No SIM — cannot bond" inside an
+  otherwise fully Arabic surface. `src/tests/no-sim-copy.test.ts` is the detector:
+  both keys are DERIVED (the reason out of `bondDisabledReasonKey`, the badge read
+  from `NoSimBadge.svelte`) so a rename cannot leave it aimed at dead copy, each
+  of the nine non-English values must DIFFER from `en`, `noSimLink` must equal
+  that locale's own already-reviewed `network.cellular.state.noSim`, and the
+  reason must say strictly more than the badge — it is a disabled control's only
+  on-screen explanation, and the kiosk touchscreen cannot hover to reveal one.
+  **A copy change also has to move `packages/i18n/tests/fixtures/<locale>.rendered.json`**,
+  the frozen reverse-render oracle, in the same commit; patch only the affected
+  entries — regenerating the whole fixture would launder unrelated drift, which is
+  the reason that gate ships with no allowlist.
 
 Coverage: `CellularSection.noSim.test.ts` — the two classes rendered in ONE
 section and compared against EACH OTHER (word, resolved `data-status-badge` tone,
@@ -1209,6 +1228,27 @@ only answer CeraUI had for a gated dongle was "go and use the vendor's page";
 that page is still reachable (`dongle-open-admin`) as the SECONDARY affordance,
 and is no longer the primary one.
 
+**…AND A DONGLE THAT WANTS ONE OPENS ON IT.** `RouterDongleDialog`'s `lockLeads`
+moves the section to the TOP of the dialog whenever the lock is anything but
+`open`. Measured on the shipped 1024×600 kiosk before the fix, a `locked` dongle
+opened on its Connection card — copy reading "its network settings live in its own
+web interface, not here" — with the "Dongle login" heading itself clipped at the
+bottom edge and the password field **191 px** below the fold; `locked-out` was
+worse, because the wait IS that state's entire payload and sat fully off-screen.
+Three properties are load-bearing. **`open` is the only exempt state**, and not
+for symmetry: it asks for nothing and is the common case on this fleet, so
+leading with it would push the readings an operator DID come for down the page.
+**Keying on `open` rather than on `lockWithholdsCapabilities` keeps the position
+stable across the unlock** — `unlocked` leads too, so a successful sign-in never
+moves the section out from under the outcome band that just confirmed it (the two
+render sites are separate blocks, so a state crossing that boundary would remount
+and drop the band, and `open` is a device reading no action here can produce).
+**The leading position is BELOW the `dongle-unavailable` / `dongle-stale` bands**,
+because either band qualifies everything under it, this login included. Nothing is
+hidden to make room — the readings render one position lower. Coverage:
+`RouterDongleDialog.lock.test.ts` (DOM order, with `open` as the negative control)
+and `tests/e2e/modem-lock-fold.spec.ts` (the geometry, at the kiosk viewport).
+
 **`open` IS THE COMMON CASE, AND IT GETS NO PROMPT.** Every bench dialect
 answered unauthenticated, so most fleet devices have no password at all — a
 prompt at one of them is exactly the dishonesty this surface exists to remove.
@@ -1572,6 +1612,9 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't fold `lte-only-unsupported` into the generic refusal line — it is a CARRIER policy, not a device fault, and rendered generically it sends an operator hunting for a firmware fix. It has its own band, its own copy and its own `data-ussd-policy` marker.
 - Don't hoist `ModemUssdSection`'s session state or its RPC into `ModemConfigDialog` "for consistency" with the GPS/FCC sections — closing the dialog unmounts the component, and that unmount is what drops the carrier's text. Don't echo the command anywhere either: it is cleared BEFORE the await precisely so it can never reach a heading, a toast title or a retry affordance.
 - Don't drop the USSD section's read-on-mount. The device fills its USSD capability evidence FROM that read and gates every verb on it, so without it the first dialogue after a boot is refused `module_unavailable` whatever the hardware can do.
+- Don't move `ModemLockSection` back to one fixed position in `RouterDongleDialog`, and don't widen `lockLeads` to every state or narrow it to `lockWithholdsCapabilities`. A fixed position put the password field 191px below the kiosk fold behind copy telling the operator to use the vendor's page instead; leading at `open` buries readings for a device that asks nothing; and keying on the withholding predicate would move the section mid-session at the unlock, remounting it and dropping the outcome band that had just confirmed the sign-in.
+- Don't prove a surface is reachable with `toBeVisible()` or `boundingBox()` — both scroll it into view first and answer a different question. Route it through `probeFold`, which refuses to report at all once an ancestor has been scrolled.
+- Don't add an i18n key by copying its English value into the other nine catalogs. That is *in parity* and every existing gate stays green; it reaches an operator as Latin script inside an RTL surface. And don't regenerate a whole `*.rendered.json` oracle to make a copy change pass — patch the entries you actually changed.
 - Don't render a password field for a dongle whose lock does not need one — `open` is the COMMON case on this fleet and a prompt there is the dishonesty the whole surface removes. Ask `offersEntryFor`, and don't "helpfully" render it disabled instead: a disabled password box still claims there is a password to type. The same rule withholds it at `unlocked`, at `locked-out`, and at a `locked` row carrying `unsupported-profile`, where the credential would never leave this host.
 - Don't offer a retry while a dongle reports `locked-out` — every dialect counts a failed login toward a window the operator cannot clear, so a retry spends the attempts that would have fixed a typo. Render the device's own wait, and don't invent an expiry from THIS host's clock when the window has elapsed: only the dongle can see that counter. "Forget stored login" is deliberately NOT a retry (zero device requests) and stays.
 - Don't make "Forget stored login" a one-tap action again — it deletes a secret this device cannot re-derive, so it arms an inline confirmation first. Don't promote that confirmation to a `SimpleAlertDialog` either (a modal inside an already-portalled dialog hides the consequence behind a layer the kiosk touchscreen must dismiss), and don't withhold it during a lockout: it spends no attempt, so it is still the one useful thing an operator can do there.

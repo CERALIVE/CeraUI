@@ -222,6 +222,35 @@ const lock = $derived(deriveLockView(modem));
 const controlsLocked = $derived(lockWithholdsCapabilities(lock));
 
 /**
+ * Whether the login LEADS this dialog instead of sitting mid-stack.
+ *
+ * The section used to sit below the status card, the network detail table and
+ * the diagnostics disclosure — correct while it was an aside on a working
+ * device, and wrong for the device that actually has a login. Measured on the
+ * shipped 1024x600 kiosk, a `locked` dongle opened on a Connection card whose
+ * copy says its network settings live in its own web interface, with the
+ * "Dongle login" heading itself clipped at the bottom edge; `locked-out` was
+ * worse, because the wait IS that state's entire payload and sat fully
+ * off-screen. An operator who cannot see the password field reads the dialog as
+ * having nothing for them.
+ *
+ * `open` is deliberately the ONLY state that keeps the old position: it is the
+ * common case on this fleet, it asks for nothing, and its section is at most a
+ * status line — leading with it would push the readings an operator DID come
+ * for down the page for no gain. Everything else either wants a credential or
+ * is explaining why one cannot be presented yet, which outranks every reading
+ * below it.
+ *
+ * Keying on `open` rather than on `lockWithholdsCapabilities` also keeps the
+ * position STABLE across the unlock: `unlocked` leads too, so a successful
+ * sign-in never moves the section out from under the outcome band that just
+ * confirmed it. The two render sites are separate blocks, so a state that
+ * crossed this boundary would remount the section and drop that band — and
+ * `open` is a device reading no action here can produce.
+ */
+const lockLeads = $derived(lock !== undefined && lock.state !== 'open');
+
+/**
  * The net-mode capability as the shared four-state ladder sees it.
  *
  * `absent` when the read produced nothing at all (zero nodes — there is no
@@ -439,6 +468,18 @@ async function applySubnet() {
 	bind:open
 >
 	<div class="space-y-6">
+		<!--
+		  ONE authoring site for the login, rendered at ONE of two positions.
+
+		  A snippet rather than two copies of the component: the props, the
+		  `absent`-renders-nothing guarantee and the credential-retention rule are
+		  stated once, so the leading and the trailing position cannot drift into
+		  two subtly different mounts of the same surface.
+		-->
+		{#snippet lockSection()}
+			<ModemLockSection {deviceId} {lock} />
+		{/snippet}
+
 		{#if admin === undefined}
 			<!-- The read has produced nothing at all. That is a state, not an empty
 			     dialog: with no band here the operator meets a blank panel and
@@ -470,6 +511,13 @@ async function applySubnet() {
 					{m["network.routerCellular.readingStale"]()}
 				</p>
 			</div>
+		{/if}
+
+		{#if lockLeads}
+			<!-- Below the two bands above, not above them: either band qualifies
+			     everything under it, this login included. Why it leads at all, and
+			     why `open` is exempt: `lockLeads`. -->
+			{@render lockSection()}
 		{/if}
 
 		<!-- The five questions every device on this page answers, answered here by
@@ -581,12 +629,15 @@ async function applySubnet() {
 			</CollapsibleSection>
 		{/if}
 
-		<!-- The login, ABOVE the two blocks it gates — so the expansion reads as one
-		     movement: sign in here, and the dongle's own capability and control
-		     sections arrive below through the same uniform surface every other
-		     reading on this dialog uses. `absent` renders zero nodes, so a device
-		     with no admin-auth surface is byte-unchanged by this mount. -->
-		<ModemLockSection {deviceId} {lock} />
+		{#if !lockLeads}
+			<!-- The `open` position: still ABOVE the two blocks it gates, so the
+			     expansion reads as one movement — sign in here, and the dongle's own
+			     capability and control sections arrive below through the same uniform
+			     surface every other reading on this dialog uses. `absent` renders
+			     zero nodes, so a device with no admin-auth surface is byte-unchanged
+			     by this mount. -->
+			{@render lockSection()}
+		{/if}
 
 		{#if netMode}
 			<!-- Discovered FIRST, offered second, through the SHARED four-state
