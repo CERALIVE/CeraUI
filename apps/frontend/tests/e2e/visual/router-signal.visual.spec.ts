@@ -510,24 +510,23 @@ for (const condition of CONDITIONS) {
 			const section = cellularSection(page);
 			await expect(section).toBeVisible({ timeout: 15_000 });
 
+			// An empty slot is NOT one of these — it is a fact about the CARD, owned
+			// by `NoSimBadge`, and it has its own leg below.
 			const cases = [
-				["dongle-nosim", "no-sim", null],
-				["dongle-unreachable", "unknown", "unreachable"],
-				["dongle-auth", "unknown", "auth-expired"],
-				["dongle-malformed", "unknown", "malformed"],
-				["dongle-blank", "unknown", "not-reported"],
+				["dongle-unreachable", "unreachable"],
+				["dongle-auth", "auth-expired"],
+				["dongle-malformed", "malformed"],
+				["dongle-blank", "not-reported"],
 			] as const;
 
 			const words = new Set<string>();
-			for (const [id, state, reason] of cases) {
+			for (const [id, reason] of cases) {
 				const chip = routerSignal(page, id);
 				await expect(chip).toBeVisible();
-				await expect(chip).toHaveAttribute("data-signal-state", state);
+				await expect(chip).toHaveAttribute("data-signal-state", "unknown");
 				// No fabricated magnitude, in any degraded state.
 				await expect(chip).not.toHaveAttribute("data-signal-tier", /.*/);
-				if (reason !== null) {
-					await expect(chip).toHaveAttribute("data-unknown-reason", reason);
-				}
+				await expect(chip).toHaveAttribute("data-unknown-reason", reason);
 
 				// The state is carried by a WORD, not by a mark or a colour — the
 				// shipped kiosk touchscreen cannot hover to reveal a title.
@@ -536,8 +535,19 @@ for (const condition of CONDITIONS) {
 				expect(text, `${id} rendered a digit`).not.toMatch(/\d/);
 				words.add(text);
 			}
-			// Five distinct operator facts must read as five distinct sentences.
+			// Four distinct operator facts must read as four distinct sentences.
 			expect(words.size).toBe(cases.length);
+
+			// THE EMPTY SLOT, stated ONCE. The fixture is the bench truth
+			// (`SimStatus 255`, `SignalIcon 0`, `maxsignal 5`), so the second
+			// assertion is the one that matters: no zero-bar meter for a device
+			// with no card for a radio to be reporting on.
+			const nosim = modemRow(page, "dongle-nosim");
+			await expect(nosim.locator("[data-no-sim]")).toHaveCount(1);
+			await expect(nosim.getByTestId("modem-router-signal")).toHaveCount(0);
+			await expect(
+				nosim.getByTestId("modem-router-signal-state"),
+			).toHaveCount(0);
 
 			// An acquiring dongle states its lifecycle without an endless spinner.
 			await expect(modemRow(page, "dongle-acquiring")).toHaveAttribute(

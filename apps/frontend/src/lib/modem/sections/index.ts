@@ -23,6 +23,8 @@
  * makes "the one rendering path" checkable rather than aspirational.
  */
 
+export type { GatedSurfaceView } from "$main/network/capability-modules";
+export { gatedSurfaceCapability } from "$main/network/capability-modules";
 export { default as CapabilitySection } from "./CapabilitySection.svelte";
 export { default as ConnectionStateBlock } from "./ConnectionStateBlock.svelte";
 export { default as DiagnosticsBlock } from "./DiagnosticsBlock.svelte";
@@ -30,7 +32,6 @@ export {
 	BASELINE_UNAVAILABLE_KEY,
 	DEFAULT_CAPABILITY_REASONS,
 	deriveCapabilityView,
-	deriveCapabilityViews,
 	deriveConnection,
 	deriveDiagnostics,
 	deriveIdentity,

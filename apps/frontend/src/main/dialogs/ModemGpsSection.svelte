@@ -37,7 +37,7 @@ import type { GnssFixState, ModemGpsStatus, SupportClaimState } from '@ceraui/rp
 import { Switch } from '$lib/components/ui/switch';
 import { loadWithinBound } from '$lib/modem/async-surface';
 import { type MutationOutcome, mutationOutcome } from '$lib/modem/mutation-outcome';
-import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
+import { CapabilitySection, gatedSurfaceCapability } from '$lib/modem/sections';
 import { rpc } from '$lib/rpc';
 
 import {
@@ -76,18 +76,18 @@ const view = $derived(gpsView(claim, status));
 const acquireWindow = $derived(gnssAcquireWindow(fixState, acquireObservedAt));
 const acquireExpired = $derived(gnssAcquireExpired(acquireWindow, now));
 const line = $derived(gpsStatusLine(fixState, acquireExpired));
-const capability = $derived.by((): CapabilityView => {
-	switch (view.kind) {
-		case 'absent':
-			return { mode: 'absent' };
-		case 'unknown':
-			return { mode: 'unknown', reasonKey: view.reasonKey };
-		case 'blocked':
-			return { mode: 'blocked', reasonKey: view.reasonKey };
-		case 'toggle':
-			return { mode: 'available' };
-	}
-});
+const capability = $derived(gatedSurfaceCapability(view));
+/**
+ * The read gate below, and it is resolved from the CLAIM ALONE — that second
+ * argument is `undefined` on purpose. `absent` is the ladder's first line and
+ * nothing under it moves that line, so a status-free call answers the same
+ * question with a `===`-stable string.
+ *
+ * Reading `capability` there instead would make the effect a subscriber of
+ * `status`, which `read()` WRITES: every successful read would re-derive the
+ * view, re-fire the effect and re-issue itself, at RPC-round-trip cadence.
+ */
+const readGate = $derived(gpsView(claim, undefined).kind);
 
 function adoptState(next: GnssFixState | undefined): void {
 	if (next?.kind === 'acquiring') {
@@ -154,12 +154,17 @@ async function toggle(enabled: boolean): Promise<void> {
   point: the capability evidence each GPS mutation gates on is process-local and
   resets on boot, so a surface that waited for the claim to say `capable` could
   never make it say so — the operator would meet a section that is permanently
-  unproven. The one claim it skips is `absent`, which renders zero nodes: a
+  unproven. The one state it skips is `absent`, which renders zero nodes: a
   surface that says nothing asks nothing. It tracks `deviceId`, so pointing the
   host at another modem re-reads.
+
+  It asks the RESOLVED ladder, never the raw claim. Restating "undefined or
+  `unavailable`" here made this effect a second, silent copy of the ladder's
+  first line — free to keep reading a module the section had stopped rendering.
+  It asks `readGate` rather than `capability` for the reason stated there.
 */
 $effect(() => {
-	if (claim === undefined || claim === 'unavailable') return;
+	if (readGate === 'absent') return;
 	void read();
 });
 

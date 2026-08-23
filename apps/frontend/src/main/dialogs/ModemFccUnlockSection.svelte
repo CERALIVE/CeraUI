@@ -21,7 +21,7 @@ import type { FccUnlockState, SupportClaimState } from '@ceraui/rpc/schemas';
 
 import { Switch } from '$lib/components/ui/switch';
 import type { MutationOutcome } from '$lib/modem/mutation-outcome';
-import { CapabilitySection, type CapabilityView } from '$lib/modem/sections';
+import { CapabilitySection, gatedSurfaceCapability } from '$lib/modem/sections';
 
 import { fccUnlockView } from './modem-fcc-unlock';
 
@@ -37,18 +37,7 @@ interface Props {
 let { claim, state, busy = false, outcome, onToggle }: Props = $props();
 
 const view = $derived(fccUnlockView(claim, state));
-const capability = $derived.by((): CapabilityView => {
-	switch (view.kind) {
-		case 'absent':
-			return { mode: 'absent' };
-		case 'unknown':
-			return { mode: 'unknown', reasonKey: view.reasonKey };
-		case 'blocked':
-			return { mode: 'blocked', reasonKey: view.reasonKey };
-		case 'toggle':
-			return { mode: 'available' };
-	}
-});
+const capability = $derived(gatedSurfaceCapability(view));
 </script>
 
 <CapabilitySection

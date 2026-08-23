@@ -114,7 +114,6 @@ import {
 	resolveClassBand,
 	resolveRowAction,
 	resolveRowState,
-	resolveSignalTier,
 	routerAdminConnectionKey,
 	routerAdminHost,
 	routerAdminSignal,
@@ -135,7 +134,7 @@ import { openRouterAdminUi, routerAdminOpenReasonKey } from './router-admin-open
 import type { RouterSignalReadout } from './router-signal';
 import {
 	isStaleReadout,
-	resolveRouterSignalReadout,
+	resolveSignalInstrument,
 	routerSignalMetricRows,
 	routerSignalStateKey,
 } from './router-signal';
@@ -261,8 +260,10 @@ const SIGNAL_COLOR: Record<ModemSignalTier, string> = {
 // therefore chosen to say WHICH kind of nothing it is: a refused session is a
 // lock, an unanswered device is an alert, a blank field is a question, and a
 // field this dialect cannot express at all is simply switched off.
+//
+// An empty SIM slot has no entry, because it is not a reading this instrument
+// can produce: `NoSimBadge` owns that fact for every modem class.
 const ROUTER_SIGNAL_STATE_ICON = {
-	'no-sim': CircleOff,
 	unsupported: CircleOff,
 	'not-reported': CircleHelp,
 	malformed: CircleAlert,
@@ -272,7 +273,6 @@ const ROUTER_SIGNAL_STATE_ICON = {
 
 function routerSignalIcon(readout: RouterSignalReadout) {
 	if (readout.kind === 'reading') return SIGNAL_ICON[readout.tier];
-	if (readout.kind === 'no-sim') return ROUTER_SIGNAL_STATE_ICON['no-sim'];
 	return ROUTER_SIGNAL_STATE_ICON[readout.reason];
 }
 
@@ -467,7 +467,8 @@ async function openAdminUi(rowId: string): Promise<void> {
 				{@const primary = primaryLabel(modem, id)}
 				{@const detail = detailLine(modem, primary)}
 				{@const slot = slotBadgeLabel(modem, primary)}
-				{@const signal = resolveSignalTier(modem.status?.signal)}
+				{@const instrument = resolveSignalInstrument(modem)}
+				{@const signal = instrument.kind === 'device-stack' ? instrument.tier : undefined}
 				{@const reasonKey = availabilityReasonKey(modem.availability_reason)}
 				{@const entry = netif?.[modem.ifname]}
 				{@const bondBlockedKey = bondDisabledReasonKey(modem, band, state, Boolean(entry?.ip))}
@@ -493,7 +494,8 @@ async function openAdminUi(rowId: string): Promise<void> {
 				<!-- Single-line summary: identity + honest bands left; controls right. -->
 				{@const admin = modem.router_admin}
 				{@const adminSegments = buildAdminSegments(modem)}
-				{@const routerSignal = resolveRouterSignalReadout(modem)}
+				{@const routerSignal =
+					instrument.kind === 'device-admin' ? instrument.readout : undefined}
 				{@const routerSignalModel = admin?.signal}
 				{@const adminDetails = detailFields(admin)}
 				{@const adminDiagnostics = diagnosticFields(admin)}
@@ -637,13 +639,10 @@ async function openAdminUi(rowId: string): Promise<void> {
 							     spinner in either arm: a poll that has not answered yet is
 							     `not-reported`, which is a fact rather than a wait. -->
 							<!-- …and NOT when the shared No-SIM tag is already on this row.
-							     A `no-sim` readout is this instrument saying "there is no
-							     signal to report, because there is no card", which is exactly
-							     what the tag beside it says — rendering both put the same fact
-							     on one row twice, in two different colours, which is the
-							     duplication this row's `rowNoteKeys` de-duplication already
-							     forbids for its note lines. The per-metric strip inside the
-							     disclosure is untouched. -->
+							     Two halves of that: `resolveSignalInstrument` answers nothing at
+							     all for a device that STATED its slot is empty (`NoSimBadge` owns
+							     that fact), and `simless` covers the rest of the bond fold. The
+							     per-metric strip inside the disclosure is untouched. -->
 							<!-- The GLYPH moved to the instrument column, beside where an
 							     MM radio draws its own (see there). Only the WORDS stay here,
 							     and only for the states that have one: this side of the row
@@ -651,7 +650,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 							     controls off a 390px screen — which is exactly why the whole
 							     chip used to live here. A plain live reading says nothing
 							     here, matching the MM row, whose tier is likewise glyph-only. -->
-							{#if signal === undefined && routerSignal && !simless}
+							{#if routerSignal && !simless}
 								{#if routerSignal.kind !== 'reading'}
 									<span
 										class={cn(MICRO_TEXT, routerSignalColor(routerSignal))}
@@ -749,9 +748,10 @@ async function openAdminUi(rowId: string): Promise<void> {
 						     `Router` mark, the DASHED frame (the "not the primary
 						     instrument" vocabulary), `data-provenance` for machines, and
 						     the prose sentence in the disclosure. The two can never both
-						     draw — `signal === undefined` is asserted in both directions by
-						     test — so one row still shows exactly one radio reading. -->
-						{#if signal === undefined && routerSignal && !simless}
+						     draw, and that is now STRUCTURAL rather than restated here:
+						     `resolveSignalInstrument` answers with exactly one of them, and
+						     both directions stay asserted by test. -->
+						{#if routerSignal && !simless}
 							{@const RouterSignalIcon = routerSignalIcon(routerSignal)}
 							{@const stateLabel = t(routerSignalStateKey(routerSignal))}
 							<span

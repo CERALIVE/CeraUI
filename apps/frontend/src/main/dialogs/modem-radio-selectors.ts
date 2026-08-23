@@ -52,11 +52,7 @@ import type {
 	SupportClaimState,
 } from "@ceraui/rpc/schemas";
 
-import {
-	type CapabilityView,
-	DEFAULT_CAPABILITY_REASONS,
-} from "$lib/modem/sections";
-import { resolveCapabilityRender } from "../network/capability-modules";
+import { type CapabilityView, deriveCapabilityView } from "$lib/modem/sections";
 import { deriveBandOffer } from "./modem-bands";
 import type { FiveGView } from "./modem-five-g";
 
@@ -195,6 +191,6 @@ export function fiveGCapabilityView(
 			? { mode: "blocked", reasonKey: RADIO_NO_SIM_REASON_KEY }
 			: { mode: "available" };
 	}
-	const resolved = resolveCapabilityRender(claim, DEFAULT_CAPABILITY_REASONS);
+	const resolved = deriveCapabilityView(claim);
 	return resolved.mode === "unknown" ? resolved : { mode: "absent" };
 }

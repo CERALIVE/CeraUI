@@ -15,14 +15,15 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { CAPABILITY_MODULES } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
-
+import { fccUnlockView } from "$main/dialogs/modem-fcc-unlock";
+import { gpsView } from "$main/dialogs/modem-gps";
+import { gatedSurfaceCapability } from "$main/network/capability-modules";
 import { isSimlessModem } from "$main/network/cellular-row";
 
 import {
 	BASELINE_UNAVAILABLE_KEY,
 	DEFAULT_CAPABILITY_REASONS,
 	deriveCapabilityView,
-	deriveCapabilityViews,
 	deriveModemSections,
 	SIGNAL_UNREADABLE_KEY,
 	UNNAMED_TITLE_KEY,
@@ -89,10 +90,9 @@ describe("the guaranteed minimum baseline", () => {
 	});
 
 	it("claims no capability it was never told about", () => {
-		const views = deriveCapabilityViews(UNRECOGNIZED.capability_modules);
-
 		for (const module of CAPABILITY_MODULES) {
-			expect(views[module]).toEqual({ mode: "absent" });
+			const claim = UNRECOGNIZED.capability_modules?.[module];
+			expect(deriveCapabilityView(claim)).toEqual({ mode: "absent" });
 		}
 	});
 
@@ -194,6 +194,9 @@ describe("telemetry renders when it is readable, and says so when it is not", ()
 	  An empty slot is the SIM block's fact and is stated there. Repeating it as a
 	  signal reason would put one condition on screen twice, which is how a row
 	  grows into the wall of sentences this surface was built to remove.
+
+	  The rule itself is `resolveRouterSignalReadout`'s — it answers nothing for a
+	  stated-empty slot, so there is no `no-sim` branch to look for here.
 	*/
 	it("does not repeat an empty slot as a signal reason", () => {
 		const set = deriveModemSections({
@@ -484,12 +487,98 @@ describe("the capability ladder is the shared one, not a second copy", () => {
 		});
 	});
 
-	it("is TOTAL over the module list, so a section cannot be silently omitted", () => {
+	it("answers every module from its own claim, proven and unproven alike", () => {
 		const claims = { gps: "capable" } as unknown as CapabilityModuleClaims;
-		const views = deriveCapabilityViews(claims);
 
-		expect(Object.keys(views).sort()).toEqual([...CAPABILITY_MODULES].sort());
-		expect(views.gps.mode).toBe("available");
-		expect(views.sms.mode).toBe("absent");
+		expect(deriveCapabilityView(claims.gps).mode).toBe("available");
+		expect(deriveCapabilityView(claims.sms).mode).toBe("absent");
+	});
+});
+
+describe("a gated surface's own view maps to the ladder ONCE", () => {
+	/*
+	  `gpsView` and `fccUnlockView` re-tag the ladder under their own names, and
+	  both components used to tag it back by hand — the same twelve lines, twice.
+	  This is the one mapping now, so the two sections cannot drift.
+	*/
+	const CASES = [
+		[{ kind: "absent" }, { mode: "absent" }],
+		[
+			{ kind: "unknown", reasonKey: "a.key" },
+			{ mode: "unknown", reasonKey: "a.key" },
+		],
+		[
+			{ kind: "blocked", reasonKey: "b.key" },
+			{ mode: "blocked", reasonKey: "b.key" },
+		],
+		[{ kind: "toggle" }, { mode: "available" }],
+	] as const;
+
+	for (const [view, expected] of CASES) {
+		it(`${view.kind} → ${expected.mode}`, () => {
+			expect(gatedSurfaceCapability(view)).toEqual(expected);
+		});
+	}
+
+	it("accepts a surface view carrying its own extras", () => {
+		expect(
+			gatedSurfaceCapability({
+				kind: "toggle",
+				enabled: true,
+				key: "12d1:14dc",
+			}),
+		).toEqual({ mode: "available" });
+	});
+});
+
+describe("…and the ladder's `absent` line is decided by the CLAIM alone", () => {
+	/*
+	  `ModemGpsSection` gates its read on the resolved ladder rather than on a
+	  hand-restated "undefined or `unavailable`". That is only safe because the
+	  `absent` verdict cannot move with the surface's OWN state — the state the
+	  read WRITES. If it could, the gate would subscribe to its own result and
+	  re-issue at RPC-round-trip cadence.
+
+	  So this is not a restatement of the table above: that one pins the mapping,
+	  this one pins which INPUTS the mapping's first line is allowed to read.
+	*/
+	const CLAIMS = [
+		undefined,
+		"unavailable",
+		"implemented",
+		"enabled",
+		"capable",
+		"certified",
+	] as const;
+
+	it.each(CLAIMS)(
+		"gpsView(%s) answers absent identically with and without a status",
+		(claim) => {
+			const withoutStatus = gpsView(claim, undefined).kind === "absent";
+			const withStatus =
+				gpsView(claim, { gnssEnabled: true }).kind === "absent";
+
+			expect(withStatus).toBe(withoutStatus);
+			expect(withoutStatus).toBe(deriveCapabilityView(claim).mode === "absent");
+		},
+	);
+
+	it.each(CLAIMS)(
+		"fccUnlockView(%s) answers absent identically with and without a state",
+		(claim) => {
+			const withoutState = fccUnlockView(claim, undefined).kind === "absent";
+			const withState =
+				fccUnlockView(claim, { enabled: true, key: "12d1:14dc" }).kind ===
+				"absent";
+
+			expect(withState).toBe(withoutState);
+		},
+	);
+
+	// Non-vacuity: the second argument DOES move every other arm, so the
+	// invariant above is a property of `absent` and not of an inert parameter.
+	it("the surface's own state still moves the arms below absent", () => {
+		expect(gpsView("certified", undefined).kind).toBe("blocked");
+		expect(gpsView("certified", { gnssEnabled: true }).kind).toBe("toggle");
 	});
 });

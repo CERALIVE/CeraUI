@@ -47,13 +47,7 @@
  * device actually published — which is the same question for every device.
  */
 
-import type {
-	CapabilityModule,
-	CapabilityModuleClaims,
-	Modem,
-	SupportClaimState,
-} from "@ceraui/rpc/schemas";
-import { CAPABILITY_MODULES } from "@ceraui/rpc/schemas";
+import type { Modem, SupportClaimState } from "@ceraui/rpc/schemas";
 
 import {
 	type CapabilityReasonKeys,
@@ -75,7 +69,6 @@ import {
 	registrationRejectionKey,
 	resolveClassBand,
 	resolveRowState,
-	resolveSignalTier,
 	rowNoteKeys,
 	signalLabelKey,
 	slotBadgeLabel,
@@ -84,7 +77,7 @@ import {
 } from "$main/network/cellular-row";
 import {
 	isStaleReadout,
-	resolveRouterSignalReadout,
+	resolveSignalInstrument,
 	routerSignalReasonKey,
 } from "$main/network/router-signal";
 
@@ -242,28 +235,30 @@ export function deriveConnection(
 /**
  * WHATEVER TELEMETRY IS READABLE, and nothing else.
  *
- * The two instruments are mutually exclusive per row by construction, so this is
- * a preference rather than a merge: whichever one published a reading is the one
- * rendered, and when neither did the model says so in words. Absence is never a
- * dash, a zero or an empty meter — all three read as a measurement that was
- * taken and came back at the bottom of the scale.
+ * WHICH instrument answers is `resolveSignalInstrument`'s, not this file's — the
+ * Cellular row applies the same precedence to decide which glyph it draws, and a
+ * second copy here could disagree with the row about a device that published
+ * both. This only shapes the winner into the section model.
+ *
+ * Absence is never a dash, a zero or an empty meter — all three read as a
+ * measurement that was taken and came back at the bottom of the scale.
  */
 export function deriveSignal(modem: Modem): SignalModel {
-	const tier = resolveSignalTier(modem.status?.signal);
-	if (tier !== undefined) {
+	const instrument = resolveSignalInstrument(modem);
+	if (instrument.kind === "none") {
+		return { readable: false, reasonKey: SIGNAL_UNREADABLE_KEY };
+	}
+	if (instrument.kind === "device-stack") {
 		return {
 			readable: true,
-			tier,
-			tierKey: signalLabelKey(tier),
+			tier: instrument.tier,
+			tierKey: signalLabelKey(instrument.tier),
 			provenance: "device-stack",
 			stale: false,
 		};
 	}
 
-	const readout = resolveRouterSignalReadout(modem);
-	if (readout === undefined) {
-		return { readable: false, reasonKey: SIGNAL_UNREADABLE_KEY };
-	}
+	const { readout } = instrument;
 	if (readout.kind === "reading") {
 		return {
 			readable: true,
@@ -272,11 +267,6 @@ export function deriveSignal(modem: Modem): SignalModel {
 			provenance: "device-admin",
 			stale: isStaleReadout(readout),
 		};
-	}
-	// An empty slot is the SIM block's fact, and it is stated there. Repeating it
-	// as a signal reason would put the same condition on screen twice.
-	if (readout.kind === "no-sim") {
-		return { readable: false, reasonKey: SIGNAL_UNREADABLE_KEY };
 	}
 	return { readable: false, reasonKey: routerSignalReasonKey(readout.reason) };
 }
@@ -474,28 +464,9 @@ export function deriveCapabilityView(
 	return resolveCapabilityRender(claim, reasons, blockedReasonKey);
 }
 
-/**
- * Every module's view in one call, in `CAPABILITY_MODULES`' own order.
- *
- * TOTAL over the module list, so a dialog cannot silently omit a section by
- * forgetting a key, and a payload from a backend that publishes no matrix
- * resolves every module to `absent` — fail-CLOSED, because absence of a claim
- * is not a claim.
- */
-export function deriveCapabilityViews(
-	claims: CapabilityModuleClaims | undefined,
-	options?: {
-		readonly reasons?: Partial<Record<CapabilityModule, CapabilityReasonKeys>>;
-		readonly blocked?: Partial<Record<CapabilityModule, string>>;
-	},
-): Record<CapabilityModule, CapabilityView> {
-	const views = {} as Record<CapabilityModule, CapabilityView>;
-	for (const module of CAPABILITY_MODULES) {
-		views[module] = deriveCapabilityView(
-			claims?.[module],
-			options?.reasons?.[module] ?? DEFAULT_CAPABILITY_REASONS,
-			options?.blocked?.[module],
-		);
-	}
-	return views;
-}
+/*
+  There is deliberately no all-modules variant. One existed and nothing called
+  it: every gated section carries its OWN reason pair (`…gps.reason.*`,
+  `…fccUnlock.reason.*`, `…ussd.reason.*`) and resolves one module at a time, so
+  a total map under the generic reasons answers a question nobody asks.
+*/
