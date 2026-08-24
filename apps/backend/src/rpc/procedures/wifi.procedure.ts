@@ -45,9 +45,14 @@ import {
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
 	hotspotToggleOutputSchema,
+	type SetWifiAdapterModeOutput,
+	setWifiAdapterModeInputSchema,
+	setWifiAdapterModeOutputSchema,
 	setWifiCountryInputSchema,
 	setWifiCountryOutputSchema,
 	successResponseSchema,
+	type WifiAdapterModeStatus,
+	wifiAdapterModeStatusSchema,
 	wifiConnectInputSchema,
 	wifiDisconnectInputSchema,
 	wifiForgetInputSchema,
@@ -77,6 +82,13 @@ import {
 	wifiAdapterLockKeyForDeviceId,
 	withWifiAdapterLock,
 } from "../../modules/wifi/wifi-adapter-lock.ts";
+import {
+	buildWifiAdapterModeStatus,
+	wifiAdapterModeOptions,
+} from "../../modules/wifi/wifi-adapter-mode.ts";
+import { publishAdapterModeOutcome } from "../../modules/wifi/wifi-adapter-mode-outcome.ts";
+import { setWifiAdapterMode } from "../../modules/wifi/wifi-adapter-mode-transition.ts";
+import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
 import {
 	persistWifiCountry,
 	setWifiCountry,
@@ -427,6 +439,97 @@ export const hotspotConfigureProcedure = authedProcedure
 			}
 		}
 		return { success: true };
+	});
+
+/*
+  A dev host has no wiphy, so nothing can PROVE an AP+STA combination on it. The
+  mock therefore offers exactly what the real derivation offers for an unprovable
+  radio — `hybrid` disabled with `capability-unknown` — rather than a fabricated
+  capability, which is the same rule the mock hotspot-security map already
+  follows.
+*/
+function mockAdapterModeStatus(): WifiAdapterModeStatus {
+	const state = getMockState();
+	const status: WifiAdapterModeStatus = {};
+	mockWifiRadios.forEach((radio, index) => {
+		status[String(index)] = {
+			ifname: radio.ifname,
+			mode: state.wifiModes[radio.device] === "hotspot" ? "hotspot" : "station",
+			options: wifiAdapterModeOptions({
+				supportsHotspot: radio.supports_hotspot === true,
+				staApComboSupported: undefined,
+			}),
+		};
+	});
+	return status;
+}
+
+/**
+ * The observed mode, the persisted preference and the TOTAL offered set for
+ * every adapter.
+ *
+ * It is its own pull rather than a field on `getStatus` so the offered set and
+ * the refusal reasons that qualify it always travel together with the mode.
+ */
+export const getWifiAdapterModesProcedure = authedProcedure
+	.output(wifiAdapterModeStatusSchema)
+	.handler(() => {
+		if (shouldUseMocks()) return mockAdapterModeStatus();
+		return buildWifiAdapterModeStatus(getWifiInterfacesByMacAddress());
+	});
+
+/**
+ * Switch one adapter between `station`, `hotspot` and `hybrid`.
+ *
+ * It takes NO `runGuarded` here, for the reason the hotspot toggles take none:
+ * the transition acquires the canonical permanent-MAC key itself and holds it
+ * across the NetworkManager work, and `withDeviceLock` is not re-entrant — so a
+ * guard at this layer would make every mode change refuse ITSELF. The
+ * transition's own admission probe answers a genuinely busy adapter.
+ */
+export const setWifiAdapterModeProcedure = authedProcedure
+	.input(setWifiAdapterModeInputSchema)
+	.output(setWifiAdapterModeOutputSchema)
+	.handler(async ({ input }): Promise<SetWifiAdapterModeOutput> => {
+		if (mockWifiBusy()) {
+			publishAdapterModeOutcome(input.device, {
+				success: false,
+				error: "DEVICE_BUSY",
+			});
+			return { success: false, error: "DEVICE_BUSY" };
+		}
+
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (!device) {
+				publishAdapterModeOutcome(input.device, {
+					success: false,
+					error: "no-device",
+				});
+				return { success: false, error: "no-device" };
+			}
+			// A dev host can express `station` and `hotspot` only: `hybrid` needs a
+			// second, real netdev, and pretending otherwise would offer a mode whose
+			// bond-exclusion proof has nothing to exclude.
+			if (input.mode === "hybrid") {
+				publishAdapterModeOutcome(input.device, {
+					success: false,
+					error: "capability-unproven",
+				});
+				return { success: false, error: "capability-unproven" };
+			}
+			getMockState().wifiModes[device] = input.mode;
+			if (input.mode === "hotspot") {
+				setMockWifiConnection(device, { activeNetwork: undefined });
+			}
+			publishAdapterModeOutcome(input.device, {
+				success: true,
+				mode: input.mode,
+			});
+			return { success: true, applied: input.mode };
+		}
+
+		return setWifiAdapterMode(input.device, input.mode);
 	});
 
 /**

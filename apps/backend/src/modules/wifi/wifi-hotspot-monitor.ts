@@ -124,7 +124,10 @@ export function registerPendingConfirmation(
 			wifiInterface.conn = wifiInterface.hotspot.conn;
 		}
 		delete wifiInterface.hotspot.transition;
-		if (wifiInterface.supportsApStaConcurrency !== true) {
+		// Keyed on the VIRTUAL interface, not on the capability: a capable radio
+		// asked for an EXCLUSIVE hotspot has no `clap-` netdev, so its parent did
+		// take the dup-IP suppression on the way in and owes the release here.
+		if (!wifiInterface.concurrentHotspot) {
 			deps.setDupIpSuppression(ifname, false);
 		}
 		deps.broadcastState();
@@ -136,7 +139,7 @@ export function registerPendingConfirmation(
 		// Confirmation never arrived — clear the transition (soft rollback). The
 		// next NM poll will reconcile if the hotspot did in fact come up.
 		delete wifiInterface.hotspot.transition;
-		if (wifiInterface.supportsApStaConcurrency !== true) {
+		if (!wifiInterface.concurrentHotspot) {
 			deps.setDupIpSuppression(ifname, false);
 		}
 		deps.broadcastState();

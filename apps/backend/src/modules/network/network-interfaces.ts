@@ -39,6 +39,7 @@ import {
 	notificationSend,
 } from "../ui/notifications.ts";
 import { broadcastMsg, buildMsg } from "../ui/websocket-server.ts";
+import { isConcurrentApIfname } from "../wifi/wifi-concurrent-interface.ts";
 import {
 	wifiDeviceListAdd,
 	wifiDeviceListEndUpdate,
@@ -199,10 +200,48 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
  */
 export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (!int.ip) return false;
+	if (isConcurrentApIfname(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
 	if (operatorBondOptOut.has(name)) return false;
 	if (isDupIpOnly(int)) return true;
 	return int.enabled;
+}
+
+/*
+  THE CONCURRENT-AP NETDEV CAN NEVER CARRY BONDED TRAFFIC.
+
+  A hybrid radio hosts its access point on a SECOND, virtual `clap-<parent>`
+  interface, and NetworkManager's shared mode leases it `10.42.0.1` — a routable
+  address on an interface that is RUNNING, `enabled`, and error-free, which is
+  every property `isBondCandidate` reads. The existing hotspot exclusion could
+  not reach it: that one walks the WiFi registry and flags `isApMode` adapters,
+  and a hybrid radio's parent is truthfully a STATION, so nothing ever stamped
+  the virtual netdev at all and `genSrtlaIpList` emitted `10.42.0.x`.
+
+  The name is the honest discriminator here, and it is not the fleet's usual
+  name-keying trap: `clap-<parent>` is MINTED by this device
+  (`concurrentApIfname`) rather than assigned by udev, so it identifies a netdev
+  we created for exactly this purpose and cannot follow a rename.
+
+  It is applied in TWO places on purpose. `isBondCandidate` above refuses it
+  structurally, so a caller holding a hand-built entry is covered; and the gate
+  below stamps `NETIF_ERR_HOTSPOT` into the netif map, so the wire, the
+  connectivity-probe eligibility rule and the same-subnet grouping all see the
+  exclusion through the flag they already read rather than through a second rule
+  each of them would have to learn.
+
+  Like the SIM-less gate it runs on EVERY pass rather than inside `intsChanged`:
+  a hybrid AP coming up adds an interface, but the flag must also be right on a
+  pass where nothing about the topology moved.
+*/
+export function applyConcurrentApBondGate(
+	interfaces: Record<string, NetworkInterface>,
+): void {
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int) continue;
+		if (isConcurrentApIfname(name)) setNetifError(int, NETIF_ERR_HOTSPOT);
+	}
 }
 
 /*
@@ -812,6 +851,10 @@ export function processIfconfigOutput(
 	// Ahead of the dup-IP and same-subnet passes so a SIM-less dongle is already
 	// disabled when they run, exactly as a dup-IP link is when grouping runs.
 	applyRouterSimBondGate(newInterfaces);
+	// Same placement, same reason: a concurrent AP is deliberately same-subnet
+	// with its own DHCP clients, so it must already carry the hotspot flag the
+	// grouping pass reads before that pass runs.
+	applyConcurrentApBondGate(newInterfaces);
 
 	const dupIpGroups = duplicateIpGroups(newInterfaces);
 

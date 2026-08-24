@@ -138,6 +138,7 @@ import {
 } from "./modules/system/ssh.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
+import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
@@ -393,6 +394,13 @@ wifiStateInit(networkMonitor);
 
 // Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
 networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
+
+// Re-apply the operator's persisted per-adapter WiFi mode. Deliberately NOT
+// awaited: the adapter registry is filled by the netif poll seconds after this
+// point, so the reconciler does its own bounded wait — awaiting it here would
+// put a radio on the boot critical path for no gain. It is idempotent and never
+// throws, so a device with no stated preference pays one map lookup.
+void guardNonCritical("wifi-adapter-modes", reconcileWifiAdapterModes);
 
 // MUST precede initModemUpdateLoop: the loop's first discovery + `modems`
 // broadcast fire immediately, and every modem RPC gates on the readiness

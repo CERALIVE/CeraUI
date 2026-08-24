@@ -128,10 +128,12 @@ import {
 	startUpdateProcedure,
 } from "./procedures/system.procedure.ts";
 import {
+	getWifiAdapterModesProcedure,
 	getWifiStatusProcedure,
 	hotspotConfigureProcedure,
 	hotspotStartProcedure,
 	hotspotStopProcedure,
+	setWifiAdapterModeProcedure,
 	setWifiCountryProcedure,
 	wifiConnectNewProcedure,
 	wifiConnectProcedure,
@@ -223,6 +225,8 @@ const stableRoutes = {
 		hotspotStop: hotspotStopProcedure,
 		hotspotConfigure: hotspotConfigureProcedure,
 		setCountry: setWifiCountryProcedure,
+		getAdapterModes: getWifiAdapterModesProcedure,
+		setAdapterMode: setWifiAdapterModeProcedure,
 	}),
 
 	bluetooth: base.router({

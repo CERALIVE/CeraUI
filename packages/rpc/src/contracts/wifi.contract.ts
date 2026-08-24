@@ -6,9 +6,12 @@ import { oc } from '@orpc/contract';
 import {
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
+	setWifiAdapterModeInputSchema,
+	setWifiAdapterModeOutputSchema,
 	setWifiCountryInputSchema,
 	setWifiCountryOutputSchema,
 	successResponseSchema,
+	wifiAdapterModeStatusSchema,
 	wifiConnectInputSchema,
 	wifiDisconnectInputSchema,
 	wifiForgetInputSchema,
@@ -69,6 +72,20 @@ export const wifiContract = oc.router({
 	 * hotspot channel set from the kernel's post-regdomain answer.
 	 */
 	setCountry: oc.input(setWifiCountryInputSchema).output(setWifiCountryOutputSchema),
+
+	/**
+	 * The observed mode, the persisted preference, and the TOTAL offered set for
+	 * every adapter. A pull rather than a field on `getStatus`, so the offered set
+	 * and its refusal reasons travel together with the mode they qualify.
+	 */
+	getAdapterModes: oc.output(wifiAdapterModeStatusSchema),
+
+	/**
+	 * Switch one adapter between `station`, `hotspot` and `hybrid`. `accepted`
+	 * promises a terminal `wifi` -> `adapter_mode` frame, never that the radio has
+	 * already reached the mode.
+	 */
+	setAdapterMode: oc.input(setWifiAdapterModeInputSchema).output(setWifiAdapterModeOutputSchema),
 
 	/**
 	 * Subscribe to WiFi status changes

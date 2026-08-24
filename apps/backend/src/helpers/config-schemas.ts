@@ -65,6 +65,7 @@ import {
 	sourcesVisibilitySchema,
 	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
+	wifiAdapterModeSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import { logger } from "./logger.ts";
@@ -358,6 +359,17 @@ export const runtimeConfigSchema = z.object({
 	// so an existing config keeps today's behaviour exactly. The hotspot channel
 	// set is DERIVED from `iw phy` after this is applied, never from a table.
 	country: regulatoryCountrySchema.optional(),
+
+	// The operator's per-adapter WiFi mode, keyed by the adapter's PERMANENT
+	// hardware address — the same key `wifiInterfacesByMacAddress` and the
+	// canonical adapter lock use, so a preference cannot be filed under one radio
+	// and read back for another. An ifname key would follow a rename rather than
+	// the radio, and this fleet's duplicate-MAC dongles rename on replug.
+	//
+	// ABSENT means "the operator has never chosen", which is deliberately NOT the
+	// same as `station`: nothing is reconciled at boot for an adapter with no
+	// preference, so an existing device keeps today's behaviour exactly.
+	wifi_modes: z.record(z.string(), wifiAdapterModeSchema).optional(),
 
 	// Opt-in gate for the guarded USB-composition-mode switch (`modems.setUsbMode`).
 	// DEFAULT-ABSENT ON PURPOSE and given NO entry in RUNTIME_CONFIG_DEFAULTS: a

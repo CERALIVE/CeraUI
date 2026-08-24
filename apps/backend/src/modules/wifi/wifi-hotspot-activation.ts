@@ -30,6 +30,7 @@ import {
 	wifiAdapterLockKey,
 	withWifiAdapterLock,
 } from "./wifi-adapter-lock.ts";
+import { getPersistedWifiAdapterMode } from "./wifi-adapter-mode.ts";
 import {
 	concurrentHotspotBindingFields,
 	ensureConcurrentApInterface,
@@ -76,6 +77,8 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	},
 	ensureConcurrentInterface: ensureConcurrentApInterface,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
+	preferConcurrentAp: (macAddress) =>
+		getPersistedWifiAdapterMode(macAddress) !== "hotspot",
 	publishOutcome: publishHotspotOutcome,
 	pollHotspotActive: async (iface) => {
 		// Re-poll authoritative NM device state, then check whether the active
@@ -160,14 +163,20 @@ async function startHotspotLocked(
 		deps.publishOutcome?.("start", wifiInterface.id, { success: true });
 		return { success: true };
 	}
-	const concurrentInterface =
-		wifiInterface.supportsApStaConcurrency === true
-			? await deps.ensureConcurrentInterface?.(ifname)
-			: undefined;
-	if (
+	/*
+	  Capability answers whether this radio CAN keep its station leg; the operator's
+	  persisted mode answers whether it SHOULD. `hotspot` means an EXCLUSIVE access
+	  point, so a capable radio must still take the exclusive path when that is what
+	  was asked for. An adapter with no stated preference resolves to concurrency,
+	  which is the behaviour every capable radio had before the mode was selectable.
+	*/
+	const useConcurrentAp =
 		wifiInterface.supportsApStaConcurrency === true &&
-		concurrentInterface === undefined
-	) {
+		(deps.preferConcurrentAp?.(macAddress) ?? true);
+	const concurrentInterface = useConcurrentAp
+		? await deps.ensureConcurrentInterface?.(ifname)
+		: undefined;
+	if (useConcurrentAp && concurrentInterface === undefined) {
 		return { success: false, error: "activation-failed" };
 	}
 	const activationIfname = concurrentInterface?.ifname ?? ifname;

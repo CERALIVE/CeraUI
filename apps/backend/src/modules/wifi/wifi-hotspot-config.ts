@@ -133,7 +133,7 @@ export type HotspotStopDeps = {
 	publishOutcome?: HotspotOutcomePublisher;
 };
 
-const defaultHotspotStopDeps: HotspotStopDeps = {
+export const defaultHotspotStopDeps: HotspotStopDeps = {
 	nmConnSetFields,
 	nmDisconnect,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
@@ -164,6 +164,11 @@ async function stopHotspotLocked(
 	const conn = wifiInterface.hotspot.conn;
 	if (!conn) return { success: true };
 
+	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
+	// to pair with whichever interface took it on the way in, and a capable radio
+	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
+	const wasConcurrent = wifiInterface.concurrentHotspot !== undefined;
+
 	wifiInterface.hotspot.transition = "deactivating";
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
@@ -183,7 +188,7 @@ async function stopHotspotLocked(
 	}
 
 	delete wifiInterface.hotspot.transition;
-	if (wifiInterface.supportsApStaConcurrency !== true) {
+	if (!wasConcurrent) {
 		deps.setDupIpSuppression(wifiInterface.ifname, false);
 	}
 	deps.broadcastState();
