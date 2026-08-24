@@ -20,11 +20,8 @@
  *   capability present and un-dispositioned fails, and a manifest key naming
  *   nothing fails (which is what catches stale rows on a version bump).
  *
- *   TIER 2 (written, disarmed) — a package-owned enumerable operation-id
- *   registry. v1.1.0 exports none, so the assertion reports an EXPLICIT,
- *   visible skip naming the work that arms it, rather than passing in silence.
- *   Its own scanner is proven non-vacuous below, so "the registry is absent" is
- *   a finding about the package and never about a broken probe.
+ *   TIER 2 (active) — the pinned package's `MODEM_OPERATION_IDS` enumerable
+ *   operation-id registry. The manifest must equal it in both directions.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * RULE D — NOTHING HERE READS ABOVE THE CeraUI CHECKOUT ROOT
@@ -125,7 +122,9 @@ function readStringArrayLiteral(
 	source: string,
 	name: string,
 ): string[] | undefined {
-	const match = new RegExp(`${name}\\s*=\\s*\\[([^\\]]*)\\]`).exec(source);
+	const match = new RegExp(
+		`${name}\\s*=\\s*(?:Object\\.freeze\\()?\\[([^\\]]*)\\]`,
+	).exec(source);
 	const body = match?.[1];
 	if (body === undefined) return undefined;
 	const members: string[] = [];
@@ -278,38 +277,22 @@ describe("tier 1 — the manifest COVERS every modem RPC the backend dispatches"
 	});
 });
 
-describe("tier 2 — armed by the package-owned operation registry", () => {
+describe("tier 2 — the manifest EQUALS the package operation registry", () => {
 	it("proves the dist scanner is non-vacuous before trusting its verdict", () => {
 		expect(findDistStringArray(PACKAGE_DIST, KNOWN_DIST_EXPORT)).toBeDefined();
 	});
 
-	it(`EQUALS ${OPERATION_REGISTRY_EXPORT}, or reports an explicit SKIP`, () => {
+	it(`EQUALS ${OPERATION_REGISTRY_EXPORT}`, () => {
 		const registry = findDistStringArray(
 			PACKAGE_DIST,
 			OPERATION_REGISTRY_EXPORT,
 		);
 
-		if (registry === undefined) {
-			// NOT a silent pass. The package genuinely exports no operation-id
-			// registry — its provider operations are named properties on
-			// heterogeneous runtime objects, with no enumerable list to compare
-			// against — so the honest answer is to say so, loudly, and name the
-			// work that arms this.
-			const skip = [
-				`SKIP tier 2: ${PACKAGE_NAME}@${PACKAGE.version} exports no ${OPERATION_REGISTRY_EXPORT} registry,`,
-				"so the manifest's operation ids cannot be held to set equality yet.",
-				"modem-stack todo 4 adds that registry; CeraUI todo 46 bumps the pin and ARMS this assertion.",
-				`Manifest operation rows standing by: ${Object.keys(OPERATION_PARITY).length}.`,
-			].join(" ");
-			console.warn(skip);
-			expect(skip).toContain("todo 4");
-			expect(skip).toContain("todo 46");
-			expect(Object.keys(OPERATION_PARITY).length).toBeGreaterThan(0);
-			return;
-		}
+		expect(registry).toBeDefined();
+		expect(registry?.length).toBeGreaterThan(0);
 
 		const undispositioned = missingFrom(
-			registry,
+			registry ?? [],
 			Object.keys(OPERATION_PARITY),
 		);
 		expect(
@@ -317,7 +300,7 @@ describe("tier 2 — armed by the package-owned operation registry", () => {
 			`operation ids the package registry exports with NO manifest disposition: ${undispositioned.join(", ")}`,
 		).toEqual([]);
 
-		const stale = missingFrom(Object.keys(OPERATION_PARITY), registry);
+		const stale = missingFrom(Object.keys(OPERATION_PARITY), registry ?? []);
 		expect(
 			stale,
 			`stale manifest operation keys naming nothing the package registry exports: ${stale.join(", ")}`,

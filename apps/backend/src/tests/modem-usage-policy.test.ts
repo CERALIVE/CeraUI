@@ -4,7 +4,7 @@
  * Every case drives the REAL pinned `@ceralive/modem-control` against a real
  * temp file, so this suite reports what the installed package can actually do
  * rather than what a double says it can. There is no package double left to
- * inject: the `1.1.0` pin is exact and the setter is a static import, so
+ * inject: the `1.2.0` pin is exact and the setter is a static import, so
  * "installed but without the setter" is not a state this build can reach.
  */
 

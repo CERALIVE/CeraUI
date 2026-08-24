@@ -12,7 +12,7 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 
 ### Modem-control compatibility
 
-The backend pins `@ceralive/modem-control` at `1.1.0` EXACTLY. The SMS port, the
+The backend pins `@ceralive/modem-control` at `1.2.0` EXACTLY. The SMS port, the
 usage-policy setter and the band certification catalog are static imports: while
 the pin was the published `0.2.0` floor each was resolved through a lazy
 `import()` and a structural probe, because its API had landed in modem-stack
@@ -24,6 +24,15 @@ Fourteen frozen projection modules still consume additive pure modem logic
 through `src/modules/modem-control-compat.ts`, which is a static namespace import
 rather than a probe. It is permanent: two of its names are exported by no release,
 so the local implementations behind it are the implementation, not a fallback.
+The package-owned `MODEM_OPERATION_IDS` registry is held to set equality with
+CeraUI's disposition manifest by the unskipped frontend tier-2 drift gate.
+
+A fifteenth compatibility consumer lives in `modems/usb-mode-runtime.ts`.
+Version 1.2.0 supplies its read-only `resolveRuntimeCompositionCapability`
+candidate; a boundary test proves the package function is selected and remains
+structurally and behaviorally identical to CeraUI's local fallback. The package's
+write-side composition registry is intentionally not consumed by this bump.
+
 Modem-stack mutation operations receive CeraUI's existing stream-coupled admission
 policy through `src/modules/modems/mutation-admission-port.ts`; transport/session
 ownership and the device wire contract remain in CeraUI. The committed pin and

@@ -54,11 +54,9 @@
  *  - `CAPABILITY_MODULE_PARITY` mirrors the package's exported capability-module
  *    list (`capability/support-claim.ts`). It is enumerable TODAY, so the gate
  *    holds it to strict set equality in both directions.
- *  - `OPERATION_PARITY` mirrors the concrete provider operation ids. v1.1.0
- *    exports no registry for these — the common `ProviderOperationsSurface`
- *    carries no operation-id list and provider operations are named properties
- *    on heterogeneous runtime objects — so the gate's set-equality assertion for
- *    this record is written but disarmed, pending the package-owned registry.
+ *  - `OPERATION_PARITY` mirrors the concrete provider operation ids. The pinned
+ *    package exports `MODEM_OPERATION_IDS`, and the gate holds this record to
+ *    strict set equality with that authoritative registry in both directions.
  *  - `BACKEND_RPC_PARITY` mirrors the modem RPC procedures CeraUI's OWN backend
  *    dispatches. This is the axis that catches a UI surface with no disposition:
  *    a new `modems.*` procedure lands, no row claims it, the gate goes red. The
@@ -149,7 +147,7 @@ export const OPERATION_PARITY: ParityRecord = {
 		reason:
 			"ModemConfigDialog's network-type selector writes the ordered RAT preference through modems.configure.",
 	},
-	"modemmanager.modes": {
+	"modemmanager.mode-combination": {
 		disposition: "wired",
 		reason:
 			"The 5G-preference control selects one advertised (allowed, preferred) combination verbatim; a posture the modem never advertised is refused, never rounded.",
@@ -173,6 +171,11 @@ export const OPERATION_PARITY: ParityRecord = {
 		disposition: "unwired",
 		reason:
 			"The idempotent radio-power read is available to the provider and reaches no wire field and no operator surface.",
+	},
+	"modemmanager.usb-composition": {
+		disposition: "wired",
+		reason:
+			"ModemConfigDialog reads the device-derived composition targets and dispatches the confirm-guarded switch through modems.setUsbMode.",
 	},
 	status: {
 		disposition: "wired",

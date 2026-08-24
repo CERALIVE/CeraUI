@@ -38,7 +38,7 @@
  * THE CATALOG IS IMPORTED STATICALLY. The band API landed in
  * `@ceralive/modem-control` after the `0.2.0` floor `package.json` used to pin,
  * so this module resolved it through a lazy `import()` plus a structural probe.
- * The pin is now `1.1.0` EXACTLY, which publishes the whole band surface, so the
+ * The pin is now `1.2.0` EXACTLY, which publishes the whole band surface, so the
  * probe is gone and `tsc` enforces what it used to test for. What is KEPT is the
  * injection seam below: it is a test double for CERTIFICATION behaviour (a
  * synthetic certified SKU, an empty catalog), not floor tolerance, and its

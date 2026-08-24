@@ -23,9 +23,11 @@
  * (`control/src/usb-mode/runtime-capability.ts`, todo 9). Every function here is
  * asked for through {@link modemControlFunction} first and answers with the local
  * implementation only when the pinned package does not export it — the fourteen
- * frozen projection modules' seam, applied to a fifteenth. `@ceralive/modem-control@1.1.0`
- * exports none of these names, so today the local half is the implementation; a
- * later release supersedes it with no call-site change.
+ * frozen projection modules' seam, applied to a fifteenth. `@ceralive/modem-control@1.2.0`
+ * exports `resolveRuntimeCompositionCapability`, so the package owns today's
+ * read-side resolution while the local half remains its executable parity oracle
+ * and fallback. The package's SET registry is intentionally not consumed here;
+ * adding a write path is a separate reviewed feature, not a compatibility bump.
  *
  * WHY A LOCAL HALF EXISTS AT ALL, given the package owns the model. The seam's
  * whole point is that adopting a packaged function is a no-op for the shipped
@@ -261,7 +263,7 @@ export function isRuntimeCompositionVendor(
 	return Object.hasOwn(RUNTIME_COMPOSITION_QUERY_REGISTRY, vendor);
 }
 
-function resolveRuntimeCompositionCapabilityLocal(
+export function resolveRuntimeCompositionCapabilityLocal(
 	input: RuntimeCompositionResponse,
 ): RuntimeCompositionCapability {
 	const vendor = input.vendor.trim().toLowerCase();
