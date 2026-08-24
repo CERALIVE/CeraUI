@@ -66,6 +66,7 @@ import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
+	getWifiScanStampForDevice,
 	wifiRescan,
 	wifiScheduleScanRefresh,
 	wifiUpdateScanResult,
@@ -184,7 +185,29 @@ export type WifiInterfaceResponseMessage = Pick<
 	// The STATION leg's live negotiated rate. Absent on an AP-mode radio, on a
 	// station holding no connection, and until the first read has landed.
 	link?: WifiLinkTelemetry;
+	// This adapter's completed-scan counter and the moment it last advanced.
+	// Absent until the adapter has completed one scan cycle — a consumer confirms
+	// its own scan by the generation ADVANCING, never by the list changing.
+	scanGeneration?: number;
+	scanAt?: number;
 };
+
+/*
+  Stamp the adapter's last completed scan cycle onto its wire row.
+
+  It rides EVERY tick rather than only the tick that advanced it, so a consumer
+  never has to decide whether a missing generation means "unchanged" or
+  "withdrawn" — the same rule `capabilities` states directly above.
+*/
+function applyScanStamp(
+	entry: WifiInterfaceResponseMessage,
+	device: WifiInterfaceId,
+): void {
+	const stamp = getWifiScanStampForDevice(device);
+	if (stamp === undefined) return;
+	entry.scanGeneration = stamp.generation;
+	entry.scanAt = stamp.at;
+}
 
 export function wifiBuildMsg() {
 	// Return mock WiFi data in development mode
@@ -242,14 +265,16 @@ export function wifiBuildMsg() {
 				saved[ssid] = mockWifiUuidForSsid(ssid);
 			}
 
-			ifs[index] = {
+			const entry: WifiInterfaceResponseMessage = {
 				ifname: radio.ifname,
 				conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
 				hw: radio.macAddress,
 				saved,
 				available,
 				...(radio.supports_hotspot ? { supports_hotspot: true } : {}),
-			} satisfies WifiInterfaceResponseMessage;
+			};
+			applyScanStamp(entry, index);
+			ifs[index] = entry;
 		});
 
 		return ifs;
@@ -348,6 +373,8 @@ export function wifiBuildMsg() {
 		if (capabilities !== undefined) {
 			entry.capabilities = capabilities;
 		}
+
+		applyScanStamp(entry, id);
 	}
 
 	// Fire-and-forget, after the snapshot is assembled: the read is bounded by
@@ -834,8 +861,17 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 				);
 				break;
 
+			/*
+			  The requested adapter is FORWARDED, not discarded. Dropping it made
+			  every scan a device-wide one: the rescan went out with no `ifname`, so
+			  a two-radio board rescanned whichever radio NetworkManager felt like,
+			  and the process-wide coalescing guard then served the second adapter's
+			  caller from the first one's run.
+			*/
 			case "scan":
-				void wifiRescan();
+				void wifiRescan(
+					extractMessage<WifiScanMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "new":

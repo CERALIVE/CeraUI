@@ -33,6 +33,11 @@ import {
 	vi,
 } from "vitest";
 
+import {
+	destroyAsyncOperations,
+	initAsyncOperations,
+} from "$lib/rpc/async-operation.svelte";
+
 import WifiSelectorDialog from "./WifiSelectorDialog.svelte";
 
 const scan = vi.hoisted(() => vi.fn());
@@ -94,9 +99,18 @@ beforeEach(() => {
 	vi.useFakeTimers();
 	scan.mockReset();
 	scan.mockResolvedValue({ success: true });
+	// The scan op is a module singleton shared by every test here, and it no
+	// longer self-confirms when the RPC resolves — a resolved reply says only that
+	// nmcli was dispatched, so confirmation waits for the device's own scan
+	// generation, which this file's feed never reports. Warm a FRESH store per
+	// test (the documented lifecycle) so the TTL valve that releases an
+	// unconfirmed poll is genuinely running, and no test inherits the previous
+	// one's pending op.
+	initAsyncOperations();
 });
 
 afterEach(() => {
+	destroyAsyncOperations();
 	vi.useRealTimers();
 });
 

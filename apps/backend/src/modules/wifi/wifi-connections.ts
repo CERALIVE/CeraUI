@@ -35,7 +35,11 @@ import {
 	setWifiState,
 } from "./state/wifi-state.ts";
 import { broadcastWifiState, type WifiNetwork } from "./wifi.ts";
-import type { WifiInterface } from "./wifi-interfaces.ts";
+import {
+	type WifiAdapterLockKey,
+	wifiAdapterLockKey,
+} from "./wifi-adapter-lock.ts";
+import type { WifiInterface, WifiInterfaceId } from "./wifi-interfaces.ts";
 
 const wifiInterfacesByMacAddress: Record<MacAddress, WifiInterface> = {};
 
@@ -286,7 +290,7 @@ export function parseWifiScanRow(raw: string): ParsedWifiScanRow | null {
 	};
 }
 
-export async function wifiUpdateScanResult() {
+export async function wifiUpdateScanResult(): Promise<boolean> {
 	// Retry transient nmcli scan/list failures with exponential backoff (T7).
 	const wifiNetworks = await pollWithBackoff(
 		() =>
@@ -300,7 +304,13 @@ export async function wifiUpdateScanResult() {
 				logger.debug(`wifiUpdateScanResult: scan failed after retries: ${err}`),
 		},
 	);
-	if (!wifiNetworks) return;
+	/*
+	  `undefined` is a failed READ, never an empty result: `nmScanResults` splits
+	  a successful empty answer into `[""]`, so a genuinely empty scan reaches the
+	  clear-and-refill below and honestly blanks the lists. A failed read must NOT
+	  — blanking on a transient nmcli failure would report every network as gone.
+	*/
+	if (!wifiNetworks) return false;
 
 	for (const wifiInterface of Object.values(wifiInterfacesByMacAddress)) {
 		wifiInterface.available = new Map();
@@ -333,6 +343,7 @@ export async function wifiUpdateScanResult() {
 	if (!wifiSyncState()) {
 		broadcastWifiState();
 	}
+	return true;
 }
 
 // ─── debounced scan refresh (HARD CUTOVER from the 6-timer schedule) ─────────
@@ -348,7 +359,7 @@ export const WIFI_SCAN_REFRESH_DEBOUNCE_MS = 3000;
 let scanRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 // The action run when the debounce fires. Overridable in tests to observe
 // execution deterministically without spawning nmcli.
-let scanRefreshAction: () => void | Promise<void> = wifiUpdateScanResult;
+let scanRefreshAction: () => unknown = wifiUpdateScanResult;
 
 export function wifiScheduleScanRefresh(): void {
 	if (scanRefreshTimer !== null) {
@@ -374,7 +385,7 @@ export function wifiCancelScanRefresh(): void {
 }
 
 /** Test seam: override the action run when the debounce timer fires. */
-export function setScanRefreshAction(action: () => void | Promise<void>): void {
+export function setScanRefreshAction(action: () => unknown): void {
 	scanRefreshAction = action;
 }
 
@@ -397,30 +408,157 @@ export function setScanRefreshAction(action: () => void | Promise<void>): void {
   their intent ("refresh the scan results") is exactly what that run delivers,
   so joining serves them without a second spawn. Same discipline as
   `signalRecheckInFlight` in `modules/streaming/sources.ts`.
+
+  THE GUARD IS PER ADAPTER, NOT PER DEVICE. It used to be one process-wide
+  promise, so a board with two radios scanned ONE of them: the second adapter's
+  caller joined the first adapter's run, which had already dispatched
+  `nmcli device wifi rescan ifname <the other radio>`, and came back "served" by
+  a scan its own radio never performed. Two radios are two independent pieces of
+  hardware — the bus pressure this guard exists to bound is per nmcli process,
+  and two of them is two, not two hundred. So the map is keyed on the SAME
+  canonical per-adapter identity every WiFi mutation serializes on
+  (`wifiAdapterLockKey`, the adapter's permanent MAC), and one key's in-flight
+  run can never answer for another's.
 */
-let rescanInFlight: Promise<void> | null = null;
+const rescanInFlight = new Map<WifiScanKey, Promise<void>>();
+
+/*
+  The key a device-LESS `wifiRescan()` coalesces on: "refresh every radio". A
+  MAC can never normalize to it, and neither can a wire device id, so it cannot
+  collide with a real adapter's key. Its completion stamps EVERY known adapter,
+  because that is what it actually refreshed.
+*/
+const WIFI_SCAN_ALL_KEY = "*";
+
+/** The identity a scan is coalesced and stamped on. */
+export type WifiScanKey = WifiAdapterLockKey;
+
+export type WifiScanStamp = {
+	/** Strictly increasing per adapter; stamped only by a COMPLETED scan cycle. */
+	readonly generation: number;
+	/** Epoch ms of that completion. Diagnostic — never the confirmation signal. */
+	readonly at: number;
+};
+
+const scanStamps = new Map<WifiScanKey, WifiScanStamp>();
+
+/*
+  Resolve the wire device id to the adapter's canonical key.
+
+  The canonical answer is `wifiAdapterLockKey` over the adapter's permanent MAC —
+  the same string `wifiInterfacesByMacAddress` is keyed on and the same one every
+  WiFi mutation locks on, so a scan and a mutation can never disagree about which
+  radio they are talking about.
+
+  An id no adapter answers to falls back to the wire id itself. That is NOT a
+  second identity scheme: it is the only identity such a caller has, and losing
+  coalescing entirely for an unresolvable adapter would reopen the spawn storm
+  this guard exists to close. It is also what keeps the mock scenarios — which
+  serve radios from a fixture and populate no registry — coalescing and stamping
+  like a real board.
+*/
+export function wifiScanKeyForDevice(device: WifiInterfaceId): WifiScanKey {
+	for (const macAddress in wifiInterfacesByMacAddress) {
+		if (wifiInterfacesByMacAddress[macAddress]?.id === device) {
+			return wifiAdapterLockKey(macAddress);
+		}
+	}
+	return `dev:${device}`;
+}
+
+function ifnameForDevice(device: WifiInterfaceId): string | undefined {
+	for (const macAddress in wifiInterfacesByMacAddress) {
+		const wifiInterface = wifiInterfacesByMacAddress[macAddress];
+		if (wifiInterface?.id === device) return wifiInterface.ifname;
+	}
+	return undefined;
+}
+
+/** The last completed scan cycle for `device`, or `undefined` if it has none. */
+export function getWifiScanStampForDevice(
+	device: WifiInterfaceId,
+): WifiScanStamp | undefined {
+	return scanStamps.get(wifiScanKeyForDevice(device));
+}
+
+/*
+  Advance the adapter's scan generation. This is the ONLY writer, and it runs
+  only when a scan cycle actually completed — so an EMPTY result advances it
+  (the operator's scan finished and found nothing, which is an answer) while a
+  failed nmcli read does not (nothing finished, and the previous list stands).
+*/
+function noteScanCompleted(key: WifiScanKey): void {
+	if (key === WIFI_SCAN_ALL_KEY) {
+		for (const macAddress in wifiInterfacesByMacAddress) {
+			noteScanCompleted(wifiAdapterLockKey(macAddress));
+		}
+		return;
+	}
+	scanStamps.set(key, {
+		generation: (scanStamps.get(key)?.generation ?? 0) + 1,
+		at: Date.now(),
+	});
+}
+
+/** Test seam: drop every recorded scan generation. */
+export function resetWifiScanStampsForTest(): void {
+	scanStamps.clear();
+}
 
 /* Mirrors `setScanRefreshAction`: lets a test count spawns without an nmcli. */
-let rescanAction: () => Promise<unknown> = nmRescan;
+let rescanAction: (device?: string) => Promise<unknown> = nmRescan;
 
-export function setRescanActionForTest(action: () => Promise<unknown>): void {
+export function setRescanActionForTest(
+	action: (device?: string) => Promise<unknown>,
+): void {
 	rescanAction = action;
 }
 
-export function wifiRescan(): Promise<void> {
-	rescanInFlight ??= runRescan().finally(() => {
-		rescanInFlight = null;
-	});
-	return rescanInFlight;
+/*
+  The READ half of a scan cycle, behind its own seam for the same reason
+  `rescanAction` is: it decides whether the generation advances, and driving that
+  decision in a test must not depend on an nmcli the host does not have.
+*/
+let scanResultReader: () => Promise<boolean> = wifiUpdateScanResult;
+
+export function setScanResultReaderForTest(
+	reader: () => Promise<boolean>,
+): void {
+	scanResultReader = reader;
 }
 
-async function runRescan(): Promise<void> {
+/**
+ * Rescan `device`'s radio, or every radio when no device is named.
+ *
+ * Concurrent callers for the SAME adapter join one run; callers for DIFFERENT
+ * adapters each get their own, because a scan of one radio says nothing about
+ * another.
+ */
+export function wifiRescan(device?: WifiInterfaceId): Promise<void> {
+	const key =
+		device === undefined ? WIFI_SCAN_ALL_KEY : wifiScanKeyForDevice(device);
+
+	const joined = rescanInFlight.get(key);
+	if (joined) return joined;
+
+	const ifname = device === undefined ? undefined : ifnameForDevice(device);
+	const run = runRescan(key, ifname).finally(() => {
+		rescanInFlight.delete(key);
+	});
+	rescanInFlight.set(key, run);
+	return run;
+}
+
+async function runRescan(
+	key: WifiScanKey,
+	ifname: string | undefined,
+): Promise<void> {
 	try {
-		await rescanAction();
+		await rescanAction(ifname);
 
 		/* A rescan request will fail if a previous one is in progress,
      but we still attempt to update the results */
-		await wifiUpdateScanResult();
+		if (await scanResultReader()) noteScanCompleted(key);
 		wifiScheduleScanRefresh();
 	} catch (err) {
 		// A shared promise must not reject: every joined caller would raise its own
