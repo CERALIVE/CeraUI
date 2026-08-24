@@ -571,6 +571,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					...(entry.usb_modem_net
 						? { usb_modem_net: entry.usb_modem_net }
 						: {}),
+					// The backend states this on EVERY ethernet row, `uplink`
+					// included, so the ordinary spread-when-present rule carries the
+					// retraction too — absence means "not an ethernet row".
+					...(entry.ethRole !== undefined ? { ethRole: entry.ethRole } : {}),
 				};
 				// An explicit `router_cellular: null` retracts the classification
 				// WITHOUT retiring the row — the interface is still enumerated, it

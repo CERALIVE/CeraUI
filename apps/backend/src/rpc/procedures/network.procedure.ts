@@ -8,6 +8,8 @@ import {
 	netifConfigInputSchema,
 	netifConfigOutputSchema,
 	netifMessageSchema,
+	setEthernetRoleInputSchema,
+	setEthernetRoleOutputSchema,
 	setIngestEnabledInputSchema,
 	setIngestEnabledOutputSchema,
 } from "@ceraui/rpc/schemas";
@@ -19,6 +21,7 @@ import {
 } from "../../mocks/mock-service.ts";
 import { setMockNetworkIngestActive } from "../../mocks/providers/network-ingest.ts";
 import { setMockGatewayActive } from "../../mocks/providers/streaming.ts";
+import { setEthernetRole } from "../../modules/network/ethernet-role-transition.ts";
 import { refreshAndBroadcastNetworkIngest } from "../../modules/network/network-ingest.ts";
 import {
 	persistIngestDesired,
@@ -74,16 +77,42 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 			broadcastMsg("netif", netIfBuildMsg());
 		}
 
-		handleNetif(context.ws as unknown as import("ws").default, {
+		const outcome = handleNetif(context.ws as unknown as import("ws").default, {
 			name: input.name,
 			ip: input.ip ?? "",
 			enabled: input.enabled,
 		});
 
+		// Under mocks the mutation genuinely applied — to the mock overlay, above —
+		// and `handleNetif` runs against the raw map only as a best effort, where
+		// its IP guard legitimately refuses. Reporting THAT refusal would report a
+		// dev/e2e toggle that visibly worked as a failure.
+		if (!shouldUseMocks() && !outcome.ok) {
+			return { success: false, error: outcome.reason };
+		}
+
 		return {
 			success: true,
 			applied: { name: input.name, ip: input.ip, enabled: input.enabled },
 		};
+	});
+
+/**
+ * Declare an Ethernet port's role.
+ *
+ * Emulated hosts are refused BEFORE anything is persisted: there is no
+ * NetworkManager profile to rewrite, so persisting a role the device could never
+ * apply would leave the boot reconciler chasing it forever.
+ */
+export const setEthernetRoleProcedure = authedProcedure
+	.input(setEthernetRoleInputSchema)
+	.output(setEthernetRoleOutputSchema)
+	.handler(async ({ input }) => {
+		if (!shouldUseMocks() && !(await isRealDevice())) {
+			return { success: false, error: "unavailable_in_emulated_mode" as const };
+		}
+
+		return setEthernetRole(input.name, input.role);
 	});
 
 /**

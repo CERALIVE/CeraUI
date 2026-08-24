@@ -58,6 +58,7 @@ import { initModemCredentials } from "./modules/modems/modem-credentials.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
 import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
+import { reconcileEthernetRoles } from "./modules/network/ethernet-role-transition.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
 import {
@@ -401,6 +402,12 @@ networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
 // put a radio on the boot critical path for no gain. It is idempotent and never
 // throws, so a device with no stated preference pays one map lookup.
 void guardNonCritical("wifi-adapter-modes", reconcileWifiAdapterModes);
+
+// Re-apply the operator's persisted shared-LAN Ethernet roles. Deliberately NOT
+// awaited, for the reason above: it rewrites NetworkManager profiles, and a
+// wired port must not sit on the boot critical path. It is idempotent and never
+// throws, so a device with no stated role pays one map lookup.
+void guardNonCritical("ethernet-roles", reconcileEthernetRoles);
 
 // MUST precede initModemUpdateLoop: the loop's first discovery + `modems`
 // broadcast fire immediately, and every modem RPC gates on the readiness

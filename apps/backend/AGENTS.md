@@ -2081,16 +2081,136 @@ bonding toggled off, "Saved" toasted, row still read "In Bond".
   one, so the guard reads as the concurrency check it is and the operator cannot trip
   it. The wire contract is unchanged; `netifConfigInputSchema.ip` stays optional and
   an address-less interface still OMITS it (`""` fails the regex).
-- **A direct RPC call with a mismatched address is still silently dropped**, and that
-  is a REAL remaining defect at the procedure layer: `configureNetworkInterfaceProcedure`
-  returns `{success: true, applied}` whichever way `handleNetif` went. It is now
-  unreachable from the UI. Fixing it honestly means a typed refusal on the wire, which
-  is a contract change and was deliberately left out of this pass.
+- **A direct RPC call with a mismatched address is now REFUSED, not silently dropped.**
+  This was a REAL remaining defect at the procedure layer —
+  `configureNetworkInterfaceProcedure` returned `{success: true, applied}` whichever
+  way `handleNetif` went, so a discarded save (including the bond toggle it carried)
+  reached the caller as "Saved". `handleNetif` now returns a typed `NetifApplyOutcome`
+  and the procedure forwards it as `{success:false, error}` — see THE NETIF RPC
+  ANSWERS FOR WHAT IT ACTUALLY APPLIED below.
 - **Do NOT re-add an address input anywhere** without first implementing the apply
   path. A control that cannot act is the defect; the missing feature is static
   addressing, and it is missing in the BACKEND, not in the dialog.
 
 Frontend half: `apps/frontend/AGENTS.md` → "The interface address is REPORTED".
+
+## THE NETIF RPC ANSWERS FOR WHAT IT ACTUALLY APPLIED [EXISTS]
+
+`handleNetif` returns `NetifApplyOutcome` (`{ok:true}` or `{ok:false, reason}`),
+and `configureNetworkInterfaceProcedure` forwards a rejection as
+`{success:false, error}` typed by `netifConfigErrorSchema` — `unknown_interface`
+/ `stale_address` / `enable_refused` / `disable_all_refused`.
+
+Every one of those was a bare `return` reported as `{success:true}`. The
+`stale_address` path is the one that mattered: it is the CONCURRENCY guard
+(`int.ip !== msg.ip`), and it discards the WHOLE request — including the bond
+toggle riding alongside the address it was checking — so the operator was told
+"Saved" over a link whose bond state had not moved.
+
+- **The mock branch still answers `success:true`, deliberately.** Under mocks the
+  mutation genuinely applied, to the overlay `setMockNetifConfig` wrote before
+  `handleNetif` ran; `handleNetif` then works the RAW map, where its IP guard
+  legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
+  failure would report a dev/e2e toggle that visibly worked as broken. Do not
+  "unify" the two branches.
+- **The four reasons are not collapsible.** `enable_refused` already carries an
+  operator notification naming the blocking error; `disable_all_refused` is the
+  device protecting its last link; `unknown_interface` clears when the link comes
+  back; `stale_address` means re-read and retry.
+
+## THE ETHERNET PORT ROLE — UPLINK OR SHARED LAN [EXISTS]
+
+`modules/network/ethernet-role.ts` (leaf: persistence + the candidate rule),
+`ethernet-role-transition.ts` (the NM transition + boot reconcile) and
+`ethernet-role-outcome.ts` (the ONE frame builder) let an operator declare a
+wired port either an ordinary bonding `uplink` or a `shared-lan` router port
+that serves DHCP/DNS to LAN clients via NetworkManager's `ipv4.method shared`.
+
+**The persisted key is `config.eth_roles`, keyed by IFNAME, and absent means
+`uplink`.** An untouched device is byte-identical to before this landed, and the
+boot reconciler acts on a stated `shared-lan` only — re-writing `ipv4.method
+auto` onto every ordinary port at boot would touch profiles nobody asked us to
+touch. The ifname key is the ONE defensible instance of name-keying in this
+directory: `wifi_modes` keys on a permanent MAC because a radio's name follows a
+udev rename, but this is not a claim about a DEVICE — it is an operator
+statement about a SOCKET, and the NM profile it drives is itself bound by
+`connection.interface-name`, so the two agree by construction.
+
+**`NETIF_ERR_SHAREDLAN = 0x08` is the exclusion mechanism**, stamped by
+`applySharedLanBondGate` in the same two places, and for the same reasons, as
+`applyConcurrentApBondGate`: `isBondCandidate` refuses the port structurally so a
+caller holding a hand-built entry is covered, and the gate stamps the flag into
+the netif map so the wire, `probeExclusionReason`, the connectivity election and
+the same-subnet grouping inherit the exclusion through the flag they already
+read. It runs on EVERY pass, beside its two siblings — a role flip moves no
+interface, address or counter, so a topology-gated stamp would never fire.
+
+**It is the ONE gate here that also RELEASES.** The SIM-less gate clears its flag
+and deliberately leaves `enabled` false, because a SIM reappearing is a hardware
+event the operator did not ask for. A flip back to `uplink` IS the operator
+asking for the port to bond again, and the flag is the only thing that lowered
+`enabled` — so releasing it undoes its own effect, honouring a separate bond
+opt-out and leaving the port down if any other error still stands.
+
+**The transition is persist-first with rollback**, on `wifi-adapter-mode`'s
+terms: the role is written before NM is touched (so a device that dies
+mid-transition comes back trying for the operator's role) and RESTORED the moment
+NM refuses, so a failed flip leaves neither the config nor the netif flags
+half-applied. Every exit path publishes exactly one terminal `eth_role` frame,
+preceded by exactly one `pending` frame on an admitted transition; the
+already-applied branch publishes its terminal frame directly, because nothing was
+dispatched and no NM answer will ever settle.
+
+**Wire shape** (`@ceraui/rpc` `network.schema.ts`), frozen for the frontend role
+UI:
+
+```ts
+netifEntry.ethRole?: 'uplink' | 'shared-lan'   // EXPLICIT on every ethernet row
+rpc.network.setEthernetRole({ name, role })    // input is .strict()
+  -> { success, applied?, error? }             // ethernetRoleErrorSchema, 5 members
+broadcast "eth_role" -> { eth_role: { name, role?, pending?, success?, error? } }
+```
+
+`ethRole` is published EXPLICITLY on every ethernet row, `uplink` included —
+never present-only-when-shared. The consumer merge preserves an omitted optional
+field, so a one-directional role could be raised and never lowered (the
+`policy_route_missing` latch, exactly). ABSENT means "not an ethernet port, or an
+older backend", and is never read as `uplink`. Frontend ingestion allowlist:
+`subscriptions.svelte.ts` `case "netif"`.
+
+**A shared-lan port registers as a client zone for the steering layer, and
+NOTHING installs a table.** The nftables client-zone work is the steering
+module's (HALTED pending the Wave-0 kernel-capability verdict); this todo marks
+the port and extends the READ-ONLY policy-route check only.
+
+Coverage: `tests/ethernet-role.test.ts` (driven through the REAL
+`processIfconfigOutput`, `genSrtlaBondEntries` and
+`configureNetworkInterfaceProcedure`), `tests/network-mutation-action-guard.test.ts`
+(the S7 device half), frontend `tests/netif-eth-role-ingestion.test.ts` (both
+directions).
+
+### …AND THE POLICY-ROUTE CHECK NOW COVERS WIRED UPLINKS, ON WEAKER TERMS [EXISTS]
+
+`collectEthernetPolicyRouteCandidates` adds `eth*`/`en*` to the check with
+`flagWhenRuleAbsent: false`, and that flag is the whole contract. The image's
+routing hooks map `usb*`/`enx*` onto tables 100-107 and `wlan0-4` onto 120-124
+and NOTHING else, so a plain `eth0` has no per-uplink table at all — "no source
+rule" is the documented steady state, not a fault, and flagging it would amber-band
+every correctly-working wired uplink in the fleet (the same reason `enx*` was
+excluded from the bonded class outright). What a wired candidate CAN be judged on
+is a rule that EXISTS whose table has no default route — the fault todo 9's
+steering module would produce once it installs one.
+
+- **`collectPolicyRouteCandidates` is UNCHANGED**, deliberately: its answer is
+  the dispatcher-mapped class, a contract other code and its tests read directly.
+  The two classes are collected separately because they are judged differently.
+- **An ethernet candidate on an ambiguous address is dropped BEFORE the spawn** —
+  it could only ever be withheld, and asking `ip` a question whose answer is
+  already known costs a spawn on the 5 s netif cadence for nothing. It is also
+  what keeps the bench-twins case spawning zero `ip` calls.
+- **A `shared-lan` port is excluded for free**: the netif gate lowers its
+  `enabled`, and the collector already requires an enabled interface. A port
+  serving its own clients is not an uplink and has no source-routing to verify.
 
 ## AN EXCLUDED DEFAULT ROUTE IS NOT A CONNECTIVITY VERDICT [EXISTS]
 

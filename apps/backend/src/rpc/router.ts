@@ -71,6 +71,7 @@ import {
 import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
+	setEthernetRoleProcedure,
 	setNetworkIngestEnabledProcedure,
 } from "./procedures/network.procedure.ts";
 import {
@@ -246,6 +247,7 @@ const stableRoutes = {
 		getInterfaces: getNetworkInterfacesProcedure,
 		configure: configureNetworkInterfaceProcedure,
 		setIngestEnabled: setNetworkIngestEnabledProcedure,
+		setEthernetRole: setEthernetRoleProcedure,
 	}),
 
 	system: base.router({

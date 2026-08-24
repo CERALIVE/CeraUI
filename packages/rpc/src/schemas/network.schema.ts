@@ -75,6 +75,20 @@ export const usbModemNetMarkerSchema = z.object({
 });
 export type UsbModemNetMarker = z.infer<typeof usbModemNetMarkerSchema>;
 
+// The operator's declared ROLE for an ETHERNET port.
+//
+// `uplink` is the DEFAULT and is today's behaviour verbatim: the port is an
+// ordinary bonding candidate. `shared-lan` hands the port to NetworkManager's
+// `ipv4.method shared`, so the device serves DHCP/DNS to LAN clients on it —
+// which makes it structurally unusable as an uplink, so the device excludes it
+// from the bond and from the connectivity election.
+//
+// It is an OPERATOR DECLARATION about a wired socket, never a classification of
+// what the device IS. That is the reason it may be keyed on the interface name
+// (see the `eth_roles` config key), unlike every marker above it.
+export const ethernetRoleSchema = z.enum(['uplink', 'shared-lan']);
+export type EthernetRole = z.infer<typeof ethernetRoleSchema>;
+
 // Network interface entry schema
 export const netifEntrySchema = z.object({
 	ip: z.string().optional(),
@@ -114,6 +128,14 @@ export const netifEntrySchema = z.object({
 	// latch reason. An explicit `null` clears the claim for one frame and KEEPS
 	// the row — the interface is still there, it merely stopped classifying.
 	usb_modem_net: usbModemNetMarkerSchema.nullable().optional(),
+	// Published EXPLICITLY on every ethernet row, including `uplink` — never
+	// present-only-when-shared. The ingestion merge preserves an omitted optional
+	// field, so a role published only in one direction could be raised and never
+	// lowered (the `policy_route_missing` latch, exactly), and a flip back to
+	// `uplink` would leave the operator's own row claiming `shared-lan` forever.
+	// ABSENT therefore means "not an ethernet port, or an older backend", and is
+	// never read as `uplink`.
+	ethRole: ethernetRoleSchema.optional(),
 });
 export type NetifEntry = z.infer<typeof netifEntrySchema>;
 
@@ -158,12 +180,73 @@ export const netifConfigInputSchema = z.object({
 });
 export type NetifConfigInput = z.infer<typeof netifConfigInputSchema>;
 
+// Why `network.configure` applied NOTHING.
+//
+// `stale_address` is the concurrency guard: the echoed address no longer matches
+// the one the device observes, so the request describes an interface state that
+// has already moved and applying it would act on the operator's stale view. It
+// used to be answered with `{success:true}`, which reported a discarded save —
+// including a discarded bond toggle — as a successful one.
+export const netifConfigErrorSchema = z.enum([
+	'unknown_interface',
+	'stale_address',
+	'enable_refused',
+	'disable_all_refused',
+]);
+export type NetifConfigError = z.infer<typeof netifConfigErrorSchema>;
+
 // Network interface config output schema
 export const netifConfigOutputSchema = z.object({
 	success: z.boolean(),
 	applied: netifConfigInputSchema.partial().optional(),
+	error: netifConfigErrorSchema.optional(),
 });
 export type NetifConfigOutput = z.infer<typeof netifConfigOutputSchema>;
+
+export const setEthernetRoleInputSchema = z
+	.object({
+		name: z.string().min(1),
+		role: ethernetRoleSchema,
+	})
+	.strict();
+export type SetEthernetRoleInput = z.infer<typeof setEthernetRoleInputSchema>;
+
+// Each member names a different thing the operator can do about it, so none is
+// collapsible: `not_ethernet` is a permanent property of the interface,
+// `unknown_interface` clears when the link comes back, `apply_failed` is worth
+// retrying, and `unavailable_in_emulated_mode` is a property of the host.
+export const ethernetRoleErrorSchema = z.enum([
+	'unknown_interface',
+	'not_ethernet',
+	'no_connection',
+	'apply_failed',
+	'unavailable_in_emulated_mode',
+]);
+export type EthernetRoleError = z.infer<typeof ethernetRoleErrorSchema>;
+
+export const setEthernetRoleOutputSchema = z.object({
+	success: z.boolean(),
+	applied: ethernetRoleSchema.optional(),
+	error: ethernetRoleErrorSchema.optional(),
+});
+export type SetEthernetRoleOutput = z.infer<typeof setEthernetRoleOutputSchema>;
+
+// The pending/terminal frame for a role transition, broadcast under the
+// `eth_role` message type. `pending` promises a later terminal frame; it never
+// claims the port has reached the role.
+export const ethernetRoleOutcomeSchema = z.object({
+	name: z.string().min(1),
+	role: ethernetRoleSchema.optional(),
+	pending: z.literal(true).optional(),
+	success: z.literal(true).optional(),
+	error: ethernetRoleErrorSchema.optional(),
+});
+export type EthernetRoleOutcome = z.infer<typeof ethernetRoleOutcomeSchema>;
+
+export const ethernetRoleMessageSchema = z.object({
+	eth_role: ethernetRoleOutcomeSchema,
+});
+export type EthernetRoleMessage = z.infer<typeof ethernetRoleMessageSchema>;
 
 // Returned by network.setIngestEnabled on a dev/emulated (non-mock) host, where
 // the systemd gateway units do not exist so the toggle is a no-op.

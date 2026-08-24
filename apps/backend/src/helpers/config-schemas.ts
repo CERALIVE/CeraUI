@@ -47,6 +47,7 @@ import {
 	type DetectionMethod,
 	detectionMethodSchema,
 	deviceKindSchema,
+	ethernetRoleSchema,
 	inputModeSchema,
 	isNamespacedRelayId,
 	kioskDisplaySchema,
@@ -370,6 +371,19 @@ export const runtimeConfigSchema = z.object({
 	// same as `station`: nothing is reconciled at boot for an adapter with no
 	// preference, so an existing device keeps today's behaviour exactly.
 	wifi_modes: z.record(z.string(), wifiAdapterModeSchema).optional(),
+
+	// The operator's declared role per ETHERNET port, keyed by interface name.
+	// ABSENT means `uplink` — today's behaviour — so an untouched device is
+	// byte-identical to before this landed, and only a stated `shared-lan` is
+	// re-applied at boot.
+	//
+	// The ifname key is deliberate here and is the one place it is defensible.
+	// `wifi_modes` keys on a permanent MAC because a radio's name follows a
+	// udev rename; this is not a claim about a DEVICE but an operator statement
+	// about a SOCKET on the board, and the NetworkManager profile it drives is
+	// itself bound by `connection.interface-name` — so the two agree by
+	// construction rather than by a second lookup that could disagree.
+	eth_roles: z.record(z.string(), ethernetRoleSchema).optional(),
 
 	// Opt-in gate for the guarded USB-composition-mode switch (`modems.setUsbMode`).
 	// DEFAULT-ABSENT ON PURPOSE and given NO entry in RUNTIME_CONFIG_DEFAULTS: a

@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 
 import { call } from "@orpc/server";
 import { getConfig } from "../modules/config.ts";
+import {
+	getNetworkInterfaces,
+	processIfconfigOutput,
+} from "../modules/network/network-interfaces.ts";
 import { clampBitrate } from "../modules/streaming/encoder.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
@@ -302,18 +306,58 @@ describe("streaming.setBitrate — applied (post-clamp) state", () => {
 });
 
 describe("network.configure — applied state", () => {
+	const APPLIED_IFACE = "eth-applied-state";
+	const APPLIED_IP = "192.168.44.10";
+
+	function seedInterface(): void {
+		processIfconfigOutput(
+			[
+				`${APPLIED_IFACE}: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500`,
+				`        inet ${APPLIED_IP}  netmask 255.255.255.0  broadcast 192.168.44.255`,
+				"        ether aa:bb:cc:dd:ee:44  txqueuelen 1000  (Ethernet)",
+				"        RX packets 200  bytes 20000 (20.0 KB)",
+				"        TX packets 100  bytes 1000 (1.0 KB)",
+				"",
+				"eth-applied-peer: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500",
+				"        inet 192.168.45.10  netmask 255.255.255.0  broadcast 192.168.45.255",
+				"        ether aa:bb:cc:dd:ee:45  txqueuelen 1000  (Ethernet)",
+				"        RX packets 200  bytes 20000 (20.0 KB)",
+				"        TX packets 100  bytes 1000 (1.0 KB)",
+			].join("\n"),
+		);
+	}
+
 	test("resolves with the applied interface config it wrote", async () => {
+		// Driven against an interface that EXISTS, so `applied` describes a write
+		// that really happened. The fixture used to be a deliberately-missing
+		// interface, which made this assertion vacuous — nothing was written, and
+		// the procedure's `{success:true}` was the fabricated-success defect.
+		seedInterface();
+
+		const result = await call(
+			configureNetworkInterfaceProcedure,
+			{ name: APPLIED_IFACE, ip: APPLIED_IP, enabled: false },
+			{ context: makeContext() },
+		);
+
+		expect(result.success).toBe(true);
+		expect(result.applied).toEqual({
+			name: APPLIED_IFACE,
+			ip: APPLIED_IP,
+			enabled: false,
+		});
+		expect(getNetworkInterfaces()[APPLIED_IFACE]?.enabled).toBe(false);
+	});
+
+	test("an interface the device does not have is refused, not reported applied", async () => {
 		const result = await call(
 			configureNetworkInterfaceProcedure,
 			{ name: "eth-test-missing", enabled: true },
 			{ context: makeContext() },
 		);
 
-		expect(result.success).toBe(true);
-		expect(result.applied).toEqual({
-			name: "eth-test-missing",
-			ip: undefined,
-			enabled: true,
-		});
+		expect(result.success).toBe(false);
+		expect(result.error).toBe("unknown_interface");
+		expect(result.applied).toBeUndefined();
 	});
 });

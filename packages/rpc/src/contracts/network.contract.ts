@@ -7,6 +7,8 @@ import {
 	netifConfigInputSchema,
 	netifConfigOutputSchema,
 	netifMessageSchema,
+	setEthernetRoleInputSchema,
+	setEthernetRoleOutputSchema,
 	setIngestEnabledInputSchema,
 	setIngestEnabledOutputSchema,
 } from '../schemas';
@@ -26,6 +28,12 @@ export const networkContract = oc.router({
 	 * Enable/disable a LAN RTMP/SRT network-ingest gateway (operator desired state)
 	 */
 	setIngestEnabled: oc.input(setIngestEnabledInputSchema).output(setIngestEnabledOutputSchema),
+
+	/**
+	 * Declare an Ethernet port's role: an ordinary bonding uplink, or a
+	 * shared-LAN port serving DHCP/DNS to clients.
+	 */
+	setEthernetRole: oc.input(setEthernetRoleInputSchema).output(setEthernetRoleOutputSchema),
 
 	/**
 	 * Subscribe to network interface status changes
