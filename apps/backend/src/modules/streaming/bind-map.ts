@@ -118,6 +118,7 @@ export interface CollisionGroup {
 }
 
 export const BIND_MAP_SCHEMA_VERSION = 1;
+const ID_PATH_MAX_BYTES = 4096;
 
 /** ADR-003 §1.1: 1-15 bytes, no `/`, no whitespace, not `.` or `..`. */
 export function isValidIfaceName(iface: string): boolean {
@@ -130,6 +131,13 @@ export function isValidIfaceName(iface: string): boolean {
 export function isValidLinkId(linkId: string): boolean {
 	if (linkId.length === 0 || linkId.length > 64) return false;
 	return /^[\x21-\x7e]+$/.test(linkId);
+}
+
+function isValidIdPath(idPath: string): boolean {
+	return (
+		idPath.startsWith("/") &&
+		new TextEncoder().encode(idPath).byteLength <= ID_PATH_MAX_BYTES
+	);
 }
 
 /**
@@ -177,7 +185,9 @@ export function buildBindMapDocument(
 			link_id: entry.linkId,
 			ip: entry.ip,
 			iface: entry.iface,
-			...(entry.idPath !== undefined ? { id_path: entry.idPath } : {}),
+			...(entry.idPath !== undefined && isValidIdPath(entry.idPath)
+				? { id_path: entry.idPath }
+				: {}),
 		})),
 	};
 }
