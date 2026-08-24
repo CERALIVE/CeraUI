@@ -136,6 +136,14 @@ export const ALLOWED: Set<string> = new Set<string>([
 	// SIM PIN2 verification only. ModemManager exposes no PIN2 operation of any
 	// kind, so this is the ONLY route to it; see modules/modems/sim-pin2.ts.
 	"qmicli",
+	// Future nftables steering rules for uplink sharing.
+	"nft",
+	// Future tc qdisc/classifier management for uplink sharing.
+	"tc",
+	// Future ip_forward toggling for uplink sharing.
+	"sysctl",
+	// Future scoped conntrack flush on hard-down.
+	"conntrack",
 ]);
 
 /**

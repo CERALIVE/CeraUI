@@ -433,6 +433,71 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		mechanism:
 			"spawnWithTimeout(UDEV_EXPORT_TIMEOUT_MS); it runs on the boot discovery path and on every modem presence edge, and its caller (refreshModemIdPaths) RETAINS the previous map on any throw, so a failed read degrades identity resolution for one edge rather than clearing every modem's stable_key",
 	},
+	{
+		id: "network.nft",
+		file: "modules/network/uplink-sharing.ts",
+		symbol: "applyNftablesRules",
+		command: "[nft, ...args]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"run() applies a bounded timeout to nftables steering-rule updates",
+	},
+	{
+		id: "network.tc",
+		file: "modules/network/uplink-sharing.ts",
+		symbol: "applyTrafficControl",
+		command: "[tc, ...args]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism: "run() bounds tc qdisc/classifier management calls",
+	},
+	{
+		id: "network.sysctl",
+		file: "modules/network/uplink-sharing.ts",
+		symbol: "setIpForwarding",
+		command: "[sysctl, ...args]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism: "run() bounds ip_forward toggling calls",
+	},
+	{
+		id: "network.conntrack",
+		file: "modules/network/uplink-sharing.ts",
+		symbol: "flushConntrack",
+		command: "[conntrack, ...args]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism: "run() bounds scoped conntrack flushes during hard-down",
+	},
 ] as const;
 
 /**
