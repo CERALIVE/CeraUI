@@ -25,11 +25,20 @@
   Dirty-field guard: once the operator edits the bond toggle, incoming server
   pushes for THAT field are ignored until the dialog is reopened, so an
   in-progress edit is never clobbered by live telemetry.
+
+  A REFUSED SAVE IS RENDERED INLINE, NOT TOASTED. Todo 8 replaced the procedure's
+  fabricated `{success:true}` with a typed `{success:false, error}` — the
+  `stale_address` concurrency guard being the one that used to report a DISCARDED
+  bond toggle as "Saved". Its four reasons name four different operator actions,
+  so the dialog keeps a structured refusal out of `osCommand`'s toast path
+  (`classify` answers ok) and states the reason in a standing band beside the
+  control it refused. Only a THROWN rpc — a transport fault with no typed reason —
+  keeps the toast. This is the BluetoothSection rule applied to a wired port.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
-import type { NetifEntry } from '@ceraui/rpc/schemas';
-import { Info, Network } from '@lucide/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import type { NetifConfigError, NetifEntry } from '@ceraui/rpc/schemas';
+import { Info, Network, TriangleAlert } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -37,7 +46,21 @@ import { AppDialog } from '$lib/components/dialogs';
 import { Label } from '$lib/components/ui/label';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { rpc } from '$lib/rpc';
-import { isOperationPending, osCommand } from '$lib/rpc/async-operation.svelte';
+import {
+	getOperationPhase,
+	getOperationReason,
+	getOperationTarget,
+	isOperationPending,
+	osCommand,
+} from '$lib/rpc/async-operation.svelte';
+import { getIsStreaming } from '$lib/rpc/subscriptions.svelte';
+import EthernetRoleSelector from '$main/network/EthernetRoleSelector.svelte';
+import {
+	deriveEthernetRoleView,
+	ethernetRoleContext,
+	ethernetRoleOpKey,
+	ethernetRoleTarget,
+} from '$main/network/ethernet-role-view';
 
 interface Props {
 	open?: boolean;
@@ -56,11 +79,24 @@ let dirtyEnabled = $state(false);
 let wasOpen = false;
 let saving = $state(false);
 
+// The device's typed refusal for the LAST save, held until the next attempt or
+// the next open. `unknown` covers a `{success:false}` carrying no `error`.
+let saveError = $state<NetifConfigError | 'unknown' | undefined>(undefined);
+
+const SAVE_ERROR_KEY: Record<NetifConfigError | 'unknown', string> = {
+	unknown_interface: 'network.netifSave.error.unknownInterface',
+	stale_address: 'network.netifSave.error.staleAddress',
+	enable_refused: 'network.netifSave.error.enableRefused',
+	disable_all_refused: 'network.netifSave.error.disableAllRefused',
+	unknown: 'network.netifSave.error.generic',
+};
+
 $effect(() => {
 	// Open edge → reset the form from the current interface, clear the dirty flag.
 	if (open && !wasOpen) {
 		enabled = iface?.enabled ?? false;
 		dirtyEnabled = false;
+		saveError = undefined;
 	}
 	wasOpen = open;
 });
@@ -93,6 +129,24 @@ const addressSource = $derived(
 // race — the osCommand re-entry guard is also the cross-surface race guard.
 const netifKey = $derived(`netif:${name}`);
 
+// The role control's own keyed op, read live so a transition dispatched from
+// ANOTHER client moves this dialog too.
+const roleKey = $derived(ethernetRoleOpKey(name));
+const roleView = $derived(
+	deriveEthernetRoleView({
+		name,
+		iface,
+		phase: getOperationPhase(roleKey),
+		...(ethernetRoleTarget(getOperationTarget(roleKey)) !== undefined
+			? { target: ethernetRoleTarget(getOperationTarget(roleKey)) }
+			: {}),
+		...(getOperationReason(roleKey) !== undefined
+			? { failureReason: getOperationReason(roleKey) }
+			: {}),
+	}),
+);
+const roleContext = $derived(ethernetRoleContext(iface, getIsStreaming()));
+
 async function save() {
 	if (saving) return;
 	// Cross-surface busy guard: a bond toggle (or another save) on THIS iface is
@@ -102,6 +156,7 @@ async function save() {
 		return;
 	}
 	saving = true;
+	saveError = undefined;
 	// Echo the OBSERVED address so the backend's `int.ip !== msg.ip` guard reads
 	// as the concurrency check it is, and can never silently discard the bond
 	// change. An address-less interface must OMIT the field (`""` fails the
@@ -116,16 +171,24 @@ async function save() {
 				ip: observedIp === '' ? undefined : observedIp,
 				enabled,
 			}),
+		// A STRUCTURED refusal stays `ok` here so it never takes osCommand's toast
+		// path — it is a device FACT with a typed reason, and it is rendered in the
+		// standing band below instead. A thrown rpc still falls through to the
+		// toast, because a transport fault names no reason worth standing.
+		classify: () => ({ ok: true }),
 		busyMessage: () => m["network.os.deviceBusy"](),
 		failMessage: () => m["network.os.operationFailed"](),
 	});
 	saving = false;
-	// success:false / throw are already toasted by osCommand and keep the dialog
-	// open with the form value preserved. Only a confirmed success closes it.
+	// Only a confirmed success closes the dialog. A refusal keeps it open with the
+	// form value preserved AND names what the device refused; a throw keeps it
+	// open with osCommand's single toast.
 	if (result?.success) {
 		toast.success(m["network.os.saved"]());
 		open = false;
+		return;
 	}
+	if (result !== undefined) saveError = result.error ?? 'unknown';
 }
 </script>
 
@@ -140,6 +203,13 @@ async function save() {
 	bind:open
 >
 	<div class="space-y-6">
+		<!-- Role leads: it is the coarsest decision on this port, and every control
+		     below it is read in its light — a shared-LAN port is excluded from the
+		     bond by the device, so the toggle underneath means nothing until the
+		     role says uplink. Renders NOTHING for a row the device published no
+		     role for (a dongle veth, an older backend). -->
+		<EthernetRoleSelector context={roleContext} view={roleView} />
+
 		<!-- Enable / disable -->
 		<div class="flex items-start justify-between gap-4">
 			<div class="min-w-0 space-y-0.5">
@@ -192,6 +262,28 @@ async function save() {
 			>
 				<Info class="text-status-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
 				<p class="text-muted-foreground text-xs">{m["settings.dialogs.linkLocalNotice"]()}</p>
+			</div>
+		{/if}
+
+		{#if saveError}
+			<!-- Beside the Save it answers, and it STANDS: the shipped kiosk
+			     touchscreen cannot hover, and a toast that expires is how a discarded
+			     save came to read as a successful one. -->
+			<div
+				class="border-status-warning/30 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3"
+				data-error={saveError}
+				data-testid="netif-save-error"
+				role="status"
+			>
+				<TriangleAlert class="text-status-warning mt-0.5 size-4 shrink-0" aria-hidden="true" />
+				<div class="min-w-0">
+					<p class="text-status-warning text-xs font-semibold">
+						{m["network.netifSave.error.title"]()}
+					</p>
+					<p class="text-muted-foreground mt-0.5 text-xs">
+						{resolveMessageKey(SAVE_ERROR_KEY[saveError])}
+					</p>
+				</div>
 			</div>
 		{/if}
 	</div>

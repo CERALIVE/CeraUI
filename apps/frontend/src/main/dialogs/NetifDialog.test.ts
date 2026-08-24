@@ -7,12 +7,20 @@
  * resource key `netif:{name}` (the SAME key BondToggle uses), with
  * `confirmOnResolve: true`. The reply's `{ success, applied }` is definitive:
  *  - `success: true`  → success toast (`network.os.saved`) THEN close.
- *  - `success: false` → osCommand's single failure toast; dialog STAYS open with
- *                       the form value preserved.
+ *  - `success: false` → the device's TYPED reason in a standing inline band;
+ *                       dialog STAYS open with the form value preserved.
  *  - RPC throw        → osCommand's single failure toast; dialog STAYS open.
  *  - shared-key busy  → a bond toggle (or another save) on THIS iface is pending:
  *                       refuse with the standard busy feedback, no second dispatch.
  *                       A save on a DIFFERENT iface proceeds.
+ *
+ * The `success: false` arm was INVERTED by todo 15: it used to assert osCommand's
+ * generic failure toast. Todo 8 gave that refusal four typed reasons naming four
+ * different operator actions, and a toast names none of them and then expires —
+ * so a structured refusal now stays off the toast path and renders inline. The
+ * assertion below is strictly stronger for it (the reason is asserted, not just
+ * that something failed); the reason table itself lives in
+ * `NetifDialog.saveError.test.ts`.
  */
 import type { NetifEntry } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
@@ -115,8 +123,8 @@ describe("NetifDialog — definitive save feedback (Task 20)", () => {
 		);
 	});
 
-	it("on success:false: keeps the dialog open, toasts once, preserves the form value", async () => {
-		configure.mockResolvedValueOnce({ success: false, error: "netif_failed" });
+	it("on success:false: keeps the dialog open, names the reason inline, preserves the form value", async () => {
+		configure.mockResolvedValueOnce({ success: false, error: "stale_address" });
 
 		render(NetifDialog, {
 			props: { open: true, name: "eth0", iface: iface({ ip: "10.0.0.5" }) },
@@ -138,8 +146,12 @@ describe("NetifDialog — definitive save feedback (Task 20)", () => {
 			ip: "10.0.0.5",
 			enabled: false,
 		});
-		// osCommand owns the single failure toast; NetifDialog does not add one.
-		await waitFor(() => expect(toastError).toHaveBeenCalledTimes(1));
+		// INVERTED (todo 15): the device's typed reason renders in a standing band
+		// instead of a generic toast that names nothing and then expires. Strictly
+		// stronger — the reason itself is asserted, and the toast is proven absent.
+		const band = await screen.findByTestId("netif-save-error");
+		expect(band.getAttribute("data-error")).toBe("stale_address");
+		expect(toastError).not.toHaveBeenCalled();
 		expect(toastSuccess).not.toHaveBeenCalled();
 		// Dialog STAYS open (Save button present) and the choice is preserved.
 		expect(saveButton()).toBeTruthy();

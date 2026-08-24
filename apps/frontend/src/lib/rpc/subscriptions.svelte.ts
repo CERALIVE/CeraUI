@@ -618,6 +618,40 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 		}
 
+		case "eth_role": {
+			// An admitted role transition publishes ONE pending frame then ONE
+			// terminal; the already-applied branch publishes its terminal DIRECTLY,
+			// because nothing was dispatched and no NetworkManager answer will ever
+			// settle. Both shapes land on a pending op — `osCommand` begins it before
+			// the dispatch — so a terminal with no pending frame still settles here.
+			// The key is built INLINE to match the sibling arms rather than importing
+			// `main/network/` into `lib/rpc/`; the two spellings are pinned together
+			// by a test that drives this handler and asserts through
+			// `ethernetRoleOpKey`.
+			const outcome = (
+				data as {
+					eth_role?: {
+						name?: string;
+						role?: string;
+						pending?: boolean;
+						success?: boolean;
+						error?: string;
+					};
+				}
+			)?.eth_role;
+			if (outcome?.name !== undefined) {
+				const key = `eth-role:${outcome.name}`;
+				if (outcome.pending === true) {
+					beginOperation(key, outcome.role);
+				} else if (outcome.error !== undefined) {
+					failOperation(key, outcome.error);
+				} else if (outcome.success === true) {
+					confirmOperation(key);
+				}
+			}
+			break;
+		}
+
 		case "uplinks":
 			uplinksState = data as UplinksMessage;
 			break;

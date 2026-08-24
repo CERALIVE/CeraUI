@@ -1,5 +1,5 @@
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type {
 	DongleState,
 	NetifEntry,
@@ -13,7 +13,9 @@ import {
 	Hourglass,
 	Network as NetworkIcon,
 	RadioTower,
+	Share2,
 	TriangleAlert,
+	Users,
 } from '@lucide/svelte';
 
 import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -22,6 +24,8 @@ import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { cn } from '$lib/utils';
+
+import { type EthernetClientZoneState, deriveSharedLanRow } from './ethernet-role-view';
 
 interface Props {
 	wiredEntries: [string, NetifEntry][];
@@ -140,6 +144,24 @@ function routerCellularName(marker: RouterCellularMarker): string {
 function modemNetName(marker: UsbModemNetMarker): string {
 	return marker.vendor === marker.model ? marker.model : `${marker.vendor} ${marker.model}`;
 }
+
+// ───────────── Shared-LAN port (the operator's own declared role) ─────────────
+//
+// A `shared-lan` port hands itself to NetworkManager's `ipv4.method shared`, so
+// the device excludes it from the bond and from the connectivity election. The
+// row must therefore never read like an uplink: it says WHAT the port is, WHAT
+// its client zone is doing, and WHY it carries no bonded traffic — the same
+// identity-badge + state-badge + on-screen-reason vocabulary the isolated-dongle
+// row above already uses, not a fourth one.
+const ZONE_VARIANT: Record<EthernetClientZoneState, 'success' | 'warning'> = {
+	serving: 'success',
+	starting: 'warning',
+};
+
+const ZONE_ICON = {
+	serving: Users,
+	starting: Hourglass,
+} satisfies Record<EthernetClientZoneState, unknown>;
 </script>
 
 <!-- ───────────── Ethernet / interfaces ───────────── -->
@@ -166,6 +188,12 @@ function modemNetName(marker: UsbModemNetMarker): string {
 				{@const routerCellular = iface.router_cellular ?? undefined}
 				<!-- `null` retracts this claim and KEEPS the row too. -->
 				{@const modemNet = iface.usb_modem_net ?? undefined}
+				<!-- Absent `ethRole` means "not an ethernet port, or an older backend",
+				     never `uplink`, so an unclaimed row renders exactly as before. -->
+				{@const sharedLan = deriveSharedLanRow(iface)}
+				{@const sharedLanReason = sharedLan
+					? resolveMessageKey(sharedLan.bondExclusionReasonKey)
+					: undefined}
 				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
 				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
 					<!-- `self-start` because a classified row is several lines tall: a
@@ -186,6 +214,34 @@ function modemNetName(marker: UsbModemNetMarker): string {
 					     instead. Desktop is unchanged — `flex-1` still grows past it. -->
 					<div class="min-w-0 flex-1 basis-72">
 						<p class="truncate text-sm font-medium">{name}</p>
+						{#if sharedLan}
+							{@const ZoneIcon = ZONE_ICON[sharedLan.zone]}
+							<!-- What the port IS, then what its client zone is doing — both in
+							     words, with their own glyphs, so colour is only reinforcement. -->
+							<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
+								<Badge
+									variant="info"
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="netif-eth-role"
+									data-eth-role="shared-lan"
+									title={m["network.ethRole.badgeHint"]()}
+								>
+									<Share2 class="size-3" aria-hidden="true" />
+									{m["network.ethRole.sharedLan"]()}
+								</Badge>
+								<Badge
+									variant={ZONE_VARIANT[sharedLan.zone]}
+									size="micro"
+									class={MICRO_TEXT}
+									data-testid="netif-eth-role-zone"
+									data-zone={sharedLan.zone}
+								>
+									<ZoneIcon class="size-3" aria-hidden="true" />
+									{resolveMessageKey(sharedLan.zoneLabelKey)}
+								</Badge>
+							</div>
+						{/if}
 						{#if dongle}
 							{@const StateIcon = DONGLE_STATE_ICON[dongle.state]}
 							<!-- What it IS, then where it is in its lifecycle — both in words. -->
@@ -256,16 +312,26 @@ function modemNetName(marker: UsbModemNetMarker): string {
 								</span>
 							</div>
 						{/if}
-						<p class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
-							{#if iface.ip}
-								<code class="font-mono">{iface.ip}</code>
-								{#if linkLocal}
-									<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
+						{#if iface.ip || !sharedLan}
+							<p class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
+								{#if iface.ip}
+									<code class="font-mono">{iface.ip}</code>
+									{#if linkLocal}
+										<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
+									{/if}
+									{#if !sharedLan}
+										<span aria-hidden="true">·</span>
+									{/if}
 								{/if}
-								<span aria-hidden="true">·</span>
-							{/if}
-							{iface.enabled ? m["network.view.connected"]() : m["network.view.off"]()}
-						</p>
+								<!-- `enabled` is BOND membership, not link state. A shared-LAN port
+								     is forced out of the bond by the device while its zone is up and
+								     serving, so rendering "Off" here would be the same lie as
+								     rendering it "Connected" — its state is the zone badge above. -->
+								{#if !sharedLan}
+									{iface.enabled ? m["network.view.connected"]() : m["network.view.off"]()}
+								{/if}
+							</p>
+						{/if}
 						{#if linkLocal}
 							<!-- Calm, informational: 169.254/16 is an automatic OS address, not a stuck static config. -->
 							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-link-local-hint">
@@ -320,6 +386,16 @@ function modemNetName(marker: UsbModemNetMarker): string {
 								{dongleBlocked}
 							</p>
 						{/if}
+						{#if sharedLanReason}
+							<!-- Same rule, same reason: the bond toggle below is disabled, and
+							     the operator has to be able to READ why without hovering. -->
+							<p
+								class="text-muted-foreground/80 mt-0.5 text-xs"
+								data-testid="netif-eth-role-excluded-hint"
+							>
+								{sharedLanReason}
+							</p>
+						{/if}
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
@@ -329,7 +405,7 @@ function modemNetName(marker: UsbModemNetMarker): string {
 							name={name}
 							enabled={iface.enabled}
 							ip={iface.ip}
-							disabledReason={dongleBlocked}
+							disabledReason={dongleBlocked ?? sharedLanReason}
 							onBeforeDisable={() => confirmDisable(name)}
 						/>
 						<Button
