@@ -137,7 +137,7 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   the typed host adapter. Shared graph code is split into sibling chunks
   co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-  (CalVer, `2026.8.2` at time of writing) — the single source of truth, matching the platform's
+  (CalVer, `2026.8.3` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **The catalog is STATIC here, not lazy.** The SPA splits its ten-locale Paraglide
   catalog into per-namespace chunks it awaits in `main.ts`; a federation bundle is

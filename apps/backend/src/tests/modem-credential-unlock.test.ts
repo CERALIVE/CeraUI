@@ -277,6 +277,7 @@ interface Recorder {
 function recorder(
 	detectOpen: "open" | "locked" | undefined,
 	detail: Parameters<typeof classifyAuthAttempt>[0],
+	rejectAt?: "detect" | "attempt",
 ): Recorder {
 	const requests: string[] = [];
 	const attempts: number[] = [];
@@ -286,11 +287,13 @@ function recorder(
 		port: {
 			detectOpen: async () => {
 				requests.push("detect");
+				if (rejectAt === "detect") throw new Error("transport down");
 				return detectOpen;
 			},
 			attempt: async () => {
 				requests.push("attempt");
 				attempts.push(1);
+				if (rejectAt === "attempt") throw new Error("transport down");
 				return detail;
 			},
 		},
@@ -326,6 +329,45 @@ function verifyDeps(
 }
 
 describe("verifying a stored credential", () => {
+	it("returns `unreachable` and withdraws stale open evidence when detection rejects", async () => {
+		const target = targetFor();
+		noteLockOpenEvidence(target.ifname, "open");
+		const rec = recorder("locked", "auth-accepted", "detect");
+
+		const outcome = await verifyModemCredential(
+			"1000",
+			verifyDeps(rec, target),
+		);
+
+		expect(outcome).toEqual({
+			success: false,
+			error: "unreachable",
+			target,
+		});
+		expect(readLockOpenEvidence(target.ifname)).toBeUndefined();
+		expect(rec.requests).toEqual(["detect"]);
+		expect(rec.attempts).toEqual([]);
+	});
+
+	it("returns `unreachable` without recording auth failure or retrying when login rejects", async () => {
+		const target = targetFor();
+		const rec = recorder("locked", "auth-accepted", "attempt");
+
+		const outcome = await verifyModemCredential(
+			"1000",
+			verifyDeps(rec, target),
+		);
+
+		expect(outcome).toEqual({
+			success: false,
+			error: "unreachable",
+			target,
+		});
+		expect(rec.requests).toEqual(["detect", "attempt"]);
+		expect(rec.attempts).toHaveLength(1);
+		expect(lockFor(target.device.identityKey, true).state).toBe("locked");
+	});
+
 	it("refuses a locked-out device with ZERO device requests", async () => {
 		const target = targetFor();
 		noteLockOutcome(target.device.identityKey, { state: "locked-out" });

@@ -1633,6 +1633,12 @@ everything. They take no lease and touch no radio.
   cannot clear, so a retry spends the attempts that would have let them fix a
   typo. A device already inside a lockout window is refused BEFORE a transport is
   opened, so it costs ZERO device requests.
+- **A rejected device transport is `unreachable`, never an authentication
+  verdict.** Both the open-detection read and the single login attempt translate
+  a rejected transport promise into the typed refusal. Detection failure also
+  withdraws any cached `open` evidence, because that claim widens the row and the
+  device can no longer support it. Neither rejection records `auth-failed`, and
+  neither is retried.
 - **`setCredentials` performs zero device requests too** — it reads the open
   verdict the admin cycle already observed — and REFUSES an `open` device
   (`device_open`) rather than storing a secret nothing will ever present.
@@ -3876,6 +3882,11 @@ inference from silence), and `unknown` (neither — the read could not answer).
   answer resolves to, and `mergeRefreshedModem` then RETAINS the previous value
   — the same withhold-on-unknown rule `deriveNetworkTypes` follows, for the same
   reason: a statement about the READ must not demote a card that was seen.
+- **`sim_lock` follows the same three-answer merge discipline.** A stated lock
+  replaces the previous value; `unlock-required: none` positively clears it; an
+  unreadable or unknown lock answer retains the previous value. The `none` arm is
+  explicit — omitting a fresh field while spreading the previous modem would
+  otherwise latch "SIM locked" forever after a successful unlock.
 - **AN EMPTY SLOT IS PUBLISHED AS `/`, not dropped.** Board-measured on the
   SIMCom SIM7600G-H, whose two `sim-slots` values both read `/`. So the test is
   the object-path SHAPE (`isSimObjectPath`), never "is this string non-empty" —

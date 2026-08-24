@@ -256,17 +256,26 @@ function buildRegistrationRejection(
 	};
 }
 
-function buildSimLock(modemInfo: Readonly<ModemInfo>): SimLock | undefined {
+type SimLockReading =
+	| { readonly state: "present"; readonly lock: SimLock }
+	| { readonly state: "absent" | "unknown" };
+
+function buildSimLock(modemInfo: Readonly<ModemInfo>): SimLockReading {
 	const info = parseModemUnlockInfo(
 		modemInfo as unknown as Record<string, string | Array<string>>,
 	);
 	if (info.required === "none") {
-		return undefined;
+		return { state: "absent" };
 	}
+	if (info.required === "unknown") return { state: "unknown" };
 	const remainingAttempts = info.retries[info.required];
-	return remainingAttempts === undefined
-		? { required: info.required }
-		: { required: info.required, remainingAttempts };
+	return {
+		state: "present",
+		lock:
+			remainingAttempts === undefined
+				? { required: info.required }
+				: { required: info.required, remainingAttempts },
+	};
 }
 
 function applyAutoconfigToModemConfig(
@@ -492,7 +501,13 @@ export function mergeRefreshedModem(
 	modemInfo: ModemInfo,
 ): Modem {
 	const status = buildModemStatus(modemInfo, previous);
-	const simLock = buildSimLock(modemInfo);
+	const simLockReading = buildSimLock(modemInfo);
+	const simLock =
+		simLockReading.state === "unknown"
+			? previous.sim_lock
+			: simLockReading.state === "present"
+				? simLockReading.lock
+				: undefined;
 	const networkType = deriveNetworkTypes(modemInfo);
 	const radioModes = deriveRadioModeCatalog(modemInfo);
 	const simPresence = deriveSimPresence(modemInfo);
@@ -500,6 +515,7 @@ export function mergeRefreshedModem(
 	const {
 		removed: _removed,
 		own_numbers: _staleOwnNumbers,
+		sim_lock: _staleSimLock,
 		...previousRest
 	} = previous;
 	return {
@@ -644,7 +660,7 @@ async function registerModem(id: number) {
 
 	modem.status = buildModemStatus(modemInfo, modem);
 	const simLock = buildSimLock(modemInfo);
-	if (simLock !== undefined) modem.sim_lock = simLock;
+	if (simLock.state === "present") modem.sim_lock = simLock.lock;
 
 	setModem(id, modem);
 }

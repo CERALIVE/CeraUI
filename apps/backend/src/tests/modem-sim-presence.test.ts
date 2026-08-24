@@ -191,6 +191,34 @@ describe("SIM presence is read from ModemManager", () => {
 		expect(afterBlindPoll.sim_presence).toBe("present");
 	});
 
+	test("a fresh `unlock-required: none` clears the previous SIM lock", () => {
+		const previouslyLocked: Modem = {
+			...unconfiguredModem("wwan0"),
+			sim_lock: { required: "sim-pin", remainingAttempts: 2 },
+		};
+
+		const unlocked = mergeRefreshedModem(previouslyLocked, {
+			"modem.generic.state": "registered",
+			"modem.generic.unlock-required": "none",
+		} as unknown as ModemInfo);
+
+		expect(unlocked.sim_lock).toBeUndefined();
+		expect(unlocked).not.toHaveProperty("sim_lock");
+	});
+
+	test("an unreadable SIM-lock poll retains the previous lock", () => {
+		const previouslyLocked: Modem = {
+			...unconfiguredModem("wwan0"),
+			sim_lock: { required: "sim-pin", remainingAttempts: 2 },
+		};
+
+		const afterBlindPoll = mergeRefreshedModem(previouslyLocked, {
+			"modem.generic.state": "registered",
+		} as unknown as ModemInfo);
+
+		expect(afterBlindPoll.sim_lock).toEqual(previouslyLocked.sim_lock);
+	});
+
 	test("the projection agrees with the legacy builder about the Quectel", async () => {
 		const modem = await refreshedFrom(QUECTEL);
 		const { message } = projectModemWire([fromMmcliModem(3, modem)], {

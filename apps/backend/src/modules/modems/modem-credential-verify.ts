@@ -313,7 +313,13 @@ export async function verifyModemCredential(
 		return { success: false, error: "unavailable_in_emulated_mode", target };
 	}
 
-	const evidence = await deps.loginPort.detectOpen(target, deps.transport);
+	let evidence: "open" | "locked" | undefined;
+	try {
+		evidence = await deps.loginPort.detectOpen(target, deps.transport);
+	} catch {
+		noteLockOpenEvidence(target.ifname, undefined);
+		return { success: false, error: "unreachable", target };
+	}
 	noteLockOpenEvidence(target.ifname, evidence);
 	if (evidence === "open") {
 		return { success: false, error: "device_open", target };
@@ -324,11 +330,12 @@ export async function verifyModemCredential(
 		return { success: false, error: "no_credential", target };
 	}
 
-	const detail = await deps.loginPort.attempt(
-		target,
-		credential,
-		deps.transport,
-	);
+	let detail: AuthAttemptDetail;
+	try {
+		detail = await deps.loginPort.attempt(target, credential, deps.transport);
+	} catch {
+		return { success: false, error: "unreachable", target };
+	}
 	const classification = classifyAuthAttempt(detail);
 	noteLockOutcome(target.device.identityKey, classification, now);
 	recordModemCredentialOutcome(
