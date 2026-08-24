@@ -10,6 +10,7 @@
 
 import type {
 	ModemCellInfo,
+	ModemConfig,
 	ModemDataUsage,
 	ModemEsim,
 } from "@ceraui/rpc/schemas";
@@ -265,6 +266,27 @@ describe("defaultAutoApn — the annex 'Automatic (recommended)' default", () =>
 				network: "",
 			}),
 		).toBe(true);
+	});
+
+	/*
+	  The `modems` broadcast is CAST, not parsed, so the schema's "required" buys
+	  nothing at runtime. A config that arrived without its APN used to throw
+	  here and take the ENTIRE control plane down through the top-level render
+	  boundary — the dialog never opened at all.
+	*/
+	it("treats a config carrying NO apn as unconfigured, and never throws", () => {
+		const partial = {
+			username: "",
+			password: "",
+			roaming: false,
+			network: "",
+		} as unknown as ModemConfig;
+
+		let result: boolean | undefined;
+		expect(() => {
+			result = defaultAutoApn(partial);
+		}).not.toThrow();
+		expect(result).toBe(true);
 	});
 
 	it("NEVER flips a stored manual APN to Automatic — that would discard it on save", () => {

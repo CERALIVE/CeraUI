@@ -290,7 +290,11 @@ export function usageView(
 export function defaultAutoApn(config: ModemConfig | undefined): boolean {
 	if (!config) return true;
 	if (typeof config.autoconfig === "boolean") return config.autoconfig;
-	return config.apn.trim().length === 0;
+	// `apn` is schema-required, but the `modems` broadcast is CAST rather than
+	// parsed, so a block that arrives without one reaches this line and throws
+	// through the top-level render boundary. No stored APN reads as
+	// unconfigured — the same answer an empty one gets.
+	return typeof config.apn !== "string" || config.apn.trim().length === 0;
 }
 
 /**
