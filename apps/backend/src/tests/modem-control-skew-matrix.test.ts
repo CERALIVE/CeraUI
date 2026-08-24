@@ -1,5 +1,5 @@
 /**
- * THE MIXED-VERSION BRIDGE: the exact 1.2.0 pin must resolve every packaged
+ * THE MIXED-VERSION BRIDGE: the exact 1.2.1 pin must resolve every packaged
  * projection from `@ceralive/modem-control`, while the two never-packaged
  * helpers remain on their permanent local implementations.
  *
