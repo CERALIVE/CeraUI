@@ -30,6 +30,10 @@ import { Button } from '$lib/components/ui/button';
 import { getWifiUUID } from '$lib/helpers/NetworkHelper';
 import { getOperationPhase, isOperationPending } from '$lib/rpc/async-operation.svelte';
 import {
+	isPendingConnectRow,
+	type PendingWifiConnect,
+} from '$lib/rpc/wifi-connect-identity';
+import {
 	frequencyBand,
 	isSecured,
 	signalTextClass,
@@ -52,8 +56,12 @@ interface Props {
 	scanError?: boolean;
 	/** WifiStatus key (interface device id) — drives the connect op phase reads. */
 	deviceId: string;
-	/** SSID of the network currently being connected, if any (local intent). */
-	connecting: string | undefined;
+	/**
+	 * The connect currently in flight, identified by profile uuid (saved) or a
+	 * minted correlation id (fresh) — never by SSID alone, so two profiles
+	 * sharing an SSID cannot claim each other's spinner.
+	 */
+	connecting: PendingWifiConnect | undefined;
 	/** UUID of the saved network whose disconnect is in flight, if any. */
 	disconnecting: string | undefined;
 	/** UUID of the saved network whose forget is in flight, if any. */
@@ -142,9 +150,10 @@ let {
 		{#each networks as network (network.ssid)}
 			{@const uuid = getWifiUUID(network, iface?.saved ?? {})}
 			{@const opPending = isOperationPending(`wifi:${deviceId}`)}
-			{@const isConnecting = connecting === network.ssid && opPending}
+			{@const isConnectRow = isPendingConnectRow(connecting, { ssid: network.ssid, uuid })}
+			{@const isConnecting = isConnectRow && opPending}
 			{@const isConnectTimedOut =
-				connecting === network.ssid && getOperationPhase(`wifi:${deviceId}`) === 'timed_out'}
+				isConnectRow && getOperationPhase(`wifi:${deviceId}`) === 'timed_out'}
 			{@const isDisconnecting = !!uuid && disconnecting === uuid}
 			{@const isForgetting = !!uuid && forgetting === uuid}
 			{@const osBusy = !!connecting || !!disconnecting || !!forgetting}

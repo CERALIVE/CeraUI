@@ -1,7 +1,16 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
-import { Ban, ChevronRight, Globe, Loader2, Router, Settings2, Wifi } from '@lucide/svelte';
+import {
+	Ban,
+	ChevronRight,
+	Globe,
+	Loader2,
+	Router,
+	Settings2,
+	TriangleAlert,
+	Wifi,
+} from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
@@ -25,6 +34,11 @@ import {
 	deriveWifiLinkView,
 	wpa3ChipKey,
 } from './wifi-capability-view';
+import {
+	deriveWifiStationLock,
+	wifiHotspotOpKey,
+	wifiModeOpKey,
+} from './wifi-station-lock';
 
 interface Props {
 	/** Every WiFi radio (record key → interface) — both station and hotspot mode. */
@@ -90,7 +104,7 @@ const switchTargets = $state<Record<string, 'hotspot' | 'station'>>({});
 async function switchToHotspot(device: string) {
 	switchTargets[device] = 'hotspot';
 	await osCommand({
-		key: `hotspot:${device}`,
+		key: wifiHotspotOpKey(device),
 		target: 'hotspot',
 		rpc: () => rpc.wifi.hotspotStart({ device }),
 		failMessage: () => m["network.os.operationFailed"](),
@@ -101,7 +115,7 @@ async function switchToHotspot(device: string) {
 async function switchToStation(device: string) {
 	switchTargets[device] = 'station';
 	await osCommand({
-		key: `hotspot:${device}`,
+		key: wifiHotspotOpKey(device),
 		target: 'station',
 		rpc: () => rpc.wifi.hotspotStop({ device }),
 		failMessage: () => m["network.os.operationFailed"](),
@@ -114,9 +128,9 @@ async function switchToStation(device: string) {
 // device never reports back (the op then decays to `timed_out`).
 $effect(() => {
 	for (const [id, iface] of wifiRadios) {
-		if (getOperationPhase(`hotspot:${id}`) !== 'pending') continue;
+		if (getOperationPhase(wifiHotspotOpKey(id)) !== 'pending') continue;
 		if (deriveWifiModeOutcome(switchTargets[id], hotspotIsActive(iface)) === 'confirmed') {
-			confirmOperation(`hotspot:${id}`);
+			confirmOperation(wifiHotspotOpKey(id));
 		}
 	}
 });
@@ -146,7 +160,21 @@ $effect(() => {
 				{@const isHotspot = isApRadio(iface)}
 				{@const concurrentCapable = iface.supports_ap_sta_concurrency === true}
 				{@const concurrentActive = concurrentCapable && hotspotIsActive(iface)}
-				{@const isSwitching = isOperationPending(`hotspot:${id}`)}
+				{@const isSwitching = isOperationPending(wifiHotspotOpKey(id))}
+				<!-- A radio mid-transition holds its own adapter lock, so every station
+				     mutation dispatched into that window is refused DEVICE_BUSY. The
+				     controls therefore stay put and go disabled-with-reason rather than
+				     staying live and failing, and the reason is rendered ON SCREEN — the
+				     kiosk touchscreen cannot hover to reveal a `title`. Reads todo 7's
+				     `wifi-mode:` key too: it answers `idle` until that control exists, so
+				     this is inert today and cannot be forgotten when it lands. -->
+				{@const stationLock = deriveWifiStationLock({
+					hotspot: getOperationPhase(wifiHotspotOpKey(id)),
+					mode: getOperationPhase(wifiModeOpKey(id)),
+				})}
+				{@const stationLockReason = stationLock.reasonKey
+					? resolveMessageKey(stationLock.reasonKey)
+					: undefined}
 				<!-- Hold the label on the CURRENT mode while a switch is pending: a raw
 				     `wifi` broadcast must not flip it before the op is confirmed. -->
 				{@const displayIsHotspot = concurrentCapable
@@ -267,13 +295,17 @@ $effect(() => {
 									name={iface.ifname}
 									enabled={Boolean(entry?.enabled)}
 									ip={entry?.ip}
+									disabledReason={stationLock.locked ? stationLockReason : undefined}
 								/>
 							{/if}
 							<Button
 								class="h-8 min-h-[var(--touch-target-min)] gap-1 px-2.5"
 								data-testid="open-wifi-selector-dialog"
 								data-device={id}
+								data-locked={stationLock.locked ? 'true' : undefined}
+								disabled={stationLock.locked}
 								size="sm"
+								title={stationLockReason}
 								variant="ghost"
 								onclick={() => onConnect(id)}
 							>
@@ -364,6 +396,40 @@ $effect(() => {
 							{/if}
 						{/if}
 					</div>
+
+					{#if stationLock.locked && stationLockReason && !displayIsHotspot}
+						<p
+							class="text-status-warning basis-full ps-5 text-xs"
+							data-device={id}
+							data-lock-kind={stationLock.kind}
+							data-testid="wifi-station-locked"
+							role="status"
+						>
+							{stationLockReason}
+						</p>
+					{:else if stationLock.failureTitleKey && stationLock.failureBodyKey}
+						<!-- The lock ALWAYS lifts: every phase behind it is terminal, either
+						     from the device's own frame or from the store's TTL valve. So the
+						     row's job at that point is to say which one happened — a refusal
+						     and a result that never arrived are different facts. -->
+						<div
+							class="border-status-warning/30 bg-status-warning/10 ms-5 flex basis-full items-start gap-2 rounded-lg border px-2.5 py-1.5"
+							data-device={id}
+							data-failure-kind={stationLock.failureKind}
+							data-testid="wifi-station-lock-failed"
+							role="status"
+						>
+							<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
+							<div class="min-w-0">
+								<p class="text-status-warning text-xs font-semibold">
+									{resolveMessageKey(stationLock.failureTitleKey)}
+								</p>
+								<p class="text-muted-foreground mt-0.5 text-xs">
+									{resolveMessageKey(stationLock.failureBodyKey)}
+								</p>
+							</div>
+						</div>
+					{/if}
 
 					{#if cap}
 						<div

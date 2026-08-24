@@ -47,7 +47,11 @@ import {
 import { rpc } from '$lib/rpc';
 import { getWifi } from '$lib/rpc/subscriptions.svelte';
 import { hasScanGenerationAdvanced } from '$lib/rpc/wifi-scan-generation';
-import { deriveWifiConnectOutcome } from '$lib/rpc/wifi-connect-outcome';
+import {
+	deriveWifiConnectIdentityOutcome,
+	mintWifiConnectCorrelationId,
+	type PendingWifiConnect,
+} from '$lib/rpc/wifi-connect-identity';
 
 import WifiNetworkList from './WifiNetworkList.svelte';
 
@@ -109,11 +113,15 @@ const PERIODIC_SCAN_INTERVAL_MS = 22_000;
 const scanError = $derived(getOperationPhase(scanKey) === 'failed');
 
 // Inline interaction state.
-// `connecting` is the local intent for the third op sharing `wifiOpKey`: the SSID
-// this surface is connecting to. Kept set through `timed_out` so the row can
+// `connecting` is the local intent for the third op sharing `wifiOpKey`. It
+// carries the dispatched profile's IDENTITY — the saved uuid, or a minted
+// correlation id for a fresh join — never a bare SSID. An SSID is not an
+// identity: NetworkManager holds several saved profiles under one, so an
+// SSID-keyed confirm resolved this op the moment ANY of them came up. See
+// `$lib/rpc/wifi-connect-identity`. Kept set through `timed_out` so the row can
 // render the calm "still connecting / Retry" affordance; cleared on confirm
 // (close), hard fail, or idle decay.
-let connecting = $state<string | undefined>(undefined);
+let connecting = $state<PendingWifiConnect | undefined>(undefined);
 let pendingNew = $state<AvailableWifiNetwork | undefined>(undefined);
 let password = $state('');
 let showPassword = $state(false);
@@ -156,18 +164,32 @@ function resetInteraction() {
 
 // Dispatch a connect (saved or new) through the shared keyed op. The subscriptions
 // `wifi` handler resolves the op on the broadcast result; the connect-confirm
-// $effect below adds a snapshot-based secondary confirm and owns close-on-success.
-async function connectVia(ssid: string, run: () => Promise<unknown>) {
+// $effect below adds an IDENTITY-based secondary confirm and owns close-on-success.
+//
+// `pending` is built by the caller because only it knows which identity applies:
+// a saved row has its profile uuid, a fresh join has none and takes a minted
+// correlation id instead. `baselineConn` is captured HERE, at dispatch, so a
+// fresh join can tell "the active connection moved" from "it was already there".
+async function connectVia(pending: PendingWifiConnect, run: () => Promise<unknown>) {
 	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
 	joinFailure = undefined;
-	connecting = ssid;
+	connecting = pending;
 	await osCommand({
 		key: wifiOpKey,
-		target: ssid,
+		target: pending.ssid,
 		rpc: run,
 		failMessage: () => m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
+}
+
+/** A fresh (unsaved) join: no profile uuid exists yet, so mint a correlation id. */
+function newConnectIntent(ssid: string): PendingWifiConnect {
+	return {
+		ssid,
+		correlationId: mintWifiConnectCorrelationId(),
+		baselineConn: iface?.conn,
+	};
 }
 
 /**
@@ -201,7 +223,9 @@ async function handleScan() {
 function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
 	if (ifaceBusy || wifiRowBlock(network, iface?.capabilities)) return;
 	resetInteraction();
-	void connectVia(network.ssid, () => rpc.wifi.connect({ uuid }));
+	void connectVia({ ssid: network.ssid, uuid, baselineConn: iface?.conn }, () =>
+		rpc.wifi.connect({ uuid }),
+	);
 }
 
 async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
@@ -227,7 +251,7 @@ function handleConnectNew(network: AvailableWifiNetwork) {
 	} else {
 		const ssid = network.ssid;
 		const security = network.security;
-		void connectVia(ssid, () =>
+		void connectVia(newConnectIntent(ssid), () =>
 			rpc.wifi.connectNew({ device: deviceId, ssid, password: '', security }),
 		);
 	}
@@ -242,7 +266,7 @@ function submitNew() {
 	pendingNew = undefined;
 	password = '';
 	showPassword = false;
-	void connectVia(ssid, () =>
+	void connectVia(newConnectIntent(ssid), () =>
 		rpc.wifi.connectNew({ device: deviceId, ssid, password: pw, security }),
 	);
 }
@@ -261,13 +285,22 @@ async function handleForget(uuid: string, network: AvailableWifiNetwork) {
 }
 
 // Connect confirm: the subscriptions `wifi` handler routes the broadcast result
-// into `wifiOpKey`; this effect adds a snapshot-based SECONDARY confirm (the
-// target SSID showing active) and owns close-on-success. The `connecting` intent
-// is kept through `timed_out` so the row renders the calm Retry affordance — it
-// is cleared only on confirm (close), hard fail, or idle decay.
+// into `wifiOpKey`; this effect adds an IDENTITY-based SECONDARY confirm and owns
+// close-on-success. The `connecting` intent is kept through `timed_out` so the
+// row renders the calm Retry affordance — it is cleared only on confirm (close),
+// hard fail, or idle decay.
+//
+// The secondary confirm used to be "a network with the target SSID is active".
+// That is not evidence about THIS dispatch: several saved profiles can carry one
+// SSID, so a sibling coming up — an auto-connect, a neighbouring profile the
+// operator never chose — closed this dialog reporting success for a connection
+// nobody asked for. `deriveWifiConnectIdentityOutcome` compares the interface's
+// own active-connection uuid against the dispatched identity instead, which is
+// the same "confirm on a durable identity, never on content" rule todo 3's scan
+// generation established.
 $effect(() => {
-	const ssid = connecting;
-	if (!ssid) return;
+	const pending = connecting;
+	if (!pending) return;
 	const phase = getOperationPhase(wifiOpKey);
 	if (phase === 'confirmed') {
 		connecting = undefined;
@@ -280,10 +313,7 @@ $effect(() => {
 		connecting = undefined;
 		return;
 	}
-	if (
-		phase === 'pending' &&
-		deriveWifiConnectOutcome({}, deviceId, ssid, iface?.available ?? []) === 'confirmed'
-	) {
+	if (phase === 'pending' && deriveWifiConnectIdentityOutcome(pending, iface) === 'confirmed') {
 		confirmOperation(wifiOpKey);
 	}
 });
