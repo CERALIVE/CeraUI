@@ -137,7 +137,7 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   the typed host adapter. Shared graph code is split into sibling chunks
   co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-  (CalVer, `2026.8.3` at time of writing) — the single source of truth, matching the platform's
+  (CalVer, `2026.8.4` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **The catalog is STATIC here, not lazy.** The SPA splits its ten-locale Paraglide
   catalog into per-namespace chunks it awaits in `main.ts`; a federation bundle is
@@ -1653,13 +1653,29 @@ After any RPC setter resolves, the frontend reads `result.applied` (not the clie
 
 ### Per-modem state merge
 
-The backend broadcasts modem updates incrementally: a full snapshot carries every field, but targeted broadcasts (`configure`, network-scan completion) send only the changed modem(s), and for those only a subset of fields (e.g. just `available_networks`, or status-only entries for unchanged modems). `subscriptions.svelte.ts` therefore merges `modems`/`status.modems` payloads **field-by-field per modem id** (`mergeModemList`), never replacing the whole map — a wholesale replace would wipe the untouched fields (`status`, `config`, `name`) and flip a live modem to a spurious no-SIM state until the next full snapshot.
+Every modem frame carries the authoritative roster key set, but each entry has one
+of TWO shapes. A full descriptor carries the required `ifname`, `name`, and
+`network_type` fields; its complete FIELD SET is authoritative, so omission of an
+optional field retracts it. A status-only entry carries none of those descriptor
+fields and merges onto the previous value, preserving the full fields it was never
+asked to restate. Targeted broadcasts still walk the whole roster: the target is a
+full descriptor and unchanged neighbours are status-only.
+
+The pure, rune-free `lib/rpc/modem-list-merge.ts` owns this distinction;
+`subscriptions.svelte.ts` imports and re-exports `mergeModemList`. Do NOT spread
+every incoming entry over its previous value: that latches a field a full
+descriptor deliberately omitted. This was operator-visible after a successful SIM
+unlock — the backend sent a full descriptor with no `sim_lock`, while the merge
+preserved the old lock and left the row at `SIM locked` until reload. Conversely,
+do NOT replace a status-only entry: that wipes `config`, `name`, and identity fields
+and can flip a live modem to a spurious no-SIM state.
 
 Network scans additionally carry `network_scan {generation, phase, failure?}`.
 `generation` is monotonic and crosses both `status.modems` targeted updates and
-full `modems` snapshots. `mergeModemList` refuses an older generation together
-with its `available_networks`, so separate event-type sequence counters cannot
-let a late older scan overwrite a newer result. The dialog settles on the
+full `modems` snapshots. `mergeModemList` preserves the newer generation and its
+`available_networks` even when the late older payload is otherwise a full
+descriptor, so separate event-type sequence counters cannot let an older scan
+overwrite a newer result. The dialog settles on the
 lifecycle marker, not on list-content change: an unchanged successful scan is
 still `completed`, a device failure is `failed`, and absence of either reaches
 the scan-specific 270 s unknown-outcome bound. A second client receives the

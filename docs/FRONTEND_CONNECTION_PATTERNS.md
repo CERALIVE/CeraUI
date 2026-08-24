@@ -17,6 +17,8 @@ For the backend broadcast enumeration (which message types the server pushes and
 7. [Connection-ready gate and BootShell](#connection-ready-gate-and-bootshell)
 8. [Half-open detection](#half-open-detection)
 9. [Per-type sequence guard](#per-type-sequence-guard)
+10. [Authoritative modem-roster merge](#authoritative-modem-roster-merge)
+11. [Status-domain OS-operation transient layer](#status-domain-os-operation-transient-layer)
 
 ---
 
@@ -368,6 +370,39 @@ The backend tags broadcast messages with a top-level `seq` number. `client.ts` l
 The tracker is per-type (`Map<string, number>`), never a global counter. A slow `modems` broadcast does not affect the `sensors` sequence.
 
 `seqTracker.advance(type, seq)` is called after applying a message, not before, so the `lastSeen` only advances on messages that were actually processed.
+
+---
+
+## Authoritative modem-roster merge
+
+**File:** `apps/frontend/src/lib/rpc/modem-list-merge.ts`
+
+The backend includes every current modem id in each modem roster frame. The key
+set is therefore authoritative: an id omitted by the next frame is removed from
+frontend state. Each included value, however, has one of two distinct contracts:
+
+| Entry shape | Runtime marker | Omission means | Frontend action |
+|---|---|---|---|
+| Full descriptor | Own `ifname`, `name`, and `network_type` fields | The optional field was retracted | Replace the prior descriptor |
+| Status-only | None of those descriptor fields | The field was not restated | Merge onto the prior descriptor |
+
+This distinction is required for both correctness directions. Replacing a
+status-only entry would discard identity, configuration, and capability fields
+that the producer intentionally did not resend. Merging a full descriptor over
+its predecessor would preserve fields the device intentionally withdrew. The
+latter caused successful SIM unlocks to leave the modem row locked: the targeted
+full descriptor correctly omitted `sim_lock`, but the old field survived the
+spread until a page reload.
+
+Network-scan generations are fenced across both shapes. If a late payload carries
+an older `network_scan.generation`, `mergeModemList` retains the newer lifecycle
+marker and `available_networks` while accepting the payload's unrelated fields.
+That guard is independent of the per-event sequence tracker because scan results
+can cross the separate `status` and `modems` event domains.
+
+`subscriptions.svelte.ts` remains the sole push consumer and re-exports
+`mergeModemList`; the pure merge lives outside that rune store so the two shape
+contracts can be tested directly.
 
 ---
 
