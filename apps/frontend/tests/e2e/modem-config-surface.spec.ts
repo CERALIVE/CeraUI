@@ -16,12 +16,16 @@ import {
  * T13 — Modem config surface clobber regressions (ceraui-os-interaction-ux), @functional.
  *
  * Drives the REAL ModemConfigDialog against the dev backend with DOM/ARIA-only
- * assertions (no screenshots). Three regressions are pinned, all turning on the
- * pure predicates from T10/T11 (`modemScanSignature`, `modemConfigEchoMatches`):
+ * assertions (no screenshots). Three regressions are pinned:
  *
- *   1. scan false-confirm: a periodic full-state re-broadcast that RE-SENDS the
- *      same operator set must NOT confirm an in-flight scan (the spinner holds);
- *      only a genuinely changed operator set confirms it.
+ *   1. scan false-confirm: NO operator-list re-broadcast confirms an in-flight
+ *      scan (the spinner holds) — not a re-sent list, and not a genuinely
+ *      changed one. Only a terminal `network_scan` lifecycle frame does.
+ *      This assertion used to turn on the retired `modemScanSignature`
+ *      predicate, which settled the scan on list-content CHANGE; that module
+ *      and its unit test were deleted together when scans gained a bounded
+ *      generation/phase lifecycle, and this spec is pinned to the replacement
+ *      contract (see `ModemConfigDialog.scan-lifecycle.test.ts`).
  *   2. configure clobber: a Save in flight stays pending while a non-matching
  *      `modems` re-broadcast ticks — only an echo that proves the device stored
  *      what we sent closes the dialog.
@@ -84,9 +88,9 @@ test.describe(
 				evidencePath("task-13-modem-config-surface.txt"),
 				[
 					"T13 — Modem config surface clobber regressions: functional E2E evidence",
-					"Driver: real ModemConfigDialog (async-operation store + modemScanSignature",
-					"        / modemConfigEchoMatches predicates) vs. real dev backend; modem",
-					"        state injected via dev.emit, scan/configure pinned via drop+fake.",
+					"Driver: real ModemConfigDialog (async-operation store + the network_scan",
+					"        lifecycle / modemConfigEchoMatches predicates) vs. real dev backend;",
+					"        modem state injected via dev.emit, scan/configure pinned via drop+fake.",
 					`Generated: ${new Date().toISOString()}`,
 					"",
 					...evidence,
@@ -96,19 +100,20 @@ test.describe(
 			);
 		});
 
-		test("a modem scan holds pending across same-list re-broadcasts and only a changed operator set confirms it", async ({
+		test("a modem scan holds pending across operator-list re-broadcasts and only a terminal lifecycle frame confirms it", async ({
 			page,
 		}) => {
 			record("── modem scan: false-confirm + clobber resistance ──");
 			const key = await targetModemKey(page, MODEM_INDEX);
 
-			// Roaming on (so the scan UI shows) + a baseline operator set captured
-			// as the scan signature when the scan is dispatched.
+			// Roaming on (so the scan UI shows) + a baseline operator set, and a
+			// settled lifecycle generation the dispatched scan supersedes.
 			await patchModem(page, key, {
 				config: { roaming: true },
 				available_networks: {
 					"310260": { name: "T-Mobile", availability: "available" },
 				},
+				network_scan: { generation: 1, phase: "completed" },
 			});
 
 			await openTargetModemDialog(page, MODEM_INDEX, key);
@@ -119,13 +124,16 @@ test.describe(
 			await expect(scan).toBeEnabled();
 
 			// Drop+fake the scan so the backend never broadcasts a real operator set.
-			await armFake(page, "modems.scan", { success: true });
+			await armFake(page, "modems.scan", {
+				success: true,
+				scanGeneration: 2,
+			});
 			await scan.click();
 			await expect(scan).toBeDisabled();
 			record("clicked Scan → op pending (scan button disabled)");
 
-			// Same-list re-broadcasts (the periodic full-state tick): the operator
-			// signature is unchanged, so the scan must NOT confirm — it stays pending.
+			// Same-list re-broadcasts (the periodic full-state tick) carry no
+			// terminal lifecycle frame, so the scan must NOT confirm.
 			for (let i = 0; i < 3; i++) {
 				await patchModem(page, key, {
 					available_networks: {
@@ -139,18 +147,29 @@ test.describe(
 				"injected 3 same-list re-broadcasts → scan STILL pending (no false-confirm) ✓",
 			);
 
-			// A genuinely changed operator set (a new operator) flips the signature
-			// and confirms the scan: the spinner clears, the button re-enables.
+			// Nor does a genuinely CHANGED operator set: list content is not the
+			// confirmation under the lifecycle contract, so this holds too.
 			await patchModem(page, key, {
 				available_networks: {
 					"310260": { name: "T-Mobile", availability: "available" },
 					"310410": { name: "AT&T", availability: "available" },
 				},
 			});
+			await expect(scan).toBeDisabled();
+			expect(await availableOperatorCount(page)).toBe(2);
+			record(
+				"injected a CHANGED operator set (added 310410) → scan STILL pending (list content never confirms) ✓",
+			);
+
+			// Only the dispatched generation reaching a terminal phase confirms it:
+			// the spinner clears and the button re-enables.
+			await patchModem(page, key, {
+				network_scan: { generation: 2, phase: "completed" },
+			});
 			await expect(scan).toBeEnabled();
 			await expect(dialog).toBeVisible();
 			record(
-				"injected a changed operator set (added 310410) → scan confirmed, button re-enabled ✓",
+				"injected network_scan{generation:2, phase:completed} → scan confirmed, button re-enabled ✓",
 			);
 		});
 
