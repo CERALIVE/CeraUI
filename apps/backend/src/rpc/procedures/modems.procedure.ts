@@ -96,7 +96,7 @@ import {
 	applyModemConfig,
 	type ModemConfigOutcome,
 } from "../../modules/modems/modems.ts";
-import { getModem } from "../../modules/modems/modems-state.ts";
+import { getModem, setModem } from "../../modules/modems/modems-state.ts";
 import {
 	acknowledgeMutation,
 	decommissionMutation,
@@ -372,6 +372,18 @@ export const scanModemProcedure = modemProcedure
 		return { success: true, scanGeneration: dispatched.generation };
 	});
 
+function modemRuntimeId(modemPath: string): number {
+	const pathId = modemPath.split("/").at(-1);
+	return Number.parseInt(pathId ?? modemPath, 10);
+}
+
+function clearCachedSimLock(modemId: number): void {
+	const modem = getModem(modemId);
+	if (modem === undefined) return;
+	const { sim_lock: _staleSimLock, ...unlockedModem } = modem;
+	setModem(modemId, unlockedModem);
+}
+
 /**
  * Submit a SIM PIN to unlock a PIN-locked modem.
  *
@@ -389,40 +401,45 @@ export const unlockSimProcedure = modemProcedure
 	.input(simUnlockInputSchema)
 	.output(simUnlockOutputSchema)
 	.handler(async ({ input }) => {
+		let result: SimUnlockResult;
 		if (shouldMockModems()) {
-			return mockAttemptSimUnlock(input.modemPath, input.pin);
-		}
-
-		let result: SimUnlockResult = { state: "error" };
-		const guarded = await withModemMutation(
-			modemStableKeyForMmTarget(input.modemPath),
-			async () => {
-				await withModemUpdateLock(async () => {
-					result = await unlockSimPin(input.modemPath, input.pin);
-				});
-			},
-		);
-		if (!guarded.ok) {
-			return { state: "error" as const, mutationRefusal: guarded.refusal };
-		}
-
-		// Opt-in "remember PIN": persist ONLY a confirmed-correct PIN to the
-		// chmod-600 tmpfs secrets file (never config.json) so boot auto-unlock has
-		// it. `remember: false` opts back out and clears any stored PIN; an absent
-		// flag leaves the stored PIN untouched. Persistence never fails the unlock.
-		if (
-			(result as SimUnlockResult).state === "success" &&
-			input.remember !== undefined
-		) {
-			try {
-				if (input.remember) {
-					await storeSimPin(input.pin);
-				} else {
-					await clearSimPin();
-				}
-			} catch (err) {
-				logger.warn(`SIM PIN remember toggle failed: ${err}`);
+			result = mockAttemptSimUnlock(input.modemPath, input.pin);
+		} else {
+			let mutationResult: SimUnlockResult | undefined;
+			const guarded = await withModemMutation(
+				modemStableKeyForMmTarget(input.modemPath),
+				async () => {
+					await withModemUpdateLock(async () => {
+						mutationResult = await unlockSimPin(input.modemPath, input.pin);
+					});
+				},
+			);
+			if (!guarded.ok) {
+				return { state: "error" as const, mutationRefusal: guarded.refusal };
 			}
+			result = mutationResult ?? { state: "error" };
+
+			// Opt-in "remember PIN": persist ONLY a confirmed-correct PIN to the
+			// chmod-600 tmpfs secrets file (never config.json) so boot auto-unlock has
+			// it. `remember: false` opts back out and clears any stored PIN; an absent
+			// flag leaves the stored PIN untouched. Persistence never fails the unlock.
+			if (result.state === "success" && input.remember !== undefined) {
+				try {
+					if (input.remember) {
+						await storeSimPin(input.pin);
+					} else {
+						await clearSimPin();
+					}
+				} catch (err) {
+					logger.warn(`SIM PIN remember toggle failed: ${err}`);
+				}
+			}
+		}
+
+		if (result.state === "success") {
+			const modemId = modemRuntimeId(input.modemPath);
+			clearCachedSimLock(modemId);
+			broadcastModems({ [modemId]: true });
 		}
 
 		return result;
@@ -444,25 +461,35 @@ export const unlockSimPukProcedure = modemProcedure
 	.input(simPukUnlockInputSchema)
 	.output(simPukUnlockOutputSchema)
 	.handler(async ({ input }) => {
+		let result: SimPukUnlockResult;
 		if (shouldMockModems()) {
-			return mockAttemptSimPukUnlock(input.modemPath, input.puk);
+			result = mockAttemptSimPukUnlock(input.modemPath, input.puk);
+		} else {
+			result = { success: false, error: "error" };
+			const guarded = await withModemMutation(
+				modemStableKeyForMmTarget(input.modemPath),
+				async () => {
+					await withModemUpdateLock(async () => {
+						result = await unlockSimPuk(
+							input.modemPath,
+							input.puk,
+							input.newPin,
+						);
+					});
+				},
+			);
+			if (!guarded.ok) {
+				return {
+					success: false,
+					error: "error" as const,
+					mutationRefusal: guarded.refusal,
+				};
+			}
 		}
-
-		let result: SimPukUnlockResult = { success: false, error: "error" };
-		const guarded = await withModemMutation(
-			modemStableKeyForMmTarget(input.modemPath),
-			async () => {
-				await withModemUpdateLock(async () => {
-					result = await unlockSimPuk(input.modemPath, input.puk, input.newPin);
-				});
-			},
-		);
-		if (!guarded.ok) {
-			return {
-				success: false,
-				error: "error" as const,
-				mutationRefusal: guarded.refusal,
-			};
+		if (result.success) {
+			const modemId = modemRuntimeId(input.modemPath);
+			clearCachedSimLock(modemId);
+			broadcastModems({ [modemId]: true });
 		}
 		return result;
 	});
@@ -485,38 +512,50 @@ export const unlockSimPin2Procedure = modemProcedure
 	.input(simPin2UnlockInputSchema)
 	.output(simPin2UnlockOutputSchema)
 	.handler(async ({ input }) => {
+		let result: SimPin2UnlockResult;
 		if (shouldMockModems()) {
-			return mockAttemptSimPin2Unlock(input.modemPath, input.pin2);
-		}
-
-		// The lease is taken BEFORE the port read, not after: reading ModemManager's
-		// port list is the first step of this transaction, and a device whose ports
-		// cannot be read must still answer WHY it refused rather than collapsing
-		// into a bare `error` that hides a held lease.
-		let result: SimPin2UnlockResult = { state: "error" };
-		const guarded = await withModemMutation(
-			modemStableKeyForMmTarget(input.modemPath),
-			async () => {
-				const ports = await mmGetModemPorts(input.modemPath);
-				if (ports === undefined) return;
-				await withModemUpdateLock(async () => {
-					result = await unlockSimPin2(input.modemPath, input.pin2, ports);
-				});
-			},
-		);
-		if (!guarded.ok) {
-			return { state: "error" as const, mutationRefusal: guarded.refusal };
-		}
-
-		if ((result as SimPin2UnlockResult).state === "success") {
-			// EXACTLY ONE re-discovery, the `modems.setUsbMode` precedent: the
-			// regular loop only broadcasts every 30 s, so without this a verified
-			// PIN2 leaves the row claiming a lock for up to half a minute. Runs
-			// after the update lock is released — it is not reentrant.
-			const { discoverModems } = await import(
-				"../../modules/modems/modem-update-loop.ts"
+			result = mockAttemptSimPin2Unlock(input.modemPath, input.pin2);
+		} else {
+			// The lease is taken BEFORE the port read, not after: reading ModemManager's
+			// port list is the first step of this transaction, and a device whose ports
+			// cannot be read must still answer WHY it refused rather than collapsing
+			// into a bare `error` that hides a held lease.
+			let mutationResult: SimPin2UnlockResult | undefined;
+			const guarded = await withModemMutation(
+				modemStableKeyForMmTarget(input.modemPath),
+				async () => {
+					const ports = await mmGetModemPorts(input.modemPath);
+					if (ports === undefined) return;
+					await withModemUpdateLock(async () => {
+						mutationResult = await unlockSimPin2(
+							input.modemPath,
+							input.pin2,
+							ports,
+						);
+					});
+				},
 			);
-			await discoverModems();
+			if (!guarded.ok) {
+				return { state: "error" as const, mutationRefusal: guarded.refusal };
+			}
+			result = mutationResult ?? { state: "error" };
+
+			if (result.state === "success") {
+				// EXACTLY ONE re-discovery, the `modems.setUsbMode` precedent: the
+				// regular loop only broadcasts every 30 s, so without this a verified
+				// PIN2 leaves the row claiming a lock for up to half a minute. Runs
+				// after the update lock is released — it is not reentrant.
+				const { discoverModems } = await import(
+					"../../modules/modems/modem-update-loop.ts"
+				);
+				await discoverModems();
+			}
+		}
+
+		if (result.state === "success") {
+			const modemId = modemRuntimeId(input.modemPath);
+			clearCachedSimLock(modemId);
+			broadcastModems({ [modemId]: true });
 		}
 
 		return result;

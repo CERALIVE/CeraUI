@@ -42,15 +42,22 @@ import {
 	getMockSimState,
 	handleMmcliCommand,
 	MOCK_SIM_PIN_FIXTURE,
+	MOCK_SIM_PIN2_FIXTURE,
 	MOCK_SIM_PUK_FIXTURE,
+	setMockSimLockState,
 } from "../mocks/providers/modems.ts";
 import {
 	mmcliParseSep,
 	parseModemUnlockInfo,
 } from "../modules/modems/mmcli.ts";
+import { discoverModems } from "../modules/modems/modem-update-loop.ts";
+import { getModemIds, removeModem } from "../modules/modems/modems-state.ts";
 import * as simSecrets from "../modules/modems/sim-secrets.ts";
+import { setModemsState } from "../modules/modems/state/modems-state-cache.ts";
 import { withDeviceType } from "../modules/system/device-detection.ts";
+import { addClient, removeClient } from "../rpc/events.ts";
 import {
+	unlockSimPin2Procedure,
 	unlockSimProcedure,
 	unlockSimPukProcedure,
 } from "../rpc/procedures/modems.procedure.ts";
@@ -58,11 +65,12 @@ import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 const ORIGINAL_MOCK_MODE = process.env.MOCK_MODE;
 
-beforeAll(() => {
+beforeAll(async () => {
 	// shouldUseMocks() gates the unlock procedures' mock branch on
 	// isDevelopment(); MOCK_MODE flips that on without depending on NODE_ENV.
 	process.env.MOCK_MODE = "true";
 	initMockService("modem-pin-locked");
+	await discoverModems();
 });
 
 afterEach(() => {
@@ -72,6 +80,8 @@ afterEach(() => {
 
 afterAll(() => {
 	stopMockService();
+	for (const id of getModemIds()) removeModem(id);
+	setModemsState({});
 	if (ORIGINAL_MOCK_MODE === undefined) {
 		delete process.env.MOCK_MODE;
 	} else {
@@ -110,6 +120,48 @@ async function callEmulated<T>(fn: () => Promise<T>): Promise<T> {
 function reportedUnlockRequired(modemId: number): string {
 	const out = handleMmcliCommand(["-K", "-m", String(modemId)]);
 	return parseModemUnlockInfo(mmcliParseSep(out ?? "")).required;
+}
+
+async function captureBroadcasts<T>(
+	fn: () => Promise<T>,
+): Promise<{ result: T; frames: Array<Record<string, unknown>> }> {
+	const sent: string[] = [];
+	const client = {
+		data: { isAuthenticated: true, lastActive: Date.now() },
+		send: (message: string) => sent.push(message),
+	} as unknown as AppWebSocket;
+	addClient(client);
+	try {
+		const result = await fn();
+		return {
+			result,
+			frames: sent.map((message) => JSON.parse(message)) as Array<
+				Record<string, unknown>
+			>,
+		};
+	} finally {
+		removeClient(client);
+	}
+}
+
+function expectTargetedFullBroadcast(
+	frames: Array<Record<string, unknown>>,
+	modemId: string,
+): void {
+	const modemFrames = frames.filter((frame) => {
+		const status = frame.status as Record<string, unknown> | undefined;
+		return status?.modems !== undefined;
+	});
+	expect(modemFrames).toHaveLength(1);
+	const status = modemFrames[0]?.status as Record<string, unknown> | undefined;
+	const modems = status?.modems as
+		| Record<string, Record<string, unknown>>
+		| undefined;
+	expect(modems?.[modemId]?.name).toBeDefined();
+	expect(modems?.[modemId]?.sim_lock).toBeUndefined();
+	for (const [id, modem] of Object.entries(modems ?? {})) {
+		if (id !== modemId) expect(modem.name).toBeUndefined();
+	}
 }
 
 describe("modem-pin-locked scenario seeding", () => {
@@ -163,15 +215,18 @@ describe("unlockSim RPC routes to the mock SIM state machine", () => {
 	});
 
 	it("unlocks modem 0 with the correct fixture PIN", async () => {
-		const result = await callEmulated(() =>
-			call(
-				unlockSimProcedure,
-				{ modemPath: "0", pin: MOCK_SIM_PIN_FIXTURE },
-				{ context: makeContext() },
+		const { result, frames } = await captureBroadcasts(() =>
+			callEmulated(() =>
+				call(
+					unlockSimProcedure,
+					{ modemPath: "0", pin: MOCK_SIM_PIN_FIXTURE },
+					{ context: makeContext() },
+				),
 			),
 		);
 		expect(result).toEqual({ state: "success" });
 		expect(getMockSimState(0)?.lock).toBe("unlocked");
+		expectTargetedFullBroadcast(frames, "0");
 	});
 
 	it("does NOT persist the PIN (storeSimPin/clearSimPin) when remember=true under mocks", async () => {
@@ -204,15 +259,18 @@ describe("unlockSimPuk RPC routes to the mock SIM state machine", () => {
 		}
 		expect(getMockSimState(0)?.lock).toBe("puk-locked");
 
-		const result = await callEmulated(() =>
-			call(
-				unlockSimPukProcedure,
-				{ modemPath: "0", puk: MOCK_SIM_PUK_FIXTURE, newPin: "4321" },
-				ctx,
+		const { result, frames } = await captureBroadcasts(() =>
+			callEmulated(() =>
+				call(
+					unlockSimPukProcedure,
+					{ modemPath: "0", puk: MOCK_SIM_PUK_FIXTURE, newPin: "4321" },
+					ctx,
+				),
 			),
 		);
 		expect(result).toEqual({ success: true });
 		expect(getMockSimState(0)?.lock).toBe("unlocked");
+		expectTargetedFullBroadcast(frames, "0");
 	});
 
 	it("reports wrong-puk with the remaining attempt count on a bad PUK", async () => {
@@ -232,5 +290,25 @@ describe("unlockSimPuk RPC routes to the mock SIM state machine", () => {
 		expect(result.success).toBe(false);
 		expect(result.error).toBe("wrong-puk");
 		expect(getMockSimState(0)?.lock).toBe("puk-locked");
+	});
+});
+
+describe("unlockSimPin2 RPC routes to the mock SIM state machine", () => {
+	it("broadcasts modem 0 in full after the correct fixture PIN2 succeeds", async () => {
+		setMockSimLockState(0, "pin2-locked");
+
+		const { result, frames } = await captureBroadcasts(() =>
+			callEmulated(() =>
+				call(
+					unlockSimPin2Procedure,
+					{ modemPath: "0", pin2: MOCK_SIM_PIN2_FIXTURE },
+					{ context: makeContext() },
+				),
+			),
+		);
+
+		expect(result).toEqual({ state: "success" });
+		expect(getMockSimState(0)?.lock).toBe("unlocked");
+		expectTargetedFullBroadcast(frames, "0");
 	});
 });
