@@ -2,10 +2,33 @@
  * WiFi Procedures
  * Wraps existing WiFi logic from modules/wifi/
  *
- * Mutating procedures (connect, disconnect, forget, scan, hotspotStart,
- * hotspotStop) are serialized per WiFi interface via `withDeviceLock`, keyed by
- * the interface MAC address. A concurrent operation on the same interface
- * returns `{ success: false, error: 'DEVICE_BUSY' }` without touching state.
+ * THE LOCK CONTRACT (and it is one lock, not two).
+ *
+ * Every mutating procedure here — connect, connectNew, disconnect, forget,
+ * scan, hotspotStart, hotspotStop, hotspotConfigure — acquires the canonical
+ * per-adapter lock through `runGuarded`, keyed by
+ * `modules/wifi/wifi-adapter-lock.ts`. That module owns the ONLY key
+ * derivation in the codebase (the adapter's PERMANENT hardware address), and
+ * the hotspot start/stop/reconfigure transactions under `modules/wifi/` acquire
+ * the identical key from the identical function — so an NM activation in flight
+ * really does refuse a concurrent station mutation on the same radio, in both
+ * directions. A refused call returns `{ success: false, error: 'DEVICE_BUSY' }`
+ * having touched no state and dispatched nothing.
+ *
+ * TWO THINGS THIS CONTRACT DOES NOT CLAIM, because both were claimed falsely
+ * before and are worth stating plainly:
+ *
+ *  - An adapter that does not RESOLVE is not serialized. `runGuarded` runs `op`
+ *    unguarded when the device id / connection uuid names no known radio: there
+ *    is no adapter to contend for, and refusing would be a lie in the other
+ *    direction.
+ *  - The station procedures hold the lock across their DISPATCH, not across the
+ *    nmcli work. `handleWifi` fires connect/disconnect/forget/scan/new with
+ *    `void`, so those calls return once the work is queued. The hotspot
+ *    transactions DO hold the lock for their full NM activation, which is the
+ *    ordering that matters — the destructive, multi-step operation cannot be
+ *    interleaved with a station mutation. Making the station legs awaitable
+ *    under the lock is a separate change with its own RPC-latency consequences.
  */
 
 import {
@@ -35,10 +58,14 @@ import {
 	getMockWifiFaults,
 	setMockHotspotConfig,
 } from "../../mocks/providers/wifi.ts";
-import { withDeviceLock } from "../../modules/network/state/device-lock.ts";
 import { isRealDevice } from "../../modules/system/device-detection.ts";
 import { handleWifi, wifiBuildMsg } from "../../modules/wifi/wifi.ts";
-import { getWifiInterfacesByMacAddress } from "../../modules/wifi/wifi-connections.ts";
+import {
+	type WifiAdapterLockKey,
+	wifiAdapterLockKeyForConnectionUuid,
+	wifiAdapterLockKeyForDeviceId,
+	withWifiAdapterLock,
+} from "../../modules/wifi/wifi-adapter-lock.ts";
 import {
 	persistWifiCountry,
 	setWifiCountry,
@@ -78,45 +105,18 @@ function resolveMockWifiDevice(device: string): string | undefined {
 	return Number.isNaN(index) ? undefined : mockWifiRadios[index]?.device;
 }
 
-// Resolve a WiFi interface MAC from a device index ("0", "1", ...). The MAC is
-// the per-device lock key shared across all mutating WiFi procedures.
-function macForDeviceId(device: string): string | undefined {
-	const id = Number.parseInt(device, 10);
-	if (Number.isNaN(id)) return undefined;
-	const interfaces = getWifiInterfacesByMacAddress();
-	for (const mac in interfaces) {
-		if (interfaces[mac]?.id === id) return mac;
-	}
-	return undefined;
-}
-
-// Resolve the owning interface MAC from a saved/active connection UUID so that
-// connect/disconnect/forget lock the same interface a hotspot toggle would.
-function macForConnectionUuid(uuid: string): string | undefined {
-	const interfaces = getWifiInterfacesByMacAddress();
-	for (const mac in interfaces) {
-		const iface = interfaces[mac];
-		if (!iface) continue;
-		if (iface.conn === uuid) return mac;
-		for (const ssid in iface.saved) {
-			if (iface.saved[ssid] === uuid) return mac;
-		}
-	}
-	return undefined;
-}
-
-// Run `op` under the per-device lock when the device resolves; returns true when
-// the lock rejected the call (busy). When the device cannot be resolved there is
-// no interface to serialize against, so `op` runs without a guard.
+// Run `op` under the canonical per-adapter lock when the adapter resolves;
+// returns true when the lock rejected the call (busy). When the adapter cannot
+// be resolved there is no radio to serialize against, so `op` runs unguarded.
 async function runGuarded(
-	deviceId: string | undefined,
+	lockKey: WifiAdapterLockKey | undefined,
 	op: () => void | Promise<void>,
 ): Promise<boolean> {
-	if (!deviceId) {
+	if (!lockKey) {
 		await op();
 		return false;
 	}
-	const result = await withDeviceLock(deviceId, async () => {
+	const result = await withWifiAdapterLock(lockKey, async () => {
 		await op();
 	});
 	return !result.success;
@@ -146,7 +146,8 @@ export const wifiConnectProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
+		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, { connect: input.uuid });
 			if (shouldUseMocks()) {
 				const faults = getMockWifiFaults();
@@ -181,7 +182,8 @@ export const wifiDisconnectProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
+		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, { disconnect: input.uuid });
 			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
 				setMockWifiConnection(MOCK_WIFI_DEVICE, { activeNetwork: undefined });
@@ -197,37 +199,40 @@ export const wifiDisconnectProcedure = authedProcedure
 export const wifiConnectNewProcedure = authedProcedure
 	.input(wifiNewInputSchema)
 	.output(wifiOperationOutputSchema)
-	.handler(({ input, context }): MutationResult => {
+	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		handleWifi(context.ws, {
-			new: {
-				device: Number(input.device),
-				ssid: input.ssid,
-				password: input.password,
-				...(input.security !== undefined ? { security: input.security } : {}),
-			},
+		const ws = context.ws;
+		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
+		const busy = await runGuarded(lockKey, () => {
+			handleWifi(ws, {
+				new: {
+					device: Number(input.device),
+					ssid: input.ssid,
+					password: input.password,
+					...(input.security !== undefined ? { security: input.security } : {}),
+				},
+			});
+			if (shouldUseMocks()) {
+				const faults = getMockWifiFaults();
+				if (faults.connectNewAuthFails) {
+					// Wrong-password result: route into the keyed op store as a failure on
+					// the SAME device key the dialog dispatched (calm re-enable).
+					broadcast("wifi", {
+						new: { error: "auth", device: input.device },
+					});
+				} else if (!faults.suppressConfirm) {
+					const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
+					const savedNetworks = current?.savedNetworks ?? [];
+					setMockWifiConnection(MOCK_WIFI_DEVICE, {
+						activeNetwork: input.ssid,
+						savedNetworks: savedNetworks.includes(input.ssid)
+							? savedNetworks
+							: [...savedNetworks, input.ssid],
+					});
+				}
+			}
 		});
-		if (shouldUseMocks()) {
-			const faults = getMockWifiFaults();
-			if (faults.connectNewAuthFails) {
-				// Wrong-password result: route into the keyed op store as a failure on
-				// the SAME device key the dialog dispatched (calm re-enable).
-				broadcast("wifi", {
-					new: { error: "auth", device: input.device },
-				});
-				return { success: true };
-			}
-			if (!faults.suppressConfirm) {
-				const current = getMockState().wifiConnections.get(MOCK_WIFI_DEVICE);
-				const savedNetworks = current?.savedNetworks ?? [];
-				setMockWifiConnection(MOCK_WIFI_DEVICE, {
-					activeNetwork: input.ssid,
-					savedNetworks: savedNetworks.includes(input.ssid)
-						? savedNetworks
-						: [...savedNetworks, input.ssid],
-				});
-			}
-		}
+		if (busy) return { success: false, error: "DEVICE_BUSY" };
 		return { success: true };
 	});
 
@@ -240,7 +245,8 @@ export const wifiForgetProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForConnectionUuid(input.uuid), () => {
+		const lockKey = wifiAdapterLockKeyForConnectionUuid(input.uuid);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, { forget: input.uuid });
 			if (shouldUseMocks()) {
 				const ssid = mockWifiSsidForUuid(input.uuid);
@@ -271,7 +277,8 @@ export const wifiScanProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForDeviceId(input.device), () => {
+		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, { scan: Number(input.device) });
 		});
 		if (busy) return { success: false, error: "DEVICE_BUSY" };
@@ -287,7 +294,8 @@ export const hotspotStartProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForDeviceId(input.device), () => {
+		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, {
 				hotspot: { start: { device: Number(input.device) } },
 			});
@@ -312,7 +320,8 @@ export const hotspotStopProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForDeviceId(input.device), () => {
+		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, {
 				hotspot: { stop: { device: Number(input.device) } },
 			});
@@ -336,7 +345,8 @@ export const hotspotConfigureProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const busy = await runGuarded(macForDeviceId(input.device), () => {
+		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
+		const busy = await runGuarded(lockKey, () => {
 			handleWifi(ws, {
 				hotspot: {
 					config: {

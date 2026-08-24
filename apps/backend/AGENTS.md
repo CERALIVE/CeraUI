@@ -92,6 +92,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s) | `modules/network/network-interfaces.ts` (`computeInterfaceRate`, `processIfconfigOutput`) |
 | WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
+| **The ONE per-adapter WiFi lock key (permanent MAC) every mutation acquires — RPC layer AND hotspot transactions** | `modules/wifi/wifi-adapter-lock.ts` (`wifiAdapterLockKey`, `wifiAdapterLockKeyForDeviceId`, `wifiAdapterLockKeyForConnectionUuid`, `withWifiAdapterLock`); contract below → EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK |
 | WiFi scan coalescing + Forget removing EVERY same-SSID profile | `modules/wifi/wifi-connections.ts` (`wifiRescan`) + `modules/wifi/wifi.ts` (`savedAll`, `wifiSiblingConnections`, `wifiForget`); contract below → A SCAN IS COALESCED, AND FORGET REMOVES THE NETWORK |
 | Regulatory domain + kernel-derived hotspot channels (`iw reg set` / `iw phy` parser, regdb precheck, armed restore timer) | `modules/wifi/regdomain.ts` (`applyRegulatoryDomain`, `deriveApChannels`, `checkWirelessRegdbSupport`, `buildRegdomainRestoreCommand`) |
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
@@ -6965,6 +6966,56 @@ host's own regulatory domain. Coverage: `tests/wifi-regdomain-channels.test.ts`,
 driven by real-shaped `iw phy` transcripts in `tests/fixtures/wifi/` (world / ES /
 US / legacy-flag / 6 GHz).
 
+## EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK [EXISTS]
+
+`modules/wifi/wifi-adapter-lock.ts` owns the ONLY per-adapter lock-key
+derivation in the codebase, and both layers import it: the oRPC procedures
+(`runGuarded` in `rpc/procedures/wifi.procedure.ts`) and the hotspot
+start/stop/reconfigure transactions (`wifi-hotspot-activation.ts`,
+`wifi-hotspot-config.ts`).
+
+**The two layers used to derive their own, and they disagreed.** The RPC layer
+keyed on the adapter's registry MAC; `startHotspotForInterface` /
+`stopHotspotForInterface` / `wifiHotspotConfig` /
+`reconfigureHotspotForRegdomain` keyed on `wifiInterface.ifname`. Those are two
+different strings for one radio, so `withDeviceLock` handed both callers the
+lock simultaneously and the guard that exists to serialize an NM activation
+against a station mutation serialized nothing. `wifiConnectNewProcedure`
+compounded it by taking no lock at all — the one mutating procedure that skipped
+`runGuarded` entirely.
+
+- **The key is the PERMANENT hardware address**, i.e. the same value
+  `wifiInterfacesByMacAddress` is keyed on (`resolveWifiPermanentMac`), so a lock
+  key and a registry lookup can never name different adapters. An ifname cannot
+  carry that guarantee: NetworkManager renames adapters (this fleet's
+  duplicate-MAC dongles rename against each other on replug), and the AP+STA
+  concurrent path activates the hotspot on a SECOND, virtual `clap-<parent>`
+  interface belonging to the same radio — an ifname key there leaves the
+  parent's station mutations unguarded for the whole activation.
+- **It is the BARE normalized MAC, no prefix.** It shares the process-wide
+  `withDeviceLock` registry, so prefixing would silently stop matching a key an
+  existing caller already holds.
+- **An unresolvable adapter runs UNGUARDED, deliberately.** `runGuarded` runs
+  `op` when the device id / connection uuid names no known radio: there is no
+  adapter to contend for, and refusing would be dishonest in the other
+  direction.
+- **The station procedures hold the lock across their DISPATCH, not across the
+  nmcli work** — `handleWifi` fires connect/disconnect/forget/scan/new with
+  `void`. The hotspot transactions DO hold it for their full NM activation,
+  which is the ordering that matters: the destructive multi-step operation
+  cannot be interleaved with a station mutation. Making the station legs
+  awaitable under the lock is a separate change with its own RPC-latency
+  consequences, and the `wifi.procedure.ts` header says so rather than claiming
+  more than the code delivers.
+
+Coverage: `tests/wifi-adapter-lock.test.ts` — the two layers' derivations
+compared for string equality AND both CALL SITES proven to refuse under one
+externally-held key, plus the `connectNew`-versus-hotspot-start race asserting
+the refused op dispatched ZERO nmcli and the admitted one observed the first
+op's terminal state. Rule-E proof captured in both directions: reverting the
+activation key to `ifname` reddens the first test, and un-guarding
+`wifiConnectNewProcedure` reddens the second.
+
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
@@ -7877,6 +7928,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't spawn `nmcli` from an RPC-reachable path without a bound — every nmcli process takes one of root's 256 system-bus connections, so an unguarded repeat makes EVERY NetworkManager operation on the device fail `Could not create NMClient object`. `wifiRescan()` coalesces; keep it that way, and keep its shared promise from rejecting.
 - Don't delete only the `saved[ssid]` uuid in `wifiForget` — a second NM profile for the same SSID keeps the row reading "Saved", which the operator cannot tell from a Forget that did nothing. Go through `wifiSiblingConnections`. And don't put `savedAll` on the wire or read it from connect/disconnect: those act on a CONNECTION, Forget removes a NETWORK.
+- Don't derive a per-adapter WiFi lock key anywhere but `modules/wifi/wifi-adapter-lock.ts`, and don't key one on `wifiInterface.ifname` — the RPC layer and the hotspot transactions did exactly that with two different strings for one radio, so `withDeviceLock` handed both callers the lock at once and the guard serialized nothing. Don't add a mutating WiFi procedure that skips `runGuarded` either (that was `wifiConnectNewProcedure`), and don't prefix the key: it shares the process-wide `withDeviceLock` registry, so a prefix silently stops matching a key an existing caller already holds.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.
 - Don't delete a hotspot profile because nothing claims the address it is bound to — a temporarily unplugged radio looks identical to an abandoned profile, and the deletion destroys the very credentials the backstop exists to preserve. Deletion needs POSITIVE evidence from the credential store (`collectSupersededHotspotConns`), and the `Hotspot-N` name pattern is a narrowing filter, never evidence: an operator's own `nmcli device wifi hotspot` profile carries the same id. Don't stop maintaining `previousConns` either — it is the ONLY record that a superseded profile was ever ours, and without it a real duplicate becomes permanently undeletable.

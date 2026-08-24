@@ -6,13 +6,13 @@
     process — so an interface a test seeds is visible to every file that runs
     after it.
 
-    That matters because the RPC layer resolves an operator-facing device id
-    ("0", "1", ...) by scanning the registry for the FIRST entry with that
-    numeric `id` (`macForDeviceId`, rpc/procedures/wifi.procedure.ts). Two
-    entries carrying the same id are indistinguishable to that scan, so a
-    leftover id-0 interface from an earlier file makes `device: "0"` resolve to
-    a MAC the current test never seeded — silently steering a per-device lock
-    onto the wrong interface.
+    That matters because the canonical lock key resolves an operator-facing
+    device id ("0", "1", ...) by scanning the registry for the FIRST entry with
+    that numeric `id` (`wifiAdapterLockKeyForDeviceId`,
+    modules/wifi/wifi-adapter-lock.ts). Two entries carrying the same id are
+    indistinguishable to that scan, so a leftover id-0 interface from an earlier
+    file makes `device: "0"` resolve to a MAC the current test never seeded —
+    silently steering a per-adapter lock onto the wrong interface.
 
     Any test that seeds an interface and then asserts on device-id resolution
     must therefore own the whole registry for the duration of the test.

@@ -23,10 +23,13 @@ import {
 	nmConnSetFields,
 	nmHotspot,
 } from "../network/network-manager.ts";
-import { withDeviceLock } from "../network/state/device-lock.ts";
 import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
 import {
 	concurrentHotspotBindingFields,
 	ensureConcurrentApInterface,
@@ -98,16 +101,22 @@ export async function wifiHotspotStart(
 }
 
 /**
- * Atomic station→hotspot switch for a resolved interface. Serialized per device
- * via {@link withDeviceLock}; a concurrent request on the same device returns
+ * Atomic station→hotspot switch for a resolved interface. Serialized per ADAPTER
+ * under the canonical permanent-MAC key — the same key the RPC layer's
+ * `runGuarded` acquires — so a concurrent request from either layer returns
  * `DEVICE_BUSY` without touching state.
+ *
+ * It is keyed on the adapter, never on `wifiInterface.ifname`: the AP+STA
+ * concurrent path activates on a SECOND, virtual interface belonging to this
+ * same radio, so an ifname key would leave the parent's station mutations
+ * unguarded for the whole activation.
  */
 export async function startHotspotForInterface(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
-	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		startHotspotLocked(macAddress, wifiInterface, deps),
 	);
 	if (!lock.success) return { success: false, error: lock.error };

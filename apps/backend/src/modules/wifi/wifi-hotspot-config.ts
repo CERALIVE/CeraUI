@@ -23,11 +23,14 @@ import {
 	nmConnSetFields,
 	nmDisconnect,
 } from "../network/network-manager.ts";
-import { withDeviceLock } from "../network/state/device-lock.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	type DerivedApChannel,
@@ -110,7 +113,7 @@ export async function stopHotspotForInterface(
 	deps: HotspotStopDeps = defaultHotspotStopDeps,
 ): Promise<void> {
 	settlePending(wifiInterface.ifname, false);
-	await withDeviceLock(wifiInterface.ifname, () =>
+	await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		stopHotspotLocked(macAddress, wifiInterface, deps),
 	);
 }
@@ -326,8 +329,9 @@ export async function wifiHotspotConfig(
 	const security =
 		msg.security ?? wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
-	// Serialize the reconfigure against other hotspot operations on this device.
-	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+	// Serialize the reconfigure against every other mutation on this ADAPTER —
+	// the RPC layer's `runGuarded` acquires the identical key.
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		reconfigureHotspotLocked(
 			macAddress,
 			wifiInterface,
@@ -389,7 +393,7 @@ export async function reconfigureHotspotForRegdomain(
 	// is carried through unexamined rather than re-derived.
 	const security = wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
-	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		reconfigureHotspotLocked(
 			macAddress,
 			wifiInterface,
