@@ -173,6 +173,26 @@ describe("the network-mode selector", () => {
 		});
 	});
 
+	/*
+	  The `modems` broadcast is CAST, not parsed, so the schema's "required"
+	  buys nothing at runtime. A block that arrived without its catalog used to
+	  throw here and take the ENTIRE control plane down through the top-level
+	  render boundary — a whole-UI crash from one absent sub-field.
+	*/
+	it("a network_type carrying NO catalog is UNKNOWN, and never throws", () => {
+		const partial = { active: "4g" } as unknown as Modem["network_type"];
+
+		let view: CapabilityView | undefined;
+		expect(() => {
+			view = networkModeCapabilityView(partial, false);
+		}).not.toThrow();
+
+		expect(view).toEqual({
+			mode: "unknown",
+			reasonKey: NETWORK_TYPE_UNKNOWN_KEY,
+		});
+	});
+
 	it("a populated catalog with a card in the slot is AVAILABLE", () => {
 		expect(networkModeCapabilityView(catalog(["4g", "5g"]), false)).toEqual({
 			mode: "available",

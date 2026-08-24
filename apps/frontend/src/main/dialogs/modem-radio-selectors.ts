@@ -163,6 +163,14 @@ export function networkModeCapabilityView(
 	if (networkType === undefined) {
 		return { mode: "unknown", reasonKey: NETWORK_TYPE_UNKNOWN_KEY };
 	}
+	// The schema types `supported` as required, but the `modems` broadcast is
+	// CAST rather than parsed (`subscriptions.svelte.ts` `case "modems"`), so
+	// nothing enforces that at runtime — a partial block reached this line and
+	// took the whole control plane down through the top-level render boundary.
+	// No catalog is the same epistemic state as an absent block: `unknown`.
+	if (!Array.isArray(networkType.supported)) {
+		return { mode: "unknown", reasonKey: NETWORK_TYPE_UNKNOWN_KEY };
+	}
 	if (networkType.supported.length === 0) return { mode: "absent" };
 	return noSim
 		? { mode: "blocked", reasonKey: RADIO_NO_SIM_REASON_KEY }
