@@ -12,7 +12,7 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 
 ### Modem-control compatibility
 
-The backend pins `@ceralive/modem-control` at `1.2.0` EXACTLY. The SMS port, the
+The backend pins `@ceralive/modem-control` at `1.2.1` EXACTLY. The SMS port, the
 usage-policy setter and the band certification catalog are static imports: while
 the pin was the published `0.2.0` floor each was resolved through a lazy
 `import()` and a structural probe, because its API had landed in modem-stack
@@ -28,7 +28,7 @@ The package-owned `MODEM_OPERATION_IDS` registry is held to set equality with
 CeraUI's disposition manifest by the unskipped frontend tier-2 drift gate.
 
 A fifteenth compatibility consumer lives in `modems/usb-mode-runtime.ts`.
-Version 1.2.0 supplies its read-only `resolveRuntimeCompositionCapability`
+Version 1.2.1 supplies its read-only `resolveRuntimeCompositionCapability`
 candidate; a boundary test proves the package function is selected and remains
 structurally and behaviorally identical to CeraUI's local fallback. The package's
 write-side composition registry is intentionally not consumed by this bump.
