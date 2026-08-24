@@ -40,7 +40,7 @@ import {
 	getNetif,
 	initSubscriptions,
 	resetState,
-} from "$lib/rpc/subscriptions.svelte";
+} from "../lib/rpc/subscriptions.svelte.ts";
 
 const HILINK = {
 	ip: "192.168.8.100",
@@ -147,6 +147,7 @@ describe("modems ingestion — the id set is authoritative", () => {
 					name: "RM530N-GL",
 					network_type: { supported: [], active: null },
 					status: { connection: "searching", signal: 81 },
+					sim_lock: { required: "sim-pin", remainingAttempts: 3 },
 				},
 			},
 		});
@@ -158,6 +159,7 @@ describe("modems ingestion — the id set is authoritative", () => {
 		expect(modem?.name).toBe("RM530N-GL");
 		expect(modem?.ifname).toBe("wwan0");
 		expect(modem?.status?.connection).toBe("registered");
+		expect(modem?.sim_lock?.required).toBe("sim-pin");
 	});
 
 	// The reported symptom, end to end: the roster drops the device, so no row

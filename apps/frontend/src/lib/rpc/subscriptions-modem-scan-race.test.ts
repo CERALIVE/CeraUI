@@ -26,3 +26,29 @@ describe("modem scan generation fencing", () => {
 		expect(afterLateOlder["7"]?.network_scan?.generation).toBe(20);
 	});
 });
+
+describe("full modem descriptor retractions", () => {
+	it("clears a stale SIM lock when the next full descriptor omits it", () => {
+		// Given a full modem descriptor that reports a blocking SIM lock.
+		const locked = mergeModemList(undefined, {
+			"7": {
+				ifname: "wwan0",
+				name: "modem",
+				network_type: { supported: ["4g"], active: "4g" },
+				sim_lock: { required: "sim-pin", remainingAttempts: 3 },
+			},
+		});
+
+		// When the authoritative full descriptor no longer carries that field.
+		const unlocked = mergeModemList(locked, {
+			"7": {
+				ifname: "wwan0",
+				name: "modem",
+				network_type: { supported: ["4g"], active: "4g" },
+			},
+		});
+
+		// Then omission retracts the previous optional lock state.
+		expect(unlocked["7"]?.sim_lock).toBeUndefined();
+	});
+});

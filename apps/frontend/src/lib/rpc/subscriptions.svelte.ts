@@ -78,8 +78,11 @@ import {
 	reconcileReactive,
 	shouldIgnoreEchoReactive,
 } from "./dirty-registry.svelte";
+import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
+
+export { mergeModemList };
 
 // ============================================
 // Svelte 5 Reactive State ($state)
@@ -395,63 +398,6 @@ export function getConnectionReady() {
 // frames are ignored; lastSeen is reset on reconnect so a restarted server
 // (seq back to 0) is accepted. Messages without `seq` bypass the guard.
 const seqTracker = createSeqTracker();
-
-/**
- * Per-modem merge of an incoming modems payload onto the current state.
- *
- * The backend broadcasts modem updates incrementally: a full snapshot carries
- * every field, but targeted broadcasts (configure, network-scan completion)
- * send only the changed modem(s) — and for those, only a subset of fields
- * (e.g. just `available_networks`, or status-only entries for the modems that
- * did not change). Replacing the whole map on each broadcast therefore wipes
- * the untouched fields (status, config, name), which flips a live modem to a
- * spurious no-SIM state until the next full snapshot. Merging field-by-field
- * per modem id keeps incremental updates non-destructive; a full snapshot still
- * overwrites every field it carries.
- *
- * The KEY SET, however, is authoritative on every frame. Values are partial;
- * ids never are — `buildModemsMessage`/`projectModemWire` both walk the whole
- * roster and emit an entry for every device, narrowing only what each entry
- * CONTAINS when `modemsFullState` asks for a status-only push. Carrying ids
- * forward was therefore not conservatism, it was a latch: a removed modem kept
- * rendering with its last-known `ifname`, and a row correlates to its address
- * by exactly that field — so the stale row resolved no netif entry and claimed
- * "No address yet" about hardware that was simply gone.
- */
-export function mergeModemList(
-	prev: ModemList | undefined,
-	incoming: ModemList,
-): ModemList {
-	const next: ModemList = {};
-	let changed = false;
-	for (const [id, modem] of Object.entries(incoming)) {
-		if (!modem) continue;
-		const previous = prev?.[id];
-		let accepted = modem;
-		if (
-			previous?.network_scan !== undefined &&
-			modem.network_scan !== undefined &&
-			modem.network_scan.generation < previous.network_scan.generation
-		) {
-			accepted = { ...modem };
-			delete accepted.available_networks;
-			delete accepted.network_scan;
-		}
-		const kept = preserveWireIdentity(previous, { ...previous, ...accepted });
-		if (kept !== previous) changed = true;
-		next[id] = kept;
-	}
-	// The key set stays authoritative: a roster that shed an id is a genuine
-	// change even when every surviving entry is byte-identical.
-	if (
-		!changed &&
-		prev !== undefined &&
-		Object.keys(next).length === Object.keys(prev).length
-	) {
-		return prev;
-	}
-	return next;
-}
 
 /**
  * Handle incoming messages and update state
