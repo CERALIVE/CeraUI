@@ -69,13 +69,15 @@ const SOLO_IP = "192.168.78.132";
 
 const MAPPING_INACTIVE_MSG =
 	`Interfaces ${TWIN_A}, ${TWIN_B} share the same IP address: ${TWIN_IP}. ` +
-	"Per-interface link mapping is not active, so checks that steer by address " +
-	"can't tell them apart and only one of them can carry bonded traffic.";
+	"Streaming is not affected. The only consequence is that per-interface link " +
+	"mapping is not active, so checks that steer by address can't tell them " +
+	"apart and only one of them can carry bonded traffic.";
 
 const IDENTITY_DEGRADED_MSG =
 	`Interfaces ${TWIN_A}, ${TWIN_B} share the same IP address: ${TWIN_IP}. ` +
-	`Per-interface link mapping is active, but ${TWIN_B} could not be ` +
-	"identified as a physical device, so it can't be told apart from its twin.";
+	`Streaming is not affected. Per-interface link mapping is active, but ${TWIN_B} ` +
+	"could not be identified as a physical device, so it can't be told apart " +
+	"from its twin and is left out of the bond.";
 
 function ifconfigStanza(name: string, ip: string): string {
 	return [
@@ -267,6 +269,17 @@ describe("the duplicate-IP notice reflects whether the collision is handled", ()
 		expect(notice).toBeDefined();
 		expect(notice?.type).toBe("warning");
 		expect(notice?.msg).toBe(IDENTITY_DEGRADED_MSG);
+	});
+
+	// (6) A degraded bond is not a broken device, so the band must say so
+	//     outright rather than leave an operator wondering. The promise is
+	//     about STREAMING, never today's bonding protocol: a second transport
+	//     is already on the roadmap (`TD-plain-srt-egress`).
+	test("both branches promise streaming is unaffected and name no protocol", () => {
+		for (const msg of [MAPPING_INACTIVE_MSG, IDENTITY_DEGRADED_MSG]) {
+			expect(msg).toContain("Streaming is not affected.");
+			expect(msg).not.toMatch(/srtla|\brist\b|\bsrt\b/i);
+		}
 	});
 });
 

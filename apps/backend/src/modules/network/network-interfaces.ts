@@ -363,7 +363,7 @@ export function decideDupIpNotice(
 
 		if (!mappingActive) {
 			sentences.push(
-				`${shared} Per-interface link mapping is not active, so checks that steer by address can't tell them apart and only one of them can carry bonded traffic.`,
+				`${shared} Streaming is not affected. The only consequence is that per-interface link mapping is not active, so checks that steer by address can't tell them apart and only one of them can carry bonded traffic.`,
 			);
 			continue;
 		}
@@ -374,7 +374,7 @@ export function decideDupIpNotice(
 		if (unmappable.length === 0) continue;
 
 		sentences.push(
-			`${shared} Per-interface link mapping is active, but ${unmappable.join(", ")} could not be identified as a physical device, so it can't be told apart from its twin.`,
+			`${shared} Streaming is not affected. Per-interface link mapping is active, but ${unmappable.join(", ")} could not be identified as a physical device, so it can't be told apart from its twin and is left out of the bond.`,
 		);
 	}
 
