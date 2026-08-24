@@ -123,6 +123,21 @@ function describeBondEntry(ifname: string, ip: string): BondEntry {
 }
 
 /**
+ * Could this link be described well enough to become a sidecar row?
+ *
+ * The duplicate-IP NOTICE has to answer exactly the question `admitEntry` below
+ * answers for bonding — "can the writer tell this link from its twin" — and it
+ * has to answer it for one interface at a time, outside a publication. Exporting
+ * the composed predicate keeps ONE authority: a second copy in the netif module
+ * would drift from `describeBondEntry`'s resolver seam the first time either
+ * side changed, and the operator would then be told the twins are disambiguated
+ * by a rule the writer does not use.
+ */
+export function isBondLinkMappable(ifname: string, ip: string): boolean {
+	return isMappableEntry(describeBondEntry(ifname, ip));
+}
+
+/**
  * A duplicate-IP link joins the bond ONLY when it can be described.
  *
  * Without a row the sender cannot tell it from its twin, so admitting it would

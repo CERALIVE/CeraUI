@@ -438,14 +438,43 @@ describe("CellularSection — todo 26 state table (every class renders a row)", 
 		}
 	});
 
-	it("class badges use the MODEM-SUPPORT-MATRIX vocabulary verbatim", () => {
+	/**
+	 * This case used to require the `MODEM-SUPPORT-MATRIX.md` tier vocabulary
+	 * VERBATIM, which made the badge read `MM-managed` / `Router-ethernet` — the
+	 * wire band with a capital letter glued on. That is the §3 OL-1 leak, on the
+	 * one pill whose whole job is to say what KIND of device this is: an operator
+	 * cannot act on the name of the daemon that controls it, and `mm-managed` is
+	 * not a phrase anyone outside this repo has read.
+	 *
+	 * So the requirement is INVERTED rather than dropped. The engineering
+	 * vocabulary is still the wire truth, still on `data-class-band`, and still
+	 * in the diagnostics `transport` row — it simply may not be the operator's
+	 * word for it. Both directions are asserted so the badge can neither regress
+	 * to a token nor quietly lose its distinctions.
+	 */
+	it("class badges name a device an operator recognises, never the wire band", () => {
 		const { container } = renderRows(ALL_ROWS);
-		const labels = [
-			...container.querySelectorAll('[data-testid="modem-class-badge"]'),
-		].map((el) => el.textContent?.trim());
-		expect(labels).toContain("MM-managed");
-		expect(labels).toContain("Router-ethernet");
-		expect(labels).toContain("Unmanaged");
+		const badges = [
+			...container.querySelectorAll<HTMLElement>(
+				'[data-testid="modem-class-badge"]',
+			),
+		];
+		const labels = badges.map((el) => el.textContent?.trim());
+
+		expect(labels).toContain("Directly managed");
+		expect(labels).toContain("Router dongle");
+		expect(labels).toContain("Unrecognised");
+
+		for (const badge of badges) {
+			const band = badge.dataset.classBand ?? "";
+			expect(band, "the wire band is still published for machines").not.toBe(
+				"",
+			);
+			expect(
+				(badge.textContent ?? "").toLowerCase(),
+				`class badge rendered its wire band "${band}"`,
+			).not.toContain(band);
+		}
 	});
 
 	it("an unknown device_class falls back to an honest generic row, never a crash or a blank", () => {

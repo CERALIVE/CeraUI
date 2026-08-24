@@ -9,6 +9,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import QRCode from "qrcode";
 
+import { formatGenerationRun } from "$lib/modem/operator-labels";
 import { rpc } from "$lib/rpc/client";
 import { getStatus } from "$lib/rpc/subscriptions.svelte";
 import type { ValueOf } from "$lib/types";
@@ -72,13 +73,8 @@ export const getModemNetworkName = (name: string) => {
 	return `${modem.status.network} (${modem.status.network_type})`;
 };
 
-export const renameSupportedModemNetwork = (item: string): string => {
-	// Extract individual components like "3g2g" -> ["3G", "2G"]
-	return item
-		.replace(/(\d+g)/gi, (match) => match.toUpperCase())
-		.split(/(?<=G)(?=\d)/)
-		.join(" / ");
-};
+export const renameSupportedModemNetwork = (item: string): string =>
+	formatGenerationRun(item);
 
 export const getAvailableNetworks = (message?: NetifMessage) => {
 	if (message) {

@@ -32,6 +32,7 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
+import { isSimlessForBond } from "@ceraui/rpc";
 
 import {
 	type ModemInfo,
@@ -198,6 +199,97 @@ describe("SIM presence is read from ModemManager", () => {
 
 		expect(message["3"]).not.toHaveProperty("no_sim");
 		expect(message["3"]).not.toHaveProperty("config");
+	});
+});
+
+/**
+ * The fold above is what BONDING needs, and it is lossy on purpose: `claimsNoSim`
+ * answers `presence !== "present"`, so `absent` and `unknown` leave the device as
+ * one `no_sim: true`. That is right for a pool a link either joins or does not,
+ * and wrong for reporting — "we know the slot is empty" and "the read could not
+ * answer" send an operator to two different places.
+ *
+ * So the reading the fold consumes now rides the wire BESIDE it. These tests pin
+ * both halves at once: the new field carries the distinction, and every existing
+ * bond answer for the SAME fixture is byte-identical.
+ */
+describe("the pre-collapse reading rides the wire beside the fold", () => {
+	afterEach(cleanupModems);
+
+	const UNREADABLE_SLOT = {
+		"modem.generic.sim": "",
+		"modem.generic.state": "enabled",
+	} as ModemInfo;
+
+	test("an unreadable slot publishes `unknown` while still claiming no_sim", async () => {
+		expect(deriveSimPresence(UNREADABLE_SLOT)).toBe("unknown");
+
+		const modem = mergeRefreshedModem(
+			unconfiguredModem("wwan0"),
+			UNREADABLE_SLOT,
+		);
+		setModem(5, modem);
+
+		for (const row of [
+			buildModemsMessage()["5"],
+			buildModemsWireMessage()["5"],
+		]) {
+			expect(row).toHaveProperty("sim_presence", "unknown");
+			expect(row).toHaveProperty("no_sim", true);
+		}
+	});
+
+	test("BOND MEMBERSHIP for that exact fixture is unchanged", async () => {
+		const modem = mergeRefreshedModem(
+			unconfiguredModem("wwan0"),
+			UNREADABLE_SLOT,
+		);
+		setModem(5, modem);
+
+		const row = buildModemsWireMessage()["5"];
+
+		// The gate reads the binary claim and nothing else, so a device that now
+		// reports `unknown` is still refused exactly as it was before the field
+		// existed. Asserting the PREDICATE rather than the field is what makes
+		// this fail if a later change routes the gate through `sim_presence`.
+		expect(isSimlessForBond({ noSim: row?.no_sim })).toBe(true);
+		expect(isSimlessForBond({ noSim: row?.no_sim, routerSim: undefined })).toBe(
+			true,
+		);
+	});
+
+	test("a positively-stated slot is `absent`, and a populated one `present`", async () => {
+		setModem(3, await refreshedFrom(QUECTEL));
+		setModem(4, await refreshedFrom(SIM_LESS[0], "wwan0"));
+
+		const rows = buildModemsWireMessage();
+
+		expect(rows["3"]).toHaveProperty("sim_presence", "present");
+		expect(rows["3"]).not.toHaveProperty("no_sim");
+
+		expect(rows["4"]).toHaveProperty("sim_presence", "absent");
+		expect(rows["4"]).toHaveProperty("no_sim", true);
+	});
+
+	test("a device whose slot this host cannot see emits NEITHER key", () => {
+		const { message } = projectModemWire(
+			[
+				{
+					kind: "router-ethernet",
+					runtimeId: null,
+					allocationKey: "opaque-fixture",
+					ifname: "enx0c5b8f279a64",
+					name: "fixture dongle",
+					networkType: { supported: [], active: null },
+					simVisibility: "opaque",
+				},
+			],
+			{ hasGsmAutoconfig: false },
+		);
+
+		const row = Object.values(message)[0];
+		expect(row).not.toHaveProperty("sim_presence");
+		expect(row).not.toHaveProperty("no_sim");
 	});
 });
 

@@ -99,6 +99,36 @@ export function resolveCapabilityRender(
 		: { mode: "blocked", reasonKey: blockedReasonKey };
 }
 
+/**
+ * The shape `gpsView`/`fccUnlockView` return: this ladder's four states under
+ * their own names. `toggle` carries no payload here on purpose — each surface
+ * adds its own, and structural typing lets both unions pass.
+ *
+ * Both resolve the ladder through {@link resolveCapabilityRender} and re-tag it,
+ * so their components had to tag it BACK for `CapabilitySection`. That round
+ * trip existed twice, identically, before this.
+ */
+export type GatedSurfaceView =
+	| { readonly kind: "absent" }
+	| { readonly kind: "unknown"; readonly reasonKey: string }
+	| { readonly kind: "blocked"; readonly reasonKey: string }
+	| { readonly kind: "toggle" };
+
+export function gatedSurfaceCapability(
+	view: GatedSurfaceView,
+): CapabilityRenderView {
+	switch (view.kind) {
+		case "absent":
+			return { mode: "absent" };
+		case "unknown":
+			return { mode: "unknown", reasonKey: view.reasonKey };
+		case "blocked":
+			return { mode: "blocked", reasonKey: view.reasonKey };
+		case "toggle":
+			return { mode: "available" };
+	}
+}
+
 export type CapabilityModuleView = {
 	readonly module: CapabilityModule;
 	readonly state: SupportClaimState;

@@ -53,18 +53,23 @@ import type {
 	ModemDeviceClass,
 	ModemEsim,
 	ModemFiveGPreference,
+	ModemLockDetail,
+	ModemLockState,
+	ModemRadioPower,
 	ModemRecoveryState,
 	ModemRegistrationRejection,
 	RouterAdmin,
 	UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
 
+import type { ResolvedModemLock } from "./modem-lock-state.ts";
+
 // NOT the schema's same-named type. This union is wider (it also spells mmcli's
 // `current`/`forbidden`/`unknown`); `modem-network-scan.ts` normalizes those away
 // before anything is stored, so the WIRE is schema-valid either way. The reason
 // to use this one is that `getAvailableNetworksForModem` and the live builder are
 // typed with it — swapping in the schema type just relocates the cast.
-import type { AvailableNetwork } from "./modems-state.ts";
+import type { AvailableNetwork, Modem } from "./modems-state.ts";
 import { claimsNoSim, type SimPresence } from "./sim-presence.ts";
 
 /** Wire status block — identical shape to `modem-status.ts`'s internal type. */
@@ -145,6 +150,7 @@ export interface ProjectedModemAdditive {
 	readonly cell_info?: ModemCellInfo;
 	readonly registration_rejection?: ModemRegistrationRejection;
 	readonly packet_service_state?: string;
+	readonly radio_power?: ModemRadioPower;
 	readonly router_admin?: RouterAdmin;
 }
 
@@ -232,8 +238,10 @@ export type WireModemEntry = {
 	network_type?: { supported: string[]; active: string | null };
 	config?: WireModemConfig;
 	no_sim?: true;
+	sim_presence?: SimPresence;
 	sim_lock?: WireSimLock;
 	available_networks?: Record<string, AvailableNetwork>;
+	network_scan?: Modem["network_scan"];
 	device_class?: ModemDeviceClass;
 	availability_reason?: string;
 	slot_label?: string;
@@ -249,10 +257,13 @@ export type WireModemEntry = {
 	cell_info?: ModemCellInfo;
 	registration_rejection?: ModemRegistrationRejection;
 	packet_service_state?: string;
+	radio_power?: ModemRadioPower;
 	router_admin?: RouterAdmin;
 	stable_key?: string;
 	capability_modules?: CapabilityModuleClaims;
 	five_g_preference?: ModemFiveGPreference;
+	lock_state?: ModemLockState;
+	lock_detail?: ModemLockDetail;
 };
 
 /** The projected wire message — `Record<numericId(string), entry>`. */
@@ -274,15 +285,18 @@ export const SYNTHETIC_ID_BASE = 1000;
  * rather than growing a positional parameter per additive local field.
  */
 interface ProjectedLocalState {
+	readonly networkScan?: Modem["network_scan"];
 	readonly usagePolicy?: ModemDataUsagePolicy | undefined;
 	readonly capabilityModules?: CapabilityModuleClaims | undefined;
 	readonly fiveGPreference?: ModemFiveGPreference | undefined;
 	readonly usbMode?: UsbCompositionMode | undefined;
+	readonly lock?: ResolvedModemLock | undefined;
 }
 
 export interface ProjectModemWireDeps {
 	/** `setup.has_gsm_autoconfig` — gates the wire `autoconfig` value. */
 	readonly hasGsmAutoconfig: boolean;
+	readonly networkScanFor?: (runtimeId: number) => Modem["network_scan"];
 	/**
 	 * The operator's persisted data-usage policy for a row, injected because it is
 	 * durable LOCAL state rather than anything a source observed — so no adapter
@@ -315,6 +329,15 @@ export interface ProjectModemWireDeps {
 	 * source observes (ModemManager does not report a USB composition at all).
 	 */
 	readonly usbModeFor?: (stableKey?: string) => UsbCompositionMode | undefined;
+	/**
+	 * Where this row's own admin login stands, or `undefined` for a device with
+	 * no admin-auth surface. Injected like the four above — it is resolved from
+	 * the credential store plus a protocol observation, neither of which any
+	 * source adapter carries.
+	 */
+	readonly lockFor?: (
+		source: ProjectedModemSource,
+	) => ResolvedModemLock | undefined;
 	/**
 	 * Prior `allocationKey → synthetic id` allocations, retained across
 	 * snapshots so a replugged device gets its OLD id back. Optional; an empty
@@ -480,14 +503,19 @@ function buildWireEntry(
 		active: source.networkType.active,
 	};
 
-	// The legacy binary is preserved for every device whose SIM CeraUI can see;
-	// an opaque device emits neither key rather than guessing which lie to tell.
+	// Both slot keys are for a device whose SIM CeraUI can see. An opaque device
+	// emits NONE of them rather than guessing which lie to tell — its slot is not
+	// unknown, it is unreadable from this host, which is a different claim.
 	if (source.simVisibility === "visible") {
 		if (source.config) {
 			entry.config = resolveWireConfig(source.config, hasGsmAutoconfig);
 		} else if (claimsNoSim(source.simPresence)) {
 			entry.no_sim = true;
 		}
+		// The pre-collapse reading beside the fold above. Source ABSENCE here means
+		// the read never answered, so it is `unknown` — never omitted (which the
+		// merging consumer would read as the previous value) and never "present".
+		entry.sim_presence = source.simPresence ?? "unknown";
 	}
 
 	if (source.simLock) {
@@ -495,6 +523,9 @@ function buildWireEntry(
 	}
 	if (source.availableNetworks !== undefined) {
 		entry.available_networks = source.availableNetworks;
+	}
+	if (local.networkScan !== undefined) {
+		entry.network_scan = local.networkScan;
 	}
 
 	appendAdditive(entry, source, local);
@@ -560,6 +591,9 @@ function appendAdditive(
 		if (additive.packet_service_state !== undefined) {
 			entry.packet_service_state = additive.packet_service_state;
 		}
+		if (additive.radio_power !== undefined) {
+			entry.radio_power = additive.radio_power;
+		}
 		if (additive.router_admin !== undefined) {
 			entry.router_admin = additive.router_admin;
 		}
@@ -591,6 +625,16 @@ function appendAdditive(
 	// is the only writer — but the precedence must not depend on that staying true.
 	if (entry.usb_mode === undefined && local.usbMode !== undefined) {
 		entry.usb_mode = local.usbMode;
+	}
+
+	// EXPLICIT on every row that HAS an admin surface, `open` included. Encoding
+	// `open` as the ABSENCE of the field would be the `policy_route_missing`
+	// latch: the merge preserves an omitted optional field, so a row that went
+	// `locked` → `open` could never lower the claim. A device with no admin-auth
+	// surface at all emits neither key, exactly as it emits no `router_admin`.
+	if (local.lock !== undefined) {
+		entry.lock_state = local.lock.state;
+		entry.lock_detail = local.lock.detail;
 	}
 }
 
@@ -634,10 +678,13 @@ export function projectModemWire(
 			deps.fullState[mmId] === true;
 		const local: ProjectedLocalState = sendFull
 			? {
+					networkScan:
+						mmId === undefined ? undefined : deps.networkScanFor?.(mmId),
 					usagePolicy: deps.usagePolicyFor?.(String(id), source.stableKey),
 					capabilityModules: deps.capabilityModulesFor?.(source.stableKey),
 					fiveGPreference: deps.fiveGPreferenceFor?.(source.stableKey),
 					usbMode: deps.usbModeFor?.(source.stableKey),
+					lock: deps.lockFor?.(source),
 				}
 			: {};
 		message[String(id)] = buildWireEntry(

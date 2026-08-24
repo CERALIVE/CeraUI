@@ -328,6 +328,16 @@ const modemRow = (page: Page, id: string): Locator =>
 const routerSignal = (page: Page, id: string): Locator =>
 	modemRow(page, id).getByTestId("modem-router-signal");
 
+/**
+ * The glyph and the WORD are two elements. `CellularSection` puts the glyph in
+ * the instrument column beside where an MM radio draws its own, and leaves the
+ * word in the badge row, which wraps freely so a long sentence cannot squeeze
+ * the controls off a 390px screen. So a state's TEXT is read here, never off
+ * `routerSignal` — which is glyph-only and answers "".
+ */
+const routerSignalState = (page: Page, id: string): Locator =>
+	modemRow(page, id).getByTestId("modem-router-signal-state");
+
 type Condition = {
 	readonly name: string;
 	readonly project: "desktop" | "mobile";
@@ -510,34 +520,55 @@ for (const condition of CONDITIONS) {
 			const section = cellularSection(page);
 			await expect(section).toBeVisible({ timeout: 15_000 });
 
+			// An empty slot is NOT one of these — it is a fact about the CARD, owned
+			// by `NoSimBadge`, and it has its own leg below.
 			const cases = [
-				["dongle-nosim", "no-sim", null],
-				["dongle-unreachable", "unknown", "unreachable"],
-				["dongle-auth", "unknown", "auth-expired"],
-				["dongle-malformed", "unknown", "malformed"],
-				["dongle-blank", "unknown", "not-reported"],
+				["dongle-unreachable", "unreachable"],
+				["dongle-auth", "auth-expired"],
+				["dongle-malformed", "malformed"],
+				["dongle-blank", "not-reported"],
 			] as const;
 
 			const words = new Set<string>();
-			for (const [id, state, reason] of cases) {
+			for (const [id, reason] of cases) {
 				const chip = routerSignal(page, id);
 				await expect(chip).toBeVisible();
-				await expect(chip).toHaveAttribute("data-signal-state", state);
+				await expect(chip).toHaveAttribute("data-signal-state", "unknown");
 				// No fabricated magnitude, in any degraded state.
 				await expect(chip).not.toHaveAttribute("data-signal-tier", /.*/);
-				if (reason !== null) {
-					await expect(chip).toHaveAttribute("data-unknown-reason", reason);
-				}
+				await expect(chip).toHaveAttribute("data-unknown-reason", reason);
+				// …and none smuggled in as text either, which is what keeps the
+				// glyph a glyph.
+				expect(
+					(await chip.innerText()).trim(),
+					`${id}'s glyph carried a magnitude`,
+				).not.toMatch(/\d/);
 
 				// The state is carried by a WORD, not by a mark or a colour — the
-				// shipped kiosk touchscreen cannot hover to reveal a title.
-				const text = (await chip.innerText()).trim();
+				// shipped kiosk touchscreen cannot hover to reveal a title. It is
+				// asserted on the element that OWNS it (see `routerSignalState`);
+				// aimed at the chip, this reads "" and passes only vacuously.
+				const state = routerSignalState(page, id);
+				await expect(state).toBeVisible();
+				await expect(state).toHaveAttribute("data-unknown-reason", reason);
+				const text = (await state.innerText()).trim();
 				expect(text.length, `${id} rendered no word`).toBeGreaterThan(0);
 				expect(text, `${id} rendered a digit`).not.toMatch(/\d/);
 				words.add(text);
 			}
-			// Five distinct operator facts must read as five distinct sentences.
+			// Four distinct operator facts must read as four distinct sentences.
 			expect(words.size).toBe(cases.length);
+
+			// THE EMPTY SLOT, stated ONCE. The fixture is the bench truth
+			// (`SimStatus 255`, `SignalIcon 0`, `maxsignal 5`), so the second
+			// assertion is the one that matters: no zero-bar meter for a device
+			// with no card for a radio to be reporting on.
+			const nosim = modemRow(page, "dongle-nosim");
+			await expect(nosim.locator("[data-no-sim]")).toHaveCount(1);
+			await expect(nosim.getByTestId("modem-router-signal")).toHaveCount(0);
+			await expect(
+				nosim.getByTestId("modem-router-signal-state"),
+			).toHaveCount(0);
 
 			// An acquiring dongle states its lifecycle without an endless spinner.
 			await expect(modemRow(page, "dongle-acquiring")).toHaveAttribute(

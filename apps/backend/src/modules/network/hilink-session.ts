@@ -40,6 +40,8 @@ export const HILINK_SIGNAL_PATH = "/api/device/signal";
 export const HILINK_NET_MODE_LIST_PATH = "/api/net/net-mode-list";
 export const HILINK_NET_MODE_PATH = "/api/net/net-mode";
 export const HILINK_DHCP_SETTINGS_PATH = "/api/dhcp/settings";
+export const HILINK_USER_STATE_PATH = "/api/user/state-login";
+export const HILINK_LOGIN_PATH = "/api/user/login";
 
 /** Every HiLink request document opens with it; the firmware rejects one without. */
 export const XML_HEADER = '<?xml version="1.0" encoding="UTF-8"?>';

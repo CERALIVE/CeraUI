@@ -15,6 +15,7 @@ import {
 	PARAGLIDE_PROJECT,
 	PARAGLIDE_STRATEGY,
 } from "./vite.i18n";
+import { PERSIST_RUNTIME_ALIAS } from "./vite.persist";
 import {
 	SPA_SOURCEMAP_OUT_DIR,
 	spaSourcemapRelocationPlugin,
@@ -282,10 +283,13 @@ export default defineConfig(({ mode }) => {
 			chunkSizeWarningLimit: 300,
 		},
 		resolve: {
-			alias: {
-				$lib: path.resolve("./src/lib"),
-				$main: path.resolve("./src/main"),
-			},
+			// Array form, not the object map: object aliases are PREFIX matches, and
+			// the persist entry has to be exact (see `vite.persist.ts`).
+			alias: [
+				PERSIST_RUNTIME_ALIAS,
+				{ find: "$lib", replacement: path.resolve("./src/lib") },
+				{ find: "$main", replacement: path.resolve("./src/main") },
+			],
 		},
 		// Enhanced development server configuration
 		server: {

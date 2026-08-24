@@ -180,6 +180,26 @@ SENSITIVE — the device redacts it from every log (`helpers/logger.ts`
 `isOwnNumberSensitiveKey`) even though the UI displays it behind an explicit
 reveal; nothing about it being rendered makes it loggable.
 
+**`sim_presence` is `no_sim`'s INPUT, not its replacement.** `no_sim` answers a
+BOND question — a link either may join the pool or may not — so the device folds
+`absent` and `unknown` onto one `true` (`claimsNoSim` is `presence !== "present"`).
+Right for bonding, lossy for reporting: an unreadable slot became indistinguishable
+from an empty one. `simPresenceSchema` publishes the pre-fold reading beside the
+claim so a consumer can tell them apart. Three rules: the two fields TRAVEL
+TOGETHER (a device emitting one emits the other, or neither when its slot is
+opaque); `absent` is reachable only from a device-stated fact, so everything not
+`present` is `unknown`; and the bond gate still reads `no_sim` alone, which is
+what keeps this additive — `isSimlessForBond` is unchanged, and routing it through
+`sim_presence` would change which links bond.
+
+**A network scan is an attempt, not a changed list.** `modem.network_scan`
+carries a monotonic `generation` and `scanning | completed | failed` phase, with
+the typed terminal failure where applicable. `modems.scan` returns the admitted
+`scanGeneration`; completion arrives later on the modem broadcast. This is what
+lets a consumer confirm a successful scan whose operator list is byte-identical,
+and fence a late older result across the independent `status` and `modems`
+sequence domains. Absence remains legacy-compatible.
+
 **`modems.configure` deliberately carries NO usage-policy write.**
 `modemDataUsageSchema` REPORTS `cycle_day` / `threshold_bytes`; the matching input
 fields are absent because `@ceralive/modem-control@0.2.0` publishes no
@@ -439,6 +459,7 @@ convention). Device contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGEN
 - Don't publish `identity_state: 'resolved'` on a telemetry row, and don't fold the state INTO `link_id` as a sentinel value — `link_id` is minted by one authority or it is absent, and an id-shaped placeholder keyed on an interface name is the exact defect the state replaced.
 - Don't correlate a modem by its numeric id, its ifname, or its MAC — a USB-mode transition re-issues the first, the bench proves the second races on a duplicate factory MAC, and the third IS that duplicate. Use `stable_key` / `deriveModemStableKey()`, don't give an adapter its own derivation, and don't prefix or hash the key.
 - Don't feed a raw sysfs DEVPATH (`Modem.Physdev`, `Modem.Device`) anywhere a `stable_key` is compared without normalizing it — it names the same socket as a udev `ID_PATH` in a different vocabulary, and equality is the only operation the key supports, so the two never match (todo 24: two rows for one stick, 10/10 cycles). `deriveModemStableKey` normalizes for you; use `canonicalModemIdPath` when you also STORE the path. And don't "fix" a future instance of this with a fuzzy compare-time match or a third key format — normalize at the derivation, to the `ID_PATH` shape every other adapter already emits.
+- Don't route `isSimlessForBond` (or anything else that decides bond membership) through `sim_presence` — that field is `no_sim`'s pre-fold INPUT, published so a consumer can tell an unreadable slot from an empty one, and the gate reading the binary claim alone is what makes it additive. And don't publish `sim_presence` present-only-when-known: the consumer merge preserves an omitted optional field, so a slot that went `present` → `unknown` could never lower the claim.
 - Don't publish `own_numbers` as an empty array, and don't collapse it to a single string — the schema's `.min(1)` is what keeps "not reported" and "none" from becoming the same wire value, and MM's property is `as`, so a first-element read silently drops a dual-number SIM's tail.
 - Don't promote any Phase-B modem field to required, and don't add `data_usage_cycle_day`/`data_usage_threshold_bytes` to `modemConfigInputSchema` until `@ceralive/modem-control` actually exports a usage-policy setter — an inert input field is a mutation the device accepts and drops.
 - Don't give a mutating modem procedure its own private refusal vocabulary — `modemMutationRefusalSchema` is shared so a blocked device reads the same on every surface, and a per-procedure generic error is how "waiting on your acknowledgement" becomes indistinguishable from "the transaction broke".

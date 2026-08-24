@@ -328,9 +328,64 @@ describe("an uncertifiable device gets NO control — never a disabled one", () 
 		expect(setUsbMode).not.toHaveBeenCalled();
 	});
 
+	it("no-return-path: no control, and it STATES why", async () => {
+		// The device answered and its answer is the refusal — it listed targets
+		// without listing the mode it is in, so nothing proves a route home. That
+		// is a property of the device, so the control is absent rather than
+		// disabled, and the band carries both the head sentence and its body.
+		const band = await renderWithSuppression("no-return-path");
+		expect(band.getAttribute("data-usb-mode-withheld")).toBe("no-return-path");
+		expect(screen.queryByTestId("modem-usb-mode-switch")).toBeNull();
+		expect(screen.queryByTestId("modem-usb-mode-targets")).toBeNull();
+		expect(band.textContent).toMatch(/way back/i);
+		expect(band.textContent).toMatch(/keeps working normally/i);
+		expect(band.textContent).not.toMatch(/network\.modem/);
+		expect(setUsbMode).not.toHaveBeenCalled();
+	});
+
+	it("unknown-vendor: no control, and NOT the word `uncertified`", async () => {
+		// The headline replacement, asserted at the rendered DOM: a device this
+		// build cannot interrogate is never told its model was unreviewed.
+		const band = await renderWithSuppression("unknown-vendor");
+		expect(band.getAttribute("data-usb-mode-withheld")).toBe("unknown-vendor");
+		expect(screen.queryByTestId("modem-usb-mode-switch")).toBeNull();
+		expect(band.textContent).not.toMatch(/certified/i);
+		expect(band.textContent).not.toMatch(/network\.modem/);
+	});
+
+	it("the four runtime states each read DIFFERENTLY on screen", async () => {
+		// Distinguishability where it actually matters — in the rendered band, not
+		// only in the catalog. Four states sharing one sentence would satisfy every
+		// key-presence check and still leave an operator unable to act.
+		const rendered: string[] = [];
+		for (const reason of [
+			"unknown-vendor",
+			"no-return-path",
+			"blocked-by-state",
+			"provisioning-disabled",
+		]) {
+			usbModeOptions.mockResolvedValue({ certified: [], suppressed: reason });
+			const { unmount } = render(ModemConfigDialog, {
+				props: { open: true, modem: modem(), deviceId: "0" },
+			});
+			const band = await screen.findByTestId(
+				reason === "unknown-vendor" || reason === "no-return-path"
+					? "modem-usb-mode-unavailable"
+					: "modem-usb-mode-blocked",
+			);
+			rendered.push(band.textContent ?? "");
+			unmount();
+		}
+
+		expect(new Set(rendered).size).toBe(4);
+		for (const text of rendered) expect(text).not.toMatch(/network\.modem/);
+	});
+
 	it("a read that THREW renders no control AND no claim about the device", async () => {
 		// "We could not establish the set" is not "the set is empty" — stating
-		// `uncertified` here would assert a device fact we do not have.
+		// `uncertified` here would assert a device fact we do not have. Silence
+		// is equally wrong: it renders identically to a device with no switch at
+		// all. The card speaks about the READ, and only about the read.
 		usbModeOptions.mockRejectedValue(new Error("socket closed"));
 		render(ModemConfigDialog, {
 			props: { open: true, modem: modem(), deviceId: "0" },
@@ -340,7 +395,14 @@ describe("an uncertifiable device gets NO control — never a disabled one", () 
 		await waitFor(() => expect(usbModeOptions).toHaveBeenCalled());
 		expect(screen.queryByTestId("modem-usb-mode-targets")).toBeNull();
 		expect(screen.queryByTestId("modem-usb-mode-unavailable")).toBeNull();
-		expect(screen.queryByText(/Switch to/i)).toBeNull();
+		// By ROLE, not by text: operator copy on this card legitimately contains
+		// the words "switch to", so a text match cannot mean "no affordance".
+		expect(screen.queryByRole("radio")).toBeNull();
+		expect(screen.queryByRole("button", { name: /Switch to/i })).toBeNull();
+
+		const line = await screen.findByTestId("modem-usb-mode-options-unknown");
+		expect(line.getAttribute("role")).toBe("status");
+		expect(line.textContent).not.toMatch(/network\.modem/);
 	});
 });
 

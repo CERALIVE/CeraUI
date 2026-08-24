@@ -31,7 +31,10 @@ import {
 function modemBuildAvailableNetworksMessage(id: number) {
 	const msg: Record<
 		string,
-		{ available_networks?: Record<string, AvailableNetwork> }
+		{
+			available_networks?: Record<string, AvailableNetwork>;
+			network_scan?: Modem["network_scan"];
+		}
 	> = {};
 
 	const modemIds = getModemIds();
@@ -42,6 +45,7 @@ function modemBuildAvailableNetworksMessage(id: number) {
 		msg[modemId] = {};
 		if (id === modemId) {
 			msg[modemId].available_networks = getAvailableNetworksForModem(modem);
+			msg[modemId].network_scan = modem.network_scan;
 		}
 	}
 
@@ -59,6 +63,25 @@ export type ModemNetworkScanOutcome =
 			readonly ok: false;
 			readonly reason: "timed_out" | "failed" | "already_scanning";
 	  };
+
+export type DispatchedModemNetworkScan =
+	| {
+			readonly ok: true;
+			readonly generation: number;
+			readonly completed: Promise<ModemNetworkScanOutcome>;
+	  }
+	| Extract<ModemNetworkScanOutcome, { readonly ok: false }>;
+
+const lastScanGeneration = new Map<number, number>();
+
+function nextScanGeneration(id: number): number {
+	const generation = Math.max(
+		Date.now(),
+		(lastScanGeneration.get(id) ?? 0) + 1,
+	);
+	lastScanGeneration.set(id, generation);
+	return generation;
+}
 
 /**
  * Clear the in-flight marker on whichever modem object is CURRENTLY in the
@@ -92,15 +115,12 @@ function clearScanningMarker(id: number): void {
  * killed at 30 s by its own caller and the operator was told it had succeeded,
  * which is the "scan fails with no error" report this closes.
  */
-export async function modemNetworkScan(
+async function runModemNetworkScan(
 	id: number,
+	generation: number,
 ): Promise<ModemNetworkScanOutcome> {
 	const modem = getModem(id);
-
-	if (!modem?.config || !modem.status) return { ok: false, reason: "failed" };
-	if (modem.is_scanning) return { ok: false, reason: "already_scanning" };
-
-	modem.is_scanning = true;
+	if (modem === undefined) return { ok: false, reason: "failed" };
 
 	let outcome: Awaited<ReturnType<typeof mmNetworkScan>>;
 	try {
@@ -108,13 +128,24 @@ export async function modemNetworkScan(
 			await nmDisconnect(modem.config.conn);
 		}
 		outcome = await mmNetworkScan(id);
+	} catch {
+		outcome = { ok: false, reason: "failed" };
 	} finally {
 		clearScanningMarker(id);
+	}
+	const live = getModem(id);
+	if (live === undefined || live.network_scan?.generation !== generation) {
+		return { ok: false, reason: "failed" };
 	}
 
 	/* A scan that produced nothing still resends the old results so clients learn
      it finished — but its REASON is returned rather than swallowed. */
 	if (!outcome.ok) {
+		live.network_scan = {
+			generation,
+			phase: "failed",
+			failure: outcome.reason,
+		};
 		broadcastModemAvailableNetworks(id);
 		return { ok: false, reason: outcome.reason };
 	}
@@ -157,7 +188,33 @@ export async function modemNetworkScan(
 		}
 	}
 
-	modem.available_networks = availableNetworks;
+	live.available_networks = availableNetworks;
+	live.network_scan = { generation, phase: "completed" };
 	broadcastModemAvailableNetworks(id);
 	return { ok: true, count: Object.keys(availableNetworks).length };
+}
+
+export function dispatchModemNetworkScan(
+	id: number,
+): DispatchedModemNetworkScan {
+	const modem = getModem(id);
+	if (!modem?.config || !modem.status) return { ok: false, reason: "failed" };
+	if (modem.is_scanning) return { ok: false, reason: "already_scanning" };
+
+	const generation = nextScanGeneration(id);
+	modem.is_scanning = true;
+	modem.network_scan = { generation, phase: "scanning" };
+	broadcastModemAvailableNetworks(id);
+	return {
+		ok: true,
+		generation,
+		completed: runModemNetworkScan(id, generation),
+	};
+}
+
+export async function modemNetworkScan(
+	id: number,
+): Promise<ModemNetworkScanOutcome> {
+	const dispatched = dispatchModemNetworkScan(id);
+	return dispatched.ok ? dispatched.completed : dispatched;
 }

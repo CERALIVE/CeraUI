@@ -71,7 +71,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Cellular composition root (backend selection + readiness gate) and its boot wiring** | `modules/cellular/cellular-stack.ts` (`initCellularStack`, `getCellularStack`, `assertCellularStackReady`) + `main.ts`; contract below → THE CELLULAR SUBSYSTEM |
 | **The `modems` wire producer (`stable_key`, dongle rows, synthetic ids, the ID_PATH cache)** | `modules/modems/modem-wire-producer.ts` (`buildProjectedModemsMessage`, `refreshModemIdPaths`) → `modem-status.ts` (`buildModemsWireMessage`) |
 | **Where a modem's `ID_PATH` — the anchor EVERY mutation fails closed on — actually comes from (udev NET records, never the USB enumerator)** | `modules/modems/modem-id-path-source.ts` (`readModemIdPaths`, `parseNetIdPaths`); contract below → THE COMPOSITION ROOT OWNS THE THREE THINGS… item 1 |
-| **A 3GPP network scan's typed outcome (`timed_out` / `already_scanning` / `failed`) and why an empty result is a SUCCESS** | `modules/modems/modem-network-scan.ts` (`modemNetworkScan`, `clearScanningMarker`) + `modules/modems/mmcli.ts` (`mmNetworkScan`, `SCAN_TIMEOUT_GRACE_S`) → `rpc/procedures/modems.procedure.ts` `scanModemProcedure`; wire `scanFailure` on `modemScanOutputSchema` |
+| **A 3GPP network scan's explicit lifecycle (`network_scan` generation + phase), typed admission/refusal, and why an empty result is a SUCCESS** | `modules/modems/modem-network-scan.ts` (`dispatchModemNetworkScan`, `modemNetworkScan`, `clearScanningMarker`) + `modules/modems/mmcli.ts` (`mmNetworkScan`, `SCAN_TIMEOUT_GRACE_S`) → `rpc/procedures/modems.procedure.ts` `scanModemProcedure`; wire `scanGeneration` on the reply and `network_scan` on modem rows |
 | **The OPTIMISTIC "Modem detected" row (udev attach → provisional row, and the precedence that retires it)** | `modules/cellular/udev-cellular-events.ts` + `udev-provisional-cache.ts` + `udev-monitor.ts`; contract below → A DEVICE IS ANNOUNCED BEFORE ANY MODEM SERVICE CAN DESCRIBE IT |
 | **Mutation-free D-Bus-vs-mmcli shadow evidence (opt-in, never on the wire)** | `modules/cellular/shadow.ts` (`startModemShadowIfEnabled`) + `shadow-wiring.ts` + `docs/MMCLI-RETIREMENT-GATE.md` |
 | USB-composition-mode switch gates (`modems.setUsbMode`, default-absent `modem_provisioning`) | `rpc/procedures/modems.procedure.ts` → `setUsbModeProcedure`; contract below → USB-COMPOSITION SWITCH |
@@ -79,7 +79,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Read-only SMS inbox (`modems.getSms`) — list + read, never send/delete** | `modules/modems/mmcli-sms.ts` (`readSmsInbox`, `parseSmsList`, `parseSmsRecord`, `SMS_PATH_RE`) → `rpc/procedures/modems.procedure.ts` → `getModemSmsProcedure`; contract below → THE READ-ONLY SMS INBOX |
 | **Streaming-admission ↔ modem-lifecycle interlock (process-wide fail-fast lease, both race orders)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireLifecycle`, `withLifecycleLock`, `leaseRefusal`) + `modules/streaming/stream-session-orchestrator.ts` (`admitLifecycle`); contract below → THE STREAMING-ADMISSION ↔ MODEM-LIFECYCLE INTERLOCK |
 | **The shared modem MUTATION-SAFETY contract (per-device lease, durable journal, replay barrier, both acknowledgement paths)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireModemMutation`, `setMutationBlocks`, `streamingBlockingMutation`) + `modules/streaming/recovery-barrier.ts` + `modules/modems/mutation-{journal,journal-state,lease,identity,blocks,rollback,acknowledge,replay}.ts`; contract below → THE MODEM MUTATION-SAFETY CONTRACT |
-| **The modem-control consumer cutover (exact 1.1.0 pin, static imports, frozen boundary gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
+| **The modem-control consumer cutover (exact 1.2.0 pin, static imports, frozen boundary gate + active operation-registry drift gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; frontend `tests/modem-parity-drift.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
 | **The certified USB-mode transition ENGINE, wired** | `modules/modems/transition-engine.ts` (ports + interlock bridge) + `transition-ports.ts` (mmcli inhibit lease, AT sender) + `usb-mode-{transition,identity,contract,execute,rollback}.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
@@ -1552,12 +1552,123 @@ owed).
 **HONEST STATUS: none of this has been exercised against a real dongle.** The
 `112008` code is a real bench measurement; every document shape is derived from
 the dialect. The auto-restore path in particular is fixture-proven only, and the
-`nmcli device disconnect`/`connect` renewal has never run on a board. There is
-also deliberately NO operator UI for the subnet rewrite yet — the RPC exists,
-capability-gated and interlocked, and shipping a button that can strand a dongle
-before the restore has been exercised on hardware would be the unproven control
-this surface refuses. Coverage: `tests/router-net-mode-write.test.ts`,
-`tests/router-subnet-hygiene.test.ts`, `tests/router-stage-b-interlock.test.ts`.
+`nmcli device disconnect`/`connect` renewal has never run on a board.
+
+**The subnet rewrite DOES have an operator surface now, and the shape it takes is
+what carries that honest status.** It is not a toggle: the operator names the
+target address, and an explicit second act confirms it against a sentence that
+SAYS the restore has been proven against recorded replies and never yet against
+real hardware. It is offered only where `router_admin.controls` is published —
+i.e. only for the dialect whose writes were round-trip-proven, which is the same
+dialect `prepareSubnetRewrite` accepts — so a dongle that would be answered
+`unsupported` never renders the field. Nothing about the device side changed:
+`confirm: z.literal(true)`, the per-device lease, the durable journal and the
+armed rollback are exactly as described above, and the UI is a caller like any
+other. Coverage: `tests/router-net-mode-write.test.ts`,
+`tests/router-subnet-hygiene.test.ts`, `tests/router-stage-b-interlock.test.ts`;
+operator half: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) → THE ROUTER
+ACTION SURFACE.
+
+### …AND WHETHER IT NEEDS A LOGIN IS ONE OF FIVE STATES [EXISTS — UNPROVEN ON A LOCKED DEVICE]
+
+`modules/modems/modem-lock-state.ts` (the pure model + its session) and
+`modem-credential-verify.ts` (the device-facing attempt) turn todo 7's credential
+store into a state an operator can act on. The wire fields are
+**`modem.lock_state`** — exactly `open` / `locked` / `unlocked` / `auth-failed` /
+`locked-out` — and **`modem.lock_detail`**.
+
+**`open` IS DETECTED, AND ITS ONLY EVIDENCE IS A DOCUMENT THAT STATES IT.** Every
+dongle on this bench answers unauthenticated, so `open` is the COMMON case and
+prompting for a password at one of them is the dishonesty this surface exists to
+remove — but "nobody refused us" is not the same claim, because a refusal can
+also be a read that never happened. HiLink's `/api/user/state-login` answers the
+question directly (`State: 0` ⇒ usable with no credential presented, `-1` ⇒ a
+login is required), so it rides the batch the 30 s admin cycle already spawns and
+is read on a FRESH session — which is what makes `0` mean "no credential needed"
+rather than "somebody logged in earlier". ZTE goform and Qualcomm HIMI publish no
+equivalent, so they resolve `locked`. An UNANSWERABLE read DROPS the cached
+evidence rather than retaining it — the deliberate opposite of this codebase's
+usual retain-on-failure rule, because `open` is the only value that WIDENS what a
+row offers and a claim we can no longer support must be withdrawn.
+
+**`protocol-mismatch` IS NOT `auth-failed`.** Todo 6's ZTE vocabulary
+(`lockout` / `auth-rejection` / `protocol-mismatch` / `auth-accepted`) maps onto
+the states through `classifyAuthAttempt`, and three of the four map directly. The
+fourth does not: the dialect answered a login shape this build ships no proven
+implementation for, so the credential was never presented and reporting it as a
+rejection would tell an operator their password is wrong. It resolves `locked`
+carrying `lock_detail.sub_reason: "unsupported-profile"`.
+
+**THE RESOLUTION ORDER IS THE CONTRACT.** A live lockout outranks everything (it
+is the only state that forbids an action rather than describing one, and an
+`open` device can never have produced a lockout record); positive open evidence
+then outranks any session history, because a device that currently states it
+needs no login needs none whatever was tried at it earlier; below that it is the
+session's own last word, and a device that has said nothing is `locked` — the
+honest floor.
+
+**`unlocked` MEANS THIS SESSION, so the session map is in memory.** Todo 7's
+persisted `lastOutcome` is the right shape for "what this credential last did"
+and survives a reboot; a boot that has presented nothing has unlocked nothing.
+
+**THE CAPABILITY EXPANSION RIDES THE EXISTING SURFACE, NOT A NEW ONE.**
+`gateRouterAdminByLock` withholds `router_admin.capabilities` and
+`router_admin.controls` — the two blocks that describe what an operator may DO to
+the dongle — while the lock does not permit an authenticated session, and the
+same rebuild offers them again the moment a verify lands. Every OBSERVATION on
+the block (admin URL, model, SIM, signal) passes through untouched: those are
+facts rather than offers, and withholding them would report a reachable device as
+unreadable. Today's fleet detects as `open`, so the reading is byte-unchanged for
+every device currently on the bench.
+
+**The three procedures are `authedProcedure`, NOT `modemProcedure`**
+(`rpc/procedures/modems-credentials.procedure.ts`), for the reason
+`modems.getCapabilities` is: a router dongle is architecturally invisible to
+ModemManager, and an operator most needs to fix a credential exactly while the
+cellular stack is initializing — which is when `cellularReadyMiddleware` refuses
+everything. They take no lease and touch no radio.
+
+- **`verifyCredentials` presents the credential EXACTLY ONCE.** There is no
+  retry: every dialect here counts a failed login toward a lockout the operator
+  cannot clear, so a retry spends the attempts that would have let them fix a
+  typo. A device already inside a lockout window is refused BEFORE a transport is
+  opened, so it costs ZERO device requests.
+- **`setCredentials` performs zero device requests too** — it reads the open
+  verdict the admin cycle already observed — and REFUSES an `open` device
+  (`device_open`) rather than storing a secret nothing will ever present.
+- **Clearing a credential drops the session verdict with it**: a credential that
+  no longer exists cannot keep a row `unlocked`.
+- **No output carries a password.** `modemCredentialsOutputSchema` is a plain
+  `z.object`, so a field added upstream by mistake is STRIPPED, and
+  `rpc-logging.ts` omits these three procedures' args entirely (a per-PROCEDURE
+  set beside the `auth.*` namespace one, because the rest of `modems.*` is
+  ordinary and blanking all of it would throw away real diagnostics).
+- **`initModemCredentials()` is wired at boot**, beside `initCellularStack` and
+  ahead of the modem loop: the first `modems` payload carries every row's lock
+  state, and an unloaded store reports a device with a stored login as having
+  none.
+
+**HONEST STATUS: no locked device exists on this bench.** All three dialects
+answered unauthenticated, so the `open` path is the only one hardware has
+exercised. The HiLink login derivation is modem-stack's certified one
+(`providers/huawei-hilink/session.ts`, password types 3 and 4) re-stated for Rule
+D and NOT run against a device that demands it; ZTE and HIMI ship no login at all
+and answer `protocol-mismatch` deliberately, because an unproven credential
+derivation would burn a real operator's attempts against a real lockout counter.
+
+Coverage: `tests/modem-credential-unlock.test.ts` — all five states reachable and
+EXPLICIT on the wire (including the no-admin-surface negative), the resolution
+ladder with its withdraw-the-open-claim case, the four refusal mappings with the
+`protocol-mismatch` ≠ `auth-failed` assertion, the capability withhold/offer pair
+and its observations-survive control, the zero-request lockout, the no-retry
+proof by attempt count, the password-absence assertions (schema strip, real
+verify outcome, and the derived login document), the rpc-logging omission with
+its diagnosable-namespace control, and static locks that the SHIPPED producer
+really calls the gate and the SHIPPED admin cycle really reads the login-state
+document. Rule-E proof in both directions: neutering the capability gate reddens
+2, folding `protocol-mismatch` into `auth-failed` reddens 2, moving the lockout
+check below the transport reddens 1, dropping the procedures from the log
+omission set reddens 1, and encoding `open` as absence reddens 2.
 
 ## …AND ONE RESOLVER DECIDES WHICH PHYSICAL DEVICE IT IS [EXISTS]
 
@@ -1768,7 +1879,7 @@ correct answers once a mapping exists:
 | may it be a generic SOURCE-IP? | still **NO** | an operation steering by source address cannot tell the twins apart. `probeExclusionReason` is unchanged, and a test asserts it. |
 | may it join the BOND? | **YES**, when a row can be published | the row names the INTERFACE too, and the sender binds `SO_BINDTODEVICE` |
 
-The flag stays raised (the warning band is unchanged), and `isBondCandidate`
+The flag stays raised on the per-interface `netif` wire, and `isBondCandidate`
 answers bond membership separately. **Two identical lines in `BIND_IPS_FILE` are
 LEGAL** and covered. `enabled` still governs membership — but a dup-IP link's
 `enabled` is forced false by the flag itself, so the operator's own choice lives
@@ -1776,6 +1887,40 @@ in `operatorBondOptOut` (`setBondOptOut`, written by `handleNetif`) rather than 
 a bit the error path overwrites. A link that cannot be DESCRIBED
 (`isMappableEntry`: valid iface name, valid `link_id`, non-empty ip) is not made
 eligible by wishing.
+
+**…AND THE NOTICE THE OPERATOR SEES IS A SEPARATE, RE-EVALUATED DECISION.**
+The flag above answers a policy question; `netif_dup_ip` answers an honesty one,
+and it is decided by `decideDupIpNotice(groups, deps)`
+(`network-interfaces.ts`) rather than read back off the flag. Three properties
+are load-bearing, and each was a defect before it was one:
+
+- **It is a WARNING, never an error.** An excluded twin is a DEGRADATION of the
+  bond, not a failure of the device — and the retired band asserted a fault at
+  `"error"` severity while its own message ended "…they can still be bonded when
+  per-interface link mapping is active", i.e. it raised an alarm and then
+  explained the alarm was handled.
+- **A FULLY MAPPED GROUP IS SILENT.** The notice consults `isBondMappingActive()`
+  — the ONE authority on whether the (ip,iface) mapping is really in force — and
+  then `isBondLinkMappable()` per member, so a band is produced only for a group
+  that is genuinely still ambiguous: no mapping (the sender collapses duplicate
+  source IPs and one link really is missing), or a mapping in force with an
+  `unmappable` member (no row can be published for it, so it is excluded from the
+  very mechanism that would have disambiguated it). Silence loses nothing: the
+  per-interface `error: "duplicate IPv4 addr"` still rides the `netif` wire and
+  the Network page still renders it.
+- **IT IS DECIDED ON EVERY PASS, OUTSIDE `intsChanged`.** Both the raise and the
+  retraction used to sit inside that branch, and a bond-mapping transition moves
+  no interface, no address and no flag — so nothing re-evaluated and the band
+  could never clear. Same raise-but-never-retract family as
+  `policy_route_missing`. `duplicateIpGroups()` is likewise recomputed from the
+  live addresses each pass rather than read back off `NETIF_ERR_DUPIPV4`, whose
+  flags are only refreshed on a topology change.
+
+`DupIpNoticeDeps` is installed (`wireDupIpNoticeDeps`) rather than statically
+imported, because both facts live under `modules/streaming/`, which imports this
+module. The defaults answer NO to both, which is the fail-safe direction: an
+unwired process REPORTS the collision rather than silently claiming it is
+handled.
 
 ### THE PRE-SPAWN CAPABILITY PROBE — the backward-compat guarantee
 
@@ -3502,7 +3647,7 @@ mutation-freedom contract; nothing here goes near it.
   `@ceralive/modem-control@1.0.0`, so while `package.json` pinned the `0.2.0`
   floor this module resolved it through a lazy `import()` plus a structural probe
   and answered a typed `usage_policy_unsupported` refusal when the pinned release
-  did not publish it. The pin is now `1.1.0` EXACTLY, so `tsc` and `bun install`
+  did not publish it. The pin is now `1.2.0` EXACTLY, so `tsc` and `bun install`
   answer that at build and install time — both strictly stronger than a
   `typeof === "function"` check, which can only report the gap after a write has
   been attempted. `isUsagePolicySupported()` is therefore constant, and it stays a
@@ -3677,6 +3822,32 @@ the manual `mmcli` walk. Coverage: `tests/modem-ussd.test.ts` (both real shapes,
 the empty-respond negative, the two-turn dialogue over the board captures, and the
 answer-never-lands case asserting NO reply rather than the retained one).
 
+### …AND THE READ THAT PROVES THE CAPABILITY RE-PUBLISHES IT [EXISTS]
+
+`readModemUssd` wrote `capabilityCache` directly and never called
+`noteCapabilityEvidenceChanged()` — the one implemented capability module that
+did not. `gps.ts`'s `recordCapability` and `band-capability.ts`'s refresh both
+do, for the reason `capability-gates.ts` states: the wire build is SYNCHRONOUS,
+so a probe that first proves a capability only reaches an operator on the next
+30 s roster poll.
+
+That window is not cosmetic for USSD, because the verbs are gated on the SAME
+evidence. Until the claim moves, `withCapabilityModuleMutation` refuses every
+one of them `module_unavailable` — so CeraUI's USSD section, which reads on
+open and is withheld below `capable`, reported "not established yet" with no
+control for up to half a minute on hardware that supports USSD, and any verb
+forced through in that window was refused.
+
+`recordUssdCapability` is that notifier, mirroring `gps.ts` exactly: it is
+CHANGE-GATED, so the dialog's read-on-open costs one map lookup once the modem
+is proven and broadcasts nothing. Both call sites go through it — the
+`unsupported` read that records `absent` as well as the successful one that
+records `present` — because a modem that positively LOSES the capability must
+lower the claim just as promptly as one that gains it.
+
+Frontend half: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) → USSD IS A
+SESSION, SO IT CARRIES A SECOND MACHINE.
+
 ## `no_sim` REPORTS A SLOT, NOT A NETWORKMANAGER PROFILE [EXISTS]
 
 `modules/modems/sim-presence.ts` (pure) is the ONE rule behind the wire's
@@ -3718,20 +3889,56 @@ inference from silence), and `unknown` (neither — the read could not answer).
   whether a modem holds a card. This matters more on the D-Bus path than on
   mmcli: the fold never populates `config` at all, so under the old rule EVERY
   D-Bus-backed row claimed `no_sim`.
-- **A SIM-present modem with no profile emits NEITHER key** — no `config`, no
-  `no_sim` — which is the honest "SIM present, not yet configured" state. The row
-  then renders the radio's real state (`searching` plus the network's own
-  rejection reason), its PIN2 lock badge, and a usable config dialog.
+- **A SIM-present modem with no profile emits no `config` and no `no_sim`** —
+  the honest "SIM present, not yet configured" state. The row then renders the
+  radio's real state (`searching` plus the network's own rejection reason), its
+  PIN2 lock badge, and a usable config dialog.
 - The `simVisibility: "opaque"` router-dongle rule is UNCHANGED and orthogonal:
-  it still emits neither key for a device whose SIM the host cannot see at all.
+  it still emits NONE of the slot keys for a device whose SIM the host cannot see
+  at all.
+
+### …AND THE READING THE FOLD CONSUMES NOW RIDES THE WIRE BESIDE IT
+
+`claimsNoSim` is `presence !== "present"`, so `absent` and `unknown` leave this
+module as ONE `no_sim: true`. That fold is correct for its consumer — bonding is
+binary, a link either joins the pool or does not — and lossy for every other
+consumer: "we know the slot is empty" and "the read could not answer" are
+different facts with different operator actions, and a modem with no NM profile
+AND an unreadable slot published the same claim as a genuinely empty one.
+
+`modemSchema.sim_presence` (`present` / `absent` / `unknown`,
+additive-optional) is that fold's INPUT, published beside it by BOTH wire
+builders. Four rules:
+
+- **`claimsNoSim`, `isSimlessForBond` and bond membership are UNTOUCHED.** The
+  gate still reads the binary claim, so the same device is refused exactly as
+  before. Making `claimsNoSim` positive-evidence-only would change which links
+  bond and is still its own change; this one is additive by construction.
+- **It is emitted EXPLICITLY, including `unknown`.** The internal `Modem` state
+  OMITS `sim_presence` when the read could not answer (that omission is what
+  `mergeRefreshedModem`'s retain-on-unknown rule needs), so the builders resolve
+  absence to `"unknown"` rather than dropping the key — the consumer merge
+  preserves an omitted optional field, so a present-only-when-known field could
+  be raised and never lowered (the `policy_route_missing` latch, exactly).
+- **It rides the `simVisibility === "visible"` branch**, so an opaque device
+  emits it no more than it emits `no_sim`: its slot is not unknown, it is
+  unreadable from this host, which is a different claim.
+- **The legacy oracle emits it too**, because `buildModemsMessage` is asserted
+  byte-identical to the projection. A field added to one and not the other is a
+  red suite, which is the point of keeping the oracle.
 
 `ModemInfo` gained `modem.generic.state-failed-reason` and
 `modem.generic.sim-slots` (both optional — mmcli drops a `--` value), and `Modem`
 gained `sim_presence`. Coverage: `tests/modem-sim-presence.test.ts`, driven
 through the REAL parser, the REAL refresh merge and BOTH wire builders against
 verbatim board captures — the Quectel for `present`, and the SIMCom /
-HiMi U01 / Fibocom FM350-GL for `absent`. Rule-E proof: forcing `claimsNoSim`
-to `true` reddens 4 tests.
+HiMi U01 / Fibocom FM350-GL for `absent` — plus "the pre-collapse reading rides
+the wire beside the fold" (the unreadable slot carrying `unknown` AND `no_sim`,
+the re-asserted `isSimlessForBond` verdict on that same fixture, the stated
+`absent`/`present` pair, and the opaque-device negative). Rule-E proof: forcing
+`claimsNoSim` to `true` reddens 4 tests; dropping the explicit `unknown` emission
+reddens 1. Frontend half: `apps/frontend/AGENTS.md` → "…AND THE `unknown`-AS-
+`absent` ASYMMETRY IS NOW CLOSED".
 
 ## THE SIM'S OWN NUMBER IS DISPLAYED, AND NEVER LOGGED [EXISTS]
 
@@ -4070,7 +4277,7 @@ wiring driven through the REAL procedure.
 
 Todo 29 moved the frozen Todo-17 pure-logic set behind the published
 `@ceralive/modem-control` package without raising CeraUI's install floor above
-`0.2.0`. **The pin is now `1.1.0` EXACTLY** (todo 49), and the three probes that
+`0.2.0`. **The pin is now `1.2.0` EXACTLY** (todo 46), and the three probes that
 floor forced — the SMS port, the usage-policy setter, the band catalog — are
 STATIC imports with no runtime fallback left.
 
@@ -4078,7 +4285,7 @@ STATIC imports with no runtime fallback left.
 unfinished cutover. It is already a static namespace import, so it is not a lazy
 `import()`; and two of its names — `hilinkConnectionBody` and `vidPidOf` — are
 exported by NO release, which `modem-control-skew-matrix.test.ts` pins and the
-installed 1.1.0 confirms. Their local implementations are PERMANENT, so deleting
+installed 1.2.0 confirms. Their local implementations are PERMANENT, so deleting
 the seam would delete the implementation. Each of the 14 MIGRATE modules asks for
 its package function through it and keeps its own as the answer when the package
 has none. Public CeraUI exports, wire fields, parser outcomes, and refusal
@@ -4101,13 +4308,34 @@ therefore remains consumer-owned rather than moving into modem-stack.
 
 `tests/modem-control-projections.test.ts` is the committed boundary gate. It
 asserts all 14 modules use the named seam, every projection imports against the
-exact `1.1.0` pin (asserted as a bare version, never a range — a resolved release
+exact `1.2.0` pin (asserted as a bare version, never a range — a resolved release
 missing the statically-imported exports must fail at import rather than degrade),
 direct `dbus|mmcli|qmicli|goform|hilink` references
 remain inside the Todo-17 ledger allowlist, and stream-active admission preserves
 the refusal vocabulary. Never add a direct modem transport/model/dialect path
 outside that allowlist; add package consumption through a named projection
 instead. Never replace the registry pin with `link:` or `file:`.
+
+`@ceralive/modem-control@1.2.0` also exports the frozen
+`MODEM_OPERATION_IDS` array from the existing root entry point. The frontend
+parity gate resolves the backend's exact installed package, reads that registry
+from emitted JavaScript without importing the D-Bus runtime graph, and holds the
+local disposition manifest to set equality. The gate is unskipped: a missing
+registry, an undispositioned package id, or a stale local id fails the suite.
+The seven public package entry points are unchanged. `hilinkConnectionBody` and
+`vidPidOf` remain absent from the package and permanently local behind
+`modem-control-compat.ts`.
+
+The same release activates the fifteenth compatibility consumer:
+`modems/usb-mode-runtime.ts` resolves
+`resolveRuntimeCompositionCapability` from the package. The module retains its
+local implementation as the fallback and executable parity oracle;
+`tests/usb-mode-runtime-compat.test.ts` proves the runtime candidate is selected,
+assignable in both directions, and returns the same shapes for all four vendors
+plus unsupported and malformed responses. This is deliberately read-only.
+Although 1.2.0 also exports `buildRuntimeCompositionSetCommand` and
+`RUNTIME_COMPOSITION_SET_REGISTRY`, CeraUI consumes neither; adding package-backed
+composition writes is a separate feature requiring its own safety review.
 
 ## THE MODEM MUTATION-SAFETY CONTRACT [EXISTS]
 
@@ -7380,6 +7608,12 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't import modem-stack's `device-classifier.ts` across the sibling boundary (Rule D) — `usb-net-classifier.ts` is a re-derived MIRROR with its own bench-captured fixtures. And don't drop the cellular-evidence gate on top of it: modem-stack's `router-mode` verdict means "a tether with no control port", which is equally true of a plain USB-to-Ethernet adapter, so claiming CELLULAR on that alone would put the word on a wired NIC.
 - Don't read only the netdev's OWN USB interface — the vendor ids, the AT/QMI ports and the ZeroCD mass-storage companion all live on the PARENT device, and those are exactly the descriptors the classification turns on.
 - Don't proxy a dongle's admin UI by DESTINATION ADDRESS — identical units share one factory address, and the bench ZTE answered a request addressed to its twins' gateway, so the address selects nothing. Resolve `wire id -> interface -> that interface's own default route` and bind with `curl --interface`; a hardcoded `192.168.8.1` or a best-guess interface reaches whichever unit the kernel picks.
+- Don't assume a dongle is `open` because nothing refused a read — a refusal can also be a read that never happened. `open` needs a document that STATES it (HiLink's `/api/user/state-login`, on a FRESH session); a dialect that cannot say so resolves `locked`. And don't RETAIN a cached open verdict whose read stopped answering: `open` is the only value that widens what a row offers, so this one case is the deliberate opposite of the retain-on-failure rule everywhere else.
+- Don't publish `lock_state: "open"` as the ABSENCE of the field — the modem merge preserves an omitted optional field, so a row that went `locked` → `open` could never lower the claim (the `policy_route_missing` latch, exactly). All five values are stated explicitly on every row that has an admin surface; only a device with NO admin-auth surface omits the key.
+- Don't fold `protocol-mismatch` into `auth-failed` — the credential was never presented, so reporting a rejection tells an operator their password is wrong when it was not tried. It is `locked` + `lock_detail.sub_reason: "unsupported-profile"`.
+- Don't retry a failed `verifyCredentials`, and don't attempt one while the device reports a lockout — every dialect counts a failed login toward a window the operator cannot clear, so a retry spends the attempts that would have let them fix a typo. The lockout check reads only local state and MUST stay ahead of the transport, so a locked-out device costs zero requests.
+- Don't store a credential for a device DETECTED as `open`, and don't route the three credential procedures through `modemProcedure` — a router dongle is invisible to ModemManager, and the readiness gate makes the fix unreachable in exactly the state it exists for.
+- Don't log the credential procedures' args, and don't "simplify" the per-procedure omission set into a whole-namespace one — the rest of `modems.*` carries APNs, band lists and device ids that are the diagnostics the trace exists to give.
 - Don't drop `--compressed` from the admin proxy, and don't forward or set an `Accept-Encoding` header — the dongle serves pre-gzipped assets and ignores `identity`, and a header set here overrides the flag and leaves curl unable to decode the reply. Stripping `content-encoding` is correct ONLY while that flag is present.
 - Don't route curl's `--dump-header` to `/dev/stderr` under `Bun.spawn` — against a PIPE it never completes (`exitCode: null`, both streams empty), even though the same argv works under a shell redirect to a file.
 - Don't widen the admin-UI URL rewriter. `(` is a delimiter in CSS only (in JS it opens a regex), a path must name a DIRECTORY outside CSS (a regex literal can end in a quote — jQuery's `replace(/'/g, …)` is byte-identical to a quoted path), a bare `"/"` is a separator as often as a link, and an XML/JSON body is data whatever its content-type says. Each of those refusals is a page that rendered blank on the bench before it existed.
@@ -7395,7 +7629,8 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't index by file line while the mapping is NOT in force — without one the sender collapses duplicate source IPs, so its ids count unique addresses rather than lines. Gate it on `isBondMappingActive()` (the normalized disposition), never on whether a telemetry field happens to be present.
 - Don't treat an ABSENT `bind_map_status` as a retraction — the pinned binding strips those keys, so absence means "this sender build does not report it" and the writer's synthesized verdict must stand. And don't hand the sender's verdict to `noteSenderBindMapReport` on every tick: the boundary notifies on every write, so an unchanged verdict re-broadcasts the operator band once a second.
 - Don't publish `status.bond_mapping` present-only-when-degraded — the frontend status merge preserves an omitted field, so a raise-only band can be raised and never lowered (the `policy_route_missing` latch, exactly). It is an explicit value, `null` when no bond is described.
-- Don't tell an operator a duplicate-IP pair "can't be used" — since the bind map those links DO bond when a per-interface mapping is in force. What the shared address really costs is every operation that steers by source address, and the `netif_dup_ip` copy now says exactly that.
+- Don't tell an operator a duplicate-IP pair "can't be used" — since the bind map those links DO bond when a per-interface mapping is in force. What the shared address really costs is every operation that steers by source address, and the `netif_dup_ip` copy now says exactly that. Don't raise it at `"error"` severity either: an excluded twin degrades the bond, it does not break the device, so the band is a WARNING.
+- Don't decide the `netif_dup_ip` band inside the `intsChanged` branch, and don't derive its groups from `NETIF_ERR_DUPIPV4` — a bond-mapping transition moves no interface, no address and no flag, so a topology-gated decision can never retract the band (the `policy_route_missing` latch, exactly). `decideDupIpNotice` runs on EVERY pass against `duplicateIpGroups()` recomputed from the live addresses. And don't band a group the mapping already disambiguated: a fully mapped group is SILENT, because the per-interface `error` still rides the `netif` wire and telling an operator a handled condition is a fault is the defect this replaced.
 - Don't mint a `link_id` from a counter or from array position — it must be stable across a reload with no persisted state and across a composition change, which is exactly what the `sha256(identityKey)` derivation buys. And don't publish the USB serial itself: the digest is what keeps an identity anchor off the wire.
 - Don't filter the descriptor/hwdb model through `isUninformativeIdentity` — that rule judges mmcli's identity answers, where a bare numeral is measured garbage; here the bare numeral is the PRODUCT ID the classifier chose as its honest floor, so filtering it degrades `Qualcomm 9024` to `Qualcomm 05c6:9024`.
 - Don't parse a router row's allocation key back into an interface name — once it carries a real `stable_key` that key is an `ID_PATH`, which names a PORT. Read the mapping the last collection recorded.
@@ -7533,7 +7768,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't match a USSD reply on a key called `reply` — mmcli uses that word as a key nowhere. The action line's key is the whole sentence `… new reply from network`, and the `-K` key is `modem.3gpp.ussd.network-request`. Don't route that value through `mmcliParseSep` either: it logs an unsplittable line verbatim, and every value here is subscriber content.
 - Don't let `fromDbusView` re-derive a fact `fromMmcliModem` already derives. `"dbus"` is the DEFAULT backend, so an mmcli-only fix ships and reaches NO device — three separate defects took this shape at once: the garbage-identity name fallback (bypassed by a hand-rolled `buildDbusName` that even claimed byte-identical output while implementing a different rule), `registration_rejection`/`packet_service_state` (never folded, leaving the whole `REJECTION_REASON_KEYS` operator-copy surface dead code), and the 3GPP scan results. When you add a fact to a modem row, name which of the TWO adapters you taught.
 - Don't hand a child process its own deadline and leave the outer wrapper on a default — the shorter of two contradictory timeouts wins, silently. `mmNetworkScan` passed `--timeout=240` to mmcli while `run()` killed it at its 30 s default, and a board-measured 27.8 s cold scan sat 2.2 s inside that cap, so the scan failed INTERMITTENTLY and read as a hardware flake. The outer budget must be strictly larger.
-- Don't answer a modem operation `{success:true}` from a `void`-dispatched effect. `scanModemProcedure` went through `handleModems`, which `void`s its work, so a scan killed mid-sweep still replied success and rebroadcast a stale empty list. A procedure that cannot observe its own effect cannot report it — await the operation and return its typed outcome. And don't collapse "found nothing" into a failure: an empty result with `success: true` is a real answer about coverage.
+- Don't dispatch a modem scan without a completion object that owns the mutation lease and publishes a terminal lifecycle marker. `scanModemProcedure` returns once admission is known, but the background completion is observed, releases the lease in `finally`, and broadcasts `network_scan` with the same generation returned as `scanGeneration`. A bare `void` promise recreates silent failures and admits streaming mid-scan. And don't collapse "found nothing" into a failure: an empty completed result is a real answer about coverage.
 - Don't clear an in-flight marker on `Modem` through a CAPTURED reference. `mergeRefreshedModem` immutably REPLACES the object each poll (so the T11 diff can see a change by value) and spreads the previous one, so the flag rides forward onto the replacement while a `delete` on the old object mutates something nothing reads. Board-measured: one scan latched `is_scanning` for the process lifetime — every later scan refused `already_scanning` and the row read `connection: "scanning"` forever, since `buildModemStatus` derives that label from the same flag. Clear it through the state map (`clearScanningMarker`).
 - Don't drop the `syntheticIds` round-trip through `buildProjectedModemsMessage` — the projector deliberately does not own that state, and without it every poll renumbers the dongles under the operator.
 - Don't decide which adapter produces a radio row from `config.modem_backend` — read the backend the stack COMMITTED (`getCellularStack()`), or a `dbus` request that fell back to mmcli advertises a detail block nothing observed.

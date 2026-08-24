@@ -394,7 +394,20 @@ export function shouldMockModems(): boolean {
  * RPC directly.
  */
 export function getMockUsbModeOptions(_device: string): UsbModeOptionsOutput {
-	return { certified: ["mbim", "ecm-ncm"] };
+	// The runtime evidence rides along so a dev host renders the SAME payload
+	// shape a board produces. Its enumeration deliberately CONTAINS its current
+	// mode — the return-path proof — because the fixture's job is the offered
+	// path, and a dev surface that only ever exercised a suppression would leave
+	// the control it exists to render untested.
+	return {
+		certified: ["mbim", "ecm-ncm"],
+		runtime: {
+			vendor: "quectel",
+			current: 0,
+			enumerated: [0, 1, 2],
+			return_path_proven: true,
+		},
+	};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

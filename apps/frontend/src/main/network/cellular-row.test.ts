@@ -32,6 +32,7 @@ import {
 	rowNoteKeys,
 	signalLabelKey,
 	slotBadgeLabel,
+	sortModemEntries,
 	stateLabelKey,
 	stateTone,
 } from "./cellular-row";
@@ -501,6 +502,54 @@ describe("configureDisabledReasonKey", () => {
 			router_admin: { admin_url: "http://192.168.0.1", reachable: true },
 		} as unknown as Modem;
 		expect(configureDisabledReasonKey("router-ethernet", readOnly)).toBe(
+			"network.cellular.reason.routerControlsUnverified",
+		);
+	});
+
+	/**
+	 * A LOCK IS NOT A DEVICE LIMITATION, AND IT MUST NOT CLOSE THE DOOR.
+	 *
+	 * `gateRouterAdminByLock` withholds `router_admin.controls` while the
+	 * dongle's own login stands, which is byte-identical on the wire to "no
+	 * write was ever proven". Read that way, Configure was disabled on exactly
+	 * the devices whose dialog now carries the login form — so the operator was
+	 * refused entry to the one surface that could fix the state, and the row
+	 * additionally blamed the hardware for it.
+	 */
+	function locked(state: string): Modem {
+		return {
+			router_admin: { admin_url: "http://192.168.8.1", reachable: true },
+			lock_state: state,
+			lock_detail: { credential_configured: false },
+		} as unknown as Modem;
+	}
+
+	it.each(["locked", "auth-failed", "locked-out"])(
+		"a %s dongle stays configurable — the dialog carries its login",
+		(state) => {
+			expect(
+				configureDisabledReasonKey("router-ethernet", locked(state)),
+			).toBeUndefined();
+		},
+	);
+
+	it("…but an `open` dongle with no proven write is still refused", () => {
+		// The lock exemption must not become a blanket one: `open` and `unlocked`
+		// are the states the device DOES serve its control block in, so absence
+		// there really is "nothing here is provably settable".
+		expect(configureDisabledReasonKey("router-ethernet", locked("open"))).toBe(
+			"network.cellular.reason.routerControlsUnverified",
+		);
+		expect(
+			configureDisabledReasonKey("router-ethernet", locked("unlocked")),
+		).toBe("network.cellular.reason.routerControlsUnverified");
+	});
+
+	it("…and a dongle with no login surface at all is unchanged", () => {
+		const noLock = {
+			router_admin: { admin_url: "http://192.168.0.1", reachable: true },
+		} as unknown as Modem;
+		expect(configureDisabledReasonKey("router-ethernet", noLock)).toBe(
 			"network.cellular.reason.routerControlsUnverified",
 		);
 	});
@@ -1155,5 +1204,153 @@ describe("a provisional 'modem detected' row", () => {
 			},
 		} as Partial<Modem>);
 		expect(resolveRowState(observed, "mm-managed")).toBe("connected");
+	});
+});
+
+/**
+ * The row order. Every wire id is `String(number)`, so `Object.entries` already
+ * hands the renderer the roster in ASCENDING NUMERIC ID order — emission order
+ * cannot leak, and a fixture built to prove it would be vacuous. What is NOT
+ * stable is the id itself: mmcli re-issues it on a replug and renumbers the
+ * whole roster on a restart. Every case below therefore models a roster already
+ * in ascending-id order whose ids no longer describe the same ports.
+ */
+describe("sortModemEntries — the order is the hardware's, not the wire id's", () => {
+	function anchored(port: string, over: Partial<Modem> = {}): Modem {
+		return modem({ stable_key: `pci-0000:00:14.0-usb-0:${port}`, ...over });
+	}
+
+	const ports = (entries: readonly (readonly [string, Modem])[]): string[] =>
+		entries.map(([, m]) => m.stable_key ?? "");
+
+	const ids = (entries: readonly (readonly [string, Modem])[]): string[] =>
+		entries.map(([id]) => id);
+
+	it("Given ascending ids that descend by PORT, Then the port decides", () => {
+		const roster: [string, Modem][] = [
+			["2", anchored("3")],
+			["5", anchored("2")],
+			["7", anchored("1")],
+		];
+
+		expect(ids(sortModemEntries(roster))).toEqual(["7", "5", "2"]);
+	});
+
+	it("Given a replug hands one device a FRESH higher index, Then its row stays put", () => {
+		const before = sortModemEntries([
+			["11", anchored("1")],
+			["12", anchored("2")],
+			["13", anchored("3")],
+		]);
+
+		// mmcli drops the middle device and re-adds it at the end of the index
+		// space, so ascending-id order alone would move it to the bottom.
+		const after = sortModemEntries([
+			["11", anchored("1")],
+			["13", anchored("3")],
+			["14", anchored("2")],
+		]);
+
+		expect(ports(after)).toEqual(ports(before));
+	});
+
+	it("Given an MM restart renumbers every id, Then the ports keep the order", () => {
+		const before = sortModemEntries(
+			["1", "2", "3", "4"].map(
+				(port, i) => [`${11 + i}`, anchored(port)] as [string, Modem],
+			),
+		);
+		// 11,13,14,15 -> 0,1,2,3, and MM re-probed the ports in the other order.
+		const after = sortModemEntries(
+			["4", "3", "2", "1"].map(
+				(port, i) => [`${i}`, anchored(port)] as [string, Modem],
+			),
+		);
+
+		expect(ports(after)).toEqual(ports(before));
+	});
+
+	it("Given the bench twins share ONE factory MAC, Then their ports separate them", () => {
+		// Board fact: two physically distinct HiLink units publish one MAC, so
+		// systemd names only one predictably and the loser falls back to `eth1`.
+		const twinA: [string, Modem] = [
+			"1001",
+			anchored("1.4.1", { ifname: "enx0c5b8f279a64" }),
+		];
+		const twinB: [string, Modem] = [
+			"1002",
+			anchored("1.4.3", { ifname: "eth1" }),
+		];
+		const before = sortModemEntries([twinA, twinB]);
+
+		// They rename against each other on replug. The NAME is not the key.
+		const renamedA: [string, Modem] = [
+			"1001",
+			anchored("1.4.1", { ifname: "eth1" }),
+		];
+		const renamedB: [string, Modem] = [
+			"1002",
+			anchored("1.4.3", { ifname: "enx0c5b8f279a64" }),
+		];
+
+		expect(ids(sortModemEntries([renamedB, renamedA]))).toEqual(ids(before));
+		expect(ids(before)).toEqual(["1001", "1002"]);
+	});
+
+	it("Given no ID_PATH ever resolved, Then the id is the honest floor", () => {
+		const roster: [string, Modem][] = [
+			["9", modem()],
+			["10", modem()],
+			["1", modem()],
+		];
+
+		// Code-unit order, so "10" precedes "9" — deterministic, never localized.
+		expect(ids(sortModemEntries(roster))).toEqual(["1", "10", "9"]);
+	});
+
+	it("Given a mixed roster, Then anchored rows lead and unanchored ones follow", () => {
+		const roster: [string, Modem][] = [
+			["3", modem()],
+			["4", anchored("9")],
+			["1", modem()],
+		];
+
+		expect(ids(sortModemEntries(roster))).toEqual(["4", "1", "3"]);
+	});
+
+	it("Given a row gains its anchor, Then it moves ONCE and never again", () => {
+		const settling = sortModemEntries([
+			["2", modem()],
+			["1", anchored("1")],
+		]);
+		const settled = sortModemEntries([
+			["2", anchored("2")],
+			["1", anchored("1")],
+		]);
+
+		expect(ids(settling)).toEqual(["1", "2"]);
+		expect(ids(settled)).toEqual(["1", "2"]);
+		expect(ids(sortModemEntries(settled))).toEqual(ids(settled));
+	});
+
+	it("never mutates its input — the caller hands over a $derived array", () => {
+		const roster: [string, Modem][] = [
+			["7", anchored("3")],
+			["2", anchored("1")],
+		];
+		const snapshot = [...roster];
+
+		sortModemEntries(roster);
+
+		expect(roster).toEqual(snapshot);
+	});
+
+	it("an empty or whitespace stable_key is NOT an anchor", () => {
+		const roster: [string, Modem][] = [
+			["2", modem({ stable_key: "   " } as Partial<Modem>)],
+			["1", modem({ stable_key: "" } as Partial<Modem>)],
+		];
+
+		expect(ids(sortModemEntries(roster))).toEqual(["1", "2"]);
 	});
 });

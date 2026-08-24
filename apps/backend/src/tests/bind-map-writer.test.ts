@@ -185,6 +185,37 @@ describe("collision groups (what legacy mode loses)", () => {
 });
 
 describe("ADR-003 publication protocol", () => {
+	test("udev ID_PATH provenance is withheld from the sender while absolute sysfs provenance is kept", async () => {
+		const deps = writerDeps();
+		const entries: BondEntry[] = [
+			{
+				...entry(TWIN_IP, "enx0c5b8f279a64", "lnk_aaaaaaaaaaaaaaaa"),
+				idPath: "platform-xhci-hcd.0.auto-usb-0:1.3.2",
+			},
+			{
+				...entry(TWIN_IP, "eth1", "lnk_bbbbbbbbbbbbbbbb"),
+				idPath: "/sys/devices/platform/xhci-hcd.0.auto/usb1/1-1/1-1.3/1-1.3.1",
+			},
+		];
+
+		await publishBondMapping(entries, deps);
+
+		const sidecar = JSON.parse(readFileSync(deps.sidecarFile, "utf8"));
+		expect(sidecar.links).toEqual([
+			{
+				link_id: "lnk_aaaaaaaaaaaaaaaa",
+				ip: TWIN_IP,
+				iface: "enx0c5b8f279a64",
+			},
+			{
+				link_id: "lnk_bbbbbbbbbbbbbbbb",
+				ip: TWIN_IP,
+				iface: "eth1",
+				id_path: "/sys/devices/platform/xhci-hcd.0.auto/usb1/1-1/1-1.3/1-1.3.1",
+			},
+		]);
+	});
+
 	test("the twins produce a coherent pair the sender would accept", async () => {
 		const deps = writerDeps();
 		const entries = [

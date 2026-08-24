@@ -315,7 +315,12 @@ const SRC_UVC_720 = {
 // SourceSection renders `getSources()` (the folded `sources` broadcast), NOT the
 // legacy `devices`/`pipelines` broadcasts, so every source-list assertion injects
 // a StreamSource[] and the beforeEach drops the backend's own `sources` echo.
-type Mode = { width: number; height: number; framerates: number[] };
+type Mode = {
+	width: number;
+	height: number;
+	framerates: number[];
+	media_type?: string;
+};
 
 // A UVC dongle whose REAL name contains "HDMI" but whose engine-reported `kind` is
 // `uvc_h264` — the exact T4 regression fixture. Its row must show the displayName
@@ -359,7 +364,7 @@ const SRC_DUAL = captureSource(
 	[
 		{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h265" },
 		{ width: 1920, height: 1080, framerates: [30], media_type: "video/x-h264" },
-	] as Mode[],
+	],
 );
 
 // The coarse `hdmi` capability placeholder — kept by the sources model only when
@@ -1615,22 +1620,32 @@ test.describe("Capability truthfulness (functional)", () => {
 		{ id: "fleet-legacy", deviceClass: undefined, name: "Legacy mmcli radio" },
 	];
 
-	// Both modules the dialog gates today. Their testids share one shape, so the
-	// matrix asserts the CONTRACT rather than one module's markup.
-	const GATED_MODULE_TESTIDS: readonly { readonly module: string; readonly testId: string }[] =
-		[
-			{ module: "fcc-auto-unlock", testId: "modem-fcc-unlock" },
-			{ module: "gps", testId: "modem-gps" },
-		];
+	const GATED_MODULE_TESTIDS: readonly {
+		readonly module: string;
+		readonly testId: string;
+		readonly controlTestId: string;
+	}[] = [
+		{
+			module: "fcc-auto-unlock",
+			testId: "modem-fcc-unlock",
+			controlTestId: "modem-fcc-unlock-toggle",
+		},
+		{
+			module: "gps",
+			testId: "modem-gps",
+			controlTestId: "modem-gps-toggle",
+		},
+	];
 
 	async function expectCapabilityRender(
 		page: Page,
 		testId: string,
+		controlTestId: string,
 		expected: ExpectedRender,
 		where: string,
 	): Promise<void> {
 		const section = page.getByTestId(testId);
-		const control = page.getByTestId(`${testId}-toggle`);
+		const control = page.getByTestId(controlTestId);
 		const unknown = page.getByTestId(`${testId}-unknown`);
 
 		if (expected === "absent") {
@@ -1733,10 +1748,11 @@ test.describe("Capability truthfulness (functional)", () => {
 				await expect(dialog).toBeVisible({ timeout: 15_000 });
 				await openModemAdvanced(dialog);
 
-				for (const { module, testId } of GATED_MODULE_TESTIDS) {
+				for (const { module, testId, controlTestId } of GATED_MODULE_TESTIDS) {
 					await expectCapabilityRender(
 						page,
 						testId,
+						controlTestId,
 						expected,
 						`${module} on ${where}`,
 					);
@@ -1747,6 +1763,44 @@ test.describe("Capability truthfulness (functional)", () => {
 			}
 		});
 	}
+
+	test("a proven GPS claim with an unavailable read stays blocked-with-reason on a router-ethernet dialog", {
+		annotation: {
+			type: DROP_SERVER_STATUS_ANNOTATION,
+			description:
+				"injects the router-ethernet family and lets the real getGps refusal drive the read-unavailable arm",
+		},
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		sendModems({
+			[DONGLE_MODEM_ID]: {
+				...routerDongle("router_managed"),
+				availability_reason: "router_direct",
+				lock_state: "open",
+				lock_detail: { credential_configured: false },
+				capability_modules: { gps: "certified" },
+				router_admin: {
+					admin_url: "http://192.168.8.1",
+					reachable: true,
+					controls: { mobile_data: false, roaming_autoconnect: false },
+				},
+			},
+		});
+
+		await navigateTo(page, "network");
+		const configure = modemRow(page, DONGLE_MODEM_ID).getByTestId(
+			"open-modem-config-dialog",
+		);
+		await expect(configure).toBeEnabled({ timeout: 15_000 });
+		await configure.click();
+
+		const section = page.getByTestId("modem-gps");
+		await expect(section).toHaveAttribute("data-capability-state", "blocked");
+		await expect(page.getByTestId("modem-gps-toggle")).toBeDisabled();
+		await expect(page.getByTestId("modem-gps-reason")).toBeVisible();
+		await expect(page.getByTestId("modem-gps-reason")).toHaveText(/\S/);
+	});
 
 	// The other two fleet families never reach that dialog, so CT-1 holds for
 	// them at the SURFACE: a device this build cannot control contributes zero
@@ -1760,7 +1814,10 @@ test.describe("Capability truthfulness (functional)", () => {
 	}, async ({ page }) => {
 		serverConfig();
 		sendFullCaps();
-		const certified = { "fcc-auto-unlock": "certified", gps: "certified" };
+		const certified = {
+			"fcc-auto-unlock": "certified",
+			gps: "certified",
+		};
 		sendModems({
 			[DONGLE_MODEM_ID]: {
 				...routerDongle("router_managed"),
@@ -1788,9 +1845,9 @@ test.describe("Capability truthfulness (functional)", () => {
 			await expect(row.getByTestId("modem-note").first()).toHaveText(/\S/);
 		}
 
-		for (const { testId } of GATED_MODULE_TESTIDS) {
+		for (const { testId, controlTestId } of GATED_MODULE_TESTIDS) {
 			await expect(page.getByTestId(testId)).toHaveCount(0);
-			await expect(page.getByTestId(`${testId}-toggle`)).toHaveCount(0);
+			await expect(page.getByTestId(controlTestId)).toHaveCount(0);
 			await expect(page.getByTestId(`${testId}-unknown`)).toHaveCount(0);
 		}
 		await expect(page.getByRole("dialog")).toHaveCount(0);

@@ -43,10 +43,14 @@ import {
 	setUsbModeFailureReasonSchema,
 	setUsbModeRefusalSchema,
 	usbModeOfferSuppressionSchema,
+	usbModeRuntimeSuppressionSchema,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
-import { usbOfferSuppressionKey } from "../lib/rpc/usb-mode-offer";
+import {
+	usbOfferSuppressionBodyKey,
+	usbOfferSuppressionKey,
+} from "../lib/rpc/usb-mode-offer";
 import { CATALOGS } from "./helpers/catalog";
 
 /** Every dotted key a USB-mode outcome can resolve to, derived from the wire. */
@@ -57,8 +61,14 @@ const REQUIRED_KEYS: readonly string[] = [
 	...setUsbModeFailureReasonSchema.options.map(
 		(reason) => `network.modem.usbMode.reason.${reason}`,
 	),
-	// The suppression table spans both namespaces — ask it, do not guess.
+	// The suppression table spans both namespaces AND re-spells the four
+	// hyphenated runtime literals — ask it, do not guess.
 	...usbModeOfferSuppressionSchema.options.map(usbOfferSuppressionKey),
+	// The explanatory second line is copy too, and an absent one renders as a
+	// missing band rather than a raw key — silent, and therefore worse.
+	...usbModeOfferSuppressionSchema.options
+		.map(usbOfferSuppressionBodyKey)
+		.filter((key): key is string => key !== undefined),
 ];
 
 /**
@@ -99,12 +109,30 @@ function withoutKey(catalog: unknown, key: string): unknown {
 
 describe("the required key list is derived, and non-trivial", () => {
 	it("covers every refusal, every failure reason, and every suppression", () => {
-		// 10 refusals + 5 reasons + 3 suppressions, two of which are refusals
-		// already counted — the set, not the sum, is what matters.
+		// 10 refusals + 5 reasons + 7 suppressions, three of which resolve onto
+		// keys already counted (`uncertified`, `unavailable_in_emulated_mode` and
+		// `provisioning-disabled` are refusals; `identity_unresolved` is a reason)
+		// + 5 explanatory bodies. The set, not the sum, is what matters.
 		expect(setUsbModeRefusalSchema.options.length).toBeGreaterThanOrEqual(10);
 		expect(setUsbModeFailureReasonSchema.options.length).toBe(5);
-		expect(usbModeOfferSuppressionSchema.options.length).toBe(3);
-		expect(new Set(REQUIRED_KEYS).size).toBe(15);
+		expect(usbModeOfferSuppressionSchema.options.length).toBe(7);
+		expect(usbModeRuntimeSuppressionSchema.options.length).toBe(4);
+		expect(new Set(REQUIRED_KEYS).size).toBe(23);
+	});
+
+	it("names the four runtime suppressions explicitly", () => {
+		// Spelled out for the same reason the mutation-safety four are below: a
+		// derived list that silently stopped deriving would otherwise pass, and
+		// these are the four that replace the blanket `uncertified` answer.
+		for (const token of [
+			"unknown-vendor",
+			"no-return-path",
+			"blocked-by-state",
+			"provisioning-disabled",
+		] as const) {
+			expect(usbModeOfferSuppressionSchema.options).toContain(token);
+			expect(REQUIRED_KEYS).toContain(usbOfferSuppressionKey(token));
+		}
 	});
 
 	it("names the four shared mutation-safety refusals explicitly", () => {
@@ -124,6 +152,41 @@ describe("the required key list is derived, and non-trivial", () => {
 describe("every locale carries copy for every USB-mode outcome", () => {
 	it.each(Object.keys(CATALOGS))("%s", (locale) => {
 		expect(missingCopyKeys(CATALOGS[locale], REQUIRED_KEYS)).toEqual([]);
+	});
+});
+
+describe("each suppression state reads DIFFERENTLY, in every locale", () => {
+	// Completeness alone would be satisfied by four states sharing one sentence,
+	// which is the defect being replaced one layer down: `uncertified` was a
+	// single sentence standing in for four unrelated situations. So the copy is
+	// additionally required to be DISTINGUISHABLE — an operator must be able to
+	// tell "we can't ask this device" from "it can't come back" from "it's busy"
+	// from "you turned this off", and be able to do so in their own language.
+	it.each(Object.keys(CATALOGS))("%s", (locale) => {
+		const sentences = usbModeOfferSuppressionSchema.options.map((reason) => {
+			const head = lookup(CATALOGS[locale], usbOfferSuppressionKey(reason));
+			const bodyKey = usbOfferSuppressionBodyKey(reason);
+			const body =
+				bodyKey === undefined ? "" : lookup(CATALOGS[locale], bodyKey);
+			return `${String(head)}\u0000${String(body)}`;
+		});
+
+		expect(new Set(sentences).size).toBe(sentences.length);
+	});
+
+	it("…and the four runtime states are distinct from `uncertified` itself", () => {
+		// The specific collision worth pinning: reusing the retired sentence for a
+		// runtime state would satisfy the distinctness check above only until two
+		// of them collided, and would reintroduce the exact claim being removed.
+		const uncertified = lookup(
+			CATALOGS.en,
+			"network.modem.usbMode.error.uncertified",
+		);
+		for (const reason of usbModeRuntimeSuppressionSchema.options) {
+			expect(lookup(CATALOGS.en, usbOfferSuppressionKey(reason))).not.toBe(
+				uncertified,
+			);
+		}
 	});
 });
 

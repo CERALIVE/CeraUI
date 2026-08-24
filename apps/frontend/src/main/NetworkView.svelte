@@ -280,10 +280,15 @@ function openModemConfig(id: string) {
 {/if}
 
 {#if dongleModem && dongleModemId}
+	<!-- `hasAddress` is a TRISTATE and the `undefined` arm is meaningful: a
+	     `netif` snapshot that has not arrived yet is "we were not told", and the
+	     dialog then makes no bond claim at all rather than claiming the link has
+	     no address. -->
 	<LazyDialog
 		dialog={RouterDongleDialog}
 		bind:open={dongleDialogOpen}
 		deviceId={dongleModemId}
+		hasAddress={netif === undefined ? undefined : Boolean(netif[dongleModem.ifname]?.ip)}
 		modem={dongleModem}
 	/>
 {/if}

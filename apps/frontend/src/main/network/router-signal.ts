@@ -48,8 +48,8 @@
  *    metric row reads as "the radio reported nothing".
  *
  * 3. **A NON-READING IS A WORD, NOT A MARK.** A reading is a glyph (matching the
- *    MM row's existing treatment); everything else — no SIM, unreachable admin,
- *    a refused session, an unreadable body — renders its own sentence on screen.
+ *    MM row's existing treatment); everything else — an unreachable admin API, a
+ *    refused session, an unreadable body — renders its own sentence on screen.
  *    The device ships with a kiosk touchscreen that cannot hover to reveal a
  *    tooltip, so a state carried only by an icon or a colour is a state the
  *    operator cannot read. There is deliberately no spinner anywhere in here: a
@@ -62,7 +62,7 @@ import type {
 	RouterSignalMetric,
 } from "@ceraui/rpc/schemas";
 
-import type { ModemSignalTier } from "./cellular-row";
+import { type ModemSignalTier, resolveSignalTier } from "./cellular-row";
 
 export type RouterSignalProvenance = RouterSignal["provenance"];
 export type RouterSignalFreshness = RouterSignal["freshness"];
@@ -74,11 +74,14 @@ export type RouterSignalUnknownReason = Extract<
 /**
  * What the row-level chip says.
  *
- * `no-sim` is its OWN variant rather than an unknown reason: the device stated
- * that its SIM slot is empty, which is a positive fact about the hardware and
- * outranks whatever the radio fields happen to hold. Both bench HiLink twins
- * are in exactly this state (`SimStatus 255` with every signal element empty),
- * so it is the common case rather than an edge one.
+ * There is deliberately NO `no-sim` variant. An empty slot is a fact about the
+ * CARD, not about the radio, and it is owned end-to-end by one component —
+ * `NoSimBadge`, which every modem class draws (see `CeraUI/AGENTS.md` → "…AND
+ * THE 'No SIM' TAG IS ONE COMPONENT"). This module used to carry a third
+ * spelling of it, and no surface has rendered that spelling since the tag was
+ * unified: the row guards its chip on `isSimlessModem`, and the section set
+ * folds the same variant back into "unreadable". A readout state nothing can
+ * render is a state that can only ever drift away from the one that ships.
  */
 export type RouterSignalReadout =
 	| {
@@ -94,11 +97,6 @@ export type RouterSignalReadout =
 			readonly provenance: RouterSignalProvenance;
 			readonly freshness: RouterSignalFreshness;
 			readonly reason: RouterSignalUnknownReason;
-	  }
-	| {
-			readonly kind: "no-sim";
-			readonly provenance: RouterSignalProvenance;
-			readonly freshness: RouterSignalFreshness;
 	  };
 
 export type RouterSignalMetricId =
@@ -259,10 +257,19 @@ function metricOf(
 /**
  * The row-level readout, or `undefined` when there is nothing to say.
  *
- * `undefined` covers two DIFFERENT absences and both must render nothing: a row
- * that is not a router dongle at all, and a backend that predates todo 20 and
- * publishes no normalized model. Absence renders as absence — the legacy bar
- * scalars keep their place in the detail strip either way.
+ * `undefined` covers THREE different absences and all three must render nothing
+ * HERE: a row that is not a router dongle at all, a backend that predates todo
+ * 20 and publishes no normalized model, and a device that stated its SIM slot is
+ * empty. Absence renders as absence — the legacy bar scalars keep their place in
+ * the detail strip either way.
+ *
+ * The empty slot is the third one BY OWNERSHIP, not by convenience. It still
+ * outranks every metric, so a `SimStatus 255` HiLink publishing `0` bars can
+ * never resolve to a `none` tier — that is rule 2 and it is unchanged. What
+ * changed is who SAYS so: the fact belongs to `NoSimBadge` (row) and `SimBlock`
+ * (dialog), each of which already states it exactly once, so this module answers
+ * only the question it owns — what the RADIO reported — and answers "nothing"
+ * when there is no card for a radio to be reporting on.
  */
 export function resolveRouterSignalReadout(
 	modem: Modem,
@@ -270,13 +277,9 @@ export function resolveRouterSignalReadout(
 	const admin = modem.router_admin;
 	const signal = admin?.signal;
 	if (signal === undefined) return undefined;
+	if (admin?.sim === "absent") return undefined;
 
 	const { provenance, freshness } = signal;
-
-	// A device that says its SIM slot is empty cannot be reporting a radio, so
-	// this outranks every metric. Drawing bars here would be the fabricated
-	// reading this whole surface exists to prevent.
-	if (admin?.sim === "absent") return { kind: "no-sim", provenance, freshness };
 
 	if (signal.bars.state === "known" && signal.max_bars.state === "known") {
 		const tier = tierFromBars(signal.bars.value, signal.max_bars.value);
@@ -300,13 +303,38 @@ export function resolveRouterSignalReadout(
 }
 
 /**
+ * WHICH of the two instruments this row may draw — exactly one, ever (rule 1).
+ *
+ * It exists because both consumers used to state that exclusion for themselves,
+ * and two copies of one precedence rule are two chances to answer differently
+ * about a row that published both — which is the instrument confusion
+ * `provenance` exists to prevent.
+ *
+ * `none` is a third answer, not a degenerate `device-admin`: no instrument
+ * published anything renderable, which is what "unreadable" is derived from.
+ */
+export type SignalInstrument =
+	| { readonly kind: "device-stack"; readonly tier: ModemSignalTier }
+	| { readonly kind: "device-admin"; readonly readout: RouterSignalReadout }
+	| { readonly kind: "none" };
+
+export function resolveSignalInstrument(modem: Modem): SignalInstrument {
+	const tier = resolveSignalTier(modem.status?.signal);
+	if (tier !== undefined) return { kind: "device-stack", tier };
+
+	const readout = resolveRouterSignalReadout(modem);
+	return readout === undefined
+		? { kind: "none" }
+		: { kind: "device-admin", readout };
+}
+
+/**
  * The chip's own sentence. A reading resolves to its tier word (the SAME four
  * this section already uses for an MM radio, so one vocabulary covers both
  * instruments); everything else names the state.
  */
 export function routerSignalStateKey(readout: RouterSignalReadout): string {
 	if (readout.kind === "reading") return TIER_LABEL_KEYS[readout.tier];
-	if (readout.kind === "no-sim") return "network.routerCellular.simAbsent";
 	return REASON_KEYS[readout.reason];
 }
 

@@ -40,6 +40,8 @@ import type {
 	ModemCapabilitiesOutput,
 	ModemConfigInput,
 	ModemConfigOutput,
+	ModemCredentialsInput,
+	ModemCredentialsOutput,
 	ModemGpsInput,
 	ModemGpsOutput,
 	ModemScanInput,
@@ -69,6 +71,7 @@ import type {
 	SetModemBandsOutput,
 	SetModemCapabilityInput,
 	SetModemCapabilityOutput,
+	SetModemCredentialsInput,
 	SetModemGpsInput,
 	SetModemGpsOutput,
 	SetPasswordInput,
@@ -659,6 +662,23 @@ export interface TypedRPC {
 		setCapabilities: (
 			input: SetModemCapabilityInput,
 		) => Promise<SetModemCapabilityOutput>;
+		/**
+		 * The router-WebUI login surface. All three answer the RESOLVED lock state
+		 * and never the request, and none of them ever echoes a password back.
+		 *
+		 * `verifyCredentials` presents the stored login EXACTLY ONCE — there is no
+		 * retry, because every dialect here counts a failed attempt toward a
+		 * lockout the operator cannot clear.
+		 */
+		setCredentials: (
+			input: SetModemCredentialsInput,
+		) => Promise<ModemCredentialsOutput>;
+		clearCredentials: (
+			input: ModemCredentialsInput,
+		) => Promise<ModemCredentialsOutput>;
+		verifyCredentials: (
+			input: ModemCredentialsInput,
+		) => Promise<ModemCredentialsOutput>;
 		/**
 		 * Whether ModemManager ships an FCC-unlock procedure for this MODEL, and
 		 * whether the operator opted in. A pure read of the same catalog the write

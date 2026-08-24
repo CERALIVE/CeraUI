@@ -16,10 +16,11 @@
  * among the certified targets, which is the only claim it can support.
  */
 
-import type {
-	UsbCompositionMode,
-	UsbModeOfferSuppression,
-	UsbModeOptionsOutput,
+import {
+	USB_MODE_LIFTABLE_SUPPRESSIONS,
+	type UsbCompositionMode,
+	type UsbModeOfferSuppression,
+	type UsbModeOptionsOutput,
 } from "@ceraui/rpc/schemas";
 
 export type UsbModeOffer =
@@ -32,7 +33,24 @@ export type UsbModeOffer =
 			readonly targets: readonly UsbCompositionMode[];
 			readonly preferred: UsbCompositionMode;
 	  }
-	| { readonly phase: "withheld"; readonly reason: UsbModeOfferSuppression };
+	/** A property of the device: no control at all, and the reason beside it. */
+	| { readonly phase: "withheld"; readonly reason: UsbModeOfferSuppression }
+	/**
+	 * A condition the operator can LIFT. The control area stays visible and
+	 * disabled, carrying the reason — the same distinction the provisioning gate
+	 * has always drawn, now available for every liftable suppression rather than
+	 * for the one the frontend could read out of `config` on its own.
+	 */
+	| { readonly phase: "blocked"; readonly reason: UsbModeOfferSuppression };
+
+const LIFTABLE = new Set<string>(USB_MODE_LIFTABLE_SUPPRESSIONS);
+
+/** Whether a suppression describes a condition, rather than the device itself. */
+export function isLiftableSuppression(
+	reason: UsbModeOfferSuppression,
+): boolean {
+	return LIFTABLE.has(reason);
+}
 
 /**
  * Fold the device's answer into what the card may render.
@@ -50,7 +68,9 @@ export function deriveUsbModeOffer(input: {
 	const { options, activeMode, recommendedMode } = input;
 	if (options === undefined) return { phase: "unknown" };
 	if (options.suppressed !== undefined) {
-		return { phase: "withheld", reason: options.suppressed };
+		return isLiftableSuppression(options.suppressed)
+			? { phase: "blocked", reason: options.suppressed }
+			: { phase: "withheld", reason: options.suppressed };
 	}
 
 	const targets = options.certified.filter((mode) => mode !== activeMode);
@@ -62,20 +82,60 @@ export function deriveUsbModeOffer(input: {
 }
 
 /**
- * The copy key for a withheld offer.
+ * The copy key for a suppressed offer.
  *
- * It is a TABLE rather than an interpolation because the three tokens do not
- * share one namespace: `identity_unresolved` is a `reason.*` string (it is also
- * a `transition_failed` reason) and the other two are `error.*`. Interpolating
- * would resolve to a missing key for one of them, which renders as the raw
- * dotted path — the one thing the modem surface's a11y gate forbids outright.
+ * It is a TABLE rather than an interpolation for two independent reasons, and
+ * either alone would be enough. The tokens do not share one namespace —
+ * `identity_unresolved` is a `reason.*` string (it is also a `transition_failed`
+ * reason) while the rest are `error.*` — and the four runtime tokens are
+ * HYPHENATED on the wire, because they are modem-stack's own literals, while
+ * every message key in this catalog is snake_case. Interpolating either shape
+ * resolves to a missing key, which renders as the raw dotted path: the one thing
+ * the modem surface's a11y gate forbids outright.
+ *
+ * `provisioning-disabled` deliberately resolves onto the EXISTING
+ * `error.provisioning_disabled` sentence rather than a runtime-specific twin.
+ * One machine token gets one operator sentence, whichever surface produced it.
  */
+const SUPPRESSION_KEYS: Readonly<Record<UsbModeOfferSuppression, string>> = {
+	identity_unresolved: "network.modem.usbMode.reason.identity_unresolved",
+	uncertified: "network.modem.usbMode.error.uncertified",
+	unavailable_in_emulated_mode:
+		"network.modem.usbMode.error.unavailable_in_emulated_mode",
+	"unknown-vendor": "network.modem.usbMode.error.unknown_vendor",
+	"no-return-path": "network.modem.usbMode.error.no_return_path",
+	"blocked-by-state": "network.modem.usbMode.error.blocked_by_state",
+	"provisioning-disabled": "network.modem.usbMode.error.provisioning_disabled",
+};
+
 export function usbOfferSuppressionKey(
 	reason: UsbModeOfferSuppression,
 ): string {
-	return reason === "identity_unresolved"
-		? "network.modem.usbMode.reason.identity_unresolved"
-		: `network.modem.usbMode.error.${reason}`;
+	return SUPPRESSION_KEYS[reason];
+}
+
+/**
+ * The second, explanatory line for a suppressed offer — what still works, or
+ * what the operator can do about it.
+ *
+ * Absent for the two suppressions whose head sentence is already the whole
+ * answer: `identity_unresolved` names its own remedy, and
+ * `unavailable_in_emulated_mode` has no operator action at all.
+ */
+const SUPPRESSION_BODY_KEYS: Readonly<
+	Partial<Record<UsbModeOfferSuppression, string>>
+> = {
+	uncertified: "network.modem.usbMode.uncertifiedBody",
+	"unknown-vendor": "network.modem.usbMode.unknownVendorBody",
+	"no-return-path": "network.modem.usbMode.noReturnPathBody",
+	"blocked-by-state": "network.modem.usbMode.blockedByStateBody",
+	"provisioning-disabled": "network.modem.usbMode.provisioningBody",
+};
+
+export function usbOfferSuppressionBodyKey(
+	reason: UsbModeOfferSuppression,
+): string | undefined {
+	return SUPPRESSION_BODY_KEYS[reason];
 }
 
 /** Whether a mode the operator has selected is still one the device offers. */

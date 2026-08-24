@@ -32,7 +32,7 @@
  * `@ceralive/modem-control@1.0.0`, so while `package.json` pinned the `0.2.0`
  * floor this module resolved it through a lazy `import()` plus a structural
  * probe and answered a typed `usage_policy_unsupported` refusal when the pinned
- * release did not publish it. The pin is now `1.1.0` EXACTLY, so that question
+ * release did not publish it. The pin is now `1.2.0` EXACTLY, so that question
  * is settled at build time by `tsc` and at install time by `bun install` — both
  * strictly stronger than a runtime `typeof === "function"` check, which could
  * only report the gap after a write had already been attempted.
@@ -90,7 +90,7 @@ let cache: ReadonlyMap<string, ModemUsagePolicy> = new Map();
 /**
  * Whether this build can apply a usage-policy write.
  *
- * Constant, because the exact `1.1.0` pin makes it one. It stays a function
+ * Constant, because the exact `1.2.0` pin makes it one. It stays a function
  * because `modem.data_usage_policy.supported` is an EXPLICIT wire field — the
  * modem merge preserves an omitted optional, so the claim must be published on
  * every row — and a single named answer is what keeps the wire and this module

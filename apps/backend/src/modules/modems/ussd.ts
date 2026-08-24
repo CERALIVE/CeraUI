@@ -50,6 +50,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { IMPLEMENTED_MODEM_CAPABILITY_MODULES } from "./capability-evidence.ts";
+import { noteCapabilityEvidenceChanged } from "./capability-gates.ts";
 import { withCapabilityModuleMutation } from "./capability-mutation.ts";
 import {
 	cancelUssd,
@@ -126,6 +127,24 @@ export function ussdEvidence(
 ): CapabilityEvidence {
 	if (stableKey === undefined) return "unknown";
 	return capabilityCache.get(stableKey) ?? "unknown";
+}
+
+/**
+ * `gps.ts`'s `recordCapability`, for the same reason and with the same gate.
+ *
+ * The wire build is synchronous, so a read that FIRST proves this modem exposes
+ * USSD would otherwise only reach an operator on the next 30 s poll — and the
+ * verbs are gated on the same evidence, so until the claim moves
+ * `withCapabilityModuleMutation` refuses every one of them `module_unavailable`.
+ * CHANGE-GATED, so re-reading an already-proven modem broadcasts nothing.
+ */
+function recordUssdCapability(
+	stableKey: string,
+	capability: CapabilityEvidence,
+): void {
+	const changed = capabilityCache.get(stableKey) !== capability;
+	capabilityCache.set(stableKey, capability);
+	if (changed) noteCapabilityEvidenceChanged();
 }
 
 function clearTimer(stableKey: string): void {
@@ -236,11 +255,11 @@ export async function readModemUssd(
 		// refusal is a statement about the read, and the ladder stops at `enabled`
 		// for `unknown` — surfaced by nothing, mutated by nothing.
 		if (status.reason === "unsupported") {
-			capabilityCache.set(identity.stableKey, "absent");
+			recordUssdCapability(identity.stableKey, "absent");
 		}
 		return { success: false, error: status.reason };
 	}
-	capabilityCache.set(identity.stableKey, "present");
+	recordUssdCapability(identity.stableKey, "present");
 	return { success: true, session: currentSession(identity.stableKey) };
 }
 

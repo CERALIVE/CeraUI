@@ -20,6 +20,7 @@ import type { RouterSignalUnknownReason } from "./router-signal";
 import {
 	dominantUnknownReason,
 	resolveRouterSignalReadout,
+	resolveSignalInstrument,
 	routerSignalMetricRows,
 	routerSignalReasonKey,
 	routerSignalStateKey,
@@ -190,9 +191,12 @@ describe("the row readout — one per dialect, plus every degraded case", () => 
 		);
 	});
 
-	it("says NO SIM instead of drawing bars when the device stated an empty slot", () => {
+	it("reports NOTHING — not a zero-bar reading — when the device stated an empty slot", () => {
 		// The real bench HiLink: `SimStatus 255`, `SignalIcon 0`, `maxsignal 5`,
-		// every element of `/api/device/signal` present and EMPTY.
+		// every element of `/api/device/signal` present and EMPTY. `NoSimBadge`
+		// owns the empty slot, so silence is the right answer here — and the
+		// second assertion is the one that matters: `0 / 5` must never become a
+		// `none` tier.
 		const benchTruth = hilink({
 			bars: known(0),
 			max_bars: known(5),
@@ -201,23 +205,24 @@ describe("the row readout — one per dialect, plus every degraded case", () => 
 			rsrq: NOT_REPORTED,
 			sinr: NOT_REPORTED,
 		});
-		const readout = resolveRouterSignalReadout(
-			dongle(benchTruth, {
-				router_admin: {
-					admin_url: "http://192.168.8.1",
-					reachable: true,
-					sim: "absent",
-					signal: benchTruth,
-				},
-			} as Partial<Modem>),
-		);
+		const simless = dongle(benchTruth, {
+			router_admin: {
+				admin_url: "http://192.168.8.1",
+				reachable: true,
+				sim: "absent",
+				signal: benchTruth,
+			},
+		} as Partial<Modem>);
 
-		expect(readout).toEqual({
-			kind: "no-sim",
-			provenance: "hilink-admin-api",
-			freshness: "live",
+		expect(resolveRouterSignalReadout(simless)).toBeUndefined();
+		expect(resolveSignalInstrument(simless)).toEqual({ kind: "none" });
+
+		// Non-vacuity: the SAME payload with a card in the slot DOES resolve, so
+		// the silence above is the slot's doing and not a broken fixture.
+		expect(resolveRouterSignalReadout(dongle(benchTruth))).toMatchObject({
+			kind: "reading",
+			tier: "none",
 		});
-		expect(readout && "tier" in readout).toBe(false);
 	});
 
 	it.each([
@@ -292,6 +297,49 @@ describe("the row readout — one per dialect, plus every degraded case", () => 
 				status: { connection: "connected", signal: 81 },
 			} as unknown as Modem),
 		).toBeUndefined();
+	});
+});
+
+describe("ONE row draws ONE instrument, and one rule decides which", () => {
+	const mmRadio = {
+		ifname: "wwan0",
+		network_type: { supported: [], active: null },
+		status: { connection: "connected", signal: 81 },
+	} as unknown as Modem;
+
+	it("prefers the device stack's own radio whenever it published one", () => {
+		expect(resolveSignalInstrument(mmRadio)).toEqual({
+			kind: "device-stack",
+			tier: "high",
+		});
+	});
+
+	it("falls through to the admin API only when the stack reported nothing", () => {
+		const instrument = resolveSignalInstrument(dongle(hilink()));
+		expect(instrument.kind).toBe("device-admin");
+		expect(instrument).toMatchObject({
+			readout: { provenance: "hilink-admin-api", tier: "high" },
+		});
+	});
+
+	it("still answers ONE instrument for a row that somehow published both", () => {
+		// Impossible by construction on the wire — an MM row carries no
+		// `router_admin` and a router row no `status` — which is exactly why the
+		// precedence must live in one place rather than be restated per surface.
+		const both = {
+			...dongle(hilink()),
+			status: { connection: "connected", signal: 81 },
+		} as Modem;
+		expect(resolveSignalInstrument(both)).toEqual({
+			kind: "device-stack",
+			tier: "high",
+		});
+	});
+
+	it("answers `none` when neither instrument reported anything renderable", () => {
+		expect(resolveSignalInstrument(dongle(undefined))).toEqual({
+			kind: "none",
+		});
 	});
 });
 

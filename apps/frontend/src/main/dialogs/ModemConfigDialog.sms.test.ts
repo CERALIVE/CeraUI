@@ -23,7 +23,7 @@
 import type { Modem, SmsMessage } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { MODEM_ASYNC_SURFACES } from "$lib/modem/async-surface";
 import { openModemAdvanced } from "../../tests/helpers/modem-advanced";
 import { resetModemsFeed } from "../../tests/helpers/modem-feed.svelte";
 import ModemConfigDialog from "./ModemConfigDialog.svelte";
@@ -550,6 +550,85 @@ describe("READ-ONLY: no mutation affordance exists in the rendered DOM", () => {
 					(el) => Number(el.getAttribute("tabindex")) >= 0,
 				),
 			).toHaveLength(0);
+		}
+	});
+});
+
+describe("state table — a read that never answers", () => {
+	it("reaches a terminal state at its declared bound instead of spinning", async () => {
+		vi.useFakeTimers();
+		try {
+			getSms.mockReturnValue(new Promise(() => {}));
+			mount();
+			await vi.advanceTimersByTimeAsync(0);
+			await openModemAdvanced();
+			await fireEvent.click(screen.getByTestId("modem-sms-toggle"));
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(getSms).toHaveBeenCalled();
+			expect(screen.getByTestId("modem-sms-loading")).toBeTruthy();
+
+			// One tick short of the bound the inbox is still honestly reading.
+			await vi.advanceTimersByTimeAsync(
+				MODEM_ASYNC_SURFACES.getSms.boundMs - 1,
+			);
+			expect(screen.queryByTestId("modem-sms-timed-out")).toBeNull();
+			expect(screen.getByTestId("modem-sms-loading")).toBeTruthy();
+
+			await vi.advanceTimersByTimeAsync(1);
+			const band = screen.getByTestId("modem-sms-timed-out");
+			expect(band.getAttribute("role")).toBe("status");
+			expect(band.textContent?.trim().length).toBeGreaterThan(0);
+			expect(band.textContent).not.toContain("network.modem.");
+			expect(screen.queryByTestId("modem-sms-loading")).toBeNull();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("is neither an empty inbox nor a refusal, and reports no count", async () => {
+		vi.useFakeTimers();
+		try {
+			getSms.mockReturnValue(new Promise(() => {}));
+			mount();
+			await vi.advanceTimersByTimeAsync(0);
+			await openModemAdvanced();
+			await fireEvent.click(screen.getByTestId("modem-sms-toggle"));
+			await vi.advanceTimersByTimeAsync(MODEM_ASYNC_SURFACES.getSms.boundMs);
+
+			expect(screen.getByTestId("modem-sms-timed-out")).toBeTruthy();
+			// "The device answered nothing" and "the device answered no" are both
+			// claims about the inbox. This is neither.
+			expect(screen.queryByTestId("modem-sms-empty")).toBeNull();
+			expect(screen.queryByTestId("modem-sms-refused")).toBeNull();
+			// A count of 0 beside an unanswered read asserts an inbox we never saw.
+			expect(screen.queryByTestId("modem-sms-count")).toBeNull();
+			// The one repair stays offered, because the device can answer next time.
+			expect(screen.getByTestId("modem-sms-refresh")).toBeTruthy();
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("recovers on a re-read once the device answers", async () => {
+		vi.useFakeTimers();
+		try {
+			getSms.mockReturnValueOnce(new Promise(() => {}));
+			mount();
+			await vi.advanceTimersByTimeAsync(0);
+			await openModemAdvanced();
+			await fireEvent.click(screen.getByTestId("modem-sms-toggle"));
+			await vi.advanceTimersByTimeAsync(MODEM_ASYNC_SURFACES.getSms.boundMs);
+			expect(screen.getByTestId("modem-sms-timed-out")).toBeTruthy();
+
+			resolveWith(INBOX);
+			await fireEvent.click(screen.getByTestId("modem-sms-refresh"));
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(screen.getByTestId("modem-sms-list")).toBeTruthy();
+			expect(screen.queryByTestId("modem-sms-timed-out")).toBeNull();
+		} finally {
+			vi.useRealTimers();
 		}
 	});
 });

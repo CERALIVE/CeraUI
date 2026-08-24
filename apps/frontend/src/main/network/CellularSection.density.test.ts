@@ -387,6 +387,108 @@ describe("a collapsed disclosure hides its content from the pointer", () => {
 });
 
 /**
+ * THE PRIMARY ROW'S BADGE BUDGET.
+ *
+ * Todo 64 cut the row from a wall of pills to four questions, and the way that
+ * regresses is not one bad commit — it is ten good ones, each adding the one
+ * pill its own feature obviously needed. `DESIGN.md` §2 ranks the row's content,
+ * so this is the ranking's arithmetic: whatever the device reports, the pills an
+ * operator scans before the reason lines are capped.
+ *
+ * The cap is on the PRIMARY region only. A pill inside the disclosure is
+ * something the operator asked to see, and the class badge lives there for
+ * exactly that reason.
+ */
+describe("badge density — the primary row's budget", () => {
+	/**
+	 * Every pill shape this row can draw: `Badge`'s semantic variants publish
+	 * `data-status-badge`, and `NoSimBadge` publishes `data-no-sim`. Matched in
+	 * ONE selector so a pill carrying both is counted once.
+	 */
+	const BADGE = "[data-status-badge],[data-no-sim]";
+
+	/**
+	 * Four is the shipped ceiling, and it is a budget rather than a measurement:
+	 * a row already renders state + carrier + roaming + slot on the bench's
+	 * roaming Quectel, which is the most any real device reaches today.
+	 */
+	const PRIMARY_BADGE_CEILING = 4;
+
+	function primaryBadges(container: HTMLElement): HTMLElement[] {
+		const body = detailsBody(container);
+		return [...row(container).querySelectorAll<HTMLElement>(BADGE)].filter(
+			(el) => !body.contains(el),
+		);
+	}
+
+	/** A roaming radio on a named carrier in a labelled slot — the fullest row. */
+	function roamingRadio(): Modem {
+		return {
+			...refusedRadio(),
+			registration_rejection: undefined,
+			status: {
+				connection: "connected",
+				signal: 81,
+				roaming: true,
+				network: "TIGO",
+				network_type: "4G",
+			},
+		} as Modem;
+	}
+
+	/** A dongle with an empty slot: the second No-SIM tag beside a link state. */
+	function simlessDongle(): Modem {
+		const base = hilink();
+		return {
+			...base,
+			router_admin: { ...base.router_admin, sim: "absent" },
+		} as Modem;
+	}
+
+	const CASES: [string, () => Modem][] = [
+		["a radio the network is refusing", refusedRadio],
+		["a roaming radio on a named carrier", roamingRadio],
+		["a router dongle", hilink],
+		["a router dongle with an empty slot", simlessDongle],
+	];
+
+	it.each(CASES)(
+		"Given %s, When the row renders, Then the primary badge count stays inside the budget",
+		(_label, build) => {
+			const { container } = renderRows([["0", build()]]);
+			const badges = primaryBadges(container);
+
+			// A row that renders NO pill would make the ceiling vacuous — every
+			// device states at least its lifecycle.
+			expect(badges.length).toBeGreaterThan(0);
+			expect(
+				badges.length,
+				`primary badges: ${badges.map((el) => el.textContent?.trim()).join(" | ")}`,
+			).toBeLessThanOrEqual(PRIMARY_BADGE_CEILING);
+		},
+	);
+
+	it("keeps the class badge OUT of that budget by keeping it in the disclosure", () => {
+		const { container } = renderRows([["0", hilink()]]);
+		const badge = container.querySelector<HTMLElement>(
+			'[data-testid="modem-class-badge"]',
+		);
+
+		expect(badge).not.toBeNull();
+		expect(primaryBadges(container)).not.toContain(badge);
+	});
+
+	// NON-VACUITY: the filter must really be excluding the disclosure, or the
+	// ceiling is being applied to a set that never contained the folded pills.
+	it("counts fewer pills than the row holds in total", () => {
+		const { container } = renderRows([["0", simlessDongle()]]);
+		const all = row(container).querySelectorAll(BADGE).length;
+
+		expect(all).toBeGreaterThan(primaryBadges(container).length);
+	});
+});
+
+/**
  * The `{#each}` key. It used to be `modem.ifname || id + '-' + index`, and the
  * bench HiLink twins ship ONE factory MAC between them, so they rename against
  * each other (`enx0c5b8f279a64` <-> `eth1`) on replug — which swaps two rows'

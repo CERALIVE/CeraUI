@@ -65,6 +65,8 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
+import { getConfig } from "../config.ts";
+import { getIsStreaming } from "../streaming/streaming.ts";
 
 import { withJournaledModemMutation } from "./mutation-lease.ts";
 import { createTransitionEngine } from "./transition-engine.ts";
@@ -81,10 +83,17 @@ import {
 	isMmTransitionMode,
 	matchCertifiedEntry,
 } from "./usb-mode-identity.ts";
+import { defaultRuntimeCompositionQuery } from "./usb-mode-runtime.ts";
 
 export const defaultUsbModeDispatchDeps: UsbModeDispatchDeps = {
 	resolveIdentity: defaultResolveIdentity,
 	catalog: CERTIFIED_CATALOG,
+	queryRuntimeComposition: defaultRuntimeCompositionQuery,
+	// Read through the SAME accessors the dispatch's own first and third gates
+	// use, so the reason an offer is withheld and the reason a dispatch is
+	// refused can never disagree about the state of one device.
+	isProvisioningEnabled: () => getConfig().modem_provisioning === true,
+	isBlockedByLiveState: () => getIsStreaming(),
 	resolveConnectionId: defaultResolveConnectionId,
 	// The physical-topology UID is what MM keys a Device inhibit on and is the one
 	// identifier available without a mutation-capable D-Bus client.

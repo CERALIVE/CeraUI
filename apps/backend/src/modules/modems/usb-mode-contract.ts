@@ -34,6 +34,10 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import type { ResolvedModemIdentity } from "./usb-mode-identity.ts";
+import type {
+	RuntimeCompositionResponse,
+	RuntimeCompositionVendor,
+} from "./usb-mode-runtime.ts";
 
 /**
  * The engine surface this module drives. Structurally `UsbModeTransition` — named
@@ -72,6 +76,37 @@ export interface UsbModeDispatchDeps {
 	/** ONE immediate re-discovery + `modems` broadcast after a verified success. */
 	rediscover(): Promise<void>;
 	now(): number;
+
+	/**
+	 * Ask the device, in its own AT dialect, which compositions it has.
+	 *
+	 * ABSENT means this build has no runtime-composition path wired at all, and
+	 * the options read falls back to the catalog answer byte-for-byte. That is a
+	 * different fact from a device that could not be asked, which is why it is an
+	 * omitted dependency rather than a resolver that answers `undefined`: reading
+	 * "no runtime path on this build" as `unknown-vendor` would tell an operator
+	 * something about their hardware that is really a statement about ours.
+	 */
+	queryRuntimeComposition?(
+		identity: ResolvedModemIdentity,
+		vendor: RuntimeCompositionVendor,
+	): Promise<RuntimeCompositionResponse | undefined>;
+
+	/**
+	 * The operator's `modem_provisioning` switch. ABSENT is NOT `false` — it is
+	 * the pre-runtime shape, and the dispatch's own first gate refuses a disabled
+	 * device independently, so a missing reader costs a wasted round-trip rather
+	 * than an unguarded mutation.
+	 */
+	isProvisioningEnabled?(): boolean;
+
+	/**
+	 * Whether a live condition forbids asking right now — a stream being admitted,
+	 * another modem transition holding the interlock. Asked BEFORE any AT contact,
+	 * because an AT read on a modem mid-mutation is exactly the contention the
+	 * interlock exists to prevent.
+	 */
+	isBlockedByLiveState?(): boolean;
 }
 
 /** A refusal this module produces, in the wire vocabulary of `setUsbMode`. */

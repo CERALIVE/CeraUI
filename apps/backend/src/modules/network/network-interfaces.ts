@@ -19,6 +19,7 @@
 /* Network interface list */
 import { EventEmitter } from "node:events";
 import { isSimlessForBond } from "@ceraui/rpc";
+import type { NotificationType } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 
 import { ipToInt, isSameSubnet } from "../../helpers/ip-addresses.ts";
@@ -204,6 +205,213 @@ export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	return int.enabled;
 }
 
+/*
+  THE DUPLICATE-IP NOTICE — WHAT THE OPERATOR IS ACTUALLY TOLD.
+
+  The flag above answers a policy question. This answers a HONESTY one, and it
+  used to get all three parts of it wrong at once:
+
+    * it was raised at `"error"` severity while its own message ended "...they
+      can still be bonded when per-interface link mapping is active", i.e. the
+      band asserted a fault and then explained that the fault is handled;
+    * it never consulted `isBondMappingActive()`, the ONE authority on whether
+      the (ip,iface) mapping is really in force — so the same words appeared
+      whether the twins were disambiguated or not; and
+    * the RAISE *and* the retraction both sat inside the `intsChanged` branch.
+      A bond-mapping transition moves no interface, no address and no flag, so
+      nothing re-evaluated and the band could never clear. Same
+      raise-but-never-retract family as `policy_route_missing`.
+
+  So the decision is re-made on EVERY pass, against the mapping state and against
+  per-interface mappability, and only a group that is genuinely still ambiguous
+  produces a band — as a WARNING, never an error, because an excluded twin is a
+  degradation of the bond and not a failure of the device.
+*/
+export const NETIF_DUP_IP_NOTIFICATION = "netif_dup_ip";
+
+export interface DuplicateIpGroup {
+	readonly ip: string;
+	readonly ifaces: readonly string[];
+}
+
+/** The band this pass wants standing, or `undefined` for "say nothing". */
+export interface DupIpNotice {
+	readonly type: NotificationType;
+	readonly msg: string;
+}
+
+/**
+ * The two facts the notice needs and this module cannot reach.
+ *
+ * Both live under `modules/streaming/`, which imports THIS module, so a static
+ * edge back would cycle — the same reason `queueUpdateGwHook` is installed
+ * rather than imported. The defaults answer NO to both, which is the fail-safe
+ * direction: an unwired process REPORTS the collision rather than silently
+ * claiming it is handled.
+ */
+export interface DupIpNoticeDeps {
+	/** Is the (ip,iface) bind map actually in force right now? */
+	readonly isMappingActive: () => boolean;
+	/** Can the writer publish a row for this link — i.e. name its device? */
+	readonly isLinkMappable: (ifname: string, ip: string) => boolean;
+}
+
+const defaultDupIpNoticeDeps: DupIpNoticeDeps = {
+	isMappingActive: () => false,
+	isLinkMappable: () => false,
+};
+
+let dupIpNoticeDeps: DupIpNoticeDeps = defaultDupIpNoticeDeps;
+
+/** Install the notice deps; `null` restores the fail-safe defaults. */
+export function setDupIpNoticeDeps(deps: DupIpNoticeDeps | null): void {
+	dupIpNoticeDeps = deps ?? defaultDupIpNoticeDeps;
+}
+
+/**
+ * Install the SHIPPED deps.
+ *
+ * Exported (rather than inlined into `initNetworkInterfaceMonitoring`) so a test
+ * can drive the production pair — the same `isBondMappingActive()` the telemetry
+ * rung gates on and the same identity resolution the bind-map writer performs —
+ * instead of a double that could agree with a rule nothing else uses.
+ */
+export async function wireDupIpNoticeDeps(): Promise<void> {
+	const [{ isBondMappingActive }, { isBondLinkMappable }] = await Promise.all([
+		import("../streaming/link-mapping-report.ts"),
+		import("../streaming/srtla.ts"),
+	]);
+	setDupIpNoticeDeps({
+		isMappingActive: isBondMappingActive,
+		isLinkMappable: isBondLinkMappable,
+	});
+}
+
+/**
+ * The same-IP groups among the interfaces dup-IP detection may judge.
+ *
+ * PURE, and deliberately recomputed from the addresses on every pass rather than
+ * read back off `NETIF_ERR_DUPIPV4`: those flags are only refreshed on a
+ * topology change, and the notice has to be re-decided when the BOND MAPPING
+ * moves — which changes no flag at all.
+ */
+export function duplicateIpGroups(
+	interfaces: Record<string, NetworkInterface>,
+): DuplicateIpGroup[] {
+	const byIp = new Map<string, string[]>();
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int?.ip) continue;
+		// A station<->hotspot transition transiently shares an address; that is a
+		// false alarm rather than a collision, so it is not a group member.
+		if (dupIpSuppressedIfaces.has(name)) continue;
+		const seen = byIp.get(int.ip);
+		if (seen) seen.push(name);
+		else byIp.set(int.ip, [name]);
+	}
+
+	const groups: DuplicateIpGroup[] = [];
+	for (const [ip, ifaces] of byIp) {
+		if (ifaces.length > 1) groups.push({ ip, ifaces });
+	}
+	return groups;
+}
+
+/** Raise/lower `NETIF_ERR_DUPIPV4` to match `groups`. Semantics unchanged. */
+function applyDuplicateIpFlags(
+	interfaces: Record<string, NetworkInterface>,
+	groups: readonly DuplicateIpGroup[],
+): void {
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int?.ip) continue;
+		clearNetifDup(int);
+	}
+	for (const group of groups) {
+		for (const name of group.ifaces) setNetifDup(interfaces[name]);
+	}
+}
+
+/**
+ * What, if anything, to tell the operator about `groups`.
+ *
+ * A group is only worth a band while the device genuinely cannot tell its
+ * members apart:
+ *
+ *   * mapping NOT in force — the sender collapses the duplicate source IPs and
+ *     keeps one representative, so a link really is missing;
+ *   * mapping in force but a member is `unmappable` (`bind-map.ts`) — no row can
+ *     be published for it, so it is excluded from exactly the mechanism that
+ *     would have disambiguated it.
+ *
+ * A fully mapped group is silent. That is not a loss of information: the
+ * per-interface `error: "duplicate IPv4 addr"` still rides the `netif` wire and
+ * the Network page still renders it, so the operator can see the shared address
+ * without being told a handled condition is a fault.
+ */
+export function decideDupIpNotice(
+	groups: readonly DuplicateIpGroup[],
+	deps: DupIpNoticeDeps = dupIpNoticeDeps,
+): DupIpNotice | undefined {
+	if (groups.length === 0) return undefined;
+
+	const mappingActive = deps.isMappingActive();
+	const sentences: string[] = [];
+
+	for (const group of groups) {
+		const shared = `Interfaces ${group.ifaces.join(", ")} share the same IP address: ${group.ip}.`;
+
+		if (!mappingActive) {
+			sentences.push(
+				`${shared} Streaming is not affected. The only consequence is that per-interface link mapping is not active, so checks that steer by address can't tell them apart and only one of them can carry bonded traffic.`,
+			);
+			continue;
+		}
+
+		const unmappable = group.ifaces.filter(
+			(ifname) => !deps.isLinkMappable(ifname, group.ip),
+		);
+		if (unmappable.length === 0) continue;
+
+		sentences.push(
+			`${shared} Streaming is not affected. Per-interface link mapping is active, but ${unmappable.join(", ")} could not be identified as a physical device, so it can't be told apart from its twin and is left out of the bond.`,
+		);
+	}
+
+	if (sentences.length === 0) return undefined;
+	return { type: "warning", msg: sentences.join("; ") };
+}
+
+// The band standing after the last decision, so a re-decision that lands on the
+// same answer costs no frame. Without it the per-pass evaluation would push a
+// `remove` to every client on every 5 s tick of an ordinary, collision-free bond.
+let lastDupIpNoticeKey: string | undefined;
+
+/** Drop the notice change-gate (test isolation). */
+export function resetDupIpNoticeState(): void {
+	lastDupIpNoticeKey = undefined;
+}
+
+function publishDupIpNotice(groups: readonly DuplicateIpGroup[]): void {
+	const notice = decideDupIpNotice(groups);
+	const key = notice === undefined ? "" : `${notice.type}\u0000${notice.msg}`;
+	if (key === lastDupIpNoticeKey) return;
+	lastDupIpNoticeKey = key;
+
+	if (notice === undefined) {
+		notificationRemove(NETIF_DUP_IP_NOTIFICATION);
+		return;
+	}
+	notificationBroadcast(
+		NETIF_DUP_IP_NOTIFICATION,
+		notice.type,
+		notice.msg,
+		0,
+		true,
+		true,
+	);
+}
+
 const networkInterfacesEventEmitter = new EventEmitter();
 
 // Reduced-cadence backstop poll: events are the primary driver now, this only
@@ -361,6 +569,9 @@ export function initNetworkInterfaceMonitoring() {
 		.catch((err: unknown) => {
 			logger.warn(`gateway re-election hook unavailable: ${err}`);
 		});
+	void wireDupIpNoticeDeps().catch((err: unknown) => {
+		logger.warn(`duplicate-IP notice deps unavailable: ${err}`);
+	});
 	void refreshDongleState();
 	setInterval(() => {
 		void refreshDongleState();
@@ -602,57 +813,22 @@ export function processIfconfigOutput(
 	// disabled when they run, exactly as a dup-IP link is when grouping runs.
 	applyRouterSimBondGate(newInterfaces);
 
+	const dupIpGroups = duplicateIpGroups(newInterfaces);
+
 	if (intsChanged) {
-		const intAddrs: Record<string, string | Array<string>> = {};
-
-		// Detect duplicate IP adddresses and set error status
-		for (const i in newInterfaces) {
-			const newInterface = newInterfaces[i];
-			if (!newInterface?.ip) continue;
-
-			clearNetifDup(newInterface);
-			if (dupIpSuppressedIfaces.has(i)) continue;
-			const currentValue = intAddrs[newInterface.ip];
-
-			if (currentValue === undefined) {
-				intAddrs[newInterface.ip] = i;
-			} else {
-				if (Array.isArray(currentValue)) {
-					currentValue.push(i);
-				} else {
-					setNetifDup(newInterfaces[currentValue]);
-					intAddrs[newInterface.ip] = [currentValue, i];
-				}
-				setNetifDup(newInterface);
-			}
-		}
-
-		// Send out an error message for duplicate IP addresses
-		let msg = "";
-		for (const d in intAddrs) {
-			if (Array.isArray(intAddrs[d])) {
-				if (msg !== "") {
-					msg += "; ";
-				}
-				// NOT "can't be used": since the (ip,iface) bind map exists these
-				// links DO bond when a per-interface mapping is in force. What the
-				// shared address really costs is every operation that steers by
-				// source IP, which cannot tell the pair apart.
-				msg += `Interfaces ${intAddrs[d].join(", ")} share the same IP address: ${d}. Checks that steer by address can't tell them apart; they can still be bonded when per-interface link mapping is active`;
-			}
-		}
-
-		if (msg === "") {
-			notificationRemove("netif_dup_ip");
-		} else {
-			notificationBroadcast("netif_dup_ip", "error", msg, 0, true, true);
-		}
+		applyDuplicateIpFlags(newInterfaces, dupIpGroups);
 
 		// Same-subnet detection (informational). Runs AFTER dup-IP so a hard
 		// dup-IP pair (now flagged NETIF_ERR_DUPIPV4 → enabled=false) is skipped
 		// and never also tagged as a same-subnet group.
 		computeSameSubnetGroups(newInterfaces);
 	}
+
+	// Deliberately OUTSIDE the branch above: the bond mapping becoming active is
+	// invisible to `intsChanged`, and it is the single event that makes a raised
+	// band untrue. The decision is change-gated, so an unchanged verdict costs
+	// no frame.
+	publishDupIpNotice(dupIpGroups);
 
 	if (wifiDeviceListEndUpdate()) {
 		logger.info("updated wifi devices");

@@ -14,6 +14,9 @@
 import { m } from "@ceraui/i18n/svelte";
 import type { Modem } from "@ceraui/rpc/schemas";
 
+import { redactDiagnosticRows } from "$lib/modem/diagnostics-redaction";
+import { isMachineIdentifier } from "$lib/modem/operator-labels";
+
 export type RouterAdminView = NonNullable<Modem["router_admin"]>;
 type RouterDetailsView = NonNullable<RouterAdminView["details"]>;
 type NetModeCapabilityView = NonNullable<
@@ -74,6 +77,18 @@ type DetailFieldSpec = {
 	id: keyof RouterDetailsView;
 	label: (value: string) => string;
 	note?: (value: string) => string | undefined;
+	/**
+	 * The device answers this field from a VOCABULARY of its own, so a value that
+	 * turns out to be a wire token is rerouted into the diagnostics table rather
+	 * than printed (§3 OL-2). One dialect answers `network_type` with `LTE` and
+	 * the next with `hspa-plus`; only the value can say which.
+	 *
+	 * It is opt-in per field because most of this table is NOT a vocabulary. An
+	 * `ssid` is the operator's own text, a `provider` is a carrier's name, a
+	 * `wan_ip` is an address — rerouting one of those on its shape would hide the
+	 * operator's own setting from them, which is the opposite of this rule.
+	 */
+	vocabulary?: true;
 };
 
 /**
@@ -91,13 +106,18 @@ type DetailFieldSpec = {
  * own spelling, one disclosure away.
  */
 const OPERATOR_DETAIL_FIELDS: ReadonlyArray<DetailFieldSpec> = [
-	{ id: "network_type", label: () => m["network.modem.networkType"]() },
+	{
+		id: "network_type",
+		label: () => m["network.modem.networkType"](),
+		vocabulary: true,
+	},
 	// Whether the carrier ACCEPTED this radio, which is a different question from
 	// whether a SIM is seated — the bench HiLink twins hold a valid slot reading
 	// and answer `NO SERVICE` here.
 	{
 		id: "registration",
 		label: () => m["network.routerCellular.detail.registration"](),
+		vocabulary: true,
 	},
 	// A DIALECT MAY ANSWER THIS WITH A NAME OR WITH A NUMBER, AND THE ROW MUST
 	// NOT CALL THE NUMBER A NAME. See `decomposePlmn` — the label and the caveat
@@ -129,6 +149,7 @@ const OPERATOR_DETAIL_FIELDS: ReadonlyArray<DetailFieldSpec> = [
 	{
 		id: "roaming",
 		label: () => m["network.routerCellular.detail.roaming"](),
+		vocabulary: true,
 	},
 	{ id: "wan_ip", label: () => m["network.routerCellular.wanIpLabel"]() },
 	{ id: "ssid", label: () => m["network.routerCellular.ssidLabel"]() },
@@ -321,12 +342,17 @@ export function identityFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
 	if (admin === undefined) return [];
-	return stated(
-		IDENTITY_FIELDS.map((field) => ({
-			id: field.id,
-			label: field.label(),
-			value: field.value(admin),
-		})),
+	// The IMEI in this table is a subscriber-adjacent identifier and crosses the
+	// SAME disclosure boundary as the diagnostics dump below — the unit table is
+	// a quieter dump, not a different kind of surface.
+	return redactDiagnosticRows(
+		stated(
+			IDENTITY_FIELDS.map((field) => ({
+				id: field.id,
+				label: field.label(),
+				value: field.value(admin),
+			})),
+		),
 	);
 }
 
@@ -338,10 +364,19 @@ export function identityFields(
  * at all. A firmware that declined the question (the bench unit answers `112008`)
  * yields the reason arm below and no chips, so it can never render a control that
  * promises an action nothing behind it performs.
+ *
+ * `label` IS NEVER THE RAW `id` (§3 OL-2). `name` is optional in the firmware's
+ * own catalog, so the former `mode.name ?? mode.id` fallback printed a vendor
+ * machine token — `lte-only`, `0302` — as the operator's word for that mode,
+ * giving a button an accessible name nobody can read before pressing it. An
+ * unnamed mode takes a positional label, and its raw id is RELOCATED (never
+ * deleted, OL-3) into the marked diagnostics table by {@link diagnosticFields}.
  */
 export type NetModeChip = {
 	readonly id: string;
 	readonly label: string;
+	/** Did the FIRMWARE name this mode, or is `label` the positional stand-in? */
+	readonly named: boolean;
 	readonly current: boolean;
 };
 
@@ -393,12 +428,48 @@ export function netModeCapability(
 	}
 	return {
 		selectable: true,
-		modes: capability.modes.map((mode) => ({
-			id: mode.id,
-			label: mode.name ?? mode.id,
-			current: mode.id === capability.current,
-		})),
+		modes: capability.modes.map((mode, index) => {
+			const named = mode.name?.trim() ?? "";
+			return {
+				id: mode.id,
+				label:
+					named === ""
+						? m["network.routerCellular.netMode.unnamed"]({
+								index: String(index + 1),
+							})
+						: named,
+				named: named !== "",
+				current: mode.id === capability.current,
+			};
+		}),
 	};
+}
+
+/**
+ * The firmware's own network-mode catalog, in its own spelling.
+ *
+ * This is the other half of the OL-3 bargain the chip labels make: a mode the
+ * firmware did not name is shown positionally, and the identifier it withheld a
+ * name for is still on screen, verbatim, one disclosure away.
+ */
+function netModeDiagnosticRows(admin: RouterAdminView): DongleField[] {
+	const capability = admin.capabilities?.net_mode;
+	if (capability === undefined || capability.state !== "reported") return [];
+	const rows: DongleField[] = [
+		{
+			id: "net_mode_catalog",
+			label: m["network.routerCellular.netMode.catalogLabel"](),
+			value: capability.modes.map((mode) => mode.id).join(" "),
+		},
+	];
+	if (capability.current !== undefined && capability.current !== "") {
+		rows.push({
+			id: "net_mode_current",
+			label: m["network.routerCellular.netMode.currentIdLabel"](),
+			value: capability.current,
+		});
+	}
+	return rows.filter((row) => row.value !== "");
 }
 
 function statedFrom(
@@ -424,16 +495,52 @@ function statedFrom(
 	);
 }
 
+/**
+ * A `vocabulary` field whose value came back as a wire token belongs in the
+ * OTHER table. Split rather than filtered, so the two callers below cannot
+ * disagree about where a given row went — which is what would turn a relocation
+ * into a deletion.
+ */
+function partitionOperatorRows(admin: RouterAdminView | undefined): {
+	operator: DongleField[];
+	relocated: DongleField[];
+} {
+	const tokenized = new Set(
+		OPERATOR_DETAIL_FIELDS.filter((field) => field.vocabulary === true).map(
+			(field) => field.id as string,
+		),
+	);
+	const operator: DongleField[] = [];
+	const relocated: DongleField[] = [];
+	for (const row of statedFrom(admin, OPERATOR_DETAIL_FIELDS)) {
+		if (tokenized.has(row.id) && isMachineIdentifier(row.value)) {
+			relocated.push(row);
+		} else {
+			operator.push(row);
+		}
+	}
+	return { operator, relocated };
+}
+
 export function detailFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
-	return statedFrom(admin, OPERATOR_DETAIL_FIELDS);
+	return partitionOperatorRows(admin).operator;
 }
 
 export function diagnosticFields(
 	admin: RouterAdminView | undefined,
 ): DongleField[] {
-	return statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS);
+	if (admin === undefined) return [];
+	// `DIAGNOSTIC_DETAIL_FIELDS` deliberately collects `imsi` and `iccid`, so this
+	// return is the disclosure boundary rather than a precaution: retaining a
+	// subscriber identifier and DISPLAYING it are separate decisions, and only
+	// the first is this table's to make.
+	return redactDiagnosticRows([
+		...statedFrom(admin, DIAGNOSTIC_DETAIL_FIELDS),
+		...netModeDiagnosticRows(admin),
+		...partitionOperatorRows(admin).relocated,
+	]);
 }
 
 export function trafficFields(

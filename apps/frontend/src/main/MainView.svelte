@@ -15,6 +15,7 @@ import MainNav from './navigation/MainNav.svelte';
 import MobileNav from './navigation/MobileNav.svelte';
 import NavigationRenderer from './navigation/NavigationRenderer.svelte';
 import NotificationsPanel from './notifications/NotificationsPanel.svelte';
+import PersistentNotices from './notifications/PersistentNotices.svelte';
 
 async function handleRefresh() {
 	window.location.reload();
@@ -86,7 +87,17 @@ const isWideDesktop = new MediaQuery(WIDE_DESKTOP_QUERY);
 			<HudRegion class="flex" />
 		{/if}
 
-		<main id="main-content" tabindex="-1" class="flex-1 focus:outline-none" class:pb-28={!isDesktop.current}>
+		<!-- In flow, never on the toast overlay: a notice with no expiry would own a
+		     hit-test point forever. See PersistentNotices.svelte. -->
+		<PersistentNotices />
+
+		<main
+			id="main-content"
+			tabindex="-1"
+			class="flex-1 focus:outline-none {isDesktop.current
+				? ''
+				: 'pb-(--mobile-dock-height)'}"
+		>
 			<NavigationRenderer></NavigationRenderer>
 		</main>
 

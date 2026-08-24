@@ -1,6 +1,7 @@
 /**
- * THE MIXED-VERSION BRIDGE: this suite must pass BYTE-IDENTICALLY against the
- * published `@ceralive/modem-control@0.2.0` floor and against the 1.1 candidate.
+ * THE MIXED-VERSION BRIDGE: the exact 1.2.0 pin must resolve every packaged
+ * projection from `@ceralive/modem-control`, while the two never-packaged
+ * helpers remain on their permanent local implementations.
  *
  * Todo 29 routes fourteen frozen pure projections through ONE structural
  * namespace probe, so which implementation answers is decided at RUNTIME by
@@ -84,14 +85,9 @@ function modemInfo(fields: Record<string, unknown>): Readonly<ModemInfo> {
 }
 
 describe("modem-control skew matrix — the probe roster", () => {
-	test("resolves to EXACTLY one of the two frozen columns", () => {
-		// Non-vacuous in both directions: a floor install must resolve NOTHING, and
-		// a candidate install must resolve the whole set. A package that resolved
-		// some other subset is an unknown build and fails here rather than
-		// answering half the projections from one version and half from another.
-		expect(resolvedProbes()).toEqual(
-			column() === "floor" ? [] : CANDIDATE_COLUMN,
-		);
+	test("the pinned release resolves the complete candidate column", () => {
+		expect(column()).toBe("candidate");
+		expect(resolvedProbes()).toEqual(CANDIDATE_COLUMN);
 	});
 
 	test("the two never-packaged names are absent in BOTH columns", () => {

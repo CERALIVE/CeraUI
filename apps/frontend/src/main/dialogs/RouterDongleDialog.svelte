@@ -54,11 +54,32 @@
   round-trip to a device on the far side of a USB link, so batching two of them
   behind one button would only make a slow operation ambiguous about which half
   failed.
+
+  ── AND IT RENDERS THE SAME SECTIONS EVERY OTHER MODEM DOES ─────────────────
+
+  Identity, connection state, signal, SIM and diagnostics come from
+  `$lib/modem/sections` — the SAME components, model and status vocabulary the
+  Cellular row and `ModemConfigDialog` render. This surface used to answer those
+  five questions in its own words or not at all: there was no lifecycle badge, no
+  SIM verdict, and no signal reading anywhere in the dialog, so an operator who
+  opened a dongle saw a strictly poorer instrument than the row they opened it
+  from. What stays bespoke below is what is genuinely only true of this family —
+  the vendor's own admin readings, its network-mode catalog, and the two toggles
+  a write was PROVEN to land on.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { Modem, RouterAdminControls } from '@ceraui/rpc/schemas';
-import { Clock, ExternalLink, Info, Router, Wrench } from '@lucide/svelte';
+import {
+	Ban,
+	Clock,
+	ExternalLink,
+	Info,
+	Router,
+	Sliders,
+	TriangleAlert,
+	Wrench,
+} from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
 import CollapsibleSection from '$lib/components/custom/CollapsibleSection.svelte';
@@ -66,7 +87,19 @@ import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
 import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import { Button } from '$lib/components/ui/button';
 import { AppDialog } from '$lib/components/dialogs';
+import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
+import {
+	CapabilitySection,
+	ConnectionStateBlock,
+	deriveModemSections,
+	DiagnosticsBlock,
+	IdentityBlock,
+	readingView,
+	SignalBlock,
+	SimBlock,
+} from '$lib/modem/sections';
+import { deriveLockView, lockWithholdsCapabilities } from '$lib/modem/lock-state';
 import { mutationOutcome } from '$lib/modem/mutation-outcome';
 import { rpc } from '$lib/rpc';
 import {
@@ -83,6 +116,16 @@ import {
 	openRouterAdminUi,
 	routerAdminOpenReasonKey,
 } from '../network/router-admin-open';
+import ModemGpsSection from './ModemGpsSection.svelte';
+import ModemLockSection from './ModemLockSection.svelte';
+import {
+	isSubnetTargetValid,
+	netModeSectionView,
+	ROUTER_UNAVAILABLE_OPERATIONS,
+	subnetOutcome,
+	subnetRewriteRequest,
+	subnetRewriteView,
+} from './router-dongle-actions';
 import {
 	detailFields,
 	diagnosticFields,
@@ -94,14 +137,46 @@ interface Props {
 	open?: boolean;
 	deviceId: string;
 	modem: Modem;
+	/**
+	 * Whether this dongle's interface currently holds an address — a TRISTATE.
+	 *
+	 * OMITTED means "we were not told", and the shared set then SKIPS the bond
+	 * refusal entirely rather than defaulting it: a refusal is a claim about an
+	 * address, and told nothing the card claims nothing. The Network view knows
+	 * it from `netif` and passes it.
+	 */
+	hasAddress?: boolean;
 }
 
-let { open = $bindable(false), deviceId, modem }: Props = $props();
+let {
+	open = $bindable(false),
+	deviceId,
+	modem,
+	hasAddress,
+}: Props = $props();
 
 type ControlId = keyof RouterAdminControls;
 
 const admin = $derived(modem.router_admin);
 const controls = $derived(admin?.controls);
+
+/**
+ * A capability module is a property of the MODEM, not of the dialog that happens
+ * to be rendering it. `capability_modules` is stamped onto every row the wire
+ * producer emits — this family included — so reading it here is what stops the
+ * choice of dialog silently deciding which claims an operator can ever reach.
+ */
+const gpsClaim = $derived(modem.capability_modules?.gps);
+
+/** Every card on this dialog is the same bordered panel the MM dialog uses. */
+const CARD_FRAME = 'space-y-3 rounded-lg border p-3';
+
+const sections = $derived(
+	deriveModemSections({
+		modem,
+		...(hasAddress === undefined ? {} : { hasAddress }),
+	}),
+);
 
 // ONE flow for the whole dialog, because ONE write may be in flight against a
 // dongle that issues single-use session tokens: two overlapping writes would
@@ -132,6 +207,98 @@ const identity = $derived(identityFields(admin));
 const details = $derived(detailFields(admin));
 const diagnostics = $derived(diagnosticFields(admin));
 const netMode = $derived(netModeCapability(admin));
+
+/**
+ * The dongle's login, and whether it is why the two operation blocks are absent.
+ *
+ * Derived ONCE here and handed down, so the section that renders the lock and
+ * the band that explains a missing control cannot disagree about which state
+ * the device is in. `lockWithholdsCapabilities` is the device's own
+ * `gateRouterAdminByLock` seen from this side: below `open`/`unlocked` the
+ * backend withholds `capabilities` and `controls`, so "nothing here is provably
+ * settable" would be a true sentence about the wrong device.
+ */
+const lock = $derived(deriveLockView(modem));
+const controlsLocked = $derived(lockWithholdsCapabilities(lock));
+
+/**
+ * Whether the login LEADS this dialog instead of sitting mid-stack.
+ *
+ * The section used to sit below the status card, the network detail table and
+ * the diagnostics disclosure — correct while it was an aside on a working
+ * device, and wrong for the device that actually has a login. Measured on the
+ * shipped 1024x600 kiosk, a `locked` dongle opened on a Connection card whose
+ * copy says its network settings live in its own web interface, with the
+ * "Dongle login" heading itself clipped at the bottom edge; `locked-out` was
+ * worse, because the wait IS that state's entire payload and sat fully
+ * off-screen. An operator who cannot see the password field reads the dialog as
+ * having nothing for them.
+ *
+ * `open` is deliberately the ONLY state that keeps the old position: it is the
+ * common case on this fleet, it asks for nothing, and its section is at most a
+ * status line — leading with it would push the readings an operator DID come
+ * for down the page for no gain. Everything else either wants a credential or
+ * is explaining why one cannot be presented yet, which outranks every reading
+ * below it.
+ *
+ * Keying on `open` rather than on `lockWithholdsCapabilities` also keeps the
+ * position STABLE across the unlock: `unlocked` leads too, so a successful
+ * sign-in never moves the section out from under the outcome band that just
+ * confirmed it. The two render sites are separate blocks, so a state that
+ * crossed this boundary would remount the section and drop that band — and
+ * `open` is a device reading no action here can produce.
+ */
+const lockLeads = $derived(lock !== undefined && lock.state !== 'open');
+
+/**
+ * The net-mode capability as the shared four-state ladder sees it.
+ *
+ * `absent` when the read produced nothing at all (zero nodes — there is no
+ * capability here to explain), `available` when the firmware named its catalog,
+ * and `blocked` when it declined the question. `blocked` renders the refusal
+ * with NO control, which is only true because this call site passes no `control`
+ * snippet: the chips are `children`, and `children` render at `available` alone.
+ *
+ * The rule itself is `router-dongle-actions.ts`, so "a 112008 refusal renders
+ * blocked-with-the-code rather than hiding the control" is assertable without
+ * mounting this dialog.
+ */
+const netModeView = $derived(netModeSectionView(netMode));
+
+/**
+ * The LAN-subnet rewrite: offered ONLY for a dongle whose writes were proven,
+ * and never as a switch.
+ *
+ * `absent` renders zero nodes, so a dialect this build performs no write for —
+ * and a dongle whose login is still outstanding, which withholds `controls` —
+ * is byte-unchanged by this surface.
+ */
+const subnetView = $derived(subnetRewriteView(admin));
+
+/** The operator's target address. Local, never persisted, cleared on apply. */
+let subnetTarget = $state('');
+/**
+ * The two-step confirmation, INLINE rather than a modal.
+ *
+ * The write can leave the dongle at an address nothing here can reach, so it
+ * needs an explicit second act — but a modal inside an already-portalled dialog
+ * puts the consequence on a layer the shipped kiosk touchscreen has to dismiss
+ * before it can re-read the address it is confirming. The panel below states the
+ * consequence beside the field that produced it.
+ */
+let subnetConfirming = $state(false);
+let subnetBusy = $state(false);
+let subnetResult = $state<
+	{ readonly kind: 'applied' | 'refused' | 'unknown'; readonly message: string } | undefined
+>(undefined);
+
+const subnetTargetValid = $derived(isSubnetTargetValid(subnetTarget));
+
+const subnetBand = $derived(
+	subnetResult === undefined
+		? undefined
+		: mutationOutcome(subnetResult.kind, subnetResult.message),
+);
 
 // §2 IH-4. `unknown` is deliberately NOT marked: the device told us nothing
 // about this reading's age, and a "stale" badge over that would be a claim we
@@ -248,6 +415,49 @@ async function applyNetMode(mode: string) {
 		if (flow) flow = failRouterWrite(flow);
 	}
 }
+
+/**
+ * Move the dongle's LAN subnet — the ONE journaled write on this surface.
+ *
+ * It carries `confirm: true` because the device's own input schema is `.strict()`
+ * with a `z.literal(true)` there: a request without it is rejected before the
+ * handler runs, which is the write's TOCTOU boundary rather than a formality.
+ * `subnetRewriteRequest` is the only shape this call site can build.
+ *
+ * Every terminal answer is rendered, `blocked` included. That outcome means the
+ * dongle answered at NEITHER address, so it maps onto the outcome band's
+ * `unknown` kind — claiming a refusal there would assert the old settings are
+ * intact, and claiming success would assert the new ones are.
+ */
+async function applySubnet() {
+	if (subnetBusy || !subnetTargetValid) return;
+	subnetConfirming = false;
+	subnetBusy = true;
+	subnetResult = undefined;
+	try {
+		const result = await rpc.modems.setRouterSubnet(
+			subnetRewriteRequest(deviceId, subnetTarget),
+		);
+		const outcome = subnetOutcome(result);
+		subnetResult = {
+			kind: outcome.kind,
+			message:
+				outcome.conflict === undefined
+					? resolveMessageKey(outcome.key)
+					: m['network.routerCellular.subnet.refused.subnet_conflict']({
+							iface: outcome.conflict,
+						}),
+		};
+		if (result.status === 'applied') subnetTarget = '';
+	} catch {
+		subnetResult = {
+			kind: 'unknown',
+			message: m['network.routerCellular.subnet.blocked'](),
+		};
+	} finally {
+		subnetBusy = false;
+	}
+}
 </script>
 
 <AppDialog
@@ -258,6 +468,18 @@ async function applyNetMode(mode: string) {
 	bind:open
 >
 	<div class="space-y-6">
+		<!--
+		  ONE authoring site for the login, rendered at ONE of two positions.
+
+		  A snippet rather than two copies of the component: the props, the
+		  `absent`-renders-nothing guarantee and the credential-retention rule are
+		  stated once, so the leading and the trailing position cannot drift into
+		  two subtly different mounts of the same surface.
+		-->
+		{#snippet lockSection()}
+			<ModemLockSection {deviceId} {lock} />
+		{/snippet}
+
 		{#if admin === undefined}
 			<!-- The read has produced nothing at all. That is a state, not an empty
 			     dialog: with no band here the operator meets a blank panel and
@@ -291,44 +513,75 @@ async function applyNetMode(mode: string) {
 			</div>
 		{/if}
 
-		{#if identity.length > 0}
-			<!-- Reported, never edited — the NetifDialog rule: an unboxed
-			     label-over-value reads as a data row, where a bordered filled one on
-			     a settings surface reads as an input the operator could unlock. -->
-			<dl class="grid grid-cols-2 gap-x-4 gap-y-3" data-testid="dongle-identity">
-				{#each identity as field (field.id)}
-					<div class="min-w-0 space-y-0.5">
-						<dt class="text-muted-foreground text-xs font-medium">{field.label}</dt>
-						<dd class="truncate font-mono text-sm" data-testid={`dongle-identity-${field.id}`}>
-							{field.value}
-						</dd>
-					</div>
-				{/each}
-			</dl>
+		{#if lockLeads}
+			<!-- Below the two bands above, not above them: either band qualifies
+			     everything under it, this login included. Why it leads at all, and
+			     why `open` is exempt: `lockLeads`. -->
+			{@render lockSection()}
 		{/if}
 
+		<!-- The five questions every device on this page answers, answered here by
+		     the SAME components the Cellular row and the MM dialog render them
+		     with. Nothing below asks what family this device belongs to.
+
+		     ORDER IS §2's, NOT THE ORDER THE BLOCKS WERE WRITTEN IN. State →
+		     signal → identity: the card used to open with `IdentityBlock`, so the
+		     first thing an operator read inside a dialog they reached by tapping
+		     that device's own row was its NAME — restating the dialog title
+		     directly above it — and the state and the radio sat below it. Identity
+		     is tier 4 of the hierarchy and it is the tier this surface needs
+		     least: the header already answers "which device", and the only thing
+		     in this block the header does NOT carry (the class hint, and the note
+		     for a device that named itself nothing) is context for the readings
+		     above rather than a lead. Nothing is removed — the block keeps every
+		     row it had, one position lower. -->
+		<div class={CARD_FRAME} data-testid="dongle-status">
+			<ConnectionStateBlock
+				connection={sections.connection}
+				name="dongle-connection"
+				title={m["network.modem.sections.connection.title"]()}
+				unavailability={sections.unavailability}
+			/>
+			<div class="grid gap-3 sm:grid-cols-2">
+				<SignalBlock
+					name="dongle-signal"
+					signal={sections.signal}
+					title={m["network.modem.sections.signal.title"]()}
+				/>
+				<SimBlock
+					name="dongle-sim"
+					sim={sections.sim}
+					title={m["network.modem.sections.sim.title"]()}
+				/>
+			</div>
+			<IdentityBlock identity={sections.identity} name="dongle-identity" />
+		</div>
+
 		{#if details.length > 0}
-			<!-- Reported, never edited — same unboxed treatment as the identity
-			     grid above, and a field the dongle did not state has no row at
-			     all rather than a dash that would read like a reading. -->
-			<div class="space-y-3 border-t pt-5">
-				<p class="text-muted-foreground text-xs font-medium">
-					{m["network.routerCellular.detailTitle"]()}
-				</p>
-				<dl class="grid grid-cols-2 gap-x-4 gap-y-3" data-testid="dongle-details">
-					{#each details as field (field.id)}
-						<div class="min-w-0 space-y-0.5">
-							<dt class="text-muted-foreground text-xs font-medium">{field.label}</dt>
-							<dd class="truncate font-mono text-sm" data-testid={`dongle-detail-${field.id}`}>
-								{field.value}
-							</dd>
-						</div>
-					{/each}
-				</dl>
+			<!-- What its NETWORK is doing, in the operator's own terms. A field the
+			     dongle did not state has no row at all rather than a dash that would
+			     read like a reading. -->
+			<div class="border-t pt-5">
+				<DiagnosticsBlock
+					diagnostics={{ rows: [] }}
+					extra={details}
+					name="dongle-details"
+					rowPrefix="dongle-detail"
+					title={m["network.routerCellular.detailTitle"]()}
+				/>
 			</div>
 		{/if}
 
-		{#if diagnostics.length > 0}
+		{#if diagnostics.length > 0 || identity.length > 0}
+			<!-- A header that IS its own control stays a `CollapsibleSection`:
+			     `CapabilitySection` splits heading from control, and both ways out are
+			     regressions (a chevron with no accessible name, or the title twice).
+
+			     The GATE is the DONGLE's own raw readings, now including its unit
+			     identifiers. The shared derived rows ride along inside but never
+			     decide whether the block exists — every device has an interface name,
+			     so gating on those would hang an always-open disclosure on a dongle
+			     that reported nothing. -->
 			<CollapsibleSection
 				bodyId="dongle-diagnostics-body"
 				bodyTestid="dongle-diagnostics-body"
@@ -340,69 +593,95 @@ async function applyNetMode(mode: string) {
 				{#snippet icon()}
 					<Wrench class="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 				{/snippet}
-				<dl class="grid grid-cols-2 gap-x-4 gap-y-3">
-					{#each diagnostics as field (field.id)}
-						<div class="min-w-0 space-y-0.5">
-							<dt class="text-muted-foreground text-xs font-medium">{field.label}</dt>
-							<dd class="truncate font-mono text-sm" data-testid={`dongle-detail-${field.id}`}>
-								{field.value}
-							</dd>
-							{#if field.note}
-								<p class="text-muted-foreground/80 text-xs">{field.note}</p>
-							{/if}
-						</div>
-					{/each}
-				</dl>
+				{#if identity.length > 0}
+					<!-- Who this UNIT is — model, firmware, hardware revision, the
+					     identifiers that separate two same-model twins. It is HARDWARE
+					     TRIVIA, which §2 ranks below state, signal and actions, and it
+					     used to sit in the status card above the network readings and
+					     above every control: the first table an operator met on a dongle
+					     whose mobile data was off was its firmware revision.
+
+					     It is not a different KIND of surface from the block beneath it —
+					     `identityFields` already crosses the same redaction boundary,
+					     because the IMEI in it is subscriber-adjacent. Filing the two
+					     together is what that shared boundary always implied. They stay
+					     two BLOCKS because `firmware` is an id in both row sets and one
+					     `{#each}` cannot key it twice.
+
+					     It is `dongle-unit-*` and NOT `dongle-identity-*` so the shared
+					     `IdentityBlock` above owns that vocabulary alone — one prefix
+					     covering both would make "which block failed" unanswerable from
+					     a selector. -->
+					<DiagnosticsBlock
+						diagnostics={{ rows: [] }}
+						extra={identity}
+						name="dongle-unit"
+					/>
+				{/if}
+				{#if diagnostics.length > 0 || sections.diagnostics.rows.length > 0}
+					<DiagnosticsBlock
+						diagnostics={sections.diagnostics}
+						extra={diagnostics}
+						name="dongle-diagnostic-readings"
+						rowPrefix="dongle-detail"
+					/>
+				{/if}
 			</CollapsibleSection>
 		{/if}
 
+		{#if !lockLeads}
+			<!-- The `open` position: still ABOVE the two blocks it gates, so the
+			     expansion reads as one movement — sign in here, and the dongle's own
+			     capability and control sections arrive below through the same uniform
+			     surface every other reading on this dialog uses. `absent` renders
+			     zero nodes, so a device with no admin-auth surface is byte-unchanged
+			     by this mount. -->
+			{@render lockSection()}
+		{/if}
+
 		{#if netMode}
-			<!-- Discovered FIRST, offered second. The reason arm carries NO control of
-			     any kind — a firmware that declined to name its catalog says so in its
-			     own words (the bench unit's own 112008) rather than being handed a chip
-			     that fails on click. Only the reported arm is selectable, and even then
-			     the device re-checks the same capability before it writes. -->
-			<div class="space-y-3 border-t pt-5" data-testid="dongle-net-mode">
-				<div class="space-y-0.5">
-					<p class="text-muted-foreground text-xs font-medium">
-						{m["network.routerCellular.netMode.title"]()}
-					</p>
-					<p class="text-muted-foreground/80 text-xs">
-						{netMode.selectable
-							? m["network.routerCellular.netMode.selectNote"]()
-							: m["network.routerCellular.netMode.readOnlyNote"]()}
-					</p>
-				</div>
+			<!-- Discovered FIRST, offered second, through the SHARED four-state
+			     ladder. The refusal arm carries NO control of any kind — the chips are
+			     `children`, which render at `available` alone — so a firmware that
+			     declined to name its catalog (the bench unit's own 112008) says so in
+			     its own words rather than being handed a chip that fails on click.
+			     Only the reported arm is selectable, and even then the device
+			     re-checks the same capability before it writes. -->
+			<div class="space-y-3 border-t pt-5">
+				<CapabilitySection
+					name="dongle-net-mode"
+					view={netModeView}
+					title={m["network.routerCellular.netMode.title"]()}
+					description={netMode.selectable
+						? m["network.routerCellular.netMode.selectNote"]()
+						: m["network.routerCellular.netMode.readOnlyNote"]()}
+					reason={netMode.reason}>
+						<ul class="flex flex-wrap gap-1.5" data-testid="dongle-net-mode-list">
+							{#each netMode.modes as mode (mode.id)}
+								<li>
+									<button
+										class="rounded-md border px-2 py-0.5 font-mono text-xs transition-colors disabled:opacity-60 {mode.current
+											? 'border-primary/50 bg-primary/10 text-primary'
+											: 'text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
+										data-current={mode.current ? 'true' : undefined}
+										data-named={mode.named ? 'true' : 'false'}
+										data-pending={pendingMode === mode.id ? 'true' : undefined}
+										data-testid={`dongle-net-mode-${mode.id}`}
+										disabled={mode.current || busy}
+										onclick={() => applyNetMode(mode.id)}
+										type="button"
+									>
+										{mode.label}{#if mode.current}<span class="ms-1.5 font-sans"
+												>{m["network.routerCellular.netMode.current"]()}</span
+											>{/if}
+									</button>
+								</li>
+							{/each}
+						</ul>
+				</CapabilitySection>
 
-				{#if netMode.reason}
-					<p class="text-muted-foreground text-xs" data-testid="dongle-net-mode-reason">
-						{netMode.reason}
-					</p>
-				{:else}
-					<ul class="flex flex-wrap gap-1.5" data-testid="dongle-net-mode-list">
-						{#each netMode.modes as mode (mode.id)}
-							<li>
-								<button
-									class="rounded-md border px-2 py-0.5 font-mono text-xs transition-colors disabled:opacity-60 {mode.current
-										? 'border-primary/50 bg-primary/10 text-primary'
-										: 'text-muted-foreground hover:border-primary/40 hover:text-foreground'}"
-									data-current={mode.current ? 'true' : undefined}
-									data-pending={pendingMode === mode.id ? 'true' : undefined}
-									data-testid={`dongle-net-mode-${mode.id}`}
-									disabled={mode.current || busy}
-									onclick={() => applyNetMode(mode.id)}
-									type="button"
-								>
-									{mode.label}{#if mode.current}<span class="ms-1.5 font-sans"
-											>{m["network.routerCellular.netMode.current"]()}</span
-										>{/if}
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-
-				<!-- LR-1: mounted with the surface, not with the outcome. A region
+				<!-- LR-1: mounted with the surface, not with the outcome — and OUTSIDE
+				     the section, so the regions exist in the refusal arm too. A region
 				     created when the answer arrives announces nothing. -->
 				<MutationOutcomeBand
 					name="dongle-mode-write"
@@ -412,54 +691,56 @@ async function applyNetMode(mode: string) {
 		{/if}
 
 		{#if controls}
-			<div class="space-y-5 border-t pt-5" data-testid="dongle-controls">
-				<div
-					class="flex items-start justify-between gap-4"
-					data-testid="dongle-control-mobile_data"
-					data-checked={deviceValue('mobile_data') ? 'true' : 'false'}
-					data-pending={pending === 'mobile_data' ? 'true' : undefined}
-				>
-					<div class="min-w-0 space-y-0.5">
-						<Label class="text-sm font-medium" for="dongle-mobile-data">
-							{m["network.routerCellular.control.mobileData"]()}
-						</Label>
-						<p class="text-muted-foreground text-xs">
-							{m["network.routerCellular.control.mobileDataDesc"]()}
-						</p>
+			<div class="space-y-5 border-t pt-5">
+				<CapabilitySection
+					name="dongle-controls" icon={Sliders} class="space-y-5"
+					view={readingView(true)}
+					title={m["network.routerCellular.control.title"]()}
+					description={m["network.routerCellular.control.verifiedNote"]()}>
+					<div
+						class="flex items-start justify-between gap-4"
+						data-testid="dongle-control-mobile_data"
+						data-checked={deviceValue('mobile_data') ? 'true' : 'false'}
+						data-pending={pending === 'mobile_data' ? 'true' : undefined}
+					>
+						<div class="min-w-0 space-y-0.5">
+							<Label class="text-sm font-medium" for="dongle-mobile-data">
+								{m["network.routerCellular.control.mobileData"]()}
+							</Label>
+							<p class="text-muted-foreground text-xs">
+								{m["network.routerCellular.control.mobileDataDesc"]()}
+							</p>
+						</div>
+						<LabeledSwitch
+							checked={deviceValue('mobile_data')}
+							disabled={busy}
+							label={m["network.routerCellular.control.mobileData"]()}
+							onCheckedChange={(v) => apply('mobile_data', v)}
+						/>
 					</div>
-					<LabeledSwitch
-						checked={deviceValue('mobile_data')}
-						disabled={busy}
-						label={m["network.routerCellular.control.mobileData"]()}
-						onCheckedChange={(v) => apply('mobile_data', v)}
-					/>
-				</div>
 
-				<div
-					class="flex items-start justify-between gap-4"
-					data-testid="dongle-control-roaming_autoconnect"
-					data-checked={deviceValue('roaming_autoconnect') ? 'true' : 'false'}
-					data-pending={pending === 'roaming_autoconnect' ? 'true' : undefined}
-				>
-					<div class="min-w-0 space-y-0.5">
-						<Label class="text-sm font-medium" for="dongle-roaming">
-							{m["network.routerCellular.control.roaming"]()}
-						</Label>
-						<p class="text-muted-foreground text-xs">
-							{m["network.routerCellular.control.roamingDesc"]()}
-						</p>
+					<div
+						class="flex items-start justify-between gap-4"
+						data-testid="dongle-control-roaming_autoconnect"
+						data-checked={deviceValue('roaming_autoconnect') ? 'true' : 'false'}
+						data-pending={pending === 'roaming_autoconnect' ? 'true' : undefined}
+					>
+						<div class="min-w-0 space-y-0.5">
+							<Label class="text-sm font-medium" for="dongle-roaming">
+								{m["network.routerCellular.control.roaming"]()}
+							</Label>
+							<p class="text-muted-foreground text-xs">
+								{m["network.routerCellular.control.roamingDesc"]()}
+							</p>
+						</div>
+						<LabeledSwitch
+							checked={deviceValue('roaming_autoconnect')}
+							disabled={busy}
+							label={m["network.routerCellular.control.roaming"]()}
+							onCheckedChange={(v) => apply('roaming_autoconnect', v)}
+						/>
 					</div>
-					<LabeledSwitch
-						checked={deviceValue('roaming_autoconnect')}
-						disabled={busy}
-						label={m["network.routerCellular.control.roaming"]()}
-						onCheckedChange={(v) => apply('roaming_autoconnect', v)}
-					/>
-				</div>
-
-				<p class="text-muted-foreground/80 text-xs" data-testid="dongle-controls-note">
-					{m["network.routerCellular.control.verifiedNote"]()}
-				</p>
+				</CapabilitySection>
 
 				<!-- LR-1: mounted with the surface, not with the outcome. -->
 				<MutationOutcomeBand
@@ -468,41 +749,190 @@ async function applyNetMode(mode: string) {
 				/>
 			</div>
 		{:else}
+			<!-- WHY there is no control here is TWO different facts, and they must not
+			     share a sentence. A signed-out dongle withholds its operation blocks
+			     (`gateRouterAdminByLock`), so "nothing here applies a setting we could
+			     verify" would be a true statement about a device we have not asked
+			     yet — and it would send the operator looking for a hardware
+			     limitation instead of at the login directly above. -->
 			<div
 				class="bg-status-info/10 border-status-info/30 flex items-start gap-3 rounded-lg border p-3"
 				data-testid="dongle-no-controls"
+				data-locked={controlsLocked ? 'true' : undefined}
 				role="status"
 			>
 				<Info class="text-status-info mt-0.5 size-4 shrink-0" aria-hidden="true" />
 				<p class="text-muted-foreground text-xs">
-					{m["network.routerCellular.control.none"]()}
+					{controlsLocked
+						? m["network.routerCellular.lock.controlsWithheld"]()
+						: m["network.routerCellular.control.none"]()}
 				</p>
 			</div>
 		{/if}
 
+		<!-- The SAME section the MM dialog mounts, not a router-flavoured copy of
+		     it. A claim that only one family's dialog knows how to render is a
+		     claim half the fleet can never act on, and `absent` renders zero nodes —
+		     so a dongle that reports no receiver is byte-unchanged by this mount. -->
+		<ModemGpsSection claim={gpsClaim} {deviceId} />
+
 		{#if admin}
-			<!-- The address is stated, and the page it names is reachable through
-			     CeraUI's own proxy rather than by linking to it: the operator's
-			     browser is not on the dongle's network. The proxy is addressed by
-			     `deviceId`, which resolves to an INTERFACE — an address would name
-			     both units of an identical pair. -->
-			<p class="text-muted-foreground/80 text-xs" data-testid="dongle-admin-note">
-				{#if admin.reachable}
-					{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
-				{:else}
-					{m["network.routerCellular.adminUnreachable"]()}
-				{/if}
-			</p>
-			<Button
-				class="w-fit gap-1"
-				data-testid="dongle-open-admin"
-				size="sm"
-				variant="outline"
-				onclick={openAdmin}
-			>
-				<ExternalLink class="size-3.5" aria-hidden="true" />
-				{m["network.routerCellular.adminOpen"]()}
-			</Button>
+			<!-- Three operations, three different answers: a proven action, a
+			     journaled one behind a confirmation, and two no provider ships at
+			     all. The third is STATED rather than omitted — an operator who came
+			     looking for the Wi-Fi switch the vendor's own page has needs to be
+			     told this device will not offer one. -->
+			<div class="space-y-4 border-t pt-5">
+				<CapabilitySection
+					name="dongle-actions" icon={Wrench} class="space-y-4"
+					view={readingView(true)}
+					title={m["network.routerCellular.actions.title"]()}
+					description={m["network.routerCellular.actions.description"]()}>
+					<!-- The address is stated, and the page it names is reachable through
+					     CeraUI's own proxy rather than by linking to it: the operator's
+					     browser is not on the dongle's network. The proxy is addressed by
+					     `deviceId`, which resolves to an INTERFACE — an address would name
+					     both units of an identical pair. -->
+					<p class="text-muted-foreground/80 text-xs" data-testid="dongle-admin-note">
+						{#if admin.reachable}
+							{m["network.routerCellular.adminAt"]({ url: admin.admin_url })}
+						{:else}
+							{m["network.routerCellular.adminUnreachable"]()}
+						{/if}
+					</p>
+					<Button
+						class="w-fit gap-1"
+						data-testid="dongle-open-admin"
+						size="sm"
+						variant="outline"
+						onclick={openAdmin}
+					>
+						<ExternalLink class="size-3.5" aria-hidden="true" />
+						{m["network.routerCellular.adminOpen"]()}
+					</Button>
+
+					<!-- The ONE journaled write here, and the only one that can cost the
+					     path to the device receiving it — so it is deliberately not a
+					     switch. The device re-checks everything this validates. -->
+					<div class="border-t pt-4">
+						<CapabilitySection
+							name="dongle-subnet"
+							view={subnetView}
+							title={m["network.routerCellular.subnet.title"]()}
+							description={m["network.routerCellular.subnet.description"]()}
+							busy={subnetBusy}
+							outcome={subnetBand}>
+							<div class="space-y-3" data-testid="dongle-subnet-form">
+								<div class="space-y-1.5">
+									<Label class="text-xs" for="dongle-subnet-address">
+										{m["network.routerCellular.subnet.addressLabel"]()}
+									</Label>
+									<Input
+										autocomplete="off"
+										class="font-mono"
+										data-testid="dongle-subnet-address"
+										disabled={subnetBusy}
+										id="dongle-subnet-address"
+										placeholder={m["network.routerCellular.subnet.addressPlaceholder"]()}
+										bind:value={subnetTarget}
+									/>
+									{#if subnetTarget.trim() !== '' && !subnetTargetValid}
+										<p class="text-status-warning text-xs" data-testid="dongle-subnet-invalid">
+											{m["network.routerCellular.subnet.addressInvalid"]()}
+										</p>
+									{/if}
+								</div>
+
+								{#if subnetConfirming}
+									<div
+										aria-labelledby="dongle-subnet-confirm-title"
+										class="bg-status-warning/10 border-status-warning/30 space-y-3 rounded-lg border p-3"
+										data-testid="dongle-subnet-confirm"
+										role="group"
+									>
+										<div class="flex items-start gap-2">
+											<TriangleAlert
+												class="text-status-warning mt-0.5 size-4 shrink-0"
+												aria-hidden="true"
+											/>
+											<div class="min-w-0 space-y-1">
+												<p class="text-sm font-medium" id="dongle-subnet-confirm-title">
+													{m["network.routerCellular.subnet.confirmTitle"]({
+														address: subnetTarget.trim(),
+													})}
+												</p>
+												<p class="text-muted-foreground text-xs">
+													{m["network.routerCellular.subnet.confirmBody"]()}
+												</p>
+											</div>
+										</div>
+										<div class="flex flex-wrap gap-2">
+											<Button
+												data-testid="dongle-subnet-apply"
+												disabled={subnetBusy || !subnetTargetValid}
+												onclick={applySubnet}
+												size="sm"
+												variant="destructive"
+											>
+												{m["network.routerCellular.subnet.confirmAction"]()}
+											</Button>
+											<Button
+												data-testid="dongle-subnet-cancel"
+												disabled={subnetBusy}
+												onclick={() => (subnetConfirming = false)}
+												size="sm"
+												variant="outline"
+											>
+												{m["dialog.cancel"]()}
+											</Button>
+										</div>
+									</div>
+								{:else}
+									<Button
+										class="w-fit"
+										data-testid="dongle-subnet-start"
+										disabled={!subnetTargetValid || subnetBusy || busy}
+										onclick={() => (subnetConfirming = true)}
+										size="sm"
+										variant="outline"
+									>
+										{m["network.routerCellular.subnet.action"]()}
+									</Button>
+								{/if}
+							</div>
+						</CapabilitySection>
+					</div>
+
+					<!-- No provider in the pinned control package exposes a Wi-Fi or a
+					     restart operation for any router dialect, so there is no write to
+					     gate — and READING the dongle's Wi-Fi name is not evidence that
+					     name can be changed. -->
+					<div class="space-y-2 border-t pt-4" data-testid="dongle-unavailable-operations">
+						<p class="text-sm leading-none font-medium">
+							{m["network.routerCellular.unavailable.title"]()}
+						</p>
+						<ul class="space-y-2">
+							{#each ROUTER_UNAVAILABLE_OPERATIONS as operation (operation.id)}
+								<li
+									class="flex items-start gap-2"
+									data-testid={`dongle-unavailable-${operation.id}`}
+								>
+									<Ban class="text-muted-foreground mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+									<div class="min-w-0 space-y-0.5">
+										<p class="text-xs font-medium">{resolveMessageKey(operation.titleKey)}</p>
+										<p
+											class="text-muted-foreground text-xs"
+											data-testid={`dongle-unavailable-${operation.id}-reason`}
+										>
+											{resolveMessageKey(operation.reasonKey)}
+										</p>
+									</div>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				</CapabilitySection>
+			</div>
 		{/if}
 	</div>
 </AppDialog>

@@ -21,6 +21,7 @@ import type { Modem, RouterAdminDetails } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { DIAGNOSTIC_REDACTED } from "$lib/modem/diagnostics-redaction";
 import RouterDongleDialog from "./RouterDongleDialog.svelte";
 
 vi.mock("$lib/rpc", () => ({
@@ -101,9 +102,20 @@ describe("RouterDongleDialog — the dongle's own network telemetry", () => {
 		expect(detail("network_mode")).toBe("1");
 		expect(detail("ssid")).toBe("4G-UFI-611A");
 		expect(detail("wan_ip")).toBe("10.64.12.9");
-		expect(detail("imsi")).toBe("732101234567890");
-		expect(detail("iccid")).toBe("8957011234567890123");
 		expect(detail("product")).toBe("HM-UFI-01");
+	});
+
+	// BEHAVIOUR CHANGE, deliberate: these two rows used to assert the raw values.
+	// A diagnostics dump is a disclosure boundary, so the identifiers are RETAINED
+	// as rows and MASKED as values — the row surviving is what keeps a redacted
+	// identifier distinguishable from a field the device never stated.
+	it("masks the subscriber identifiers it still lists", () => {
+		open(UFI_DETAILS);
+
+		expect(detail("imsi")).toBe(DIAGNOSTIC_REDACTED);
+		expect(detail("iccid")).toBe(DIAGNOSTIC_REDACTED);
+		expect(document.body.textContent).not.toContain("732101234567890");
+		expect(document.body.textContent).not.toContain("8957011234567890123");
 	});
 
 	it("renders NO row for a field the device did not state", () => {

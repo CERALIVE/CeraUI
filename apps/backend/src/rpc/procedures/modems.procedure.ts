@@ -86,7 +86,7 @@ import {
 	unlockSimPuk,
 } from "../../modules/modems/mmcli.ts";
 import { readSmsInbox } from "../../modules/modems/mmcli-sms.ts";
-import { modemNetworkScan } from "../../modules/modems/modem-network-scan.ts";
+import { dispatchModemNetworkScan } from "../../modules/modems/modem-network-scan.ts";
 import {
 	broadcastModems,
 	buildModemsWireMessage,
@@ -108,6 +108,7 @@ import {
 	modemStableKeyForMmTarget,
 } from "../../modules/modems/mutation-identity.ts";
 import {
+	beginModemMutation,
 	withJournaledModemMutation,
 	withModemMutation,
 } from "../../modules/modems/mutation-lease.ts";
@@ -144,8 +145,10 @@ import type { RPCContext } from "../types.ts";
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
 
-// Authenticated procedure
-const authedProcedure = baseProcedure.use(authMiddleware);
+// Authenticated procedure. Exported because the credential/lock surface must
+// build from it directly — see `modems-credentials.procedure.ts` for why those
+// three deliberately skip the cellular readiness gate below.
+export const authedProcedure = baseProcedure.use(authMiddleware);
 
 // EVERY modem procedure builds from this, never from `authedProcedure` directly:
 // the readiness gate has to be uniform, because a single ungated procedure is one
@@ -346,22 +349,27 @@ export const scanModemProcedure = modemProcedure
 		// A 3GPP network scan drops the modem's registration for its duration, so
 		// it takes the mutation lease like every other disruptive path — it is not
 		// journaled, because it restores itself and has no pre-state to put back.
-		// AWAITED, and deliberately NOT through `handleModems`: that dispatcher
-		// `void`s the scan, so the procedure could only ever reply `{success:true}`
-		// — including for a scan that was killed mid-sweep. The mutation lease
-		// above is what serializes this against other modem work; the modem update
-		// lock is not taken across the scan because a 3GPP sweep runs for minutes
-		// and holding it would stall the `modems` broadcast for that whole window.
-		const guarded = await withModemMutation(
-			modemStableKeyForId(Number(input.device)),
-			() => modemNetworkScan(Number(input.device)),
-		);
-		if (!guarded.ok) {
-			return { success: false, mutationRefusal: guarded.refusal };
+		// Admission returns immediately; the mutation lease remains held by the
+		// completion promise and the terminal outcome is published with its scan
+		// generation. The modem update lock is not held across a minutes-long sweep.
+		const id = Number(input.device);
+		if (getModem(id)?.is_scanning) {
+			return { success: false, scanFailure: "already_scanning" };
 		}
-		return guarded.value.ok
-			? { success: true }
-			: { success: false, scanFailure: guarded.value.reason };
+		const acquired = beginModemMutation(modemStableKeyForId(id));
+		if (!acquired.ok) {
+			return { success: false, mutationRefusal: acquired.refusal };
+		}
+		const dispatched = dispatchModemNetworkScan(id);
+		if (!dispatched.ok) {
+			acquired.lease.release();
+			return { success: false, scanFailure: dispatched.reason };
+		}
+		void dispatched.completed.then(
+			() => acquired.lease.release(),
+			() => acquired.lease.release(),
+		);
+		return { success: true, scanGeneration: dispatched.generation };
 	});
 
 /**
@@ -580,13 +588,17 @@ export const setModemGpsProcedure = modemProcedure
  *
  * It takes NO mutation lease (it mutates nothing — the `modems.getAll`/`getSms`
  * rule) and it runs through {@link getUsbModeDispatchDeps}, so the set it offers
- * is resolved by the SAME identity resolver and matched against the SAME catalog
- * `setUsbMode` will gate on.
+ * is resolved by the SAME identity resolver, gated on the SAME provisioning and
+ * live-state reads, and matched against the SAME catalog `setUsbMode` will gate
+ * on.
  *
- * It does NOT answer the provisioning question. That gate is a device SETTING
- * the operator can turn back on, so its control renders disabled-with-reason
- * rather than absent; folding it in here would withdraw a control that is merely
- * blocked and make the two states indistinguishable.
+ * It DOES answer the provisioning question, and answering it does not collapse
+ * the two states — the distinction moved from "which surface knows" to "which
+ * treatment the suppression gets". `provisioning-disabled` and
+ * `blocked-by-state` are LIFTABLE conditions and render as a disabled control
+ * carrying its reason; every other suppression is a property of the device and
+ * renders no control at all. The frontend's own `config.modem_provisioning`
+ * tristate is retained beside it for a backend that predates this answer.
  */
 export const getUsbModeOptionsProcedure = modemProcedure
 	.input(usbModeOptionsInputSchema)

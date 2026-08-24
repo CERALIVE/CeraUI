@@ -55,6 +55,44 @@ export type TranslateLabel = (
 	params?: Readonly<Record<string, string>>,
 ) => string;
 
+// ── Is it the DEVICE's word, or the WIRE's? ──────────────────────────────────
+
+/**
+ * A wire token: all lowercase, no spaces, at least one `-`/`_` separator.
+ *
+ * Several fields on `modemSchema` are `z.string()` carrying whichever of the two
+ * their producer happened to have. `status.network_type` is the clearest case —
+ * the backend folds a RECOGNISED ModemManager access technology into a display
+ * string ("4G", "3G+") and passes an unrecognised one through VERBATIM
+ * (`mmConvertAccessTech` returns `accessTechs[0]`), so the same field is "4G" on
+ * one modem and `hspa-plus` on the next. A router dongle's own `network_type`
+ * has the same two shapes for the same reason, one dialect apart.
+ *
+ * So the surface cannot ask "is this field a token" — only "is THIS VALUE one".
+ * Anchored, so a value that merely CONTAINS a separator (a URL, an opaque
+ * `platform-…:2` key, a sentence, an operator's own hyphenated SSID with a
+ * capital in it) is not one.
+ *
+ * ── AND IT IS DELIBERATELY LOWERCASE-ONLY ───────────────────────────────────
+ *
+ * Every vocabulary this module relocates is lowercase (`ecm-ncm`, `eutran-3`,
+ * `hspa-plus`, `router-ethernet`), while the strings that legitimately reach an
+ * operator with a hyphen in them are device DISPLAY names and vendor table rows
+ * that are not — `RM530N-GL`, `LTE_BAND_3`, `NO SERVICE`. Widening to any case
+ * would hide a modem's own product name, which is the one string on the row that
+ * MUST render verbatim.
+ *
+ * IT IS NOT A GENERAL-PURPOSE TEST, and must not be pointed at a value the
+ * OPERATOR chose. A hotspot SSID is lowercase user text and may legitimately
+ * carry a hyphen; rerouting it into diagnostics would hide the operator's own
+ * setting from them. Only device-generated vocabularies are asked.
+ */
+const MACHINE_IDENTIFIER_RE = /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+$/;
+
+export function isMachineIdentifier(value: string): boolean {
+	return MACHINE_IDENTIFIER_RE.test(value.trim());
+}
+
 // ── USB composition mode ─────────────────────────────────────────────────────
 
 /**
@@ -259,4 +297,68 @@ export function bandDiagnosticTokens(
 	tokens: readonly string[],
 ): readonly string[] {
 	return tokens.filter((token) => token.trim().length > 0);
+}
+
+// ── Radio access technology ──────────────────────────────────────────────────
+
+/**
+ * The access technology as an operator may read it, or `undefined` when there
+ * is nothing sayable.
+ *
+ * The backend already owns the translation — `accessTechToGen` folds a
+ * recognised technology into "2G" … "5G", which is the vocabulary an operator
+ * shares with their carrier and is locale-invariant. This is therefore a GUARD
+ * rather than a second table: re-mapping here would be a competing vocabulary,
+ * and the two could then disagree about one modem.
+ *
+ * `undefined` is the OL-5 answer for a token the backend could not fold. The
+ * caller renders nothing in its place and the raw value is relocated to the
+ * diagnostics block (OL-3) — never printed with a prefix glued on, which is the
+ * same leak one word longer.
+ */
+export function accessTechnologyDisplay(
+	value: string | undefined,
+): string | undefined {
+	const trimmed = value?.trim() ?? "";
+	if (trimmed === "" || isMachineIdentifier(trimmed)) return undefined;
+	return trimmed;
+}
+
+// ── Network mode (the operator-settable allowed set) ─────────────────────────
+
+/**
+ * `5g4g` → `5G / 4G`. mmcli builds a mode label by sorting the allowed set and
+ * joining it with no separator, and both shipped producers reproduce that
+ * grammar exactly (`modeMaskToLabel` says so in as many words), so this is the
+ * spelling the selector has always rendered.
+ */
+export function formatGenerationRun(value: string): string {
+	return value
+		.replace(/(\d+g)/gi, (match) => match.toUpperCase())
+		.split(/(?<=G)(?=\d)/)
+		.join(" / ");
+}
+
+/**
+ * The operator's word for one entry of `network_type.supported`.
+ *
+ * `network_type` is `z.string()` on both halves of the wire and the MODEM is the
+ * authority on which modes it advertises — the same openness `bandNameSchema`
+ * has, and the same consequence: a label this build does not recognise is an
+ * expected case, not a defect. A machine identifier therefore takes the
+ * POSITIONAL label the router dongle's own unnamed modes already take (OL-2),
+ * and its raw spelling is relocated to diagnostics (OL-3) rather than dropped.
+ *
+ * Every label either shipped producer emits is a generation run, so this is
+ * byte-identical to the previous rendering on every device in the fleet.
+ */
+export function networkModeOperatorLabel(
+	value: string,
+	index: number,
+	t: TranslateLabel,
+): string {
+	const trimmed = value.trim();
+	if (trimmed === "") return "";
+	if (!isMachineIdentifier(trimmed)) return formatGenerationRun(trimmed);
+	return t("network.modem.networkMode.unnamed", { index: String(index + 1) });
 }

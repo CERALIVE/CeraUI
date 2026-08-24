@@ -29,6 +29,8 @@
  */
 
 /** MMModemAccessTechnology bits → the RAT tokens the wire adapter understands. */
+import type { ModemRadioPower } from "@ceraui/rpc/schemas";
+
 import { modemControlFunction } from "../modem-control-compat.ts";
 
 const ACCESS_TECH_BITS: ReadonlyArray<readonly [number, string]> = [
@@ -207,6 +209,25 @@ export function decodeEsimStatus(
 ): "no-profiles" | "with-profiles" | undefined {
 	if (value === 1) return "no-profiles";
 	if (value === 2) return "with-profiles";
+	return undefined;
+}
+
+/**
+ * MMModemPowerState (`Modem.PowerState`) → the wire `radio_power` vocabulary.
+ *
+ * `0` is MM's own `UNKNOWN`, and it is a STATED value here rather than
+ * `undefined`: the modem answered, and what it answered is that it does not
+ * know its own power state — a different fact from this backend not reporting
+ * one at all, which is what an absent field means. An out-of-range value is the
+ * latter, so it yields `undefined` rather than being folded onto `unknown`.
+ */
+export function decodeRadioPower(
+	value: number | undefined,
+): ModemRadioPower | undefined {
+	if (value === 0) return "unknown";
+	if (value === 1) return "off";
+	if (value === 2) return "low";
+	if (value === 3) return "on";
 	return undefined;
 }
 

@@ -93,6 +93,11 @@ export type Modem = {
 	iccid?: string;
 	sim_lock?: SimLock;
 	available_networks?: Record<string, AvailableNetwork>;
+	network_scan?: {
+		generation: number;
+		phase: "scanning" | "completed" | "failed";
+		failure?: "timed_out" | "failed";
+	};
 	removed?: true;
 };
 

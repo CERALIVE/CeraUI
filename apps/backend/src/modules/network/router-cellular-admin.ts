@@ -106,6 +106,10 @@
  */
 
 import { logger } from "../../helpers/logger.ts";
+import {
+	classifyHilinkLoginState,
+	noteLockOpenEvidence,
+} from "../modems/modem-lock-state.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { SAFE_IFNAME_RE } from "./device-bound-probe.ts";
 import {
@@ -114,6 +118,7 @@ import {
 	HILINK_NET_MODE_LIST_PATH,
 	HILINK_NET_MODE_PATH,
 	HILINK_SIGNAL_PATH,
+	HILINK_USER_STATE_PATH,
 	hilinkHeaders,
 	openHilinkSession,
 } from "./hilink-session.ts";
@@ -828,6 +833,12 @@ async function probeHilink(
 		`${probe.adminUrl}${HILINK_SIGNAL_PATH}`,
 		`${probe.adminUrl}${HILINK_NET_MODE_LIST_PATH}`,
 		`${probe.adminUrl}${HILINK_NET_MODE_PATH}`,
+		// The ONE document on this fleet that positively answers "does this device
+		// require a login". It rides the batch the cycle already spawns, so the
+		// lock model costs no extra request and no extra session — and it is read
+		// on a FRESH session, which is what makes `State: 0` mean "usable with no
+		// credential presented" rather than "somebody logged in earlier".
+		`${probe.adminUrl}${HILINK_USER_STATE_PATH}`,
 	];
 	let bodies: readonly (string | undefined)[] | undefined;
 	for (let attempt = 0; attempt < AUTH_ATTEMPTS_PER_CYCLE; attempt += 1) {
@@ -857,7 +868,12 @@ async function probeHilink(
 		signal,
 		netModeList,
 		netMode,
+		userState,
 	] = bodies ?? [];
+	noteLockOpenEvidence(
+		probe.ifname,
+		userState === undefined ? undefined : classifyHilinkLoginState(userState),
+	);
 	if (information === undefined || status === undefined) return undefined;
 	return parseHilink(probe.adminUrl, {
 		information,

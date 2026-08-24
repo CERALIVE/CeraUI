@@ -6,6 +6,7 @@ import { Ban, ChevronRight, Globe, Loader2, Router, Settings2, Wifi } from '@luc
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
 import { deriveWifiModeOutcome, isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import {
@@ -18,7 +19,6 @@ import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
 import { cn } from '$lib/utils';
 
-import HotspotDialog from '../dialogs/HotspotDialog.svelte';
 import {
 	blockIsOperatorActionable,
 	deriveWifiCapabilityView,
@@ -60,6 +60,11 @@ function activeWifiNetwork(iface: WifiInterface) {
 }
 
 // ── Per-radio hotspot configurator (one mount, keyed by selected radio) ──
+// Registry-loaded, like every other config dialog. A static import here also
+// defeated NetworkView's OWN lazy registration of the same component — rolldown
+// reported `INEFFECTIVE_DYNAMIC_IMPORT` and fused it back into the entry chunk.
+const HotspotDialog = lazyDialog(() => import('../dialogs/HotspotDialog.svelte'));
+
 let hotspotDialogOpen = $state(false);
 let hotspotDeviceId = $state('');
 const hotspotIface = $derived(wifiRadios.find(([id]) => id === hotspotDeviceId)?.[1]);
@@ -477,5 +482,10 @@ $effect(() => {
 
 <!-- Per-radio hotspot configurator -->
 {#if hotspotIface}
-	<HotspotDialog bind:open={hotspotDialogOpen} deviceId={hotspotDeviceId} iface={hotspotIface} />
+	<LazyDialog
+		dialog={HotspotDialog}
+		bind:open={hotspotDialogOpen}
+		deviceId={hotspotDeviceId}
+		iface={hotspotIface}
+	/>
 {/if}

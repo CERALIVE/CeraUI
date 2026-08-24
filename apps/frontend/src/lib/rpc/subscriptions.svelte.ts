@@ -418,7 +418,7 @@ const seqTracker = createSeqTracker();
  * by exactly that field — so the stale row resolved no netif entry and claimed
  * "No address yet" about hardware that was simply gone.
  */
-function mergeModemList(
+export function mergeModemList(
 	prev: ModemList | undefined,
 	incoming: ModemList,
 ): ModemList {
@@ -427,7 +427,17 @@ function mergeModemList(
 	for (const [id, modem] of Object.entries(incoming)) {
 		if (!modem) continue;
 		const previous = prev?.[id];
-		const kept = preserveWireIdentity(previous, { ...previous, ...modem });
+		let accepted = modem;
+		if (
+			previous?.network_scan !== undefined &&
+			modem.network_scan !== undefined &&
+			modem.network_scan.generation < previous.network_scan.generation
+		) {
+			accepted = { ...modem };
+			delete accepted.available_networks;
+			delete accepted.network_scan;
+		}
+		const kept = preserveWireIdentity(previous, { ...previous, ...accepted });
 		if (kept !== previous) changed = true;
 		next[id] = kept;
 	}

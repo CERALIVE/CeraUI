@@ -5,14 +5,26 @@
  * Two properties carry this suite, and neither can be asserted anywhere but the
  * DOM:
  *
- *   1. THE CONTROL IS HIDDEN WITHOUT CERTIFICATION EVIDENCE, and a withheld
- *      offer renders NO control at all — not a disabled one, which would imply a
- *      capability being kept back rather than one nobody has proven. Absence has
- *      no syntax to grep for, so it is counted.
+ *   1. THE CONTROL IS HIDDEN WITHOUT CERTIFICATION EVIDENCE — no chips, and not
+ *      a disabled twin of them either. Absence has no syntax to grep for, so it
+ *      is counted.
  *   2. IT IS IN THE PRIMARY SURFACE. The dialog's own docs put every other
  *      instrument card behind the "Advanced" disclosure; this one is out of it
  *      by explicit product decision, and the only honest way to state that is by
  *      ancestry in the rendered tree.
+ *
+ * TWO ASSERTIONS BELOW WERE RETARGETED, BY DECISION RATHER THAN WEAKENED. They
+ * pinned the card's whole withheld/unanswered surface as `modem-bands-unavailable`
+ * beside an ABSENT card — and for the unanswered case, as absolutely nothing at
+ * all. That second one was the defect: `deriveBandOffer(undefined)` means "not
+ * asked yet, in flight, or the read THREW", and rendering it as zero nodes is
+ * indistinguishable from a modem that positively has no bands. The card now
+ * carries the four-state ladder itself (`modem-radio-selectors.ts`), so the
+ * reason lives on the section that owns it — `modem-bands-card-unknown` for a
+ * read nobody completed, `modem-bands-card-reason` for a refusal the device
+ * explained — and the standalone `<p>` that existed only to work around the
+ * two-state helper is gone. `unsupported` is the one refusal that still renders
+ * nothing, because it is the one that is a claim about the DEVICE.
  */
 
 import type { Modem } from "@ceraui/rpc/schemas";
@@ -136,23 +148,27 @@ describe("the control is HIDDEN without certification evidence", () => {
 		mount();
 
 		await waitFor(() => {
-			expect(screen.getByTestId("modem-bands-unavailable")).toBeTruthy();
+			expect(screen.getByTestId("modem-bands-card-reason")).toBeTruthy();
 		});
-		expect(screen.queryByTestId("modem-bands-card")).toBeNull();
+		expect(
+			screen
+				.getByTestId("modem-bands-card")
+				.getAttribute("data-capability-state"),
+		).toBe("blocked");
 		expect(screen.queryByTestId("modem-bands-options")).toBeNull();
-		// Not a disabled control either — there is nothing to re-enable.
+		// Not a disabled control either — the offer is a LIST, so a refused one
+		// renders no chips at all rather than a row of dead ones.
 		expect(screen.queryByRole("checkbox", { name: /eutran/i })).toBeNull();
 	});
 
-	it("a read that never answered asserts NOTHING at all", async () => {
+	it("a read that never answered says SO — it does not render as absence", async () => {
 		getBands.mockRejectedValue(new Error("socket closed"));
 		mount();
 
-		await waitFor(() => {
-			expect(getBands).toHaveBeenCalled();
-		});
-		expect(screen.queryByTestId("modem-bands-card")).toBeNull();
-		expect(screen.queryByTestId("modem-bands-unavailable")).toBeNull();
+		const marker = await screen.findByTestId("modem-bands-card-unknown");
+		expect(marker.getAttribute("data-state")).toBe("unknown");
+		expect(marker.textContent?.trim().length ?? 0).toBeGreaterThan(0);
+		expect(screen.queryByTestId("modem-bands-options")).toBeNull();
 	});
 
 	it("a certified device with an EMPTY offerable set renders no card", async () => {
@@ -167,10 +183,11 @@ describe("the control is HIDDEN without certification evidence", () => {
 		});
 		mount();
 
+		// It reads `unknown` until the answer lands, so absence is a claim about
+		// the ANSWER — which means waiting for one.
 		await waitFor(() => {
-			expect(getBands).toHaveBeenCalled();
+			expect(screen.queryByTestId("modem-bands-card")).toBeNull();
 		});
-		expect(screen.queryByTestId("modem-bands-card")).toBeNull();
 	});
 });
 

@@ -643,6 +643,7 @@ describe("modem wire projection — D-Bus rows", () => {
 			"manufacturer",
 			"network_type",
 			"config",
+			"sim_presence",
 			"sim_lock",
 			"available_networks",
 			"device_class",

@@ -462,8 +462,11 @@ describe("OL-2/OL-3/OL-4 — the raw tokens moved, they did not disappear", () =
 		expect(screen.getByTestId("dongle-diagnostics-body").inert).toBe(true);
 	});
 
+	// `model` joined the override list when the unit table was demoted into this
+	// block: it IS relocatable hardware trivia, so a fixture carrying one no
+	// longer expresses this test's own premise. The assertion is unchanged.
 	it("renders no diagnostics block for a device that stated none of them", () => {
-		mount(hilink({ details: { network_type: "LTE" } }));
+		mount(hilink({ details: { network_type: "LTE" }, model: undefined }));
 		expect(screen.queryByTestId("dongle-diagnostics")).toBeNull();
 	});
 });

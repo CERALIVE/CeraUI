@@ -14,24 +14,23 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import Bell from '@lucide/svelte/icons/bell';
-import CircleAlert from '@lucide/svelte/icons/circle-alert';
-import CircleCheck from '@lucide/svelte/icons/circle-check';
 import Inbox from '@lucide/svelte/icons/inbox';
-import Info from '@lucide/svelte/icons/info';
-import TriangleAlert from '@lucide/svelte/icons/triangle-alert';
 import XIcon from '@lucide/svelte/icons/x';
-import type { Component } from 'svelte';
 
 import type { NotificationType } from '@ceraui/rpc/schemas';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
 import { Badge } from '$lib/components/ui/badge';
 import { Button } from '$lib/components/ui/button';
-import { rpc } from '$lib/rpc';
 import { requestDialog } from '$lib/stores/dialog-request.svelte';
 import { getDisplayProfile, prefersEinkTheme } from '$lib/stores/display-profile.svelte';
-import { dismiss, getPersistent } from '$lib/stores/notifications.svelte';
+import { getPersistent } from '$lib/stores/notifications.svelte';
 import { cn } from '$lib/utils';
+
+import {
+	dismissPersistentNotification,
+	NOTIFICATION_ICONS,
+} from './notification-presentation';
 
 function lookupLabel(key: string): string {
 	return resolveMessageKey(key);
@@ -43,30 +42,12 @@ const items = $derived(getPersistent());
 const count = $derived(items.length);
 const frozen = $derived(prefersEinkTheme(getDisplayProfile()));
 
-const ICONS: Record<NotificationType, Component> = {
-	success: CircleCheck,
-	warning: TriangleAlert,
-	error: CircleAlert,
-	info: Info,
-};
-
 const TONES: Record<NotificationType, string> = {
 	success: 'text-primary',
 	warning: 'text-primary',
 	error: 'text-destructive',
 	info: 'text-primary',
 };
-
-async function handleDismiss(name: string) {
-	dismiss(name);
-	try {
-		await rpc.notifications.dismiss({ name });
-	} catch {
-		/* Backend dismiss is best-effort: the optimistic local removal above is the
-		   source of truth for the panel; a server-side remove broadcast (if any)
-		   reconciles idempotently through subscriptions.svelte. */
-	}
-}
 </script>
 
 <Button
@@ -105,7 +86,7 @@ async function handleDismiss(name: string) {
 	{:else}
 		<ul class="flex flex-col gap-2" data-testid="notifications-list">
 			{#each items as item (item.name)}
-				{@const Icon = ICONS[item.type]}
+				{@const Icon = NOTIFICATION_ICONS[item.type]}
 				<li
 					class={cn(
 						'bg-card flex items-start gap-3 rounded-lg border p-3',
@@ -142,7 +123,7 @@ async function handleDismiss(name: string) {
 							variant="ghost"
 							aria-label={m["notifications.panel.dismiss"]()}
 							data-testid="notification-dismiss"
-							onclick={() => handleDismiss(item.name)}
+							onclick={() => void dismissPersistentNotification(item.name)}
 						>
 							<XIcon class="size-4" />
 						</Button>

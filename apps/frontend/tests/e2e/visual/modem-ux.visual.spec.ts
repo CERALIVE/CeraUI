@@ -595,7 +595,8 @@ for (const condition of CONDITIONS) {
 			await enterModemSurface(page, { modem_provisioning: true });
 
 			dialog = await openModemDialog(page);
-			await dialog.getByRole("button", { name: /Switch to mbim/i }).click();
+			await dialog.getByTestId("modem-usb-mode-target-mbim").click();
+			await dialog.getByRole("button", { name: /Switch to/i }).click();
 			await page.getByRole("button", { name: /Switch mode/i }).click();
 
 			const standing = dialog.getByTestId("modem-usb-mode-error");
@@ -604,7 +605,10 @@ for (const condition of CONDITIONS) {
 			await expect(standing).toHaveAttribute("role", "status");
 			await expect(dialog.getByTestId("modem-usb-mode-switch")).toHaveCount(0);
 			// The refusal never moves the reported mode.
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveText("rndis");
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
+				"rndis",
+			);
 			signatures.set("uncertified", await usbTerminalSignature(dialog));
 			await dialog
 				.getByTestId("modem-usb-mode-card")
@@ -622,7 +626,8 @@ for (const condition of CONDITIONS) {
 			await enterModemSurface(page, { modem_provisioning: true });
 
 			dialog = await openModemDialog(page);
-			await dialog.getByRole("button", { name: /Switch to mbim/i }).click();
+			await dialog.getByTestId("modem-usb-mode-target-mbim").click();
+			await dialog.getByRole("button", { name: /Switch to/i }).click();
 			await page.getByRole("button", { name: /Switch mode/i }).click();
 
 			const transient = dialog.getByTestId("modem-usb-mode-error");
@@ -631,9 +636,12 @@ for (const condition of CONDITIONS) {
 			expect(await transient.getAttribute("data-usb-mode-refusal")).toBeNull();
 			await expect(dialog.getByTestId("modem-usb-mode-switch")).toHaveCount(0);
 			await expect(
-				dialog.getByRole("button", { name: /Switch to mbim/i }),
+				dialog.getByTestId("modem-usb-mode-target-mbim"),
 			).toBeVisible();
-			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveText("rndis");
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
+				"rndis",
+			);
 			signatures.set("transition_failed", await usbTerminalSignature(dialog));
 			await dialog
 				.getByTestId("modem-usb-mode-card")

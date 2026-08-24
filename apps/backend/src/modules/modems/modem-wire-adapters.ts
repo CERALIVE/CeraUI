@@ -68,6 +68,7 @@ import type {
 	ModemDataUsage,
 	ModemDeviceClass,
 	ModemEsim,
+	ModemRadioPower,
 	ModemRecoveryState,
 	ModemRegistrationRejection,
 	RouterAdmin,
@@ -204,6 +205,9 @@ export function fromMmcliModem(
 	if (modem.status.packet_service_state !== undefined) {
 		additive.packet_service_state = modem.status.packet_service_state;
 	}
+	if (modem.status.radio_power !== undefined) {
+		additive.radio_power = modem.status.radio_power;
+	}
 	if (modem.own_numbers !== undefined && modem.own_numbers.length > 0) {
 		additive.own_numbers = [...modem.own_numbers];
 	}
@@ -315,6 +319,8 @@ export interface DbusModemView {
 	readonly registrationRejection?: ModemRegistrationRejection;
 	/** `Modem3gpp.PacketServiceState` — `attached` / `detached`. */
 	readonly packetServiceState?: string;
+	/** `Modem.PowerState`. A READING; this package publishes no setter for it. */
+	readonly radioPower?: ModemRadioPower;
 	/** Drives the legacy `scanning` connection override. */
 	readonly scanning?: boolean;
 	readonly supportedNetworkTypes: readonly string[];
@@ -486,6 +492,10 @@ function buildDbusAdditive(
 	}
 	if (view.packetServiceState !== undefined) {
 		additive.packet_service_state = view.packetServiceState;
+		observed = true;
+	}
+	if (view.radioPower !== undefined) {
+		additive.radio_power = view.radioPower;
 		observed = true;
 	}
 
