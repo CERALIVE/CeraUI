@@ -23,6 +23,7 @@ export const DEVICE_STATS_EVENT = "device-stats" as const;
 // (it owns the `broadcastMsg(ADDON_EVENT, …)` push); re-exported here so the RPC
 // layer resolves the channel name from the events surface like every other event.
 export { ADDON_EVENT } from "../modules/addons/manager.ts";
+export { UPLINKS_EVENT } from "../modules/network/uplink-health/runtime.ts";
 // CPU topology (core count) — the denominator `device-stats.cpuLoad1` needs to
 // be readable as a share of capacity. Its OWN channel for the same S1-lock
 // reason as the two above; the emitter owns the name.

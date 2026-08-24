@@ -30,6 +30,7 @@ import type {
 	SourcesMessage,
 	StatusResponse,
 	UpdateState,
+	UplinksMessage,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
 import {
@@ -117,6 +118,7 @@ let updateStateState = $state<UpdateState | undefined>(undefined);
 
 // Network state
 let netifState = $state<NetifMessage | undefined>(undefined);
+let uplinksState = $state<UplinksMessage | undefined>(undefined);
 let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
 
@@ -270,6 +272,10 @@ export function getUpdateState() {
 
 export function getNetif() {
 	return netifState;
+}
+
+export function getUplinks(): UplinksMessage | undefined {
+	return uplinksState;
 }
 
 export function getWifi() {
@@ -602,6 +608,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					: merged;
 			break;
 		}
+
+		case "uplinks":
+			uplinksState = data as UplinksMessage;
+			break;
 
 		case "audio-level":
 			audioLevelState = data as AudioLevelMessage;
@@ -993,6 +1003,7 @@ export function resetState(): void {
 	availableUpdatesState = undefined;
 	updatingState = null;
 	netifState = undefined;
+	uplinksState = undefined;
 	wifiState = undefined;
 	modemsState = undefined;
 	linkTelemetryState = undefined;

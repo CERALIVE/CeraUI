@@ -103,6 +103,12 @@ src/
 
 ## RPC PATTERN
 
+### Uplink-health state [EXISTS]
+
+`subscriptions.svelte.ts` is the sole consumer of the backend's `uplinks` push.
+`getUplinks()` exposes the replace-whole `UplinksMessage`; `resetState()` clears it.
+Do not add a second socket consumer or infer health from modem signal/netif fields.
+
 ```ts
 import { rpc, rpcClient } from '$lib/rpc';
 await rpc.streaming.start(config);          // typed via TypedRPC in client.ts

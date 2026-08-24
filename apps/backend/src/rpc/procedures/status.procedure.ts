@@ -15,6 +15,7 @@ import { buildModemsWireMessage } from "../../modules/modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../../modules/network/network-ingest.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
 import { getUnclaimedAdapters } from "../../modules/network/unclaimed-adapters.ts";
+import { getUplinksMessage } from "../../modules/network/uplink-health/state.ts";
 import {
 	buildRelaysMsg,
 	getRelays,
@@ -147,6 +148,7 @@ export function buildInitialStatus() {
 			unclaimed_adapters: getUnclaimedAdapters(),
 		},
 		netif: netIfBuildMsg(),
+		uplinks: getUplinksMessage(),
 		sensors: getSensors(),
 		encoderLoad: getEncoderLoad(),
 		// A BOOT FACT with no periodic loop behind it, so the initial push is the

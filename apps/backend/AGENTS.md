@@ -5524,6 +5524,21 @@ substituted device, a renumber, and the coarse/unset selections.
 
 ## BROADCAST EVENTS
 
+### Per-uplink health (`uplinks`) [EXISTS]
+
+`modules/network/uplink-health/` owns the client-steering health verdict. Its one
+exported config object fixes the 5 s cadence, three-failure down threshold,
+five-success recovery threshold, 15 s hold-down and three-probe concurrency cap.
+While streaming, interfaces present in SRTLA telemetry receive zero active probes:
+RTT/NAK/staleness can degrade them, while only definitive carrier/route/disconnect/
+expiry evidence removes them from client steering. Captive interception is
+`degraded/captive_portal`, never `down`; modem signal is not an input.
+
+The engine publishes `uplinks` records and `gateways.ts` filters default-route
+candidates through their steering eligibility. The engine never edits routes;
+`gateways.ts` remains the sole `ip route del default` owner. Post-login hydration
+replays the current records immediately.
+
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
 
 | Event type | Interval | Source |

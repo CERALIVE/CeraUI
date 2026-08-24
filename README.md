@@ -58,6 +58,9 @@ A dev-only DevTools destination is available in development builds.
   honest fallback message when the board's encoder plugin is missing or
   rejects a setting. See [`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md)
   for the outstanding board-validation checklist (open, unrun as of writing).
+- **Per-uplink health**: bounded device-specific checks feed default-route
+  election, while active SRTLA links use passive RTT/NAK telemetry instead of
+  competing probes. Captive portals remain visible as degraded links.
 
 ## Development
 

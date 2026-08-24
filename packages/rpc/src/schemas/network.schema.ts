@@ -121,6 +121,35 @@ export type NetifEntry = z.infer<typeof netifEntrySchema>;
 export const netifMessageSchema = z.record(z.string(), netifEntrySchema);
 export type NetifMessage = z.infer<typeof netifMessageSchema>;
 
+export const uplinkKindSchema = z.enum(['ethernet', 'wifi', 'cellular', 'other']);
+export const uplinkHealthStateSchema = z.enum(['up', 'degraded', 'down']);
+export const uplinkHealthReasonSchema = z.enum([
+	'probe_failed',
+	'captive_portal',
+	'passive_congestion',
+	'definitive_loss',
+]);
+export const uplinkHealthRecordSchema = z.object({
+	iface: z.string().min(1),
+	kind: uplinkKindSchema,
+	state: uplinkHealthStateSchema,
+	reason: uplinkHealthReasonSchema.optional(),
+	weight: z.number().min(0).max(100),
+	lastTransition: z.number().nonnegative(),
+	staleAt: z.number().nonnegative(),
+	probes: z.object({
+		successes: z.number().int().nonnegative(),
+		failures: z.number().int().nonnegative(),
+	}),
+	signals: z.object({
+		activeAt: z.number().nonnegative().optional(),
+		passiveAt: z.number().nonnegative().optional(),
+	}),
+});
+export const uplinksMessageSchema = z.array(uplinkHealthRecordSchema);
+export type UplinkHealthRecord = z.infer<typeof uplinkHealthRecordSchema>;
+export type UplinksMessage = z.infer<typeof uplinksMessageSchema>;
+
 // Network interface config input schema
 export const netifConfigInputSchema = z.object({
 	name: z.string(),

@@ -167,6 +167,7 @@ The backend pushes typed events to all connected clients via `src/rpc/events.ts`
 | Event | Interval | Source |
 |-------|----------|--------|
 | `netif` | 5 s | `modules/network/network-interfaces.ts` |
+| `uplinks` | 5 s / on change | `modules/network/uplink-health/` |
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
