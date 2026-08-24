@@ -343,6 +343,46 @@ export const hotspotToggleInputSchema = z.object({
 });
 export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
 
+/*
+  Why a hotspot start/stop did not complete. Every member names a DIFFERENT
+  thing an operator can do about it, so none of them is collapsible into a
+  generic error:
+
+    DEVICE_BUSY          another mutation holds this radio — retry
+    no-device            the wire id names no adapter this device can see
+    unsupported          the radio cannot host an access point at all
+    activation-failed    NetworkManager refused; the adapter was rolled back
+    not-confirmed        activation was issued and NM never confirmed the AP
+    deactivation-failed  NetworkManager did not take the hotspot down
+*/
+export const hotspotToggleErrorSchema = z.enum([
+	'DEVICE_BUSY',
+	'no-device',
+	'unsupported',
+	'activation-failed',
+	'not-confirmed',
+	'deactivation-failed',
+]);
+export type HotspotToggleError = z.infer<typeof hotspotToggleErrorSchema>;
+
+/*
+  The reply to `wifi.hotspotStart` / `wifi.hotspotStop`.
+
+  `accepted` is present ONLY when the transaction was admitted and the device
+  cannot yet vouch for NetworkManager's verdict — a hotspot start registers a
+  bounded NM confirmation that resolves after this reply. It is a promise that a
+  TERMINAL `wifi` frame follows (`hotspot.start` / `hotspot.stop`, carrying
+  `success: true` or a typed `error`), never a claim that the AP is up. A reply
+  WITHOUT it is already terminal: `success: true` means the device confirmed the
+  outcome itself, `success: false` carries the reason.
+*/
+export const hotspotToggleOutputSchema = z.object({
+	success: z.boolean(),
+	accepted: z.literal(true).optional(),
+	error: hotspotToggleErrorSchema.optional(),
+});
+export type HotspotToggleOutput = z.infer<typeof hotspotToggleOutputSchema>;
+
 // Hotspot config input schema
 export const hotspotConfigInputSchema = z.object({
 	device: z.string(),
@@ -370,6 +410,14 @@ export const wifiOperationOutputSchema = z.object({
 });
 export type WifiOperationOutput = z.infer<typeof wifiOperationOutputSchema>;
 
+// A terminal hotspot start/stop frame: the deferred half of an `accepted` reply.
+export const hotspotToggleResultSchema = z.object({
+	device: z.union([z.number(), z.string()]),
+	success: z.boolean().optional(),
+	error: hotspotToggleErrorSchema.optional(),
+});
+export type HotspotToggleResult = z.infer<typeof hotspotToggleResultSchema>;
+
 // WiFi message schema (response from WiFi operations)
 export const wifiMessageSchema = z.object({
 	connect: z.array(z.string()).optional(),
@@ -377,9 +425,24 @@ export const wifiMessageSchema = z.object({
 	disconnect: z.string().optional(),
 	new: z
 		.object({
-			error: z.enum(['auth', 'generic']).optional(),
+			// 'ambiguous': the join reported no error and named no connection, so
+			// the device cannot say whether the network was actually joined.
+			error: z.enum(['auth', 'generic', 'ambiguous']).optional(),
 			device: z.union([z.number(), z.string()]).optional(),
 			success: z.boolean().optional(),
+		})
+		.optional(),
+	hotspot: z
+		.object({
+			start: hotspotToggleResultSchema.optional(),
+			stop: hotspotToggleResultSchema.optional(),
+			config: z
+				.object({
+					device: z.union([z.number(), z.string()]),
+					success: z.boolean().optional(),
+					error: z.string().optional(),
+				})
+				.optional(),
 		})
 		.optional(),
 });

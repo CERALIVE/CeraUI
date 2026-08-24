@@ -4,36 +4,47 @@
  *
  * THE LOCK CONTRACT (and it is one lock, not two).
  *
- * Every mutating procedure here — connect, connectNew, disconnect, forget,
- * scan, hotspotStart, hotspotStop, hotspotConfigure — acquires the canonical
- * per-adapter lock through `runGuarded`, keyed by
- * `modules/wifi/wifi-adapter-lock.ts`. That module owns the ONLY key
- * derivation in the codebase (the adapter's PERMANENT hardware address), and
- * the hotspot start/stop/reconfigure transactions under `modules/wifi/` acquire
- * the identical key from the identical function — so an NM activation in flight
- * really does refuse a concurrent station mutation on the same radio, in both
- * directions. A refused call returns `{ success: false, error: 'DEVICE_BUSY' }`
- * having touched no state and dispatched nothing.
+ * Every mutating procedure here is serialized on the canonical per-adapter lock
+ * keyed by `modules/wifi/wifi-adapter-lock.ts` — the module that owns the ONLY
+ * key derivation in the codebase (the adapter's PERMANENT hardware address). The
+ * hotspot transactions under `modules/wifi/` acquire the identical key from the
+ * identical function, so an NM activation in flight really does refuse a
+ * concurrent station mutation on the same radio, in both directions. A refused
+ * call returns `{ success: false, error: 'DEVICE_BUSY' }` having touched no
+ * state and dispatched nothing.
  *
- * TWO THINGS THIS CONTRACT DOES NOT CLAIM, because both were claimed falsely
- * before and are worth stating plainly:
+ * WHICH LAYER TAKES THE LOCK DIFFERS BY PROCEDURE, and it has to:
  *
- *  - An adapter that does not RESOLVE is not serialized. `runGuarded` runs `op`
- *    unguarded when the device id / connection uuid names no known radio: there
- *    is no adapter to contend for, and refusing would be a lie in the other
- *    direction.
- *  - The station procedures hold the lock across their DISPATCH, not across the
- *    nmcli work. `handleWifi` fires connect/disconnect/forget/scan/new with
- *    `void`, so those calls return once the work is queued. The hotspot
- *    transactions DO hold the lock for their full NM activation, which is the
- *    ordering that matters — the destructive, multi-step operation cannot be
- *    interleaved with a station mutation. Making the station legs awaitable
- *    under the lock is a separate change with its own RPC-latency consequences.
+ *  - The STATION procedures (connect, connectNew, disconnect, forget, scan) take
+ *    it here via `runGuarded`, and hold it across their DISPATCH only —
+ *    `handleWifi` fires those with `void`, so they return once the work is
+ *    queued. Making them awaitable under the lock is a separate change with its
+ *    own RPC-latency consequences.
+ *  - The HOTSPOT procedures do NOT wrap their dispatch in `runGuarded`. The
+ *    transaction acquires this same key itself and holds it for the full NM
+ *    activation, so wrapping it here made it refuse ITSELF: the outer lock was
+ *    still held when the transaction reached `withDeviceLock`, every start/stop
+ *    answered DEVICE_BUSY internally, and the procedure reported the fabricated
+ *    `{ success: true }` over the top of it. `hotspotStart`/`hotspotStop` now
+ *    AWAIT the transaction and return its typed outcome; `hotspotConfigure`
+ *    keeps a dispatch ack and uses `adapterBusy` as an admission probe.
+ *
+ * ONE THING THIS CONTRACT STILL DOES NOT CLAIM: an adapter that does not RESOLVE
+ * is not serialized. `runGuarded` runs `op` unguarded when the device id or
+ * connection uuid names no known radio — there is no adapter to contend for, and
+ * refusing would be a lie in the other direction.
+ *
+ * EVERY hotspot exit path ends in a terminal `wifi` frame
+ * (`modules/wifi/wifi-hotspot-outcome.ts`), including the ones that resolve long
+ * after the reply — so `accepted: true` is a promise of a later frame, never a
+ * claim that the access point is up.
  */
 
 import {
+	type HotspotToggleOutput,
 	hotspotConfigInputSchema,
 	hotspotToggleInputSchema,
+	hotspotToggleOutputSchema,
 	setWifiCountryInputSchema,
 	setWifiCountryOutputSchema,
 	successResponseSchema,
@@ -70,6 +81,9 @@ import {
 	persistWifiCountry,
 	setWifiCountry,
 } from "../../modules/wifi/wifi-country.ts";
+import { wifiHotspotStart } from "../../modules/wifi/wifi-hotspot-activation.ts";
+import { wifiHotspotStop } from "../../modules/wifi/wifi-hotspot-config.ts";
+import { publishHotspotOutcome } from "../../modules/wifi/wifi-hotspot-outcome.ts";
 import { broadcast } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
@@ -120,6 +134,30 @@ async function runGuarded(
 		await op();
 	});
 	return !result.success;
+}
+
+// Was the adapter busy at this instant? Acquires and releases immediately, so it
+// never becomes the lock a later transaction has to contend with.
+async function adapterBusy(
+	lockKey: WifiAdapterLockKey | undefined,
+): Promise<boolean> {
+	if (!lockKey) return false;
+	const probe = await withWifiAdapterLock(lockKey, async () => true);
+	return !probe.success;
+}
+
+// A refusal decided before the transaction is reached still owes the terminal
+// frame every other hotspot outcome publishes. `device` is the NUMERIC adapter
+// id the transaction publishes, so every hotspot frame is keyed identically.
+function refuseHotspot(
+	kind: "start" | "stop",
+	device: string,
+): HotspotToggleOutput {
+	publishHotspotOutcome(kind, Number(device), {
+		success: false,
+		error: "DEVICE_BUSY",
+	});
+	return { success: false, error: "DEVICE_BUSY" };
 }
 
 // Base procedure with context
@@ -290,25 +328,34 @@ export const wifiScanProcedure = authedProcedure
  */
 export const hotspotStartProcedure = authedProcedure
 	.input(hotspotToggleInputSchema)
-	.output(successResponseSchema)
-	.handler(async ({ input, context }): Promise<MutationResult> => {
-		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws;
-		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
-		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, {
-				hotspot: { start: { device: Number(input.device) } },
-			});
-			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
+	.output(hotspotToggleOutputSchema)
+	.handler(async ({ input }): Promise<HotspotToggleOutput> => {
+		if (mockWifiBusy()) return refuseHotspot("start", input.device);
+		/*
+		  An admission PROBE, released before the transaction runs — see
+		  `hotspotConfigure` below for why the lock is never held across the
+		  dispatch. It answers up front for an adapter this layer can resolve; the
+		  transaction's own lock is still what actually serializes the work, and
+		  its DEVICE_BUSY comes back through the awaited result either way.
+		*/
+		if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
+			return refuseHotspot("start", input.device);
+		}
+		if (shouldUseMocks()) {
+			if (!getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
 				if (device) {
 					getMockState().wifiModes[device] = "hotspot";
 					setMockWifiConnection(device, { activeNetwork: undefined });
 				}
 			}
-		});
-		if (busy) return { success: false, error: "DEVICE_BUSY" };
-		return { success: true };
+			publishHotspotOutcome("start", Number(input.device), { success: true });
+			return { success: true, accepted: true };
+		}
+
+		const result = await wifiHotspotStart({ device: Number(input.device) });
+		if (!result.success) return { success: false, error: result.error };
+		return { success: true, accepted: true };
 	});
 
 /**
@@ -316,23 +363,24 @@ export const hotspotStartProcedure = authedProcedure
  */
 export const hotspotStopProcedure = authedProcedure
 	.input(hotspotToggleInputSchema)
-	.output(successResponseSchema)
-	.handler(async ({ input, context }): Promise<MutationResult> => {
-		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
-		const ws = context.ws;
-		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
-		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, {
-				hotspot: { stop: { device: Number(input.device) } },
-			});
-			if (shouldUseMocks() && !getMockWifiFaults().suppressConfirm) {
+	.output(hotspotToggleOutputSchema)
+	.handler(async ({ input }): Promise<HotspotToggleOutput> => {
+		if (mockWifiBusy()) return refuseHotspot("stop", input.device);
+		// Admission probe, on `hotspotStart`'s terms.
+		if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
+			return refuseHotspot("stop", input.device);
+		}
+		if (shouldUseMocks()) {
+			if (!getMockWifiFaults().suppressConfirm) {
 				const device = resolveMockWifiDevice(input.device);
-				if (device) {
-					getMockState().wifiModes[device] = "station";
-				}
+				if (device) getMockState().wifiModes[device] = "station";
 			}
-		});
-		if (busy) return { success: false, error: "DEVICE_BUSY" };
+			publishHotspotOutcome("stop", Number(input.device), { success: true });
+			return { success: true };
+		}
+
+		const result = await wifiHotspotStop({ device: Number(input.device) });
+		if (!result.success) return { success: false, error: result.error };
 		return { success: true };
 	});
 
@@ -345,33 +393,39 @@ export const hotspotConfigureProcedure = authedProcedure
 	.handler(async ({ input, context }): Promise<MutationResult> => {
 		if (mockWifiBusy()) return { success: false, error: "DEVICE_BUSY" };
 		const ws = context.ws;
-		const lockKey = wifiAdapterLockKeyForDeviceId(input.device);
-		const busy = await runGuarded(lockKey, () => {
-			handleWifi(ws, {
-				hotspot: {
-					config: {
-						device: Number(input.device),
-						name: input.name,
-						password: input.password,
-						channel: input.channel,
-						...(input.security !== undefined
-							? { security: input.security }
-							: {}),
-					},
+		/*
+		  An ADMISSION PROBE, not a guard held across the work: `wifiHotspotConfig`
+		  acquires this exact key itself, and holding it here while dispatching made
+		  the transaction refuse ITSELF — every reconfigure answered `saving` on a
+		  healthy radio. The probe still refuses a genuinely busy adapter up front;
+		  the transaction's own lock remains the guarantee, and its terminal `wifi`
+		  frame remains the outcome the dialog waits on.
+		*/
+		if (await adapterBusy(wifiAdapterLockKeyForDeviceId(input.device))) {
+			return { success: false, error: "DEVICE_BUSY" };
+		}
+
+		handleWifi(ws, {
+			hotspot: {
+				config: {
+					device: Number(input.device),
+					name: input.name,
+					password: input.password,
+					channel: input.channel,
+					...(input.security !== undefined ? { security: input.security } : {}),
 				},
-			});
-			if (shouldUseMocks()) {
-				const device = resolveMockWifiDevice(input.device);
-				if (device) {
-					setMockHotspotConfig(device, {
-						name: input.name,
-						password: input.password,
-						channel: input.channel,
-					});
-				}
-			}
+			},
 		});
-		if (busy) return { success: false, error: "DEVICE_BUSY" };
+		if (shouldUseMocks()) {
+			const device = resolveMockWifiDevice(input.device);
+			if (device) {
+				setMockHotspotConfig(device, {
+					name: input.name,
+					password: input.password,
+					channel: input.channel,
+				});
+			}
+		}
 		return { success: true };
 	});
 

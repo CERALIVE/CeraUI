@@ -110,6 +110,8 @@ export function registerPendingConfirmation(
 	const ifname = wifiInterface.ifname;
 	const connName = wifiInterface.hotspot.name ?? ifname;
 
+	const device = wifiInterface.id;
+
 	const confirm = () => {
 		if (
 			wifiInterface.hotspot.conn &&
@@ -127,6 +129,7 @@ export function registerPendingConfirmation(
 		}
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface); // now mode: 'hotspot'
+		deps.publishOutcome?.("start", device, { success: true });
 	};
 
 	const giveUp = () => {
@@ -138,6 +141,17 @@ export function registerPendingConfirmation(
 		}
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
+		/*
+		  The state broadcast above says the radio is still a station; it does not
+		  say the START failed, so on its own it leaves the operator's keyed op to
+		  expire on its TTL. `not-confirmed` is deliberately not `activation-failed`:
+		  NetworkManager accepted the activation and simply never reported the AP up,
+		  which is a different thing to tell someone than a refusal.
+		*/
+		deps.publishOutcome?.("start", device, {
+			success: false,
+			error: "not-confirmed",
+		});
 	};
 
 	const pending: PendingHotspot = {

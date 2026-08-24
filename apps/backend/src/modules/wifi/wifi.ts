@@ -78,6 +78,7 @@ import {
 } from "./wifi-hotspot-clients.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
+import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
 import {
 	getHotspotSecurityMap,
 	type HotspotBandMaxWidth,
@@ -104,6 +105,9 @@ import {
 	saeActivateArgs,
 	type WifiStationJoinPlan,
 } from "./wifi-station-security.ts";
+
+const errorText = (err: unknown) =>
+	err instanceof Error ? err.message : String(err);
 
 type WifiConnectMessage = {
 	connect: ConnectionUUID;
@@ -705,11 +709,24 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 	// stayed green while hardware could not join a new network at all.
 	if (msg.device === undefined || !msg.ssid) return;
 
+	const senderId = getSocketSenderId(conn);
+	// An unresolvable adapter is still a terminal answer the caller is owed; the
+	// retired silent returns left the keyed join op pending until its TTL.
+	const refuse = () => {
+		conn.send(
+			buildMsg(
+				"wifi",
+				{ new: { error: "generic", device: msg.device } },
+				senderId,
+			),
+		);
+	};
+
 	const macAddress = getMacAddressForWifiInterface(msg.device);
-	if (!macAddress) return;
+	if (!macAddress) return refuse();
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
-	if (!wifiInterface) return;
+	if (!wifiInterface) return refuse();
 
 	const plan = planWifiStationJoin({
 		ssid: msg.ssid,
@@ -717,8 +734,6 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 		password: msg.password,
 		security: msg.security,
 	});
-
-	const senderId = getSocketSenderId(conn);
 
 	void runWifiNew(conn, msg, macAddress, plan, senderId);
 }
@@ -756,6 +771,21 @@ async function runWifiNew(
 	if (outcome.uuid === undefined) {
 		logger.warn(
 			`wifiNew: no error but not matching a successful connection msg in:\n${outcome.stdout}\n${outcome.stderr}`,
+		);
+		/*
+		  nmcli reported no error and named no connection, so nothing here can say
+		  whether the network was joined — but a bare `return` is the one answer
+		  that is certainly wrong: it leaves the dialog's keyed op to expire on its
+		  TTL with no explanation. `ambiguous` says exactly that much, and nothing
+		  is cleaned up: `wifiDeleteFailedConns` runs on the FAILURE path because a
+		  failure proves the profile never activated, and this path proves nothing.
+		*/
+		conn.send(
+			buildMsg(
+				"wifi",
+				{ new: { error: "ambiguous", device: msg.device } },
+				senderId,
+			),
 		);
 		return;
 	}
@@ -823,12 +853,43 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 					msg,
 					type,
 				);
+				/*
+				  These are dispatched, not awaited — but they are NOT bare
+				  fire-and-forget: each transaction publishes a terminal `wifi` frame
+				  on every outcome it can reach, and the `catch` arms cover the one
+				  outcome it cannot (an unexpected throw), so no path on this branch
+				  can leave an operator's keyed op to expire on its TTL.
+				*/
 				if ("start" in hotspotMessage && hotspotMessage.start) {
-					void wifiHotspotStart(hotspotMessage.start);
+					const { device } = hotspotMessage.start;
+					void wifiHotspotStart(hotspotMessage.start).catch((err) => {
+						logger.error(`hotspot start threw: ${errorText(err)}`);
+						publishHotspotOutcome("start", device, {
+							success: false,
+							error: "activation-failed",
+						});
+					});
 				} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
-					void wifiHotspotStop(hotspotMessage.stop);
+					const { device } = hotspotMessage.stop;
+					void wifiHotspotStop(hotspotMessage.stop).catch((err) => {
+						logger.error(`hotspot stop threw: ${errorText(err)}`);
+						publishHotspotOutcome("stop", device, {
+							success: false,
+							error: "deactivation-failed",
+						});
+					});
 				} else if ("config" in hotspotMessage && hotspotMessage.config) {
-					void wifiHotspotConfig(conn, hotspotMessage.config);
+					const { device } = hotspotMessage.config;
+					void wifiHotspotConfig(conn, hotspotMessage.config).catch((err) => {
+						logger.error(`hotspot configure threw: ${errorText(err)}`);
+						conn.send(
+							buildMsg(
+								"wifi",
+								{ hotspot: { config: { device, error: "unavailable" } } },
+								getSocketSenderId(conn),
+							),
+						);
+					});
 				}
 				break;
 			}

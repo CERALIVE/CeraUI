@@ -7031,6 +7031,63 @@ op's terminal state. Rule-E proof captured in both directions: reverting the
 activation key to `ifname` reddens the first test, and un-guarding
 `wifiConnectNewProcedure` reddens the second.
 
+### …AND A HOTSPOT TOGGLE NEVER CLAIMS MORE THAN NM HAS CONFIRMED [EXISTS]
+
+`withDeviceLock` is **NOT re-entrant**, and sharing ONE key between the RPC layer
+and the transactions is exactly what exposed that. The hotspot procedures
+dispatched INSIDE `runGuarded`, so the outer lock was still held when the
+transaction reached `withDeviceLock` — and a `void` does not help, because an
+async body runs SYNCHRONOUSLY up to its first `await` and the busy check is
+before any await. On a real device **every** hotspot start/stop/configure refused
+ITSELF with `DEVICE_BUSY` while the procedure ignored the result and answered a
+fabricated `{ success: true }`. Nothing caught it: no test asserted the
+dispatched outcome.
+
+| Procedure | Lock posture |
+|---|---|
+| station (connect/connectNew/disconnect/forget/scan) | UNCHANGED — `runGuarded` across dispatch only |
+| `hotspotStart` / `hotspotStop` | NO `runGuarded`: an `adapterBusy()` admission PROBE (acquire+release), then AWAIT the transaction and return its typed outcome |
+| `hotspotConfigure` | NO `runGuarded`: same probe, then a dispatch ack — awaiting it risks 2 × `HOTSPOT_UP_TO` (60 s) against a 30 s RPC timeout |
+
+**The probe is required, not decorative: two id→MAC resolutions exist and they
+disagree.** `getMacAddressForWifiInterface` reads `getWifiIdToMacAddress()`;
+`wifiAdapterLockKeyForDeviceId` scans the registry by `.id`. A caller that
+resolves a lock key but not a MAC would be answered `no-device` where
+`DEVICE_BUSY` is owed.
+
+**`modules/wifi/wifi-hotspot-outcome.ts` is the ONE builder of a
+`wifi` → `hotspot.start` / `hotspot.stop` frame**, and it BROADCASTS: the path
+that most needs a terminal (the bounded NM confirmation) settles from a monitor
+event or a backoff poll with no requesting socket in hand. **Exactly ONE
+publisher per exit path** — refusals from `wifiHotspotStart`, the already-active
+short-circuit from `startHotspotLocked` (nothing was dispatched, so no
+confirmation will ever settle), confirmed/never-confirmed from
+`registerPendingConfirmation`, every stop outcome from `wifiHotspotStop`, and an
+unexpected throw from the `.catch` arms in `handleWifi`. `wifiHotspotStart`
+deliberately does NOT publish on success — that would resolve the operator's op
+before NetworkManager has answered.
+
+**A state broadcast is not a terminal outcome.** `giveUp()` already called
+`broadcastState()`, which says "still a station"; it does not say the START
+failed, so the keyed op could only expire on its TTL. Hence `not-confirmed`,
+which is deliberately NOT `activation-failed` — NM accepted the activation and
+never reported the AP up, which is a different thing to tell someone.
+
+`accepted: true` on the reply means "a terminal frame follows", never "the access
+point is up". Wire contract: `hotspotToggleErrorSchema` (six members, none
+collapsible) + `hotspotToggleOutputSchema` in `@ceraui/rpc`.
+
+**`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
+`{new:{error:"ambiguous"}}` and deliberately does NOT run
+`wifiDeleteFailedConns()` — the failure path does, because a failure proves the
+profile never activated, and this path proves nothing.
+
+Both `publishOutcome` deps are OPTIONAL so the existing suites' exact dep objects
+still typecheck; production wires them in the `default*Deps`. Coverage:
+`tests/wifi-hotspot-terminal-outcomes.test.ts` (11 tests — every typed refusal,
+both accepted-path settlements, both stop outcomes, the RPC caller's typed
+reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree.
+
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
@@ -7943,6 +8000,10 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't spawn `nmcli` from an RPC-reachable path without a bound — every nmcli process takes one of root's 256 system-bus connections, so an unguarded repeat makes EVERY NetworkManager operation on the device fail `Could not create NMClient object`. `wifiRescan()` coalesces; keep it that way, and keep its shared promise from rejecting.
 - Don't delete only the `saved[ssid]` uuid in `wifiForget` — a second NM profile for the same SSID keeps the row reading "Saved", which the operator cannot tell from a Forget that did nothing. Go through `wifiSiblingConnections`. And don't put `savedAll` on the wire or read it from connect/disconnect: those act on a CONNECTION, Forget removes a NETWORK.
+- Don't hold a per-adapter lock across a call into a module that acquires the SAME key — `withDeviceLock` is not re-entrant and an async body runs synchronously to its first `await`, so `runGuarded(key, () => void wifiHotspotStart(…))` made every hotspot start/stop/configure refuse ITSELF under a fabricated `{success:true}`. The hotspot procedures use an `adapterBusy()` probe and then AWAIT the transaction; don't re-wrap them.
+- Don't return `{success:true}` from a hotspot RPC before the transaction has answered, and don't treat `accepted: true` as "the AP is up" — it promises a later terminal frame and nothing else.
+- Don't build a `wifi` `hotspot.start`/`hotspot.stop` frame anywhere but `wifi-hotspot-outcome.ts`, and don't add a SECOND publisher to an exit path that already has one — publishing success from `wifiHotspotStart` resolves the operator's op before NetworkManager has answered. A `broadcastState()` is not a terminal outcome, and `not-confirmed` is not `activation-failed`.
+- Don't return in silence from a WiFi dispatch that an operator's keyed op is waiting on — a bare `return` leaves it to expire on its TTL. And don't "clean up" `runWifiNew`'s ambiguous path by calling `wifiDeleteFailedConns()` or claiming `generic`: `ok:true` with no uuid proves nothing in either direction.
 - Don't derive a per-adapter WiFi lock key anywhere but `modules/wifi/wifi-adapter-lock.ts`, and don't key one on `wifiInterface.ifname` — the RPC layer and the hotspot transactions did exactly that with two different strings for one radio, so `withDeviceLock` handed both callers the lock at once and the guard serialized nothing. Don't add a mutating WiFi procedure that skips `runGuarded` either (that was `wifiConnectNewProcedure`), and don't prefix the key: it shares the process-wide `withDeviceLock` registry, so a prefix silently stops matching a key an existing caller already holds.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.

@@ -24,6 +24,7 @@ import type {
 	DerivedApChannel,
 	WifiChannel,
 } from "./wifi-channels.ts";
+import type { HotspotOutcomePublisher } from "./wifi-hotspot-outcome.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
 	type HotspotSecurityId,
@@ -200,6 +201,13 @@ export type HotspotActivationDeps = {
 		ifname: string,
 	) => Promise<{ ifname: string; created: boolean } | undefined>;
 	releaseConcurrentInterface?: (ifname: string) => Promise<void>;
+	/**
+	 * Publishes the TERMINAL `wifi` frame for this start. Optional so a unit test
+	 * driving the transaction with its own fake dep set stays off the broadcast
+	 * bus; production wires the real publisher in {@link defaultHotspotDeps}, so
+	 * every device path really does end in a frame.
+	 */
+	publishOutcome?: HotspotOutcomePublisher;
 	/**
 	 * Optional bounded confirmation poll. When provided, it is retried with
 	 * backoff until it returns `true` (confirming the hotspot is up) or attempts
