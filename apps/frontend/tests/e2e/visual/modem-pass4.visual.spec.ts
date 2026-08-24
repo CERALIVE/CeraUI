@@ -279,8 +279,8 @@ function probeHierarchy(page: Page): Promise<string[]> {
  * chrome is a FIXED bottom dock, and an element screenshot of a
  * taller-than-viewport section re-composites that dock into every stitched tile,
  * so the capture shows it crossing the roster at points where nothing on screen
- * ever does. `<main>` reserves `pb-28` for the dock, and this measures that
- * claim instead of reading it off a picture.
+ * ever does. `<main>` reserves `--mobile-dock-height` for the dock, and this
+ * measures that claim instead of reading it off a picture.
  *
  * Three details are load-bearing, and the first two were found by this probe
  * failing on its own defects rather than on the product's:

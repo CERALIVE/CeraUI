@@ -31,8 +31,11 @@ src/
 │   ├── HudBar.svelte          # Persistent HUD bar — bitrate, per-link signals, SoC telemetry, tap-to-expand Sheet
 │   ├── HudRegion.svelte       # Responsive HUD mount (desktop top / mobile bottom dock)
 │   ├── DisconnectedBanner.svelte  # Reconnect/reboot/session-expiry banner (authed branch only)
-│   ├── notifications/         # NotificationsPanel.svelte — header bell + unread badge;
-│   │                          #   AppDialog listing notifications.getPersistent() with per-item dismiss
+│   ├── notifications/         # PersistentNotices.svelte — the IN-FLOW band every persistent
+│   │                          #   notice renders in (never the toast overlay);
+│   │                          #   NotificationsPanel.svelte — header bell + unread badge,
+│   │                          #   AppDialog listing notifications.getPersistent() with per-item dismiss;
+│   │                          #   notification-presentation.ts — the icon vocabulary + dismiss both share
 │   ├── dialogs/               # 15 focused config dialogs, all compose AppDialog:
 │   │   ├── EncoderDialog.svelte
 │   │   ├── AudioDialog.svelte
@@ -66,8 +69,9 @@ src/
 │   │   ├── connection-ux.svelte.ts # Reconnect/reboot/session-expiry UX (eager-init in browser)
 │   │   ├── auth-status.svelte.ts  # SOLE auth-mutation path (ingestAuth/authenticate/createPassword) —
 │   │   │                          #   websocket-store.svelte.ts is DELETED; do not re-add it
-│   │   ├── notifications.svelte.ts # Active notifications (toast + persistent); getActive() feeds
-│   │   │                          #   the toast host, getPersistent() feeds NotificationsPanel
+│   │   ├── notifications.svelte.ts # Active notifications; getActive() feeds the toast host
+│   │   │                          #   (TRANSIENT entries only), getPersistent() feeds both
+│   │   │                          #   PersistentNotices and NotificationsPanel
 │   │   └── layout-mode.svelte.ts  # Touch/kiosk layout flag ($persist "layout-mode")
 │   ├── components/
 │   │   ├── dialogs/           # AppDialog.svelte (shared chrome) + lazyDialog()/LazyDialog registry — config dialogs load as separate chunks on first open (see CONVENTIONS below)
@@ -1543,6 +1547,81 @@ Coverage: `lib/modem/mutation-outcome.test.ts`, `lib/rpc/router-write-flow.test.
 `main/dialogs/ModemConfigDialog.draft.test.ts`, plus the `@a11y` axe leg in
 `tests/e2e/modem-a11y.spec.ts`.
 
+## A PERSISTENT NOTICE IS NOT A TOAST [EXISTS]
+
+`LayoutToastHost` renders only NON-persistent notifications. A persistent one
+(`is_persistent: true`) renders IN FLOW, in `main/notifications/PersistentNotices.svelte`,
+and keeps its archive + unread badge in `NotificationsPanel`.
+
+It used to ride the same sonner stream with
+`duration: Number.POSITIVE_INFINITY`, which is a permanent card on an overlay
+layer at **z-index 999999999**. Board-measured on `ceralive2` (task 41's fleet
+drill), that card's box was:
+
+| Viewport | Toast box | What it covered |
+|---|---|---|
+| 375x812 | `16,665 328x132` | the fixed dock's Settings tab (`144,708 72x56`) |
+| 768x900 | `373,745 356x132` | the same tab (`301,796 151x56`) |
+| 1024x600 | `629,445 356x132` | an 85svh dialog's footer (`249,490 512x65`) |
+
+The operator-visible failure was a Settings tap that timed out for 30 s, and it
+was NOT recoverable by waiting: an infinite toast has no expiry, and the Toaster
+ships `closeButton` off, so `netif_dup_ip` had no dismiss control on screen even
+though the wire marks it `is_dismissable: true`.
+
+Five rules carry the fix, and each was measured rather than reasoned:
+
+- **THE DISCRIMINATOR IS PERSISTENCE, NOT SEVERITY OR DISMISSABILITY.** A toast
+  overlapping a dialog's corner for four seconds is what a toast IS; the same
+  card there forever is an occlusion. So the split is on `isPersistent`, and it
+  is applied at the ONE place that talks to sonner.
+- **THE BAND IS ON NO STACKING LAYER.** No `fixed`, no `z-*`, no positioned
+  ancestor with a numeric z-index — verified in-browser as an empty layer chain
+  against the dialog's `z=50`. That is what makes "it can push content down, it
+  can never cover it" a structural property rather than a promise.
+- **A HIT TEST CANNOT SEE THE DIALOG CASE.** bits-ui sets
+  `pointer-events: none` on `<body>` while a modal is open (board-verified), so
+  `document.elementFromPoint` skips the toast and returns the button under it.
+  The dialog occlusion was therefore VISUAL — a Save button behind an opaque
+  permanent card — and only a stacking-layer comparison detects it. Do not
+  "simplify" that assertion into an `elementFromPoint` check; it passes on the
+  broken tree.
+- **THE TOAST LAYER STAYS ABOVE THE DIALOG, and must.** Lowering the toaster
+  below `z-50` would bury the "Copied" / "Saved" / typed-refusal toasts that
+  `HotspotDialog`, `PasswordDialog`, `SshDialog`, `CloudRemoteDialog`,
+  `NetifDialog`, `SimUnlockDialog` and `async-operation.svelte.ts` fire WHILE a
+  dialog is open, under a `bg-black/10` + `backdrop-blur` scrim.
+- **TRANSIENT TOASTS STILL CLEAR THE DOCK.** The mobile layout parks a fixed
+  dock on the bottom edge and the stack is anchored to the same edge, so
+  `LayoutToastHost` passes an `offset`/`mobileOffset` of
+  `calc(var(--mobile-dock-height) + env(safe-area-inset-bottom, 0px) + 1rem)`.
+  It is keyed on `DESKTOP_CHROME_QUERY` — the query `MainView` mounts the dock
+  with — NOT on sonner's own `max-width: 600px` rule, which does not fire at
+  768x900 where the dock is still mounted. `--mobile-dock-height` (`app.css`) is
+  the SINGLE source for that clearance and for the padding `<main>` reserves.
+- `[data-sonner-toaster]` is `pointer-events: none` with `[data-sonner-toast]`
+  `auto`, so the container never answers a hit test for pixels it does not
+  paint. Events still BUBBLE to the `<ol>`, so sonner's expand/swipe handlers
+  are unaffected.
+
+`notification-presentation.ts` holds the ONE icon vocabulary and the ONE dismiss
+action both surfaces use — a warning that draws a triangle in the band and a
+circle in the panel is the drift it prevents. The band adds NO i18n keys: each
+notice carries its own resolved `text`, and the dismiss control reuses
+`notifications.panel.dismiss`.
+
+Coverage: `src/tests/persistent-notice-surface.test.ts` (the toast-layer split,
+the no-stacking-layer lock, the dock clearance, and the dismiss/withheld-dismiss
+pair) + `tests/e2e/notification-overlap.spec.ts` (the geometry half — hit-test
+ownership of the dock at 375/768, the stacking-layer comparison at 1024/768/375,
+the `<main>`-reserves-the-dock lock, a SCOPED axe run on the band, and a
+non-vacuity leg that lifts the band onto sonner's own layer and proves the probe
+reports it). The axe leg is scoped rather than folded into `a11y.spec.ts`
+because that gate is page-BASELINED — it can only say "no new rule" — and it
+never raises a notice, so the band would be unmeasured there.
+Rule-E proof captured in both directions: reverting the fix reddens 7 of 7 e2e
+legs and 3 of 10 unit tests.
+
 ## CONNECTION RELIABILITY
 
 ### Connection-ready gate
@@ -1590,6 +1669,9 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - No direct backend calls — everything through `rpc.*` or `rpcClient.onMessage`.
 - No manual UI primitive files in `lib/components/ui/` — use the shadcn-svelte CLI.
 - No `$:` reactive statements — Svelte 5 runes only.
+- Don't route a persistent notification back through svelte-sonner, and don't give the band a `fixed` position or a `z-*` class — an infinite toast at z-999999999 owned the mobile dock's hit-test point and covered every dialog's primary action (see A PERSISTENT NOTICE IS NOT A TOAST). Don't "fix" a future instance of that with a lower toaster z-index either: the dialogs fire their own "Copied"/"Saved"/refusal toasts while open, and those would end up under the scrim.
+- Don't assert a dialog-occlusion claim with `document.elementFromPoint` — bits-ui sets `pointer-events: none` on `<body>` while a modal is open, so the probe skips the overlay and answers with the button underneath it. Compare stacking layers.
+- Don't hardcode the mobile dock's height, and don't key the toast clearance on sonner's own `max-width: 600px` breakpoint — the dock is still mounted at 768x900, where that rule does not fire. `--mobile-dock-height` + `DESKTOP_CHROME_QUERY` are the shared sources.
 - Don't confirm a USB-mode switch on the RPC reply, and don't route it through `osCommand` — the reply proves the transaction ran, not that the device came back in the requested mode, and `osCommand`'s dispatch-anchored 15 s TTL is shorter than a healthy transition. Don't correlate the device by its numeric id or ifname either: the transition re-issues the first and changes the second (see A USB-MODE SWITCH IS CONFIRMED BY THE DEVICE).
 - Don't mock a reactive backend feed with a plain `vi.fn()` returning a mutable object — a component `$effect` never re-runs on it, so the test proves the component IGNORES late snapshots. Use a rune-backed double (`src/tests/helpers/modem-feed.svelte.ts`).
 - No hardcoded socket URL — RPC callers use `getRpcSocketUrl()` from `$lib/env`; preview callers use `getPreviewSocketUrl()`. Both derive same-origin URLs from `window.location` in production and ignore `VITE_SOCKET_*` there; those overrides apply to dev only. Never reconstruct a socket URL from `hostname` + a port literal.

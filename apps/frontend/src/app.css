@@ -226,6 +226,13 @@
 	:root {
 		--touch-target-min: 0px;
 		--spacing-touch-scale: 1;
+
+		/* Height of the fixed mobile dock (MobileNav + HudRegion), measured 105px
+		   on a 375x812 board capture. It is the ONE source for two things that
+		   must agree: the padding `<main>` reserves so content is not hidden
+		   under the dock, and the bottom offset the toast stack is pushed above
+		   so a toast can never own the dock's hit-test point. */
+		--mobile-dock-height: 7rem;
 	}
 
 	[data-layout-mode='touch'] {
@@ -657,7 +664,18 @@ html[data-theme='eink'] *::after {
    --success-bg/--error-bg vars only apply with richColors, so
    coloring is driven via the always-present [data-type] attr. */
 
+/* The toast LAYER is never a hit target — only the cards on it are. sonner
+   stretches its `<ol>` full-width at `max-width: 600px` and parks it at
+   z-index 999999999, above the fixed mobile dock (z-40) and every dialog
+   (z-50), so a container that answered the hit test would swallow taps it
+   paints nothing for. Pointer events still BUBBLE to the `<ol>`, so sonner's
+   own expand/swipe handlers are unaffected. */
+[data-sonner-toaster] {
+	pointer-events: none;
+}
+
 [data-sonner-toast] {
+	pointer-events: auto;
 	border-radius: 0.625rem !important;
 	border-width: 1px !important;
 	background: var(--popover) !important;
