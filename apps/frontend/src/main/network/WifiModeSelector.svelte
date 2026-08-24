@@ -1,0 +1,236 @@
+<!--
+  WifiModeSelector.svelte — the ONE per-adapter Station / Hotspot / Hybrid control.
+
+  Three rules carry it, and each replaces something that used to be decided at a
+  render site:
+
+  1. NEVER HIDE, ALWAYS REASON. All three rungs are always on screen. A mode the
+     radio cannot take renders `aria-disabled` with its reason as an on-screen
+     `role="status"` line — never only in a `title`, because the shipped kiosk
+     touchscreen cannot hover. `capability-unknown` is deliberately NOT the same
+     sentence as `capability-absent`: absence of evidence is not evidence of
+     absence.
+
+  2. THE DEVICE MOVES THE CONTROL, NOT THE CLICK. `setAdapterMode` only promises
+     a terminal frame follows, so the op stays `pending` after the RPC resolves
+     (no `confirmOnResolve`) and the displayed mode is held on the PRIOR one. A
+     failure therefore leaves the prior mode selected with the device's own typed
+     reason rendered inline — `silent: true`, so it is never toast-only.
+
+  3. A DESTRUCTIVE TRANSITION IS CONFIRMED INLINE, NOT IN A MODAL. This control
+     renders inside `HotspotDialog`, which is already portalled; a modal there
+     puts the consequence on a layer a touchscreen must dismiss before it can
+     re-read what it is confirming. Arming the confirm dispatches nothing.
+-->
+<script lang="ts">
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
+import type { WifiAdapterMode } from '@ceraui/rpc/schemas';
+import { Ban, Loader2, TriangleAlert } from '@lucide/svelte';
+
+import { Button } from '$lib/components/ui/button';
+import { osCommand } from '$lib/rpc/async-operation.svelte';
+import { rpc } from '$lib/rpc/client';
+import { cn } from '$lib/utils';
+
+import {
+	deriveWifiModeConsequence,
+	type WifiAdapterModeContext,
+	type WifiAdapterModeView,
+	wifiModeConsequenceKeys,
+	wifiModeDescriptionKey,
+	wifiModeLabelKey,
+} from './wifi-adapter-mode-view';
+import { wifiModeOpKey } from './wifi-station-lock';
+
+interface Props {
+	view: WifiAdapterModeView;
+	/** What the radio is doing now — decides whether a transition destroys anything. */
+	context: WifiAdapterModeContext;
+	/**
+	 * Set when another transition already holds this adapter. Every rung goes
+	 * disabled and the reason renders on screen beside them.
+	 */
+	lockedReason?: string;
+	/** Compact rows drop the per-mode descriptions; reasons are never dropped. */
+	compact?: boolean;
+}
+
+const { view, context, lockedReason, compact = false }: Props = $props();
+
+/** The mode an inline confirm is armed for. Arming dispatches nothing. */
+let armed = $state<WifiAdapterMode | undefined>(undefined);
+
+const armedConsequence = $derived(
+	armed === undefined
+		? undefined
+		: deriveWifiModeConsequence(view.displayMode, armed, context),
+);
+
+const unavailable = $derived(view.options.filter((option) => !option.available));
+
+async function apply(mode: WifiAdapterMode) {
+	armed = undefined;
+	await osCommand({
+		key: wifiModeOpKey(view.device),
+		target: mode,
+		rpc: () => rpc.wifi.setAdapterMode({ device: view.device, mode }),
+		// The reason renders inline beneath the control; a toast would say the
+		// same thing twice and then take it away.
+		silent: true,
+	});
+}
+
+function request(mode: WifiAdapterMode) {
+	if (mode === view.displayMode) return;
+	if (deriveWifiModeConsequence(view.displayMode, mode, context) !== undefined) {
+		armed = mode;
+		return;
+	}
+	void apply(mode);
+}
+</script>
+
+<div
+	class="space-y-1.5"
+	data-device={view.device}
+	data-mode={view.displayMode}
+	data-device-answered={view.deviceAnswered}
+	data-testid="wifi-mode-selector"
+>
+	<div
+		aria-label={m["network.wifiMode.label"]()}
+		class="flex flex-wrap gap-1.5"
+		role="radiogroup"
+	>
+		{#each view.options as option (option.mode)}
+			{@const blocked = !option.available || view.pending || lockedReason !== undefined}
+			<button
+				aria-checked={option.selected}
+				aria-disabled={option.available ? undefined : 'true'}
+				class={cn(
+					'inline-flex h-8 min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+					option.selected
+						? 'border-primary bg-primary/10 text-primary'
+						: 'border-border text-muted-foreground hover:bg-accent/50',
+					'disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent',
+				)}
+				data-available={option.available}
+				data-mode={option.mode}
+				data-reason={option.reason}
+				data-selected={option.selected}
+				data-testid="wifi-mode-option-{view.device}-{option.mode}"
+				disabled={blocked}
+				onclick={() => request(option.mode)}
+				role="radio"
+				title={option.reasonKey ? resolveMessageKey(option.reasonKey) : undefined}
+				type="button"
+			>
+				{#if option.pending}
+					<Loader2 class="size-3 shrink-0 animate-spin motion-reduce:animate-none" />
+				{:else if !option.available}
+					<Ban aria-hidden="true" class="size-3 shrink-0" />
+				{/if}
+				{resolveMessageKey(wifiModeLabelKey(option.mode))}
+			</button>
+		{/each}
+	</div>
+
+	{#if !compact}
+		<p class="text-muted-foreground text-xs" data-testid="wifi-mode-hint-{view.device}">
+			{resolveMessageKey(wifiModeDescriptionKey(view.displayMode))}
+		</p>
+	{/if}
+
+	{#each unavailable as option (option.mode)}
+		<p
+			class="text-muted-foreground text-xs"
+			data-mode={option.mode}
+			data-reason={option.reason}
+			data-testid="wifi-mode-reason-{view.device}-{option.mode}"
+			role="status"
+		>
+			{m["network.wifiMode.unavailable"]({
+				mode: resolveMessageKey(wifiModeLabelKey(option.mode)),
+				reason: option.reasonKey ? resolveMessageKey(option.reasonKey) : '',
+			})}
+		</p>
+	{/each}
+
+	{#if lockedReason}
+		<p
+			class="text-status-warning text-xs"
+			data-testid="wifi-mode-locked-{view.device}"
+			role="status"
+		>
+			{lockedReason}
+		</p>
+	{/if}
+
+	{#if view.pending && view.pendingTarget}
+		<p
+			class="text-muted-foreground text-xs"
+			data-target={view.pendingTarget}
+			data-testid="wifi-mode-pending-{view.device}"
+			role="status"
+		>
+			{m["network.wifiMode.pending"]({
+				mode: resolveMessageKey(wifiModeLabelKey(view.pendingTarget)),
+			})}
+		</p>
+	{/if}
+
+	{#if armed && armedConsequence}
+		{@const keys = wifiModeConsequenceKeys(armedConsequence)}
+		<div
+			class="border-status-warning/30 bg-status-warning/10 space-y-2 rounded-lg border px-2.5 py-2"
+			data-consequence={armedConsequence}
+			data-target={armed}
+			data-testid="wifi-mode-confirm-{view.device}"
+			role="status"
+		>
+			<p class="text-status-warning text-xs font-semibold">
+				{resolveMessageKey(keys.title)}
+			</p>
+			<p class="text-muted-foreground text-xs">{resolveMessageKey(keys.body)}</p>
+			<div class="flex flex-wrap gap-2">
+				<Button
+					class="h-8 min-h-[var(--touch-target-min)] px-2.5"
+					data-testid="wifi-mode-confirm-apply-{view.device}"
+					onclick={() => armed && apply(armed)}
+					size="sm"
+					variant="destructive"
+				>
+					{resolveMessageKey(keys.confirm)}
+				</Button>
+				<Button
+					class="h-8 min-h-[var(--touch-target-min)] px-2.5"
+					data-testid="wifi-mode-confirm-cancel-{view.device}"
+					onclick={() => (armed = undefined)}
+					size="sm"
+					variant="secondary"
+				>
+					{m["dialog.cancel"]()}
+				</Button>
+			</div>
+		</div>
+	{/if}
+
+	{#if view.errorKey}
+		<div
+			class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
+			data-error={view.error}
+			data-testid="wifi-mode-error-{view.device}"
+			role="status"
+		>
+			<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
+			<div class="min-w-0">
+				<p class="text-status-warning text-xs font-semibold">
+					{m["network.wifiMode.error.title"]()}
+				</p>
+				<p class="text-muted-foreground mt-0.5 text-xs">
+					{resolveMessageKey(view.errorKey)}
+				</p>
+			</div>
+		</div>
+	{/if}
+</div>

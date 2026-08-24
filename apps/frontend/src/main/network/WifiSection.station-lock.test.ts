@@ -39,7 +39,12 @@ import { wifiHotspotOpKey, wifiModeOpKey } from "./wifi-station-lock";
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		network: { configure: vi.fn() },
-		wifi: { hotspotStart: vi.fn(), hotspotStop: vi.fn() },
+		wifi: {
+			hotspotStart: vi.fn(),
+			hotspotStop: vi.fn(),
+			getAdapterModes: vi.fn(async () => ({})),
+			setAdapterMode: vi.fn(async () => ({ success: true, accepted: true })),
+		},
 	},
 }));
 vi.mock("svelte-sonner", () => ({
@@ -192,7 +197,7 @@ describe("WifiSection — station controls during a pending adapter transition",
 	});
 
 	it("re-enables Connect when the device never answers, and says so distinctly", async () => {
-		const { getByTestId } = renderSection();
+		const { getByTestId, queryByTestId } = renderSection();
 
 		beginOperation(MODE_KEY, "hotspot");
 		await tick();
@@ -203,8 +208,13 @@ describe("WifiSection — station controls during a pending adapter transition",
 		await tick();
 
 		expect(connectButton().disabled).toBe(false);
-		const failure = getByTestId("wifi-station-lock-failed");
-		expect(failure.dataset.failureKind).toBe("mode");
+
+		// A MODE failure is stated by the selector, which carries the device's own
+		// typed reason. The generic station-lock band deliberately stands down for
+		// it (todo 14) — one fact announced twice reads as two failures.
+		expect(queryByTestId("wifi-station-lock-failed")).toBeNull();
+		const failure = getByTestId(`wifi-mode-error-${DEVICE}`);
+		expect(failure.textContent?.trim().length ?? 0).toBeGreaterThan(0);
 
 		// A refusal and a result that never arrived are different facts, so they
 		// must not read as the same sentence.
@@ -214,9 +224,9 @@ describe("WifiSection — station controls during a pending adapter transition",
 		await tick();
 		failOperation(MODE_KEY, "activation-failed");
 		await tick();
-		expect(getByTestId("wifi-station-lock-failed").textContent).not.toBe(
-			unconfirmedCopy,
-		);
+		const refused = getByTestId(`wifi-mode-error-${DEVICE}`);
+		expect(refused.dataset.error).toBe("activation-failed");
+		expect(refused.textContent).not.toBe(unconfirmedCopy);
 	});
 
 	it("names the MODE change when a mode transition drives the hotspot leg", async () => {

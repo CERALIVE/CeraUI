@@ -67,6 +67,7 @@ import {
 } from "$lib/streaming/receiver-experience";
 
 import {
+	beginOperation,
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
@@ -82,6 +83,10 @@ import {
 import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
+import {
+	refreshWifiAdapterModes,
+	resetWifiAdapterModes,
+} from "./wifi-adapter-modes.svelte";
 
 export { mergeModemList };
 
@@ -645,6 +650,13 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 						error?: string;
 					};
 				};
+				adapter_mode?: {
+					device?: string | number;
+					mode?: string;
+					pending?: boolean;
+					success?: boolean;
+					error?: string;
+				};
 			};
 
 			// Boolean connect result (saved network). The array ack (connect:
@@ -678,6 +690,19 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					confirmOperation(key);
 				} else {
 					failOperation(key, wifiData.hotspot.config.error ?? "failed");
+				}
+			}
+			// `begin` on the pending frame is deliberate: it re-arms the TTL and
+			// makes a transition dispatched from ANOTHER client visible here too.
+			if (wifiData.adapter_mode?.device !== undefined) {
+				const key = `wifi-mode:${wifiData.adapter_mode.device}`;
+				if (wifiData.adapter_mode.pending === true) {
+					beginOperation(key, wifiData.adapter_mode.mode);
+				} else if (wifiData.adapter_mode.error !== undefined) {
+					failOperation(key, wifiData.adapter_mode.error);
+				} else if (wifiData.adapter_mode.success === true) {
+					confirmOperation(key);
+					void refreshWifiAdapterModes();
 				}
 			}
 			break;
@@ -1032,6 +1057,7 @@ export function resetState(): void {
 	activeInputState = undefined;
 	connectionReadyState = false;
 	resetPairingState();
+	resetWifiAdapterModes();
 
 	if (lockExpiryTick !== undefined) {
 		clearInterval(lockExpiryTick);

@@ -54,6 +54,7 @@ const ON_DEVICE_DISPLAY = "main/settings/OnDeviceDisplaySection.svelte";
 const SETTINGS_VIEW = "main/SettingsView.svelte";
 const LIVE_VIEW = "main/LiveView.svelte";
 const ADDONS_SECTION = "main/settings/AddonsSection.svelte";
+const WIFI_MODE_SELECTOR = "main/network/WifiModeSelector.svelte";
 
 /**
  * The device-mutation actions T14 wired onto `osCommand`. Each entry pins the
@@ -109,6 +110,16 @@ const DEVICE_ACTIONS: readonly DeviceAction[] = [
 		// biome-ignore lint/suspicious/noTemplateCurlyInString: intentional — this string is a grep pattern, not a template literal
 		mustContain: ["osCommand(", "key: `addon:${id}`"],
 	},
+	{
+		// The per-adapter Station/Hotspot/Hybrid transition (todo 14). Its key is
+		// built by the shared `wifiModeOpKey` helper rather than a string literal,
+		// so that call IS the per-key proof — the same accommodation PowerDialog's
+		// `key: action` variable gets.
+		name: "WiFi adapter mode",
+		key: "wifi-mode:<device>",
+		file: WIFI_MODE_SELECTOR,
+		mustContain: ["osCommand(", "key: wifiModeOpKey("],
+	},
 ] as const;
 
 /** The canonical key set — a meta-guard so the list itself cannot silently shrink. */
@@ -121,6 +132,7 @@ const EXPECTED_KEYS: readonly string[] = [
 	"autostart",
 	"switch-input",
 	"addon:<id>",
+	"wifi-mode:<device>",
 ];
 
 const fileCache = new Map<string, string>();

@@ -51,10 +51,19 @@ import { generateWifiQr, hotspotQrSecurity } from '$lib/helpers/NetworkHelper';
 import {
 	confirmOperation,
 	getOperationPhase,
+	getOperationTarget,
 	osCommand,
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive, hotspotToggleConfirmed } from '$lib/rpc/os-toggle-predicates';
+import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
+import WifiModeBadge from '$main/network/WifiModeBadge.svelte';
+import WifiModeSelector from '$main/network/WifiModeSelector.svelte';
+import {
+	deriveWifiAdapterModeView,
+	wifiModeTarget,
+} from '$main/network/wifi-adapter-mode-view';
+import { wifiModeOpKey } from '$main/network/wifi-station-lock';
 import { cn } from '$lib/utils';
 
 import {
@@ -77,6 +86,20 @@ const bounds = networkConstraints.hotspot;
 
 // The hotspot is "active" when the interface is currently broadcasting one.
 const isActive = $derived(hotspotIsActive(iface));
+
+// The shared adapter-mode derivation. `undefined` only while the dialog has no
+// interface to describe — never a fallback rendering of its own.
+const modeView = $derived(
+	iface
+		? deriveWifiAdapterModeView({
+				device: deviceId,
+				iface,
+				entry: getWifiAdapterModeEntry(deviceId),
+				phase: getOperationPhase(wifiModeOpKey(deviceId)),
+				target: wifiModeTarget(getOperationTarget(wifiModeOpKey(deviceId))),
+			})
+		: undefined,
+);
 
 // ── Keyed async-operation phases ──────────────────────────────────────────
 // start/stop shares the `hotspot:${deviceId}` key with WifiSection's mode switch
@@ -309,6 +332,9 @@ async function copyPassword() {
 					<p class="text-muted-foreground truncate text-xs">{iface.ifname}</p>
 				{/if}
 			</div>
+			{#if modeView}
+				<WifiModeBadge device={deviceId} mode={modeView.displayMode} />
+			{/if}
 			<span
 				class={cn(
 					'size-2 shrink-0 rounded-full',
@@ -318,27 +344,26 @@ async function copyPassword() {
 			></span>
 		</div>
 
-		<div
-			class={cn(
-				'rounded-lg border px-3 py-2.5 text-sm',
-				iface?.supports_ap_sta_concurrency
-					? 'border-status-info/30 bg-status-info/5'
-					: 'border-status-warning/30 bg-status-warning/5',
-			)}
-			data-testid="hotspot-concurrency-status"
-			role="status"
-		>
-			<p class="font-medium">
-				{iface?.supports_ap_sta_concurrency
-					? m["network.view.concurrentModeTitle"]()
-					: m["network.view.exclusiveModeTitle"]()}
-			</p>
-			<p class="text-muted-foreground mt-0.5 text-xs">
-				{iface?.supports_ap_sta_concurrency
-					? m["network.view.concurrentModeHelp"]()
-					: m["network.view.concurrentModeUnavailable"]()}
-			</p>
-		</div>
+		<!-- The SAME derivation the WiFi row renders. It replaced a local
+		     `supports_ap_sta_concurrency` band — a third vocabulary for one fact,
+		     which could not say WHY hybrid was unavailable. -->
+		{#if modeView}
+			<div
+				class="rounded-lg border px-3 py-2.5"
+				data-testid="hotspot-concurrency-status"
+				role="group"
+				aria-label={m["network.wifiMode.label"]()}
+			>
+				<WifiModeSelector
+					view={modeView}
+					context={{
+						stationLinkLive: modeView.displayMode !== 'hotspot' && Boolean(iface?.conn),
+						hotspotLive: isActive,
+					}}
+					lockedReason={toggling ? m["network.wifiStationLock.hotspotPending"]() : undefined}
+				/>
+			</div>
+		{/if}
 
 		<!-- Name -->
 		<div class="space-y-1.5">

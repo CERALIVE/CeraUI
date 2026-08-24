@@ -85,6 +85,8 @@ import type {
 	SetSourceVisibilityOutput,
 	SetUsbModeInput,
 	SetUsbModeOutput,
+	SetWifiAdapterModeInput,
+	SetWifiAdapterModeOutput,
 	SetWifiCountryInput,
 	SetWifiCountryOutput,
 	SimPin2UnlockInput,
@@ -107,6 +109,7 @@ import type {
 	UssdCancelInput,
 	UssdInitiateInput,
 	UssdRespondInput,
+	WifiAdapterModeStatus,
 	WifiConnectInput,
 	WifiDisconnectInput,
 	WifiForgetInput,
@@ -770,6 +773,14 @@ export interface TypedRPC {
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
 		setCountry: (input: SetWifiCountryInput) => Promise<SetWifiCountryOutput>;
+		getAdapterModes: () => Promise<WifiAdapterModeStatus>;
+		/**
+		 * `accepted: true` promises a TERMINAL `wifi` → `adapter_mode` frame
+		 * follows — never that the radio reached the mode.
+		 */
+		setAdapterMode: (
+			input: SetWifiAdapterModeInput,
+		) => Promise<SetWifiAdapterModeOutput>;
 	};
 	network: {
 		getInterfaces: () => Promise<unknown>;

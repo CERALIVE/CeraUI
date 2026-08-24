@@ -1,33 +1,28 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
-import {
-	Ban,
-	ChevronRight,
-	Globe,
-	Loader2,
-	Router,
-	Settings2,
-	TriangleAlert,
-	Wifi,
-} from '@lucide/svelte';
+import { Ban, ChevronRight, Globe, Settings2, TriangleAlert, Wifi } from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
-import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
-import { deriveWifiModeOutcome, isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import {
-	confirmOperation,
 	getOperationPhase,
+	getOperationReason,
+	getOperationTarget,
 	isOperationPending,
-	osCommand,
 } from '$lib/rpc/async-operation.svelte';
-import { rpc } from '$lib/rpc/client';
 import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
+import {
+	getWifiAdapterModeEntry,
+	refreshWifiAdapterModes,
+} from '$lib/rpc/wifi-adapter-modes.svelte';
 import { cn } from '$lib/utils';
 
+import WifiModeBadge from './WifiModeBadge.svelte';
+import WifiModeSelector from './WifiModeSelector.svelte';
+import { deriveWifiAdapterModeView, wifiModeTarget } from './wifi-adapter-mode-view';
 import {
 	blockIsOperatorActionable,
 	deriveWifiCapabilityView,
@@ -88,51 +83,14 @@ function openHotspotSetup(id: string) {
 	hotspotDialogOpen = true;
 }
 
-// ── Station ⇆ hotspot mode switching (a radio is ONE mode at a time) ──
-// Switching to hotspot is destructive (drops the WiFi link + bond membership)
-// so it is gated behind a confirm dialog; switching back to station is not.
-//
-// The transition is owned by the keyed async-operation store under
-// `hotspot:${device}` — the SAME key HotspotDialog uses, so only one hotspot op
-// per device is ever in flight (osCommand's re-entry guard enforces it). The
-// per-device target is remembered locally so the confirm $effect below can flip
-// the op to `confirmed` the moment the authoritative `wifi` snapshot reports the
-// target mode, and so the label is held on the CURRENT mode until then — a raw
-// `wifi` broadcast must never clobber the label mid-switch.
-const switchTargets = $state<Record<string, 'hotspot' | 'station'>>({});
-
-async function switchToHotspot(device: string) {
-	switchTargets[device] = 'hotspot';
-	await osCommand({
-		key: wifiHotspotOpKey(device),
-		target: 'hotspot',
-		rpc: () => rpc.wifi.hotspotStart({ device }),
-		failMessage: () => m["network.os.operationFailed"](),
-		busyMessage: () => m["network.os.deviceBusy"](),
-	});
-}
-
-async function switchToStation(device: string) {
-	switchTargets[device] = 'station';
-	await osCommand({
-		key: wifiHotspotOpKey(device),
-		target: 'station',
-		rpc: () => rpc.wifi.hotspotStop({ device }),
-		failMessage: () => m["network.os.operationFailed"](),
-		busyMessage: () => m["network.os.deviceBusy"](),
-	});
-}
-
-// Confirm a pending mode switch as soon as the authoritative `wifi` snapshot
-// reports the target mode. The store's 15 s TTL valve is the backstop if the
-// device never reports back (the op then decays to `timed_out`).
+// ── The per-adapter mode offering (station / hotspot / hybrid) ──
+// The offering is a PULL, so it is re-read whenever the set of radios changes —
+// a newly-plugged adapter has no entry until we ask for one. `refresh` is
+// self-serialising, so a re-render cannot stack duplicate reads.
+const radioIds = $derived(wifiRadios.map(([id]) => id).join(','));
 $effect(() => {
-	for (const [id, iface] of wifiRadios) {
-		if (getOperationPhase(wifiHotspotOpKey(id)) !== 'pending') continue;
-		if (deriveWifiModeOutcome(switchTargets[id], hotspotIsActive(iface)) === 'confirmed') {
-			confirmOperation(wifiHotspotOpKey(id));
-		}
-	}
+	void radioIds;
+	void refreshWifiAdapterModes();
 });
 </script>
 
@@ -157,10 +115,19 @@ $effect(() => {
 		{:else}
 			{#each wifiRadios as [id, iface] (id)}
 				{@const entry = netif?.[iface.ifname]}
-				{@const isHotspot = isApRadio(iface)}
-				{@const concurrentCapable = iface.supports_ap_sta_concurrency === true}
-				{@const concurrentActive = concurrentCapable && hotspotIsActive(iface)}
 				{@const isSwitching = isOperationPending(wifiHotspotOpKey(id))}
+				<!-- ONE derivation per adapter. The row's identity line, its selector,
+				     HotspotSection's card and HotspotDialog's header all read this same
+				     shape, so the mode they display cannot disagree. -->
+				{@const modeView = deriveWifiAdapterModeView({
+					device: id,
+					iface,
+					entry: getWifiAdapterModeEntry(id),
+					phase: getOperationPhase(wifiModeOpKey(id)),
+					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id))),
+					failureReason: getOperationReason(wifiModeOpKey(id)),
+				})}
+				{@const isHotspot = modeView.displayMode === 'hotspot'}
 				<!-- A radio mid-transition holds its own adapter lock, so every station
 				     mutation dispatched into that window is refused DEVICE_BUSY. The
 				     controls therefore stay put and go disabled-with-reason rather than
@@ -175,17 +142,10 @@ $effect(() => {
 				{@const stationLockReason = stationLock.reasonKey
 					? resolveMessageKey(stationLock.reasonKey)
 					: undefined}
-				<!-- Hold the label on the CURRENT mode while a switch is pending: a raw
-				     `wifi` broadcast must not flip it before the op is confirmed. -->
-				{@const displayIsHotspot = concurrentCapable
-					? false
-					: isSwitching
-						? switchTargets[id] === 'station'
-						: isHotspot}
 				{@const net = activeWifiNetwork(iface)}
 				{@const connected = !isHotspot && Boolean(iface.conn && net)}
 				{@const ifaceStale = staleInterfaces.has(iface.ifname) || isFullyStale}
-				{@const showStale = ifaceStale && !displayIsHotspot && connected}
+				{@const showStale = ifaceStale && !isHotspot && connected}
 				{@const hasIp = Boolean(entry?.ip)}
 				<!-- `undefined` here is the device saying it never computed a capability
 				     report (no `iw`, an unresolvable wiphy, a failed parse, or a backend
@@ -203,13 +163,13 @@ $effect(() => {
 					<span
 						class={cn(
 							'size-2 shrink-0 rounded-full',
-							displayIsHotspot ? 'bg-status-info' : connected ? 'bg-primary' : 'bg-muted-foreground/40',
+							isHotspot ? 'bg-status-info' : connected ? 'bg-primary' : 'bg-muted-foreground/40',
 						)}
 						aria-hidden="true"
 					></span>
 					<div class="min-w-0 flex-1">
 						<p class="truncate text-sm font-medium">
-							{#if displayIsHotspot}
+							{#if isHotspot}
 								{iface.hotspot?.name || iface.ifname}
 							{:else}
 								{iface.ifname}
@@ -218,10 +178,10 @@ $effect(() => {
 						<p
 							class={cn(
 								'text-muted-foreground truncate text-xs transition-opacity',
-								!displayIsHotspot && ifaceStale && 'opacity-50',
+								!isHotspot && ifaceStale && 'opacity-50',
 							)}
 						>
-							{#if displayIsHotspot}
+							{#if isHotspot}
 								{m["network.view.hotspot"]()} · {iface.ifname}
 							{:else if connected && net}
 								{m["network.view.connected"]()} · {net.ssid}
@@ -229,7 +189,7 @@ $effect(() => {
 								{m["network.view.disconnected"]()}
 							{/if}
 						</p>
-						{#if !displayIsHotspot && link}
+						{#if !isHotspot && link}
 							<p
 								class={cn(
 									'text-muted-foreground mt-0.5 truncate text-xs transition-opacity',
@@ -255,41 +215,18 @@ $effect(() => {
 						{#if showStale}
 							<Badge variant="stale" data-stale-interface={iface.ifname} />
 						{/if}
-						{#if displayIsHotspot}
-							<!-- Hotspot mode: cannot bond; offer config + revert to station. -->
+						<WifiModeBadge device={id} mode={modeView.displayMode} />
+						{#if isHotspot}
+							<!-- Exclusive AP: the radio carries no station leg, so it cannot bond. -->
 							<BondToggle
 								name={iface.ifname}
 								enabled={false}
 								disabledReason={m["network.view.hotspotNoBond"]()}
 							/>
-							<Button
-								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
-								disabled={isSwitching}
-								size="sm"
-								variant="ghost"
-								onclick={() => openHotspotSetup(id)}
-							>
-								<Settings2 class="size-3.5" />
-								{m["network.view.setup"]()}
-							</Button>
-							<Button
-								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
-								disabled={isSwitching}
-								size="sm"
-								variant="secondary"
-								onclick={() => switchToStation(id)}
-							>
-								{#if isSwitching}
-									<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-								{:else}
-									<Wifi class="size-3.5" />
-								{/if}
-								{m["network.view.switchToStation"]()}
-							</Button>
 						{:else}
-							<!-- Station mode: bond when it holds an IP; connect to a network;
-							     offer switch to hotspot. Connect renders regardless of `hasIp`
-							     so a disconnected radio can still open its own selector. -->
+							<!-- Station and hybrid both keep a station leg, so both keep the bond
+							     toggle and Connect. Connect renders regardless of `hasIp` so a
+							     disconnected radio can still open its own selector. -->
 							{#if hasIp}
 								<BondToggle
 									name={iface.ifname}
@@ -312,92 +249,36 @@ $effect(() => {
 								{m["network.view.connect"]()}
 								<ChevronRight class="size-3.5 rtl:rotate-180" />
 							</Button>
-							{#if concurrentActive}
-								<Badge
-									variant="info"
-									data-testid="concurrent-hotspot-active"
-									label={m["network.view.concurrentModeActive"]()}
-								/>
-								<Button
-									class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
-									disabled={isSwitching}
-									size="sm"
-									variant="ghost"
-									onclick={() => openHotspotSetup(id)}
-								>
-									<Settings2 class="size-3.5" />
-									{m["network.view.setup"]()}
-								</Button>
-								<Button
-									class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
-									disabled={isSwitching}
-									size="sm"
-									variant="secondary"
-									onclick={() => switchToStation(id)}
-								>
-									{#if isSwitching}
-										<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-									{:else}
-										<Router class="size-3.5" />
-									{/if}
-									{m["network.status.turnOff"]()}
-								</Button>
-							{:else if iface.supports_hotspot}
-								{#if concurrentCapable && !isSwitching}
-									<Button
-										class="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none"
-										aria-label={m["network.view.switchToHotspot"]()}
-										data-testid="start-concurrent-hotspot"
-										title={m["network.view.concurrentModeHelp"]()}
-										size="sm"
-										variant="ghost"
-										onclick={() => switchToHotspot(id)}
-									>
-										<Router class="size-3.5" />
-									</Button>
-								{:else}
-								{#if isSwitching}
-									<!-- Switch confirmed at the click; hold a spinner until the
-									     authoritative snapshot flips the label to hotspot. Icon-only
-									     to match the row's action-button density (a11y name via
-									     aria-label since there is no visible text). -->
-									<Button
-										class="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none"
-										aria-label={m["network.view.switchToHotspot"]()}
-										title={m["network.view.switchToHotspot"]()}
-										disabled
-										size="sm"
-										variant="ghost"
-									>
-										<Loader2 class="size-3.5 animate-spin motion-reduce:animate-none" />
-									</Button>
-								{:else}
-									<SimpleAlertDialog
-										buttonAriaLabel={m["network.view.switchToHotspot"]()}
-										confirmButtonText={m["network.view.hotspotSwitchConfirm"]()}
-										confirmVariant="destructive"
-										extraButtonClasses="h-8 w-8 min-h-[var(--touch-target-min)] min-w-[var(--touch-target-min)] p-0 shadow-none hover:shadow-none bg-transparent text-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
-										iconPosition="left"
-										title={m["network.view.switchToHotspot"]()}
-										onconfirm={() => switchToHotspot(id)}
-									>
-										{#snippet icon()}
-											<Router class="size-3.5" />
-										{/snippet}
-										{#snippet dialogTitle()}
-											{m["network.view.hotspotSwitchTitle"]()}
-										{/snippet}
-										{#snippet description()}
-											{m["network.view.hotspotSwitchBody"]()}
-										{/snippet}
-									</SimpleAlertDialog>
-								{/if}
-								{/if}
-							{/if}
+						{/if}
+						{#if modeView.displayMode !== 'station'}
+							<Button
+								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
+								data-testid="open-hotspot-setup"
+								data-device={id}
+								disabled={isSwitching}
+								size="sm"
+								variant="ghost"
+								onclick={() => openHotspotSetup(id)}
+							>
+								<Settings2 class="size-3.5" />
+								{m["network.view.setup"]()}
+							</Button>
 						{/if}
 					</div>
 
-					{#if stationLock.locked && stationLockReason && !displayIsHotspot}
+					<div class="basis-full ps-5">
+						<WifiModeSelector
+							view={modeView}
+							context={{
+								stationLinkLive: connected || Boolean(entry?.enabled),
+								hotspotLive: hotspotIsActive(iface),
+							}}
+							lockedReason={isSwitching ? stationLockReason : undefined}
+							compact
+						/>
+					</div>
+
+					{#if stationLock.locked && stationLockReason && !isHotspot}
 						<p
 							class="text-status-warning basis-full ps-5 text-xs"
 							data-device={id}
@@ -407,11 +288,15 @@ $effect(() => {
 						>
 							{stationLockReason}
 						</p>
-					{:else if stationLock.failureTitleKey && stationLock.failureBodyKey}
+					{:else if stationLock.failureKind === 'hotspot' && stationLock.failureTitleKey && stationLock.failureBodyKey}
 						<!-- The lock ALWAYS lifts: every phase behind it is terminal, either
 						     from the device's own frame or from the store's TTL valve. So the
 						     row's job at that point is to say which one happened — a refusal
-						     and a result that never arrived are different facts. -->
+						     and a result that never arrived are different facts.
+
+						     A MODE failure is deliberately NOT rendered here: the selector
+						     below states the same terminal with the device's own typed reason,
+						     and one fact announced twice reads as two failures. -->
 						<div
 							class="border-status-warning/30 bg-status-warning/10 ms-5 flex basis-full items-start gap-2 rounded-lg border px-2.5 py-1.5"
 							data-device={id}
