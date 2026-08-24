@@ -22,7 +22,7 @@
  * `import("@ceralive/modem-control")` behind a structural probe, because the
  * port landed in modem-stack AFTER the version `package.json` pinned and a
  * static import of a symbol the pinned release does not export fails the BUILD
- * rather than degrading. `package.json` now pins `1.2.0` EXACTLY, which
+ * rather than degrading. `package.json` now pins `1.2.1` EXACTLY, which
  * publishes the whole port, so the probe has nothing left to discover: the
  * import is enforced by `tsc` at build time and by `bun install` at install
  * time, which is strictly stronger than a runtime `typeof === "function"` check
