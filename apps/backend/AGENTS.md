@@ -5676,6 +5676,14 @@ The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder
 add/remove, and reweight never change a surviving mark, so established flows keep
 their original route while only new flows see the new weights.
 
+**The emitted nft syntax targets Debian bookworm's nftables 1.0.6.** A set
+expression may read only one runtime mark when applying a bitwise OR, so save and
+restore lift the known uplink value into a literal per-uplink statement; combining
+`meta mark` and `ct mark` dynamically is forbidden even though newer nftables parses
+it. Whole-table replacement is `add table` then `delete table`, never the newer
+`destroy table`. Both rules are production compatibility constraints, not CI
+workarounds; the packet low byte and conntrack high 24 bits remain byte-identical.
+
 **A hard-down is three phases:** publish a transition ruleset excluding the mark
 from new-flow selection while retaining its NAT/route support → delete conntrack
 entries carrying exactly that mark → remove route support and publish the final

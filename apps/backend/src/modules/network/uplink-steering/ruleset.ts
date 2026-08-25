@@ -43,7 +43,8 @@ export function buildShareRuleset(state: ShareRulesetState): string {
 		(uplink) => uplink.selectable && uplink.weight > 0,
 	);
 	const lines = [
-		`destroy table ${SHARE_TABLE.family} ${SHARE_TABLE.name}`,
+		`add table ${SHARE_TABLE.family} ${SHARE_TABLE.name}`,
+		`delete table ${SHARE_TABLE.family} ${SHARE_TABLE.name}`,
 		"",
 		`table ${SHARE_TABLE.family} ${SHARE_TABLE.name} {`,
 	];
@@ -61,7 +62,7 @@ export function buildShareRuleset(state: ShareRulesetState): string {
 			lines.push(
 				`\tchain select_${index} {`,
 				`\t\tmeta mark set (meta mark & ${hexMark(UNOWNED_MARK_MASK)}) | ${hexMark(uplink.mark)}`,
-				`\t\tct mark set (ct mark & ${hexMark(UNOWNED_MARK_MASK)}) | (meta mark & ${hexMark(UPLINK_MARK_MASK)})`,
+				`\t\tct mark set (ct mark & ${hexMark(UNOWNED_MARK_MASK)}) | ${hexMark(uplink.mark)}`,
 				"\t\treturn",
 				"\t}",
 				"",
@@ -74,7 +75,9 @@ export function buildShareRuleset(state: ShareRulesetState): string {
 		"\t\ttype filter hook prerouting priority mangle; policy accept;",
 	);
 	for (const zone of zones) {
-		lines.push(renderRestoreRule(zone));
+		for (const uplink of uplinks) {
+			lines.push(renderRestoreRule(zone, uplink));
+		}
 		if (selectable.length > 0) {
 			lines.push(renderSelectionRule(zone));
 		}
@@ -127,8 +130,8 @@ export function apportionWeightBuckets(
 	return shares.map((share) => share.buckets);
 }
 
-function renderRestoreRule(zone: ClientZone): string {
-	return `\t\tiifname "${zone.ifname}" ip saddr ${zone.ipv4Cidr} ct state established,related ct mark & ${hexMark(CLIENT_FLOW_NAMESPACE_MASK)} == ${hexMark(CLIENT_FLOW_NAMESPACE)} meta mark set (meta mark & ${hexMark(UNOWNED_MARK_MASK)}) | (ct mark & ${hexMark(UPLINK_MARK_MASK)}) comment "restore client flow"`;
+function renderRestoreRule(zone: ClientZone, uplink: SteeringUplink): string {
+	return `\t\tiifname "${zone.ifname}" ip saddr ${zone.ipv4Cidr} ct state established,related ct mark & ${hexMark(UPLINK_MARK_MASK)} == ${hexMark(uplink.mark)} meta mark set meta mark & ${hexMark(UNOWNED_MARK_MASK)} | ${hexMark(uplink.mark)} comment "restore client flow"`;
 }
 
 function renderSelectionRule(zone: ClientZone): string {

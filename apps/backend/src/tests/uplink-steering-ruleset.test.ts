@@ -1,3 +1,5 @@
+/// <reference types="bun" />
+
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -129,7 +131,8 @@ describe("buildShareRuleset", () => {
 	test("is full-state and empty-set safe without touching foreign tables", () => {
 		const ruleset = buildShareRuleset({ clientZones: [], uplinks: [] });
 
-		expect(ruleset).toBe(`destroy table inet ceralive_share
+		expect(ruleset).toBe(`add table inet ceralive_share
+delete table inet ceralive_share
 
 table inet ceralive_share {
 	chain prerouting {
@@ -185,7 +188,10 @@ table inet ceralive_share {
 		);
 		expect(ruleset).toContain("ct state established,related");
 		expect(ruleset).toContain(
-			"ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)",
+			`ct mark set (ct mark & 0x000000ff) | ${hexMark(wifiMark)}`,
+		);
+		expect(ruleset).toContain(
+			`ct mark set (ct mark & 0x000000ff) | ${hexMark(wwanMark)}`,
 		);
 
 		for (const line of ruleset.split("\n")) {
@@ -207,6 +213,31 @@ table inet ceralive_share {
 
 		expect(ruleset).not.toContain("hook output");
 		expect(ruleset).not.toMatch(/\b(?:limit rate|meter|police)\b/);
+	});
+
+	test("emits bookworm-compatible single-register mark expressions", () => {
+		// Given a client flow whose low mark byte belongs to another consumer.
+		const uplink = steeringUplink("bookworm-parser", "wan0", 100);
+
+		// When the complete replacement ruleset is rendered.
+		const ruleset = buildShareRuleset({
+			clientZones: [{ ifname: "client0", ipv4Cidr: "10.42.0.0/24" }],
+			uplinks: [uplink],
+		});
+
+		// Then every OR combines one runtime register with an immediate value.
+		expect(ruleset).toStartWith(
+			"add table inet ceralive_share\ndelete table inet ceralive_share\n",
+		);
+		expect(ruleset).toContain(
+			`ct mark set (ct mark & 0x000000ff) | ${hexMark(uplink.mark)}`,
+		);
+		expect(ruleset).toContain(
+			`ct mark & 0xffffff00 == ${hexMark(uplink.mark)} meta mark set meta mark & 0x000000ff | ${hexMark(uplink.mark)} comment "restore client flow"`,
+		);
+		expect(ruleset).not.toContain("| (meta mark &");
+		expect(ruleset).not.toContain("| (ct mark &");
+		expect(ruleset).not.toContain("destroy table");
 	});
 
 	test("keeps retained hard-down support out of new-flow selection", () => {

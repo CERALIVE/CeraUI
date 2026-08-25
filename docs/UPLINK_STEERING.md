@@ -46,6 +46,14 @@ weighted verdict map. Established client-direction packets restore their route m
 from conntrack. Reply packets entering from a WAN interface do not, preventing WAN
 recirculation.
 
+The generated syntax targets the device's Debian bookworm nftables 1.0.6, not a
+developer host's newer parser. Conntrack save and restore are expanded per
+route-supported uplink so each bitwise OR combines one runtime mark with one literal
+mark; no set-statement expression reads both `meta mark` and `ct mark`. Full-table
+replacement uses idempotent `add table` then `delete table`, because bookworm also
+predates `destroy table`. These expansions preserve the packet mark's low byte and
+the conntrack mark's high 24-bit uplink identity exactly.
+
 Masquerade requires all three facts: the client-zone ingress interface, the
 client-zone source prefix, and the namespaced conntrack mark for the selected
 uplink. A host-originated packet therefore cannot enter this NAT path even if it
