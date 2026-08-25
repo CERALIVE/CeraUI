@@ -14,7 +14,7 @@ import {
 	type UplinkHealthRecord,
 	type UplinkKind,
 } from "./model.ts";
-import { getUplinkHealthEngine } from "./state.ts";
+import { getUplinkHealthEngine, notifyUplinkHealthChange } from "./state.ts";
 
 export const UPLINKS_EVENT = "uplinks" as const;
 
@@ -163,6 +163,7 @@ export class UplinkHealthRuntime {
 		const json = JSON.stringify(records);
 		if (json === this.#lastJson) return;
 		this.#lastJson = json;
+		notifyUplinkHealthChange(records);
 		this.#deps.publish(records);
 	}
 }

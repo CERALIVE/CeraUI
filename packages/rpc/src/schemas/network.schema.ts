@@ -172,6 +172,32 @@ export const uplinksMessageSchema = z.array(uplinkHealthRecordSchema);
 export type UplinkHealthRecord = z.infer<typeof uplinkHealthRecordSchema>;
 export type UplinksMessage = z.infer<typeof uplinksMessageSchema>;
 
+export const steeringUnavailableReasonSchema = z.enum([
+	'bond_candidate_client_zone',
+	'mark_collision',
+	'overlapping_subnet',
+	'policy_route_missing',
+	'ruleset_publish_failed',
+	'ruleset_reload_failed',
+]);
+export type SteeringUnavailableReason = z.infer<typeof steeringUnavailableReasonSchema>;
+
+export const uplinkSteeringStatusSchema = z.discriminatedUnion('state', [
+	z.object({ state: z.literal('available') }),
+	z.object({
+		state: z.literal('steering_unavailable'),
+		reason: steeringUnavailableReasonSchema,
+		detail: z.string().min(1).optional(),
+	}),
+]);
+export type UplinkSteeringStatus = z.infer<typeof uplinkSteeringStatusSchema>;
+
+export const uplinkFlowsResetEventSchema = z.object({
+	iface: z.string().min(1),
+	linkId: z.string().min(1),
+});
+export type UplinkFlowsResetEvent = z.infer<typeof uplinkFlowsResetEventSchema>;
+
 // Network interface config input schema
 export const netifConfigInputSchema = z.object({
 	name: z.string(),

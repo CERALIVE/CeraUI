@@ -1,0 +1,307 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`buildShareRuleset has exact golden output for the declared zero-through-six target: uplinks-0 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for the declared zero-through-six target: uplinks-1 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-9999 : jump select_0 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xca336b00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for the declared zero-through-six target: uplinks-2 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-5404 : jump select_0, 5405-9999 : jump select_1 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xca336b00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_1 {
+		meta mark set (meta mark & 0x000000ff) | 0xca31c400
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca31c400 oifname "wan1" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca31c400 oifname "wan1" masquerade comment "client flow NAT"
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for the declared zero-through-six target: uplinks-3 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-3921 : jump select_0, 3922-7254 : jump select_1, 7255-9999 : jump select_2 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xca336b00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_1 {
+		meta mark set (meta mark & 0x000000ff) | 0xca31c400
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_2 {
+		meta mark set (meta mark & 0x000000ff) | 0xca36b100
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca31c400 oifname "wan1" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca36b100 oifname "wan2" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca31c400 oifname "wan1" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca36b100 oifname "wan2" masquerade comment "client flow NAT"
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for the declared zero-through-six target: uplinks-6 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-2666 : jump select_0, 2667-4933 : jump select_1, 4934-6800 : jump select_2, 6801-8267 : jump select_3, 8268-9333 : jump select_4, 9334-9999 : jump select_5 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xca336b00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_1 {
+		meta mark set (meta mark & 0x000000ff) | 0xca31c400
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_2 {
+		meta mark set (meta mark & 0x000000ff) | 0xca36b100
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_3 {
+		meta mark set (meta mark & 0x000000ff) | 0xca332200
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_4 {
+		meta mark set (meta mark & 0x000000ff) | 0xca312700
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain select_5 {
+		meta mark set (meta mark & 0x000000ff) | 0xca339000
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca31c400 oifname "wan1" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca36b100 oifname "wan2" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca332200 oifname "wan3" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca312700 oifname "wan4" masquerade comment "client flow NAT"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xca339000 oifname "wan5" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca336b00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca31c400 oifname "wan1" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca36b100 oifname "wan2" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca332200 oifname "wan3" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca312700 oifname "wan4" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xca339000 oifname "wan5" masquerade comment "client flow NAT"
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for hotspot, shared-lan, and combined zones: hotspot 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-9999 : jump select_0 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xcac81f00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xcac81f00 oifname "wan0" masquerade comment "client flow NAT"
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for hotspot, shared-lan, and combined zones: shared-lan 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-9999 : jump select_0 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xcac81f00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xcac81f00 oifname "wan0" masquerade comment "client flow NAT"
+	}
+}
+"
+`;
+
+exports[`buildShareRuleset has exact golden output for hotspot, shared-lan, and combined zones: combined 1`] = `
+"destroy table inet ceralive_share
+
+table inet ceralive_share {
+	map uplink_verdicts {
+		typeof numgen random mod 10000 : verdict
+		flags interval
+		elements = { 0-9999 : jump select_0 }
+	}
+
+	chain select_0 {
+		meta mark set (meta mark & 0x000000ff) | 0xcac81f00
+		ct mark set (ct mark & 0x000000ff) | (meta mark & 0xffffff00)
+		return
+	}
+
+	chain prerouting {
+		type filter hook prerouting priority mangle; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state established,related ct mark & 0xff000000 == 0xca000000 meta mark set (meta mark & 0x000000ff) | (ct mark & 0xffffff00) comment "restore client flow"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct state new ct mark & 0xff000000 != 0xca000000 numgen random mod 10000 vmap @uplink_verdicts comment "select client uplink"
+	}
+
+	chain postrouting {
+		type nat hook postrouting priority srcnat; policy accept;
+		iifname "clap-wlan0" ip saddr 10.42.0.0/24 ct mark & 0xffffff00 == 0xcac81f00 oifname "wan0" masquerade comment "client flow NAT"
+		iifname "eth9" ip saddr 10.43.0.0/24 ct mark & 0xffffff00 == 0xcac81f00 oifname "wan0" masquerade comment "client flow NAT"
+	}
+}
+"
+`;

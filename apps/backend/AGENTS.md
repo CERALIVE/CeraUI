@@ -98,6 +98,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | **Device-bound connectivity probe (`curl --interface`) — the only thing that can name one of two same-IP twins** | `modules/network/device-bound-probe.ts` (`checkConnectivityViaDevice`, `SAFE_IFNAME_RE`) + `connectivity-candidates.ts` (`probeBindingFor`, `deviceBoundProbeExclusionReason`) + `connectivity-election.ts` (`electConnectivityCandidate`, injected probe pair); contract below → …AND A PROBE THAT MUST NAME A DEVICE BINDS ONE |
 | Policy-route self-check for bonded wifi/modem/dongle interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
+| **Flow-sticky client sharing (owned nft table, stable marks, per-uplink routes, hard-down drain)** | `modules/network/uplink-steering/` + `modules/network/uplink-sharing.ts`; contract [`../../docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md) |
 | **Router-dongle netns runtime metadata (contract-v1 MIRROR reader; stale/ambiguous/bad-version ignored+logged)** | `modules/network/dongle-metadata.ts` (`readDongleMetadata`, `refreshDongleMetadata`, `getDongleMarker`, `dongleSlotLabel`) |
 | **The `dongle` netif marker (live-row stamp + wire-only union rows + one-frame retraction)** | `modules/network/network-interfaces.ts` (`applyDongleProjection`); contract below → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND |
 | Retracting the `hdmi_error` notification (BOTH the no-signal message and the EMI/cable advisory) once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, `HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
@@ -5641,6 +5642,48 @@ driven across the window with both degraded shapes, plus the negative controls
 that matter: a sustained absence resolving honestly again, a repeatedly-observed
 absence failing to renew the window, the boundary millisecond, a `lost` row, a
 substituted device, a renumber, and the coarse/unset selections.
+
+## FLOW-STICKY SHARED-CLIENT STEERING [PARTIAL — backend complete; image carrier + board drill pending]
+
+`modules/network/uplink-steering/` is the desired-state controller for hotspot and
+Ethernet `shared-lan` client traffic. It owns only `inet ceralive_share`, the
+priority-110 namespaced fwmark rules, and private route tables 30000–95535. The
+image's `inet ceralive_ingest_fw` table (input hook priority -10) is foreign and is
+never named by generated rule text. The carrier effects are isolated in
+`modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
+→ systemd start/reload, with prior-file reload on failure.
+
+**Client provenance is structural.** New-flow selection, conntrack mark restore,
+and masquerade all require a positive registered client-zone `iifname`; NAT also
+requires the zone prefix and the namespaced conntrack mark. There is no output
+hook. A locally-originated packet therefore cannot enter this path even when its
+source is inside a client prefix, and a WAN reply never restores the client flow's
+mark and recirculates out the WAN.
+
+**Marks are physical-identity keyed.** The high byte `0xca` proves client-zone
+provenance, the next 16 bits select the uplink, and the low byte is preserved.
+The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder,
+add/remove, and reweight never change a surviving mark, so established flows keep
+their original route while only new flows see the new weights.
+
+**A hard-down is three phases:** publish a transition ruleset excluding the mark
+from new-flow selection while retaining its NAT/route support → delete conntrack
+entries carrying exactly that mark → remove route support and publish the final
+ruleset. The transient `uplink-flows-reset {iface,linkId}` follows successful
+route removal and is never hydrated. `uplink-steering` is persistent and carries
+the shared `@ceraui/rpc` typed availability/refusal state.
+
+The coordinator is single-flight, re-reads the latest model before every apply,
+skips byte-identical state, and retries at 100/500 ms only. On process restart it
+inventories its priority-110 rules, publishes the latest model first, then flushes
+and removes stale support. Any overlap, mark collision, foreign priority owner,
+missing route, nft failure, or rollback failure is fail-soft and surfaces
+`steering_unavailable`; it never blocks the already-bound WS server.
+
+The CeraUI half is complete and kernel-netns tested. It cannot activate on a fleet
+image until image-building todo 12 ships `ceralive-share.service`, its teardown
+script, nftables/conntrack packages, and the CeraUI unit ordering. Full contract and
+hardware gate: [`../../docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md).
 
 ## BROADCAST EVENTS
 

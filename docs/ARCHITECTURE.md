@@ -206,6 +206,16 @@ own `modes` (Tier-2 device modes, when known), `audioKind`, and availability.
   SOLE owner of live per-link telemetry numbers — the per-interface WiFi/Cellular/
   Ethernet section rows do NOT duplicate them.
 
+### Shared-client traffic path
+
+Hotspot and `shared-lan` clients use a separate device-local forwarding path:
+client-zone ingress → `inet ceralive_share` first-flow selection → namespaced
+conntrack mark → priority-110 policy rule → per-uplink table → mark-scoped
+masquerade. The path cannot match locally originated SRTLA traffic and never edits
+the image's `ceralive_ingest_fw` table. See
+[`UPLINK_STEERING.md`](UPLINK_STEERING.md) for ownership, hard-down ordering, wire
+state, and the pending image carrier.
+
 ## Connection Topology
 
 The default deployment is **same-device**: the backend and the browser both run on the encoder hardware, so the WebSocket connects to `localhost`. A **remote** topology (browser on a separate machine, backend on the encoder) is also supported via an outbound WSS:443 tunnel — the device always dials out, making CGNAT-traversal feasible without inbound port forwarding.

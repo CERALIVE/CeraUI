@@ -18,5 +18,6 @@ export {
 	getUplinkHealthEngine,
 	getUplinksMessage,
 	isUplinkClientSteeringEligible,
+	onUplinkHealthChange,
 	setUplinkHealthEngineForTest,
 } from "./state.ts";

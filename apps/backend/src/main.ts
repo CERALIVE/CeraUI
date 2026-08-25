@@ -73,6 +73,7 @@ import {
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
 import { initUplinkHealth } from "./modules/network/uplink-health/runtime.ts";
+import { initUplinkSteering } from "./modules/network/uplink-steering/runtime.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { wireActiveProfileReporter } from "./modules/remote-control/active-profile-wiring.ts";
 import { initControlChannel } from "./modules/remote-control/channel.ts";
@@ -384,6 +385,7 @@ periodicCheckForSoftwareUpdates();
 
 initNetworkInterfaceMonitoring();
 initUplinkHealth();
+await guardNonCritical("uplink-steering", initUplinkSteering);
 
 // Event-driven netif: monitor stream drives up/down; onResync re-polls on restart
 const networkMonitor = createMonitorManager(() => updateNetif());

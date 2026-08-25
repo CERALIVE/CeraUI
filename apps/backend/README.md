@@ -168,6 +168,8 @@ The backend pushes typed events to all connected clients via `src/rpc/events.ts`
 |-------|----------|--------|
 | `netif` | 5 s | `modules/network/network-interfaces.ts` |
 | `uplinks` | 5 s / on change | `modules/network/uplink-health/` |
+| `uplink-steering` | on change + post-login snapshot | Persistent steering availability/refusal state |
+| `uplink-flows-reset` | hard-down only | Transient `{iface, linkId}` conntrack-reset notice |
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `gateways` | 2 s | `modules/network/gateways.ts` |
 | `modems` | 30 s | `modules/modems/modem-update-loop.ts` |
@@ -180,6 +182,16 @@ The backend pushes typed events to all connected clients via `src/rpc/events.ts`
 After a client authenticates, the backend immediately pushes a full snapshot of every event type. Clients don't need to wait for the first periodic tick to render.
 
 See [`docs/RPC_COMMUNICATION.md`](../../docs/RPC_COMMUNICATION.md) for the full wire-protocol reference.
+
+### Shared-client uplink steering
+
+`modules/network/uplink-steering/` owns `inet ceralive_share`, stable namespaced
+flow marks, per-uplink policy-route support, and the single-flight reconcile loop.
+Only packets entering a registered hotspot/shared-LAN zone are eligible; local
+traffic and foreign nftables tables are structurally outside the generated rules.
+Hard-down removes new-flow selection before a mark-scoped conntrack flush and
+route teardown. Full design, failure behavior, deployment dependency, and netns
+coverage: [`docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md).
 
 ## Conventions
 
