@@ -926,7 +926,7 @@ Four further Build Check facts, all landed 2026-08-14:
   step at all. **The Playwright half is NOT flipped and has never produced a green
   parity run** — that lane keeps Node 26, and nothing here authorises moving it.
   Two consequences: this was a build-check RUN-STEP change, so the root
-  `ci-local.manifest.yaml` set-equality model must be resynced to match; and the
+  workspace CI manifest set-equality model must be resynced to match; and the
   prerelease `vitest` pin is now load-bearing for a required lane, so bumping it to
   stable 5.0 means re-confirming the same-lockfile parity counts, not just editing
   the version.
@@ -941,11 +941,10 @@ Four further Build Check facts, all landed 2026-08-14:
 - **The e2e exclusion tag list lives in TWO files** — the root `test:e2e` script
   and the Functional E2E step's `--grep-invert`. Both carry
   `@visual|@a11y|@gallery|@premigration-upgrade`; change one and you must change
-  the other (and the root `ci-local.manifest.yaml` legs with it).
+  the other (and the workspace manifest legs with it).
 
-Any change to this workflow's jobs or run steps also changes the root repo's
-`ci-local.manifest.yaml` — `scripts/ceraui_build_check_manifest_contract_test.py`
-and `scripts/ceraui_build_check_execution_contract_test.py` model the job set and
+Any change to this workflow's jobs or run steps also changes the workspace
+manifest — the build-check manifest and execution contract tests model the job set and
 per-job run-step digests with SET EQUALITY and fail on anything unmodeled.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)

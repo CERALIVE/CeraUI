@@ -1,7 +1,9 @@
 #!/bin/sh
-# Pre-commit hook - auto-fix lint issues
-
-bun run lint:fix
-
-# Stage any auto-fixed files
-git add -u
+# Auto-fix lint on commit; re-stage ONLY files that were already staged.
+# lint:fix is best-effort here - the pre-push hook and cloud CI are the blocking gates.
+# KNOWN LIMIT: a partially staged file (git add -p) that lint:fix rewrites is
+# re-staged whole by --again; full immunity is only for entirely unstaged files.
+if command -v bun >/dev/null 2>&1; then
+  bun run lint:fix || true
+fi
+git update-index --again

@@ -68,3 +68,6 @@ f3-qa/
 
 # Dev/CI-only modem-mutation journal (the device writes /data/ceralive/modem-mutations)
 modem-mutations/
+
+# local pre-push hook, written by an external tool if you use one — never committed
+/.githooks/pre-push
