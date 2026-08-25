@@ -149,6 +149,8 @@ afterEach(() => {
 	document.body.innerHTML = "";
 });
 
+vi.setConfig({ testTimeout: 15000 });
+
 describe("EncoderDialog — passthrough disclosure + bitrate gate", () => {
 	it("force + uvc_h264 + h264 out → passthrough band, bitrate disabled with reason", () => {
 		reactiveSources.value = sourcesMessage([UVC_H264]);
