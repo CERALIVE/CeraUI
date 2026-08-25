@@ -100,7 +100,7 @@ sleep 0.2
 
 read -r -d '' WEIGHTED_SEND <<'PY' || true
 import socket, time
-for index in range(200):
+for index in range(1000):
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.sendto(f"weighted-{index}".encode(), ("203.0.113.10", 9000))
     sock.close()

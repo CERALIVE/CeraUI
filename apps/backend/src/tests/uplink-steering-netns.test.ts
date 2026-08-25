@@ -129,10 +129,17 @@ describe.skipIf(!NETNS_ISOLATED)(
 				]);
 				expect(exitCode, stderr).toBe(0);
 				const result = JSON.parse(stdout.trim()) as NetnsResult;
-				expect(result.weightedTotal).toBeGreaterThanOrEqual(190);
+				expect(result.weightedTotal).toBeGreaterThanOrEqual(950);
 				expect(result.weightedWan0).toBeGreaterThan(0);
 				expect(result.weightedWan1).toBeGreaterThan(0);
 				const ratio = result.weightedWan0 / result.weightedWan1;
+				/**
+				 * The 1000-packet sample has an expected wan0/wan1 ratio of 4.0
+				 * (p=0.8). With binomial sd(wan0)=sqrt(1000*0.8*0.2)≈12.65,
+				 * the ratio's local sd is approximately 12.65*25/1000≈0.32.
+				 * Therefore the unchanged 5.5 ceiling is about 4.75σ above the
+				 * expected ratio, giving the distribution assertion a robust margin.
+				 */
 				expect(ratio).toBeGreaterThan(2.5);
 				expect(ratio).toBeLessThan(5.5);
 				expect(result.stickyBefore).toBe("wan0");
