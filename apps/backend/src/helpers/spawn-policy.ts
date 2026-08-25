@@ -451,6 +451,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"run() applies a bounded timeout to nftables steering-rule updates",
 	},
 	{
+		id: "network.nftRead",
+		file: "modules/network/sharing-diag/runtime.ts",
+		symbol: "refreshSharingDiag",
+		command: "[nft, list, ruleset]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"run() bounds the read-only coexistence-diagnostic ruleset dump; a failed read degrades ONE tri-state check to `unknown` and mutates nothing. It is a SEPARATE site from network.nft because that one is the steering layer's bounded-command WRITE — a read on the diagnostic's own slow cadence has neither its caller nor its failure semantics.",
+	},
+	{
 		id: "network.tc",
 		file: "modules/network/uplink-sharing.ts",
 		symbol: "applyTrafficControl",

@@ -72,6 +72,7 @@ import {
 	initNetworkInterfaceMonitoring,
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
+import { initSharingDiag } from "./modules/network/sharing-diag/runtime.ts";
 import { initUplinkHealth } from "./modules/network/uplink-health/runtime.ts";
 import {
 	initUplinkShaper,
@@ -392,6 +393,7 @@ initNetworkInterfaceMonitoring();
 initUplinkHealth();
 await guardNonCritical("uplink-steering", initUplinkSteering);
 await guardNonCritical("uplink-shaper", initUplinkShaper);
+await guardNonCritical("sharing-diag", initSharingDiag);
 
 // Event-driven netif: monitor stream drives up/down; onResync re-polls on restart
 const networkMonitor = createMonitorManager(() => updateNetif());

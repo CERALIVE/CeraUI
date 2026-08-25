@@ -27,6 +27,7 @@ import type {
 	RelayMessage,
 	Revisions,
 	SensorsStatus,
+	SharingDiag,
 	SourcesMessage,
 	StatusResponse,
 	UpdateState,
@@ -124,6 +125,12 @@ let updateStateState = $state<UpdateState | undefined>(undefined);
 // Network state
 let netifState = $state<NetifMessage | undefined>(undefined);
 let uplinksState = $state<UplinksMessage | undefined>(undefined);
+// The read-only sharing-coexistence verdict. REPLACED wholesale, never merged:
+// every check is an EXPLICIT tri-state, so a field-preserving merge would
+// re-create the raise-but-never-lower latch those explicit values exist to
+// prevent. `undefined` means no snapshot has arrived, which is distinct from a
+// delivered payload whose checks read `unknown`.
+let sharingDiagState = $state<SharingDiag | undefined>(undefined);
 let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
 
@@ -281,6 +288,10 @@ export function getNetif() {
 
 export function getUplinks(): UplinksMessage | undefined {
 	return uplinksState;
+}
+
+export function getSharingDiag(): SharingDiag | undefined {
+	return sharingDiagState;
 }
 
 export function getWifi() {
@@ -654,6 +665,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 
 		case "uplinks":
 			uplinksState = data as UplinksMessage;
+			break;
+
+		case "sharing_diag":
+			sharingDiagState = data as SharingDiag;
 			break;
 
 		case "audio-level":
@@ -1067,6 +1082,7 @@ export function resetState(): void {
 	updatingState = null;
 	netifState = undefined;
 	uplinksState = undefined;
+	sharingDiagState = undefined;
 	wifiState = undefined;
 	modemsState = undefined;
 	linkTelemetryState = undefined;

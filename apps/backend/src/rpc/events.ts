@@ -23,6 +23,7 @@ export const DEVICE_STATS_EVENT = "device-stats" as const;
 // (it owns the `broadcastMsg(ADDON_EVENT, …)` push); re-exported here so the RPC
 // layer resolves the channel name from the events surface like every other event.
 export { ADDON_EVENT } from "../modules/addons/manager.ts";
+export { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
 export { UPLINKS_EVENT } from "../modules/network/uplink-health/runtime.ts";
 export { UPLINK_SHAPER_EVENT } from "../modules/network/uplink-shaper/status.ts";
 export {

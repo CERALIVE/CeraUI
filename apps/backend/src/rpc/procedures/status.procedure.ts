@@ -14,6 +14,7 @@ import { getConfig } from "../../modules/config.ts";
 import { buildModemsWireMessage } from "../../modules/modems/modem-status.ts";
 import { getNetworkIngestInfo } from "../../modules/network/network-ingest.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
+import { getSharingDiag } from "../../modules/network/sharing-diag/status.ts";
 import { getUnclaimedAdapters } from "../../modules/network/unclaimed-adapters.ts";
 import { getUplinksMessage } from "../../modules/network/uplink-health/state.ts";
 import { getUplinkShaperStatus } from "../../modules/network/uplink-shaper/status.ts";
@@ -153,6 +154,10 @@ export function buildInitialStatus() {
 		uplinks: getUplinksMessage(),
 		uplinkSteering: getUplinkSteeringStatus(),
 		uplinkShaper: getUplinkShaperStatus(),
+		// Read-only coexistence verdict. It broadcasts on CHANGE and its slowest
+		// input is a 30 s poll, so without this hydration a fresh client sits on
+		// the pre-check all-`unknown` state until something moves.
+		sharingDiag: getSharingDiag(),
 		sensors: getSensors(),
 		encoderLoad: getEncoderLoad(),
 		// A BOOT FACT with no periodic loop behind it, so the initial push is the

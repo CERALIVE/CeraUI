@@ -28,10 +28,23 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 23 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(23);
+	it("classifies all 24 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(24);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(23);
+		expect(ids.size).toBe(24);
+	});
+
+	// The diagnostic's `nft list ruleset` is a READ on its own slow cadence, so it
+	// is its own bounded-PROBE site rather than a second caller of the steering
+	// layer's bounded-COMMAND write. Pinned because collapsing the two would let a
+	// future write inherit a read's justification.
+	it("the coexistence diagnostic's nft read is a bounded probe, distinct from the steering write", () => {
+		const read = getSpawnSite("network.nftRead");
+		const write = getSpawnSite("network.nft");
+		expect(read?.class).toBe("bounded-probe");
+		expect(read?.contract.timed).toBe(true);
+		expect(write?.class).toBe("bounded-command");
+		expect(read?.file).not.toBe(write?.file);
 	});
 
 	it("every site's declared contract satisfies its class invariants", () => {

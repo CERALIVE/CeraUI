@@ -207,6 +207,61 @@ export const uplinkShaperStatusSchema = z.discriminatedUnion('state', [
 ]);
 export type UplinkShaperStatus = z.infer<typeof uplinkShaperStatusSchema>;
 
+/*
+  SHARING-COEXISTENCE DIAGNOSTICS — read-only, and TRI-STATE on purpose.
+
+  The device shares its uplinks with hotspot / shared-LAN clients through TWO
+  independent NAT layers that are designed to coexist: NetworkManager's own
+  shared-mode masquerade (the working floor, kept alive by the image's
+  `firewall-backend=nftables` pin) and CeraUI's per-uplink, `CLIENT_FLOW`-scoped
+  masquerade inside `inet ceralive_share`. Four things can be checked from the
+  outside without touching either, and every one of them has an answer the
+  device genuinely cannot establish — a pre-pin image, an unreadable ruleset, a
+  shared profile whose interface has not leased its address yet.
+
+  So each check is `ok` | `degraded` | `unknown`, and `unknown` is EXPLICIT
+  rather than an omitted field: a consumer merge preserves an omitted optional,
+  so a check that could be raised and never lowered is the `policy_route_missing`
+  latch all over again. `degraded` is never a failure — nothing here gates a
+  stream, an interface, or a mutation; it is an honest amber verdict about a
+  coexistence contract.
+*/
+export const sharingDiagStateSchema = z.enum(['ok', 'degraded', 'unknown']);
+export type SharingDiagState = z.infer<typeof sharingDiagStateSchema>;
+
+// Each member names a different thing an operator (or a maintainer) does about
+// it, so none is collapsible. `firewall_backend_unpinned` in particular is the
+// PRE-PIN image — a normal, non-error state — and must never read as a mismatch.
+export const sharingDiagReasonSchema = z.enum([
+	'firewall_backend_unpinned',
+	'firewall_backend_mismatch',
+	'steering_rule_shadows_source_route',
+	'steering_rule_priority_drift',
+	'shared_nat_missing',
+	'shared_nat_duplicated',
+	'foreign_table_modified',
+]);
+export type SharingDiagReason = z.infer<typeof sharingDiagReasonSchema>;
+
+export const sharingDiagCheckSchema = z.object({
+	state: sharingDiagStateSchema,
+	reason: sharingDiagReasonSchema.optional(),
+	detail: z.string().min(1).optional(),
+});
+export type SharingDiagCheck = z.infer<typeof sharingDiagCheckSchema>;
+
+// All four checks are ALWAYS present. The rollup can never claim `ok` while a
+// check is withheld: `degraded` outranks `unknown` outranks `ok`.
+export const sharingDiagSchema = z.object({
+	state: sharingDiagStateSchema,
+	checkedAt: z.number().nonnegative(),
+	firewallBackend: sharingDiagCheckSchema,
+	steeringRules: sharingDiagCheckSchema,
+	sharedNat: sharingDiagCheckSchema,
+	foreignTables: sharingDiagCheckSchema,
+});
+export type SharingDiag = z.infer<typeof sharingDiagSchema>;
+
 export const uplinkFlowsResetEventSchema = z.object({
 	iface: z.string().min(1),
 	linkId: z.string().min(1),

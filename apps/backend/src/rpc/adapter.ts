@@ -7,6 +7,7 @@ import { call } from "@orpc/server";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 
 import { logger, logRedact } from "../helpers/logger.ts";
+import { SHARING_DIAG_EVENT } from "../modules/network/sharing-diag/status.ts";
 import {
 	getStreamHealth,
 	HEALTH_EVENT_TYPE,
@@ -189,6 +190,7 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	sendToClient(ws, "uplinks", initialStatus.uplinks);
 	sendToClient(ws, "uplink-steering", initialStatus.uplinkSteering);
 	sendToClient(ws, "uplink-shaper", initialStatus.uplinkShaper);
+	sendToClient(ws, SHARING_DIAG_EVENT, initialStatus.sharingDiag);
 	sendToClient(ws, "sensors", initialStatus.sensors);
 	sendToClient(ws, CPU_EVENT, initialStatus.cpu);
 	sendToClient(ws, "revisions", initialStatus.revisions);
