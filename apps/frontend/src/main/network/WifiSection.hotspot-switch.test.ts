@@ -1,32 +1,48 @@
 // @vitest-environment jsdom
 /**
- * WifiSection — icon-only "Switch to Hotspot" trigger (ceraui-refinement-pass Todo 2).
+ * WifiSection — the per-adapter mode control.
  *
- * The station-row hotspot trigger was a text+icon button that crowded the row
- * alongside the per-row Connect button (Todo 1). It is now icon-only (Router
- * glyph) to match the row's action-button density, while staying a11y-safe:
- *   (a) it renders as a button whose ACCESSIBLE NAME is the switchToHotspot copy
- *       (via aria-label) — assistive tech still announces it,
- *   (b) it renders NO visible text node (icon-only, no empty text either),
- *   (c) it keeps the 44px touch-target min sizing tokens,
- *   (d) the isSwitching spinner placeholder gets the SAME icon-only treatment.
+ * This file used to lock an ICON-ONLY "Switch to Hotspot" trigger plus a
+ * separate concurrent-hotspot start button and "AP active" badge. Todo 14
+ * replaced all three with ONE Station/Hotspot/Hybrid selector, so the icon-only
+ * contract is gone by design — a mode rung's whole job is to carry its word.
  *
- * The destructive-confirm SimpleAlertDialog flow itself is unchanged (covered by
- * the f3-manual-qa e2e); this file locks only the icon-only + a11y contract.
+ * Every other guarantee that file encoded is preserved here, restated against
+ * the control that replaced it:
+ *   (a) the hotspot affordance is a button with an accessible name,
+ *   (b) it carries a VISIBLE word (the deliberate inversion of the old
+ *       icon-only rule — the shared mode vocabulary is the point),
+ *   (c) it keeps the 44px touch-target min sizing token,
+ *   (d) the in-flight state renders a spinner on the rung being switched to,
+ *   (e) a PROVEN concurrent radio starts hybrid with no destructive confirm,
+ *   (f) station controls stay visible while a concurrent hotspot is active.
  */
 import type { NetifMessage, WifiInterface } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearOperation } from "$lib/rpc/async-operation.svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+	clearOperation,
+	destroyAsyncOperations,
+	initAsyncOperations,
+} from "$lib/rpc/async-operation.svelte";
 import { rpc } from "$lib/rpc/client";
+import {
+	resetWifiAdapterModes,
+	setWifiAdapterModesForTest,
+} from "$lib/rpc/wifi-adapter-modes.svelte";
 
 import WifiSection from "./WifiSection.svelte";
 
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		network: { configure: vi.fn() },
-		wifi: { hotspotStart: vi.fn(), hotspotStop: vi.fn() },
+		wifi: {
+			hotspotStart: vi.fn(),
+			hotspotStop: vi.fn(),
+			getAdapterModes: vi.fn(async () => ({})),
+			setAdapterMode: vi.fn(async () => ({ success: true, accepted: true })),
+		},
 	},
 }));
 vi.mock("svelte-sonner", () => ({
@@ -36,9 +52,21 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getConnectionState: () => "connected",
 }));
 
-const SWITCH_TO_HOTSPOT = "Switch to Hotspot";
+const HOTSPOT_RUNG = "Hotspot";
+const HYBRID_RUNG = "Hybrid";
 const TOUCH_MIN_CLASS = "min-h-[var(--touch-target-min)]";
-const TOUCH_MIN_W_CLASS = "min-w-[var(--touch-target-min)]";
+
+const ALL_MODES_OFFERED = {
+	wifi0: {
+		ifname: "wlan0",
+		mode: "station" as const,
+		options: [
+			{ mode: "station" as const, available: true },
+			{ mode: "hotspot" as const, available: true },
+			{ mode: "hybrid" as const, available: true },
+		],
+	},
+};
 
 function wifiIface(overrides: Partial<WifiInterface> = {}): WifiInterface {
 	return {
@@ -49,7 +77,7 @@ function wifiIface(overrides: Partial<WifiInterface> = {}): WifiInterface {
 			{ active: true, ssid: "MyNet", signal: 72, security: "WPA2", freq: 5200 },
 		],
 		saved: {},
-		// Station mode + capable of hotspot → the switch trigger renders.
+		// Station mode + capable of hotspot → the hotspot rung is selectable.
 		supports_hotspot: true,
 		...overrides,
 	} as WifiInterface;
@@ -66,81 +94,85 @@ function renderSection(iface: Partial<WifiInterface> = {}) {
 			isFullyStale: false,
 			staleInterfaces: new Set<string>(),
 			onConnect: vi.fn(),
+			onOpenCountry: vi.fn(),
 		},
 	});
 }
 
+beforeEach(() => {
+	initAsyncOperations();
+	resetWifiAdapterModes();
+});
+
 afterEach(() => {
 	clearOperation("hotspot:wifi0");
+	clearOperation("wifi-mode:wifi0");
+	destroyAsyncOperations();
+	resetWifiAdapterModes();
 	document.documentElement.removeAttribute("data-layout-mode");
 	vi.clearAllMocks();
 });
 
-describe("WifiSection — icon-only Switch-to-Hotspot trigger", () => {
-	it("(a) exposes a button whose accessible name is the switchToHotspot copy", () => {
+describe("WifiSection — the adapter mode control", () => {
+	it("(a) exposes the hotspot affordance as a named radio rung", () => {
 		const { getByRole } = renderSection();
-		const trigger = getByRole("button", { name: SWITCH_TO_HOTSPOT });
-		expect(trigger).toBeTruthy();
+		expect(getByRole("radio", { name: HOTSPOT_RUNG })).toBeTruthy();
 	});
 
-	it("(b) renders NO visible text node in the trigger (icon-only)", () => {
+	it("(b) carries a VISIBLE word — the shared mode vocabulary, not an icon", () => {
 		const { getByRole } = renderSection();
-		const trigger = getByRole("button", { name: SWITCH_TO_HOTSPOT });
-		// The accessible name comes from aria-label, not visible text.
-		expect(trigger.textContent?.trim()).toBe("");
-		// But an SVG icon (Router) IS present.
-		expect(trigger.querySelector("svg")).not.toBeNull();
+		const rung = getByRole("radio", { name: HOTSPOT_RUNG });
+		expect(rung.textContent?.trim()).toBe(HOTSPOT_RUNG);
 	});
 
-	it("(c) keeps the 44px touch-target min sizing tokens", () => {
+	it("(c) keeps the 44px touch-target min sizing token", () => {
 		const { getByRole } = renderSection();
-		const trigger = getByRole("button", { name: SWITCH_TO_HOTSPOT });
-		expect(trigger.className).toContain(TOUCH_MIN_CLASS);
-		expect(trigger.className).toContain(TOUCH_MIN_W_CLASS);
-	});
-
-	it("(d) the isSwitching spinner placeholder is also icon-only + a11y-named", async () => {
-		const { getByRole, getAllByRole } = renderSection();
-		// Open the confirm dialog, then confirm to dispatch the switch op. Once the
-		// op is pending the row re-renders into the spinner-placeholder branch,
-		// which replaces the SimpleAlertDialog trigger with an icon-only spinner
-		// button that carries the SAME switchToHotspot accessible name.
-		await fireEvent.click(getByRole("button", { name: SWITCH_TO_HOTSPOT }));
-		await tick();
-		// The AlertDialog Action confirm carries the confirm copy (also
-		// "Switch to Hotspot"); pick the one inside the open alertdialog.
-		const confirm = getAllByRole("button", { name: SWITCH_TO_HOTSPOT }).find(
-			(b) => b.closest('[role="alertdialog"]') !== null,
+		expect(getByRole("radio", { name: HOTSPOT_RUNG }).className).toContain(
+			TOUCH_MIN_CLASS,
 		);
-		expect(
-			confirm,
-			"confirm action must exist in the open dialog",
-		).toBeTruthy();
-		await fireEvent.click(confirm as HTMLElement);
-		await tick();
-		// Now the spinner placeholder is the sole Switch-to-Hotspot-named button.
-		const placeholder = getByRole("button", { name: SWITCH_TO_HOTSPOT });
-		expect(placeholder.textContent?.trim()).toBe("");
-		expect(placeholder.querySelector("svg")).not.toBeNull();
-		expect(placeholder.className).toContain(TOUCH_MIN_CLASS);
 	});
-});
 
-describe("WifiSection — AP+STA concurrent mode", () => {
-	it("starts a proven concurrent hotspot without the destructive mode-switch dialog", async () => {
-		const { getByTestId, queryByRole } = renderSection({
+	it("(d) renders a spinner on the rung being switched to while in flight", async () => {
+		setWifiAdapterModesForTest(ALL_MODES_OFFERED);
+		const { getByRole, getByTestId } = renderSection({
 			mode: "station",
 			supports_ap_sta_concurrency: true,
 		});
 
-		await fireEvent.click(getByTestId("start-concurrent-hotspot"));
+		// Hybrid is additive (nothing is lost), so it dispatches without a confirm.
+		await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
+		await tick();
 		await tick();
 
-		expect(queryByRole("alertdialog")).toBeNull();
-		expect(rpc.wifi.hotspotStart).toHaveBeenCalledWith({ device: "wifi0" });
+		expect(
+			getByTestId("wifi-mode-option-wifi0-hybrid").querySelector("svg"),
+		).not.toBeNull();
+		expect(getByTestId("wifi-mode-pending-wifi0")).toBeTruthy();
+	});
+});
+
+describe("WifiSection — AP+STA concurrent mode", () => {
+	it("(e) starts a proven concurrent hotspot without a destructive confirm", async () => {
+		setWifiAdapterModesForTest(ALL_MODES_OFFERED);
+		const { getByRole, queryByTestId } = renderSection({
+			mode: "station",
+			supports_ap_sta_concurrency: true,
+		});
+
+		await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
+		await tick();
+
+		expect(queryByTestId("wifi-mode-confirm-wifi0")).toBeNull();
+		expect(rpc.wifi.setAdapterMode).toHaveBeenCalledWith({
+			device: "wifi0",
+			mode: "hybrid",
+		});
 	});
 
-	it("keeps station controls visible while the concurrent hotspot is active", () => {
+	it("(f) keeps station controls visible while the concurrent hotspot is active", () => {
+		setWifiAdapterModesForTest({
+			wifi0: { ...ALL_MODES_OFFERED.wifi0, mode: "hybrid" },
+		});
 		const { getByRole, getByTestId } = renderSection({
 			mode: "station",
 			supports_ap_sta_concurrency: true,
@@ -152,7 +184,53 @@ describe("WifiSection — AP+STA concurrent mode", () => {
 		});
 
 		expect(getByRole("button", { name: "Connect" })).toBeTruthy();
-		expect(getByTestId("concurrent-hotspot-active")).toBeTruthy();
-		expect(getByRole("button", { name: "Turn Off" })).toBeTruthy();
+		expect(getByTestId("wifi-mode-selector").getAttribute("data-mode")).toBe(
+			"hybrid",
+		);
+		expect(getByTestId("open-hotspot-setup")).toBeTruthy();
+	});
+});
+
+describe("WifiSection — a destructive transition is confirmed first", () => {
+	it("arms an inline confirm naming the uplink loss and dispatches NOTHING", async () => {
+		setWifiAdapterModesForTest(ALL_MODES_OFFERED);
+		const { getByRole, getByTestId } = renderSection({
+			mode: "station",
+			supports_ap_sta_concurrency: true,
+		});
+
+		await fireEvent.click(getByRole("radio", { name: HOTSPOT_RUNG }));
+		await tick();
+
+		const band = getByTestId("wifi-mode-confirm-wifi0");
+		expect(band.getAttribute("data-consequence")).toBe("drops-uplink");
+		expect(band.textContent).toContain("leaves the bond");
+		expect(rpc.wifi.setAdapterMode).not.toHaveBeenCalled();
+
+		await fireEvent.click(getByTestId("wifi-mode-confirm-apply-wifi0"));
+		await tick();
+		expect(rpc.wifi.setAdapterMode).toHaveBeenCalledWith({
+			device: "wifi0",
+			mode: "hotspot",
+		});
+	});
+
+	it("cancelling the confirm leaves the prior mode and dispatches nothing", async () => {
+		setWifiAdapterModesForTest(ALL_MODES_OFFERED);
+		const { getByRole, getByTestId, queryByTestId } = renderSection({
+			mode: "station",
+			supports_ap_sta_concurrency: true,
+		});
+
+		await fireEvent.click(getByRole("radio", { name: HOTSPOT_RUNG }));
+		await tick();
+		await fireEvent.click(getByTestId("wifi-mode-confirm-cancel-wifi0"));
+		await tick();
+
+		expect(queryByTestId("wifi-mode-confirm-wifi0")).toBeNull();
+		expect(rpc.wifi.setAdapterMode).not.toHaveBeenCalled();
+		expect(getByTestId("wifi-mode-selector").getAttribute("data-mode")).toBe(
+			"station",
+		);
 	});
 });

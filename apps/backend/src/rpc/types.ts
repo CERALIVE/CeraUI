@@ -67,6 +67,7 @@ export type BroadcastEvent =
 	| { type: "status"; data: unknown }
 	| { type: "sensors"; data: unknown }
 	| { type: "netif"; data: unknown }
+	| { type: "uplinks"; data: unknown }
 	| { type: "modems"; data: unknown }
 	| { type: "config"; data: unknown }
 	| { type: "wifi"; data: unknown }

@@ -19,7 +19,11 @@
 /* Network interface list */
 import { EventEmitter } from "node:events";
 import { isSimlessForBond } from "@ceraui/rpc";
-import type { NotificationType } from "@ceraui/rpc/schemas";
+import type {
+	EthernetRole,
+	NetifConfigError,
+	NotificationType,
+} from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 
 import { ipToInt, isSameSubnet } from "../../helpers/ip-addresses.ts";
@@ -39,6 +43,7 @@ import {
 	notificationSend,
 } from "../ui/notifications.ts";
 import { broadcastMsg, buildMsg } from "../ui/websocket-server.ts";
+import { isConcurrentApIfname } from "../wifi/wifi-concurrent-interface.ts";
 import {
 	wifiDeviceListAdd,
 	wifiDeviceListEndUpdate,
@@ -51,6 +56,7 @@ import {
 	getDongleRecords,
 	refreshDongleMetadata,
 } from "./dongle-metadata.ts";
+import { ethernetRoleForWire, isSharedLanPort } from "./ethernet-role.ts";
 import {
 	getPolicyRouteVerdict,
 	refreshPolicyRouteFlags,
@@ -132,6 +138,13 @@ export const NETIF_ERR_HOTSPOT = 0x02;
 // bondable and the bond spends a slot on an uplink with no WAN behind it. Like
 // NETIF_ERR_HOTSPOT this marks "cannot carry bonded traffic", not a fault.
 export const NETIF_ERR_NOSIM = 0x04;
+// An operator has declared this Ethernet port a SHARED-LAN router port, so
+// NetworkManager serves DHCP/DNS on it and it faces the device's own clients
+// rather than a WAN. Like NETIF_ERR_HOTSPOT this marks "cannot carry bonded
+// traffic", not a fault — and it is the only flag here raised by an operator's
+// stated intent rather than by a device condition, which is why it is the only
+// one whose release restores `enabled`.
+export const NETIF_ERR_SHAREDLAN = 0x08;
 
 let netif: Record<string, NetworkInterface> = {};
 
@@ -199,10 +212,98 @@ export function isDupIpOnly(int: NetworkInterface): boolean {
  */
 export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (!int.ip) return false;
+	if (isConcurrentApIfname(name)) return false;
+	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
 	if (operatorBondOptOut.has(name)) return false;
 	if (isDupIpOnly(int)) return true;
 	return int.enabled;
+}
+
+/*
+  THE CONCURRENT-AP NETDEV CAN NEVER CARRY BONDED TRAFFIC.
+
+  A hybrid radio hosts its access point on a SECOND, virtual `clap-<parent>`
+  interface, and NetworkManager's shared mode leases it `10.42.0.1` — a routable
+  address on an interface that is RUNNING, `enabled`, and error-free, which is
+  every property `isBondCandidate` reads. The existing hotspot exclusion could
+  not reach it: that one walks the WiFi registry and flags `isApMode` adapters,
+  and a hybrid radio's parent is truthfully a STATION, so nothing ever stamped
+  the virtual netdev at all and `genSrtlaIpList` emitted `10.42.0.x`.
+
+  The name is the honest discriminator here, and it is not the fleet's usual
+  name-keying trap: `clap-<parent>` is MINTED by this device
+  (`concurrentApIfname`) rather than assigned by udev, so it identifies a netdev
+  we created for exactly this purpose and cannot follow a rename.
+
+  It is applied in TWO places on purpose. `isBondCandidate` above refuses it
+  structurally, so a caller holding a hand-built entry is covered; and the gate
+  below stamps `NETIF_ERR_HOTSPOT` into the netif map, so the wire, the
+  connectivity-probe eligibility rule and the same-subnet grouping all see the
+  exclusion through the flag they already read rather than through a second rule
+  each of them would have to learn.
+
+  Like the SIM-less gate it runs on EVERY pass rather than inside `intsChanged`:
+  a hybrid AP coming up adds an interface, but the flag must also be right on a
+  pass where nothing about the topology moved.
+*/
+export function applyConcurrentApBondGate(
+	interfaces: Record<string, NetworkInterface>,
+): void {
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int) continue;
+		if (isConcurrentApIfname(name)) setNetifError(int, NETIF_ERR_HOTSPOT);
+	}
+}
+
+/*
+  A SHARED-LAN ETHERNET PORT CAN NEVER CARRY BONDED TRAFFIC.
+
+  NetworkManager's `ipv4.method shared` leases the port `10.42.x.1` and serves
+  DHCP/DNS on it, so the port is RUNNING, addressed and error-free — every
+  property `isBondCandidate` reads said "bond me", exactly as the concurrent-AP
+  netdev did before its own gate existed. The difference is that this port faces
+  the device's OWN clients rather than a WAN, so bonding it would send video into
+  the LAN it is serving.
+
+  Applied in the same TWO places, for the same reason: `isBondCandidate` refuses
+  it structurally so a caller holding a hand-built entry is covered, and this
+  gate stamps the flag into the netif map so the wire, `probeExclusionReason`,
+  the connectivity election and the same-subnet grouping inherit the exclusion
+  through the flag they already read rather than each learning a second rule.
+
+  It runs on EVERY pass rather than inside `intsChanged`, beside its two
+  siblings: a role flip moves no interface, no address and no counter, so a
+  topology-gated stamp would never fire for the one event it exists for.
+
+  IT IS THE ONE GATE HERE THAT ALSO RELEASES. The SIM-less gate clears its flag
+  and deliberately leaves `enabled` false, because a SIM reappearing is a
+  hardware event the operator did not ask for and re-bonding a link silently is
+  not the device's call. A flip back to `uplink` IS the operator asking for this
+  port to bond again, and the flag is the only thing that lowered `enabled` — so
+  releasing it must undo its own effect, or the operator's own action would
+  leave the port permanently excluded with nothing on screen explaining why.
+  Their separate bond opt-out is still honoured, and any other error still
+  standing keeps the port down.
+*/
+export function applySharedLanBondGate(
+	interfaces: Record<string, NetworkInterface>,
+	readRole: (ifname: string) => boolean = isSharedLanPort,
+): void {
+	for (const name in interfaces) {
+		const int = interfaces[name];
+		if (!int) continue;
+
+		if (readRole(name)) {
+			setNetifError(int, NETIF_ERR_SHAREDLAN);
+			continue;
+		}
+
+		if ((int.error & NETIF_ERR_SHAREDLAN) === 0) continue;
+		clearNetifError(int, NETIF_ERR_SHAREDLAN);
+		if (int.error === 0 && !operatorBondOptOut.has(name)) int.enabled = true;
+	}
 }
 
 /*
@@ -812,6 +913,13 @@ export function processIfconfigOutput(
 	// Ahead of the dup-IP and same-subnet passes so a SIM-less dongle is already
 	// disabled when they run, exactly as a dup-IP link is when grouping runs.
 	applyRouterSimBondGate(newInterfaces);
+	// Same placement, same reason: a concurrent AP is deliberately same-subnet
+	// with its own DHCP clients, so it must already carry the hotspot flag the
+	// grouping pass reads before that pass runs.
+	applyConcurrentApBondGate(newInterfaces);
+	// And again for the same reason: a shared-LAN port is deliberately
+	// same-subnet with the clients it serves.
+	applySharedLanBondGate(newInterfaces);
 
 	const dupIpGroups = duplicateIpGroups(newInterfaces);
 
@@ -996,6 +1104,7 @@ const netIfErrors = {
 	2: "WiFi hotspot",
 	1: "duplicate IPv4 addr",
 	4: "no SIM",
+	8: "shared LAN",
 } as const;
 
 function setNetifError(int: NetworkInterface | undefined, err: number) {
@@ -1085,6 +1194,7 @@ type NetworkInterfaceResponseMessage = {
 		dongle?: DongleMarker | null;
 		router_cellular?: RouterCellularMarker | null;
 		usb_modem_net?: UsbModemNetMarker | null;
+		ethRole?: EthernetRole;
 	};
 };
 
@@ -1140,6 +1250,14 @@ export function netIfBuildMsg() {
 		const policyRouteVerdict = getPolicyRouteVerdict(i);
 		if (policyRouteVerdict !== undefined) {
 			entry.policy_route_missing = policyRouteVerdict;
+		}
+
+		// Explicit on every ethernet row, `uplink` included — a role published
+		// only when shared could be raised and never lowered by the consumer
+		// merge, so a flip back would leave the row claiming `shared-lan`.
+		const ethRole = ethernetRoleForWire(i);
+		if (ethRole !== undefined) {
+			entry.ethRole = ethRole;
 		}
 	}
 
@@ -1280,14 +1398,26 @@ function countActiveNetif() {
 	return count;
 }
 
+/**
+ * Whether `handleNetif` applied anything, and if not, why.
+ *
+ * Every rejection here used to be a bare `return`, which the RPC layer reported
+ * as `{success: true}` — so a save discarded by the stale-address guard (which
+ * discards the BOND TOGGLE alongside the address it was checking) reached the
+ * operator as "Saved".
+ */
+export type NetifApplyOutcome =
+	| { ok: true }
+	| { ok: false; reason: NetifConfigError };
+
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
-) {
+): NetifApplyOutcome {
 	const int = netif[msg.name];
-	if (!int) return;
+	if (!int) return { ok: false, reason: "unknown_interface" };
 
-	if (int.ip !== msg.ip) return;
+	if (int.ip !== msg.ip) return { ok: false, reason: "stale_address" };
 
 	if (msg.enabled === true || msg.enabled === false) {
 		// A duplicate-IP link's `enabled` is forced false by the flag itself, so a
@@ -1298,7 +1428,7 @@ export function handleNetif(
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
 			conn.send(buildMsg("netif", netIfBuildMsg()));
-			return;
+			return { ok: true };
 		}
 
 		if (msg.enabled) {
@@ -1311,7 +1441,7 @@ export function handleNetif(
 					`Can't enable ${msg.name}: ${err}`,
 					10,
 				);
-				return;
+				return { ok: false, reason: "enable_refused" };
 			}
 		} else {
 			if (int.enabled && countActiveNetif() === 1) {
@@ -1322,7 +1452,7 @@ export function handleNetif(
 					"Can't disable all networks",
 					10,
 				);
-				return;
+				return { ok: false, reason: "disable_all_refused" };
 			}
 		}
 
@@ -1332,4 +1462,5 @@ export function handleNetif(
 	}
 
 	conn.send(buildMsg("netif", netIfBuildMsg()));
+	return { ok: true };
 }

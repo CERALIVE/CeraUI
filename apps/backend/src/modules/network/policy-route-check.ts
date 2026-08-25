@@ -72,10 +72,27 @@ export type PolicyRule = {
 	table: string;
 };
 
-/** An enabled, IP-bearing bonded (modem/wifi) interface to verify. */
+/** An enabled, IP-bearing bonded interface to verify. */
 export type PolicyRouteCandidate = {
 	name: string;
 	ip: string;
+	/**
+	 * May a MISSING source rule be reported as a fault for this candidate?
+	 *
+	 * `true` (the default, and the only value the dispatcher-mapped modem/wifi
+	 * class uses) is the pre-existing behaviour: the image installs a rule for
+	 * these, so its absence is the fault this check exists to find.
+	 *
+	 * `false` is the ETHERNET class. The image's routing hooks map `usb*`/`enx*`
+	 * onto tables 100-107 and `wlan0-4` onto 120-124 and nothing else, so a plain
+	 * `eth0` has no per-uplink table AT ALL and "no rule" is the documented
+	 * steady state rather than a fault. Reporting it would amber-band every
+	 * correctly-working wired uplink in the fleet — the same reason `enx*` was
+	 * excluded outright. What such a candidate CAN still be judged on is a rule
+	 * that EXISTS and dispatches to a table with no default route, which is the
+	 * fault the steering module would produce once it installs one.
+	 */
+	flagWhenRuleAbsent?: boolean;
 };
 
 /** Minimal live-netif shape this check reads (name → ip/enabled). */
@@ -104,6 +121,24 @@ export type NetifSnapshot = Record<
  * whose dispatcher no longer has an opinion about it.
  */
 const BONDED_MODEM_OR_WIFI_RE = /^(?:wlan|usb|ww)/;
+
+/*
+  The ETHERNET uplink class, judged on WEAKER terms than the class above.
+
+  Wired ports were outside this check entirely, so a steering fault on one could
+  not be reported at all. They are in it now, but with `flagWhenRuleAbsent:
+  false`: the shipped dispatcher installs no ethernet table, so only a rule that
+  EXISTS and resolves to a table with no default route is a fault here. That is
+  the read-only half of the ethernet steering contract; installing the table is
+  the steering module's job, not this check's.
+
+  `enx*` is INCLUDED by this prefix and that is deliberate. It was excluded from
+  the bonded class because half of those adapters legitimately have no rule and
+  would false-flag — which is precisely the condition `flagWhenRuleAbsent: false`
+  now withholds a verdict for, so the exclusion's whole reason is satisfied while
+  a genuinely broken `enx*N` table can finally be reported.
+*/
+const ETHERNET_UPLINK_RE = /^(?:eth|en)/;
 
 // A safe routing-table token to hand to `ip route show table <t>`: digits or a
 // well-known name. Guards the argv against a leading-`-` flag-injection even
@@ -142,6 +177,11 @@ export function parseHasDefaultRoute(stdout: string): boolean {
 /** Is this a bonded uplink interface (WiFi or cellular-modem class)? */
 export function isBondedModemOrWifiIface(name: string): boolean {
 	return BONDED_MODEM_OR_WIFI_RE.test(name);
+}
+
+/** Is this a wired ethernet uplink, judged on the weaker rule above? */
+export function isEthernetUplinkIface(name: string): boolean {
+	return ETHERNET_UPLINK_RE.test(name);
 }
 
 /**
@@ -195,6 +235,33 @@ export function collectPolicyRouteCandidates(
 }
 
 /**
+ * The wired candidates, which are deliberately NOT part of
+ * {@link collectPolicyRouteCandidates}'s set.
+ *
+ * They are kept separate rather than folded in because the two classes are
+ * judged by different rules, and because that function's answer is the
+ * dispatcher-mapped class — a contract other code and its tests read directly.
+ *
+ * A `shared-lan` port is excluded for free: the netif gate lowers its `enabled`,
+ * and this collector already requires an enabled interface. A port serving its
+ * own clients is not an uplink, so it has no source-routing to verify.
+ */
+export function collectEthernetPolicyRouteCandidates(
+	netif: NetifSnapshot,
+): PolicyRouteCandidate[] {
+	const candidates: PolicyRouteCandidate[] = [];
+	for (const name in netif) {
+		const entry = netif[name];
+		if (!entry) continue;
+		if (!entry.enabled) continue;
+		if (!entry.ip) continue;
+		if (!isEthernetUplinkIface(name)) continue;
+		candidates.push({ name, ip: entry.ip, flagWhenRuleAbsent: false });
+	}
+	return candidates;
+}
+
+/**
  * Derive the set of interface names that are missing their policy route.
  *
  * For each candidate: the iface→table binding is DISCOVERED by matching the
@@ -231,6 +298,12 @@ export function derivePolicyRouteMissing(
 
 		const matching = rules.filter((r) => r.src === iface.ip);
 		if (matching.length === 0) {
+			if (iface.flagWhenRuleAbsent === false) {
+				logger.debug(
+					`policy-route self-check: ${iface.name} has no source rule and its class installs none; no verdict`,
+				);
+				continue;
+			}
 			flagged.add(iface.name);
 			continue;
 		}
@@ -349,14 +422,21 @@ export async function checkPolicyRoutes(
 				: null;
 		}
 
-		const candidates = collectPolicyRouteCandidates(netif);
+		const ambiguousIps = ambiguousSourceIps(netif);
+		// An ethernet candidate on an ambiguous address can only ever be withheld
+		// (twice over — by the ambiguity guard and by its own absent-rule rule), so
+		// it is dropped BEFORE the spawn rather than after. Asking `ip` a question
+		// whose answer is already known costs a spawn on the 5 s netif cadence for
+		// nothing.
+		const candidates = [
+			...collectPolicyRouteCandidates(netif),
+			...collectEthernetPolicyRouteCandidates(netif).filter(
+				(candidate) => !ambiguousIps.has(candidate.ip),
+			),
+		];
 		if (candidates.length === 0) return new Set();
 
-		return await runRealPolicyRouteCheck(
-			candidates,
-			ambiguousSourceIps(netif),
-			deps,
-		);
+		return await runRealPolicyRouteCheck(candidates, ambiguousIps, deps);
 	} catch (err) {
 		// Any failure degrades to null — this must never crash the netif loop.
 		logger.debug("policy-route self-check degraded to null", { err });

@@ -47,6 +47,7 @@ import {
 	type DetectionMethod,
 	detectionMethodSchema,
 	deviceKindSchema,
+	ethernetRoleSchema,
 	inputModeSchema,
 	isNamespacedRelayId,
 	kioskDisplaySchema,
@@ -65,6 +66,7 @@ import {
 	sourcesVisibilitySchema,
 	streamProfileIdSchema,
 	streamRecoveryPreferenceSchema,
+	wifiAdapterModeSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import { logger } from "./logger.ts";
@@ -358,6 +360,30 @@ export const runtimeConfigSchema = z.object({
 	// so an existing config keeps today's behaviour exactly. The hotspot channel
 	// set is DERIVED from `iw phy` after this is applied, never from a table.
 	country: regulatoryCountrySchema.optional(),
+
+	// The operator's per-adapter WiFi mode, keyed by the adapter's PERMANENT
+	// hardware address — the same key `wifiInterfacesByMacAddress` and the
+	// canonical adapter lock use, so a preference cannot be filed under one radio
+	// and read back for another. An ifname key would follow a rename rather than
+	// the radio, and this fleet's duplicate-MAC dongles rename on replug.
+	//
+	// ABSENT means "the operator has never chosen", which is deliberately NOT the
+	// same as `station`: nothing is reconciled at boot for an adapter with no
+	// preference, so an existing device keeps today's behaviour exactly.
+	wifi_modes: z.record(z.string(), wifiAdapterModeSchema).optional(),
+
+	// The operator's declared role per ETHERNET port, keyed by interface name.
+	// ABSENT means `uplink` — today's behaviour — so an untouched device is
+	// byte-identical to before this landed, and only a stated `shared-lan` is
+	// re-applied at boot.
+	//
+	// The ifname key is deliberate here and is the one place it is defensible.
+	// `wifi_modes` keys on a permanent MAC because a radio's name follows a
+	// udev rename; this is not a claim about a DEVICE but an operator statement
+	// about a SOCKET on the board, and the NetworkManager profile it drives is
+	// itself bound by `connection.interface-name` — so the two agree by
+	// construction rather than by a second lookup that could disagree.
+	eth_roles: z.record(z.string(), ethernetRoleSchema).optional(),
 
 	// Opt-in gate for the guarded USB-composition-mode switch (`modems.setUsbMode`).
 	// DEFAULT-ABSENT ON PURPOSE and given NO entry in RUNTIME_CONFIG_DEFAULTS: a

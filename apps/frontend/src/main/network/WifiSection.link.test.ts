@@ -30,6 +30,8 @@ vi.mock("$lib/rpc/client", () => ({
 			hotspotStart: vi.fn(),
 			hotspotStop: vi.fn(),
 			hotspotConfig: vi.fn(),
+			getAdapterModes: vi.fn(async () => ({})),
+			setAdapterMode: vi.fn(async () => ({ success: true, accepted: true })),
 		},
 	},
 }));

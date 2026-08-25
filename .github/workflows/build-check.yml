@@ -148,6 +148,9 @@ jobs:
       - name: Prepare backend test runtime directories
         run: sudo install -d -o "$(id -u)" -g "$(id -g)" /run/ceralive /var/run/bcrpt
 
+      - name: Enable unprivileged user namespaces (Ubuntu 24.04 AppArmor restriction)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Mock device attach service contract
         working-directory: CeraUI
         run: bun run test:service-contract
@@ -155,6 +158,18 @@ jobs:
       - name: Unit tests (bun)
         working-directory: CeraUI
         run: bun run --filter backend test
+
+      # These two tests measure a REAL weighted packet distribution through a real
+      # netns/nftables setup, so their statistical bounds only hold with CPU
+      # headroom: inside the full backend suite the ratio was observed at 5.897
+      # against a 5.5 ceiling, while isolated runs pass cleanly. They skip
+      # themselves during the bundled run above and execute here instead, after
+      # it, reusing this job's AppArmor unprivileged-userns sysctl.
+      - name: netns-semantics (isolated — statistical assertions need CPU headroom)
+        working-directory: CeraUI
+        env:
+          CERALIVE_NETNS_ISOLATED: "1"
+        run: bun test apps/backend/src/tests/uplink-steering-netns.test.ts apps/backend/src/tests/uplink-shaper-netns.test.ts
 
       - name: i18n unit tests (bun — frozen rendered oracle + backend labelKey contract)
         working-directory: CeraUI

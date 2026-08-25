@@ -27,9 +27,13 @@ import type {
 	RelayMessage,
 	Revisions,
 	SensorsStatus,
+	SharingDiag,
 	SourcesMessage,
 	StatusResponse,
 	UpdateState,
+	UplinkShaperStatus,
+	UplinkSteeringStatus,
+	UplinksMessage,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
 import {
@@ -38,6 +42,7 @@ import {
 	hardwareTypeSchema,
 	notificationsMessageSchema,
 	pipelineSchema,
+	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { preserveWireIdentity } from "$lib/rpc/value-identity";
@@ -66,6 +71,7 @@ import {
 } from "$lib/streaming/receiver-experience";
 
 import {
+	beginOperation,
 	confirmOperation,
 	destroyAsyncOperations,
 	failOperation,
@@ -81,6 +87,10 @@ import {
 import { mergeModemList } from "./modem-list-merge";
 import { reauthenticateAndHydrate } from "./reconnect";
 import { createSeqTracker } from "./seq-guard";
+import {
+	refreshWifiAdapterModes,
+	resetWifiAdapterModes,
+} from "./wifi-adapter-modes.svelte";
 
 export { mergeModemList };
 
@@ -117,6 +127,17 @@ let updateStateState = $state<UpdateState | undefined>(undefined);
 
 // Network state
 let netifState = $state<NetifMessage | undefined>(undefined);
+let uplinksState = $state<UplinksMessage | undefined>(undefined);
+// The read-only sharing-coexistence verdict. REPLACED wholesale, never merged:
+// every check is an EXPLICIT tri-state, so a field-preserving merge would
+// re-create the raise-but-never-lower latch those explicit values exist to
+// prevent. `undefined` means no snapshot has arrived, which is distinct from a
+// delivered payload whose checks read `unknown`.
+let sharingDiagState = $state<SharingDiag | undefined>(undefined);
+// Replaced wholesale; re-served by the post-login push. `undefined` means no
+// snapshot has arrived and must never render as available/healthy.
+let uplinkSteeringState = $state<UplinkSteeringStatus | undefined>(undefined);
+let uplinkShaperState = $state<UplinkShaperStatus | undefined>(undefined);
 let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
 
@@ -270,6 +291,22 @@ export function getUpdateState() {
 
 export function getNetif() {
 	return netifState;
+}
+
+export function getUplinks(): UplinksMessage | undefined {
+	return uplinksState;
+}
+
+export function getSharingDiag(): SharingDiag | undefined {
+	return sharingDiagState;
+}
+
+export function getUplinkSteering(): UplinkSteeringStatus | undefined {
+	return uplinkSteeringState;
+}
+
+export function getUplinkShaper(): UplinkShaperStatus | undefined {
+	return uplinkShaperState;
 }
 
 export function getWifi() {
@@ -565,6 +602,10 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					...(entry.usb_modem_net
 						? { usb_modem_net: entry.usb_modem_net }
 						: {}),
+					// The backend states this on EVERY ethernet row, `uplink`
+					// included, so the ordinary spread-when-present rule carries the
+					// retraction too — absence means "not an ethernet row".
+					...(entry.ethRole !== undefined ? { ethRole: entry.ethRole } : {}),
 				};
 				// An explicit `router_cellular: null` retracts the classification
 				// WITHOUT retiring the row — the interface is still enumerated, it
@@ -603,6 +644,76 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 		}
 
+		case "eth_role": {
+			// An admitted role transition publishes ONE pending frame then ONE
+			// terminal; the already-applied branch publishes its terminal DIRECTLY,
+			// because nothing was dispatched and no NetworkManager answer will ever
+			// settle. Both shapes land on a pending op — `osCommand` begins it before
+			// the dispatch — so a terminal with no pending frame still settles here.
+			// The key is built INLINE to match the sibling arms rather than importing
+			// `main/network/` into `lib/rpc/`; the two spellings are pinned together
+			// by a test that drives this handler and asserts through
+			// `ethernetRoleOpKey`.
+			const outcome = (
+				data as {
+					eth_role?: {
+						name?: string;
+						role?: string;
+						pending?: boolean;
+						success?: boolean;
+						error?: string;
+					};
+				}
+			)?.eth_role;
+			if (outcome?.name !== undefined) {
+				const key = `eth-role:${outcome.name}`;
+				if (outcome.pending === true) {
+					beginOperation(key, outcome.role);
+				} else if (outcome.error !== undefined) {
+					failOperation(key, outcome.error);
+				} else if (outcome.success === true) {
+					confirmOperation(key);
+				}
+			}
+			break;
+		}
+
+		case "uplinks":
+			uplinksState = data as UplinksMessage;
+			break;
+
+		case "sharing_diag":
+			sharingDiagState = data as SharingDiag;
+			break;
+
+		case "uplink-steering":
+			uplinkSteeringState = data as UplinkSteeringStatus;
+			break;
+
+		case "uplink-shaper":
+			uplinkShaperState = data as UplinkShaperStatus;
+			break;
+
+		case "uplink-flows-reset": {
+			// TRANSIENT: the hard-down drain already happened, so it is never
+			// hydrated and must never become a lingering slot. It is pushed as a
+			// non-persistent notification — deduped by `name`, so a re-broadcast
+			// for the same interface replaces the notice rather than stacking one.
+			const reset = uplinkFlowsResetEventSchema.safeParse(data);
+			if (!reset.success) break;
+			pushNotification({
+				name: `uplink-flows-reset:${reset.data.iface}`,
+				type: "info",
+				key: "notifications.uplinkFlowsReset",
+				params: { iface: reset.data.iface },
+				msg: `Client connections were reset on ${reset.data.iface}`,
+				is_dismissable: true,
+				is_persistent: false,
+				duration: 8,
+			});
+			break;
+		}
+
 		case "audio-level":
 			audioLevelState = data as AudioLevelMessage;
 			break;
@@ -630,6 +741,13 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 						success?: boolean;
 						error?: string;
 					};
+				};
+				adapter_mode?: {
+					device?: string | number;
+					mode?: string;
+					pending?: boolean;
+					success?: boolean;
+					error?: string;
 				};
 			};
 
@@ -664,6 +782,19 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 					confirmOperation(key);
 				} else {
 					failOperation(key, wifiData.hotspot.config.error ?? "failed");
+				}
+			}
+			// `begin` on the pending frame is deliberate: it re-arms the TTL and
+			// makes a transition dispatched from ANOTHER client visible here too.
+			if (wifiData.adapter_mode?.device !== undefined) {
+				const key = `wifi-mode:${wifiData.adapter_mode.device}`;
+				if (wifiData.adapter_mode.pending === true) {
+					beginOperation(key, wifiData.adapter_mode.mode);
+				} else if (wifiData.adapter_mode.error !== undefined) {
+					failOperation(key, wifiData.adapter_mode.error);
+				} else if (wifiData.adapter_mode.success === true) {
+					confirmOperation(key);
+					void refreshWifiAdapterModes();
 				}
 			}
 			break;
@@ -993,6 +1124,10 @@ export function resetState(): void {
 	availableUpdatesState = undefined;
 	updatingState = null;
 	netifState = undefined;
+	uplinksState = undefined;
+	sharingDiagState = undefined;
+	uplinkSteeringState = undefined;
+	uplinkShaperState = undefined;
 	wifiState = undefined;
 	modemsState = undefined;
 	linkTelemetryState = undefined;
@@ -1017,6 +1152,7 @@ export function resetState(): void {
 	activeInputState = undefined;
 	connectionReadyState = false;
 	resetPairingState();
+	resetWifiAdapterModes();
 
 	if (lockExpiryTick !== undefined) {
 		clearInterval(lockExpiryTick);

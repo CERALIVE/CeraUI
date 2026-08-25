@@ -42,6 +42,7 @@ import {
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
+import { isUplinkClientSteeringEligible } from "./uplink-health/state.ts";
 
 export const UPDATE_GW_INT = 2000;
 
@@ -208,7 +209,9 @@ async function updateGw() {
 	}
 
 	const netif = getNetworkInterfaces();
-	const candidates = eligibleProbeCandidates(netif);
+	const candidates = eligibleProbeCandidates(netif).filter((candidate) =>
+		isUplinkClientSteeringEligible(candidate.name),
+	);
 
 	const defaultIf = await resolveDefaultRouteInterface();
 	const claim = decideConnectivityClaim({

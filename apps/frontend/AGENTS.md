@@ -103,6 +103,34 @@ src/
 
 ## RPC PATTERN
 
+### Uplink-health state [EXISTS]
+
+`subscriptions.svelte.ts` is the sole consumer of the backend's `uplinks` push.
+`getUplinks()` exposes the replace-whole `UplinksMessage`; `resetState()` clears it.
+Do not add a second socket consumer or infer health from modem signal/netif fields.
+
+### Sharing-coexistence verdict [EXISTS]
+
+`getSharingDiag()` exposes the backend's read-only `sharing_diag` push — the
+tri-state verdict on whether NetworkManager's shared-mode NAT floor and CeraUI's
+own per-uplink NAT still coexist. Four rules:
+
+- **It is REPLACED wholesale, never merged.** Every check is an EXPLICIT
+  `ok | degraded | unknown`, so a field-preserving merge would re-create exactly
+  the raise-but-never-lower latch those explicit values exist to prevent.
+- **`undefined` means no snapshot has arrived**, which is distinct from a
+  delivered payload whose checks read `unknown`. Never render absence as a clean
+  bill.
+- **`degraded` is never a failure.** Nothing on this signal gates a stream, an
+  interface or a control — it is an honest amber verdict about a coexistence
+  contract, and the reasons are wire-stable tokens that must be resolved to keyed
+  copy at a render site, never printed raw.
+- **A `firewall_backend_unpinned` reading is EXPECTED on a pre-pin image**, not a
+  finding: the `firewall-backend=nftables` pin ships image-side.
+
+The rendered Internet-Sharing surface that consumes it is a separate change; the
+store slot, the ingestion case and its tests are all this one ships.
+
 ```ts
 import { rpc, rpcClient } from '$lib/rpc';
 await rpc.streaming.start(config);          // typed via TypedRPC in client.ts

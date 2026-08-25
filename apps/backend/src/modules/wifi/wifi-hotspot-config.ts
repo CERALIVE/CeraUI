@@ -23,11 +23,14 @@ import {
 	nmConnSetFields,
 	nmDisconnect,
 } from "../network/network-manager.ts";
-import { withDeviceLock } from "../network/state/device-lock.ts";
 import type { MessageSocket } from "../ui/message-socket.ts";
 import { buildMsg, getSocketSenderId } from "../ui/websocket-server.ts";
 import { rememberHotspotCredentials } from "./hotspot-credentials.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
 import { getWifiCapabilitiesForInterface } from "./wifi-capabilities.ts";
 import {
 	type DerivedApChannel,
@@ -42,6 +45,10 @@ import {
 	wifiRescan,
 } from "./wifi-connections.ts";
 import { settlePending, syncWifiStateCache } from "./wifi-hotspot-monitor.ts";
+import {
+	type HotspotOutcomePublisher,
+	publishHotspotOutcome,
+} from "./wifi-hotspot-outcome.ts";
 import {
 	DEFAULT_HOTSPOT_SECURITY,
 	type HotspotSecurityId,
@@ -71,19 +78,48 @@ const HOTSPOT_PASSWORD_MAX_LENGTH = 64;
 
 // ─── stop ────────────────────────────────────────────────────────────────────
 
+export type HotspotStopResult =
+	| { success: true }
+	| {
+			success: false;
+			error:
+				| "DEVICE_BUSY"
+				| "no-device"
+				| "unsupported"
+				| "deactivation-failed";
+	  };
+
 export async function wifiHotspotStop(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["stop"]>,
-) {
+	deps: HotspotStopDeps = defaultHotspotStopDeps,
+): Promise<HotspotStopResult> {
+	const result = await resolveAndStop(msg, deps);
+	deps.publishOutcome?.("stop", msg.device, result);
+	return result;
+}
+
+async function resolveAndStop(
+	msg: NonNullable<WifiHotspotMessage["hotspot"]["stop"]>,
+	deps: HotspotStopDeps,
+): Promise<HotspotStopResult> {
 	const macAddress = getMacAddressForWifiInterface(msg.device);
-	if (!macAddress) return;
+	if (!macAddress) return { success: false, error: "no-device" };
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
-	if (!wifiInterface) return;
-	if (!canHotspot(wifiInterface)) return;
-	if (!isHotspotActive(wifiInterface)) return; // not in hotspot mode, nothing to do
-	if (!wifiInterface.hotspot.conn) return;
+	if (!wifiInterface) return { success: false, error: "no-device" };
+	if (!canHotspot(wifiInterface))
+		return { success: false, error: "unsupported" };
+	/*
+	  A radio already in station mode has nothing to take down. That is the
+	  operator's requested end state, so it is a SUCCESS — reporting it as a
+	  failure would make a double-tap, or a stop racing the confirmation poll,
+	  look broken on a device that is doing exactly what was asked.
+	*/
+	if (!isHotspotActive(wifiInterface) || !wifiInterface.hotspot.conn) {
+		return { success: true };
+	}
 
-	await stopHotspotForInterface(macAddress, wifiInterface);
+	return stopHotspotForInterface(macAddress, wifiInterface, deps);
 }
 
 export type HotspotStopDeps = {
@@ -93,35 +129,45 @@ export type HotspotStopDeps = {
 	broadcastState: typeof broadcastWifiState;
 	setDupIpSuppression: typeof setNetifDupIpSuppression;
 	rescan: typeof wifiRescan;
+	/** Same contract and same optionality reason as `HotspotActivationDeps.publishOutcome`. */
+	publishOutcome?: HotspotOutcomePublisher;
 };
 
-const defaultHotspotStopDeps: HotspotStopDeps = {
+export const defaultHotspotStopDeps: HotspotStopDeps = {
 	nmConnSetFields,
 	nmDisconnect,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
 	broadcastState: broadcastWifiState,
 	setDupIpSuppression: setNetifDupIpSuppression,
 	rescan: wifiRescan,
+	publishOutcome: publishHotspotOutcome,
 };
 
 export async function stopHotspotForInterface(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps = defaultHotspotStopDeps,
-): Promise<void> {
+): Promise<HotspotStopResult> {
 	settlePending(wifiInterface.ifname, false);
-	await withDeviceLock(wifiInterface.ifname, () =>
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		stopHotspotLocked(macAddress, wifiInterface, deps),
 	);
+	if (!lock.success) return { success: false, error: "DEVICE_BUSY" };
+	return lock.result;
 }
 
 async function stopHotspotLocked(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotStopDeps,
-): Promise<void> {
+): Promise<HotspotStopResult> {
 	const conn = wifiInterface.hotspot.conn;
-	if (!conn) return;
+	if (!conn) return { success: true };
+
+	// Read BEFORE the teardown clears it: the dup-IP suppression release below has
+	// to pair with whichever interface took it on the way in, and a capable radio
+	// hosting an EXCLUSIVE hotspot has no virtual netdev at all.
+	const wasConcurrent = wifiInterface.concurrentHotspot !== undefined;
 
 	wifiInterface.hotspot.transition = "deactivating";
 	deps.broadcastState();
@@ -129,7 +175,8 @@ async function stopHotspotLocked(
 
 	await deps.nmConnSetFields(conn, { "connection.autoconnect": "no" });
 
-	if (await deps.nmDisconnect(conn)) {
+	const disconnected = await deps.nmDisconnect(conn);
+	if (disconnected) {
 		if (wifiInterface.concurrentHotspot) {
 			const virtualIfname = wifiInterface.concurrentHotspot.ifname;
 			delete wifiInterface.concurrentHotspot;
@@ -141,12 +188,17 @@ async function stopHotspotLocked(
 	}
 
 	delete wifiInterface.hotspot.transition;
-	if (wifiInterface.supportsApStaConcurrency !== true) {
+	if (!wasConcurrent) {
 		deps.setDupIpSuppression(wifiInterface.ifname, false);
 	}
 	deps.broadcastState();
 	syncWifiStateCache(macAddress, wifiInterface);
 	void deps.rescan();
+	// The transition is cleared either way, so the state broadcast above looks
+	// identical for both outcomes — only this return distinguishes them.
+	return disconnected
+		? { success: true }
+		: { success: false, error: "deactivation-failed" };
 }
 
 // ─── config ──────────────────────────────────────────────────────────────────
@@ -240,16 +292,36 @@ export async function wifiHotspotConfig(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["config"]>,
 	deps: HotspotConfigDeps = defaultHotspotConfigDeps,
 ) {
+	const senderId = getSocketSenderId(conn);
+	/*
+	  These four used to return in silence, which left the dialog's keyed save op
+	  pending until its TTL expired — the operator saw a spinner stop with nothing
+	  said. `unavailable` is one token for all four because they are one operator
+	  fact: this adapter is not currently a reconfigurable hotspot.
+	*/
+	const refuse = () => {
+		conn.send(
+			buildMsg(
+				"wifi",
+				{
+					hotspot: {
+						config: { device: msg.device, error: "unavailable" },
+					},
+				},
+				senderId,
+			),
+		);
+	};
+
 	// Find the Wifi interface
 	const macAddress = getMacAddressForWifiInterface(msg.device);
-	if (!macAddress) return;
+	if (!macAddress) return refuse();
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
-	if (!wifiInterface) return;
-	if (!canHotspot(wifiInterface)) return;
-	if (!isHotspotActive(wifiInterface)) return; // Make sure the interface is already in hotspot mode
-
-	const senderId = getSocketSenderId(conn);
+	if (!wifiInterface) return refuse();
+	if (!canHotspot(wifiInterface)) return refuse();
+	// Make sure the interface is already in hotspot mode
+	if (!isHotspotActive(wifiInterface)) return refuse();
 
 	// Make sure all required fields are present and valid
 	if (
@@ -326,8 +398,9 @@ export async function wifiHotspotConfig(
 	const security =
 		msg.security ?? wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
-	// Serialize the reconfigure against other hotspot operations on this device.
-	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+	// Serialize the reconfigure against every other mutation on this ADAPTER —
+	// the RPC layer's `runGuarded` acquires the identical key.
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		reconfigureHotspotLocked(
 			macAddress,
 			wifiInterface,
@@ -389,7 +462,7 @@ export async function reconfigureHotspotForRegdomain(
 	// is carried through unexamined rather than re-derived.
 	const security = wifiInterface.hotspot.security ?? DEFAULT_HOTSPOT_SECURITY;
 
-	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		reconfigureHotspotLocked(
 			macAddress,
 			wifiInterface,

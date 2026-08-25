@@ -8,8 +8,14 @@
  *       header carries NONE (the former header-level Connect is gone);
  *   (b) clicking a row's Connect opens the WiFi selector scoped to THAT radio's
  *       device (dialog visible + scanned network list renders);
- *   (c) the "Switch to Hotspot" trigger is icon-only — it exposes its accessible
- *       name via aria-label (getByRole button name) and renders no visible text.
+ *   (c) every hotspot-capable station row carries its own Hotspot mode rung.
+ *       Todo 14 replaced the icon-only "Switch to Hotspot" trigger with ONE
+ *       Station/Hotspot/Hybrid selector (`WifiModeSelector.svelte`), so the
+ *       trigger is now a `role="radio"` rung whose accessible name IS the mode's
+ *       own word — the deliberate inversion of the old icon-only rule, because
+ *       the shared mode vocabulary is the point. It still keeps the 44px
+ *       touch-target sizing token. Same guarantee as before (one per radio, each
+ *       bound to its own device), restated against the control that replaced it.
  *
  * Functional spec (NO screenshots — see PLAYBOOK.md). Default worker scenario is
  * `multi-modem-wifi`, which seeds two station radios (both hotspot-capable) — a
@@ -88,22 +94,33 @@ test.describe('Per-interface WiFi connect', () => {
 		}
 	});
 
-	test('the Switch to Hotspot trigger is icon-only (accessible name via aria-label)', async ({
+	test('the Switch to Hotspot trigger is a Hotspot mode rung carrying its own word', async ({
 		authedPage: page,
 	}) => {
 		await navigateTo(page, 'network');
 
 		const section = wifiSection(page);
 
-		// (c) One hotspot trigger per hotspot-capable station row, each exposing
-		// its accessible name through aria-label (getByRole matches it) …
-		const hotspotTriggers = section.getByRole('button', { name: 'Switch to Hotspot' });
-		await expect(hotspotTriggers).toHaveCount(STATION_RADIO_COUNT);
+		// (c) One hotspot rung per hotspot-capable station row, each exposing its
+		// accessible name through the mode's own word (getByRole matches it) …
+		const hotspotRungs = section.getByRole('radio', { name: 'Hotspot', exact: true });
+		await expect(hotspotRungs).toHaveCount(STATION_RADIO_COUNT);
 
-		const first = hotspotTriggers.first();
+		const first = hotspotRungs.first();
 		await expect(first).toBeVisible();
 
-		// … and rendering NO visible text (icon-only).
-		await expect(first).toHaveText('');
+		// … each bound to its OWN radio (one selector per row, distinct testids) …
+		const testIds = await hotspotRungs.evaluateAll((els) =>
+			els.map((el) => el.getAttribute('data-testid')),
+		);
+		expect(testIds.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
+		expect(new Set(testIds).size).toBe(testIds.length);
+
+		// … rendering the VISIBLE word rather than an icon alone (Todo 14's
+		// deliberate inversion — a mode rung's whole job is to carry its word) …
+		await expect(first).toHaveText('Hotspot');
+
+		// … and keeping the 44px touch-target sizing token.
+		await expect(first).toHaveClass(/min-h-\[var\(--touch-target-min\)\]/);
 	});
 });

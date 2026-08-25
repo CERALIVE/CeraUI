@@ -71,6 +71,18 @@ const NOT_I18N_KEYS = new Set<string>([
 	// control-protocol self-fencing op name, `modules/remote-control/
 	// self-fencing.ts` — collides with the `network.*` namespace.
 	"network.reconfig",
+	// spawn-policy site identifier from `helpers/spawn-policy.ts` (todo19), collides with the `network.*` namespace.
+	"network.nft",
+	// spawn-policy site identifier from `helpers/spawn-policy.ts` (todo19), collides with the `network.*` namespace.
+	"network.tc",
+	// spawn-policy site identifier from `helpers/spawn-policy.ts` (todo19), collides with the `network.*` namespace.
+	"network.sysctl",
+	// spawn-policy site identifier from `helpers/spawn-policy.ts` (todo19), collides with the `network.*` namespace.
+	"network.conntrack",
+	// spawn-policy site identifier from `helpers/spawn-policy.ts` (todo11's
+	// `nft list ruleset` READ, registered as its own bounded-probe class beside
+	// todo19's `network.nft` write), collides with the `network.*` namespace.
+	"network.nftRead",
 ]);
 
 /**

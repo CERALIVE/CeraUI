@@ -71,6 +71,7 @@ import {
 import {
 	configureNetworkInterfaceProcedure,
 	getNetworkInterfacesProcedure,
+	setEthernetRoleProcedure,
 	setNetworkIngestEnabledProcedure,
 } from "./procedures/network.procedure.ts";
 import {
@@ -128,10 +129,12 @@ import {
 	startUpdateProcedure,
 } from "./procedures/system.procedure.ts";
 import {
+	getWifiAdapterModesProcedure,
 	getWifiStatusProcedure,
 	hotspotConfigureProcedure,
 	hotspotStartProcedure,
 	hotspotStopProcedure,
+	setWifiAdapterModeProcedure,
 	setWifiCountryProcedure,
 	wifiConnectNewProcedure,
 	wifiConnectProcedure,
@@ -223,6 +226,8 @@ const stableRoutes = {
 		hotspotStop: hotspotStopProcedure,
 		hotspotConfigure: hotspotConfigureProcedure,
 		setCountry: setWifiCountryProcedure,
+		getAdapterModes: getWifiAdapterModesProcedure,
+		setAdapterMode: setWifiAdapterModeProcedure,
 	}),
 
 	bluetooth: base.router({
@@ -242,6 +247,7 @@ const stableRoutes = {
 		getInterfaces: getNetworkInterfacesProcedure,
 		configure: configureNetworkInterfaceProcedure,
 		setIngestEnabled: setNetworkIngestEnabledProcedure,
+		setEthernetRole: setEthernetRoleProcedure,
 	}),
 
 	system: base.router({

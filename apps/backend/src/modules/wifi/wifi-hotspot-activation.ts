@@ -23,10 +23,14 @@ import {
 	nmConnSetFields,
 	nmHotspot,
 } from "../network/network-manager.ts";
-import { withDeviceLock } from "../network/state/device-lock.ts";
 import { hotspotCredentialsStore } from "./hotspot-credentials.ts";
 import { getWifiState, setWifiState } from "./state/wifi-state.ts";
 import { broadcastWifiState, wifiUpdateSavedConns } from "./wifi.ts";
+import {
+	wifiAdapterLockKey,
+	withWifiAdapterLock,
+} from "./wifi-adapter-lock.ts";
+import { getPersistedWifiAdapterMode } from "./wifi-adapter-mode.ts";
 import {
 	concurrentHotspotBindingFields,
 	ensureConcurrentApInterface,
@@ -41,6 +45,7 @@ import {
 	registerPendingConfirmation,
 	syncWifiStateCache,
 } from "./wifi-hotspot-monitor.ts";
+import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
 import {
 	canHotspot,
 	HOTSPOT_AUTOCONNECT_FIELDS,
@@ -72,6 +77,9 @@ export const defaultHotspotDeps: HotspotActivationDeps = {
 	},
 	ensureConcurrentInterface: ensureConcurrentApInterface,
 	releaseConcurrentInterface: releaseConcurrentApInterface,
+	preferConcurrentAp: (macAddress) =>
+		getPersistedWifiAdapterMode(macAddress) !== "hotspot",
+	publishOutcome: publishHotspotOutcome,
 	pollHotspotActive: async (iface) => {
 		// Re-poll authoritative NM device state, then check whether the active
 		// connection now matches our hotspot connection.
@@ -86,6 +94,23 @@ export async function wifiHotspotStart(
 	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
+	const result = await resolveAndStart(msg, deps);
+	/*
+	  A refusal ends here, so it is published here. A SUCCESS is deliberately not:
+	  it means the transaction was admitted, and the terminal frame for it is owed
+	  by whichever branch actually resolved the outcome — the already-active
+	  short-circuit publishes immediately, a real activation publishes when the
+	  bounded NM confirmation settles. Publishing success twice would resolve the
+	  operator's op before NetworkManager has answered.
+	*/
+	if (!result.success) deps.publishOutcome?.("start", msg.device, result);
+	return result;
+}
+
+async function resolveAndStart(
+	msg: NonNullable<WifiHotspotMessage["hotspot"]["start"]>,
+	deps: HotspotActivationDeps,
+): Promise<HotspotStartResult> {
 	const macAddress = getMacAddressForWifiInterface(msg.device);
 	if (!macAddress) return { success: false, error: "no-device" };
 
@@ -98,16 +123,22 @@ export async function wifiHotspotStart(
 }
 
 /**
- * Atomic station→hotspot switch for a resolved interface. Serialized per device
- * via {@link withDeviceLock}; a concurrent request on the same device returns
+ * Atomic station→hotspot switch for a resolved interface. Serialized per ADAPTER
+ * under the canonical permanent-MAC key — the same key the RPC layer's
+ * `runGuarded` acquires — so a concurrent request from either layer returns
  * `DEVICE_BUSY` without touching state.
+ *
+ * It is keyed on the adapter, never on `wifiInterface.ifname`: the AP+STA
+ * concurrent path activates on a SECOND, virtual interface belonging to this
+ * same radio, so an ifname key would leave the parent's station mutations
+ * unguarded for the whole activation.
  */
 export async function startHotspotForInterface(
 	macAddress: string,
 	wifiInterface: WifiInterfaceWithHotspot,
 	deps: HotspotActivationDeps = defaultHotspotDeps,
 ): Promise<HotspotStartResult> {
-	const lock = await withDeviceLock(wifiInterface.ifname, () =>
+	const lock = await withWifiAdapterLock(wifiAdapterLockKey(macAddress), () =>
 		startHotspotLocked(macAddress, wifiInterface, deps),
 	);
 	if (!lock.success) return { success: false, error: lock.error };
@@ -127,16 +158,25 @@ async function startHotspotLocked(
 			wifiInterface.concurrentHotspot?.activeConn ===
 				wifiInterface.hotspot.conn)
 	) {
+		// Already up: nothing is dispatched, so no confirmation will ever settle
+		// and this branch owes the terminal frame itself.
+		deps.publishOutcome?.("start", wifiInterface.id, { success: true });
 		return { success: true };
 	}
-	const concurrentInterface =
-		wifiInterface.supportsApStaConcurrency === true
-			? await deps.ensureConcurrentInterface?.(ifname)
-			: undefined;
-	if (
+	/*
+	  Capability answers whether this radio CAN keep its station leg; the operator's
+	  persisted mode answers whether it SHOULD. `hotspot` means an EXCLUSIVE access
+	  point, so a capable radio must still take the exclusive path when that is what
+	  was asked for. An adapter with no stated preference resolves to concurrency,
+	  which is the behaviour every capable radio had before the mode was selectable.
+	*/
+	const useConcurrentAp =
 		wifiInterface.supportsApStaConcurrency === true &&
-		concurrentInterface === undefined
-	) {
+		(deps.preferConcurrentAp?.(macAddress) ?? true);
+	const concurrentInterface = useConcurrentAp
+		? await deps.ensureConcurrentInterface?.(ifname)
+		: undefined;
+	if (useConcurrentAp && concurrentInterface === undefined) {
 		return { success: false, error: "activation-failed" };
 	}
 	const activationIfname = concurrentInterface?.ifname ?? ifname;

@@ -23,7 +23,7 @@
  * (which ignores the deps argument and calls the real module-level broadcast)
  * the spy is never invoked → these tests FAIL, which is the intended RED state.
  */
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import { setup } from "../modules/setup.ts";
 import { getSshStatus, type SshStatusDeps } from "../modules/system/ssh.ts";
@@ -34,6 +34,14 @@ function shadowLine(user: string): string {
 }
 
 describe("getSshStatus — async race / single-broadcast (Task 6)", () => {
+	let savedSshUser: string | undefined;
+	beforeEach(() => {
+		savedSshUser = setup.ssh_user;
+	});
+	afterEach(() => {
+		setup.ssh_user = savedSshUser;
+	});
+
 	test("broadcasts EXACTLY ONCE with a complete status when both probes succeed", async () => {
 		// Distinct user per test keeps the module-level change-guard from
 		// suppressing the broadcast regardless of test execution order.

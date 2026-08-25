@@ -46,8 +46,12 @@ import {
 } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc';
 import { getWifi } from '$lib/rpc/subscriptions.svelte';
-import { wifiScanSignature } from '$lib/rpc/wifi-scan-signature';
-import { deriveWifiConnectOutcome } from '$lib/rpc/wifi-connect-outcome';
+import { hasScanGenerationAdvanced } from '$lib/rpc/wifi-scan-generation';
+import {
+	deriveWifiConnectIdentityOutcome,
+	mintWifiConnectCorrelationId,
+	type PendingWifiConnect,
+} from '$lib/rpc/wifi-connect-identity';
 
 import WifiNetworkList from './WifiNetworkList.svelte';
 
@@ -83,36 +87,41 @@ const sortedNetworks = $derived(
 	}),
 );
 
-// Scan key — DISTINCT from the connect/disconnect/forget key. The scan op is
-// tracked through the keyed async-operation state machine; its `pending` phase
-// drives the spinner and its content-signature confirm resolves it.
+// THE scan key for this adapter — ONE op for the manual tap AND the periodic
+// background refresh, DISTINCT from the connect/disconnect/forget key.
+//
+// They used to be two keys (`wifi-scan:` and `wifi-scan-auto:`), which is what
+// made cross-confirmation possible: two ops watched the same shared evidence
+// (the content of `available`), so whichever broadcast landed first resolved
+// BOTH, and a periodic tick could clear the operator's manual spinner without
+// their scan having finished. With one op there is nothing to cross-confirm,
+// and the confirmation is the adapter's own scan generation rather than shared
+// content. The two INTENTS are still distinguished — see `scanIntent` — so the
+// background poll still never toasts and still never drives the spinner.
 const scanKey = $derived(`wifi-scan:${deviceId}`);
 
 // Connect / disconnect / forget share ONE key per interface — the osCommand
 // re-entry guard enforces a single WiFi mutation in flight at a time.
 const wifiOpKey = $derived(`wifi:${deviceId}`);
 
-// Periodic (silent) rescan key — DISTINCT from the manual `scanKey` so the
-// background poll never drives the manual-scan spinner. Routed through
-// `osCommand` purely so a failing tick is caught + surfaced (no unhandled
-// rejection, calm error state) instead of a bare fire-and-forget.
-const periodicScanKey = $derived(`wifi-scan-auto:${deviceId}`);
+// How often the open dialog refreshes the list in the background.
+const PERIODIC_SCAN_INTERVAL_MS = 22_000;
 
-// A scan-error surface flag: true when EITHER the manual or the periodic scan op
-// left the machine in `failed`. Extends the list's scanning-vs-empty distinction
-// with a calm failure state. A subsequent successful scan re-arms the op and
-// clears it.
-const scanError = $derived(
-	getOperationPhase(scanKey) === 'failed' ||
-		getOperationPhase(periodicScanKey) === 'failed',
-);
+// A scan-error surface flag: true when the scan op left the machine in `failed`.
+// Extends the list's scanning-vs-empty distinction with a calm failure state. A
+// subsequent successful scan re-arms the op and clears it.
+const scanError = $derived(getOperationPhase(scanKey) === 'failed');
 
 // Inline interaction state.
-// `connecting` is the local intent for the third op sharing `wifiOpKey`: the SSID
-// this surface is connecting to. Kept set through `timed_out` so the row can
+// `connecting` is the local intent for the third op sharing `wifiOpKey`. It
+// carries the dispatched profile's IDENTITY — the saved uuid, or a minted
+// correlation id for a fresh join — never a bare SSID. An SSID is not an
+// identity: NetworkManager holds several saved profiles under one, so an
+// SSID-keyed confirm resolved this op the moment ANY of them came up. See
+// `$lib/rpc/wifi-connect-identity`. Kept set through `timed_out` so the row can
 // render the calm "still connecting / Retry" affordance; cleared on confirm
 // (close), hard fail, or idle decay.
-let connecting = $state<string | undefined>(undefined);
+let connecting = $state<PendingWifiConnect | undefined>(undefined);
 let pendingNew = $state<AvailableWifiNetwork | undefined>(undefined);
 let password = $state('');
 let showPassword = $state(false);
@@ -132,9 +141,19 @@ let joinFailure = $state<string | undefined>(undefined);
 let disconnecting = $state<string | undefined>(undefined);
 let forgetting = $state<string | undefined>(undefined);
 
-// Signature of the available-network set captured at scan dispatch. A later
-// broadcast whose signature differs confirms the scan (new/removed AP).
-let scanBaseline = $state<string | undefined>(undefined);
+// Which intent the in-flight scan is serving. The op is shared, so this is what
+// keeps a background tick from driving the operator's spinner or toasting at
+// them. A manual tap arriving while a background tick is in flight PROMOTES it
+// rather than dispatching a second scan — the operator's request is exactly what
+// that run already delivers.
+let scanIntent = $state<'manual' | 'auto' | undefined>(undefined);
+
+// This adapter's scan generation as captured at dispatch. The scan is confirmed
+// when the device reports a HIGHER one, so an honest empty result confirms just
+// as a fruitful one does. `scanAwaitingGeneration` distinguishes "no scan has
+// been dispatched" from "a scan was dispatched against generation undefined".
+let scanBaseline = $state<number | undefined>(undefined);
+let scanAwaitingGeneration = $state(false);
 
 function resetInteraction() {
 	pendingNew = undefined;
@@ -145,35 +164,68 @@ function resetInteraction() {
 
 // Dispatch a connect (saved or new) through the shared keyed op. The subscriptions
 // `wifi` handler resolves the op on the broadcast result; the connect-confirm
-// $effect below adds a snapshot-based secondary confirm and owns close-on-success.
-async function connectVia(ssid: string, run: () => Promise<unknown>) {
+// $effect below adds an IDENTITY-based secondary confirm and owns close-on-success.
+//
+// `pending` is built by the caller because only it knows which identity applies:
+// a saved row has its profile uuid, a fresh join has none and takes a minted
+// correlation id instead. `baselineConn` is captured HERE, at dispatch, so a
+// fresh join can tell "the active connection moved" from "it was already there".
+async function connectVia(pending: PendingWifiConnect, run: () => Promise<unknown>) {
 	if (ifaceBusy || isOperationPending(wifiOpKey)) return;
 	joinFailure = undefined;
-	connecting = ssid;
+	connecting = pending;
 	await osCommand({
 		key: wifiOpKey,
-		target: ssid,
+		target: pending.ssid,
 		rpc: run,
 		failMessage: () => m["network.os.operationFailed"](),
 		busyMessage: () => m["network.os.deviceBusy"](),
 	});
 }
 
-async function handleScan() {
-	// Capture the baseline BEFORE dispatch so a fresh result is detectable.
-	scanBaseline = wifiScanSignature(iface?.available ?? []);
+/** A fresh (unsaved) join: no profile uuid exists yet, so mint a correlation id. */
+function newConnectIntent(ssid: string): PendingWifiConnect {
+	return {
+		ssid,
+		correlationId: mintWifiConnectCorrelationId(),
+		baselineConn: iface?.conn,
+	};
+}
+
+/**
+ * Dispatch a scan on THIS adapter's single keyed op, or join the one already in
+ * flight. Never a second RPC for the same adapter — the device coalesces them
+ * anyway, and a joined caller is served by the run it joined.
+ */
+async function dispatchScan(intent: 'manual' | 'auto') {
+	if (isOperationPending(scanKey)) {
+		if (intent === 'manual') scanIntent = 'manual';
+		return;
+	}
+	scanIntent = intent;
+	// Capture the baseline BEFORE dispatch, or a generation that advanced while
+	// the RPC was in flight would be read as the pre-scan value.
+	scanBaseline = iface?.scanGeneration;
+	scanAwaitingGeneration = true;
 	await osCommand({
 		key: scanKey,
 		rpc: () => rpc.wifi.scan({ device: deviceId }),
+		silent: intent === 'auto',
 		busyMessage: () => m["network.os.deviceBusy"](),
 		failMessage: () => m["network.os.operationFailed"](),
 	});
 }
 
+async function handleScan() {
+	await dispatchScan('manual');
+}
+
 function handleConnectSaved(uuid: string, network: AvailableWifiNetwork) {
 	if (ifaceBusy || wifiRowBlock(network, iface?.capabilities)) return;
 	resetInteraction();
-	void connectVia(network.ssid, () => rpc.wifi.connect({ uuid }));
+	void connectVia({ ssid: network.ssid, uuid, baselineConn: iface?.conn }, () =>
+		rpc.wifi.connect({ uuid }),
+	);
 }
 
 async function handleDisconnect(uuid: string, network: AvailableWifiNetwork) {
@@ -199,7 +251,7 @@ function handleConnectNew(network: AvailableWifiNetwork) {
 	} else {
 		const ssid = network.ssid;
 		const security = network.security;
-		void connectVia(ssid, () =>
+		void connectVia(newConnectIntent(ssid), () =>
 			rpc.wifi.connectNew({ device: deviceId, ssid, password: '', security }),
 		);
 	}
@@ -214,7 +266,7 @@ function submitNew() {
 	pendingNew = undefined;
 	password = '';
 	showPassword = false;
-	void connectVia(ssid, () =>
+	void connectVia(newConnectIntent(ssid), () =>
 		rpc.wifi.connectNew({ device: deviceId, ssid, password: pw, security }),
 	);
 }
@@ -233,13 +285,22 @@ async function handleForget(uuid: string, network: AvailableWifiNetwork) {
 }
 
 // Connect confirm: the subscriptions `wifi` handler routes the broadcast result
-// into `wifiOpKey`; this effect adds a snapshot-based SECONDARY confirm (the
-// target SSID showing active) and owns close-on-success. The `connecting` intent
-// is kept through `timed_out` so the row renders the calm Retry affordance — it
-// is cleared only on confirm (close), hard fail, or idle decay.
+// into `wifiOpKey`; this effect adds an IDENTITY-based SECONDARY confirm and owns
+// close-on-success. The `connecting` intent is kept through `timed_out` so the
+// row renders the calm Retry affordance — it is cleared only on confirm (close),
+// hard fail, or idle decay.
+//
+// The secondary confirm used to be "a network with the target SSID is active".
+// That is not evidence about THIS dispatch: several saved profiles can carry one
+// SSID, so a sibling coming up — an auto-connect, a neighbouring profile the
+// operator never chose — closed this dialog reporting success for a connection
+// nobody asked for. `deriveWifiConnectIdentityOutcome` compares the interface's
+// own active-connection uuid against the dispatched identity instead, which is
+// the same "confirm on a durable identity, never on content" rule todo 3's scan
+// generation established.
 $effect(() => {
-	const ssid = connecting;
-	if (!ssid) return;
+	const pending = connecting;
+	if (!pending) return;
 	const phase = getOperationPhase(wifiOpKey);
 	if (phase === 'confirmed') {
 		connecting = undefined;
@@ -252,26 +313,31 @@ $effect(() => {
 		connecting = undefined;
 		return;
 	}
-	if (
-		phase === 'pending' &&
-		deriveWifiConnectOutcome({}, deviceId, ssid, iface?.available ?? []) === 'confirmed'
-	) {
+	if (phase === 'pending' && deriveWifiConnectIdentityOutcome(pending, iface) === 'confirmed') {
 		confirmOperation(wifiOpKey);
 	}
 });
 
-// Confirm a manual scan when its content signature changes (a new/removed AP),
-// NOT on a mere getWifi() reference change — a periodic full-state re-broadcast
-// re-references the same set and must not clear the spinner. An environment that
-// yields no new networks legitimately produces no change: the absolute TTL valve
-// (ASYNC_OP_TTL_MS) then flips the op to timed_out, rendered NEUTRALLY as "scan
-// complete", never an error.
+// Confirm the scan when THIS adapter's generation advances — the device's own
+// statement that a scan cycle finished, whatever it found. A scan that turns up
+// nothing new, or nothing at all, therefore confirms exactly as a fruitful one
+// does, and the empty list it publishes is that scan's honest result rather than
+// an unresolved spinner.
+//
+// A device that reports no generation at all confirms nothing, and the absolute
+// TTL valve (ASYNC_OP_TTL_MS) then flips the op to timed_out — rendered
+// NEUTRALLY as "scan complete", never an error, exactly as before this field
+// existed.
 $effect(() => {
-	if (getOperationPhase(scanKey) !== 'pending') return;
-	const currentSig = wifiScanSignature(iface?.available ?? []);
-	if (scanBaseline !== undefined && currentSig !== scanBaseline) {
+	if (getOperationPhase(scanKey) !== 'pending') {
+		scanIntent = undefined;
+		scanAwaitingGeneration = false;
+		return;
+	}
+	if (!scanAwaitingGeneration) return;
+	if (hasScanGenerationAdvanced(scanBaseline, iface?.scanGeneration)) {
 		confirmOperation(scanKey);
-		scanBaseline = undefined;
+		scanAwaitingGeneration = false;
 	}
 });
 
@@ -307,15 +373,15 @@ $effect(() => {
 	}
 });
 
-// Initial + periodic silent rescan while the dialog is open. Still a passive
-// query-style refresh keyed on `periodicScanKey` — DISTINCT from the manual
-// `scanKey`, so it never drives the manual-scan spinner. It routes through
-// `osCommand` (not a raw fire-and-forget) SO A FAILING TICK IS CAUGHT: no
-// unhandled promise rejection. `silent` suppresses the toast — a background op
-// never interrupts with a toast; the failing tick surfaces only through the calm
-// `wifi-scan-error` band (via `scanError`). `confirmOnResolve` resolves the ok
-// path immediately (scan RPC has no completion marker) which also re-arms +
-// clears a prior failure on the next successful tick.
+// Initial + periodic silent rescan while the dialog is open. It shares the ONE
+// keyed scan op with the manual tap (so cross-confirmation is structurally
+// impossible) and is distinguished only by its `auto` intent, which is what
+// keeps it out of the spinner and out of the toast: `silent` suppresses the
+// toast — a background op never interrupts with one — so a failing tick surfaces
+// only through the calm `wifi-scan-error` band (via `scanError`), and the next
+// successful tick re-arms and clears it. It confirms on the SAME generation
+// advance the manual scan does; it never `confirmOnResolve`s, because the RPC
+// resolving says only that nmcli was dispatched.
 //
 // THE DISPATCH IS `untrack`ed, AND THAT IS THE WHOLE POINT OF THIS EFFECT.
 // `osCommand` reads the async-operation store (its re-entry guard,
@@ -342,15 +408,10 @@ $effect(() => {
 	if (!open) return;
 	const runSilentScan = () =>
 		untrack(() => {
-			void osCommand({
-				key: periodicScanKey,
-				rpc: () => rpc.wifi.scan({ device: deviceId }),
-				confirmOnResolve: true,
-				silent: true,
-			});
+			void dispatchScan('auto');
 		});
 	runSilentScan();
-	const id = setInterval(runSilentScan, 22000);
+	const id = setInterval(runSilentScan, PERIODIC_SCAN_INTERVAL_MS);
 	return () => clearInterval(id);
 });
 
@@ -362,6 +423,8 @@ $effect(() => {
 		disconnecting = undefined;
 		forgetting = undefined;
 		scanBaseline = undefined;
+		scanAwaitingGeneration = false;
+		scanIntent = undefined;
 		joinFailure = undefined;
 	}
 });
@@ -417,7 +480,8 @@ $effect(() => {
 		passwordMin={PASSWORD_MIN}
 		{pendingNew}
 		{scanError}
-		scanning={getOperationPhase(scanKey) === 'pending'}
+		scanning={scanIntent === 'manual' && getOperationPhase(scanKey) === 'pending'}
+		scanInFlight={getOperationPhase(scanKey) === 'pending'}
 		bind:password
 		bind:showPassword
 	/>

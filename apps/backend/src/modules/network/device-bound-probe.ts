@@ -148,6 +148,30 @@ export const defaultDeviceBoundProbeDeps: DeviceBoundProbeDeps = {
 	shouldUseMocks,
 };
 
+export type DeviceProbeVerdict = "reachable" | "captive_portal" | "unreachable";
+
+export async function probeConnectivityViaDevice(
+	remoteAddr: string,
+	ifname: string,
+	deps: DeviceBoundProbeDeps = defaultDeviceBoundProbeDeps,
+): Promise<DeviceProbeVerdict> {
+	if (deps.shouldUseMocks()) return "reachable";
+	try {
+		const result = await deps.runProbe(
+			buildDeviceBoundProbeArgv(remoteAddr, ifname),
+		);
+		const { code, body } = parseCurlProbeResponse(result.stdout);
+		if (code === CONNECTIVITY_CHECK_CODE && body === "") return "reachable";
+		if ((code >= 300 && code < 400) || body.length > 0) return "captive_portal";
+		return "unreachable";
+	} catch (err) {
+		logger.debug(
+			`device-bound connectivity probe via ${ifname} failed: ${String(err)}`,
+		);
+		return "unreachable";
+	}
+}
+
 /**
  * Is `remoteAddr` reachable through the physical interface `ifname`?
  *
@@ -160,18 +184,7 @@ export async function checkConnectivityViaDevice(
 	ifname: string,
 	deps: DeviceBoundProbeDeps = defaultDeviceBoundProbeDeps,
 ): Promise<boolean> {
-	if (deps.shouldUseMocks()) return true;
-
-	try {
-		const result = await deps.runProbe(
-			buildDeviceBoundProbeArgv(remoteAddr, ifname),
-		);
-		const { code, body } = parseCurlProbeResponse(result.stdout);
-		return code === CONNECTIVITY_CHECK_CODE && body === "";
-	} catch (err) {
-		logger.debug(
-			`device-bound connectivity probe via ${ifname} failed: ${String(err)}`,
-		);
-		return false;
-	}
+	return (
+		(await probeConnectivityViaDevice(remoteAddr, ifname, deps)) === "reachable"
+	);
 }

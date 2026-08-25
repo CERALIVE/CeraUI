@@ -43,6 +43,8 @@ vi.mock("$lib/rpc/client", () => ({
 			hotspotStart: vi.fn(),
 			hotspotStop: vi.fn(),
 			hotspotConfigure: vi.fn(async () => ({ success: true })),
+			getAdapterModes: vi.fn(async () => ({})),
+			setAdapterMode: vi.fn(async () => ({ success: true, accepted: true })),
 		},
 	},
 	// `osCommand` pulls the connection-ux store, which subscribes to the client.

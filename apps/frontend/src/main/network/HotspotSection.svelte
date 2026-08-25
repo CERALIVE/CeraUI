@@ -11,16 +11,26 @@
   This is the ONLY surface that renders per-client telemetry — the same rule that
   makes BondedLinksSection the sole owner of per-link RTT/NAK/weight. Do not
   restate a client's signal or rate on another card.
+
+  The card's state pill is the SHARED mode badge, derived from the SAME rule the
+  WiFi row's selector reads. It used to say "WiFi + AP" or "Active" off a local
+  `supports_ap_sta_concurrency` read — a second vocabulary for a fact the other
+  card was already naming, and the one the operator had to reconcile by eye.
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import type { WifiInterface } from '@ceraui/rpc/schemas';
 import { ChevronRight, Router, Users } from '@lucide/svelte';
 
+import { getOperationPhase, getOperationTarget } from '$lib/rpc/async-operation.svelte';
 import { Button } from '$lib/components/ui/button';
 import { signalTextClass } from '$lib/helpers/signal';
+import { getWifiAdapterModeEntry } from '$lib/rpc/wifi-adapter-modes.svelte';
 
+import WifiModeBadge from './WifiModeBadge.svelte';
+import { deriveWifiAdapterModeView, wifiModeTarget } from './wifi-adapter-mode-view';
 import { deriveHotspotClientsView, formatClientRatePair } from './hotspot-clients-view';
+import { wifiModeOpKey } from './wifi-station-lock';
 
 interface Props {
 	hotspotInterfaces: [string, WifiInterface][];
@@ -68,6 +78,13 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 		{:else}
 			{#each hotspotInterfaces as [id, iface] (id)}
 				{@const clients = deriveHotspotClientsView(iface.hotspot)}
+				{@const modeView = deriveWifiAdapterModeView({
+					device: id,
+					iface,
+					entry: getWifiAdapterModeEntry(id),
+					phase: getOperationPhase(wifiModeOpKey(id)),
+					target: wifiModeTarget(getOperationTarget(wifiModeOpKey(id))),
+				})}
 				<div class="px-4 py-3">
 					<div class="flex items-center gap-3">
 						<span class="bg-status-info size-2 shrink-0 rounded-full" aria-hidden="true"></span>
@@ -77,13 +94,7 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 								{m["network.view.active"]()} · {iface.ifname}
 							</p>
 						</div>
-						<span
-							class="bg-status-info/10 text-status-info rounded-md px-1.5 py-0.5 text-xs font-medium"
-						>
-							{iface.supports_ap_sta_concurrency
-								? m["network.view.concurrentModeBadge"]()
-								: m["network.view.active"]()}
-						</span>
+						<WifiModeBadge device={id} mode={modeView.displayMode} />
 					</div>
 
 					{#if clients}

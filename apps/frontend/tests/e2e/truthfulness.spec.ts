@@ -185,6 +185,14 @@ let dropServerBluetooth = false;
 // only; the real backend rejects unknown ids. Captured inputs are asserted on.
 let fakeSetConfig = false;
 const setConfigCalls: Record<string, unknown>[] = [];
+// `wifi.getAdapterModes` is a PULL, not a broadcast, so the drop-and-inject
+// mechanism above cannot reach it. When set, the proxy resolves that RPC
+// client-side with this map — the same shape `fakeSetConfig` uses — so the
+// per-adapter mode offering is test-authoritative against a backend that knows
+// nothing about the injected radios. `wifi.setAdapterMode` is answered with the
+// device's own "admitted, a terminal frame follows" reply.
+let fakeAdapterModes: Record<string, unknown> | undefined;
+const setAdapterModeCalls: Record<string, unknown>[] = [];
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
@@ -636,6 +644,8 @@ test.describe("Capability truthfulness (functional)", () => {
 		dropServerBluetooth = true;
 		fakeSetConfig = false;
 		setConfigCalls.length = 0;
+		fakeAdapterModes = undefined;
+		setAdapterModeCalls.length = 0;
 
 		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
@@ -659,6 +669,39 @@ test.describe("Capability truthfulness (functional)", () => {
 									JSON.stringify({
 										id: frame.id,
 										result: { success: true, applied: frame.input ?? {} },
+									}),
+								);
+							}
+							return;
+						}
+					} catch {
+						/* non-RPC frame */
+					}
+				}
+				if (fakeAdapterModes !== undefined) {
+					const text = typeof m === "string" ? m : m.toString();
+					try {
+						const frame = JSON.parse(text) as {
+							id?: string | number;
+							path?: unknown;
+							input?: Record<string, unknown>;
+						};
+						const rpc = Array.isArray(frame.path) ? frame.path.join(".") : null;
+						if (rpc === "wifi.getAdapterModes") {
+							if (frame.id !== undefined) {
+								ws.send(
+									JSON.stringify({ id: frame.id, result: fakeAdapterModes }),
+								);
+							}
+							return;
+						}
+						if (rpc === "wifi.setAdapterMode") {
+							setAdapterModeCalls.push(frame.input ?? {});
+							if (frame.id !== undefined) {
+								ws.send(
+									JSON.stringify({
+										id: frame.id,
+										result: { success: true, accepted: true },
 									}),
 								);
 							}
@@ -2152,6 +2195,177 @@ test.describe("Capability truthfulness (functional)", () => {
 			"data-same-channel",
 			"false",
 		);
+	});
+
+	// ── (a) Wi-Fi: the Station/Hotspot/Hybrid mode control follows the DEVICE ───
+	// The mode offering is a PULL (`wifi.getAdapterModes`), so it is injected
+	// through the RPC seam rather than the broadcast one. `options` is TOTAL on
+	// the wire — all three modes, always — so a rung that disappears here is a
+	// bug, and a rung that goes disabled must still say why.
+	const modeRung = (page: Page, mode: string) =>
+		page.getByTestId(`wifi-mode-option-0-${mode}`);
+	const modeReason = (page: Page, mode: string) =>
+		page.getByTestId(`wifi-mode-reason-0-${mode}`);
+
+	function adapterModes(
+		mode: "station" | "hotspot" | "hybrid",
+		hybrid: { available: boolean; reason?: string },
+	): Record<string, unknown> {
+		return {
+			0: {
+				ifname: "wlan0",
+				mode,
+				options: [
+					{ mode: "station", available: true },
+					{ mode: "hotspot", available: true },
+					{
+						mode: "hybrid",
+						available: hybrid.available,
+						...(hybrid.reason ? { reason: hybrid.reason } : {}),
+					},
+				],
+			},
+		};
+	}
+
+	test("the Hybrid mode rung flips enabled ⇄ disabled-with-reason as the radio's AP+STA capability changes", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		fakeAdapterModes = adapterModes("station", { available: true });
+		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
+
+		await navigateTo(page, "network");
+
+		const selector = page.getByTestId("wifi-mode-selector");
+		await expect(selector).toBeVisible({ timeout: 15_000 });
+		await expect(selector).toHaveAttribute("data-mode", "station");
+
+		// PROVEN: all three rungs are real, enabled choices and none carries a
+		// reason — the control is not withholding anything.
+		for (const mode of ["station", "hotspot", "hybrid"]) {
+			await expect(modeRung(page, mode)).toBeEnabled();
+			await expect(modeRung(page, mode)).toHaveAttribute(
+				"data-available",
+				"true",
+			);
+			await expect(modeRung(page, mode)).not.toHaveAttribute(
+				"aria-disabled",
+				"true",
+			);
+		}
+		await expect(page.getByTestId("wifi-mode-reason-0-hybrid")).toHaveCount(0);
+
+		// PROVEN NEGATIVE: the DOM genuinely flips. Hybrid goes disabled AND
+		// `aria-disabled`, stays on screen (never hidden), and states its reason
+		// as visible text rather than only in a title.
+		fakeAdapterModes = adapterModes("station", {
+			available: false,
+			reason: "capability-absent",
+		});
+		await page.reload();
+		await ensureAuthenticated(page);
+		serverConfig();
+		sendFullCaps();
+		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
+		await navigateTo(page, "network");
+
+		await expect(modeRung(page, "hybrid")).toBeDisabled();
+		await expect(modeRung(page, "hybrid")).toHaveAttribute(
+			"aria-disabled",
+			"true",
+		);
+		await expect(modeRung(page, "hybrid")).toHaveAttribute(
+			"data-available",
+			"false",
+		);
+		// The other two are UNAFFECTED — a withheld rung must not disable siblings.
+		await expect(modeRung(page, "station")).toBeEnabled();
+		await expect(modeRung(page, "hotspot")).toBeEnabled();
+
+		const absentReason = modeReason(page, "hybrid");
+		await expect(absentReason).toBeVisible();
+		await expect(absentReason).toHaveAttribute(
+			"data-reason",
+			"capability-absent",
+		);
+		await expect(absentReason).not.toBeEmpty();
+		// Never a raw dotted key at an operator.
+		await expect(absentReason).not.toContainText("network.wifiMode.");
+		const absentCopy = (await absentReason.textContent()) ?? "";
+
+		// UNKNOWN is a DIFFERENT fact from a proven negative, and must not borrow
+		// its sentence: absence of evidence is not evidence of absence.
+		fakeAdapterModes = adapterModes("station", {
+			available: false,
+			reason: "capability-unknown",
+		});
+		await page.reload();
+		await ensureAuthenticated(page);
+		serverConfig();
+		sendFullCaps();
+		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
+		await navigateTo(page, "network");
+
+		const unknownReason = modeReason(page, "hybrid");
+		await expect(unknownReason).toBeVisible();
+		await expect(unknownReason).toHaveAttribute(
+			"data-reason",
+			"capability-unknown",
+		);
+		expect((await unknownReason.textContent()) ?? "").not.toBe(absentCopy);
+	});
+
+	test("a destructive mode transition confirms before it dispatches, and the control never moves on the click alone", {
+		annotation: WIFI_ROSTER_ANNOTATION,
+	}, async ({ page }) => {
+		serverConfig();
+		sendFullCaps();
+		fakeAdapterModes = adapterModes("station", { available: true });
+		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
+
+		await navigateTo(page, "network");
+
+		const selector = page.getByTestId("wifi-mode-selector");
+		await expect(selector).toBeVisible({ timeout: 15_000 });
+		await expect(selector).toHaveAttribute("data-mode", "station");
+
+		// Exclusive hotspot drops the WiFi uplink, so it arms a confirm that NAMES
+		// the consequence — and dispatches nothing until it is accepted.
+		await modeRung(page, "hotspot").click();
+		const confirm = page.getByTestId("wifi-mode-confirm-0");
+		await expect(confirm).toBeVisible();
+		await expect(confirm).toHaveAttribute("data-consequence", "drops-uplink");
+		await expect(confirm).toContainText(/bond/i);
+		expect(setAdapterModeCalls).toHaveLength(0);
+
+		// Cancelling leaves the PRIOR mode selected — nothing moved.
+		await page.getByTestId("wifi-mode-confirm-cancel-0").click();
+		await expect(confirm).toHaveCount(0);
+		expect(setAdapterModeCalls).toHaveLength(0);
+		await expect(selector).toHaveAttribute("data-mode", "station");
+
+		// Confirming dispatches. The RPC reply alone is only "admitted", so the
+		// control STAYS on the prior mode and shows the pending line instead.
+		await modeRung(page, "hotspot").click();
+		await page.getByTestId("wifi-mode-confirm-apply-0").click();
+		await expect
+			.poll(() => setAdapterModeCalls.length, { timeout: 10_000 })
+			.toBe(1);
+		expect(setAdapterModeCalls[0]).toEqual({ device: "0", mode: "hotspot" });
+		await expect(page.getByTestId("wifi-mode-pending-0")).toBeVisible();
+		await expect(selector).toHaveAttribute("data-mode", "station");
+
+		// A TERMINAL FAILURE leaves the prior mode on screen with the device's own
+		// typed reason rendered INLINE — never toast-only, never an optimistic flip.
+		send({ wifi: { adapter_mode: { device: 0, error: "capability-unproven" } } });
+		const failure = page.getByTestId("wifi-mode-error-0");
+		await expect(failure).toBeVisible();
+		await expect(failure).toHaveAttribute("data-error", "capability-unproven");
+		await expect(failure).not.toContainText("network.wifiMode.");
+		await expect(selector).toHaveAttribute("data-mode", "station");
+		await expect(page.getByTestId("wifi-mode-pending-0")).toHaveCount(0);
 	});
 
 	// ── (a, CT-2) A band the radio HAS but cannot use stays visible with a reason ─

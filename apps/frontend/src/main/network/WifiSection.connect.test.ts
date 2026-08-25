@@ -21,7 +21,12 @@ import WifiSection from "./WifiSection.svelte";
 vi.mock("$lib/rpc/client", () => ({
 	rpc: {
 		network: { configure: vi.fn() },
-		wifi: { hotspotStart: vi.fn(), hotspotStop: vi.fn() },
+		wifi: {
+			hotspotStart: vi.fn(),
+			hotspotStop: vi.fn(),
+			getAdapterModes: vi.fn(async () => ({})),
+			setAdapterMode: vi.fn(async () => ({ success: true, accepted: true })),
+		},
 	},
 }));
 vi.mock("svelte-sonner", () => ({

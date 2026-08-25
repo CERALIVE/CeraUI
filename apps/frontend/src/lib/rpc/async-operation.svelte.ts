@@ -158,6 +158,14 @@ export function getReason(
 }
 
 /**
+ * The target recorded when `key` was begun. Without it a surface needs a
+ * parallel local map, which then disagrees with an op begun anywhere else.
+ */
+export function getTarget(reg: AsyncOpRegistry, key: string): unknown {
+	return reg.ops[key]?.target;
+}
+
+/**
  * Begin an operation: enter `pending` and reset the TTL. Calling `begin` from
  * ANY phase re-arms the entry (overwriting is allowed) — this is what makes a
  * Retry on a stale-pending or terminal op safe. Always succeeds (`true`).
@@ -275,6 +283,7 @@ export const asyncOpCore = {
 	getPhase,
 	isPending,
 	getReason,
+	getTarget,
 	begin,
 	confirm,
 	fail,
@@ -295,6 +304,7 @@ interface AsyncOpStore {
 	getPhase: (key: string) => AsyncOpPhase;
 	isPending: (key: string) => boolean;
 	getReason: (key: string) => string | undefined;
+	getTarget: (key: string) => unknown;
 	begin: (key: string, target?: unknown, now?: number, ttlMs?: number) => void;
 	confirm: (key: string, now?: number) => void;
 	fail: (key: string, reason: string, now?: number) => void;
@@ -343,6 +353,7 @@ function createAsyncOpStore(): AsyncOpStore {
 		getPhase: (key) => getPhase(registry, key),
 		isPending: (key) => isPending(registry, key),
 		getReason: (key) => getReason(registry, key),
+		getTarget: (key) => getTarget(registry, key),
 		begin: (key, target, now = Date.now(), ttlMs) => {
 			begin(registry, key, target, now, ttlMs);
 		},
@@ -405,6 +416,11 @@ export function isOperationPending(key: string): boolean {
 /** The failure reason recorded for `key` (only ever set on `failed`). */
 export function getOperationReason(key: string): string | undefined {
 	return store().getReason(key);
+}
+
+/** The target `key`'s operation was begun with (`undefined` when it holds none). */
+export function getOperationTarget(key: string): unknown {
+	return store().getTarget(key);
 }
 
 /**

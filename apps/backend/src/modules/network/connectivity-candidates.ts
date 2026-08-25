@@ -63,7 +63,9 @@ export type ProbeCandidate = {
  *
  *  - it carries a netif error flag (`NETIF_ERR_DUPIPV4` — the duplicate-MAC
  *    HiLink pair both leasing `192.168.8.100`; `NETIF_ERR_HOTSPOT` — a radio
- *    broadcasting rather than associated), or
+ *    broadcasting rather than associated; `NETIF_ERR_SHAREDLAN` — a wired port
+ *    the operator handed to LAN clients, which faces the device's own network
+ *    rather than a WAN), or
  *  - it holds no address at all, so there is no source address to bind and the
  *    probe would silently fall back to the current default route (a modem with
  *    no SIM, a radio with no lease).
@@ -97,9 +99,10 @@ export function probeExclusionReason(
  * A duplicate IPv4 address is disqualifying for {@link probeExclusionReason}
  * and NOT here, and that difference is the entire point: the flag means "this
  * address names a pair", which a device-bound probe never consults. Every other
- * netif error (a broadcasting hotspot radio) still disqualifies, and an
- * addressless interface still does too — it has no lease, so it has no route to
- * carry the probe and no address for a later default-route election to use.
+ * netif error still disqualifies — a broadcasting hotspot radio, and a
+ * shared-LAN port, which no binding can turn into a path to the Internet — and
+ * an addressless interface still does too: it has no lease, so it has no route
+ * to carry the probe and no address for a later default-route election to use.
  */
 export function deviceBoundProbeExclusionReason(
 	entry: NetworkInterface | undefined,

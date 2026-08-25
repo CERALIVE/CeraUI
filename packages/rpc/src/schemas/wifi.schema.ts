@@ -229,6 +229,135 @@ export const hotspotClientsSchema = z.object({
 });
 export type HotspotClients = z.infer<typeof hotspotClientsSchema>;
 
+// ─── the operator-facing per-adapter mode ───────────────────────────────────
+//
+// THREE modes an operator can ask a radio for, and they are DELIBERATELY not a
+// third value of `wifiInterfaceSchema.mode`. That field reports what the radio
+// IS — `station` or `hotspot` — and a hybrid radio really is a station that
+// additionally hosts an AP on a second, virtual `clap-<parent>` netdev. So the
+// three-way selector maps onto the EXISTING model rather than widening it:
+//
+//   station  ->  mode: 'station'
+//   hotspot  ->  mode: 'hotspot'   (exclusive AP on the physical interface)
+//   hybrid   ->  mode: 'station'   + a concurrent AP on `clap-<parent>`
+//
+// Getting that wrong would be observable: `mode === 'station'` during a
+// concurrent AP is a pinned device assertion, and every bond/probe/telemetry
+// rule that keys on the physical radio still being a station depends on it.
+export const wifiAdapterModeSchema = z.enum(['station', 'hotspot', 'hybrid']);
+export type WifiAdapterMode = z.infer<typeof wifiAdapterModeSchema>;
+
+// Why a mode is not on offer for THIS radio. Each names a different thing an
+// operator can do about it, so none is collapsible into a generic "no":
+//
+//   unsupported        the radio cannot host an access point at all
+//   capability-absent  the wiphy ANSWERED, and its interface combinations
+//                      forbid a managed + AP pair — a proven negative
+//   capability-unknown nothing has proven it either way (no `iw`, an
+//                      unresolvable wiphy, a dump that failed its parser)
+//
+// `capability-unknown` is NOT `capability-absent`: absence of evidence is not
+// evidence of absence, and telling an operator their radio cannot do something
+// we never managed to ask about is the dishonesty this vocabulary exists to
+// prevent.
+export const wifiAdapterModeUnavailableReasonSchema = z.enum([
+	'unsupported',
+	'capability-absent',
+	'capability-unknown',
+]);
+export type WifiAdapterModeUnavailableReason = z.infer<
+	typeof wifiAdapterModeUnavailableReasonSchema
+>;
+
+// One row of the offered set. `available` is an EXPLICIT boolean, never a
+// present-only-when-true flag: an unavailable mode must render disabled WITH
+// its reason, never be hidden, so a consumer has to be able to see the refusal.
+export const wifiAdapterModeOptionSchema = z.object({
+	mode: wifiAdapterModeSchema,
+	available: z.boolean(),
+	reason: wifiAdapterModeUnavailableReasonSchema.optional(),
+});
+export type WifiAdapterModeOption = z.infer<typeof wifiAdapterModeOptionSchema>;
+
+// What one adapter answers about its own mode.
+//
+// `mode` is OBSERVED (what the radio is doing right now) and `desired` is the
+// PERSISTED operator preference. They are separate because they legitimately
+// disagree: during a transition, and after a boot reconciliation that could not
+// reach the operator's choice. Collapsing them would report an unreached
+// preference as achieved.
+//
+// `options` is TOTAL — all three modes, always — so a consumer never has to
+// decide whether a missing entry means "unavailable" or "not reported".
+export const wifiAdapterModeEntrySchema = z.object({
+	ifname: z.string(),
+	mode: wifiAdapterModeSchema,
+	desired: wifiAdapterModeSchema.optional(),
+	options: z.array(wifiAdapterModeOptionSchema),
+});
+export type WifiAdapterModeEntry = z.infer<typeof wifiAdapterModeEntrySchema>;
+
+// Keyed by the same numeric device id `wifiStatusSchema` is keyed on.
+export const wifiAdapterModeStatusSchema = z.record(z.string(), wifiAdapterModeEntrySchema);
+export type WifiAdapterModeStatus = z.infer<typeof wifiAdapterModeStatusSchema>;
+
+// `.strict()` because this switches a radio between operating modes — an
+// unknown extra key must be REJECTED rather than silently ignored.
+export const setWifiAdapterModeInputSchema = z
+	.object({
+		device: z.string(),
+		mode: wifiAdapterModeSchema,
+	})
+	.strict();
+export type SetWifiAdapterModeInput = z.infer<typeof setWifiAdapterModeInputSchema>;
+
+/*
+  Why a mode change did not complete. The first five are `hotspotToggleError`'s
+  own members, deliberately reused rather than re-spelled — a mode change IS a
+  hotspot start/stop underneath, so a refusal must read identically whichever
+  control produced it. `capability-unproven` is the one addition: `hybrid` was
+  asked for on a radio whose AP+STA combination has not been proven.
+*/
+export const wifiAdapterModeErrorSchema = z.enum([
+	'DEVICE_BUSY',
+	'no-device',
+	'unsupported',
+	'capability-unproven',
+	'activation-failed',
+	'not-confirmed',
+	'deactivation-failed',
+]);
+export type WifiAdapterModeError = z.infer<typeof wifiAdapterModeErrorSchema>;
+
+/*
+  The reply to `wifi.setAdapterMode`.
+
+  `accepted` carries exactly `hotspotToggleOutputSchema.accepted`'s meaning: the
+  transition was admitted and a TERMINAL `wifi` -> `adapter_mode` frame follows.
+  It is never a claim that the radio has reached the mode.
+*/
+export const setWifiAdapterModeOutputSchema = z.object({
+	success: z.boolean(),
+	accepted: z.literal(true).optional(),
+	// The mode actually persisted. Absent on a refusal, because a refused
+	// transition must not echo the value back as though it had been recorded.
+	applied: wifiAdapterModeSchema.optional(),
+	error: wifiAdapterModeErrorSchema.optional(),
+});
+export type SetWifiAdapterModeOutput = z.infer<typeof setWifiAdapterModeOutputSchema>;
+
+// A pending or terminal mode-change frame — the deferred half of an `accepted`
+// reply. Exactly one `pending: true` frame is emitted per admitted transition,
+// followed by exactly one terminal frame (`success` or `error`).
+export const wifiAdapterModeResultSchema = z.object({
+	device: z.union([z.number(), z.string()]),
+	mode: wifiAdapterModeSchema.optional(),
+	pending: z.literal(true).optional(),
+	success: z.boolean().optional(),
+	error: wifiAdapterModeErrorSchema.optional(),
+});
+export type WifiAdapterModeResult = z.infer<typeof wifiAdapterModeResultSchema>;
+
 // Available WiFi network schema
 export const availableWifiNetworkSchema = z.object({
 	active: z.boolean(),
@@ -290,6 +419,34 @@ export const wifiInterfaceSchema = z.object({
 	// read that failed its named parser, and on a backend predating the field —
 	// so a consumer must read absence as "not measured", never as a dead link.
 	link: wifiLinkTelemetrySchema.optional(),
+	// How many scan cycles THIS adapter has completed since the backend started.
+	//
+	// A rescan RPC returns the moment nmcli is dispatched, and there is no
+	// scan-complete marker anywhere in nmcli's output — so a consumer that wants
+	// to know its scan finished has to be told. Comparing the CONTENT of
+	// `available` cannot answer it: a scan that legitimately finds the same set
+	// (or nothing at all) leaves the content byte-identical, which is
+	// indistinguishable from a scan that never ran.
+	//
+	// This counter is therefore stamped by the DEVICE on every scan cycle that
+	// completed, INCLUDING one whose result list is empty, and is strictly
+	// increasing per adapter. A consumer confirms by comparing it against the
+	// value it captured at dispatch; a HIGHER value means "a scan finished", and
+	// the accompanying `available` list — empty or not — is that scan's honest
+	// result.
+	//
+	// It is PER ADAPTER on purpose. Two radios scan independently, so one
+	// adapter's completed scan must never confirm another's in-flight one.
+	//
+	// Absent means the device has completed no scan cycle for this adapter yet,
+	// or the backend predates the field. A consumer must read absence as "not
+	// reported", never as generation zero.
+	scanGeneration: z.number().int().nonnegative().optional(),
+	// Epoch ms at which the scan named by `scanGeneration` completed. Diagnostic
+	// only — the CONFIRMATION signal is the generation, never this stamp, because
+	// a wall clock can move backwards and a monotonic counter cannot. Absent
+	// exactly when `scanGeneration` is absent.
+	scanAt: z.number().int().nonnegative().optional(),
 });
 export type WifiInterface = z.infer<typeof wifiInterfaceSchema>;
 
@@ -343,6 +500,46 @@ export const hotspotToggleInputSchema = z.object({
 });
 export type HotspotToggleInput = z.infer<typeof hotspotToggleInputSchema>;
 
+/*
+  Why a hotspot start/stop did not complete. Every member names a DIFFERENT
+  thing an operator can do about it, so none of them is collapsible into a
+  generic error:
+
+    DEVICE_BUSY          another mutation holds this radio — retry
+    no-device            the wire id names no adapter this device can see
+    unsupported          the radio cannot host an access point at all
+    activation-failed    NetworkManager refused; the adapter was rolled back
+    not-confirmed        activation was issued and NM never confirmed the AP
+    deactivation-failed  NetworkManager did not take the hotspot down
+*/
+export const hotspotToggleErrorSchema = z.enum([
+	'DEVICE_BUSY',
+	'no-device',
+	'unsupported',
+	'activation-failed',
+	'not-confirmed',
+	'deactivation-failed',
+]);
+export type HotspotToggleError = z.infer<typeof hotspotToggleErrorSchema>;
+
+/*
+  The reply to `wifi.hotspotStart` / `wifi.hotspotStop`.
+
+  `accepted` is present ONLY when the transaction was admitted and the device
+  cannot yet vouch for NetworkManager's verdict — a hotspot start registers a
+  bounded NM confirmation that resolves after this reply. It is a promise that a
+  TERMINAL `wifi` frame follows (`hotspot.start` / `hotspot.stop`, carrying
+  `success: true` or a typed `error`), never a claim that the AP is up. A reply
+  WITHOUT it is already terminal: `success: true` means the device confirmed the
+  outcome itself, `success: false` carries the reason.
+*/
+export const hotspotToggleOutputSchema = z.object({
+	success: z.boolean(),
+	accepted: z.literal(true).optional(),
+	error: hotspotToggleErrorSchema.optional(),
+});
+export type HotspotToggleOutput = z.infer<typeof hotspotToggleOutputSchema>;
+
 // Hotspot config input schema
 export const hotspotConfigInputSchema = z.object({
 	device: z.string(),
@@ -370,6 +567,14 @@ export const wifiOperationOutputSchema = z.object({
 });
 export type WifiOperationOutput = z.infer<typeof wifiOperationOutputSchema>;
 
+// A terminal hotspot start/stop frame: the deferred half of an `accepted` reply.
+export const hotspotToggleResultSchema = z.object({
+	device: z.union([z.number(), z.string()]),
+	success: z.boolean().optional(),
+	error: hotspotToggleErrorSchema.optional(),
+});
+export type HotspotToggleResult = z.infer<typeof hotspotToggleResultSchema>;
+
 // WiFi message schema (response from WiFi operations)
 export const wifiMessageSchema = z.object({
 	connect: z.array(z.string()).optional(),
@@ -377,9 +582,25 @@ export const wifiMessageSchema = z.object({
 	disconnect: z.string().optional(),
 	new: z
 		.object({
-			error: z.enum(['auth', 'generic']).optional(),
+			// 'ambiguous': the join reported no error and named no connection, so
+			// the device cannot say whether the network was actually joined.
+			error: z.enum(['auth', 'generic', 'ambiguous']).optional(),
 			device: z.union([z.number(), z.string()]).optional(),
 			success: z.boolean().optional(),
+		})
+		.optional(),
+	adapter_mode: wifiAdapterModeResultSchema.optional(),
+	hotspot: z
+		.object({
+			start: hotspotToggleResultSchema.optional(),
+			stop: hotspotToggleResultSchema.optional(),
+			config: z
+				.object({
+					device: z.union([z.number(), z.string()]),
+					success: z.boolean().optional(),
+					error: z.string().optional(),
+				})
+				.optional(),
 		})
 		.optional(),
 });

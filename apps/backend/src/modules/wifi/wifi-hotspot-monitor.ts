@@ -110,6 +110,8 @@ export function registerPendingConfirmation(
 	const ifname = wifiInterface.ifname;
 	const connName = wifiInterface.hotspot.name ?? ifname;
 
+	const device = wifiInterface.id;
+
 	const confirm = () => {
 		if (
 			wifiInterface.hotspot.conn &&
@@ -122,22 +124,37 @@ export function registerPendingConfirmation(
 			wifiInterface.conn = wifiInterface.hotspot.conn;
 		}
 		delete wifiInterface.hotspot.transition;
-		if (wifiInterface.supportsApStaConcurrency !== true) {
+		// Keyed on the VIRTUAL interface, not on the capability: a capable radio
+		// asked for an EXCLUSIVE hotspot has no `clap-` netdev, so its parent did
+		// take the dup-IP suppression on the way in and owes the release here.
+		if (!wifiInterface.concurrentHotspot) {
 			deps.setDupIpSuppression(ifname, false);
 		}
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface); // now mode: 'hotspot'
+		deps.publishOutcome?.("start", device, { success: true });
 	};
 
 	const giveUp = () => {
 		// Confirmation never arrived — clear the transition (soft rollback). The
 		// next NM poll will reconcile if the hotspot did in fact come up.
 		delete wifiInterface.hotspot.transition;
-		if (wifiInterface.supportsApStaConcurrency !== true) {
+		if (!wifiInterface.concurrentHotspot) {
 			deps.setDupIpSuppression(ifname, false);
 		}
 		deps.broadcastState();
 		syncWifiStateCache(macAddress, wifiInterface);
+		/*
+		  The state broadcast above says the radio is still a station; it does not
+		  say the START failed, so on its own it leaves the operator's keyed op to
+		  expire on its TTL. `not-confirmed` is deliberately not `activation-failed`:
+		  NetworkManager accepted the activation and simply never reported the AP up,
+		  which is a different thing to tell someone than a refusal.
+		*/
+		deps.publishOutcome?.("start", device, {
+			success: false,
+			error: "not-confirmed",
+		});
 	};
 
 	const pending: PendingHotspot = {

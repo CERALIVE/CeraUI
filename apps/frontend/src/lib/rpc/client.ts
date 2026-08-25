@@ -61,6 +61,8 @@ import type {
 	ReloadAudioDelayOutput,
 	RemoteConfigInput,
 	Revisions,
+	SetEthernetRoleInput,
+	SetEthernetRoleOutput,
 	SetFccUnlockInput,
 	SetFccUnlockOutput,
 	SetFiveGPreferenceInput,
@@ -85,6 +87,8 @@ import type {
 	SetSourceVisibilityOutput,
 	SetUsbModeInput,
 	SetUsbModeOutput,
+	SetWifiAdapterModeInput,
+	SetWifiAdapterModeOutput,
 	SetWifiCountryInput,
 	SetWifiCountryOutput,
 	SimPin2UnlockInput,
@@ -107,6 +111,7 @@ import type {
 	UssdCancelInput,
 	UssdInitiateInput,
 	UssdRespondInput,
+	WifiAdapterModeStatus,
 	WifiConnectInput,
 	WifiDisconnectInput,
 	WifiForgetInput,
@@ -770,10 +775,27 @@ export interface TypedRPC {
 		hotspotStop: (input: HotspotToggleInput) => Promise<SuccessResponse>;
 		hotspotConfigure: (input: HotspotConfigInput) => Promise<SuccessResponse>;
 		setCountry: (input: SetWifiCountryInput) => Promise<SetWifiCountryOutput>;
+		getAdapterModes: () => Promise<WifiAdapterModeStatus>;
+		/**
+		 * `accepted: true` promises a TERMINAL `wifi` → `adapter_mode` frame
+		 * follows — never that the radio reached the mode.
+		 */
+		setAdapterMode: (
+			input: SetWifiAdapterModeInput,
+		) => Promise<SetWifiAdapterModeOutput>;
 	};
 	network: {
 		getInterfaces: () => Promise<unknown>;
 		configure: (input: NetifConfigInput) => Promise<NetifConfigOutput>;
+		/**
+		 * Declare a wired port's role. `{success:true}` means NetworkManager
+		 * answered; the operator-visible settlement is the `eth_role` TERMINAL
+		 * frame the device broadcasts (todo 8's contract), which is why the
+		 * caller must NOT `confirmOnResolve` on this reply.
+		 */
+		setEthernetRole: (
+			input: SetEthernetRoleInput,
+		) => Promise<SetEthernetRoleOutput>;
 		setIngestEnabled: (
 			input: SetIngestEnabledInput,
 		) => Promise<SetIngestEnabledOutput>;

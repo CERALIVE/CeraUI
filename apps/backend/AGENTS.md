@@ -92,11 +92,15 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Same-subnet detection (`same_subnet_group`, informational, AP-excluded) | `modules/network/network-interfaces.ts` (`netIfBuildMsg`) |
 | Measured per-interface throughput (`tx_bps`/`rx_bps`, bits/s) | `modules/network/network-interfaces.ts` (`computeInterfaceRate`, `processIfconfigOutput`) |
 | WiFi AP-vs-client classification (`isApMode`, `activeConn`/`activeMode`) | `modules/wifi/wifi-hotspot-types.ts` + `modules/wifi/wifi-interfaces.ts` |
+| **The ONE per-adapter WiFi lock key (permanent MAC) every mutation acquires — RPC layer AND hotspot transactions** | `modules/wifi/wifi-adapter-lock.ts` (`wifiAdapterLockKey`, `wifiAdapterLockKeyForDeviceId`, `wifiAdapterLockKeyForConnectionUuid`, `withWifiAdapterLock`); contract below → EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK |
 | WiFi scan coalescing + Forget removing EVERY same-SSID profile | `modules/wifi/wifi-connections.ts` (`wifiRescan`) + `modules/wifi/wifi.ts` (`savedAll`, `wifiSiblingConnections`, `wifiForget`); contract below → A SCAN IS COALESCED, AND FORGET REMOVES THE NETWORK |
 | Regulatory domain + kernel-derived hotspot channels (`iw reg set` / `iw phy` parser, regdb precheck, armed restore timer) | `modules/wifi/regdomain.ts` (`applyRegulatoryDomain`, `deriveApChannels`, `checkWirelessRegdbSupport`, `buildRegdomainRestoreCommand`) |
 | Persisted country → apply → re-derive → hotspot restart | `modules/wifi/wifi-country.ts` (`setWifiCountry`, `reconcileHotspotChannels`) |
 | **Device-bound connectivity probe (`curl --interface`) — the only thing that can name one of two same-IP twins** | `modules/network/device-bound-probe.ts` (`checkConnectivityViaDevice`, `SAFE_IFNAME_RE`) + `connectivity-candidates.ts` (`probeBindingFor`, `deviceBoundProbeExclusionReason`) + `connectivity-election.ts` (`electConnectivityCandidate`, injected probe pair); contract below → …AND A PROBE THAT MUST NAME A DEVICE BINDS ONE |
 | Policy-route self-check for bonded wifi/modem/dongle interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
+| **Flow-sticky client sharing (owned nft table, stable marks, per-uplink routes, hard-down drain)** | `modules/network/uplink-steering/` + `modules/network/uplink-sharing.ts`; contract [`../../docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md) |
+| **Whether the two shared-client NAT layers still coexist (READ-ONLY, tri-state; `sharing_diag`)** | `modules/network/sharing-diag/`; contract below → …AND THE TWO NAT LAYERS ARE WATCHED, NEVER ARBITRATED |
+| **Streaming-first egress shaping (uncapped local band, adaptive marked-client cap)** | `modules/network/uplink-shaper/`; contract [`../../docs/UPLINK_SHAPING.md`](../../docs/UPLINK_SHAPING.md) |
 | **Router-dongle netns runtime metadata (contract-v1 MIRROR reader; stale/ambiguous/bad-version ignored+logged)** | `modules/network/dongle-metadata.ts` (`readDongleMetadata`, `refreshDongleMetadata`, `getDongleMarker`, `dongleSlotLabel`) |
 | **The `dongle` netif marker (live-row stamp + wire-only union rows + one-frame retraction)** | `modules/network/network-interfaces.ts` (`applyDongleProjection`); contract below → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND |
 | Retracting the `hdmi_error` notification (BOTH the no-signal message and the EMI/cable advisory) once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, `HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
@@ -2080,16 +2084,136 @@ bonding toggled off, "Saved" toasted, row still read "In Bond".
   one, so the guard reads as the concurrency check it is and the operator cannot trip
   it. The wire contract is unchanged; `netifConfigInputSchema.ip` stays optional and
   an address-less interface still OMITS it (`""` fails the regex).
-- **A direct RPC call with a mismatched address is still silently dropped**, and that
-  is a REAL remaining defect at the procedure layer: `configureNetworkInterfaceProcedure`
-  returns `{success: true, applied}` whichever way `handleNetif` went. It is now
-  unreachable from the UI. Fixing it honestly means a typed refusal on the wire, which
-  is a contract change and was deliberately left out of this pass.
+- **A direct RPC call with a mismatched address is now REFUSED, not silently dropped.**
+  This was a REAL remaining defect at the procedure layer —
+  `configureNetworkInterfaceProcedure` returned `{success: true, applied}` whichever
+  way `handleNetif` went, so a discarded save (including the bond toggle it carried)
+  reached the caller as "Saved". `handleNetif` now returns a typed `NetifApplyOutcome`
+  and the procedure forwards it as `{success:false, error}` — see THE NETIF RPC
+  ANSWERS FOR WHAT IT ACTUALLY APPLIED below.
 - **Do NOT re-add an address input anywhere** without first implementing the apply
   path. A control that cannot act is the defect; the missing feature is static
   addressing, and it is missing in the BACKEND, not in the dialog.
 
 Frontend half: `apps/frontend/AGENTS.md` → "The interface address is REPORTED".
+
+## THE NETIF RPC ANSWERS FOR WHAT IT ACTUALLY APPLIED [EXISTS]
+
+`handleNetif` returns `NetifApplyOutcome` (`{ok:true}` or `{ok:false, reason}`),
+and `configureNetworkInterfaceProcedure` forwards a rejection as
+`{success:false, error}` typed by `netifConfigErrorSchema` — `unknown_interface`
+/ `stale_address` / `enable_refused` / `disable_all_refused`.
+
+Every one of those was a bare `return` reported as `{success:true}`. The
+`stale_address` path is the one that mattered: it is the CONCURRENCY guard
+(`int.ip !== msg.ip`), and it discards the WHOLE request — including the bond
+toggle riding alongside the address it was checking — so the operator was told
+"Saved" over a link whose bond state had not moved.
+
+- **The mock branch still answers `success:true`, deliberately.** Under mocks the
+  mutation genuinely applied, to the overlay `setMockNetifConfig` wrote before
+  `handleNetif` ran; `handleNetif` then works the RAW map, where its IP guard
+  legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
+  failure would report a dev/e2e toggle that visibly worked as broken. Do not
+  "unify" the two branches.
+- **The four reasons are not collapsible.** `enable_refused` already carries an
+  operator notification naming the blocking error; `disable_all_refused` is the
+  device protecting its last link; `unknown_interface` clears when the link comes
+  back; `stale_address` means re-read and retry.
+
+## THE ETHERNET PORT ROLE — UPLINK OR SHARED LAN [EXISTS]
+
+`modules/network/ethernet-role.ts` (leaf: persistence + the candidate rule),
+`ethernet-role-transition.ts` (the NM transition + boot reconcile) and
+`ethernet-role-outcome.ts` (the ONE frame builder) let an operator declare a
+wired port either an ordinary bonding `uplink` or a `shared-lan` router port
+that serves DHCP/DNS to LAN clients via NetworkManager's `ipv4.method shared`.
+
+**The persisted key is `config.eth_roles`, keyed by IFNAME, and absent means
+`uplink`.** An untouched device is byte-identical to before this landed, and the
+boot reconciler acts on a stated `shared-lan` only — re-writing `ipv4.method
+auto` onto every ordinary port at boot would touch profiles nobody asked us to
+touch. The ifname key is the ONE defensible instance of name-keying in this
+directory: `wifi_modes` keys on a permanent MAC because a radio's name follows a
+udev rename, but this is not a claim about a DEVICE — it is an operator
+statement about a SOCKET, and the NM profile it drives is itself bound by
+`connection.interface-name`, so the two agree by construction.
+
+**`NETIF_ERR_SHAREDLAN = 0x08` is the exclusion mechanism**, stamped by
+`applySharedLanBondGate` in the same two places, and for the same reasons, as
+`applyConcurrentApBondGate`: `isBondCandidate` refuses the port structurally so a
+caller holding a hand-built entry is covered, and the gate stamps the flag into
+the netif map so the wire, `probeExclusionReason`, the connectivity election and
+the same-subnet grouping inherit the exclusion through the flag they already
+read. It runs on EVERY pass, beside its two siblings — a role flip moves no
+interface, address or counter, so a topology-gated stamp would never fire.
+
+**It is the ONE gate here that also RELEASES.** The SIM-less gate clears its flag
+and deliberately leaves `enabled` false, because a SIM reappearing is a hardware
+event the operator did not ask for. A flip back to `uplink` IS the operator
+asking for the port to bond again, and the flag is the only thing that lowered
+`enabled` — so releasing it undoes its own effect, honouring a separate bond
+opt-out and leaving the port down if any other error still stands.
+
+**The transition is persist-first with rollback**, on `wifi-adapter-mode`'s
+terms: the role is written before NM is touched (so a device that dies
+mid-transition comes back trying for the operator's role) and RESTORED the moment
+NM refuses, so a failed flip leaves neither the config nor the netif flags
+half-applied. Every exit path publishes exactly one terminal `eth_role` frame,
+preceded by exactly one `pending` frame on an admitted transition; the
+already-applied branch publishes its terminal frame directly, because nothing was
+dispatched and no NM answer will ever settle.
+
+**Wire shape** (`@ceraui/rpc` `network.schema.ts`), frozen for the frontend role
+UI:
+
+```ts
+netifEntry.ethRole?: 'uplink' | 'shared-lan'   // EXPLICIT on every ethernet row
+rpc.network.setEthernetRole({ name, role })    // input is .strict()
+  -> { success, applied?, error? }             // ethernetRoleErrorSchema, 5 members
+broadcast "eth_role" -> { eth_role: { name, role?, pending?, success?, error? } }
+```
+
+`ethRole` is published EXPLICITLY on every ethernet row, `uplink` included —
+never present-only-when-shared. The consumer merge preserves an omitted optional
+field, so a one-directional role could be raised and never lowered (the
+`policy_route_missing` latch, exactly). ABSENT means "not an ethernet port, or an
+older backend", and is never read as `uplink`. Frontend ingestion allowlist:
+`subscriptions.svelte.ts` `case "netif"`.
+
+**A shared-lan port registers as a client zone for the steering layer, and
+NOTHING installs a table.** The nftables client-zone work is the steering
+module's (HALTED pending the Wave-0 kernel-capability verdict); this todo marks
+the port and extends the READ-ONLY policy-route check only.
+
+Coverage: `tests/ethernet-role.test.ts` (driven through the REAL
+`processIfconfigOutput`, `genSrtlaBondEntries` and
+`configureNetworkInterfaceProcedure`), `tests/network-mutation-action-guard.test.ts`
+(the S7 device half), frontend `tests/netif-eth-role-ingestion.test.ts` (both
+directions).
+
+### …AND THE POLICY-ROUTE CHECK NOW COVERS WIRED UPLINKS, ON WEAKER TERMS [EXISTS]
+
+`collectEthernetPolicyRouteCandidates` adds `eth*`/`en*` to the check with
+`flagWhenRuleAbsent: false`, and that flag is the whole contract. The image's
+routing hooks map `usb*`/`enx*` onto tables 100-107 and `wlan0-4` onto 120-124
+and NOTHING else, so a plain `eth0` has no per-uplink table at all — "no source
+rule" is the documented steady state, not a fault, and flagging it would amber-band
+every correctly-working wired uplink in the fleet (the same reason `enx*` was
+excluded from the bonded class outright). What a wired candidate CAN be judged on
+is a rule that EXISTS whose table has no default route — the fault todo 9's
+steering module would produce once it installs one.
+
+- **`collectPolicyRouteCandidates` is UNCHANGED**, deliberately: its answer is
+  the dispatcher-mapped class, a contract other code and its tests read directly.
+  The two classes are collected separately because they are judged differently.
+- **An ethernet candidate on an ambiguous address is dropped BEFORE the spawn** —
+  it could only ever be withheld, and asking `ip` a question whose answer is
+  already known costs a spawn on the 5 s netif cadence for nothing. It is also
+  what keeps the bench-twins case spawning zero `ip` calls.
+- **A `shared-lan` port is excluded for free**: the netif gate lowers its
+  `enabled`, and the collector already requires an enabled interface. A port
+  serving its own clients is not an uplink and has no source-routing to verify.
 
 ## AN EXCLUDED DEFAULT ROUTE IS NOT A CONNECTIVITY VERDICT [EXISTS]
 
@@ -5521,13 +5645,221 @@ that matter: a sustained absence resolving honestly again, a repeatedly-observed
 absence failing to renew the window, the boundary millisecond, a `lost` row, a
 substituted device, a renumber, and the coarse/unset selections.
 
+## FLOW-STICKY SHARED-CLIENT STEERING [PARTIAL — backend complete; image carrier + board drill pending]
+
+`modules/network/uplink-steering/` is the desired-state controller for hotspot and
+Ethernet `shared-lan` client traffic. It owns only `inet ceralive_share`, the
+priority-110 namespaced fwmark rules, and private route tables 30000–95535. The
+image's `inet ceralive_ingest_fw` table (input hook priority -10) is foreign and is
+never named by generated rule text. The carrier effects are isolated in
+`modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
+→ systemd start/reload, with prior-file reload on failure.
+
+**The invariant in one sentence: only forwarded client-zone traffic is steered or
+NATed, and only the client band is ever capped.** Everything below is how that is
+made structural rather than intentional. Every mode transition that can create or
+retire a client zone — station / hotspot / hybrid, and the Ethernet `uplink` /
+`shared-lan` role — runs under the one permanent-MAC adapter lock described in
+EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK, so a zone can never be registered
+against a half-applied adapter state.
+
+**Client provenance is structural.** New-flow selection, conntrack mark restore,
+and masquerade all require a positive registered client-zone `iifname`; NAT also
+requires the zone prefix and the namespaced conntrack mark. There is no output
+hook. A locally-originated packet therefore cannot enter this path even when its
+source is inside a client prefix, and a WAN reply never restores the client flow's
+mark and recirculates out the WAN.
+
+**Marks are physical-identity keyed.** The high byte `0xca` proves client-zone
+provenance, the next 16 bits select the uplink, and the low byte is preserved.
+The fixed 10000-bucket verdict map uses largest-remainder apportionment. Reorder,
+add/remove, and reweight never change a surviving mark, so established flows keep
+their original route while only new flows see the new weights.
+
+**The emitted nft syntax targets Debian bookworm's nftables 1.0.6.** A set
+expression may read only one runtime mark when applying a bitwise OR, so save and
+restore lift the known uplink value into a literal per-uplink statement; combining
+`meta mark` and `ct mark` dynamically is forbidden even though newer nftables parses
+it. Whole-table replacement is `add table` then `delete table`, never the newer
+`destroy table`. Both rules are production compatibility constraints, not CI
+workarounds; the packet low byte and conntrack high 24 bits remain byte-identical.
+
+**A hard-down is three phases:** publish a transition ruleset excluding the mark
+from new-flow selection while retaining its NAT/route support → delete conntrack
+entries carrying exactly that mark → remove route support and publish the final
+ruleset. The transient `uplink-flows-reset {iface,linkId}` follows successful
+route removal and is never hydrated. `uplink-steering` is persistent and carries
+the shared `@ceraui/rpc` typed availability/refusal state.
+
+The coordinator is single-flight, re-reads the latest model before every apply,
+skips byte-identical state, and retries at 100/500 ms only. On process restart it
+inventories its priority-110 rules, publishes the latest model first, then flushes
+and removes stale support. Any overlap, mark collision, foreign priority owner,
+missing route, nft failure, or rollback failure is fail-soft and surfaces
+`steering_unavailable`; it never blocks the already-bound WS server.
+
+The CeraUI half is complete and kernel-netns tested. It cannot activate on a fleet
+image until image-building todo 12 ships `ceralive-share.service`, its teardown
+script, nftables/conntrack packages, and the CeraUI unit ordering. Full contract and
+hardware gate: [`../../docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md).
+
+## STREAMING-FIRST UPLINK SHAPING [PARTIAL — backend complete; image backstop + board drill pending]
+
+`modules/network/uplink-shaper/` consumes `readDesiredSteeringState()` as the single
+authority for which uplinks currently carry shared client traffic. Its explicit
+idle/streaming machine is lifecycle-edge driven: stream start installs a conservative
+bootstrap client cap before telemetry, stale telemetry holds, and stream stop removes
+ceilings without waiting for telemetry absence.
+
+The streaming hierarchy is root `prio`: tc band 1 is the design's zero-indexed
+local band 0 and carries only `fq_codel`; tc band 2 is selected by the steering
+`CLIENT_FLOW` fwmark/mask and alone receives CAKE `bandwidth`, or HTB `rate == ceil`
+plus an `fq_codel` leaf when the bounded CAKE child apply is refused. AIMD uses RTT
+inflation, NAK delta, and sustained client-child backlog on a 5 s cadence. All
+constants are in `SHAPER_CONFIG`; current `bitrate_bps` is never treated as capacity.
+
+Root ownership is fail-closed: recognized kernel defaults may be recorded and
+replaced under reserved handle `ca00:`; that handle is restart-idempotent; a custom
+foreign root produces `shaper_unavailable` before any mutation. Removed interfaces
+and module shutdown restore their recorded roots. The persistent `uplink-shaper`
+wire state reports the realized CAKE/HTB algorithm or `priorityDegraded: true` while
+steering and sharing continue independently. Full command, ownership, controller,
+failure, and netns proof is in [`../../docs/UPLINK_SHAPING.md`](../../docs/UPLINK_SHAPING.md).
+
+## …AND THE TWO NAT LAYERS ARE WATCHED, NEVER ARBITRATED [EXISTS]
+
+`modules/network/sharing-diag/` is the read-only coexistence diagnostic for the
+two masquerade layers the shared-client path deliberately runs at once:
+NetworkManager's own shared-mode NAT (the working FLOOR, which keeps the hotspot
+usable even while the steering layer is down or degraded) and CeraUI's
+per-uplink, `CLIENT_FLOW`-scoped NAT inside `inet ceralive_share`. It is the
+sibling of `policy-route-check.ts` and inherits its discipline verbatim: an
+indeterminate reading is withheld, never guessed, and the strongest verdict the
+whole module can reach is `degraded` — nothing here gates a stream, an
+interface, a bond or a mutation.
+
+**IT IS READ-ONLY BY CONSTRUCTION.** Four readers, no writer: the NM config
+files, `ip rule show`, `nft list ruleset`, and an `nmcli` enumeration of the
+ACTIVE `ipv4.method shared` profiles. There is no apply, no rollback and no
+teardown anywhere in the module, and a failed read degrades exactly ONE check.
+
+**FOUR CHECKS, EACH AN EXPLICIT TRI-STATE** (`ok` | `degraded` | `unknown`), on
+the `sharing_diag` broadcast (`@ceraui/rpc` `sharingDiagSchema`). `unknown` is
+EMITTED, never expressed as an omitted field — the consumer merge preserves an
+omitted optional, so a raise-only check is the `policy_route_missing` latch
+again. The rollup is `degraded` ≻ `unknown` ≻ `ok`, so it can never claim `ok`
+while a check is withheld.
+
+| Check | `degraded` when | Withheld when |
+|---|---|---|
+| `firewallBackend` | no explicit `firewall-backend` pin (`firewall_backend_unpinned`) or an explicit non-`nftables` one (`firewall_backend_mismatch`) | no NM config file could be read |
+| `steeringRules` | an owned fwmark rule runs at or before source routing (`steering_rule_shadows_source_route`) or off `FWMARK_RULE_PRIORITY` (`steering_rule_priority_drift`) | `ip rule show` unreadable or unparseable |
+| `sharedNat` | an active shared prefix has no NM masquerade (`shared_nat_missing`) or more than one (`shared_nat_duplicated`) | ruleset unreadable, NM unenumerable, or a shared interface holds no address yet |
+| `foreignTables` | `ceralive_ingest_fw` moved its declared hook/priority, or now carries CeraLive client-flow rules (`foreign_table_modified`) | ruleset unreadable, or the ingest firewall is not installed |
+
+Six decisions carry weight, and each was the tempting wrong answer first:
+
+- **A PRE-PIN IMAGE IS `degraded`, NEVER A MISMATCH AND NEVER AN ERROR.** The
+  `firewall-backend=nftables` pin ships in the image (plan todo 12), so a device
+  that predates it is a normal, expected state — it simply cannot be confirmed.
+  It is also deliberately NOT resolved to NetworkManager's compiled-in default:
+  what that default is depends on the daemon's build and on whether it found an
+  `nft` binary at start-up, so substituting one would be a claim this reader
+  cannot support.
+- **THE SHARED PREFIX IS THE INTERFACE'S LIVE ADDRESS, never `10.42.0.0/24`.**
+  NetworkManager picks a shared subnet itself unless `ipv4.addresses` is set, so
+  the PROFILE usually states none — the profile answers WHICH interface is
+  shared, and the netif map answers what prefix it actually leased. An interface
+  that has not leased its gateway yet is INDETERMINATE, never missing NAT.
+- **THE FLOOR IS IDENTIFIED BY TABLE PROVENANCE.** `ceralive_share` masquerades
+  the same prefix by design, so a masquerade rule inside it can never stand in
+  for NM's floor — the reader excludes the owned table before counting. A test
+  removes NM's table and asserts the floor still reports missing.
+- **THE ORDERING FLOOR IS THE HIGHER OF THE CONSTANT AND THE OBSERVED RULES.**
+  `SOURCE_ROUTE_RULE_PRIORITY` is the contract, but an image whose own source
+  rules moved must still be protected, so a steering rule legal against the
+  constant alone and yet ahead of the real source rules is still a shadow.
+- **AN ABSENT `ceralive_ingest_fw` IS `unknown`, NOT `degraded`.** The ingest
+  gateway is operator-disable-able and is not provisioned on every image, so its
+  absence is a statement about the IMAGE rather than evidence that the steering
+  layer touched it. Only an installed table that no longer matches
+  `FOREIGN_NFT_TABLES`' declared hooks — or that now carries client-flow rules —
+  is degraded.
+- **EVERY CONSTANT IS READ, NEVER RE-DERIVED.** `FWMARK_RULE_PRIORITY`,
+  `SOURCE_ROUTE_RULE_PRIORITY`, `SHARE_TABLE`, `FOREIGN_NFT_TABLES`,
+  `CLIENT_FLOW_NAMESPACE` and `UPLINK_MARK_MASK` all come from
+  `uplink-steering/contracts.ts`, and the provenance-byte regex is BUILT from
+  `CLIENT_FLOW_NAMESPACE` so a change to the mark layout cannot leave this reader
+  hunting for a marker the steering layer no longer writes.
+
+**Its `ip rule` reader is deliberately NOT a re-use of `route-policy.ts`.**
+Those readers are scoped to `FWMARK_RULE_PRIORITY` because their job is to find
+the rules the steering layer OWNS; this one must see a steering rule that has
+DRIFTED off that priority, which is exactly the fault it exists to report. The
+line shapes are the same and are shared by regex shape, not by import.
+
+**Cadence + spawn class.** Its own `SHARING_DIAG_INTERVAL_MS` (30 s) `unref`'d
+interval, `isRealDevice()`-gated, wired at boot through
+`guardNonCritical("sharing-diag", …)`. `nft list ruleset` is registered
+separately in `SPAWN_POLICY` as `network.nftRead` (**bounded-probe**), distinct
+from the steering layer's `network.nft` (**bounded-command**) write: a read on
+its own slow cadence has neither that site's caller nor its failure semantics,
+and collapsing the two would let a future write inherit a read's justification.
+
+**Wire registration is all four steps, deliberately.** Schema in
+`packages/rpc/src/schemas/network.schema.ts`, event re-exported from
+`rpc/events.ts`, a `case "sharing_diag"` + state slot + `getSharingDiag()` in the
+frontend `subscriptions.svelte.ts`, and post-login hydration on the PRODUCTION
+path — `buildInitialStatus()` plus an explicit emission in
+`rpc/adapter.ts::sendInitialStatusToClient`, NOT the legacy `modules/ui/status.ts`
+relay enumeration. The signal broadcasts on CHANGE only and its slowest input is
+a 30 s poll, so a missed hydration leaves a fresh browser on the pre-check
+all-`unknown` state indefinitely; `tests/sharing-diag-initial-push.test.ts` pins
+both halves for the same reason `cpu-initial-push.test.ts` does.
+
+**`checkedAt` is excluded from the broadcast change key**, or an identical
+verdict would re-broadcast on every tick; the cached status still carries the
+fresh stamp.
+
+Coverage: `tests/sharing-diag.test.ts` (the verdict table — healthy, shadowed,
+priority drift, duplicated NAT, missing NAT, missing backend pin,
+foreign-table-modified, and every ambiguous arm, plus the nft reader's priority
+spellings and its null contract), `tests/sharing-diag-ordering.test.ts` (the band
+ordering, built ENTIRELY from the two constants — that file contains no priority
+literal), `tests/sharing-diag-initial-push.test.ts` (both hydration halves and the
+end-to-end shadowed-device wire proof), and the frontend half
+`apps/frontend/src/tests/sharing-diag-ingestion.test.ts`.
+
+**Honest status:** every fixture models captured device output; no verdict has
+been produced against a real board's `nft list ruleset`. The image-side
+`firewall-backend=nftables` pin this diagnostic checks for ships in plan todo 12,
+so on today's images the `firewallBackend` check is expected to read
+`firewall_backend_unpinned` — that is the tri-state tolerance working, not a
+finding.
+
 ## BROADCAST EVENTS
+
+### Per-uplink health (`uplinks`) [EXISTS]
+
+`modules/network/uplink-health/` owns the client-steering health verdict. Its one
+exported config object fixes the 5 s cadence, three-failure down threshold,
+five-success recovery threshold, 15 s hold-down and three-probe concurrency cap.
+While streaming, interfaces present in SRTLA telemetry receive zero active probes:
+RTT/NAK/staleness can degrade them, while only definitive carrier/route/disconnect/
+expiry evidence removes them from client steering. Captive interception is
+`degraded/captive_portal`, never `down`; modem signal is not an input.
+
+The engine publishes `uplinks` records and `gateways.ts` filters default-route
+candidates through their steering eligibility. The engine never edits routes;
+`gateways.ts` remains the sole `ip route del default` owner. Post-login hydration
+replays the current records immediately.
 
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
 
 | Event type | Interval | Source |
 |------------|----------|--------|
 | `netif` | 5 s | `modules/network/network-interfaces.ts` |
+| `sharing_diag` | 30 s, on-change + post-login snapshot | `modules/network/sharing-diag/` (real devices only — `isRealDevice()`-gated) |
 | `sensors` | 1 s | `modules/system/sensors.ts` |
 | `encoder-load` | 2 s | `modules/system/encoder-load.ts` (real devices only — `isRealDevice()`-gated) |
 | `fan` | 5 s | `modules/system/fan.ts` (real devices only — `isRealDevice()`-gated) |
@@ -6965,6 +7297,113 @@ host's own regulatory domain. Coverage: `tests/wifi-regdomain-channels.test.ts`,
 driven by real-shaped `iw phy` transcripts in `tests/fixtures/wifi/` (world / ES /
 US / legacy-flag / 6 GHz).
 
+## EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK [EXISTS]
+
+`modules/wifi/wifi-adapter-lock.ts` owns the ONLY per-adapter lock-key
+derivation in the codebase, and both layers import it: the oRPC procedures
+(`runGuarded` in `rpc/procedures/wifi.procedure.ts`) and the hotspot
+start/stop/reconfigure transactions (`wifi-hotspot-activation.ts`,
+`wifi-hotspot-config.ts`).
+
+**The two layers used to derive their own, and they disagreed.** The RPC layer
+keyed on the adapter's registry MAC; `startHotspotForInterface` /
+`stopHotspotForInterface` / `wifiHotspotConfig` /
+`reconfigureHotspotForRegdomain` keyed on `wifiInterface.ifname`. Those are two
+different strings for one radio, so `withDeviceLock` handed both callers the
+lock simultaneously and the guard that exists to serialize an NM activation
+against a station mutation serialized nothing. `wifiConnectNewProcedure`
+compounded it by taking no lock at all — the one mutating procedure that skipped
+`runGuarded` entirely.
+
+- **The key is the PERMANENT hardware address**, i.e. the same value
+  `wifiInterfacesByMacAddress` is keyed on (`resolveWifiPermanentMac`), so a lock
+  key and a registry lookup can never name different adapters. An ifname cannot
+  carry that guarantee: NetworkManager renames adapters (this fleet's
+  duplicate-MAC dongles rename against each other on replug), and the AP+STA
+  concurrent path activates the hotspot on a SECOND, virtual `clap-<parent>`
+  interface belonging to the same radio — an ifname key there leaves the
+  parent's station mutations unguarded for the whole activation.
+- **It is the BARE normalized MAC, no prefix.** It shares the process-wide
+  `withDeviceLock` registry, so prefixing would silently stop matching a key an
+  existing caller already holds.
+- **An unresolvable adapter runs UNGUARDED, deliberately.** `runGuarded` runs
+  `op` when the device id / connection uuid names no known radio: there is no
+  adapter to contend for, and refusing would be dishonest in the other
+  direction.
+- **The station procedures hold the lock across their DISPATCH, not across the
+  nmcli work** — `handleWifi` fires connect/disconnect/forget/scan/new with
+  `void`. The hotspot transactions DO hold it for their full NM activation,
+  which is the ordering that matters: the destructive multi-step operation
+  cannot be interleaved with a station mutation. Making the station legs
+  awaitable under the lock is a separate change with its own RPC-latency
+  consequences, and the `wifi.procedure.ts` header says so rather than claiming
+  more than the code delivers.
+
+Coverage: `tests/wifi-adapter-lock.test.ts` — the two layers' derivations
+compared for string equality AND both CALL SITES proven to refuse under one
+externally-held key, plus the `connectNew`-versus-hotspot-start race asserting
+the refused op dispatched ZERO nmcli and the admitted one observed the first
+op's terminal state. Rule-E proof captured in both directions: reverting the
+activation key to `ifname` reddens the first test, and un-guarding
+`wifiConnectNewProcedure` reddens the second.
+
+### …AND A HOTSPOT TOGGLE NEVER CLAIMS MORE THAN NM HAS CONFIRMED [EXISTS]
+
+`withDeviceLock` is **NOT re-entrant**, and sharing ONE key between the RPC layer
+and the transactions is exactly what exposed that. The hotspot procedures
+dispatched INSIDE `runGuarded`, so the outer lock was still held when the
+transaction reached `withDeviceLock` — and a `void` does not help, because an
+async body runs SYNCHRONOUSLY up to its first `await` and the busy check is
+before any await. On a real device **every** hotspot start/stop/configure refused
+ITSELF with `DEVICE_BUSY` while the procedure ignored the result and answered a
+fabricated `{ success: true }`. Nothing caught it: no test asserted the
+dispatched outcome.
+
+| Procedure | Lock posture |
+|---|---|
+| station (connect/connectNew/disconnect/forget/scan) | UNCHANGED — `runGuarded` across dispatch only |
+| `hotspotStart` / `hotspotStop` | NO `runGuarded`: an `adapterBusy()` admission PROBE (acquire+release), then AWAIT the transaction and return its typed outcome |
+| `hotspotConfigure` | NO `runGuarded`: same probe, then a dispatch ack — awaiting it risks 2 × `HOTSPOT_UP_TO` (60 s) against a 30 s RPC timeout |
+
+**The probe is required, not decorative: two id→MAC resolutions exist and they
+disagree.** `getMacAddressForWifiInterface` reads `getWifiIdToMacAddress()`;
+`wifiAdapterLockKeyForDeviceId` scans the registry by `.id`. A caller that
+resolves a lock key but not a MAC would be answered `no-device` where
+`DEVICE_BUSY` is owed.
+
+**`modules/wifi/wifi-hotspot-outcome.ts` is the ONE builder of a
+`wifi` → `hotspot.start` / `hotspot.stop` frame**, and it BROADCASTS: the path
+that most needs a terminal (the bounded NM confirmation) settles from a monitor
+event or a backoff poll with no requesting socket in hand. **Exactly ONE
+publisher per exit path** — refusals from `wifiHotspotStart`, the already-active
+short-circuit from `startHotspotLocked` (nothing was dispatched, so no
+confirmation will ever settle), confirmed/never-confirmed from
+`registerPendingConfirmation`, every stop outcome from `wifiHotspotStop`, and an
+unexpected throw from the `.catch` arms in `handleWifi`. `wifiHotspotStart`
+deliberately does NOT publish on success — that would resolve the operator's op
+before NetworkManager has answered.
+
+**A state broadcast is not a terminal outcome.** `giveUp()` already called
+`broadcastState()`, which says "still a station"; it does not say the START
+failed, so the keyed op could only expire on its TTL. Hence `not-confirmed`,
+which is deliberately NOT `activation-failed` — NM accepted the activation and
+never reported the AP up, which is a different thing to tell someone.
+
+`accepted: true` on the reply means "a terminal frame follows", never "the access
+point is up". Wire contract: `hotspotToggleErrorSchema` (six members, none
+collapsible) + `hotspotToggleOutputSchema` in `@ceraui/rpc`.
+
+**`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
+`{new:{error:"ambiguous"}}` and deliberately does NOT run
+`wifiDeleteFailedConns()` — the failure path does, because a failure proves the
+profile never activated, and this path proves nothing.
+
+Both `publishOutcome` deps are OPTIONAL so the existing suites' exact dep objects
+still typecheck; production wires them in the `default*Deps`. Coverage:
+`tests/wifi-hotspot-terminal-outcomes.test.ts` (11 tests — every typed refusal,
+both accepted-path settlements, both stop outcomes, the RPC caller's typed
+reply, and the two station-join frames). Rule-E: all 11 fail on the pre-fix tree.
+
 ## WIFI ADAPTER IDENTITY IS THE PERMANENT MAC [EXISTS]
 
 Every adapter-keyed WiFi structure — the `wifiInterfacesByMacAddress` registry,
@@ -7751,6 +8190,11 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't blame "the default connection" when the elected default route sits on an interface CeraUI has already excluded — the kernel elects it from whatever DHCP hands it, and a dup-IP dongle's metric-0 lease outranks eth0. Route the decision through `decideConnectivityClaim`, and don't give `suppressed` an escalation branch: a candidate probe steers by SOURCE ADDRESS, which selects a route only where the kernel supports policy routing, so a failed probe there is evidence about steering rather than connectivity (see AN EXCLUDED DEFAULT ROUTE IS NOT A CONNECTIVITY VERDICT).
 - Don't probe a duplicate-IP interface by SOURCE ADDRESS, and don't "unify" `probeExclusionReason` with `deviceBoundProbeExclusionReason` — the twins share one address AND one admin gateway, so only `SO_BINDTODEVICE` (`curl --interface`) can name one of them. Don't let a dongle's own `192.168.8.1` answer stand in for a WAN verdict either: reaching the admin API and reaching the Internet are separate assertions, and a SIM-less HiLink passes the first while captive-portalling the second.
 - Don't identify an uplink by its GATEWAY address on the default-route path — two twins publish the same `via 192.168.8.1` and differ only in `dev`. `buildRouteAddArgv` replays every token for exactly that reason.
+- Don't let the sharing-coexistence diagnostic write anything, gate anything, or reach a verdict stronger than `degraded` — it is read-only by construction, and every check it cannot establish is an EMITTED `unknown` rather than an omitted field (the `policy_route_missing` latch). Don't read an absent `firewall-backend` pin as a mismatch (it is a PRE-PIN image, which is normal) and don't substitute NetworkManager's compiled-in default for it — what that default is depends on the daemon's build and on whether it found an `nft` binary at start-up.
+- Don't assume `10.42.0.0/24` for an NM shared prefix — the profile answers WHICH interface is shared and the netif map answers what it actually leased, so an interface with no address yet is INDETERMINATE, never missing NAT. And don't count a masquerade rule without first excluding `inet ceralive_share`: it masquerades the same prefix by design, so ignoring table provenance lets CeraUI's own NAT stand in for the NetworkManager floor it is supposed to be checking.
+- Don't judge steering-rule placement against `SOURCE_ROUTE_RULE_PRIORITY` alone — the floor is the higher of that constant and the source rules the device really installed, or a rule that is legal against the constant while sitting ahead of the real source rules reads as healthy. And don't reuse `route-policy.ts`'s readers here: those are scoped to `FWMARK_RULE_PRIORITY`, so they structurally cannot see the drifted rule this diagnostic exists to report.
+- Don't report an absent `ceralive_ingest_fw` as `degraded` — the ingest gateway is operator-disable-able and is not on every image, so absence is a statement about the image rather than evidence that steering touched the table.
+- Don't fold the diagnostic's `nft list ruleset` READ into the steering layer's `network.nft` spawn-policy entry — it is `network.nftRead`, a bounded PROBE with a different caller and different failure semantics, and merging them would let a future write inherit a read's justification.
 - Don't attribute an `ip rule` back to an interface whose address another interface also holds — `derivePolicyRouteMissing` withholds there, and a withheld interface must never be reported as "checked and faulty". Don't re-derive that ambiguity from `NETIF_ERR_DUPIPV4` either: importing it would cycle, and it lags the condition.
 - Don't re-add a `dg<N>h` arm to `isBondedModemOrWifiIface` — the netns layer that created those veths is retired (phase-C todo 39), so the only board that can still show one is an old-image board mid-teardown, and flagging its veth amber reports a layer being REMOVED as a routing fault. The retired seam is regression-locked, including a stale-netns fixture whose `dg0h` rule is still present and whose table is deliberately default-less, so a re-added arm goes red rather than quietly flagging.
 - Don't add `enabled === false` to `probeExclusionReason` — it is overloaded, and the operator toggling a link out of the BOND is not a statement that it may not be used to check for Internet.
@@ -7877,6 +8321,11 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't classify a WiFi radio's AP-vs-client mode from `conn` (or from the presence of a `hotspot` block) — `conn` is IP-gated and lies during a poll skew. Use `isApMode()`; keep `isHotspot()` only where `hotspot.conn` is actually dereferenced.
 - Don't spawn `nmcli` from an RPC-reachable path without a bound — every nmcli process takes one of root's 256 system-bus connections, so an unguarded repeat makes EVERY NetworkManager operation on the device fail `Could not create NMClient object`. `wifiRescan()` coalesces; keep it that way, and keep its shared promise from rejecting.
 - Don't delete only the `saved[ssid]` uuid in `wifiForget` — a second NM profile for the same SSID keeps the row reading "Saved", which the operator cannot tell from a Forget that did nothing. Go through `wifiSiblingConnections`. And don't put `savedAll` on the wire or read it from connect/disconnect: those act on a CONNECTION, Forget removes a NETWORK.
+- Don't hold a per-adapter lock across a call into a module that acquires the SAME key — `withDeviceLock` is not re-entrant and an async body runs synchronously to its first `await`, so `runGuarded(key, () => void wifiHotspotStart(…))` made every hotspot start/stop/configure refuse ITSELF under a fabricated `{success:true}`. The hotspot procedures use an `adapterBusy()` probe and then AWAIT the transaction; don't re-wrap them.
+- Don't return `{success:true}` from a hotspot RPC before the transaction has answered, and don't treat `accepted: true` as "the AP is up" — it promises a later terminal frame and nothing else.
+- Don't build a `wifi` `hotspot.start`/`hotspot.stop` frame anywhere but `wifi-hotspot-outcome.ts`, and don't add a SECOND publisher to an exit path that already has one — publishing success from `wifiHotspotStart` resolves the operator's op before NetworkManager has answered. A `broadcastState()` is not a terminal outcome, and `not-confirmed` is not `activation-failed`.
+- Don't return in silence from a WiFi dispatch that an operator's keyed op is waiting on — a bare `return` leaves it to expire on its TTL. And don't "clean up" `runWifiNew`'s ambiguous path by calling `wifiDeleteFailedConns()` or claiming `generic`: `ok:true` with no uuid proves nothing in either direction.
+- Don't derive a per-adapter WiFi lock key anywhere but `modules/wifi/wifi-adapter-lock.ts`, and don't key one on `wifiInterface.ifname` — the RPC layer and the hotspot transactions did exactly that with two different strings for one radio, so `withDeviceLock` handed both callers the lock at once and the guard serialized nothing. Don't add a mutating WiFi procedure that skips `runGuarded` either (that was `wifiConnectNewProcedure`), and don't prefix the key: it shares the process-wide `withDeviceLock` registry, so a prefix silently stops matching a key an existing caller already holds.
 - Don't key an adapter on the MAC `ifconfig`/`GENERAL.HWADDR` reports — NetworkManager randomizes it while scanning, and pinning it into `802-11-wireless.mac-address` produces a profile no device can ever activate. Route through `resolveWifiPermanentMac()`, and bridge an ifname-carrying monitor event with `getWifiInterfaceByIfname()`.
 - Don't generate a hotspot SSID/password without asking `findHotspotConnForAdapter()` and the credential store first — that ordering IS the fix for the six orphaned `Hotspot-N` profiles. And don't move the `nmConnSetFields` repair after the `nmConnect`: NetworkManager rejects a profile whose pinned MAC does not match the adapter's permanent address, so the activation is what fails.
 - Don't delete a hotspot profile because nothing claims the address it is bound to — a temporarily unplugged radio looks identical to an abandoned profile, and the deletion destroys the very credentials the backstop exists to preserve. Deletion needs POSITIVE evidence from the credential store (`collectSupersededHotspotConns`), and the `Hotspot-N` name pattern is a narrowing filter, never evidence: an operator's own `nmcli device wifi hotspot` profile carries the same id. Don't stop maintaining `previousConns` either — it is the ONLY record that a superseded profile was ever ours, and without it a real duplicate becomes permanently undeletable.

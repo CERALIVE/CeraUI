@@ -58,6 +58,7 @@ import { initModemCredentials } from "./modules/modems/modem-credentials.ts";
 import { initModemUpdateLoop } from "./modules/modems/modem-update-loop.ts";
 import { setMockDbusModemViews } from "./modules/modems/modem-wire-producer.ts";
 import { initMutationRecovery } from "./modules/modems/mutation-replay.ts";
+import { reconcileEthernetRoles } from "./modules/network/ethernet-role-transition.ts";
 import { UPDATE_GW_INT, updateGwWrapper } from "./modules/network/gateways.ts";
 import { createMonitorManager } from "./modules/network/monitor/monitor-manager.ts";
 import {
@@ -71,6 +72,14 @@ import {
 	initNetworkInterfaceMonitoring,
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
+import { initSharingDiag } from "./modules/network/sharing-diag/runtime.ts";
+import { initUplinkHealth } from "./modules/network/uplink-health/runtime.ts";
+import {
+	initUplinkShaper,
+	stopUplinkShaper,
+	tickUplinkShaper,
+} from "./modules/network/uplink-shaper/runtime.ts";
+import { initUplinkSteering } from "./modules/network/uplink-steering/runtime.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { wireActiveProfileReporter } from "./modules/remote-control/active-profile-wiring.ts";
 import { initControlChannel } from "./modules/remote-control/channel.ts";
@@ -137,6 +146,7 @@ import {
 } from "./modules/system/ssh.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
+import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
 import { wifiStateInit } from "./modules/wifi/wifi-connections.ts";
 import { handleWifiMonitorEvent as handleHotspotMonitorEvent } from "./modules/wifi/wifi-hotspot-monitor.ts";
 import { onHeartbeatTick, startHeartbeat } from "./rpc/heartbeat.ts";
@@ -380,6 +390,10 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 periodicCheckForSoftwareUpdates();
 
 initNetworkInterfaceMonitoring();
+initUplinkHealth();
+await guardNonCritical("uplink-steering", initUplinkSteering);
+await guardNonCritical("uplink-shaper", initUplinkShaper);
+await guardNonCritical("sharing-diag", initSharingDiag);
 
 // Event-driven netif: monitor stream drives up/down; onResync re-polls on restart
 const networkMonitor = createMonitorManager(() => updateNetif());
@@ -391,6 +405,19 @@ wifiStateInit(networkMonitor);
 
 // Hotspot NM-confirmation: flips station↔hotspot once NM reports the switch
 networkMonitor.on("monitor-event", handleHotspotMonitorEvent);
+
+// Re-apply the operator's persisted per-adapter WiFi mode. Deliberately NOT
+// awaited: the adapter registry is filled by the netif poll seconds after this
+// point, so the reconciler does its own bounded wait — awaiting it here would
+// put a radio on the boot critical path for no gain. It is idempotent and never
+// throws, so a device with no stated preference pays one map lookup.
+void guardNonCritical("wifi-adapter-modes", reconcileWifiAdapterModes);
+
+// Re-apply the operator's persisted shared-LAN Ethernet roles. Deliberately NOT
+// awaited, for the reason above: it rewrites NetworkManager profiles, and a
+// wired port must not sit on the boot critical path. It is idempotent and never
+// throws, so a device with no stated role pays one map lookup.
+void guardNonCritical("ethernet-roles", reconcileEthernetRoles);
 
 // MUST precede initModemUpdateLoop: the loop's first discovery + `modems`
 // broadcast fire immediately, and every modem RPC gates on the readiness
@@ -474,6 +501,9 @@ onHeartbeatTick(broadcastHealthIfChanged);
 
 // srtla link telemetry: fold into the status flow on the same tick, on-change
 onHeartbeatTick(broadcastLinkTelemetryIfChanged);
+onHeartbeatTick(() => {
+	void tickUplinkShaper();
+});
 
 // Network-ingest gateway status (Todo 16): probe the rtmp/srt ingest gateways on
 // the heartbeat cadence and fold the result into the `status` flow on change. The
@@ -528,6 +558,7 @@ process.on("SIGTERM", () =>
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
+		stopUplinkShaper,
 		exit: process.exit,
 	}),
 );
@@ -536,6 +567,7 @@ process.on("SIGINT", () =>
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
+		stopUplinkShaper,
 		exit: process.exit,
 	}),
 );

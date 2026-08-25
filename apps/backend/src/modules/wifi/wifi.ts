@@ -66,6 +66,7 @@ import { getWifiChannelMap } from "./wifi-channels.ts";
 import {
 	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
+	getWifiScanStampForDevice,
 	wifiRescan,
 	wifiScheduleScanRefresh,
 	wifiUpdateScanResult,
@@ -78,6 +79,7 @@ import {
 } from "./wifi-hotspot-clients.ts";
 import { wifiHotspotConfig, wifiHotspotStop } from "./wifi-hotspot-config.ts";
 import { handleHotspotConn } from "./wifi-hotspot-discovery.ts";
+import { publishHotspotOutcome } from "./wifi-hotspot-outcome.ts";
 import {
 	getHotspotSecurityMap,
 	type HotspotBandMaxWidth,
@@ -104,6 +106,9 @@ import {
 	saeActivateArgs,
 	type WifiStationJoinPlan,
 } from "./wifi-station-security.ts";
+
+const errorText = (err: unknown) =>
+	err instanceof Error ? err.message : String(err);
 
 type WifiConnectMessage = {
 	connect: ConnectionUUID;
@@ -180,7 +185,29 @@ export type WifiInterfaceResponseMessage = Pick<
 	// The STATION leg's live negotiated rate. Absent on an AP-mode radio, on a
 	// station holding no connection, and until the first read has landed.
 	link?: WifiLinkTelemetry;
+	// This adapter's completed-scan counter and the moment it last advanced.
+	// Absent until the adapter has completed one scan cycle — a consumer confirms
+	// its own scan by the generation ADVANCING, never by the list changing.
+	scanGeneration?: number;
+	scanAt?: number;
 };
+
+/*
+  Stamp the adapter's last completed scan cycle onto its wire row.
+
+  It rides EVERY tick rather than only the tick that advanced it, so a consumer
+  never has to decide whether a missing generation means "unchanged" or
+  "withdrawn" — the same rule `capabilities` states directly above.
+*/
+function applyScanStamp(
+	entry: WifiInterfaceResponseMessage,
+	device: WifiInterfaceId,
+): void {
+	const stamp = getWifiScanStampForDevice(device);
+	if (stamp === undefined) return;
+	entry.scanGeneration = stamp.generation;
+	entry.scanAt = stamp.at;
+}
 
 export function wifiBuildMsg() {
 	// Return mock WiFi data in development mode
@@ -238,14 +265,16 @@ export function wifiBuildMsg() {
 				saved[ssid] = mockWifiUuidForSsid(ssid);
 			}
 
-			ifs[index] = {
+			const entry: WifiInterfaceResponseMessage = {
 				ifname: radio.ifname,
 				conn: activeSsid ? mockWifiUuidForSsid(activeSsid) : "",
 				hw: radio.macAddress,
 				saved,
 				available,
 				...(radio.supports_hotspot ? { supports_hotspot: true } : {}),
-			} satisfies WifiInterfaceResponseMessage;
+			};
+			applyScanStamp(entry, index);
+			ifs[index] = entry;
 		});
 
 		return ifs;
@@ -344,6 +373,8 @@ export function wifiBuildMsg() {
 		if (capabilities !== undefined) {
 			entry.capabilities = capabilities;
 		}
+
+		applyScanStamp(entry, id);
 	}
 
 	// Fire-and-forget, after the snapshot is assembled: the read is bounded by
@@ -705,11 +736,24 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 	// stayed green while hardware could not join a new network at all.
 	if (msg.device === undefined || !msg.ssid) return;
 
+	const senderId = getSocketSenderId(conn);
+	// An unresolvable adapter is still a terminal answer the caller is owed; the
+	// retired silent returns left the keyed join op pending until its TTL.
+	const refuse = () => {
+		conn.send(
+			buildMsg(
+				"wifi",
+				{ new: { error: "generic", device: msg.device } },
+				senderId,
+			),
+		);
+	};
+
 	const macAddress = getMacAddressForWifiInterface(msg.device);
-	if (!macAddress) return;
+	if (!macAddress) return refuse();
 
 	const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
-	if (!wifiInterface) return;
+	if (!wifiInterface) return refuse();
 
 	const plan = planWifiStationJoin({
 		ssid: msg.ssid,
@@ -717,8 +761,6 @@ function wifiNew(conn: MessageSocket, msg: WifiNewMessage["new"]) {
 		password: msg.password,
 		security: msg.security,
 	});
-
-	const senderId = getSocketSenderId(conn);
 
 	void runWifiNew(conn, msg, macAddress, plan, senderId);
 }
@@ -756,6 +798,21 @@ async function runWifiNew(
 	if (outcome.uuid === undefined) {
 		logger.warn(
 			`wifiNew: no error but not matching a successful connection msg in:\n${outcome.stdout}\n${outcome.stderr}`,
+		);
+		/*
+		  nmcli reported no error and named no connection, so nothing here can say
+		  whether the network was joined — but a bare `return` is the one answer
+		  that is certainly wrong: it leaves the dialog's keyed op to expire on its
+		  TTL with no explanation. `ambiguous` says exactly that much, and nothing
+		  is cleaned up: `wifiDeleteFailedConns` runs on the FAILURE path because a
+		  failure proves the profile never activated, and this path proves nothing.
+		*/
+		conn.send(
+			buildMsg(
+				"wifi",
+				{ new: { error: "ambiguous", device: msg.device } },
+				senderId,
+			),
 		);
 		return;
 	}
@@ -804,8 +861,17 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 				);
 				break;
 
+			/*
+			  The requested adapter is FORWARDED, not discarded. Dropping it made
+			  every scan a device-wide one: the rescan went out with no `ifname`, so
+			  a two-radio board rescanned whichever radio NetworkManager felt like,
+			  and the process-wide coalescing guard then served the second adapter's
+			  caller from the first one's run.
+			*/
 			case "scan":
-				void wifiRescan();
+				void wifiRescan(
+					extractMessage<WifiScanMessage, typeof type>(msg, type),
+				);
 				break;
 
 			case "new":
@@ -823,12 +889,43 @@ export function handleWifi(conn: MessageSocket, msg: WifiMessage["wifi"]) {
 					msg,
 					type,
 				);
+				/*
+				  These are dispatched, not awaited — but they are NOT bare
+				  fire-and-forget: each transaction publishes a terminal `wifi` frame
+				  on every outcome it can reach, and the `catch` arms cover the one
+				  outcome it cannot (an unexpected throw), so no path on this branch
+				  can leave an operator's keyed op to expire on its TTL.
+				*/
 				if ("start" in hotspotMessage && hotspotMessage.start) {
-					void wifiHotspotStart(hotspotMessage.start);
+					const { device } = hotspotMessage.start;
+					void wifiHotspotStart(hotspotMessage.start).catch((err) => {
+						logger.error(`hotspot start threw: ${errorText(err)}`);
+						publishHotspotOutcome("start", device, {
+							success: false,
+							error: "activation-failed",
+						});
+					});
 				} else if ("stop" in hotspotMessage && hotspotMessage.stop) {
-					void wifiHotspotStop(hotspotMessage.stop);
+					const { device } = hotspotMessage.stop;
+					void wifiHotspotStop(hotspotMessage.stop).catch((err) => {
+						logger.error(`hotspot stop threw: ${errorText(err)}`);
+						publishHotspotOutcome("stop", device, {
+							success: false,
+							error: "deactivation-failed",
+						});
+					});
 				} else if ("config" in hotspotMessage && hotspotMessage.config) {
-					void wifiHotspotConfig(conn, hotspotMessage.config);
+					const { device } = hotspotMessage.config;
+					void wifiHotspotConfig(conn, hotspotMessage.config).catch((err) => {
+						logger.error(`hotspot configure threw: ${errorText(err)}`);
+						conn.send(
+							buildMsg(
+								"wifi",
+								{ hotspot: { config: { device, error: "unavailable" } } },
+								getSocketSenderId(conn),
+							),
+						);
+					});
 				}
 				break;
 			}

@@ -22,6 +22,8 @@ src/
 |------|----------|
 | Add a new RPC procedure | `contracts/{domain}.contract.ts` → wire into `contracts/index.ts` |
 | Add/change input or output shape | `schemas/{domain}.schema.ts` |
+| Shared-client steering status/refusal + transient hard-down reset | `schemas/network.schema.ts` → `uplinkSteeringStatusSchema` / `uplinkFlowsResetEventSchema` |
+| Streaming-first shaper mode/algorithm + priority degradation | `schemas/network.schema.ts` → `uplinkShaperStatusSchema` |
 | Correlate a modem across a USB-mode transition | `schemas/modems.schema.ts` → `deriveModemStableKey()` / the `stable_key` field |
 | The shared modem MUTATION-SAFETY wire vocabulary (journal states, refusals, ack modes, the three operator procedures) | `schemas/modems.schema.ts` → `modemMutation*Schema`; section below → THE MUTATION-SAFETY VOCABULARY IS SHARED |
 | Identify a bonded LINK across a SIGHUP reload (`link_id` / `port_label` / `serial` on a telemetry row) + the one normalized bind-map disposition (`bond_mapping`) | `schemas/status.schema.ts` → `linkTelemetryEntrySchema`, `bondMappingSchema`; `conn_id` is a FILE POSITION and must never be a row identity |
@@ -42,6 +44,25 @@ import { appContract, type AppContract } from '@ceraui/rpc';           // root r
 import { streamingContract } from '@ceraui/rpc/contracts';             // granular
 import { loginInputSchema } from '@ceraui/rpc/schemas';                // validation
 ```
+
+## UPLINK STEERING WIRE STATE IS SHARED [EXISTS]
+
+`schemas/network.schema.ts` owns both steering channels. The persistent
+`uplinkSteeringStatusSchema` is a discriminated union: `available`, or
+`steering_unavailable` with one of the six machine-stable reasons and an optional
+diagnostic detail. The transient `uplinkFlowsResetEventSchema` is exactly
+`{iface, linkId}` — physical identity, never a route-table position or mark.
+
+The backend parses both shapes before broadcast. Only `uplink-steering` is sent in
+the post-login snapshot; `uplink-flows-reset` describes a hard-down action that
+already happened and must never be replayed to a later session. Do not duplicate
+either type under `apps/` or widen the reset event into persisted state.
+
+`uplinkShaperStatusSchema` is the sibling persistent state. Available states name
+the lifecycle mode and realized algorithm (`cake` or `htb-fq_codel`). Unavailable
+states carry one typed ownership/apply reason and the literal
+`priorityDegraded: true`, making it impossible for a consumer to render an
+unshaped shared uplink as protected. It does not alter steering availability.
 
 ## DEVICE-TOKEN CLAIM CONTRACT (canonical, single source)
 
