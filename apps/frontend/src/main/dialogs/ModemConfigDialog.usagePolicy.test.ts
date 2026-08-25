@@ -125,6 +125,13 @@ afterEach(() => {
 	vi.clearAllMocks();
 });
 
+// Every case below mounts the WHOLE ModemConfigDialog, so this file is render/transform-bound
+// rather than assertion-bound: wall-clock tracks machine load, not what is asserted — the same
+// class of CPU-contended-runner overrun documented in ModemConfigDialog.detail.test.ts, which
+// carries the identical fix. Measured in CI: the first case alone exceeded vitest's 5000 ms
+// default on a contended runner while passing locally in well under 1000 ms.
+vi.setConfig({ testTimeout: 15000 });
+
 describe("ModemConfigDialog — the usage policy is a tri-state write", () => {
 	it("a threshold-only save PRESERVES the persisted cycle day by omitting it", async () => {
 		mount(modem({ supported: true, cycle_day: 17, threshold_bytes: 10 * GB }));
