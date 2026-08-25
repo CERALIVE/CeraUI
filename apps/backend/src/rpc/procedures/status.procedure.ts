@@ -16,6 +16,7 @@ import { getNetworkIngestInfo } from "../../modules/network/network-ingest.ts";
 import { netIfBuildMsg } from "../../modules/network/network-interfaces.ts";
 import { getUnclaimedAdapters } from "../../modules/network/unclaimed-adapters.ts";
 import { getUplinksMessage } from "../../modules/network/uplink-health/state.ts";
+import { getUplinkShaperStatus } from "../../modules/network/uplink-shaper/status.ts";
 import { getUplinkSteeringStatus } from "../../modules/network/uplink-steering/status.ts";
 import {
 	buildRelaysMsg,
@@ -151,6 +152,7 @@ export function buildInitialStatus() {
 		netif: netIfBuildMsg(),
 		uplinks: getUplinksMessage(),
 		uplinkSteering: getUplinkSteeringStatus(),
+		uplinkShaper: getUplinkShaperStatus(),
 		sensors: getSensors(),
 		encoderLoad: getEncoderLoad(),
 		// A BOOT FACT with no periodic loop behind it, so the initial push is the

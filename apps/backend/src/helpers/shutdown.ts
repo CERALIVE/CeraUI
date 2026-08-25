@@ -4,6 +4,7 @@ export interface BackendShutdownDeps {
 	readonly gracefulShutdown: () => Promise<void>;
 	readonly stopSrtIngest: () => Promise<void>;
 	readonly stopDmesgWatchers: () => void;
+	readonly stopUplinkShaper?: () => Promise<void>;
 	readonly exit: (code: number) => void;
 }
 
@@ -34,6 +35,8 @@ export function handleTerminationSignal(
 	void (async () => {
 		await settleCleanup("SRT ingest", deps.stopSrtIngest);
 		await settleCleanup("dmesg watchers", deps.stopDmesgWatchers);
+		if (deps.stopUplinkShaper)
+			await settleCleanup("uplink shaper", deps.stopUplinkShaper);
 		await settleCleanup("streaming processes", deps.gracefulShutdown);
 		deps.exit(0);
 	})();

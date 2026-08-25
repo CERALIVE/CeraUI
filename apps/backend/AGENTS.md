@@ -99,6 +99,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Device-bound connectivity probe (`curl --interface`) — the only thing that can name one of two same-IP twins** | `modules/network/device-bound-probe.ts` (`checkConnectivityViaDevice`, `SAFE_IFNAME_RE`) + `connectivity-candidates.ts` (`probeBindingFor`, `deviceBoundProbeExclusionReason`) + `connectivity-election.ts` (`electConnectivityCandidate`, injected probe pair); contract below → …AND A PROBE THAT MUST NAME A DEVICE BINDS ONE |
 | Policy-route self-check for bonded wifi/modem/dongle interfaces (`policy_route_missing`) | `modules/network/policy-route-check.ts` |
 | **Flow-sticky client sharing (owned nft table, stable marks, per-uplink routes, hard-down drain)** | `modules/network/uplink-steering/` + `modules/network/uplink-sharing.ts`; contract [`../../docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md) |
+| **Streaming-first egress shaping (uncapped local band, adaptive marked-client cap)** | `modules/network/uplink-shaper/`; contract [`../../docs/UPLINK_SHAPING.md`](../../docs/UPLINK_SHAPING.md) |
 | **Router-dongle netns runtime metadata (contract-v1 MIRROR reader; stale/ambiguous/bad-version ignored+logged)** | `modules/network/dongle-metadata.ts` (`readDongleMetadata`, `refreshDongleMetadata`, `getDongleMarker`, `dongleSlotLabel`) |
 | **The `dongle` netif marker (live-row stamp + wire-only union rows + one-frame retraction)** | `modules/network/network-interfaces.ts` (`applyDongleProjection`); contract below → AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND |
 | Retracting the `hdmi_error` notification (BOTH the no-signal message and the EMI/cable advisory) once the link relocks | `modules/system/hdmi-signal-notification.ts` (`clearHdmiSignalErrorOnRecovery`, `HDMI_MSGS_CLEARED_BY_LOCKED_SIGNAL`, hooked into `sources.ts` `commitEngineDevices`); contract below → A PERSISTENT NOTIFICATION MUST BE RETRACTABLE |
@@ -5684,6 +5685,29 @@ The CeraUI half is complete and kernel-netns tested. It cannot activate on a fle
 image until image-building todo 12 ships `ceralive-share.service`, its teardown
 script, nftables/conntrack packages, and the CeraUI unit ordering. Full contract and
 hardware gate: [`../../docs/UPLINK_STEERING.md`](../../docs/UPLINK_STEERING.md).
+
+## STREAMING-FIRST UPLINK SHAPING [PARTIAL — backend complete; image backstop + board drill pending]
+
+`modules/network/uplink-shaper/` consumes `readDesiredSteeringState()` as the single
+authority for which uplinks currently carry shared client traffic. Its explicit
+idle/streaming machine is lifecycle-edge driven: stream start installs a conservative
+bootstrap client cap before telemetry, stale telemetry holds, and stream stop removes
+ceilings without waiting for telemetry absence.
+
+The streaming hierarchy is root `prio`: tc band 1 is the design's zero-indexed
+local band 0 and carries only `fq_codel`; tc band 2 is selected by the steering
+`CLIENT_FLOW` fwmark/mask and alone receives CAKE `bandwidth`, or HTB `rate == ceil`
+plus an `fq_codel` leaf when the bounded CAKE child apply is refused. AIMD uses RTT
+inflation, NAK delta, and sustained client-child backlog on a 5 s cadence. All
+constants are in `SHAPER_CONFIG`; current `bitrate_bps` is never treated as capacity.
+
+Root ownership is fail-closed: recognized kernel defaults may be recorded and
+replaced under reserved handle `ca00:`; that handle is restart-idempotent; a custom
+foreign root produces `shaper_unavailable` before any mutation. Removed interfaces
+and module shutdown restore their recorded roots. The persistent `uplink-shaper`
+wire state reports the realized CAKE/HTB algorithm or `priorityDegraded: true` while
+steering and sharing continue independently. Full command, ownership, controller,
+failure, and netns proof is in [`../../docs/UPLINK_SHAPING.md`](../../docs/UPLINK_SHAPING.md).
 
 ## BROADCAST EVENTS
 

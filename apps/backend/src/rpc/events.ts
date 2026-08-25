@@ -24,6 +24,7 @@ export const DEVICE_STATS_EVENT = "device-stats" as const;
 // layer resolves the channel name from the events surface like every other event.
 export { ADDON_EVENT } from "../modules/addons/manager.ts";
 export { UPLINKS_EVENT } from "../modules/network/uplink-health/runtime.ts";
+export { UPLINK_SHAPER_EVENT } from "../modules/network/uplink-shaper/status.ts";
 export {
 	UPLINK_FLOWS_RESET_EVENT,
 	UPLINK_STEERING_EVENT,

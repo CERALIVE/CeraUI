@@ -142,6 +142,13 @@ export async function setIpForwarding(
 	]);
 }
 
+export async function applyTrafficControl(
+	argv: readonly string[],
+	deps: Pick<UplinkSharingDeps, "run"> = defaultDeps,
+): Promise<string> {
+	return await deps.run("tc", [...argv]);
+}
+
 function hexMark(mark: number): string {
 	return `0x${(mark >>> 0).toString(16).padStart(8, "0")}`;
 }

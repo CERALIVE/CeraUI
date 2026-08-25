@@ -73,6 +73,11 @@ import {
 	updateNetif,
 } from "./modules/network/network-interfaces.ts";
 import { initUplinkHealth } from "./modules/network/uplink-health/runtime.ts";
+import {
+	initUplinkShaper,
+	stopUplinkShaper,
+	tickUplinkShaper,
+} from "./modules/network/uplink-shaper/runtime.ts";
 import { initUplinkSteering } from "./modules/network/uplink-steering/runtime.ts";
 import { initRemote } from "./modules/remote/remote.ts";
 import { wireActiveProfileReporter } from "./modules/remote-control/active-profile-wiring.ts";
@@ -386,6 +391,7 @@ periodicCheckForSoftwareUpdates();
 initNetworkInterfaceMonitoring();
 initUplinkHealth();
 await guardNonCritical("uplink-steering", initUplinkSteering);
+await guardNonCritical("uplink-shaper", initUplinkShaper);
 
 // Event-driven netif: monitor stream drives up/down; onResync re-polls on restart
 const networkMonitor = createMonitorManager(() => updateNetif());
@@ -493,6 +499,9 @@ onHeartbeatTick(broadcastHealthIfChanged);
 
 // srtla link telemetry: fold into the status flow on the same tick, on-change
 onHeartbeatTick(broadcastLinkTelemetryIfChanged);
+onHeartbeatTick(() => {
+	void tickUplinkShaper();
+});
 
 // Network-ingest gateway status (Todo 16): probe the rtmp/srt ingest gateways on
 // the heartbeat cadence and fold the result into the `status` flow on change. The
@@ -547,6 +556,7 @@ process.on("SIGTERM", () =>
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
+		stopUplinkShaper,
 		exit: process.exit,
 	}),
 );
@@ -555,6 +565,7 @@ process.on("SIGINT", () =>
 		gracefulShutdown,
 		stopSrtIngest: stopSRTIngest,
 		stopDmesgWatchers,
+		stopUplinkShaper,
 		exit: process.exit,
 	}),
 );

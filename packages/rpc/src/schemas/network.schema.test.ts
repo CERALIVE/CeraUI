@@ -2,7 +2,11 @@
 
 import { describe, expect, test } from 'bun:test';
 
-import { uplinkFlowsResetEventSchema, uplinkSteeringStatusSchema } from './network.schema';
+import {
+	uplinkFlowsResetEventSchema,
+	uplinkShaperStatusSchema,
+	uplinkSteeringStatusSchema,
+} from './network.schema';
 
 describe('uplink steering wire schemas', () => {
 	test('parses available and typed unavailable persistent states', () => {
@@ -44,5 +48,24 @@ describe('uplink steering wire schemas', () => {
 				linkId: '',
 			}).success,
 		).toBe(false);
+	});
+});
+
+describe('uplink shaper status', () => {
+	test('reports the active algorithm or a priority-degraded refusal', () => {
+		expect(
+			uplinkShaperStatusSchema.parse({
+				state: 'available',
+				mode: 'streaming',
+				algorithm: 'htb-fq_codel',
+			}),
+		).toEqual({ state: 'available', mode: 'streaming', algorithm: 'htb-fq_codel' });
+		expect(
+			uplinkShaperStatusSchema.parse({
+				state: 'shaper_unavailable',
+				reason: 'tc_apply_failed',
+				priorityDegraded: true,
+			}),
+		).toEqual({ state: 'shaper_unavailable', reason: 'tc_apply_failed', priorityDegraded: true });
 	});
 });

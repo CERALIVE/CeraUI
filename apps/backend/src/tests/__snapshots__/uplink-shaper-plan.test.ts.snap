@@ -1,0 +1,27 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`buildShaperPlan CAKE hierarchy leaves the local band uncapped and caps only marked clients 1`] = `
+[
+  "qdisc replace dev wwan0 root handle ca00: prio bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
+  "qdisc replace dev wwan0 parent ca00:1 handle ca10: fq_codel",
+  "filter replace dev wwan0 parent ca00: protocol all priority 10 handle 0xcaaeed00/0xffffff00 fw flowid ca00:2",
+  "qdisc replace dev wwan0 parent ca00:2 handle ca20: cake bandwidth 4000000bit",
+]
+`;
+
+exports[`buildShaperPlan HTB fallback attaches rate and ceil only beneath the client band 1`] = `
+[
+  "qdisc replace dev wwan0 root handle ca00: prio bands 2 priomap 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0",
+  "qdisc replace dev wwan0 parent ca00:1 handle ca10: fq_codel",
+  "filter replace dev wwan0 parent ca00: protocol all priority 10 handle 0xcaaeed00/0xffffff00 fw flowid ca00:2",
+  "qdisc replace dev wwan0 parent ca00:2 handle ca20: htb default 1",
+  "class replace dev wwan0 parent ca20: classid ca20:1 htb rate 4000000bit ceil 4000000bit",
+  "qdisc replace dev wwan0 parent ca20:1 handle ca30: fq_codel",
+]
+`;
+
+exports[`buildShaperPlan idle installs fair queuing without a ceiling 1`] = `
+[
+  "qdisc replace dev wwan0 root handle ca00: fq_codel",
+]
+`;

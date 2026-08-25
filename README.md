@@ -65,6 +65,10 @@ A dev-only DevTools destination is available in development builds.
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the
   remaining deployment dependency; see [`docs/UPLINK_STEERING.md`](docs/UPLINK_STEERING.md).
+- **Streaming-first client shaping**: while live, locally-originated SRT/SRTLA
+  traffic occupies an uncapped priority band and only steering-marked client flows
+  receive an adaptive CAKE/HTB ceiling. See
+  [`docs/UPLINK_SHAPING.md`](docs/UPLINK_SHAPING.md).
 
 ## Development
 
@@ -163,6 +167,7 @@ See [BUILD_PIPELINE.md](docs/BUILD_PIPELINE.md) for full build documentation.
 | [BRANDING.md](docs/BRANDING.md) | Branding guidelines |
 | [TOUCHSCREEN.md](docs/TOUCHSCREEN.md) | Touch/kiosk layout mode |
 | [UPLINK_STEERING.md](docs/UPLINK_STEERING.md) | Shared-client flow steering, route/NAT ownership, and validation status |
+| [UPLINK_SHAPING.md](docs/UPLINK_SHAPING.md) | SRT-priority qdisc hierarchy, adaptive client caps, ownership, and validation status |
 | [TECHNICAL_DEBT.md](docs/TECHNICAL_DEBT.md) | Machine-checkable tech-debt register (source-experience overhaul) |
 | [CONVENTIONS.md](docs/CONVENTIONS.md) | CeraUI-local conventions including tech-debt register contract |
 | [apps/frontend/docs/DEVTOOLS.md](apps/frontend/docs/DEVTOOLS.md) | Development tools |

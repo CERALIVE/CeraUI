@@ -192,6 +192,21 @@ export const uplinkSteeringStatusSchema = z.discriminatedUnion('state', [
 ]);
 export type UplinkSteeringStatus = z.infer<typeof uplinkSteeringStatusSchema>;
 
+export const uplinkShaperStatusSchema = z.discriminatedUnion('state', [
+	z.object({
+		state: z.literal('available'),
+		mode: z.enum(['idle', 'streaming']),
+		algorithm: z.enum(['cake', 'htb-fq_codel']),
+	}),
+	z.object({
+		state: z.literal('shaper_unavailable'),
+		reason: z.enum(['foreign_qdisc', 'qdisc_inventory_failed', 'tc_apply_failed']),
+		priorityDegraded: z.literal(true),
+		detail: z.string().min(1).optional(),
+	}),
+]);
+export type UplinkShaperStatus = z.infer<typeof uplinkShaperStatusSchema>;
+
 export const uplinkFlowsResetEventSchema = z.object({
 	iface: z.string().min(1),
 	linkId: z.string().min(1),
