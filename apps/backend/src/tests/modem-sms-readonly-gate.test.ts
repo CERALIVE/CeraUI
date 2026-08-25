@@ -109,7 +109,8 @@ describe("the modem SMS surface is read-only, and stays that way", () => {
 	it("scans a non-trivial set of modem source files", () => {
 		// Guards the gate itself: a moved directory would otherwise make this
 		// suite pass vacuously by scanning nothing.
-		expect(SOURCES.length).toBeGreaterThan(15);
+		// Scanned 85 files before adding this count floor.
+		expect(SOURCES.length).toBeGreaterThanOrEqual(85);
 		expect(
 			SOURCES.some((path) => path.endsWith("mmcli-sms.ts")),
 			"the SMS module itself must be in scan scope",
