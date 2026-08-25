@@ -30,6 +30,17 @@ import { expect, test } from '../fixtures/index.js';
 import { navigateTo } from '../helpers/index.js';
 import { DevToolsPage } from '../pages/devtools.js';
 
+/**
+ * Per-link telemetry is a push-vs-capture race with no settled side — Skeleton
+ * while the feed is `undefined`, "--" once delivered — and which one a capture
+ * sees depends on whether this page was the first to authenticate against its
+ * worker backend. mask.css neutralises neither, so the value cells are pinned to
+ * the Skeleton's own metrics. Reasoning in full in network.visual.spec.ts, which
+ * captures the same section.
+ */
+const TELEMETRY_STABILIZE =
+	'[data-testid="link-telemetry"] dd{visibility:hidden !important;display:block !important;overflow:hidden !important;margin-block-start:0.125rem !important;block-size:0.875rem !important;inline-size:2.5rem !important}';
+
 const maskStyle = new URL('./mask.css', import.meta.url).pathname;
 
 // Hide the HUD's volatile telemetry (bitrate + SoC readouts both carry a `title`;
@@ -90,7 +101,7 @@ test.describe('@visual LinkIndicator surfaces', () => {
 			const bonded = page.getByRole('region', { name: 'Bonded Links' });
 			await expect(bonded).toBeVisible();
 
-			await page.addStyleTag({ content: BONDED_STABILIZE });
+			await page.addStyleTag({ content: `${BONDED_STABILIZE}${TELEMETRY_STABILIZE}` });
 
 			await expect(bonded).toHaveScreenshot('bonded-links-section.png', {
 				stylePath: maskStyle,
