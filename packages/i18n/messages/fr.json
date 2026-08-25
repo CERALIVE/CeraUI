@@ -2280,6 +2280,8 @@
 	"wifiSelector.dialog.searchWifi": "Rechercher des réseaux WiFi",
 	"wifiSelector.emptyState.description": "Cliquez sur Scanner pour trouver les réseaux WiFi disponibles.",
 	"wifiSelector.emptyState.title": "Aucun réseau trouvé",
+	"wifiSelector.freshness.refreshing": "Actualisation en cours – ces résultats vont être remplacés",
+	"wifiSelector.freshness.stale": "Dernière recherche échouée – résultats antérieurs affichés",
 	"wifiSelector.error.authFailed": "Mot de passe incorrect",
 	"wifiSelector.error.authFailedDescription": "Le mot de passe que vous avez saisi est incorrect. Veuillez vérifier et réessayer.",
 	"wifiSelector.error.connectionFailed": "Échec de la Connexion WiFi",

@@ -2232,6 +2232,8 @@
 	"wifiSelector.dialog.searchWifi": "WiFi 네트워크 검색",
 	"wifiSelector.emptyState.description": "스캔을 클릭하여 사용 가능한 WiFi 네트워크를 검색하세요.",
 	"wifiSelector.emptyState.title": "네트워크를 찾을 수 없음",
+	"wifiSelector.freshness.refreshing": "새로 고치는 중 — 이 결과는 곧 교체됩니다",
+	"wifiSelector.freshness.stale": "마지막 검색에 실패했습니다 — 이전 결과를 표시합니다",
 	"wifiSelector.error.authFailed": "비밀번호가 올바르지 않습니다",
 	"wifiSelector.error.authFailedDescription": "입력한 비밀번호가 올바르지 않습니다. 확인 후 다시 시도하세요.",
 	"wifiSelector.error.connectionFailed": "WiFi 연결 실패",

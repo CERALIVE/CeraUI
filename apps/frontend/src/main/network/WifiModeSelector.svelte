@@ -25,7 +25,7 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { WifiAdapterMode } from '@ceraui/rpc/schemas';
-import { Ban, Loader2, TriangleAlert } from '@lucide/svelte';
+import { Ban, Loader2, RadioTower, TriangleAlert, Waypoints, Wifi } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
@@ -56,6 +56,19 @@ interface Props {
 }
 
 const { view, context, lockedReason, compact = false }: Props = $props();
+
+// The glyph vocabulary `WifiModeBadge` renders, carried here by the SELECTED rung
+// only. On every rung it would widen the control by three glyphs, and the 375px
+// row has ~50px of headroom; on the selected one it costs a single glyph and makes
+// the chosen mode legible as a SHAPE rather than as "whichever pill is lime". The
+// slot is shared with the rung's state marks, which outrank it: an in-flight rung
+// shows its spinner and a withheld rung its `Ban`, because a rung's STATE is more
+// urgent than its identity.
+const GLYPH: Record<WifiAdapterMode, typeof Wifi> = {
+	station: Wifi,
+	hotspot: RadioTower,
+	hybrid: Waypoints,
+};
 
 /** The mode an inline confirm is armed for. Arming dispatches nothing. */
 let armed = $state<WifiAdapterMode | undefined>(undefined);
@@ -129,6 +142,9 @@ function request(mode: WifiAdapterMode) {
 					<Loader2 class="size-3 shrink-0 animate-spin motion-reduce:animate-none" />
 				{:else if !option.available}
 					<Ban aria-hidden="true" class="size-3 shrink-0" />
+				{:else if option.selected}
+					{@const Glyph = GLYPH[option.mode]}
+					<Glyph aria-hidden="true" class="size-3 shrink-0" />
 				{/if}
 				{resolveMessageKey(wifiModeLabelKey(option.mode))}
 			</button>

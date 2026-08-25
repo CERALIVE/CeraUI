@@ -2280,6 +2280,8 @@
 	"wifiSelector.dialog.searchWifi": "Ver redes disponibles",
 	"wifiSelector.emptyState.description": "Haz clic en buscar para encontrar redes WiFi disponibles en tu área.",
 	"wifiSelector.emptyState.title": "No se encontraron redes",
+	"wifiSelector.freshness.refreshing": "Actualizando: estos resultados se van a reemplazar",
+	"wifiSelector.freshness.stale": "El último escaneo falló: se muestran resultados anteriores",
 	"wifiSelector.error.authFailed": "Contraseña incorrecta",
 	"wifiSelector.error.authFailedDescription": "La contraseña que ingresaste es incorrecta. Verifícala e inténtalo de nuevo.",
 	"wifiSelector.error.connectionFailed": "Conexión WiFi Fallida",

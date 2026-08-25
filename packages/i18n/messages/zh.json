@@ -2232,6 +2232,8 @@
 	"wifiSelector.dialog.searchWifi": "搜索 WiFi 网络",
 	"wifiSelector.emptyState.description": "点击扫描搜索可用的 WiFi 网络。",
 	"wifiSelector.emptyState.title": "未找到网络",
+	"wifiSelector.freshness.refreshing": "正在刷新 — 这些结果即将被替换",
+	"wifiSelector.freshness.stale": "上次扫描失败 — 正在显示较早的结果",
 	"wifiSelector.error.authFailed": "密码不正确",
 	"wifiSelector.error.authFailedDescription": "您输入的密码不正确。请检查后重试。",
 	"wifiSelector.error.connectionFailed": "WiFi连接失败",

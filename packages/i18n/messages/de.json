@@ -2277,6 +2277,8 @@
 	"wifiSelector.dialog.searchWifi": "WLAN-Netzwerke suchen",
 	"wifiSelector.emptyState.description": "Klicken Sie auf Scannen, um verfügbare WLAN-Netzwerke zu finden.",
 	"wifiSelector.emptyState.title": "Keine Netzwerke gefunden",
+	"wifiSelector.freshness.refreshing": "Wird aktualisiert – diese Ergebnisse werden ersetzt",
+	"wifiSelector.freshness.stale": "Letzter Suchlauf fehlgeschlagen – frühere Ergebnisse werden angezeigt",
 	"wifiSelector.error.authFailed": "Falsches Passwort",
 	"wifiSelector.error.authFailedDescription": "Das eingegebene Passwort ist falsch. Bitte überprüfen Sie es und versuchen Sie es erneut.",
 	"wifiSelector.error.connectionFailed": "WLAN-Verbindung Fehlgeschlagen",

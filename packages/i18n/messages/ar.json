@@ -2289,6 +2289,8 @@
 	"wifiSelector.dialog.searchWifi": "البحث عن شبكات WiFi",
 	"wifiSelector.emptyState.description": "انقر على مسح للبحث عن شبكات WiFi المتاحة.",
 	"wifiSelector.emptyState.title": "لم يتم العثور على شبكات",
+	"wifiSelector.freshness.refreshing": "جارٍ التحديث — سيتم استبدال هذه النتائج",
+	"wifiSelector.freshness.stale": "فشل آخر فحص — يتم عرض نتائج سابقة",
 	"wifiSelector.error.authFailed": "كلمة مرور غير صحيحة",
 	"wifiSelector.error.authFailedDescription": "كلمة المرور التي أدخلتها غير صحيحة. يرجى التحقق والمحاولة مرة أخرى.",
 	"wifiSelector.error.connectionFailed": "فشل الاتصال بـ WiFi",

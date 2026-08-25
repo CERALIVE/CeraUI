@@ -175,47 +175,33 @@ $effect(() => {
 								{iface.ifname}
 							{/if}
 						</p>
-						<p
-							class={cn(
-								'text-muted-foreground truncate text-xs transition-opacity',
-								!isHotspot && ifaceStale && 'opacity-50',
-							)}
-						>
-							{#if isHotspot}
-								{m["network.view.hotspot"]()} · {iface.ifname}
-							{:else if connected && net}
-								{m["network.view.connected"]()} · {net.ssid}
-							{:else}
-								{m["network.view.disconnected"]()}
-							{/if}
-						</p>
-						{#if !isHotspot && link}
-							<p
+						<!-- WHAT THIS RADIO IS DOING, AS ONE READING. The mode badge used to
+						     sit at the far end of the action cluster, so "Hybrid" and
+						     "Connected · CERALIVE" — one fact and its consequence — were
+						     separated by every control on the row. Adjacent, they read as one
+						     sentence, and the action cluster is left holding only actions. -->
+						<div class="flex flex-wrap items-center gap-1.5">
+							<WifiModeBadge device={id} mode={modeView.displayMode} />
+							<span
 								class={cn(
-									'text-muted-foreground mt-0.5 truncate text-xs transition-opacity',
-									ifaceStale && 'opacity-50',
+									'text-muted-foreground truncate text-xs transition-opacity',
+									!isHotspot && ifaceStale && 'opacity-50',
 								)}
-								data-testid="wifi-link-telemetry"
-								data-device={id}
-								data-generation={link.generation}
-								data-width-mhz={link.channelWidthMhz}
 							>
-								<span class="opacity-70">{m["network.wifiCapability.linkLabel"]()}</span>
-								<span class="font-mono" dir="ltr">
-									{resolveMessageKey(link.generationLabelKey)}
-									{#if link.channelWidthMhz !== undefined}
-										&middot; {m["network.wifiCapability.width"]({ mhz: link.channelWidthMhz })}
-									{/if}
-									&middot; {m["network.wifiCapability.linkRate"]({ mbps: link.bitrateMbps })}
-								</span>
-							</p>
-						{/if}
+								{#if isHotspot}
+									{m["network.view.hotspot"]()} · {iface.ifname}
+								{:else if connected && net}
+									{m["network.view.connected"]()} · {net.ssid}
+								{:else}
+									{m["network.view.disconnected"]()}
+								{/if}
+							</span>
+						</div>
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
 							<Badge variant="stale" data-stale-interface={iface.ifname} />
 						{/if}
-						<WifiModeBadge device={id} mode={modeView.displayMode} />
 						{#if isHotspot}
 							<!-- Exclusive AP: the radio carries no station leg, so it cannot bond. -->
 							<BondToggle
@@ -266,7 +252,22 @@ $effect(() => {
 						{/if}
 					</div>
 
-					<div class="basis-full ps-5">
+				<!-- ONE SECONDARY REGION, not four stacked siblings.
+				     The mode control, the lock reason, the negotiated link and the radio's
+				     capability strip each used to be a `basis-full ps-5` sibling of the
+				     identity line, so the parent's `gap-3` spaced them exactly as far apart
+				     as it spaced them from the row header — four registers reading as four
+				     unrelated facts. Grouped under one container with a tighter
+				     `space-y-1.5`, proximity does the work: one gap separates the row's
+				     header from its detail, and the detail reads as a block.
+
+				     It is UNCONDITIONAL, and that is load-bearing. `wifi-link-telemetry`
+				     and `wifi-capabilities` are both absent on an older backend, and both
+				     are pinned by byte-identity locks that delete the node and compare the
+				     section against a legacy render. A wrapper that existed only when one
+				     of them did would survive that deletion as an empty div and break both
+				     locks. The selector always renders, so this container always does. -->
+					<div class="basis-full space-y-1.5 ps-5">
 						<WifiModeSelector
 							view={modeView}
 							context={{
@@ -276,11 +277,10 @@ $effect(() => {
 							lockedReason={isSwitching ? stationLockReason : undefined}
 							compact
 						/>
-					</div>
 
 					{#if stationLock.locked && stationLockReason && !isHotspot}
 						<p
-							class="text-status-warning basis-full ps-5 text-xs"
+							class="text-status-warning text-xs"
 							data-device={id}
 							data-lock-kind={stationLock.kind}
 							data-testid="wifi-station-locked"
@@ -298,7 +298,7 @@ $effect(() => {
 						     below states the same terminal with the device's own typed reason,
 						     and one fact announced twice reads as two failures. -->
 						<div
-							class="border-status-warning/30 bg-status-warning/10 ms-5 flex basis-full items-start gap-2 rounded-lg border px-2.5 py-1.5"
+							class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
 							data-device={id}
 							data-failure-kind={stationLock.failureKind}
 							data-testid="wifi-station-lock-failed"
@@ -316,9 +316,37 @@ $effect(() => {
 						</div>
 					{/if}
 
+					<!-- WHAT IT NEGOTIATED, BESIDE WHAT IT CAN DO. This line reports the
+					     CONNECTION and the strip below reports the RADIO, so the two
+					     legitimately differ — a Wi-Fi 7 adapter on an 802.11ac access point
+					     really is running VHT — and that difference is the reading. It used
+					     to be the identity column's third line, two blocks away from the
+					     ceiling it should be read against. -->
+					{#if !isHotspot && link}
+						<p
+							class={cn(
+								'text-muted-foreground truncate text-xs transition-opacity',
+								ifaceStale && 'opacity-50',
+							)}
+							data-testid="wifi-link-telemetry"
+							data-device={id}
+							data-generation={link.generation}
+							data-width-mhz={link.channelWidthMhz}
+						>
+							<span class="opacity-70">{m["network.wifiCapability.linkLabel"]()}</span>
+							<span class="font-mono" dir="ltr">
+								{resolveMessageKey(link.generationLabelKey)}
+								{#if link.channelWidthMhz !== undefined}
+									&middot; {m["network.wifiCapability.width"]({ mhz: link.channelWidthMhz })}
+								{/if}
+								&middot; {m["network.wifiCapability.linkRate"]({ mbps: link.bitrateMbps })}
+							</span>
+						</p>
+					{/if}
+
 					{#if cap}
 						<div
-							class="basis-full space-y-1.5 ps-5"
+							class="space-y-1.5"
 							data-testid="wifi-capabilities"
 							data-device={id}
 							data-generation={cap.generation}
@@ -425,6 +453,7 @@ $effect(() => {
 							{/if}
 						</div>
 					{/if}
+					</div>
 				</div>
 			{/each}
 		{/if}

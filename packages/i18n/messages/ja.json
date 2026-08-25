@@ -2232,6 +2232,8 @@
 	"wifiSelector.dialog.searchWifi": "WiFiネットワークを検索",
 	"wifiSelector.emptyState.description": "スキャンをクリックして利用可能なWiFiネットワークを検索してください。",
 	"wifiSelector.emptyState.title": "ネットワークが見つかりません",
+	"wifiSelector.freshness.refreshing": "更新中 — これらの結果は置き換えられます",
+	"wifiSelector.freshness.stale": "前回のスキャンに失敗しました — 以前の結果を表示しています",
 	"wifiSelector.error.authFailed": "パスワードが正しくありません",
 	"wifiSelector.error.authFailedDescription": "入力したパスワードが正しくありません。確認して再試行してください。",
 	"wifiSelector.error.connectionFailed": "WiFi接続に失敗",

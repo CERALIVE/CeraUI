@@ -481,6 +481,7 @@ $effect(() => {
 		{pendingNew}
 		{scanError}
 		scanning={scanIntent === 'manual' && getOperationPhase(scanKey) === 'pending'}
+		scanInFlight={getOperationPhase(scanKey) === 'pending'}
 		bind:password
 		bind:showPassword
 	/>

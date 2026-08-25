@@ -2277,6 +2277,8 @@
 	"wifiSelector.dialog.searchWifi": "वाई-फाई नेटवर्क खोजें",
 	"wifiSelector.emptyState.description": "उपलब्ध WiFi नेटवर्क खोजने के लिए स्कैन पर क्लिक करें।",
 	"wifiSelector.emptyState.title": "कोई नेटवर्क नहीं मिला",
+	"wifiSelector.freshness.refreshing": "रीफ़्रेश हो रहा है — ये परिणाम बदल दिए जाएंगे",
+	"wifiSelector.freshness.stale": "पिछला स्कैन विफल रहा — पहले के परिणाम दिखाए जा रहे हैं",
 	"wifiSelector.error.authFailed": "गलत पासवर्ड",
 	"wifiSelector.error.authFailedDescription": "आपके द्वारा दर्ज किया गया पासवर्ड गलत है। कृपया जांचें और पुनः प्रयास करें।",
 	"wifiSelector.error.connectionFailed": "वाई-फाई कनेक्शन विफल",

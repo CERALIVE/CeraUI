@@ -2277,6 +2277,8 @@
 	"wifiSelector.dialog.searchWifi": "View Available Networks",
 	"wifiSelector.emptyState.description": "Click scan to search for available WiFi networks in your area.",
 	"wifiSelector.emptyState.title": "No Networks Found",
+	"wifiSelector.freshness.refreshing": "Refreshing — replacing these results",
+	"wifiSelector.freshness.stale": "Last scan failed — showing earlier results",
 	"wifiSelector.error.authFailed": "Incorrect Password",
 	"wifiSelector.error.authFailedDescription": "The password you entered is incorrect. Please check and try again.",
 	"wifiSelector.error.connectionFailed": "WiFi Connection Failed",

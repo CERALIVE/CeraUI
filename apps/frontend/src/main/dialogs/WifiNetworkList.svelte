@@ -14,6 +14,7 @@ import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { AvailableWifiNetwork, WifiInterface } from '@ceraui/rpc/schemas';
 import {
 	Check,
+	Clock,
 	Loader2,
 	Lock,
 	Plug,
@@ -42,6 +43,11 @@ import {
 import { cn } from '$lib/utils';
 
 import WifiConnectForm from './WifiConnectForm.svelte';
+import {
+	deriveWifiScanState,
+	wifiScanFreshnessKey,
+	wifiScanResultsSuperseded,
+} from './wifi-scan-state';
 
 interface Props {
 	/** Live interface this list operates on (provides available count + saved map). */
@@ -52,6 +58,12 @@ interface Props {
 	ifaceBusy: boolean;
 	/** Manual-scan spinner flag. */
 	scanning: boolean;
+	/**
+	 * ANY scan is pending on this adapter — the operator's tap OR the background
+	 * tick. Defaults to {@link scanning}, so a caller that omits it renders
+	 * byte-identically to the pre-freshness surface.
+	 */
+	scanInFlight?: boolean;
 	/** True when the last scan (manual or periodic) failed — drives the calm error state. */
 	scanError?: boolean;
 	/** WifiStatus key (interface device id) — drives the connect op phase reads. */
@@ -91,6 +103,7 @@ let {
 	networks,
 	ifaceBusy,
 	scanning,
+	scanInFlight,
 	scanError = false,
 	deviceId,
 	connecting,
@@ -110,20 +123,60 @@ let {
 	onSubmitNew,
 	onResetInteraction,
 }: Props = $props();
+
+const scanState = $derived(
+	deriveWifiScanState({
+		scanInFlight: scanInFlight ?? scanning,
+		manualScan: scanning,
+		scanFailed: scanError,
+		resultCount: networks.length,
+	}),
+);
+const freshnessKey = $derived(wifiScanFreshnessKey(scanState));
+const superseded = $derived(wifiScanResultsSuperseded(scanState));
 </script>
 
 <div class="flex flex-col gap-4">
-	<!-- Scan bar -->
-	<div class="bg-muted/50 flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5">
-		<div class="flex items-center gap-2 text-sm">
-			<span class="text-foreground font-semibold tabular-nums">
+	<!-- Scan bar. The count DIMS while the list it counts is superseded — the same
+	     opacity treatment every other aged reading in the app uses, never a second
+	     mechanism — and the state says which supersession it is in its own words. -->
+	<div
+		class="bg-muted/50 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2.5"
+	>
+		<div class="flex flex-wrap items-center gap-2 text-sm">
+			<span
+				class={cn(
+					'text-foreground font-semibold tabular-nums transition-opacity',
+					superseded && 'opacity-50',
+				)}
+			>
 				{iface?.available?.length ?? 0}
 			</span>
-			<span class="text-muted-foreground">{m["wifiSelector.networks.found"]()}</span>
+			<span class={cn('text-muted-foreground transition-opacity', superseded && 'opacity-50')}>
+				{m["wifiSelector.networks.found"]()}
+			</span>
 			{#if scanning}
 				<InlineSpinner data-testid="wifi-scan-status" label={m["wifiSelector.button.scanning"]()} />
 			{:else if ifaceBusy}
 				<InlineSpinner label={m["wifiSelector.dialog.connecting"]()} />
+			{/if}
+			{#if freshnessKey}
+				<span
+					class={cn(
+						'inline-flex items-center gap-1 text-xs',
+						scanState === 'stale' ? 'text-status-warning' : 'text-muted-foreground',
+					)}
+					data-state={scanState}
+					data-testid="wifi-scan-freshness"
+					role="status"
+				>
+					{#if scanState === 'stale'}
+						<Clock aria-hidden="true" class="size-3 shrink-0" />
+					{:else}
+						<RefreshCw aria-hidden="true" class="size-3 shrink-0" />
+					{/if}
+					{resolveMessageKey(freshnessKey)}
+				</span>
 			{/if}
 		</div>
 		<Button
@@ -339,7 +392,7 @@ let {
 				{/if}
 			</div>
 		{:else}
-			{#if scanning}
+			{#if scanState === 'scanning'}
 				<!-- Scanning state — distinct from the settled empty state below. -->
 				<div
 					class="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center"
@@ -355,7 +408,7 @@ let {
 						</p>
 					</div>
 				</div>
-			{:else if scanError}
+			{:else if scanState === 'error'}
 				<!-- Scan-error state — a failing scan (manual or periodic), distinct
 				     from the scanning + settled-empty states above. -->
 				<div
