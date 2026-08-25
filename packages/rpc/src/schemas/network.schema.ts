@@ -144,13 +144,16 @@ export const netifMessageSchema = z.record(z.string(), netifEntrySchema);
 export type NetifMessage = z.infer<typeof netifMessageSchema>;
 
 export const uplinkKindSchema = z.enum(['ethernet', 'wifi', 'cellular', 'other']);
+export type UplinkKind = z.infer<typeof uplinkKindSchema>;
 export const uplinkHealthStateSchema = z.enum(['up', 'degraded', 'down']);
+export type UplinkHealthState = z.infer<typeof uplinkHealthStateSchema>;
 export const uplinkHealthReasonSchema = z.enum([
 	'probe_failed',
 	'captive_portal',
 	'passive_congestion',
 	'definitive_loss',
 ]);
+export type UplinkHealthReason = z.infer<typeof uplinkHealthReasonSchema>;
 export const uplinkHealthRecordSchema = z.object({
 	iface: z.string().min(1),
 	kind: uplinkKindSchema,

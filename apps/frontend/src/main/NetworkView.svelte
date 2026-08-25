@@ -12,7 +12,11 @@ import {
 	getLinkTelemetry,
 	getModems,
 	getNetif,
+	getSharingDiag,
 	getStatus,
+	getUplinks,
+	getUplinkShaper,
+	getUplinkSteering,
 	getWifi,
 } from '$lib/rpc/subscriptions.svelte';
 import { getHudState } from '$lib/stores/hud.svelte';
@@ -28,6 +32,7 @@ import CollisionBands from './network/CollisionBands.svelte';
 import EthernetSection from './network/EthernetSection.svelte';
 import HotspotSection from './network/HotspotSection.svelte';
 import { isWiredSectionEntry, modemClaimedIfnames } from './network/section-assignment';
+import SharingSection from './network/SharingSection.svelte';
 import UnclaimedAdaptersBand from './network/UnclaimedAdaptersBand.svelte';
 import WifiSection from './network/WifiSection.svelte';
 
@@ -215,6 +220,14 @@ function openModemConfig(id: string) {
 		/>
 		<CollisionBands {netif} bondMapping={getStatus()?.bond_mapping ?? null} />
 		<UnclaimedAdaptersBand adapters={getStatus()?.unclaimed_adapters} />
+		<SharingSection
+			uplinks={getUplinks()}
+			diag={getSharingDiag()}
+			steering={getUplinkSteering()}
+			shaper={getUplinkShaper()}
+			{netif}
+			{hotspotInterfaces}
+		/>
 		<WifiSection
 			wifiRadios={wifiEntries}
 			{netif}

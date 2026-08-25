@@ -31,6 +31,8 @@ import type {
 	SourcesMessage,
 	StatusResponse,
 	UpdateState,
+	UplinkShaperStatus,
+	UplinkSteeringStatus,
 	UplinksMessage,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
@@ -40,6 +42,7 @@ import {
 	hardwareTypeSchema,
 	notificationsMessageSchema,
 	pipelineSchema,
+	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
 import { preserveWireIdentity } from "$lib/rpc/value-identity";
@@ -131,6 +134,10 @@ let uplinksState = $state<UplinksMessage | undefined>(undefined);
 // prevent. `undefined` means no snapshot has arrived, which is distinct from a
 // delivered payload whose checks read `unknown`.
 let sharingDiagState = $state<SharingDiag | undefined>(undefined);
+// Replaced wholesale; re-served by the post-login push. `undefined` means no
+// snapshot has arrived and must never render as available/healthy.
+let uplinkSteeringState = $state<UplinkSteeringStatus | undefined>(undefined);
+let uplinkShaperState = $state<UplinkShaperStatus | undefined>(undefined);
 let wifiState = $state<WifiStatus | undefined>(undefined);
 let modemsState = $state<ModemList | undefined>(undefined);
 
@@ -292,6 +299,14 @@ export function getUplinks(): UplinksMessage | undefined {
 
 export function getSharingDiag(): SharingDiag | undefined {
 	return sharingDiagState;
+}
+
+export function getUplinkSteering(): UplinkSteeringStatus | undefined {
+	return uplinkSteeringState;
+}
+
+export function getUplinkShaper(): UplinkShaperStatus | undefined {
+	return uplinkShaperState;
 }
 
 export function getWifi() {
@@ -670,6 +685,34 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 		case "sharing_diag":
 			sharingDiagState = data as SharingDiag;
 			break;
+
+		case "uplink-steering":
+			uplinkSteeringState = data as UplinkSteeringStatus;
+			break;
+
+		case "uplink-shaper":
+			uplinkShaperState = data as UplinkShaperStatus;
+			break;
+
+		case "uplink-flows-reset": {
+			// TRANSIENT: the hard-down drain already happened, so it is never
+			// hydrated and must never become a lingering slot. It is pushed as a
+			// non-persistent notification — deduped by `name`, so a re-broadcast
+			// for the same interface replaces the notice rather than stacking one.
+			const reset = uplinkFlowsResetEventSchema.safeParse(data);
+			if (!reset.success) break;
+			pushNotification({
+				name: `uplink-flows-reset:${reset.data.iface}`,
+				type: "info",
+				key: "notifications.uplinkFlowsReset",
+				params: { iface: reset.data.iface },
+				msg: `Client connections were reset on ${reset.data.iface}`,
+				is_dismissable: true,
+				is_persistent: false,
+				duration: 8,
+			});
+			break;
+		}
 
 		case "audio-level":
 			audioLevelState = data as AudioLevelMessage;
@@ -1083,6 +1126,8 @@ export function resetState(): void {
 	netifState = undefined;
 	uplinksState = undefined;
 	sharingDiagState = undefined;
+	uplinkSteeringState = undefined;
+	uplinkShaperState = undefined;
 	wifiState = undefined;
 	modemsState = undefined;
 	linkTelemetryState = undefined;
