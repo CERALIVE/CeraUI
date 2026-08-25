@@ -7,8 +7,13 @@
  *
  *   - Group 3: Modem Config toggles expose their state (aria-checked + On/Off
  *     text label) and have a ≥44px hit area (measured, not screenshotted).
- *   - Group 4: The "Switch to Hotspot" control is gated behind a confirm
- *     dialog; `wifi.hotspotStart` does NOT fire on open or on Cancel.
+ *   - Group 4: The switch-to-hotspot control is gated behind a confirm step;
+ *     `wifi.setAdapterMode` does NOT fire on open or on Cancel. Todo 14 replaced
+ *     the standalone trigger + modal alertdialog with ONE Station/Hotspot/Hybrid
+ *     selector whose destructive transitions arm an INLINE confirm band — a
+ *     modal inside an already-portalled surface puts the consequence on a layer
+ *     a kiosk touchscreen must dismiss before it can re-read what it confirms.
+ *     The gate itself is unchanged: arming dispatches nothing.
  *   - Group 5: Staleness — when incoming WS frames freeze past
  *     STALE_THRESHOLD_MS (5s) live telemetry dims (opacity-50); on resume the
  *     dimming clears.
@@ -47,7 +52,7 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 	let frozen: boolean;
 
 	const hotspotStartCount = () =>
-		sentPaths.filter((p) => p === 'wifi.hotspotStart').length;
+		sentPaths.filter((p) => p === 'wifi.setAdapterMode').length;
 
 	test.beforeEach(async ({ page }, testInfo) => {
 		test.skip(
@@ -126,30 +131,36 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 		const network = new NetworkPage(page);
 		await network.open();
 
-		const trigger = page
-			.getByRole('button', { name: 'Switch to Hotspot', exact: true })
-			.first();
+		// One mode selector per WiFi radio; each names its own adapter, and the
+		// confirm band it arms is keyed on that same device.
+		const selector = page.getByTestId('wifi-mode-selector').first();
+		await expect(selector).toBeVisible();
+		const device = await selector.getAttribute('data-device');
+		expect(device, 'the mode selector names its adapter').toBeTruthy();
+		await expect(selector).toHaveAttribute('data-mode', 'station');
+
+		const trigger = selector.getByRole('radio', { name: 'Hotspot', exact: true });
 		await expect(trigger).toBeVisible();
-		expect(hotspotStartCount(), 'no hotspotStart before interaction').toBe(0);
+		expect(hotspotStartCount(), 'no setAdapterMode before interaction').toBe(0);
 
 		await trigger.scrollIntoViewIfNeeded();
 		await trigger.click();
 
-		// The confirm dialog must appear (the gate)…
-		const alert = page.getByRole('alertdialog');
-		await expect(alert).toBeVisible();
-		await expect(alert).toContainText('Switch to Hotspot?');
+		// The confirm must appear (the gate) and name the consequence…
+		const confirm = page.getByTestId(`wifi-mode-confirm-${device}`);
+		await expect(confirm).toBeVisible();
+		await expect(confirm).toHaveAttribute('data-consequence', 'drops-uplink');
+		await expect(confirm).toHaveAttribute('data-target', 'hotspot');
 		// …and NO RPC may have fired yet.
-		expect(hotspotStartCount(), 'no hotspotStart RPC before confirm').toBe(0);
+		expect(hotspotStartCount(), 'no setAdapterMode RPC before confirm').toBe(0);
 
-		// Cancel → dialog closes, still no RPC, station mode intact.
-		await page.getByRole('button', { name: /^cancel$/i }).click();
-		await expect(alert).toBeHidden();
-		expect(hotspotStartCount(), 'Cancel fires no hotspotStart RPC').toBe(0);
+		// Cancel → confirm closes, still no RPC, station mode intact.
+		await page.getByTestId(`wifi-mode-confirm-cancel-${device}`).click();
+		await expect(confirm).toBeHidden();
+		expect(hotspotStartCount(), 'Cancel fires no setAdapterMode RPC').toBe(0);
+		await expect(selector).toHaveAttribute('data-mode', 'station');
 		await expect(
-			page
-				.getByRole('button', { name: 'Switch to Hotspot', exact: true })
-				.first(),
+			selector.getByRole('radio', { name: 'Hotspot', exact: true }),
 		).toBeVisible();
 	});
 
