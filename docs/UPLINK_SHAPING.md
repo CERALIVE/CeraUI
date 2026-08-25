@@ -59,6 +59,10 @@ backstop and is intentionally not authored in this repository.
 - `uplink-shaper-netns.test.ts` issues the generated nft/tc commands under
   `unshare -rn`; forwarded marked traffic increments the capped client leaf while
   unmarked local traffic increments the uncapped local leaf.
+- Same `CERALIVE_NETNS_ISOLATED` gate as `uplink-steering-netns.test.ts` (see
+  `docs/UPLINK_STEERING.md` → Verification) — it skips inside the bundled `Unit
+  tests (bun)` step and runs in the shared dedicated `netns-semantics` CI step
+  instead.
 
 The outstanding hardware gate is a shaped-vs-unshaped live-stream saturation run on
 a real shared uplink. Automated netns evidence is not hardware evidence.

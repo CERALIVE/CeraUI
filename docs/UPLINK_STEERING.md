@@ -108,6 +108,16 @@ fail-soft: the WebSocket server is already bound, boot continues through
   proves weighted first-flow selection, established-flow stickiness, reweighting,
   drain-window exclusion, mark-scoped conntrack deletion, reply routing, local-flow
   NAT isolation, and foreign-table survival.
+- This test measures a REAL weighted packet distribution through a real netns +
+  nftables setup, so its statistical bound (`ratio < 5.5` against a 4:1 weight
+  target) only holds with CPU headroom — bundled inside the ~5400-test backend
+  suite it is load-sensitive (observed at 5.667 locally under parallel load and
+  5.897 in CI's bundled run). It gates on `CERALIVE_NETNS_ISOLATED=1` via
+  `describe.skipIf`, so it skips inside the bundled `Unit tests (bun)` step and
+  runs instead in its own dedicated `netns-semantics` CI step
+  (`.github/workflows/build-check.yml`, `test-be` job) after the main suite. Run
+  it locally with
+  `CERALIVE_NETNS_ISOLATED=1 bun test apps/backend/src/tests/uplink-steering-netns.test.ts`.
 
 The outstanding board drill needs two real uplinks and a hotspot client. It must
 inspect nftables/conntrack marks while confirming SRTLA link distribution remains
