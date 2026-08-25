@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,6 +11,7 @@ import {
 	buildShareRuleset,
 	stableUplinkMark,
 } from "../modules/network/uplink-steering/ruleset.ts";
+import { netnsPrivilegePrefix } from "./helpers/netns-privilege.ts";
 
 test("kernel netns preserves flow marks across reweight and scopes NAT to client provenance", async () => {
 	const wan0 = steeringUplink("wan-a", "wan0", 100);
@@ -39,6 +40,7 @@ test("kernel netns preserves flow marks across reweight and scopes NAT to client
 	const root = join(process.cwd(), "test-results", "uplink-sharing");
 	await mkdir(root, { recursive: true });
 	const temp = await mkdtemp(join(root, "netns-"));
+	await chmod(temp, 0o711);
 	try {
 		const weightedPath = join(temp, "weighted.nft");
 		const selectWan0Path = join(temp, "select-wan0.nft");
@@ -54,6 +56,8 @@ test("kernel netns preserves flow marks across reweight and scopes NAT to client
 			writeFile(selectWan0Path, selectWan0),
 			writeFile(transitionWan1Path, transitionWan1),
 			writeFile(finalWan1Path, finalWan1),
+			writeFile(log0, ""),
+			writeFile(log1, ""),
 			...goldenPaths.map((path, index) =>
 				writeFile(
 					path,
@@ -72,7 +76,11 @@ test("kernel netns preserves flow marks across reweight and scopes NAT to client
 				),
 			),
 		]);
-		const privilege = await netnsPrivilegePrefix();
+		await Promise.all([chmod(log0, 0o666), chmod(log1, 0o666)]);
+		const fixturePath = fileURLToPath(
+			new URL("./fixtures/uplink-steering-netns.sh", import.meta.url),
+		);
+		const privilege = await netnsPrivilegePrefix(fixturePath);
 
 		const proc = Bun.spawn(
 			[
@@ -80,9 +88,7 @@ test("kernel netns preserves flow marks across reweight and scopes NAT to client
 				"unshare",
 				"-rn",
 				"bash",
-				fileURLToPath(
-					new URL("./fixtures/uplink-steering-netns.sh", import.meta.url),
-				),
+				fixturePath,
 				weightedPath,
 				selectWan0Path,
 				transitionWan1Path,
@@ -168,22 +174,4 @@ function steeringUplink(
 
 function hexMark(mark: number): string {
 	return `0x${mark.toString(16).padStart(8, "0")}`;
-}
-
-async function netnsPrivilegePrefix(): Promise<readonly string[]> {
-	const direct = Bun.spawn(["unshare", "-rn", "true"], {
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-	const directError = new Response(direct.stderr).text();
-	if ((await direct.exited) === 0) return [];
-	const elevated = Bun.spawn(["sudo", "-n", "unshare", "-rn", "true"], {
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-	const elevatedError = new Response(elevated.stderr).text();
-	if ((await elevated.exited) === 0) return ["sudo", "-n"];
-	throw new Error(
-		`network namespaces unavailable: direct=${(await directError).trim()} sudo=${(await elevatedError).trim()}`,
-	);
 }

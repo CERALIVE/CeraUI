@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,12 +8,14 @@ import {
 	buildShareRuleset,
 	stableUplinkMark,
 } from "../modules/network/uplink-steering/index.ts";
+import { netnsPrivilegePrefix } from "./helpers/netns-privilege.ts";
 
 test("kernel netns classifies client fwmarks into capped band while local traffic stays uncapped", async () => {
 	const mark = stableUplinkMark("wan-a");
 	const root = join(process.cwd(), "test-results", "uplink-sharing");
 	await mkdir(root, { recursive: true });
 	const temp = await mkdtemp(join(root, "shaper-netns-"));
+	await chmod(temp, 0o711);
 	try {
 		const rulesetPath = join(temp, "share.nft");
 		const commandsPath = join(temp, "commands.json");
@@ -42,16 +44,17 @@ test("kernel netns classifies client fwmarks into capped band while local traffi
 				}).map((command) => command.argv),
 			),
 		);
-		const privilege = await netnsPrivilegePrefix();
+		const fixturePath = fileURLToPath(
+			new URL("./fixtures/uplink-shaper-netns.sh", import.meta.url),
+		);
+		const privilege = await netnsPrivilegePrefix(fixturePath);
 		const proc = Bun.spawn(
 			[
 				...privilege,
 				"unshare",
 				"-rn",
 				"bash",
-				fileURLToPath(
-					new URL("./fixtures/uplink-shaper-netns.sh", import.meta.url),
-				),
+				fixturePath,
 				rulesetPath,
 				commandsPath,
 			],
@@ -73,21 +76,3 @@ test("kernel netns classifies client fwmarks into capped band while local traffi
 		await rm(temp, { recursive: true, force: true });
 	}
 }, 20_000);
-
-async function netnsPrivilegePrefix(): Promise<readonly string[]> {
-	const direct = Bun.spawn(["unshare", "-rn", "true"], {
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-	const directError = new Response(direct.stderr).text();
-	if ((await direct.exited) === 0) return [];
-	const elevated = Bun.spawn(["sudo", "-n", "unshare", "-rn", "true"], {
-		stdout: "ignore",
-		stderr: "pipe",
-	});
-	const elevatedError = new Response(elevated.stderr).text();
-	if ((await elevated.exited) === 0) return ["sudo", "-n"];
-	throw new Error(
-		`network namespaces unavailable: direct=${(await directError).trim()} sudo=${(await elevatedError).trim()}`,
-	);
-}
