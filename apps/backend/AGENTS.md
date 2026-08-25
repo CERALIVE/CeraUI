@@ -5655,6 +5655,14 @@ never named by generated rule text. The carrier effects are isolated in
 `modules/network/uplink-sharing.ts`: fsynced temp → `nft --check` → atomic rename
 → systemd start/reload, with prior-file reload on failure.
 
+**The invariant in one sentence: only forwarded client-zone traffic is steered or
+NATed, and only the client band is ever capped.** Everything below is how that is
+made structural rather than intentional. Every mode transition that can create or
+retire a client zone — station / hotspot / hybrid, and the Ethernet `uplink` /
+`shared-lan` role — runs under the one permanent-MAC adapter lock described in
+EVERY WIFI MUTATION SHARES ONE ADAPTER LOCK, so a zone can never be registered
+against a half-applied adapter state.
+
 **Client provenance is structural.** New-flow selection, conntrack mark restore,
 and masquerade all require a positive registered client-zone `iifname`; NAT also
 requires the zone prefix and the namespaced conntrack mark. There is no output
