@@ -513,6 +513,89 @@ for (const condition of CONDITIONS) {
 			await dialog.screenshot({ path: shot("modem-dialog") });
 		});
 
+		// ── The normalized ModemManager reading ──────────────────────────────────
+		// A metric here is a value or one of seven typed reasons, and the only way
+		// this surface can fail is by rendering those seven as one mark. The PNG is
+		// evidence; the criteria below are asserted — including the two absences
+		// that are the SHIPPED steady state on every board and must read as facts
+		// rather than as blanks.
+		test("the normalized signal reading states a reason wherever it has no value", {
+			tag: "@visual",
+		}, async ({ page }) => {
+			serverConfig({ modem_provisioning: true });
+			sendModems({
+				[MM_HEALTHY_ID]: mmManaged({
+					...FULL_DETAIL,
+					signal_detail: {
+						quality_recent: { state: "known", value: true },
+						rsrp: { state: "known", value: -92 },
+						rsrq: { state: "known", value: -11 },
+						snr: { state: "known", value: 7 },
+						// MM gives SINR to one dict alone, so an LTE modem's missing
+						// SINR is a READ-class unknown, never a capability claim.
+						sinr: { state: "unknown", reason: "not-reported" },
+					},
+					registration_context: {
+						operator_name: { state: "known", value: "Test Carrier" },
+						operator_code: { state: "known", value: "73201" },
+						// Masked until a location source is primed, which this device
+						// never does — the fence, rendered.
+						cell_id: { state: "unknown", reason: "not-observed" },
+						tac: { state: "unknown", reason: "not-observed" },
+					},
+				}),
+			});
+
+			const dialog = await openModemDialog(page);
+			const detail = dialog.getByTestId("modem-signal-detail");
+			await expect(detail).toBeVisible();
+
+			// RSRP is a power and the ratios are not, so they never share a unit.
+			await expect(dialog.getByTestId("modem-signal-rsrp")).toHaveText(
+				"-92 dBm",
+			);
+			await expect(dialog.getByTestId("modem-signal-snr")).toHaveText("7 dB");
+
+			await expect(dialog.getByTestId("modem-signal-sinr")).toHaveAttribute(
+				"data-metric-reason",
+				"not-reported",
+			);
+			for (const id of ["cell_id", "tac"]) {
+				await expect(
+					dialog.getByTestId(`modem-registration-${id}`),
+				).toHaveAttribute("data-metric-reason", "not-observed");
+			}
+
+			// A placeholder is a WORD. Not an em-dash, and never a zero — a zero is
+			// a measurement the radio never took.
+			for (const id of ["modem-signal-sinr", "modem-registration-cell_id"]) {
+				const shown = ((await dialog.getByTestId(id).textContent()) ?? "").trim();
+				expect(shown.length).toBeGreaterThan(2);
+				expect(shown).not.toBe("—");
+				expect(shown).not.toMatch(/^-?0(\s|$)/);
+			}
+
+			// Reading vs reason must be separable without reading the words: a
+			// figure is set in the instrument face, a reason is not.
+			const readingFont = await dialog
+				.getByTestId("modem-signal-rsrp")
+				.evaluate((el) => getComputedStyle(el).fontFamily);
+			const reasonFont = await dialog
+				.getByTestId("modem-signal-sinr")
+				.evaluate((el) => getComputedStyle(el).fontFamily);
+			expect(readingFont).not.toBe(reasonFont);
+
+			await expect(dialog.getByTestId("modem-signal-recency")).toHaveAttribute(
+				"data-recency",
+				"recent",
+			);
+
+			await detail.screenshot({ path: shot("modem-signal-detail") });
+			await dialog
+				.getByTestId("modem-registration-context")
+				.screenshot({ path: shot("modem-registration-context") });
+		});
+
 		// ── The SIM's own number: hidden by default, revealed on request ─────────
 		// The PNGs are evidence; every criterion below is asserted. The one that
 		// matters most is NEGATIVE — the number must not be anywhere in the

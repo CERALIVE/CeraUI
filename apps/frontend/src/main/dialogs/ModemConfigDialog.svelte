@@ -221,6 +221,15 @@ import {
 import { loadWithinBound, modemBoundMs } from '$lib/modem/async-surface';
 import { modemRefusalCopyKey } from '$lib/modem/refusal-taxonomy';
 import {
+	hasNormalizedReading,
+	type ModemMetricRow,
+	qualityRecency,
+	registrationRows,
+	signalDetailRows,
+	simPresenceEvidenceHint,
+	SUPERSEDED_CELL_METRIC_KEYS,
+} from '$lib/modem/signal-detail';
+import {
 	CapabilitySection,
 	type CapabilityView,
 	ConnectionStateBlock,
@@ -1058,10 +1067,38 @@ const t = resolveMessageKey;
 const locale = $derived(getLocale());
 const bytes = $derived(formatBytes(locale));
 
-const cellRows = $derived(cellMetricRows(modem.cell_info));
+// THE NORMALIZED BLOCK SUPERSEDES THE LEGACY STRIP'S QUALITY ROWS. Both can
+// express RSRP/RSRQ/SNR/SINR, and two rows under one label carrying different
+// numbers is worse than either alone — so when the ModemManager reading is
+// present it wins, because it is the only one of the two that can say WHY a
+// value is missing. This is the precedence `router-signal` already applies to
+// the legacy `signal_bars` scalars; `tech`, `band` and the legacy `cell_id` are
+// untouched, and a modem with no normalized block renders exactly as before.
+const signalDetail = $derived(modem.signal_detail);
+const cellRows = $derived(
+	cellMetricRows(modem.cell_info).filter(
+		(row) =>
+			signalDetail === undefined || !SUPERSEDED_CELL_METRIC_KEYS.includes(row.key),
+	),
+);
 const observedAt = $derived(cellObservedAtMs(modem.cell_info));
 const firmware = $derived(firmwareRevision(modem.firmware_revision));
 const esim = $derived(esimView(modem.esim));
+
+// The four extended measurements, the modem's own measurement recency, and the
+// network/cell it registered on. Each is a metric — a value, or a TYPED reason —
+// so an absent reading renders its own word rather than a dash that would make
+// "this modem cannot report it", "nobody primed the read" and "the dict was
+// there and the member was not" look identical.
+const signalRows = $derived(signalDetailRows(signalDetail));
+const signalRecency = $derived(qualityRecency(signalDetail));
+const registrationMetrics = $derived(registrationRows(modem.registration_context));
+
+// WHICH FACT decided the SIM verdict. The banner above is BINARY because the
+// bond gate it renders is binary, so on its own it cannot separate a slot the
+// modem positively reported empty from a slot nothing could read — and those
+// two ask opposite things of an operator.
+const simEvidence = $derived(simPresenceEvidenceHint(modem.sim_presence_evidence));
 
 // WHETHER THERE IS A CARD IN THE SLOT — the stack's EVIDENCE model, rendered
 // through the SAME primitive the router dialog draws, so the two families state
@@ -1083,8 +1120,14 @@ const simIdentity = $derived(deriveSim(modem));
 // own primary banner above, and a second, otherwise-empty card restating it is
 // the density regression todo 64 removed. `unknown` is not in it either: on its
 // own it has nothing to add, and the card would say only that it knows nothing.
+// A PUBLISHED READING is worth the card on the same terms a positively-stated
+// SIM is: the backend observed the radio interface and answered, so the card has
+// something to say even on a modem that reported no cell info, no eSIM and no
+// firmware. The mmcli path publishes none of these blocks at all, so it is
+// unaffected — an absent block means "this backend did not observe it".
 const showDetailCard = $derived(
 	hasModemDetail(modem) ||
+		hasNormalizedReading(modem) ||
 		simIdentity.presence === 'present' ||
 		simIdentity.presence === 'locked',
 );
@@ -1389,6 +1432,24 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					<NoSimBadge size="sm" testid="modem-no-sim-banner-badge" />
 					<p class="text-sm font-semibold">{m["network.modem.noSim"]()}</p>
 					<p class="text-muted-foreground text-xs">{m["network.modem.noSimHint"]()}</p>
+					<!-- WHICH FACT decided it. The badge above is the bond gate's binary
+					     verdict, so on its own it cannot separate a slot the modem
+					     positively reported empty from a slot nothing could read — and
+					     an operator's next move differs completely between the two
+					     (re-seat the card vs. the read never landed). The evidence KIND
+					     is keyed copy; the raw object path and failure token it carries
+					     stay in the marked diagnostics block, where relocation puts
+					     them. -->
+					{#if simEvidence}
+						<p
+							class="text-muted-foreground/80 text-xs leading-relaxed"
+							data-evidence-kind={simEvidence.kind}
+							data-states-empty-slot={simEvidence.statesEmptySlot}
+							data-testid="modem-no-sim-evidence"
+						>
+							{t(simEvidence.key, simEvidence.params)}
+						</p>
+					{/if}
 				</div>
 			</div>
 		{/if}
@@ -2000,6 +2061,36 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 				</CapabilitySection>
 		</CapabilitySection>
 
+		<!-- A reading is an instrument figure (mono, tabular, full contrast); a
+		     reason is a WORD (proportional, muted, wrapping). The split is the
+		     honesty rule made visual — a glance can never read "Not measured yet"
+		     as a measurement, and the seven reasons stay seven sentences rather
+		     than collapsing into one em-dash. `data-metric-*` carries the machine
+		     verdict so a test names a reason class, never a translated string. -->
+		{#snippet metricStrip(rows: ModemMetricRow<string>[], prefix: string, cols: string)}
+			<dl class={cn('grid grid-cols-2 gap-x-3 gap-y-2.5', cols)} data-testid={`${prefix}-strip`}>
+				{#each rows as row (row.id)}
+					<div class="min-w-0">
+						<dt class="text-muted-foreground text-xs">{t(row.labelKey)}</dt>
+						<!-- WRAPS, never truncates: unlike the legacy strip's short hex
+						     tokens, an operator name is the one string here a person must
+						     read, and it rendered as "Test Carri…" before this. -->
+						<dd
+							class={row.state === 'known'
+								? 'font-mono text-sm break-words tabular-nums'
+								: 'text-muted-foreground/90 text-xs leading-snug'}
+							data-metric-reason={row.state === 'unknown' ? row.reason : undefined}
+							data-metric-state={row.state}
+							data-testid={`${prefix}-${row.id}`}
+							dir={row.state === 'known' ? 'ltr' : undefined}
+						>
+							{row.state === 'known' ? row.value : t(row.reasonKey)}
+						</dd>
+					</div>
+				{/each}
+			</dl>
+		{/snippet}
+
 		<!-- ── Serving-cell detail, firmware, and the SIM identity group ────────
 		     Read-only throughout. The eSIM block carries NO management
 		     affordance of any kind — no button, no click target, no editable
@@ -2037,6 +2128,48 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 									when: formatRelativeTime(locale)(new Date(observedAt)),
 								})}
 					</p>
+				{/if}
+
+				{#if signalRows.length > 0}
+					<div class="space-y-2" data-testid="modem-signal-detail">
+						<p class="text-sm font-medium">{m["network.modem.detail.signalTitle"]()}</p>
+						{@render metricStrip(signalRows, 'modem-signal', 'sm:grid-cols-4')}
+
+						<!-- WHEN THE MODEM LAST MEASURED, which is a different question
+						     from when WE last read — envelope staleness already answers
+						     the second. Without it a cached 40% and a live 40% are the
+						     same number on screen, and telling them apart is most of
+						     what diagnosing a marginal link is. -->
+						{#if signalRecency}
+							<p
+								class="text-muted-foreground/80 text-xs"
+								data-recency={signalRecency.state}
+								data-testid="modem-signal-recency"
+							>
+								{m["network.modem.detail.recencyLabel"]()}: {t(signalRecency.labelKey)}
+							</p>
+						{/if}
+					</div>
+				{/if}
+
+				<!-- WHICH network and WHICH cell — never WHERE. These name an operator
+				     and a cell inside that operator's network and carry no coordinate,
+				     which is why they sit outside the GNSS privacy fence.
+
+				     `cell_id` and `tac` read "Not measured yet" on every board today:
+				     the cell property stays masked unless a location source is primed,
+				     which this device deliberately never does. That is the fence
+				     rendered honestly, not a gap — do not "fix" it here. -->
+				{#if registrationMetrics.length > 0}
+					<div class="space-y-2" data-testid="modem-registration-context">
+						<p class="text-sm font-medium">
+							{m["network.modem.detail.registrationTitle"]()}
+						</p>
+						<!-- TWO columns, not four: three of these four values are names or
+						     identifiers rather than short figures, so the signal strip's
+						     density is what cut the carrier name in half. -->
+						{@render metricStrip(registrationMetrics, 'modem-registration', 'sm:grid-cols-2')}
+					</div>
 				{/if}
 
 				{#if firmware}
