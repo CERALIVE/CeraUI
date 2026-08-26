@@ -79,7 +79,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Read-only SMS inbox (`modems.getSms`) — list + read, never send/delete** | `modules/modems/mmcli-sms.ts` (`readSmsInbox`, `parseSmsList`, `parseSmsRecord`, `SMS_PATH_RE`) → `rpc/procedures/modems.procedure.ts` → `getModemSmsProcedure`; contract below → THE READ-ONLY SMS INBOX |
 | **Streaming-admission ↔ modem-lifecycle interlock (process-wide fail-fast lease, both race orders)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireLifecycle`, `withLifecycleLock`, `leaseRefusal`) + `modules/streaming/stream-session-orchestrator.ts` (`admitLifecycle`); contract below → THE STREAMING-ADMISSION ↔ MODEM-LIFECYCLE INTERLOCK |
 | **The shared modem MUTATION-SAFETY contract (per-device lease, durable journal, replay barrier, both acknowledgement paths)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireModemMutation`, `setMutationBlocks`, `streamingBlockingMutation`) + `modules/streaming/recovery-barrier.ts` + `modules/modems/mutation-{journal,journal-state,lease,identity,blocks,rollback,acknowledge,replay}.ts`; contract below → THE MODEM MUTATION-SAFETY CONTRACT |
-| **The modem-control consumer cutover (exact 1.2.1 pin, static imports, frozen boundary gate + active operation-registry drift gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; frontend `tests/modem-parity-drift.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
+| **The modem-control consumer cutover (exact 1.3.0 pin, static imports, frozen boundary gate + active operation-registry drift gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; frontend `tests/modem-parity-drift.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
 | **The certified USB-mode transition ENGINE, wired** | `modules/modems/transition-engine.ts` (ports + interlock bridge) + `transition-ports.ts` (mmcli inhibit lease, AT sender) + `usb-mode-{transition,identity,contract,execute,rollback}.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
@@ -3785,7 +3785,7 @@ mutation-freedom contract; nothing here goes near it.
   `@ceralive/modem-control@1.0.0`, so while `package.json` pinned the `0.2.0`
   floor this module resolved it through a lazy `import()` plus a structural probe
   and answered a typed `usage_policy_unsupported` refusal when the pinned release
-  did not publish it. The pin is now `1.2.1` EXACTLY, so `tsc` and `bun install`
+  did not publish it. The pin is now `1.3.0` EXACTLY, so `tsc` and `bun install`
   answer that at build and install time — both strictly stronger than a
   `typeof === "function"` check, which can only report the gap after a write has
   been attempted. `isUsagePolicySupported()` is therefore constant, and it stays a
@@ -4420,7 +4420,7 @@ wiring driven through the REAL procedure.
 
 Todo 29 moved the frozen Todo-17 pure-logic set behind the published
 `@ceralive/modem-control` package without raising CeraUI's install floor above
-`0.2.0`. **The pin is now `1.2.1` EXACTLY**, and the three probes that
+`0.2.0`. **The pin is now `1.3.0` EXACTLY**, and the three probes that
 floor forced — the SMS port, the usage-policy setter, the band catalog — are
 STATIC imports with no runtime fallback left.
 
@@ -4428,7 +4428,7 @@ STATIC imports with no runtime fallback left.
 unfinished cutover. It is already a static namespace import, so it is not a lazy
 `import()`; and two of its names — `hilinkConnectionBody` and `vidPidOf` — are
 exported by NO release, which `modem-control-skew-matrix.test.ts` pins and the
-installed 1.2.1 confirms. Their local implementations are PERMANENT, so deleting
+installed 1.3.0 confirms. Their local implementations are PERMANENT, so deleting
 the seam would delete the implementation. Each of the 14 MIGRATE modules asks for
 its package function through it and keeps its own as the answer when the package
 has none. Public CeraUI exports, wire fields, parser outcomes, and refusal
@@ -4451,7 +4451,7 @@ therefore remains consumer-owned rather than moving into modem-stack.
 
 `tests/modem-control-projections.test.ts` is the committed boundary gate. It
 asserts all 14 modules use the named seam, every projection imports against the
-exact `1.2.1` pin (asserted as a bare version, never a range — a resolved release
+exact `1.3.0` pin (asserted as a bare version, never a range — a resolved release
 missing the statically-imported exports must fail at import rather than degrade),
 direct `dbus|mmcli|qmicli|goform|hilink` references
 remain inside the Todo-17 ledger allowlist, and stream-active admission preserves
@@ -4459,7 +4459,7 @@ the refusal vocabulary. Never add a direct modem transport/model/dialect path
 outside that allowlist; add package consumption through a named projection
 instead. Never replace the registry pin with `link:` or `file:`.
 
-`@ceralive/modem-control@1.2.1` also exports the frozen
+`@ceralive/modem-control@1.3.0` also exports the frozen
 `MODEM_OPERATION_IDS` array from the existing root entry point. The frontend
 parity gate resolves the backend's exact installed package, reads that registry
 from emitted JavaScript without importing the D-Bus runtime graph, and holds the
@@ -4476,7 +4476,7 @@ local implementation as the fallback and executable parity oracle;
 `tests/usb-mode-runtime-compat.test.ts` proves the runtime candidate is selected,
 assignable in both directions, and returns the same shapes for all four vendors
 plus unsupported and malformed responses. This is deliberately read-only.
-Although 1.2.1 also exports `buildRuntimeCompositionSetCommand` and
+Although 1.3.0 also exports `buildRuntimeCompositionSetCommand` and
 `RUNTIME_COMPOSITION_SET_REGISTRY`, CeraUI consumes neither; adding package-backed
 composition writes is a separate feature requiring its own safety review.
 

@@ -314,7 +314,7 @@ function toNormalizeResult<T>(result: ParseResult<T>): SmsNormalizeResult<T> {
  * This backend's own parsers, expressed as the seam's normalizer.
  *
  * It is the PARITY ORACLE the port is measured against, and that is now its only
- * role: the `1.2.1` pin carries the port, so nothing falls back to it. Deleting
+ * role: the `1.3.0` pin carries the port, so nothing falls back to it. Deleting
  * it would delete the differential — see `sms-port.ts`.
  */
 export const legacySmsNormalizer: SmsNormalizer = {

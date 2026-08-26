@@ -23,7 +23,7 @@
  * (`control/src/usb-mode/runtime-capability.ts`, todo 9). Every function here is
  * asked for through {@link modemControlFunction} first and answers with the local
  * implementation only when the pinned package does not export it — the fourteen
- * frozen projection modules' seam, applied to a fifteenth. `@ceralive/modem-control@1.2.1`
+ * frozen projection modules' seam, applied to a fifteenth. `@ceralive/modem-control@1.3.0`
  * exports `resolveRuntimeCompositionCapability`, so the package owns today's
  * read-side resolution while the local half remains its executable parity oracle
  * and fallback. The package's SET registry is intentionally not consumed here;

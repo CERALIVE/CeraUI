@@ -123,7 +123,7 @@ describe("modem-control compatibility projections", () => {
 		}
 	});
 
-	test("the EXACT 1.2.1 pin imports every projection", async () => {
+	test("the EXACT 1.3.0 pin imports every projection", async () => {
 		// A bare version, never a range: the SMS port, usage-policy setter and
 		// band catalog are STATIC imports with no runtime probe behind them, so a
 		// `^`/`~` that resolved a release missing any of them fails at import
@@ -131,7 +131,7 @@ describe("modem-control compatibility projections", () => {
 		const packageJson = await Bun.file(
 			join(BACKEND_ROOT, "..", "package.json"),
 		).json();
-		expect(packageJson.dependencies["@ceralive/modem-control"]).toBe("1.2.1");
+		expect(packageJson.dependencies["@ceralive/modem-control"]).toBe("1.3.0");
 		for (const module of MIGRATED_MODULES) {
 			expect(await import(join(BACKEND_ROOT, module))).toBeDefined();
 		}
