@@ -82,11 +82,12 @@
  * WHAT IS IN SCOPE, AND WHAT DELIBERATELY IS NOT
  * ────────────────────────────────────────────────────────────────────────────
  *
- * In scope: the three vocabularies the modem-config surface actually answers with
+ * In scope: the five vocabularies the modem-config surface actually answers with
  * — the shared mutation-safety enum, the config-write enum, the dongle-credential
- * enum, and the operator-scan enum. Those are the paths that carried the
- * interpolation/default defect, and every class below is reachable through one of
- * them, which is what makes the per-class rendered gate possible at all.
+ * enum, the operator-scan enum, and the typed ModemManager operation refusal enum.
+ * Those are the paths that carried the interpolation/default defect, and every class
+ * below is reachable through one of them, which is what makes the per-class rendered
+ * gate possible at all.
  *
  * Out of scope, on purpose: the USB-composition switch, USSD, SMS, GPS, band-lock
  * and FCC each own a refusal vocabulary whose required key set is ALREADY derived
@@ -116,6 +117,7 @@
 import type {
 	ModemConfigRefusal,
 	ModemCredentialsRefusal,
+	ModemManagerRefusalReason,
 	ModemMutationRefusal,
 	ModemScanFailure,
 } from "@ceraui/rpc/schemas";
@@ -133,7 +135,8 @@ export type ModemRefusalToken =
 	| ModemMutationRefusal
 	| ModemConfigRefusal
 	| ModemCredentialsRefusal
-	| ModemScanFailure;
+	| ModemScanFailure
+	| ModemManagerRefusalReason;
 
 /**
  * The operator-facing refusal classes.
@@ -239,6 +242,17 @@ export function refusalCopyKey(refusalClass: RefusalClass): string {
  * place, and that claim is the only thing a reviewer needs to check.
  */
 export const REFUSAL_CLASS_OF = {
+	// ── ModemManager operation refusals ──────────────────────────────────────
+	// These values come from the operation outcome after admission, not the
+	// mutation-safety gate above. Each resolves to a distinct remedy class.
+	unauthorized: "auth-failed",
+	unsupported: "unsupported",
+	"wrong-state": "blocked-by-state",
+	busy: "device-busy",
+	"not-found": "hardware-gone",
+	"timed-out": "timed-out-unknown-outcome",
+	disconnected: "unreachable",
+
 	// ── The device cannot do it at all ──────────────────────────────────────
 	// A capability nobody can turn on, so the honest remedy is a different modem.
 	unsupported_network_type: "unsupported",

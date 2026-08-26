@@ -29,13 +29,20 @@
  * `unsupported-profile`) is asserted by name on top of the sweep.
  */
 
+import { modemManagerRefusalReasonSchema } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
-import { REFUSAL_CLASSES, refusalCopyKey } from "$lib/modem/refusal-taxonomy";
+import {
+	modemRefusalCopyKey,
+	REFUSAL_CLASSES,
+	refusalCopyKey,
+} from "$lib/modem/refusal-taxonomy";
 import { CATALOGS } from "./helpers/catalog";
 
 /** Derived, never re-typed — a twentieth class lands here on its own. */
 const REQUIRED_KEYS: readonly string[] = REFUSAL_CLASSES.map(refusalCopyKey);
+const MODEM_MANAGER_REFUSAL_COPY_KEYS =
+	modemManagerRefusalReasonSchema.options.map(modemRefusalCopyKey);
 
 /**
  * Pure so the falsifiability proof below can hand it a damaged clone rather than
@@ -97,6 +104,20 @@ describe("every locale carries copy for every refusal class", () => {
 	it.each(Object.keys(CATALOGS))("%s", (locale) => {
 		expect(missingCopyKeys(CATALOGS[locale], REQUIRED_KEYS)).toEqual([]);
 	});
+
+	it.each(Object.keys(CATALOGS))(
+		"%s — every ModemManager refusal has distinct operator copy",
+		(locale) => {
+			expect(
+				missingCopyKeys(CATALOGS[locale], MODEM_MANAGER_REFUSAL_COPY_KEYS),
+			).toEqual([]);
+			expect(
+				new Set(
+					MODEM_MANAGER_REFUSAL_COPY_KEYS.map((key) => sentence(locale, key)),
+				).size,
+			).toBe(modemManagerRefusalReasonSchema.options.length);
+		},
+	);
 });
 
 describe("the classes are DISTINGUISHABLE in every locale", () => {
