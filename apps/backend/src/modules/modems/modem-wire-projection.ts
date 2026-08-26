@@ -57,7 +57,10 @@ import type {
 	ModemLockState,
 	ModemRadioPower,
 	ModemRecoveryState,
+	ModemRegistrationContext,
 	ModemRegistrationRejection,
+	ModemSignalDetail,
+	ModemSimPresenceEvidence,
 	RouterAdmin,
 	UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
@@ -118,7 +121,7 @@ export type ProjectedDeviceKind = "mm-managed" | "router" | "unmanaged";
 export type ProjectedSimVisibility = "visible" | "opaque";
 
 /**
- * The eleven additive-optional Phase-B fields, in `modemSchema` declaration
+ * The additive-optional Phase-B detail fields, in `modemSchema` declaration
  * order. Every one is OMITTED when its source did not observe it — a projection
  * never fabricates a field to make a row look complete.
  *
@@ -151,6 +154,9 @@ export interface ProjectedModemAdditive {
 	readonly registration_rejection?: ModemRegistrationRejection;
 	readonly packet_service_state?: string;
 	readonly radio_power?: ModemRadioPower;
+	readonly signal_detail?: ModemSignalDetail;
+	readonly registration_context?: ModemRegistrationContext;
+	readonly sim_presence_evidence?: ModemSimPresenceEvidence;
 	readonly router_admin?: RouterAdmin;
 }
 
@@ -258,6 +264,9 @@ export type WireModemEntry = {
 	registration_rejection?: ModemRegistrationRejection;
 	packet_service_state?: string;
 	radio_power?: ModemRadioPower;
+	signal_detail?: ModemSignalDetail;
+	registration_context?: ModemRegistrationContext;
+	sim_presence_evidence?: ModemSimPresenceEvidence;
 	router_admin?: RouterAdmin;
 	stable_key?: string;
 	capability_modules?: CapabilityModuleClaims;
@@ -593,6 +602,15 @@ function appendAdditive(
 		}
 		if (additive.radio_power !== undefined) {
 			entry.radio_power = additive.radio_power;
+		}
+		if (additive.signal_detail !== undefined) {
+			entry.signal_detail = additive.signal_detail;
+		}
+		if (additive.registration_context !== undefined) {
+			entry.registration_context = additive.registration_context;
+		}
+		if (additive.sim_presence_evidence !== undefined) {
+			entry.sim_presence_evidence = additive.sim_presence_evidence;
 		}
 		if (additive.router_admin !== undefined) {
 			entry.router_admin = additive.router_admin;

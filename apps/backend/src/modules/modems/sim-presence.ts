@@ -49,10 +49,26 @@
  * no modem class silently stops reporting a genuinely missing SIM.
  */
 
+import type { ModemSimPresenceEvidence } from "@ceraui/rpc/schemas";
+
 import { modemControlFunction } from "../modem-control-compat.ts";
 import type { ModemInfo } from "./mmcli.ts";
 
 export type SimPresence = "present" | "absent" | "unknown";
+
+/** The three MM facts a presence decision may be drawn from, in inspection order. */
+export const SIM_PRESENCE_FIELDS = ["sim", "simSlots", "failedReason"] as const;
+
+export interface SimPresenceFacts {
+	readonly sim?: string;
+	readonly simSlots?: readonly string[];
+	readonly failedReason?: string;
+}
+
+export interface SimPresenceReading {
+	readonly presence: SimPresence;
+	readonly evidence: ModemSimPresenceEvidence;
+}
 
 /**
  * A populated SIM slot names a real MM `Sim` object. An EMPTY slot is published
@@ -113,6 +129,63 @@ export function deriveSimPresence(modemInfo: Readonly<ModemInfo>): SimPresence {
 	}
 
 	return "unknown";
+}
+
+const packagedReadSimPresence = modemControlFunction<
+	((facts: SimPresenceFacts) => SimPresenceReading) | undefined
+>("readSimPresence", undefined);
+
+/**
+ * The presence decision together with the FACT THAT PRODUCED IT.
+ *
+ * `absent` and `unknown` are read off the SAME empty fields — a modem with no
+ * `Sim` path, no populated slot and no failure reason looks identical to one
+ * that is merely still initializing — so the presence alone cannot be audited.
+ * The evidence can: `absent` is reachable through exactly ONE kind
+ * (`state-failed-reason`), which turns "never inferred from a blank field" into
+ * a property a test asserts rather than a convention a refactor can quietly
+ * drop.
+ *
+ * `no-evidence` names the fields that WERE inspected, so "all three said
+ * nothing" is distinguishable from "only one was available to look at".
+ */
+export function readSimPresenceEvidence(
+	facts: SimPresenceFacts,
+): SimPresenceReading {
+	if (packagedReadSimPresence !== undefined) {
+		return packagedReadSimPresence(facts);
+	}
+	if (facts.sim !== undefined && isSimObjectPath(facts.sim)) {
+		return {
+			presence: "present",
+			evidence: { kind: "sim-object-path", field: "sim", value: facts.sim },
+		};
+	}
+	const slot = facts.simSlots?.find(isSimObjectPath);
+	if (slot !== undefined) {
+		return {
+			presence: "present",
+			evidence: {
+				kind: "sim-slot-object-path",
+				field: "simSlots",
+				value: slot,
+			},
+		};
+	}
+	if (facts.failedReason?.trim() === SIM_MISSING_FAILED_REASON) {
+		return {
+			presence: "absent",
+			evidence: {
+				kind: "state-failed-reason",
+				field: "failedReason",
+				value: SIM_MISSING_FAILED_REASON,
+			},
+		};
+	}
+	return {
+		presence: "unknown",
+		evidence: { kind: "no-evidence", inspected: [...SIM_PRESENCE_FIELDS] },
+	};
 }
 
 /**
