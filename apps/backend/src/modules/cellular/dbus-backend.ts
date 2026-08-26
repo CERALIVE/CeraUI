@@ -55,7 +55,10 @@ import {
 import { logger } from "../../helpers/logger.ts";
 
 import type { CellularBackend, CellularStartResult } from "./cellular-stack.ts";
-import { createAuditingDbusTransport } from "./dbus-audit-transport.ts";
+import {
+	createAuditingDbusTransport,
+	LIVE_OBSERVATION_MEMBERS,
+} from "./dbus-audit-transport.ts";
 import { type DbusModemCache, getDbusModemCache } from "./dbus-modem-cache.ts";
 import { foldDbusModemViews } from "./dbus-view-fold.ts";
 
@@ -116,6 +119,7 @@ export function createDbusCellularBackend(
 	const audited = createAuditingDbusTransport(
 		deps.transport ??
 			createDbusTransport({ busAddress: resolveSystemBusAddress() }),
+		{ allowedMembers: LIVE_OBSERVATION_MEMBERS },
 	);
 
 	let aborted = false;

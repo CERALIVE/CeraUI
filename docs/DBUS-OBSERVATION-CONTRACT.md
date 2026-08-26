@@ -161,31 +161,28 @@ buys nothing and costs a `mmcli` spawn per modem per tick.
 device state) that ModemManager's ObjectManager does not carry at all, so it is
 not redundant with this path and is not part of this cutover.
 
-### c.4 Signal cadence — a documented deviation, with evidence
+### c.4 Signal cadence — live setup, strict shadow
 
-The plan calls for `Signal.SetupThresholds` where supported, else `Signal.Setup`
-at 5-10 s. **Neither is called on the shipped path, deliberately.**
+Extended signal metrics require `org.freedesktop.ModemManager1.Modem.Signal.Setup`.
+It is a modem write: it enables the extended signal-reporting cadence and carries
+MM 1.24's radio-quality-only `rssi-threshold` and `error-rate-threshold` settings.
+It is allowed by one deliberately narrow policy only:
 
-`dbus-audit-transport.ts` is fail-closed: exactly three read members reach the
-bus, and `org.freedesktop.ModemManager1.Modem.Signal.Setup` is refused BY NAME
-(`REFUSAL_NAMED_MUTATION`) because it writes — it turns on periodic extended
-signal reporting on the modem. That fail-closed guarantee is the single property
-that makes it safe to point the default at a path observing the same daemon
-mmcli drives; opening a write member in the very commit that flips the default
-would remove the reason the flip is safe.
+- **`LIVE_OBSERVATION_MEMBERS`** permits the original three reads plus
+  `Modem.Signal.Setup`. `dbus-backend.ts` selects this policy so the live observer
+  can refresh RSSI/RSRP/RSRQ/SNR/SINR data.
+- **`STRICT_SHADOW_MEMBERS`** remains byte-identical to the former three-read
+  policy. `shadow.ts` selects it explicitly; `Signal.Setup` remains a named
+  `REFUSAL_NAMED_MUTATION`, never reaches the bus, and no shadow observation can
+  alter a modem's telemetry configuration.
 
-It costs nothing measurable, because `Modem.SignalQuality` is MM's own polled
-property and is published via `PropertiesChanged` **without any `Signal.Setup`
-call**: todo 16's board run recorded 66 `PropertiesChanged` signals with
-`changedKeys: ["SignalQuality"]` over a session in which no `Setup` was ever
-issued. `Signal.Setup` governs the *extended* `Modem.Signal` interface (RSSI,
-RSRP, SNR), which `DbusModemView.signal` does not read — it reads the 0-100
-`SignalQuality`.
+No other named mutating D-Bus member is admitted by either policy. In particular,
+`Ussd.Initiate`, `Ussd.Respond`, and `Ussd.Cancel` remain refused in both paths.
 
-**When this changes:** adopting extended signal metrics means adding
-`Modem.Signal.SetupThresholds`/`Setup` to `CELLULAR_READ_ONLY_MEMBERS` with an
-explicit rationale and a test, as its own change with its own review — not as a
-side effect of an adoption.
+This is the separately reviewed contract change required before CeraUI consumes
+the extended metrics from `@ceralive/modem-control@1.3.0`: todo 19's targeted
+audit test proves both the live permission and the exact former strict-shadow
+refusal record. `Signal.SetupThresholds` is not admitted.
 
 ---
 

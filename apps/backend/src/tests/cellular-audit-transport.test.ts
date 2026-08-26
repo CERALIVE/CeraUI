@@ -23,13 +23,14 @@ import type {
 } from "@ceralive/modem-control/transport";
 
 import {
-	CELLULAR_READ_ONLY_MEMBERS,
 	CellularAuditRefusalError,
 	createAuditingDbusTransport,
+	LIVE_OBSERVATION_MEMBERS,
 	memberKey,
 	NAMED_MUTATING_MEMBERS,
 	REFUSAL_NAMED_MUTATION,
 	REFUSAL_NOT_ALLOWLISTED,
+	STRICT_SHADOW_MEMBERS,
 } from "../modules/cellular/dbus-audit-transport.ts";
 
 const SIGNAL_SETUP = "org.freedesktop.ModemManager1.Modem.Signal.Setup";
@@ -78,13 +79,52 @@ function call(key: string): MethodCall {
 	};
 }
 
-describe("the allowlist is exactly three reads", () => {
-	test("no member beyond the three named reads is admitted", () => {
-		expect([...CELLULAR_READ_ONLY_MEMBERS].sort()).toEqual([
+describe("the named audit policies", () => {
+	test("strict-shadow remains byte-identical to the original three-read policy", () => {
+		expect([...STRICT_SHADOW_MEMBERS].sort()).toEqual([
 			"org.freedesktop.DBus.GetNameOwner",
 			"org.freedesktop.DBus.ObjectManager.GetManagedObjects",
 			"org.freedesktop.ModemManager1.Modem.GetCellInfo",
 		]);
+	});
+
+	test("live-observation admits Signal.Setup and no other named mutation", async () => {
+		// Given the telemetry-only Signal.Setup member on the live observer policy
+		const inner = recordingTransport();
+		const audited = createAuditingDbusTransport(inner, {
+			allowedMembers: LIVE_OBSERVATION_MEMBERS,
+		});
+
+		// When the observer configures ModemManager's extended-signal cadence
+		await audited.callMethod(call(SIGNAL_SETUP));
+
+		// Then it alone is forwarded beyond the former three-read policy
+		expect(inner.calls).toEqual([SIGNAL_SETUP]);
+		expect(audited.getCallLog()).toEqual([SIGNAL_SETUP]);
+		expect(audited.getRefusals()).toEqual([]);
+		expect(
+			[...LIVE_OBSERVATION_MEMBERS].filter(
+				(member) => !STRICT_SHADOW_MEMBERS.has(member),
+			),
+		).toEqual([SIGNAL_SETUP]);
+	});
+
+	test("strict-shadow refuses Signal.Setup with the former byte-identical refusal", async () => {
+		// Given the shadow policy and its recorded pre-split refusal shape
+		const inner = recordingTransport();
+		const audited = createAuditingDbusTransport(inner, {
+			allowedMembers: STRICT_SHADOW_MEMBERS,
+		});
+
+		// When Signal.Setup is attempted
+		const attempt = audited.callMethod(call(SIGNAL_SETUP));
+
+		// Then neither the refusal record nor the bus side effect changes
+		await expect(attempt).rejects.toBeInstanceOf(CellularAuditRefusalError);
+		expect(audited.getRefusals()).toEqual([
+			{ member: SIGNAL_SETUP, reason: REFUSAL_NAMED_MUTATION },
+		]);
+		expect(inner.calls).toEqual([]);
 	});
 
 	for (const allowed of [
@@ -124,7 +164,7 @@ describe("refusal table", () => {
 
 	test("Signal.Setup is enumerated in the named-mutation table", () => {
 		expect(NAMED_MUTATING_MEMBERS).toContain(SIGNAL_SETUP);
-		expect(CELLULAR_READ_ONLY_MEMBERS.has(SIGNAL_SETUP)).toBe(false);
+		expect(STRICT_SHADOW_MEMBERS.has(SIGNAL_SETUP)).toBe(false);
 	});
 
 	for (const mutation of NAMED_MUTATING_MEMBERS) {

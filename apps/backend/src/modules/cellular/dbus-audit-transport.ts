@@ -21,18 +21,15 @@
  * The device is expected to observe the SAME ModemManager instance mmcli is
  * actively driving, so an observation path that can mutate is a way to change a
  * live modem by accident. This wrapper is the enforcement point: a method call
- * reaches the bus ONLY when its fully-qualified `interface.member` is one of the
- * three reads in {@link CELLULAR_READ_ONLY_MEMBERS}. Anything else — a known
- * mutation, an unrecognised member, a member added by a future package version —
- * is refused with a typed {@link CellularAuditRefusalError} and never forwarded.
+ * reaches the bus ONLY when its fully-qualified `interface.member` is in the
+ * caller-selected policy. Anything else — a known mutation, an unrecognised
+ * member, a member added by a future package version — is refused with a typed
+ * {@link CellularAuditRefusalError} and never forwarded.
  *
- * `org.freedesktop.ModemManager1.Modem.Signal.Setup` is refused BY NAME rather
- * than merely by omission. It reads like a passive "subscribe to signal quality"
- * call and is not: it turns on periodic extended signal reporting on the modem,
- * i.e. it writes. {@link NAMED_MUTATING_MEMBERS} exists so that fact is asserted
- * against a name instead of inferred from an allowlist gap — a refusal recorded
- * as {@link REFUSAL_NAMED_MUTATION} proves the call was recognised and rejected,
- * not simply unknown.
+ * `org.freedesktop.ModemManager1.Modem.Signal.Setup` is a named write. The live
+ * observer permits it solely for extended-signal telemetry refresh and MM 1.24
+ * radio-quality thresholds (`rssi-threshold` / `error-rate-threshold`); strict
+ * shadow continues to refuse it by name.
  *
  * Signal SUBSCRIPTIONS (`subscribeSignal`) are match-rule registrations on the
  * bus daemon, not calls against a modem, so they pass through untouched.
@@ -57,10 +54,17 @@ export function memberKey(call: {
 	return `${call.interface}.${call.member}`;
 }
 
-export const CELLULAR_READ_ONLY_MEMBERS: ReadonlySet<string> = new Set([
+/** Strict shadow keeps the original three-read policy byte-for-byte. */
+export const STRICT_SHADOW_MEMBERS: ReadonlySet<string> = new Set([
 	"org.freedesktop.DBus.GetNameOwner",
 	"org.freedesktop.DBus.ObjectManager.GetManagedObjects",
 	"org.freedesktop.ModemManager1.Modem.GetCellInfo",
+]);
+
+/** Live observation admits only Signal.Setup beyond strict shadow's three reads. */
+export const LIVE_OBSERVATION_MEMBERS: ReadonlySet<string> = new Set([
+	...STRICT_SHADOW_MEMBERS,
+	"org.freedesktop.ModemManager1.Modem.Signal.Setup",
 ]);
 
 /**
@@ -117,11 +121,16 @@ export interface AuditingDbusTransport extends DbusTransport {
 }
 
 export interface AuditingDbusTransportDeps {
+	/** Defaults to strict shadow so unclassified callers cannot widen bus access. */
+	readonly allowedMembers?: ReadonlySet<string>;
 	readonly onRefusal?: (refusal: CellularAuditRefusal) => void;
 }
 
-function classify(member: string): CellularAuditRefusalReason | undefined {
-	if (CELLULAR_READ_ONLY_MEMBERS.has(member)) {
+function classify(
+	member: string,
+	allowedMembers: ReadonlySet<string>,
+): CellularAuditRefusalReason | undefined {
+	if (allowedMembers.has(member)) {
 		return undefined;
 	}
 	return NAMED_MUTATING_MEMBER_SET.has(member)
@@ -143,7 +152,10 @@ export function createAuditingDbusTransport(
 
 		async callMethod(call: MethodCall): Promise<MethodReply> {
 			const member = memberKey(call);
-			const reason = classify(member);
+			const reason = classify(
+				member,
+				deps.allowedMembers ?? STRICT_SHADOW_MEMBERS,
+			);
 			if (reason !== undefined) {
 				const refusal: CellularAuditRefusal = { member, reason };
 				refusals.push(refusal);

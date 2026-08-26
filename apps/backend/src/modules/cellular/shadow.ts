@@ -70,6 +70,7 @@ import { getConfig } from "../config.ts";
 import {
 	type CellularAuditRefusal,
 	createAuditingDbusTransport,
+	STRICT_SHADOW_MEMBERS,
 } from "./dbus-audit-transport.ts";
 import {
 	classifyShadowDivergences,
@@ -164,6 +165,7 @@ export async function startModemShadow(deps: ShadowModeDeps): Promise<void> {
 	// during construction is evidence too rather than a lost event.
 	const refusalCount = { value: 0 };
 	const transport = createAuditingDbusTransport(deps.createTransport(), {
+		allowedMembers: STRICT_SHADOW_MEMBERS,
 		onRefusal: (refusal) => {
 			refusalCount.value += 1;
 			logger.debug(
