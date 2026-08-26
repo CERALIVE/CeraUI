@@ -18,13 +18,14 @@
 /*
   mmcli helpers
 */
+import type { ModemOperationOutcome } from "@ceraui/rpc/schemas";
+
 import { logger } from "../../helpers/logger.ts";
 import { ALLOWED, RunTimeoutError, run } from "../../helpers/run.ts";
 import {
 	handleMmcliCommand,
 	shouldMockModems,
 } from "../../mocks/providers/modems.ts";
-
 import { setup } from "../setup.ts";
 import {
 	describeCliError,
@@ -33,6 +34,7 @@ import {
 	parseFail,
 	parseOk,
 } from "../system/cli-parse.ts";
+import { modemOperationOutcomeFromError } from "./operation-outcome.ts";
 
 export type ModemId = number;
 
@@ -1015,8 +1017,18 @@ export async function mmSendSimPuk(
  */
 export type SimPukUnlockResult =
 	| { success: true }
-	| { success: false; error: "wrong-puk"; remainingAttempts?: number }
-	| { success: false; error: "locked"; remainingAttempts: 0 }
+	| {
+			success: false;
+			error: "wrong-puk";
+			remainingAttempts?: number;
+			operation?: ModemOperationOutcome;
+	  }
+	| {
+			success: false;
+			error: "locked";
+			remainingAttempts: 0;
+			operation?: ModemOperationOutcome;
+	  }
 	| { success: false; error: "no-locked-modem" }
 	| { success: false; error: "error" };
 
@@ -1062,24 +1074,43 @@ export async function unlockSimPuk(
 	try {
 		await mmSendSimPuk(modemPath, puk, newPin);
 		return { success: true };
-	} catch {
+	} catch (err) {
 		// Deliberately secret-free: execFileP's error message embeds the argv
 		// (PUK + PIN included), so we never log it. mmcli's stderr is also omitted.
 		logger.warn(
 			`SIM PUK unlock rejected for modem ${modemPath} (re-checking lock state)`,
 		);
 
+		// The retry counters below cannot separate "the PUK was wrong" from "the
+		// daemon never took the submit", and the counter re-read can itself fail —
+		// in which case `wrong-puk` is a GUESS, and one that tells an operator
+		// their carrier-issued code is bad. The classified outcome rides alongside
+		// so that guess is falsifiable. It is safe to derive from `err` and unsafe
+		// to log it: the projection answers one of eight enum members and never
+		// echoes the argv-bearing message.
+		const operation = modemOperationOutcomeFromError(err);
+
 		// Re-read to classify: how many PUK attempts remain? Zero means the SIM is
 		// now permanently locked. We do NOT resubmit.
 		const after = await mmGetModemUnlockInfo(modemPath);
 		const remainingAttempts = after?.retries[pukKind];
 		if (remainingAttempts === 0) {
-			return { success: false, error: "locked", remainingAttempts: 0 };
+			return {
+				success: false,
+				error: "locked",
+				remainingAttempts: 0,
+				operation,
+			};
 		}
 		if (remainingAttempts !== undefined) {
-			return { success: false, error: "wrong-puk", remainingAttempts };
+			return {
+				success: false,
+				error: "wrong-puk",
+				remainingAttempts,
+				operation,
+			};
 		}
-		return { success: false, error: "wrong-puk" };
+		return { success: false, error: "wrong-puk", operation };
 	}
 }
 

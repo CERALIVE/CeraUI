@@ -178,6 +178,128 @@ test.describe(
 			record("refusal rendered inline; active mode unchanged (qmi)");
 		});
 
+		/*
+		  THE CLASSIFIED OUTCOME, RENDERED — the half a generic error banner throws
+		  away.
+
+		  Both legs arm the SAME procedure with the SAME `transition_failed` /
+		  `transaction_error` pair and differ only in the classification riding
+		  beside it, which is exactly the point: the wire word for "the transaction
+		  blew up" cannot separate a daemon that was busy from a write whose reply
+		  never came back, and before this the operator got one red sentence for
+		  both.
+		*/
+		test("a retryable daemon refusal renders its own state, not a generic error", async ({
+			page,
+		}) => {
+			record("── setUsbMode: retryable daemon refusal ──");
+			await seedSwitchableModem(page);
+
+			await armFake(page, "modems.setUsbMode", {
+				success: false,
+				error: "transition_failed",
+				reason: "transaction_error",
+				operation: {
+					status: "refused",
+					completion: "failed",
+					reason: "InProgress",
+					refusal: "busy",
+					retryable: true,
+				},
+			});
+
+			await openTargetModemDialog(page, MODEM_INDEX);
+			const dialog = page.getByRole("dialog");
+			await dialog.getByTestId("modem-usb-mode-target-mbim").click();
+			await dialog.getByRole("button", { name: /Switch to/i }).click();
+			await page.getByRole("button", { name: /Switch mode/i }).click();
+
+			const band = dialog.getByTestId("modem-usb-mode-error");
+			await expect(band).toBeVisible();
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome"),
+			).toHaveAttribute("data-outcome", "refused");
+			// The three things a generic banner cannot say: what it MEANS, what the
+			// device actually reported, and whether trying again could help.
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome-result"),
+			).toBeVisible();
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome-completion"),
+			).toBeVisible();
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome-retry"),
+			).toBeVisible();
+			// A retryable refusal is NOT a reconciliation case.
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome-reconciliation"),
+			).toHaveCount(0);
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
+				"qmi",
+			);
+			record(
+				"busy → result + completion + retry hint rendered; no reconciliation pointer",
+			);
+			await dialog
+				.getByTestId("modem-usb-mode-card")
+				.screenshot({ path: shot("usb-mode-refusal-retryable") });
+		});
+
+		test("an unknown outcome routes to reconciliation and is never findable as an error", async ({
+			page,
+		}) => {
+			record("── setUsbMode: unknown outcome ──");
+			await seedSwitchableModem(page);
+
+			await armFake(page, "modems.setUsbMode", {
+				success: false,
+				error: "transition_failed",
+				reason: "transaction_error",
+				operation: {
+					status: "unknown-outcome",
+					completion: "timed-out",
+					reason: "write-reply-timed-out",
+					requires_reconciliation: true,
+					retryable: false,
+				},
+			});
+
+			await openTargetModemDialog(page, MODEM_INDEX);
+			const dialog = page.getByRole("dialog");
+			await dialog.getByTestId("modem-usb-mode-target-mbim").click();
+			await dialog.getByRole("button", { name: /Switch to/i }).click();
+			await page.getByRole("button", { name: /Switch mode/i }).click();
+
+			await expect(
+				dialog.getByTestId("modem-usb-mode-unknown-outcome"),
+			).toBeVisible();
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome"),
+			).toHaveAttribute("data-outcome", "unknown");
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome-reconciliation"),
+			).toBeVisible();
+			// Never a success claim, never a failure claim, never a retry.
+			await expect(dialog.getByTestId("modem-usb-mode-error")).toHaveCount(0);
+			await expect(
+				dialog.getByTestId("modem-usb-mode-confirmed"),
+			).toHaveCount(0);
+			await expect(
+				dialog.getByTestId("modem-usb-mode-outcome-retry"),
+			).toHaveCount(0);
+			await expect(dialog.getByTestId("modem-usb-mode-active")).toHaveAttribute(
+				"data-usb-mode",
+				"qmi",
+			);
+			record(
+				"unknown-outcome → reconciliation band; no error band, no success, no retry",
+			);
+			await dialog
+				.getByTestId("modem-usb-mode-card")
+				.screenshot({ path: shot("usb-mode-unknown-outcome") });
+		});
+
 		// ── Certified-modes-only: the four device classes, rendered ──────────────
 		// The card must offer EXACTLY the certified set and, for a device that has
 		// none, no control at all. "No control" is asserted as an absence of every

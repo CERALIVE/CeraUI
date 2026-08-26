@@ -22,7 +22,7 @@
  * `import("@ceralive/modem-control")` behind a structural probe, because the
  * port landed in modem-stack AFTER the version `package.json` pinned and a
  * static import of a symbol the pinned release does not export fails the BUILD
- * rather than degrading. `package.json` now pins `1.2.1` EXACTLY, which
+ * rather than degrading. `package.json` now pins `1.3.0` EXACTLY, which
  * publishes the whole port, so the probe has nothing left to discover: the
  * import is enforced by `tsc` at build time and by `bun install` at install
  * time, which is strictly stronger than a runtime `typeof === "function"` check
@@ -35,12 +35,9 @@
  * case now drives BOTH implementations through `readSmsInbox` and asserts one
  * inbox, so either side drifting reddens a test on both.
  *
- * THE SEAM IS NORMALIZATION ONLY, AND DELIBERATELY SO. The transport stays
- * `mmcli` — a client of the SAME ModemManager daemon the port's D-Bus adapter
- * talks to, already proven on the bench board, and adding ZERO modem-control
- * surface. Moving the transport to the port's `Added`/`Deleted` observation is a
- * separate change that needs a live receive drill to certify, and that drill is
- * blocked (no bench modem has an SMS-capable registered SIM).
+ * The parser seam remains the mmcli parity oracle. Transport selection now lives
+ * in `sms-backend.ts`: `dbus` consumes the package observation port while
+ * `mmcli` keeps this normalizer and reader as the explicit rollback.
  */
 
 import {

@@ -56,7 +56,7 @@ const CASES: readonly RuntimeCompositionResponse[] = [
 ];
 
 describe("USB runtime composition package compatibility", () => {
-	test("the exact 1.2.1 package resolver wins the structural seam", () => {
+	test("the exact 1.3.0 package resolver wins the structural seam", () => {
 		expect(hasModemControlFunction("resolveRuntimeCompositionCapability")).toBe(
 			true,
 		);

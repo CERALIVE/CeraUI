@@ -53,9 +53,16 @@ import {
 } from "@ceralive/modem-control/transport";
 
 import { logger } from "../../helpers/logger.ts";
-
+import {
+	DbusSmsPortRegistry,
+	setActiveDbusSmsPortRegistry,
+} from "../modems/dbus-sms.ts";
 import type { CellularBackend, CellularStartResult } from "./cellular-stack.ts";
-import { createAuditingDbusTransport } from "./dbus-audit-transport.ts";
+import {
+	createAuditingDbusTransport,
+	LIVE_OBSERVATION_MEMBERS,
+	LIVE_OBSERVATION_SIGNALS,
+} from "./dbus-audit-transport.ts";
 import { type DbusModemCache, getDbusModemCache } from "./dbus-modem-cache.ts";
 import { foldDbusModemViews } from "./dbus-view-fold.ts";
 
@@ -116,7 +123,12 @@ export function createDbusCellularBackend(
 	const audited = createAuditingDbusTransport(
 		deps.transport ??
 			createDbusTransport({ busAddress: resolveSystemBusAddress() }),
+		{
+			allowedMembers: LIVE_OBSERVATION_MEMBERS,
+			allowedSignals: LIVE_OBSERVATION_SIGNALS,
+		},
 	);
+	const smsRegistry = new DbusSmsPortRegistry(audited);
 
 	let aborted = false;
 
@@ -126,7 +138,9 @@ export function createDbusCellularBackend(
 			if (aborted) {
 				return;
 			}
-			cache.applySnapshot(epoch, foldDbusModemViews(tree));
+			const views = foldDbusModemViews(tree);
+			cache.applySnapshot(epoch, views);
+			smsRegistry.noteEpoch(epoch, views);
 		},
 	});
 
@@ -140,7 +154,9 @@ export function createDbusCellularBackend(
 	});
 
 	async function teardown(): Promise<void> {
+		setActiveDbusSmsPortRegistry(null, smsRegistry);
 		unobserve();
+		await smsRegistry.stop().catch(() => undefined);
 		await observer.stop().catch(() => undefined);
 		await audited.disconnect().catch(() => undefined);
 	}
@@ -158,6 +174,8 @@ export function createDbusCellularBackend(
 				await teardown();
 				return { ok: false };
 			}
+			await smsRegistry.settle();
+			setActiveDbusSmsPortRegistry(smsRegistry);
 			return { ok: list.ok };
 		},
 		async stop(): Promise<void> {

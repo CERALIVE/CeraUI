@@ -161,31 +161,28 @@ buys nothing and costs a `mmcli` spawn per modem per tick.
 device state) that ModemManager's ObjectManager does not carry at all, so it is
 not redundant with this path and is not part of this cutover.
 
-### c.4 Signal cadence — a documented deviation, with evidence
+### c.4 Signal cadence — live setup, strict shadow
 
-The plan calls for `Signal.SetupThresholds` where supported, else `Signal.Setup`
-at 5-10 s. **Neither is called on the shipped path, deliberately.**
+Extended signal metrics require `org.freedesktop.ModemManager1.Modem.Signal.Setup`.
+It is a modem write: it enables the extended signal-reporting cadence and carries
+MM 1.24's radio-quality-only `rssi-threshold` and `error-rate-threshold` settings.
+It is allowed by one deliberately narrow policy only:
 
-`dbus-audit-transport.ts` is fail-closed: exactly three read members reach the
-bus, and `org.freedesktop.ModemManager1.Modem.Signal.Setup` is refused BY NAME
-(`REFUSAL_NAMED_MUTATION`) because it writes — it turns on periodic extended
-signal reporting on the modem. That fail-closed guarantee is the single property
-that makes it safe to point the default at a path observing the same daemon
-mmcli drives; opening a write member in the very commit that flips the default
-would remove the reason the flip is safe.
+- **`LIVE_OBSERVATION_MEMBERS`** permits the original three reads plus
+  `Modem.Signal.Setup`. `dbus-backend.ts` selects this policy so the live observer
+  can refresh RSSI/RSRP/RSRQ/SNR/SINR data.
+- **`STRICT_SHADOW_MEMBERS`** remains byte-identical to the former three-read
+  policy. `shadow.ts` selects it explicitly; `Signal.Setup` remains a named
+  `REFUSAL_NAMED_MUTATION`, never reaches the bus, and no shadow observation can
+  alter a modem's telemetry configuration.
 
-It costs nothing measurable, because `Modem.SignalQuality` is MM's own polled
-property and is published via `PropertiesChanged` **without any `Signal.Setup`
-call**: todo 16's board run recorded 66 `PropertiesChanged` signals with
-`changedKeys: ["SignalQuality"]` over a session in which no `Setup` was ever
-issued. `Signal.Setup` governs the *extended* `Modem.Signal` interface (RSSI,
-RSRP, SNR), which `DbusModemView.signal` does not read — it reads the 0-100
-`SignalQuality`.
+No other named mutating D-Bus member is admitted by either policy. In particular,
+`Ussd.Initiate`, `Ussd.Respond`, and `Ussd.Cancel` remain refused in both paths.
 
-**When this changes:** adopting extended signal metrics means adding
-`Modem.Signal.SetupThresholds`/`Setup` to `CELLULAR_READ_ONLY_MEMBERS` with an
-explicit rationale and a test, as its own change with its own review — not as a
-side effect of an adoption.
+This is the separately reviewed contract change required before CeraUI consumes
+the extended metrics from `@ceralive/modem-control@1.3.0`: todo 19's targeted
+audit test proves both the live permission and the exact former strict-shadow
+refusal record. `Signal.SetupThresholds` is not admitted.
 
 ---
 
@@ -312,6 +309,37 @@ The rule that DOES hold, stated so the next reader does not re-add one:
   safeguard;
 - a row that cannot be matched across an epoch (no `ID_PATH`, see §e.2) is never
   carried into a settling merge at all, which is what actually bounds the merge.
+
+---
+
+## SMS ports follow the observer epoch
+
+`modems.getSms` follows the composition root's committed backend. The `dbus`
+path uses `@ceralive/modem-control`'s `createDbusSmsPort`: one initial inbox
+read, then `Messaging.Added` / `Messaging.Deleted` folding, with an authoritative
+replace on reconnect. The `mmcli` value retains the shipped list/read reader as
+the rollback path; it is not removed or emulated through D-Bus.
+
+A package SMS port captures one immutable modem object path. That path cannot be
+carried across an MM owner epoch because the daemon renumbers the roster (the
+measured `11,13,14,15 → 0,1,2,3` transition above). CeraUI therefore keys live
+ports by the observer epoch and the modem's `ID_PATH`: on an epoch edge it stops
+all old subscriptions first, resolves each previously-read physical modem in the
+new roster, and builds a fresh port for the new `/Modem/N`. A row with no
+cross-epoch `ID_PATH` is not carried. The same ID_PATH check also rebuilds a
+held port when a replug changes `/Modem/N` within one owner epoch.
+
+The live audit policy admits exactly the package's SMS wire surface:
+
+- method `org.freedesktop.ModemManager1.Modem.Messaging.List`;
+- method `org.freedesktop.DBus.Properties.GetAll` only on
+  `/org/freedesktop/ModemManager1/SMS/<n>` with the sole argument
+  `org.freedesktop.ModemManager1.Sms`;
+- signals `Messaging.Added` and `Messaging.Deleted`.
+
+Strict shadow gains none of these entries. SMS write members remain named
+refusals under both policies, and no `Ussd.*` member is admitted; USSD stays on
+`mmcli-ussd.ts` by owner decision.
 
 ---
 

@@ -25,7 +25,12 @@ src/
 | Shared-client steering status/refusal + transient hard-down reset | `schemas/network.schema.ts` → `uplinkSteeringStatusSchema` / `uplinkFlowsResetEventSchema` |
 | Streaming-first shaper mode/algorithm + priority degradation | `schemas/network.schema.ts` → `uplinkShaperStatusSchema` |
 | Correlate a modem across a USB-mode transition | `schemas/modems.schema.ts` → `deriveModemStableKey()` / the `stable_key` field |
+| A ModemManager reading that may be absent, WITHOUT losing why | `schemas/modems.schema.ts` → `modemMetricUnknownReasonSchema` + `modemNumberMetricSchema` / `modemFlagMetricSchema` / `modemTextMetricSchema`; section below → AN ABSENT READING STILL SAYS SOMETHING |
+| Extended MM signal detail (rsrp/rsrq/snr/sinr) + measurement recency | `schemas/modems.schema.ts` → `modemSignalDetailSchema` (the `signal_detail` field) |
+| Which network / which cell the radio registered on | `schemas/modems.schema.ts` → `modemRegistrationContextSchema` (the `registration_context` field) |
+| WHICH FACT decided `sim_presence` | `schemas/modems.schema.ts` → `modemSimPresenceEvidenceSchema` (the `sim_presence_evidence` field) |
 | The shared modem MUTATION-SAFETY wire vocabulary (journal states, refusals, ack modes, the three operator procedures) | `schemas/modems.schema.ts` → `modemMutation*Schema`; section below → THE MUTATION-SAFETY VOCABULARY IS SHARED |
+| What a modem OPERATION did once it was admitted (completion/result/unknown-outcome + the 8 ModemManager refusals, and whether a retry could help) | `schemas/modems.schema.ts` → `modemOperation*Schema` / `modemManagerRefusalReasonSchema` / `MODEM_MANAGER_REFUSAL_RETRYABLE`; section below → AN OPERATION'S OWN WORDS SURVIVE THE BOUNDARY |
 | Identify a bonded LINK across a SIGHUP reload (`link_id` / `port_label` / `serial` on a telemetry row) + the one normalized bind-map disposition (`bond_mapping`) | `schemas/status.schema.ts` → `linkTelemetryEntrySchema`, `bondMappingSchema`; `conn_id` is a FILE POSITION and must never be a row identity |
 | Say that a link's device could NOT be identified (`identity_state: 'unmappable'`) | `schemas/status.schema.ts` → `bondLinkIdentityStateSchema` on `linkTelemetryEntrySchema`; section below → AN UNIDENTIFIABLE LINK SAYS SO |
 | Whether a capability module may be offered, mutated, or claimed | `schemas/capability-modules.schema.ts` + `capabilities/capability-matrix.ts` → `resolveSupportClaim` / `resolveCapabilityMatrix` / `mayRenderModule` / `mayClaimSupport`; section below → THE CAPABILITY FEATURE-GATE FRAMEWORK LIVES HERE, ONCE |
@@ -253,6 +258,69 @@ Coverage: `schemas/modems.schema.test.ts` — the legacy-payload byte-compat fix
 field), the `stable_key` derivation table incl. the same-unit/different-port/
 non-USB/absent arms, and the strict-input negatives.
 
+## AN ABSENT READING STILL SAYS SOMETHING [EXISTS]
+
+`@ceralive/modem-control@1.3.0` normalizes every ModemManager reading as a
+`NormalizedMetric<T>` — a value, or an `unknown` carrying one of SEVEN reasons.
+`modemMetricUnknownReasonSchema` plus the three value-typed unions
+(`modemNumberMetricSchema` / `modemFlagMetricSchema` / `modemTextMetricSchema`)
+are the wire form of that, and they exist so the REASON survives the trip.
+
+**A bare `null` would destroy the only information worth carrying.**
+`unsupported` is a durable claim about the SOURCE, `not-reported` is about ONE
+reading, and `not-observed` is about US — three different operator actions (hide
+the control / wait for the next sample / prime the read) that a single `null`
+renders identical. This is the same distinction `routerSignalMetricSchema`
+already draws for the dongle dialects.
+
+**It is NOT `routerSignalMetricSchema` re-used, and that is deliberate.** Its
+five reasons are the router-admin dialects' own vocabulary and carry no
+`not-observed` or `refused`; a ModemManager reading genuinely reaches both,
+because the extended `Modem.Signal` dicts stay empty until `Signal.Setup` primes
+them. Widening the router union instead would tell a dongle consumer that two
+reasons its dialects cannot produce are now possible.
+
+Three blocks consume it, all additive-optional on `modemSchema`:
+
+| Field | Carries |
+|---|---|
+| `signal_detail` | `quality_recent` + `rsrp` / `rsrq` / `snr` / `sinr` |
+| `registration_context` | `operator_name` / `operator_code` / `cell_id` / `tac` |
+| `sim_presence_evidence` | WHICH FACT decided `sim_presence` |
+
+Four shape decisions carry weight:
+
+- **Inside a present block every metric is REQUIRED.** The modem merge preserves
+  an omitted optional field, so a metric published only when known could be
+  raised and never lowered (the `policy_route_missing` latch, exactly). The
+  BLOCK is optional because only a backend that reads the interface can answer
+  at all — the mmcli path omits all three rather than publishing metrics it
+  never looked for.
+- **`sinr` is `not-reported` on an LTE/NR modem, never `unsupported`.**
+  ModemManager 1.24.2's own introspection gives `sinr` to `Signal.Evdo` and to
+  no other dict, while `Lte`/`Nr5g` publish `snr` — a different quantity. So
+  ModemManager CAN express SINR, and a capability claim it disproves would be
+  the invented reading this layer exists to prevent.
+- **`operator_name` is deliberately DUPLICATED with `status.network`.** `status`
+  is byte-locked against the pre-Phase-B builder and OMITS the field when the
+  modem reported none, which destroys "not registered yet" vs "never looked".
+  The metric keeps the reason; `status.network` keeps the legacy shape.
+- **There is no EARFCN, and there cannot be one from these sources.** MM
+  publishes no generic ARFCN on `Modem` / `Modem3gpp` / `Location`; the only one
+  is per-cell, under two DIFFERENT keys for two DIFFERENT quantities (`earfcn`
+  LTE, `nrarfcn` 5GNR). One slot would have to merge them or pick a RAT.
+
+`modemSimPresenceEvidenceSchema` is a `kind` union whose whole purpose is
+auditability: `absent` is reachable through exactly ONE member
+(`state-failed-reason`), which turns "never inferred from a blank field" into a
+property a consumer can VERIFY. `no-evidence` names the fields that were
+inspected. Its `value` fields carry D-Bus object paths and MM's own
+failed-reason token — never a subscriber identifier, and they must never be
+widened to carry one.
+
+Device contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) →
+THE EXTENDED SIGNAL READING IS A METRIC, NOT A NUMBER.
+
 ## AN UNIDENTIFIABLE LINK SAYS SO, RATHER THAN BEING RENAMED
 
 `bondLinkIdentityStateSchema` (`resolved | unmappable`) is the wire vocabulary
@@ -306,6 +374,51 @@ Three shape decisions carry weight:
 mutation record the device cannot read is precisely the case fail-closed exists
 for. Device-side contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md)
 → THE MODEM MUTATION-SAFETY CONTRACT.
+
+## AN OPERATION'S OWN WORDS SURVIVE THE BOUNDARY [EXISTS]
+
+`@ceralive/modem-control` classifies a modem operation in three frozen
+vocabularies, and CeraUI threw all three away at the RPC boundary. The four enums
+in `schemas/modems.schema.ts` — 5 completion statuses + 4 result statuses + 3
+unknown-outcome reasons + 8 ModemManager refusal reasons, **20 values** — are the
+wire form of them, and `modemOperationOutcomeSchema` is the shape they ride in.
+
+**They are DISTINCT from `modemMutationRefusalSchema`, and that is the point.**
+That set answers "may this device be mutated at all" (a lease is held, a journal
+entry blocks it, a stream is live). These answer "what did the operation do once
+it WAS admitted". Folding them together would oblige every mutating surface to
+declare refusals it cannot produce — the same argument that keeps
+`capabilityMutationRefusalSchema` a superset rather than new members.
+
+Four shape decisions carry weight:
+
+- **The COMPLETION status rides beside the RESULT status, not instead of it.**
+  `timed-out` classifies as `unknown-outcome` on a WRITE and as plain `failed` on
+  a READ, so a single field cannot hold both facts — a consumer would be unable
+  to tell an unanswered write from a stale generation.
+- **`unknown-outcome` is neither a success nor a failure**, carries a TYPED
+  reason (not a free string) and is the only arm carrying
+  `requires_reconciliation: true`. The mutation may have landed, so it belongs on
+  the existing mutation-block/reconciliation surface — rendering it as either
+  outcome is a lie in one direction or the other.
+- **`retryable` rides EVERY arm explicitly.** Absent-means-false is the
+  `policy_route_missing` latch in miniature: a merging consumer could raise a
+  retry hint and never lower it. `MODEM_MANAGER_REFUSAL_RETRYABLE` is a TOTAL
+  record so a ninth refusal fails `tsc` rather than defaulting to "do not retry",
+  which would tell an operator to give up on a transient condition.
+- **`refusal` is present ONLY when the reason really came from
+  `mapModemManagerError`.** A CeraUI-authored refusal string is a real reason
+  too, so `reason` stays a free string there; minting the package's `failed`
+  fallback arm for a CeraUI-side decision would put a daemon verdict on screen
+  for something the daemon never said.
+
+Every value is a MIRROR of the package's own frozen list, re-read from
+`control/src/domain/operation.ts` and
+`control/src/providers/modem-manager/errors.ts` — never invented. A reason the
+package cannot emit is a state no device reaches, and operator copy written for
+one is dead copy. Device contract:
+[`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) → A GENERIC FAILURE IS
+NOT AN ANSWER.
 
 ## THE SMS INBOX SCHEMAS ARE READ-ONLY BY DESIGN
 
@@ -477,12 +590,21 @@ convention). Device contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGEN
 - Don't add runtime handlers here. Handlers live in `apps/backend/src/`.
 - Don't duplicate schema definitions in `apps/` — always import from this package.
 - Don't use Zod v3 APIs (`z.string().nonempty()` etc.) — project is on Zod v4.
+- Don't publish a ModemManager reading as a bare `null` or an omitted key when it is absent — `unsupported` / `not-reported` / `not-observed` lead to three different operator actions, and a `null` renders them identical. Use the metric unions, and don't make a metric optional INSIDE a present block: the merge preserves an omitted field, so a known-only metric can be raised and never lowered.
+- Don't widen `routerSignalMetricSchema` to carry `not-observed`/`refused` instead of adding the modem unions — those five reasons are the dongle dialects' own vocabulary, and widening tells a dongle consumer two reasons its dialects cannot produce are now possible.
+- Don't claim `sinr` off an `Lte`/`Nr5g` dict, and don't report an LTE modem's missing SINR as `unsupported` — MM 1.24.2 gives `sinr` to `Signal.Evdo` alone and `snr` (a different quantity) to the others, so `unsupported` is a capability claim ModemManager itself disproves.
+- Don't add an EARFCN to `modemRegistrationContextSchema` — MM exposes none generically, and its two per-cell keys (`earfcn` / `nrarfcn`) are different quantities that one slot could only merge or silently pick between.
+- Don't widen a `modemSimPresenceEvidenceSchema` `value` to carry an ICCID, IMSI or MSISDN — the union deliberately carries only D-Bus object paths and MM's own failed-reason token. And don't add a second evidence kind that can answer `absent`: exactly one is what makes "never inferred from a blank field" verifiable.
 - Don't publish `identity_state: 'resolved'` on a telemetry row, and don't fold the state INTO `link_id` as a sentinel value — `link_id` is minted by one authority or it is absent, and an id-shaped placeholder keyed on an interface name is the exact defect the state replaced.
 - Don't correlate a modem by its numeric id, its ifname, or its MAC — a USB-mode transition re-issues the first, the bench proves the second races on a duplicate factory MAC, and the third IS that duplicate. Use `stable_key` / `deriveModemStableKey()`, don't give an adapter its own derivation, and don't prefix or hash the key.
 - Don't feed a raw sysfs DEVPATH (`Modem.Physdev`, `Modem.Device`) anywhere a `stable_key` is compared without normalizing it — it names the same socket as a udev `ID_PATH` in a different vocabulary, and equality is the only operation the key supports, so the two never match (todo 24: two rows for one stick, 10/10 cycles). `deriveModemStableKey` normalizes for you; use `canonicalModemIdPath` when you also STORE the path. And don't "fix" a future instance of this with a fuzzy compare-time match or a third key format — normalize at the derivation, to the `ID_PATH` shape every other adapter already emits.
 - Don't route `isSimlessForBond` (or anything else that decides bond membership) through `sim_presence` — that field is `no_sim`'s pre-fold INPUT, published so a consumer can tell an unreadable slot from an empty one, and the gate reading the binary claim alone is what makes it additive. And don't publish `sim_presence` present-only-when-known: the consumer merge preserves an omitted optional field, so a slot that went `present` → `unknown` could never lower the claim.
 - Don't publish `own_numbers` as an empty array, and don't collapse it to a single string — the schema's `.min(1)` is what keeps "not reported" and "none" from becoming the same wire value, and MM's property is `as`, so a first-element read silently drops a dual-number SIM's tail.
 - Don't promote any Phase-B modem field to required, and don't add `data_usage_cycle_day`/`data_usage_threshold_bytes` to `modemConfigInputSchema` until `@ceralive/modem-control` actually exports a usage-policy setter — an inert input field is a mutation the device accepts and drops.
+- Don't collapse a modem operation's classified outcome into a per-procedure generic literal — `write_failed`, `transaction_error` and a bare `error` are three different words for "something failed", and `mapModemManagerError` had already answered whether to wait, re-authenticate, or stop trying. Publish `modemOperationOutcomeSchema` beside the legacy literal; don't replace it (that would break every consumer that renders it today).
+- Don't invent a member of any `modemOperation*Schema` / `modemManagerRefusalReasonSchema` — all four are MIRRORS of the package's frozen lists, and a reason it cannot emit is a state no device reaches. Don't merge the completion and result enums either: they share three member names and split on exactly the write-vs-read distinction that makes `unknown-outcome` meaningful.
+- Don't make `retryable` optional, and don't turn `MODEM_MANAGER_REFUSAL_RETRYABLE` into a list of the retryable ones — the first re-creates the `policy_route_missing` latch, the second silently defaults a ninth refusal to "do not retry".
+- Don't render `unknown-outcome` as a success or a failure, and don't give it a free-string reason — it means the write may have landed, so it routes to the reconciliation surface.
 - Don't give a mutating modem procedure its own private refusal vocabulary — `modemMutationRefusalSchema` is shared so a blocked device reads the same on every surface, and a per-procedure generic error is how "waiting on your acknowledgement" becomes indistinguishable from "the transaction broke".
 - Don't make `mode` optional on `modemMutationAckInputSchema`, and don't drop its `.strict()`/`confirm` — those are the wire-level enforcement of "only VERIFIED-ROLLBACK or FORCE-REBASELINE may unblock a failed mutation".
 - Don't fold `module_disabled`/`module_unavailable` into `modemMutationRefusalSchema` — they are a SUPERSET (`capabilityMutationRefusalSchema`) because a gate refusal is a different fact from a mutation-safety one, and widening the shared enum breaks every consumer that maps from it.

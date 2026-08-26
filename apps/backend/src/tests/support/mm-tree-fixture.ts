@@ -39,7 +39,15 @@ export const MM_LOCK_NONE = 1;
 
 const MODEM_IFACE = "org.freedesktop.ModemManager1.Modem";
 const MODEM3GPP_IFACE = "org.freedesktop.ModemManager1.Modem.Modem3gpp";
+const MODEM_SIGNAL_IFACE = "org.freedesktop.ModemManager1.Modem.Signal";
+const MODEM_LOCATION_IFACE = "org.freedesktop.ModemManager1.Modem.Location";
 const SIM_IFACE = "org.freedesktop.ModemManager1.Sim";
+
+/** MMModemState `FAILED_REASON_SIM_MISSING`, as `Modem.StateFailedReason` reports it. */
+export const MM_FAILED_REASON_SIM_MISSING = 2;
+
+/** `MM_MODEM_LOCATION_SOURCE_3GPP_LAC_CI` — the key of a coarse-cell entry. */
+export const MM_LOCATION_SOURCE_3GPP_LAC_CI = 1;
 
 export interface ModemFixture {
 	readonly path: string;
@@ -67,6 +75,30 @@ export interface ModemFixture {
 	readonly packetServiceState?: number;
 	/** `Modem.PowerState` (`MMModemPowerState`). Omitted ⇒ the property is absent. */
 	readonly powerState?: number;
+	readonly operatorCode?: string;
+	/** The `b` of `Modem.SignalQuality`'s `(ub)` — was it measured recently. */
+	readonly signalRecent?: boolean;
+	/** Suppress `Modem.SignalQuality` entirely, so the read has nothing to answer. */
+	readonly omitSignalQuality?: boolean;
+	/**
+	 * The `Modem.Signal` interface's per-RAT `a{sv}` properties, keyed by MM's
+	 * own property names (`Nr5g` / `Lte` / `Evdo` / …). Omitting the whole field
+	 * omits the INTERFACE — which is what an unprimed observation looks like and
+	 * is a different fact from a primed interface whose dicts are empty.
+	 */
+	readonly extendedSignal?: Readonly<
+		Record<string, Readonly<Record<string, DbusValue>>>
+	>;
+	/**
+	 * A `Modem.Location` `a{uv}` entry set. Omitting it omits the INTERFACE; MM
+	 * masks the property itself unless a location source is enabled, so an empty
+	 * record models an exposed-but-silent interface.
+	 */
+	readonly location?: Readonly<Record<number, DbusValue>>;
+	/** `Modem.SimSlots` (`ao`). An EMPTY slot is the bare root path `/`. */
+	readonly simSlots?: readonly string[];
+	/** `Modem.StateFailedReason` (`MMModemStateFailedReason`). */
+	readonly stateFailedReason?: number;
 	readonly networkRejection?: {
 		readonly error: number;
 		readonly operatorId?: string;
@@ -85,7 +117,14 @@ function v(
 function modemProps(fixture: ModemFixture): [string, ReturnType<typeof v>][] {
 	const props: [string, ReturnType<typeof v>][] = [
 		["State", v("i", fixture.state ?? MM_STATE_CONNECTED)],
-		["SignalQuality", v("(ub)", [fixture.signal ?? 72, true])],
+		...(fixture.omitSignalQuality === true
+			? []
+			: ([
+					[
+						"SignalQuality",
+						v("(ub)", [fixture.signal ?? 72, fixture.signalRecent ?? true]),
+					],
+				] as [string, ReturnType<typeof v>][])),
 		[
 			"Ports",
 			v("a(su)", [
@@ -143,6 +182,12 @@ function modemProps(fixture: ModemFixture): [string, ReturnType<typeof v>][] {
 	if (fixture.simPath !== undefined) {
 		props.push(["Sim", v("o", fixture.simPath)]);
 	}
+	if (fixture.simSlots !== undefined) {
+		props.push(["SimSlots", v("ao", [...fixture.simSlots])]);
+	}
+	if (fixture.stateFailedReason !== undefined) {
+		props.push(["StateFailedReason", v("u", fixture.stateFailedReason)]);
+	}
 	return props;
 }
 
@@ -164,6 +209,33 @@ function networkRejectionDict(
 	return entries as unknown as DbusValue;
 }
 
+/** The `a{sv}` tuple form of one per-RAT signal dict. */
+function signalDict(members: Readonly<Record<string, DbusValue>>): DbusValue {
+	return Object.entries(members).map(([key, value]) => [
+		key,
+		v(typeof value === "number" ? "d" : "s", value),
+	]) as unknown as DbusValue;
+}
+
+function signalIfaceProps(
+	extended: Readonly<Record<string, Readonly<Record<string, DbusValue>>>>,
+): [string, ReturnType<typeof v>][] {
+	return Object.entries(extended).map(([rat, members]) => [
+		rat,
+		v("a{sv}", signalDict(members)),
+	]);
+}
+
+function locationIfaceProps(
+	entries: Readonly<Record<number, DbusValue>>,
+): [string, ReturnType<typeof v>][] {
+	const dict = Object.entries(entries).map(([key, value]) => [
+		Number(key),
+		v(typeof value === "string" ? "s" : "v", value),
+	]) as unknown as DbusValue;
+	return [["Location", v("a{uv}", dict)]];
+}
+
 /** One modem object plus (when the fixture names one) its SIM object. */
 export function modemObjects(fixture: ModemFixture): DecodedManagedObjects {
 	const objects: DecodedManagedObjects = [
@@ -181,6 +253,9 @@ export function modemObjects(fixture: ModemFixture): DecodedManagedObjects {
 						...(fixture.operatorName !== undefined
 							? ([["OperatorName", v("s", fixture.operatorName)]] as const)
 							: []),
+						...(fixture.operatorCode !== undefined
+							? ([["OperatorCode", v("s", fixture.operatorCode)]] as const)
+							: []),
 						...(fixture.packetServiceState !== undefined
 							? ([
 									["PacketServiceState", v("u", fixture.packetServiceState)],
@@ -196,6 +271,12 @@ export function modemObjects(fixture: ModemFixture): DecodedManagedObjects {
 							: []),
 					],
 				],
+				...(fixture.extendedSignal !== undefined
+					? [[MODEM_SIGNAL_IFACE, signalIfaceProps(fixture.extendedSignal)]]
+					: []),
+				...(fixture.location !== undefined
+					? [[MODEM_LOCATION_IFACE, locationIfaceProps(fixture.location)]]
+					: []),
 			],
 		],
 	] as unknown as DecodedManagedObjects;

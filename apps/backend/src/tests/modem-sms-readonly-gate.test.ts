@@ -17,6 +17,17 @@
 import { describe, expect, it } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import type { MethodCall } from "@ceralive/modem-control/transport";
+
+import {
+	isAllowedMethodCall,
+	LIVE_OBSERVATION_MEMBERS,
+	LIVE_OBSERVATION_SIGNALS,
+	NAMED_MUTATING_MEMBERS,
+	SMS_OBSERVATION_METHOD_MEMBERS,
+	SMS_OBSERVATION_SIGNAL_MEMBERS,
+	STRICT_SHADOW_MEMBERS,
+} from "../modules/cellular/dbus-audit-transport.ts";
 
 const BACKEND_SRC = join(import.meta.dir, "..");
 const REPO_ROOT = join(BACKEND_SRC, "..", "..", "..");
@@ -109,7 +120,8 @@ describe("the modem SMS surface is read-only, and stays that way", () => {
 	it("scans a non-trivial set of modem source files", () => {
 		// Guards the gate itself: a moved directory would otherwise make this
 		// suite pass vacuously by scanning nothing.
-		expect(SOURCES.length).toBeGreaterThan(15);
+		// Scanned 85 files before adding this count floor.
+		expect(SOURCES.length).toBeGreaterThanOrEqual(85);
 		expect(
 			SOURCES.some((path) => path.endsWith("mmcli-sms.ts")),
 			"the SMS module itself must be in scan scope",
@@ -164,6 +176,69 @@ describe("the modem SMS surface is read-only, and stays that way", () => {
 			}
 		}
 		expect([...messagingFlags]).toEqual(["--messaging-list-sms"]);
+	});
+
+	it("admits exactly the package D-Bus SMS methods and signals", () => {
+		expect([...SMS_OBSERVATION_METHOD_MEMBERS]).toEqual([
+			"org.freedesktop.ModemManager1.Modem.Messaging.List",
+			"org.freedesktop.DBus.Properties.GetAll",
+		]);
+		expect([...SMS_OBSERVATION_SIGNAL_MEMBERS]).toEqual([
+			"org.freedesktop.ModemManager1.Modem.Messaging.Added",
+			"org.freedesktop.ModemManager1.Modem.Messaging.Deleted",
+		]);
+		for (const signal of SMS_OBSERVATION_SIGNAL_MEMBERS) {
+			expect(LIVE_OBSERVATION_SIGNALS.has(signal)).toBe(true);
+		}
+	});
+
+	it("scopes Properties.GetAll to SMS objects and the exact Sms interface", () => {
+		const call: MethodCall = {
+			destination: "org.freedesktop.ModemManager1",
+			path: "/org/freedesktop/ModemManager1/SMS/7",
+			interface: "org.freedesktop.DBus.Properties",
+			member: "GetAll",
+			signature: "s",
+			args: ["org.freedesktop.ModemManager1.Sms"],
+		};
+		expect(isAllowedMethodCall(call, LIVE_OBSERVATION_MEMBERS)).toBe(true);
+		expect(
+			isAllowedMethodCall(
+				{ ...call, path: "/org/freedesktop/ModemManager1/Modem/7" },
+				LIVE_OBSERVATION_MEMBERS,
+			),
+		).toBe(false);
+		expect(
+			isAllowedMethodCall(
+				{ ...call, args: ["org.freedesktop.ModemManager1.Modem"] },
+				LIVE_OBSERVATION_MEMBERS,
+			),
+		).toBe(false);
+	});
+
+	it("refuses every D-Bus SMS write member under both policies", () => {
+		const writes = [
+			"org.freedesktop.ModemManager1.Modem.Messaging.Create",
+			"org.freedesktop.ModemManager1.Modem.Messaging.Delete",
+			"org.freedesktop.ModemManager1.Sms.Send",
+			"org.freedesktop.ModemManager1.Sms.Store",
+		];
+		for (const member of writes) {
+			expect(NAMED_MUTATING_MEMBERS).toContain(member);
+			expect(STRICT_SHADOW_MEMBERS.has(member)).toBe(false);
+			expect(LIVE_OBSERVATION_MEMBERS.has(member)).toBe(false);
+		}
+	});
+
+	it("admits no Ussd member under either D-Bus policy", () => {
+		for (const member of [
+			"org.freedesktop.ModemManager1.Modem.Modem3gpp.Ussd.Initiate",
+			"org.freedesktop.ModemManager1.Modem.Modem3gpp.Ussd.Respond",
+			"org.freedesktop.ModemManager1.Modem.Modem3gpp.Ussd.Cancel",
+		]) {
+			expect(STRICT_SHADOW_MEMBERS.has(member)).toBe(false);
+			expect(LIVE_OBSERVATION_MEMBERS.has(member)).toBe(false);
+		}
 	});
 
 	it("exposes no mutating SMS procedure on the modems router", () => {

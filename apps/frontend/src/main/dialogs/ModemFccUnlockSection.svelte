@@ -20,7 +20,10 @@ import { m } from '@ceraui/i18n/svelte';
 import type { FccUnlockState, SupportClaimState } from '@ceraui/rpc/schemas';
 
 import { Switch } from '$lib/components/ui/switch';
-import type { MutationOutcome } from '$lib/modem/mutation-outcome';
+import type {
+	MutationOutcome,
+	MutationOutcomeDetail,
+} from '$lib/modem/mutation-outcome';
 import { CapabilitySection, gatedSurfaceCapability } from '$lib/modem/sections';
 
 import { fccUnlockView } from './modem-fcc-unlock';
@@ -31,10 +34,12 @@ interface Props {
 	busy?: boolean;
 	/** The last terminal outcome of a toggle — success included (§8 LR-5). */
 	outcome?: MutationOutcome | undefined;
+	/** The classified operation behind that outcome, already localized. */
+	detail?: MutationOutcomeDetail | undefined;
 	onToggle: (enabled: boolean) => void;
 }
 
-let { claim, state, busy = false, outcome, onToggle }: Props = $props();
+let { claim, state, busy = false, outcome, detail, onToggle }: Props = $props();
 
 const view = $derived(fccUnlockView(claim, state));
 const capability = $derived(gatedSurfaceCapability(view));
@@ -45,6 +50,7 @@ const capability = $derived(gatedSurfaceCapability(view));
 	view={capability}
 	{busy}
 	{outcome}
+	{detail}
 	controlId="modem-fcc-unlock-toggle"
 	title={m['network.modem.fccUnlock.title']()}
 	description={m['network.modem.fccUnlock.description']()}

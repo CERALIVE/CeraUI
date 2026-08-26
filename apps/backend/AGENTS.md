@@ -19,6 +19,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Fan presence + PWM duty cycle (`pwm-fan` discovered by TYPE string, never an index; `fan` broadcast) | `modules/system/fan.ts` (`discoverPwmFanCoolingDevice`, `parsePwmDuty`, `collectFan`, `initFan`); contract below → FAN |
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
+| **Carry a modem operation's own verdict (ModemManager refusal, unknown-outcome, retryability) instead of a generic failure literal** | `modules/modems/operation-outcome.ts` (`modemOperationOutcomeFromError`, `classifyModemOperationOutcome`); wire `packages/rpc/src/schemas/modems.schema.ts` → `modemOperationOutcomeSchema`; contract below → A GENERIC FAILURE IS NOT AN ANSWER |
 | Bluetooth operator surface (the 10 `bluetooth.*` procedures, the live stack singleton, the `bluetooth` broadcast) | `rpc/procedures/bluetooth.procedure.ts` + `modules/bluetooth/bluetooth-runtime.ts` + `modules/bluetooth/bluetooth-wire.ts`; contract below → THE BLUETOOTH DOMAIN IS WIRED |
 | **A Bluetooth microphone dropping mid-stream (operator bands + the two reconnect duties; recovery itself is ENGINE-owned)** | `modules/streaming/bluetooth-audio-resilience.ts` (`classifyBluetoothSourcePresence`, `noteBluetoothAudioPresence`) + the 3-step publish order in `modules/bluetooth/bluetooth-runtime.ts`; contract below → …AND A MICROPHONE THAT DROPS MID-STREAM IS TOLD, NOT REPAIRED |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
@@ -76,10 +77,10 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Mutation-free D-Bus-vs-mmcli shadow evidence (opt-in, never on the wire)** | `modules/cellular/shadow.ts` (`startModemShadowIfEnabled`) + `shadow-wiring.ts` + `docs/MMCLI-RETIREMENT-GATE.md` |
 | USB-composition-mode switch gates (`modems.setUsbMode`, default-absent `modem_provisioning`) | `rpc/procedures/modems.procedure.ts` → `setUsbModeProcedure`; contract below → USB-COMPOSITION SWITCH |
 | **Operator-settable data-usage POLICY (cycle day + advisory limit)** | `modules/modems/usage-policy.ts` (`writeUsagePolicy`, `refreshUsagePolicies`, `getCachedUsagePolicy`, `usagePolicySlotKey`) → `rpc/procedures/modems.procedure.ts` `configureModemProcedure`; wire stamp in `modules/modems/modem-wire-producer.ts` (`projectUsagePolicy`); contract below → THE DATA-USAGE POLICY IS A LOCAL WRITE |
-| **Read-only SMS inbox (`modems.getSms`) — list + read, never send/delete** | `modules/modems/mmcli-sms.ts` (`readSmsInbox`, `parseSmsList`, `parseSmsRecord`, `SMS_PATH_RE`) → `rpc/procedures/modems.procedure.ts` → `getModemSmsProcedure`; contract below → THE READ-ONLY SMS INBOX |
+| **Read-only SMS inbox (`modems.getSms`) — D-Bus event fold + mmcli rollback, never send/delete** | `modules/modems/sms-backend.ts` selects the committed backend; `dbus-sms.ts` owns epoch/path lifecycle over the package port; `mmcli-sms.ts` remains rollback; contract below → THE READ-ONLY SMS INBOX |
 | **Streaming-admission ↔ modem-lifecycle interlock (process-wide fail-fast lease, both race orders)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireLifecycle`, `withLifecycleLock`, `leaseRefusal`) + `modules/streaming/stream-session-orchestrator.ts` (`admitLifecycle`); contract below → THE STREAMING-ADMISSION ↔ MODEM-LIFECYCLE INTERLOCK |
 | **The shared modem MUTATION-SAFETY contract (per-device lease, durable journal, replay barrier, both acknowledgement paths)** | `modules/streaming/lifecycle-admission.ts` (`tryAcquireModemMutation`, `setMutationBlocks`, `streamingBlockingMutation`) + `modules/streaming/recovery-barrier.ts` + `modules/modems/mutation-{journal,journal-state,lease,identity,blocks,rollback,acknowledge,replay}.ts`; contract below → THE MODEM MUTATION-SAFETY CONTRACT |
-| **The modem-control consumer cutover (exact 1.2.1 pin, static imports, frozen boundary gate + active operation-registry drift gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; frontend `tests/modem-parity-drift.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
+| **The modem-control consumer cutover (exact 1.3.0 pin, static imports, frozen boundary gate + active operation-registry drift gate)** | `modules/modem-control-compat.ts` + the 14 frozen pure projection modules + `modules/modems/mutation-admission-port.ts`; `tests/modem-control-projections.test.ts`; frontend `tests/modem-parity-drift.test.ts`; contract below → MODEM-CONTROL COMPATIBILITY PROJECTIONS |
 | **The certified USB-mode transition ENGINE, wired** | `modules/modems/transition-engine.ts` (ports + interlock bridge) + `transition-ports.ts` (mmcli inhibit lease, AT sender) + `usb-mode-{transition,identity,contract,execute,rollback}.ts` |
 | Kiosk DC-2 state machine (toggle runs the `cog-display` add-on via the manager) | `modules/system/kiosk.ts` |
 | Observable logs (getLog/getSyslog → `log` push → LogsDialog download) | `modules/system/logs.ts` + `rpc/procedures/system.procedure.ts` |
@@ -3785,7 +3786,7 @@ mutation-freedom contract; nothing here goes near it.
   `@ceralive/modem-control@1.0.0`, so while `package.json` pinned the `0.2.0`
   floor this module resolved it through a lazy `import()` plus a structural probe
   and answered a typed `usage_policy_unsupported` refusal when the pinned release
-  did not publish it. The pin is now `1.2.1` EXACTLY, so `tsc` and `bun install`
+  did not publish it. The pin is now `1.3.0` EXACTLY, so `tsc` and `bun install`
   answer that at build and install time — both strictly stronger than a
   `typeof === "function"` check, which can only report the gap after a write has
   been attempted. `isUsagePolicySupported()` is therefore constant, and it stays a
@@ -3828,15 +3829,82 @@ drives the REAL pinned package throughout, and asserts that the exact pin
 GUARANTEES the write the wire advertises). Frontend half:
 `apps/frontend/src/main/dialogs/modem-usage-policy.ts`.
 
+## A GENERIC FAILURE IS NOT AN ANSWER [EXISTS]
+
+`@ceralive/modem-control`'s `mapModemManagerError` has always answered the one
+question an operator actually has — wait, re-authenticate, or stop trying — and
+nothing read its answer. Three mutation paths threw it away, each in its own
+words: `modems.setUsbMode` answered a thrown dependency `transaction_error`,
+`modems.setFccUnlock` answered `write_failed`, and `unlockSimPuk` swallowed the
+error entirely in a bare `catch {}`.
+
+**The PUK one was the worst, because its collapse was a GUESS rather than a
+shrug.** After a failed submit it re-reads the retry counter, and when that
+re-read ALSO fails it returns `wrong-puk` — telling an operator their
+carrier-issued code is bad when the daemon may simply have been unreachable and
+the PUK never left the device. The counters structurally cannot separate "the
+PUK was wrong" from "the submit was never taken".
+
+`modules/modems/operation-outcome.ts` is the projection, and it is ADDITIVE at
+every call site: the existing `error` literal is byte-unchanged and the
+classified `operation` rides beside it, so a consumer that renders the legacy
+terminal keeps working and one that knows the field can say why. Legacy payloads
+still parse content-identically and gain no defaulted key.
+
+- **Package consumption goes through the existing `modem-control-compat.ts`
+  seam**, with local mirrors of `mapModemManagerError` and
+  `classifyOperationCompletion` behind it — behaviour mirrors, not stubs, pinned
+  against the real package per reason.
+- **The mirror matches the transport errors by `name`, not `instanceof`.** A
+  fallback that imported the package's own classes would defeat the point of
+  being a fallback. Its regex ARM ORDER is the rule and is reproduced exactly:
+  several ModemManager errors match more than one pattern, and the first match is
+  what the package publishes.
+- **`retryable: false` on a CeraUI-authored refusal is a statement, not a
+  default.** An identical request re-issued against an identical CeraUI-side
+  decision produces an identical refusal; only the daemon is describing a device
+  state that can clear on its own.
+- **It is safe to DERIVE from the PUK error and unsafe to LOG it.** That catch
+  block's `execFileP` error message embeds the argv — the PUK and the new PIN —
+  so the projection is used precisely because it answers one of eight enum
+  members and never echoes the message. Do not widen it to carry a free-text
+  detail from that path.
+- **It opens no transport.** It is in the projections gate's KEEP allowlist only
+  because its fallback names the `dbusName` error property; it holds no session
+  and issues no call.
+
+Coverage: `tests/modem-operation-vocabulary.test.ts` (all 20 values, one test per
+refusal reason, the write-vs-read split, the fallback-mirrors-the-package matrix,
+and the wire shape refusing an empty reason / a retryable success / a
+free-string unknown-outcome). Wire contract:
+[`../../packages/rpc/AGENTS.md`](../../packages/rpc/AGENTS.md) → AN OPERATION'S
+OWN WORDS SURVIVE THE BOUNDARY.
+
 ## THE READ-ONLY SMS INBOX [EXISTS]
 
-`modules/modems/mmcli-sms.ts` + `modems.getSms`. Two mmcli verbs, both reads:
-`--messaging-list-sms` for the object paths, then `-s <path>` per message. mmcli
-is a client of the SAME ModemManager daemon both cellular backends talk to, so
-this behaves identically under `modem_backend: mmcli` and `dbus` and adds ZERO
-modem-control surface — which is why it carries no provisioning gate, no
-lifecycle interlock, and no confirmation. It is `modemProcedure`-gated like every
-modem procedure.
+`modems.getSms` follows the composition root's COMMITTED `modem_backend` through
+`sms-backend.ts`. Under `dbus`, `dbus-sms.ts` owns one
+`@ceralive/modem-control` `createDbusSmsPort` plus `createSmsInboxStore` per
+physical modem: list at activation, then fold `Added` / `Deleted`; the package's
+reconnect resync REPLACES the store. Under `mmcli`, the original two-read path
+remains shipped unchanged: `--messaging-list-sms` for object paths, then `-s
+<path>` per message. That value is the explicit rollback and its exact gate
+assertion remains `toEqual(["--messaging-list-sms"])`.
+
+**THE PORT IS EPOCH-SCOPED, NOT PATH-CACHED FOREVER.** A package port captures
+one immutable `/Modem/N`, while MM restarts renumber the entire roster. On a new
+observer epoch the registry stops every old port and its subscriptions FIRST,
+then matches previously-read modems by `ID_PATH` and rebuilds against the new
+runtime path. A path-only row is not carried across the epoch. The explicit
+`11 → 0` test proves the old `Added` subscription is dead, the new one is live,
+and a replay cannot duplicate the inbox; the same reconciliation also rebuilds
+an ID_PATH whose runtime index changes within one epoch after a replug.
+
+The live audit policy adds only `Messaging.List`, SMS-object-scoped
+`Properties.GetAll(args: ["org.freedesktop.ModemManager1.Sms"])`, and the
+`Added` / `Deleted` subscriptions. Strict shadow gains none. The four D-Bus SMS
+write members are named refusals under both policies. USSD is untouched and
+continues through `mmcli-ussd.ts`; no `Ussd.*` member is admitted.
 
 **READ-ONLY IS PERMANENT, AND IT IS ENFORCED BY A TEST.**
 `tests/modem-sms-readonly-gate.test.ts` greps the whole modem surface (both
@@ -3985,6 +4053,77 @@ lower the claim just as promptly as one that gains it.
 
 Frontend half: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) → USSD IS A
 SESSION, SO IT CARRIES A SECOND MACHINE.
+
+## THE EXTENDED SIGNAL READING IS A METRIC, NOT A NUMBER [EXISTS]
+
+`status.signal` is ModemManager's 0-100 `SignalQuality` percentage and is all an
+operator ever got. The radio measures far more than that, and modem-stack 1.3.0
+normalizes it — so `dbus-view-fold.ts` now folds three additive blocks beside the
+legacy `status`: `signal_detail`, `registration_context`, `sim_presence_evidence`.
+Wire contract: [`../../packages/rpc/AGENTS.md`](../../packages/rpc/AGENTS.md) →
+AN ABSENT READING STILL SAYS SOMETHING.
+
+**Every value is a METRIC — a reading or a typed REASON — and that is the whole
+point.** `unsupported` (the source cannot express it), `not-reported` (it
+answered and this was not in the answer), `not-observed` (nobody read that
+interface) and `malformed` (it was there and would not decode) are four different
+operator facts, and a bare `null` renders them identical.
+
+**`Signal.Setup` is what makes any of this non-null on hardware, and it is
+permitted on the LIVE path only.** `LIVE_OBSERVATION_MEMBERS` admits it;
+`STRICT_SHADOW_MEMBERS` keeps refusing it as a named mutation. Do NOT use the
+live policy in shadow mode, and do not read this section as licence to widen
+either set.
+
+- **The RAT ladder is newest-first and merges NOTHING.** `rsrp`/`rsrq`/`snr` read
+  `Nr5g` → `Lte`; on an NSA attach both dicts are populated with different
+  carriers' measurements, so the ladder picks one reading rather than averaging
+  two into a number no radio produced.
+- **`sinr` reads `Evdo` ALONE.** MM 1.24.2's introspection gives `sinr` to that
+  dict and to no other, while `Lte`/`Nr5g` publish `snr`. So an LTE/NR modem
+  answers `not-reported`, NOT `unsupported` — the latter is a capability claim
+  ModemManager itself disproves.
+- **A primed-but-empty interface is `not-reported`; an unread one is
+  `not-observed`.** That distinction is the reason the block exists at all, and
+  it is what tells an operator whether to wait for the next sample or to look at
+  why nothing is reading the interface.
+- **`quality_recent` is the `b` of `SignalQuality`'s `(ub)`.** The percentage and
+  "was it measured recently" are separate facts about one measurement; only the
+  first was ever projected, so a stale 40% and a live 40% were indistinguishable.
+  `status.signal` is byte-unchanged.
+- **Cell context is COARSE and enables nothing.** `cell_id`/`tac` come from
+  `Modem.Location`'s `3gpp-lac-ci` entry, decoded through `dbus-mm-enums.ts`
+  `decodeLacCi` (the package's `decode3gppLacCi` behind the compat seam). MM
+  MASKS that property unless `Location.Setup` ran with `signal_location = true`,
+  which is permanently forbidden here and which the audit allowlist does not
+  admit — so the shipped steady state is an honest `not-observed`, and a value
+  appears only where something else already enabled the source. Both come out of
+  ONE decoded string, so they can never describe two different cells; the tokens
+  stay MM's own uppercase hex, because `0A1B2C3D` read as decimal renders
+  `169552957`, which matches nothing `mmcli` or a vendor UI shows.
+- **`operator_name` duplicates `status.network` deliberately.** `status` is
+  byte-locked and OMITS the field when the modem reported none, which loses the
+  reason; the metric keeps it.
+- **`sim_presence_evidence` rides EVERY row, including an `unknown` one.** That
+  is the row it exists for — `no-evidence` naming the inspected fields separates
+  "we looked and the modem said nothing" from "we did not look" — and a
+  present-only-when-decisive field could never lower its claim.
+  `readSimPresenceEvidence` (`sim-presence.ts`) is the ONE reader both backends
+  hand facts to, so `absent` stays reachable through exactly one evidence kind.
+- **The mmcli path emits none of the three, and that is honest rather than a
+  gap.** It observes no `Modem.Signal` interface at all, so publishing four
+  `not-observed` metrics would claim a read it never attempted. The blocks are
+  additive-optional; the legacy byte-compat oracle is unaffected.
+
+Coverage: `tests/modem-signal-detail-wire.test.ts` — the RAT ladder and its
+NSA no-merge rule, the `not-reported`-vs-`unsupported` SINR distinction, the
+`not-observed`-vs-`not-reported` split in both directions, `malformed`, the
+`(ub)` recency with `status.signal` unchanged, operator name/code as text, the
+`3gpp-lac-ci` decode with its hex-stays-hex and 2G-no-TAC arms, the fenced
+`not-observed` steady state, a negative proving no ARFCN is claimed, the
+SIM-evidence table with its exactly-one-kind-answers-`absent` audit, the
+additive-only projection proof, and the redaction pass with its non-vacuity
+control.
 
 ## `no_sim` REPORTS A SLOT, NOT A NETWORKMANAGER PROFILE [EXISTS]
 
@@ -4420,7 +4559,7 @@ wiring driven through the REAL procedure.
 
 Todo 29 moved the frozen Todo-17 pure-logic set behind the published
 `@ceralive/modem-control` package without raising CeraUI's install floor above
-`0.2.0`. **The pin is now `1.2.1` EXACTLY**, and the three probes that
+`0.2.0`. **The pin is now `1.3.0` EXACTLY**, and the three probes that
 floor forced — the SMS port, the usage-policy setter, the band catalog — are
 STATIC imports with no runtime fallback left.
 
@@ -4428,7 +4567,7 @@ STATIC imports with no runtime fallback left.
 unfinished cutover. It is already a static namespace import, so it is not a lazy
 `import()`; and two of its names — `hilinkConnectionBody` and `vidPidOf` — are
 exported by NO release, which `modem-control-skew-matrix.test.ts` pins and the
-installed 1.2.1 confirms. Their local implementations are PERMANENT, so deleting
+installed 1.3.0 confirms. Their local implementations are PERMANENT, so deleting
 the seam would delete the implementation. Each of the 14 MIGRATE modules asks for
 its package function through it and keeps its own as the answer when the package
 has none. Public CeraUI exports, wire fields, parser outcomes, and refusal
@@ -4451,7 +4590,7 @@ therefore remains consumer-owned rather than moving into modem-stack.
 
 `tests/modem-control-projections.test.ts` is the committed boundary gate. It
 asserts all 14 modules use the named seam, every projection imports against the
-exact `1.2.1` pin (asserted as a bare version, never a range — a resolved release
+exact `1.3.0` pin (asserted as a bare version, never a range — a resolved release
 missing the statically-imported exports must fail at import rather than degrade),
 direct `dbus|mmcli|qmicli|goform|hilink` references
 remain inside the Todo-17 ledger allowlist, and stream-active admission preserves
@@ -4459,7 +4598,7 @@ the refusal vocabulary. Never add a direct modem transport/model/dialect path
 outside that allowlist; add package consumption through a named projection
 instead. Never replace the registry pin with `link:` or `file:`.
 
-`@ceralive/modem-control@1.2.1` also exports the frozen
+`@ceralive/modem-control@1.3.0` also exports the frozen
 `MODEM_OPERATION_IDS` array from the existing root entry point. The frontend
 parity gate resolves the backend's exact installed package, reads that registry
 from emitted JavaScript without importing the D-Bus runtime graph, and holds the
@@ -4476,7 +4615,7 @@ local implementation as the fallback and executable parity oracle;
 `tests/usb-mode-runtime-compat.test.ts` proves the runtime candidate is selected,
 assignable in both directions, and returns the same shapes for all four vendors
 plus unsupported and malformed responses. This is deliberately read-only.
-Although 1.2.1 also exports `buildRuntimeCompositionSetCommand` and
+Although 1.3.0 also exports `buildRuntimeCompositionSetCommand` and
 `RUNTIME_COMPOSITION_SET_REGISTRY`, CeraUI consumes neither; adding package-backed
 composition writes is a separate feature requiring its own safety review.
 
@@ -8097,6 +8236,11 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't import the dongle metadata schema from the sibling `image-building-pipeline` checkout — Rule D forbids the path reference, and the contract itself requires each repo to carry its own reader and fixtures. Don't tighten the mirrored `driver` field into the contract's three-value enum either: a reader must ignore what it does not know, and rejecting a fourth USB-ethernet driver would drop a working dongle over a field nothing here reads.
 - Don't add `enx*` to the policy-route candidate set — the image dispatcher maps only `enx*0`..`enx*7` by the ifname's LAST character, so ~half of correctly-working adapters would false-flag amber for a documented dispatcher gap.
 - Don't statically import `gateways.ts` from `network-interfaces.ts` to call `queueUpdateGw` — that edge cycles, and an eagerly-wired default dials real DNS from a parser-only test. It is installed by `initNetworkInterfaceMonitoring`.
+- Don't publish an extended-signal reading as a bare number-or-absent — `unsupported`, `not-reported`, `not-observed` and `malformed` are four different operator facts and an omitted key collapses them. And don't report an LTE/NR modem's missing SINR as `unsupported`: MM 1.24.2 gives `sinr` to `Signal.Evdo` alone, so it CAN express one and the honest answer is `not-reported`.
+- Don't merge or average two RAT dicts — on an NSA attach `Nr5g` and `Lte` measure different carriers, so a ladder picks one reading; combining them publishes a number no radio produced.
+- Don't call `Location.Setup`, and don't add a `Location` member to either audit policy, to make `cell_id`/`tac` non-null — `signal_location = true` is permanently forbidden, so the honest steady state is `not-observed` and a value appears only where something else already enabled the source. Don't parse the hex tokens to decimal either.
+- Don't emit `sim_presence_evidence` only when presence is decisive — the `unknown` row is the one it exists for, and a present-only-when-decisive field can be raised and never lowered on a merging consumer. Don't derive the evidence from the presence either: they are read off the same empty fields, which is exactly why the evidence is carried separately.
+- Don't give the mmcli adapter `not-observed` metrics to make the two backends look symmetric — it reads no `Modem.Signal` interface, so that would claim a read it never attempted. Absence is that backend's honest answer.
 - Don't derive `no_sim` from the absence of a NetworkManager GSM profile — a profile is provisioned only after a SIM has been READ and a connection created for it, so a working card that has not registered yet has none, and the board's Quectel was reported SIM-less while its own SMS inbox and PIN2 unlock were correctly offered. Route it through `sim-presence.ts` `claimsNoSim`. Don't collapse `unknown` into `absent` either (that is what keeps a modem class from silently losing a genuine no-SIM report), don't let an `unknown` poll overwrite a `present` already seen, and don't test a SIM slot for a non-empty string: an EMPTY slot is published as the bare path `/`, so only the object-path SHAPE tells the two apart.
 - Don't loosen the `@ceralive/modem-control` pin off an exact version, and don't
   re-add a runtime probe in front of `setUsagePolicy`, the SMS port or the band
@@ -8214,6 +8358,9 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't give `config.modem_capabilities` a `RUNTIME_CONFIG_DEFAULTS` entry, or an inner `.default(true)` — absent and `false` must be equally inert, or seven radio-mutating modules become reachable on every shipped device at once.
 - Don't route `modems.getCapabilities`/`setCapabilities` through `modemProcedure` — the gates belong to the DEVICE, and the readiness middleware would make the settings surface unreachable while the cellular stack is initializing or with no modem attached, which is exactly when an operator opens it. And don't persist a gate for a module `IMPLEMENTED_MODEM_CAPABILITY_MODULES` omits: its key is read by nothing, so the operator gets a switch that can never act — refuse it.
 - Don't fire `noteCapabilityEvidenceChanged()` on every probe read — it is change-gated so a dialog open does not re-broadcast the whole roster. Don't static-import `modem-status.ts` to install its notifier either (that module reaches `capability-gates.ts` through the wire producer, so the edge cycles), and don't drop the inert default: a suite that never installs one must stay byte-identical.
+- Don't answer a thrown modem failure with a per-procedure generic literal alone — `mapModemManagerError` already classified it, and `write_failed` / `transaction_error` / a bare `error` each throw that answer away. Attach `modemOperationOutcomeFromError(err)` BESIDE the existing literal; replacing it would break every consumer rendering the legacy terminal today.
+- Don't derive `wrong-puk` from a failed retry-counter re-read and leave it at that — the counters cannot separate a wrong PUK from a submit the daemon never took, so that literal is a guess that blames the operator's carrier-issued code. And don't log or return the caught error's message on that path: it embeds the PUK and the new PIN.
+- Don't replace `operation-outcome.ts`'s local mirrors with imports of the package's transport classes, and don't reorder their regex arms — the arm order IS the rule, because several ModemManager errors match more than one pattern.
 - Don't add a modem-mutating path that does not route through `withModemMutation` / `withJournaledModemMutation` / `beginModemMutation` — the enforcement suite has one test per inventoried entrypoint and a new route with no test is a route with no lease. Don't build a second lease beside `getIsStreaming()` either: that check is false for the whole admission window, which is exactly the window a mutation must not land in.
 - Don't guess a mutation key for a device with no resolvable `stable_key` — the identity contract permits its absence, and a guessed key files one device's rollback under another's slot. Refuse with `identity_unresolved`, and don't turn that refusal into a throw at an RPC boundary.
 - Don't reorder or shorten the journal's `temp -> fsync(temp) -> rename -> fsync(parent)` sequence, and don't move the parent-directory fsync outside the commit boundary — until that entry is durable a power cut can lose the rename, and a mutation whose armed record can vanish is the exact case the journal exists to prevent.

@@ -165,7 +165,7 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
   the typed host adapter. Shared graph code is split into sibling chunks
   co-located at the same versioned path.
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
-  (CalVer, `2026.8.4` at time of writing) — the single source of truth, matching the platform's
+  (CalVer, `2026.8.5` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
 - **The catalog is STATIC here, not lazy.** The SPA splits its ten-locale Paraglide
   catalog into per-namespace chunks it awaits in `main.ts`; a federation bundle is
@@ -996,6 +996,101 @@ flag always wins; absent a flag, a stored APN means manual and an empty one mean
 unconfigured. The recommendation itself is a `Badge` pill
 (`modem-autoapn-recommended`), not a parenthetical in the switch's label — which
 keeps the control's accessible name and its visible text identical.
+
+## …AND AN ABSENT MEASUREMENT STATES ITS OWN REASON [EXISTS]
+
+`lib/modem/signal-detail.ts` (pure, rune-free) renders the three normalized
+blocks the D-Bus backend publishes for a directly-managed radio —
+`signal_detail`, `registration_context`, `sim_presence_evidence` — into the
+detail card and the no-SIM banner. It is the ModemManager twin of
+`main/network/router-signal.ts`, which does the same job for the dongle
+dialects, and both exist because a metric on this wire is a VALUE or one of
+SEVEN typed reasons, never a nullable number.
+
+**The reasons may not be collapsed.** `unsupported` is a claim about the source,
+`not-reported` is about ONE reading, `not-observed` is about US — three
+different operator actions, and one em-dash for all three throws away everything
+the block adds over a bare `null`. A `0` is worse: it is a measurement the radio
+never took. `MODEM_METRIC_REASON_KEYS` is TOTAL over the wire enum, so an eighth
+reason fails the typecheck rather than reaching an operator as its own dotted
+path.
+
+Six rules carry it:
+
+1. **EVERY metric renders a row, `unsupported` included — the one deliberate
+   divergence from the router twin.** `routerSignalMetricRows` DROPS an
+   `unsupported` metric because a dongle dialect's metric set genuinely differs
+   per vendor (the HiLink strip has no SNR field at all), so a row there would
+   report the radio as silent about something it was never asked.
+   `modemSignalDetailSchema` is TOTAL — the same four metrics for every modem,
+   always, precisely so a metric can be LOWERED again — so a dropped row would
+   silently shrink a fixed-shape strip and read as a partial render beside the
+   next modem. Do not "unify" the two rules; the wire shapes differ.
+2. **A reading and a reason must not share a face.** A value is an instrument
+   figure (`font-mono`, `tabular-nums`, full contrast); a reason is a WORD
+   (proportional, muted, wrapping). That split is the honesty rule made visual,
+   and it is asserted on the rendered class list rather than reviewed.
+   `data-metric-state` / `data-metric-reason` carry the machine verdict beside
+   the copy so a test names a reason class, never a translated string.
+3. **`sinr` reads `not-reported` on every LTE/NR modem, and that is CORRECT.**
+   ModemManager 1.24.2 gives `sinr` to `Signal.Evdo` alone; `Lte`/`Nr5g` publish
+   `snr`, a different quantity. Rendering it as `unsupported` would be a
+   capability claim ModemManager itself disproves.
+4. **`cell_id`/`tac` read `not-observed` on every board today, and that is the
+   FENCE, not a gap.** The cell property stays masked unless a location source
+   is primed, which this device permanently does not do. Do not "fix" it from
+   the render side — making them non-null costs a transport and allowlist
+   change, and the honest published reason is the whole point.
+5. **The normalized block SUPERSEDES the legacy `cell_info` quality rows**
+   (`SUPERSEDED_CELL_METRIC_KEYS`). Both can express RSRP/RSRQ/SNR/SINR, and two
+   rows under one label carrying different numbers is worse than either alone;
+   the normalized block wins because it is the only one that can say WHY a value
+   is missing. Same precedence `router-signal` applies to the legacy
+   `signal_bars` scalars. `tech`/`band` and the legacy `cell_id` are untouched,
+   and a modem with no normalized block renders byte-identically to before.
+6. **The no-SIM banner's evidence hint carries the KIND, never the value.** The
+   banner is binary because the bond gate it renders is binary, so on its own it
+   cannot separate a slot the modem positively reported empty from a slot
+   nothing could read — and those ask opposite things of an operator. `absent`
+   is reachable through exactly ONE evidence kind (`state-failed-reason`), which
+   is what `data-states-empty-slot` publishes. The evidence's own `value` fields
+   are D-Bus object paths and ModemManager's failed-reason token; none is
+   rendered, because a machine identifier in operator copy is the OL-2 defect.
+   `no-evidence` carries the inspected COUNT, not the field names.
+
+**`quality_recent` is about the MODEM's measurement, not our envelope.** Socket
+staleness (`getIsConnected()`) already answers the second; without the first a
+cached 40% and a live 40% are the same number on screen, which is most of what
+diagnosing a marginal link is about.
+
+**The radio power state was already rendered and is UNTOUCHED by this.**
+`modem-power-card` reads the already-projected `radio_power` through
+`radioPowerReading` (`modem-power-recovery.ts`) and offers nothing pressable —
+`@ceralive/modem-control` publishes `power` as a read with no setter beside it.
+Do not re-derive or re-fetch it, and do not add a control for it.
+
+**The detail card's gate widened, and only the gate.** `hasNormalizedReading`
+joins `hasModemDetail` and the positively-stated SIM, so a modem that published
+a radio reading earns the card even with no cell info, eSIM or firmware. The
+mmcli path publishes none of the three blocks, so it is unaffected — an absent
+block means "this backend did not observe it", never "the modem has none".
+
+Copy: `network.modem.detail.{signalTitle,registrationTitle,operatorName,operatorCode,tac,recency*}`
++ `network.modem.detail.reason.*` (7) + `network.modem.simEvidence.*` (5), all in
+10 locales. Coverage: `lib/modem/signal-detail.test.ts` (the pure tables, swept
+exhaustively over the seven reasons and the five evidence kinds) and
+`main/dialogs/ModemConfigDialog.signalDetail.test.ts` (rendered DOM — the
+per-reason distinctness sweep, the never-a-zero/never-a-dash lock, the
+supersession pair, the evidence hint with its no-raw-value assertion, and the
+power card's zero-affordance sweep with a non-vacuity control). Rule-E proof:
+collapsing the seven reason keys onto one reddens 4 tests across the two files.
+Wire contract: [`../../packages/rpc/AGENTS.md`](../../packages/rpc/AGENTS.md) →
+AN ABSENT READING STILL SAYS SOMETHING.
+
+**NONE of this belongs on `CellularSection`.** That row stays QUALITATIVE by
+documented house rule — a tier glyph with a word behind it, no digits, no
+`data-live-value` — and todo 64's badge budget is FOUR. Every reading above is
+dialog-only.
 
 ## …AND THE SIM IDENTITY GROUP LEADS WITH THE SHARED PRESENCE BLOCK [EXISTS]
 

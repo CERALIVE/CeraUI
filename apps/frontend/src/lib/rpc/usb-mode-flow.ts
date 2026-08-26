@@ -36,6 +36,7 @@
 import type {
 	Modem,
 	ModemList,
+	ModemOperationOutcome,
 	SetUsbModeFailureReason,
 	SetUsbModeOutput,
 	SetUsbModeRefusal,
@@ -72,6 +73,16 @@ export interface UsbModeFlow {
 	readonly deadlineAt: number | undefined;
 	readonly refusal: SetUsbModeRefusal | undefined;
 	readonly reason: SetUsbModeFailureReason | undefined;
+	/**
+	 * The device's own classified outcome, where the reply carried one.
+	 *
+	 * Retained rather than folded into `phase` because `refused` cannot express
+	 * the third answer: a transition whose reply never arrived is `unknown-outcome`
+	 * and must not be rendered as a failure. The render site reads the
+	 * classification to pick the band; `phase` still drives the spinner and the
+	 * displayed mode exactly as before.
+	 */
+	readonly operation: ModemOperationOutcome | undefined;
 }
 
 /** The flow is busy exactly while the spinner should be held. */
@@ -117,6 +128,7 @@ export function beginUsbModeFlow(input: {
 		deadlineAt: undefined,
 		refusal: undefined,
 		reason: undefined,
+		operation: undefined,
 	};
 }
 
@@ -160,6 +172,7 @@ export function resolveUsbModeFlow(
 			deadlineAt: undefined,
 			refusal: result?.error,
 			reason: result?.reason,
+			operation: result?.operation,
 		};
 	}
 
@@ -182,6 +195,7 @@ export function failUsbModeFlow(flow: UsbModeFlow): UsbModeFlow {
 		deadlineAt: undefined,
 		refusal: "transition_failed",
 		reason: "transaction_error",
+		operation: undefined,
 	};
 }
 

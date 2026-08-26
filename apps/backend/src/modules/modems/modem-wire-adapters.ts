@@ -70,7 +70,10 @@ import type {
 	ModemEsim,
 	ModemRadioPower,
 	ModemRecoveryState,
+	ModemRegistrationContext,
 	ModemRegistrationRejection,
+	ModemSignalDetail,
+	ModemSimPresenceEvidence,
 	RouterAdmin,
 	UsbCompositionMode,
 } from "@ceraui/rpc/schemas";
@@ -334,6 +337,21 @@ export interface DbusModemView {
 	 * `Modem.StateFailedReason`. Absent ⇒ the fold could not answer.
 	 */
 	readonly simPresence?: SimPresence;
+	/**
+	 * WHICH FACT decided {@link simPresence}. Carried beside it rather than
+	 * derived from it: `absent` and `unknown` are read off the same empty fields,
+	 * so only the evidence can prove nothing inferred "there is no SIM" from a
+	 * blank one.
+	 */
+	readonly simPresenceEvidence?: ModemSimPresenceEvidence;
+	/**
+	 * The extended `Modem.Signal` reading. Every metric is stated — a value or a
+	 * typed reason — so a consumer can never mistake "not measured on this RAT"
+	 * for "this radio cannot measure it".
+	 */
+	readonly signalDetail?: ModemSignalDetail;
+	/** Which network and which cell, as metrics. Coarse context, never a position. */
+	readonly registrationContext?: ModemRegistrationContext;
 	/** The SIM's own number(s) from `Modem.OwnNumbers`. SENSITIVE — never logged. */
 	readonly ownNumbers?: readonly string[];
 	/** The SIM's ICCID from `Sim.SimIdentifier`. Displayed plainly, unlike above. */
@@ -496,6 +514,18 @@ function buildDbusAdditive(
 	}
 	if (view.radioPower !== undefined) {
 		additive.radio_power = view.radioPower;
+		observed = true;
+	}
+	if (view.signalDetail !== undefined) {
+		additive.signal_detail = view.signalDetail;
+		observed = true;
+	}
+	if (view.registrationContext !== undefined) {
+		additive.registration_context = view.registrationContext;
+		observed = true;
+	}
+	if (view.simPresenceEvidence !== undefined) {
+		additive.sim_presence_evidence = view.simPresenceEvidence;
 		observed = true;
 	}
 

@@ -45,7 +45,7 @@
   prominently than PUK1, so exhausting it is often unrecoverable in practice.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type {
 	Modem,
 	SimPin2UnlockOutput,
@@ -56,6 +56,7 @@ import { KeyRound, ListChecks, Loader2, ShieldAlert, ShieldX } from '@lucide/sve
 import { toast } from 'svelte-sonner';
 
 import AppDialog from '$lib/components/dialogs/AppDialog.svelte';
+import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import { networkConstraints } from '$lib/components/streaming/ValidationAdapter';
 import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
@@ -67,6 +68,7 @@ import {
 	classifySimPinResult,
 	classifySimPukResult,
 } from '$lib/rpc/sim-unlock-outcome';
+import { type ModemWriteBand, modemWriteBand } from '$lib/modem/operator-labels';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -126,6 +128,21 @@ let puk = $state('');
 let newPin = $state('');
 let pukErrorState = $state<SimPukUnlockOutput['error'] | null>(null);
 let pukRemainingAttempts = $state<number | undefined>(undefined);
+/*
+  The classified outcome behind a PUK submit, when the reply carried one.
+
+  This is the surface todo 22 named as the worst collapse in the stack: the
+  handler's catch re-reads the retry counter and, when THAT read also fails,
+  answers `wrong-puk` — telling an operator their carrier-issued code is bad when
+  the daemon may simply have been unreachable and the PUK never left the device.
+  The counters structurally cannot separate those two; the classification can, so
+  where it says the outcome is UNKNOWN the band replaces the guess rather than
+  sitting beside it.
+*/
+let pukBand = $state<ModemWriteBand | undefined>(undefined);
+const pukUnknownBand = $derived(
+	pukBand?.outcome?.kind === 'unknown' ? pukBand : undefined,
+);
 
 // PIN2 flow state — separate again, for the same reason: a PIN2 terminal must
 // never leak into the PIN1/PUK counters an operator is reading.
@@ -184,6 +201,7 @@ $effect(() => {
 		pin2 = '';
 		errorState = null;
 		pukErrorState = null;
+		pukBand = undefined;
 		pin2ErrorState = null;
 		remainingAttempts = modem.sim_lock?.remainingAttempts;
 		pukRemainingAttempts =
@@ -228,10 +246,16 @@ function applyPinResult(result: SimUnlockOutput) {
 function applyPukResult(result: SimPukUnlockOutput) {
 	const verdict = classifySimPukResult(result);
 	if (verdict.ok) {
+		pukBand = undefined;
 		toast.success(m["network.modem.simUnlock.pukSuccess"]());
 		open = false;
 		return;
 	}
+	pukBand = modemWriteBand(
+		result.operation,
+		resolveMessageKey('network.modem.simUnlock.wrongPuk'),
+		resolveMessageKey,
+	);
 	switch (verdict.reason) {
 		case 'wrong-puk':
 			pukErrorState = 'wrong-puk';
@@ -447,7 +471,18 @@ function handlePukKeydown(event: KeyboardEvent) {
 					type="password"
 					bind:value={newPin}
 				/>
-				{#if pukErrorState === 'wrong-puk'}
+				{#if pukUnknownBand}
+					<!-- NOT `sim-puk-error`: the daemon may never have delivered the PUK,
+					     so "wrong PUK" is a guess about the operator's carrier code and
+					     must not be findable as a verdict. -->
+					<div data-testid="sim-puk-unknown-outcome">
+						<MutationOutcomeBand
+							name="sim-puk"
+							outcome={pukUnknownBand.outcome}
+							detail={pukUnknownBand.detail}
+						/>
+					</div>
+				{:else if pukErrorState === 'wrong-puk'}
 					<p class="text-status-error text-sm" data-testid="sim-puk-error" role="alert">
 						{m["network.modem.simUnlock.wrongPuk"]()}
 					</p>

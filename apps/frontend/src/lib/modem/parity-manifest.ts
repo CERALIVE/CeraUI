@@ -93,6 +93,9 @@ export type ParityRecord = Readonly<Record<string, ParityRow>>;
 /**
  * The seven gated capability modules `@ceralive/modem-control` exports.
  *
+ * Regenerated for v1.3.0: its additive observation fields leave this package-owned
+ * capability-id registry unchanged, so the existing dispositions remain exact.
+ *
  * Keys MUST equal the package's own `CAPABILITY_MODULES`; the gate asserts that
  * in both directions, so an eighth module fails until it is dispositioned here.
  */

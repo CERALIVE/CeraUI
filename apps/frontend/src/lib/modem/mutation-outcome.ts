@@ -64,6 +64,34 @@ export interface MutationOutcome {
 }
 
 /**
+ * The typed detail behind an outcome, ALREADY localized by the caller.
+ *
+ * It exists because a modem operation carries TWO classifications — what the
+ * provider reported and what that means — and the band's three kinds can only
+ * hold the second. `timed-out` is the forcing case: it is `unknown-outcome` on a
+ * write and `failed` on a read, so a surface showing only the kind cannot tell an
+ * unanswered write from a call that plainly failed.
+ *
+ * Every field is a SENTENCE, never a key and never a wire token, for the same
+ * LR-4 reason `message` is. `$lib/modem/operator-labels` builds it.
+ */
+export interface MutationOutcomeDetail {
+	/** What the result MEANS. Always present — it is the outcome's own word. */
+	readonly result: string;
+	/** What the DEVICE reported, when that differs from the result. */
+	readonly completion?: string;
+	/** Why the outcome is unknowable. `unknown` only. */
+	readonly unknownReason?: string;
+	/**
+	 * The pointer at the mutation-block/reconciliation surface the device is
+	 * genuinely on. `unknown` only, and NEVER accompanied by `retry`.
+	 */
+	readonly reconciliation?: string;
+	/** Offered ONLY where re-issuing the same request could plausibly succeed. */
+	readonly retry?: string;
+}
+
+/**
  * Whether this outcome interrupts (LR-2).
  *
  * `unknown` is grouped with `refused` deliberately: an operator who cannot be

@@ -20,7 +20,7 @@
       "dependencies": {
         "@ceralive/cerastream": "2026.8.0",
         "@ceralive/control-protocol": "2026.7.0",
-        "@ceralive/modem-control": "1.2.1",
+        "@ceralive/modem-control": "1.3.0",
         "@ceralive/srtla-send": "2026.8.0",
         "@ceraui/rpc": "workspace:*",
         "@httptoolkit/dbus-native": "0.1.5",
@@ -343,7 +343,7 @@
 
     "@ceralive/design-tokens": ["@ceralive/design-tokens@2026.6.1", "", {}, "sha512-u0Ja75p7rcJY9anvU+Ke/0PKLWrK6Y8bNO1RnrbNDuQduiKLXK0bgWnsOIMtuv3mxDgp2Kvshpc7cog20znOzw=="],
 
-    "@ceralive/modem-control": ["@ceralive/modem-control@1.2.1", "", { "dependencies": { "@httptoolkit/dbus-native": "0.1.5", "zod": "4.4.3" } }, "sha512-YDkP9uVlF6yhwXUaP8DRO5Wule6MeLU1qjKRQWTTvMc1KaWEBPHYiTYxdcRVI8PeyszRInte60Ri0zZEK8Y8AQ=="],
+    "@ceralive/modem-control": ["@ceralive/modem-control@1.3.0", "", { "dependencies": { "@httptoolkit/dbus-native": "0.1.5", "zod": "4.4.3" } }, "sha512-ED/U4otXhDkHiQ8N/jgT6SEC9Iq4OgmEVAq+icyQh74nlOWxQq8rbY06L/A+aK5Z59BLJvIXgcvu0xQDUW/YCg=="],
 
     "@ceralive/srtla-send": ["@ceralive/srtla-send@2026.8.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-IJNFN3oNplaNbQVuE/9PA3QPNqsyo4UGGokEyd+iqkgm7FzEw+yNmTpgJKFGwvTmZOeRmIwwMPWONTotT1lXoQ=="],
 

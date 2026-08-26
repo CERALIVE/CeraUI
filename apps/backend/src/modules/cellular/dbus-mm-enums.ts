@@ -297,6 +297,72 @@ export function decodeNetworkRejectionError(
 	}
 }
 
+/**
+ * `MM_MODEM_LOCATION_SOURCE_3GPP_LAC_CI` — the key this entry has in the
+ * `a{uv}` `Modem.Location` property. Bit 0, per `MMModemLocationSource`.
+ */
+export const LOCATION_SOURCE_3GPP_LAC_CI = 1 << 0;
+
+/** The five comma tokens ModemManager packs into a `3gpp-lac-ci` entry. */
+export interface LacCiReading {
+	readonly cellId: string;
+	readonly trackingAreaCode: string;
+}
+
+/**
+ * Decode `Modem.Location`'s `3gpp-lac-ci` string into coarse cell context.
+ *
+ * The value is a STRING, not a dict: `libmm-glib/mm-location-3gpp.c` builds it
+ * as `"%.3s,%s,%lX,%lX,%lX"` ⇒ `MCC,MNC,LAC,CI,TAC`, with the last three in
+ * UPPERCASE HEX. The tokens are carried as MM's own text — `0A1B2C3D` read as
+ * decimal renders `169552957`, which matches nothing `mmcli` or a vendor UI
+ * shows.
+ *
+ * A token count other than five, or an empty MCC/MNC/CI, decodes to NOTHING
+ * rather than to a partially-populated record: a cell identifier that is wrong
+ * is worse than one that is missing, because only the second is visible as
+ * missing. An empty TAC still decodes — a 2G/3G attach genuinely has none.
+ *
+ * This is coarse CELL context, not a position. It names a cell in the
+ * operator's network and carries no coordinate, so it stays outside the GNSS
+ * redaction class and outside `GNSS_SOURCES`, and reading it enables nothing:
+ * `Location.Setup`'s `signal_location` argument is untouched by this path.
+ */
+export function decodeLacCi(
+	value: string | undefined,
+): LacCiReading | undefined {
+	const packaged = modemControlFunction<
+		((raw: string | undefined) => LacCiReading | undefined) | undefined
+	>("decode3gppLacCi", undefined);
+	if (packaged !== undefined) {
+		const decoded = packaged(value);
+		return decoded === undefined
+			? undefined
+			: {
+					cellId: decoded.cellId,
+					trackingAreaCode: decoded.trackingAreaCode,
+				};
+	}
+	if (value === undefined) {
+		return undefined;
+	}
+	const tokens = value.split(",");
+	if (tokens.length !== 5) {
+		return undefined;
+	}
+	const [mcc, mnc, , cellId, trackingAreaCode] = tokens as [
+		string,
+		string,
+		string,
+		string,
+		string,
+	];
+	if (mcc === "" || mnc === "" || cellId === "") {
+		return undefined;
+	}
+	return { cellId, trackingAreaCode };
+}
+
 /** The trailing integer of an MM object path (`…/Modem/7` ⇒ `7`), else `undefined`. */
 export function runtimeIdFromPath(path: string): number | undefined {
 	const match = /\/(\d+)$/.exec(path);

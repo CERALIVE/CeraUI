@@ -85,7 +85,6 @@ import {
 	unlockSimPin,
 	unlockSimPuk,
 } from "../../modules/modems/mmcli.ts";
-import { readSmsInbox } from "../../modules/modems/mmcli-sms.ts";
 import { dispatchModemNetworkScan } from "../../modules/modems/modem-network-scan.ts";
 import {
 	broadcastModems,
@@ -112,11 +111,13 @@ import {
 	withJournaledModemMutation,
 	withModemMutation,
 } from "../../modules/modems/mutation-lease.ts";
+import { modemOperationOutcomeFromError } from "../../modules/modems/operation-outcome.ts";
 import {
 	type SimPin2UnlockResult,
 	unlockSimPin2,
 } from "../../modules/modems/sim-pin2.ts";
 import { clearSimPin, storeSimPin } from "../../modules/modems/sim-secrets.ts";
+import { readSmsInboxForBackend } from "../../modules/modems/sms-backend.ts";
 import {
 	getCachedUsagePolicy,
 	type ModemUsagePolicy,
@@ -564,13 +565,11 @@ export const unlockSimPin2Procedure = modemProcedure
 /**
  * Read a modem's stored SMS inbox, newest first and capped.
  *
- * `modemProcedure`-gated like every modem procedure, and READ-ONLY for good:
- * the only mmcli verbs behind it are `--messaging-list-sms` and a per-message
- * `-s <path>` read, both of which are already-available reads against the same
- * ModemManager daemon either cellular backend talks to. It therefore adds no
- * modem-control capability at all, which is why it needs no provisioning gate,
- * no streaming interlock, and no confirmation — and why a send/delete sibling
- * would be a categorically different change rather than an increment.
+ * `modemProcedure`-gated like every modem procedure, and READ-ONLY for good.
+ * `sms-backend.ts` selects the package D-Bus observation port or the retained
+ * mmcli rollback reader from the composition root's committed backend. Neither
+ * path adds a provisioning gate, streaming interlock, or confirmation because
+ * neither path mutates the modem.
  *
  * A refusal is NEVER flattened into an empty inbox: `{success: true, messages:
  * []}` means this modem has an inbox and it is empty, and nothing else.
@@ -579,7 +578,7 @@ export const getModemSmsProcedure = modemProcedure
 	.input(modemSmsInputSchema)
 	.output(modemSmsOutputSchema)
 	.handler(async ({ input }) => {
-		const result = await readSmsInbox(input.device);
+		const result = await readSmsInboxForBackend(input.device);
 		if (!result.ok) {
 			return { success: false, error: result.reason };
 		}
@@ -693,7 +692,11 @@ export const setFccUnlockProcedure = modemProcedure
 				`modems.setFccUnlock(${input.device} → ${input.enabled}) threw`,
 				{ module: "modems", err },
 			);
-			return { success: false, error: "write_failed" } as const;
+			return {
+				success: false,
+				error: "write_failed",
+				operation: modemOperationOutcomeFromError(err),
+			} as const;
 		}
 	});
 
@@ -750,6 +753,7 @@ export const setUsbModeProcedure = modemProcedure
 				success: false,
 				error: "transition_failed",
 				reason: "transaction_error",
+				operation: modemOperationOutcomeFromError(err),
 			};
 		}
 	});

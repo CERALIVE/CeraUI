@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import {
 	modemConfigRefusalSchema,
 	modemCredentialsRefusalSchema,
+	modemManagerRefusalReasonSchema,
 	modemMutationRefusalSchema,
 	modemScanFailureSchema,
 } from "@ceraui/rpc/schemas";
@@ -45,6 +46,7 @@ const WIRE_TOKENS: readonly string[] = [
 		...modemConfigRefusalSchema.options,
 		...modemCredentialsRefusalSchema.options,
 		...modemScanFailureSchema.options,
+		...modemManagerRefusalReasonSchema.options,
 	]),
 ];
 
@@ -151,6 +153,20 @@ describe("every wire token is classified", () => {
 			const key = modemRefusalCopyKey(token as ModemRefusalToken);
 			expect(key).not.toBe(token);
 			expect(key.startsWith("network.")).toBe(true);
+		}
+	});
+
+	it("gives every ModemManager refusal its own actionable copy state", () => {
+		const classes =
+			modemManagerRefusalReasonSchema.options.map(classifyModemRefusal);
+		expect(new Set(classes).size).toBe(
+			modemManagerRefusalReasonSchema.options.length,
+		);
+
+		for (const refusal of modemManagerRefusalReasonSchema.options) {
+			const key = modemRefusalCopyKey(refusal);
+			expect(key.length).toBeGreaterThan(0);
+			expect(key).not.toBe(refusal);
 		}
 	});
 });

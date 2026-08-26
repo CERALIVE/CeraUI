@@ -12,13 +12,20 @@ The backend is a single compiled binary (`ceralive`) produced by `bun build --co
 
 ### Modem-control compatibility
 
-The backend pins `@ceralive/modem-control` at `1.2.1` EXACTLY. The SMS port, the
+The backend pins `@ceralive/modem-control` at `1.3.0` EXACTLY. The SMS port, the
 usage-policy setter and the band certification catalog are static imports: while
 the pin was the published `0.2.0` floor each was resolved through a lazy
 `import()` and a structural probe, because its API had landed in modem-stack
 after the pinned release and a static import would have failed the build rather
 than degrading. With an exact pin that question is settled by `tsc` and by
 `bun install`.
+
+`modems.getSms` follows the committed `modem_backend`: `dbus` uses the
+package's read-only `createDbusSmsPort` with one inbox store per modem and MM
+owner epoch; `mmcli` retains the shipped list/read implementation as the explicit
+rollback. An owner-epoch change stops old subscriptions before resolving the
+same `ID_PATH` on the new roster and rebuilding its immutable-path port, so MM
+renumbering cannot leave a stale path subscribed. USSD remains on mmcli.
 
 Fourteen frozen projection modules still consume additive pure modem logic
 through `src/modules/modem-control-compat.ts`, which is a static namespace import
@@ -28,7 +35,7 @@ The package-owned `MODEM_OPERATION_IDS` registry is held to set equality with
 CeraUI's disposition manifest by the unskipped frontend tier-2 drift gate.
 
 A fifteenth compatibility consumer lives in `modems/usb-mode-runtime.ts`.
-Version 1.2.1 supplies its read-only `resolveRuntimeCompositionCapability`
+Version 1.3.0 supplies its read-only `resolveRuntimeCompositionCapability`
 candidate; a boundary test proves the package function is selected and remains
 structurally and behaviorally identical to CeraUI's local fallback. The package's
 write-side composition registry is intentionally not consumed by this bump.

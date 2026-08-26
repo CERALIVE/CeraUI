@@ -47,7 +47,21 @@
  *    clean.
  */
 
-import type { UsbCompositionMode } from "@ceraui/rpc/schemas";
+import type {
+	ModemOperationCompletionStatus,
+	ModemOperationOutcome,
+	ModemOperationResultStatus,
+	ModemOperationUnknownReason,
+	UsbCompositionMode,
+} from "@ceraui/rpc/schemas";
+import { MODEM_MANAGER_REFUSAL_RETRYABLE } from "@ceraui/rpc/schemas";
+
+import {
+	type MutationOutcome,
+	type MutationOutcomeDetail,
+	type MutationOutcomeKind,
+	mutationOutcome,
+} from "./mutation-outcome";
 
 /** The catalog lookup, injected. Mirrors `m[key](params)` / `resolveMessageKey`. */
 export type TranslateLabel = (
@@ -361,4 +375,242 @@ export function networkModeOperatorLabel(
 	if (trimmed === "") return "";
 	if (!isMachineIdentifier(trimmed)) return formatGenerationRun(trimmed);
 	return t("network.modem.networkMode.unnamed", { index: String(index + 1) });
+}
+
+// ── What a modem OPERATION did once it was admitted ──────────────────────────
+//
+// `@ceralive/modem-control` classifies every operation TWICE — into a COMPLETION
+// (what the provider reported) and into a RESULT (what that means after
+// generation fencing) — plus a typed reason for the one result that is neither a
+// success nor a failure. Twelve values in three enums, mirrored onto the wire by
+// `modemOperationOutcomeSchema` and rendered here.
+//
+// THREE PROPERTIES ARE LOAD-BEARING, and every one of them is a lie waiting to
+// happen if it is "simplified":
+//
+//  1. **THE COMPLETION IS RENDERED BESIDE THE RESULT, NEVER INSTEAD OF IT.**
+//     `timed-out` is the forcing case: on a WRITE it classifies as
+//     `unknown-outcome` (the call may have landed) and on a READ as plain
+//     `failed` (nothing changed). One completion, two operator situations, two
+//     different next actions. Collapsing the pair onto one sentence destroys
+//     exactly the distinction the split enum exists to carry — so the same
+//     completion renders in two visibly different bands, and a test pins both.
+//  2. **`unknown-outcome` IS NEITHER A SUCCESS NOR A FAILURE, EVER.** It maps to
+//     the band's `unknown` kind and carries the EXISTING mutation-block
+//     reconciliation sentence — the surface a device in that state genuinely is
+//     on, since the journal holds it fail-closed until an operator confirms what
+//     the hardware is actually in. It never maps to `applied` or `refused`, and
+//     it never offers a retry: re-issuing a write whose fate is unknown is how a
+//     half-applied change becomes a doubly-applied one.
+//  3. **A RETRY IS SUGGESTED ONLY WHERE THE PACKAGE SAYS ONE COULD HELP.** The
+//     gate is `MODEM_MANAGER_REFUSAL_RETRYABLE` for a typed daemon refusal and
+//     the wire's own `retryable` otherwise; nothing here re-derives it from a
+//     reason NAME. Suggesting a retry for `unauthorized` or `unsupported` spends
+//     an operator's time on a verdict that cannot move.
+//
+// Copy is keyed, never composed from a wire token (OL-5): the twelve values are
+// `applied`/`refused`/`failed`/`timed-out`/`dropped` and friends, which are
+// machine identifiers by `isMachineIdentifier`'s own test.
+
+/**
+ * What the PROVIDER reported. Five values, one key each.
+ *
+ * A TOTAL record rather than a lookup with a fallback: a sixth completion status
+ * fails `tsc` here instead of reaching an operator as a dotted path.
+ */
+export const MODEM_OPERATION_COMPLETION_KEY = {
+	applied: "network.modem.operation.completion.applied",
+	refused: "network.modem.operation.completion.refused",
+	failed: "network.modem.operation.completion.failed",
+	"timed-out": "network.modem.operation.completion.timedOut",
+	dropped: "network.modem.operation.completion.dropped",
+} as const satisfies Record<ModemOperationCompletionStatus, string>;
+
+/** What the classifier ANSWERED. Four values, one key each. Total. */
+export const MODEM_OPERATION_RESULT_KEY = {
+	applied: "network.modem.operation.result.applied",
+	refused: "network.modem.operation.result.refused",
+	"unknown-outcome": "network.modem.operation.result.unknownOutcome",
+	failed: "network.modem.operation.result.failed",
+} as const satisfies Record<ModemOperationResultStatus, string>;
+
+/** The three — and only three — ways an outcome becomes unknowable. Total. */
+export const MODEM_OPERATION_UNKNOWN_REASON_KEY = {
+	"stale-generation": "network.modem.operation.unknown.staleGeneration",
+	"write-reply-timed-out": "network.modem.operation.unknown.writeReplyTimedOut",
+	"write-reply-dropped": "network.modem.operation.unknown.writeReplyDropped",
+} as const satisfies Record<ModemOperationUnknownReason, string>;
+
+/**
+ * The reconciliation pointer, and it is deliberately the EXISTING mutation-block
+ * sentence rather than a new one.
+ *
+ * A device carrying an unknown outcome IS mutation-blocked — the journal holds
+ * it fail-closed until an operator confirms what the hardware is in — so this is
+ * not a second, parallel "unknown state" concept but the one that already
+ * exists, said in the words it already has. Mirrored as a literal for the reason
+ * `ANY_BAND` is (this module stays leaf-pure); `operator-labels.test.ts` pins it
+ * against `refusalCopyKey("reconciliation-required")`, so the two cannot drift.
+ */
+export const MODEM_OPERATION_RECONCILIATION_KEY =
+	"network.modem.refusal.reconciliationRequired";
+
+/** The retry hint. Rendered ONLY where {@link modemOperationRetrySuggested} says so. */
+export const MODEM_OPERATION_RETRY_KEY =
+	"network.modem.operation.retrySuggested";
+
+/** The pure reading of one wire outcome, in i18n KEYS. Never sentences. */
+export interface ModemOperationView {
+	/** The band kind. `unknown-outcome` is the only path to `unknown`. */
+	readonly kind: MutationOutcomeKind;
+	/** One of the four result keys. */
+	readonly resultKey: string;
+	/** One of the five completion keys. */
+	readonly completionKey: string;
+	/**
+	 * `true` when the completion adds information the result does not already
+	 * carry. A clean `applied` says the same thing twice, so it is suppressed.
+	 */
+	readonly showCompletion: boolean;
+	/** One of the three unknown-reason keys. `unknown-outcome` only. */
+	readonly unknownReasonKey?: string;
+	/** The reconciliation pointer. `unknown-outcome` only. */
+	readonly reconciliationKey?: string;
+	/** Whether re-issuing the SAME request could plausibly succeed. */
+	readonly retrySuggested: boolean;
+	/** Mirrors the wire's `requires_reconciliation`, so a caller can gate on it. */
+	readonly requiresReconciliation: boolean;
+}
+
+/**
+ * Whether the operator should be offered a retry.
+ *
+ * `unknown-outcome` is refused OUTRIGHT and first, before anything else is
+ * consulted — the write may already have landed, so a retry is the one action
+ * that can turn an unknown state into a wrong one. The wire pins `retryable:
+ * false` on that arm too; asking twice is deliberate, because this is the rule a
+ * later refactor is most likely to "simplify" into a single `outcome.retryable`
+ * read.
+ *
+ * For everything else the PACKAGE answers, not this module: a typed daemon
+ * refusal is looked up in `MODEM_MANAGER_REFUSAL_RETRYABLE` (the total record
+ * `@ceralive/modem-control` authors), and a CeraUI-authored refusal — which
+ * carries no typed member, by contract — rides the wire's own `retryable`, which
+ * is `false` by construction because an identical CeraUI-side decision produces
+ * an identical answer.
+ */
+export function modemOperationRetrySuggested(
+	outcome: ModemOperationOutcome,
+): boolean {
+	if (outcome.status === "unknown-outcome") return false;
+	if (outcome.status === "applied") return false;
+	return outcome.refusal === undefined
+		? outcome.retryable
+		: MODEM_MANAGER_REFUSAL_RETRYABLE[outcome.refusal];
+}
+
+/**
+ * Read one wire outcome into keys.
+ *
+ * `failed` and `refused` share the band's `refused` kind because the band has
+ * three kinds and both mean "the operator's change is not in force" — the
+ * DIFFERENCE between them (the device said no, versus the device tried and could
+ * not) is carried by the result sentence, which is why that sentence always
+ * renders rather than only decorating a refusal.
+ */
+export function modemOperationView(
+	outcome: ModemOperationOutcome,
+): ModemOperationView {
+	const completionKey = MODEM_OPERATION_COMPLETION_KEY[outcome.completion];
+	const resultKey = MODEM_OPERATION_RESULT_KEY[outcome.status];
+	const retrySuggested = modemOperationRetrySuggested(outcome);
+
+	if (outcome.status === "unknown-outcome") {
+		return {
+			kind: "unknown",
+			resultKey,
+			completionKey,
+			showCompletion: true,
+			unknownReasonKey: MODEM_OPERATION_UNKNOWN_REASON_KEY[outcome.reason],
+			reconciliationKey: MODEM_OPERATION_RECONCILIATION_KEY,
+			retrySuggested,
+			requiresReconciliation: true,
+		};
+	}
+
+	return {
+		kind: outcome.status === "applied" ? "applied" : "refused",
+		resultKey,
+		completionKey,
+		// A `refused`/`failed` result whose completion repeats the same word adds
+		// nothing; every other pairing is the device's own separate fact.
+		showCompletion: outcome.completion !== outcome.status,
+		retrySuggested,
+		requiresReconciliation: false,
+	};
+}
+
+/**
+ * The band's detail block, ALREADY localized (LR-4).
+ *
+ * Resolution happens here rather than in the component so the band never holds a
+ * key or a wire token, which is what makes "a machine identifier cannot reach an
+ * operator" a structural property of that component rather than a review note.
+ */
+export function modemOperationDetail(
+	outcome: ModemOperationOutcome,
+	t: TranslateLabel,
+): MutationOutcomeDetail {
+	const view = modemOperationView(outcome);
+	return {
+		result: t(view.resultKey),
+		...(view.showCompletion ? { completion: t(view.completionKey) } : {}),
+		...(view.unknownReasonKey === undefined
+			? {}
+			: { unknownReason: t(view.unknownReasonKey) }),
+		...(view.reconciliationKey === undefined
+			? {}
+			: { reconciliation: t(view.reconciliationKey) }),
+		...(view.retrySuggested ? { retry: t(MODEM_OPERATION_RETRY_KEY) } : {}),
+	};
+}
+
+/** The band kind one wire outcome renders as. Never `applied` for an unknown one. */
+export function modemOperationKind(
+	outcome: ModemOperationOutcome,
+): MutationOutcomeKind {
+	return modemOperationView(outcome).kind;
+}
+
+/** Everything `MutationOutcomeBand` needs for one modem write. */
+export interface ModemWriteBand {
+	readonly outcome: MutationOutcome | undefined;
+	readonly detail: MutationOutcomeDetail | undefined;
+}
+
+/**
+ * Build a write flow's band from its own sentence plus the classified outcome.
+ *
+ * EVERY modem write render site goes through this, and that is the point rather
+ * than a convenience: the band KIND is derived from the classification here, so
+ * no call site can pick it by hand — which is the only way an `unknown-outcome`
+ * ever ends up rendered as a refusal. A flow whose wire carries no classification
+ * keeps `fallbackKind`, so it is byte-identical to what it rendered before.
+ */
+export function modemWriteBand(
+	operation: ModemOperationOutcome | undefined,
+	message: string,
+	t: TranslateLabel,
+	fallbackKind: MutationOutcomeKind = "refused",
+): ModemWriteBand {
+	if (operation === undefined) {
+		return {
+			outcome: mutationOutcome(fallbackKind, message),
+			detail: undefined,
+		};
+	}
+	return {
+		outcome: mutationOutcome(modemOperationKind(operation), message),
+		detail: modemOperationDetail(operation, t),
+	};
 }

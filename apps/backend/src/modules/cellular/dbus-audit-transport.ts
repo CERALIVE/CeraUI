@@ -21,21 +21,20 @@
  * The device is expected to observe the SAME ModemManager instance mmcli is
  * actively driving, so an observation path that can mutate is a way to change a
  * live modem by accident. This wrapper is the enforcement point: a method call
- * reaches the bus ONLY when its fully-qualified `interface.member` is one of the
- * three reads in {@link CELLULAR_READ_ONLY_MEMBERS}. Anything else — a known
- * mutation, an unrecognised member, a member added by a future package version —
- * is refused with a typed {@link CellularAuditRefusalError} and never forwarded.
+ * reaches the bus ONLY when its fully-qualified `interface.member` is in the
+ * caller-selected policy. Anything else — a known mutation, an unrecognised
+ * member, a member added by a future package version — is refused with a typed
+ * {@link CellularAuditRefusalError} and never forwarded.
  *
- * `org.freedesktop.ModemManager1.Modem.Signal.Setup` is refused BY NAME rather
- * than merely by omission. It reads like a passive "subscribe to signal quality"
- * call and is not: it turns on periodic extended signal reporting on the modem,
- * i.e. it writes. {@link NAMED_MUTATING_MEMBERS} exists so that fact is asserted
- * against a name instead of inferred from an allowlist gap — a refusal recorded
- * as {@link REFUSAL_NAMED_MUTATION} proves the call was recognised and rejected,
- * not simply unknown.
+ * `org.freedesktop.ModemManager1.Modem.Signal.Setup` is a named write. The live
+ * observer permits it solely for extended-signal telemetry refresh and MM 1.24
+ * radio-quality thresholds (`rssi-threshold` / `error-rate-threshold`); strict
+ * shadow continues to refuse it by name.
  *
  * Signal SUBSCRIPTIONS (`subscribeSignal`) are match-rule registrations on the
- * bus daemon, not calls against a modem, so they pass through untouched.
+ * bus daemon, not calls against a modem, but they are still policy-scoped: live
+ * observation admits the observer's four lifecycle signals plus Messaging's
+ * `Added` / `Deleted`; strict shadow retains only the former four.
  */
 
 import type {
@@ -57,10 +56,41 @@ export function memberKey(call: {
 	return `${call.interface}.${call.member}`;
 }
 
-export const CELLULAR_READ_ONLY_MEMBERS: ReadonlySet<string> = new Set([
+/** Strict shadow keeps the original three-read policy byte-for-byte. */
+export const STRICT_SHADOW_MEMBERS: ReadonlySet<string> = new Set([
 	"org.freedesktop.DBus.GetNameOwner",
 	"org.freedesktop.DBus.ObjectManager.GetManagedObjects",
 	"org.freedesktop.ModemManager1.Modem.GetCellInfo",
+]);
+
+export const CELLULAR_READ_ONLY_MEMBERS = STRICT_SHADOW_MEMBERS;
+
+export const SMS_OBSERVATION_METHOD_MEMBERS: ReadonlySet<string> = new Set([
+	"org.freedesktop.ModemManager1.Modem.Messaging.List",
+	"org.freedesktop.DBus.Properties.GetAll",
+]);
+
+export const LIVE_OBSERVATION_MEMBERS: ReadonlySet<string> = new Set([
+	...STRICT_SHADOW_MEMBERS,
+	"org.freedesktop.ModemManager1.Modem.Signal.Setup",
+	...SMS_OBSERVATION_METHOD_MEMBERS,
+]);
+
+export const STRICT_SHADOW_SIGNALS: ReadonlySet<string> = new Set([
+	"org.freedesktop.DBus.ObjectManager.InterfacesAdded",
+	"org.freedesktop.DBus.ObjectManager.InterfacesRemoved",
+	"org.freedesktop.DBus.Properties.PropertiesChanged",
+	"org.freedesktop.DBus.NameOwnerChanged",
+]);
+
+export const SMS_OBSERVATION_SIGNAL_MEMBERS: ReadonlySet<string> = new Set([
+	"org.freedesktop.ModemManager1.Modem.Messaging.Added",
+	"org.freedesktop.ModemManager1.Modem.Messaging.Deleted",
+]);
+
+export const LIVE_OBSERVATION_SIGNALS: ReadonlySet<string> = new Set([
+	...STRICT_SHADOW_SIGNALS,
+	...SMS_OBSERVATION_SIGNAL_MEMBERS,
 ]);
 
 /**
@@ -79,6 +109,10 @@ export const NAMED_MUTATING_MEMBERS: readonly string[] = [
 	"org.freedesktop.ModemManager1.Sim.SendPin",
 	"org.freedesktop.ModemManager1.Sim.SendPuk",
 	"org.freedesktop.ModemManager1.InhibitDevice",
+	"org.freedesktop.ModemManager1.Modem.Messaging.Create",
+	"org.freedesktop.ModemManager1.Modem.Messaging.Delete",
+	"org.freedesktop.ModemManager1.Sms.Send",
+	"org.freedesktop.ModemManager1.Sms.Store",
 ];
 
 const NAMED_MUTATING_MEMBER_SET: ReadonlySet<string> = new Set(
@@ -117,11 +151,39 @@ export interface AuditingDbusTransport extends DbusTransport {
 }
 
 export interface AuditingDbusTransportDeps {
+	/** Defaults to strict shadow so unclassified callers cannot widen bus access. */
+	readonly allowedMembers?: ReadonlySet<string>;
+	readonly allowedSignals?: ReadonlySet<string>;
 	readonly onRefusal?: (refusal: CellularAuditRefusal) => void;
 }
 
-function classify(member: string): CellularAuditRefusalReason | undefined {
-	if (CELLULAR_READ_ONLY_MEMBERS.has(member)) {
+const SMS_OBJECT_PATH_RE = /^\/org\/freedesktop\/ModemManager1\/SMS\/\d+$/;
+const SMS_INTERFACE = "org.freedesktop.ModemManager1.Sms";
+const PROPERTIES_GET_ALL = "org.freedesktop.DBus.Properties.GetAll";
+
+export function isAllowedMethodCall(
+	call: MethodCall,
+	allowedMembers: ReadonlySet<string>,
+): boolean {
+	const member = memberKey(call);
+	if (!allowedMembers.has(member)) {
+		return false;
+	}
+	if (member !== PROPERTIES_GET_ALL) {
+		return true;
+	}
+	return (
+		SMS_OBJECT_PATH_RE.test(call.path) &&
+		call.args?.length === 1 &&
+		call.args[0] === SMS_INTERFACE
+	);
+}
+
+function classify(
+	member: string,
+	allowedMembers: ReadonlySet<string>,
+): CellularAuditRefusalReason | undefined {
+	if (allowedMembers.has(member)) {
 		return undefined;
 	}
 	return NAMED_MUTATING_MEMBER_SET.has(member)
@@ -143,7 +205,10 @@ export function createAuditingDbusTransport(
 
 		async callMethod(call: MethodCall): Promise<MethodReply> {
 			const member = memberKey(call);
-			const reason = classify(member);
+			const allowedMembers = deps.allowedMembers ?? STRICT_SHADOW_MEMBERS;
+			const reason = isAllowedMethodCall(call, allowedMembers)
+				? undefined
+				: classify(member, new Set<string>());
 			if (reason !== undefined) {
 				const refusal: CellularAuditRefusal = { member, reason };
 				refusals.push(refusal);
@@ -161,6 +226,18 @@ export function createAuditingDbusTransport(
 			spec: SignalSpec,
 			listener: SignalListener,
 		): Promise<Subscription> {
+			const member = memberKey(spec);
+			if (!(deps.allowedSignals ?? STRICT_SHADOW_SIGNALS).has(member)) {
+				const refusal: CellularAuditRefusal = {
+					member,
+					reason: REFUSAL_NOT_ALLOWLISTED,
+				};
+				refusals.push(refusal);
+				deps.onRefusal?.(refusal);
+				return Promise.reject(
+					new CellularAuditRefusalError(member, REFUSAL_NOT_ALLOWLISTED),
+				);
+			}
 			return inner.subscribeSignal(spec, listener);
 		},
 
