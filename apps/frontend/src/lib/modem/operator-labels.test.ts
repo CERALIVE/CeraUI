@@ -23,6 +23,12 @@
 import { LOCALES, type LocaleCode } from "@ceraui/i18n";
 import { setLocale } from "@ceraui/i18n/svelte";
 import {
+	MODEM_MANAGER_REFUSAL_RETRYABLE,
+	type ModemManagerRefusalReason,
+	type ModemOperationCompletionStatus,
+	type ModemOperationOutcome,
+	type ModemOperationResultStatus,
+	type ModemOperationUnknownReason,
 	type UsbCompositionMode,
 	usbCompositionModeSchema,
 } from "@ceraui/rpc/schemas";
@@ -31,12 +37,23 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
 	bandListOperatorLabel,
 	bandOperatorLabel,
+	isMachineIdentifier,
 	isMappedBandToken,
+	MODEM_OPERATION_COMPLETION_KEY,
+	MODEM_OPERATION_RECONCILIATION_KEY,
+	MODEM_OPERATION_RESULT_KEY,
+	MODEM_OPERATION_RETRY_KEY,
+	MODEM_OPERATION_UNKNOWN_REASON_KEY,
+	modemOperationDetail,
+	modemOperationRetrySuggested,
+	modemOperationView,
+	modemWriteBand,
 	parseBandToken,
 	USB_MODE_LABEL_KEY,
 	USB_MODE_RAW_TOKENS,
 	usbModeOperatorLabel,
 } from "./operator-labels";
+import { refusalCopyKey } from "./refusal-taxonomy";
 
 const LOCALE_CODES: readonly LocaleCode[] = LOCALES.map((entry) => entry.code);
 
@@ -237,5 +254,332 @@ describe("bandOperatorLabel — OL-2/OL-5: no raw band token in operator copy", 
 	// An empty set must not produce a dangling "Currently locked to ." sentence.
 	it("Given an empty set, When listed, Then it answers undefined rather than an empty string", () => {
 		expect(bandListOperatorLabel([], translate)).toBeUndefined();
+	});
+});
+
+/*
+  THE OPERATION VOCABULARY — 12 values, and the two rules that make it worth
+  carrying at all.
+
+  Everything below drives the REAL ten-locale catalog, for the reason the header
+  gives: the leak this whole module exists to stop lives in the copy, not in the
+  key choice.
+*/
+describe("modem operation vocabulary", () => {
+	const COMPLETIONS: readonly ModemOperationCompletionStatus[] = [
+		"applied",
+		"refused",
+		"failed",
+		"timed-out",
+		"dropped",
+	];
+	const RESULTS: readonly ModemOperationResultStatus[] = [
+		"applied",
+		"refused",
+		"unknown-outcome",
+		"failed",
+	];
+	const UNKNOWN_REASONS: readonly ModemOperationUnknownReason[] = [
+		"stale-generation",
+		"write-reply-timed-out",
+		"write-reply-dropped",
+	];
+
+	function unknownOutcome(
+		reason: ModemOperationUnknownReason,
+		completion: ModemOperationCompletionStatus = "timed-out",
+	): ModemOperationOutcome {
+		return {
+			status: "unknown-outcome",
+			completion,
+			reason,
+			requires_reconciliation: true,
+			retryable: false,
+		};
+	}
+
+	function refusal(
+		reason: ModemManagerRefusalReason,
+		completion: ModemOperationCompletionStatus = "failed",
+	): ModemOperationOutcome {
+		return {
+			status: "refused",
+			completion,
+			reason,
+			refusal: reason,
+			retryable: MODEM_MANAGER_REFUSAL_RETRYABLE[reason],
+		};
+	}
+
+	// 5 + 4 + 3 = 12. Counted as three enums rather than eleven distinct strings
+	// because `applied`/`refused`/`failed` mean different things on each side.
+	it("Given the three enums, When counted, Then they carry exactly 12 values", () => {
+		expect(COMPLETIONS).toHaveLength(5);
+		expect(RESULTS).toHaveLength(4);
+		expect(UNKNOWN_REASONS).toHaveLength(3);
+		expect(Object.keys(MODEM_OPERATION_COMPLETION_KEY)).toHaveLength(5);
+		expect(Object.keys(MODEM_OPERATION_RESULT_KEY)).toHaveLength(4);
+		expect(Object.keys(MODEM_OPERATION_UNKNOWN_REASON_KEY)).toHaveLength(3);
+	});
+
+	it.each(LOCALE_CODES)(
+		"Given every one of the 12 values in %s, When rendered, Then each has copy and none is a wire token",
+		(locale) => {
+			withLocale(locale, () => {
+				const keys = [
+					...COMPLETIONS.map((c) => MODEM_OPERATION_COMPLETION_KEY[c]),
+					...RESULTS.map((r) => MODEM_OPERATION_RESULT_KEY[r]),
+					...UNKNOWN_REASONS.map((r) => MODEM_OPERATION_UNKNOWN_REASON_KEY[r]),
+					MODEM_OPERATION_RETRY_KEY,
+					MODEM_OPERATION_RECONCILIATION_KEY,
+				];
+				for (const key of keys) {
+					const sentence = translate(key);
+					expect(sentence.length).toBeGreaterThan(0);
+					expect(sentence).not.toContain(key);
+					// The wire spellings are machine identifiers by this module's own
+					// test, so a leak is exactly a hyphenated lowercase token on screen.
+					for (const token of [
+						...COMPLETIONS,
+						...RESULTS,
+						...UNKNOWN_REASONS,
+					]) {
+						if (!isMachineIdentifier(token)) continue;
+						expect(sentence.toLowerCase()).not.toContain(token);
+					}
+				}
+			});
+		},
+	);
+
+	// The whole surface renders three DIFFERENT sentences per value class; two
+	// values sharing one is the collapse this vocabulary replaced.
+	it.each(LOCALE_CODES)(
+		"Given the 12 values in %s, When rendered, Then no two share a sentence",
+		(locale) => {
+			withLocale(locale, () => {
+				const sentences = [
+					...COMPLETIONS.map((c) =>
+						translate(MODEM_OPERATION_COMPLETION_KEY[c]),
+					),
+					...RESULTS.map((r) => translate(MODEM_OPERATION_RESULT_KEY[r])),
+					...UNKNOWN_REASONS.map((r) =>
+						translate(MODEM_OPERATION_UNKNOWN_REASON_KEY[r]),
+					),
+				];
+				expect(new Set(sentences).size).toBe(sentences.length);
+			});
+		},
+	);
+
+	// The reconciliation pointer must BE the mutation-block sentence, not a
+	// look-alike: a second wording is the parallel "unknown state" surface this
+	// change exists to avoid building.
+	it("Given the reconciliation pointer, When resolved, Then it is the existing mutation-block copy", () => {
+		expect(MODEM_OPERATION_RECONCILIATION_KEY).toBe(
+			refusalCopyKey("reconciliation-required"),
+		);
+	});
+
+	it.each(UNKNOWN_REASONS)(
+		"Given unknown-outcome %s, When viewed, Then it is neither applied nor refused and routes to reconciliation",
+		(reason) => {
+			const view = modemOperationView(unknownOutcome(reason));
+			expect(view.kind).toBe("unknown");
+			expect(view.kind).not.toBe("applied");
+			expect(view.kind).not.toBe("refused");
+			expect(view.requiresReconciliation).toBe(true);
+			expect(view.reconciliationKey).toBe(MODEM_OPERATION_RECONCILIATION_KEY);
+			expect(view.unknownReasonKey).toBe(
+				MODEM_OPERATION_UNKNOWN_REASON_KEY[reason],
+			);
+			expect(view.retrySuggested).toBe(false);
+		},
+	);
+
+	// Every completion the classifier can pair with `unknown-outcome` must still
+	// reach the reconciliation band — the kind follows the RESULT, never the
+	// completion, or a `dropped` write would render as a plain failure.
+	it.each(COMPLETIONS)(
+		"Given an unknown outcome whose completion is %s, When viewed, Then it still routes to reconciliation",
+		(completion) => {
+			const view = modemOperationView(
+				unknownOutcome("write-reply-dropped", completion),
+			);
+			expect(view.kind).toBe("unknown");
+			expect(view.completionKey).toBe(
+				MODEM_OPERATION_COMPLETION_KEY[completion],
+			);
+		},
+	);
+
+	/*
+	  THE LOAD-BEARING SPLIT. `timed-out` is ONE completion with TWO meanings —
+	  `unknown-outcome` on a write, plain `failed` on a read — so the pair must
+	  render in two visibly different bands. Collapsing them is the single most
+	  likely "simplification" of this module.
+	*/
+	it("Given the SAME `timed-out` completion, When it is a write and a read, Then the two render differently", () => {
+		const write = modemOperationView(
+			unknownOutcome("write-reply-timed-out", "timed-out"),
+		);
+		const read = modemOperationView({
+			status: "failed",
+			completion: "timed-out",
+			reason: "timed out",
+			refusal: "timed-out",
+			retryable: MODEM_MANAGER_REFUSAL_RETRYABLE["timed-out"],
+		});
+
+		expect(write.completionKey).toBe(read.completionKey);
+		expect(write.kind).toBe("unknown");
+		expect(read.kind).toBe("refused");
+		expect(write.resultKey).not.toBe(read.resultKey);
+		expect(write.reconciliationKey).toBeDefined();
+		expect(read.reconciliationKey).toBeUndefined();
+		// The read arm is a daemon `timed-out` refusal, which IS retryable; the
+		// write arm is not, however the same word appears in both.
+		expect(read.retrySuggested).toBe(true);
+		expect(write.retrySuggested).toBe(false);
+	});
+
+	it.each(
+		Object.keys(MODEM_MANAGER_REFUSAL_RETRYABLE) as ModemManagerRefusalReason[],
+	)(
+		"Given the typed refusal %s, When viewed, Then the retry hint follows the package's own table",
+		(reason) => {
+			const view = modemOperationView(refusal(reason));
+			expect(view.retrySuggested).toBe(MODEM_MANAGER_REFUSAL_RETRYABLE[reason]);
+		},
+	);
+
+	// The four the package marks retryable, spelled out — so a table edit that
+	// widened the set would redden here rather than silently invite retries.
+	it("Given the eight refusals, When gated, Then exactly four suggest a retry", () => {
+		const retryable = (
+			Object.keys(
+				MODEM_MANAGER_REFUSAL_RETRYABLE,
+			) as ModemManagerRefusalReason[]
+		).filter((reason) => modemOperationRetrySuggested(refusal(reason)));
+		expect(retryable.sort()).toEqual(
+			["busy", "disconnected", "timed-out", "wrong-state"].sort(),
+		);
+	});
+
+	/*
+	  THE TABLE IS THE AUTHORITY FOR A TYPED REFUSAL, and this is the only test
+	  that can show it: every honest fixture has the wire field agreeing with
+	  `MODEM_MANAGER_REFUSAL_RETRYABLE`, so a gate that simply read
+	  `outcome.retryable` would pass all of them. Here the two DISAGREE.
+	*/
+	it("Given a typed refusal whose wire flag contradicts the package table, When gated, Then the table wins", () => {
+		expect(
+			modemOperationRetrySuggested({
+				status: "refused",
+				completion: "failed",
+				reason: "AccessDenied",
+				refusal: "unauthorized",
+				retryable: true,
+			}),
+		).toBe(false);
+		expect(
+			modemOperationRetrySuggested({
+				status: "failed",
+				completion: "failed",
+				reason: "InProgress",
+				refusal: "busy",
+				retryable: false,
+			}),
+		).toBe(true);
+	});
+
+	// The wire pins `retryable: false` on this arm, so the guard can only be shown
+	// to exist by contradicting it: a retry here is the one action that can turn
+	// an unknown state into a wrong one.
+	it("Given an unknown outcome that claims to be retryable, When gated, Then no retry is suggested", () => {
+		expect(
+			modemOperationRetrySuggested({
+				status: "unknown-outcome",
+				completion: "dropped",
+				reason: "write-reply-dropped",
+				requires_reconciliation: true,
+				retryable: true,
+			} as unknown as ModemOperationOutcome),
+		).toBe(false);
+	});
+
+	// A CeraUI-authored refusal carries no typed member by contract, so the wire's
+	// own `retryable` is the only answer available — and it is `false`.
+	it("Given a CeraUI-authored refusal, When gated, Then it never suggests a retry", () => {
+		const view = modemOperationView({
+			status: "refused",
+			completion: "refused",
+			reason: "provisioning_disabled",
+			retryable: false,
+		});
+		expect(view.retrySuggested).toBe(false);
+		expect(view.showCompletion).toBe(false);
+	});
+
+	it("Given a clean success, When viewed, Then it says so once and offers no retry", () => {
+		const view = modemOperationView({
+			status: "applied",
+			completion: "applied",
+			retryable: false,
+		});
+		expect(view.kind).toBe("applied");
+		expect(view.showCompletion).toBe(false);
+		expect(view.retrySuggested).toBe(false);
+		expect(view.requiresReconciliation).toBe(false);
+	});
+
+	it("Given an unknown outcome, When detailed, Then it carries a reconciliation pointer and NO retry", () => {
+		const detail = modemOperationDetail(
+			unknownOutcome("write-reply-timed-out"),
+			translate,
+		);
+		expect(detail.reconciliation).toBe(
+			translate(MODEM_OPERATION_RECONCILIATION_KEY),
+		);
+		expect(detail.retry).toBeUndefined();
+		expect(detail.unknownReason).toBe(
+			translate(MODEM_OPERATION_UNKNOWN_REASON_KEY["write-reply-timed-out"]),
+		);
+		expect(detail.result).toBe(
+			translate(MODEM_OPERATION_RESULT_KEY["unknown-outcome"]),
+		);
+	});
+
+	it("Given a retryable refusal, When detailed, Then it carries a retry hint and NO reconciliation pointer", () => {
+		const detail = modemOperationDetail(refusal("busy"), translate);
+		expect(detail.retry).toBe(translate(MODEM_OPERATION_RETRY_KEY));
+		expect(detail.reconciliation).toBeUndefined();
+	});
+
+	// `modemWriteBand` is the seam every render site goes through, and this is why
+	// it exists: no call site picks the kind, so none of them can get this wrong.
+	it("Given a write flow, When banded, Then the KIND comes from the classification, not the call site", () => {
+		const unknown = modemWriteBand(
+			unknownOutcome("stale-generation"),
+			"the modem refused",
+			translate,
+		);
+		expect(unknown.outcome?.kind).toBe("unknown");
+		expect(unknown.detail?.reconciliation).toBeDefined();
+
+		const applied = modemWriteBand(
+			{ status: "applied", completion: "applied", retryable: false },
+			"whatever the site said",
+			translate,
+		);
+		expect(applied.outcome?.kind).toBe("applied");
+	});
+
+	// A flow whose wire carries no classification must render exactly as before.
+	it("Given no classified outcome, When banded, Then the flow keeps its own kind and gains no detail", () => {
+		const band = modemWriteBand(undefined, "the modem refused", translate);
+		expect(band.outcome?.kind).toBe("refused");
+		expect(band.outcome?.message).toBe("the modem refused");
+		expect(band.detail).toBeUndefined();
 	});
 });

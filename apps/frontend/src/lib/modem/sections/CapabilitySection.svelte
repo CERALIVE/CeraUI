@@ -63,7 +63,10 @@ import type { Component, Snippet } from 'svelte';
 
 import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import { Label } from '$lib/components/ui/label';
-import type { MutationOutcome } from '$lib/modem/mutation-outcome';
+import type {
+	MutationOutcome,
+	MutationOutcomeDetail,
+} from '$lib/modem/mutation-outcome';
 import { cn } from '$lib/utils';
 
 import type { CapabilityControlContext, CapabilityView } from './types';
@@ -88,6 +91,11 @@ interface Props {
 	/** The last terminal outcome of a write — SUCCESS INCLUDED (§8 LR-5). */
 	outcome?: MutationOutcome | undefined;
 	/**
+	 * The classified operation detail behind that outcome, already localized.
+	 * Additive — a section whose wire carries none is byte-identical.
+	 */
+	detail?: MutationOutcomeDetail | undefined;
+	/**
 	 * An ALREADY-LOCALIZED refusal sentence, for a caller whose reason carries a
 	 * device-supplied value and is therefore no longer a key. Wins over
 	 * `view.reasonKey` at `unknown` and `blocked`.
@@ -111,6 +119,7 @@ let {
 	controlId,
 	busy = false,
 	outcome,
+	detail,
 	reason: reasonOverride,
 	class: className,
 	icon,
@@ -191,6 +200,6 @@ const controlContext = $derived<CapabilityControlContext>({
 			{@render children()}
 		{/if}
 
-		<MutationOutcomeBand {name} {outcome} />
+		<MutationOutcomeBand {name} {outcome} {detail} />
 	</section>
 {/if}

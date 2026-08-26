@@ -45,6 +45,7 @@ import { CircleCheck, CircleHelp, TriangleAlert } from '@lucide/svelte';
 
 import {
 	type MutationOutcome,
+	type MutationOutcomeDetail,
 	outcomeIsAssertive,
 	outcomeTone,
 } from '$lib/modem/mutation-outcome';
@@ -54,18 +55,43 @@ interface Props {
 	outcome: MutationOutcome | undefined;
 	/** Test-id prefix. The band is `<name>-outcome`; the regions `<name>-announce-*`. */
 	name: string;
+	/**
+	 * The typed operation detail, already localized. Additive: a surface whose
+	 * wire carries no classified outcome renders exactly as it did before.
+	 */
+	detail?: MutationOutcomeDetail | undefined;
 }
 
-let { outcome, name }: Props = $props();
+let { outcome, name, detail }: Props = $props();
 
 const assertive = $derived(
 	outcome !== undefined && outcomeIsAssertive(outcome.kind),
 );
+/*
+  ANNOUNCED ONCE, WHOLE (LR-3). The detail sentences join the caller's message in
+  the SAME region rather than getting regions of their own — a second live region
+  would announce the reconciliation pointer as a separate event, which is exactly
+  how an operator comes to hear a refusal twice and an unknown outcome never.
+*/
+const spokenText = $derived(
+	outcome === undefined
+		? ''
+		: [
+				outcome.message,
+				detail?.result,
+				detail?.completion,
+				detail?.unknownReason,
+				detail?.reconciliation,
+				detail?.retry,
+			]
+				.filter((part): part is string => part !== undefined && part !== '')
+				.join(' '),
+);
 // Each region holds ONLY the outcomes of its own politeness class, so a refusal
 // following a success replaces the assertive text and empties the polite one
 // rather than leaving a stale sentence an assistive technology may re-read.
-const politeText = $derived(outcome !== undefined && !assertive ? outcome.message : '');
-const assertiveText = $derived(outcome !== undefined && assertive ? outcome.message : '');
+const politeText = $derived(assertive ? '' : spokenText);
+const assertiveText = $derived(assertive ? spokenText : '');
 
 const tone = $derived(outcome === undefined ? 'warning' : outcomeTone(outcome.kind));
 const toneClass = $derived(
@@ -107,6 +133,41 @@ const toneClass = $derived(
 		{:else}
 			<CircleHelp class="mt-px size-3.5 shrink-0" aria-hidden="true" />
 		{/if}
-		<span>{outcome.message}</span>
+		<span class="flex min-w-0 flex-col gap-1">
+			<span>{outcome.message}</span>
+			{#if detail}
+				<span class="font-medium" data-testid={`${name}-outcome-result`}
+					>{detail.result}</span
+				>
+				{#if detail.completion}
+					<span class="opacity-90" data-testid={`${name}-outcome-completion`}
+						>{detail.completion}</span
+					>
+				{/if}
+				{#if detail.unknownReason}
+					<span
+						class="opacity-90"
+						data-testid={`${name}-outcome-unknown-reason`}>{detail.unknownReason}</span
+					>
+				{/if}
+				<!--
+				  The reconciliation pointer and the retry hint are MUTUALLY EXCLUSIVE by
+				  construction upstream, and this is the surface where that matters: an
+				  unknown outcome offering a retry is how a write that may already have
+				  landed gets applied twice.
+				-->
+				{#if detail.reconciliation}
+					<span
+						class="opacity-90"
+						data-testid={`${name}-outcome-reconciliation`}>{detail.reconciliation}</span
+					>
+				{/if}
+				{#if detail.retry}
+					<span class="opacity-90" data-testid={`${name}-outcome-retry`}
+						>{detail.retry}</span
+					>
+				{/if}
+			{/if}
+		</span>
 	</p>
 {/if}

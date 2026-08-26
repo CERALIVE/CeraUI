@@ -125,6 +125,7 @@ import {
 } from './modem-usage-policy';
 import { getLocale, m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { toast } from 'svelte-sonner';
+import MutationOutcomeBand from '$lib/components/custom/MutationOutcomeBand.svelte';
 import ModemFccUnlockSection from './ModemFccUnlockSection.svelte';
 import { fccUnlockErrorKey } from './modem-fcc-unlock';
 import ModemGpsSection from './ModemGpsSection.svelte';
@@ -216,6 +217,7 @@ import {
 } from '$lib/rpc/usb-mode-offer';
 import {
 	type MutationOutcome,
+	type MutationOutcomeDetail,
 	mutationOutcome,
 } from '$lib/modem/mutation-outcome';
 import { loadWithinBound, modemBoundMs } from '$lib/modem/async-surface';
@@ -246,6 +248,8 @@ import {
 	bandListOperatorLabel,
 	bandOperatorLabel,
 	isMappedBandToken,
+	MODEM_OPERATION_RECONCILIATION_KEY,
+	modemWriteBand,
 	networkModeOperatorLabel,
 	usbModeOperatorLabel,
 } from '$lib/modem/operator-labels';
@@ -410,6 +414,7 @@ $effect(() => {
 		resetSmsInbox();
 		void loadUsbModeOptions();
 		bandOutcomeKey = undefined;
+		bandReconciliation = undefined;
 		void loadBands();
 		void loadFccUnlock();
 	}
@@ -734,12 +739,14 @@ let fccBusy = $state(false);
 // the success as well as the refusal — a toggle that moved with no word anywhere
 // is an outcome an operator using a screen reader never receives (§8 LR-5/LR-6).
 let fccOutcome = $state<MutationOutcome | undefined>(undefined);
+let fccDetail = $state<MutationOutcomeDetail | undefined>(undefined);
 
 const fccClaim = $derived(modem.capability_modules?.["fcc-auto-unlock"]);
 
 async function loadFccUnlock(): Promise<void> {
 	fccState = undefined;
 	fccOutcome = undefined;
+	fccDetail = undefined;
 	const requested = deviceId;
 	const outcome = await loadWithinBound('getFccUnlock', () =>
 		rpc.modems.getFccUnlock({ device: String(deviceId) }),
@@ -754,6 +761,7 @@ async function loadFccUnlock(): Promise<void> {
 async function toggleFccUnlock(enabled: boolean): Promise<void> {
 	fccBusy = true;
 	fccOutcome = undefined;
+	fccDetail = undefined;
 	try {
 		const result = await rpc.modems.setFccUnlock({
 			device: String(deviceId),
@@ -772,10 +780,19 @@ async function toggleFccUnlock(enabled: boolean): Promise<void> {
 					: m["network.modem.fccUnlock.outcome.disabled"](),
 			);
 		} else {
-			fccOutcome = mutationOutcome(
-				"refused",
+			// The KIND is the CLASSIFICATION's, never this site's: an FCC write that
+			// ended `unknown-outcome` must reach the reconciliation band, not the
+			// refusal one, and `modemWriteBand` is what makes that structural.
+			// The refusal arm of this union carries no classification by contract —
+			// a gate refusal is a CeraUI-side decision the daemon never saw — so the
+			// field is read narrowly rather than assumed onto every arm.
+			const band = modemWriteBand(
+				"operation" in result ? result.operation : undefined,
 				t(fccUnlockErrorKey("error" in result ? result.error : result.refusal)),
+				t,
 			);
+			fccOutcome = band.outcome;
+			fccDetail = band.detail;
 		}
 	} catch {
 		fccOutcome = mutationOutcome(
@@ -805,6 +822,7 @@ let bandResult = $state<ModemBandsOutput | undefined>(undefined);
 let bandSelection = $state<readonly string[]>([BAND_ANY]);
 let bandApplying = $state(false);
 let bandOutcomeKey = $state<string | undefined>(undefined);
+let bandReconciliation = $state<string | undefined>(undefined);
 
 const bandOffer = $derived(deriveBandOffer(bandResult));
 const bandDirty = $derived(bandSelectionChanged(bandOffer.current, bandSelection));
@@ -858,6 +876,7 @@ async function loadBands(): Promise<void> {
 async function applyBandLock(): Promise<void> {
 	bandApplying = true;
 	bandOutcomeKey = undefined;
+	bandReconciliation = undefined;
 	try {
 		const result = await rpc.modems.setBands({
 			device: String(deviceId),
@@ -872,8 +891,18 @@ async function applyBandLock(): Promise<void> {
 			result.status === undefined
 				? 'network.modem.bands.outcome.refused'
 				: `network.modem.bands.outcome.${result.status}`;
+		// `restore_failed` is the one band terminal that is NEITHER a success nor
+		// a plain refusal: the write landed, the rollback did not, and the device
+		// is held fail-closed until an operator confirms what it is actually
+		// locked to. That is the mutation-block surface, said in its own words —
+		// the same routing `unknown-outcome` takes, because it is the same state.
+		bandReconciliation =
+			result.status === 'restore_failed'
+				? t(MODEM_OPERATION_RECONCILIATION_KEY)
+				: undefined;
 	} catch {
 		bandOutcomeKey = 'network.modem.bands.outcome.refused';
+		bandReconciliation = undefined;
 	} finally {
 		bandApplying = false;
 		// Re-read rather than trusting the reply — the modem is the authority on
@@ -1025,6 +1054,24 @@ const usbStandingBodyKey = $derived(
 	usbStandingRefusal === 'uncertified'
 		? 'network.modem.usbMode.uncertifiedBody'
 		: 'network.modem.usbMode.provisioningBody',
+);
+
+/*
+  The CLASSIFIED outcome behind a refused switch, when the reply carried one.
+
+  A USB-mode transaction whose reply never arrived is `unknown-outcome`, and the
+  red `role="alert"` band below states that the switch FAILED — which is a claim
+  nobody is entitled to make about a transition that may well have landed. The
+  classification therefore picks the band, and the reconciliation arm is
+  separated out so it can never be found as an error.
+*/
+const usbBand = $derived.by(() => {
+	const operation = usbFlow?.phase === 'refused' ? usbFlow.operation : undefined;
+	if (operation === undefined || usbFailureText === undefined) return undefined;
+	return modemWriteBand(operation, usbFailureText, t);
+});
+const usbUnknownBand = $derived(
+	usbBand?.outcome?.kind === 'unknown' ? usbBand : undefined,
 );
 const offerUsbSwitch = $derived(usbOffer.phase === 'offered' && !usbStandingRefusal);
 
@@ -1804,6 +1851,15 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					<p class="text-xs" data-testid="modem-bands-outcome" role="status">
 						{resolveMessageKey(bandOutcomeKey)}
 					</p>
+					{#if bandReconciliation}
+						<p
+							class="text-status-warning text-xs"
+							data-testid="modem-bands-outcome-reconciliation"
+							role="status"
+						>
+							{bandReconciliation}
+						</p>
+					{/if}
 				{/if}
 		</CapabilitySection>
 
@@ -2762,6 +2818,18 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					>
 						{m["network.modem.usbMode.pending"]()}
 					</p>
+				{:else if usbUnknownBand}
+					<!-- NOT `modem-usb-mode-error`: an outcome nobody can classify as a
+					     failure must not be findable as one, by an operator or by a
+					     gate. The band carries the reconciliation pointer and offers no
+					     retry. -->
+					<div data-testid="modem-usb-mode-unknown-outcome">
+						<MutationOutcomeBand
+							name="modem-usb-mode"
+							outcome={usbUnknownBand.outcome}
+							detail={usbUnknownBand.detail}
+						/>
+					</div>
 				{:else if usbStandingRefusal}
 					<!-- A refusal that will answer identically forever is a standing
 					     property of this device, not an error. It gets the calm muted
@@ -2780,6 +2848,14 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 					>
 						<p class="text-sm font-medium">{usbFailureText}</p>
 						<p class="text-muted-foreground text-xs">{t(usbStandingBodyKey)}</p>
+					</div>
+				{:else if usbBand}
+					<div data-testid="modem-usb-mode-error">
+						<MutationOutcomeBand
+							name="modem-usb-mode"
+							outcome={usbBand.outcome}
+							detail={usbBand.detail}
+						/>
 					</div>
 				{:else if usbFailureText}
 					<p
@@ -2837,6 +2913,7 @@ const powerReading = $derived(radioPowerReading(modem.radio_power));
 			state={fccState}
 			busy={fccBusy}
 			outcome={fccOutcome}
+			detail={fccDetail}
 			onToggle={(next) => void toggleFccUnlock(next)}
 		/>
 
