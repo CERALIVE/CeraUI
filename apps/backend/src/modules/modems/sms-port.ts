@@ -35,12 +35,9 @@
  * case now drives BOTH implementations through `readSmsInbox` and asserts one
  * inbox, so either side drifting reddens a test on both.
  *
- * THE SEAM IS NORMALIZATION ONLY, AND DELIBERATELY SO. The transport stays
- * `mmcli` — a client of the SAME ModemManager daemon the port's D-Bus adapter
- * talks to, already proven on the bench board, and adding ZERO modem-control
- * surface. Moving the transport to the port's `Added`/`Deleted` observation is a
- * separate change that needs a live receive drill to certify, and that drill is
- * blocked (no bench modem has an SMS-capable registered SIM).
+ * The parser seam remains the mmcli parity oracle. Transport selection now lives
+ * in `sms-backend.ts`: `dbus` consumes the package observation port while
+ * `mmcli` keeps this normalizer and reader as the explicit rollback.
  */
 
 import {

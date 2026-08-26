@@ -26,14 +26,22 @@ import {
 	CellularAuditRefusalError,
 	createAuditingDbusTransport,
 	LIVE_OBSERVATION_MEMBERS,
+	LIVE_OBSERVATION_SIGNALS,
 	memberKey,
 	NAMED_MUTATING_MEMBERS,
 	REFUSAL_NAMED_MUTATION,
 	REFUSAL_NOT_ALLOWLISTED,
+	SMS_OBSERVATION_METHOD_MEMBERS,
+	SMS_OBSERVATION_SIGNAL_MEMBERS,
 	STRICT_SHADOW_MEMBERS,
+	STRICT_SHADOW_SIGNALS,
 } from "../modules/cellular/dbus-audit-transport.ts";
 
 const SIGNAL_SETUP = "org.freedesktop.ModemManager1.Modem.Signal.Setup";
+const MESSAGING_LIST = "org.freedesktop.ModemManager1.Modem.Messaging.List";
+const PROPERTIES_GET_ALL = "org.freedesktop.DBus.Properties.GetAll";
+const SMS_PATH = "/org/freedesktop/ModemManager1/SMS/36";
+const SMS_IFACE = "org.freedesktop.ModemManager1.Sms";
 
 interface RecordingTransport extends DbusTransport {
 	readonly calls: string[];
@@ -88,6 +96,50 @@ describe("the named audit policies", () => {
 		]);
 	});
 
+	test("SMS adds exactly List, scoped Properties.GetAll, Added, and Deleted to live observation", () => {
+		expect([...SMS_OBSERVATION_METHOD_MEMBERS]).toEqual([
+			MESSAGING_LIST,
+			PROPERTIES_GET_ALL,
+		]);
+		expect([...SMS_OBSERVATION_SIGNAL_MEMBERS].sort()).toEqual([
+			"org.freedesktop.ModemManager1.Modem.Messaging.Added",
+			"org.freedesktop.ModemManager1.Modem.Messaging.Deleted",
+		]);
+		expect(
+			[...LIVE_OBSERVATION_SIGNALS].filter(
+				(signal) => !STRICT_SHADOW_SIGNALS.has(signal),
+			),
+		).toEqual([...SMS_OBSERVATION_SIGNAL_MEMBERS]);
+	});
+
+	test("Properties.GetAll is admitted only for an SMS path and the exact Sms interface argument", async () => {
+		const inner = recordingTransport();
+		const audited = createAuditingDbusTransport(inner, {
+			allowedMembers: LIVE_OBSERVATION_MEMBERS,
+			allowedSignals: LIVE_OBSERVATION_SIGNALS,
+		});
+		const scopedCall: MethodCall = {
+			...call(PROPERTIES_GET_ALL),
+			path: SMS_PATH,
+			signature: "s",
+			args: [SMS_IFACE],
+		};
+
+		await audited.callMethod(scopedCall);
+
+		expect(inner.calls).toEqual([PROPERTIES_GET_ALL]);
+		for (const nearMiss of [
+			{ ...scopedCall, path: "/org/freedesktop/ModemManager1/Modem/0" },
+			{ ...scopedCall, args: ["org.freedesktop.ModemManager1.Modem"] },
+			{ ...scopedCall, args: [] },
+		]) {
+			await expect(audited.callMethod(nearMiss)).rejects.toMatchObject({
+				reason: REFUSAL_NOT_ALLOWLISTED,
+			});
+		}
+		expect(inner.calls).toEqual([PROPERTIES_GET_ALL]);
+	});
+
 	test("live-observation admits Signal.Setup and no other named mutation", async () => {
 		// Given the telemetry-only Signal.Setup member on the live observer policy
 		const inner = recordingTransport();
@@ -106,7 +158,7 @@ describe("the named audit policies", () => {
 			[...LIVE_OBSERVATION_MEMBERS].filter(
 				(member) => !STRICT_SHADOW_MEMBERS.has(member),
 			),
-		).toEqual([SIGNAL_SETUP]);
+		).toEqual([SIGNAL_SETUP, MESSAGING_LIST, PROPERTIES_GET_ALL]);
 	});
 
 	test("strict-shadow refuses Signal.Setup with the former byte-identical refusal", async () => {
@@ -236,9 +288,12 @@ describe("refusal table", () => {
 });
 
 describe("passthrough surface", () => {
-	test("signal subscriptions are observational and pass through untouched", async () => {
+	test("only policy-listed signal subscriptions pass through", async () => {
 		const inner = recordingTransport();
-		const audited = createAuditingDbusTransport(inner);
+		const audited = createAuditingDbusTransport(inner, {
+			allowedMembers: LIVE_OBSERVATION_MEMBERS,
+			allowedSignals: LIVE_OBSERVATION_SIGNALS,
+		});
 
 		await audited.subscribeSignal(
 			{
@@ -251,7 +306,34 @@ describe("passthrough surface", () => {
 		expect(inner.subscriptions).toEqual([
 			"org.freedesktop.DBus.ObjectManager.InterfacesAdded",
 		]);
-		expect(audited.getRefusals()).toEqual([]);
+		await audited.subscribeSignal(
+			{
+				interface: "org.freedesktop.ModemManager1.Modem.Messaging",
+				member: "Added",
+				path: "/org/freedesktop/ModemManager1/Modem/0",
+			},
+			() => {},
+		);
+		await expect(
+			audited.subscribeSignal(
+				{
+					interface: "org.freedesktop.ModemManager1.Modem.Messaging",
+					member: "SomeFutureSignal",
+				},
+				() => {},
+			),
+		).rejects.toMatchObject({ reason: REFUSAL_NOT_ALLOWLISTED });
+		expect(inner.subscriptions).toEqual([
+			"org.freedesktop.DBus.ObjectManager.InterfacesAdded",
+			"org.freedesktop.ModemManager1.Modem.Messaging.Added",
+		]);
+		expect(audited.getRefusals()).toEqual([
+			{
+				member:
+					"org.freedesktop.ModemManager1.Modem.Messaging.SomeFutureSignal",
+				reason: REFUSAL_NOT_ALLOWLISTED,
+			},
+		]);
 	});
 
 	test("lifecycle methods delegate to the inner transport", async () => {

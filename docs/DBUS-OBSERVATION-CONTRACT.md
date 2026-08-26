@@ -312,6 +312,37 @@ The rule that DOES hold, stated so the next reader does not re-add one:
 
 ---
 
+## SMS ports follow the observer epoch
+
+`modems.getSms` follows the composition root's committed backend. The `dbus`
+path uses `@ceralive/modem-control`'s `createDbusSmsPort`: one initial inbox
+read, then `Messaging.Added` / `Messaging.Deleted` folding, with an authoritative
+replace on reconnect. The `mmcli` value retains the shipped list/read reader as
+the rollback path; it is not removed or emulated through D-Bus.
+
+A package SMS port captures one immutable modem object path. That path cannot be
+carried across an MM owner epoch because the daemon renumbers the roster (the
+measured `11,13,14,15 → 0,1,2,3` transition above). CeraUI therefore keys live
+ports by the observer epoch and the modem's `ID_PATH`: on an epoch edge it stops
+all old subscriptions first, resolves each previously-read physical modem in the
+new roster, and builds a fresh port for the new `/Modem/N`. A row with no
+cross-epoch `ID_PATH` is not carried. The same ID_PATH check also rebuilds a
+held port when a replug changes `/Modem/N` within one owner epoch.
+
+The live audit policy admits exactly the package's SMS wire surface:
+
+- method `org.freedesktop.ModemManager1.Modem.Messaging.List`;
+- method `org.freedesktop.DBus.Properties.GetAll` only on
+  `/org/freedesktop/ModemManager1/SMS/<n>` with the sole argument
+  `org.freedesktop.ModemManager1.Sms`;
+- signals `Messaging.Added` and `Messaging.Deleted`.
+
+Strict shadow gains none of these entries. SMS write members remain named
+refusals under both policies, and no `Ussd.*` member is admitted; USSD stays on
+`mmcli-ussd.ts` by owner decision.
+
+---
+
 ## The cutover
 
 ### What flipped

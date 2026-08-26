@@ -394,9 +394,8 @@ export const runtimeConfigSchema = z.object({
 
 	// Which cellular-control backend the composition root commits at boot.
 	// DEFAULT-ABSENT ON PURPOSE, with NO entry in RUNTIME_CONFIG_DEFAULTS: absence
-	// resolves to `"mmcli"` inside `initCellularStack()` — the legacy one-shot-CLI
-	// path, synchronously ready, byte-identical to the behaviour before the seam
-	// existed. Only an explicit `"dbus"` loads the D-Bus transport at all.
+	// resolves to the D-Bus observer through `DEFAULT_MODEM_BACKEND`; an explicit
+	// `"mmcli"` retains the synchronously-ready legacy rollback path.
 	modem_backend: modemBackendSchema.optional(),
 
 	// Opt-in read-only D-Bus observation BESIDE mmcli (Phase-B shadow mode).

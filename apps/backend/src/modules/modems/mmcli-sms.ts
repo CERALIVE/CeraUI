@@ -18,12 +18,10 @@
 /*
  * Read-only SMS inbox, over the existing allowlisted mmcli runner.
  *
- * WHY mmcli and not the cellular backend abstraction: mmcli is a client of the
- * SAME ModemManager daemon both cellular backends talk to, so this reads
- * identically under either selection and adds ZERO modem-control surface. The
- * only two verbs used are `--messaging-list-sms` and a per-message `-s <path>`
- * read. There is deliberately no send, no delete, and no store — that is locked
- * by the grep gate in `tests/modem-sms-readonly-gate.test.ts`, not by memory.
+ * This is the explicit `modem_backend: "mmcli"` rollback reader. The only two
+ * verbs used are `--messaging-list-sms` and a per-message `-s <path>` read.
+ * There is deliberately no send, no delete, and no store — that is locked by
+ * the grep gate in `tests/modem-sms-readonly-gate.test.ts`, not by memory.
  *
  * WHY this module does not reuse `mmcliParseSep` for the per-message record:
  * that parser logs the OFFENDING LINE VERBATIM whenever a line does not split

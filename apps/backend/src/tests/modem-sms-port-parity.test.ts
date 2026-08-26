@@ -3,20 +3,18 @@
  *
  * WHY THE PARITY IS EXPRESSED THROUGH GOLDEN VALUES RATHER THAN AN IMPORT.
  * Rule D forbids this repo from reaching into the sibling `modem-stack`
- * checkout, and the pinned `@ceralive/modem-control` release predates the SMS
- * port — so there is no build in which BOTH implementations are importable at
- * once, and a differential that ran them side by side could not exist. What CAN
- * exist, and is strictly as strong, is a SHARED SET OF GOLDEN VALUES: every
- * fixture and every expectation below is byte-identical to the one
- * `modem-stack`'s `control/src/sms/parse.test.ts` pins for the port. Either side
- * drifting reddens a test on both sides.
+ * checkout. The pinned package now supplies the D-Bus port, while this file
+ * keeps the independent mmcli grammar oracle: every fixture and expectation
+ * below is byte-identical to the package's parser fixtures. The live side-by-side
+ * D-Bus/mmcli result comparison is in `modem-sms-dbus.test.ts`; this file pins
+ * the detailed grammar and normalization edge cases on the rollback path.
  *
  * The fixtures themselves are VERBATIM `mmcli 1.24.2 -K` output captured from
  * the bench board (Quectel RM530N-GL), bodies replaced with neutral copy.
  *
- * The second half of this file proves the SEAM: `readSmsInbox` really does route
- * its normalization through whatever `resolveSmsNormalizer` answers, so the day
- * the pin carries the port the switch is a pin bump and not a rewrite.
+ * The second half proves the retained mmcli normalization seam remains real,
+ * which keeps the rollback path independently testable after the transport
+ * cutover.
  */
 
 import { afterEach, describe, expect, it } from "bun:test";

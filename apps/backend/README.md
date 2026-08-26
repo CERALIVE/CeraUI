@@ -20,6 +20,13 @@ after the pinned release and a static import would have failed the build rather
 than degrading. With an exact pin that question is settled by `tsc` and by
 `bun install`.
 
+`modems.getSms` follows the committed `modem_backend`: `dbus` uses the
+package's read-only `createDbusSmsPort` with one inbox store per modem and MM
+owner epoch; `mmcli` retains the shipped list/read implementation as the explicit
+rollback. An owner-epoch change stops old subscriptions before resolving the
+same `ID_PATH` on the new roster and rebuilding its immutable-path port, so MM
+renumbering cannot leave a stale path subscribed. USSD remains on mmcli.
+
 Fourteen frozen projection modules still consume additive pure modem logic
 through `src/modules/modem-control-compat.ts`, which is a static namespace import
 rather than a probe. It is permanent: two of its names are exported by no release,
