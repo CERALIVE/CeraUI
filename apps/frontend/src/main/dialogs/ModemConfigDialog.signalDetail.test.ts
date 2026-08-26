@@ -161,6 +161,15 @@ beforeEach(() => {
 	resetModemsFeed();
 });
 
+// All 21 cases mount the WHOLE dialog, so this file is render-bound rather than
+// assertion-bound — the reasoning `ModemConfigDialog.detail.test.ts` records for
+// its own budget. This spec shipped without one and was the last heavy dialog
+// file on vitest's 5000 ms default; it timed out a release runner at 71 s wall,
+// with case slots reaching 16.7 s. That is past the 15 s sibling budget, so this
+// matches `src/tests/modem-raw-token-sweep.test.ts` instead. A budget, not a
+// tolerance: nothing is relaxed or skipped, and a hung render still fails.
+vi.setConfig({ testTimeout: 30000 });
+
 describe("the extended radio measurements", () => {
 	it("renders every measurement the modem reported, each with its own unit", async () => {
 		await open(modemWith({ signal_detail: lteSignalDetail() }));
