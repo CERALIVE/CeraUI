@@ -72,6 +72,12 @@ const TRANSPORT_KEEP_ALLOWLIST = new Set([
 	"modules/modems/modems-state.ts",
 	"modules/modems/modems.ts",
 	"modules/modems/mutation-identity.ts",
+	// KEEP, not MIGRATE: it CONSUMES the package's `mapModemManagerError` through
+	// the seam and only names the `dbusName` error property in its local fallback
+	// mirror, which cannot `instanceof` the package's own transport classes. It
+	// opens no transport, holds no session and issues no call — the token this
+	// gate matches on is a property NAME on an error it was handed.
+	"modules/modems/operation-outcome.ts",
 	"modules/modems/physical-identity.ts",
 	"modules/modems/sim-pin2.ts",
 	"modules/modems/sim-autounlock.ts",

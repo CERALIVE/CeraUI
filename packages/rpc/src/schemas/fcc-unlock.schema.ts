@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { capabilityMutationRefusalSchema } from './modems.schema';
+import { capabilityMutationRefusalSchema, modemOperationOutcomeSchema } from './modems.schema';
 
 /**
  * The `fcc-auto-unlock` module's wire contract — a per-MODEL opt-in, and the
@@ -176,7 +176,14 @@ export const setFccUnlockOutputSchema = z.union([
 		 */
 		reprobed: z.boolean(),
 	}),
-	z.object({ success: z.literal(false), error: setFccUnlockErrorSchema }),
+	z.object({
+		success: z.literal(false),
+		error: setFccUnlockErrorSchema,
+		// `write_failed` is this procedure's generic word for a caught throw. When
+		// that throw was a ModemManager one, the outcome keeps the daemon's own
+		// reason and its retryability. ABSENT means nothing was dispatched.
+		operation: modemOperationOutcomeSchema.optional(),
+	}),
 	z.object({ success: z.literal(false), refusal: capabilityMutationRefusalSchema }),
 ]);
 export type SetFccUnlockOutput = z.infer<typeof setFccUnlockOutputSchema>;

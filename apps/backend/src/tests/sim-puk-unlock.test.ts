@@ -124,6 +124,16 @@ describe("unlockSimPuk()", () => {
 			success: false,
 			error: "wrong-puk",
 			remainingAttempts: 9,
+			// The decremented counter proves the PUK really was wrong, so the
+			// classified outcome sits beside it as an unplaceable `failed` — the
+			// mock throws a bare Error, not a ModemManager one.
+			operation: {
+				status: "refused",
+				completion: "failed",
+				reason: "failed",
+				refusal: "failed",
+				retryable: false,
+			},
 		});
 		// Submitted exactly once — never retried toward a permanent lockout.
 		expect(m.getPukCalls()).toBe(1);
@@ -146,6 +156,13 @@ describe("unlockSimPuk()", () => {
 			success: false,
 			error: "locked",
 			remainingAttempts: 0,
+			operation: {
+				status: "refused",
+				completion: "failed",
+				reason: "failed",
+				refusal: "failed",
+				retryable: false,
+			},
 		});
 		expect(m.getPukCalls()).toBe(1);
 	});

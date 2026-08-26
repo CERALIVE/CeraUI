@@ -30,6 +30,7 @@ src/
 | Which network / which cell the radio registered on | `schemas/modems.schema.ts` → `modemRegistrationContextSchema` (the `registration_context` field) |
 | WHICH FACT decided `sim_presence` | `schemas/modems.schema.ts` → `modemSimPresenceEvidenceSchema` (the `sim_presence_evidence` field) |
 | The shared modem MUTATION-SAFETY wire vocabulary (journal states, refusals, ack modes, the three operator procedures) | `schemas/modems.schema.ts` → `modemMutation*Schema`; section below → THE MUTATION-SAFETY VOCABULARY IS SHARED |
+| What a modem OPERATION did once it was admitted (completion/result/unknown-outcome + the 8 ModemManager refusals, and whether a retry could help) | `schemas/modems.schema.ts` → `modemOperation*Schema` / `modemManagerRefusalReasonSchema` / `MODEM_MANAGER_REFUSAL_RETRYABLE`; section below → AN OPERATION'S OWN WORDS SURVIVE THE BOUNDARY |
 | Identify a bonded LINK across a SIGHUP reload (`link_id` / `port_label` / `serial` on a telemetry row) + the one normalized bind-map disposition (`bond_mapping`) | `schemas/status.schema.ts` → `linkTelemetryEntrySchema`, `bondMappingSchema`; `conn_id` is a FILE POSITION and must never be a row identity |
 | Say that a link's device could NOT be identified (`identity_state: 'unmappable'`) | `schemas/status.schema.ts` → `bondLinkIdentityStateSchema` on `linkTelemetryEntrySchema`; section below → AN UNIDENTIFIABLE LINK SAYS SO |
 | Whether a capability module may be offered, mutated, or claimed | `schemas/capability-modules.schema.ts` + `capabilities/capability-matrix.ts` → `resolveSupportClaim` / `resolveCapabilityMatrix` / `mayRenderModule` / `mayClaimSupport`; section below → THE CAPABILITY FEATURE-GATE FRAMEWORK LIVES HERE, ONCE |
@@ -374,6 +375,51 @@ mutation record the device cannot read is precisely the case fail-closed exists
 for. Device-side contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md)
 → THE MODEM MUTATION-SAFETY CONTRACT.
 
+## AN OPERATION'S OWN WORDS SURVIVE THE BOUNDARY [EXISTS]
+
+`@ceralive/modem-control` classifies a modem operation in three frozen
+vocabularies, and CeraUI threw all three away at the RPC boundary. The four enums
+in `schemas/modems.schema.ts` — 5 completion statuses + 4 result statuses + 3
+unknown-outcome reasons + 8 ModemManager refusal reasons, **20 values** — are the
+wire form of them, and `modemOperationOutcomeSchema` is the shape they ride in.
+
+**They are DISTINCT from `modemMutationRefusalSchema`, and that is the point.**
+That set answers "may this device be mutated at all" (a lease is held, a journal
+entry blocks it, a stream is live). These answer "what did the operation do once
+it WAS admitted". Folding them together would oblige every mutating surface to
+declare refusals it cannot produce — the same argument that keeps
+`capabilityMutationRefusalSchema` a superset rather than new members.
+
+Four shape decisions carry weight:
+
+- **The COMPLETION status rides beside the RESULT status, not instead of it.**
+  `timed-out` classifies as `unknown-outcome` on a WRITE and as plain `failed` on
+  a READ, so a single field cannot hold both facts — a consumer would be unable
+  to tell an unanswered write from a stale generation.
+- **`unknown-outcome` is neither a success nor a failure**, carries a TYPED
+  reason (not a free string) and is the only arm carrying
+  `requires_reconciliation: true`. The mutation may have landed, so it belongs on
+  the existing mutation-block/reconciliation surface — rendering it as either
+  outcome is a lie in one direction or the other.
+- **`retryable` rides EVERY arm explicitly.** Absent-means-false is the
+  `policy_route_missing` latch in miniature: a merging consumer could raise a
+  retry hint and never lower it. `MODEM_MANAGER_REFUSAL_RETRYABLE` is a TOTAL
+  record so a ninth refusal fails `tsc` rather than defaulting to "do not retry",
+  which would tell an operator to give up on a transient condition.
+- **`refusal` is present ONLY when the reason really came from
+  `mapModemManagerError`.** A CeraUI-authored refusal string is a real reason
+  too, so `reason` stays a free string there; minting the package's `failed`
+  fallback arm for a CeraUI-side decision would put a daemon verdict on screen
+  for something the daemon never said.
+
+Every value is a MIRROR of the package's own frozen list, re-read from
+`control/src/domain/operation.ts` and
+`control/src/providers/modem-manager/errors.ts` — never invented. A reason the
+package cannot emit is a state no device reaches, and operator copy written for
+one is dead copy. Device contract:
+[`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) → A GENERIC FAILURE IS
+NOT AN ANSWER.
+
 ## THE SMS INBOX SCHEMAS ARE READ-ONLY BY DESIGN
 
 `smsMessageSchema` / `modemSmsInputSchema` / `modemSmsOutputSchema` back
@@ -555,6 +601,10 @@ convention). Device contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGEN
 - Don't route `isSimlessForBond` (or anything else that decides bond membership) through `sim_presence` — that field is `no_sim`'s pre-fold INPUT, published so a consumer can tell an unreadable slot from an empty one, and the gate reading the binary claim alone is what makes it additive. And don't publish `sim_presence` present-only-when-known: the consumer merge preserves an omitted optional field, so a slot that went `present` → `unknown` could never lower the claim.
 - Don't publish `own_numbers` as an empty array, and don't collapse it to a single string — the schema's `.min(1)` is what keeps "not reported" and "none" from becoming the same wire value, and MM's property is `as`, so a first-element read silently drops a dual-number SIM's tail.
 - Don't promote any Phase-B modem field to required, and don't add `data_usage_cycle_day`/`data_usage_threshold_bytes` to `modemConfigInputSchema` until `@ceralive/modem-control` actually exports a usage-policy setter — an inert input field is a mutation the device accepts and drops.
+- Don't collapse a modem operation's classified outcome into a per-procedure generic literal — `write_failed`, `transaction_error` and a bare `error` are three different words for "something failed", and `mapModemManagerError` had already answered whether to wait, re-authenticate, or stop trying. Publish `modemOperationOutcomeSchema` beside the legacy literal; don't replace it (that would break every consumer that renders it today).
+- Don't invent a member of any `modemOperation*Schema` / `modemManagerRefusalReasonSchema` — all four are MIRRORS of the package's frozen lists, and a reason it cannot emit is a state no device reaches. Don't merge the completion and result enums either: they share three member names and split on exactly the write-vs-read distinction that makes `unknown-outcome` meaningful.
+- Don't make `retryable` optional, and don't turn `MODEM_MANAGER_REFUSAL_RETRYABLE` into a list of the retryable ones — the first re-creates the `policy_route_missing` latch, the second silently defaults a ninth refusal to "do not retry".
+- Don't render `unknown-outcome` as a success or a failure, and don't give it a free-string reason — it means the write may have landed, so it routes to the reconciliation surface.
 - Don't give a mutating modem procedure its own private refusal vocabulary — `modemMutationRefusalSchema` is shared so a blocked device reads the same on every surface, and a per-procedure generic error is how "waiting on your acknowledgement" becomes indistinguishable from "the transaction broke".
 - Don't make `mode` optional on `modemMutationAckInputSchema`, and don't drop its `.strict()`/`confirm` — those are the wire-level enforcement of "only VERIFIED-ROLLBACK or FORCE-REBASELINE may unblock a failed mutation".
 - Don't fold `module_disabled`/`module_unavailable` into `modemMutationRefusalSchema` — they are a SUPERSET (`capabilityMutationRefusalSchema`) because a gate refusal is a different fact from a mutation-safety one, and widening the shared enum breaks every consumer that maps from it.

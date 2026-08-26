@@ -111,6 +111,7 @@ import {
 	withJournaledModemMutation,
 	withModemMutation,
 } from "../../modules/modems/mutation-lease.ts";
+import { modemOperationOutcomeFromError } from "../../modules/modems/operation-outcome.ts";
 import {
 	type SimPin2UnlockResult,
 	unlockSimPin2,
@@ -691,7 +692,11 @@ export const setFccUnlockProcedure = modemProcedure
 				`modems.setFccUnlock(${input.device} → ${input.enabled}) threw`,
 				{ module: "modems", err },
 			);
-			return { success: false, error: "write_failed" } as const;
+			return {
+				success: false,
+				error: "write_failed",
+				operation: modemOperationOutcomeFromError(err),
+			} as const;
 		}
 	});
 
@@ -748,6 +753,7 @@ export const setUsbModeProcedure = modemProcedure
 				success: false,
 				error: "transition_failed",
 				reason: "transaction_error",
+				operation: modemOperationOutcomeFromError(err),
 			};
 		}
 	});

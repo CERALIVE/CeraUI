@@ -514,6 +514,17 @@ describe("the lifecycle lease is released on EVERY exit", () => {
 				success: false,
 				error: "transition_failed",
 				reason: "transaction_error",
+				// `transaction_error` says only that the transaction blew up. The
+				// classified outcome rides beside it so an operator learns whether the
+				// daemon refused or something unplaceable did — here, a bare Error, so
+				// the package's own fallback arm.
+				operation: {
+					status: "refused",
+					completion: "failed",
+					reason: "failed",
+					refusal: "failed",
+					retryable: false,
+				},
 			});
 		});
 

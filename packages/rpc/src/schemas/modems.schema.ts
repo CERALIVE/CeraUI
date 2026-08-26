@@ -302,6 +302,192 @@ export const capabilityMutationRefusalSchema = z.enum([
 ]);
 export type CapabilityMutationRefusal = z.infer<typeof capabilityMutationRefusalSchema>;
 
+// ── The modem OPERATION vocabulary (`@ceralive/modem-control`) ────────────────
+// The four enums below are the package's own frozen vocabularies, mirrored
+// verbatim so an operation's own words survive the RPC boundary UNTRANSLATED.
+// They are DISTINCT from `modemMutationRefusalSchema` above, which is CeraUI's
+// device-safety vocabulary (lease held, journal blocked, streaming active) — a
+// statement about whether this device may be mutated AT ALL. These say what the
+// operation itself did once it was admitted, which is a different question with
+// a different operator action, so they are a separate set rather than more
+// members of that one.
+//
+// Provenance for every value below (re-read, not recalled):
+//   `control/src/domain/operation.ts`                    — `OperationCompletion`,
+//     `OperationResult`, `classifyOperationCompletion`
+//   `control/src/providers/modem-manager/errors.ts`      —
+//     `MODEM_MANAGER_REFUSAL_REASONS`, `mapModemManagerError`
+// Nothing here may be invented: a reason the package cannot emit is a state no
+// device can ever reach, and an operator surface built on one is dead copy.
+
+/**
+ * What a PROVIDER hands the classifier — the raw completion, before generation
+ * fencing and write-reply uncertainty are applied.
+ *
+ * `timed-out` and `dropped` exist here and NOT on the result vocabulary below
+ * because their meaning depends on the operation: for a WRITE the outcome is
+ * genuinely unknowable (the call may have landed), for a READ it is a plain
+ * failure. `classifyOperationCompletion` is what splits them, so a consumer must
+ * never map a completion straight onto a result.
+ */
+export const modemOperationCompletionStatusSchema = z.enum([
+	'applied',
+	'refused',
+	'failed',
+	'timed-out',
+	'dropped',
+]);
+export type ModemOperationCompletionStatus = z.infer<typeof modemOperationCompletionStatusSchema>;
+
+/**
+ * What `classifyOperationCompletion` ANSWERS. Four members, and the one that is
+ * not a completion status is the whole point: `unknown-outcome` is neither a
+ * success nor a failure, so a surface that renders it as either is lying in one
+ * direction or the other.
+ */
+export const modemOperationResultStatusSchema = z.enum([
+	'applied',
+	'refused',
+	'unknown-outcome',
+	'failed',
+]);
+export type ModemOperationResultStatus = z.infer<typeof modemOperationResultStatusSchema>;
+
+/**
+ * The three — and only three — ways an outcome becomes unknowable. This is the
+ * package's own frozen union (`OperationResult`'s `unknown-outcome` arm types
+ * `reason` as exactly these), so it is an enum rather than a free string:
+ *
+ *   stale-generation       — the device re-enumerated (or its provider was
+ *                            replaced) before the completion landed, so the
+ *                            completion describes hardware that is gone.
+ *   write-reply-timed-out  — the write was dispatched and no reply arrived. It
+ *                            may have been applied.
+ *   write-reply-dropped    — the write was dispatched and the reply was lost.
+ *                            Likewise.
+ *
+ * Every one of them REQUIRES reconciliation before that modem is mutated again.
+ */
+export const modemOperationUnknownReasonSchema = z.enum([
+	'stale-generation',
+	'write-reply-timed-out',
+	'write-reply-dropped',
+]);
+export type ModemOperationUnknownReason = z.infer<typeof modemOperationUnknownReasonSchema>;
+
+/**
+ * The eight stable refusal reasons `mapModemManagerError` maps a typed
+ * daemon/transport failure onto. `failed` is its FALLBACK arm — an error it
+ * could not place — and is deliberately a member rather than an absence, so a
+ * consumer always has a reason to render.
+ *
+ * Note two names collide with `modemOperationCompletionStatusSchema`
+ * (`timed-out`, `failed`). They are two different enums that happen to share a
+ * word: a completion `timed-out` is "the call did not answer", a refusal
+ * `timed-out` is "the daemon refused because something timed out". Do NOT merge
+ * the sets.
+ */
+export const modemManagerRefusalReasonSchema = z.enum([
+	'unauthorized',
+	'unsupported',
+	'wrong-state',
+	'busy',
+	'not-found',
+	'timed-out',
+	'disconnected',
+	'failed',
+]);
+export type ModemManagerRefusalReason = z.infer<typeof modemManagerRefusalReasonSchema>;
+
+/**
+ * Whether re-issuing the operation could plausibly succeed, per reason.
+ *
+ * This is a TOTAL record rather than a list of the retryable ones, so adding a
+ * ninth refusal to the enum fails `tsc` here instead of silently defaulting to
+ * "do not retry" — an operator would then be told to give up on a transient
+ * condition. Values mirror `mapModemManagerError`'s own `retryable` field:
+ * a refusal about the DEVICE'S CURRENT STATE (`wrong-state`, `busy`,
+ * `timed-out`, `disconnected`) can clear on its own; one about AUTHORITY or
+ * CAPABILITY (`unauthorized`, `unsupported`, `not-found`, `failed`) cannot, and
+ * retrying it only spends time.
+ */
+export const MODEM_MANAGER_REFUSAL_RETRYABLE: Readonly<Record<ModemManagerRefusalReason, boolean>> =
+	{
+		unauthorized: false,
+		unsupported: false,
+		'wrong-state': true,
+		busy: true,
+		'not-found': false,
+		'timed-out': true,
+		disconnected: true,
+		failed: false,
+	};
+
+export const modemManagerRefusalSchema = z.object({
+	reason: modemManagerRefusalReasonSchema,
+	retryable: z.boolean(),
+});
+export type ModemManagerRefusal = z.infer<typeof modemManagerRefusalSchema>;
+
+/**
+ * The wire projection of ONE modem operation's outcome.
+ *
+ * Five shape decisions carry weight:
+ *
+ * - **It is discriminated on the RESULT status, and carries the COMPLETION
+ *   status beside it.** The two answer different questions — what the provider
+ *   reported, and what that means once generation fencing was applied — and a
+ *   `timed-out` completion classifying as `unknown-outcome` on a write and as
+ *   `failed` on a read is exactly the distinction a single field would destroy.
+ * - **`unknown-outcome` carries a TYPED reason and `requires_reconciliation:
+ *   true`, and it is the only arm that does.** It is not an error variant: the
+ *   mutation may have landed, so a consumer must route it to the existing
+ *   mutation-block/reconciliation surface rather than to a success or a failure.
+ * - **`retryable` rides EVERY arm, explicitly.** Absent-means-false is the
+ *   `policy_route_missing` latch in miniature — a consumer merging outcomes
+ *   could raise a retry hint and never lower it — and "we do not know" is not a
+ *   thing this field may express: the package answers it for every refusal.
+ * - **`refusal` is additive-optional and present ONLY when the reason really
+ *   came from `mapModemManagerError`.** A CeraUI-authored refusal string (a
+ *   descriptor refusal, a precondition, a readback mismatch) is a real reason
+ *   too, so `reason` is a free string on those arms and the typed refusal is
+ *   published beside it when there is one. Fabricating a `failed` refusal for a
+ *   reason the daemon never produced would put the package's fallback arm on
+ *   screen for a CeraUI-side decision.
+ * - **`reason` is `.min(1)` on the arms that carry a free string.** An empty
+ *   reason renders identically to a generic failure, which is the exact collapse
+ *   this vocabulary exists to end.
+ */
+export const modemOperationOutcomeSchema = z.discriminatedUnion('status', [
+	z.object({
+		status: z.literal('applied'),
+		completion: z.literal('applied'),
+		retryable: z.literal(false),
+	}),
+	z.object({
+		status: z.literal('refused'),
+		completion: modemOperationCompletionStatusSchema,
+		reason: z.string().min(1),
+		refusal: modemManagerRefusalReasonSchema.optional(),
+		retryable: z.boolean(),
+	}),
+	z.object({
+		status: z.literal('unknown-outcome'),
+		completion: modemOperationCompletionStatusSchema,
+		reason: modemOperationUnknownReasonSchema,
+		requires_reconciliation: z.literal(true),
+		retryable: z.literal(false),
+	}),
+	z.object({
+		status: z.literal('failed'),
+		completion: modemOperationCompletionStatusSchema,
+		reason: z.string().min(1),
+		refusal: modemManagerRefusalReasonSchema.optional(),
+		retryable: z.boolean(),
+	}),
+]);
+export type ModemOperationOutcome = z.infer<typeof modemOperationOutcomeSchema>;
+
 /** One journaled transition, retained so a blocked device can explain itself. */
 export const modemMutationHistoryEntrySchema = z.object({
 	state: modemMutationStateSchema,
@@ -1905,6 +2091,10 @@ export const simPukUnlockOutputSchema = z.object({
 	remainingAttempts: z.number().int().nonnegative().optional(),
 	error: simPukErrorSchema.optional(),
 	mutationRefusal: modemMutationRefusalSchema.optional(),
+	// `simPukErrorSchema`'s `error` member is this procedure's generic word for
+	// "the submit did not land", so it cannot separate a wrong PUK from a busy
+	// daemon. ABSENT means nothing was dispatched, never "it succeeded".
+	operation: modemOperationOutcomeSchema.optional(),
 });
 export type SimPukUnlockOutput = z.infer<typeof simPukUnlockOutputSchema>;
 
@@ -1982,6 +2172,10 @@ export const setUsbModeOutputSchema = z.object({
 	success: z.boolean(),
 	error: setUsbModeRefusalSchema.optional(),
 	reason: setUsbModeFailureReasonSchema.optional(),
+	// `transaction_error` says the transaction blew up and nothing more. When the
+	// throw behind it was a ModemManager one, this keeps the daemon's own reason
+	// and its retryability. ABSENT means nothing was dispatched.
+	operation: modemOperationOutcomeSchema.optional(),
 });
 export type SetUsbModeOutput = z.infer<typeof setUsbModeOutputSchema>;
 
