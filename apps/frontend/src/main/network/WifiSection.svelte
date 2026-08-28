@@ -1,12 +1,21 @@
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { NetifMessage, WifiInterface } from '@ceraui/rpc/schemas';
-import { Ban, ChevronRight, Globe, Settings2, TriangleAlert, Wifi } from '@lucide/svelte';
+import {
+	Ban,
+	ChevronRight,
+	Globe,
+	Settings2,
+	SlidersHorizontal,
+	TriangleAlert,
+	Wifi,
+} from '@lucide/svelte';
 
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { LazyDialog, lazyDialog } from '$lib/components/dialogs';
 import { Button } from '$lib/components/ui/button';
+import * as Popover from '$lib/components/ui/popover';
 import {
 	getOperationPhase,
 	getOperationReason,
@@ -21,6 +30,7 @@ import {
 import { cn } from '$lib/utils';
 
 import WifiModeBadge from './WifiModeBadge.svelte';
+import WifiModeErrorBand from './WifiModeErrorBand.svelte';
 import WifiModeSelector from './WifiModeSelector.svelte';
 import { deriveWifiAdapterModeView, wifiModeTarget } from './wifi-adapter-mode-view';
 import {
@@ -55,14 +65,6 @@ interface Props {
 
 const { wifiRadios, netif, isFullyStale, staleInterfaces, onConnect, onOpenCountry }: Props =
 	$props();
-
-// Chip vocabulary for the per-adapter capability strip. Everything here is a
-// §2 tier-5 hardware tag, so it renders BELOW the row's state/action elements,
-// one step smaller, and never in the phosphor-lime accent — that colour is
-// reserved for the live signal.
-const CHIP = 'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs';
-const CHIP_NEUTRAL = 'border-border/70 bg-muted/40 text-muted-foreground';
-const CHIP_BLOCKED = 'border-status-warning/40 bg-status-warning/10 text-status-warning';
 
 function activeWifiNetwork(iface: WifiInterface) {
 	return iface.available?.find((network) => network.active);
@@ -167,36 +169,37 @@ $effect(() => {
 						)}
 						aria-hidden="true"
 					></span>
+					<!-- IDENTITY, THEN ONE STATUS LINE. The mode is a property of the
+					     RADIO, so the badge belongs beside the radio's name — and putting it
+					     there is what lets the mode fact render exactly ONCE per row: the
+					     three-rung selector that used to restate it below now lives behind
+					     the "Mode" affordance in the action cluster. Everything under the
+					     name is then a single sentence about what the radio is doing. -->
 					<div class="min-w-0 flex-1">
-						<p class="truncate text-sm font-medium">
+						<div class="flex min-w-0 items-center gap-1.5">
+							<p class="truncate text-sm font-medium">
+								{#if isHotspot}
+									{iface.hotspot?.name || iface.ifname}
+								{:else}
+									{iface.ifname}
+								{/if}
+							</p>
+							<WifiModeBadge device={id} mode={modeView.displayMode} />
+						</div>
+						<p
+							class={cn(
+								'text-muted-foreground truncate text-xs transition-opacity',
+								!isHotspot && ifaceStale && 'opacity-50',
+							)}
+						>
 							{#if isHotspot}
-								{iface.hotspot?.name || iface.ifname}
+								{m["network.view.hotspot"]()} · {iface.ifname}
+							{:else if connected && net}
+								{m["network.view.connected"]()} · {net.ssid}
 							{:else}
-								{iface.ifname}
+								{m["network.view.disconnected"]()}
 							{/if}
 						</p>
-						<!-- WHAT THIS RADIO IS DOING, AS ONE READING. The mode badge used to
-						     sit at the far end of the action cluster, so "Hybrid" and
-						     "Connected · CERALIVE" — one fact and its consequence — were
-						     separated by every control on the row. Adjacent, they read as one
-						     sentence, and the action cluster is left holding only actions. -->
-						<div class="flex flex-wrap items-center gap-1.5">
-							<WifiModeBadge device={id} mode={modeView.displayMode} />
-							<span
-								class={cn(
-									'text-muted-foreground truncate text-xs transition-opacity',
-									!isHotspot && ifaceStale && 'opacity-50',
-								)}
-							>
-								{#if isHotspot}
-									{m["network.view.hotspot"]()} · {iface.ifname}
-								{:else if connected && net}
-									{m["network.view.connected"]()} · {net.ssid}
-								{:else}
-									{m["network.view.disconnected"]()}
-								{/if}
-							</span>
-						</div>
 					</div>
 					<div class="ms-auto flex shrink-0 items-center gap-2">
 						{#if showStale}
@@ -250,6 +253,40 @@ $effect(() => {
 								{m["network.view.setup"]()}
 							</Button>
 						{/if}
+						<!-- The three-rung selector is a CHOICE an operator makes rarely, so it
+						     no longer occupies the row at rest. It keeps every rule it had —
+						     all three rungs on screen, each withheld one stating its reason,
+						     the destructive confirm inline — just inside a popover instead of
+						     under the row. Its TERMINAL FAILURE deliberately does NOT come
+						     with it: a dismissed popover cannot report an outcome, so the row
+						     hosts that band itself (see the secondary region below). -->
+						<Popover.Root>
+							<Popover.Trigger
+								class="focus-visible:ring-ring text-muted-foreground hover:bg-accent/50 hover:text-foreground inline-flex h-8 min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors outline-hidden focus-visible:ring-2"
+								data-testid="open-wifi-mode"
+								data-device={id}
+								data-pending={modeView.pending ? 'true' : undefined}
+								title={m["network.wifiMode.label"]()}
+								type="button"
+							>
+								<SlidersHorizontal aria-hidden="true" class="size-3.5 shrink-0" />
+								{m["network.wifiMode.open"]()}
+							</Popover.Trigger>
+							<Popover.Content align="end" class="w-80" data-testid="wifi-mode-popover-{id}">
+								<Popover.Header>
+									<Popover.Title>{m["network.wifiMode.label"]()}</Popover.Title>
+								</Popover.Header>
+								<WifiModeSelector
+									view={modeView}
+									context={{
+										stationLinkLive: connected || Boolean(entry?.enabled),
+										hotspotLive: hotspotIsActive(iface),
+									}}
+									errorPlacement="host"
+									lockedReason={isSwitching ? stationLockReason : undefined}
+								/>
+							</Popover.Content>
+						</Popover.Root>
 					</div>
 
 				<!-- ONE SECONDARY REGION, not four stacked siblings.
@@ -266,18 +303,9 @@ $effect(() => {
 				     are pinned by byte-identity locks that delete the node and compare the
 				     section against a legacy render. A wrapper that existed only when one
 				     of them did would survive that deletion as an empty div and break both
-				     locks. The selector always renders, so this container always does. -->
+				     locks. Every row renders this container, so both locks still hold now
+				     that the mode selector has moved into the header's popover. -->
 					<div class="basis-full space-y-1.5 ps-5">
-						<WifiModeSelector
-							view={modeView}
-							context={{
-								stationLinkLive: connected || Boolean(entry?.enabled),
-								hotspotLive: hotspotIsActive(iface),
-							}}
-							lockedReason={isSwitching ? stationLockReason : undefined}
-							compact
-						/>
-
 					{#if stationLock.locked && stationLockReason && !isHotspot}
 						<p
 							class="text-status-warning text-xs"
@@ -294,9 +322,9 @@ $effect(() => {
 						     row's job at that point is to say which one happened — a refusal
 						     and a result that never arrived are different facts.
 
-						     A MODE failure is deliberately NOT rendered here: the selector
-						     below states the same terminal with the device's own typed reason,
-						     and one fact announced twice reads as two failures. -->
+						     A MODE failure is deliberately NOT rendered here: the band below
+						     states the same terminal with the device's own typed reason, and
+						     one fact announced twice reads as two failures. -->
 						<div
 							class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
 							data-device={id}
@@ -314,6 +342,14 @@ $effect(() => {
 								</p>
 							</div>
 						</div>
+					{/if}
+
+					<!-- The mode selector lives in a popover the operator can dismiss, so
+					     the row keeps its terminal failure instead: an outcome nobody can
+					     see is an outcome that did not happen. `WifiModeSelector` withholds
+					     its own copy (`errorPlacement="host"`) so this fact renders once. -->
+					{#if modeView.errorKey}
+						<WifiModeErrorBand device={id} error={modeView.error} errorKey={modeView.errorKey} />
 					{/if}
 
 					<!-- WHAT IT NEGOTIATED, BESIDE WHAT IT CAN DO. This line reports the
@@ -344,34 +380,63 @@ $effect(() => {
 						</p>
 					{/if}
 
+					<!-- WHAT THE RADIO CAN DO, ON REQUEST. Every chip here is a §2 tier-5
+					     hardware tag — a ceiling that changes only when the hardware or the
+					     regulatory domain does — so at rest it is noise stacked under a row
+					     whose job is to report a live link. It is DEMOTED, never dropped:
+					     the disclosure keeps each fact one tap away, blocked band and its
+					     "Set country" escape included.
+
+					     The `<details>` itself carries `data-testid="wifi-capabilities"`, so
+					     the byte-identity lock that deletes that node and compares the row
+					     against a report-less render still removes the whole disclosure. -->
 					{#if cap}
-						<div
-							class="space-y-1.5"
+						<details
+							class="group"
 							data-testid="wifi-capabilities"
 							data-device={id}
 							data-generation={cap.generation}
 							data-phy={cap.phy}
 						>
+							<summary
+								class="text-muted-foreground hover:text-foreground flex min-h-[var(--touch-target-min)] cursor-pointer list-none items-center gap-1.5 text-xs font-medium select-none"
+								data-testid="wifi-capabilities-toggle"
+								data-device={id}
+							>
+								<ChevronRight
+									aria-hidden="true"
+									class="size-3.5 shrink-0 transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:-rotate-90"
+								/>
+								{m["network.wifiCapability.disclosure"]()}
+							</summary>
+							<div class="mt-1.5 space-y-1.5">
 							<div class="flex flex-wrap items-center gap-1.5">
 								<!-- NEVER inferred: the shipped RTL8852BE prints all-zero EHT
 								     structures, so anything but the wire's own verdict would
 								     stamp Wi-Fi 7 on a Wi-Fi 6 radio. -->
-								<span
-									class={cn(CHIP, 'border-border bg-muted/60 text-foreground font-semibold')}
+								<Badge
+									class="border-border bg-muted/60 text-foreground border px-1.5 font-semibold"
 									data-testid="wifi-generation-badge"
 									data-generation={cap.generation}
+									variant="neutral"
 								>
 									{resolveMessageKey(cap.generationLabelKey)}
-								</span>
+								</Badge>
 
 								{#each cap.bands as band (band.band)}
-									<span
-										class={cn(CHIP, band.available ? CHIP_NEUTRAL : CHIP_BLOCKED)}
+									<Badge
+										class={cn(
+											'border px-1.5',
+											band.available
+												? 'border-border/70 bg-muted/40 text-muted-foreground'
+												: 'border-status-warning/40',
+										)}
 										data-testid="wifi-band-option"
 										data-band={band.band}
 										data-available={band.available}
 										data-blocked-by={band.blockedBy}
 										aria-disabled={band.available ? undefined : 'true'}
+										variant={band.available ? 'neutral' : 'warning'}
 									>
 										{#if !band.available}
 											<Ban aria-hidden="true" class="size-3 shrink-0" />
@@ -382,17 +447,18 @@ $effect(() => {
 												>{m["network.wifiCapability.width"]({ mhz: band.maxWidthMhz })}</span
 											>
 										{/if}
-									</span>
+									</Badge>
 								{/each}
 
 								{#if wpa3Key}
-									<span
-										class={cn(CHIP, CHIP_NEUTRAL)}
+									<Badge
+										class="border-border/70 bg-muted/40 text-muted-foreground border px-1.5"
 										data-testid="wifi-wpa3"
 										data-state={cap.wpa3Sae}
+										variant="neutral"
 									>
 										{resolveMessageKey(wpa3Key)}
-									</span>
+									</Badge>
 								{/if}
 							</div>
 
@@ -451,7 +517,8 @@ $effect(() => {
 									{resolveMessageKey(cap.comboNoteKey)}
 								</p>
 							{/if}
-						</div>
+							</div>
+						</details>
 					{/if}
 					</div>
 				</div>

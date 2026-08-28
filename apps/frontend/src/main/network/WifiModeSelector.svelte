@@ -21,17 +21,25 @@
      renders inside `HotspotDialog`, which is already portalled; a modal there
      puts the consequence on a layer a touchscreen must dismiss before it can
      re-read what it is confirming. Arming the confirm dispatches nothing.
+
+  4. THE TERMINAL FAILURE MAY BE HOSTED ELSEWHERE. `WifiSection` renders this
+     control behind a "Mode" popover, which the operator can dismiss long before
+     the device answers — so that surface HOSTS `WifiModeErrorBand` in its own
+     card body and passes `errorPlacement="host"` to withhold the inline copy.
+     Every always-visible mount keeps the default, and exactly one of the two
+     ever renders the band: one fact announced twice reads as two failures.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { WifiAdapterMode } from '@ceraui/rpc/schemas';
-import { Ban, Loader2, RadioTower, TriangleAlert, Waypoints, Wifi } from '@lucide/svelte';
+import { Ban, Loader2, RadioTower, Waypoints, Wifi } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { osCommand } from '$lib/rpc/async-operation.svelte';
 import { rpc } from '$lib/rpc/client';
 import { cn } from '$lib/utils';
 
+import WifiModeErrorBand from './WifiModeErrorBand.svelte';
 import {
 	deriveWifiModeConsequence,
 	type WifiAdapterModeContext,
@@ -53,9 +61,22 @@ interface Props {
 	lockedReason?: string;
 	/** Compact rows drop the per-mode descriptions; reasons are never dropped. */
 	compact?: boolean;
+	/**
+	 * Where the terminal failure band renders. `inline` (the default) keeps it
+	 * inside this control; `host` withholds it because the mounting surface
+	 * renders `WifiModeErrorBand` somewhere the operator can still see once this
+	 * control has been dismissed. Never both — see rule 4 in the header.
+	 */
+	errorPlacement?: 'inline' | 'host';
 }
 
-const { view, context, lockedReason, compact = false }: Props = $props();
+const {
+	view,
+	context,
+	lockedReason,
+	compact = false,
+	errorPlacement = 'inline',
+}: Props = $props();
 
 // The glyph vocabulary `WifiModeBadge` renders, carried here by the SELECTED rung
 // only. On every rung it would widen the control by three glyphs, and the 375px
@@ -231,22 +252,7 @@ function request(mode: WifiAdapterMode) {
 		</div>
 	{/if}
 
-	{#if view.errorKey}
-		<div
-			class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
-			data-error={view.error}
-			data-testid="wifi-mode-error-{view.device}"
-			role="status"
-		>
-			<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
-			<div class="min-w-0">
-				<p class="text-status-warning text-xs font-semibold">
-					{m["network.wifiMode.error.title"]()}
-				</p>
-				<p class="text-muted-foreground mt-0.5 text-xs">
-					{resolveMessageKey(view.errorKey)}
-				</p>
-			</div>
-		</div>
+	{#if view.errorKey && errorPlacement === 'inline'}
+		<WifiModeErrorBand device={view.device} error={view.error} errorKey={view.errorKey} />
 	{/if}
 </div>

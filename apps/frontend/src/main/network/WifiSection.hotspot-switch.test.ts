@@ -16,6 +16,12 @@
  *   (d) the in-flight state renders a spinner on the rung being switched to,
  *   (e) a PROVEN concurrent radio starts hybrid with no destructive confirm,
  *   (f) station controls stay visible while a concurrent hotspot is active.
+ *
+ * Todo 32 MOVED that selector behind the row's "Mode" popover, so every rung
+ * assertion now opens it first (`openModeControl`) — the guarantees are the same
+ * ones, asserted one tap further in. The popover is portalled to `document.body`
+ * and the render result's queries are bound to `baseElement`, so they still
+ * resolve; a `container`-scoped query would not.
  */
 import type { NetifMessage, WifiInterface } from "@ceraui/rpc/schemas";
 import { fireEvent, render } from "@testing-library/svelte";
@@ -99,6 +105,16 @@ function renderSection(iface: Partial<WifiInterface> = {}) {
 	});
 }
 
+/** Open the row's "Mode" popover — where the three-rung selector now lives. */
+async function openModeControl(device = "wifi0"): Promise<void> {
+	const trigger = document.querySelector<HTMLElement>(
+		`[data-testid="open-wifi-mode"][data-device="${device}"]`,
+	);
+	if (!trigger) throw new Error("the Mode affordance is not rendered");
+	await fireEvent.click(trigger);
+	await tick();
+}
+
 beforeEach(() => {
 	initAsyncOperations();
 	resetWifiAdapterModes();
@@ -114,22 +130,46 @@ afterEach(() => {
 });
 
 describe("WifiSection — the adapter mode control", () => {
-	it("(a) exposes the hotspot affordance as a named radio rung", () => {
+	it("(a) exposes the hotspot affordance as a named radio rung", async () => {
 		const { getByRole } = renderSection();
+		await openModeControl();
 		expect(getByRole("radio", { name: HOTSPOT_RUNG })).toBeTruthy();
 	});
 
-	it("(b) carries a VISIBLE word — the shared mode vocabulary, not an icon", () => {
+	it("keeps the three rungs OUT of the row until the Mode affordance is opened", async () => {
+		const { queryByTestId, getByTestId } = renderSection();
+
+		// The mode still reads ONCE on the collapsed row — as the badge beside the
+		// adapter's name — and the selector that used to restate it is not mounted.
+		expect(getByTestId("wifi-mode-badge").dataset.mode).toBe("station");
+		expect(queryByTestId("wifi-mode-selector")).toBeNull();
+		expect(document.querySelectorAll('[role="radio"]')).toHaveLength(0);
+
+		await openModeControl();
+		expect(getByTestId("wifi-mode-selector").dataset.mode).toBe("station");
+		expect(document.querySelectorAll('[role="radio"]').length).toBe(3);
+	});
+
+	it("(b) carries a VISIBLE word — the shared mode vocabulary, not an icon", async () => {
 		const { getByRole } = renderSection();
+		await openModeControl();
 		const rung = getByRole("radio", { name: HOTSPOT_RUNG });
 		expect(rung.textContent?.trim()).toBe(HOTSPOT_RUNG);
 	});
 
-	it("(c) keeps the 44px touch-target min sizing token", () => {
+	it("(c) keeps the 44px touch-target min sizing token", async () => {
 		const { getByRole } = renderSection();
+		await openModeControl();
 		expect(getByRole("radio", { name: HOTSPOT_RUNG }).className).toContain(
 			TOUCH_MIN_CLASS,
 		);
+
+		// …and so does the affordance that reveals it, since that is now the only
+		// mode control a finger can reach on the row itself.
+		expect(
+			document.querySelector<HTMLElement>('[data-testid="open-wifi-mode"]')
+				?.className,
+		).toContain(TOUCH_MIN_CLASS);
 	});
 
 	it("(d) renders a spinner on the rung being switched to while in flight", async () => {
@@ -138,6 +178,7 @@ describe("WifiSection — the adapter mode control", () => {
 			mode: "station",
 			supports_ap_sta_concurrency: true,
 		});
+		await openModeControl();
 
 		// Hybrid is additive (nothing is lost), so it dispatches without a confirm.
 		await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
@@ -158,6 +199,7 @@ describe("WifiSection — AP+STA concurrent mode", () => {
 			mode: "station",
 			supports_ap_sta_concurrency: true,
 		});
+		await openModeControl();
 
 		await fireEvent.click(getByRole("radio", { name: HYBRID_RUNG }));
 		await tick();
@@ -169,7 +211,7 @@ describe("WifiSection — AP+STA concurrent mode", () => {
 		});
 	});
 
-	it("(f) keeps station controls visible while the concurrent hotspot is active", () => {
+	it("(f) keeps station controls visible while the concurrent hotspot is active", async () => {
 		setWifiAdapterModesForTest({
 			wifi0: { ...ALL_MODES_OFFERED.wifi0, mode: "hybrid" },
 		});
@@ -184,10 +226,13 @@ describe("WifiSection — AP+STA concurrent mode", () => {
 		});
 
 		expect(getByRole("button", { name: "Connect" })).toBeTruthy();
+		expect(getByTestId("open-hotspot-setup")).toBeTruthy();
+		// The row states the mode once, on the badge; the selector agrees with it.
+		expect(getByTestId("wifi-mode-badge").dataset.mode).toBe("hybrid");
+		await openModeControl();
 		expect(getByTestId("wifi-mode-selector").getAttribute("data-mode")).toBe(
 			"hybrid",
 		);
-		expect(getByTestId("open-hotspot-setup")).toBeTruthy();
 	});
 });
 
@@ -198,6 +243,7 @@ describe("WifiSection — a destructive transition is confirmed first", () => {
 			mode: "station",
 			supports_ap_sta_concurrency: true,
 		});
+		await openModeControl();
 
 		await fireEvent.click(getByRole("radio", { name: HOTSPOT_RUNG }));
 		await tick();
@@ -221,6 +267,7 @@ describe("WifiSection — a destructive transition is confirmed first", () => {
 			mode: "station",
 			supports_ap_sta_concurrency: true,
 		});
+		await openModeControl();
 
 		await fireEvent.click(getByRole("radio", { name: HOTSPOT_RUNG }));
 		await tick();
