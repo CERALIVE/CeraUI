@@ -2873,6 +2873,30 @@ matrix incl. `no_adapter` ⇒ `unavailable` vs an unread stack ⇒ `enabled`, th
 agent gap ⇒ `unavailable`, and the whole payload parsed against the published
 schema) plus `packages/rpc/src/schemas/bluetooth.schema.test.ts`.
 
+### …AND THE MICROPHONE PRESENCE ORACLE FOLLOWS THE ENGINE BACKEND [EXISTS]
+
+`modules/streaming/bluetooth-audio.ts` chooses one of two mutually exclusive
+presence oracles from the engine's `features` array. The exact
+`pipewire-capture` token selects the engine-node arm: `sources.ts` preserves the
+additive `device_address` from `list-devices` in `EngineAudioDevice`, CeraUI joins
+that colon-form address case-insensitively to the BlueZ registry MAC, and the
+matched row's `input_id` (`node.name`) becomes `AudioConfig.device` unchanged.
+No matching row means no source, and the BlueALSA bus is not read on this arm.
+
+When the token is absent, the existing `org.bluealsa` capture-PCM enumeration,
+`audio-pcm-spec` gate, `bluealsa:DEV=<MAC>,PROFILE=sco` target, quality projection,
+and retain-on-unreadable-bus behavior are byte-identical. The persisted identity is
+also identical on both arms: `bt:` plus the upper-case MAC with colons replaced by
+underscores. A reboot therefore resolves an existing selection to the current
+backend target without rewriting config. `object.serial` is never consumed or
+persisted.
+
+Engine audio-list changes re-fold the PipeWire microphone before audio labels,
+Auto resolution, and the meter preference are re-resolved. Mock capability
+overrides can drive both the feature array and an addressable PipeWire node.
+Coverage: `tests/bluetooth-mic-source.test.ts`,
+`tests/dev-capability-profile.test.ts`, and the S6 boot case in `src/main.test.ts`.
+
 ### …AND A MICROPHONE THAT DROPS MID-STREAM IS TOLD, NOT REPAIRED [EXISTS]
 
 `modules/streaming/bluetooth-audio-resilience.ts` is the operator-facing half of

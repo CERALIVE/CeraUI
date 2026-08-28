@@ -206,6 +206,9 @@ export function getMockEngineCapabilities(): EngineCapabilitiesSnapshot {
 	if (profile.audioLiveSwitch) {
 		caps.audio_live_switch = true;
 	}
+	if (profile.features !== undefined) {
+		caps.features = [...profile.features];
+	}
 	if (getActiveScenario() === "caps-full") {
 		// The engine's native bps units — routed through normalizeBitrateRangeToKbps
 		// in getCapabilities() so caps-full exercises the bps→kbps conversion seam.
@@ -379,7 +382,19 @@ export function getMockEngineDevices(): ListDevicesResult {
 		attachedModes[id] = group;
 	}
 	const audioDevices = getMockAudioDevices();
-	return expandDeviceModes(attachedModes, displayNames, audioDevices);
+	const expanded = expandDeviceModes(attachedModes, displayNames, audioDevices);
+	const pipewireNode = resolveScenarioCapabilities().pipewireBluetoothNode;
+	if (pipewireNode === undefined || pipewireNode === null) return expanded;
+	const device = {
+		input_id: pipewireNode.nodeName,
+		device_path: pipewireNode.nodeName,
+		display_name: pipewireNode.displayName,
+		media_class: "audio" as const,
+		device_address: pipewireNode.deviceAddress,
+	};
+	return {
+		devices: [...expanded.devices, device],
+	};
 }
 
 /**

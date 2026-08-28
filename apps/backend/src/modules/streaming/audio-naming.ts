@@ -73,6 +73,7 @@ export interface EngineAudioDevice {
 	product_name?: string;
 	transport?: AudioDeviceTransport;
 	stable_id?: string;
+	device_address?: string;
 	// `usb:<topology-token>` shared by every row of ONE physical device
 	// (cerastream ADR-0008) — the join key the "Auto" audio resolver matches on.
 	physical_group_id?: string;

@@ -193,6 +193,41 @@ describe("setMockEngineCapabilities (TEST-ONLY seam)", () => {
 		// the re-resolved last-known snapshot carries the flag too
 		expect(getLastCapabilities()?.schemaVersionMismatch).toBe(true);
 	});
+
+	test("drives both pipewire-capture feature arms with an addressable audio node", async () => {
+		bootMockScenario("bt-mic-paired");
+
+		await setMockEngineCapabilities({
+			features: ["pipewire-capture"],
+			pipewireBluetoothNode: {
+				deviceAddress: "AA:BB:CC:11:22:33",
+				nodeName: "bluez_input.AA_BB_CC_11_22_33.0",
+				displayName: "Jabra Talk 45",
+			},
+		});
+
+		expect(getLastCapabilities()?.features).toEqual(["pipewire-capture"]);
+		const expectedNode = {
+			input_id: "bluez_input.AA_BB_CC_11_22_33.0",
+			device_path: "bluez_input.AA_BB_CC_11_22_33.0",
+			display_name: "Jabra Talk 45",
+			media_class: "audio" as const,
+			device_address: "AA:BB:CC:11:22:33",
+		};
+		expect(getMockEngineDevices().devices).toContainEqual(expectedNode);
+
+		await setMockEngineCapabilities({
+			features: [],
+			pipewireBluetoothNode: null,
+		});
+
+		expect(getLastCapabilities()?.features).toEqual([]);
+		expect(
+			getMockEngineDevices().devices.some((device) =>
+				Object.hasOwn(device, "device_address"),
+			),
+		).toBe(false);
+	});
 });
 
 describe("production isolation (shouldUseMocks() === false)", () => {

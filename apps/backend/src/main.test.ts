@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { StreamHealthOutput } from "@ceraui/rpc/schemas";
 
@@ -13,6 +13,11 @@ import {
 	handleTerminationSignal,
 	resetShutdownForTest,
 } from "./helpers/shutdown.ts";
+import {
+	refreshBluetoothAudioSources,
+	resetBluetoothAudioForTest,
+	setBluetoothAudioDepsForTest,
+} from "./modules/streaming/bluetooth-audio.ts";
 import {
 	buildLocalObservabilitySurface,
 	type LocalObservabilitySurface,
@@ -66,6 +71,10 @@ beforeEach(() => {
 	resetBootReadiness();
 	resetShutdownForTest();
 	clearRecentLogLines();
+});
+
+afterEach(() => {
+	resetBluetoothAudioForTest();
 });
 
 describe("guardNonCritical — fail-soft non-critical init", () => {
@@ -192,6 +201,45 @@ describe("boot contract — degraded-but-up vs critical abort", () => {
 			"pipelines",
 			"rtmp-ingest",
 		]);
+	});
+
+	test("a PipeWire Bluetooth mic with no engine node leaves the WS server bound", async () => {
+		let bluealsaReads = 0;
+		setBluetoothAudioDepsForTest({
+			readEnumeratedPcms: async () => {
+				bluealsaReads += 1;
+				throw new Error("legacy oracle must not run on the PipeWire arm");
+			},
+			readRegistryDevices: () => [
+				{
+					address: "AA:BB:CC:11:22:33",
+					alias: "Jabra Talk 45",
+					name: "Jabra Talk 45",
+					connected: true,
+					scoCapable: true,
+				},
+			],
+			engineSupportsPcmSpec: () => true,
+			engineSupportsPipewireCapture: () => true,
+			readEngineAudioDevices: () => [],
+		});
+
+		const result = await simulateBoot({
+			bindServer: () => {},
+			nonCritical: [
+				{
+					name: "bluetooth-audio",
+					run: async () => {
+						await refreshBluetoothAudioSources();
+					},
+				},
+			],
+			logger: silent,
+		});
+
+		expect(result.serverBound).toBe(true);
+		expect(bluealsaReads).toBe(0);
+		expect(isBootDegraded()).toBe(false);
 	});
 
 	test("a critical WS-control-server bind failure aborts boot", async () => {

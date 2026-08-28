@@ -2608,8 +2608,17 @@ seam is a one-file deletion. A boot-the-mock-service parity test is owed with it
 
 ## THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE [EXISTS]
 
-**The presence oracle is the `org.bluealsa` capture PCM object, never BlueZ
-`Connected`.** A device can be connected with no PCM behind it, and naming it as an
+**The presence oracle follows the engine's configured audio backend, never BlueZ
+`Connected`.** When the engine advertises the exact `pipewire-capture` feature token,
+the oracle is its `list-devices` audio row whose optional `device_address` matches the
+paired registry MAC; CeraUI sends that row's `input_id` (`node.name`) through
+`AudioConfig.device` unchanged. A connected registry device with no matching engine
+node yields no source. CeraUI compares the colon-form address case-insensitively and
+keeps the persisted id byte-identical as `bt:<upper-case underscored MAC>`; it never
+persists PipeWire `object.serial`.
+
+Without `pipewire-capture`, the oracle remains the `org.bluealsa` capture PCM object
+byte-for-byte. A device can be connected with no PCM behind it, and naming it as an
 available source is a claim the device cannot honour. `scoCapable` + PCM present yields
 the row; connected-but-no-PCM yields none; A2DP-only yields none.
 
@@ -2663,7 +2672,7 @@ Recorded as a hardware gap, not a code gap, in
 - Don't decide a channel or band is AP-usable from the per-channel `iw phy` flags alone — board-proven, an RTL8852BE under the world domain lists 5180/5200/5220 with no `no IR` marker while every 5 GHz rule in `iw reg get` reads `PASSIVE-SCAN`. Ask `buildApInitiationGate`, ask it at **both** producers (the `ch_*` map and the `auto_*` rungs), don't "simplify" it into a hardcoded 5 GHz block, don't make it channel-scoped, and don't make it fail closed.
 - Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.
 - Don't build the `org.bluez.Agent1` object on the shared `DbusTransport` — it is client-only. Use `bluez-agent-exporter.ts`'s dedicated connection, and never `RegisterAgent` a path before its object is exported: BlueZ then blocks on every callback until it times out, which is worse than having no agent.
-- Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the `org.bluealsa` capture-PCM object; a connected device with no PCM must yield no source row.
+- Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the address-matched engine node when `pipewire-capture` is advertised and the `org.bluealsa` capture PCM otherwise; a connected device with neither must yield no source row. Never persist PipeWire `object.serial` or change the existing `bt:` id.
 - Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
