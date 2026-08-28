@@ -50,6 +50,20 @@ describe('AddonDescriptorSchema', () => {
 		expect(parsed.provides).toHaveLength(4);
 	});
 
+	test('trixie versionId 13 parses successfully', () => {
+		const parsed = AddonDescriptorSchema.parse({
+			...validDebugToolset,
+			versionId: '13',
+			compatibleOsVersions: ['13'],
+		});
+		expect(parsed.versionId).toBe('13');
+	});
+
+	test('bookworm versionId 12 remains accepted', () => {
+		const parsed = AddonDescriptorSchema.parse(validDebugToolset);
+		expect(parsed.versionId).toBe('12');
+	});
+
 	test('G2 — a /etc path in provides[] is rejected with a provides field path', () => {
 		const bad = { ...validDebugToolset, provides: ['/usr/bin/htop', '/etc/foo'] };
 		const result = AddonDescriptorSchema.safeParse(bad);

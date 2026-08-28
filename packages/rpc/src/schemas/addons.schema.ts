@@ -84,10 +84,10 @@ export const AddonDescriptorSchema = z
 		category: addonCategorySchema,
 		icon: z.string().min(1).optional(),
 		payload: addonPayloadSchema,
-		// G1 — sysext merge identity the kernel keys on. Both are fixed literals;
-		// any other value is un-mergeable on the device.
+		// G1 — sysext merge identity the kernel keys on. The level is fixed, while
+		// VERSION_ID is validated as a numeric OS identity for mixed fleets.
 		sysextLevel: z.literal('1'),
-		versionId: z.literal('12'),
+		versionId: z.string().regex(/^\d+$/),
 		compatibleOsVersions: uniqueArray(z.string().regex(OS_VERSION_RE)).min(1).optional(),
 		artifact: addonArtifactSchema,
 		provides: uniqueArray(z.string().regex(SYSEXT_PATH_RE)).min(1),
