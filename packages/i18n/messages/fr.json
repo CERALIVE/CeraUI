@@ -1681,6 +1681,7 @@
 	"network.ethRole.uplinkConsequence": "Rejoint l'agrégat SRTLA et transporte le trafic du flux.",
 	"network.ethRole.sharedLanConsequence": "Quitte l'agrégat SRTLA et fournit internet aux appareils branchés sur ce port.",
 	"network.ethRole.badgeHint": "Ce port partage la connexion internet de l'appareil avec tout ce qui y est branché. Il distribue les adresses et la résolution de noms à ces appareils, il ne peut donc pas transporter le trafic agrégé du flux.",
+	"network.ethRole.open": "À propos de Réseau partagé",
 	"network.ethRole.zoneServing": "Dessert des clients",
 	"network.ethRole.zoneStarting": "Démarrage",
 	"network.ethRole.excludedFromBondReason": "Hors de l'agrégat : ce port fournit internet aux appareils qui y sont branchés. Repassez-le en Liaison montante depuis Configurer pour l'agréger à nouveau.",

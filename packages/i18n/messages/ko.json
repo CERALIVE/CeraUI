@@ -1633,6 +1633,7 @@
 	"network.ethRole.uplinkConsequence": "SRTLA 본딩에 참여해 스트림 트래픽을 전달합니다.",
 	"network.ethRole.sharedLanConsequence": "SRTLA 본딩에서 빠지고, 이 포트에 연결된 기기에 인터넷을 제공합니다.",
 	"network.ethRole.badgeHint": "이 포트는 기기의 인터넷 연결을 여기에 연결된 장치와 공유합니다. 해당 장치에 주소와 이름 해석을 나눠주므로 본딩된 스트림 트래픽은 전달할 수 없습니다.",
+	"network.ethRole.open": "공유 LAN 정보",
 	"network.ethRole.zoneServing": "클라이언트 제공 중",
 	"network.ethRole.zoneStarting": "시작하는 중",
 	"network.ethRole.excludedFromBondReason": "본딩에 포함되지 않음: 이 포트는 연결된 장치에 인터넷을 제공하고 있습니다. 다시 본딩하려면 구성에서 업링크로 되돌리세요.",

@@ -1678,6 +1678,7 @@
 	"network.ethRole.uplinkConsequence": "Joins the SRTLA bond and carries stream traffic.",
 	"network.ethRole.sharedLanConsequence": "Leaves the SRTLA bond and serves internet to devices plugged into this port.",
 	"network.ethRole.badgeHint": "This port shares the device's internet connection with whatever is plugged into it. It hands out addresses and name lookups to those devices, so it cannot carry bonded stream traffic.",
+	"network.ethRole.open": "About Shared LAN",
 	"network.ethRole.zoneServing": "Serving clients",
 	"network.ethRole.zoneStarting": "Starting",
 	"network.ethRole.excludedFromBondReason": "Not in the bond: this port serves internet to the devices plugged into it. Set it back to Uplink in Configure to bond it again.",

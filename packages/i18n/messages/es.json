@@ -1681,6 +1681,7 @@
 	"network.ethRole.uplinkConsequence": "Se une al enlace SRTLA y transporta el tráfico de la transmisión.",
 	"network.ethRole.sharedLanConsequence": "Sale del enlace SRTLA y ofrece internet a los dispositivos conectados a este puerto.",
 	"network.ethRole.badgeHint": "Este puerto comparte la conexión a internet del equipo con lo que esté conectado a él. Reparte direcciones y resolución de nombres a esos dispositivos, por lo que no puede transportar tráfico de la transmisión.",
+	"network.ethRole.open": "Acerca de Red compartida",
 	"network.ethRole.zoneServing": "Atendiendo clientes",
 	"network.ethRole.zoneStarting": "Iniciando",
 	"network.ethRole.excludedFromBondReason": "Fuera del enlace: este puerto ofrece internet a los dispositivos conectados a él. Vuelve a ponerlo en Enlace de subida desde Configurar para incluirlo de nuevo.",

@@ -1678,6 +1678,7 @@
 	"network.ethRole.uplinkConsequence": "SRTLA बॉन्ड में शामिल होता है और स्ट्रीम ट्रैफ़िक ले जाता है।",
 	"network.ethRole.sharedLanConsequence": "SRTLA बॉन्ड से बाहर हो जाता है और इस पोर्ट से जुड़े उपकरणों को इंटरनेट देता है।",
 	"network.ethRole.badgeHint": "यह पोर्ट डिवाइस का इंटरनेट कनेक्शन उससे जुड़े उपकरणों के साथ साझा करता है। यह उन्हें पते और नाम का हल देता है, इसलिए यह बॉन्ड किया गया स्ट्रीम ट्रैफ़िक नहीं ले जा सकता।",
+	"network.ethRole.open": "साझा LAN के बारे में",
 	"network.ethRole.zoneServing": "क्लाइंट को सेवा दे रहा है",
 	"network.ethRole.zoneStarting": "शुरू हो रहा है",
 	"network.ethRole.excludedFromBondReason": "बॉन्ड में नहीं: यह पोर्ट इससे जुड़े उपकरणों को इंटरनेट दे रहा है। इसे फिर से बॉन्ड में लाने के लिए कॉन्फ़िगर में इसे अपलिंक पर लौटाएँ।",

@@ -1633,6 +1633,7 @@
 	"network.ethRole.uplinkConsequence": "SRTLAボンドに参加し、配信トラフィックを運びます。",
 	"network.ethRole.sharedLanConsequence": "SRTLAボンドから外れ、このポートに接続した機器にインターネットを提供します。",
 	"network.ethRole.badgeHint": "このポートは本体のインターネット接続を、接続された機器と共有します。それらの機器にアドレスと名前解決を配るため、ボンドされた配信トラフィックは運べません。",
+	"network.ethRole.open": "共有LANについて",
 	"network.ethRole.zoneServing": "クライアントに提供中",
 	"network.ethRole.zoneStarting": "開始中",
 	"network.ethRole.excludedFromBondReason": "ボンドに含まれていません。このポートは接続された機器にインターネットを提供しています。再びボンドに加えるには、「設定」でアップリンクに戻してください。",

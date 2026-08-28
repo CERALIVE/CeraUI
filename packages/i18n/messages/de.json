@@ -1678,6 +1678,7 @@
 	"network.ethRole.uplinkConsequence": "Tritt dem SRTLA-Bündel bei und überträgt Stream-Daten.",
 	"network.ethRole.sharedLanConsequence": "Verlässt das SRTLA-Bündel und versorgt an diesem Anschluss angesteckte Geräte mit Internet.",
 	"network.ethRole.badgeHint": "Dieser Anschluss teilt die Internetverbindung des Geräts mit allem, was daran angesteckt ist. Er vergibt Adressen und Namensauflösung für diese Geräte und kann deshalb keine gebündelten Stream-Daten übertragen.",
+	"network.ethRole.open": "Über Gemeinsames LAN",
 	"network.ethRole.zoneServing": "Versorgt Geräte",
 	"network.ethRole.zoneStarting": "Startet",
 	"network.ethRole.excludedFromBondReason": "Nicht im Bündel: Dieser Anschluss versorgt die angesteckten Geräte mit Internet. Stellen Sie ihn unter Konfigurieren wieder auf Uplink, um ihn erneut zu bündeln.",

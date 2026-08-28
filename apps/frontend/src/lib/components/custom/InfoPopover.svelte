@@ -46,6 +46,13 @@ interface Props {
 	ariaLabel?: string;
 	/** Stable automation hook on the trigger button. */
 	testId?: string;
+	/**
+	 * Stable automation hook on the reason band. Defaults to the shared
+	 * `info-popover-reason`; a surface that DEMOTED a standing on-screen reason
+	 * into this popover passes the id that reason already carried, so the fact
+	 * keeps one name across the move.
+	 */
+	reasonTestId?: string;
 	class?: string;
 	/**
 	 * Optional external reference the explainer links out to (e.g. a durable
@@ -62,6 +69,7 @@ let {
 	reason,
 	ariaLabel,
 	testId,
+	reasonTestId = 'info-popover-reason',
 	class: className,
 	learnMoreUrl,
 	learnMoreLabel,
@@ -104,7 +112,7 @@ const triggerLabel = $derived(ariaLabel ?? m["live.education.info"]({ field: tit
 			<!-- Distinct from "coming soon": a runtime constraint, not a future. -->
 			<div
 				class="border-status-warning/30 bg-status-warning/10 mt-1 rounded-md border px-2.5 py-2"
-				data-testid="info-popover-reason"
+				data-testid={reasonTestId}
 			>
 				<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
 					{m["live.education.reasonLabel"]()}

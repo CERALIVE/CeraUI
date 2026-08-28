@@ -1690,6 +1690,7 @@
 	"network.ethRole.uplinkConsequence": "ينضم إلى تجميع SRTLA وينقل بيانات البث.",
 	"network.ethRole.sharedLanConsequence": "يخرج من تجميع SRTLA ويوفّر الإنترنت للأجهزة الموصولة بهذا المنفذ.",
 	"network.ethRole.badgeHint": "يشارك هذا المنفذ اتصال الجهاز بالإنترنت مع ما يُوصل به، ويوزّع على تلك الأجهزة العناوين وتحويل الأسماء، لذلك لا يمكنه نقل بيانات البث المجمّعة.",
+	"network.ethRole.open": "حول شبكة محلية مشتركة",
 	"network.ethRole.zoneServing": "يخدم الأجهزة",
 	"network.ethRole.zoneStarting": "قيد البدء",
 	"network.ethRole.excludedFromBondReason": "خارج التجميع: هذا المنفذ يوفّر الإنترنت للأجهزة الموصولة به. أعِده إلى وصلة صاعدة من «تهيئة» لضمّه إلى التجميع من جديد.",

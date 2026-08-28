@@ -1633,6 +1633,7 @@
 	"network.ethRole.uplinkConsequence": "加入 SRTLA 绑定并承载推流流量。",
 	"network.ethRole.sharedLanConsequence": "退出 SRTLA 绑定，并为接入此端口的设备提供网络。",
 	"network.ethRole.badgeHint": "此端口会把设备的互联网连接共享给接入它的设备，并为这些设备分配地址和域名解析，因此无法承载绑定的推流流量。",
+	"network.ethRole.open": "关于共享局域网",
 	"network.ethRole.zoneServing": "正在为客户端服务",
 	"network.ethRole.zoneStarting": "正在启动",
 	"network.ethRole.excludedFromBondReason": "不在绑定中：此端口正在为接入它的设备提供网络。若要重新绑定，请在“配置”中将其改回上行链路。",

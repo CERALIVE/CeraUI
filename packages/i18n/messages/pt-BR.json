@@ -1681,6 +1681,7 @@
 	"network.ethRole.uplinkConsequence": "Entra no agrupamento SRTLA e transporta o tráfego da transmissão.",
 	"network.ethRole.sharedLanConsequence": "Sai do agrupamento SRTLA e fornece internet aos dispositivos ligados a esta porta.",
 	"network.ethRole.badgeHint": "Esta porta compartilha a conexão de internet do aparelho com o que estiver ligado nela. Ela distribui endereços e resolução de nomes a esses dispositivos, por isso não pode transportar o tráfego agrupado da transmissão.",
+	"network.ethRole.open": "Sobre Rede compartilhada",
 	"network.ethRole.zoneServing": "Atendendo clientes",
 	"network.ethRole.zoneStarting": "Iniciando",
 	"network.ethRole.excludedFromBondReason": "Fora do agrupamento: esta porta fornece internet aos dispositivos ligados a ela. Volte a defini-la como Uplink em Configurar para agrupá-la novamente.",
