@@ -17,6 +17,16 @@
  *       touch-target sizing token. Same guarantee as before (one per radio, each
  *       bound to its own device), restated against the control that replaced it.
  *
+ *       WHERE that rung lives moved again in todo 32 (`cc23830`): the selector is
+ *       no longer under the row, it is behind the row's own "Mode" affordance
+ *       (`open-wifi-mode`, one per radio) in a bits-ui popover — which renders
+ *       NOTHING while closed and is PORTALLED to `<body>` while open. So the
+ *       guarantee is now proven per row rather than by one section-wide count:
+ *       the section is asked for the affordances (which ARE in the row, one per
+ *       radio), and each one's popover is asked for its single Hotspot rung. A
+ *       section-scoped `getByRole('radio')` cannot see a portalled rung at all,
+ *       which is exactly how this read 0 after that move.
+ *
  * Functional spec (NO screenshots — see PLAYBOOK.md). Default worker scenario is
  * `multi-modem-wifi`, which seeds two station radios (both hotspot-capable) — a
  * deterministic two-row WiFi section. The single-modem (no-WiFi) negative control
@@ -101,26 +111,58 @@ test.describe('Per-interface WiFi connect', () => {
 
 		const section = wifiSection(page);
 
-		// (c) One hotspot rung per hotspot-capable station row, each exposing its
-		// accessible name through the mode's own word (getByRole matches it) …
-		const hotspotRungs = section.getByRole('radio', { name: 'Hotspot', exact: true });
-		await expect(hotspotRungs).toHaveCount(STATION_RADIO_COUNT);
+		// (c) One "Mode" affordance per station row, each bound to its OWN radio
+		// via a distinct, non-empty data-device — the per-row guarantee, now
+		// carried by the control that reveals the rungs.
+		const modeTriggers = section.getByTestId('open-wifi-mode');
+		await expect(modeTriggers).toHaveCount(STATION_RADIO_COUNT);
 
-		const first = hotspotRungs.first();
-		await expect(first).toBeVisible();
-
-		// … each bound to its OWN radio (one selector per row, distinct testids) …
-		const testIds = await hotspotRungs.evaluateAll((els) =>
-			els.map((el) => el.getAttribute('data-testid')),
+		const devices = await modeTriggers.evaluateAll((els) =>
+			els.map((el) => el.getAttribute('data-device')),
 		);
-		expect(testIds.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
+		expect(devices.every((d) => typeof d === 'string' && d.length > 0)).toBe(true);
+		expect(new Set(devices).size).toBe(devices.length);
+
+		// At rest the rungs are not merely unopened — a closed bits-ui popover
+		// renders no content at all, so nothing anywhere on the page claims a mode
+		// the operator has not asked to see.
+		await expect(page.getByRole('radio', { name: 'Hotspot', exact: true })).toHaveCount(0);
+
+		const testIds: string[] = [];
+
+		for (const device of devices) {
+			await section
+				.locator(`[data-testid="open-wifi-mode"][data-device="${device}"]`)
+				.click();
+
+			// The popover is portalled to <body>, so it is reached from the page.
+			const popover = page.getByTestId(`wifi-mode-popover-${device}`);
+			await expect(popover).toBeVisible();
+
+			// Exactly ONE hotspot rung behind this radio's affordance, exposing its
+			// accessible name through the mode's own word (getByRole matches it) …
+			const hotspotRung = popover.getByRole('radio', { name: 'Hotspot', exact: true });
+			await expect(hotspotRung).toHaveCount(1);
+			await expect(hotspotRung).toBeVisible();
+
+			// … rendering the VISIBLE word rather than an icon alone (Todo 14's
+			// deliberate inversion — a mode rung's whole job is to carry its word) …
+			await expect(hotspotRung).toHaveText('Hotspot');
+
+			// … and keeping the 44px touch-target sizing token.
+			await expect(hotspotRung).toHaveClass(/min-h-\[var\(--touch-target-min\)\]/);
+
+			testIds.push((await hotspotRung.getAttribute('data-testid')) ?? '');
+
+			// Close before opening the next radio's popover — one at a time, so a
+			// rung can never be attributed to the wrong row.
+			await page.keyboard.press('Escape');
+			await expect(popover).toBeHidden();
+		}
+
+		// One rung per radio, each bound to its OWN device (distinct testids).
+		expect(testIds).toHaveLength(STATION_RADIO_COUNT);
+		expect(testIds.every((id) => id.length > 0)).toBe(true);
 		expect(new Set(testIds).size).toBe(testIds.length);
-
-		// … rendering the VISIBLE word rather than an icon alone (Todo 14's
-		// deliberate inversion — a mode rung's whole job is to carry its word) …
-		await expect(first).toHaveText('Hotspot');
-
-		// … and keeping the 44px touch-target sizing token.
-		await expect(first).toHaveClass(/min-h-\[var\(--touch-target-min\)\]/);
 	});
 });

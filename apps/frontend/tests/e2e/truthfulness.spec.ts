@@ -2136,6 +2136,19 @@ test.describe("Capability truthfulness (functional)", () => {
 	const wifiBand = (page: Page, band: string) =>
 		page.locator(`[data-testid="wifi-band-option"][data-band="${band}"]`);
 
+	// The SAME todo-32 (`cc23830`) demotion, one container over: the capability
+	// strip moved into a collapsed `<details data-testid="wifi-capabilities">`.
+	// Every chip inside it is in the DOM at rest, so `toHaveCount` /
+	// `toHaveAttribute` / `toContainText` never noticed — only `toBeVisible()`
+	// does, which is why exactly the visibility assertions went red.
+	async function openWifiCapabilities(page: Page): Promise<void> {
+		const strip = page.getByTestId("wifi-capabilities").first();
+		await expect(strip).toBeVisible({ timeout: 15_000 });
+		if (await strip.evaluate((el) => (el as HTMLDetailsElement).open)) return;
+		await page.getByTestId("wifi-capabilities-toggle").first().click();
+		await expect(strip).toHaveJSProperty("open", true);
+	}
+
 	const WIFI_ROSTER_ANNOTATION = {
 		type: DROP_SERVER_STATUS_ANNOTATION,
 		description:
@@ -2207,6 +2220,20 @@ test.describe("Capability truthfulness (functional)", () => {
 	const modeReason = (page: Page, mode: string) =>
 		page.getByTestId(`wifi-mode-reason-0-${mode}`);
 
+	// Todo 32 (`cc23830`) demoted the three-rung selector behind the row's own
+	// "Mode" affordance, in a bits-ui popover that renders NOTHING while closed.
+	// So the offering has to be revealed before it can be read — and it is read
+	// from the page rather than from the row, because the popover is portalled
+	// to `<body>`.
+	async function openWifiMode(page: Page, device = "0"): Promise<void> {
+		const trigger = page.locator(
+			`[data-testid="open-wifi-mode"][data-device="${device}"]`,
+		);
+		await expect(trigger).toBeVisible({ timeout: 15_000 });
+		await trigger.click();
+		await expect(page.getByTestId(`wifi-mode-popover-${device}`)).toBeVisible();
+	}
+
 	function adapterModes(
 		mode: "station" | "hotspot" | "hybrid",
 		hybrid: { available: boolean; reason?: string },
@@ -2231,12 +2258,19 @@ test.describe("Capability truthfulness (functional)", () => {
 	test("the Hybrid mode rung flips enabled ⇄ disabled-with-reason as the radio's AP+STA capability changes", {
 		annotation: WIFI_ROSTER_ANNOTATION,
 	}, async ({ page }) => {
+		// The offering is pulled ONCE per radio-id set, so proving it genuinely
+		// flips costs a full reload + re-auth per capability — three app boots in
+		// one test. Measured 7s alone and 26s of a 30s budget under a loaded
+		// worker pool, which is a wall clock away from failing for no reason.
+		test.slow();
+
 		serverConfig();
 		sendFullCaps();
 		fakeAdapterModes = adapterModes("station", { available: true });
 		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
 
 		await navigateTo(page, "network");
+		await openWifiMode(page);
 
 		const selector = page.getByTestId("wifi-mode-selector");
 		await expect(selector).toBeVisible({ timeout: 15_000 });
@@ -2270,6 +2304,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		sendFullCaps();
 		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
 		await navigateTo(page, "network");
+		await openWifiMode(page);
 
 		await expect(modeRung(page, "hybrid")).toBeDisabled();
 		await expect(modeRung(page, "hybrid")).toHaveAttribute(
@@ -2307,6 +2342,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		sendFullCaps();
 		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
 		await navigateTo(page, "network");
+		await openWifiMode(page);
 
 		const unknownReason = modeReason(page, "hybrid");
 		await expect(unknownReason).toBeVisible();
@@ -2326,6 +2362,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		sendWifi({ 0: wifiRadio(ROCK_RTL8852BE) });
 
 		await navigateTo(page, "network");
+		await openWifiMode(page);
 
 		const selector = page.getByTestId("wifi-mode-selector");
 		await expect(selector).toBeVisible({ timeout: 15_000 });
@@ -2384,6 +2421,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		});
 
 		await navigateTo(page, "network");
+		await openWifiCapabilities(page);
 
 		const six = wifiBand(page, "6");
 		await expect(six).toBeVisible({ timeout: 15_000 });

@@ -131,12 +131,20 @@ test.describe('F3 manual QA — modem toggles, hotspot gate, staleness', () => {
 		const network = new NetworkPage(page);
 		await network.open();
 
-		// One mode selector per WiFi radio; each names its own adapter, and the
-		// confirm band it arms is keyed on that same device.
-		const selector = page.getByTestId('wifi-mode-selector').first();
+		// One "Mode" affordance per WiFi radio; each names its own adapter, and the
+		// confirm band the selector behind it arms is keyed on that same device.
+		// Todo 32 (`cc23830`) moved the selector into that affordance's popover —
+		// it renders nothing while closed and is portalled to <body> when open.
+		const modeTrigger = page.getByTestId('open-wifi-mode').first();
+		await expect(modeTrigger).toBeVisible();
+		const device = await modeTrigger.getAttribute('data-device');
+		expect(device, 'the mode affordance names its adapter').toBeTruthy();
+		await modeTrigger.click();
+
+		const selector = page
+			.getByTestId(`wifi-mode-popover-${device}`)
+			.getByTestId('wifi-mode-selector');
 		await expect(selector).toBeVisible();
-		const device = await selector.getAttribute('data-device');
-		expect(device, 'the mode selector names its adapter').toBeTruthy();
 		await expect(selector).toHaveAttribute('data-mode', 'station');
 
 		const trigger = selector.getByRole('radio', { name: 'Hotspot', exact: true });
