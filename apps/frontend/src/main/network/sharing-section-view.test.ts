@@ -26,12 +26,16 @@ import { describe, expect, it } from "vitest";
 
 import {
 	deriveClientZones,
+	deriveDiagnosticsSummary,
 	derivePriority,
 	deriveSharingDiagView,
+	deriveSharingHeadline,
 	deriveSharingSection,
 	type HotspotZoneInput,
 	SHARING_LINK_TOKENS,
+	type SharingBand,
 	type SharingSectionInput,
+	subordinateBands,
 	uplinkReasonKey,
 } from "./sharing-section-view";
 
@@ -348,6 +352,252 @@ describe("honest bands", () => {
 			),
 		).toEqual([]);
 		expect(bandKinds(section({ steering: undefined }))).toEqual([]);
+	});
+});
+
+describe("the ONE headline state line", () => {
+	it("speaks for the healthy case with the device's own uplink counts", () => {
+		const view = section({
+			uplinks: uplinks(
+				{ iface: "wwan0" },
+				{ iface: "wlan0", state: "degraded", weight: 25 },
+				{ iface: "eth0", state: "down", weight: 0 },
+			),
+		});
+		expect(view.headline.kind).toBe("sharing-active");
+		expect(view.headline.tone).toBe("ok");
+		// A degraded uplink still carries traffic, so it counts as usable — the
+		// same rule `reachabilityBand` applies when it decides not to fire.
+		expect(view.headline.usableUplinks).toBe(2);
+		expect(view.headline.totalUplinks).toBe(3);
+		expect(view.headline.restatesRowState).toBe(false);
+	});
+
+	it("adopts the governing band verbatim, reason included", () => {
+		const view = section({
+			steering: uplinkSteeringStatusSchema.parse({
+				state: "steering_unavailable",
+				reason: "mark_collision",
+			}),
+		});
+		const band = view.bands.find((b) => b.kind === "steering-unavailable");
+		expect(view.headline.kind).toBe("steering-unavailable");
+		expect(view.headline.tone).toBe(band?.tone);
+		expect(view.headline.titleKey).toBe(band?.titleKey);
+		expect(view.headline.bodyKey).toBe(band?.bodyKey);
+		expect(view.headline.reason).toBe("mark_collision");
+		expect(view.headline.reasonKey).toBe(band?.reasonKey);
+	});
+
+	it("orders by SCOPE, so a wider fact outranks a narrower one", () => {
+		const steering = uplinkSteeringStatusSchema.parse({
+			state: "steering_unavailable",
+			reason: "mark_collision",
+		});
+
+		// Nothing is shared, so how it would be steered is moot.
+		expect(
+			section({ steering, hotspotInterfaces: [], netif: undefined }).headline
+				.kind,
+		).toBe("sharing-off");
+
+		// There is nowhere to send client traffic, so a steering failure is not
+		// the fact to lead with.
+		expect(
+			section({
+				steering,
+				uplinks: uplinks({ iface: "wwan0", state: "down", weight: 0 }),
+			}).headline.kind,
+		).toBe("no-healthy-uplink");
+
+		// But a refusal the device actually NAMED outranks a report that never
+		// arrived — `uplinks-unreported` says nothing definite.
+		expect(section({ steering, uplinks: undefined }).headline.kind).toBe(
+			"steering-unavailable",
+		);
+	});
+
+	it("mutes the rows ONLY when it already asserts their state", () => {
+		const allDown = section({
+			uplinks: uplinks(
+				{ iface: "wwan0", state: "down", weight: 0 },
+				{ iface: "wwan1", state: "down", weight: 0 },
+			),
+		});
+		expect(allDown.headline.kind).toBe("no-healthy-uplink");
+		expect(allDown.headline.restatesRowState).toBe(true);
+
+		// Every other band names something the rows do not restate.
+		for (const view of [
+			section({ hotspotInterfaces: [], netif: undefined }),
+			section({ uplinks: undefined }),
+			section({
+				steering: uplinkSteeringStatusSchema.parse({
+					state: "steering_unavailable",
+					reason: "mark_collision",
+				}),
+			}),
+			section(),
+		]) {
+			expect(view.headline.restatesRowState).toBe(false);
+		}
+	});
+
+	it("never mutes an EMPTY roster — there is no row to deduplicate", () => {
+		const view = section({ uplinks: uplinksMessageSchema.parse([]) });
+		expect(view.headline.kind).toBe("no-healthy-uplink");
+		expect(view.headline.restatesRowState).toBe(false);
+	});
+
+	it("demotes the band it did NOT speak for, and drops nothing", () => {
+		const view = section({
+			steering: uplinkSteeringStatusSchema.parse({
+				state: "steering_unavailable",
+				reason: "mark_collision",
+			}),
+			uplinks: uplinks({ iface: "wwan0", state: "down", weight: 0 }),
+		});
+		expect(view.headline.kind).toBe("no-healthy-uplink");
+		expect(view.subordinate.map((b) => b.kind)).toEqual([
+			"steering-unavailable",
+		]);
+		// Every band is still accounted for: one leads, the rest are demoted.
+		expect(
+			[view.headline.kind, ...view.subordinate.map((b) => b.kind)].sort(),
+		).toEqual(bandKinds(view).slice().sort());
+	});
+
+	it("leaves nothing subordinate when one band is the whole story", () => {
+		expect(section().subordinate).toEqual([]);
+		expect(
+			section({ hotspotInterfaces: [], netif: undefined }).subordinate,
+		).toEqual([]);
+	});
+});
+
+describe("the diagnostics disclosure summary", () => {
+	const band = (kind: SharingBand["kind"], tone: "info" | "warning") =>
+		({ kind, tone, titleKey: "t", bodyKey: "b" }) satisfies SharingBand;
+
+	it("says NOTHING TO REVIEW when every instrument is clean", () => {
+		const summary = deriveDiagnosticsSummary(
+			derivePriority(
+				uplinkShaperStatusSchema.parse({
+					state: "available",
+					mode: "idle",
+					algorithm: "cake",
+				}),
+			),
+			undefined,
+			[],
+		);
+		expect(summary).toEqual({
+			tone: "neutral",
+			findings: 0,
+			labelKey: "network.sharing.diagnostics.clear",
+		});
+	});
+
+	it("does NOT count an unreported shaper — an honest non-state is not a fault", () => {
+		const summary = deriveDiagnosticsSummary(
+			derivePriority(undefined),
+			undefined,
+			[],
+		);
+		expect(summary.findings).toBe(0);
+		expect(summary.tone).toBe("neutral");
+	});
+
+	it("keeps a pre-pin verdict in the calm register while it is alone", () => {
+		const diag = deriveSharingDiagView(
+			sharingDiagSchema.parse({
+				state: "degraded",
+				checkedAt: NOW,
+				firewallBackend: {
+					state: "degraded",
+					reason: "firewall_backend_unpinned",
+				},
+				steeringRules: { state: "ok" },
+				sharedNat: { state: "ok" },
+				foreignTables: { state: "ok" },
+			}),
+		);
+		const summary = deriveDiagnosticsSummary(
+			derivePriority(undefined),
+			diag,
+			[],
+		);
+		expect(summary.tone).toBe("info");
+		expect(summary.findings).toBe(1);
+		expect(summary.labelKey).toBe("network.sharing.diagnostics.findingsOne");
+	});
+
+	it("escalates to WARNING for anything folded away that is one", () => {
+		const degradedShaper = derivePriority(
+			uplinkShaperStatusSchema.parse({
+				state: "shaper_unavailable",
+				reason: "tc_apply_failed",
+				priorityDegraded: true,
+			}),
+		);
+		expect(deriveDiagnosticsSummary(degradedShaper, undefined, []).tone).toBe(
+			"warning",
+		);
+		expect(
+			deriveDiagnosticsSummary(derivePriority(undefined), undefined, [
+				band("steering-unavailable", "warning"),
+			]).tone,
+		).toBe("warning");
+	});
+
+	it("counts every folded finding, so a closed disclosure cannot hide a total", () => {
+		const diag = deriveSharingDiagView(
+			sharingDiagSchema.parse({
+				state: "degraded",
+				checkedAt: NOW,
+				firewallBackend: {
+					state: "degraded",
+					reason: "firewall_backend_unpinned",
+				},
+				steeringRules: {
+					state: "degraded",
+					reason: "steering_rule_shadows_source_route",
+				},
+				sharedNat: { state: "ok" },
+				foreignTables: { state: "ok" },
+			}),
+		);
+		const summary = deriveDiagnosticsSummary(
+			derivePriority(
+				uplinkShaperStatusSchema.parse({
+					state: "shaper_unavailable",
+					reason: "foreign_qdisc",
+					priorityDegraded: true,
+				}),
+			),
+			diag,
+			[band("steering-unavailable", "warning")],
+		);
+		expect(summary.findings).toBe(4);
+		expect(summary.tone).toBe("warning");
+		expect(summary.labelKey).toBe("network.sharing.diagnostics.findingsMany");
+	});
+
+	it("is wired into the whole-section view, not left to a render site", () => {
+		const view = section({
+			shaper: uplinkShaperStatusSchema.parse({
+				state: "shaper_unavailable",
+				reason: "foreign_qdisc",
+				priorityDegraded: true,
+			}),
+		});
+		expect(view.diagnostics).toEqual(
+			deriveDiagnosticsSummary(view.priority, view.diag, view.subordinate),
+		);
+		expect(view.headline).toEqual(deriveSharingHeadline(view.bands, view.rows));
+		expect(view.subordinate).toEqual(
+			subordinateBands(view.bands, view.headline),
+		);
 	});
 });
 
