@@ -247,7 +247,12 @@ async function probeMode(page: Page) {
 		const trigger = document.querySelector(
 			'[data-testid="open-wifi-mode"]',
 		) as HTMLElement | null;
-		const row = (trigger?.closest(".flex-wrap") ?? null) as HTMLElement | null;
+		// The row is reached by its OWN handle, not by climbing to the nearest
+		// `.flex-wrap`: the action group the trigger sits in wraps as well, so a
+		// class-shaped anchor stops one box short and reports that group's
+		// overflow — always 0 — instead of the row's.
+		const row = (trigger?.closest('[data-testid="wifi-row"]') ??
+			null) as HTMLElement | null;
 		const badge = (row?.querySelector('[data-testid="wifi-mode-badge"]') ??
 			null) as HTMLElement | null;
 		// The selector is PORTALLED out of the row while open and absent while
@@ -546,7 +551,7 @@ test.describe("@visual Wi-Fi mode legibility at 375px — touch layout", () => {
 						which === "row"
 							? ((document
 									.querySelector('[data-testid="open-wifi-mode"]')
-									?.closest(".flex-wrap") ?? null) as HTMLElement | null)
+									?.closest('[data-testid="wifi-row"]') ?? null) as HTMLElement | null)
 							: (document.querySelector('[data-testid="wifi-mode-selector"]') as
 									| HTMLElement
 									| null);

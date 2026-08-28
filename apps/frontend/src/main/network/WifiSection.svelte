@@ -160,8 +160,14 @@ $effect(() => {
 				{@const link = deriveWifiLinkView(iface.link)}
 				{@const blocked = cap?.blockedBands[0]}
 				{@const wpa3Key = cap ? wpa3ChipKey(cap.wpa3Sae) : undefined}
-				<!-- Single-line row: identity (dot · name · status) left; bond + actions right. -->
-				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+				<!-- Single-line row: identity (dot · name · status) left; bond + actions right.
+				     The handle exists because the action group below wraps too, so a probe
+				     climbing to the nearest `.flex-wrap` would stop there, not here. -->
+				<div
+					class="flex flex-wrap items-center gap-3 px-4 py-2.5"
+					data-testid="wifi-row"
+					data-device={id}
+				>
 					<span
 						class={cn(
 							'size-2 shrink-0 rounded-full',
@@ -201,7 +207,15 @@ $effect(() => {
 							{/if}
 						</p>
 					</div>
-					<div class="ms-auto flex shrink-0 items-center gap-2">
+					<!-- The controls travel as ONE wrapping group, and the group SHRINKS.
+					     A hybrid radio carries four of them — bond, Connect, Setup, Mode —
+					     which measure 373px inside a 278px row at 375px, so `shrink-0`
+					     could only push Mode 39px past the viewport edge. Wrapping keeps
+					     every control at full width and full tap target; `justify-end`
+					     keeps the wrapped line on the row's trailing edge, and the group
+					     wraps whole so no control strands away from its siblings. Same
+					     shape as BondedLinksSection's trailing instrument group. -->
+					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
 						{#if showStale}
 							<Badge variant="stale" data-stale-interface={iface.ifname} />
 						{/if}
