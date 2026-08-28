@@ -2408,6 +2408,36 @@ re-derived from bus-path string matching. Frontend label precedence is
 `product_name · TRANSPORT` → `label` → `labelKey` → `id`. Full contract:
 `apps/backend/AGENTS.md` → AUDIO-DEVICE NAMING.
 
+**And the ladder is UNCHANGED on the engine's PipeWire audio arm — proven, not
+assumed.** cerastream's `[audio] backend = "pipewire"` moved where a row's
+identity is derived (PipeWire node props, resolved back through the engine's
+`pw_identity.rs`) and left the vocabulary alone: an audio row's `id` is still
+`hw:CARD=<card>` and `alsa_card_id` is still published, so the join key CeraUI
+resolves on never moved. `tests/audio-naming-pipewire-arm.test.ts` renders one
+physical roster as BOTH arms' `list-devices` payloads and drives each through the
+real whitelist copy and the real ladder; the arms disagree about `device_path`
+(which is not in the audio whitelist at all) and agree about everything the
+ladder reads. The persisted-config half is the same test's acceptance: a
+`config.asrc` written before any PipeWire work — an alias name, a bare card id,
+or a raw `hw:CARD=`/`plughw:` selector — resolves to the same meter target on
+both arms and to the literal pre-migration answer, so **no `asrc` migration is
+required for the backend flip**. Full contract: `apps/backend/AGENTS.md` →
+"…AND THE LADDER IS THE SAME ON THE PIPEWIRE ARM" and the pre-migration paragraph
+under IDLE AUDIO-METER DEVICE PREFERENCE.
+
+**RELEASE SEQUENCING — this CeraUI release ships WITH the image's PipeWire
+release, not before or after it.** The device image's PipeWire adoption
+(`image-building-pipeline`, system-mode PipeWire + BlueALSA retirement) removes
+`bluealsad` from the board in the same release that adds the PipeWire stack, and
+CeraUI's Bluetooth-microphone presence oracle switches arms on the engine's
+`pipewire-capture` feature token rather than on an image version. The two halves
+are therefore atomic by construction: an image carrying PipeWire under a CeraUI
+that still drives `bluealsad` would offer an operator a Bluetooth path the device
+no longer has, and the reverse strands a working BlueALSA path behind a token
+that never arrives. Nothing in either repo can detect the mismatch, so it is a
+RELEASE-ORDER obligation, recorded here for the release checklist rather than
+enforced in code.
+
 ## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
 
 The three-value band enum (`auto` / `auto_24` / `auto_50`) is still the **wire

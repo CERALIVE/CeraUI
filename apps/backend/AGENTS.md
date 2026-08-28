@@ -221,6 +221,47 @@ broadcast instead of falling back to the bare asrc key.
 
 Coverage: `tests/audio-device-naming-cleanup.test.ts`, `tests/audio-naming.test.ts`.
 
+### …AND THE LADDER IS THE SAME ON THE PIPEWIRE ARM — PROVEN, NOT ASSUMED [EXISTS]
+
+cerastream's `[audio] backend = "pipewire"` arm changed WHERE an audio row's
+identity comes from — PipeWire node props resolved back through the engine's
+`sources/pw_identity.rs` — and deliberately not what a device is CALLED. The
+engine still builds an audio row's `id` as `hw:CARD=<card>` FIRST on both arms
+and still publishes `alsa_card_id`, so this ladder needs no change at all.
+
+**That is a claim, so it is tested rather than stated.**
+`tests/audio-naming-pipewire-arm.test.ts` renders ONE physical roster as BOTH
+arms' `list-devices` payloads, drives each through the REAL `probeEngineDevices`
+whitelist copy and the REAL ladder, and compares. Three properties carry it:
+
+- **`device_path` is the field the arms genuinely disagree about, and it is not
+  a naming input.** On the ALSA arm it is the provider's own path (`hw:5,0`); on
+  the PipeWire arm it is `PipeWireNodeIdentity::persisted_device()`, i.e.
+  `hw:CARD=<id>`. It is absent from the AUDIO whitelist entirely, so it cannot
+  reach `EngineAudioDevice` — asserted in both directions (the payloads differ,
+  no crossed row carries the key), which is what stops the equality above being
+  a tautology.
+- **`device_address` is the one PipeWire-only field that DOES cross, and it must
+  move nothing.** This is CeraUI's half of the engine's own
+  `a_node_that_advertises_a_device_address_carries_it_verbatim` contract: the
+  field reaches the row (proven, or the comparison is vacuous) and no label,
+  detail or identity changes with it.
+- **Tier 2 is provider-independent by construction.** It is
+  `/proc/asound/cards`, a kernel file CeraUI reads itself, so the tier a failed
+  tier-1 join falls to cannot drift between arms — including for a PipeWire node
+  whose provider published no `api.alsa.card.id` at all, which falls to tier 3
+  and still logs the same one-shot diagnostic naming
+  `engineEntriesWithoutJoinKey`.
+
+**Honesty boundary: the ladder is proven provider-agnostic; a provider's own
+human STRING is not pinned.** `display_name` is authored by whichever GStreamer
+device provider enumerated the node, so a PipeWire node description could be
+worded differently from the ALSA card longname on real hardware. That can only
+change which cleaned string tier 1 yields — it cannot change the join key, which
+tier fires, the picker key, `config.asrc`, routing, or the meter preference, and
+a non-human value still loses to the kernel longname on BOTH arms. No board has
+run this ladder on the PipeWire arm; that is the todo-31 drill's.
+
 **The resolved label/identity maps are re-resolved when the ENGINE list changes,
 not only on a udev hotplug.** `lastAudioDisplays` / `lastAudioIdentities` are built
 inside `broadcastAudioSources()`, which only `updateAudioDevices()` called — and
@@ -794,6 +835,21 @@ no-alias, every `null` case, selector passthrough; plus `hasCapturePcmNode` and 
 capture-PCM presence rule: a listed card with zero capture PCM is absent, a card that
 owns one is present, the same card flips once its capture PCM appears, and an unlisted
 pick stays absent — driven through a real sysfs-shaped fixture dir).
+
+**NO CONFIG MIGRATION IS REQUIRED FOR THE PIPEWIRE ARM, and that is a TESTED
+claim.** `resolveMeterPreference` reads the picker map + the alias table, and the
+picker map is CeraUI's own `/sys/class/sound` walk — a read the engine's audio
+backend has no part in. So a `config.asrc` persisted before any PipeWire work
+existed resolves to the same engine target whichever arm is running, by
+construction rather than by coincidence.
+`tests/audio-naming-pipewire-arm.test.ts` pins every pre-migration shape — the
+alias display name, a bare card id, a raw `hw:CARD=` / `plughw:CARD=…,DEV=…` /
+`hw:N,M` selector, both pseudo-sources and an unset pick — against BOTH arms AND
+against the literal pre-migration answers, so a change that moved both arms
+together is still a failure. `"Auto"` is covered separately because it is the ONE
+resolution that reads the engine's audio list: rule 5's `physical_group_id` join
+is driven through the pure `resolveAutoAsrc` with each arm's really-crossed rows
+and must answer identically. Do NOT add an `asrc` migration for the backend flip.
 
 ## AN ISOLATED DONGLE IS SURFACED WITHOUT ENTERING THE BOND [PARTIAL — reader only; the PRODUCER is retired]
 
