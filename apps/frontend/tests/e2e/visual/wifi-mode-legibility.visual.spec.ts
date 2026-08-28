@@ -8,8 +8,23 @@ import { ensureAuthenticated, navigateTo } from "../helpers/index.js";
  * @visual NARROW-VIEWPORT legibility of the per-adapter Wi-Fi mode (todo 16).
  *
  * The acceptance criterion is a single sentence: at 375px, station / hotspot /
- * hybrid must be distinguishable WITHOUT opening a dialog. Two things make that
- * worth a browser rather than a jsdom test:
+ * hybrid must be distinguishable WITHOUT opening a dialog.
+ *
+ * WHAT CARRIES THAT CRITERION MOVED (todo 32, cc23830), and the spec moved with
+ * it. The three-rung selector no longer sits under the row: it lives behind the
+ * row's "Mode" affordance (`open-wifi-mode`) in a bits-ui popover, which is
+ * PORTALLED to `<body>` and renders nothing at all while closed. So the probe
+ * anchors on that trigger — which IS in the row — instead of on the selector,
+ * and the mode fact an operator reads at rest is `wifi-mode-badge`, still on the
+ * row beside the radio's name.
+ *
+ * The criterion is not weakened by that move, it is narrowed to the thing that
+ * actually satisfies it: a popover is not a dialog, and at rest there is no
+ * popover, so `openDialogs === 0` still holds and is still asserted. The rungs
+ * are asserted too, behind an explicit trigger click — that is what proves the
+ * badge and the offering agree about which mode is current.
+ *
+ * Two things make this worth a browser rather than a jsdom test:
  *
  *   • jsdom lays nothing out, so it cannot answer whether the mode indicator
  *     truncates, wraps into the action cluster, or pushes the row off-screen —
@@ -117,6 +132,7 @@ function installWifiHarness(): void {
 		socket: null,
 		_seq: 0,
 		adapterModes: undefined,
+		held: undefined,
 		emit(type: string, payload: unknown) {
 			const s = w.__wifiNarrow.socket;
 			if (s)
@@ -128,6 +144,10 @@ function installWifiHarness(): void {
 					}),
 				);
 		},
+		hold(roster: unknown) {
+			w.__wifiNarrow.held = roster;
+			w.__wifiNarrow.emit("status", { wifi: roster });
+		},
 	};
 	class HookedWS extends Real {
 		// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
@@ -135,6 +155,31 @@ function installWifiHarness(): void {
 			super(url, protocols);
 			w.__wifiNarrow.socket = this;
 			this.__realSend = Real.prototype.send.bind(this);
+			// A device `status.wifi` frame overwrites the whole roster, which would
+			// swap the injected radio out from under an in-flight popover click.
+			// Such a frame must not reach the app at all. Registered in the
+			// constructor, so it precedes the app's own listener and
+			// `stopImmediatePropagation` wins; the patched copy matches `held`, so
+			// it re-enters once and passes through.
+			this.addEventListener("message", (ev: MessageEvent) => {
+				const held = w.__wifiNarrow.held;
+				if (held === undefined || typeof ev.data !== "string") return;
+				let parsed: { status?: Record<string, unknown> };
+				try {
+					parsed = JSON.parse(ev.data);
+				} catch {
+					return;
+				}
+				const status = parsed?.status;
+				if (!status || status.wifi === undefined) return;
+				if (JSON.stringify(status.wifi) === JSON.stringify(held)) return;
+				ev.stopImmediatePropagation();
+				this.dispatchEvent(
+					new MessageEvent("message", {
+						data: JSON.stringify({ ...parsed, status: { ...status, wifi: held } }),
+					}),
+				);
+			});
 		}
 		// biome-ignore lint/suspicious/noExplicitAny: native send signature.
 		send(data: any) {
@@ -163,16 +208,19 @@ function installWifiHarness(): void {
 	w.WebSocket = HookedWS;
 }
 
-function emit(page: Page, type: string, payload: unknown): Promise<void> {
+/** Publish a roster AND keep it published against the device's own broadcasts. */
+function hold(page: Page, roster: unknown): Promise<void> {
 	return page.evaluate(
-		([t, p]) =>
-			(
-				window as unknown as {
-					__wifiNarrow: { emit(t: string, p: unknown): void };
-				}
-			).__wifiNarrow.emit(t, p),
-		[type, payload] as const,
+		(r) =>
+			(window as unknown as { __wifiNarrow: { hold(r: unknown): void } }).__wifiNarrow.hold(r),
+		roster,
 	);
+}
+
+/** Reveal the three-rung selector the row demoted behind its "Mode" affordance. */
+async function openModePopover(page: Page): Promise<void> {
+	await page.getByTestId("open-wifi-mode").first().click();
+	await expect(page.getByTestId("wifi-mode-selector").first()).toBeVisible();
 }
 
 /** Arm the in-page `wifi.getAdapterModes` answer BEFORE the roster is injected. */
@@ -192,17 +240,28 @@ function setAdapterModes(page: Page, modes: unknown): Promise<void> {
  */
 async function probeMode(page: Page) {
 	return page.evaluate(() => {
-		// Scoped to the WiFi ROW, never to the document: a live hotspot also
-		// renders a `wifi-mode-badge` in HotspotSection further down the page, and
-		// a document-wide query would silently start measuring that one instead.
+		// Anchored on the row's own "Mode" affordance, never on the document: a
+		// live hotspot also renders a `wifi-mode-badge` in HotspotSection further
+		// down the page, and a document-wide badge query would silently start
+		// measuring that one instead.
+		const trigger = document.querySelector(
+			'[data-testid="open-wifi-mode"]',
+		) as HTMLElement | null;
+		// The row is reached by its OWN handle, not by climbing to the nearest
+		// `.flex-wrap`: the action group the trigger sits in wraps as well, so a
+		// class-shaped anchor stops one box short and reports that group's
+		// overflow — always 0 — instead of the row's.
+		const row = (trigger?.closest('[data-testid="wifi-row"]') ??
+			null) as HTMLElement | null;
+		const badge = (row?.querySelector('[data-testid="wifi-mode-badge"]') ??
+			null) as HTMLElement | null;
+		// The selector is PORTALLED out of the row while open and absent while
+		// closed, so it is reached from the document and its rungs from it.
 		const selector = document.querySelector(
 			'[data-testid="wifi-mode-selector"]',
 		) as HTMLElement | null;
-		const row = (selector?.closest(".flex-wrap") ?? null) as HTMLElement | null;
-		const badge = (row?.querySelector('[data-testid="wifi-mode-badge"]') ??
-			null) as HTMLElement | null;
 		const rungs = [
-			...(row?.querySelectorAll<HTMLElement>('[data-testid^="wifi-mode-option-"]') ?? []),
+			...(selector?.querySelectorAll<HTMLElement>('[data-testid^="wifi-mode-option-"]') ?? []),
 		];
 
 		const box = (el: HTMLElement | null) => {
@@ -267,6 +326,10 @@ async function probeMode(page: Page) {
 			badgeGlyph: glyphOf(badge),
 			badgeBox: box(badge),
 			badgeClipped: clipped(badge),
+			triggerPresent: trigger !== null,
+			triggerBox: box(trigger),
+			triggerClipped: clipped(trigger),
+			selectorPresent: selector !== null,
 			selectorMode: selector?.dataset.mode ?? null,
 			selectorBox: box(selector),
 			rowBox: box(row as HTMLElement | null),
@@ -305,26 +368,34 @@ test.describe("@visual Wi-Fi mode legibility at 375px", () => {
 			{ tag: "@visual" },
 			async ({ page }) => {
 				await setAdapterModes(page, fixture.modes);
-				await emit(page, "status", { wifi: { [fixture.device]: fixture.iface } });
+				await hold(page, { [fixture.device]: fixture.iface });
 				await expect(
-					page.locator(
-						`[data-testid="wifi-mode-selector"][data-mode="${fixture.mode}"]`,
-					),
+					page.locator(`[data-testid="wifi-mode-badge"][data-mode="${fixture.mode}"]`).first(),
 				).toBeVisible();
 
-				const probe = await probeMode(page);
+				const atRest = await probeMode(page);
 
-				expect(probe.viewportWidth).toBe(NARROW.width);
+				expect(atRest.viewportWidth).toBe(NARROW.width);
 				// The criterion's own words: WITHOUT opening a dialog.
-				expect(probe.openDialogs).toBe(0);
+				expect(atRest.openDialogs).toBe(0);
+				// …and the selector really is behind the affordance, not merely
+				// unopened: a closed bits-ui popover renders no content at all.
+				expect(atRest.selectorPresent).toBe(false);
+				expect(atRest.triggerPresent).toBe(true);
 
-				expect(probe.badgeMode).toBe(fixture.mode);
-				expect(probe.selectorMode).toBe(fixture.mode);
-				expect(probe.badgeText.length).toBeGreaterThan(0);
-				expect(probe.badgeText).not.toContain("network.wifiMode.");
+				expect(atRest.badgeMode).toBe(fixture.mode);
+				expect(atRest.badgeText.length).toBeGreaterThan(0);
+				expect(atRest.badgeText).not.toContain("network.wifiMode.");
+
+				// The row's badge and the offering behind it must name the SAME
+				// mode, or the fact an operator reads at rest is not the one the
+				// control would act on.
+				await openModePopover(page);
+				const opened = await probeMode(page);
+				expect(opened.selectorMode).toBe(fixture.mode);
 
 				// Exactly one rung is chosen, and it is this mode's.
-				const selected = probe.rungs.filter((r) => r.selected === "true");
+				const selected = opened.rungs.filter((r) => r.selected === "true");
 				expect(selected).toHaveLength(1);
 				expect(selected[0]?.mode).toBe(fixture.mode);
 			},
@@ -339,11 +410,9 @@ test.describe("@visual Wi-Fi mode legibility at 375px", () => {
 
 			for (const fixture of FIXTURES) {
 				await setAdapterModes(page, fixture.modes);
-				await emit(page, "status", { wifi: { [fixture.device]: fixture.iface } });
+				await hold(page, { [fixture.device]: fixture.iface });
 				await expect(
-					page.locator(
-						`[data-testid="wifi-mode-selector"][data-mode="${fixture.mode}"]`,
-					),
+					page.locator(`[data-testid="wifi-mode-badge"][data-mode="${fixture.mode}"]`).first(),
 				).toBeVisible();
 				const probe = await probeMode(page);
 				seen.push({
@@ -375,26 +444,37 @@ test.describe("@visual Wi-Fi mode legibility at 375px", () => {
 			const hybrid = FIXTURES.find((f) => f.mode === "hybrid");
 			if (hybrid === undefined) throw new Error("hybrid fixture missing");
 			await setAdapterModes(page, hybrid.modes);
-			await emit(page, "status", { wifi: { [hybrid.device]: hybrid.iface } });
+			await hold(page, { [hybrid.device]: hybrid.iface });
 			await expect(
-				page.locator('[data-testid="wifi-mode-selector"][data-mode="hybrid"]'),
+				page.locator('[data-testid="wifi-mode-badge"][data-mode="hybrid"]').first(),
 			).toBeVisible();
 
+			// AT REST the row carries the badge and the affordance, and both must
+			// fit it. The rungs are measured separately, below, because they no
+			// longer live in this box.
+			const atRest = await probeMode(page);
+			expect(atRest.badgeMode).toBe("hybrid");
+			expect(atRest.badgeClipped).toBe(false);
+			expect(atRest.triggerClipped).toBe(false);
+			expect(atRest.badgeBox!.right).toBeLessThanOrEqual(atRest.rowBox!.right + 1);
+			expect(atRest.triggerBox!.right).toBeLessThanOrEqual(atRest.rowBox!.right + 1);
+
+			await openModePopover(page);
 			const probe = await probeMode(page);
 
-			expect(probe.badgeMode).toBe("hybrid");
-			expect(probe.badgeClipped).toBe(false);
+			expect(probe.rungs).toHaveLength(3);
 			expect(probe.rungs.filter((r) => r.clipped).map((r) => r.testid)).toEqual([]);
 			expect(probe.rungsOverlapping).toEqual([]);
-			// A rung that wrapped out of its own control, or a control that escaped
-			// its row, is the collision this row's `flex-wrap` exists to avoid.
+			// A rung that wrapped out of its own control is the collision the
+			// selector's `flex-wrap` exists to avoid. The selector is PORTALLED, so
+			// it is bounded by the viewport rather than by the row.
 			for (const rung of probe.rungs) {
 				expect(rung.box).not.toBeNull();
 				expect(rung.box!.right).toBeLessThanOrEqual(probe.selectorBox!.right + 1);
 				expect(rung.box!.x).toBeGreaterThanOrEqual(probe.selectorBox!.x - 1);
 			}
-			expect(probe.selectorBox!.right).toBeLessThanOrEqual(probe.rowBox!.right + 1);
-			expect(probe.badgeBox!.right).toBeLessThanOrEqual(probe.rowBox!.right + 1);
+			expect(probe.selectorBox!.right).toBeLessThanOrEqual(probe.viewportWidth + 1);
+			expect(probe.selectorBox!.x).toBeGreaterThanOrEqual(-1);
 			// The ROW is what this pass owns, so the row is what it asserts: nothing
 			// inside it may scroll sideways, and no element anywhere may escape the
 			// viewport by way of the WiFi section. The document-wide figure is
@@ -405,9 +485,12 @@ test.describe("@visual Wi-Fi mode legibility at 375px", () => {
 				probe.overflowSources.filter((s) => /wifi/i.test(s)),
 			).toEqual([]);
 
+			// Anchored on the trigger, not the selector: the selector is portalled
+			// to <body>, whose nearest ancestor section is not the WiFi card.
 			fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
 			await page
-				.getByTestId("wifi-mode-selector")
+				.getByTestId("open-wifi-mode")
+				.first()
 				.locator("xpath=ancestor::section[1]")
 				.screenshot({ path: path.join(EVIDENCE_DIR, "todo16-mobile.png") });
 		},
@@ -436,10 +519,14 @@ test.describe("@visual Wi-Fi mode legibility at 375px — touch layout", () => {
 	/**
 	 * The 44px floor, measured rather than asserted in prose.
 	 *
-	 * This pass added NO new interactive control (the freshness marker is a
-	 * `role="status"` span), so the whole claim is that the EXISTING
-	 * `--touch-target-min` discipline still holds for every control the row
-	 * carries. It is measured as the HIT AREA rather than the box: a switch is
+	 * The claim is that the `--touch-target-min` discipline holds for every
+	 * control an operator can reach for the mode — which since todo 32 spans TWO
+	 * surfaces: the row (whose controls now include the `open-wifi-mode`
+	 * affordance) and the popover the affordance reveals (which is where the
+	 * three rungs went). Measuring only the row would silently stop covering the
+	 * rungs this test was originally written for.
+	 *
+	 * It is measured as the HIT AREA rather than the box: a switch is
 	 * the one control that must NOT grow — `min-height` would stretch the painted
 	 * track into a pill and strand the thumb — so `app.css` widens its `::after`
 	 * overlay to the token instead, and a box-only probe would report the
@@ -452,48 +539,67 @@ test.describe("@visual Wi-Fi mode legibility at 375px — touch layout", () => {
 			const hybrid = FIXTURES.find((f) => f.mode === "hybrid");
 			if (hybrid === undefined) throw new Error("hybrid fixture missing");
 			await setAdapterModes(page, hybrid.modes);
-			await emit(page, "status", { wifi: { [hybrid.device]: hybrid.iface } });
+			await hold(page, { [hybrid.device]: hybrid.iface });
 			await expect(
-				page.locator('[data-testid="wifi-mode-selector"][data-mode="hybrid"]'),
+				page.locator('[data-testid="wifi-mode-badge"][data-mode="hybrid"]').first(),
 			).toBeVisible();
 
-			const report = await page.evaluate(() => {
-				const doc = document.documentElement;
-				const row = document
-					.querySelector('[data-testid="wifi-mode-selector"]')
-					?.closest(".flex-wrap") as HTMLElement | null;
-				if (!row) return { layoutMode: doc.dataset.layoutMode ?? null, token: "", short: [] };
+			const measure = (scope: "row" | "selector") =>
+				page.evaluate((which) => {
+					const doc = document.documentElement;
+					const root =
+						which === "row"
+							? ((document
+									.querySelector('[data-testid="open-wifi-mode"]')
+									?.closest('[data-testid="wifi-row"]') ?? null) as HTMLElement | null)
+							: (document.querySelector('[data-testid="wifi-mode-selector"]') as
+									| HTMLElement
+									| null);
+					if (!root)
+						return { layoutMode: doc.dataset.layoutMode ?? null, token: "", short: [], count: 0 };
 
-				const token = getComputedStyle(doc).getPropertyValue("--touch-target-min").trim();
-				const controls = [
-					...row.querySelectorAll<HTMLElement>(
-						'button, a[href], input, [role="switch"], [data-slot="switch"]',
-					),
-				];
-				const short: { id: string; height: number }[] = [];
-				for (const el of controls) {
-					if (el.offsetParent === null) continue;
-					const box = el.getBoundingClientRect();
-					// The painted box OR the hit overlay, whichever reaches further.
-					const after = getComputedStyle(el, "::after");
-					const inset = Number.parseFloat(after.insetBlockStart);
-					const hit = Number.isNaN(inset) ? box.height : box.height - 2 * inset;
-					const height = Math.max(box.height, hit);
-					if (height < 44) {
-						short.push({
-							id: el.dataset.testid ?? el.getAttribute("aria-label") ?? el.tagName,
-							height: Math.round(height),
-						});
+					const token = getComputedStyle(doc).getPropertyValue("--touch-target-min").trim();
+					const controls = [
+						...root.querySelectorAll<HTMLElement>(
+							'button, a[href], input, [role="switch"], [data-slot="switch"]',
+						),
+					];
+					const short: { id: string; height: number }[] = [];
+					for (const el of controls) {
+						if (el.offsetParent === null) continue;
+						const box = el.getBoundingClientRect();
+						// The painted box OR the hit overlay, whichever reaches further.
+						const after = getComputedStyle(el, "::after");
+						const inset = Number.parseFloat(after.insetBlockStart);
+						const hit = Number.isNaN(inset) ? box.height : box.height - 2 * inset;
+						const height = Math.max(box.height, hit);
+						if (height < 44) {
+							short.push({
+								id: el.dataset.testid ?? el.getAttribute("aria-label") ?? el.tagName,
+								height: Math.round(height),
+							});
+						}
 					}
-				}
-				return { layoutMode: doc.dataset.layoutMode ?? null, token, short, count: controls.length };
-			});
+					return {
+						layoutMode: doc.dataset.layoutMode ?? null,
+						token,
+						short,
+						count: controls.length,
+					};
+				}, scope);
 
-			// Non-vacuity: touch layout really is on, and the row really has controls.
-			expect(report.layoutMode).toBe("touch");
-			expect(report.token).toBe("44px");
-			expect(report.count ?? 0).toBeGreaterThan(0);
-			expect(report.short).toEqual([]);
+			const row = await measure("row");
+			await openModePopover(page);
+			const selector = await measure("selector");
+
+			// Non-vacuity: touch layout really is on, and BOTH surfaces really
+			// carry controls — the rungs are only reachable once opened.
+			expect(row.layoutMode).toBe("touch");
+			expect(row.token).toBe("44px");
+			expect(row.count).toBeGreaterThan(0);
+			expect(selector.count).toBeGreaterThan(0);
+			expect(row.short).toEqual([]);
+			expect(selector.short).toEqual([]);
 		},
 	);
 });

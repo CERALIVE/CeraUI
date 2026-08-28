@@ -22,6 +22,7 @@ import * as AlertDialog from '$lib/components/ui/alert-dialog';
 import { Button } from '$lib/components/ui/button';
 import BondToggle from '$lib/components/custom/BondToggle.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
+import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
 import { isLinkLocalIpv4 } from '$lib/helpers/ip-classification';
 import { cn } from '$lib/utils';
 
@@ -150,9 +151,16 @@ function modemNetName(marker: UsbModemNetMarker): string {
 // A `shared-lan` port hands itself to NetworkManager's `ipv4.method shared`, so
 // the device excludes it from the bond and from the connectivity election. The
 // row must therefore never read like an uplink: it says WHAT the port is, WHAT
-// its client zone is doing, and WHY it carries no bonded traffic — the same
-// identity-badge + state-badge + on-screen-reason vocabulary the isolated-dongle
-// row above already uses, not a fourth one.
+// its client zone is doing, and WHY it carries no bonded traffic.
+//
+// All three still render — but as ONE pill plus one explainer, not three stacked
+// blocks. The role and the zone are the same fact read at two grains ("this port
+// serves clients" / "the zone is up"), so splitting them across two pills bought
+// a second line and no information, and the WHY was a standing paragraph of prose
+// under a row whose own state is four words. The pill therefore takes the ZONE's
+// colour (the half that changes) and the exclusion reason moves into the "?"
+// explainer beside it. Nothing is lost: the reason is ALSO the disabled bond
+// toggle's accessible name, and the toggle still prints `Excluded` on screen.
 const ZONE_VARIANT: Record<EthernetClientZoneState, 'success' | 'warning'> = {
 	serving: 'success',
 	starting: 'warning',
@@ -163,6 +171,14 @@ const ZONE_ICON = {
 	starting: Hourglass,
 } satisfies Record<EthernetClientZoneState, unknown>;
 </script>
+
+<!-- Shared by both name paths. A `shared-lan` row sets it beside the identity
+     pill; every other row emits it bare — NOT inside a wrapper — because the
+     dongle/router-cellular/modem-net locks compare a plain row element-for-element
+     against a checked-in golden. -->
+{#snippet portName(name: string)}
+	<p class="truncate text-sm font-medium">{name}</p>
+{/snippet}
 
 <!-- ───────────── Ethernet / interfaces ───────────── -->
 <section class="bg-card rounded-xl border">
@@ -213,14 +229,16 @@ const ZONE_ICON = {
 					     than the remaining space forces the cluster onto its own line
 					     instead. Desktop is unchanged — `flex-1` still grows past it. -->
 					<div class="min-w-0 flex-1 basis-72">
-						<p class="truncate text-sm font-medium">{name}</p>
 						{#if sharedLan}
 							{@const ZoneIcon = ZONE_ICON[sharedLan.zone]}
-							<!-- What the port IS, then what its client zone is doing — both in
-							     words, with their own glyphs, so colour is only reinforcement. -->
-							<div class="mt-0.5 flex flex-wrap items-center gap-1.5">
+							<!-- ONE pill: what the port IS · what its zone is doing, each still a
+							     WORD with its own glyph so colour stays reinforcement. It rides the
+							     name's line, and the "?" beside it carries the concept AND the
+							     bond-exclusion reason that used to stand as a paragraph below. -->
+							<div class="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+								{@render portName(name)}
 								<Badge
-									variant="info"
+									variant={ZONE_VARIANT[sharedLan.zone]}
 									size="micro"
 									class={MICRO_TEXT}
 									data-testid="netif-eth-role"
@@ -229,18 +247,27 @@ const ZONE_ICON = {
 								>
 									<Share2 class="size-3" aria-hidden="true" />
 									{m["network.ethRole.sharedLan"]()}
+									<span aria-hidden="true">·</span>
+									<span
+										class="inline-flex items-center gap-1"
+										data-testid="netif-eth-role-zone"
+										data-zone={sharedLan.zone}
+									>
+										<ZoneIcon class="size-3" aria-hidden="true" />
+										{resolveMessageKey(sharedLan.zoneLabelKey)}
+									</span>
 								</Badge>
-								<Badge
-									variant={ZONE_VARIANT[sharedLan.zone]}
-									size="micro"
-									class={MICRO_TEXT}
-									data-testid="netif-eth-role-zone"
-									data-zone={sharedLan.zone}
-								>
-									<ZoneIcon class="size-3" aria-hidden="true" />
-									{resolveMessageKey(sharedLan.zoneLabelKey)}
-								</Badge>
+								<InfoPopover
+									ariaLabel={m["network.ethRole.open"]()}
+									body={m["network.ethRole.badgeHint"]()}
+									reason={sharedLanReason}
+									reasonTestId="netif-eth-role-excluded-hint"
+									testId="netif-eth-role-info"
+									title={m["network.ethRole.sharedLan"]()}
+								/>
 							</div>
+						{:else}
+							{@render portName(name)}
 						{/if}
 						{#if dongle}
 							{@const StateIcon = DONGLE_STATE_ICON[dongle.state]}
@@ -330,12 +357,15 @@ const ZONE_ICON = {
 								{#if !sharedLan}
 									{iface.enabled ? m["network.view.connected"]() : m["network.view.off"]()}
 								{/if}
-							</p>
-						{/if}
-						{#if linkLocal}
-							<!-- Calm, informational: 169.254/16 is an automatic OS address, not a stuck static config. -->
-							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-link-local-hint">
-								{m["network.view.linkLocalHint"]()}
+								{#if linkLocal}
+									<!-- Calm, informational: 169.254/16 is an automatic OS address, not a
+									     stuck static config. It rides the address's own line — a wrapped
+									     clause reads as part of the reading it explains, a stacked
+									     paragraph reads as a second finding. -->
+									<span class="text-muted-foreground/80" data-testid="netif-link-local-hint">
+										{m["network.view.linkLocalHint"]()}
+									</span>
+								{/if}
 							</p>
 						{/if}
 						{#if routerCellular}
@@ -384,16 +414,6 @@ const ZONE_ICON = {
 							     unreachable on the kiosk touchscreen this device ships with. -->
 							<p class="text-muted-foreground/80 mt-0.5 text-xs" data-testid="netif-dongle-blocked-hint">
 								{dongleBlocked}
-							</p>
-						{/if}
-						{#if sharedLanReason}
-							<!-- Same rule, same reason: the bond toggle below is disabled, and
-							     the operator has to be able to READ why without hovering. -->
-							<p
-								class="text-muted-foreground/80 mt-0.5 text-xs"
-								data-testid="netif-eth-role-excluded-hint"
-							>
-								{sharedLanReason}
 							</p>
 						{/if}
 					</div>

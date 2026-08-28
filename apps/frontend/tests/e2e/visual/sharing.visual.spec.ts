@@ -19,6 +19,30 @@ import {
 
 const CARD = '[data-testid="sharing-section"]';
 
+/**
+ * FIXED OVERLAYS RE-COMPOSITE INTO A STITCHED ELEMENT SCREENSHOT.
+ *
+ * At 390px this card is taller than the viewport, so Playwright captures it by
+ * scrolling and stitching — and anything `position: fixed` is painted into each
+ * tile at whatever offset the stitch reaches, which is not the same between two
+ * runs. Two overlays sit over this card and neither belongs to it:
+ *
+ *   • the mobile dock (nav tabs + HUD) on the bottom edge — measured as a stable
+ *     ~1900px difference, a baseline with the dock covering CLIENT ZONES against
+ *     a verify run with it absent, which no retry settles;
+ *   • the svelte-sonner toast host, whose presence is timing-dependent — the
+ *     residual ~118px at the card's trailing edge once the dock was gone.
+ *     `mask.css` already neutralises it for the specs that load it; this one
+ *     takes element screenshots and does not.
+ *
+ * Both are removed from the capture rather than masked: an element screenshot's
+ * geometry does not depend on either, and on desktop the dock is not mounted at
+ * all, so the first rule is inert there.
+ */
+const OVERLAY_STABILIZE =
+	'.fixed.inset-x-0.bottom-0.z-40{display:none !important}' +
+	'[data-sonner-toaster]{display:none !important}';
+
 test.describe('@visual Internet-Sharing card', () => {
 	let wire: SharingWire;
 
@@ -29,6 +53,7 @@ test.describe('@visual Internet-Sharing card', () => {
 		await navigateTo(page, 'network');
 		await wire.publish();
 		await expect(page.locator(CARD)).toBeVisible();
+		await page.addStyleTag({ content: OVERLAY_STABILIZE });
 	});
 
 	test('@visual healthy three-uplink baseline', { tag: '@visual' }, async ({ page }) => {

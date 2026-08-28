@@ -107,6 +107,11 @@ Mock hardware scenarios are available via `MOCK_SCENARIO`:
 | `bun run dev:modem-pin-locked` | 2 modems, modem 0 SIM PIN-locked (fixture PIN `0000`) |
 | `bun run dev:bt-mic-paired` | Bluetooth on with an HFP mic already paired, trusted and connected |
 
+Bluetooth microphone source identity remains `bt:<upper-case underscored MAC>`.
+The engine's `pipewire-capture` feature makes an address-matched `list-devices`
+node the presence oracle and routes its `node.name` unchanged; engines without
+the token retain the existing BlueALSA PCM path as the rollback arm.
+
 ### Type-check
 
 ```bash

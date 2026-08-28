@@ -58,6 +58,7 @@ import {
 	getBluetoothAudioSources,
 	isBluetoothAudioSourceId,
 	refreshBluetoothAudioSources,
+	refreshPipewireBluetoothAudioSourcesForEngineChange,
 } from "./bluetooth-audio.ts";
 import { AUDIO_PROBE_TIMEOUT_MS } from "./constants.ts";
 import { reportActiveAudioSource } from "./lifecycle-indicators.ts";
@@ -117,7 +118,7 @@ export function resolveAudioMode(
 	// resolved the same way: the two can no longer disagree about a pick.
 	return {
 		mode: "device",
-		device: toAlsaCaptureDevice(audioDevices[asrc] ?? getAudioSrcId(asrc)),
+		device: resolveAudioCaptureDevice(asrc),
 	};
 }
 
@@ -173,9 +174,8 @@ export function resolveMeterPreference(
 	const pick = resolveEffectiveAudioPick(asrc, resolveAuto);
 	if (pick === undefined) return null;
 	if (isPseudoAudioSource(pick)) return null;
-	const cardId = audioDevices[pick] ?? getAudioSrcId(pick);
-	if (cardId.trim() === "") return null;
-	return toAlsaCaptureDevice(cardId);
+	const device = resolveAudioCaptureDevice(pick);
+	return device.trim() === "" ? null : device;
 }
 
 /**
@@ -291,6 +291,11 @@ export function isMeterPreferenceDevicePresent(
 function toAlsaCaptureDevice(cardId: string): string {
 	if (cardId.includes(":") || cardId.includes("=")) return cardId;
 	return `hw:CARD=${cardId}`;
+}
+
+function resolveAudioCaptureDevice(asrc: string): string {
+	const target = audioDevices[asrc] ?? getAudioSrcId(asrc);
+	return isBluetoothAudioSourceId(asrc) ? target : toAlsaCaptureDevice(target);
 }
 const BASE_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	C4K: "Cam Link 4K",
@@ -647,6 +652,8 @@ export async function broadcastAudioSources(): Promise<void> {
  * so an unchanged pick broadcasts no gap.
  */
 export async function reresolveAudioForEngineChange(): Promise<void> {
+	await refreshPipewireBluetoothAudioSourcesForEngineChange();
+	composeAudioDevices();
 	await broadcastAudioSources();
 	refreshResolvedAsrcPreview();
 	syncAudioMeterPreference();

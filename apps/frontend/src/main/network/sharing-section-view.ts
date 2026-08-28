@@ -387,6 +387,163 @@ export function deriveSharingDiagView(
 	return { tone, findings };
 }
 
+// ─────────────────────── the ONE headline state line ───────────────────────
+
+/**
+ * The section's single state authority. It is DERIVED from the bands above —
+ * never a second reading of the wire — so the headline and the bands can never
+ * disagree about what the device said.
+ *
+ * Precedence is by SCOPE, not by tone: sharing being off makes every downstream
+ * fact moot, and having nowhere to send client traffic makes a steering failure
+ * invisible. `uplinks-unreported` sits LAST of the bands because it is the one
+ * that says nothing definite; a steering refusal the device actually named
+ * outranks a report that has not arrived.
+ */
+const HEADLINE_PRECEDENCE: readonly SharingBandKind[] = [
+	"sharing-off",
+	"no-healthy-uplink",
+	"steering-unavailable",
+	"uplinks-unreported",
+];
+
+export type SharingHeadlineKind = SharingBandKind | "sharing-active";
+
+export interface SharingHeadlineView {
+	readonly kind: SharingHeadlineKind;
+	readonly tone: "ok" | "info" | "warning";
+	readonly titleKey: string;
+	readonly bodyKey: string;
+	readonly reason?: string;
+	readonly reasonKey?: string;
+	/**
+	 * TRUE when the headline ITSELF asserts the state every row would restate,
+	 * so a render site mutes the per-row chips instead of repeating one alarm
+	 * once per uplink. The WORD still renders — colour is only reinforcement —
+	 * so muting removes the duplication without removing a fact.
+	 */
+	readonly restatesRowState: boolean;
+	/** Uplinks not reported `down`, and the total — the healthy body's figures. */
+	readonly usableUplinks: number;
+	readonly totalUplinks: number;
+}
+
+export function deriveSharingHeadline(
+	bands: readonly SharingBand[],
+	rows: readonly UplinkRowView[],
+): SharingHeadlineView {
+	const governing = HEADLINE_PRECEDENCE.map((kind) =>
+		bands.find((band) => band.kind === kind),
+	).find((band): band is SharingBand => band !== undefined);
+
+	const counts = {
+		usableUplinks: rows.filter((row) => row.state !== "down").length,
+		totalUplinks: rows.length,
+	};
+
+	if (governing === undefined) {
+		return {
+			kind: "sharing-active",
+			tone: "ok",
+			titleKey: "network.sharing.headline.activeTitle",
+			bodyKey: "network.sharing.headline.activeBody",
+			restatesRowState: false,
+			...counts,
+		};
+	}
+
+	return {
+		kind: governing.kind,
+		tone: governing.tone,
+		titleKey: governing.titleKey,
+		bodyKey: governing.bodyKey,
+		...(governing.reason !== undefined ? { reason: governing.reason } : {}),
+		...(governing.reasonKey !== undefined
+			? { reasonKey: governing.reasonKey }
+			: {}),
+		// `no-healthy-uplink` is the ONE band that literally asserts a per-row
+		// state ("every uplink is down"); nothing else names one, so nothing else
+		// may mute a row. The row check is re-made here rather than assumed: an
+		// empty roster bands the same way and has no rows to deduplicate.
+		restatesRowState:
+			governing.kind === "no-healthy-uplink" &&
+			rows.length > 0 &&
+			rows.every((row) => row.state === "down"),
+		...counts,
+	};
+}
+
+/**
+ * The bands the headline did NOT speak for. They are still true, so they are
+ * demoted into the diagnostics disclosure rather than dropped — a second
+ * standing band beside the headline is exactly the duplication this removes.
+ */
+export function subordinateBands(
+	bands: readonly SharingBand[],
+	headline: SharingHeadlineView,
+): readonly SharingBand[] {
+	return bands.filter((band) => band.kind !== headline.kind);
+}
+
+// ─────────────────────── the diagnostics disclosure ───────────────────────
+
+export type DiagnosticsTone = "neutral" | "info" | "warning";
+
+export interface DiagnosticsSummaryView {
+	readonly tone: DiagnosticsTone;
+	/** How many separate findings are folded away behind the disclosure. */
+	readonly findings: number;
+	readonly labelKey: string;
+}
+
+const TONE_RANK: Record<DiagnosticsTone, number> = {
+	neutral: 0,
+	info: 1,
+	warning: 2,
+};
+
+/**
+ * The chip on the collapsed disclosure's summary. A folded surface that cannot
+ * say it holds a warning is a hidden warning, so the chip carries BOTH the tone
+ * and the count — and an `unreported` shaper is deliberately NOT a finding: an
+ * honest non-state is not a fault to review.
+ */
+export function deriveDiagnosticsSummary(
+	priority: PriorityView,
+	diag: SharingDiagView | undefined,
+	subordinate: readonly SharingBand[],
+): DiagnosticsSummaryView {
+	let findings = 0;
+	let tone: DiagnosticsTone = "neutral";
+	const escalate = (next: DiagnosticsTone) => {
+		if (TONE_RANK[next] > TONE_RANK[tone]) tone = next;
+	};
+
+	if (priority.kind === "degraded") {
+		findings += 1;
+		escalate("warning");
+	}
+	if (diag !== undefined) {
+		findings += diag.findings.length;
+		escalate(diag.tone);
+	}
+	for (const band of subordinate) {
+		findings += 1;
+		escalate(band.tone);
+	}
+
+	return {
+		tone,
+		findings,
+		labelKey:
+			findings === 0
+				? "network.sharing.diagnostics.clear"
+				: findings === 1
+					? "network.sharing.diagnostics.findingsOne"
+					: "network.sharing.diagnostics.findingsMany",
+	};
+}
+
 // ─────────────────────────── the whole section ───────────────────────────
 
 export interface SharingSectionInput {
@@ -405,6 +562,9 @@ export interface SharingSectionView {
 	readonly priority: PriorityView;
 	readonly bands: readonly SharingBand[];
 	readonly diag?: SharingDiagView;
+	readonly headline: SharingHeadlineView;
+	readonly subordinate: readonly SharingBand[];
+	readonly diagnostics: DiagnosticsSummaryView;
 }
 
 export function deriveSharingSection(
@@ -422,11 +582,17 @@ export function deriveSharingSection(
 	if (reachability) bands.push(reachability);
 
 	const diag = deriveSharingDiagView(input.diag);
+	const priority = derivePriority(input.shaper);
+	const headline = deriveSharingHeadline(bands, rows);
+	const subordinate = subordinateBands(bands, headline);
 	return {
 		rows,
 		zones,
-		priority: derivePriority(input.shaper),
+		priority,
 		bands,
 		...(diag !== undefined ? { diag } : {}),
+		headline,
+		subordinate,
+		diagnostics: deriveDiagnosticsSummary(priority, diag, subordinate),
 	};
 }

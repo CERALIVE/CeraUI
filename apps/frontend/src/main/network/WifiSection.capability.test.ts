@@ -7,6 +7,13 @@
  * bands are offered, which generation is claimed, and whether a band the radio
  * carries but cannot use right now says so with a way out.
  *
+ * Todo 32 DEMOTED the strip behind a collapsed "Radio capabilities" disclosure —
+ * every chip below it is a hardware ceiling, which changes only when the hardware
+ * or the regulatory domain does, so at rest it buried a row whose job is to report
+ * a live link. Nothing was removed: every assertion here now opens the disclosure
+ * first (`openCapabilities`) and reads the SAME facts one tap further in, and the
+ * describe above the regression lock pins the collapsed/expanded split itself.
+ *
  * The last describe is the regression lock. `capabilities` is optional on the
  * wire and absent on every backend that predates todo 2, so a row without one
  * must render EXACTLY what it rendered before this feature existed — proven by
@@ -16,7 +23,7 @@ import type {
 	WifiAdapterCapabilities,
 	WifiInterface,
 } from "@ceraui/rpc/schemas";
-import { render } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
 
 import WifiSection from "./WifiSection.svelte";
@@ -101,6 +108,23 @@ function mount(
 	});
 }
 
+/**
+ * Open every radio's capability disclosure by clicking its own summary.
+ *
+ * Clicking rather than assigning `open` is the point: it proves the fact is
+ * REACHABLE through the affordance an operator has, not merely present in a
+ * subtree a query can still walk while it is collapsed.
+ */
+async function openCapabilities(container: HTMLElement): Promise<void> {
+	const toggles = container.querySelectorAll<HTMLElement>(
+		'[data-testid="wifi-capabilities-toggle"]',
+	);
+	if (toggles.length === 0) {
+		throw new Error("no radio-capability disclosure is rendered");
+	}
+	for (const toggle of toggles) await fireEvent.click(toggle);
+}
+
 function bandsOf(container: HTMLElement) {
 	return [
 		...container.querySelectorAll('[data-testid="wifi-band-option"]'),
@@ -112,8 +136,9 @@ function bandsOf(container: HTMLElement) {
 }
 
 describe("WifiSection — the shipped Wi-Fi 6 radio", () => {
-	it("badges the generation from the wire and nothing else", () => {
-		const { getByTestId } = mount([["0", radio(ROCK_RTL8852BE)]]);
+	it("badges the generation from the wire and nothing else", async () => {
+		const { container, getByTestId } = mount([["0", radio(ROCK_RTL8852BE)]]);
+		await openCapabilities(container);
 
 		const badge = getByTestId("wifi-generation-badge");
 		expect(badge.dataset.generation).toBe("wifi6");
@@ -123,8 +148,9 @@ describe("WifiSection — the shipped Wi-Fi 6 radio", () => {
 		expect(badge.textContent).not.toContain("Wi-Fi 7");
 	});
 
-	it("offers exactly the two bands it carries, each with its own width", () => {
+	it("offers exactly the two bands it carries, each with its own width", async () => {
 		const { container } = mount([["0", radio(ROCK_RTL8852BE)]]);
+		await openCapabilities(container);
 
 		expect(bandsOf(container)).toEqual([
 			{ band: "2.4", available: "true", text: "2.4 GHz 40 MHz" },
@@ -132,8 +158,9 @@ describe("WifiSection — the shipped Wi-Fi 6 radio", () => {
 		]);
 	});
 
-	it("renders NO 6 GHz node and NO reason — the radio positively lacks the band", () => {
+	it("renders NO 6 GHz node and NO reason — the radio positively lacks the band", async () => {
 		const { container, queryByTestId } = mount([["0", radio(ROCK_RTL8852BE)]]);
+		await openCapabilities(container);
 
 		expect(
 			container.querySelector(
@@ -144,8 +171,9 @@ describe("WifiSection — the shipped Wi-Fi 6 radio", () => {
 		expect(queryByTestId("wifi-open-country")).toBeNull();
 	});
 
-	it("states the same-channel limit on its station+AP combo", () => {
-		const { getByTestId } = mount([["0", radio(ROCK_RTL8852BE)]]);
+	it("states the same-channel limit on its station+AP combo", async () => {
+		const { container, getByTestId } = mount([["0", radio(ROCK_RTL8852BE)]]);
+		await openCapabilities(container);
 
 		const note = getByTestId("wifi-sta-ap-combo");
 		expect(note.dataset.sameChannel).toBe("true");
@@ -154,10 +182,11 @@ describe("WifiSection — the shipped Wi-Fi 6 radio", () => {
 });
 
 describe("WifiSection — a Wi-Fi 7 radio whose domain allows 6 GHz", () => {
-	it("offers all three bands, 6 GHz enabled, with no reason band", () => {
+	it("offers all three bands, 6 GHz enabled, with no reason band", async () => {
 		const { container, getByTestId, queryByTestId } = mount([
 			["0", radio(MT7925)],
 		]);
+		await openCapabilities(container);
 
 		expect(getByTestId("wifi-generation-badge").textContent?.trim()).toBe(
 			"Wi-Fi 7",
@@ -170,8 +199,9 @@ describe("WifiSection — a Wi-Fi 7 radio whose domain allows 6 GHz", () => {
 		expect(queryByTestId("wifi-band-blocked-reason")).toBeNull();
 	});
 
-	it("states that its station+AP combo needs no shared channel", () => {
-		const { getByTestId } = mount([["0", radio(MT7925)]]);
+	it("states that its station+AP combo needs no shared channel", async () => {
+		const { container, getByTestId } = mount([["0", radio(MT7925)]]);
+		await openCapabilities(container);
 
 		expect(getByTestId("wifi-sta-ap-combo").dataset.sameChannel).toBe("false");
 	});
@@ -183,8 +213,9 @@ describe("WifiSection — a 6 GHz band the regulatory domain forbids", () => {
 		regulatory: { country: "CO", is6GhzLegal: false, self_managed: false },
 	};
 
-	it("keeps 6 GHz visible, marked unavailable, never hidden", () => {
+	it("keeps 6 GHz visible, marked unavailable, never hidden", async () => {
 		const { container } = mount([["0", radio(blockedByDomain)]]);
+		await openCapabilities(container);
 
 		const six = container.querySelector<HTMLElement>(
 			'[data-testid="wifi-band-option"][data-band="6"]',
@@ -194,8 +225,9 @@ describe("WifiSection — a 6 GHz band the regulatory domain forbids", () => {
 		expect(six?.getAttribute("aria-disabled")).toBe("true");
 	});
 
-	it("carries an on-screen reason naming the country, not a raw token", () => {
-		const { getByTestId } = mount([["0", radio(blockedByDomain)]]);
+	it("carries an on-screen reason naming the country, not a raw token", async () => {
+		const { container, getByTestId } = mount([["0", radio(blockedByDomain)]]);
+		await openCapabilities(container);
 
 		const band = getByTestId("wifi-band-blocked-reason");
 		expect(band.dataset.blockedBy).toBe("regulatory-domain");
@@ -208,17 +240,18 @@ describe("WifiSection — a 6 GHz band the regulatory domain forbids", () => {
 
 	it("routes the operator to the country surface", async () => {
 		const onOpenCountry = vi.fn();
-		const { getByTestId } = mount(
+		const { container, getByTestId } = mount(
 			[["0", radio(blockedByDomain)]],
 			onOpenCountry,
 		);
+		await openCapabilities(container);
 
 		getByTestId("wifi-open-country").click();
 		expect(onOpenCountry).toHaveBeenCalledTimes(1);
 	});
 
-	it("says NO country is set when the world domain is what forbids it", () => {
-		const { getByTestId } = mount([
+	it("says NO country is set when the world domain is what forbids it", async () => {
+		const { container, getByTestId } = mount([
 			[
 				"0",
 				radio({
@@ -231,6 +264,7 @@ describe("WifiSection — a 6 GHz band the regulatory domain forbids", () => {
 				}),
 			],
 		]);
+		await openCapabilities(container);
 
 		const band = getByTestId("wifi-band-blocked-reason");
 		expect(band.textContent).toContain("No country is set");
@@ -246,8 +280,9 @@ describe("WifiSection — a self-managed radio forbidding its own 6 GHz", () => 
 		regulatory: { country: "US", is6GhzLegal: false, self_managed: true },
 	};
 
-	it("explains it is the adapter's firmware, in the calm register", () => {
-		const { getByTestId } = mount([["0", radio(selfManaged)]]);
+	it("explains it is the adapter's firmware, in the calm register", async () => {
+		const { container, getByTestId } = mount([["0", radio(selfManaged)]]);
+		await openCapabilities(container);
 
 		const band = getByTestId("wifi-band-blocked-reason");
 		expect(band.dataset.blockedBy).toBe("self-managed");
@@ -256,28 +291,31 @@ describe("WifiSection — a self-managed radio forbidding its own 6 GHz", () => 
 		expect(band.className).not.toContain("status-warning");
 	});
 
-	it("offers NO country action — the dialog provably cannot move it", () => {
-		const { queryByTestId } = mount([["0", radio(selfManaged)]]);
+	it("offers NO country action — the dialog provably cannot move it", async () => {
+		const { container, queryByTestId } = mount([["0", radio(selfManaged)]]);
+		await openCapabilities(container);
 
 		expect(queryByTestId("wifi-open-country")).toBeNull();
 	});
 });
 
 describe("WifiSection — WPA3 is tri-state", () => {
-	it("renders `unknown` as its own visibly distinct state", () => {
-		const { getByTestId } = mount([
+	it("renders `unknown` as its own visibly distinct state", async () => {
+		const { container, getByTestId } = mount([
 			["0", radio({ ...ROCK_RTL8852BE, wpa3Sae: "unknown" })],
 		]);
+		await openCapabilities(container);
 
 		const chip = getByTestId("wifi-wpa3");
 		expect(chip.dataset.state).toBe("unknown");
 		expect(chip.textContent).toContain("not reported");
 	});
 
-	it("draws nothing for a radio that positively cannot do WPA3", () => {
-		const { queryByTestId } = mount([
+	it("draws nothing for a radio that positively cannot do WPA3", async () => {
+		const { container, queryByTestId } = mount([
 			["0", radio({ ...ROCK_RTL8852BE, wpa3Sae: "unsupported" })],
 		]);
+		await openCapabilities(container);
 
 		expect(queryByTestId("wifi-wpa3")).toBeNull();
 	});
@@ -296,11 +334,12 @@ describe("WifiSection — zero radios is a stated fact", () => {
 });
 
 describe("WifiSection — every radio answers for itself", () => {
-	it("derives each adapter's strip from its own report", () => {
-		const { getAllByTestId } = mount([
+	it("derives each adapter's strip from its own report", async () => {
+		const { container, getAllByTestId } = mount([
 			["0", radio(ROCK_RTL8852BE)],
 			["1", { ...radio(MT7925), ifname: "wlan1" } as WifiInterface],
 		]);
+		await openCapabilities(container);
 
 		const strips = getAllByTestId("wifi-capabilities");
 		expect(strips.map((s) => s.dataset.generation)).toEqual(["wifi6", "wifi7"]);
@@ -309,11 +348,12 @@ describe("WifiSection — every radio answers for itself", () => {
 		).toEqual(["2.4", "5", "2.4", "5", "6"]);
 	});
 
-	it("leaves a report-less sibling bare while the other keeps its strip", () => {
-		const { getAllByTestId } = mount([
+	it("leaves a report-less sibling bare while the other keeps its strip", async () => {
+		const { container, getAllByTestId } = mount([
 			["0", radio(ROCK_RTL8852BE)],
 			["1", { ...radio(), ifname: "wlan1" } as WifiInterface],
 		]);
+		await openCapabilities(container);
 
 		const strips = getAllByTestId("wifi-capabilities");
 		expect(strips).toHaveLength(1);
@@ -322,20 +362,111 @@ describe("WifiSection — every radio answers for itself", () => {
 });
 
 describe("WifiSection — the capability strip is a demoted hardware tag", () => {
-	it("never borrows the phosphor-lime accent reserved for the live signal", () => {
-		const { getByTestId } = mount([["0", radio(MT7925)]]);
+	it("never borrows the phosphor-lime accent reserved for the live signal", async () => {
+		const { container, getByTestId } = mount([["0", radio(MT7925)]]);
+		await openCapabilities(container);
 
 		const strip = getByTestId("wifi-capabilities");
 		expect(strip.innerHTML).not.toContain("text-primary");
 		expect(strip.innerHTML).not.toContain("bg-primary");
 	});
 
-	it("resolves every label through i18n rather than printing a dotted key", () => {
-		const { getByTestId } = mount([["0", radio(MT7925)]]);
+	it("resolves every label through i18n rather than printing a dotted key", async () => {
+		const { container, getByTestId } = mount([["0", radio(MT7925)]]);
+		await openCapabilities(container);
 
 		expect(getByTestId("wifi-capabilities").textContent).not.toContain(
 			"network.wifiCapability",
 		);
+	});
+});
+
+describe("WifiSection — the capability strip is a collapsed disclosure", () => {
+	it("arrives closed, so the row at rest is identity, status and actions", () => {
+		const { container, getByTestId } = mount([["0", radio(MT7925)]]);
+
+		const disclosure = getByTestId("wifi-capabilities") as HTMLDetailsElement;
+		expect(disclosure.tagName).toBe("DETAILS");
+		expect(disclosure.open).toBe(false);
+
+		// What an operator meets on the collapsed card: the adapter, what it is
+		// doing, what they can do about it — and a named way to the rest.
+		expect(container.textContent).toContain("wlan0");
+		expect(container.textContent).toContain("CERALIVE");
+		expect(getByTestId("open-wifi-selector-dialog")).toBeTruthy();
+		expect(getByTestId("wifi-mode-badge")).toBeTruthy();
+		expect(getByTestId("wifi-capabilities-toggle").textContent?.trim()).toBe(
+			"Radio capabilities",
+		);
+	});
+
+	it("opens from its own summary — the facts are reachable, not merely present", async () => {
+		const { container, getByTestId } = mount([["0", radio(MT7925)]]);
+
+		await openCapabilities(container);
+
+		expect((getByTestId("wifi-capabilities") as HTMLDetailsElement).open).toBe(
+			true,
+		);
+		// Every fact the always-open strip used to carry, still carried.
+		expect(getByTestId("wifi-generation-badge").dataset.generation).toBe(
+			"wifi7",
+		);
+		expect(bandsOf(container).map((b) => b.band)).toEqual(["2.4", "5", "6"]);
+		expect(getByTestId("wifi-wpa3")).toBeTruthy();
+		expect(getByTestId("wifi-sta-ap-combo")).toBeTruthy();
+	});
+
+	it("keeps a blocked band AND its way out inside the disclosure", async () => {
+		const onOpenCountry = vi.fn();
+		const { container, getByTestId } = mount(
+			[
+				[
+					"0",
+					radio({
+						...MT7925,
+						regulatory: {
+							country: "CO",
+							is6GhzLegal: false,
+							self_managed: false,
+						},
+					}),
+				],
+			],
+			onOpenCountry,
+		);
+
+		await openCapabilities(container);
+		const band = getByTestId("wifi-band-blocked-reason");
+		expect(band.closest('[data-testid="wifi-capabilities"]')).not.toBeNull();
+
+		const wayOut = getByTestId("wifi-open-country");
+		expect(wayOut.closest('[data-testid="wifi-capabilities"]')).not.toBeNull();
+		wayOut.click();
+		expect(onOpenCountry).toHaveBeenCalledTimes(1);
+	});
+
+	it("gives each radio its own disclosure, independently openable", async () => {
+		const { container } = mount([
+			["0", radio(ROCK_RTL8852BE)],
+			["1", { ...radio(MT7925), ifname: "wlan1" } as WifiInterface],
+		]);
+
+		const disclosures = [
+			...container.querySelectorAll<HTMLDetailsElement>(
+				'[data-testid="wifi-capabilities"]',
+			),
+		];
+		expect(disclosures.map((d) => d.dataset.device)).toEqual(["0", "1"]);
+		expect(disclosures.map((d) => d.open)).toEqual([false, false]);
+
+		const first = disclosures[0]?.querySelector<HTMLElement>(
+			'[data-testid="wifi-capabilities-toggle"]',
+		);
+		if (!first) throw new Error("the first disclosure has no summary");
+		await fireEvent.click(first);
+
+		expect(disclosures.map((d) => d.open)).toEqual([true, false]);
 	});
 });
 

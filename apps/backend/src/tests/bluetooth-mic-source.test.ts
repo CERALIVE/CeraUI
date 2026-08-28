@@ -9,6 +9,7 @@ import {
 	resolveAudioMode,
 	resolveMeterPreference,
 } from "../modules/streaming/audio.ts";
+import type { EngineAudioDevice } from "../modules/streaming/audio-naming.ts";
 import {
 	type BluealsaCapturePcm,
 	type BluetoothAudioDevice,
@@ -22,6 +23,11 @@ import {
 	resetBluetoothAudioForTest,
 	setBluetoothAudioDepsForTest,
 } from "../modules/streaming/bluetooth-audio.ts";
+import {
+	getEngineAudioDevices,
+	refreshEngineDeviceCache,
+	resetEngineDeviceCache,
+} from "../modules/streaming/sources.ts";
 
 const MIC_ADDRESS = "AA:BB:CC:11:22:33";
 const MIC_ID = "bt:AA_BB_CC_11_22_33";
@@ -53,6 +59,17 @@ function scoPcm(
 	};
 }
 
+function pipewireNode(
+	overrides: Partial<EngineAudioDevice> = {},
+): EngineAudioDevice {
+	return {
+		input_id: "bluez_input.AA_BB_CC_11_22_33.0",
+		display_name: "Jabra Talk 45",
+		device_address: MIC_ADDRESS,
+		...overrides,
+	};
+}
+
 function variant(signature: string, value: unknown) {
 	return { signature, value };
 }
@@ -74,33 +91,124 @@ function installDeps(options: {
 	devices?: readonly BluetoothAudioDevice[];
 	pcms?: BluealsaCapturePcm[] | undefined;
 	engineSupportsPcmSpec?: boolean;
+	engineSupportsPipewireCapture?: boolean;
+	engineDevices?: readonly EngineAudioDevice[];
+	onBluealsaRead?: () => void;
 }) {
 	noteBluetoothRegistryDevices(options.devices ?? [hfpMic()]);
 	setBluetoothAudioDepsForTest({
-		readEnumeratedPcms: async () =>
-			options.pcms === undefined && "pcms" in options
+		readEnumeratedPcms: async () => {
+			options.onBluealsaRead?.();
+			return options.pcms === undefined && "pcms" in options
 				? undefined
-				: (options.pcms ?? [scoPcm()]),
+				: (options.pcms ?? [scoPcm()]);
+		},
 		readRegistryDevices: () => [...(options.devices ?? [hfpMic()])],
 		engineSupportsPcmSpec: () => options.engineSupportsPcmSpec ?? true,
+		engineSupportsPipewireCapture: () =>
+			options.engineSupportsPipewireCapture ?? false,
+		readEngineAudioDevices: () => [...(options.engineDevices ?? [])],
 	});
 }
 
 describe("Bluetooth microphone as an audio source", () => {
 	beforeEach(() => {
 		resetBluetoothAudioForTest();
+		resetEngineDeviceCache();
 	});
 
 	afterEach(async () => {
 		delete getConfig().asrc;
 		resetBluetoothAudioForTest();
+		resetEngineDeviceCache();
 		setBluetoothAudioDepsForTest({
 			readEnumeratedPcms: async () => [],
 			readRegistryDevices: () => [],
 			engineSupportsPcmSpec: () => true,
+			engineSupportsPipewireCapture: () => false,
+			readEngineAudioDevices: () => [],
 		});
 		await refreshBluetoothAudioDevices();
 		resetBluetoothAudioForTest();
+	});
+
+	describe("the PipeWire engine node is the presence oracle", () => {
+		test("the additive engine payload survives the real list-devices projection", async () => {
+			await refreshEngineDeviceCache({
+				fetchEngineDevices: async () => ({
+					devices: [
+						{
+							input_id: "bluez_input.AA_BB_CC_11_22_33.0",
+							device_path: "bluez_input.AA_BB_CC_11_22_33.0",
+							display_name: "Jabra Talk 45",
+							media_class: "audio",
+							device_address: MIC_ADDRESS,
+						},
+					],
+				}),
+			});
+
+			expect(getEngineAudioDevices()).toEqual([pipewireNode()]);
+
+			installDeps({
+				engineSupportsPipewireCapture: true,
+				engineDevices: getEngineAudioDevices(),
+			});
+			await refreshBluetoothAudioDevices();
+			expect(getAudioDevices()[MIC_ID]).toBe("bluez_input.AA_BB_CC_11_22_33.0");
+		});
+
+		test("pipewire-capture matches device_address case-insensitively and routes node.name unchanged", async () => {
+			let bluealsaReads = 0;
+			installDeps({
+				engineSupportsPipewireCapture: true,
+				engineDevices: [
+					pipewireNode({ device_address: MIC_ADDRESS.toLowerCase() }),
+				],
+				onBluealsaRead: () => {
+					bluealsaReads += 1;
+				},
+			});
+
+			await refreshBluetoothAudioDevices();
+
+			expect(bluealsaReads).toBe(0);
+			expect(getAudioDevices()[MIC_ID]).toBe("bluez_input.AA_BB_CC_11_22_33.0");
+			expect(resolveAudioMode(MIC_ID, false)).toEqual({
+				mode: "device",
+				device: "bluez_input.AA_BB_CC_11_22_33.0",
+			});
+		});
+
+		test("pipewire-capture with no matching node publishes no row even when BlueALSA has one", async () => {
+			installDeps({
+				engineSupportsPipewireCapture: true,
+				engineDevices: [pipewireNode({ device_address: "00:11:22:33:44:55" })],
+				pcms: [scoPcm()],
+			});
+
+			await refreshBluetoothAudioDevices();
+
+			expect(getAudioDevices()[MIC_ID]).toBeUndefined();
+			expect(deriveAudioSources().some((source) => source.id === MIC_ID)).toBe(
+				false,
+			);
+		});
+
+		test("a pre-migration bt: selection resolves after reboot without changing one byte", async () => {
+			getConfig().asrc = MIC_ID;
+			installDeps({
+				engineSupportsPipewireCapture: true,
+				engineDevices: [pipewireNode()],
+			});
+
+			await refreshBluetoothAudioDevices();
+
+			expect(getConfig().asrc).toBe(MIC_ID);
+			expect(resolveMeterPreference(getConfig().asrc)).toBe(
+				"bluez_input.AA_BB_CC_11_22_33.0",
+			);
+		});
 	});
 
 	describe("the BlueALSA PCM is the presence oracle", () => {
@@ -397,6 +505,8 @@ describe("Bluetooth microphone as an audio source", () => {
 				readEnumeratedPcms: async () => undefined,
 				readRegistryDevices: () => [hfpMic()],
 				engineSupportsPcmSpec: () => true,
+				engineSupportsPipewireCapture: () => false,
+				readEngineAudioDevices: () => [],
 			});
 			await refreshBluetoothAudioDevices();
 

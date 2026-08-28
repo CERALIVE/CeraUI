@@ -2408,6 +2408,36 @@ re-derived from bus-path string matching. Frontend label precedence is
 `product_name · TRANSPORT` → `label` → `labelKey` → `id`. Full contract:
 `apps/backend/AGENTS.md` → AUDIO-DEVICE NAMING.
 
+**And the ladder is UNCHANGED on the engine's PipeWire audio arm — proven, not
+assumed.** cerastream's `[audio] backend = "pipewire"` moved where a row's
+identity is derived (PipeWire node props, resolved back through the engine's
+`pw_identity.rs`) and left the vocabulary alone: an audio row's `id` is still
+`hw:CARD=<card>` and `alsa_card_id` is still published, so the join key CeraUI
+resolves on never moved. `tests/audio-naming-pipewire-arm.test.ts` renders one
+physical roster as BOTH arms' `list-devices` payloads and drives each through the
+real whitelist copy and the real ladder; the arms disagree about `device_path`
+(which is not in the audio whitelist at all) and agree about everything the
+ladder reads. The persisted-config half is the same test's acceptance: a
+`config.asrc` written before any PipeWire work — an alias name, a bare card id,
+or a raw `hw:CARD=`/`plughw:` selector — resolves to the same meter target on
+both arms and to the literal pre-migration answer, so **no `asrc` migration is
+required for the backend flip**. Full contract: `apps/backend/AGENTS.md` →
+"…AND THE LADDER IS THE SAME ON THE PIPEWIRE ARM" and the pre-migration paragraph
+under IDLE AUDIO-METER DEVICE PREFERENCE.
+
+**RELEASE SEQUENCING — this CeraUI release ships WITH the image's PipeWire
+release, not before or after it.** The device image's PipeWire adoption
+(`image-building-pipeline`, system-mode PipeWire + BlueALSA retirement) removes
+`bluealsad` from the board in the same release that adds the PipeWire stack, and
+CeraUI's Bluetooth-microphone presence oracle switches arms on the engine's
+`pipewire-capture` feature token rather than on an image version. The two halves
+are therefore atomic by construction: an image carrying PipeWire under a CeraUI
+that still drives `bluealsad` would offer an operator a Bluetooth path the device
+no longer has, and the reverse strands a working BlueALSA path behind a token
+that never arrives. Nothing in either repo can detect the mismatch, so it is a
+RELEASE-ORDER obligation, recorded here for the release checklist rather than
+enforced in code.
+
 ## THE WI-FI OFFERING IS DERIVED FROM THE RADIO [EXISTS]
 
 The three-value band enum (`auto` / `auto_24` / `auto_50`) is still the **wire
@@ -2608,8 +2638,17 @@ seam is a one-file deletion. A boot-the-mock-service parity test is owed with it
 
 ## THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE [EXISTS]
 
-**The presence oracle is the `org.bluealsa` capture PCM object, never BlueZ
-`Connected`.** A device can be connected with no PCM behind it, and naming it as an
+**The presence oracle follows the engine's configured audio backend, never BlueZ
+`Connected`.** When the engine advertises the exact `pipewire-capture` feature token,
+the oracle is its `list-devices` audio row whose optional `device_address` matches the
+paired registry MAC; CeraUI sends that row's `input_id` (`node.name`) through
+`AudioConfig.device` unchanged. A connected registry device with no matching engine
+node yields no source. CeraUI compares the colon-form address case-insensitively and
+keeps the persisted id byte-identical as `bt:<upper-case underscored MAC>`; it never
+persists PipeWire `object.serial`.
+
+Without `pipewire-capture`, the oracle remains the `org.bluealsa` capture PCM object
+byte-for-byte. A device can be connected with no PCM behind it, and naming it as an
 available source is a claim the device cannot honour. `scoCapable` + PCM present yields
 the row; connected-but-no-PCM yields none; A2DP-only yields none.
 
@@ -2663,7 +2702,7 @@ Recorded as a hardware gap, not a code gap, in
 - Don't decide a channel or band is AP-usable from the per-channel `iw phy` flags alone — board-proven, an RTL8852BE under the world domain lists 5180/5200/5220 with no `no IR` marker while every 5 GHz rule in `iw reg get` reads `PASSIVE-SCAN`. Ask `buildApInitiationGate`, ask it at **both** producers (the `ch_*` map and the `auto_*` rungs), don't "simplify" it into a hardcoded 5 GHz block, don't make it channel-scoped, and don't make it fail closed.
 - Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.
 - Don't build the `org.bluez.Agent1` object on the shared `DbusTransport` — it is client-only. Use `bluez-agent-exporter.ts`'s dedicated connection, and never `RegisterAgent` a path before its object is exported: BlueZ then blocks on every callback until it times out, which is worse than having no agent.
-- Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the `org.bluealsa` capture-PCM object; a connected device with no PCM must yield no source row.
+- Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the address-matched engine node when `pipewire-capture` is advertised and the `org.bluealsa` capture PCM otherwise; a connected device with neither must yield no source row. Never persist PipeWire `object.serial` or change the existing `bt:` id.
 - Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.

@@ -14,7 +14,8 @@
  * even when its own suite passes.
  */
 import type { NetifMessage, WifiInterface } from "@ceraui/rpc/schemas";
-import { render } from "@testing-library/svelte";
+import { fireEvent, render } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	destroyAsyncOperations,
@@ -152,6 +153,22 @@ function badgeModes(container: HTMLElement | Document): string[] {
 	);
 }
 
+/**
+ * Open the WiFi row's "Mode" popover, where todo 32 moved the selector.
+ *
+ * `HotspotSection` and `HotspotDialog` still mount the selector directly, so
+ * only the WiFi half takes this step — which is itself part of the contract:
+ * the surfaces agree on the mode whether the control is on screen or not.
+ */
+async function openWifiMode(device: string): Promise<void> {
+	const trigger = document.querySelector<HTMLElement>(
+		`[data-testid="open-wifi-mode"][data-device="${device}"]`,
+	);
+	if (!trigger) throw new Error("the Mode affordance is not rendered");
+	await fireEvent.click(trigger);
+	await tick();
+}
+
 beforeEach(() => {
 	initAsyncOperations();
 	resetWifiAdapterModes();
@@ -165,7 +182,7 @@ afterEach(() => {
 
 describe("the displayed mode is identical across every surface", () => {
 	for (const fixture of FIXTURES) {
-		it(`${fixture.name} reads "${fixture.expected}" everywhere`, () => {
+		it(`${fixture.name} reads "${fixture.expected}" everywhere`, async () => {
 			setWifiAdapterModesForTest({
 				[DEVICE]: {
 					ifname: "wlan0",
@@ -187,9 +204,16 @@ describe("the displayed mode is identical across every surface", () => {
 			});
 			const wifiModes = badgeModes(wifi.container);
 			expect(wifiModes).toEqual([fixture.expected]);
-			// The selector's own root must agree with the badge beside it.
+			// The badge is the row's ONLY mode statement until the operator asks for
+			// the control — that is what "renders once" means on this surface.
 			expect(
-				wifi.container
+				wifi.container.querySelector('[data-testid="wifi-mode-selector"]'),
+			).toBeNull();
+			// …and the selector, once opened, must agree with the badge beside it.
+			// It is portalled out of `container`, so this reads from the document.
+			await openWifiMode(DEVICE);
+			expect(
+				document
 					.querySelector('[data-testid="wifi-mode-selector"]')
 					?.getAttribute("data-mode"),
 			).toBe(fixture.expected);
@@ -213,7 +237,7 @@ describe("the displayed mode is identical across every surface", () => {
 });
 
 describe("an unavailable mode states its reason on every surface that offers it", () => {
-	it("renders a visible reason line, not only a title", () => {
+	it("renders a visible reason line, not only a title", async () => {
 		setWifiAdapterModesForTest({
 			[DEVICE]: {
 				ifname: "wlan0",
@@ -226,7 +250,7 @@ describe("an unavailable mode states its reason on every surface that offers it"
 			},
 		});
 
-		const { container } = render(WifiSection, {
+		render(WifiSection, {
 			props: {
 				wifiRadios: [[DEVICE, iface({ mode: "station" })]],
 				netif: NETIF,
@@ -236,14 +260,15 @@ describe("an unavailable mode states its reason on every surface that offers it"
 				onOpenCountry: vi.fn(),
 			},
 		});
+		await openWifiMode(DEVICE);
 
-		const rung = container.querySelector<HTMLButtonElement>(
+		const rung = document.querySelector<HTMLButtonElement>(
 			`[data-testid="wifi-mode-option-${DEVICE}-hybrid"]`,
 		);
 		expect(rung?.getAttribute("aria-disabled")).toBe("true");
 		expect(rung?.disabled).toBe(true);
 
-		const reason = container.querySelector(
+		const reason = document.querySelector(
 			`[data-testid="wifi-mode-reason-${DEVICE}-hybrid"]`,
 		);
 		expect(reason).not.toBeNull();

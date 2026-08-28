@@ -44,6 +44,12 @@ export interface ScenarioCapabilities {
 	// setMockEngineCapabilities({ deviceModes }) override — the per-scenario
 	// default is derived from `fullProfile` in getMockEngineDevices().
 	deviceModes?: Record<string, DeviceModeGroup>;
+	features?: readonly string[];
+	pipewireBluetoothNode?: {
+		readonly deviceAddress: string;
+		readonly nodeName: string;
+		readonly displayName: string;
+	} | null;
 }
 
 /**

@@ -10,7 +10,11 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { AddonDescriptor, AddonState } from "@ceraui/rpc/schemas";
+import {
+	type AddonDescriptor,
+	AddonDescriptorSchema,
+	type AddonState,
+} from "@ceraui/rpc/schemas";
 
 import {
 	ADDON_NOT_AVAILABLE_FOR_OS_VERSION,
@@ -128,6 +132,28 @@ describe("addon reconciler — re-materialisation", () => {
 
 		expect(calls.fetch).toBe(1);
 		expect(last(states)?.osVersionMaterialized).toBe("13");
+	});
+
+	it("accepts a schema-parsed trixie descriptor and reaches the fetch path", async () => {
+		const { deps, states, calls } = makeDeps({
+			getOsVersionId: () => Promise.resolve("13"),
+			rawExists: () => Promise.resolve(false),
+			getAddons: () => ({
+				"debug-toolset": enabledState({ osVersionMaterialized: "12" }),
+			}),
+			readDescriptor: () =>
+				Promise.resolve(
+					AddonDescriptorSchema.parse(
+						descriptor({ versionId: "13", compatibleOsVersions: ["13"] }),
+					),
+				),
+		});
+
+		await runAddonReconciler(deps);
+
+		expect(calls.fetch).toBe(1);
+		expect(last(states)?.phase).toBe("active");
+		expect(last(states)?.lastError).toBeUndefined();
 	});
 
 	it("is idempotent: an already-materialised add-on triggers no fetch, refresh, or write", async () => {

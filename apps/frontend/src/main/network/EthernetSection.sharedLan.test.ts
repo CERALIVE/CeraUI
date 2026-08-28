@@ -6,19 +6,21 @@
  * `NETIF_ERR_SHAREDLAN`, and drops it from `genSrtlaIpList()`. So the row must
  * not read like an uplink in either direction:
  *
- *   1. It says WHAT the port is (the Shared LAN identity badge) and WHAT its
- *      client zone is doing (a state badge whose WORD, not merely its colour,
- *      names `serving` / `starting`).
+ *   1. It says WHAT the port is (the Shared LAN identity) and WHAT its client
+ *      zone is doing (a WORD, not merely a colour, naming `serving` /
+ *      `starting`) — as ONE pill on the port name's line (todo 33).
  *   2. It never says "Connected" and never says "Off" — `enabled` is BOND
  *      membership here, and a zone that is up and serving is neither.
- *   3. It names WHY the port carries no bonded traffic, on screen AND as the
- *      disabled bond toggle's accessible name (a kiosk touchscreen cannot hover).
+ *   3. It names WHY the port carries no bonded traffic, as the disabled bond
+ *      toggle's accessible name AND one tap away in the badge's "?" explainer
+ *      (a kiosk touchscreen cannot hover, so a `title` alone is unreachable).
  *
  * And an `uplink` port — plus a row the device published NO role for — are
  * byte-unchanged by all of it.
  */
 import type { NetifEntry } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { describe, expect, it, vi } from "vitest";
 
 import EthernetSection from "./EthernetSection.svelte";
@@ -113,25 +115,92 @@ describe("EthernetSection — a shared-LAN port is not an uplink", () => {
 		expect(container.textContent).toContain("10.42.0.1");
 	});
 
-	it("names WHY it is out of the bond, on screen", () => {
-		const { getByTestId } = renderRows([SERVING]);
+	it("names WHY it is out of the bond — one tap away, not as standing prose", async () => {
+		const { getByTestId, queryByTestId, findByTestId } = renderRows([SERVING]);
 
-		const hint = getByTestId("netif-eth-role-excluded-hint");
+		// The WHY is a property of a role that does not change while the operator
+		// watches, so at rest it is not a paragraph under a four-word row.
+		expect(queryByTestId("netif-eth-role-excluded-hint")).toBeNull();
+
+		getByTestId("netif-eth-role-info").click();
+		await tick();
+
+		const hint = await findByTestId("netif-eth-role-excluded-hint");
 		expect(hint.textContent).toContain("Not in the bond");
 		expect(hint.textContent).toContain("Uplink");
 	});
 
-	it("disables the bond toggle and carries the same reason as its accessible name", () => {
-		const { getByTestId } = renderRows([SERVING]);
+	it("disables the bond toggle and carries the same reason as its accessible name", async () => {
+		const { getByTestId, findByTestId } = renderRows([SERVING]);
 
 		const toggle = getByTestId("bond-toggle-eth1");
 		expect(toggle.hasAttribute("disabled")).toBe(true);
 
-		const reason = getByTestId("netif-eth-role-excluded-hint")
-			.textContent?.trim()
+		// The reason moved into the explainer, so the toggle's accessible name is
+		// now the ONLY copy of it a screen reader reaches without opening anything.
+		// It must still be the same sentence, word for word.
+		getByTestId("netif-eth-role-info").click();
+		await tick();
+
+		// The band's own "Why it's unavailable" heading is InfoPopover chrome; the
+		// sentence itself is its value paragraph, and THAT is what must match.
+		const reason = (await findByTestId("netif-eth-role-excluded-hint"))
+			.querySelector("p:last-of-type")
+			?.textContent?.trim()
 			.replace(/\s+/g, " ");
 		const label = toggle.getAttribute("aria-label")?.replace(/\s+/g, " ");
 		expect(label).toBe(reason);
+	});
+
+	it("collapses the role and the zone into ONE pill", () => {
+		const { getByTestId, container } = renderRows([SERVING]);
+
+		const badge = getByTestId("netif-eth-role");
+		const zone = getByTestId("netif-eth-role-zone");
+
+		expect(badge.contains(zone)).toBe(true);
+		expect(container.querySelectorAll("[data-status-badge]").length).toBe(1);
+		// Both halves still read as words, each with its own glyph.
+		expect(badge.textContent).toContain("Shared LAN");
+		expect(badge.textContent).toContain("Serving clients");
+		expect(badge.querySelectorAll("svg").length).toBe(2);
+	});
+
+	it("puts that pill on the port name's own line", () => {
+		const { getByTestId, container } = renderRows([SERVING]);
+
+		const name = Array.from(container.querySelectorAll("p")).find(
+			(node) => node.textContent?.trim() === "eth1",
+		);
+		expect(name).toBeTruthy();
+		expect(getByTestId("netif-eth-role").parentElement).toBe(
+			name?.parentElement,
+		);
+	});
+
+	it("keeps the idle row to two stacked blocks", () => {
+		const { container } = renderRows([SERVING]);
+
+		// identity line + address line. The zone badge and the exclusion paragraph
+		// used to be two more, on a row whose whole state is four words.
+		const column = container.querySelector(".divide-y > div > div.basis-72");
+		expect(column?.children.length).toBe(2);
+	});
+
+	it("reaches the explanation through a real, named button", async () => {
+		const { getByTestId, findByText } = renderRows([SERVING]);
+
+		const trigger = getByTestId("netif-eth-role-info");
+		expect(trigger.tagName).toBe("BUTTON");
+		expect(trigger.getAttribute("aria-label")).toBe("About Shared LAN");
+
+		trigger.click();
+		await tick();
+
+		// The concept itself, not only the disabled control's reason.
+		expect(
+			await findByText(/shares the device's internet connection/),
+		).toBeTruthy();
 	});
 
 	it("still says EXCLUDED in the bond vocabulary the other rows use", () => {
@@ -152,6 +221,8 @@ describe("EthernetSection — every other row is untouched", () => {
 		expect(queryByTestId("netif-eth-role")).toBeNull();
 		expect(queryByTestId("netif-eth-role-zone")).toBeNull();
 		expect(queryByTestId("netif-eth-role-excluded-hint")).toBeNull();
+		// No explainer either: there is no role claim for one to explain.
+		expect(queryByTestId("netif-eth-role-info")).toBeNull();
 		expect(container.textContent).toContain("Connected");
 	});
 

@@ -1452,6 +1452,7 @@ async function probeEngineDevices(
 						product_name?: string;
 						transport?: EngineAudioDevice["transport"];
 						stable_id?: string;
+						device_address?: string;
 						physical_group_id?: string;
 					};
 					return {
@@ -1468,6 +1469,9 @@ async function probeEngineDevices(
 							: {}),
 						...(extra.stable_id !== undefined
 							? { stable_id: extra.stable_id }
+							: {}),
+						...(extra.device_address !== undefined
+							? { device_address: extra.device_address }
 							: {}),
 						...(extra.physical_group_id !== undefined
 							? { physical_group_id: extra.physical_group_id }

@@ -56,7 +56,9 @@ import { isVariant } from "@ceralive/modem-control/transport";
 import type { AudioSourceQuality } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_UNAVAILABLE_REASONS } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
+import type { EngineAudioDevice } from "./audio-naming.ts";
 import { getLastCapabilities } from "./capabilities.ts";
+import { getEngineAudioDevices } from "./sources.ts";
 
 export const BLUEALSA_SERVICE = "org.bluealsa";
 export const BLUEALSA_ROOT_PATH = "/org/bluealsa";
@@ -65,6 +67,8 @@ const OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager";
 
 /** The engine feature token that authorizes an opaque (non-card) ALSA PCM spec. */
 export const AUDIO_PCM_SPEC_FEATURE = "audio-pcm-spec";
+
+export const PIPEWIRE_CAPTURE_FEATURE = "pipewire-capture";
 
 /** Every `config.asrc` value naming a Bluetooth microphone starts with this. */
 export const BLUETOOTH_AUDIO_ID_PREFIX = "bt:";
@@ -108,6 +112,7 @@ export interface BluetoothAudioSource {
 	readonly id: string;
 	readonly address: string;
 	readonly displayName: string;
+	/** AudioConfig.device: BlueALSA PCM on legacy, PipeWire node.name on migration. */
 	readonly pcmSpec: string;
 	readonly quality: AudioSourceQuality | undefined;
 	readonly unavailableReason:
@@ -246,7 +251,8 @@ export function parseBluealsaCapturePcms(
  * honest "up to 16 kHz mono" ceiling, which is a bound rather than a claim.
  */
 export function deriveBluetoothMicQuality(
-	pcm: Pick<BluealsaCapturePcm, "codec" | "sampleRateHz" | "channels">,
+	pcm: Pick<BluealsaCapturePcm, "codec"> &
+		Partial<Pick<BluealsaCapturePcm, "sampleRateHz" | "channels">>,
 ): AudioSourceQuality | undefined {
 	const token = pcm.codec?.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
 	if (token === undefined) return undefined;
@@ -272,6 +278,8 @@ export interface DeriveBluetoothAudioSourcesInput {
 	readonly pcms: readonly BluealsaCapturePcm[];
 	/** The engine advertises `audio-pcm-spec`; absent ⇒ every row disabled-with-reason. */
 	readonly engineSupportsPcmSpec: boolean;
+	readonly engineSupportsPipewireCapture?: boolean;
+	readonly engineDevices?: readonly EngineAudioDevice[];
 }
 
 /**
@@ -285,6 +293,37 @@ export interface DeriveBluetoothAudioSourcesInput {
 export function deriveBluetoothAudioSources(
 	input: DeriveBluetoothAudioSourcesInput,
 ): BluetoothAudioSource[] {
+	if (input.engineSupportsPipewireCapture === true) {
+		const nodeByAddress = new Map<string, EngineAudioDevice>();
+		for (const node of input.engineDevices ?? []) {
+			const address = node.device_address;
+			if (address === undefined || address === "") continue;
+			const normalized = normalizeAddress(address);
+			if (!nodeByAddress.has(normalized)) nodeByAddress.set(normalized, node);
+		}
+
+		const sources: BluetoothAudioSource[] = [];
+		const seen = new Set<string>();
+		for (const device of input.devices) {
+			if (!device.connected || !device.scoCapable) continue;
+			const address = device.address;
+			if (address === undefined || address === "") continue;
+			const normalized = normalizeAddress(address);
+			const node = nodeByAddress.get(normalized);
+			if (node === undefined || seen.has(normalized)) continue;
+			seen.add(normalized);
+			sources.push({
+				id: bluetoothAudioSourceId(normalized),
+				address: normalized,
+				displayName: device.alias ?? device.name ?? normalized,
+				pcmSpec: node.input_id,
+				quality: undefined,
+				unavailableReason: undefined,
+			});
+		}
+		return sources;
+	}
+
 	const pcmByAddress = new Map<string, BluealsaCapturePcm>();
 	for (const pcm of input.pcms) {
 		if (!pcmByAddress.has(pcm.address)) pcmByAddress.set(pcm.address, pcm);
@@ -321,6 +360,8 @@ export interface BluetoothAudioDeps {
 	readEnumeratedPcms: () => Promise<BluealsaCapturePcm[] | undefined>;
 	readRegistryDevices: () => BluetoothAudioDevice[];
 	engineSupportsPcmSpec: () => boolean;
+	engineSupportsPipewireCapture: () => boolean;
+	readEngineAudioDevices: () => readonly EngineAudioDevice[];
 }
 
 let deps: BluetoothAudioDeps | undefined;
@@ -394,6 +435,8 @@ function activeDeps(): BluetoothAudioDeps {
 			readEnumeratedPcms: defaultReadEnumeratedPcms,
 			readRegistryDevices: defaultReadRegistryDevices,
 			engineSupportsPcmSpec: defaultEngineSupportsPcmSpec,
+			engineSupportsPipewireCapture: defaultEngineSupportsPipewireCapture,
+			readEngineAudioDevices: getEngineAudioDevices,
 		}
 	);
 }
@@ -410,6 +453,12 @@ function defaultEngineSupportsPcmSpec(): boolean {
 	);
 }
 
+function defaultEngineSupportsPipewireCapture(): boolean {
+	return (
+		getLastCapabilities()?.features?.includes(PIPEWIRE_CAPTURE_FEATURE) === true
+	);
+}
+
 /**
  * Re-read the BlueALSA PCM objects and rebuild the cached source list.
  *
@@ -418,11 +467,16 @@ function defaultEngineSupportsPcmSpec(): boolean {
  */
 export async function refreshBluetoothAudioSources(): Promise<boolean> {
 	const active = activeDeps();
+	const usesPipewire = active.engineSupportsPipewireCapture();
 	let pcms: BluealsaCapturePcm[] | undefined;
-	try {
-		pcms = await active.readEnumeratedPcms();
-	} catch {
-		pcms = undefined;
+	if (usesPipewire) {
+		pcms = [];
+	} else {
+		try {
+			pcms = await active.readEnumeratedPcms();
+		} catch {
+			pcms = undefined;
+		}
 	}
 	if (pcms === undefined) return false;
 
@@ -432,6 +486,8 @@ export async function refreshBluetoothAudioSources(): Promise<boolean> {
 			devices: active.readRegistryDevices(),
 			pcms,
 			engineSupportsPcmSpec: active.engineSupportsPcmSpec(),
+			engineSupportsPipewireCapture: usesPipewire,
+			engineDevices: active.readEngineAudioDevices(),
 		});
 	} catch (err) {
 		logger.warn(
@@ -443,6 +499,11 @@ export async function refreshBluetoothAudioSources(): Promise<boolean> {
 	if (JSON.stringify(next) === JSON.stringify(cachedSources)) return false;
 	cachedSources = next;
 	return true;
+}
+
+export async function refreshPipewireBluetoothAudioSourcesForEngineChange(): Promise<boolean> {
+	if (!activeDeps().engineSupportsPipewireCapture()) return false;
+	return refreshBluetoothAudioSources();
 }
 
 export function getBluetoothAudioSources(): readonly BluetoothAudioSource[] {
