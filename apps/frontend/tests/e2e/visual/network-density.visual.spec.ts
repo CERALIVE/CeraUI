@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { expect, test } from "../fixtures/index.js";
+import { expect, type Page, test } from "../fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "../helpers/index.js";
 
 /**
@@ -19,31 +19,39 @@ import { ensureAuthenticated, navigateTo } from "../helpers/index.js";
  *   1030 px  2e0fb3be         origin/main at this branch's merge-base — ALREADY
  *                             44% over the 713.4 px cap, unobserved because
  *                             @visual is grep-inverted out of the CI e2e lane
- *   1174 px  7ddcea8d..HEAD   this branch
+ *   1174 px  7ddcea8d..8b35266^  this branch, before the de-noise pass
+ *   1058 px  8b35266..HEAD   this branch, after it
  *
- * Worth stating plainly: 1174 is 15 px under the 1189 px pre-compaction stack, so
- * Task 19/20's 40.9% saving is now spent. The next reviewed growth here should be
- * a compaction decision, not another rebase.
+ * The last line is the compaction the previous revision of this header asked
+ * for, so the budget is REBASED DOWN rather than left slack: −116 px (−9.9%),
+ * and leaving the ceiling at 1174 would silently re-admit every pixel of it.
+ * Both contributions are DEMOTIONS, not deletions — nothing this surface used to
+ * state stopped being reachable:
  *
- * The +144 px is todo 14 (8f37fa1e — WifiSection's station|hotspot|hybrid mode
- * selector, WifiModeBadge, station-lock reason line) and todo 15 (c30a8b60 —
- * EthernetSection's uplink|shared-lan role selector and bond-exclusion
- * explanation). Todo 16 (28647dae) measured 0 px net. Todo 13's Internet-Sharing
- * surface contributes nothing and never can: SharingSection mounts ABOVE
- * WifiSection, outside this span by construction.
+ *   • todo 32 (cc23830) folded WifiSection's per-adapter capability strip into a
+ *     closed `wifi-capabilities` disclosure and collapsed the mode identity into
+ *     one badge behind `open-wifi-mode`;
+ *   • todo 33 (3041103) consolidated EthernetSection's shared-LAN role + zone
+ *     pills into ONE badge and demoted the bond-exclusion reason paragraph into
+ *     an `netif-eth-role-info` popover.
  *
- * Compaction was considered and rejected: the only material savings left are the
- * disabled-with-reason lines both surfaces must keep visible (the kiosk
- * touchscreen cannot hover to reveal a `title`), and trading a hard honesty
- * invariant for pixels is the wrong direction.
+ * todo 34 (8b35266) restructured SharingSection and contributes 0 px here by
+ * construction: that card mounts ABOVE WifiSection, outside this span.
+ *
+ * The honesty invariant the previous revision defended is intact and is why the
+ * saving stops here: every disabled-with-reason line stays ON SCREEN (the kiosk
+ * touchscreen cannot hover to reveal a `title`). What moved behind a disclosure
+ * is hardware-ceiling and diagnostic material, never a refusal an operator has
+ * to act on.
  *
  * PNG lands in apps/frontend/test-results/task-24-visual (repo-local, gitignored).
  */
 
 const TASK24_DIR = path.resolve(import.meta.dirname, "../../../test-results/task-24-visual");
 
-// Rebase ONLY with a written justification naming what grew, as the header does.
-const MEASURED_STACK_HEIGHT_PX = 1174;
+// Rebase ONLY with a written justification naming what grew — or, as in the
+// 1174 → 1058 move above, what was compacted.
+const MEASURED_STACK_HEIGHT_PX = 1058;
 
 // Half a `text-xs` line box (Tailwind v4: 0.75rem/1rem ⇒ 16 px), so one added
 // line of copy still trips the budget. Absorbs sub-pixel flex rounding only —
@@ -91,4 +99,146 @@ test.describe("@visual NetworkView density", () => {
 			clip: { x: wifiBox!.x, y: top, width: wifiBox!.width, height: bottom - top },
 		});
 	});
+});
+
+/**
+ * The −116 px above is only honest if the demoted material is CLOSED at rest and
+ * still REACHABLE — either half alone is satisfiable by a broken surface, so both
+ * are asserted. Three traps this is written around:
+ *
+ *   • A COLLAPSED `<details>` still answers `getByTestId`, so a presence query
+ *     says nothing about its state; `open` is what has to be read.
+ *   • The open state must be reached by a real `<summary>` click — `.open = true`
+ *     bypasses the toggle an operator uses, so it would pass against a summary
+ *     that is unreachable, mis-nested or pointer-blocked.
+ *   • No shipped mock scenario carries a per-adapter capability report, so
+ *     without one `WifiSection` renders no capability disclosure at all and the
+ *     assertion passes vacuously. `SharingSection` renders its diagnostics
+ *     disclosure unconditionally and needs nothing.
+ *
+ * The report is stamped onto the device's OWN roster by patching every inbound
+ * `status.wifi` frame, rather than pushed once through `dev.emit`. A one-shot
+ * push is overwritten by the backend's next status broadcast, which detaches the
+ * disclosure — measured here as a `<summary>` click failing "element was
+ * detached from the DOM" after the injected roster was replaced.
+ *
+ * Own describe: the patch perturbs the height budget above, which is measured
+ * against the untouched mock scenario.
+ */
+
+/** Rock 5B+ / RTL8852BE, the same board capture `wifi-capability.visual.spec.ts` uses. */
+const ROCK_RTL8852BE = {
+	phy: "phy0",
+	generation: "wifi6",
+	bands: ["2.4", "5"],
+	maxWidthMhz: { "2.4": 40, "5": 80 },
+	apModes: ["2.4", "5"],
+	staApCombo: { supported: true, sameChannelOnly: true },
+	wpa3Sae: "supported",
+	regulatory: { country: "00", is6GhzLegal: false, self_managed: false },
+};
+
+/** Returns the patched frame, or `null` for one this harness does not own. */
+function withWifiCapabilities(frame: Record<string, unknown>): Record<string, unknown> | null {
+	const status = frame.status;
+	if (status === null || typeof status !== "object") return null;
+	const wifi = (status as Record<string, unknown>).wifi;
+	if (wifi === null || typeof wifi !== "object") return null;
+	const stamped = Object.fromEntries(
+		Object.entries(wifi as Record<string, unknown>).map(([id, radio]) => [
+			id,
+			{ ...(radio as Record<string, unknown>), capabilities: ROCK_RTL8852BE },
+		]),
+	);
+	return { ...frame, status: { ...(status as Record<string, unknown>), wifi: stamped } };
+}
+
+async function installCapabilityPatch(page: Page): Promise<void> {
+	await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
+		const server = ws.connectToServer();
+		ws.onMessage((message) => server.send(message));
+		server.onMessage((message) => {
+			const text = typeof message === "string" ? message : message.toString();
+			try {
+				const patched = withWifiCapabilities(JSON.parse(text) as Record<string, unknown>);
+				if (patched !== null) {
+					ws.send(JSON.stringify(patched));
+					return;
+				}
+			} catch {
+				/* non-JSON / binary frame */
+			}
+			ws.send(message);
+		});
+	});
+}
+
+/**
+ * EVERY matching disclosure's `open`, not the first one's — the mock scenario
+ * carries two radios, so a `.first()` read would leave the second unmeasured.
+ */
+const openStates = (page: Page, testId: string): Promise<boolean[]> =>
+	page
+		.getByTestId(testId)
+		.evaluateAll((els) => els.map((el) => (el as HTMLDetailsElement).open));
+
+test.describe("@visual NetworkView density — disclosures", () => {
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(testInfo.project.name !== "desktop", "desktop layout drives the sections");
+		await installCapabilityPatch(page);
+		await page.goto("/");
+		await ensureAuthenticated(page);
+		await navigateTo(page, "network");
+		await expect(page.getByTestId("wifi-capabilities").first()).toBeAttached();
+	});
+
+	test(
+		"the capability strip and the sharing diagnostics are both closed on load",
+		{ tag: "@visual" },
+		async ({ page }) => {
+			const capability = await openStates(page, "wifi-capabilities");
+			const diagnostics = await openStates(page, "sharing-diagnostics");
+
+			// Non-vacuity: an empty list would satisfy `every` without measuring.
+			expect(capability.length).toBeGreaterThan(0);
+			expect(diagnostics).toHaveLength(1);
+
+			expect(capability.every((open) => open === false)).toBe(true);
+			expect(diagnostics[0]).toBe(false);
+
+			// The state a folded warning still has to publish from outside.
+			await expect(page.getByTestId("sharing-diagnostics-chip").first()).toBeVisible();
+
+			await page.screenshot({
+				path: path.join(TASK24_DIR, "network-disclosures-closed.png"),
+				fullPage: true,
+			});
+		},
+	);
+
+	test(
+		"each disclosure opens from its own summary, and only itself",
+		{ tag: "@visual" },
+		async ({ page }) => {
+			const firstRadio = page.locator(
+				'[data-testid="wifi-capabilities-toggle"][data-device="0"]',
+			);
+			await firstRadio.click();
+			expect(await openStates(page, "wifi-capabilities")).toEqual(
+				expect.arrayContaining([true]),
+			);
+			await expect(page.getByTestId("wifi-generation-badge").first()).toBeVisible();
+			// Independent disclosures: opening one may not open the other.
+			expect(await openStates(page, "sharing-diagnostics")).toEqual([false]);
+
+			await page.getByTestId("sharing-diagnostics-toggle").click();
+			expect(await openStates(page, "sharing-diagnostics")).toEqual([true]);
+			await expect(page.getByTestId("sharing-priority")).toBeVisible();
+
+			await page.screenshot({
+				path: path.join(TASK24_DIR, "network-disclosures-open.png"),
+				fullPage: true,
+			});
+		},
+	);
 });

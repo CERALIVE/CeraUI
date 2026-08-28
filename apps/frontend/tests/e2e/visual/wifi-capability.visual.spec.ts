@@ -24,6 +24,14 @@ import { ensureAuthenticated, navigateTo } from "../helpers/index.js";
  * carries a capability report, and inventing one in the mock providers would be
  * a second mechanism for a state the wire already models.
  *
+ * THE STRIP IS NOW DEMOTED (todo 32, cc23830): it lives inside a `<details>`
+ * that ships CLOSED, so its chips are in the DOM but not VISIBLE at rest. Count
+ * and attribute assertions are unaffected — they never required visibility — but
+ * anything that reads paint or clicks has to open the disclosure first, with a
+ * real `<summary>` click rather than `.open = true`. `openStrip()` does that,
+ * and it is also what makes the evidence PNGs show the strip they are evidence
+ * of.
+ *
  * PNGs land in CeraUI/test-results/ (repo-local, gitignored — Rule D).
  */
 
@@ -79,6 +87,7 @@ function installWifiHarness(): void {
 	w.__wifiCaps = {
 		socket: null,
 		_seq: 0,
+		held: undefined,
 		emit(type: string, payload: unknown) {
 			const s = w.__wifiCaps.socket;
 			if (s)
@@ -90,6 +99,10 @@ function installWifiHarness(): void {
 					}),
 				);
 		},
+		hold(roster: unknown) {
+			w.__wifiCaps.held = roster;
+			w.__wifiCaps.emit("status", { wifi: roster });
+		},
 	};
 	class HookedWS extends Real {
 		// biome-ignore lint/suspicious/noExplicitAny: native ctor signature.
@@ -97,19 +110,58 @@ function installWifiHarness(): void {
 			super(url, protocols);
 			w.__wifiCaps.socket = this;
 			this.__realSend = Real.prototype.send.bind(this);
+			// A pushed roster is TRANSIENT: the device keeps broadcasting its own
+			// `status.wifi`, and the merge replaces the roster wholesale. The
+			// clobbering frame must never REACH the app — re-asserting after it
+			// lands is not enough, because the intervening render unmounts the
+			// capability `<details>` and a remounted one comes back CLOSED, so an
+			// in-flight click is left waiting on an element that keeps vanishing.
+			//
+			// This listener is registered in the constructor, so it precedes the
+			// app's own; `stopImmediatePropagation` therefore suppresses the
+			// original and the patched copy is delivered in its place, with every
+			// other status key preserved. The patched copy re-enters this listener
+			// once, matches `held`, and passes straight through.
+			this.addEventListener("message", (ev: MessageEvent) => {
+				const held = w.__wifiCaps.held;
+				if (held === undefined || typeof ev.data !== "string") return;
+				let parsed: { status?: Record<string, unknown> };
+				try {
+					parsed = JSON.parse(ev.data);
+				} catch {
+					return;
+				}
+				const status = parsed?.status;
+				if (!status || status.wifi === undefined) return;
+				if (JSON.stringify(status.wifi) === JSON.stringify(held)) return;
+				ev.stopImmediatePropagation();
+				this.dispatchEvent(
+					new MessageEvent("message", {
+						data: JSON.stringify({ ...parsed, status: { ...status, wifi: held } }),
+					}),
+				);
+			});
 		}
 	}
 	w.WebSocket = HookedWS;
 }
 
-function emit(page: Page, type: string, payload: unknown): Promise<void> {
+/** Publish a roster AND keep it published against the device's own broadcasts. */
+function hold(page: Page, roster: unknown): Promise<void> {
 	return page.evaluate(
-		([t, p]) =>
-			(
-				window as unknown as { __wifiCaps: { emit(t: string, p: unknown): void } }
-			).__wifiCaps.emit(t, p),
-		[type, payload] as const,
+		(r) => (window as unknown as { __wifiCaps: { hold(r: unknown): void } }).__wifiCaps.hold(r),
+		roster,
 	);
+}
+
+/** Unfold the demoted capability strip. Idempotent; a no-op where there is none. */
+async function openStrip(page: Page): Promise<void> {
+	const toggle = page.getByTestId("wifi-capabilities-toggle").first();
+	if ((await toggle.count()) === 0) return;
+	const strip = page.getByTestId("wifi-capabilities").first();
+	if (await strip.evaluate((el) => (el as HTMLDetailsElement).open)) return;
+	await toggle.click();
+	await expect(strip).toHaveJSProperty("open", true);
 }
 
 async function shoot(page: Page, name: string): Promise<void> {
@@ -137,10 +189,13 @@ test.describe("@visual per-adapter Wi-Fi capability strip", () => {
 		"a Wi-Fi 6 radio offers its two bands and no 6 GHz at all",
 		{ tag: "@visual" },
 		async ({ page }) => {
-			await emit(page, "status", { wifi: { 0: radio(ROCK_RTL8852BE) } });
+			await hold(page, { 0: radio(ROCK_RTL8852BE) });
 
 			const strip = page.getByTestId("wifi-capabilities");
 			await expect(strip).toBeVisible();
+			// Demoted, not dropped: closed at rest, and its chips still on the wire.
+			await expect(strip).toHaveJSProperty("open", false);
+			await openStrip(page);
 			await expect(page.getByTestId("wifi-generation-badge")).toHaveText("Wi-Fi 6");
 			await expect(page.getByTestId("wifi-band-option")).toHaveCount(2);
 			// The radio positively lacks Band 4, so 6 GHz contributes nothing —
@@ -160,7 +215,8 @@ test.describe("@visual per-adapter Wi-Fi capability strip", () => {
 		"a Wi-Fi 7 radio offers 6 GHz when its domain permits it",
 		{ tag: "@visual" },
 		async ({ page }) => {
-			await emit(page, "status", { wifi: { 0: radio(MT7925) } });
+			await hold(page, { 0: radio(MT7925) });
+			await openStrip(page);
 
 			await expect(page.getByTestId("wifi-generation-badge")).toHaveText("Wi-Fi 7");
 			await expect(page.getByTestId("wifi-band-option")).toHaveCount(3);
@@ -180,14 +236,14 @@ test.describe("@visual per-adapter Wi-Fi capability strip", () => {
 		"a forbidden 6 GHz band stays visible and reaches the country dialog",
 		{ tag: "@visual" },
 		async ({ page }) => {
-			await emit(page, "status", {
-				wifi: {
-					0: radio({
-						...MT7925,
-						regulatory: { country: "CO", is6GhzLegal: false, self_managed: false },
-					}),
-				},
+			await hold(page, {
+				0: radio({
+					...MT7925,
+					regulatory: { country: "CO", is6GhzLegal: false, self_managed: false },
+				}),
 			});
+
+			await openStrip(page);
 
 			const six = page.locator('[data-testid="wifi-band-option"][data-band="6"]');
 			await expect(six).toBeVisible();
@@ -211,7 +267,7 @@ test.describe("@visual per-adapter Wi-Fi capability strip", () => {
 		"a board with no Wi-Fi radio says so",
 		{ tag: "@visual" },
 		async ({ page }) => {
-			await emit(page, "status", { wifi: {} });
+			await hold(page, {});
 
 			const empty = page.getByTestId("wifi-no-adapter");
 			await expect(empty).toBeVisible();

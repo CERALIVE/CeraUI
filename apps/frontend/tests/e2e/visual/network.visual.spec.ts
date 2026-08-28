@@ -2,6 +2,24 @@ import { expect, test } from '../fixtures/index.js';
 import { NetworkPage } from '../pages/network.js';
 
 /**
+ * THE CAPTURE IS FULL-PAGE, and that is load-bearing rather than incidental.
+ *
+ * It was a bare `toHaveScreenshot()`, i.e. VIEWPORT-scoped — 1280×800, which on
+ * this destination reaches only Bonded Links and the top of Internet Sharing.
+ * WiFi, Cellular and Ethernet all sit below that fold, so the three cards this
+ * baseline is nominally the regression gate for were never in it: the WifiSection
+ * and EthernetSection restructures (todos 32/33) left the committed PNG
+ * byte-identical, and a re-generation run reported nothing to update. A baseline
+ * that cannot see the surface it guards is not a gate.
+ *
+ * `fullPage: true` makes the desktop baseline 1280×2761 and the mobile one
+ * 390×4014, covering Bonded Links → Internet Sharing → WiFi → Cellular →
+ * Ethernet → Hotspot → Bluetooth. Verified stable: three consecutive verify runs
+ * on both projects passed with no pixel drift, on top of the two stabilizers
+ * below and `mask.css`.
+ */
+
+/**
  * BondedLinksSection's per-link telemetry cell is a push-vs-capture race with NO
  * settled side: it renders a Skeleton while the feed is `undefined` and "--" once
  * a `status` frame delivers `null`. Which one a capture sees depends on whether
@@ -47,6 +65,7 @@ test.describe('@visual Network destination snapshots', () => {
 
 		await page.addStyleTag({ content: `${TELEMETRY_STABILIZE}${COLLISION_BANDS_STABILIZE}` });
 		await expect(page).toHaveScreenshot('network-desktop.png', {
+			fullPage: true,
 			stylePath: new URL('./mask.css', import.meta.url).pathname,
 			maxDiffPixels: 100,
 		});
