@@ -213,6 +213,33 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(withKind.kind).toBe("uvc_h264");
 	});
 
+	test("captureDeviceSchema carries device_address through .parse()", () => {
+		// cerastream PR #126 added this field; CeraUI shipped BT-mic code reading
+		// it under the 2026.8.0 pin, which predates that PR — and because the
+		// consumers declared their own local `device_address?: string`, typecheck
+		// stayed green while Zod stripped the field on every device.
+		// Reading it WITHOUT a cast is the compile-time half of the guard; the
+		// equality is the runtime half.
+		const address = "AA:BB:CC:DD:EE:FF";
+		const withAddress = bindings.captureDeviceSchema.parse({
+			input_id: "bluez_input.AA_BB_CC_DD_EE_FF",
+			device_path: "hw:CARD=btmic",
+			display_name: "Bluetooth Microphone",
+			media_class: "audio",
+			device_address: address,
+		});
+		expect(withAddress.device_address).toBe(address);
+
+		// Additive-optional: a producer that published none gets no fabricated one.
+		const withoutAddress = bindings.captureDeviceSchema.parse({
+			input_id: "video0",
+			device_path: "/dev/video0",
+			display_name: "USB Camera",
+			media_class: "video",
+		});
+		expect(withoutAddress.device_address).toBeUndefined();
+	});
+
 	test("0.4.0 surface: statusEventSchema has additive optional active_encode field", () => {
 		// Minimal status (backward compat)
 		const minimal = bindings.statusEventSchema.parse({
