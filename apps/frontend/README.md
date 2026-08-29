@@ -19,7 +19,7 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 The `backend` app consumes both streaming bindings as pinned public npm packages:
 
 ```
-"@ceralive/cerastream": "2026.8.0"   (public npm, @ceralive scope)
+"@ceralive/cerastream": "2026.8.1"   (public npm, @ceralive scope)
 "@ceralive/srtla-send": "2026.8.0"   (public npm, @ceralive scope)
 ```
 
