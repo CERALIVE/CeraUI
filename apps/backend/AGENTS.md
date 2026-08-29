@@ -5473,6 +5473,77 @@ engine version — and one contract that is easy to break from either side.
 Board-proven on a Rock 5B+ across a full engine stop/start with NO backend
 restart: `2026.7.2` → `engine unreachable` → `2026.7.2`.
 
+## …AND A BUILD-TIME VERSION IS NOT A COMMIT [EXISTS]
+
+The row above is the LIVE-read one. `revisions.ceralive` is the opposite kind of
+fact — a static build-time stamp — and it was published as the wrong fact
+entirely: the `CeraUI` row read as a bare git short-SHA (`8738fd63`) beside four
+rows showing real CalVer versions.
+
+**The fallback chain was never broken, and that is the whole diagnosis.** On a
+packaged device the PRIMARY read succeeds — `build-debian-package.sh` stamps
+`/opt/ceralive/revision` precisely so `git rev-parse` is not the always-taken
+path — so what was wrong is WHAT that file carries. The commit is build
+metadata; it was occupying a slot an operator reads as a version.
+
+**Two stamps now, and the second is a SIBLING rather than a repurposing.**
+`revision` keeps its exact meaning and byte-identical content; the build script
+additionally stamps `/opt/ceralive/version` with the CalVer read from the root
+`package.json` (`get_ceraui_version`, `shared-build-functions.sh`). Widening the
+`revision` file's content instead would silently change the meaning of a file
+whose NAME says commit, and would leave a consumer unable to read either fact on
+its own.
+
+**`resolveCeraUiRevision` is the ladder, and its three rungs answer three
+different questions:**
+
+| Rung | Source | When it answers |
+|---|---|---|
+| 1 | the `version` stamp | a packaged device — the version of the build that is RUNNING |
+| 2 | `dpkg-query -W -f='${Version}' ceralive-device` | a real device whose stamp is gone |
+| 3 | none — the row falls back to the commit alone | a dev checkout, which genuinely has no packaged version |
+
+- **The stamp OUTRANKS `dpkg`, deliberately.** The stamp names the build whose
+  binary is executing; `dpkg` names what the package manager last recorded, and
+  the two come apart during an upgrade or a `dev-sync` push.
+- **The `dpkg` rung is `isRealDevice()`-gated.** A developer who once installed
+  the `.deb` on their workstation would otherwise have their git checkout report
+  that unrelated package's version as the running build — a plausible wrong
+  answer, which is worse than the honest SHA.
+- **Rung 3 is PRESERVED EXACTLY, not tolerated.** A dev checkout has no packaged
+  version, so the bare `git rev-parse --short HEAD` value is the truthful answer
+  there and its output is byte-identical to before this change. Nothing readable
+  at all still yields the pre-existing `"unknown revision"`.
+- **The commit is DEMOTED, never discarded.** `composeCeraUiRevision` emits
+  `<version> (<commit>)` — the SAME shape `srtla_send -v` already emits — so the
+  frontend's existing `splitVersionValue` promotes the version and demotes the
+  commit to the row's secondary line with NO schema change, NO new wire field and
+  NO row-specific branch in `VersionsDialog`. A `dpkg` version whose iteration
+  already embeds the commit is left alone rather than repeating it.
+- **`probe(argv)` is a separate primitive from `readRevision(cmd)`**, because the
+  ladder must tell "this rung had no answer" from "this rung answered":
+  `readRevision` answers the literal `"unknown revision"`, which is a fine value
+  to RENDER and useless to RESOLVE with. It is registered separately in
+  `SPAWN_POLICY` (`revisions.installedPackageVersion`, bounded-probe) so a hung
+  `dpkg` lock is capped like every other probe.
+- **`CeraUiRevisionSources` is the seam** (the `*Deps` convention, not
+  `set*Runner`), passed as an optional argument to `initRevisions`, so the whole
+  ladder is drivable with no packaged tree, no `dpkg` database and no git
+  checkout — and `initRevisions()` with no argument is byte-unchanged for every
+  existing caller.
+
+Both stamps are read RELATIVE to the working directory, matching the original
+`revision` read and `ceralive.service`'s `WorkingDirectory=/opt/ceralive`. Do NOT
+absolutize them: a dev checkout having neither file is exactly what keeps rung 3
+reachable.
+
+Coverage: `tests/ceraui-version-revision.test.ts` (all three rungs against a real
+staged temp tree, the empty-stamp fall-through, the no-duplication rule, the
+gated `dpkg` reader, and the dev-checkout regression lock) +
+`scripts/build/deb-version-stamp.test.sh` (wired into
+`bun run test:release-package-contracts`: the version source is EXECUTED against
+`package.json`, and both stamping lines are pinned).
+
 ## TERMINATION CLEANUP [EXISTS]
 
 `helpers/shutdown.ts` owns the process-level `SIGTERM`/`SIGINT` lifecycle. The first
@@ -8480,6 +8551,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't re-serialise the DNS health check ahead of the caller's query in `dnsCacheResolve`, and don't share one `Resolver` between them — the check only GATES the answer, and a shared c-ares channel's `cancel()` would abort the sibling leg. Both legs sit inside the per-attempt launch deadline (see DNS ON THE STREAM-START CRITICAL PATH).
 - Don't use `process.exit` directly — use `invariant` from `helpers/invariant.ts`.
 - Don't serve `revisions.cerastream` from a cache, and don't retain the last-known value when the engine is unreachable — the engine is a separate systemd-owned process that can be restarted or upgraded mid-session, so a retained version keeps naming a build that may not be installed. Re-probe (`refreshEngineRevision`) and report `ENGINE_UNREACHABLE_REVISION` honestly.
+- Don't publish a COMMIT as `revisions.ceralive` — a short-SHA in a version slot is the defect, not the fallback. Route it through `resolveCeraUiRevision`, which promotes the packaged CalVer and demotes the commit through `composeCeraUiRevision`'s `<version> (<commit>)` shape. Don't delete the `git rev-parse` rung (a dev checkout genuinely has no packaged version and the bare SHA is the truthful answer there), don't repurpose the `revision` stamp to carry a version (it is the commit, and a second file is what keeps both facts readable alone), don't absolutize either stamp path (their CWD-relative form is what makes a dev checkout fall through), and don't un-gate the `dpkg` rung — an unrelated `.deb` installed on a developer's workstation would otherwise be reported as the running build.
 - Don't read config files with raw `fs` — use `helpers/config-loader.ts`.
 - Don't drive the engine directly — route through `getStreamingBackend()`, never
   the `cerastreamBackend` singleton.

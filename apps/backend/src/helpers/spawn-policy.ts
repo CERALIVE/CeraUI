@@ -383,6 +383,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"git rev-parse / `<exec> -v` quick probes; Bun.spawnSync timeout caps a hung probe → 'unknown revision'",
 	},
 	{
+		id: "revisions.installedPackageVersion",
+		file: "modules/system/revisions.ts",
+		symbol: "defaultCeraUiRevisionSources.readInstalledPackageVersion",
+		command: "[dpkg-query, -W, -f=<Version>, ceralive-device]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"isRealDevice()-gated one-shot at boot; Bun.spawnSync timeout caps a hung dpkg lock, and a non-zero exit or empty stdout resolves `undefined` so the ladder falls through to the git rung rather than throwing",
+	},
+	{
 		id: "srtlaSend.capabilityProbe",
 		file: "modules/streaming/srtla-capabilities.ts",
 		symbol: "probeSrtlaSenderCapabilities",

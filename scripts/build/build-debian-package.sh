@@ -21,8 +21,19 @@ fi
 PACKAGE_NAME="ceralive-device"
 VERSION=$(get_version)
 COMMIT=$(get_commit)
+CERAUI_VERSION=$(get_ceraui_version)
 ARCHITECTURE=$(get_architecture)
 BUILD_DATE=$(get_build_date)
+
+# Fail closed: an unstampable version leaves the device's Versions row with no
+# CalVer to promote, which is the exact defect the stamp exists to remove.
+if ! printf '%s' "$CERAUI_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+    log_error "Could not read a CalVer version from package.json (got: '${CERAUI_VERSION}')"
+    exit 1
+fi
+if [ "$CERAUI_VERSION" != "$VERSION" ]; then
+    log_warning "package.json version ($CERAUI_VERSION) differs from the package version ($VERSION); stamping package.json's"
+fi
 
 # Generate dynamic iteration for APT version detection
 ITERATION="${BUILD_DATE}.${COMMIT}"
@@ -97,6 +108,11 @@ cp apps/backend/setup.json "$TEMP_DIR/opt/ceralive/"
 # `git rev-parse` fallback fail — "unknown revision" would be the always-taken path
 # on every real device.
 printf '%s\n' "$COMMIT" > "$TEMP_DIR/opt/ceralive/revision"
+# The same reasoning one level up: the commit alone is not a VERSION, so the
+# Versions row rendered a bare short-SHA where every other row showed CalVer.
+# `revision` keeps its exact meaning (the commit, demoted to build metadata) and
+# this sibling carries the version that is promoted in front of it.
+printf '%s\n' "$CERAUI_VERSION" > "$TEMP_DIR/opt/ceralive/version"
 ln -s /var/www/ceralive "$TEMP_DIR/opt/ceralive/public"
 cp dist/override-ceralive.sh "$TEMP_DIR/usr/local/bin/"
 cp dist/reset-to-default.sh "$TEMP_DIR/usr/local/bin/"
