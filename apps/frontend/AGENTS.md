@@ -101,6 +101,29 @@ src/
 
 `lib/rpc/subscriptions.svelte.ts` exports `initSubscriptions()` — this registers the `onMessage` and `onConnectionChange` handlers that feed all non-deprecated getters (`getConfig`, `getModems`, `getWifi`, `getIsStreaming`, etc.). It is called in `main.ts` before mount. **Any store or component that reads from `subscriptions.svelte` getters depends on this call being present.** If you remove or move it, the HUD, all destination views, and the disconnected banner will show stale/empty data.
 
+## NETWORK VIEW STRUCTURE [EXISTS]
+
+The Network destination deliberately separates operator identity from transient
+enumeration detail. `WifiSection.svelte` derives one `modeView` per radio and
+uses it for the row badge, status line, hotspot setup, and mode popover; the
+station/hotspot/hybrid identity is therefore stated once beside the radio name,
+while mode selection and capability details remain available on request. A
+station or hybrid radio retains its connection and bond actions; an exclusive
+hotspot radio does not.
+
+`EthernetSection.svelte` treats a `shared-lan` port as a client-zone row rather
+than an uplink: one combined role/zone pill names what the port is and whether
+the zone is serving or starting, while the bond-exclusion reason moves into the
+adjacent info popover and remains the toggle's accessible reason. It does not
+render the shared port as connected/off uplink state.
+
+`SharingSection.svelte` derives one headline as the card's state authority.
+Per-uplink status is muted when it merely repeats that headline; probe details,
+subordinate bands, shaping priority, coexistence diagnostics, and the DNS note
+are folded into the Diagnostics disclosure, while each uplink's own probe data
+stays behind its row disclosure. These structures de-noise transient interface
+enumeration churn from operator-visible state without dropping diagnostic facts.
+
 ## RPC PATTERN
 
 ### Uplink-health state [EXISTS]
