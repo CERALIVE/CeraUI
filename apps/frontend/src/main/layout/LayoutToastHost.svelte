@@ -14,13 +14,7 @@ import {
 	clearNotifications,
 	dismiss,
 	getActive,
-	push,
 } from '$lib/stores/notifications.svelte';
-import {
-	deriveConnectionSurfaceUx,
-	getDisconnectedSince,
-	getGraceNow,
-} from '$lib/stores/connection-ux.svelte';
 
 // Resolve the action label i18n key against the live message registry, falling
 // back to the raw key so an unknown label never blocks the deep-link affordance.
@@ -34,32 +28,15 @@ const resolveActionLabel = resolveMessageKey;
 // This is plain bookkeeping, not reactive state — the only reactive dependency
 // is `getActive()`.
 const renderedAt = new Map<string, number>();
-let connectionLossNotified = false;
 
-const connectionSurfaces = $derived(
-	deriveConnectionSurfaceUx(
-		{ authTimedOut: false, disconnectedSince: getDisconnectedSince() },
-		getGraceNow(),
-	),
-);
-
-$effect(() => {
-	if (connectionSurfaces.showConnectionLostToast && !connectionLossNotified) {
-		connectionLossNotified = true;
-		push({
-			name: 'connection-lost',
-			type: 'error',
-			key: 'notifications.connectionLost',
-			msg: 'Connection lost',
-			is_dismissable: true,
-			is_persistent: false,
-			duration: 3,
-		});
-	} else if (!connectionSurfaces.showConnectionLostToast && connectionLossNotified) {
-		connectionLossNotified = false;
-		dismiss('connection-lost');
-	}
-});
+// This host used to ALSO push its own `connection-lost` toast off
+// `deriveConnectionSurfaceUx`. It is gone: that field was byte-identically the
+// same boolean as `showOfflineBanner`, and `PWAStatus` (which renders that
+// banner) is mounted unconditionally by `Layout.svelte` — so the toast never
+// said anything the banner was not already saying, at the same instant, one
+// layer higher. A connection loss is an ONGOING STATE, which is a band's job;
+// a toast is for a transition the operator would otherwise miss. Do NOT
+// reintroduce one here.
 
 // A toast is TRANSIENT by definition, so a persistent notification does not
 // belong on this layer: given `Number.POSITIVE_INFINITY` it parked a card at

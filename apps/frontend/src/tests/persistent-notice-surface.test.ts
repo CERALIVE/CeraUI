@@ -48,12 +48,6 @@ vi.mock("$lib/helpers/SystemHelper", () => ({
 	stopStreaming: () => undefined,
 }));
 
-vi.mock("$lib/stores/connection-ux.svelte", () => ({
-	deriveConnectionSurfaceUx: () => ({ showConnectionLostToast: false }),
-	getDisconnectedSince: () => undefined,
-	getGraceNow: () => 0,
-}));
-
 vi.mock("$lib/rpc", () => ({
 	rpc: { notifications: { dismiss: () => Promise.resolve({}) } },
 }));

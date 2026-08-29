@@ -49,10 +49,14 @@ vi.mock("./layout/LayoutToastHost.svelte", noop);
 vi.mock("./layout/UpdateBanner.svelte", noop);
 vi.mock("$lib/components/updating-overlay.svelte", noop);
 
-// The pwa barrel exports two named components — stub both with the Noop.
+// PWAStatus is inert here; OfflinePage gets an IDENTIFIABLE stub so a test can
+// assert the full-page takeover actually replaced the pre-auth screen.
 vi.mock("$lib/components/custom/pwa", async () => {
 	const Noop = (await import("../tests/fixtures/Noop.svelte")).default;
-	return { OfflinePage: Noop, PWAStatus: Noop };
+	const OfflinePageStub = (
+		await import("../tests/fixtures/OfflinePageStub.svelte")
+	).default;
+	return { OfflinePage: OfflinePageStub, PWAStatus: Noop };
 });
 
 const authenticate = vi.hoisted(() => vi.fn(() => new Promise<void>(() => {})));
@@ -61,25 +65,26 @@ const authState = vi.hoisted(() => ({
 	status: false as unknown,
 }));
 const connectionSurfaceState = vi.hoisted(() => ({ lossVisible: true }));
-const offlineState = vi.hoisted(() => ({ requested: false }));
+// The DEBOUNCED verdict now lives in the store (`getShouldShowOfflinePage()`
+// folds the request through the shared grace itself), so Layout consumes it
+// verbatim — the mock stands in for that already-settled answer.
+const offlineState = vi.hoisted(() => ({ takeoverVisible: false }));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => authState.status,
 }));
 
 vi.mock("$lib/stores/offline-state.svelte", () => ({
-	getShouldShowOfflinePage: () => offlineState.requested,
+	getShouldShowOfflinePage: () => offlineState.takeoverVisible,
 }));
 
 vi.mock("$lib/stores/connection-ux.svelte", () => ({
 	deriveConnectionSurfaceUx: (input: { authTimedOut: boolean }) => ({
 		showOfflineBanner: connectionSurfaceState.lossVisible,
 		showAuthTimeout: input.authTimedOut && connectionSurfaceState.lossVisible,
-		showConnectionLostToast: connectionSurfaceState.lossVisible,
 	}),
 	getDisconnectedSince: () => 0,
 	getGraceNow: () => 3000,
-	getHasConnected: () => true,
 	markAuthenticated: vi.fn(),
 	clearSessionExpired: vi.fn(),
 	markSessionExpired: vi.fn(),
@@ -126,7 +131,7 @@ beforeEach(() => {
 	authState.auth = undefined;
 	authState.status = false;
 	connectionSurfaceState.lossVisible = true;
-	offlineState.requested = false;
+	offlineState.takeoverVisible = false;
 	// A stored token makes the component run the auth-check branch.
 	localStorage.setItem("auth", "token-abc");
 });
@@ -137,17 +142,32 @@ afterEach(() => {
 });
 
 describe("Layout — auth-check timeout surface", () => {
-	it("keeps the full offline takeover silent during a post-connect grace window", () => {
-		// Given a page that connected before, then received an offline-page request during a short drop.
+	it("keeps the full offline takeover silent while the store withholds it", () => {
+		// Given the store's debounced verdict is still withholding the takeover.
 		localStorage.removeItem("auth");
-		offlineState.requested = true;
+		offlineState.takeoverVisible = false;
 		connectionSurfaceState.lossVisible = false;
 
-		// When Layout renders while the shared reconnect grace is still active.
+		// When Layout renders during that window.
 		render(Layout);
 
 		// Then the ordinary pre-auth screen remains instead of the offline takeover.
 		expect(screen.getByTestId("auth-screen")).not.toBeNull();
+		expect(screen.queryByTestId("offline-page")).toBeNull();
+	});
+
+	it("hands the whole screen to the takeover once the store allows it", () => {
+		// Given the store's debounced verdict has settled on visible.
+		localStorage.removeItem("auth");
+		offlineState.takeoverVisible = true;
+
+		// When Layout renders.
+		render(Layout);
+
+		// Then the takeover owns the screen and the pre-auth gate is gone — the
+		// verdict is consumed verbatim, never re-composed against a raw request.
+		expect(screen.getByTestId("offline-page")).not.toBeNull();
+		expect(screen.queryByTestId("auth-screen")).toBeNull();
 	});
 
 	it("keeps the auth recovery card silent while the shared reconnect grace suppresses it", async () => {

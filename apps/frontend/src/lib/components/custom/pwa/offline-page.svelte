@@ -50,7 +50,7 @@ function goBack() {
 }
 </script>
 
-<div class="bg-background flex min-h-screen items-center justify-center p-4">
+<div class="bg-background flex min-h-screen items-center justify-center p-4" data-testid="offline-page">
 	<Card class="mx-auto w-full max-w-md">
 		<CardHeader class="text-center">
 			<div class="bg-muted mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">

@@ -32,6 +32,7 @@ import { evidencePath, navigateTo } from "./helpers";
 
 const RECONNECTING_BANNER = '[data-disconnect-banner="reconnecting"]';
 const ANY_BANNER = "[data-disconnect-banner]";
+const OFFLINE_PAGE = '[data-testid="offline-page"]';
 
 /** Mirrors `RECONNECT_BANNER_GRACE_MS` in `$lib/stores/connection-ux.svelte`. */
 const GRACE_MS = 3000;
@@ -79,11 +80,22 @@ function installHarness(token: string): void {
 		block: false,
 		droppedAt: null as number | null,
 		bannerFirstSeenAt: null as number | null,
+		offlineDroppedAt: null as number | null,
+		offlinePageFirstSeenAt: null as number | null,
 		markDrop() {
 			w.__cera.droppedAt = performance.now();
 			w.__cera.bannerFirstSeenAt = null;
 			const s = w.__cera.socket;
 			if (s) s.close();
+		},
+		/**
+		 * Stamp the instant BEFORE the browser is taken offline. Stamping early
+		 * can only inflate the measured delay, and every assertion on it is a
+		 * lower bound — so the safe direction is the one that cannot false-fail.
+		 */
+		markOfflineDrop() {
+			w.__cera.offlineDroppedAt = performance.now();
+			w.__cera.offlinePageFirstSeenAt = null;
 		},
 		/** ms between the drop and the banner first appearing; null = never seen. */
 		bannerDelayMs(): number | null {
@@ -91,21 +103,37 @@ function installHarness(token: string): void {
 			if (droppedAt === null || bannerFirstSeenAt === null) return null;
 			return bannerFirstSeenAt - droppedAt;
 		},
+		/** ms between going offline and the full-page takeover; null = never seen. */
+		offlinePageDelayMs(): number | null {
+			const { offlineDroppedAt, offlinePageFirstSeenAt } = w.__cera;
+			if (offlineDroppedAt === null || offlinePageFirstSeenAt === null) {
+				return null;
+			}
+			return offlinePageFirstSeenAt - offlineDroppedAt;
+		},
 		isSocketOpen(): boolean {
 			return w.__cera.socket?.readyState === 1;
 		},
 	};
 
-	const noteBanner = (): void => {
-		if (w.__cera.bannerFirstSeenAt !== null) return;
-		if (document.querySelector('[data-disconnect-banner="reconnecting"]')) {
+	const noteSurfaces = (): void => {
+		if (
+			w.__cera.bannerFirstSeenAt === null &&
+			document.querySelector('[data-disconnect-banner="reconnecting"]')
+		) {
 			w.__cera.bannerFirstSeenAt = performance.now();
+		}
+		if (
+			w.__cera.offlinePageFirstSeenAt === null &&
+			document.querySelector('[data-testid="offline-page"]')
+		) {
+			w.__cera.offlinePageFirstSeenAt = performance.now();
 		}
 	};
 	// Observe the Document node, not `documentElement` — an init script runs
 	// before the page's own scripts, so the root element may not exist yet and
 	// `observe(null)` would throw and take the whole harness down with it.
-	new MutationObserver(noteBanner).observe(document, {
+	new MutationObserver(noteSurfaces).observe(document, {
 		childList: true,
 		subtree: true,
 	});
@@ -147,6 +175,11 @@ function installHarness(token: string): void {
 function bannerDelay(page: Page): Promise<number | null> {
 	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
 	return page.evaluate(() => (window as any).__cera.bannerDelayMs());
+}
+
+function offlinePageDelay(page: Page): Promise<number | null> {
+	// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
+	return page.evaluate(() => (window as any).__cera.offlinePageDelayMs());
 }
 
 test.describe(
@@ -267,6 +300,47 @@ test.describe(
 			});
 			await expect(page.locator("#password")).toHaveCount(0);
 			record("reconnected → banner CLEARED, still authenticated ✓");
+		});
+
+		test("the full-page takeover waits out the same grace the banner does", async ({
+			page,
+		}) => {
+			record("── browser offline (full-page takeover) ──");
+
+			await navigateTo(page, "settings");
+			await expect(page.locator(OFFLINE_PAGE)).toHaveCount(0);
+			record("authed shell up, no offline takeover");
+
+			// The takeover is the LOUDEST connection-loss treatment in the app — it
+			// throws the whole screen away — and it was the only one the raw browser
+			// `offline` event could trigger with zero debounce. `setOffline` drives
+			// that real edge (navigator.onLine flips and the event fires), not a
+			// synthetic dispatch.
+			// biome-ignore lint/suspicious/noExplicitAny: browser harness glue.
+			await page.evaluate(() => (window as any).__cera.markOfflineDrop());
+			await page.context().setOffline(true);
+			record("browser taken offline");
+
+			await expect(page.locator(OFFLINE_PAGE)).toBeVisible({
+				timeout: 30_000,
+			});
+			const delay = await offlinePageDelay(page);
+			record(`offline takeover appeared after ${Math.round(delay ?? -1)} ms`);
+			expect(delay).not.toBeNull();
+			expect(delay as number).toBeGreaterThanOrEqual(
+				GRACE_MS - OBSERVER_SLACK_MS,
+			);
+			record("takeover withheld for the full grace period ✓");
+
+			// Recovery may reload the page (the store's poll does that once the
+			// origin answers again), so assert the settled end state rather than an
+			// in-page counter that a reload would reset.
+			await page.context().setOffline(false);
+			await expect(page.locator(OFFLINE_PAGE)).toHaveCount(0, {
+				timeout: 60_000,
+			});
+			await expect(page.locator("#password")).toHaveCount(0);
+			record("back online → takeover CLEARED, still authenticated ✓");
 		});
 	},
 );

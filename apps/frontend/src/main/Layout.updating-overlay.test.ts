@@ -61,11 +61,9 @@ vi.mock("$lib/stores/connection-ux.svelte", () => ({
 	deriveConnectionSurfaceUx: () => ({
 		showOfflineBanner: false,
 		showAuthTimeout: false,
-		showConnectionLostToast: false,
 	}),
 	getDisconnectedSince: () => null,
 	getGraceNow: () => 0,
-	getHasConnected: () => true,
 	markAuthenticated: vi.fn(),
 	clearSessionExpired: vi.fn(),
 	markSessionExpired: vi.fn(),
