@@ -1,18 +1,18 @@
 /*
-    CeraUI - web UI for the CeraLive project
-    Copyright (C) 2024-2025 CeraLive project
+	CeraUI - web UI for the CeraLive project
+	Copyright (C) 2024-2025 CeraLive project
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 import pkg from "../package.json" with { type: "json" };
@@ -138,7 +138,10 @@ import {
 	initHardwareMonitoring,
 	stopDmesgWatchers,
 } from "./modules/system/sensors.ts";
-import { periodicCheckForSoftwareUpdates } from "./modules/system/software-updates.ts";
+import {
+	periodicCheckForSoftwareUpdates,
+	recoverSoftwareUpdateIfRunning,
+} from "./modules/system/software-updates.ts";
 import {
 	ensureSshPasswordProvisioned,
 	ensureSshPasswordSynced,
@@ -387,6 +390,9 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 // Self-gating: it no-ops when updates are disabled for this device or when the
 // host is a dev/mock box (a dev machine must never be handed to apt).
+await guardNonCritical("software-update-recovery", async () => {
+	await recoverSoftwareUpdateIfRunning();
+});
 periodicCheckForSoftwareUpdates();
 
 initNetworkInterfaceMonitoring();

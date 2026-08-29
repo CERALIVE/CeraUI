@@ -1,18 +1,18 @@
 /*
-    CeraUI - web UI for the CERALIVE project
-    Copyright (C) 2024-2025 CeraLive project
+	CeraUI - web UI for the CERALIVE project
+	Copyright (C) 2024-2025 CeraLive project
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 /*
@@ -331,22 +331,92 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWatcher runs dmesg -w with shutdown-abort cleanup and no process-lifetime timeout",
 	},
 	{
-		id: "softwareUpdates.aptGet",
+		id: "softwareUpdates.refreshPackageLists",
 		file: "modules/system/software-updates.ts",
-		symbol: "doSoftwareUpdate",
-		command: "[apt-get, ...upgradeArgs]",
+		symbol: "checkForSoftwareUpdates",
+		command: "[/usr/bin/apt-get, update, --allow-releaseinfo-change]",
 		class: "bounded-command",
 		contract: {
-			timed: false,
+			timed: true,
 			startupTimeout: false,
 			shutdownCleanup: false,
 			shutdownAbort: false,
 			lifetimeTimeoutExempt: false,
-			streamingExempt: true,
 		},
 		status: "enforced",
 		mechanism:
-			"streams stdout to parse + broadcast apt progress; a wall-clock cap is wrong (an upgrade legitimately runs minutes). Bounded by output parsing, not time",
+			"spawnWithTimeout runs the package-list refresh argv-only and bounds a repository/network stall without changing the apt transaction lifetime",
+	},
+	{
+		id: "softwareUpdates.discoverUpgrade",
+		file: "modules/system/software-updates.ts",
+		symbol: "getSoftwareUpdateSize",
+		command:
+			"[/usr/bin/apt-get, dist-upgrade|install, --assume-no, ...packages]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout runs the read-only upgrade discovery argv-only with a bounded local probe window",
+	},
+	{
+		id: "softwareUpdates.startTransient",
+		file: "modules/system/software-update-service.ts",
+		symbol: "defaultDetachedAptServiceDeps.start",
+		command:
+			"[systemd-run, ...serviceArgs, --, /usr/bin/apt-get, ...upgradeArgs]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds only the local systemd-run submission; PID 1 owns the apt/dpkg service with no runtime deadline, so a ceralive.service restart cannot kill the transaction",
+	},
+	{
+		id: "softwareUpdates.inspectTransient",
+		file: "modules/system/software-update-service.ts",
+		symbol: "inspectService",
+		command:
+			"[systemctl, show, ceralive-software-update.service, ...properties]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds each local state read; adoption verifies the exact unit id, no-hook transient-service posture, and canonical apt-get upgrade argv, while an unreadable or unknown state stays fail-closed behind a coalesced recovery retry",
+	},
+	{
+		id: "softwareUpdates.cleanupTransient",
+		file: "modules/system/software-update-service.ts",
+		symbol: "defaultDetachedAptServiceDeps.cleanup",
+		command: "[systemctl, stop|reset-failed, ceralive-software-update.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds terminal service cleanup after stdout/stderr and ExecMainStatus have been consumed; cleanup failure remains an explicit failed update outcome rather than being reported as success",
 	},
 	{
 		id: "addons.runValidateCmd",

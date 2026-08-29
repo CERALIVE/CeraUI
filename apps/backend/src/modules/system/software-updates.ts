@@ -1,25 +1,28 @@
 /*
-    CeraUI - web UI for the CERALIVE project
-    Copyright (C) 2024-2025 CeraLive project
+	CeraUI - web UI for the CERALIVE project
+	Copyright (C) 2024-2025 CeraLive project
 
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation, either version 3 of the License, or
+	(at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-    You should have received a copy of the GNU General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { execPNR } from "../../helpers/exec.ts";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
 import { run } from "../../helpers/run.ts";
+import {
+	type SpawnWithTimeoutResult,
+	spawnWithTimeout,
+} from "../../helpers/spawn-policy.ts";
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
@@ -41,6 +44,17 @@ import {
 	parseOk,
 } from "./cli-parse.ts";
 import {
+	DetachedAptServiceCleanupError,
+	recoverDetachedAptUpgrade,
+	runDetachedAptUpgrade,
+	type SoftwareUpdateOutputHandlers,
+} from "./software-update-process.ts";
+import {
+	isSoftwareUpdateRecoveryInconclusive,
+	recoverSoftwareUpdateWithCoordination,
+	resetSoftwareUpdateRecovery,
+} from "./software-update-recovery.ts";
+import {
 	deriveUpdateIdentity,
 	deriveUpdateState,
 	type UpdateCheckFailureReason,
@@ -57,7 +71,7 @@ let availableUpdates:
 	  }
 	| null
 	| false = aptUpdatesEnabled() ? null : false;
-type SoftUpdateStatus = {
+export type SoftUpdateStatus = {
 	total: number;
 	downloading: number;
 	unpacking: number;
@@ -66,8 +80,29 @@ type SoftUpdateStatus = {
 };
 let softUpdateStatus: SoftUpdateStatus | null = null;
 let aptGetUpdating = false;
+let aptDiscoveryRunning = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
+let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
+let softwareUpdateRecoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
+const SOFTWARE_UPDATE_RECOVERY_RETRY_MS = 3_000;
+const APT_REFRESH_TIMEOUT_MS = 5 * oneMinute;
+const APT_DISCOVERY_TIMEOUT_MS = 2 * oneMinute;
+
+async function runAptCommand(
+	argv: string[],
+	timeoutMs: number,
+): Promise<SpawnWithTimeoutResult> {
+	try {
+		return await spawnWithTimeout(argv, { timeoutMs });
+	} catch (error) {
+		return {
+			exitCode: 1,
+			stdout: "",
+			stderr: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
 
 // Unified-update-state signals (Todo 24). The identity of the currently-available
 // update; the identity being installed; and the terminal outcome of the last run.
@@ -132,6 +167,14 @@ export function isUpdating() {
 // and the last terminal outcome so a suite that leaves an update mid-flight
 // cannot refuse the next test's start with `already_updating`.
 export function resetSoftwareUpdateState(): void {
+	if (delayedSoftwareUpdateStart) clearTimeout(delayedSoftwareUpdateStart);
+	if (softwareUpdateRecoveryRetryTimer) {
+		clearTimeout(softwareUpdateRecoveryRetryTimer);
+	}
+	delayedSoftwareUpdateStart = undefined;
+	softwareUpdateRecoveryRetryTimer = undefined;
+	resetSoftwareUpdateRecovery();
+	aptDiscoveryRunning = false;
 	softUpdateStatus = null;
 	currentUpdateIdentity = null;
 	lastUpdateFailure = null;
@@ -139,6 +182,29 @@ export function resetSoftwareUpdateState(): void {
 	lastCheckFailure = null;
 	lastCheckedAt = null;
 }
+
+export type SoftwareUpdateRecoveryDeps = {
+	readonly recover: typeof recoverDetachedAptUpgrade;
+	readonly scheduleRetry: (retry: () => void) => void;
+	readonly resumePeriodicChecks: () => void;
+};
+
+function scheduleSoftwareUpdateRecoveryRetry(retry: () => void): void {
+	if (softwareUpdateRecoveryRetryTimer) return;
+	softwareUpdateRecoveryRetryTimer = setTimeout(() => {
+		softwareUpdateRecoveryRetryTimer = undefined;
+		retry();
+	}, SOFTWARE_UPDATE_RECOVERY_RETRY_MS);
+	softwareUpdateRecoveryRetryTimer.unref?.();
+}
+
+const defaultSoftwareUpdateRecoveryDeps: SoftwareUpdateRecoveryDeps = {
+	recover: recoverDetachedAptUpgrade,
+	scheduleRetry: scheduleSoftwareUpdateRecoveryRetry,
+	resumePeriodicChecks: periodicCheckForSoftwareUpdates,
+};
+
+export { isSoftwareUpdateRecoveryInconclusive };
 
 export function getUpdateState(): UpdateState {
 	const available =
@@ -154,7 +220,7 @@ export function getUpdateState(): UpdateState {
 					}
 				: null;
 	return deriveUpdateState({
-		checking: aptGetUpdating,
+		checking: aptGetUpdating || aptDiscoveryRunning,
 		available,
 		updating:
 			softUpdateStatus && softUpdateStatus.result === undefined
@@ -279,14 +345,13 @@ export function buildAptUpgradeArgs(heldBackPackages?: string[]): string[] {
 }
 
 async function aptAssumeNoInstall(packages: string[]): Promise<string> {
-	try {
-		return await run("apt-get", buildAptInstallArgs(packages));
-	} catch (err) {
-		// --assume-no aborts non-zero whenever changes would be made, so run()
-		// rejects; the summary we parse is still on the rejection's stdout.
-		const e = err as { stdout?: unknown };
-		return typeof e.stdout === "string" ? e.stdout : "";
-	}
+	const result = await runAptCommand(
+		["/usr/bin/apt-get", ...buildAptInstallArgs(packages)],
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	// --assume-no exits non-zero whenever changes would be made; its summary is
+	// still authoritative stdout and must be parsed on that expected refusal.
+	return result.stdout;
 }
 
 function packageListIncludes(list: string, includes: Array<string>) {
@@ -382,7 +447,15 @@ async function getSoftwareUpdateSize() {
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
 
 	// First see if any packages can be upgraded by dist-upgrade
-	const upgrade = await execPNR("apt-get dist-upgrade --assume-no");
+	const upgradeResult = await runAptCommand(
+		["/usr/bin/apt-get", "dist-upgrade", "--assume-no"],
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	const upgrade = {
+		code: upgradeResult.exitCode,
+		stdout: upgradeResult.stdout,
+		stderr: upgradeResult.stderr,
+	};
 	if (reportUpdateCheckFailure(upgrade)) {
 		failCurrentCheck("discovery_failed");
 		return null;
@@ -505,7 +578,14 @@ function checkForSoftwareUpdates(
 	callback: (err: SoftwareUpdateError, aptGetUpdateFailures: number) => unknown,
 ): boolean {
 	if (!aptUpdatesEnabled()) return false;
-	if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
+	if (
+		getIsStreaming() ||
+		isUpdating() ||
+		aptGetUpdating ||
+		aptDiscoveryRunning
+	) {
+		return false;
+	}
 
 	// A fresh cycle supersedes the previous one's verdict, and the `checking`
 	// transition is BROADCAST: it is derivable server-side the moment this flag
@@ -516,11 +596,12 @@ function checkForSoftwareUpdates(
 	broadcastUpdateState();
 
 	void (async () => {
-		const res = await Bun.$`apt-get update --allow-releaseinfo-change`
-			.nothrow()
-			.quiet();
-		const stdout = res.stdout.toString();
-		const stderr = res.stderr.toString();
+		const res = await runAptCommand(
+			["/usr/bin/apt-get", "update", "--allow-releaseinfo-change"],
+			APT_REFRESH_TIMEOUT_MS,
+		);
+		const stdout = res.stdout;
+		const stderr = res.stderr;
 
 		aptGetUpdating = false;
 
@@ -604,11 +685,16 @@ export function resetSoftwareUpdateSizeRunner(): void {
 // already carries it) and always emits a terminal frame — discovery has several
 // early returns that broadcast nothing, and each of those used to leave the
 // operator on whatever the dialog happened to be showing.
-async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
+export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError> {
+	if (aptDiscoveryRunning) return "busy";
+	aptDiscoveryRunning = true;
 	lastCheckedAt = Date.now();
-	const discovery = await softwareUpdateSizeRunner();
-	broadcastUpdateState();
-	return discovery;
+	try {
+		return await softwareUpdateSizeRunner();
+	} finally {
+		aptDiscoveryRunning = false;
+		broadcastUpdateState();
+	}
 }
 
 let nextCheckForSoftwareUpdates = getms();
@@ -627,6 +713,7 @@ export function periodicCheckForSoftwareUpdates() {
 	// A dev/CI host must never be handed to apt. The manual check has its own
 	// mock branch; this background loop simply does not run there.
 	if (shouldUseMocks()) return;
+	if (isSoftwareUpdateRecoveryInconclusive()) return;
 	if (nextCheckForSoftwareUpdatesTimer) {
 		clearTimeout(nextCheckForSoftwareUpdatesTimer);
 		nextCheckForSoftwareUpdatesTimer = undefined;
@@ -660,8 +747,16 @@ export function periodicCheckForSoftwareUpdates() {
 // Reuses the periodic discovery + skip guard but never touches its timer.
 // Returns false when skipped (streaming/updating/apt busy).
 export function triggerManualUpdateCheck(): boolean {
+	if (isSoftwareUpdateRecoveryInconclusive()) return false;
 	if (shouldUseMocks()) {
-		if (getIsStreaming() || isUpdating() || aptGetUpdating) return false;
+		if (
+			getIsStreaming() ||
+			isUpdating() ||
+			aptGetUpdating ||
+			aptDiscoveryRunning
+		) {
+			return false;
+		}
 		lastUpdateFailure = null;
 		lastUpdateSucceeded = false;
 		lastCheckFailure = null;
@@ -823,6 +918,9 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 	if (!aptUpdatesEnabled()) return refuseUpdateStart("updates_disabled");
 	if (getIsStreaming()) return refuseUpdateStart("streaming");
 	if (isUpdating()) return refuseUpdateStart("already_updating");
+	if (isSoftwareUpdateRecoveryInconclusive()) {
+		return refuseUpdateStart("check_unavailable");
+	}
 
 	// An update restarts `ceralive` (and usually reboots) WITHOUT changing the
 	// boot id, so a stream armed before an engine crash earlier in this same boot
@@ -836,8 +934,27 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 	lastUpdateSucceeded = false;
 
 	// if an apt-get update is already in progress, retry later
-	if (aptGetUpdating) {
-		setTimeout(startSoftwareUpdate, 3 * 1000);
+	if (aptGetUpdating || aptDiscoveryRunning) {
+		if (!delayedSoftwareUpdateStart) {
+			delayedSoftwareUpdateStart = setTimeout(() => {
+				delayedSoftwareUpdateStart = undefined;
+				const outcome = startSoftwareUpdate();
+				if (!outcome.started) {
+					lastUpdateSucceeded = false;
+					lastUpdateFailure = {
+						reason: `Software update could not start after waiting for package discovery: ${outcome.reason}`,
+						...((currentUpdateIdentity ?? availableIdentity)
+							? {
+									identity: (currentUpdateIdentity ??
+										availableIdentity) as UpdateIdentity,
+								}
+							: {}),
+					};
+					broadcastUpdateState();
+				}
+			}, 3 * 1000);
+			delayedSoftwareUpdateStart.unref?.();
+		}
 		return { started: true };
 	}
 
@@ -852,158 +969,216 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 	return softwareUpdateRunner();
 }
 
-function doSoftwareUpdate() {
-	if (!aptUpdatesEnabled() || getIsStreaming()) return;
+type SoftwareUpdateProcessMonitor = {
+	readonly handlers: SoftwareUpdateOutputHandlers;
+	readonly finish: (completion: Promise<number>) => void;
+};
 
+export function deriveAptProgress(
+	current: SoftUpdateStatus,
+	output: string,
+): SoftUpdateStatus {
+	const parsedTotal = parseUpgradePackageCount(output);
+	const total = parsedTotal.ok ? parsedTotal.value : current.total;
+	let highestGet = current.downloading;
+	for (const match of output.matchAll(/Get:(\d+)/g)) {
+		highestGet = Math.max(highestGet, Number.parseInt(match[1] ?? "", 10));
+	}
+	const unpacking = Math.min(output.match(/Unpacking /g)?.length ?? 0, total);
+	const settingUp = Math.min(output.match(/Setting up /g)?.length ?? 0, total);
+	return {
+		...current,
+		total,
+		downloading: unpacking > 0 ? total : Math.min(highestGet, total),
+		unpacking,
+		setting_up: settingUp,
+	};
+}
+
+function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 	let rebootAfterUpgrade = false;
 	let aptLog = "";
 	let aptErr = "";
 
-	const heldBack = aptHeldBackPackages
-		? parseHeldBackPackages(aptHeldBackPackages)
-		: undefined;
-	const aptUpgrade = Bun.spawn(["apt-get", ...buildAptUpgradeArgs(heldBack)], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-
 	const handleStdoutChunk = (data: string) => {
-		let sendUpdate = false;
-
 		aptLog += data;
 
 		if (!softUpdateStatus) return;
-
-		if (softUpdateStatus.total === 0) {
+		const previous = softUpdateStatus;
+		const next = deriveAptProgress(previous, aptLog);
+		softUpdateStatus = next;
+		if (next.total === 0 && aptLog.includes(" upgraded")) {
 			const count = parseUpgradePackageCount(aptLog);
-			if (count.ok) {
-				softUpdateStatus.total = count.value;
-				sendUpdate = true;
-
-				const packageList = parseAptUpgradedPackages(aptLog);
-				if (
-					packageList.ok &&
-					packageList.value !== undefined &&
-					packageListIncludes(packageList.value, rebootPackageList)
-				) {
-					rebootAfterUpgrade = true;
-				}
-			} else if (aptLog.includes(" upgraded")) {
-				logParseError(count);
-			}
+			if (!count.ok) logParseError(count);
 		}
-
-		if (softUpdateStatus.downloading !== softUpdateStatus.total) {
-			const getMatch = data.match(/Get:(\d+)/);
-			if (getMatch) {
-				const i = Number.parseInt(getMatch[1] ?? "", 10);
-				if (i > softUpdateStatus.downloading) {
-					softUpdateStatus.downloading = Math.min(i, softUpdateStatus.total);
-					sendUpdate = true;
-				}
-			}
+		if (!rebootAfterUpgrade && next.total > 0) {
+			const packageList = parseAptUpgradedPackages(aptLog);
+			rebootAfterUpgrade =
+				packageList.ok &&
+				packageList.value !== undefined &&
+				packageListIncludes(packageList.value, rebootPackageList);
 		}
-
-		const unpacking = data.match(/Unpacking /g);
-		if (unpacking) {
-			softUpdateStatus.downloading = softUpdateStatus.total;
-			softUpdateStatus.unpacking += unpacking.length;
-			softUpdateStatus.unpacking = Math.min(
-				softUpdateStatus.unpacking,
-				softUpdateStatus.total,
-			);
-			sendUpdate = true;
-		}
-
-		const setting_up = data.match(/Setting up /g);
-		if (setting_up) {
-			softUpdateStatus.setting_up += setting_up.length;
-			softUpdateStatus.setting_up = Math.min(
-				softUpdateStatus.setting_up,
-				softUpdateStatus.total,
-			);
-			sendUpdate = true;
-		}
-
-		if (sendUpdate) {
+		if (
+			previous.total !== next.total ||
+			previous.downloading !== next.downloading ||
+			previous.unpacking !== next.unpacking ||
+			previous.setting_up !== next.setting_up
+		) {
 			broadcastMsg("status", { updating: softUpdateStatus });
 		}
 	};
 
-	void (async () => {
-		const stdoutDecoder = new TextDecoder();
-		const drainStdout = (async () => {
-			for await (const chunk of aptUpgrade.stdout as ReadableStream<Uint8Array>) {
-				handleStdoutChunk(stdoutDecoder.decode(chunk, { stream: true }));
+	const handlers: SoftwareUpdateOutputHandlers = {
+		onStdout: handleStdoutChunk,
+		onStderr: (data) => {
+			aptErr += data;
+		},
+		onObserverError: (error) => {
+			logger.warn(
+				"Software update observer retrying after a local read failure",
+				{
+					error,
+				},
+			);
+		},
+	};
+
+	const finish = (completion: Promise<number>): void => {
+		void (async () => {
+			let code: number;
+			try {
+				code = await completion;
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				aptErr += aptErr.length > 0 ? `\n${message}` : message;
+				code =
+					err instanceof DetachedAptServiceCleanupError &&
+					err.transactionExitCode !== 0
+						? err.transactionExitCode
+						: 1;
 			}
-		})();
 
-		const stderrDecoder = new TextDecoder();
-		const drainStderr = (async () => {
-			for await (const chunk of aptUpgrade.stderr as ReadableStream<Uint8Array>) {
-				aptErr += stderrDecoder.decode(chunk, { stream: true });
-			}
-		})();
-
-		const [, , code] = await Promise.all([
-			drainStdout,
-			drainStderr,
-			aptUpgrade.exited,
-		]);
-
-		if (softUpdateStatus) {
-			if (code === 0) {
-				lastUpdateSucceeded = true;
-				lastUpdateFailure = null;
-			} else {
-				lastUpdateSucceeded = false;
-				lastUpdateFailure = {
-					reason: aptErr.trim() || `apt-get exited with code ${code}`,
-					...((currentUpdateIdentity ?? availableIdentity)
-						? {
-								identity: (currentUpdateIdentity ??
-									availableIdentity) as UpdateIdentity,
-							}
-						: {}),
-				};
-				notificationBroadcast(
-					"ceralive_update_failed",
-					"error",
-					"The software update failed. Open Settings → Software Updates to see the reason and retry.",
-					0,
-					true,
-					true,
-					true,
-					"notifications.ceraliveUpdateFailed",
-					undefined,
-					{
-						action: {
-							schema: 1,
-							kind: "navigate",
-							target: "updates-dialog",
-							labelKey: "notifications.openUpdates",
+			if (softUpdateStatus) {
+				if (code === 0) {
+					lastUpdateSucceeded = true;
+					lastUpdateFailure = null;
+				} else {
+					lastUpdateSucceeded = false;
+					lastUpdateFailure = {
+						reason: aptErr.trim() || `apt-get exited with code ${code}`,
+						...((currentUpdateIdentity ?? availableIdentity)
+							? {
+									identity: (currentUpdateIdentity ??
+										availableIdentity) as UpdateIdentity,
+								}
+							: {}),
+					};
+					notificationBroadcast(
+						"ceralive_update_failed",
+						"error",
+						"The software update failed. Open Settings → Software Updates to see the reason and retry.",
+						0,
+						true,
+						true,
+						true,
+						"notifications.ceraliveUpdateFailed",
+						undefined,
+						{
+							action: {
+								schema: 1,
+								kind: "navigate",
+								target: "updates-dialog",
+								labelKey: "notifications.openUpdates",
+							},
 						},
-					},
-				);
+					);
+				}
+				softUpdateStatus.result = code === 0 ? code : aptErr;
+				broadcastMsg("status", {
+					updating: softUpdateStatus,
+					update_state: getUpdateState(),
+				});
+				softUpdateStatus = null;
+				broadcastUpdateState();
 			}
-			softUpdateStatus.result = code === 0 ? code : aptErr;
+
+			if (aptLog) logger.info(aptLog);
+			if (aptErr) logger.error(aptErr);
+
+			if (code === 0) {
+				if (rebootAfterUpgrade) {
+					rebootAfterUpdate();
+				} else {
+					invariant(
+						false,
+						"software update complete; exiting to restart CeraUI",
+					);
+				}
+			}
+		})();
+	};
+
+	return { handlers, finish };
+}
+
+function doSoftwareUpdate() {
+	if (!aptUpdatesEnabled() || getIsStreaming()) return;
+
+	const heldBack = aptHeldBackPackages
+		? parseHeldBackPackages(aptHeldBackPackages)
+		: undefined;
+	const monitor = createSoftwareUpdateProcessMonitor();
+
+	// 2026-08-29: apt can restart ceralive.service from a package script;
+	// running it in this unit's cgroup then lets that restart kill the package
+	// transaction itself. PID 1 owns this service, and the next backend process
+	// reattaches to its durable output instead of relaunching apt.
+	monitor.finish(
+		runDetachedAptUpgrade(buildAptUpgradeArgs(heldBack), monitor.handlers),
+	);
+}
+
+async function recoverSoftwareUpdate(
+	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
+): Promise<boolean> {
+	if (!aptUpdatesEnabled() || shouldUseMocks() || isUpdating()) return false;
+
+	const monitor = createSoftwareUpdateProcessMonitor();
+	const recovered = await deps.recover({
+		...monitor.handlers,
+		onAttached: () => {
+			softUpdateStatus = {
+				total: 0,
+				downloading: 0,
+				unpacking: 0,
+				setting_up: 0,
+			};
+			lastUpdateFailure = null;
+			lastUpdateSucceeded = false;
+			logger.warn(
+				"Software update: reattached to the detached apt transaction",
+			);
 			broadcastMsg("status", {
 				updating: softUpdateStatus,
 				update_state: getUpdateState(),
 			});
-			softUpdateStatus = null;
-			broadcastUpdateState();
-		}
+		},
+	});
+	if (!recovered) return false;
 
-		if (aptLog) logger.info(aptLog);
-		if (aptErr) logger.error(aptErr);
+	monitor.finish(recovered.completion);
+	return true;
+}
 
-		if (code === 0) {
-			if (rebootAfterUpgrade) {
-				rebootAfterUpdate();
-			} else {
-				invariant(false, "software update complete; exiting to restart CeraUI");
-			}
-		}
-	})();
+export function recoverSoftwareUpdateIfRunning(
+	deps: SoftwareUpdateRecoveryDeps = defaultSoftwareUpdateRecoveryDeps,
+): Promise<boolean> {
+	return recoverSoftwareUpdateWithCoordination({
+		attempt: () => recoverSoftwareUpdate(deps),
+		scheduleRetry: deps.scheduleRetry,
+		resumePeriodicChecks: deps.resumePeriodicChecks,
+		reportRetryError: (error) => {
+			logger.warn("Software update recovery probe will retry", { error });
+		},
+	});
 }
