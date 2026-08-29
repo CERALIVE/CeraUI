@@ -153,7 +153,7 @@ describe("the card", () => {
 		).toBe("mbim");
 		// OL-1: the wire token lives on the attribute, never in operator copy.
 		expect(active.textContent).not.toContain("qmi");
-	}, 15_000);
+	});
 
 	it("is absent entirely when the device reports no mode — additive-tolerant", () => {
 		render(ModemConfigDialog, {
