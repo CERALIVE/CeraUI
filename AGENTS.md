@@ -58,7 +58,9 @@ CeraUI/
 │           ├── encoder-load.ts        # per-core VEPU580 load; probes BOTH kernel realities
 │           │   ├── device-detection.ts    # isRealDevice() — gates all add-on ops
 │           │   ├── kiosk.ts               # Kiosk DC-2 state machine; toggle runs the cog-display add-on via the manager
-│           │   └── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
+│           │   ├── software-updates.ts    # apt/size parsing; APT_PACKAGE_NAME_RE
+│           │   ├── software-update-service.ts # transient-unit lifecycle + retained exit status
+│           │   └── software-update-process.ts # durable progress polling + restart reattachment
 │           └── modules/addons/
 │               └── manager.ts             # Add-on enable/disable state machine (T28)
 ├── packages/
@@ -735,6 +737,25 @@ post-boot reconciler. Both are the default-parameter values for their respective
 public functions, so existing tests that pass deps explicitly are unaffected.
 
 **Software-update + SSH dev mock seams (T8):**
+- Production self-updates run through `software-update-process.ts` as a
+  PID-1-owned transient service, never as a direct child of `ceralive.service`:
+  the CeraUI package's own restart must not kill the `apt-get`/`dpkg` transaction.
+  Progress comes from fixed, root-owned, no-follow mode-0600 append files under
+  `/run/ceralive`, not `systemd-run --pipe` or a caller-owned scope, so the status
+  parsers are not coupled to the backend process lifetime or file-read chunking.
+  `RemainAfterExit` preserves the terminal result; boot verifies the exact unit id,
+  transient fragment and effective `[Service]` append destinations, no-hook service
+  posture, and canonical
+  upgrade argv before reattaching. An
+  unreadable probe fails closed before the periodic refresh and retries until it can
+  resume that loop; concurrent recovery callers join one attempt. Fresh starts reject
+  an existing unit and non-upgrade apt argv;
+  observation errors retain independently-advanced cursors, final output must drain
+  completely before cleanup (bounded exhaustion retains the unit for recovery), and
+  cleanup failure is terminally visible rather than reported as success. Discovery
+  is single-flight. Every apt call names `/usr/bin/apt-get` explicitly; refresh
+  and read-only discovery are argv-only and locally bounded, while the detached
+  install transaction remains deliberately unbounded.
 - `simulateMockSoftwareUpdate()` (internal, called by `startSoftwareUpdate()` under
   `shouldUseMocks()`) broadcasts a realistic sequence of `{updating: SoftUpdateStatus}`
   frames — initial zero totals, then downloading/unpacking/setting-up counts, then
