@@ -59,9 +59,9 @@ describe("offline-state connection tracking", () => {
 		expect(mod.getConnectionState()).toBe("connecting");
 	});
 
-	it("subscribes exactly once and replays no raw socket listeners", async () => {
+	it("subscribes both pre-auth stores once and replays no raw socket listeners", async () => {
 		await loadOfflineState("connecting");
-		expect(onConnectionChange).toHaveBeenCalledTimes(1);
+		expect(onConnectionChange).toHaveBeenCalledTimes(2);
 		expect(capturedHandler).toBeTypeOf("function");
 	});
 

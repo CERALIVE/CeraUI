@@ -10,8 +10,9 @@
  * `connection-ux.svelte` already projects onto every other loss surface
  * ({@link hasOutlastedBannerGrace} over `getDisconnectedSince()`), so the
  * full-page takeover, the pre-auth top banner and the authenticated
- * `DisconnectedBanner` can never disagree about whether a drop has lasted long
- * enough to be worth telling the operator about.
+ * `DisconnectedBanner` share one grace verdict. After a successful connection,
+ * a socket-only loss belongs to the banner; the takeover is reserved for a
+ * browser-offline edge so its origin poll cannot reload a healthy page.
  *
  * WHY: this file used to run a SECOND, parallel offline detector with its own
  * 3 s constant, and the browser `offline` event bypassed even that — it set the
@@ -250,7 +251,8 @@ function clearOfflineRequest() {
 }
 
 function checkOfflineState() {
-	if (getIsFullyOffline()) requestDebouncedOfflinePage();
+	if (!getIsOnline() || (!getHasConnected() && getIsFullyOffline()))
+		requestDebouncedOfflinePage();
 	else clearOfflineRequest();
 }
 
