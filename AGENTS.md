@@ -816,6 +816,17 @@ reported `process.execPath` = node and `process.versions.bun` = `undefined` befo
 bun / `1.4.0` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
 exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
 
+The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The 355-file,
+5,795-test CI run is transform/import-bound and takes roughly 20–25 minutes; across two CI
+runs, three unrelated async-rendering tests (`PowerDialog.async-state`,
+`ModemConfigDialog.usbmode`, and `ModemConfigDialog.apn`) each exhausted the default 5-second
+budget while every other test passed. The varying victim and identical boundary establish
+runner-load starvation rather than three independent hangs. Twenty seconds is deliberate:
+four times the default provides scheduler headroom without turning the timeout into the
+60-second-or-longer non-safety-net that would conceal a genuine stuck test. Do not accumulate
+per-test overrides for this load class; reserve explicit longer limits for tests whose own
+documented operation genuinely exceeds the suite-wide budget.
+
 The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
 same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
 before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
