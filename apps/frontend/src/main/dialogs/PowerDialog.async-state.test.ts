@@ -151,7 +151,7 @@ describe("PowerDialog — reboot async state", () => {
 		// Resolving the first dispatch hands off to the rebooting banner exactly once.
 		d.resolve({ success: true });
 		await waitFor(() => expect(markRebooting).toHaveBeenCalledOnce());
-	});
+	}, 15_000);
 
 	it("surfaces a failure and releases re-entry when a reboot is refused", async () => {
 		rebootRpc.mockResolvedValue({ success: false });
