@@ -26,6 +26,16 @@ get_commit() {
     git -C "$BUILD_REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo "unknown"
 }
 
+# The repo's own CalVer bump artifact (docs/APT_VERSION_CONTROL.md → "Per-Repo
+# Bump Artifact": CeraUI owns its version in the root package.json). This is the
+# SAME source vite.federation.config.ts reads, so a device's Versions row, the
+# federation bundle path, and the release tag cannot name three different builds.
+# Deliberately NOT get_version(), which falls back to "1.0.0" in a tagless
+# checkout — an untagged local build must still stamp the real CalVer.
+get_ceraui_version() {
+    bun -p "require('$BUILD_REPO_ROOT/package.json').version" 2>/dev/null
+}
+
 get_build_date() {
     date -u +"%Y%m%dT%H%M%S"
 }
@@ -462,7 +472,7 @@ smart_build_monitored() {
 }
 
 # Export all functions for use in other scripts
-export -f get_version get_commit get_build_date get_architecture
+export -f get_version get_commit get_build_date get_architecture get_ceraui_version
 export -f get_git_hash hash_build_inputs get_frontend_hash get_backend_hash
 export -f is_frontend_cache_valid is_backend_cache_valid
 export -f build_frontend_only build_backend_only smart_build smart_build_monitored

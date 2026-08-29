@@ -1,16 +1,20 @@
 /**
  * One presentation rule for every row of Settings → Versions.
  *
- * The rows come from four unrelated producers — a git hash, `Bun.version`,
- * `uname -r`, the engine's IPC `hello`, and `srtla_send -v` — and only the last
- * one carries build metadata. It used to render its whole CLI line verbatim
- * (`3.2.0 (main@974c8b9) [srtla_send]`) beside three bare version numbers, so
+ * The rows come from unrelated producers — `Bun.version`, `uname -r`, the
+ * engine's IPC `hello`, `srtla_send -v`, and CeraUI's own build stamps — and two
+ * of them carry build metadata. `srtla_send -v` used to render its whole CLI line
+ * verbatim (`3.2.0 (main@974c8b9) [srtla_send]`) beside bare version numbers, so
  * one row read as noise next to its neighbours.
  *
  * Splitting the line here means every row renders the SAME shape: a version as
  * the primary value, with any build metadata demoted to a secondary line. The
  * package tag is dropped outright — the row's own label already names the
  * component.
+ *
+ * It is also why the backend composes CeraUI's own row as
+ * `<version> (<commit>)`: reusing this shape demotes the commit with no wire
+ * change and no per-row branch in the dialog.
  */
 export interface VersionDisplay {
 	/** The version number, rendered as the row's primary value. */

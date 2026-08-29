@@ -85,6 +85,31 @@ describe("VersionsDialog", () => {
 		});
 	});
 
+	// CeraUI's own row used to be a bare git short-SHA beside four real version
+	// numbers, because the .deb stamped only the commit. It now carries the
+	// packaged CalVer, and the commit rides the SAME `(...)` shape SRTLA already
+	// uses — so the existing splitVersionValue handles it with no row-specific
+	// branch and no wire change.
+	it("promotes CeraUI's packaged version and demotes its commit", async () => {
+		vi.mocked(rpc.system.getRevisions).mockResolvedValueOnce({
+			...pushed,
+			ceralive: "2026.8.5 (8738fd63)",
+		});
+		render(VersionsDialog, { props: { open: true } });
+		const container = document.body;
+		await waitFor(() => {
+			expect(rowValue(container, "CeraUI")).toEqual(["2026.8.5", "8738fd63"]);
+		});
+	});
+
+	it("still renders a dev checkout's bare commit as the whole value", async () => {
+		render(VersionsDialog, { props: { open: true } });
+		const container = document.body;
+		await waitFor(() => {
+			expect(rowValue(container, "CeraUI")).toEqual(["abc1234"]);
+		});
+	});
+
 	it("re-pulls the versions on open so a late engine is not reported unreachable forever", async () => {
 		vi.mocked(rpc.system.getRevisions).mockResolvedValueOnce({
 			...pushed,

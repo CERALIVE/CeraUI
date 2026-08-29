@@ -28,10 +28,10 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 24 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(24);
+	it("classifies all 25 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(25);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(24);
+		expect(ids.size).toBe(25);
 	});
 
 	// The diagnostic's `nft list ruleset` is a READ on its own slow cadence, so it
