@@ -19,6 +19,10 @@ export default defineConfig({
 		setupFiles: ['./vitest.setup.ts'],
 		include: ['src/**/*.test.ts'],
 		exclude: ['**/node_modules/**', '**/dist/**'],
+		// CI compiles ~355 Svelte-heavy files for 20+ minutes; three unrelated
+		// async rendering tests have each exhausted Vitest's 5 s default under load.
+		// Four times that budget absorbs scheduler pressure while keeping hangs bounded.
+		testTimeout: 20_000,
 		// The suite is transform/import-bound (Svelte compile), not CPU-bound on the
 		// assertions, so wall-clock scales with how many files compile in parallel.
 		// Threads start far cheaper than forks for this workload; keep per-file

@@ -243,3 +243,22 @@ describe("a socket loss before the page ever connected", () => {
 		expect(mod.getShouldShowOfflinePage()).toBe(false);
 	});
 });
+
+describe("a socket-only loss after the page connected", () => {
+	it("leaves recovery to the reconnect banner while the browser remains online", async () => {
+		const mod = await load();
+		emit("connected");
+
+		// Given the origin remains reachable, when only the RPC socket drops.
+		browserOnline = true;
+		emit("error");
+		await vi.advanceTimersByTimeAsync(graceMs());
+
+		// Then the authenticated reconnect banner owns the outage. A full-page
+		// takeover would arm an origin poll that reloads the healthy page and races
+		// the banner at this same boundary.
+		expect(mod.getOfflinePageRequest()).toBe("none");
+		expect(mod.getShouldShowOfflinePage()).toBe(false);
+		expect(pollArmCount()).toBe(0);
+	});
+});
