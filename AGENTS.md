@@ -2017,7 +2017,10 @@ not drift. `offline-state.svelte.ts` additionally imports `connection-ux.svelte.
 ONE shared reconnect-grace verdict (`getDisconnectedSince` / `getHasConnected` /
 `getGraceNow` / `hasOutlastedBannerGrace`); that store reads the same client surface
 directly, so the pre-auth purity is preserved and the full-page offline takeover can no
-longer disagree with the smaller banners about how long a drop has lasted. Do NOT give
+longer disagree with the smaller banners about how long a drop has lasted. After an
+established connection, a socket-only loss remains banner-owned while the browser is
+online; the takeover is reserved for browser-offline recovery so its origin poll cannot
+reload a healthy page. Do NOT give
 `offline-state` a second offline detector or a second grace constant — see
 [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) → "Reconnect-surface grace period".
 
