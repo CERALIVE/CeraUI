@@ -319,11 +319,10 @@ describe("deriveConnectionSurfaceUx", () => {
 			CONN_T0 + RECONNECT_BANNER_GRACE_MS - 1,
 		);
 
-		// Then none of the three loud pre-auth surfaces is eligible to render.
+		// Then neither loud pre-auth surface is eligible to render.
 		expect(ux).toEqual({
 			showOfflineBanner: false,
 			showAuthTimeout: false,
-			showConnectionLostToast: false,
 		});
 	});
 
@@ -340,11 +339,10 @@ describe("deriveConnectionSurfaceUx", () => {
 			CONN_T0 + RECONNECT_BANNER_GRACE_MS,
 		);
 
-		// Then the existing top banner, auth card, and toast all remain available.
+		// Then the existing top banner and auth card remain available.
 		expect(ux).toEqual({
 			showOfflineBanner: true,
 			showAuthTimeout: true,
-			showConnectionLostToast: true,
 		});
 	});
 
@@ -359,8 +357,25 @@ describe("deriveConnectionSurfaceUx", () => {
 		expect(ux).toEqual({
 			showOfflineBanner: false,
 			showAuthTimeout: true,
-			showConnectionLostToast: false,
 		});
+	});
+
+	it("projects ONE connection-loss signal, not a banner AND a toast", () => {
+		// Given a sustained drop, i.e. every loss surface is eligible.
+		const ux = deriveConnectionSurfaceUx(
+			{ authTimedOut: false, disconnectedSince: CONN_T0 },
+			CONN_T0 + RECONNECT_BANNER_GRACE_MS,
+		);
+
+		// Then the projection carries no second field for the same fact. The
+		// retired `showConnectionLostToast` was byte-identically `showOfflineBanner`
+		// and `PWAStatus` renders that banner unconditionally, so the toast could
+		// never say anything the banner was not already saying. Re-adding a field
+		// here must be a deliberate act, not an accident.
+		expect(Object.keys(ux).sort()).toEqual([
+			"showAuthTimeout",
+			"showOfflineBanner",
+		]);
 	});
 });
 

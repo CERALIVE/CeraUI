@@ -125,6 +125,7 @@ CeraUI/
 | **Ingest sparkline memoization** | `apps/frontend/src/lib/components/custom/ingest-link-view.ts` |
 | **Ingest visual/UX + @visual spec** | `apps/frontend/src/lib/components/custom/IngestStats.svelte` + `tests/e2e/visual/ingest-states.visual.spec.ts` |
 | **Device/component versions (kernel + live cerastream engine read)** | `apps/backend/src/modules/system/revisions.ts` (`refreshEngineRevision`, `ENGINE_UNREACHABLE_REVISION`) |
+| **CeraUI's OWN version row (packaged CalVer stamp \u2192 `dpkg-query` \u2192 git SHA; commit demoted, never dropped)** | `apps/backend/src/modules/system/revisions.ts` (`resolveCeraUiRevision`, `composeCeraUiRevision`, `CeraUiRevisionSources`) + the `/opt/ceralive/version` stamp in `scripts/build/build-debian-package.sh`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) \u2192 \u2026AND A BUILD-TIME VERSION IS NOT A COMMIT |
 | **Versions row presentation (version promoted, build metadata demoted)** | `apps/frontend/src/lib/system/version-display.ts` (`splitVersionValue`) → `apps/frontend/src/main/dialogs/VersionsDialog.svelte` |
 | Design rules | `.impeccable.md` |
 | **The modem EVENT SOURCE beneath the wire producer** — observer adoption, the authority state machine, the MM-restart settle guard, the two SEPARATED failure classes, the shipped default cutover + rollback, and the startup cancellation contract | `docs/DBUS-OBSERVATION-CONTRACT.md`; code `apps/backend/src/modules/cellular/{dbus-modem-cache,dbus-view-fold,dbus-mm-enums,dbus-backend}.ts` |
@@ -1984,7 +1985,13 @@ legacy WS bridge is therefore a deliberate, visible decision, never a silent imp
 directly** (`rpcClient.getConnectionState()` + `onConnectionChange`) — NOT from
 `subscriptions.svelte` — to stay pre-auth-pure (no subscription graph pulled before login).
 This is the one deliberate exception to "read connection state from subscriptions.svelte",
-not drift.
+not drift. `offline-state.svelte.ts` additionally imports `connection-ux.svelte.ts` for the
+ONE shared reconnect-grace verdict (`getDisconnectedSince` / `getHasConnected` /
+`getGraceNow` / `hasOutlastedBannerGrace`); that store reads the same client surface
+directly, so the pre-auth purity is preserved and the full-page offline takeover can no
+longer disagree with the smaller banners about how long a drop has lasted. Do NOT give
+`offline-state` a second offline detector or a second grace constant — see
+[`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) → "Reconnect-surface grace period".
 
 ## CAPABILITY-TRUTHFULNESS REGRESSION GATE [EXISTS]
 

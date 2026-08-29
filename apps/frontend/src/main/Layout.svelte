@@ -18,7 +18,6 @@ import {
 	deriveConnectionSurfaceUx,
 	getDisconnectedSince,
 	getGraceNow,
-	getHasConnected,
 	markAuthenticated,
 	markSessionExpired,
 	shouldExpireSession,
@@ -40,20 +39,19 @@ let isCheckingAuthStatus = $state(true);
 let authTimedOut = $state(false);
 let updatingStatus: StatusMessage['updating'] = $state(false);
 
-const offlinePageRequested = $derived(getShouldShowOfflinePage());
 const connectionSurfaces = $derived(
 	deriveConnectionSurfaceUx(
 		{ authTimedOut, disconnectedSince: getDisconnectedSince() },
 		getGraceNow(),
 	),
 );
-// Initial offline launches keep their immediate recovery page. Once this page
-// has connected, a transient loss must outlast the shared grace before the same
-// full-page takeover is allowed.
-const showOfflinePage = $derived(
-	offlinePageRequested &&
-		(!getHasConnected() || connectionSurfaces.showOfflineBanner),
-);
+// One debounced verdict, owned by the store: `getShouldShowOfflinePage()` folds
+// the offline-page REQUEST through the same shared grace every other
+// connection-loss surface reads. This used to be re-composed here against the
+// UNDEBOUNCED request, which left the other two consumers of that request
+// (App's boot-shell gate, DisconnectedBanner's precedence input) reading a raw
+// flag the browser `offline` event could flip instantly.
+const showOfflinePage = $derived(getShouldShowOfflinePage());
 
 // Svelte 5: Use $effect for side effects
 $effect(() => {

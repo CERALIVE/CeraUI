@@ -223,12 +223,17 @@ The transport (`client.ts`) retries forever regardless of what the banner shows.
 
 ### Shared reconnect-surface grace
 
-`RECONNECT_BANNER_GRACE_MS = 3000` is one presentation threshold shared by every ordinary connection-loss surface. `reduceConnection(prev, state, now)` stamps the socket drop once, `reduceBrowserOfflineSince(prev, online, now)` does the same for the browser network edge, and `effectiveDisconnectedSince` selects the earlier non-null stamp. This matters because a browser offline event does not guarantee an already-open WebSocket closes. One `createStalenessClock` advances the injected clock only while that effective drop is inside the grace, and the two pure projections consume the same timestamp:
+`RECONNECT_BANNER_GRACE_MS = 3000` is the ONE presentation threshold shared by every ordinary connection-loss surface — there is no second grace constant anywhere. `reduceConnection(prev, state, now)` stamps the socket drop once, `reduceBrowserOfflineSince(prev, online, now)` does the same for the browser network edge, and `effectiveDisconnectedSince` selects the earlier non-null stamp. This matters because a browser offline event does not guarantee an already-open WebSocket closes. One `createStalenessClock` advances the injected clock only while that effective drop is inside the grace, and three pure projections consume the same timestamp:
 
 - `deriveConnectionUx(input, now)` gates the authenticated reconnecting banner.
-- `deriveConnectionSurfaceUx(input, now)` gates the pre-auth top offline banner, stalled saved-session card, and connection-lost toast.
+- `deriveConnectionSurfaceUx(input, now)` gates the pre-auth top offline banner and the stalled saved-session card.
+- `deriveOfflinePageVisible(request, hasConnected, disconnectedSince, now)` (`offline-state.svelte.ts`) gates the full-page offline takeover.
 
-`LayoutToastHost` creates the toast only after the shared verdict becomes visible; `subscriptions.svelte.ts` does not push a toast on the raw disconnect edge. `Layout.svelte` also withholds a post-connect offline-page takeover during the grace, while preserving the immediate recovery page when the browser started offline and has never connected. No component owns a second timer. A socket that reconnects inside the window is therefore silent across authenticated and pre-auth UI; a sustained drop reveals the existing treatments after the window.
+`offline-state.svelte.ts` records only a REQUEST (`"none" | "immediate" | "debounced"`); `getShouldShowOfflinePage()` folds it through the shared verdict, so `Layout.svelte`, `App.svelte`'s boot-shell gate and `DisconnectedBanner`'s precedence input all read one already-debounced answer. It previously ran a parallel detector whose `handleOffline()` set the takeover synchronously on the raw browser `offline` event and armed its reload-capable recovery poll in the same breath — the loudest surface in the app was the only undebounced one. That poll is now armed at the grace boundary too, so a blip cannot cost a PWA operator a page reload.
+
+An `immediate` request (a page load that could not reach its own origin, or the imperative `showOfflinePage()`) is never debounced: with no connection ever established there is no transient drop to wait out. A missing stamp fails closed on every surface, so absence can never be the reason something appears. No component owns a second timer.
+
+There is deliberately no connection-lost TOAST. The retired `showConnectionLostToast` was byte-identically `showOfflineBanner`, and `PWAStatus` renders that banner unconditionally, so the toast said nothing the band was not already saying, at the same instant. A socket that reconnects inside the window is silent across authenticated and pre-auth UI; a sustained drop reveals the existing treatments after the window.
 
 ### Banner modes
 

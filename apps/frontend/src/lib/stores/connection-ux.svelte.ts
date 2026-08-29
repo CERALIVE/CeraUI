@@ -95,7 +95,6 @@ export interface ConnectionUx {
 export interface ConnectionSurfaceUx {
 	showOfflineBanner: boolean;
 	showAuthTimeout: boolean;
-	showConnectionLostToast: boolean;
 }
 
 export interface ConnectionSurfaceUxInput {
@@ -296,6 +295,13 @@ export function effectiveDisconnectedSince(
  * Apply the reconnect banner's existing grace verdict to every other loud
  * connection-loss surface. An auth-only stall remains visible when no socket
  * drop is active; only connection-driven noise is delayed.
+ *
+ * There is deliberately NO third `showConnectionLostToast` field. It existed,
+ * it was byte-identically the same boolean as `showOfflineBanner`, and
+ * `PWAStatus` — which renders that banner — is mounted UNCONDITIONALLY by
+ * `Layout.svelte`. So the toast could not fire in any state the banner was not
+ * already stating, carried no information the banner did not, and arrived in
+ * the same instant. One outage, one signal.
  */
 export function deriveConnectionSurfaceUx(
 	input: ConnectionSurfaceUxInput,
@@ -310,7 +316,6 @@ export function deriveConnectionSurfaceUx(
 		showAuthTimeout:
 			input.authTimedOut &&
 			(input.disconnectedSince === null || showConnectionLoss),
-		showConnectionLostToast: showConnectionLoss,
 	};
 }
 
