@@ -755,10 +755,10 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 
 | Package | Version |
 |---------|---------|
-| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.30 — EXACT pin, see below |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.31 — EXACT pin, see below |
 | Bun pin (`.bun-version`) | 1.4.0 |
 | `svelte` | 5.56.10 |
-| `vitest` | 5.0.0-rc.2 — EXACT pin (a PRERELEASE; see the note below the table) |
+| `vitest` | 5.0.0-rc.3 — EXACT pin (a PRERELEASE; see the note below the table) |
 | `vite` | 8.2.2 |
 | `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
 | Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` job is the one job with NO `setup-node` step — every command in it is Bun (see the Vitest note below). |
@@ -781,9 +781,9 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 runtime verdict — which is now ACTED ON, not merely recorded.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
-why the frontend suite ran on Node for as long as it did. Under `5.0.0-rc.2` Bun 1.4.0 runs the
-suite at **281 files / 3,780 tests, 0 failures — identical to Node 26**, reproduced across
-separate runs. Nothing in the v5 migration guide needed a source or config change here:
+why the frontend suite ran on Node for as long as it did. Under `5.0.0-rc.3` Bun 1.4.0 runs the
+current suite at **354 files / 5,779 tests, 0 failures**, matching the pre-bump `5.0.0-rc.2`
+baseline exactly. Nothing in the rc.2→rc.3 release notes needed a source or config change here:
 `clearMocks` now defaults to `true` and the suite is unaffected, and the repo uses none of the
 removed surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench`
 at module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). **The frontend
@@ -800,7 +800,7 @@ before the flip it was running Vitest on whatever Node the runner shipped. It is
 Bun 1.4.0 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
-**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.30` would range forward across betas and into stable
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.31` would range forward across betas and into stable
 2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
 serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
 WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
@@ -809,6 +809,13 @@ WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there
 are declared as a bare `oc`. Do not reintroduce route metadata — CeraUI serves no OpenAPI surface.
 Reserved router keys in v2 (`then`, `bind`, `valueOf`, `toString`, `toJSON`) must never be used as a
 procedure or child-router key.
+
+Beta.31's breaking change is likewise outside CeraUI's surface: it changes only
+`CORSHandlerPlugin`'s HTTP response default from reflected origin to `*` and permits async
+`origin`/`timingOrigin` resolvers. CeraUI instantiates no handler or CORS plugin; the Bun WebSocket
+adapter navigates the router and invokes `call()` directly. The other beta.31 contract/server edits
+are fixes (including prototype-safe error-code lookup) and do not change the `oc.router()` /
+`oc.input()` / `oc.output()` declarations used in `packages/rpc`.
 
 ### TypeScript: two majors, deliberately
 
@@ -921,8 +928,8 @@ Four further Build Check facts, all landed 2026-08-14:
   (`NODE_VERSION: "26"`, still set at workflow level and still consumed by
   `test-be`, `setup-e2e`, `test-e2e`, `merge-e2e-reports` and `build`). The Vitest
   blocker was `vitest@4.1.10`'s collection failure, not Bun's: under the
-  `vitest@5.0.0-rc.2` pin the suite is green at **281 files / 3,780 tests —
-  identical to Node 26**, reproduced across separate runs, so the frontend `test`
+  `vitest@5.0.0-rc.3` pin the current suite is green at **354 files / 5,779 tests —
+  identical to the pre-bump rc.2 baseline**, so the frontend `test`
   script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
   step at all. **The Playwright half is NOT flipped and has never produced a green
   parity run** — that lane keeps Node 26, and nothing here authorises moving it.
