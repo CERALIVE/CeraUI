@@ -525,6 +525,14 @@ The `reauthInFlight` flag prevents concurrent re-auth attempts.
 
 Setter procedures (`streaming.start`, `streaming.setConfig`, `streaming.setBitrate`, `network.configure`, etc.) return an `applied` object containing the post-clamp, server-validated values that were actually written. The client must not assume the input values were accepted verbatim.
 
+`streaming.start` is a partial-update exception to “send the whole form”: the server
+first projects the persisted stream configuration through the public input schema,
+then overlays the fields in the request. Sending `{}` therefore starts the saved
+configuration, while a partial object changes only its defined fields. A manual
+address/port clears the saved managed relay server and account; a managed server
+clears the saved manual address/port. Persisted non-stream fields never enter the
+start payload.
+
 Example — `streaming.setBitrate`:
 
 ```json

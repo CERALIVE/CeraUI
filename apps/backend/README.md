@@ -154,7 +154,7 @@ Key streaming procedures:
 
 | Procedure | Purpose |
 |-----------|---------|
-| `streaming.start(config)` | Validate and admit one lifecycle attempt; concurrent/cancelled admission resolves as typed `busy`/`cancelled` plus `attemptId`, while established success/failure responses keep their legacy wire shape |
+| `streaming.start(config)` | Overlay optional fields on saved stream config, then validate and admit one lifecycle attempt; concurrent/cancelled admission resolves as typed `busy`/`cancelled` plus `attemptId` |
 | `streaming.stop()` | Cancel/stop the active lifecycle generation and return a typed stop result |
 | `streaming.setConfig(fields)` | Persist config fields without starting the stream |
 | `streaming.setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
@@ -163,6 +163,13 @@ Key streaming procedures:
 | `streaming.getConfig()` | Return current config snapshot |
 
 All setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-validation values actually written to config. Clients must lock their UI to `applied`, not to the raw input.
+
+`streaming.start` accepts a partial config. An empty `{}` starts from the complete
+persisted stream configuration; defined fields override only their saved counterparts.
+A manual address/port switches away from both saved managed-relay fields, while a
+managed relay server switches away from the saved manual address/port.
+The merge occurs in the shared streamloop update seam, so UI starts and control-channel
+reconnects have the same semantics.
 
 All start origins share `stream-session-orchestrator.ts`; UI, autostart, remote
 control, and set-profile cannot launch parallel engine sessions. The backend

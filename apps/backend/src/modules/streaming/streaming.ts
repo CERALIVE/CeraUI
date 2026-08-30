@@ -52,6 +52,7 @@ import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
 import { noteSourceSelectionWrite } from "./sources.ts";
 import { resolveSrtla } from "./srtla.ts";
+import { mergePersistedStartConfig } from "./start-config-merge.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
 export type StartMessage = { start: ConfigParameters };
@@ -228,7 +229,17 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }
 
-export async function updateConfig(_conn: WebSocket, params: ConfigParameters) {
+export async function updateConfig(requestedParams: ConfigParameters) {
+	// Every start is a partial update over the persisted stream config. Keep the
+	// merge at this shared seam: UI starts arrive through session.start, while a
+	// set-profile reconnect calls it directly with {}. Parsing through the wire
+	// schema projects only stream fields, so credentials in runtime config can
+	// never ride the applied start object.
+	const params: ConfigParameters = mergePersistedStartConfig(
+		getConfig(),
+		requestedParams,
+	);
+
 	const {
 		pipeline,
 		srtlaAddr: initialAddr,
