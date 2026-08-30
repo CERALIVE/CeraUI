@@ -451,6 +451,33 @@ export function resolveAutoAsrcFromLiveState(): AutoAsrcResolution {
 	});
 }
 
+/**
+ * Does this source bring its OWN audio, so no card of the source's own exists for
+ * the IDLE meter to open?
+ *
+ * Keyed on the declared `audioKind`, never on `origin === "network"` — it is the
+ * AUDIO property that decides, and a network source the engine reports as
+ * `selectable` still wants a card. Deliberately NOT gated on the engine's
+ * `network_embedded_audio` capability either: that answers whether the ENGINE can
+ * ROUTE the muxed track, while this answers whether the SOURCE owns a card, and
+ * an rtmp/srt row owns none under either answer. Both Auto rules for a network
+ * source (`embedded` with the cap, `pipeline-default` without) already name no
+ * card, so gating on the cap would leave the un-capped half unguarded.
+ */
+export function sourceCarriesEmbeddedAudio(
+	source: StreamSource | undefined,
+): boolean {
+	return source?.audioKind === "embedded";
+}
+
+/** {@link sourceCarriesEmbeddedAudio} against the live selection. */
+export function selectedSourceCarriesEmbeddedAudio(): boolean {
+	const sources = getSourcesMessage().sources;
+	return sourceCarriesEmbeddedAudio(
+		resolveSelectedSourceWithGrace(getConfig().source, sources),
+	);
+}
+
 // ─── Module state + two-function emitter API ─────────────────────────────────
 
 let resolvedAsrc: string | null = null;

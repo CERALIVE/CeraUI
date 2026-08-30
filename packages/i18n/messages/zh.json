@@ -593,6 +593,7 @@
 	"live.preview.audioSilent": "静音",
 	"live.preview.audioUnavailable": "电平表不可用",
 	"live.preview.audioUnavailableReason.device_busy": "音频设备忙",
+	"live.preview.audioUnavailableReason.embedded_audio": "等待流音频",
 	"live.preview.audioUnavailableReason.handoff": "切换中…",
 	"live.preview.audioUnavailableReason.mode_none": "音频已禁用",
 	"live.preview.audioUnavailableReason.no_device": "无音频设备",

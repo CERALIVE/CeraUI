@@ -55,6 +55,11 @@
 
 import type { CaptureDevice as CerastreamCaptureDevice } from "@ceralive/cerastream";
 import { logger } from "../../helpers/logger.ts";
+import {
+	type CardAliases,
+	engineAudioDeviceForCard,
+	isAliasOfCard,
+} from "./audio-card-vocabulary.ts";
 import { normalizeOnboardKey } from "./onboard-display-names.ts";
 
 /**
@@ -99,14 +104,23 @@ const PSEUDO_SOURCE_IDS = new Set(["No audio", "Pipeline default"]);
  * longname. Rejects a value that:
  *   - contains no letter (e.g. "0", "  ");
  *   - is path-like (`/dev/…` or any absolute path, or an ALSA `hw:…` form);
- *   - is byte-identical to the card id itself (adds no information).
+ *   - is byte-identical to any name this board uses for the card — its id, or
+ *     one of its `/proc/asound/pcm` PCM ids. The alias arm matters because the
+ *     engine's PipeWire arm reports a card's PCM id AS its `product_name`
+ *     (`fddf8000.i2s-i2s-hifi i2s-hifi-0` for `hdmirx`), and the frontend prefers
+ *     `product_name` over the label — so without it the operator's "HDMI Input"
+ *     row would render as a raw driver string.
  */
-export function isHumanAudioName(displayName: string, cardId: string): boolean {
+export function isHumanAudioName(
+	displayName: string,
+	cardId: string,
+	aliases: CardAliases = new Map(),
+): boolean {
 	if (displayName.length === 0) return false;
 	if (!/\p{L}/u.test(displayName)) return false; // must contain a letter
 	if (displayName.startsWith("/")) return false; // path-like (`/dev/…`)
 	if (/^hw:/i.test(displayName)) return false; // ALSA `hw:…` form
-	if (displayName === cardId) return false; // byte-equal to the card id
+	if (isAliasOfCard(cardId, displayName, aliases)) return false; // names the card
 	return true;
 }
 
@@ -350,21 +364,33 @@ export interface AudioDeviceDisplay {
 	detail?: string;
 }
 
+// The engine names a card in its OWN vocabulary, which is only the kernel card id
+// on the ALSA arm (see `audio-card-vocabulary.ts`). Joining on a literal card id
+// therefore missed EVERY card on the PipeWire arm, which silently cost tier 1 its
+// product name AND left every row without a `stable_id` for the UI to bind to.
+function findEngineMatch(
+	cardId: string,
+	engineAudio: readonly EngineAudioDevice[],
+	aliases: CardAliases,
+): EngineAudioDevice | undefined {
+	return engineAudioDeviceForCard(cardId, engineAudio, aliases);
+}
+
 function resolveOneDisplay(
 	asrcKey: string,
 	cardId: string,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
+	aliases: CardAliases,
 ): Omit<AudioDeviceDisplay, "label"> & { raw: string } {
-	const engineMatch = engineAudio.find(
-		(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
-	);
+	const engineMatch = findEngineMatch(cardId, engineAudio, aliases);
 	const hardware = resolveHardwareName(
 		asrcKey,
 		cardId,
 		engineMatch,
 		engineAudio,
 		longnames,
+		aliases,
 	);
 
 	// (0) a static onboard rule wins over every hardware-derived string. The name
@@ -387,6 +413,7 @@ function resolveHardwareName(
 	engineMatch: EngineAudioDevice | undefined,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
+	aliases: CardAliases,
 ): CleanedAudioName {
 	// (1) engine-join: an audio entry whose join key matches this card. Prefer the
 	//     real `product_name` (cerastream Todo 20), then the generic `display_name`
@@ -396,7 +423,7 @@ function resolveHardwareName(
 	//     "RØDE …" name for a device the engine mislabels generically).
 	if (
 		engineMatch?.product_name !== undefined &&
-		isHumanAudioName(engineMatch.product_name, cardId)
+		isHumanAudioName(engineMatch.product_name, cardId, aliases)
 	) {
 		return cleanAudioDeviceName(engineMatch.product_name);
 	}
@@ -404,7 +431,7 @@ function resolveHardwareName(
 	// verbatim, so this tier carries the same kernel diagnostic tail as tier 2.
 	if (
 		engineMatch !== undefined &&
-		isHumanAudioName(engineMatch.display_name, cardId)
+		isHumanAudioName(engineMatch.display_name, cardId, aliases)
 	) {
 		return cleanAudioDeviceName(engineMatch.display_name);
 	}
@@ -441,6 +468,7 @@ export function resolveAudioDisplays(
 	cards: Record<string, string>,
 	engineAudio: readonly EngineAudioDevice[],
 	longnames: Map<string, string>,
+	aliases: CardAliases = new Map(),
 ): Map<string, AudioDeviceDisplay> {
 	const displays = new Map<string, AudioDeviceDisplay>();
 	const seenCounts = new Map<string, number>();
@@ -451,6 +479,7 @@ export function resolveAudioDisplays(
 			cardId,
 			engineAudio,
 			longnames,
+			aliases,
 		);
 		const nextCount = (seenCounts.get(raw) ?? 0) + 1;
 		seenCounts.set(raw, nextCount);
@@ -490,13 +519,12 @@ export function resolveAudioLabels(
 export function resolveAudioIdentities(
 	cards: Record<string, string>,
 	engineAudio: readonly EngineAudioDevice[],
+	aliases: CardAliases = new Map(),
 ): Map<string, AudioDeviceIdentity> {
 	const identities = new Map<string, AudioDeviceIdentity>();
 	for (const [asrcKey, cardId] of Object.entries(cards)) {
 		if (PSEUDO_SOURCE_IDS.has(cardId)) continue;
-		const match = engineAudio.find(
-			(d) => d.alsa_card_id !== undefined && d.alsa_card_id === cardId,
-		);
+		const match = findEngineMatch(cardId, engineAudio, aliases);
 		if (match === undefined) continue;
 		// Only surface a product_name that passes the human-name heuristic, so a
 		// generic engine value (e.g. "usbaudio", equal to the card id) is never
@@ -504,7 +532,7 @@ export function resolveAudioIdentities(
 		// rides on its own, and the picker falls back to the longname-derived label.
 		const identity: AudioDeviceIdentity = {
 			...(match.product_name !== undefined &&
-			isHumanAudioName(match.product_name, cardId)
+			isHumanAudioName(match.product_name, cardId, aliases)
 				? { product_name: match.product_name }
 				: {}),
 			...(match.transport !== undefined ? { transport: match.transport } : {}),

@@ -596,6 +596,7 @@
 	"live.preview.audioSilent": "Stille",
 	"live.preview.audioUnavailable": "Pegelanzeige nicht verfügbar",
 	"live.preview.audioUnavailableReason.device_busy": "Audiogerät belegt",
+	"live.preview.audioUnavailableReason.embedded_audio": "Warte auf Stream-Audio",
 	"live.preview.audioUnavailableReason.handoff": "Wird umgeschaltet…",
 	"live.preview.audioUnavailableReason.mode_none": "Audio deaktiviert",
 	"live.preview.audioUnavailableReason.no_device": "Kein Audiogerät",

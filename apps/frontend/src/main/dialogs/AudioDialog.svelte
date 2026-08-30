@@ -133,15 +133,16 @@ const hasAudioSupport = $derived(hostAdapter !== undefined || gateState === 'ena
 // the READ-ONLY active-source label — the selection itself lives in SourceSection.
 const audioSourceEntries = $derived(resolveAudioSourceList(audioSourceList, audioSources));
 
-// Embedded network-ingest audio (Task 13): with the `network_embedded_audio`
-// capability, an rtmp/srt pipeline routes its muxed audio and the source is
-// read-only; without it the ALSA picker stays and we show a ComingSoon pill.
+// Embedded network-ingest audio (Task 13): an rtmp/srt pipeline carries its audio
+// muxed into the incoming stream, so the source is read-only here in EVERY
+// connection state. Kept in lockstep with `SourceSection`'s own gate — that
+// component owns the selection, and a dialog that disagreed with it would offer a
+// device for a source the picker says has none. The `network_embedded_audio`
+// capability answers the separate ROUTING question and keeps its ComingSoon pill.
 const selectedPipelineAudioKind = $derived(
 	pipelineKey ? pipelines?.[pipelineKey]?.audio_kind : undefined,
 );
-const audioEmbeddedActive = $derived(
-	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio === true,
-);
+const audioEmbeddedActive = $derived(selectedPipelineAudioKind === 'embedded');
 const audioEmbeddedComingSoon = $derived(
 	selectedPipelineAudioKind === 'embedded' && capabilities?.network_embedded_audio !== true,
 );

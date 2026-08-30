@@ -589,6 +589,64 @@ a string prefers that card. Never send `undefined` expecting "Auto".
 (`cerastream-backend.ts`) is the fail-safe gate: an older engine is sent nothing and
 keeps auto-picking, which is the exact pre-0.9.0 behaviour.
 
+### ONE CARD, TWO VOCABULARIES — AND ONLY ONE MODULE RELATES THEM [EXISTS]
+
+Everything above compares a card CeraUI names with a card the ENGINE names, and
+those are only the same string on the ALSA arm. `audio-card-vocabulary.ts` is the
+one place that relates them; nothing else may compare the two by hand.
+
+CeraUI names a card by the KERNEL CARD ID it reads out of `/sys/class/sound/cardN/id`
+— the vocabulary of `config.asrc`, the picker, and every `hw:CARD=<id>` string this
+backend has ever produced. The engine names it by whatever its GStreamer device
+provider published. Board-measured on a Rock 5B+ running cerastream 2026.8.3 with
+`[audio] backend = "pipewire"`:
+
+| kernel `cardN/id` | engine `alsa_card_id`                    |
+|-------------------|------------------------------------------|
+| `usbaudio`        | `USB Audio`                              |
+| `hdmirx`          | `fddf8000.i2s-i2s-hifi i2s-hifi-0`       |
+| `rk3588es8316`    | `fe470000.i2s-ES8316 HiFi ES8316 HiFi-0` |
+
+Those right-hand values are ALSA **PCM** ids, not card ids — the first field of a
+`/proc/asound/pcm` row. **That is an ENGINE defect** (its PipeWire arm reads a NODE
+proplist, where the `alsa.id` fallback is the PCM id; `api.alsa.card.id` is absent
+from the graph entirely), recorded separately and NOT worked around by pretending
+the engine is right. What this module does is stop CeraUI being WRONG about it.
+
+**Two independent consequences, two independent fixes.**
+
+1. **The gate must not claim a foreignness it cannot prove.** `isForeignCardLevel`
+   compared the two keys as bare strings, so `hw:CARD=usbaudio` met `card:USB Audio`
+   and every selection, on every card, reported `not_selected_device` ("Not the
+   selected device") for a card that was working — board-confirmed for `hdmirx`,
+   `usbaudio` and `rk3588es8316` in one session. `classifyMeterIdentity` is now a
+   TRI-STATE and only `foreign` suppresses: both keys are canonicalised onto a card
+   this board knows, and a name belonging to NO known card is `unknown`, which
+   proves nothing in either direction. This also stops an opaque `bluealsa:` PCM
+   spec — whose `alsaCardKey` is meaningless — from suppressing a Bluetooth mic's
+   own levels.
+2. **The engine must be spoken to in its OWN vocabulary.** `resolveAudioCaptureDevice`
+   — the single seam feeding BOTH `audio.device` (program) and `audio.meter_device`
+   (idle meter) — now resolves the card to the engine's own `list-devices`
+   `input_id`. On the ALSA arm that IS `hw:CARD=<kernel card id>`, so it is
+   byte-identical; on the PipeWire arm a `hw:CARD=<kernel id>` matches no engine
+   candidate at all, which is why the meter ignored the pick and an explicit device
+   selection failed `audio-device-unavailable`.
+
+**The join is DETERMINISTIC, never fuzzy.** `/proc/asound/pcm` keys each PCM id by
+CARD INDEX and `/sys/class/sound/cardN` gives that index its card id, so
+`ScannedAlsaCard` now carries `index` and `buildCardAliases` pairs the two. No name
+similarity, no prefix matching, no vendor table — the product-name route was
+available and rejected for exactly that reason. An unreadable `/proc/asound/pcm`
+degrades to card-id-only aliases, i.e. the pre-existing single-name behaviour, and
+never loses a card.
+
+Coverage: `tests/audio-card-vocabulary.test.ts` (the parser against the board's own
+verbatim `/proc/asound/pcm`, the alias build, both canonicalisation directions, the
+translation with its ALSA byte-identical and engine-silent controls, and the
+tri-state matrix) + the retargeted `tests/audio-meter-bridge.test.ts` cases. Rule-E
+proof: restoring the bare-string comparison reddens 4 tests across the two files.
+
 **It is a PREFERENCE, not a pin — and the engine is what guarantees that.** cerastream
 only moves the named card to the head of its candidate list; its delivery-confirmation
 demotion (a card holding the ALSA handle for 2 s without clocking a sample yields to the
@@ -797,15 +855,72 @@ silenced: the pipeline default really does hand sourcing to the engine, and `"Au
 resolved to a concrete card instead (so it is gated on THAT card, never silenced).
 Neither means "meter nothing".
 
+### …AND A SOURCE THAT BRINGS ITS OWN AUDIO HAS NO CARD TO METER [EXISTS]
+
+The paragraph above is about a PICK. This is the same shape reached from the
+SOURCE, and it is the third member of the family: `resolveMeterPreference`
+answers `null` for an rtmp/srt selection, `null` on the wire means "engine,
+choose for yourself", and `isForeignCardLevel` needs BOTH sides to name a card —
+so the engine's idle sidecar opened whatever card it could and its real, moving
+bars rendered as the ingest source's own audio with no publisher connected. The
+two halves compounded exactly as the resolved-`"Auto"` defect did: the `null` did
+not merely fail to name a card, it DISARMED the gate that would have refused the
+reading. Operator-reported, in their words: *"the RTMP & SRT input sources … try
+to select other available audio source even if we are not receiving signal —
+they should use their own audio, and when they start receiving signal/streaming,
+of course use its own metrics."*
+
+`isMeterEmbeddedBySource()` (`audio.ts`, over `auto-audio.ts`'s
+`selectedSourceCarriesEmbeddedAudio`) is the distinction, and `projectLevel`
+applies it immediately AFTER the explicit-silence gate. Five rules are
+load-bearing:
+
+- **It is keyed on the SOURCE, not on the pick and not on the Auto REASON.** Both
+  Auto rules for a network source name no card — rule 1 answers `embedded` with
+  the engine capability, rule 2 answers `pipeline-default` without it — so a
+  reason-keyed gate would leave the un-capped half unguarded. It is likewise not
+  keyed on `origin === "network"`: it is the AUDIO property that decides, and a
+  network source the engine reports as `selectable` still wants a card.
+- **It is NOT gated on `network_embedded_audio`.** That capability answers whether
+  the ENGINE can ROUTE the muxed track; this answers whether the SOURCE owns a
+  card, and an ingest row owns none under either answer.
+- **A `streaming`-owned level passes STRAIGHT THROUGH, and that is the feature.**
+  cerastream resolves an `AudioPlan::NetworkEmbedded` start to
+  `MeterMode::ProgramAudio` — ADR-0007 §7's `embedded-HDMI` row, "no ALSA card of
+  its own; the streaming leg is the meter" — so a level tagged `streaming` here IS
+  the muxed track, and suppressing it would kill the one reading the operator
+  asked for. The discriminator is the engine's OWN `source.owner` tag rather than
+  a second lifecycle guess, so the two can never disagree about which leg is
+  publishing.
+- **The gap has its OWN typed reason**, `embedded_audio`, never `no_device`
+  (nothing is missing) and never `mode_none` (the operator did not ask for
+  silence). Copy: `live.preview.audioUnavailableReason.embedded_audio`, 10
+  locales.
+- **The ENGINE needs no change, and none was made.** It already refuses to give an
+  embedded row an idle meter of its own; what was wrong was CeraUI presenting the
+  sidecar's unrelated card as that row's audio.
+
+Coverage: `tests/audio-meter-bridge.test.ts` → "an embedded-audio source has no
+card to meter" (the suppressed sidecar level, the streaming passthrough, the
+explicit-`No audio` precedence, the switch-retires-the-level case, the
+never-re-assert case, and a non-vacuity control proving the SAME frame on the SAME
+`null` preference is forwarded for a card-owning source). Frontend half:
+`apps/frontend/AGENTS.md` → "…AND IT HAS NO DEVICE TO PICK, IN ANY CONNECTION
+STATE".
+
 **A pick change retires the level already on screen, without waiting for a frame.**
 Every gate above acts on the NEXT event the engine sends, and the engine needs a
 moment to re-point its sidecar — so between the config write and that event the meter
 keeps drawing the PREVIOUS device's bars. `noteMeterSelection()` broadcasts the gap
-immediately on a changed pick: `mode_none` when the new pick is silenced, `handoff`
-otherwise. Three properties are load-bearing:
+immediately on a changed pick: `mode_none` when the new pick is silenced,
+`embedded_audio` when the new source brings its own, `handoff` otherwise. Three
+properties are load-bearing:
 
-- **The change key is the PAIR** `(silenced, preference)` — "Auto" and "No audio" both
-  resolve to a `null` preference, so a preference-only diff cannot see that switch.
+- **The change key is the TRIPLE** `(silenced, embedded, preference)`. "Auto" and
+  "No audio" both resolve to a `null` preference, so a preference-only diff cannot
+  see that switch — and an ingest source resolves to that same `null`, so without
+  the embedded arm a switch ONTO one moves no part of the key at all and the
+  previous device's bars stay up until the next engine frame.
 - **It fires even while the bridge is disconnected.** `syncAudioMeterPreference()`
   calls it BEFORE the client check: the stale level was already broadcast, so it must
   be retired whether or not the engine can be told about the change yet.
@@ -8617,6 +8732,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
 - Don't identify the HDMI-RX audio card by ONE card id — the vendor 6.1 BSP calls it `rockchiphdmiin` and mainline/edge 7.1 calls the same physical port `hdmirx`, so a single hardcoded string makes rule 3 miss, fall through in silence, and never bind HDMI audio at all on the other kernel (board-proven: that card captures real, non-silent audio). Add every spelling to `HDMI_CARD_IDS` and to `ONBOARD_AUDIO_DISPLAY_RULES`, keep the first-enumerated-wins ordering, and ask the capture gate about the spelling that MATCHED. Don't "generalise" it into "bind whichever card can capture" either — that answers capability, not identity, and would hand an HDMI source somebody else's microphone. And don't add the second id to `RK3588_AUDIO_SRC_ALIASES`: that table is inverted by `getAudioSrcReverseAliases()`, so two ids under one label break the vendor board's `getAudioSrcId("HDMI")`.
 - Don't let Auto rule 3/4 bind their FIXED card on enumeration alone — that is the same "listed ≠ recordable" confusion one layer up, and it made every `asrc: "Auto"` start on the board's HDMI source die `audio-device-unavailable … not_retriable` even with a locked signal. Pass `captureCapableCardIds` and refuse with `no-capture-audio`. Keep the refusal FAIL-OPEN (an absent set binds exactly as before), keep it resolving to the `"No audio"` pseudo-source rather than a `null` asrcKey (a `null` OMITS `asrc` and hands the engine its legacy inference over the port that cannot deliver), and don't extend the gate to rule 5 — its candidates already come from the engine's `list-devices`, which never lists a capture-less card.
+- Don't hand an rtmp/srt selection's idle meter to the engine's auto-pick. `resolveMeterPreference` answers `null` for it, `null` means "engine, choose for yourself", and a `null` also DISARMS `isForeignCardLevel` — so the sidecar's unrelated card drew real, moving bars as the ingest source's own audio with no publisher connected. Ask `isMeterEmbeddedBySource()`. Don't key that gate on the Auto REASON (rule 2 answers `pipeline-default` for an un-capped network source, leaving that half unguarded), don't key it on `origin === "network"` (it is the AUDIO property that decides), and don't gate it on `network_embedded_audio` (that answers ROUTING, not whether the source owns a card). Above all don't suppress a level tagged `owner: "streaming"` — cerastream meters `MeterMode::ProgramAudio` off the program leg for an embedded start, so that level IS the muxed track and it is the whole point of the feature.
 - Don't infer "the operator wants no meter" from a `null` meter preference — `null` also covers the pipeline default and an "Auto" that resolves to no single card, each of which legitimately meters whatever the engine picks. Ask `isMeterSilencedByPick()`, key the selection-change detection on the `(silenced, preference)` PAIR, and don't let an engine-sent `unavailable` reason outrank an explicit "No audio".
 - Don't short-circuit `AUDIO_SOURCE_AUTO` to a `null` meter preference — "Auto" is a DETERMINISTIC resolution (`resolveAutoAsrc`), not a hand-back, so route it through `resolveEffectiveAudioPick()` and let the meter prefer the same card the start path would use. Getting this wrong is doubly invisible: `null` makes the engine auto-pick AND disarms `isForeignCardLevel`, so the meter draws a different device's real moving bars for a pick whose own start fails. And don't ask `isMeterPreferenceDevicePresent()` about the raw sentinel — `audioDevices["Auto"]` is undefined, so every Auto pick would report `no_device` and a genuine mismatch on a healthy card would lose its `not_selected_device` reason.
 - Don't re-push the meter preference only when `asrc` changed — under "Auto" the resolved card is a function of the selected VIDEO source (rule 3) and of the ENGINE's audio list (rule 5), so `input.source` changes and `reresolveAudioForEngineChange` must re-push too. An unchanged pick is deduped by the bridge and costs nothing; a missed changed one is permanent, because `set_preferred_device` early-returns on an unchanged value.

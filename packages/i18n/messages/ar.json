@@ -612,6 +612,7 @@
 	"live.preview.audioSilent": "صامت",
 	"live.preview.audioUnavailable": "المقياس غير متوفر",
 	"live.preview.audioUnavailableReason.device_busy": "جهاز الصوت مشغول",
+	"live.preview.audioUnavailableReason.embedded_audio": "بانتظار صوت البث",
 	"live.preview.audioUnavailableReason.handoff": "جارٍ التبديل…",
 	"live.preview.audioUnavailableReason.mode_none": "الصوت معطّل",
 	"live.preview.audioUnavailableReason.no_device": "لا يوجد جهاز صوت",

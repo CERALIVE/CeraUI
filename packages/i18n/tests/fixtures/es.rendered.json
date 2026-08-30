@@ -596,6 +596,7 @@
 	"live.preview.audioSilent": "Silencio",
 	"live.preview.audioUnavailable": "Medidor no disponible",
 	"live.preview.audioUnavailableReason.device_busy": "Dispositivo de audio ocupado",
+	"live.preview.audioUnavailableReason.embedded_audio": "Esperando audio del flujo",
 	"live.preview.audioUnavailableReason.handoff": "Cambiando…",
 	"live.preview.audioUnavailableReason.mode_none": "Audio desactivado",
 	"live.preview.audioUnavailableReason.no_device": "Sin dispositivo de audio",

@@ -21,12 +21,19 @@ export type AudioLevelOwner = z.infer<typeof audioLevelOwnerSchema>;
 // backend gate raises it for a level belonging to a different ALSA card than the
 // operator picked, while that pick IS present. `no_device` there claimed the
 // device was gone when it was plugged in and delivering.
+//
+// `embedded_audio` is CeraUI's own too, and it names a genuinely different gap: a
+// network-ingest source's audio is muxed into the INCOMING stream, so the source
+// owns no ALSA card the idle sidecar could meter. It is not `no_device` (nothing
+// is missing) and not `mode_none` (the operator asked for audio) — it is "this
+// source's audio arrives with its stream, and no stream is arriving yet".
 export const AUDIO_LEVEL_UNAVAILABLE_REASONS = [
 	'device_busy',
 	'no_device',
 	'not_selected_device',
 	'mode_none',
 	'handoff',
+	'embedded_audio',
 ] as const;
 export const audioLevelUnavailableReasonSchema = z.enum(AUDIO_LEVEL_UNAVAILABLE_REASONS);
 export type AudioLevelUnavailableReason = z.infer<typeof audioLevelUnavailableReasonSchema>;

@@ -17,11 +17,12 @@
 //   b) USB camera + Auto → that camera's OWN card, live and moving.
 //   c) a capture-capable card carrying genuine silence → the `silent` state, and it
 //      must stay `silent` forever rather than aging into `unavailable`.
-import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
+import type { AudioLevelMessage, StatusResponse } from "@ceraui/rpc/schemas";
 import { render } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let currentLevel: AudioLevelMessage | undefined;
+let currentStatus: StatusResponse | undefined;
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAudioLevel: () => currentLevel,
@@ -29,6 +30,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	// which is precisely why the frontend selection gate cannot see the card move
 	// and the backend has to resolve the pick before it reaches the wire.
 	getConfig: () => ({ asrc: "Auto" }),
+	getStatus: () => currentStatus,
 }));
 
 import LiveAudioMeter from "./LiveAudioMeter.svelte";

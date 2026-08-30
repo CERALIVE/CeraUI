@@ -6,6 +6,7 @@ import type {
 	Subscription,
 } from "@ceralive/cerastream";
 import { type AudioLevelMessage, LIFECYCLE_STATES } from "@ceraui/rpc/schemas";
+import type { CardAliases } from "../modules/streaming/audio-card-vocabulary.ts";
 import {
 	AUDIO_METER_FRAME_ABSENCE_MS,
 	AUDIO_METER_MISMATCH_GRACE_MS,
@@ -56,9 +57,21 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 	let preference: string | null = "hw:CARD=usbaudio";
 	let preferencePresent = false;
 	let silenced = false;
+	let embedded = false;
 	let launching = false;
 	let clock = 1_000;
 	let reloadRejects = false;
+	// The board's own card vocabulary. Every card these tests name is listed, so a
+	// mismatch between two of them is PROVABLE; `usbaudio` also carries the ALSA
+	// PCM id its PipeWire arm publishes, which is what makes the cross-vocabulary
+	// case expressible.
+	let cardAliases: CardAliases = new Map<string, ReadonlySet<string>>([
+		["usbaudio", new Set(["usbaudio", "USB Audio"])],
+		["rockchiphdmiin", new Set(["rockchiphdmiin"])],
+		["Rx", new Set(["Rx"])],
+		["MINI", new Set(["MINI"])],
+		["DJIPocket3", new Set(["DJIPocket3"])],
+	]);
 
 	const subscription: Subscription = {
 		result: { topics: ["audio-level"] },
@@ -97,7 +110,9 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		meterPreference: () => preference,
 		meterPreferencePresent: () => preferencePresent,
 		meterSilenced: () => silenced,
+		meterEmbedded: () => embedded,
 		launchInFlight: () => launching,
+		cardAliases: () => cardAliases,
 		logger: silent,
 		random: () => 0.5,
 		now: () => clock,
@@ -137,8 +152,14 @@ function harness(connectOutcomes: boolean[], schemaVersion = "0.9.0") {
 		setSilenced: (next: boolean) => {
 			silenced = next;
 		},
+		setEmbedded: (next: boolean) => {
+			embedded = next;
+		},
 		setLaunching: (next: boolean) => {
 			launching = next;
+		},
+		setCardAliases: (next: CardAliases) => {
+			cardAliases = next;
 		},
 		advance: async (ms: number) => {
 			clock += ms;
@@ -987,11 +1008,54 @@ describe("alsaCardKey / isForeignCardLevel — card identity, not literal spelli
 		expect(alsaCardKey("   ")).toBeUndefined();
 	});
 
+	const board: CardAliases = new Map<string, ReadonlySet<string>>([
+		["usbaudio", new Set(["usbaudio", "USB Audio"])],
+		["rockchiphdmiin", new Set(["rockchiphdmiin"])],
+		["Rx", new Set(["Rx"])],
+	]);
+
 	test("a mismatch is only claimed when BOTH sides name a card", () => {
-		expect(isForeignCardLevel("hw:CARD=rockchiphdmiin", "card:Rx")).toBe(true);
-		expect(isForeignCardLevel("hw:CARD=usbaudio", "card:usbaudio")).toBe(false);
-		expect(isForeignCardLevel(null, "card:Rx")).toBe(false);
-		expect(isForeignCardLevel("hw:CARD=rockchiphdmiin", undefined)).toBe(false);
+		expect(isForeignCardLevel("hw:CARD=rockchiphdmiin", "card:Rx", board)).toBe(
+			true,
+		);
+		expect(isForeignCardLevel("hw:CARD=usbaudio", "card:usbaudio", board)).toBe(
+			false,
+		);
+		expect(isForeignCardLevel(null, "card:Rx", board)).toBe(false);
+		expect(isForeignCardLevel("hw:CARD=rockchiphdmiin", undefined, board)).toBe(
+			false,
+		);
+	});
+
+	test("one card quoted in TWO vocabularies is the same card, not a foreign one", () => {
+		// The board's PipeWire arm names card `usbaudio` by its ALSA PCM id, so the
+		// preference and the reported identity are legitimately spelled differently.
+		expect(
+			isForeignCardLevel("hw:CARD=usbaudio", "card:USB Audio", board),
+		).toBe(false);
+		expect(
+			isForeignCardLevel("hw:CARD=USB Audio", "card:usbaudio", board),
+		).toBe(false);
+		// …and the genuine mismatch is still caught across the same two vocabularies.
+		expect(
+			isForeignCardLevel("hw:CARD=USB Audio", "card:rockchiphdmiin", board),
+		).toBe(true);
+	});
+
+	test("a name this board files under NO card proves nothing, so it never suppresses", () => {
+		// The pre-fix rule compared the two keys as bare strings, so an identity in
+		// a vocabulary CeraUI cannot read was reported as PROVEN foreign — which is
+		// how every selection on a PipeWire board read "Not the selected device".
+		expect(
+			isForeignCardLevel("hw:CARD=usbaudio", "card:something-else", board),
+		).toBe(false);
+		expect(
+			isForeignCardLevel("hw:CARD=unscanned", "card:usbaudio", board),
+		).toBe(false);
+		// An empty vocabulary (no card scan yet) can prove nothing at all.
+		expect(
+			isForeignCardLevel("hw:CARD=rockchiphdmiin", "card:Rx", new Map()),
+		).toBe(false);
 	});
 });
 
@@ -1003,5 +1067,121 @@ describe("supportsMeterDevicePreference — fail-safe schema gate", () => {
 		for (const v of ["0.8.0", "0.4.0", "", undefined, "nonsense"]) {
 			expect(supportsMeterDevicePreference(v)).toBe(false);
 		}
+	});
+});
+
+// A source that brings its OWN audio has no card the IDLE sidecar could be
+// metering. `resolveMeterPreference` answers `null` for an rtmp/srt selection,
+// `null` on the wire means "engine, choose for yourself", and `isForeignCardLevel`
+// needs BOTH sides to name a card — so the engine opened whatever card it could
+// and its real, moving bars rendered as the ingest source's own audio while no
+// publisher was connected. The operator report was exactly that: "they try to
+// select other available audio source even if we are not receiving signal".
+describe("audio-meter bridge — an embedded-audio source has no card to meter", () => {
+	async function connectedOnAnIngestSource() {
+		const h = harness([true]);
+		// What an rtmp/srt selection really resolves to: no card named.
+		h.setPreference(null);
+		h.setEmbedded(true);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.broadcasts.length = 0;
+		// The connect-time preference push is not a re-assert.
+		h.reloads.length = 0;
+		return h;
+	}
+
+	test("a sidecar level for another card never renders as the ingest's audio", async () => {
+		const h = await connectedOnAnIngestSource();
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toEqual([
+			{ unavailable: true, reason: "embedded_audio" },
+		]);
+	});
+
+	// The whole point of the feature: once a publisher connects, cerastream meters
+	// `MeterMode::ProgramAudio` off the program leg — which IS the muxed track —
+	// and tags the level `streaming`. Suppressing that would kill the one reading
+	// the operator asked for.
+	test("a STREAMING level passes through — that IS the embedded track", async () => {
+		const h = await connectedOnAnIngestSource();
+
+		h.emit({
+			...levelEvent,
+			source: { identity: "card:usbaudio", owner: "streaming" },
+		});
+
+		expect(h.broadcasts).toEqual([
+			{
+				source: { identity: "card:usbaudio", owner: "streaming" },
+				channels: 2,
+				rms_db: [-18, -19],
+				peak_db: [-6, -7],
+				floor_db: -1e6,
+			},
+		]);
+	});
+
+	// An explicit "No audio" is the operator's own word and outranks the source's
+	// nature — otherwise the two gaps would be indistinguishable on screen.
+	test("an explicit `No audio` still outranks the embedded state", async () => {
+		const h = await connectedOnAnIngestSource();
+		h.setSilenced(true);
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toEqual([{ unavailable: true, reason: "mode_none" }]);
+	});
+
+	// Non-vacuity: the SAME frame on the SAME `null` preference is forwarded when
+	// the selected source owns a card, so the gate is the source, not the harness.
+	test("a card-owning source is unaffected by the gate", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		h.setEmbedded(false);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.broadcasts.length = 0;
+
+		h.emit(levelEvent);
+
+		expect(h.broadcasts).toHaveLength(1);
+		expect(h.broadcasts[0]).not.toHaveProperty("unavailable");
+	});
+
+	// Switching ONTO an ingest source moves neither `silenced` nor the (already
+	// `null`) preference, so without the embedded arm in the selection key the
+	// previous device's bars would stay on screen until the next engine frame.
+	test("switching onto an ingest source retires the on-screen level at once", async () => {
+		const h = harness([true]);
+		h.setPreference(null);
+		initAudioMeterBridge(h.deps);
+		await settleAudioMeterBridge();
+		h.emit(levelEvent);
+		h.broadcasts.length = 0;
+
+		h.setEmbedded(true);
+		syncAudioMeterPreference();
+		await settleAudioMeterBridge();
+
+		expect(h.broadcasts).toContainEqual({
+			unavailable: true,
+			reason: "embedded_audio",
+		});
+	});
+
+	// A `null` preference already short-circuits the re-assert, so an ingest
+	// source must never make the bridge re-open a card to "fix" a silence that is
+	// correct. Pinned because the suppression and the watchdog share a feed.
+	test("the frame-absence watchdog never re-asserts for an ingest source", async () => {
+		const h = await connectedOnAnIngestSource();
+
+		await h.advance(AUDIO_METER_FRAME_ABSENCE_MS);
+		await h.fireNextTimer();
+		await h.advance(0);
+
+		expect(h.reloads).toEqual([]);
 	});
 });

@@ -53,10 +53,16 @@ import { getConfig } from "../config.ts";
 import { setup } from "../setup.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import {
+	getAudioCardAliases,
+	isMeterEmbeddedBySource,
 	isMeterPreferenceDevicePresent,
 	isMeterSilencedByPick,
 	resolveMeterPreference,
 } from "./audio.ts";
+import {
+	type CardAliases,
+	classifyMeterIdentity,
+} from "./audio-card-vocabulary.ts";
 import { supportsMeterDevicePreference } from "./cerastream-backend.ts";
 import { asRawRequestClient } from "./raw-request.ts";
 import { getStreamLifecycleState } from "./stream-lifecycle-status.ts";
@@ -114,6 +120,10 @@ export interface AudioMeterBridgeDeps {
 	 * handoff working — not the fault either watchdog exists to recover.
 	 */
 	launchInFlight: () => boolean;
+	/** Does the selected source bring its own audio? See `isMeterEmbeddedBySource`. */
+	meterEmbedded: () => boolean;
+	/** Every name this board answers to per card — see `audio-card-vocabulary.ts`. */
+	cardAliases: () => CardAliases;
 	logger: AudioMeterBridgeLogger;
 	random: () => number;
 	now: () => number;
@@ -158,16 +168,29 @@ export function alsaCardKey(value: string | undefined): string | undefined {
  * the engine by design, and an engine that reports no identity cannot be PROVEN
  * to mismatch — neither is gated, so this can only ever suppress a reading we
  * know belongs to another device.
+ *
+ * "Known" means BOTH keys are names this board relates to one of its own cards.
+ * They are not always in the same vocabulary: the engine's PipeWire arm publishes
+ * a card's ALSA PCM id where its ALSA arm publishes the kernel card id, so on a
+ * Rock 5B+ the operator's `hw:CARD=usbaudio` met a reported `card:USB Audio` and
+ * a bare string compare called it PROVEN foreign — every selection, on every
+ * card, reported "Not the selected device" for a card that was working. An
+ * unreadable vocabulary proves nothing in either direction, so it never
+ * suppresses; `classifyMeterIdentity` owns that judgement.
  */
 export function isForeignCardLevel(
 	preference: string | null,
 	identity: string | undefined,
+	aliases: CardAliases = new Map(),
 ): boolean {
 	if (preference === null) return false;
-	const wanted = alsaCardKey(preference);
-	const reported = alsaCardKey(identity);
-	if (wanted === undefined || reported === undefined) return false;
-	return wanted !== reported;
+	return (
+		classifyMeterIdentity(
+			alsaCardKey(preference),
+			alsaCardKey(identity),
+			aliases,
+		) === "foreign"
+	);
 }
 
 /**
@@ -220,6 +243,8 @@ function defaultDeps(): AudioMeterBridgeDeps {
 		meterPreferencePresent: () => isMeterPreferenceDevicePresent(),
 		meterSilenced: () => isMeterSilencedByPick(getConfig().asrc),
 		launchInFlight: () => launchIsAcquiringAudio(getStreamLifecycleState()),
+		meterEmbedded: () => isMeterEmbeddedBySource(),
+		cardAliases: () => getAudioCardAliases(),
 		logger: defaultLogger,
 		random: Math.random,
 		now: Date.now,
@@ -424,11 +449,27 @@ function projectLevel(
 		clearForeignCardRun();
 		return { unavailable: true, reason: "mode_none" };
 	}
+	// A source that brings its own audio owns no card the IDLE sidecar could be
+	// metering, so a sidecar level here belongs to an unrelated device however
+	// real its bars are. The discriminator is the engine's OWN `owner` tag rather
+	// than a second lifecycle guess: a `streaming` level for this source IS the
+	// muxed track (cerastream meters `MeterMode::ProgramAudio` off the program
+	// leg), and suppressing it would kill the one reading the operator wants.
+	if (deps.meterEmbedded() && message.source?.owner !== "streaming") {
+		clearForeignCardRun();
+		return { unavailable: true, reason: "embedded_audio" };
+	}
 	if (message.unavailable === true) {
 		clearForeignCardRun();
 		return message;
 	}
-	if (!isForeignCardLevel(deps.meterPreference(), message.source?.identity)) {
+	if (
+		!isForeignCardLevel(
+			deps.meterPreference(),
+			message.source?.identity,
+			deps.cardAliases(),
+		)
+	) {
 		clearForeignCardRun();
 		return message;
 	}
@@ -457,7 +498,11 @@ function handleEvent(event: EventParams): void {
  * cannot see that switch.
  */
 function meterSelectionKey(deps: AudioMeterBridgeDeps): string {
-	const pick = deps.meterSilenced() ? "silenced" : "device";
+	const pick = deps.meterSilenced()
+		? "silenced"
+		: deps.meterEmbedded()
+			? "embedded"
+			: "device";
 	return `${pick}:${deps.meterPreference() ?? "auto"}`;
 }
 
@@ -483,7 +528,9 @@ function noteMeterSelection(deps: AudioMeterBridgeDeps): void {
 		deps.broadcast(
 			deps.meterSilenced()
 				? { unavailable: true, reason: "mode_none" }
-				: { unavailable: true, reason: "handoff" },
+				: deps.meterEmbedded()
+					? { unavailable: true, reason: "embedded_audio" }
+					: { unavailable: true, reason: "handoff" },
 		);
 	} catch (err) {
 		deps.logger.debug(

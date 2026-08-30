@@ -107,6 +107,7 @@ import {
 	resolvedAudioLabel,
 	withAutoAudioEntry,
 } from '$lib/streaming/sourceSummary';
+import { planAudioSelectionForSource } from '$lib/streaming/embedded-audio-selection';
 
 // Durable engineering note (public GitHub, gstlibuvch264src repo) explaining how a
 // UVC device's descriptors are read to decide whether it has hardware H.264 — the
@@ -138,6 +139,15 @@ interface Props {
 	audioSourceList?: AudioSource[] | undefined;
 	selectedAudioSource?: string | undefined;
 	onSelectAudioSource?: (id: string) => void;
+	/**
+	 * A source switch that ALSO retires or restores the device audio pick writes
+	 * `asrc` in the same `setConfig` — so it is a second writer of a field
+	 * `selectedAudioSource` is derived from, and the owner must be told or its
+	 * value goes stale. Board-measured: the picker went on showing a mic the
+	 * device had already replaced with `Auto`, which is the "picker lies about
+	 * what is metered" defect one layer up.
+	 */
+	onAudioSelectionApplied?: (asrc: string) => void;
 	/** T5 auto-resolution fields off the `status` broadcast (resolved/pending/embedded). */
 	audioStatus?: ResolvedAudioStatus | undefined;
 	/**
@@ -162,6 +172,7 @@ let {
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
+	onAudioSelectionApplied,
 	audioStatus,
 	onOpenAudioDialog,
 }: Props = $props();
@@ -440,8 +451,15 @@ async function handleSelectSource(source: StreamSource): Promise<void> {
 	if (rowDisabled(source) || source.id === config?.source) return;
 	beginFieldSync(SOURCE_FIELD, source.id);
 	markFieldApplying(SOURCE_FIELD);
+	// A source that brings its own audio has no device to pick, so the device pick
+	// travels WITH the source write rather than being left behind for a later start
+	// to resolve.
+	const audioPlan = planAudioSelectionForSource(source, config?.asrc);
 	try {
-		const result = await rpc.streaming.setConfig({ source: source.id });
+		const result = await rpc.streaming.setConfig({
+			source: source.id,
+			...(audioPlan.asrc !== undefined ? { asrc: audioPlan.asrc } : {}),
+		});
 		// Release the lock to the SERVER-APPLIED value (`result.applied.source`),
 		// never the optimistic id we sent. A rejected setConfig (`success:false`,
 		// e.g. `{error:'unknown_source'}` — which carries no `applied.source`) or a
@@ -449,6 +467,9 @@ async function handleSelectSource(source: StreamSource): Promise<void> {
 		// the prior config value and surface the same calm error the catch path does.
 		if (result.success && result.applied?.source !== undefined) {
 			markFieldApplied(SOURCE_FIELD, result.applied.source);
+			// Tell the selection's owner what this write did to `asrc`, or its
+			// shadow of the field outlives the value the device actually stored.
+			if (audioPlan.asrc !== undefined) onAudioSelectionApplied?.(audioPlan.asrc);
 		} else {
 			markFieldFailed(SOURCE_FIELD, config?.source);
 			toast.error(m["notifications.saveFailed"]());
@@ -549,12 +570,18 @@ const audioComingSoon = $derived(isStreaming && audioMode === 'multiple');
 
 // Embedded network-ingest audio (Task 13): the ACTIVE source's `audioKind` is
 // `embedded` (an rtmp/srt pipeline carries its audio muxed into the incoming
-// stream). The engine only ROUTES it with the `network_embedded_audio` capability —
-// with it, the audio source is read-only "Embedded audio"; without it, the legacy
-// ALSA picker stays (the calm ComingSoon pill lives in IdleCockpit's roadmap, T12).
-const audioEmbeddedActive = $derived(
-	activeSource?.audioKind === 'embedded' && capabilities?.network_embedded_audio === true,
-);
+// stream), so there is no device to pick — in ANY connection state, whether or
+// not a publisher is currently connected.
+//
+// It is deliberately NOT gated on the engine's `network_embedded_audio`
+// capability. That capability answers whether the ENGINE can ROUTE the muxed
+// track; this answers whether the SOURCE owns a card, and an ingest row owns
+// none under either answer. Gating on it also made the gate DEGRADE-SENSITIVE:
+// the capability is absent from the engine-starting and engine-unavailable
+// fallback snapshots, so every engine blip flipped an ingest row back to a
+// picker of unrelated microphones. The routing question keeps its own surface
+// (IdleCockpit's roadmap ComingSoon pill, T12).
+const audioEmbeddedActive = $derived(activeSource?.audioKind === 'embedded');
 // Embedded state renders when the active source routes embedded audio OR the T5
 // resolver reported the embedded reason (distinguishes the two null cases, R9-1).
 const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);

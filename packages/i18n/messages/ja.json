@@ -593,6 +593,7 @@
 	"live.preview.audioSilent": "無音",
 	"live.preview.audioUnavailable": "メーターは利用できません",
 	"live.preview.audioUnavailableReason.device_busy": "オーディオデバイス使用中",
+	"live.preview.audioUnavailableReason.embedded_audio": "ストリーム音声を待機中",
 	"live.preview.audioUnavailableReason.handoff": "切り替え中…",
 	"live.preview.audioUnavailableReason.mode_none": "オーディオ無効",
 	"live.preview.audioUnavailableReason.no_device": "オーディオデバイスなし",

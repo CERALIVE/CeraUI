@@ -609,6 +609,7 @@
 	"live.preview.audioSilent": "Silence",
 	"live.preview.audioUnavailable": "Indicateur indisponible",
 	"live.preview.audioUnavailableReason.device_busy": "Périphérique audio occupé",
+	"live.preview.audioUnavailableReason.embedded_audio": "En attente de l'audio du flux",
 	"live.preview.audioUnavailableReason.handoff": "Changement…",
 	"live.preview.audioUnavailableReason.mode_none": "Audio désactivé",
 	"live.preview.audioUnavailableReason.no_device": "Aucun périphérique audio",

@@ -81,6 +81,7 @@ interface Props {
 	audioSourceList: AudioSource[] | undefined;
 	selectedAudioSource: string | undefined;
 	onSelectAudioSource: (id: string) => void;
+	onAudioSelectionApplied: (asrc: string) => void;
 	audioStatus: ResolvedAudioStatus | undefined;
 	/** Open the AudioDialog from the Source card's "Codec & delay" affordance. */
 	onOpenAudioDialog: () => void;
@@ -117,6 +118,7 @@ const {
 	audioSourceList,
 	selectedAudioSource,
 	onSelectAudioSource,
+	onAudioSelectionApplied,
 	audioStatus,
 	onOpenAudioDialog,
 	selectedPipeline,
@@ -148,6 +150,7 @@ const audioEmbeddedComingSoon = $derived(
 		{capabilities}
 		{config}
 		{isStreaming}
+		onAudioSelectionApplied={onAudioSelectionApplied}
 		onSelectAudioSource={onSelectAudioSource}
 		{onOpenAudioDialog}
 		onSwitch={onSwitch}

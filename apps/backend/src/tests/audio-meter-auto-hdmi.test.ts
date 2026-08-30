@@ -32,6 +32,7 @@ import {
 	resolveMeterPreference,
 	updateAudioDevices,
 } from "../modules/streaming/audio.ts";
+import type { CardAliases } from "../modules/streaming/audio-card-vocabulary.ts";
 import {
 	type AudioMeterBridgeDeps,
 	type AudioMeterBridgeLogger,
@@ -177,7 +178,16 @@ describe("resolveMeterPreference — 'Auto' names the SAME card the start path w
 			hdmiResolution,
 		);
 
-		expect(isForeignCardLevel(preference, `card:${USB_CARD_ID}`)).toBe(true);
+		// The board's own two cards. A mismatch is only PROVABLE within a
+		// vocabulary this device recognises, so the gate is handed one.
+		const aliases: CardAliases = new Map<string, ReadonlySet<string>>([
+			[HDMI_CARD_ID, new Set([HDMI_CARD_ID])],
+			[USB_CARD_ID, new Set([USB_CARD_ID])],
+		]);
+
+		expect(isForeignCardLevel(preference, `card:${USB_CARD_ID}`, aliases)).toBe(
+			true,
+		);
 	});
 
 	// A card with no capture PCM can never be metered, so the honest gap is

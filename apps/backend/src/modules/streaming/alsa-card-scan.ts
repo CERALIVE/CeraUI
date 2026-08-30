@@ -34,6 +34,13 @@ export const CANONICAL_SOUND_CLASS_DIR = "/sys/class/sound";
 export interface ScannedAlsaCard {
 	/** The card's ALSA id (`cardN/id`), e.g. `usbaudio`. */
 	readonly id: string;
+	/**
+	 * The `N` of `cardN` — the only key that joins this card to a
+	 * `/proc/asound/pcm` row, which is what `audio-card-vocabulary.ts` needs to
+	 * relate it to the engine's own name for it. Every other shared field is a
+	 * human-authored string, which is not an identity.
+	 */
+	readonly index: number;
 	/** That card directory's entries — the PCM nodes the direction rules read. */
 	readonly entries: readonly string[];
 }
@@ -58,11 +65,12 @@ const defaultScanDeps: AlsaCardScanDeps = {
  * because that is the kernel's own ordering, and NUMERICALLY because a
  * lexicographic sort puts `card10` before `card2`.
  */
+function cardIndex(entry: string): number {
+	const parsed = Number(entry.slice("card".length));
+	return Number.isInteger(parsed) ? parsed : Number.NaN;
+}
+
 function cardEntriesInIndexOrder(entries: readonly string[]): string[] {
-	const cardIndex = (entry: string): number => {
-		const parsed = Number(entry.slice("card".length));
-		return Number.isInteger(parsed) ? parsed : Number.NaN;
-	};
 	return entries
 		.filter((entry) => entry.startsWith("card"))
 		.sort((a, b) => {
@@ -115,6 +123,7 @@ export async function scanAlsaCards(
 		if (id === "") continue;
 		cards.push({
 			id,
+			index: cardIndex(entry),
 			entries: await readCardEntries(`${dir}/${entry}`, deps),
 		});
 	}

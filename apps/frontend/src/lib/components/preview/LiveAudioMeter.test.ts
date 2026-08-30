@@ -9,6 +9,7 @@ let currentLevel: AudioLevelMessage | undefined;
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getAudioLevel: () => currentLevel,
 	getConfig: () => undefined,
+	getStatus: () => undefined,
 }));
 
 import LiveAudioMeter from "./LiveAudioMeter.svelte";
@@ -102,5 +103,68 @@ describe("LiveAudioMeter — always-mounted inline meter + staleness watchdog", 
 		expect(
 			innerMeter(container)?.querySelector('[data-testid="audio-unavailable"]'),
 		).not.toBeNull();
+	});
+});
+
+// The frontend half of the ingest-audio contract. The backend replaces a sidecar
+// level with `{unavailable, reason:"embedded_audio"}` while an rtmp/srt source is
+// selected, because that source owns no card the idle sidecar could be metering.
+// What must reach the operator is a NAMED gap — not bars, and not a device line.
+describe("LiveAudioMeter — an ingest source's audio arrives with its stream", () => {
+	beforeEach(() => {
+		vi.useFakeTimers();
+		currentLevel = undefined;
+	});
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
+	it("renders the embedded_audio gap and names NO device", () => {
+		currentLevel = { unavailable: true, reason: "embedded_audio" };
+		const { container } = render(LiveAudioMeter);
+
+		expect(innerMeter(container)?.dataset.unavailable).toBe("true");
+		expect(
+			container.querySelector('[data-testid="audio-unavailable"]')?.textContent,
+		).toContain("Waiting for stream audio");
+		// Naming a device under a retired reading is the "bars under the wrong
+		// name" defect one step quieter.
+		expect(
+			container.querySelector('[data-testid="live-audio-meter-device"]'),
+		).toBeNull();
+	});
+
+	it("draws NO bars for the gap and keeps naming it while the feed is live", () => {
+		currentLevel = { unavailable: true, reason: "embedded_audio" };
+		const { container } = render(LiveAudioMeter);
+
+		expect(innerMeter(container)?.dataset.channels).toBe("0");
+
+		// Inside the staleness deadline the NAMED gap must hold: replacing it with
+		// the anonymous "Meter unavailable" would discard the one thing that tells
+		// the operator their ingest simply has no publisher yet.
+		vi.advanceTimersByTime(1_000);
+		flushSync();
+		expect(meter(container)?.dataset.stale).toBe("false");
+		expect(
+			container.querySelector('[data-testid="audio-unavailable"]')?.textContent,
+		).toContain("Waiting for stream audio");
+	});
+
+	// Once a publisher connects, cerastream meters the program leg and the backend
+	// forwards it verbatim: this is the "use its own metrics" half of the report.
+	it("draws the embedded track's real levels once the stream is arriving", () => {
+		currentLevel = {
+			source: { identity: "card:ingest", owner: "streaming" },
+			channels: 2,
+			rms_db: [-18, -19],
+			peak_db: [-6, -7],
+			floor_db: -1e6,
+		};
+		const { container } = render(LiveAudioMeter);
+
+		expect(innerMeter(container)?.dataset.unavailable).toBe("false");
+		expect(innerMeter(container)?.dataset.silent).toBe("false");
+		expect(innerMeter(container)?.dataset.channels).toBe("2");
 	});
 });

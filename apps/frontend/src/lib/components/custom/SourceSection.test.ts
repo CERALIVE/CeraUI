@@ -1327,7 +1327,15 @@ describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
 		).toBeNull();
 	});
 
-	it("keeps the ALSA picker WITHOUT the capability (TD-embedded-audio pill relocated to IdleCockpit roadmap, T12)", () => {
+	// SUPERSEDES "keeps the ALSA picker WITHOUT the capability". That assertion
+	// pinned the defect: `network_embedded_audio` answers whether the ENGINE can
+	// ROUTE the muxed track, and the picker asks whether the SOURCE owns a card —
+	// an ingest row owns none under either answer. The capability is also absent
+	// from the engine-starting and engine-unavailable fallback snapshots, so the
+	// old gate handed the operator a list of unrelated microphones on every engine
+	// blip. The routing question keeps its own surface (IdleCockpit's roadmap
+	// pill), which is why no debt marker renders here either.
+	it("shows the embedded state WITHOUT the capability — an ingest row owns no card", () => {
 		const { container } = mount({
 			audioSources: ["USB audio", "Pipeline default"],
 			config: { source: "rtmp" },
@@ -1335,13 +1343,56 @@ describe("SourceSection — embedded network-ingest audio (Task 13)", () => {
 			capabilities: CAPS_AUDIO_RTMP,
 		});
 		expect(
-			container.querySelector('[data-testid="audio-source-select"]'),
+			container.querySelector('[data-testid="audio-source-embedded"]'),
 		).not.toBeNull();
 		expect(
-			container.querySelector('[data-testid="audio-source-embedded"]'),
+			container.querySelector('[data-testid="audio-source-select"]'),
 		).toBeNull();
 		expect(
 			container.querySelector('[data-debt-id="TD-embedded-audio"]'),
+		).toBeNull();
+	});
+
+	// "In ANY connection state" is the operator's own wording, and the two states
+	// below are the ones that reach a real board: a gateway that is up but has no
+	// publisher connected, and a capability snapshot with no engine behind it.
+	it("shows the embedded state while the ingest is waiting for a publisher", () => {
+		for (const caps of [CAPS_EMBEDDED_ON, CAPS_AUDIO_RTMP, undefined]) {
+			const { container, unmount } = mount({
+				audioSources: ["USB audio", "Pipeline default"],
+				config: { source: "rtmp" },
+				sources: sourcesMsg([netRtmp(false)]),
+				capabilities: caps,
+			});
+			expect(
+				container.querySelector('[data-testid="audio-source-embedded"]'),
+			).not.toBeNull();
+			expect(
+				container.querySelector('[data-testid="audio-source-select"]'),
+			).toBeNull();
+			unmount();
+		}
+	});
+
+	it("shows the embedded state for an SRT ingest too", () => {
+		const netSrt = {
+			...netRtmp(true),
+			id: "srt",
+			pipelineId: "srt",
+			labelKey: "settings.sources.srt",
+			requiresGateway: "srt" as const,
+		};
+		const { container } = mount({
+			audioSources: ["USB audio", "Pipeline default"],
+			config: { source: "srt" },
+			sources: sourcesMsg([netSrt]),
+			capabilities: CAPS_AUDIO_RTMP,
+		});
+		expect(
+			container.querySelector('[data-testid="audio-source-embedded"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-testid="audio-source-select"]'),
 		).toBeNull();
 	});
 
@@ -1549,7 +1600,10 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 		).toBeNull();
 	});
 
-	it("M2: network WITHOUT the cap → the ALSA picker REMAINS (legacy path)", () => {
+	// M2 previously asserted the legacy ALSA picker here. The capability answers a
+	// ROUTING question, not a "does this source own a card" one, so the matrix now
+	// reads the same as M1 — see the superseding case in the embedded describe.
+	it("M2: network WITHOUT the cap → still the embedded state, never a picker", () => {
 		const { container } = mount({
 			audioSources: ["USB audio", "Pipeline default"],
 			config: { source: "rtmp" },
@@ -1557,10 +1611,10 @@ describe("SourceSection — source×audio mixture matrix (M1–M6)", () => {
 			capabilities: CAPS_AUDIO_RTMP,
 		});
 		expect(
-			container.querySelector('[data-testid="audio-source-select"]'),
+			container.querySelector('[data-testid="audio-source-embedded"]'),
 		).not.toBeNull();
 		expect(
-			container.querySelector('[data-testid="audio-source-embedded"]'),
+			container.querySelector('[data-testid="audio-source-select"]'),
 		).toBeNull();
 	});
 
@@ -1875,5 +1929,114 @@ describe("SourceSection — empty state + lost-banner scoping (todo 23)", () => 
 		expect(
 			container.querySelector('[data-testid="source-lost-banner-remembered"]'),
 		).toBeNull();
+	});
+});
+
+describe("SourceSection — a source that brings its own audio has no device to pick", () => {
+	async function selectRtmp(
+		config: Record<string, unknown>,
+		extra: Record<string, unknown> = {},
+	) {
+		const { container } = mount({
+			sources: sourcesMsg([RODE, netRtmp(true)]),
+			config,
+			...extra,
+		});
+		const btn = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-network-ingest-select-rtmp"]',
+		);
+		expect(btn).not.toBeNull();
+		if (btn) await fireEvent.click(btn);
+	}
+
+	async function selectRode(
+		config: Record<string, unknown>,
+		extra: Record<string, unknown> = {},
+	) {
+		const { container } = mount({
+			sources: sourcesMsg([RODE, netRtmp(true)]),
+			config,
+			...extra,
+		});
+		const btn = container.querySelector<HTMLButtonElement>(
+			'[data-testid="source-select-usb"]',
+		);
+		expect(btn).not.toBeNull();
+		if (btn) await fireEvent.click(btn);
+	}
+
+	it("clears a device pick onto Auto when the ingest row is selected", async () => {
+		setConfig.mockResolvedValue({
+			success: true,
+			applied: { source: "rtmp", asrc: AUDIO_SOURCE_AUTO },
+		});
+		await selectRtmp({ source: "usb", asrc: "DJI Mic Mini" });
+
+		expect(setConfig).toHaveBeenCalledWith({
+			source: "rtmp",
+			asrc: AUDIO_SOURCE_AUTO,
+		});
+	});
+
+	it("restores nothing when the operator returns to a capture source", async () => {
+		setConfig.mockResolvedValue({
+			success: true,
+			applied: { source: "rtmp", asrc: AUDIO_SOURCE_AUTO },
+		});
+		await selectRtmp({ source: "usb", asrc: "DJI Mic Mini" });
+
+		setConfig.mockResolvedValue({ success: true, applied: { source: "usb" } });
+		await selectRode({ source: "rtmp", asrc: AUDIO_SOURCE_AUTO });
+
+		expect(setConfig).toHaveBeenLastCalledWith({ source: "usb" });
+	});
+
+	it("leaves an operator's own pick on the ingest row alone", async () => {
+		setConfig.mockResolvedValue({ success: true, applied: { source: "rtmp" } });
+		await selectRtmp({ source: "usb", asrc: "No audio" });
+		expect(setConfig).toHaveBeenLastCalledWith({ source: "rtmp" });
+	});
+
+	// The selection's owner derives what the picker RENDERS from its own shadow of
+	// `asrc`, so a source switch that writes that field behind its back leaves the
+	// picker naming a device the board already replaced. Board-measured: the picker
+	// read "DJI MIC MINI" for 16s while the device held `Auto` and metered HDMI.
+	it("tells the selection's owner when the switch rewrote asrc", async () => {
+		const onAudioSelectionApplied = vi.fn();
+		setConfig.mockResolvedValue({
+			success: true,
+			applied: { source: "rtmp", asrc: AUDIO_SOURCE_AUTO },
+		});
+		await selectRtmp(
+			{ source: "usb", asrc: "DJI Mic Mini" },
+			{ onAudioSelectionApplied },
+		);
+
+		expect(onAudioSelectionApplied).toHaveBeenCalledWith(AUDIO_SOURCE_AUTO);
+	});
+
+	// Silence is only correct when the write left `asrc` alone — announcing an
+	// unchanged field would make the owner adopt a value it was never sent.
+	it("stays silent when the switch left asrc alone", async () => {
+		const onAudioSelectionApplied = vi.fn();
+		setConfig.mockResolvedValue({ success: true, applied: { source: "rtmp" } });
+		await selectRtmp(
+			{ source: "usb", asrc: "No audio" },
+			{ onAudioSelectionApplied },
+		);
+
+		expect(setConfig).toHaveBeenLastCalledWith({ source: "rtmp" });
+		expect(onAudioSelectionApplied).not.toHaveBeenCalled();
+	});
+
+	it("stays silent when the device refused the write", async () => {
+		const onAudioSelectionApplied = vi.fn();
+		setConfig.mockResolvedValue({ success: false, error: "unknown_source" });
+		await selectRtmp(
+			{ source: "usb", asrc: "DJI Mic Mini" },
+			{ onAudioSelectionApplied },
+		);
+
+		expect(onAudioSelectionApplied).not.toHaveBeenCalled();
 	});
 });

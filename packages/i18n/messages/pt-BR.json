@@ -609,6 +609,7 @@
 	"live.preview.audioSilent": "Silêncio",
 	"live.preview.audioUnavailable": "Medidor indisponível",
 	"live.preview.audioUnavailableReason.device_busy": "Dispositivo de áudio ocupado",
+	"live.preview.audioUnavailableReason.embedded_audio": "Aguardando áudio do stream",
 	"live.preview.audioUnavailableReason.handoff": "Alternando…",
 	"live.preview.audioUnavailableReason.mode_none": "Áudio desativado",
 	"live.preview.audioUnavailableReason.no_device": "Nenhum dispositivo de áudio",
