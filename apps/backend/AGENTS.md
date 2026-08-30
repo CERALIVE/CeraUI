@@ -128,7 +128,7 @@ The `streaming` router exposes these procedures:
 
 | Procedure | Purpose |
 |-----------|---------|
-| `start(config)` | Validate config, launch stream, persist config |
+| `start(config)` | Overlay optional fields on persisted stream config, validate, launch, persist |
 | `stop()` | Stop active stream |
 | `setConfig(fields)` | Persist config fields **without** starting the stream (added Task 19) |
 | `setBitrate({ max_br })` | Hot-adjust bitrate while streaming |
@@ -137,6 +137,15 @@ The `streaming` router exposes these procedures:
 | `getConfig()` | Return current config snapshot |
 
 `setConfig` writes the provided fields onto the running config (same relay/manual mutual-exclusion logic as `updateConfig`, minus DNS/pipeline validation), then calls `saveConfig` and broadcasts a `config` message. Use this for all config-only dialogs that must not start the stream.
+
+`start` input is PARTIAL by contract. `updateConfig` projects the saved runtime
+config through `streamingConfigInputSchema`, overlays the caller's stated fields,
+then validates the effective whole. Thus `{}` means “start exactly what is saved” —
+required by both the public RPC and `device.setProfile`'s direct reconnect path —
+while a partial call changes only what it states. The schema projection is the
+credential boundary: never replace it with `{...getConfig()}`, which would put
+non-stream fields such as device credentials on the applied-start object. Keep the
+merge below the RPC layer so every start origin receives identical behavior.
 
 ## AUDIO-DEVICE NAMING [EXISTS]
 
