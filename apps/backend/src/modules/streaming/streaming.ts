@@ -164,9 +164,7 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	}
 
 	// audio codec
-	if (pipeline.supportsAudio) {
-		if (typeof validated.acodec !== "string")
-			throw new Error("Invalid audio codec");
+	if (pipeline.supportsAudio && validated.acodec !== undefined) {
 		if (!(validated.acodec in AUDIO_CODECS))
 			throw new Error("Audio codec not found");
 	}
