@@ -147,8 +147,11 @@ not a clear. A stated manual endpoint clears both saved managed-relay fields
 (`relay_server` and `relay_account`), while a stated managed server clears the
 saved manual address and port. The schema projection is the
 credential boundary: never replace it with `{...getConfig()}`, which would put
-non-stream fields such as device credentials on the applied-start object. Keep the
-merge below the RPC layer so every start origin receives identical behavior.
+non-stream fields such as device credentials on the applied-start object. `acodec`
+remains optional: when neither the request nor persisted config states one,
+validation leaves it absent so cerastream applies its engine default; an explicitly
+stated codec is still checked against the supported codec registry. Keep the merge
+below the RPC layer so every start origin receives identical behavior.
 
 ## AUDIO-DEVICE NAMING [EXISTS]
 

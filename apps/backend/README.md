@@ -167,7 +167,9 @@ All setters return `{ success: boolean, applied: <fields> }`. The `applied` obje
 `streaming.start` accepts a partial config. An empty `{}` starts from the complete
 persisted stream configuration; defined fields override only their saved counterparts.
 A manual address/port switches away from both saved managed-relay fields, while a
-managed relay server switches away from the saved manual address/port.
+managed relay server switches away from the saved manual address/port. An omitted
+audio codec remains omitted and uses cerastream's engine default; only an explicitly
+stated codec is registry-validated.
 The merge occurs in the shared streamloop update seam, so UI starts and control-channel
 reconnects have the same semantics.
 
