@@ -6721,6 +6721,58 @@ table driven through the REAL procedure, the persistence-untouched guarantee, an
 the fail-open negatives) + `tests/capability-truth-clamp.test.ts` (the Osmo
 1080p60-on-H.264 migration, the one-time notification, and the never-clamp cases).
 
+## …AND AN OVERRIDE THE PIPELINE CANNOT HONOR IS RESIDUE, NOT INTENT [EXISTS]
+
+The section above is about an override the DEVICE cannot deliver. This is the
+adjacent case — an override the PIPELINE has no use for at all — and the two
+resolve in opposite directions on purpose.
+
+`intersectCaps` collapses a non-override source's offering to its own
+`default_resolution`/`default_framerate`, so the Encoder dialog never renders the
+axis for an rtmp/srt ingest row: the geometry is whatever the publisher sends. A
+`resolution`/`framerate` sitting on such a config is therefore always RESIDUE from
+a previous source, and the wire cannot say otherwise — a start carries the WHOLE
+persisted config, so an echoed value and a typed one are the same bytes.
+
+Board-measured on a Rock 5B+ (2026-08-30). A `config.json` holding `720p`/`30` from
+an earlier HDMI session, with the RTMP row selected, failed EVERY start:
+
+```
+PipelineOverrideError: Pipeline does not support resolution override
+start_invalid  phase=params  retry=not_retriable
+```
+
+The operator could not clear it from anywhere — the axis is not on their source
+row — so the device was unstreamable until the config was hand-edited over SSH.
+
+`unsupportedPipelineOverrides` (`@ceraui/rpc` `capabilities/pipeline-override-truth.ts`)
+is the shared rule, in `@ceraui/rpc` for the reason `device-mode-truth.ts` is: a
+start that dies on a field the save path was happy to persist is the same
+offering-vs-save disagreement one layer down. Two seams consume it:
+
+- **The START drops it** (`streaming.ts` `validateConfig`, which no longer calls
+  `validatePipelineOverrides`) and warns. This is the operator-visible half.
+- **The SAVE clears it from disk** (`streaming.procedure.ts`, beside the existing
+  merge) so the config self-heals on the next write of any kind — including the
+  source switch that created the residue.
+
+**An EXPLICIT override for such a pipeline is still REFUSED, unchanged.** That is
+an operator action and answering it is the point; only the carried-forward value
+is cleared, decided by whether `input` mentions the field. Do not "unify" the two
+adjacent blocks in `setConfig` — they look contradictory and are not.
+
+The per-axis scoping is load-bearing: each field is judged against its OWN support
+flag, so a pipeline that refuses a resolution override while accepting a framerate
+one drops exactly one of them.
+
+Coverage: `packages/rpc/src/capabilities/pipeline-override-truth.test.ts` (the pure
+rule, incl. the absent-override and per-axis cases) +
+`tests/pipeline-override-residue.test.ts` (both seams driven through the REAL
+`validateConfig` and the REAL `setConfig` procedure, the board's own config shape,
+the honors-the-axes negatives, and the still-refused explicit write) +
+`tests/pipeline-validation.test.ts` (the start path's per-axis drop; its
+resolution-refusal case was INVERTED by this change and says so).
+
 ## A LIVE CAPTURE DEVICE IS NEVER SILENTLY DROPPED [EXISTS]
 
 `buildSources` folds each device into the coarse capability entry its kind bridges
@@ -8777,6 +8829,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't re-apply an onboard display-name rule at a render site (a Svelte label, a summary derivation) — it belongs at the device-construction seam (`fromEngineDevice`), which is why the row and the "Configured" label are both fixed by one call.
 - Don't re-derive `pipeline`/`selected_video_input` resolution inline in a new procedure — route through `resolveSourceRouting()`/`deriveEngineRouting()` in `modules/streaming/sources.ts`.
 - Don't dispatch an `input_id` to the engine from ANY path without resolving it by stable identity first — the preview leg was the one that skipped it, and a renumbered device streamed while refusing to preview. And don't "upgrade" `resolvePreviewStartFrame` to `resolveSourceRouting`: preview must RESOLVE without REJECTING, or a true unplug loses the engine's typed `source-unavailable` reason to a silent drop.
+- Don't restore `validatePipelineOverrides` to the START path — a start carries the whole persisted config, so an override on a pipeline that cannot honor it is residue the UI never offered and the wire cannot distinguish from intent, and refusing it strands the operator on a start that fails naming a field their own source row does not display (board-measured). It is DROPPED there and CLEARED on the next save; the explicit-write refusal in `setConfig` is the one that stays.
 - Don't validate an encode target against a device ladder with a second, local copy of the rule — `@ceraui/rpc` `capabilities/device-mode-truth.ts` is shared with the frontend precisely so the offering and the save path cannot disagree. And don't turn its fail-open guards (no ladder, coarse source, un-normalizable payload) into refusals: blocking a save the hardware can honour is the same dishonesty as allowing one it cannot.
 - Don't report a `streaming.setConfig` result without reading `result.success` — a device-truth refusal RESOLVES, it does not throw, so a bare try/catch toasts "Saved" over a config the device rejected.
 - Don't add a country→channel table anywhere — the hotspot channel set is DERIVED by applying `iw reg set <CC>` and parsing `iw phy` back out (`regdomain.ts`), because the legal set depends on the kernel's regdb version, the radio, and self-managed adapters. And don't validate a channel with `isWifiChannelName` alone: that is a SHAPE check, and legality is `isChannelOffered` against the runtime-derived set.

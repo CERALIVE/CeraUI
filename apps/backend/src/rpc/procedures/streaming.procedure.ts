@@ -4,6 +4,7 @@
  */
 
 import { CerastreamRpcError } from "@ceralive/cerastream";
+import { unsupportedPipelineOverrides } from "@ceraui/rpc";
 import {
 	AUDIO_CODEC_UNSUPPORTED_TRANSPORT,
 	AUDIO_SOURCE_AUTO,
@@ -732,35 +733,49 @@ export const setConfigProcedure = authedProcedure
 		}
 
 		// Validate pipeline overrides at save time (QW-I)
+		const overridePipelineId = input.pipeline ?? config.pipeline;
+		const overridePipeline = searchPipelines(overridePipelineId ?? "");
 		if (
-			input.pipeline !== undefined ||
-			input.resolution !== undefined ||
-			input.framerate !== undefined
+			overridePipeline &&
+			(input.pipeline !== undefined ||
+				input.resolution !== undefined ||
+				input.framerate !== undefined)
 		) {
-			const pipelineId = input.pipeline ?? config.pipeline;
-			const pipeline = searchPipelines(pipelineId ?? "");
-			if (pipeline) {
-				try {
-					validatePipelineOverrides(pipeline, {
-						...(input.resolution !== undefined
-							? { resolution: input.resolution }
-							: {}),
-						...(input.framerate !== undefined
-							? { framerate: input.framerate }
-							: {}),
-					});
-				} catch (err) {
-					if (err instanceof PipelineOverrideError) {
-						return {
-							success: false,
-							error: `Pipeline does not support ${err.field} override`,
-							applied: {},
-						};
-					}
-					throw err;
+			try {
+				validatePipelineOverrides(overridePipeline, {
+					...(input.resolution !== undefined
+						? { resolution: input.resolution }
+						: {}),
+					...(input.framerate !== undefined
+						? { framerate: input.framerate }
+						: {}),
+				});
+			} catch (err) {
+				if (err instanceof PipelineOverrideError) {
+					return {
+						success: false,
+						error: `Pipeline does not support ${err.field} override`,
+						applied: {},
+					};
 				}
+				throw err;
 			}
 		}
+
+		// An EXPLICIT override for such a pipeline is still refused above — that is
+		// an operator action, and answering it is the point. What is cleared here is
+		// the PERSISTED residue a source switch leaves behind, which no later save
+		// mentions and which would otherwise sit on disk blocking every start.
+		const staleOverrides = overridePipeline
+			? unsupportedPipelineOverrides(overridePipeline, {
+					...(input.resolution === undefined
+						? { resolution: config.resolution }
+						: {}),
+					...(input.framerate === undefined
+						? { framerate: config.framerate }
+						: {}),
+				})
+			: [];
 
 		// Three orderings here are load-bearing (ADR-0008 §10 / todo 11a). It runs
 		// BEFORE the first config mutation, so a refusal leaves disk byte-identical
@@ -821,6 +836,17 @@ export const setConfigProcedure = authedProcedure
 		if (input.max_br !== undefined) config.max_br = clampBitrate(input.max_br);
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
+		for (const field of staleOverrides) {
+			logger.warn(
+				`setConfig: clearing stale ${field} override — pipeline '${overridePipeline?.name}' cannot honor it`,
+				{
+					module: "streaming",
+					pipeline: overridePipeline?.name,
+					dropped: String(config[field]),
+				},
+			);
+			config[field] = undefined;
+		}
 		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
 		if (input.video_passthrough !== undefined)
 			config.video_passthrough = input.video_passthrough;

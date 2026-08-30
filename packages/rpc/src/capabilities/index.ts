@@ -6,6 +6,7 @@ export * from './audio';
 export * from './capability-matrix';
 export * from './device-mode-truth';
 export * from './intersect-caps';
+export * from './pipeline-override-truth';
 export * from './preview';
 export * from './sim-bond-eligibility';
 export * from './wifi-station-security';
