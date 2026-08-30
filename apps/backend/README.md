@@ -165,7 +165,9 @@ Key streaming procedures:
 All setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-validation values actually written to config. Clients must lock their UI to `applied`, not to the raw input.
 
 `streaming.start` accepts a partial config. An empty `{}` starts from the complete
-persisted stream configuration; stated fields override only their saved counterparts.
+persisted stream configuration; defined fields override only their saved counterparts.
+A manual address/port switches away from both saved managed-relay fields, while a
+managed relay server switches away from the saved manual address/port.
 The merge occurs in the shared streamloop update seam, so UI starts and control-channel
 reconnects have the same semantics.
 

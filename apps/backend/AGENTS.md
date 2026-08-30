@@ -142,7 +142,10 @@ The `streaming` router exposes these procedures:
 config through `streamingConfigInputSchema`, overlays the caller's stated fields,
 then validates the effective whole. Thus `{}` means “start exactly what is saved” —
 required by both the public RPC and `device.setProfile`'s direct reconnect path —
-while a partial call changes only what it states. The schema projection is the
+while a partial call changes only its defined fields; an explicit `undefined` is
+not a clear. A stated manual endpoint clears both saved managed-relay fields
+(`relay_server` and `relay_account`), while a stated managed server clears the
+saved manual address and port. The schema projection is the
 credential boundary: never replace it with `{...getConfig()}`, which would put
 non-stream fields such as device credentials on the applied-start object. Keep the
 merge below the RPC layer so every start origin receives identical behavior.
