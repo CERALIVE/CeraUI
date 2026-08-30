@@ -1415,14 +1415,6 @@ async function probeEngineDevices(
 	try {
 		const result = await deps.fetchEngineDevices();
 		const devices = result.devices.map((d) => {
-			// `modes[]` is read defensively, exactly like the audio join keys below:
-			// this whitelist copy is the ONE seam a real engine payload crosses, and
-			// an unlisted field is DROPPED silently. It was, which made todo 21's
-			// per-format mode families reachable only from a hand-built fixture —
-			// every dual-format camera published `selectedInputMode` with no
-			// `inputModes` beside it, so the picker had nothing to offer and the
-			// encoder ladder fell back to the device's unioned flat list.
-			const extra = d as { modes?: readonly unknown[] };
 			return fromEngineDevice({
 				input_id: d.input_id,
 				device_path: d.device_path,
@@ -1430,7 +1422,7 @@ async function probeEngineDevices(
 				media_class: d.media_class,
 				kind: d.kind,
 				caps: d.caps,
-				...(extra.modes !== undefined ? { modes: extra.modes } : {}),
+				...(d.modes !== undefined ? { modes: d.modes } : {}),
 				stable_id: d.stable_id,
 				physical_group_id: d.physical_group_id,
 			});
@@ -1440,41 +1432,28 @@ async function probeEngineDevices(
 			devices,
 			selectionToken,
 			// Parallel AUDIO cache (T4): an EXPLICIT field copy of the audio entries
-			// that PRESERVES the `alsa_card_id` join key verbatim. It is read
-			// defensively (the pre-T18 binding schema strips it → `undefined`; the
-			// bumped schema retains it), and it is NOT routed through the video
-			// whitelist copy above or `fromEngineDevice()`, both of which drop it.
+			// that preserves the producer-owned join keys verbatim. It is NOT routed
+			// through the video whitelist copy above or `fromEngineDevice()`, both of
+			// which intentionally drop the audio-only fields.
 			audio: result.devices
 				.filter((d) => d.media_class === "audio")
 				.map((d) => {
-					const extra = d as {
-						alsa_card_id?: string;
-						product_name?: string;
-						transport?: EngineAudioDevice["transport"];
-						stable_id?: string;
-						device_address?: string;
-						physical_group_id?: string;
-					};
 					return {
 						input_id: d.input_id,
 						display_name: d.display_name,
-						...(extra.alsa_card_id !== undefined
-							? { alsa_card_id: extra.alsa_card_id }
+						...(d.alsa_card_id !== undefined
+							? { alsa_card_id: d.alsa_card_id }
 							: {}),
-						...(extra.product_name !== undefined
-							? { product_name: extra.product_name }
+						...(d.product_name !== undefined
+							? { product_name: d.product_name }
 							: {}),
-						...(extra.transport !== undefined
-							? { transport: extra.transport }
+						...(d.transport !== undefined ? { transport: d.transport } : {}),
+						...(d.stable_id !== undefined ? { stable_id: d.stable_id } : {}),
+						...(d.device_address !== undefined
+							? { device_address: d.device_address }
 							: {}),
-						...(extra.stable_id !== undefined
-							? { stable_id: extra.stable_id }
-							: {}),
-						...(extra.device_address !== undefined
-							? { device_address: extra.device_address }
-							: {}),
-						...(extra.physical_group_id !== undefined
-							? { physical_group_id: extra.physical_group_id }
+						...(d.physical_group_id !== undefined
+							? { physical_group_id: d.physical_group_id }
 							: {}),
 					};
 				}),
