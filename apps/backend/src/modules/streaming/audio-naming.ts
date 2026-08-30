@@ -53,33 +53,30 @@
  * module-level dedup Set) and never at warn/error (a nameless card is normal).
  */
 
+import type { CaptureDevice as CerastreamCaptureDevice } from "@ceralive/cerastream";
 import { logger } from "../../helpers/logger.ts";
 import { normalizeOnboardKey } from "./onboard-display-names.ts";
 
 /**
- * The engine-audio join record — a DEDICATED local type carrying ONLY the three
- * fields the label join needs. Deliberately NOT the `@ceraui/rpc` `CaptureDevice`
- * (which has no `alsa_card_id` join key), NOT the output of `fromEngineDevice()`
- * (drops the join key), and NOT the video-cache whitelist copy (copies 6 video
- * fields, not `alsa_card_id`). The `alsa_card_id?` field is the LOAD-BEARING join
- * key preserved verbatim from the `list-devices` audio entry — it is `undefined`
- * on the pre-T18 pin (whose binding `captureDeviceSchema` strips it) and populated
- * once the bumped binding retains it.
+ * The engine-audio join record derives from the published cerastream device shape.
+ * This preserves the producer's schema version as the compile-time boundary: a
+ * stale binding cannot silently accept fields it strips at runtime.
  */
-export interface EngineAudioDevice {
-	input_id: string;
-	display_name: string;
-	alsa_card_id?: string;
-	product_name?: string;
-	transport?: AudioDeviceTransport;
-	stable_id?: string;
-	device_address?: string;
-	// `usb:<topology-token>` shared by every row of ONE physical device
-	// (cerastream ADR-0008) — the join key the "Auto" audio resolver matches on.
-	physical_group_id?: string;
-}
+export type EngineAudioDevice = Pick<
+	CerastreamCaptureDevice,
+	| "input_id"
+	| "display_name"
+	| "alsa_card_id"
+	| "product_name"
+	| "transport"
+	| "stable_id"
+	| "device_address"
+	| "physical_group_id"
+>;
 
-export type AudioDeviceTransport = "usb" | "hdmi" | "bluetooth" | "onboard";
+export type AudioDeviceTransport = NonNullable<
+	CerastreamCaptureDevice["transport"]
+>;
 
 export interface AudioDeviceIdentity {
 	product_name?: string;
@@ -505,11 +502,11 @@ export function resolveAudioIdentities(
 		// generic engine value (e.g. "usbaudio", equal to the card id) is never
 		// composed as `<Product Name> · <Transport>` — the transport tag still
 		// rides on its own, and the picker falls back to the longname-derived label.
-		const hasRealProduct =
-			match.product_name !== undefined &&
-			isHumanAudioName(match.product_name, cardId);
 		const identity: AudioDeviceIdentity = {
-			...(hasRealProduct ? { product_name: match.product_name } : {}),
+			...(match.product_name !== undefined &&
+			isHumanAudioName(match.product_name, cardId)
+				? { product_name: match.product_name }
+				: {}),
 			...(match.transport !== undefined ? { transport: match.transport } : {}),
 			...(match.stable_id !== undefined ? { stable_id: match.stable_id } : {}),
 		};
