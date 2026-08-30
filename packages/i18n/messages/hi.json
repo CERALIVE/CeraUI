@@ -608,6 +608,7 @@
 	"live.preview.audioSilent": "मौन",
 	"live.preview.audioUnavailable": "मीटर उपलब्ध नहीं",
 	"live.preview.audioUnavailableReason.device_busy": "ऑडियो डिवाइस व्यस्त",
+	"live.preview.audioUnavailableReason.embedded_audio": "स्ट्रीम ऑडियो की प्रतीक्षा",
 	"live.preview.audioUnavailableReason.handoff": "बदल रहा है…",
 	"live.preview.audioUnavailableReason.mode_none": "ऑडियो अक्षम",
 	"live.preview.audioUnavailableReason.no_device": "कोई ऑडियो डिवाइस नहीं",

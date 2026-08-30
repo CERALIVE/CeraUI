@@ -619,6 +619,17 @@ async function handleSelectAudioSource(selection: string) {
 	}
 }
 
+// A source switch can retire (or restore) the device audio pick in its own
+// `setConfig`. `effectiveAudioSource` prefers this override, so without this the
+// picker would keep rendering a pick the device has already replaced.
+function handleAudioSelectionApplied(asrc: string) {
+	audioOverride = {
+		asrc,
+		acodec: effectiveAudioCodec ?? 'aac',
+		delay: effectiveAudioDelay,
+	};
+}
+
 function formatBitrate(kbps: number | undefined): string {
 	if (kbps === undefined || kbps === null) return '—';
 	if (kbps >= 1000) {
@@ -1056,6 +1067,7 @@ const configRows = $derived<ConfigRow[]>([
 			audioStatus={getStatus()}
 			selectedAudioSource={resolvedAudioSource}
 			onSelectAudioSource={handleSelectAudioSource}
+			onAudioSelectionApplied={handleAudioSelectionApplied}
 			onOpenAudioDialog={() => (audioDialogOpen = true)}
 			selectedPipeline={config?.pipeline}
 			capabilities={getCapabilities()}

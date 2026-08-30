@@ -13,6 +13,11 @@
   vanishing: an operator must be able to tell "the meter says nothing is coming in"
   apart from "the meter isn't here".
 
+  It also NAMES the device the bars belong to (`meteredAudioLabel`), so a reading
+  is never an anonymous set of numbers. It therefore reads three subscription
+  getters — `getAudioLevel`, `getConfig` and `getStatus` — and a test that mounts
+  it (directly or through SourceSection/LiveSummaryStrip) must mock all three.
+
   The staleness watchdog keys on CONTENT, not arrival — see
   `audio-meter-liveness.ts` for why a frame landing is not evidence the audio path
   behind it is alive. Its clock is a single deadline re-armed on each genuinely
@@ -35,7 +40,10 @@ import {
 	trackMeterFreshness,
 	trackMeterSelection,
 } from '$lib/components/preview/audio-meter-liveness';
-import { getAudioLevel, getConfig } from '$lib/rpc/subscriptions.svelte';
+import { resolveMessageKey } from '@ceraui/i18n/svelte';
+
+import { getAudioLevel, getConfig, getStatus } from '$lib/rpc/subscriptions.svelte';
+import { meteredAudioLabel, resolveAudioSourceList } from '$lib/streaming/sourceSummary';
 import { cn } from '$lib/utils';
 
 interface Props {
@@ -96,6 +104,19 @@ $effect(() => {
 const pending = $derived(level === undefined);
 const superseded = $derived(isLevelSuperseded(selectionGate, level));
 const dead = $derived(pending || stale || superseded || level?.unavailable === true);
+
+// WHICH device these bars belong to. Only shown while they are real: a retired,
+// stale or unavailable reading has no device to name, and labelling one would be
+// the same "bars under the wrong name" the selection gate exists to prevent.
+const meteredDevice = $derived(
+	dead
+		? undefined
+		: meteredAudioLabel(
+				level?.source?.identity,
+				resolveAudioSourceList(getStatus()?.audio_sources, getStatus()?.asrcs ?? []),
+				resolveMessageKey,
+			),
+);
 </script>
 
 <div
@@ -112,4 +133,12 @@ const dead = $derived(pending || stale || superseded || level?.unavailable === t
 		rmsDb={dead ? [] : (level?.rms_db ?? [])}
 		unavailable={dead}
 	/>
+	{#if meteredDevice !== undefined}
+		<p
+			class="text-muted-foreground truncate pt-0.5 font-mono text-[11px] tracking-wide"
+			data-testid="live-audio-meter-device"
+		>
+			{meteredDevice}
+		</p>
+	{/if}
 </div>

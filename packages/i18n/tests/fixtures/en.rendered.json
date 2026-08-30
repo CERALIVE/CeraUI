@@ -596,6 +596,7 @@
 	"live.preview.audioSilent": "Silent",
 	"live.preview.audioUnavailable": "Meter unavailable",
 	"live.preview.audioUnavailableReason.device_busy": "Audio device busy",
+	"live.preview.audioUnavailableReason.embedded_audio": "Waiting for stream audio",
 	"live.preview.audioUnavailableReason.handoff": "Switching…",
 	"live.preview.audioUnavailableReason.mode_none": "Audio disabled",
 	"live.preview.audioUnavailableReason.no_device": "No audio device",

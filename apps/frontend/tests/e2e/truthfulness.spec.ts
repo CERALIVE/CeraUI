@@ -1327,6 +1327,72 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.getByTestId("audio-source-select")).toHaveCount(0);
 	});
 
+	// ── An ingest source owns no card, in EVERY connection state ────────────────
+	// The operator report this closes, verbatim: "the RTMP & SRT input sources …
+	// try to select other available audio source even if we are not receiving
+	// signal — they should use their own audio, and when they start receiving
+	// signal/streaming, of course use its own metrics."
+	//
+	// The case above proves the embedded state WITH `network_embedded_audio`. That
+	// capability answers whether the ENGINE can ROUTE the muxed track; it says
+	// nothing about whether the SOURCE owns a card, and it is ABSENT from the
+	// engine-starting and engine-unavailable fallback snapshots — so gating the
+	// picker on it handed the operator a list of unrelated microphones on every
+	// engine blip. Walked here as three real connection states in one browser.
+	test("an rtmp/srt ingest never offers a device picker, in any connection state", {
+		annotation: { type: DROP_SERVER_STATUS_ANNOTATION, description: "injects its own audio-level frames" },
+	}, async ({ page }) => {
+		await ensureAuthenticated(page);
+		await navigateTo(page, "live");
+
+		const states: { label: string; caps: Record<string, unknown>; gateway: boolean }[] = [
+			{ label: "gateway up, capability advertised", caps: { network_embedded_audio: true }, gateway: true },
+			{ label: "gateway up, capability ABSENT (engine restarting)", caps: {}, gateway: true },
+			{ label: "gateway DOWN — no publisher can be connected", caps: {}, gateway: false },
+		];
+
+		for (const state of states) {
+			serverConfig({ pipeline: "rtmp", source: "rtmp" });
+			send({ status: { asrcs: ["No audio", "Pipeline default", "USB audio"] } });
+			sendSources([networkSource("rtmp", state.gateway, true)]);
+			sendCapabilities({ audio_live_switch: true, ...state.caps });
+
+			const embedded = page.getByTestId("audio-source-embedded");
+			await expect(embedded, state.label).toBeVisible();
+			await expect(embedded, state.label).toContainText(/embedded/i);
+			// The whole point: no dropdown of other people's microphones.
+			await expect(page.getByTestId("audio-source-select"), state.label).toHaveCount(0);
+			await expect(page.getByTestId("audio-source-readonly"), state.label).toHaveCount(0);
+		}
+
+		// …and the METER says so rather than substituting the idle sidecar's card.
+		// This is the backend's `embedded_audio` gap arriving over the real socket.
+		send({ "audio-level": { unavailable: true, reason: "embedded_audio" } });
+		const gap = page.getByTestId("audio-unavailable").first();
+		await expect(gap).toBeVisible();
+		await expect(gap).toContainText(/waiting for stream audio/i);
+		// A retired reading names no device — labelling one is "bars under the
+		// wrong name" a step quieter.
+		await expect(page.getByTestId("live-audio-meter-device")).toHaveCount(0);
+
+		// Once a publisher connects, cerastream meters the program leg and tags the
+		// level `streaming`; the backend forwards it verbatim, so THOSE bars are the
+		// embedded track. This is the "use its own metrics" half of the report.
+		send({
+			"audio-level": {
+				source: { identity: "card:ingest", owner: "streaming" },
+				channels: 2,
+				rms_db: [-18, -19],
+				peak_db: [-6, -7],
+				floor_db: -1e6,
+			},
+		});
+		const meter = page.getByTestId("audio-level-meter").first();
+		await expect(meter).toHaveAttribute("data-unavailable", "false");
+		await expect(meter).toHaveAttribute("data-channels", "2");
+		await expect(meter).toHaveAttribute("data-silent", "false");
+	});
+
 	// ── An unavailable-but-selected audio device is shown, never re-offered ──────
 	test("the selected audio device the engine no longer reports is listed disabled with a reason, not as a fresh choice", {
 		annotation: {

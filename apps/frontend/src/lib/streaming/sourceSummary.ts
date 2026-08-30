@@ -169,6 +169,26 @@ export function audioSourceLabel(
 }
 
 /**
+ * The name of the device a level is a reading OF, or `undefined` when the engine
+ * named nothing this device lists.
+ *
+ * Joined on `stable_id`, which is what the engine puts in `source.identity`. An
+ * identity it publishes no source row for yields NOTHING — never the raw id,
+ * which would print `card:USB Audio` at an operator.
+ */
+export function meteredAudioLabel(
+	identity: string | undefined,
+	audioSourceEntries: readonly AudioSource[],
+	t: (key: string) => string,
+): string | undefined {
+	if (identity === undefined || identity === "") return undefined;
+	const entry = audioSourceEntries.find(
+		(candidate) => candidate.stable_id === identity,
+	);
+	return entry === undefined ? undefined : audioSourceLabel(entry, t);
+}
+
+/**
  * Resolve a SAVED audio selection (an old asrc-key OR the new `stable_id`) to the
  * matching current entry — the migration shim (device-quality-wave2 Todo 22). A
  * pre-upgrade `config.asrc` (the asrc-key id) keeps resolving after the identity

@@ -593,6 +593,7 @@
 	"live.preview.audioSilent": "무음",
 	"live.preview.audioUnavailable": "미터를 사용할 수 없음",
 	"live.preview.audioUnavailableReason.device_busy": "오디오 장치 사용 중",
+	"live.preview.audioUnavailableReason.embedded_audio": "스트림 오디오 대기 중",
 	"live.preview.audioUnavailableReason.handoff": "전환 중…",
 	"live.preview.audioUnavailableReason.mode_none": "오디오 비활성화",
 	"live.preview.audioUnavailableReason.no_device": "오디오 장치 없음",

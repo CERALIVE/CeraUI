@@ -33,6 +33,12 @@ import {
 	resolveConfiguredAlsaCards,
 	scanAlsaCards,
 } from "./alsa-card-scan.ts";
+import {
+	buildCardAliases,
+	type CardAliases,
+	engineAudioDeviceString,
+	parseProcAsoundPcm,
+} from "./audio-card-vocabulary.ts";
 import { syncAudioMeterPreference } from "./audio-meter-bridge.ts";
 import type {
 	AudioDeviceDisplay,
@@ -51,6 +57,7 @@ import {
 	type AutoAsrcResolution,
 	refreshResolvedAsrcPreview,
 	resolveAutoAsrcFromLiveState,
+	selectedSourceCarriesEmbeddedAudio,
 } from "./auto-audio.ts";
 import {
 	type BluetoothAudioSource,
@@ -67,6 +74,7 @@ import { getStreamingProcesses } from "./streamloop/process-runner.ts";
 
 const deviceDir = setup.sound_device_dir ?? CANONICAL_SOUND_CLASS_DIR;
 const PROC_ASOUND_CARDS = "/proc/asound/cards";
+const PROC_ASOUND_PCM = "/proc/asound/pcm";
 
 const NO_AUDIO_ID = "No audio";
 export const DEFAULT_AUDIO_ID = "Pipeline default";
@@ -200,6 +208,34 @@ export function isMeterSilencedByPick(
 }
 
 /**
+ * Is the IDLE meter looking at a source that owns no card at all?
+ *
+ * `resolveMeterPreference` answers `null` for an rtmp/srt selection — both Auto
+ * rules for a network source name no card — and `null` on the wire means "engine,
+ * choose for yourself". So the engine's idle sidecar opened whatever card it
+ * could and published its real, moving levels while the operator sat on an ingest
+ * source with no stream arriving: the meter reported another device's audio as
+ * the ingest's own. `isForeignCardLevel` could not refuse it either, because it
+ * needs BOTH sides to name a card and a `null` preference names none — the same
+ * compounding shape the resolved-"Auto" defect had.
+ *
+ * The distinction cannot live in the preference (there is no wire value for
+ * "meter nothing"), so it is made here, on the SOURCE, and enforced by the
+ * audio-meter bridge — the `isMeterSilencedByPick` precedent, for a different
+ * gap. FAIL-OPEN on a throw: this runs on every broadcast, and an unresolvable
+ * source must never leave a working meter dead.
+ */
+export function isMeterEmbeddedBySource(
+	embedded: () => boolean = selectedSourceCarriesEmbeddedAudio,
+): boolean {
+	try {
+		return embedded();
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Does this card directory listing expose a CAPTURE PCM substream?
  *
  * ALSA names a card's PCM nodes `pcmC<card>D<device><p|c>`; the `c` suffix IS the
@@ -293,9 +329,21 @@ function toAlsaCaptureDevice(cardId: string): string {
 	return `hw:CARD=${cardId}`;
 }
 
+// The ENGINE reads this string, so it is spelled in the ENGINE's vocabulary
+// (`list-devices` `input_id`). On the ALSA arm that IS `hw:CARD=<kernel card id>`,
+// so this is byte-identical; the PipeWire arm names the card by its ALSA PCM id,
+// where a `hw:CARD=<kernel id>` matches no candidate — the meter ignores the pick
+// and the program leg fails `audio-device-unavailable`.
 function resolveAudioCaptureDevice(asrc: string): string {
 	const target = audioDevices[asrc] ?? getAudioSrcId(asrc);
-	return isBluetoothAudioSourceId(asrc) ? target : toAlsaCaptureDevice(target);
+	if (isBluetoothAudioSourceId(asrc)) return target;
+	const alsaDevice = toAlsaCaptureDevice(target);
+	return engineAudioDeviceString(
+		target,
+		alsaDevice,
+		getEngineAudioDevices(),
+		cardAliases,
+	);
 }
 const BASE_AUDIO_SRC_ALIASES: Readonly<Record<string, string>> = {
 	C4K: "Cam Link 4K",
@@ -352,6 +400,15 @@ addAudioCardById(audioDevices, DEFAULT_AUDIO_ID);
 // picker (the operator picked that PORT, and a signal can arrive at any moment) —
 // only claims about it being able to deliver audio are gated on this set.
 let audioCaptureCardIds: ReadonlySet<string> = new Set();
+
+// Every name this board answers to per card (kernel id + its `/proc/asound/pcm`
+// ids). Rebuilt by the same scan that fills `audioDevices`, so a card present in
+// one is named authoritatively by the other.
+let cardAliases: CardAliases = new Map();
+
+export function getAudioCardAliases(): CardAliases {
+	return cardAliases;
+}
 
 /**
  * Rebuild the picker map from the scanned cards plus the SELECTABLE Bluetooth
@@ -614,7 +671,12 @@ async function resolveAudioDisplaysForTick(
 		const text = await readTextFile(PROC_ASOUND_CARDS);
 		if (text !== undefined) longnames = parseAsoundCards(text);
 	}
-	return resolveAudioDisplays(devices, getEngineAudioDevices(), longnames);
+	return resolveAudioDisplays(
+		devices,
+		getEngineAudioDevices(),
+		longnames,
+		cardAliases,
+	);
 }
 
 /** Re-resolve every audio label/detail and push the `status` audio surface. */
@@ -623,6 +685,7 @@ export async function broadcastAudioSources(): Promise<void> {
 	lastAudioIdentities = resolveAudioIdentities(
 		audioDevices,
 		getEngineAudioDevices(),
+		cardAliases,
 	);
 	rememberAudioIdentities(lastAudioIdentities);
 	broadcastMsg("status", {
@@ -723,6 +786,14 @@ export async function updateAudioDevices(dir?: string) {
 		addAudioCardById(sortedList, id);
 	}
 
+	// Read alongside the card scan so the two vocabularies are always one pass
+	// apart. Unreadable degrades to card-id-only aliases, i.e. the pre-existing
+	// single-name behaviour — never a lost card.
+	cardAliases = buildCardAliases(
+		cards,
+		parseProcAsoundPcm(await readTextFile(PROC_ASOUND_PCM)),
+	);
+
 	scannedAudioCards = sortedList;
 	scannedCaptureCardIds = captureCards;
 	composeAudioDevices();
@@ -731,7 +802,7 @@ export async function updateAudioDevices(dir?: string) {
 	// Migrate BEFORE the lost verdict below: a card that only changed ALSA id is
 	// not lost, and reporting it lost raises a persistent alert nothing can clear.
 	reconcileConfiguredAudioIdentity(
-		resolveAudioIdentities(audioDevices, getEngineAudioDevices()),
+		resolveAudioIdentities(audioDevices, getEngineAudioDevices(), cardAliases),
 	);
 
 	// Lifecycle indicator: the selected audio device vanishing mid-stream keeps
