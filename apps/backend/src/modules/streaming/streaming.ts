@@ -22,7 +22,6 @@ import {
 	AUDIO_SOURCE_AUTO,
 	RIST_TRANSPORT,
 	SRTLA_MIN_LATENCY_MS,
-	streamingConfigInputSchema,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 import {
@@ -53,6 +52,7 @@ import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
 import { noteSourceSelectionWrite } from "./sources.ts";
 import { resolveSrtla } from "./srtla.ts";
+import { mergePersistedStartConfig } from "./start-config-merge.ts";
 import { resolveStreamEndpoint } from "./transport/resolve-endpoint.ts";
 
 export type StartMessage = { start: ConfigParameters };
@@ -229,18 +229,16 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 	return { pipeline, srtlaAddr, srtlaPort, streamid };
 }
 
-export async function updateConfig(params: ConfigParameters) {
+export async function updateConfig(requestedParams: ConfigParameters) {
 	// Every start is a partial update over the persisted stream config. Keep the
 	// merge at this shared seam: UI starts arrive through session.start, while a
 	// set-profile reconnect calls it directly with {}. Parsing through the wire
 	// schema projects only stream fields, so credentials in runtime config can
 	// never ride the applied start object.
-	const requested = { ...params };
-	const persisted = streamingConfigInputSchema.parse(getConfig());
-	if (requested.srtla_addr !== undefined || requested.srtla_port !== undefined)
-		persisted.relay_server = undefined;
-	if (requested.srt_streamid !== undefined) persisted.relay_account = undefined;
-	Object.assign(params, persisted, requested);
+	const params: ConfigParameters = mergePersistedStartConfig(
+		getConfig(),
+		requestedParams,
+	);
 
 	const {
 		pipeline,
