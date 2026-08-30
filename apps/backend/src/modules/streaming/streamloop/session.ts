@@ -97,7 +97,7 @@ export async function start(
 		streamid: string;
 	};
 	try {
-		c = await updateConfig(conn, params);
+		c = await updateConfig(params);
 	} catch (err) {
 		if (typeof err === "string") {
 			startError(conn, err, senderId);
