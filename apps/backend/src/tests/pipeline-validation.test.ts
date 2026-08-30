@@ -155,10 +155,52 @@ describe("validateConfig capability + override rejection", () => {
 		).rejects.toThrow("Pipeline not found");
 	});
 
-	it("rejects a resolution override on a pipeline that does not support it", async () => {
-		await expect(
-			validateConfig({ delay: 0, pipeline: "rtmp", resolution: "1080p" }),
-		).rejects.toThrow("Pipeline does not support resolution override");
+	// Was a rejection until the residue fix. A start carries the WHOLE persisted
+	// config, so an override on a pipeline that cannot honor it is left over from
+	// a previous source and never something the operator typed — the UI does not
+	// offer the axis for an ingest row. Refusing it stranded the operator on a
+	// start that failed naming a field their own source row does not display.
+	it("drops a resolution override the pipeline cannot honor, instead of failing the start", async () => {
+		const params: Record<string, unknown> = {
+			delay: 0,
+			pipeline: "rtmp",
+			resolution: "1080p",
+		};
+
+		await expect(validateConfig(params)).rejects.not.toThrow(
+			"Pipeline does not support",
+		);
+		expect(params).not.toHaveProperty("resolution");
+	});
+
+	// Per-axis, against each axis's OWN flag: this fixture's rtmp refuses a
+	// resolution override and accepts a framerate one, so exactly one is dropped.
+	it("drops only the axis the pipeline cannot honor", async () => {
+		const params: Record<string, unknown> = {
+			delay: 0,
+			pipeline: "rtmp",
+			resolution: "1080p",
+			framerate: 30,
+		};
+
+		await expect(validateConfig(params)).rejects.not.toThrow(
+			"Pipeline does not support",
+		);
+		expect(params).not.toHaveProperty("resolution");
+		expect(params.framerate).toBe(30);
+	});
+
+	it("keeps an override the pipeline DOES honor", async () => {
+		const params: Record<string, unknown> = {
+			delay: 0,
+			pipeline: "camlink",
+			resolution: "1080p",
+		};
+
+		await expect(validateConfig(params)).rejects.not.toThrow(
+			"Pipeline does not support",
+		);
+		expect(params.resolution).toBe("1080p");
 	});
 
 	it("rejects an unknown audio codec", async () => {
