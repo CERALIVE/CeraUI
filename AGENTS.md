@@ -1398,11 +1398,16 @@ connect-phase `start_timeout` so a hung engine call cannot hold the lifecycle sl
 The prior launch must settle after cleanup before backoff is armed; if it does not
 settle within the cleanup bound, `start_cleanup_timeout` is terminal and no later
 attempt is launched.
-Cerastream stop is the deliberate exception to the backend IPC queue: it is sent
-immediately through the active client so cleanup cannot wait behind the launch it
-must interrupt. The client is then closed without waiting for a stop reply; this
-settles pending start/stop requests and releases the serialized queue even when a
-crashed engine can no longer answer.
+Cerastream stop is the deliberate exception to the backend IPC queue: it opens a
+fresh control connection and dispatches `stop` there before closing the session
+client. The engine serves only one request at a time per connection, so reusing the
+session client can leave `stop` unread behind `list-devices` or an in-flight start;
+closing that socket then discards the queued stop while the engine keeps streaming.
+The fresh connection lets CeraUI close the old client to interrupt local pending
+work without withdrawing the engine request. `onStopped` fires only after that
+request answers `state: "idle"`; connect/RPC failure leaves the callback unresolved
+and the orchestrator's 12-second bound returns typed `stop_failed` instead of a
+false success.
 Suppression reads only existing update, engine capability, and boot-uptime signals;
 suppressed attempts remain `starting` and emit no error toast. Structured retry and
 terminal records carry attempt id, phase, class, optional engine code, and retry
