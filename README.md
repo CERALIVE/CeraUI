@@ -45,6 +45,11 @@ A dev-only DevTools destination is available in development builds.
 - **Internationalization**: 10 languages with full RTL support
 - **Touch/kiosk mode**: `?mode=touch` URL flag scales touch targets to 44px minimum
 - **Responsive**: desktop and mobile layouts with a persistent bottom HUD dock on mobile
+- **Acknowledged stream stops**: the backend reports a stop only after cerastream
+  confirms it is idle; an unrelated in-flight engine request cannot swallow Stop
+  while the media session continues in the background. The request and cleanup
+  budgets leave an explicit margin inside the existing 12-second bound, and a
+  late, undispatched connection is closed without sending a stale stop.
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
   switch. Physical-radio validation is still pending; see

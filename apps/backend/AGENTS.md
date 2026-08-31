@@ -8186,6 +8186,28 @@ clears `active` first) are all deliberately NOT proof.
 Net effect: the board lands in a real `idle` and the next `streaming.start` dials
 a fresh connection and succeeds — no `ceralive.service` restart.
 
+**STOP uses a second connection, and success means engine Idle.** The IPC server
+dispatches at most one request per connection. Reusing the session client for
+`stop`, then closing it to interrupt pending work, can leave the stop line unread
+behind `list-devices` or start; the server finishes the first call, fails its reply
+to the closed peer, and exits without dispatching stop. That produced a real board
+state where CeraUI returned `stopped`, the engine kept reconnecting egress, and the
+frame watchdog later aborted it. `CerastreamBackend.stop()` now connects a fresh
+client, dispatches stop there, closes the old session client, awaits the fresh
+client's `state: "idle"` response, closes it, and only then invokes `onStopped`.
+The connect-plus-acknowledgement request gets 6.5 seconds, derived by reserving
+`ENGINE_CLOSE_DEADLINE_MS` (5 seconds) plus
+`ENGINE_STOP_DEADLINE_MARGIN_MS` (0.5 seconds) inside the unchanged 12-second
+orchestrator bound. Expiry fences a connection that has not dispatched: if it
+resolves later, it is closed before `stop()` is called. An already-dispatched but
+unacknowledged stop connection is closed and never invokes the callback, but the
+engine may still finish work already written to that socket; its state is therefore
+unknown, and the orchestrator reports `stop_failed` before reconciliation adopts
+the eventual truth. Coverage:
+`tests/cerastream-stop-ack.test.ts` drives a blocked session request and controls
+the independent stop acknowledgement; `tests/cerastream-stop-deadline.test.ts`
+drives both late-connect and unacknowledged-RPC expiry.
+
 **Scoped OUT, deliberately:** there is no transparent mid-session reconnect that
 resumes the running stream. It is not achievable against this engine — a
 restarted cerastream has no session to resume — and would need engine-side

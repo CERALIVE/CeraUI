@@ -205,11 +205,20 @@ per-attempt launch deadline, AND a total-time budget
   cleanup cannot make it settle within the stop bound, the result is terminal
   `start_cleanup_timeout` and no next attempt launches. A late completion remains
   fenced to that cancelled launch and cannot declare the session started.
-- Engine stop bypasses `CerastreamBackend`'s ordinary IPC queue and uses the active
-  client immediately. This lets deadline cleanup interrupt the in-flight start
-  instead of deadlocking behind it. After dispatching stop, CeraUI closes the
-  client without waiting for a reply; closure settles pending start/stop requests
-  and releases the serialized queue before another generation is admitted.
+- Engine stop bypasses `CerastreamBackend`'s ordinary IPC queue and opens a fresh
+  control connection. The engine accepts one in-flight request per connection, so
+  sending stop on the session client can queue it behind `list-devices` or start;
+  closing that client would then discard the unread request. CeraUI dispatches stop
+  on the fresh connection first, closes the session client to settle its pending
+  work, and reports `stopped` only after the independent request answers
+  `state: "idle"`. The fresh connect plus acknowledgement has a derived
+  6.5-second budget, reserving 5 seconds for socket cleanup and 0.5 seconds for
+  scheduling inside the unchanged 12-second outer bound. If that request budget
+  expires, a connection that resolves later is closed without dispatching `stop`;
+  a pending stop connection is also closed and cannot invoke the completion
+  callback. An already-dispatched request may still settle inside the engine after
+  its client is closed, so its outcome is deliberately UNKNOWN: the caller gets
+  `stop_failed` and reconciliation adopts the engine's eventual truth.
 - A scheduled retry logs `attemptId`, phase, class, engine code when present, and
   retry state. It emits a class-keyed localized warning only outside a suppression
   window. Terminal exhaustion/non-retriable failure emits exactly one keyed error

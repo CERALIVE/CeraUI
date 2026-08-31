@@ -108,6 +108,12 @@ function makeFakeClient(): FakeClient {
 				},
 				sources: [],
 			}),
+		changeConfig: async () =>
+			guard("change-config", {
+				attempt_id: "change-1",
+				phase: "applied" as const,
+				state: "streaming" as const,
+			}),
 		subscribeEvents: async (_params, eventListener) => {
 			calls.push("subscribe-events");
 			listener = eventListener;
@@ -252,8 +258,8 @@ describe("engine restart mid-session — the session control connection is the s
 		liveSession(h).killConnection();
 		await expect(h.backend.listDevicesIfActive()).resolves.toBeNull();
 
-		// The operator's recovery path: stop, then start. Both must work against an
-		// engine CeraUI can no longer reach through the retired client.
+		// The operator's recovery path: stop on an independent connection, then
+		// start on another. Neither may reuse the retired session client.
 		await new Promise<void>((resolve) => {
 			h.backend.stop(resolve);
 		});
@@ -262,8 +268,11 @@ describe("engine restart mid-session — the session control connection is the s
 		await h.backend.start(STREAM_CONFIG, RUN_OPTS);
 		await h.backend.settle();
 
-		expect(h.connectCount()).toBe(2);
-		const revived = h.clients[1];
+		expect(h.connectCount()).toBe(3);
+		const stopClient = h.clients[1];
+		expect(stopClient?.calls).toContain("stop");
+		expect(stopClient?.calls).not.toContain("start");
+		const revived = h.clients[2];
 		expect(revived?.calls).toContain("start");
 		await expect(
 			h.backend.switchInput({ input_id: "cam2", mode: "manual" }),
