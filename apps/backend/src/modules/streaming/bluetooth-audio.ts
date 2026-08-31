@@ -20,29 +20,32 @@
  * Bluetooth microphones as selectable audio sources.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE PRESENCE ORACLE IS THE BlueALSA CAPTURE PCM, NEVER BlueZ `Connected`
+ * THE PRESENCE ORACLE FOLLOWS THE ENGINE AUDIO BACKEND; NEVER BlueZ `Connected`
  * ─────────────────────────────────────────────────────────────────────────────
  *
  * `org.bluez.Device1.Connected` says a link exists. It does NOT say the board
  * can open a microphone: a headset connects over A2DP alone, a SCO transport is
- * negotiated separately, and `bluealsad` may not be running at all. So a row is
- * published ONLY when `org.bluealsa` exports a capture PCM object for it —
- * exactly the object `alsasrc device=bluealsa:...` will go on to open. The BlueZ
- * registry contributes two things and nothing else: the operator-facing name,
- * and the `scoCapable` UUID verdict that keeps an A2DP-source-only phone (todo
- * 12's forcing case) from ever being offered a `PROFILE=sco` row whose every
- * open would fail.
+ * negotiated separately, and `bluealsad` may not be running at all. With
+ * `pipewire-capture`, a matching engine audio node is the oracle: its
+ * `device_address` is matched to the registry MAC and its `input_id` becomes
+ * the capture target. The BlueALSA bus is not consulted on that path. Without
+ * that feature, a row is published only when `org.bluealsa` exports a capture
+ * PCM object for it — exactly the object `alsasrc device=bluealsa:...` opens.
+ * The BlueZ registry contributes the operator-facing name and `scoCapable`
+ * UUID verdict, which keeps an A2DP-source-only phone from being offered a
+ * `PROFILE=sco` row whose every open would fail.
  *
  * The same asymmetry governs FAILURE: the registry's connection state ENRICHES
  * the probe's message so an operator is told which device is missing and whether
  * BlueZ still sees it, but it can never SATISFY the probe.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * THE WHOLE AFFORDANCE IS GATED ON THE ENGINE'S `audio-pcm-spec` FEATURE
+ * THE LEGACY BLUEALSA AFFORDANCE IS GATED ON `audio-pcm-spec`
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * A BlueALSA address is an OPAQUE plugin PCM, not a card. An engine that predates
- * todo 4 resolves `audio.device` through its card registry, so it would answer a
+ * On the legacy arm, a BlueALSA address is an OPAQUE plugin PCM, not a card.
+ * An engine that predates todo 4 resolves `audio.device` through its card
+ * registry, so it would answer a
  * `bluealsa:` string with a card lookup that finds nothing — a start that fails
  * at the leg, seconds after the operator committed. `features` is cerastream's
  * own fail-closed negotiation contract, so the row is rendered DISABLED with the
