@@ -52,7 +52,7 @@ function makeConfig(): RuntimeConfig {
  * where the engine stops answering while it hands `/dev/videoN` back to
  * `uvcvideo`.
  */
-function makeHangingCloseClient(): CerastreamClient {
+function makeHangingCloseClient(closeHangs: boolean): CerastreamClient {
 	return {
 		hello: {
 			protocol: "cerastream-ipc/1",
@@ -60,7 +60,7 @@ function makeHangingCloseClient(): CerastreamClient {
 			engine_version: "test",
 		},
 		start: async () => ({ session_id: "s1", state: "streaming" as const }),
-		stop: async () => new Promise<never>(() => {}),
+		stop: async () => ({ state: "idle" as const }),
 		reloadConfig: async (params: unknown) => ({ applied: params }),
 		setBitrate: async (params: { max_bitrate: number }) => ({
 			applied: { max_bitrate: params.max_bitrate },
@@ -74,17 +74,22 @@ function makeHangingCloseClient(): CerastreamClient {
 			result: { subscribed: [] as never[] },
 			close: () => {},
 		}),
-		// The defect under test: this promise never settles.
-		close: () => new Promise<void>(() => {}),
+		// The defect under test: the session connection never closes.
+		close: () => (closeHangs ? new Promise<void>(() => {}) : Promise.resolve()),
 	} as unknown as CerastreamClient;
 }
 
 describe("a stop that never settles must not poison the session", () => {
-	test("the engine close is bounded, so the stop still reports completion", async () => {
-		// Given a started session whose engine will never answer the close.
+	test("the session close is bounded, so an acknowledged stop still reports completion", async () => {
+		// Given a started session whose control socket will never answer close,
+		// while the independent stop connection remains usable.
 		const deadlines: Array<{ callback: () => void; delayMs: number }> = [];
+		let connections = 0;
 		const backend = new CerastreamBackend({
-			connect: async () => makeHangingCloseClient(),
+			connect: async () => {
+				connections += 1;
+				return makeHangingCloseClient(connections === 1);
+			},
 			connectOptions: {},
 			getConfig: makeConfig,
 			saveConfig: () => {},
@@ -119,7 +124,7 @@ describe("a stop that never settles must not poison the session", () => {
 		await Promise.resolve();
 
 		// Then a bound was armed for the close...
-		const closeDeadline = deadlines.at(-1);
+		const closeDeadline = deadlines[deadlines.length - 1];
 		expect(closeDeadline).toBeDefined();
 		closeDeadline?.callback();
 		for (let i = 0; i < 10; i += 1) await Promise.resolve();

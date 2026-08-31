@@ -673,7 +673,7 @@ export class CerastreamBackend implements StreamingBackend {
 	// so a blind remove-by-name would retract whichever error happens to be
 	// standing rather than the one the recovery signal actually falsifies.
 	private standingEngineError: ResolvedCerastreamError | undefined;
-	// Serializes non-stop IPC ops; stop interrupts a pending start through its client.
+	// Serializes non-stop IPC ops; stop uses a fresh client so this queue cannot hide it.
 	private queue: Promise<void> = Promise.resolve();
 	private interrupt: Promise<void> = Promise.resolve();
 
@@ -803,10 +803,10 @@ export class CerastreamBackend implements StreamingBackend {
 	// A close that never answers is no more informative than one that rejects —
 	// which this path already treats as "proceed" — so bound it and let the stop
 	// complete either way rather than stranding the session.
-	private closeWithinDeadline(
+	private async closeWithinDeadline(
 		client: CerastreamClient | undefined,
 	): Promise<void> {
-		if (client === undefined) return Promise.resolve();
+		if (client === undefined) return;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const bound = new Promise<void>((resolve) => {
 			timer = this.deps.scheduleTimeout(() => {
@@ -817,9 +817,18 @@ export class CerastreamBackend implements StreamingBackend {
 				resolve();
 			}, ENGINE_CLOSE_DEADLINE_MS);
 		});
-		return Promise.race([client.close(), bound]).finally(() => {
+		try {
+			await Promise.race([
+				client.close().catch((error: unknown) => {
+					this.deps.logger.debug("cerastream: control socket already closing", {
+						error,
+					});
+				}),
+				bound,
+			]);
+		} finally {
 			if (timer !== undefined) this.deps.cancelTimeout(timer);
-		});
+		}
 	}
 
 	stop(onStopped: () => void): boolean {
@@ -837,20 +846,20 @@ export class CerastreamBackend implements StreamingBackend {
 		const subscription = this.subscription;
 		const operation = (async () => {
 			subscription?.close();
-			void client?.stop().catch((error) => {
-				this.deps.logger.debug("cerastream: stop request interrupted", {
-					error,
-				});
-			});
+			let stopClient: CerastreamClient | undefined;
+			let sessionCloseStarted = false;
 			try {
-				await this.closeWithinDeadline(client);
-			} catch {
-				// already closing
+				stopClient = await this.deps.connect(this.deps.connectOptions);
+				const stopConfirmation = stopClient.stop();
+				sessionCloseStarted = true;
+				await Promise.all([stopConfirmation, this.closeWithinDeadline(client)]);
 			} finally {
+				if (!sessionCloseStarted) await this.closeWithinDeadline(client);
+				if (stopClient !== client) await this.closeWithinDeadline(stopClient);
 				if (this.client === client) this.client = undefined;
 				if (this.subscription === subscription) this.subscription = undefined;
-				onStopped();
 			}
+			onStopped();
 		})();
 		this.interrupt = operation.catch((error) =>
 			this.handleOpFailure("stop", error),

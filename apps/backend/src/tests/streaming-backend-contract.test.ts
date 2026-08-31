@@ -158,6 +158,14 @@ function makeFakeClient(options: FakeClientOptions = {}): FakeClientHarness {
 			},
 			sources: [],
 		}),
+		changeConfig: async (params) => {
+			calls.push({ op: "change-config", params });
+			return {
+				attempt_id: "change-1",
+				phase: "applied",
+				state: "streaming",
+			};
+		},
 		subscribeEvents: async (params, eventListener) => {
 			calls.push({ op: "subscribe-events", params });
 			listener = eventListener;
@@ -510,28 +518,20 @@ describe("CerastreamBackend behavioural contract", () => {
 		});
 		const deadOps = dead.calls.map(({ op }) => op);
 		expect(deadOps.filter((op) => op === "start")).toHaveLength(1);
-		expect(deadOps.filter((op) => op === "stop")).toHaveLength(2);
+		expect(deadOps.filter((op) => op === "stop")).toHaveLength(1);
 		expect(deadOps.filter((op) => op === "close")).toHaveLength(2);
 		expect(deadOps.filter((op) => op === "unsubscribe")).toHaveLength(2);
 
-		// A second owner must reach the recovered connect path and terminate; it
-		// must not park behind generation one's dead queue and make a third RPC busy.
-		const second = orchestrator.start({ origin: "ui", launch });
-		for (let tick = 0; tick < 10; tick += 1) await Bun.sleep(0);
-		expect(await second).toMatchObject({ result: "failed" });
-		expect(streaming).toBe(false);
-		expect(orchestrator.snapshot()).toEqual({
-			state: "idle",
-			generation: 2,
-		});
-		const third = await orchestrator.start({ origin: "ui", launch });
-		expect(third).toMatchObject({ result: "started" });
-		expect(connections).toBe(3);
+		// A second owner must reach the recovered connect path and start; it must
+		// not park behind generation one's dead queue or need a third launch.
+		const second = await orchestrator.start({ origin: "ui", launch });
+		expect(second).toMatchObject({ result: "started" });
 		expect(streaming).toBe(true);
 		expect(orchestrator.snapshot()).toEqual({
 			state: "streaming",
-			generation: 3,
+			generation: 2,
 		});
+		expect(connections).toBe(3);
 
 		await orchestrator.stop("operator");
 		await backend.settle();
