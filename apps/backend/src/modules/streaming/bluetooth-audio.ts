@@ -283,12 +283,12 @@ export interface DeriveBluetoothAudioSourcesInput {
 }
 
 /**
- * Fold the BlueZ registry and the BlueALSA PCM objects into source rows.
+ * Fold the BlueZ registry into backend-specific capture source rows.
  *
- * A row requires ALL THREE of connected, `scoCapable`, and a live capture PCM.
- * The PCM is the presence oracle, so a device the registry never mentioned
- * yields nothing — a PCM CeraUI cannot name is one it cannot label honestly, and
- * an unnamed microphone in the picker is worse than none.
+ * PipeWire rows require a connected SCO-capable BlueZ device and an engine audio
+ * node with the same `device_address`; BlueALSA is not consulted. Legacy rows
+ * instead require that device plus a live BlueALSA capture PCM. In either case,
+ * a capture endpoint CeraUI cannot name is not shown in the picker.
  */
 export function deriveBluetoothAudioSources(
 	input: DeriveBluetoothAudioSourcesInput,
@@ -460,7 +460,7 @@ function defaultEngineSupportsPipewireCapture(): boolean {
 }
 
 /**
- * Re-read the BlueALSA PCM objects and rebuild the cached source list.
+ * Re-read the selected backend's source-presence data and rebuild the cached list.
  *
  * Answers whether the published list CHANGED, so the caller can keep the audio
  * broadcast on its on-change cadence. Never throws.
@@ -522,7 +522,7 @@ export function findBluetoothAudioSource(
  *
  * The probe's failure detail reads this so an operator learns WHICH microphone
  * is missing and whether BlueZ still sees it at all. It can never make a device
- * present — only the capture PCM does that.
+ * present — the selected backend's matching capture endpoint does that.
  */
 export function describeBluetoothAudioTarget(
 	id: string,
