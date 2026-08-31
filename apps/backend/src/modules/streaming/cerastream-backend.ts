@@ -134,7 +134,10 @@ import {
 	type LaunchTransaction,
 } from "./launch-transaction.ts";
 import { asRawRequestClient } from "./raw-request.ts";
-import { ENGINE_CLOSE_DEADLINE_MS } from "./start-lifecycle-timing.ts";
+import {
+	ENGINE_CLOSE_DEADLINE_MS,
+	ENGINE_STOP_REQUEST_DEADLINE_MS,
+} from "./start-lifecycle-timing.ts";
 import type {
 	BackendErrorListener,
 	BitrateParams,
@@ -831,6 +834,46 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 	}
 
+	private async stopOnFreshConnection(
+		sessionClient: CerastreamClient | undefined,
+	): Promise<void> {
+		let deadlineExpired = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		let stopClient: CerastreamClient | undefined;
+		let sessionClose: Promise<void> | undefined;
+		const request = (async () => {
+			const candidate = await this.deps.connect(this.deps.connectOptions);
+			if (deadlineExpired) {
+				await this.closeWithinDeadline(candidate);
+				throw new Error("stop_timeout");
+			}
+			stopClient = candidate;
+			const confirmation = candidate.stop();
+			sessionClose = this.closeWithinDeadline(sessionClient);
+			await confirmation;
+		})();
+		const deadline = new Promise<never>((_resolve, reject) => {
+			timer = this.deps.scheduleTimeout(() => {
+				deadlineExpired = true;
+				reject(new Error("stop_timeout"));
+			}, ENGINE_STOP_REQUEST_DEADLINE_MS);
+		});
+
+		try {
+			await Promise.race([request, deadline]);
+		} finally {
+			if (timer !== undefined) this.deps.cancelTimeout(timer);
+			const closeSession =
+				sessionClose ?? this.closeWithinDeadline(sessionClient);
+			await Promise.all([
+				closeSession,
+				stopClient === sessionClient
+					? Promise.resolve()
+					: this.closeWithinDeadline(stopClient),
+			]);
+		}
+	}
+
 	stop(onStopped: () => void): boolean {
 		if (!this.active) return false;
 		this.active = false;
@@ -846,16 +889,9 @@ export class CerastreamBackend implements StreamingBackend {
 		const subscription = this.subscription;
 		const operation = (async () => {
 			subscription?.close();
-			let stopClient: CerastreamClient | undefined;
-			let sessionCloseStarted = false;
 			try {
-				stopClient = await this.deps.connect(this.deps.connectOptions);
-				const stopConfirmation = stopClient.stop();
-				sessionCloseStarted = true;
-				await Promise.all([stopConfirmation, this.closeWithinDeadline(client)]);
+				await this.stopOnFreshConnection(client);
 			} finally {
-				if (!sessionCloseStarted) await this.closeWithinDeadline(client);
-				if (stopClient !== client) await this.closeWithinDeadline(stopClient);
 				if (this.client === client) this.client = undefined;
 				if (this.subscription === subscription) this.subscription = undefined;
 			}
