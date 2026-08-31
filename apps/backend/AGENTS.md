@@ -8195,10 +8195,15 @@ state where CeraUI returned `stopped`, the engine kept reconnecting egress, and 
 frame watchdog later aborted it. `CerastreamBackend.stop()` now connects a fresh
 client, dispatches stop there, closes the old session client, awaits the fresh
 client's `state: "idle"` response, closes it, and only then invokes `onStopped`.
-Failure never invokes the callback, so the orchestrator's stop deadline reports
-`stop_failed` instead of claiming teardown. Coverage:
+The connect-plus-acknowledgement request gets 7 seconds, derived by reserving
+`ENGINE_CLOSE_DEADLINE_MS` (5 seconds) inside the unchanged 12-second orchestrator
+bound. Expiry fences the request: a connection that resolves later is closed before
+it can dispatch, while an already-dispatched but unacknowledged stop connection is
+closed. Failure never invokes the callback, so no late operation can mutate the
+engine after the orchestrator reports `stop_failed`. Coverage:
 `tests/cerastream-stop-ack.test.ts` drives a blocked session request and controls
-the independent stop acknowledgement.
+the independent stop acknowledgement; `tests/cerastream-stop-deadline.test.ts`
+drives both late-connect and unacknowledged-RPC expiry.
 
 **Scoped OUT, deliberately:** there is no transparent mid-session reconnect that
 resumes the running stream. It is not achievable against this engine — a
