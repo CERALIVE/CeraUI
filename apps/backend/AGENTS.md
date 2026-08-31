@@ -656,11 +656,57 @@ available and rejected for exactly that reason. An unreadable `/proc/asound/pcm`
 degrades to card-id-only aliases, i.e. the pre-existing single-name behaviour, and
 never loses a card.
 
+**…AND IT IS UNAMBIGUOUS, WHICH IS A SECOND PROPERTY, NOT A RESTATEMENT.** A PCM
+id is NOT unique: two identical-model USB sound cards enumerate as two kernel card
+ids (`snd_usb_audio` suffixes the second) and BOTH report the generic PCM id
+`USB Audio`, so that name is a real alias of two different cards. The first
+implementation resolved a name by taking the first card that claimed it — a
+`.find()` in `engineAudioDeviceForCard` and a first-match loop in
+`canonicalCardId` — so on the PipeWire arm, where the join key IS the PCM id,
+selecting the SECOND unit routed to the FIRST unit's engine node, and the second
+unit's OWN meter reading was then classified `foreign` and suppressed. Both halves
+came from one ambiguous lookup, and both contradicted this module's own
+"deterministic, never fuzzy" contract.
+
+`buildCardAliasOwners(aliases)` is the reverse index that closes it: every name
+this board answers to, mapped to the ONE card that owns it, or `null` when more
+than one does. Four rules are load-bearing:
+
+- **A shared name identifies NOBODY**, not the first claimant. `engineAudioDeviceForCard`
+  returns no match for either twin, so `engineAudioDeviceString` falls back to the
+  caller's own `hw:CARD=<kernel id>` through the UNCHANGED fail-soft path — a
+  translation nobody can vouch for is still never invented.
+- **On the meter side ambiguity is `unknown`, never `foreign`.** `canonicalCardId`
+  answers `undefined` for a shared name, and `classifyMeterIdentity`'s existing
+  tri-state then reports `unknown` — which proves nothing and SUPPRESSES nothing.
+  `foreign` is a positive claim of misidentification and would silence the very
+  device the operator picked; the two are different operator facts and collapsing
+  them is the defect.
+- **A KERNEL CARD ID still resolves, always.** It is unique by construction, so
+  `ownerOfName` checks it first and each twin keeps its own identity — which is
+  why an ALSA-arm engine (whose join key IS the kernel id) resolves both twins
+  correctly and is byte-unchanged.
+- **The card-id-only degrade is preserved by an EXPLICIT branch.**
+  `engineAudioDeviceForCard` short-circuits on `key === cardId` before consulting
+  the index, because an unreadable `/proc/asound/pcm` yields an alias table that
+  cannot answer for any card. It looks redundant with the index and is not:
+  removing it reddens 13 tests across three files (`audio-naming`,
+  `audio-device-naming-cleanup`, `audio-naming-pipewire-arm`).
+
+`isAliasOfCard` is deliberately NOT routed through the index — it is a MEMBERSHIP
+test ("is this string one of the names for this card"), used by `isHumanAudioName`
+to REJECT a non-human display name, and rejecting a shared generic name for both
+twins is exactly right.
+
 Coverage: `tests/audio-card-vocabulary.test.ts` (the parser against the board's own
 verbatim `/proc/asound/pcm`, the alias build, both canonicalisation directions, the
-translation with its ALSA byte-identical and engine-silent controls, and the
-tri-state matrix) + the retargeted `tests/audio-meter-bridge.test.ts` cases. Rule-E
-proof: restoring the bare-string comparison reddens 4 tests across the two files.
+translation with its ALSA byte-identical and engine-silent controls, the tri-state
+matrix, and the twin-card describe: the second twin never routed to the first, the
+fallback it falls to, `unknown`-not-`foreign` on the shared alias, each twin still
+answering to its own kernel id, the ALSA-arm control, and the unique-alias control)
++ the retargeted `tests/audio-meter-bridge.test.ts` cases. Rule-E proof both ways:
+restoring the bare-string comparison reddens 4 tests across the two files, and
+restoring the first-match lookup reddens the 3 twin cases.
 
 **It is a PREFERENCE, not a pin — and the engine is what guarantees that.** cerastream
 only moves the named card to the head of its candidate list; its delivery-confirmation
@@ -8818,6 +8864,8 @@ config, an anchored path still held by its own device, and a live row with no
   SOFTWARE-UPDATE CHECK CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
+- Don't resolve an ALSA name to a card by taking the FIRST card that claims it — a PCM id is not unique, so two identical-model USB cards both answer to `USB Audio` and a first-match lookup routes the second unit to the first unit's engine node and then suppresses the second unit's own meter reading as `foreign`. Go through `buildCardAliasOwners`, which answers nothing for a shared name. And don't "fix" the resulting silence by falling back to the first claimant, by collapsing the ambiguous case into `foreign` (that is a positive claim of misidentification, where `unknown` is the honest one), or by deleting `engineAudioDeviceForCard`'s `key === cardId` short-circuit — it looks redundant with the index and is the card-id-only degrade an unreadable `/proc/asound/pcm` lands on.
+- Don't route `isAliasOfCard` through the owner index — it is a MEMBERSHIP test feeding `isHumanAudioName`'s rejection rule, and a generic name shared by two cards must be rejected for both.
 - Don't equate "the card is in `audioDevices`" with "the card can deliver audio" — a permanently-enumerated input with no capture PCM (idle HDMI-RX) is genuinely `no_device`, not `not_selected_device`. Gate presence on `audioCaptureCardIds`/`hasCapturePcmNode`, and don't "simplify" that by filtering the card out of the picker instead.
 - Don't identify the HDMI-RX audio card by ONE card id — the vendor 6.1 BSP calls it `rockchiphdmiin` and mainline/edge 7.1 calls the same physical port `hdmirx`, so a single hardcoded string makes rule 3 miss, fall through in silence, and never bind HDMI audio at all on the other kernel (board-proven: that card captures real, non-silent audio). Add every spelling to `HDMI_CARD_IDS` and to `ONBOARD_AUDIO_DISPLAY_RULES`, keep the first-enumerated-wins ordering, and ask the capture gate about the spelling that MATCHED. Don't "generalise" it into "bind whichever card can capture" either — that answers capability, not identity, and would hand an HDMI source somebody else's microphone. And don't add the second id to `RK3588_AUDIO_SRC_ALIASES`: that table is inverted by `getAudioSrcReverseAliases()`, so two ids under one label break the vendor board's `getAudioSrcId("HDMI")`.
 - Don't let Auto rule 3/4 bind their FIXED card on enumeration alone — that is the same "listed ≠ recordable" confusion one layer up, and it made every `asrc: "Auto"` start on the board's HDMI source die `audio-device-unavailable … not_retriable` even with a locked signal. Pass `captureCapableCardIds` and refuse with `no-capture-audio`. Keep the refusal FAIL-OPEN (an absent set binds exactly as before), keep it resolving to the `"No audio"` pseudo-source rather than a `null` asrcKey (a `null` OMITS `asrc` and hands the engine its legacy inference over the port that cannot deliver), and don't extend the gate to rule 5 — its candidates already come from the engine's `list-devices`, which never lists a capture-less card.

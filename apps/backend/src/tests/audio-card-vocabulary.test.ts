@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CardAliases } from "../modules/streaming/audio-card-vocabulary.ts";
 import {
 	buildCardAliases,
+	buildCardAliasOwners,
 	canonicalCardId,
 	classifyMeterIdentity,
 	engineAudioDeviceForCard,
@@ -221,6 +222,129 @@ describe("classifyMeterIdentity — suppress only what is PROVEN foreign", () =>
 		);
 		expect(classifyMeterIdentity("usbaudio", "hdmirx", new Map())).toBe(
 			"unknown",
+		);
+	});
+});
+
+// TWO identical-model USB sound cards. The kernel gives each its own card id
+// (`snd_usb_audio` suffixes the second), and BOTH report the generic PCM id
+// `USB Audio` — so that name is a real alias of two different cards.
+const TWIN_PROC_ASOUND_PCM = `01-00: USB Audio : USB Audio : capture 1
+02-00: USB Audio : USB Audio : capture 1
+`;
+
+const TWIN_CARDS = [
+	{ index: 1, id: "usbaudio" },
+	{ index: 2, id: "usbaudio_1" },
+];
+
+// The PipeWire arm resolves BOTH nodes' join key to that same PCM id.
+const TWIN_ENGINE_AUDIO: EngineAudioDevice[] = [
+	{
+		input_id: "alsa_input.usb-first",
+		alsa_card_id: "USB Audio",
+		stable_id: "node.first",
+	},
+	{
+		input_id: "alsa_input.usb-second",
+		alsa_card_id: "USB Audio",
+		stable_id: "node.second",
+	},
+];
+
+function twinAliases(): CardAliases {
+	return buildCardAliases(TWIN_CARDS, parseProcAsoundPcm(TWIN_PROC_ASOUND_PCM));
+}
+
+describe("an AMBIGUOUS alias identifies nobody", () => {
+	test("the reverse index records the collision instead of a winner", () => {
+		const owners = buildCardAliasOwners(twinAliases());
+		expect(owners.get("USB Audio")).toBeNull();
+		expect(owners.get("usbaudio")).toBe("usbaudio");
+		expect(owners.get("usbaudio_1")).toBe("usbaudio_1");
+		expect(buildCardAliasOwners(boardAliases()).get("USB Audio")).toBe(
+			"usbaudio",
+		);
+	});
+
+	test("the SECOND twin is never routed to the FIRST one's engine row", () => {
+		const aliases = twinAliases();
+		// The defect: `USB Audio` is an alias of BOTH cards, so a first-match
+		// lookup answered the second card with the first card's node.
+		expect(
+			engineAudioDeviceForCard("usbaudio_1", TWIN_ENGINE_AUDIO, aliases),
+		).toBeUndefined();
+		// …and it must not silently claim the first card either — the shared name
+		// proves nothing about which unit the engine is describing.
+		expect(
+			engineAudioDeviceForCard("usbaudio", TWIN_ENGINE_AUDIO, aliases),
+		).toBeUndefined();
+	});
+
+	test("the unresolved card falls back to the caller's own device string", () => {
+		const aliases = twinAliases();
+		expect(
+			engineAudioDeviceString(
+				"usbaudio_1",
+				"hw:CARD=usbaudio_1",
+				TWIN_ENGINE_AUDIO,
+				aliases,
+			),
+		).toBe("hw:CARD=usbaudio_1");
+	});
+
+	test("a meter reading on the shared alias is UNKNOWN, never foreign", () => {
+		const aliases = twinAliases();
+		// `foreign` asserts a mismatch this board cannot prove and SUPPRESSES the
+		// reading; `unknown` is the honest verdict for a genuinely ambiguous name.
+		expect(classifyMeterIdentity("usbaudio_1", "USB Audio", aliases)).toBe(
+			"unknown",
+		);
+		expect(classifyMeterIdentity("USB Audio", "usbaudio_1", aliases)).toBe(
+			"unknown",
+		);
+		expect(canonicalCardId("USB Audio", aliases)).toBeUndefined();
+	});
+
+	test("each twin still answers to its OWN kernel card id", () => {
+		const aliases = twinAliases();
+		expect(canonicalCardId("usbaudio_1", aliases)).toBe("usbaudio_1");
+		expect(classifyMeterIdentity("usbaudio_1", "usbaudio_1", aliases)).toBe(
+			"match",
+		);
+		// Two DIFFERENT kernel ids are still provably foreign.
+		expect(classifyMeterIdentity("usbaudio", "usbaudio_1", aliases)).toBe(
+			"foreign",
+		);
+	});
+
+	test("an ALSA-arm engine names the twins apart, so both still resolve", () => {
+		const aliases = twinAliases();
+		const alsaArm: EngineAudioDevice[] = [
+			{ input_id: "hw:CARD=usbaudio", alsa_card_id: "usbaudio" },
+			{ input_id: "hw:CARD=usbaudio_1", alsa_card_id: "usbaudio_1" },
+		];
+		expect(
+			engineAudioDeviceForCard("usbaudio", alsaArm, aliases)?.input_id,
+		).toBe("hw:CARD=usbaudio");
+		expect(
+			engineAudioDeviceForCard("usbaudio_1", alsaArm, aliases)?.input_id,
+		).toBe("hw:CARD=usbaudio_1");
+	});
+
+	test("a genuinely UNIQUE alias is unaffected — the board's own case", () => {
+		const aliases = boardAliases();
+		expect(canonicalCardId("USB Audio", aliases)).toBe("usbaudio");
+		expect(
+			engineAudioDeviceForCard("usbaudio", BOARD_ENGINE_AUDIO, aliases)
+				?.stable_id,
+		).toBe("card:USB Audio");
+		expect(
+			engineAudioDeviceForCard("hdmirx", BOARD_ENGINE_AUDIO, aliases)
+				?.stable_id,
+		).toBe("card:fddf8000.i2s-i2s-hifi i2s-hifi-0");
+		expect(classifyMeterIdentity("usbaudio", "USB Audio", aliases)).toBe(
+			"match",
 		);
 	});
 });

@@ -44,6 +44,13 @@
 // CARD INDEX, and `/sys/class/sound/cardN` gives that same index its card id. No
 // name similarity, no prefix matching, no vendor table.
 //
+// It is also UNAMBIGUOUS, and that is a second property rather than a
+// restatement of the first. A PCM id is not unique — two identical-model USB
+// cards both report `USB Audio` — so a name resolves to a card only when exactly
+// ONE card owns it. A shared name identifies nobody and is answered with nothing,
+// because the alternative is picking whichever card was scanned first and
+// attributing one device's audio to another's.
+//
 // Everything here is pure so the whole rule is testable with no sysfs and no
 // engine.
 
@@ -112,7 +119,13 @@ export function buildCardAliases(
 	return aliases;
 }
 
-/** Is `name` one of the names this board uses for `cardId`? */
+/**
+ * Is `name` one of the names this board uses for `cardId`?
+ *
+ * MEMBERSHIP, not identity: several cards can answer to one name (see
+ * `buildCardAliasOwners`), so this must never be used to decide WHICH card a
+ * name refers to.
+ */
 export function isAliasOfCard(
 	cardId: string,
 	name: string,
@@ -123,21 +136,66 @@ export function isAliasOfCard(
 }
 
 /**
+ * The reverse index: each name this board answers to, mapped to the ONE card
+ * that owns it — or `null` when more than one does.
+ *
+ * A PCM id is NOT unique. Two identical-model USB sound cards both report the
+ * generic `USB Audio`, so that name names a PAIR; resolving it to whichever card
+ * happens to come first attributes the second device to the first one's identity.
+ * Recording the collision as `null` is what lets every consumer refuse instead.
+ */
+export function buildCardAliasOwners(
+	aliases: CardAliases,
+): ReadonlyMap<string, string | null> {
+	const owners = new Map<string, string | null>();
+	for (const [cardId, names] of aliases) {
+		for (const name of names) {
+			owners.set(name, owners.has(name) ? null : cardId);
+		}
+	}
+	return owners;
+}
+
+/**
+ * The card `name` PROVABLY refers to, or `undefined` when nothing does — which
+ * covers both a name from no known vocabulary and a name several cards share.
+ *
+ * A kernel card id is checked first because it is unique by construction, so it
+ * still identifies its own card even where some other card's PCM id collides
+ * with it.
+ */
+function ownerOfName(
+	name: string,
+	aliases: CardAliases,
+	owners: ReadonlyMap<string, string | null>,
+): string | undefined {
+	if (aliases.has(name)) return name;
+	return owners.get(name) ?? undefined;
+}
+
+/**
  * The engine's OWN audio row for a card CeraUI names `cardId`, or `undefined`
  * when the engine lists nothing this board would call that card.
  *
- * Matched on `alsa_card_id` against the card's alias set, so the kernel id (the
+ * Matched on `alsa_card_id` through the reverse index, so the kernel id (the
  * ALSA arm) and the PCM id (the PipeWire arm) both resolve — and neither is
- * guessed at.
+ * guessed at. A row whose key names SEVERAL cards matches none of them: on the
+ * PipeWire arm two identical USB cards share one PCM id, and answering either
+ * with the first row would hand the second device the first one's identity.
  */
 export function engineAudioDeviceForCard(
 	cardId: string,
 	engineAudio: readonly EngineAudioDevice[],
 	aliases: CardAliases,
 ): EngineAudioDevice | undefined {
+	const owners = buildCardAliasOwners(aliases);
 	return engineAudio.find((device) => {
 		const key = device.alsa_card_id;
-		return key !== undefined && isAliasOfCard(cardId, key, aliases);
+		if (key === undefined) return false;
+		// A card's own kernel id identifies it with no vocabulary at all, which is
+		// what a board with an unreadable `/proc/asound/pcm` degrades to.
+		if (key === cardId) return true;
+		return ownerOfName(key, aliases, owners) === cardId;
 	});
 }
 
@@ -181,17 +239,20 @@ export type MeterIdentityVerdict = "match" | "foreign" | "unknown";
 /**
  * The card this board files `name` under, whichever of its vocabularies `name` is
  * drawn from — or `undefined` when it belongs to none of them (an opaque
- * `bluealsa:` PCM, an engine that named something this scan has never seen).
+ * `bluealsa:` PCM, an engine that named something this scan has never seen) and
+ * equally when it belongs to SEVERAL of them.
+ *
+ * That second case is why the answer is not merely "the first card that claims
+ * it": a shared PCM id canonicalises to nothing, so `classifyMeterIdentity`
+ * reports `unknown` — which proves nothing and suppresses nothing — instead of
+ * asserting a `foreign` mismatch it cannot support.
  */
 export function canonicalCardId(
 	name: string | undefined,
 	aliases: CardAliases,
 ): string | undefined {
 	if (name === undefined) return undefined;
-	for (const [cardId, names] of aliases) {
-		if (cardId === name || names.has(name)) return cardId;
-	}
-	return undefined;
+	return ownerOfName(name, aliases, buildCardAliasOwners(aliases));
 }
 
 export function classifyMeterIdentity(
