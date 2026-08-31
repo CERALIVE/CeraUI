@@ -1406,10 +1406,12 @@ closing that socket then discards the queued stop while the engine keeps streami
 The fresh connection lets CeraUI close the old client to interrupt local pending
 work without withdrawing the engine request. `onStopped` fires only after that
 request answers `state: "idle"`. The connect-plus-acknowledgement budget is derived
-as 7 seconds, reserving the remaining 5 seconds of the unchanged 12-second stop
-bound for cleanup. A connection resolving after that request deadline is closed
-without dispatching `stop`, and a pending stop connection is closed, so neither can
-mutate the engine or invoke the callback after typed `stop_failed` has returned.
+as 6.5 seconds, reserving 5 seconds for cleanup and a 0.5-second scheduling margin
+inside the unchanged 12-second outer bound. A connection resolving after that
+request deadline is closed without dispatching `stop`; a pending stop connection
+is closed and cannot invoke the callback. An already-dispatched request may still
+settle in the engine, so timeout leaves engine state unknown and reconciliation
+adopts its eventual truth after typed `stop_failed`.
 Suppression reads only existing update, engine capability, and boot-uptime signals;
 suppressed attempts remain `starting` and emit no error toast. Structured retry and
 terminal records carry attempt id, phase, class, optional engine code, and retry

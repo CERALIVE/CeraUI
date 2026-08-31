@@ -211,12 +211,14 @@ per-attempt launch deadline, AND a total-time budget
   closing that client would then discard the unread request. CeraUI dispatches stop
   on the fresh connection first, closes the session client to settle its pending
   work, and reports `stopped` only after the independent request answers
-  `state: "idle"`. The fresh connect plus acknowledgement has a derived 7-second
-  budget, reserving the remaining 5 seconds of the unchanged 12-second stop bound
-  for socket cleanup. If that request budget expires, a connection that resolves
-  later is closed without dispatching `stop`; a pending stop connection is also
-  closed. No late completion can mutate the engine or invoke the completion
-  callback after the orchestrator has returned `stop_failed`.
+  `state: "idle"`. The fresh connect plus acknowledgement has a derived
+  6.5-second budget, reserving 5 seconds for socket cleanup and 0.5 seconds for
+  scheduling inside the unchanged 12-second outer bound. If that request budget
+  expires, a connection that resolves later is closed without dispatching `stop`;
+  a pending stop connection is also closed and cannot invoke the completion
+  callback. An already-dispatched request may still settle inside the engine after
+  its client is closed, so its outcome is deliberately UNKNOWN: the caller gets
+  `stop_failed` and reconciliation adopts the engine's eventual truth.
 - A scheduled retry logs `attemptId`, phase, class, engine code when present, and
   retry state. It emits a class-keyed localized warning only outside a suppression
   window. Terminal exhaustion/non-retriable failure emits exactly one keyed error

@@ -48,8 +48,8 @@ A dev-only DevTools destination is available in development builds.
 - **Acknowledged stream stops**: the backend reports a stop only after cerastream
   confirms it is idle; an unrelated in-flight engine request cannot swallow Stop
   while the media session continues in the background. The request and cleanup
-  remain inside the existing 12-second bound, and a late connection is closed
-  without dispatching a stale stop.
+  budgets leave an explicit margin inside the existing 12-second bound, and a
+  late, undispatched connection is closed without sending a stale stop.
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
   switch. Physical-radio validation is still pending; see
