@@ -29,14 +29,16 @@ export const STOP_DEADLINE_MS = 12_000;
  */
 export const ENGINE_CLOSE_DEADLINE_MS = 5_000;
 
+export const ENGINE_STOP_DEADLINE_MARGIN_MS = 500;
+
 /**
  * Shared budget for opening the independent stop connection and receiving the
- * engine's Idle acknowledgement. The remaining stop budget is reserved for
- * bounded socket cleanup, so a timed-out connection can never dispatch a stale
- * stop after the orchestrator has already reported `stop_failed`.
+ * engine's Idle acknowledgement. The remaining stop budget covers bounded
+ * socket cleanup plus an explicit scheduling margin, so internal timers settle
+ * ahead of the orchestrator's outer deadline.
  */
 export const ENGINE_STOP_REQUEST_DEADLINE_MS =
-	STOP_DEADLINE_MS - ENGINE_CLOSE_DEADLINE_MS;
+	STOP_DEADLINE_MS - ENGINE_CLOSE_DEADLINE_MS - ENGINE_STOP_DEADLINE_MARGIN_MS;
 
 /**
  * Outer bound on `reconfiguring`: the engine's declared worst-case transaction

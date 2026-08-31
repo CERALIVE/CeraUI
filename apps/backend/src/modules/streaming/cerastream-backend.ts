@@ -822,11 +822,14 @@ export class CerastreamBackend implements StreamingBackend {
 		});
 		try {
 			await Promise.race([
-				client.close().catch((error: unknown) => {
-					this.deps.logger.debug("cerastream: control socket already closing", {
-						error,
-					});
-				}),
+				Promise.resolve()
+					.then(() => client.close())
+					.catch((error: unknown) => {
+						this.deps.logger.debug(
+							"cerastream: control socket already closing",
+							{ error },
+						);
+					}),
 				bound,
 			]);
 		} finally {

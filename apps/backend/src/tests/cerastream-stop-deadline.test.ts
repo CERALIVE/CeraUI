@@ -10,7 +10,12 @@ import {
 	CerastreamBackend,
 	type CerastreamBackendDeps,
 } from "../modules/streaming/cerastream-backend.ts";
-import { ENGINE_STOP_REQUEST_DEADLINE_MS } from "../modules/streaming/start-lifecycle-timing.ts";
+import {
+	ENGINE_CLOSE_DEADLINE_MS,
+	ENGINE_STOP_DEADLINE_MARGIN_MS,
+	ENGINE_STOP_REQUEST_DEADLINE_MS,
+	STOP_DEADLINE_MS,
+} from "../modules/streaming/start-lifecycle-timing.ts";
 
 const CONFIG: RuntimeConfig = {
 	max_br: 8_000,
@@ -139,6 +144,17 @@ async function start(backend: CerastreamBackend): Promise<void> {
 		streamid: "test",
 	});
 }
+
+test("the request and cleanup budgets finish before the outer stop deadline", () => {
+	expect(
+		ENGINE_STOP_REQUEST_DEADLINE_MS +
+			ENGINE_CLOSE_DEADLINE_MS +
+			ENGINE_STOP_DEADLINE_MARGIN_MS,
+	).toBe(STOP_DEADLINE_MS);
+	expect(
+		ENGINE_STOP_REQUEST_DEADLINE_MS + ENGINE_CLOSE_DEADLINE_MS,
+	).toBeLessThan(STOP_DEADLINE_MS);
+});
 
 test("a stop connection that resolves after the deadline is closed without dispatch", async () => {
 	const trace: string[] = [];

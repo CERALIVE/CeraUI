@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import type { CerastreamClient } from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import { CerastreamBackend } from "../modules/streaming/cerastream-backend.ts";
+import { ENGINE_CLOSE_DEADLINE_MS } from "../modules/streaming/start-lifecycle-timing.ts";
 import { createStreamSessionOrchestrator } from "../modules/streaming/stream-session-orchestrator.ts";
 import type { StreamRunOptions } from "../modules/streaming/streaming-backend.ts";
 
@@ -121,13 +122,22 @@ describe("a stop that never settles must not poison the session", () => {
 				stopped = true;
 			}),
 		).toBe(true);
-		await Promise.resolve();
+		for (let i = 0; i < 10; i += 1) {
+			if (
+				deadlines.some(({ delayMs }) => delayMs === ENGINE_CLOSE_DEADLINE_MS)
+			) {
+				break;
+			}
+			await Promise.resolve();
+		}
 
 		// Then a bound was armed for the close...
-		const closeDeadline = deadlines[deadlines.length - 1];
+		const closeDeadline = deadlines.find(
+			({ delayMs }) => delayMs === ENGINE_CLOSE_DEADLINE_MS,
+		);
 		expect(closeDeadline).toBeDefined();
 		closeDeadline?.callback();
-		for (let i = 0; i < 10; i += 1) await Promise.resolve();
+		await backend.settle();
 
 		// ...and the stop completes rather than hanging forever.
 		expect(stopped).toBe(true);
