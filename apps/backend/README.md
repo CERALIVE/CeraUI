@@ -181,6 +181,12 @@ reconciliation adopts a stream that survived a backend process restart. A timeou
 query error, or contradictory engine status stays `reconciling`; the reconnect-heal
 path retries instead of publishing a false idle state.
 
+Stop uses a fresh, short-lived cerastream control connection. The engine processes
+one request at a time per connection, so sending stop on the session connection and
+then closing it can discard an unread stop behind another RPC. The backend dispatches
+stop independently, closes the old session client to interrupt pending local work,
+and signals completion only after the engine replies with its idle state.
+
 ### Broadcast Events
 
 The backend pushes typed events to all connected clients via `src/rpc/events.ts`. Each event type carries a monotonic `seq` counter that resets on server restart.

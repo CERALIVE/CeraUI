@@ -8186,6 +8186,20 @@ clears `active` first) are all deliberately NOT proof.
 Net effect: the board lands in a real `idle` and the next `streaming.start` dials
 a fresh connection and succeeds — no `ceralive.service` restart.
 
+**STOP uses a second connection, and success means engine Idle.** The IPC server
+dispatches at most one request per connection. Reusing the session client for
+`stop`, then closing it to interrupt pending work, can leave the stop line unread
+behind `list-devices` or start; the server finishes the first call, fails its reply
+to the closed peer, and exits without dispatching stop. That produced a real board
+state where CeraUI returned `stopped`, the engine kept reconnecting egress, and the
+frame watchdog later aborted it. `CerastreamBackend.stop()` now connects a fresh
+client, dispatches stop there, closes the old session client, awaits the fresh
+client's `state: "idle"` response, closes it, and only then invokes `onStopped`.
+Failure never invokes the callback, so the orchestrator's stop deadline reports
+`stop_failed` instead of claiming teardown. Coverage:
+`tests/cerastream-stop-ack.test.ts` drives a blocked session request and controls
+the independent stop acknowledgement.
+
 **Scoped OUT, deliberately:** there is no transparent mid-session reconnect that
 resumes the running stream. It is not achievable against this engine — a
 restarted cerastream has no session to resume — and would need engine-side
