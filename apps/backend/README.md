@@ -186,9 +186,12 @@ one request at a time per connection, so sending stop on the session connection 
 then closing it can discard an unread stop behind another RPC. The backend dispatches
 stop independently, closes the old session client to interrupt pending local work,
 and signals completion only after the engine replies with its idle state. The
-connect-plus-acknowledgement request is bounded at 7 seconds, leaving 5 seconds of
-the unchanged 12-second lifecycle bound for cleanup; a connection resolving after
-that request deadline is closed before it can dispatch a stale stop.
+connect-plus-acknowledgement request is bounded at 6.5 seconds, leaving 5 seconds
+for cleanup and a 0.5-second scheduling margin inside the unchanged 12-second
+lifecycle bound. A connection resolving after the request deadline is closed
+before it can dispatch. If an already-dispatched request misses acknowledgement,
+its outcome is unknown and the lifecycle reconciles engine truth after
+`stop_failed`.
 
 ### Broadcast Events
 
