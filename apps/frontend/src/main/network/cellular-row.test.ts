@@ -1205,6 +1205,18 @@ describe("a provisional 'modem detected' row", () => {
 		} as Partial<Modem>);
 		expect(resolveRowState(observed, "mm-managed")).toBe("connected");
 	});
+
+	it("settles into a quiet undriveable state after authoritative discovery misses it", () => {
+		const undriveable = modem({
+			availability_reason: "undriveable",
+		} as Partial<Modem>);
+
+		expect(resolveRowState(undriveable, "mm-managed")).toBe("undriveable");
+		expect(stateTone("undriveable")).toBe("attention");
+		expect(availabilityReasonKey("undriveable")).toBe(
+			"network.cellular.reason.undriveable",
+		);
+	});
 });
 
 /**
