@@ -73,6 +73,8 @@ export type ModemsResponseMessageEntry =
 
 type ModemsResponseMessage = Record<string, ModemsResponseMessageEntry>;
 
+let committedModemsWireMessage: ModemsResponseMessage = {};
+
 function buildModemMessage(
 	modem: Modem,
 	modemsFullState: Record<number, true> | undefined,
@@ -188,10 +190,20 @@ export function buildModemsWireMessage(
 	}
 }
 
+/** Return the last complete modem message published by a settled update. */
+export function getCommittedModemsWireMessage(): ModemsResponseMessage {
+	return committedModemsWireMessage;
+}
+
 export function broadcastModems(
 	modemsFullState: Record<number, true> | undefined = undefined,
 ) {
-	const modems = buildModemsWireMessage(modemsFullState);
+	const complete = buildModemsWireMessage();
+	committedModemsWireMessage = complete;
+	const modems =
+		modemsFullState === undefined
+			? complete
+			: buildModemsWireMessage(modemsFullState);
 	broadcastMsg("status", { modems });
 
 	// The roaming advisory reconciles AFTER the payload is on the wire, and is
