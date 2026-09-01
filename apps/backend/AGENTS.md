@@ -991,6 +991,38 @@ properties are load-bearing:
 
 This is a re-evaluation, never a pin: the very next real level replaces the gap.
 
+**A gap this side publishes may be held for one window before it is PAINTED, and
+the two STATED reasons are exempt.** Every gap above is honest and every gap above
+is also instantaneous, so a single dropped frame between two healthy readings drew
+the full "Meter unavailable" treatment for one paint and took it away again — on a
+board that reads as the meter blinking, and an operator cannot tell a blink apart
+from the real thing. The frontend therefore holds a TRANSIENT gap over the reading
+already on screen for `METER_UNAVAILABLE_DISPLAY_GRACE_MS` (1 200 ms, defined in
+`apps/frontend/src/lib/components/preview/audio-meter-liveness.ts` and applied by
+`LiveAudioMeter.svelte`). Three consequences bind THIS side:
+
+- **It is a DISPLAY rule and changes nothing here.** No gap is delayed, suppressed
+  or coalesced on the wire; a gap that outlasts the window still bands, with this
+  side's own typed reason. Do not "simplify" a future paint problem by debouncing
+  `noteMeterSelection` or the watchdogs instead — that would hide a real outage.
+- **`mode_none` and `embedded_audio` are NEVER graced** (`STATED_UNAVAILABLE_REASONS`,
+  read by `isTransientMeterGap`). Both are answers to something somebody just did —
+  the operator's own "No audio" pick, and a property of the selected source — and
+  both are published SYNCHRONOUSLY by `noteMeterSelection` on the selection change,
+  i.e. squarely inside that window. Delaying either would make a deliberate action
+  look laggy. A NEW stated reason published from this module must be added to that
+  set on the frontend side in the same change; a gap carrying no reason at all is
+  treated as transient, which is the honest default for the weakest claim on the wire.
+- **The window is strictly below `AUDIO_METER_STALE_MS` (2 000 ms) and well above
+  the sidecar's ~200 ms cadence.** Above the deadline the staleness watchdog would
+  draw its own band first and the grace would be unreachable; at the cadence an
+  ordinary missed frame would still reach the operator. It is unrelated to
+  `AUDIO_METER_FRAME_ABSENCE_MS` (2 500 ms), which is this side's re-assert trigger
+  rather than a paint rule — do not couple them.
+
+Frontend half: `apps/frontend/AGENTS.md` → "…AND A TRANSIENT GAP IS HELD FOR ONE
+DISPLAY WINDOW". Coverage there: `LiveAudioMeter.grace.test.ts`.
+
 Coverage for both: `tests/audio-meter-bridge.test.ts` (the silenced pick vs. Auto at
 the same `null` preference, the engine-reason override, no re-assert while silenced,
 the switching gap before any frame, the Auto→No-audio pair key, the unchanged-pick and
@@ -8966,3 +8998,66 @@ points at Settings → System Logs instead of a shell command or a unit name. Th
 propagation above is UNCHANGED — do not weaken it to "fix" the toast, and do not
 re-add the concatenation. Gate: `apps/frontend/src/tests/operator-copy-no-internals.test.ts`
 sweeps all 10 locales for `journalctl` / `systemctl` / `*.service` / `hw:CARD=`.
+
+### …AND A CAPTURE REFUSAL CARRIES ITS OWN CAUSE [EXISTS]
+
+`START_FAILURE_CLASSES` gained exactly ONE member, `capture_source_unavailable`,
+and `StartFailure` gained ONE additive optional field, `captureCause`. The engine
+publishes the cause as typed data on its JSON-RPC error (`@ceralive/cerastream`
+`2026.9.0`, `SCHEMA_VERSION 0.12.0`, `captureCauseSchema`); before it existed, a
+capture refusal arrived as a bare `-32602` and was classified `start_invalid`,
+which is honest about the code and says nothing an operator can act on.
+
+The taxonomy table:
+
+| `captureCause` | What the engine refused on | Retriable at `start-rpc` |
+|---|---|---|
+| `negotiation_failed` | the capture leg could not negotiate the source's signal format | **no** |
+| `no_signal` | the device is present and carrying nothing | **no** |
+| `device_busy` | the node is held by another opener | **yes** |
+
+Five rules are load-bearing:
+
+- **The cause had to be FIRST-CLASS because retriability is keyed `(class, phase)`,
+  and no existing class is retriable at `start-rpc`.**
+  `START_FAILURE_RETRIABILITY` is a per-class table of `retriablePhases`, every
+  entry of which is connect-phase-only or empty — so a single row for this class
+  could only be all-retriable or all-non-retriable at the one phase a capture cause
+  can be reported from. `isRetriableStartFailure(cls, phase, captureCause?)` takes
+  a third OPTIONAL parameter and consults a cause-keyed override table
+  (`START_FAILURE_CAPTURE_CAUSE_RETRIABILITY`). Every existing caller is unchanged,
+  and the branch is scoped to this one class — do not make a second class
+  cause-aware without a reason of the same shape.
+- **Retrying `device_busy` is the only retry that can succeed.** The other two
+  describe the signal on the cable and the camera at the far end of it; re-running
+  the same launch against the same unchanged input spends the retry budget to be
+  told the same thing three more times. `device_busy` is a contended opener, which
+  is exactly the transient the bounded retry exists for.
+- **An ABSENT or UNRECOGNISED cause degrades to the legacy path, byte-identically.**
+  `captureCauses()` answers `[]` for missing or unparseable error `data`, so an
+  older engine falls straight through to the numeric-code table. An unrecognised
+  cause STRING is dropped rather than minting the class without a discriminator: an
+  unjudgeable cause cannot decide retriability, and degrading keeps a future engine
+  enum from breaking the build.
+- **There is no free-prose parsing anywhere on this path.** The cause is read from
+  the typed `data` field only; the engine's `message` keeps its existing role (log
+  only, never the toast) exactly as the section above states.
+- **The copy is per CAUSE, and the class-level key is deliberately NOT a leaf.**
+  `TERMINAL_NOTIFICATION_KEYS` is a TOTAL `Record<StartFailureClass, string>`, so
+  the class carries a class-level notification key as its honest floor for a future
+  engine that reports the class alone; `terminalNotificationKey` layers the
+  per-cause selection over it. On the render side
+  `live.startFailure.class.capture_source_unavailable` has three `.<cause>`
+  children and NO string of its own — the frontend test helper re-nests the flat
+  dotted catalog, so a key that is both a string and an object collides. The
+  cause-less fallback is `live.startFailed.generic`, unreachable because the mapper
+  never mints the class without a cause. Copy ships in all 10 locales and names the
+  signal format plus the camera-side fix; the notification is non-persistent
+  (`notificationBroadcast(..., 0, false, ...)`), so a `no_signal` refusal adds no
+  second band beside the standing `hdmi_error`.
+
+Coverage: `apps/backend/src/tests/start-failure-taxonomy.test.ts` (the cause
+matrix, the cause-aware retry table, and the legacy fallback),
+`apps/backend/src/tests/cerastream-bindings-skew.test.ts` (the published enum order
+and `SCHEMA_VERSION`), and `apps/frontend/src/tests/live-start-failed-reason.test.ts`
+(per-cause rendering).
