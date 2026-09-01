@@ -7,6 +7,7 @@ import {
 	installSharingWire,
 	type SharingWire,
 	SHARED_LAN_IFNAME,
+	sharingOff,
 	steeringUnavailable,
 } from './helpers/sharing-wire.js';
 
@@ -214,5 +215,45 @@ test.describe('Internet-Sharing surface', () => {
 		}
 		// Non-vacuity: the card really did render its degraded content.
 		await expect(page.getByTestId('sharing-band-no-healthy-uplink')).toBeVisible();
+	});
+});
+
+/**
+ * Its own describe because the quiet state has to be the wire's INITIAL
+ * fixture: the client zone is patched into the device's `netif` frame, so
+ * switching it off mid-test only takes effect on the next device tick.
+ */
+test.describe('Internet-Sharing surface — quiet when sharing is off', () => {
+	test.beforeEach(async ({ page }) => {
+		const wire = await installSharingWire(page, sharingOff());
+		await page.goto('/');
+		await ensureAuthenticated(page);
+		await navigateTo(page, 'network');
+		await wire.publish();
+		await expect(page.locator(CARD)).toBeVisible();
+	});
+
+	test('shows the hint row alone, and keeps the card as the way in', async ({ page }) => {
+		const card = page.locator(CARD);
+
+		// The uplinks ARE reported — the card is quiet because no client zone
+		// exists, not because the device said nothing.
+		const hint = page.getByTestId('sharing-band-sharing-off');
+		await expect(hint).toBeVisible();
+		await expect(card).toContainText('Sharing is off');
+		await expect(card).toContainText('hotspot');
+
+		for (const testid of [
+			'sharing-uplinks',
+			'sharing-uplink-wwan0',
+			'sharing-zones',
+			'sharing-diagnostics',
+			'sharing-priority',
+			'sharing-dns-note',
+		]) {
+			await expect(page.getByTestId(testid)).toHaveCount(0);
+		}
+		// Nothing is merely folded away: no disclosure is left to open.
+		await expect(card.locator('details')).toHaveCount(0);
 	});
 });

@@ -565,6 +565,14 @@ export interface SharingSectionView {
 	readonly headline: SharingHeadlineView;
 	readonly subordinate: readonly SharingBand[];
 	readonly diagnostics: DiagnosticsSummaryView;
+	/**
+	 * No client zone exists, so every instrument below the headline measures a
+	 * path no traffic takes: a render site keeps the hint row and drops the
+	 * rest. Read off `zones.active` — the client-zone presence the bands already
+	 * derive from — never off `headline.kind`, which is a display order. It
+	 * gates RENDERING only; every field above stays derived.
+	 */
+	readonly quiet: boolean;
 }
 
 export function deriveSharingSection(
@@ -594,5 +602,6 @@ export function deriveSharingSection(
 		headline,
 		subordinate,
 		diagnostics: deriveDiagnosticsSummary(priority, diag, subordinate),
+		quiet: !zones.active,
 	};
 }
