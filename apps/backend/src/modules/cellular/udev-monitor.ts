@@ -57,9 +57,11 @@
 import { logger } from "../../helpers/logger.ts";
 import { retryWithBackoff } from "../../helpers/retry.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
+import { readUdevExportDb } from "../modems/modem-id-path-source.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 
 import {
+	cellularAttachesFromUdevDatabase,
 	cellularAttachFromUdev,
 	detachIdPathFromUdev,
 	parseUdevPropertyBlock,
@@ -97,6 +99,7 @@ export interface UdevMonitorProcess {
 }
 
 export type SpawnUdevMonitor = () => UdevMonitorProcess;
+export type ReadUdevInventory = () => Promise<string>;
 
 function spawnUdevMonitor(): UdevMonitorProcess {
 	return Bun.spawn([UDEVADM, ...UDEVADM_MONITOR_ARGS], {
@@ -115,6 +118,7 @@ export class UdevMonitorSupervisor {
 	constructor(
 		private readonly cache: UdevProvisionalCache = getUdevProvisionalCache(),
 		private readonly spawn: SpawnUdevMonitor = spawnUdevMonitor,
+		private readonly readInventory: ReadUdevInventory = readUdevExportDb,
 	) {}
 
 	start(): void {
@@ -145,9 +149,9 @@ export class UdevMonitorSupervisor {
 
 	/**
 	 * Supervisor loop. Each attempt runs one child to death; throwing afterwards
-	 * triggers the next (backed-off) attempt. Every restart CLEARS the cache
-	 * first — the monitor has no historical replay, so a detach that happened
-	 * while the child was down would otherwise leave a row nothing can retire.
+	 * triggers the next (backed-off) attempt. Every attempt rebuilds the complete
+	 * physical inventory before monitoring, preserving attached rows and retiring
+	 * removals that happened while the child was down.
 	 */
 	async #supervise(): Promise<void> {
 		let attempt = 0;
@@ -157,10 +161,8 @@ export class UdevMonitorSupervisor {
 					if (!this.#running) {
 						return;
 					}
-					if (attempt > 0) {
-						logger.warn("udev monitor restarted; dropping provisional rows");
-						this.cache.clear();
-					}
+					if (attempt > 0)
+						logger.warn("udev monitor restarted; rebuilding inventory");
 					attempt++;
 					await this.#runOnce();
 					if (!this.#running) {
@@ -188,6 +190,14 @@ export class UdevMonitorSupervisor {
 	async #runOnce(): Promise<void> {
 		const proc = this.spawn();
 		this.#proc = proc;
+		try {
+			const inventory = await this.readInventory();
+			this.cache.replaceInventory(cellularAttachesFromUdevDatabase(inventory));
+		} catch (error) {
+			logger.warn("udev inventory rebuild failed; retaining attached rows", {
+				error,
+			});
+		}
 
 		const decoder = new TextDecoder();
 		let buffer = "";

@@ -80,23 +80,8 @@ import type { UdevCellularAttach } from "./udev-cellular-events.ts";
  * token, never rendered raw.
  */
 export const PROVISIONAL_AVAILABILITY_REASON = "modem_initializing";
-
-/**
- * How long a provisional row may stand before it is retired unseen.
- *
- * DERIVED, not picked. The mmcli reconciliation backstop polls every 30 s with
- * ±10 % jitter (`modem-update-loop.ts`), so the LAST scheduled moment at which a
- * device could still appear on the authoritative path is ~33 s after the attach,
- * plus the mmcli read and the broadcast that poll performs. 40 s clears that
- * whole window, so expiry can only ever fire for a device that genuinely never
- * exported — never for a slow-but-working one.
- *
- * Expiry REMOVES the row. It does not mark it, dim it, or leave a tombstone:
- * "we optimistically said a modem was coming and it never did" is not a fact
- * about hardware worth keeping on an operator's screen, and a retained
- * expired-provisional state would be a new ghost class.
- */
-export const PROVISIONAL_TIMEOUT_MS = 40_000;
+export const UNDRIVEABLE_AVAILABILITY_REASON = "undriveable";
+export const UNDRIVEABLE_AUTHORITATIVE_CYCLES = 2;
 
 export type ProvisionalCacheListener = () => void;
 
@@ -105,7 +90,8 @@ interface ProvisionalEntry {
 	readonly idPath: string;
 	readonly displayName: string;
 	readonly evidence: string;
-	timer: ReturnType<typeof setTimeout> | undefined;
+	missingAuthoritativeCycles: number;
+	lifecycle: "initializing" | "undriveable";
 }
 
 /**
@@ -134,50 +120,54 @@ function provisionalDisplayName(attach: UdevCellularAttach): string {
 export class UdevProvisionalCache {
 	readonly #listeners = new Set<ProvisionalCacheListener>();
 	readonly #entries = new Map<string, ProvisionalEntry>();
-	readonly #timeoutMs: number;
-
-	/**
-	 * @param timeoutMs how long an unclaimed row may stand. A CONSTRUCTOR
-	 * parameter rather than a direct read of {@link PROVISIONAL_TIMEOUT_MS},
-	 * because that value is DERIVED from the 30 s reconciliation poll and a test
-	 * that waited it out would cost 40 s per case — the timer path itself stays
-	 * real. The shipped singleton below takes the derived value.
-	 */
-	constructor(timeoutMs: number = PROVISIONAL_TIMEOUT_MS) {
-		this.#timeoutMs = timeoutMs;
-	}
 
 	/**
 	 * Record a cellular-class attach.
 	 *
 	 * A device with no derivable `stable_key` is IGNORED: the merge key is what
 	 * makes the row retirable, and a row nothing could ever supersede is a ghost.
-	 * A repeat attach for a key already held is a no-op rather than a timer
-	 * reset — a composite device can emit more than one `usb_device` add during
-	 * modeswitch, and each one must not extend the window the first opened.
+	 * A repeat attach for a key already held is a no-op — a composite device can
+	 * emit more than one `usb_device` add during modeswitch, and none may reset
+	 * the authoritative-cycle history already accumulated for that device.
 	 */
 	noteAttach(attach: UdevCellularAttach): void {
-		const stableKey = deriveModemStableKey(attach.idPath);
-		if (stableKey === undefined || this.#entries.has(stableKey)) {
-			return;
-		}
-		const timer = setTimeout(() => {
-			const entry = this.#entries.get(stableKey);
-			if (entry === undefined) {
-				return;
+		if (this.#insertAttach(attach)) this.#notify();
+	}
+
+	noteAuthoritativeCycle(claimedKeys: ReadonlySet<string>): void {
+		let changed = false;
+		for (const entry of [...this.#entries.values()]) {
+			if (claimedKeys.has(entry.stableKey)) {
+				changed = this.#drop(entry.stableKey) || changed;
+				continue;
 			}
-			this.#entries.delete(stableKey);
-			this.#notify();
-		}, this.#timeoutMs);
-		timer.unref?.();
-		this.#entries.set(stableKey, {
-			stableKey,
-			idPath: attach.idPath,
-			displayName: provisionalDisplayName(attach),
-			evidence: attach.evidence,
-			timer,
-		});
-		this.#notify();
+			entry.missingAuthoritativeCycles++;
+			if (
+				entry.lifecycle === "initializing" &&
+				entry.missingAuthoritativeCycles >= UNDRIVEABLE_AUTHORITATIVE_CYCLES
+			) {
+				entry.lifecycle = "undriveable";
+				changed = true;
+			}
+		}
+		if (changed) this.#notify();
+	}
+
+	replaceInventory(attaches: readonly UdevCellularAttach[]): void {
+		const attachedKeys = new Set<string>();
+		let changed = false;
+		for (const attach of attaches) {
+			const stableKey = deriveModemStableKey(attach.idPath);
+			if (stableKey === undefined) continue;
+			attachedKeys.add(stableKey);
+			changed = this.#insertAttach(attach) || changed;
+		}
+		for (const stableKey of [...this.#entries.keys()]) {
+			if (!attachedKeys.has(stableKey)) {
+				changed = this.#drop(stableKey) || changed;
+			}
+		}
+		if (changed) this.#notify();
 	}
 
 	/** Retire the row for a detached device. Unknown paths are a no-op. */
@@ -194,12 +184,9 @@ export class UdevProvisionalCache {
 	/**
 	 * Drop every provisional row.
 	 *
-	 * Called when the `udevadm monitor` child restarts: the monitor has no
-	 * historical replay, so a device that detached while it was down would leave
-	 * a row nothing can ever retire. Discarding the whole set is the honest
-	 * response — a device that is still attached and still un-exported has not
-	 * been re-announced to us, and claiming otherwise would be a memory of an
-	 * event rather than an observation.
+	 * Used at process teardown. Monitor restarts reconcile through
+	 * `replaceInventory`, which preserves rows still physically attached and
+	 * retires only devices absent from the complete inventory.
 	 */
 	clear(): void {
 		if (this.#entries.size === 0) {
@@ -245,7 +232,10 @@ export class UdevProvisionalCache {
 				// `no_sim`, both of which would be guesses.
 				simVisibility: "opaque",
 				additive: {
-					availability_reason: PROVISIONAL_AVAILABILITY_REASON,
+					availability_reason:
+						entry.lifecycle === "initializing"
+							? PROVISIONAL_AVAILABILITY_REASON
+							: UNDRIVEABLE_AVAILABILITY_REASON,
 				},
 			});
 		}
@@ -259,7 +249,7 @@ export class UdevProvisionalCache {
 		};
 	}
 
-	/** Drop every entry, timer and listener (test isolation / teardown). */
+	/** Drop every entry and listener (test isolation / teardown). */
 	reset(): void {
 		for (const key of [...this.#entries.keys()]) {
 			this.#drop(key);
@@ -272,11 +262,21 @@ export class UdevProvisionalCache {
 		if (entry === undefined) {
 			return false;
 		}
-		if (entry.timer !== undefined) {
-			clearTimeout(entry.timer);
-			entry.timer = undefined;
-		}
 		this.#entries.delete(stableKey);
+		return true;
+	}
+
+	#insertAttach(attach: UdevCellularAttach): boolean {
+		const stableKey = deriveModemStableKey(attach.idPath);
+		if (stableKey === undefined || this.#entries.has(stableKey)) return false;
+		this.#entries.set(stableKey, {
+			stableKey,
+			idPath: attach.idPath,
+			displayName: provisionalDisplayName(attach),
+			evidence: attach.evidence,
+			missingAuthoritativeCycles: 0,
+			lifecycle: "initializing",
+		});
 		return true;
 	}
 

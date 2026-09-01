@@ -96,22 +96,37 @@ const CELLULAR_INTERFACE_CLASSES: ReadonlySet<string> = new Set([
  */
 export function parseUdevPropertyBlock(
 	lines: readonly string[],
+	defaultAction?: string,
 ): UdevPropertyEvent | undefined {
 	const properties = new Map<string, string>();
 	for (const line of lines) {
-		const separator = line.indexOf("=");
+		const propertyLine = line.startsWith("E: ") ? line.slice(3) : line;
+		const separator = propertyLine.indexOf("=");
 		if (separator <= 0) {
 			continue;
 		}
-		const key = line.slice(0, separator).trim();
+		const key = propertyLine.slice(0, separator).trim();
 		// A property VALUE may legitimately contain `=`; only the FIRST one
 		// separates. Trailing whitespace is display padding, never data.
 		if (key.length > 0 && !properties.has(key)) {
-			properties.set(key, line.slice(separator + 1).trimEnd());
+			properties.set(key, propertyLine.slice(separator + 1).trimEnd());
 		}
 	}
-	const action = properties.get("ACTION");
+	const action = properties.get("ACTION") ?? defaultAction;
 	return action === undefined ? undefined : { action, properties };
+}
+
+export function cellularAttachesFromUdevDatabase(
+	exportDb: string,
+): readonly UdevCellularAttach[] {
+	const attaches: UdevCellularAttach[] = [];
+	for (const block of exportDb.split(/\n\s*\n/)) {
+		const event = parseUdevPropertyBlock(block.split("\n"), "add");
+		if (event === undefined) continue;
+		const attach = cellularAttachFromUdev(event);
+		if (attach !== undefined) attaches.push(attach);
+	}
+	return attaches;
 }
 
 function isUsbDevice(event: UdevPropertyEvent): boolean {
