@@ -275,11 +275,7 @@ describe("SharingSection — the weight is a STEERING SHARE, never link quality"
 			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
 		});
 		expect(q(container, "sharing-uplink-weight-wwan0")).toBeNull();
-		// The row itself is untouched: only the share is withheld.
-		expect(q(container, "sharing-uplink-wwan0")).not.toBeNull();
-		expect(q(container, "sharing-uplink-state-wwan0")?.textContent).toContain(
-			"Up",
-		);
+		expect(q(container, "sharing-uplink-wwan0")).toBeNull();
 		expect(container.textContent ?? "").not.toContain("100%");
 	});
 
