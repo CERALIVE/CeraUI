@@ -1,5 +1,6 @@
 import type {
 	StartFailure,
+	StartFailureCaptureCause,
 	StartFailureClass,
 	StartFailurePhase,
 } from "@ceraui/rpc/schemas";
@@ -22,6 +23,7 @@ export type StartRetryDiagnostic = {
 	readonly class: StartFailureClass;
 	readonly code?: number | string;
 	readonly message?: string;
+	readonly captureCause?: StartFailureCaptureCause;
 	readonly retry:
 		| {
 				readonly state: "scheduled";
@@ -188,6 +190,9 @@ function diagnostic(
 		class: failure.class,
 		...(failure.code !== undefined ? { code: failure.code } : {}),
 		...(failure.message !== undefined ? { message: failure.message } : {}),
+		...(failure.captureCause !== undefined
+			? { captureCause: failure.captureCause }
+			: {}),
 		retry,
 	};
 }

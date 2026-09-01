@@ -210,6 +210,9 @@ describe("classifyStartFailure — table over every known failure site", () => {
 		});
 	}
 
+	// This case is ALSO the legacy-fallback assertion for the typed capture
+	// causes below: a `-32602` carrying no `error.data` at all must classify
+	// byte-identically to how it always has, and must mint no `captureCause`.
 	test("preserves the descriptive JSON-RPC message alongside code and class", () => {
 		const message =
 			"invalid params: audio-device-unavailable: ALSA capture device 'hw:CARD=rockchiphdmiin' is busy or unavailable";
@@ -223,7 +226,9 @@ describe("classifyStartFailure — table over every known failure site", () => {
 			class: "start_invalid",
 			code: -32602,
 			message,
+			retriable: false,
 		});
+		expect(failure.captureCause).toBeUndefined();
 	});
 
 	test("an unmapped/opaque error falls to engine_internal + a logged warning, never throws", () => {
@@ -248,6 +253,92 @@ describe("classifyStartFailure — table over every known failure site", () => {
 			"att_y",
 		);
 		expect(failure.class).toBe("engine_internal");
+	});
+});
+
+describe("typed capture causes — the class carries a first-class discriminator", () => {
+	function captureStartError(
+		causes: ReadonlyArray<{ device: string; cause: string }>,
+	): CerastreamRpcError {
+		return new CerastreamRpcError(
+			-32602,
+			"invalid params: capture-source-unavailable",
+			"cerastream.params.invalid",
+			null,
+			{ code: "cerastream.params.invalid", capture_causes: causes },
+		);
+	}
+
+	// Retriability is keyed (class, phase) for every OTHER class, and no class is
+	// retriable at start-rpc — so the cause is what decides here, and each row
+	// asserts the verdict the operator's retry behaviour hangs on.
+	const causes = [
+		{ cause: "negotiation_failed", retriable: false },
+		{ cause: "no_signal", retriable: false },
+		{ cause: "device_busy", retriable: true },
+	] as const;
+
+	for (const { cause, retriable } of causes) {
+		test(`a start-rpc rejection carrying ${cause} maps to capture_source_unavailable (retriable=${retriable})`, () => {
+			const failure = classifyStartFailure(
+				"start-rpc",
+				captureStartError([{ device: "/dev/video0", cause }]),
+				"att_capture",
+			);
+
+			expect(failure).toMatchObject({
+				phase: "start-rpc",
+				class: "capture_source_unavailable",
+				captureCause: cause,
+				code: -32602,
+				retriable,
+			});
+		});
+	}
+
+	test("device_busy retries at start-rpc while negotiation_failed does not", () => {
+		const busy = classifyStartFailure(
+			"start-rpc",
+			captureStartError([{ device: "/dev/video0", cause: "device_busy" }]),
+			"att_busy",
+		);
+		const negotiation = classifyStartFailure(
+			"start-rpc",
+			captureStartError([
+				{ device: "/dev/video0", cause: "negotiation_failed" },
+			]),
+			"att_negotiation",
+		);
+
+		expect(shouldRetryStart(busy, { attempts: 1, elapsedMs: 100 })).toBe(true);
+		expect(shouldRetryStart(negotiation, { attempts: 1, elapsedMs: 100 })).toBe(
+			false,
+		);
+	});
+
+	test("an empty cause list leaves the legacy start_invalid classification alone", () => {
+		const failure = classifyStartFailure(
+			"start-rpc",
+			captureStartError([]),
+			"att_empty",
+		);
+
+		expect(failure.class).toBe("start_invalid");
+		expect(failure.captureCause).toBeUndefined();
+	});
+
+	// A cause this build does not know cannot be judged for retriability, so the
+	// honest answer is the unchanged legacy classification — never a new class
+	// with an unknown discriminator hanging off it.
+	test("an unrecognized cause falls back to the legacy classification", () => {
+		const failure = classifyStartFailure(
+			"start-rpc",
+			captureStartError([{ device: "/dev/video0", cause: "future_cause" }]),
+			"att_future",
+		);
+
+		expect(failure.class).toBe("start_invalid");
+		expect(failure.captureCause).toBeUndefined();
 	});
 });
 

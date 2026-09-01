@@ -76,9 +76,29 @@ export const START_FAILURE_CLASSES = [
 	// device's true modem state is UNKNOWN. Fail-closed: autostart stays blocked
 	// until an operator acknowledges through one of the two typed paths.
 	'mutation_blocked',
+	// The engine could not bring the selected CAPTURE input up, and said WHY in
+	// the structured `error.data.capture_causes` the start RPC rejects with. It
+	// is its own class rather than a `start_invalid` because that class is
+	// deterministic by definition ("an identical retry fails identically"), and
+	// one of this class's causes is transient — see `captureCause` below.
+	'capture_source_unavailable',
 ] as const;
 export const startFailureClassSchema = z.enum(START_FAILURE_CLASSES);
 export type StartFailureClass = z.infer<typeof startFailureClassSchema>;
+
+/**
+ * Why the capture input could not be used, verbatim from the engine's typed
+ * `capture_causes`. It rides `StartFailure` as an additive-optional field rather
+ * than becoming three classes because it discriminates exactly ONE class, and
+ * splitting it would put three near-identical rows in every phase table.
+ */
+export const START_FAILURE_CAPTURE_CAUSES = [
+	'negotiation_failed',
+	'no_signal',
+	'device_busy',
+] as const;
+export const startFailureCaptureCauseSchema = z.enum(START_FAILURE_CAPTURE_CAUSES);
+export type StartFailureCaptureCause = z.infer<typeof startFailureCaptureCauseSchema>;
 
 /**
  * A structured start failure. `attemptId` is REQUIRED on every failure (Todo 29
@@ -86,7 +106,10 @@ export type StartFailureClass = z.infer<typeof startFailureClassSchema>;
  * (e.g. -32603) or its stable string data-code (e.g.
  * `cerastream.protocol.unsupported_version`) when the failure came from an
  * engine error response; absent for local/transport failures. `retriable` is
- * the MATERIALIZED verdict for THIS (class, phase) — see `isRetriableStartFailure`.
+ * the MATERIALIZED verdict for THIS (class, phase, captureCause) — see
+ * `isRetriableStartFailure`. `captureCause` is present ONLY on
+ * `capture_source_unavailable`, and every operator surface that renders that
+ * class must read it: the class alone names no action.
  */
 export const startFailureSchema = z.object({
 	attemptId: z.string(),
@@ -94,6 +117,7 @@ export const startFailureSchema = z.object({
 	class: startFailureClassSchema,
 	code: z.union([z.number(), z.string()]).optional(),
 	message: z.string().optional(),
+	captureCause: startFailureCaptureCauseSchema.optional(),
 	retriable: z.boolean(),
 });
 export type StartFailure = z.infer<typeof startFailureSchema>;
@@ -251,9 +275,43 @@ export const START_FAILURE_RETRIABILITY: Record<
 		retriablePhases: [],
 		why: 'A modem mutation failed and its rollback did not complete, so that modem\u2019s true state is unknown and fail-closed policy holds autostart. Only an explicit operator acknowledgement (verified rollback, or an accepted rebaseline of the current hardware) can clear it — a retry cannot.',
 	},
+	capture_source_unavailable: {
+		retriablePhases: [],
+		why: 'The capture input could not be brought up, and by default that is a standing condition — an unsupported signal format and an absent signal both fail identically on retry. The ONE transient cause is overridden per-cause below rather than by widening this row, so a class that is deterministic for two of its three causes never advertises itself as retriable.',
+	},
 };
 
-/** The materialized retriability verdict for a concrete (class, phase). */
-export function isRetriableStartFailure(cls: StartFailureClass, phase: StartFailurePhase): boolean {
+/**
+ * The phases each capture cause is retriable on — the cause-aware OVERRIDE of
+ * the class row above. `device_busy` is the only transient one: the input is
+ * held for a moment (a libuvc rebind, the idle meter releasing a card), and the
+ * bounded retry runner is exactly the right length of wait for it. It is scoped
+ * to `start-rpc` because that is the only phase the engine can report a capture
+ * cause from.
+ */
+export const START_FAILURE_CAPTURE_CAUSE_RETRIABILITY: Record<
+	StartFailureCaptureCause,
+	readonly StartFailurePhase[]
+> = {
+	negotiation_failed: [],
+	no_signal: [],
+	device_busy: ['start-rpc'],
+};
+
+/**
+ * The materialized retriability verdict for a concrete (class, phase), narrowed
+ * by `captureCause` where the class carries one. A `capture_source_unavailable`
+ * with NO cause is non-retriable: nothing has said the condition is transient.
+ */
+export function isRetriableStartFailure(
+	cls: StartFailureClass,
+	phase: StartFailurePhase,
+	captureCause?: StartFailureCaptureCause,
+): boolean {
+	if (cls === 'capture_source_unavailable') {
+		return captureCause === undefined
+			? false
+			: START_FAILURE_CAPTURE_CAUSE_RETRIABILITY[captureCause].includes(phase);
+	}
 	return START_FAILURE_RETRIABILITY[cls].retriablePhases.includes(phase);
 }

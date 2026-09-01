@@ -27,7 +27,10 @@
  *   hello         CerastreamTimeoutError               → start_timeout (not retriable)
  *   subscribe     CerastreamTimeoutError               → start_timeout (not retriable)
  *   subscribe     CerastreamConnectionError            → engine_unavailable (not retriable)
- *   start-rpc     -32602 params.invalid / -32003       → start_invalid
+ *   start-rpc     error.data.capture_causes present  → capture_source_unavailable
+ *                 (+ the typed captureCause; outranks the numeric-code table,
+ *                  because the engine named the real reason)
+ *   start-rpc     -32602 params.invalid / -32003     → start_invalid
  *   start-rpc     -32002 already / -32603 internal     → engine_internal
  *   start-rpc     CerastreamTimeoutError (10s request) → start_timeout (not retriable)
  *   playing-wait  CerastreamTimeoutError               → start_timeout (not retriable)
@@ -41,7 +44,9 @@ import {
 } from "@ceralive/cerastream";
 import {
 	isRetriableStartFailure,
+	START_FAILURE_CAPTURE_CAUSES,
 	type StartFailure,
+	type StartFailureCaptureCause,
 	type StartFailureClass,
 	type StartFailurePhase,
 } from "@ceraui/rpc/schemas";
@@ -80,6 +85,23 @@ const RPC_CODE_TO_CLASS: Record<number, StartFailureClass> = {
 	[-32002]: "engine_internal", // cerastream.state.already_streaming (engine-side state conflict)
 	[-32603]: "engine_internal", // cerastream.internal
 };
+
+/**
+ * The engine's own typed capture verdict, read ONLY from the structured
+ * `error.data.capture_causes` the binding parses — never from the human message,
+ * whose wording is not a contract. A cause this build does not know is DROPPED:
+ * an unjudgeable discriminator cannot decide retriability, so the honest answer
+ * is the unchanged legacy classification rather than a class nothing can act on.
+ */
+function captureCauseOf(
+	error: CerastreamRpcError,
+): StartFailureCaptureCause | undefined {
+	const reported = error.captureCauses()[0]?.cause;
+	return reported !== undefined &&
+		(START_FAILURE_CAPTURE_CAUSES as readonly string[]).includes(reported)
+		? (reported as StartFailureCaptureCause)
+		: undefined;
+}
 
 function isZodLikeError(err: unknown): boolean {
 	return (
@@ -124,14 +146,19 @@ export function classifyStartFailure(
 	attemptId: string,
 	deps: ClassifyDeps = defaultClassifyDeps,
 ): StartFailure {
-	const { cls, code, message } = classifyClass(phase, error, deps);
+	const { cls, code, message, captureCause } = classifyClass(
+		phase,
+		error,
+		deps,
+	);
 	return {
 		attemptId,
 		phase,
 		class: cls,
 		...(code !== undefined ? { code } : {}),
 		...(message !== undefined ? { message } : {}),
-		retriable: isRetriableStartFailure(cls, phase),
+		...(captureCause !== undefined ? { captureCause } : {}),
+		retriable: isRetriableStartFailure(cls, phase, captureCause),
 	};
 }
 
@@ -160,7 +187,12 @@ function classifyClass(
 	phase: StartFailurePhase,
 	error: unknown,
 	deps: ClassifyDeps,
-): { cls: StartFailureClass; code?: number | string; message?: string } {
+): {
+	cls: StartFailureClass;
+	code?: number | string;
+	message?: string;
+	captureCause?: StartFailureCaptureCause;
+} {
 	// A timeout is always a timeout, whatever the phase — retriability is derived
 	// per-phase downstream (connect-only) so we don't decide it here.
 	if (error instanceof CerastreamTimeoutError) {
@@ -177,6 +209,15 @@ function classifyClass(
 	// identity the taxonomy enumerates: -32000/-32602/-32002/-32003/-32603); the
 	// human-readable string dataCode stays available on the raw error for logs.
 	if (error instanceof CerastreamRpcError) {
+		const captureCause = captureCauseOf(error);
+		if (captureCause !== undefined) {
+			return {
+				cls: "capture_source_unavailable",
+				code: error.code,
+				message: error.message,
+				captureCause,
+			};
+		}
 		const mapped = RPC_CODE_TO_CLASS[error.code];
 		if (mapped !== undefined) {
 			return { cls: mapped, code: error.code, message: error.message };
