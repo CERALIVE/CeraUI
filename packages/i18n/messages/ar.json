@@ -1994,6 +1994,7 @@
 	"settings.deviceStats.bootSlot": "فتحة الإقلاع",
 	"settings.deviceStats.cpuFreq": "تردد المعالج",
 	"settings.deviceStats.cpuFreqHint": "التردد الحالي مقابل الحد الأقصى للعتاد، لكل سياسة cpufreq. اسم السياسة هو مجلد في sysfs وليس مجموعة أنوية.",
+	"settings.deviceStats.cpuFreqGovernorHint": "سياسة النواة التي تختار تردد هذه المجموعة. تثبّت CeraLive وضع performance لتقليل زمن الترميز.",
 	"settings.deviceStats.cpuLoad": "حمل المعالج",
 	"settings.deviceStats.cpuLoadHeavy": "مرتفع",
 	"settings.deviceStats.cpuLoadHint": "نسبة من إجمالي طاقة المعالج — متوسط الحِمل خلال دقيقة واحدة موزّعًا على {cores} نواة.",

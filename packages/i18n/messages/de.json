@@ -1982,6 +1982,7 @@
 	"settings.deviceStats.bootSlot": "Boot-Slot",
 	"settings.deviceStats.cpuFreq": "CPU-Takt",
 	"settings.deviceStats.cpuFreqHint": "Aktueller Takt gegen die Hardware-Obergrenze, je cpufreq-Policy. Ein Policy-Name ist ein sysfs-Verzeichnis, kein Kern-Cluster.",
+	"settings.deviceStats.cpuFreqGovernorHint": "Die Kernel-Policy, die den Takt dieser Gruppe wählt. CeraLive fixiert performance für die Encode-Latenz.",
 	"settings.deviceStats.cpuLoad": "CPU-Last",
 	"settings.deviceStats.cpuLoadHeavy": "Hoch",
 	"settings.deviceStats.cpuLoadHint": "Anteil der gesamten CPU-Kapazität — der 1-Minuten-Lastdurchschnitt über {cores} Kerne.",

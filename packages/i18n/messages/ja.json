@@ -1937,6 +1937,7 @@
 	"settings.deviceStats.bootSlot": "ブートスロット",
 	"settings.deviceStats.cpuFreq": "CPU 周波数",
 	"settings.deviceStats.cpuFreqHint": "cpufreq ポリシーごとの、ハードウェア上限に対する現在のクロックです。ポリシー名は sysfs のディレクトリ名であり、コアクラスタではありません。",
+	"settings.deviceStats.cpuFreqGovernorHint": "このグループのクロックを決めるカーネルポリシーです。CeraLive はエンコード遅延のため performance に固定します。",
 	"settings.deviceStats.cpuLoad": "CPU 負荷",
 	"settings.deviceStats.cpuLoadHeavy": "高",
 	"settings.deviceStats.cpuLoadHint": "CPU 全体の容量に対する割合 — {cores} コアに対する 1 分間のロードアベレージです。",

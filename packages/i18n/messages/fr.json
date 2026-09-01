@@ -1985,6 +1985,7 @@
 	"settings.deviceStats.bootSlot": "Slot de démarrage",
 	"settings.deviceStats.cpuFreq": "Fréquence CPU",
 	"settings.deviceStats.cpuFreqHint": "Fréquence actuelle face au plafond matériel, par politique cpufreq. Un nom de politique est un répertoire sysfs, pas un cluster de cœurs.",
+	"settings.deviceStats.cpuFreqGovernorHint": "La politique noyau qui choisit la fréquence de ce groupe. CeraLive fixe performance pour la latence d'encodage.",
 	"settings.deviceStats.cpuLoad": "Charge CPU",
 	"settings.deviceStats.cpuLoadHeavy": "Élevée",
 	"settings.deviceStats.cpuLoadHint": "Part de la capacité CPU totale — la charge moyenne sur 1 minute répartie sur {cores} cœurs.",

@@ -1985,6 +1985,7 @@
 	"settings.deviceStats.bootSlot": "Slot de inicialização",
 	"settings.deviceStats.cpuFreq": "Frequência da CPU",
 	"settings.deviceStats.cpuFreqHint": "Clock atual em relação ao teto do hardware, por política do cpufreq. O nome da política é um diretório do sysfs, não um cluster de núcleos.",
+	"settings.deviceStats.cpuFreqGovernorHint": "A política do kernel que escolhe o clock deste grupo. O CeraLive fixa performance pela latência de codificação.",
 	"settings.deviceStats.cpuLoad": "Carga da CPU",
 	"settings.deviceStats.cpuLoadHeavy": "Alta",
 	"settings.deviceStats.cpuLoadHint": "Proporção da capacidade total da CPU — a carga média de 1 minuto distribuída por {cores} núcleos.",

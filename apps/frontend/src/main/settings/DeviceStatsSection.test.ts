@@ -281,6 +281,182 @@ describe("CPU frequency", () => {
 				.firstElementChild?.getAttribute("style"),
 		).toContain("inline-size: 56%");
 	});
+
+	// A device that sent no metadata is the pre-metadata payload, and it must
+	// still render exactly as it did: sysfs ids, no count, no governor chip.
+	it("renders the raw shape with no invented name, count or governor", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: policies });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policies").getAttribute("data-cpufreq-shape"),
+		).toBe("raw");
+		expect(screen.queryByTestId("cpufreq-policy-governor-policy0")).toBeNull();
+		expect(screen.queryByTestId("cpufreq-policy-detail-policy0")).toBeNull();
+		expect(
+			screen.getByTestId("cpufreq-policy-policy0").textContent,
+		).not.toMatch(/\u00d7/);
+	});
+});
+
+/**
+ * The metadata the collector now reads: which CPUs a policy governs, which
+ * governor drives it, and the microarchitecture those CPUs report.
+ *
+ * Two shapes, and the discriminator is whether a policy governs more than ONE
+ * CPU. A cluster keeps its row and gains a name; a per-core board's dozen
+ * near-identical policies fold into one row carrying the count and the range of
+ * clocks they occupy — because twelve bars against one ceiling is noise, and
+ * picking one of them to draw would be a claim about a core nobody chose.
+ */
+describe("CPU frequency — labelled clusters and per-core aggregation", () => {
+	const RK3588 = [
+		{
+			id: "policy0",
+			curKhz: 1_008_000,
+			maxKhz: 1_800_000,
+			cpus: "0-3",
+			cpuCount: 4,
+			governor: "performance",
+			label: "Cortex-A55",
+		},
+		{
+			id: "policy4",
+			curKhz: 1_416_000,
+			maxKhz: 2_400_000,
+			cpus: "4-5",
+			cpuCount: 2,
+			governor: "performance",
+			label: "Cortex-A76",
+		},
+		{
+			id: "policy6",
+			curKhz: 2_016_000,
+			maxKhz: 2_400_000,
+			cpus: "6-7",
+			cpuCount: 2,
+			governor: "performance",
+			label: "Cortex-A76",
+		},
+	];
+
+	const X86 = Array.from({ length: 12 }, (_, cpu) => ({
+		id: `policy${cpu}`,
+		curKhz: 800_000 + cpu * 1000,
+		maxKhz: 4_800_000,
+		cpus: `${cpu}`,
+		cpuCount: 1,
+		governor: "schedutil",
+		label: "Intel(R) N100",
+	}));
+
+	it("names an ARM cluster and states how many cores it covers", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: RK3588 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policies").getAttribute("data-cpufreq-shape"),
+		).toBe("cluster");
+		expect(screen.getByTestId("cpufreq-policy-policy0").textContent).toContain(
+			"Cortex-A55\u00a0\u00d74",
+		);
+		expect(screen.getByTestId("cpufreq-policy-policy4").textContent).toContain(
+			"Cortex-A76\u00a0\u00d72",
+		);
+	});
+
+	it("renders the governor as its own chip beside the cluster", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: RK3588 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policy-governor-policy0").textContent?.trim(),
+		).toBe("performance");
+	});
+
+	// The two A76 policies are genuinely alike, so the row that tells them apart
+	// is the one naming the sysfs policy and the CPUs behind it.
+	it("keeps the sysfs id and the CPU range visible for a single policy", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: RK3588 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policy-detail-policy4").textContent?.trim(),
+		).toBe("policy4 \u00b7 cpu4-5");
+		expect(
+			screen.getByTestId("cpufreq-policy-detail-policy6").textContent?.trim(),
+		).toBe("policy6 \u00b7 cpu6-7");
+	});
+
+	it("keeps the cluster reading and its fill bar unchanged", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: RK3588 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policy-value-policy0").textContent?.trim(),
+		).toBe("1.01 GHz / 1.80 GHz");
+		expect(
+			screen
+				.getByTestId("cpufreq-policy-bar-policy0")
+				.getAttribute("data-bar-kind"),
+		).toBe("fill");
+	});
+
+	it("folds a 12-thread x86 board into ONE row, not twelve near-identical bars", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: X86 });
+		render(DeviceStatsSection);
+
+		const container = screen.getByTestId("cpufreq-policies");
+		expect(container.getAttribute("data-cpufreq-shape")).toBe("per-core");
+		expect(container.querySelectorAll("[data-policy-count]")).toHaveLength(1);
+		expect(screen.getByTestId("cpufreq-policy-policy0").textContent).toContain(
+			"Intel(R) N100\u00a0\u00d712",
+		);
+		expect(
+			screen
+				.getByTestId("cpufreq-policy-policy0")
+				.getAttribute("data-policy-count"),
+		).toBe("12");
+	});
+
+	// One figure for twelve cores would have to pick a core to be about, so the
+	// folded row reports the range they actually occupy.
+	it("reports the folded cores' clock RANGE and draws it as a span", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: X86 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policy-value-policy0").textContent?.trim(),
+		).toBe("0.80\u20130.81 GHz / 4.80 GHz");
+		expect(
+			screen
+				.getByTestId("cpufreq-policy-bar-policy0")
+				.getAttribute("data-bar-kind"),
+		).toBe("span");
+		expect(
+			screen.getByTestId("cpufreq-policy-detail-policy0").textContent?.trim(),
+		).toBe("cpu0-11");
+	});
+
+	// A folded group has no single sysfs policy, so naming its first one would be
+	// a wrong label rather than the diagnostic it is for a one-policy row.
+	it("does not attribute a folded group to one policy id", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: X86 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policy-detail-policy0").textContent,
+		).not.toContain("policy0");
+	});
+
+	it("never invents a cluster name from a policy id or a core count", () => {
+		subs.deviceStats = statsWithLoad(1.0, { cpuFreq: RK3588 });
+		render(DeviceStatsSection);
+
+		expect(
+			screen.getByTestId("cpufreq-policies").textContent ?? "",
+		).not.toMatch(/big|little/i);
+	});
 });
 
 describe("DDR bus", () => {

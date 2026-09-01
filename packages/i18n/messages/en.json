@@ -1982,6 +1982,7 @@
 	"settings.deviceStats.bootSlot": "Boot Slot",
 	"settings.deviceStats.cpuFreq": "CPU Frequency",
 	"settings.deviceStats.cpuFreqHint": "Current clock against the hardware ceiling, per cpufreq policy. A policy name is a sysfs directory, not a core cluster.",
+	"settings.deviceStats.cpuFreqGovernorHint": "The kernel policy choosing this group's clock. CeraLive pins performance for encode latency.",
 	"settings.deviceStats.cpuLoad": "CPU Load",
 	"settings.deviceStats.cpuLoadHeavy": "Heavy",
 	"settings.deviceStats.cpuLoadHint": "Share of total CPU capacity — the 1-minute load average across {cores} cores.",
