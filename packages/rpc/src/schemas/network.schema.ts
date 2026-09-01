@@ -303,6 +303,7 @@ export const netifConfigErrorSchema = z.enum([
 	'stale_address',
 	'enable_refused',
 	'disable_all_refused',
+	'bond_unmappable',
 ]);
 export type NetifConfigError = z.infer<typeof netifConfigErrorSchema>;
 

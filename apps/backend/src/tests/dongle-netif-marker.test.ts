@@ -288,8 +288,8 @@ describe("dup-IP honesty is preserved alongside the marker", () => {
 		const msg = netIfBuildMsg();
 		expect(msg.usb0?.error).toBe("duplicate IPv4 addr");
 		expect(msg.eth0?.error).toBe("duplicate IPv4 addr");
-		expect(msg.usb0?.enabled).toBe(false);
-		expect(msg.eth0?.enabled).toBe(false);
+		expect(msg.usb0?.enabled).toBe(true);
+		expect(msg.eth0?.enabled).toBe(true);
 		expect(msg.dg0h?.dongle).toEqual({ slot: 0, state: "up" });
 		expect(msg.dg0h?.error).toBeUndefined();
 		// The dup pair is now BONDING-ELIGIBLE (todo 11's policy split) while

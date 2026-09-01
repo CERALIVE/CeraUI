@@ -22,6 +22,7 @@ import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
 	NetifConfigError,
+	NetifConfigInput,
 	NotificationType,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
@@ -36,7 +37,7 @@ import {
 	getMockIfconfigOutput,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
-
+import { isBondLinkMappable } from "../streaming/bond-entry.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -50,6 +51,13 @@ import {
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
+import {
+	bondPhysicalId,
+	isBondOptedOut,
+	resetPersistentBondOptOutForTest,
+	resetSessionBondOptOutForTest,
+	setPersistentBondOptOut,
+} from "./bond-preference.ts";
 import {
 	type DongleMarker,
 	getDongleMarker,
@@ -187,15 +195,16 @@ export function setNetifDupIpSuppression(ifname: string, suppressed: boolean) {
   forced false by the flag itself, so the operator's own choice is tracked apart
   from it here rather than being read out of a bit the error path overwrites.
 */
-const operatorBondOptOut = new Set<string>();
-
 export function resetBondOptOut(): void {
-	operatorBondOptOut.clear();
+	resetPersistentBondOptOutForTest();
+}
+
+export function resetBondOptOutSession(): void {
+	resetSessionBondOptOutForTest();
 }
 
 export function setBondOptOut(ifname: string, optOut: boolean): void {
-	if (optOut) operatorBondOptOut.add(ifname);
-	else operatorBondOptOut.delete(ifname);
+	setPersistentBondOptOut(ifname, optOut);
 }
 
 export function isDupIpOnly(int: NetworkInterface): boolean {
@@ -215,8 +224,8 @@ export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
-	if (operatorBondOptOut.has(name)) return false;
-	if (isDupIpOnly(int)) return true;
+	if (isBondOptedOut(name)) return false;
+	if (isDupIpOnly(int)) return isBondLinkMappable(name, int.ip);
 	return int.enabled;
 }
 
@@ -302,7 +311,7 @@ export function applySharedLanBondGate(
 
 		if ((int.error & NETIF_ERR_SHAREDLAN) === 0) continue;
 		clearNetifError(int, NETIF_ERR_SHAREDLAN);
-		if (int.error === 0 && !operatorBondOptOut.has(name)) int.enabled = true;
+		if (int.error === 0 && !isBondOptedOut(name)) int.enabled = true;
 	}
 }
 
@@ -1222,7 +1231,7 @@ export function netIfBuildMsg() {
 		const entry: NetworkInterfaceResponseMessage[string] = {
 			...(networkInterface.ip !== undefined ? { ip: networkInterface.ip } : {}),
 			tp: networkInterface.tp,
-			enabled: networkInterface.enabled,
+			enabled: isBondCandidate(i, networkInterface),
 			...(networkInterface.tx_bps !== undefined
 				? { tx_bps: networkInterface.tx_bps }
 				: {}),
@@ -1407,17 +1416,57 @@ function countActiveNetif() {
  * operator as "Saved".
  */
 export type NetifApplyOutcome =
-	| { ok: true }
+	| { ok: true; applied: NetifConfigInput }
 	| { ok: false; reason: NetifConfigError };
+
+export function readAppliedNetifConfig(
+	name: string,
+): NetifConfigInput | undefined {
+	const entry = netIfBuildMsg()[name];
+	if (entry === undefined) return undefined;
+	return {
+		name,
+		...(entry.ip !== undefined ? { ip: entry.ip } : {}),
+		enabled: entry.enabled,
+	};
+}
+
+function finishBondMutation(
+	msg: NetworkInterfaceMessage["netif"],
+	outcome: { ok: false; reason: NetifConfigError } | undefined,
+): NetifApplyOutcome {
+	const applied = readAppliedNetifConfig(msg.name);
+	const reason = outcome?.reason ?? "applied";
+	logger.info("network bond mutation", {
+		iface: msg.name,
+		physical_id: bondPhysicalId(msg.name) ?? null,
+		requested: msg.enabled,
+		resulted: applied?.enabled ?? null,
+		reason,
+	});
+	if (outcome !== undefined) return outcome;
+	if (applied === undefined) return { ok: false, reason: "unknown_interface" };
+	return { ok: true, applied };
+}
 
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
 ): NetifApplyOutcome {
 	const int = netif[msg.name];
-	if (!int) return { ok: false, reason: "unknown_interface" };
+	if (!int) {
+		return finishBondMutation(msg, {
+			ok: false,
+			reason: "unknown_interface",
+		});
+	}
 
-	if (int.ip !== msg.ip) return { ok: false, reason: "stale_address" };
+	if (int.ip !== msg.ip) {
+		return finishBondMutation(msg, {
+			ok: false,
+			reason: "stale_address",
+		});
+	}
 
 	if (msg.enabled === true || msg.enabled === false) {
 		// A duplicate-IP link's `enabled` is forced false by the flag itself, so a
@@ -1425,10 +1474,16 @@ export function handleNetif(
 		// (and its warning band) is deliberately left standing: the link is still
 		// unusable for a generic source-IP operation, which is a different claim.
 		if (isDupIpOnly(int)) {
+			if (msg.enabled && !isBondLinkMappable(msg.name, int.ip)) {
+				return finishBondMutation(msg, {
+					ok: false,
+					reason: "bond_unmappable",
+				});
+			}
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
 			conn.send(buildMsg("netif", netIfBuildMsg()));
-			return { ok: true };
+			return finishBondMutation(msg, undefined);
 		}
 
 		if (msg.enabled) {
@@ -1441,7 +1496,10 @@ export function handleNetif(
 					`Can't enable ${msg.name}: ${err}`,
 					10,
 				);
-				return { ok: false, reason: "enable_refused" };
+				return finishBondMutation(msg, {
+					ok: false,
+					reason: "enable_refused",
+				});
 			}
 		} else {
 			if (int.enabled && countActiveNetif() === 1) {
@@ -1452,7 +1510,10 @@ export function handleNetif(
 					"Can't disable all networks",
 					10,
 				);
-				return { ok: false, reason: "disable_all_refused" };
+				return finishBondMutation(msg, {
+					ok: false,
+					reason: "disable_all_refused",
+				});
 			}
 		}
 
@@ -1462,5 +1523,5 @@ export function handleNetif(
 	}
 
 	conn.send(buildMsg("netif", netIfBuildMsg()));
-	return { ok: true };
+	return finishBondMutation(msg, undefined);
 }
