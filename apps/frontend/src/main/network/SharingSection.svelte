@@ -120,8 +120,8 @@ const SUMMARY =
 	<!-- ── the ONE headline: sharing off / nowhere to send / not steered / active ── -->
 	<div
 		class={cn(
-			'mb-3 flex items-start gap-3 rounded-xl border p-3',
-			TONE_SURFACE[view.headline.tone],
+			'flex items-start gap-3',
+			!view.quiet && cn('mb-3 rounded-xl border p-3', TONE_SURFACE[view.headline.tone]),
 		)}
 		data-testid="sharing-band-{view.headline.kind}"
 		data-headline="true"
@@ -153,6 +153,7 @@ const SUMMARY =
 		</div>
 	</div>
 
+	{#if !view.quiet}
 	<!-- ── per-uplink health: name · kind · state · share, detail on request ── -->
 	{#if view.rows.length > 0}
 		<h3 class="text-muted-foreground mb-1.5 text-[10px] font-medium tracking-wide uppercase">
@@ -439,4 +440,5 @@ const SUMMARY =
 			</p>
 		</div>
 	</details>
+	{/if}
 </section>

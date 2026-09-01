@@ -357,6 +357,112 @@ describe("SharingSection — client zones", () => {
 	});
 });
 
+describe("SharingSection — quiet when sharing is off", () => {
+	/** No hotspot and no shared-LAN port: nothing is being shared. */
+	const OFF = { hotspotInterfaces: [], netif: undefined };
+
+	/** Every silenced signal REPORTED, two of them degraded. */
+	const REPORTED = {
+		uplinks: uplinks(
+			{ iface: "wwan0" },
+			{
+				iface: "wlan0",
+				kind: "wifi",
+				state: "degraded",
+				reason: "captive_portal",
+				weight: 25,
+			},
+		),
+		steering: uplinkSteeringStatusSchema.parse({
+			state: "steering_unavailable",
+			reason: "mark_collision",
+		}),
+		shaper: uplinkShaperStatusSchema.parse({
+			state: "shaper_unavailable",
+			reason: "foreign_qdisc",
+			priorityDegraded: true,
+		}),
+		diag: sharingDiagSchema.parse({
+			state: "degraded",
+			checkedAt: NOW,
+			firewallBackend: {
+				state: "degraded",
+				reason: "firewall_backend_mismatch",
+			},
+			steeringRules: { state: "ok" },
+			sharedNat: { state: "ok" },
+			foreignTables: { state: "ok" },
+		}),
+	};
+
+	const SILENCED = [
+		"sharing-uplinks",
+		"sharing-uplink-wwan0",
+		"sharing-zones",
+		"sharing-diagnostics",
+		"sharing-priority",
+		"sharing-diag",
+		"sharing-dns-note",
+	];
+
+	it("renders the hint row and NOTHING below it", () => {
+		// The card is quiet because no client zone exists — never because there
+		// was nothing to say: every signal below is on the wire and two of them
+		// are degraded.
+		const { container } = mount({ ...REPORTED, ...OFF });
+
+		const hint = q(container, "sharing-band-sharing-off");
+		expect(hint).not.toBeNull();
+		expect(hint?.getAttribute("data-headline")).toBe("true");
+
+		for (const testid of SILENCED) {
+			expect(q(container, testid), `${testid} is still rendered`).toBeNull();
+		}
+		// Not merely folded away either — no disclosure is left to open.
+		expect(container.querySelectorAll("details")).toHaveLength(0);
+	});
+
+	it("keeps the card, because the hint row IS the discovery affordance", () => {
+		const { container } = mount(OFF);
+		const card = q(container, "sharing-section");
+		expect(card).not.toBeNull();
+		expect(card?.textContent ?? "").toContain("Internet Sharing");
+		expect(card?.textContent ?? "").toContain("Sharing is off");
+		// …and it names what to switch on.
+		expect(card?.textContent ?? "").toContain("hotspot");
+	});
+
+	it("returns the whole card when a hotspot comes up", () => {
+		const { container } = mount({
+			...REPORTED,
+			hotspotInterfaces: [hotspot(2)],
+			netif: undefined,
+		});
+		expect(q(container, "sharing-band-sharing-off")).toBeNull();
+		for (const testid of SILENCED) {
+			expect(
+				q(container, testid),
+				`${testid} did not come back`,
+			).not.toBeNull();
+		}
+	});
+
+	it("returns the whole card when a wired port takes the shared-LAN role", () => {
+		const { container } = mount({
+			...REPORTED,
+			hotspotInterfaces: [],
+			netif: netif({ eth0: { ethRole: "shared-lan", ip: "10.42.1.1" } }),
+		});
+		expect(q(container, "sharing-band-sharing-off")).toBeNull();
+		for (const testid of SILENCED) {
+			expect(
+				q(container, testid),
+				`${testid} did not come back`,
+			).not.toBeNull();
+		}
+	});
+});
+
 describe("SharingSection — streaming priority", () => {
 	it("reports the adaptive cap and the realized algorithm while streaming", () => {
 		const { container } = mount({
@@ -911,10 +1017,13 @@ describe("SharingSection — wire-field inventory", () => {
 });
 
 describe("SharingSection — the surface's own guarantees", () => {
-	it("always states the known DNS limitation, whatever the wire says", () => {
+	// Scoped to the states sharing is ON in: with no client zone the card is one
+	// hint row and the note goes with the disclosure that carries it — asserted
+	// in "quiet when sharing is off" below, not weakened away here.
+	it("always states the known DNS limitation while sharing is on", () => {
 		for (const props of [
 			{},
-			{ uplinks: undefined, hotspotInterfaces: [] },
+			{ uplinks: undefined },
 			{
 				steering: uplinkSteeringStatusSchema.parse({
 					state: "steering_unavailable",

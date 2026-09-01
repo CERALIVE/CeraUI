@@ -273,6 +273,66 @@ describe("client zones", () => {
 	});
 });
 
+describe("the quiet card", () => {
+	it("is quiet exactly when no client zone exists", () => {
+		expect(section({ hotspotInterfaces: [], netif: undefined }).quiet).toBe(
+			true,
+		);
+		expect(
+			section({
+				hotspotInterfaces: [],
+				netif: netif({ eth0: { ethRole: "uplink", ip: "192.168.0.5" } }),
+			}).quiet,
+		).toBe(true);
+	});
+
+	it("is loud for a hotspot alone, and for a shared-LAN port alone", () => {
+		expect(
+			section({ hotspotInterfaces: [HOTSPOT_NO_ROSTER], netif: undefined })
+				.quiet,
+		).toBe(false);
+		expect(
+			section({
+				hotspotInterfaces: [],
+				netif: netif({ eth1: { ethRole: "shared-lan" } }),
+			}).quiet,
+		).toBe(false);
+	});
+
+	it("reads the client zones, NOT the headline's precedence", () => {
+		// A zone that exists makes the card loud however little else is known —
+		// so the verdict has to track `zones.active` rather than whichever band
+		// happens to lead.
+		const view = section({
+			hotspotInterfaces: [],
+			netif: netif({ eth0: { ethRole: "shared-lan", ip: "10.42.1.1" } }),
+			uplinks: undefined,
+		});
+		expect(view.headline.kind).toBe("uplinks-unreported");
+		expect(view.quiet).toBe(false);
+		expect(view.quiet).toBe(!view.zones.active);
+	});
+
+	it("still derives every instrument it declines to show", () => {
+		// `quiet` gates RENDERING. Truncating the derivation instead would make a
+		// zone appearing mid-session a different code path from one present at
+		// first paint.
+		const view = section({
+			hotspotInterfaces: [],
+			netif: undefined,
+			shaper: uplinkShaperStatusSchema.parse({
+				state: "available",
+				mode: "streaming",
+				algorithm: "cake",
+			}),
+		});
+		expect(view.quiet).toBe(true);
+		expect(view.rows).toHaveLength(1);
+		expect(view.priority.kind).toBe("adaptive-cap");
+		expect(view.headline.kind).toBe("sharing-off");
+	});
+});
+
 describe("streaming priority", () => {
 	const shaper = (value: unknown): UplinkShaperStatus =>
 		uplinkShaperStatusSchema.parse(value);

@@ -585,6 +585,7 @@ export interface SharingSectionView {
 	readonly subordinate: readonly SharingBand[];
 	readonly diagnostics: DiagnosticsSummaryView;
 	readonly showSteeringShare: boolean;
+	readonly quiet: boolean;
 }
 
 export function deriveSharingSection(
@@ -615,5 +616,6 @@ export function deriveSharingSection(
 		subordinate,
 		diagnostics: deriveDiagnosticsSummary(priority, diag, subordinate),
 		showSteeringShare: showSteeringShare(zones, input.steering),
+		quiet: !zones.active,
 	};
 }
