@@ -36,9 +36,6 @@ import {
 vi.mock("$lib/rpc", () => ({
 	rpc: { network: { configure: vi.fn() } },
 }));
-vi.mock("$lib/rpc/client", () => ({
-	rpc: { network: { setEthernetRole: vi.fn() } },
-}));
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getIsStreaming: () => false,
 	getConnectionState: () => "connected",

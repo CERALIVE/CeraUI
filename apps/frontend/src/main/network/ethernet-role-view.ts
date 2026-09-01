@@ -133,6 +133,60 @@ export function ethernetRoleConsequenceKeys(
 }
 
 /**
+ * The band a STAGED role change renders while it is waiting for Save.
+ *
+ * The role is dialog state until the operator saves, so the control alone no
+ * longer tells them anything has been decided — the rung they picked simply
+ * looks selected, exactly like the rung the device is already on. This band is
+ * what makes a staged change VISIBLE, and it states the one cost the operator
+ * cannot see coming: a port changing role is reconfigured by NetworkManager, so
+ * LAN reachability to this device can drop — which matters most when the browser
+ * they are reading it in arrived through that very port.
+ */
+export interface EthernetRoleStagedWarning {
+	/** The role Save will apply. */
+	target: EthernetRole;
+	titleKey: string;
+	/** The always-rendered reachability sentence. */
+	bodyKey: string;
+	/**
+	 * Set only when applying ALSO takes a link out of a LIVE bond — the todo-15
+	 * streaming interlock, folded into this band rather than kept as a second
+	 * arm/confirm step, because Save is now the confirmation gate.
+	 */
+	consequence?: EthernetRoleConsequence;
+	/** That consequence's own sentence; present exactly when `consequence` is. */
+	consequenceBodyKey?: string;
+}
+
+/**
+ * The staged-change band, or `undefined` when there is nothing staged.
+ *
+ * A staged role EQUAL to the applied one is not a change and must render
+ * nothing: warning about a transition that will not happen is the same class of
+ * noise as a confirm on every transition.
+ */
+export function deriveEthernetRoleStagedWarning(
+	applied: EthernetRole,
+	staged: EthernetRole | undefined,
+	ctx: EthernetRoleContext,
+): EthernetRoleStagedWarning | undefined {
+	if (staged === undefined || staged === applied) return undefined;
+	const consequence = deriveEthernetRoleConsequence(applied, staged, ctx);
+	return {
+		target: staged,
+		titleKey: "network.ethRole.staged.title",
+		bodyKey: "network.ethRole.staged.body",
+		...(consequence !== undefined
+			? {
+					consequence,
+					consequenceBodyKey: CONSEQUENCE_KEY[consequence].body,
+				}
+			: {}),
+	};
+}
+
+/**
  * Whether moving `from` → `to` destroys something the operator is using RIGHT
  * NOW.
  *
