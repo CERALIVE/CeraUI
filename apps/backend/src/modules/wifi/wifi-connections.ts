@@ -79,6 +79,12 @@ export function addWifiInterface(
 	wifiInterfacesByMacAddress[macAddress] = wifiInterface;
 }
 
+export function clearWifiInterfacesForTest(): void {
+	for (const macAddress of Object.keys(wifiInterfacesByMacAddress)) {
+		delete wifiInterfacesByMacAddress[macAddress];
+	}
+}
+
 // ─── MAC-keyed state cache + diff-driven broadcast (T10/T15) ─────────────────
 
 /*

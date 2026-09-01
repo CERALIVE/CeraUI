@@ -158,6 +158,9 @@ $effect(() => {
 				     negotiated. A Wi-Fi 7 adapter on an 802.11ac access point is
 				     genuinely running VHT, so the two can differ and must. -->
 				{@const link = deriveWifiLinkView(iface.link)}
+				{@const degradedReasonKey = iface.degraded_reason
+					? `network.wifiDegraded.${iface.degraded_reason}`
+					: undefined}
 				{@const blocked = cap?.blockedBands[0]}
 				{@const wpa3Key = cap ? wpa3ChipKey(cap.wpa3Sae) : undefined}
 				<!-- Single-line row: identity (dot · name · status) left; bond + actions right.
@@ -198,7 +201,9 @@ $effect(() => {
 								!isHotspot && ifaceStale && 'opacity-50',
 							)}
 						>
-							{#if isHotspot}
+							{#if degradedReasonKey}
+								{resolveMessageKey(degradedReasonKey)}
+							{:else if isHotspot}
 								{m["network.view.hotspot"]()} · {iface.ifname}
 							{:else if connected && net}
 								{m["network.view.connected"]()} · {net.ssid}
@@ -216,17 +221,18 @@ $effect(() => {
 					     wraps whole so no control strands away from its siblings. Same
 					     shape as BondedLinksSection's trailing instrument group. -->
 					<div class="ms-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-						{#if showStale}
-							<Badge variant="stale" data-stale-interface={iface.ifname} />
-						{/if}
-						{#if isHotspot}
+						{#if !degradedReasonKey}
+							{#if showStale}
+								<Badge variant="stale" data-stale-interface={iface.ifname} />
+							{/if}
+							{#if isHotspot}
 							<!-- Exclusive AP: the radio carries no station leg, so it cannot bond. -->
 							<BondToggle
 								name={iface.ifname}
 								enabled={false}
 								disabledReason={m["network.view.hotspotNoBond"]()}
 							/>
-						{:else}
+							{:else}
 							<!-- Station and hybrid both keep a station leg, so both keep the bond
 							     toggle and Connect. Connect renders regardless of `hasIp` so a
 							     disconnected radio can still open its own selector. -->
@@ -252,8 +258,8 @@ $effect(() => {
 								{m["network.view.connect"]()}
 								<ChevronRight class="size-3.5 rtl:rotate-180" />
 							</Button>
-						{/if}
-						{#if modeView.displayMode !== 'station'}
+							{/if}
+							{#if modeView.displayMode !== 'station'}
 							<Button
 								class="h-8 min-h-[var(--touch-target-min)] gap-1.5 px-2.5"
 								data-testid="open-hotspot-setup"
@@ -266,7 +272,7 @@ $effect(() => {
 								<Settings2 class="size-3.5" />
 								{m["network.view.setup"]()}
 							</Button>
-						{/if}
+							{/if}
 						<!-- The three-rung selector is a CHOICE an operator makes rarely, so it
 						     no longer occupies the row at rest. It keeps every rule it had —
 						     all three rungs on screen, each withheld one stating its reason,
@@ -274,7 +280,7 @@ $effect(() => {
 						     under the row. Its TERMINAL FAILURE deliberately does NOT come
 						     with it: a dismissed popover cannot report an outcome, so the row
 						     hosts that band itself (see the secondary region below). -->
-						<Popover.Root>
+							<Popover.Root>
 							<Popover.Trigger
 								class="focus-visible:ring-ring text-muted-foreground hover:bg-accent/50 hover:text-foreground inline-flex h-8 min-h-[var(--touch-target-min)] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium transition-colors outline-hidden focus-visible:ring-2"
 								data-testid="open-wifi-mode"
@@ -300,7 +306,8 @@ $effect(() => {
 									lockedReason={isSwitching ? stationLockReason : undefined}
 								/>
 							</Popover.Content>
-						</Popover.Root>
+							</Popover.Root>
+						{/if}
 					</div>
 
 				<!-- ONE SECONDARY REGION, not four stacked siblings.
@@ -320,6 +327,17 @@ $effect(() => {
 				     locks. Every row renders this container, so both locks still hold now
 				     that the mode selector has moved into the header's popover. -->
 					<div class="basis-full space-y-1.5 ps-5">
+						{#if degradedReasonKey}
+							<div
+								class="border-status-warning/30 bg-status-warning/10 flex items-start gap-2 rounded-lg border px-2.5 py-1.5"
+								data-reason={iface.degraded_reason}
+								data-testid="wifi-adapter-degraded"
+								role="status"
+							>
+								<TriangleAlert aria-hidden="true" class="text-status-warning mt-0.5 size-3.5 shrink-0" />
+								<p class="text-muted-foreground text-xs">{resolveMessageKey(degradedReasonKey)}</p>
+							</div>
+						{/if}
 					{#if stationLock.locked && stationLockReason && !isHotspot}
 						<p
 							class="text-status-warning text-xs"

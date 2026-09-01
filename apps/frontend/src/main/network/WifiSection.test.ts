@@ -112,6 +112,22 @@ describe("WifiSection — T20 single-line rows + touch targets", () => {
 		).not.toBeNull();
 	});
 
+	it("keeps a degraded adapter row visible with its reason and no live controls", () => {
+		const { getByTestId, queryByTestId } = renderSection({
+			iface: {
+				conn: "",
+				available: [],
+				degraded_reason: "operational-mac-missing",
+			},
+		});
+
+		expect(getByTestId("wifi-adapter-degraded").dataset.reason).toBe(
+			"operational-mac-missing",
+		);
+		expect(queryByTestId("open-wifi-selector-dialog")).toBeNull();
+		expect(queryByTestId("open-wifi-mode")).toBeNull();
+	});
+
 	it("KEEPS the disabledReason bond toggle for a hotspot radio (cannot bond)", () => {
 		const hotspot = {
 			name: "AP",

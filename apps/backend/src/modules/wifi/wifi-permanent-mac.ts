@@ -96,6 +96,7 @@ export function setPermanentMacReaderForTest(
 
 /** Last successfully-read permanent address per interface name. */
 const permanentMacByIfname = new Map<string, MacAddress>();
+const permanentMacByOperationalMac = new Map<MacAddress, MacAddress>();
 /** Interfaces already warned about, so the fallback logs once, not per poll. */
 const fallbackWarned = new Set<string>();
 
@@ -117,11 +118,17 @@ export async function resolveWifiPermanentMac(
 			permanentMacByIfname.set(ifname, resolved);
 			fallbackWarned.delete(ifname);
 		}
+		permanentMacByOperationalMac.set(currentMac.toLowerCase(), resolved);
 		return resolved;
 	}
 
 	const cached = permanentMacByIfname.get(ifname);
 	if (cached) return cached;
+	const renamed = permanentMacByOperationalMac.get(currentMac.toLowerCase());
+	if (renamed) {
+		permanentMacByIfname.set(ifname, renamed);
+		return renamed;
+	}
 
 	if (!fallbackWarned.has(ifname)) {
 		fallbackWarned.add(ifname);
@@ -153,5 +160,6 @@ export function retainWifiPermanentMacs(ifnames: Iterable<string>): void {
 /** Test seam: clear all cached permanent addresses. */
 export function resetWifiPermanentMacCache(): void {
 	permanentMacByIfname.clear();
+	permanentMacByOperationalMac.clear();
 	fallbackWarned.clear();
 }

@@ -28,12 +28,12 @@ describe("concurrent AP virtual interface", () => {
 		).toBeLessThanOrEqual(15);
 	});
 
-	test("creates a missing __ap interface and waits for NetworkManager", async () => {
+	test("removes a stale interface, recreates it as managed, and waits for NetworkManager", async () => {
 		const calls: string[][] = [];
 		setConcurrentInterfaceDepsForTest(
 			async (_command, args) => {
 				calls.push(args);
-				if (args.length === 3) throw new Error("missing");
+				if (args.join(" ") === "dev clap-wlan0 info") return "type AP";
 				return "";
 			},
 			async () => true,
@@ -42,10 +42,12 @@ describe("concurrent AP virtual interface", () => {
 		expect(await ensureConcurrentApInterface("wlan0")).toEqual({
 			ifname: "clap-wlan0",
 			created: true,
+			type: "managed",
 		});
 		expect(calls).toEqual([
 			["dev", "clap-wlan0", "info"],
-			["dev", "wlan0", "interface", "add", "clap-wlan0", "type", "__ap"],
+			["dev", "clap-wlan0", "del"],
+			["dev", "wlan0", "interface", "add", "clap-wlan0", "type", "managed"],
 		]);
 	});
 

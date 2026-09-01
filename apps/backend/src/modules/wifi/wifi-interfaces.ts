@@ -71,6 +71,7 @@ import {
 	type WifiInterfaceWithHotspot,
 } from "./wifi-hotspot-types.ts";
 import {
+	getWifiPermanentMacCached,
 	resolveWifiPermanentMac,
 	retainWifiPermanentMacs,
 } from "./wifi-permanent-mac.ts";
@@ -79,6 +80,11 @@ export type SSID = string;
 export type WifiInterfaceId = number;
 
 export type WifiActiveMode = "ap" | "infrastructure" | "unknown";
+
+export type WifiAdapterDegradedReason =
+	| "unavailable"
+	| "operational-mac-missing"
+	| "permanent-mac-unresolved";
 
 export type BaseWifiInterface = {
 	id: WifiInterfaceId; // numeric id for the adapter - temporary for each CeraLive execution
@@ -121,6 +127,7 @@ export type BaseWifiInterface = {
 		ifname: string;
 		activeConn: ConnectionUUID | null;
 	};
+	degradedReason?: WifiAdapterDegradedReason;
 };
 
 export type WifiInterface = BaseWifiInterface | WifiInterfaceWithHotspot;
@@ -197,6 +204,37 @@ export function getMacAddressForWifiInterface(id: WifiInterfaceId) {
 
 let unavailableDeviceRetryExpiry = 0;
 let wifiIfId = 0;
+
+export function resetWifiInterfaceDiscoveryForTest(): void {
+	wifiIfId = 0;
+	unavailableDeviceRetryExpiry = 0;
+}
+
+export function recordDegradedWifiInterface(
+	ifname: string,
+	reason: WifiAdapterDegradedReason,
+): WifiInterface {
+	const existing = Object.values(getWifiInterfacesByMacAddress()).find(
+		(wifiInterface) => wifiInterface?.ifname === ifname,
+	);
+	if (existing) {
+		delete existing.removed;
+		existing.degradedReason = reason;
+		return existing;
+	}
+	const degraded: WifiInterface = {
+		id: wifiIfId++,
+		ifname,
+		conn: null,
+		hw: ifname,
+		available: new Map(),
+		saved: {},
+		savedAll: {},
+		degradedReason: reason,
+	};
+	addWifiInterface(`degraded:${ifname}`, degraded);
+	return degraded;
+}
 
 const connectionModeCache = new Map<ConnectionUUID, WifiActiveMode>();
 
@@ -295,6 +333,13 @@ export async function wifiUpdateDevices() {
 			}
 			if (state === "unavailable") {
 				unavailableDevices = true;
+				seenIfnames.push(ifname);
+				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
+					(wifiInterface) => wifiInterface?.ifname === ifname,
+				);
+				recordDegradedWifiInterface(ifname, "unavailable");
+				if (existed) statusChange = true;
+				else newDevices = true;
 				continue;
 			}
 
@@ -305,7 +350,16 @@ export async function wifiUpdateDevices() {
 					? activeConn
 					: null;
 			const currentMac = wifiDeviceListGetMacAddress(ifname);
-			if (!currentMac) continue;
+			if (!currentMac) {
+				seenIfnames.push(ifname);
+				const existed = Object.values(getWifiInterfacesByMacAddress()).some(
+					(wifiInterface) => wifiInterface?.ifname === ifname,
+				);
+				recordDegradedWifiInterface(ifname, "operational-mac-missing");
+				if (existed) statusChange = true;
+				else newDevices = true;
+				continue;
+			}
 
 			/*
 			  Adapters are keyed by their PERMANENT hardware address, never the
@@ -315,12 +369,30 @@ export async function wifiUpdateDevices() {
 			*/
 			seenIfnames.push(ifname);
 			const macAddress = await resolveWifiPermanentMac(ifname, currentMac);
+			const permanentMacResolved =
+				getWifiPermanentMacCached(ifname) !== undefined;
+			let recoveredId: WifiInterfaceId | undefined;
+			for (const [key, candidate] of Object.entries(
+				getWifiInterfacesByMacAddress(),
+			)) {
+				if (
+					key !== macAddress &&
+					candidate?.ifname === ifname &&
+					candidate.degradedReason !== undefined
+				) {
+					recoveredId = candidate.id;
+					removeWifiInterface(key);
+					break;
+				}
+			}
 
 			const wifiInterface = getWifiInterfaceByMacAddress(macAddress);
 
 			if (wifiInterface) {
 				// the interface is still available
 				delete wifiInterface.removed;
+				if (permanentMacResolved) delete wifiInterface.degradedReason;
+				else wifiInterface.degradedReason = "permanent-mac-unresolved";
 
 				if (ifname !== wifiInterface.ifname) {
 					wifiInterface.ifname = ifname;
@@ -331,7 +403,7 @@ export async function wifiUpdateDevices() {
 					statusChange = true;
 				}
 			} else {
-				const id = wifiIfId++;
+				const id = recoveredId ?? wifiIfId++;
 
 				const parsedProps = parseWifiDeviceProperties(
 					await nmDeviceProp(
@@ -352,6 +424,9 @@ export async function wifiUpdateDevices() {
 					available: new Map(),
 					saved: {},
 					savedAll: {},
+					...(!permanentMacResolved
+						? { degradedReason: "permanent-mac-unresolved" as const }
+						: {}),
 				};
 
 				if (parsedProps.value.supportsAp) {
