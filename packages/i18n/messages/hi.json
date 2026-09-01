@@ -1720,6 +1720,7 @@
 	"network.sharing.reason.passiveCongestion": "स्ट्रीम टेलीमेट्री भीड़ दिखा रही है, इसलिए यह लिंक कम क्लाइंट ट्रैफ़िक ले जा रहा है।",
 	"network.sharing.reason.definitiveLoss": "डिवाइस ने यह लिंक खो दिया, इसलिए जुड़े हुए उपकरण अब इसका उपयोग नहीं करते।",
 	"network.sharing.weightLabel": "क्लाइंट ट्रैफ़िक हिस्सा {weight} प्रतिशत",
+	"network.sharing.steeringShare": "स्टीयरिंग हिस्सा",
 	"network.sharing.probes": "{successes} सफल · {failures} विफल",
 	"network.sharing.probesLabel": "कनेक्टिविटी जाँच",
 	"network.sharing.uplinkDetail.disclosure": "विवरण",

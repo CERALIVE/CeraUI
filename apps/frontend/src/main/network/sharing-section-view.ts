@@ -556,6 +556,25 @@ export interface SharingSectionInput {
 	readonly now: number;
 }
 
+/**
+ * May a row render its steering weight?
+ *
+ * The weight is the device's SELECTION SHARE for shared-client traffic — how
+ * much of it this uplink is asked to carry — and it is not a link-quality
+ * reading, so it is only meaningful where client traffic is actually being
+ * steered. Two situations withhold it, on POSITIVE evidence in both cases:
+ * no client zone exists (nothing to share), or the device has said its steering
+ * layer is unavailable (clients fall back to the default route, so the share
+ * steers nothing). An UNREPORTED steering state withholds nothing — absence is
+ * not evidence, and the weight is still the record's own field.
+ */
+export function showSteeringShare(
+	zones: ClientZoneSummary,
+	steering: UplinkSteeringStatus | undefined,
+): boolean {
+	return zones.active && steering?.state !== "steering_unavailable";
+}
+
 export interface SharingSectionView {
 	readonly rows: readonly UplinkRowView[];
 	readonly zones: ClientZoneSummary;
@@ -565,6 +584,7 @@ export interface SharingSectionView {
 	readonly headline: SharingHeadlineView;
 	readonly subordinate: readonly SharingBand[];
 	readonly diagnostics: DiagnosticsSummaryView;
+	readonly showSteeringShare: boolean;
 }
 
 export function deriveSharingSection(
@@ -594,5 +614,6 @@ export function deriveSharingSection(
 		headline,
 		subordinate,
 		diagnostics: deriveDiagnosticsSummary(priority, diag, subordinate),
+		showSteeringShare: showSteeringShare(zones, input.steering),
 	};
 }

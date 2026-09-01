@@ -201,33 +201,59 @@ const SUMMARY =
 									     alone. -->
 									<Badge variant="stale" data-stale-interface={row.iface} />
 								{/if}
-								<!-- The weight bar is the device's own selection share, so it is a
-								     real 0-100 fraction rather than a fabricated denominator. -->
-								<span
-									class="inline-flex shrink-0 items-center gap-1.5"
-									data-testid="sharing-uplink-weight-{row.iface}"
-									data-weight={row.weight}
-								>
+								<!-- The weight is a STEERING SHARE, not link quality: how much
+								     shared-client traffic this uplink is asked to carry. It therefore
+								     renders only where client traffic is really being steered, and it
+								     is LABELLED, because an unlabelled percentage beside a health
+								     state reads as a quality score for the link. -->
+								{#if view.showSteeringShare}
 									<span
-										class="bg-muted relative block h-1.5 w-16 overflow-hidden rounded-full"
-										role="img"
-										aria-label={m['network.sharing.weightLabel']({ weight: row.weight })}
+										class="inline-flex shrink-0 items-center gap-1.5"
+										data-testid="sharing-uplink-weight-{row.iface}"
+										data-weight={row.weight}
 									>
+										<span class="text-muted-foreground text-[10px] tracking-wide uppercase">
+											{m['network.sharing.steeringShare']()}
+										</span>
 										<span
-											class="absolute inset-y-0 start-0 block rounded-full"
-											style="inline-size: {row.weight}%; background-color: {color};"
-										></span>
+											class="bg-muted relative block h-1.5 w-16 overflow-hidden rounded-full"
+											role="img"
+											aria-label={m['network.sharing.weightLabel']({ weight: row.weight })}
+										>
+											<span
+												class="absolute inset-y-0 start-0 block rounded-full"
+												style="inline-size: {row.weight}%; background-color: {color};"
+											></span>
+										</span>
+										<span
+											data-live-value
+											class="font-mono text-xs tabular-nums"
+											style="color: {color};"
+										>
+											{row.weight}%
+										</span>
 									</span>
-									<span data-live-value class="font-mono text-xs tabular-nums" style="color: {color};">
-										{row.weight}%
-									</span>
-								</span>
+								{/if}
 								<ChevronRight
 									aria-hidden="true"
 									class="text-muted-foreground size-3.5 shrink-0 transition-transform group-open:rotate-90 rtl:rotate-180 rtl:group-open:-rotate-90"
 								/>
 								<span class="sr-only">{m['network.sharing.uplinkDetail.disclosure']()}</span>
 							</span>
+
+							<!-- WHY a link is not up belongs beside its state, not behind a
+							     disclosure: the state word alone ("Degraded") is the one thing an
+							     operator cannot act on. `basis-full` wraps it onto its own line
+							     inside the same summary, so it is on screen at rest. -->
+							{#if row.reasonKey}
+								<p
+									class="text-muted-foreground basis-full text-xs"
+									data-testid="sharing-uplink-reason-{row.iface}"
+									role="status"
+								>
+									{resolveMessageKey(row.reasonKey)}
+								</p>
+							{/if}
 						</summary>
 
 						<div class="space-y-1 border-t px-3 pt-1.5 pb-2">
@@ -243,15 +269,6 @@ const SUMMARY =
 									})}
 								</span>
 							</p>
-							{#if row.reasonKey}
-								<p
-									class="text-muted-foreground text-xs"
-									data-testid="sharing-uplink-reason-{row.iface}"
-									role="status"
-								>
-									{resolveMessageKey(row.reasonKey)}
-								</p>
-							{/if}
 						</div>
 					</details>
 				</li>

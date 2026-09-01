@@ -1723,6 +1723,7 @@
 	"network.sharing.reason.passiveCongestion": "La telemetría de la emisión muestra congestión, así que este enlace lleva menos tráfico de clientes.",
 	"network.sharing.reason.definitiveLoss": "El dispositivo perdió este enlace, así que los equipos conectados ya no lo usan.",
 	"network.sharing.weightLabel": "Reparto de tráfico de clientes: {weight} por ciento",
+	"network.sharing.steeringShare": "Reparto de enrutado",
 	"network.sharing.probes": "{successes} correctas · {failures} fallidas",
 	"network.sharing.probesLabel": "Comprobaciones de conectividad",
 	"network.sharing.uplinkDetail.disclosure": "Detalles",

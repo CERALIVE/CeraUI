@@ -1720,6 +1720,7 @@
 	"network.sharing.reason.passiveCongestion": "Die Stream-Telemetrie zeigt Überlastung, deshalb trägt diese Strecke weniger Client-Verkehr.",
 	"network.sharing.reason.definitiveLoss": "Das Gerät hat diese Strecke verloren, verbundene Geräte nutzen sie nicht mehr.",
 	"network.sharing.weightLabel": "Anteil am Client-Verkehr {weight} Prozent",
+	"network.sharing.steeringShare": "Steuerungsanteil",
 	"network.sharing.probes": "{successes} erfolgreich · {failures} fehlgeschlagen",
 	"network.sharing.probesLabel": "Verbindungsprüfungen",
 	"network.sharing.uplinkDetail.disclosure": "Details",

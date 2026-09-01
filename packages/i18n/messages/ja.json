@@ -1675,6 +1675,7 @@
 	"network.sharing.reason.passiveCongestion": "配信テレメトリが輻輳を示しているため、この回線が運ぶクライアント通信は減っています。",
 	"network.sharing.reason.definitiveLoss": "本機がこの回線を失ったため、接続中の機器はもう使用しません。",
 	"network.sharing.weightLabel": "クライアント通信の配分 {weight} パーセント",
+	"network.sharing.steeringShare": "振り分け比率",
 	"network.sharing.probes": "成功 {successes} · 失敗 {failures}",
 	"network.sharing.probesLabel": "接続チェック",
 	"network.sharing.uplinkDetail.disclosure": "詳細",

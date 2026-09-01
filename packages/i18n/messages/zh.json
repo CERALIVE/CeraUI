@@ -1675,6 +1675,7 @@
 	"network.sharing.reason.passiveCongestion": "推流遥测显示拥塞，因此该链路承载的客户端流量减少。",
 	"network.sharing.reason.definitiveLoss": "设备已失去该链路，所连设备不再使用它。",
 	"network.sharing.weightLabel": "客户端流量占比 {weight} 百分比",
+	"network.sharing.steeringShare": "分流占比",
 	"network.sharing.probes": "成功 {successes} · 失败 {failures}",
 	"network.sharing.probesLabel": "连通性检查",
 	"network.sharing.uplinkDetail.disclosure": "详细信息",

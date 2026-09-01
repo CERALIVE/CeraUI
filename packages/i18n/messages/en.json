@@ -1720,6 +1720,7 @@
 	"network.sharing.reason.passiveCongestion": "Stream telemetry shows congestion, so this link carries less client traffic.",
 	"network.sharing.reason.definitiveLoss": "The device lost this link, so connected devices no longer use it.",
 	"network.sharing.weightLabel": "Client traffic share {weight} percent",
+	"network.sharing.steeringShare": "Steering share",
 	"network.sharing.probes": "{successes} ok · {failures} failed",
 	"network.sharing.probesLabel": "Connectivity checks",
 	"network.sharing.uplinkDetail.disclosure": "Details",

@@ -1723,6 +1723,7 @@
 	"network.sharing.reason.passiveCongestion": "La télémétrie du flux indique une congestion, cette liaison transporte donc moins de trafic client.",
 	"network.sharing.reason.definitiveLoss": "L'appareil a perdu cette liaison, les appareils connectés ne l'utilisent plus.",
 	"network.sharing.weightLabel": "Part du trafic client : {weight} pour cent",
+	"network.sharing.steeringShare": "Part de répartition",
 	"network.sharing.probes": "{successes} réussies · {failures} échouées",
 	"network.sharing.probesLabel": "Tests de connectivité",
 	"network.sharing.uplinkDetail.disclosure": "Détails",

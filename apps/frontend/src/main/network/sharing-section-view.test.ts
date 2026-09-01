@@ -35,6 +35,7 @@ import {
 	SHARING_LINK_TOKENS,
 	type SharingBand,
 	type SharingSectionInput,
+	showSteeringShare,
 	subordinateBands,
 	uplinkReasonKey,
 } from "./sharing-section-view";
@@ -169,6 +170,60 @@ describe("per-uplink rows", () => {
 			1, 2, 3, 4, 5, 6, 1,
 		]);
 		expect(SHARING_LINK_TOKENS).toBe(6);
+	});
+});
+
+describe("the steering share is a share, not a quality score", () => {
+	const ZONES_ON = {
+		hotspots: 1,
+		hotspotClients: 2,
+		sharedLan: [],
+		active: true,
+	};
+	const ZONES_OFF = {
+		hotspots: 0,
+		hotspotClients: undefined,
+		sharedLan: [],
+		active: false,
+	};
+	const STEERING_OK = uplinkSteeringStatusSchema.parse({ state: "available" });
+	const STEERING_DOWN = uplinkSteeringStatusSchema.parse({
+		state: "steering_unavailable",
+		reason: "mark_collision",
+	});
+
+	it("shows it while client traffic is really being steered", () => {
+		expect(showSteeringShare(ZONES_ON, STEERING_OK)).toBe(true);
+	});
+
+	it("withholds it when NO client zone exists — there is nothing to share", () => {
+		expect(showSteeringShare(ZONES_OFF, STEERING_OK)).toBe(false);
+		expect(showSteeringShare(ZONES_OFF, undefined)).toBe(false);
+	});
+
+	it("withholds it when the device SAID its steering layer is unavailable", () => {
+		// Clients fall back to the default route, so the share steers nothing.
+		expect(showSteeringShare(ZONES_ON, STEERING_DOWN)).toBe(false);
+	});
+
+	it("an UNREPORTED steering state withholds nothing — absence is not evidence", () => {
+		expect(showSteeringShare(ZONES_ON, undefined)).toBe(true);
+	});
+
+	it("rides the section view, so a render site never re-derives it", () => {
+		expect(section().showSteeringShare).toBe(true);
+		expect(section({ hotspotInterfaces: [] }).showSteeringShare).toBe(false);
+		expect(section({ steering: STEERING_DOWN }).showSteeringShare).toBe(false);
+	});
+
+	it("never touches the row's own weight — only whether it is rendered", () => {
+		// The value is the device's record; withholding is a DISPLAY decision.
+		const withheld = section({
+			hotspotInterfaces: [],
+			uplinks: uplinks({ iface: "wwan0", weight: 70 }),
+		});
+		expect(withheld.showSteeringShare).toBe(false);
+		expect(withheld.rows[0]?.weight).toBe(70);
 	});
 });
 
