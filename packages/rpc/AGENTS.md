@@ -23,6 +23,7 @@ src/
 | Add a new RPC procedure | `contracts/{domain}.contract.ts` → wire into `contracts/index.ts` |
 | Add/change input or output shape | `schemas/{domain}.schema.ts` |
 | Shared-client steering status/refusal + transient hard-down reset | `schemas/network.schema.ts` → `uplinkSteeringStatusSchema` / `uplinkFlowsResetEventSchema` |
+| Name the DEVICE behind an uplink-health row without renaming the row | `schemas/network.schema.ts` → `uplinkHealthRecordSchema.displayName`; section below → AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY |
 | Streaming-first shaper mode/algorithm + priority degradation | `schemas/network.schema.ts` → `uplinkShaperStatusSchema` |
 | Correlate a modem across a USB-mode transition | `schemas/modems.schema.ts` → `deriveModemStableKey()` / the `stable_key` field |
 | A ModemManager reading that may be absent, WITHOUT losing why | `schemas/modems.schema.ts` → `modemMetricUnknownReasonSchema` + `modemNumberMetricSchema` / `modemFlagMetricSchema` / `modemTextMetricSchema`; section below → AN ABSENT READING STILL SAYS SOMETHING |
@@ -62,6 +63,31 @@ The backend parses both shapes before broadcast. Only `uplink-steering` is sent 
 the post-login snapshot; `uplink-flows-reset` describes a hard-down action that
 already happened and must never be replayed to a later session. Do not duplicate
 either type under `apps/` or widen the reset event into persisted state.
+
+## AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY [EXISTS]
+
+`uplinkHealthRecordSchema.displayName` is additive-optional DISPLAY metadata —
+the device's own operator-facing name (`Huawei E3372`, `Quectel RM530N-GL`, an
+hwdb/vendor label), resolved by the device from the SAME USB-descriptor markers
+the `netif` projection stamps.
+
+Three shape decisions carry weight:
+
+- **`iface` remains the row's identity, and nothing may key or join on the
+  name.** Two units of one SKU legitimately publish the SAME name — the bench
+  HiLink twins do — so a name-keyed consumer collapses two links into one. That
+  is `conn_id`'s lesson (`status.schema.ts`) restated for a different field.
+- **Absent is the honest common case, so it must cost nothing.** A PCIe modem, a
+  plain wired port and a backend that predates the field all carry no name, and
+  the consumer then renders the raw `iface` byte-identically to before. A
+  placeholder or an id-shaped stand-in would be the fabrication the rest of this
+  wire refuses everywhere else.
+- **`.min(1)` is what keeps `""` from becoming a third state.** An empty name is
+  neither a name nor an absence, and a consumer would render it as a blank line
+  where a device should be.
+
+Device contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) →
+…AND AN UPLINK'S KIND COMES FROM THE DEVICE, NOT FROM ITS NAME.
 
 `uplinkShaperStatusSchema` is the sibling persistent state. Available states name
 the lifecycle mode and realized algorithm (`cake` or `htb-fq_codel`). Unavailable

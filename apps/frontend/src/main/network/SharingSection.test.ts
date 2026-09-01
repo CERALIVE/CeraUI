@@ -330,6 +330,70 @@ describe("SharingSection — the weight is a STEERING SHARE, never link quality"
 	});
 });
 
+describe("SharingSection — an uplink is a DEVICE, keyed on its interface", () => {
+	it("leads with the model name and demotes the kernel name to mono", () => {
+		const { container } = mount({
+			uplinks: uplinks({
+				iface: "wwu1u4u4i4",
+				displayName: "Quectel RM530N-GL",
+			}),
+		});
+
+		const name = q(container, "sharing-uplink-name-wwu1u4u4i4");
+		const iface = q(container, "sharing-uplink-iface-wwu1u4u4i4");
+		expect(name?.textContent?.trim()).toBe("Quectel RM530N-GL");
+		// The raw name is NOT garbled — it is the real predictable kernel name of
+		// that modem's QMI netdev — so it stays, one step quieter.
+		expect(iface?.textContent?.trim()).toBe("wwu1u4u4i4");
+		expect(iface?.className).toContain("font-mono");
+		expect(name?.className).not.toContain("font-mono");
+	});
+
+	it("keeps the raw-ifname row byte-identical when no name was resolved", () => {
+		const named = mount({
+			uplinks: uplinks({ iface: "eth0", kind: "ethernet", displayName: "X" }),
+		});
+		const bare = mount({
+			uplinks: uplinks({ iface: "eth0", kind: "ethernet" }),
+		});
+
+		expect(q(named.container, "sharing-uplink-name-eth0")).not.toBeNull();
+		expect(q(bare.container, "sharing-uplink-name-eth0")).toBeNull();
+		expect(q(bare.container, "sharing-uplink-iface-eth0")).toBeNull();
+
+		const row = q(bare.container, "sharing-uplink-eth0");
+		expect(row?.textContent ?? "").toContain("eth0");
+		const rawName = row?.querySelector("span.font-mono");
+		expect(rawName?.textContent?.trim()).toBe("eth0");
+		expect(rawName?.className).toContain("text-xs");
+	});
+
+	it("keys the row on `iface`, never on the device name", () => {
+		const { container } = mount({
+			uplinks: uplinks(
+				{ iface: "eth1", displayName: "Huawei E3372" },
+				{ iface: "enx0c5b8f279a64", displayName: "Huawei E3372" },
+			),
+		});
+
+		// Two units of one SKU share a name and must still be two distinct rows.
+		expect(q(container, "sharing-uplink-eth1")).not.toBeNull();
+		expect(q(container, "sharing-uplink-enx0c5b8f279a64")).not.toBeNull();
+		expect(
+			container.querySelectorAll('[data-testid^="sharing-uplink-name-"]'),
+		).toHaveLength(2);
+	});
+
+	it("still states the kind beside the name", () => {
+		const { container } = mount({
+			uplinks: uplinks({ iface: "eth1", displayName: "Huawei E3372" }),
+		});
+
+		const row = q(container, "sharing-uplink-eth1");
+		expect(row?.textContent ?? "").toContain("Cellular");
+	});
+});
+
 describe("SharingSection — client zones", () => {
 	it("reports the hotspot roster count through the shared roster rule", () => {
 		const { container } = mount({ hotspotInterfaces: [hotspot(2)] });

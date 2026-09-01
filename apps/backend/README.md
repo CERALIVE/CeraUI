@@ -164,6 +164,14 @@ Key streaming procedures:
 
 All setters return `{ success: boolean, applied: <fields> }`. The `applied` object reflects post-validation values actually written to config. Clients must lock their UI to `applied`, not to the raw input.
 
+`network.configure` follows the same rule for bond toggles: it reads the
+post-mutation `netif` projection back and returns that result, never the requested
+boolean. Duplicate-IP links use one eligibility predicate for both the displayed
+Included/Excluded state and SRTLA IP-list/bind-map admission. A link with a valid
+physical bind row can be included; one that cannot be mapped is refused with
+`bond_unmappable`. Operator exclusions persist in `config.json` under canonical
+physical link IDs, so they survive backend restarts and interface renames.
+
 `streaming.start` accepts a partial config. An empty `{}` starts from the complete
 persisted stream configuration; defined fields override only their saved counterparts.
 A manual address/port switches away from both saved managed-relay fields, while a

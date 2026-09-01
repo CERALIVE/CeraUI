@@ -2382,7 +2382,7 @@ toggle riding alongside the address it was checking — so the operator was told
   legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
   failure would report a dev/e2e toggle that visibly worked as broken. Do not
   "unify" the two branches.
-- **The four reasons are not collapsible.** `enable_refused` already carries an
+- **The five reasons are not collapsible.** `enable_refused` already carries an
   operator notification naming the blocking error; `disable_all_refused` is the
   device protecting its last link; `unknown_interface` clears when the link comes
   back; `stale_address` means re-read and retry.
@@ -6466,6 +6466,57 @@ candidates through their steering eligibility. The engine never edits routes;
 `gateways.ts` remains the sole `ip route del default` owner. Post-login hydration
 replays the current records immediately.
 
+### …AND AN UPLINK'S KIND COMES FROM THE DEVICE, NOT FROM ITS NAME [EXISTS]
+
+`modules/network/uplink-identity.ts` (`resolveUplinkIdentity`) is the ONE thing
+the health runtime asks what an interface IS, at all three `observe()` sites. It
+replaced a private `kindFor()` that read the interface NAME, and the two answers
+were board-proven to disagree with the `netif` projection sitting beside them.
+
+**BOARD-PROVEN MISMATCH** (`ceralive2`, 2026-08-30). `eth1` is a Huawei E3372
+LTE dongle (`cdc_ether`, `12d1:14dc`). The `netif` projection reads USB
+descriptors and stamps it `router_cellular` correctly; the health engine matched
+`/^(?:eth|en)/` and published `kind: "ethernet"`. Its IDENTICAL TWIN — same SKU,
+same hub, one port apart — won the udev rename race, is called
+`enx0c5b8f279a64`, matched the `enx` arm first, and published `cellular`. One
+device class, typed two ways, decided entirely by a rename race.
+
+- **The markers are consulted FIRST and are authoritative.**
+  `getRouterCellularMarker` then `getModemNetMarker` — the SAME cache
+  `applyRouterCellularProjection` / `applyModemNetProjection` stamp onto the
+  `netif` wire, so the two surfaces cannot disagree about one device. There is
+  no second classifier and no second sysfs read; this module only reads.
+- **The name ladder BELOW them is a fallback, never a second opinion.** It
+  covers what the USB sweep structurally cannot describe — a PCIe/MHI modem, a
+  PPP link — and it still runs at boot, before the asynchronous marker sweep has
+  landed. `enx*` is DELIBERATELY REMOVED from its cellular arm: it is systemd's
+  predictable name for ANY USB network adapter, so reading it as cellular is
+  precisely the coin-flip above. `ww*` / `ppp*` / `usb*` stay, because those
+  describe a device class rather than guessing at one.
+- **`displayName` is ADDITIVE-OPTIONAL and NEVER FABRICATED.** It composes
+  through `routerCellularDisplayName` — the SAME rule that titles the device's
+  modem row — so a device is called one thing across both surfaces. A device the
+  classifier could not name carries NO name, and the row renders the raw `iface`
+  byte-identically to before the field existed.
+- **The dongle's own admin API is NOT consulted here.** This runs on the 5 s
+  health cadence while the admin cache is filled on a 30 s poll, so a name that
+  changed depending on which poll last landed would be worse than the descriptor
+  answer that is always available.
+- **Absence RETRACTS.** `#reduce` re-derives `displayName` from the observation
+  every tick and omits it when absent, rather than preserving `current`. Keeping
+  it would latch a resolved identity onto whatever re-enumerates under that
+  interface next — the `policy_route_missing` latch, exactly.
+- **`iface` remains the row identity.** Nothing keys, joins or correlates on the
+  name; two units of one SKU legitimately share one.
+
+Coverage: `tests/uplink-identity.test.ts` — the bench topology driven through the
+REAL `refreshUsbNetMarkers` sweep (the eth-named dongle typing `cellular` and
+naming itself, both twins agreeing, the MM-managed data function named after its
+modem), the plain-Ethernet regression lock, the markers-absent fallback proving
+the pre-existing ladder, the `enx`-never-guesses negative, and the record/wire
+half (stamped, omitted, retracted, `iface` still the key). Frontend half:
+`apps/frontend/AGENTS.md` → AN UPLINK ROW NAMES A DEVICE.
+
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
 
 | Event type | Interval | Source |
@@ -8781,7 +8832,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't derive a second physical identity anywhere — `physical-identity.ts` is the ONE resolver and the ONE `link_id` authority, or the bind map and the telemetry registry attribute an operator's links to different devices. Don't key a classified dongle on its interface name again (that is the defect this closed), don't add an alias table unifying the serial and port rungs (a stale port alias hands the NEXT device the previous unit's identity), and don't re-key the wire's `stable_key` onto the serial rung — todo 17's consumers, the usage-policy store and the projection fixtures all correlate on the ID_PATH-derived value.
 - Don't write `BIND_IPS_FILE` outside `publishBondMapping` — the two-file ADR-003 publication order (ips rename → sidecar rename as the COMMIT POINT → SIGHUP), the unique temp siblings, the fsync, and the 0600 sidecar mode are all one contract, and a second writer desynchronizes the `generation` counter the reader orders mappings by. Don't swap the sidecar write to `Bun.write`: it neither fsyncs nor sets a mode, and the reader REFUSES a group- or world-writable sidecar.
 - Don't key the SIGHUP on an IP-list diff — a MAPPING-ONLY change (a link moving between interfaces) leaves the IP bytes byte-identical, so only `publication.changed`/`generation` can see it. That is the whole reason the generation increments on every publication.
-- Don't collapse the duplicate-IP flag back into one answer. It stays raised and `probeExclusionReason` still refuses the link for a generic SOURCE-IP operation; bond membership is the separate `isBondCandidate` question, and two same-IP lines in `BIND_IPS_FILE` are LEGAL. Don't read the operator's bond choice out of `enabled` for such a link either — the error path forces that bit false, which is why `operatorBondOptOut` exists.
+- Don't collapse the duplicate-IP flag back into one answer. It stays raised and `probeExclusionReason` still refuses the link for a generic SOURCE-IP operation; bond membership is the separate `isBondCandidate` question, and two same-IP lines in `BIND_IPS_FILE` are LEGAL. That ONE predicate must drive both `netIfBuildMsg().enabled` and `genSrtlaBondEntries()`, or the UI and sender disagree again. Don't persist the operator's choice under an ifname: `config.bond_opt_out` keys on the physical `link_id`, and a genuinely unmappable duplicate-IP include is refused as `bond_unmappable`.
 - Don't pass `--bind-map` without the pre-spawn `--capabilities-json` probe, and don't move that probe below `buildSrtlaSendArgs` — an unknown flag makes an OLD `srtla_send` exit with a usage error, i.e. a failed stream instead of a graceful downgrade. Match on NOTHING: any non-zero exit, unparseable output, or timeout is NO SUPPORT.
 - Don't invent a second disposition vocabulary, and don't let the UI infer a degradation from an absent field — `bind-map-disposition.ts` emits todo 8's exact `bind_map_status`/`disposition` values for EVERY launch path, including the two the sender cannot report, and sender-reported telemetry replaces the synthesized value. A degraded band that names no collision group, or a second twin dropped in silence, is the defect this boundary exists to remove.
 - Don't identify a telemetry row by its `conn_id` — that is a FILE POSITION, so a SIGHUP reload moves it and the row follows the position instead of the modem. Key on todo 10's `link_id` through `link-registry.ts`, and don't resolve a row's interface by looking its source IP up in `netif`: twins share one address, so that answered BOTH rows with ONE interface. Don't let the file-position rung outrank the sender's own `link_id` echo either — the echo names the row the sender actually bound.

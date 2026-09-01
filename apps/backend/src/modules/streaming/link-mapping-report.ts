@@ -169,6 +169,30 @@ export function isBondMappingActive(): boolean {
 }
 
 /**
+ * THE MAPPING STATE IS A TRI-STATE, AND THE BOOLEAN ABOVE CANNOT EXPRESS IT.
+ *
+ * `isBondMappingActive()` answers `false` for TWO facts that call for opposite
+ * operator copy: no bond has been described at all (an IDLE device — nothing has
+ * launched, so nothing is excluded), and a described mapping that is degraded (a
+ * launch really did collapse the twins). Reading that one bit told an idle
+ * operator with two perfectly mappable twins that "only one of them can carry
+ * bonded traffic" — a claim about a bond that does not exist.
+ *
+ * `absent` folds into `degraded` deliberately: both mean a DESCRIBED bond whose
+ * mapping is not in force, which is the only distinction a consumer of this
+ * function may act on; the precise reason still rides `status.reason`. This is
+ * ADDITIVE — `isBondMappingActive()` keeps its exact meaning, so the telemetry
+ * rung-3 gate that reads it is untouched.
+ */
+export type BondMappingState = "none" | "active" | "degraded";
+
+export function getBondMappingState(): BondMappingState {
+	const state = getNormalizedBindMapReport()?.status.state;
+	if (state === undefined) return "none";
+	return state === "active" ? "active" : "degraded";
+}
+
+/**
  * The normalized report as the UI reads it — `null` when no bond is described.
  *
  * Emitted as an explicit value on every status frame rather than only when

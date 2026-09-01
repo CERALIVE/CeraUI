@@ -385,6 +385,11 @@ export const runtimeConfigSchema = z.object({
 	// construction rather than by a second lookup that could disagree.
 	eth_roles: z.record(z.string(), ethernetRoleSchema).optional(),
 
+	// Operator exclusions from the SRTLA bond, keyed by the canonical physical
+	// link id. Values can only be true: absence means included. A bare ifname is
+	// never accepted as a durable identity because the Huawei twins swap names.
+	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
+
 	// Opt-in gate for the guarded USB-composition-mode switch (`modems.setUsbMode`).
 	// DEFAULT-ABSENT ON PURPOSE and given NO entry in RUNTIME_CONFIG_DEFAULTS: a
 	// mode switch re-enumerates the modem and drops its bond link, so the mutation

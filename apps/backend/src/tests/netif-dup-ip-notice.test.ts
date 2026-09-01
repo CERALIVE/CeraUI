@@ -42,11 +42,17 @@ import {
 import { setNetifState } from "../modules/network/state/netif-state.ts";
 import {
 	clearBindMapReport,
+	noteSenderBindMapReport,
 	noteWriterBindMapReport,
 	resetBindMapReportListeners,
 } from "../modules/streaming/bind-map-disposition.ts";
 import {
+	getBondMappingState,
+	isBondMappingActive,
+} from "../modules/streaming/link-mapping-report.ts";
+import {
 	genSrtlaBondEntries,
+	isBondLinkMappable,
 	setBondIdentityResolverForTest,
 } from "../modules/streaming/srtla.ts";
 import {
@@ -78,6 +84,17 @@ const IDENTITY_DEGRADED_MSG =
 	`Streaming is not affected. Per-interface link mapping is active, but ${TWIN_B} ` +
 	"could not be identified as a physical device, so it can't be told apart " +
 	"from its twin and is left out of the bond.";
+
+/**
+ * The IDLE arm of the same finding. Nothing has launched, so the exclusion is
+ * still ahead of the operator rather than behind them — and the copy must be in
+ * the tense that says so.
+ */
+const IDLE_UNMAPPABLE_MSG =
+	`Interfaces ${TWIN_A}, ${TWIN_B} share the same IP address: ${TWIN_IP}. ` +
+	`Streaming is not affected. ${TWIN_B} could not be identified as a physical ` +
+	"device, so once a stream starts it can't be told apart from its twin and " +
+	"will be left out of the bond.";
 
 function ifconfigStanza(name: string, ip: string): string {
 	return [
@@ -151,6 +168,10 @@ function removedIds(frames: Array<Record<string, unknown>>): string[] {
 			| undefined;
 		return (payload?.remove ?? []).map((entry) => entry.id);
 	});
+}
+
+function messageNow(): string | undefined {
+	return notificationExists(NETIF_DUP_IP_NOTIFICATION)?.msg;
 }
 
 function shownNotices(
@@ -326,5 +347,145 @@ describe("QA: the bench twin fixture across a mapping-inactive -> active flip", 
 		processIfconfigOutput(ifconfigStanza(SOLO_IF, SOLO_IP));
 
 		expect(notificationExists(NETIF_DUP_IP_NOTIFICATION)).toBeUndefined();
+	});
+});
+
+/*
+  THE MAPPING STATE IS A TRI-STATE, AND THE BOOLEAN COULD NOT EXPRESS IT.
+
+  `isBondMappingActive()` answers `false` for two facts that call for OPPOSITE
+  operator copy: no bond has been described at all, and a described mapping that
+  is degraded. Reading that one bit told an IDLE operator — nothing launched,
+  both twins perfectly mappable — that "only one of them can carry bonded
+  traffic", which is a claim about a bond that does not exist. Every case below
+  drives the SHIPPED `wireDupIpNoticeDeps()` pair, so the state under test is the
+  same `getBondMappingState()` the producer reads.
+*/
+describe("the notice is decided on none | active | degraded", () => {
+	test("`none` with every twin mappable is SILENT", () => {
+		pollNetif();
+
+		expect(getBondMappingState()).toBe("none");
+		// Non-vacuity: the collision is real and both members are describable, so
+		// the silence is the verdict rather than an absent group.
+		expect(getNetworkInterfaces()[TWIN_A]?.ip).toBe(TWIN_IP);
+		expect(getNetworkInterfaces()[TWIN_B]?.ip).toBe(TWIN_IP);
+		expect(isBondLinkMappable(TWIN_A, TWIN_IP)).toBe(true);
+		expect(isBondLinkMappable(TWIN_B, TWIN_IP)).toBe(true);
+		expect(notificationExists(NETIF_DUP_IP_NOTIFICATION)).toBeUndefined();
+	});
+
+	test("`none` with an unmappable twin warns in the FUTURE tense", () => {
+		failIdentityFor(TWIN_B);
+		pollNetif();
+
+		const notice = notificationExists(NETIF_DUP_IP_NOTIFICATION);
+		expect(getBondMappingState()).toBe("none");
+		expect(notice?.type).toBe("warning");
+		expect(notice?.msg).toBe(IDLE_UNMAPPABLE_MSG);
+		// It must claim NEITHER of the other two states: no launch has happened,
+		// so nothing collapsed the addresses and no mapping is in force.
+		expect(notice?.msg).not.toBe(MAPPING_INACTIVE_MSG);
+		expect(notice?.msg).not.toContain("link mapping is active");
+		expect(notice?.msg).not.toContain("link mapping is not active");
+	});
+
+	test("`none` does NOT weaken todo 41's unmappable refusal", () => {
+		failIdentityFor(TWIN_B);
+		pollNetif();
+
+		// The band is an honesty surface; the exclusion itself is unchanged. A
+		// dup-IP twin the writer cannot describe is still refused by
+		// `isBondCandidate`, so it never reaches the entry list at all.
+		const ifaces = genSrtlaBondEntries().map((entry) => entry.iface);
+		expect(ifaces).toContain(TWIN_A);
+		expect(ifaces).not.toContain(TWIN_B);
+		expect(isBondLinkMappable(TWIN_B, TWIN_IP)).toBe(false);
+		expect(getNetworkInterfaces()[TWIN_B]?.enabled).toBe(false);
+	});
+
+	test("the same collision reads three different ways across the tri-state", () => {
+		const seen: Array<[string, string | undefined]> = [];
+
+		pollNetif();
+		seen.push([getBondMappingState(), messageNow()]);
+
+		degradeBondMapping();
+		pollNetif();
+		seen.push([getBondMappingState(), messageNow()]);
+
+		activateBondMapping();
+		pollNetif();
+		seen.push([getBondMappingState(), messageNow()]);
+
+		expect(seen).toEqual([
+			["none", undefined],
+			["degraded", MAPPING_INACTIVE_MSG],
+			["active", undefined],
+		]);
+	});
+
+	test("a stop retires the described bond and the band goes back to silent", () => {
+		degradeBondMapping();
+		pollNetif();
+		expect(notificationExists(NETIF_DUP_IP_NOTIFICATION)).toBeDefined();
+
+		clearBindMapReport();
+		const frames = captureFrames(() => {
+			pollNetif();
+		});
+
+		expect(getBondMappingState()).toBe("none");
+		expect(removedIds(frames)).toContain(NETIF_DUP_IP_NOTIFICATION);
+		expect(notificationExists(NETIF_DUP_IP_NOTIFICATION)).toBeUndefined();
+	});
+});
+
+describe("getBondMappingState folds only what a consumer may act on", () => {
+	test("no described bond is `none`, and the boolean cannot say so", () => {
+		expect(getBondMappingState()).toBe("none");
+		expect(isBondMappingActive()).toBe(false);
+	});
+
+	test("a mapped launch is `active`", () => {
+		pollNetif();
+		activateBondMapping();
+
+		expect(getBondMappingState()).toBe("active");
+		expect(isBondMappingActive()).toBe(true);
+	});
+
+	test("a launch the sender could not honour is `degraded`", () => {
+		pollNetif();
+		degradeBondMapping();
+
+		expect(getBondMappingState()).toBe("degraded");
+		expect(isBondMappingActive()).toBe(false);
+	});
+
+	test("a sender-reported `absent` folds into `degraded`, keeping its reason", () => {
+		// `absent` and `degraded` are one fact to a consumer — a DESCRIBED bond
+		// whose mapping is not in force — and the precise reason still rides
+		// `status.reason` for anyone who needs it.
+		noteSenderBindMapReport({
+			status: { state: "absent", reason: "missing_file" },
+			disposition: { state: "legacy_unique_only" },
+		});
+
+		expect(getBondMappingState()).toBe("degraded");
+		expect(isBondMappingActive()).toBe(false);
+	});
+
+	test("`isBondMappingActive` is byte-unchanged for every state", () => {
+		const table: Array<[() => void, boolean]> = [
+			[() => clearBindMapReport(), false],
+			[() => activateBondMapping(), true],
+			[() => degradeBondMapping(), false],
+		];
+		pollNetif();
+		for (const [arrange, expected] of table) {
+			arrange();
+			expect(isBondMappingActive()).toBe(expected);
+		}
 	});
 });

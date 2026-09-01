@@ -106,6 +106,12 @@ export function uplinkReasonKey(
 
 export interface UplinkRowView {
 	readonly iface: string;
+	/**
+	 * The device's own name, when the device resolved one. ABSENT is the honest
+	 * common case (a PCIe modem, a plain wired port, an older backend), and the
+	 * row then renders exactly what it always did: the raw `iface`.
+	 */
+	readonly displayName?: string;
 	readonly kind: UplinkKind;
 	readonly kindLabelKey: string;
 	readonly state: UplinkHealthState;
@@ -132,6 +138,9 @@ function toRow(
 	const reasonKey = uplinkReasonKey(record.reason);
 	return {
 		iface: record.iface,
+		...(record.displayName !== undefined
+			? { displayName: record.displayName }
+			: {}),
 		kind: record.kind,
 		kindLabelKey: KIND_LABEL_KEY[record.kind],
 		state: record.state,

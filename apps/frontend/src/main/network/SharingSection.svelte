@@ -175,8 +175,29 @@ const SUMMARY =
 							class={cn(SUMMARY, 'flex-wrap gap-x-2.5 gap-y-1 px-3 py-1.5')}
 							data-testid="sharing-uplink-toggle-{row.iface}"
 						>
+							<!-- A DEVICE the operator owns, above the kernel name it happens to
+							     answer to. `wwu1u4u4i4` IS the real predictable name of the
+							     Quectel's QMI netdev — it is not garbled — so it stays, one
+							     step quieter, and a row the device could not name renders
+							     byte-identically to before this metadata existed. -->
 							<span class="flex min-w-0 flex-[1_1_7rem] flex-col leading-tight">
-								<span class="truncate font-mono text-xs font-medium" dir="ltr">{row.iface}</span>
+								{#if row.displayName}
+									<span
+										class="truncate text-xs font-medium"
+										data-testid="sharing-uplink-name-{row.iface}"
+									>
+										{row.displayName}
+									</span>
+									<span
+										class="text-muted-foreground truncate font-mono text-[10px]"
+										dir="ltr"
+										data-testid="sharing-uplink-iface-{row.iface}"
+									>
+										{row.iface}
+									</span>
+								{:else}
+									<span class="truncate font-mono text-xs font-medium" dir="ltr">{row.iface}</span>
+								{/if}
 								<span class="text-muted-foreground truncate text-[10px] tracking-wide uppercase">
 									{resolveMessageKey(row.kindLabelKey)}
 								</span>
