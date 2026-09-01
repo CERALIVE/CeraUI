@@ -24,10 +24,13 @@ unsupported radios omit it, so the frontend never infers support.
 ## Runtime lifecycle
 
 For a proven radio, the backend creates a deterministic `clap-<parent>` virtual
-interface with cfg80211 type `__ap`. NetworkManager binds the hotspot profile to
-that interface while the physical interface keeps its station profile and bond
-membership. Start, confirmation, configuration, stop, process restart, and
-profile adoption track the virtual AP separately from the station connection.
+interface with cfg80211 type `managed`. The row model records that type, and an
+existing interface is reused only after its type is confirmed; a stale or wrongly
+typed instance is deleted before deterministic recreation. NetworkManager binds
+the hotspot profile to that interface while the physical interface keeps its
+station profile and bond membership. Start, confirmation, configuration, stop,
+process restart, and profile adoption track the virtual AP separately from the
+station connection.
 
 If support is absent, CeraUI retains the existing exclusive station-to-hotspot
 switch. The UI states that starting the hotspot will disconnect WiFi and remove

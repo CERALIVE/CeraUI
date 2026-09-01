@@ -395,6 +395,32 @@ describe("the six transitions", () => {
 		expect(getPersistedWifiAdapterMode(MAC)).toBe("station");
 	});
 
+	test("an accepted transition whose confirmation publisher is lost reaches a typed timeout terminal", async () => {
+		let expire: (() => void) | undefined;
+		const { deps, recorder } = makeDeps(
+			{ [MAC]: makeIface() },
+			{
+				startHotspot: async () => ({ success: true }),
+				armTerminalTimeout: (callback) => {
+					expire = callback;
+					return () => {};
+				},
+			},
+		);
+
+		const result = await setWifiAdapterMode(0, "hotspot", deps);
+		expire?.();
+
+		expect(result).toEqual({
+			success: true,
+			accepted: true,
+			applied: "hotspot",
+		});
+		expect(terminalFrames(recorder)).toEqual([
+			{ device: 0, outcome: { success: false, error: "not-confirmed" } },
+		]);
+	});
+
 	test("a busy adapter is refused without persisting or dispatching", async () => {
 		const { deps, recorder } = makeDeps(
 			{ [MAC]: makeIface() },

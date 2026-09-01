@@ -409,6 +409,9 @@ export const wifiInterfaceSchema = z.object({
 	supports_ap_sta_concurrency: z.boolean().optional(),
 	transition: z.enum(['activating', 'deactivating']).optional(),
 	mode: z.enum(['station', 'hotspot']).optional(),
+	degraded_reason: z
+		.enum(['unavailable', 'operational-mac-missing', 'permanent-mac-unresolved'])
+		.optional(),
 	// Absent means NOT COMPUTED — no `iw` on the image, a wiphy that could not be
 	// resolved for this interface, or a dump that failed its named parser. Once
 	// computed it is emitted on EVERY tick, so a consumer never has to decide

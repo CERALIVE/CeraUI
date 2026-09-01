@@ -52,7 +52,10 @@ A dev-only DevTools destination is available in development builds.
   late, undispatched connection is closed without sending a stale stop.
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
-  switch. Physical-radio validation is still pending; see
+  switch. The deterministic virtual interface is type-checked before reuse, and
+  adapters with temporarily unresolved hardware identity remain visible as
+  degraded rows rather than disappearing. Physical-radio validation is still
+  pending; see
   [`docs/AP-STA-CONCURRENT-MODE.md`](docs/AP-STA-CONCURRENT-MODE.md).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the

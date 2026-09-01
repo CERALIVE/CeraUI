@@ -7823,7 +7823,9 @@ Coverage: `tests/wifi-ap-mode-classification.test.ts`.
 are enforced, and every absent/malformed/probe-error path resolves false.
 
 `wifi-concurrent-interface.ts` creates the deterministic `clap-<parent>` cfg80211
-`__ap` interface and waits for NetworkManager to observe it. Hotspot profiles on
+`managed` interface and waits for NetworkManager to observe it. An existing
+interface is reused only after its reported type is confirmed as `managed`; stale
+or wrongly typed instances are deleted before recreation. Hotspot profiles on
 proven radios bind to that virtual interface, so the physical interface retains
 its station connection and bond state. Confirmation, polling, saved-profile
 adoption, reconfiguration, and stop track the virtual AP separately. Radios that
@@ -8057,6 +8059,11 @@ never reported the AP up, which is a different thing to tell someone.
 point is up". Wire contract: `hotspotToggleErrorSchema` (six members, none
 collapsible) + `hotspotToggleOutputSchema` in `@ceraui/rpc`.
 
+The adapter-mode wrapper places a bounded terminal watchdog around that promise.
+If the delegated publisher is lost entirely, the mode operation settles once as
+typed `not-confirmed`; a late publisher is fenced and cannot emit a second mode
+terminal. This does not change admission or re-enter the per-adapter lock.
+
 **`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
 `{new:{error:"ambiguous"}}` and deliberately does NOT run
 `wifiDeleteFailedConns()` — the failure path does, because a failure proves the
@@ -8100,6 +8107,14 @@ re-key the registry onto a scan-time address for one poll. `busctl` is
 deliberately NOT used — it is not in the `helpers/run.ts` ALLOWED set, and a
 single sysfs read needs no spawn at all. `setPermanentMacReaderForTest` is the
 test seam.
+
+The cache also correlates the last permanent address through the operational MAC,
+so an ifname rename during a transient sysfs failure keeps the same physical
+identity. Discovery never drops an adapter merely because NetworkManager reports
+`unavailable`, the operational MAC has not landed, or the permanent address cannot
+yet be confirmed: the registry retains a row with a typed `degraded_reason`, keeps
+its numeric id while re-keying on recovery, and the frontend withholds controls
+until identity is trustworthy.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
