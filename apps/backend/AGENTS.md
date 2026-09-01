@@ -3823,15 +3823,14 @@ did not; the pairing the board actually produces is now covered in
 - an attach with NO `ID_PATH` is DROPPED, because the merge key is what makes the
   row retirable and a row nothing can supersede is precisely the ghost class this
   must not introduce;
-- a repeat `add` for a key already held is a no-op, not a timer reset, so a
-  modeswitching composite cannot extend the window its first event opened.
+- a repeat `add` for a key already held is a no-op, so a modeswitching composite
+  cannot reset the authoritative-cycle history already accumulated for it.
 
-**The bound is DERIVED: `PROVISIONAL_TIMEOUT_MS = 40 000`.** The mmcli backstop
-polls every 30 s with ±10 % jitter, so the last scheduled moment a device could
-still reach the authoritative path is ~33 s after the attach, plus that poll's
-read and broadcast. Expiry REMOVES the row — no tombstone, no dimmed
-"expired" state, because "we said a modem was coming and it never did" is not a
-fact about hardware worth keeping on screen.
+**The lifecycle is cycle-based, never timer-based.** An attached device starts at
+`modem_initializing`. Two successful authoritative roster cycles that still cannot
+describe it move the same retained row to `undriveable`; no elapsed-time deadline
+may erase physical presence. The row then remains until an authoritative source
+claims its `stable_key` or udev proves physical detach.
 
 **The source is a SUPERVISED `udevadm monitor --property --udev` CHILD, never the
 npm `udev` binding.** That binding is an unmaintained native addon compiled
@@ -3841,9 +3840,10 @@ load-bearing — the `--kernel` events that precede rule processing carry no `ID
 properties at all, so a monitor without it would see every attach and be able to
 say nothing about any of them. The supervisor is the direct twin of
 `NmcliMonitorManager` (same backoff, same `watcher` spawn class,
-`monitor.udevMonitor` in `SPAWN_POLICY`), and **every restart CLEARS the cache**:
-the monitor has no historical replay, so a detach that happened while the child
-was down would otherwise leave a row nothing could ever retire.
+`monitor.udevMonitor` in `SPAWN_POLICY`). On startup and every child respawn, the
+supervisor reads `udevadm info --export-db` through the same property parser and
+atomically replaces physical inventory. Rows still attached retain their lifecycle;
+a detach that happened while monitoring was down is retired by its absence.
 
 `initUdevProvisionalMonitor` is `isRealDevice()`-gated and skipped under mocks,
 and `readProvisionalSources` answers mocks with NOTHING — this row exists to
@@ -3852,11 +3852,12 @@ a parallel mechanism rather than the scenario roster.
 
 Coverage: `tests/udev-provisional-rows.test.ts` — the decode/refusal table, the
 precedence and retirement rules, the `9024`⇄`9091` flip folding onto one row,
-detach, the derived timeout, the non-extending repeat attach, the supervised
-child (split chunks, EOF flush, malformed block, respawn-and-drop, stop), and the
+detach, the two-cycle transition, repeat-attach retention, the supervised
+child (split chunks, EOF flush, malformed block, respawn inventory, stop), and the
 row reaching the REAL `buildModemsWireMessage()` payload plus its replacement
 there by an mmcli row for the same port. Rule-E proof: deleting the claimed-key
-check reddens 3 tests; dropping the cache clear on restart reddens 1.
+check reddens 3 tests; dropping inventory reconstruction or lifecycle retention
+across restart reddens the supervisor cases.
 
 **Board-measured, no longer modelled.** On `ceralive2` (RK3588, SIMCom
 SIM7600G-H, 9 plug cycles) the optimistic row reaches an authenticated WebSocket
@@ -8875,7 +8876,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't write a supersession fixture with the same key encoding on both sides — that is precisely the gap that let this ship. Pair an `ID_PATH`-keyed provisional row against a SYSFS-path-keyed authoritative one, and assert on the WHOLE payload length: a key-filtered assertion cannot see the duplicate row under the other encoding.
 - Don't accept a `usb_interface`, a `bind`/`change`, or an attach with no `ID_PATH` as a provisional row — the first draws one composite stick as several rows, the second describes a device already present, and the third can never be superseded, which is the ghost class this feature must not introduce.
 - Don't make the retained modem poll status-only again, and don't gate modem presence on `modem-added`/`modem-removed` — the production `NmcliMonitorManager` structurally cannot emit either (`nmcli monitor` has no view of the ModemManager lifecycle), so those arms are mock-only and presence would once more be established just once, at boot. Board-measured: a Fibocom FM350-GL created 46 minutes after boot was never registered, never got an NM profile, and sat `registered` with a live SIM and no IP while CeraUI kept polling two indices that no longer existed. And don't read an unreadable `mmcli -L` as an empty roster (`?? []`) — at the 30 s cadence that evicts every modem's resolved profile on one transient failure; `undefined` retains, `[]` is authoritative.
-- Don't reach for the npm `udev` binding, and don't drop `--udev` from the monitor's argv — the binding is an unmaintained native addon a `bun build --compile` binary cannot load, and the `--kernel` events that precede rule processing carry no `ID_*` properties at all. Don't skip the cache clear on a monitor restart either: the child has no replay, so a detach during the gap leaves a row nothing can retire.
+- Don't reach for the npm `udev` binding, and don't drop `--udev` from the monitor's argv — the binding is an unmaintained native addon a `bun build --compile` binary cannot load, and the `--kernel` events that precede rule processing carry no `ID_*` properties at all. Don't clear the cache on monitor restart: rebuild it from `udevadm info --export-db`, preserve still-attached rows and their lifecycle, and retire only devices absent from that complete inventory.
 - Don't seed the dev dongle fixtures PAST `dongle-metadata.ts`'s deps seam, and don't freeze their `updated_at_ms` — entering as file CONTENT is what keeps the real schema/staleness/ambiguity rules on the dev path, and a frozen timestamp makes the rows silently vanish after 90 s. Don't give the duplicate-MAC HiLink pair different MACs to "fix" the fixture: that collision is the whole reason identity is `ID_PATH`-keyed.
 - Don't write a raw ifname as the mmcli-side shadow `deviceKey` — the observer side is opaque-hashed, so the join fails and every cycle emits a matched `only-in-mmcli` + `only-in-dbus` pair instead of a real divergence. That is the state the retirement runbook calls a gate blocker, and it looks like data rather than a bug.
 - Don't give `modem_provisioning` a default, and don't move the provisioning check behind the emulated/streaming ones — default-absent-and-first is what makes a modem re-enumeration unreachable on an unprovisioned device. And don't let `setUsbMode` return `{success:true}` while the transition transaction is unimplemented: past the gates the honest answer is the typed `transition_failed`.
