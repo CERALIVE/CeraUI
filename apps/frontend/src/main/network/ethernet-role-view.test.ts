@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
 	deriveEthernetRoleConsequence,
+	deriveEthernetRoleStagedWarning,
 	deriveEthernetRoleView,
 	deriveSharedLanRow,
 	ETHERNET_ROLES,
@@ -222,6 +223,79 @@ describe("deriveEthernetRoleConsequence — the streaming interlock", () => {
 		expect(new Set(Object.values(keys)).size).toBe(3);
 		for (const key of Object.values(keys)) {
 			expect(key.startsWith("network.ethRole.confirm.")).toBe(true);
+		}
+	});
+});
+
+describe("deriveEthernetRoleStagedWarning — a staged change is visible", () => {
+	const idle = { bondedUplink: true, streaming: false };
+	const bondedLive = { bondedUplink: true, streaming: true };
+
+	it("warns whenever the staged role differs from the applied one", () => {
+		const warning = deriveEthernetRoleStagedWarning(
+			"uplink",
+			"shared-lan",
+			idle,
+		);
+		expect(warning?.target).toBe("shared-lan");
+		expect(warning?.titleKey).toBe("network.ethRole.staged.title");
+		expect(warning?.bodyKey).toBe("network.ethRole.staged.body");
+	});
+
+	it("warns in BOTH directions — leaving shared-LAN reconfigures the port too", () => {
+		expect(
+			deriveEthernetRoleStagedWarning("shared-lan", "uplink", idle)?.target,
+		).toBe("uplink");
+	});
+
+	it("stays SILENT when the staged role equals the applied one", () => {
+		expect(
+			deriveEthernetRoleStagedWarning("uplink", "uplink", bondedLive),
+		).toBeUndefined();
+	});
+
+	it("stays SILENT when nothing is staged at all", () => {
+		expect(
+			deriveEthernetRoleStagedWarning("uplink", undefined, bondedLive),
+		).toBeUndefined();
+	});
+
+	it("carries NO live-bond sentence for an ordinary staged change", () => {
+		const warning = deriveEthernetRoleStagedWarning(
+			"uplink",
+			"shared-lan",
+			idle,
+		);
+		expect(warning?.consequence).toBeUndefined();
+		expect(warning?.consequenceBodyKey).toBeUndefined();
+	});
+
+	it("ADDS the interlock sentence beside the reachability one, never instead of it", () => {
+		const warning = deriveEthernetRoleStagedWarning(
+			"uplink",
+			"shared-lan",
+			bondedLive,
+		);
+		expect(warning?.bodyKey).toBe("network.ethRole.staged.body");
+		expect(warning?.consequence).toBe("drops-bonded-uplink");
+		expect(warning?.consequenceBodyKey).toBe(
+			ethernetRoleConsequenceKeys("drops-bonded-uplink").body,
+		);
+	});
+
+	it("escalates on exactly the interlock's own verdict, never a second rule", () => {
+		for (const ctx of [
+			idle,
+			bondedLive,
+			{ bondedUplink: false, streaming: true },
+		]) {
+			for (const from of ETHERNET_ROLES) {
+				for (const to of ETHERNET_ROLES) {
+					expect(
+						deriveEthernetRoleStagedWarning(from, to, ctx)?.consequence,
+					).toBe(deriveEthernetRoleConsequence(from, to, ctx));
+				}
+			}
 		}
 	});
 });

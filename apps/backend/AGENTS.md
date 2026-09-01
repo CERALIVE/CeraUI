@@ -2447,6 +2447,16 @@ field, so a one-directional role could be raised and never lowered (the
 older backend", and is never read as `uplink`. Frontend ingestion allowlist:
 `subscriptions.svelte.ts` `case "netif"`.
 
+**The UI STAGES the role and applies it on Save; none of the above changed for
+it.** `setEthernetRole` is now called from `NetifDialog.save()` alone rather than
+from the role control's own click, because a role change reconfigures the port
+and can drop the LAN path the operator is reading the page over. That is purely a
+consumer-side decision: same procedure, same `.strict()` input, same persist-first
+rollback, same one-pending-then-one-terminal frame contract. Do NOT add a
+"staged" or "deferred" notion to this module — the device applies what it is told,
+when it is told. Frontend contract: `apps/frontend/AGENTS.md` → "The wired port
+ROLE is STAGED, and Save is its ONLY dispatch site".
+
 **A shared-lan port registers as a client zone for the steering layer, and
 NOTHING installs a table.** The nftables client-zone work is the steering
 module's (HALTED pending the Wave-0 kernel-capability verdict); this todo marks

@@ -55,7 +55,7 @@ const SETTINGS_VIEW = "main/SettingsView.svelte";
 const LIVE_VIEW = "main/LiveView.svelte";
 const ADDONS_SECTION = "main/settings/AddonsSection.svelte";
 const WIFI_MODE_SELECTOR = "main/network/WifiModeSelector.svelte";
-const ETH_ROLE_SELECTOR = "main/network/EthernetRoleSelector.svelte";
+const NETIF_DIALOG = "main/dialogs/NetifDialog.svelte";
 
 /**
  * The device-mutation actions T14 wired onto `osCommand`. Each entry pins the
@@ -123,13 +123,19 @@ const DEVICE_ACTIONS: readonly DeviceAction[] = [
 	},
 	{
 		// The per-port Uplink/Shared-LAN transition (todo 15). Its key is built by
-		// the shared `ethernetRoleOpKey` helper rather than a string literal, so
-		// that call IS the per-key proof — the same accommodation PowerDialog's
-		// `key: action` variable and the WiFi mode selector's helper both get.
+		// the shared `ethernetRoleOpKey` helper and held in a `$derived`, so the
+		// proof is that pair — the helper call plus the `osCommand` keyed on it —
+		// the same accommodation PowerDialog's `key: action` variable gets.
+		//
+		// It is owned by the DIALOG, not by `EthernetRoleSelector`: todo 37 made
+		// the role staged dialog state, so the control dispatches nothing and
+		// `NetifDialog.save()` is the only caller of `setEthernetRole`. S7 is
+		// unchanged — the dispatch still routes through `osCommand` — only the
+		// surface that owns it moved.
 		name: "Ethernet port role",
 		key: "eth-role:<name>",
-		file: ETH_ROLE_SELECTOR,
-		mustContain: ["osCommand(", "key: ethernetRoleOpKey("],
+		file: NETIF_DIALOG,
+		mustContain: ["osCommand(", "ethernetRoleOpKey(", "key: roleKey"],
 	},
 ] as const;
 
