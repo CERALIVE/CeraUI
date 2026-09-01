@@ -120,35 +120,28 @@ describe("withDeviceLock", () => {
 });
 
 describe("withModemUpdateLock", () => {
-	it("drops a re-entrant call during an active lock without deadlocking", async () => {
+	it("coalesces every mid-update request into exactly one trailing run", async () => {
 		const gate = deferred<void>();
-		let firstFnCalled = false;
-		let secondFnCalled = false;
+		const runs: Array<string> = [];
 
-		// First call holds the lock until we release the gate.
+		// Given one update that is still in flight
 		const first = withModemUpdateLock(async () => {
-			firstFnCalled = true;
+			runs.push("first");
 			await gate.promise;
 		});
 
-		// Re-entrant call while the first is in-flight — must be dropped silently.
-		await withModemUpdateLock(async () => {
-			secondFnCalled = true;
-		});
+		// When several callers request reconciliation before it settles
+		const queued = ["event-1", "event-2", "event-3"].map((label) =>
+			withModemUpdateLock(async () => {
+				runs.push(label);
+			}),
+		);
 
-		expect(firstFnCalled).toBe(true);
-		expect(secondFnCalled).toBe(false);
-
-		// Release the first; lock frees in finally.
 		gate.resolve();
-		await first;
+		await Promise.all([first, ...queued]);
 
-		// After completion, a subsequent call runs normally (no deadlock).
-		let thirdFnCalled = false;
-		await withModemUpdateLock(async () => {
-			thirdFnCalled = true;
-		});
-		expect(thirdFnCalled).toBe(true);
+		// Then the active run is followed by one latest-state reconciliation
+		expect(runs).toEqual(["first", "event-3"]);
 	});
 
 	it("releases on throw so subsequent calls still run", async () => {
