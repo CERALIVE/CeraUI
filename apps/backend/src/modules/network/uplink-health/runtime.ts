@@ -8,11 +8,11 @@ import {
 	getNetworkInterfaces,
 	type NetworkInterface,
 } from "../network-interfaces.ts";
+import { resolveUplinkIdentity } from "../uplink-identity.ts";
 import {
 	UPLINK_HEALTH_CONFIG,
 	type UplinkHealthOutcome,
 	type UplinkHealthRecord,
-	type UplinkKind,
 } from "./model.ts";
 import { getUplinkHealthEngine, notifyUplinkHealthChange } from "./state.ts";
 
@@ -56,13 +56,6 @@ const defaultDeps: UplinkHealthRuntimeDeps = {
 	publish: (records) => broadcastMsg(UPLINKS_EVENT, records),
 };
 
-const kindFor = (iface: string): UplinkKind => {
-	if (iface.startsWith("wl")) return "wifi";
-	if (/^(?:ww|ppp|usb|enx)/.test(iface)) return "cellular";
-	if (/^(?:eth|en)/.test(iface)) return "ethernet";
-	return "other";
-};
-
 export class UplinkHealthRuntime {
 	readonly #engine = getUplinkHealthEngine();
 	readonly #deps: UplinkHealthRuntimeDeps;
@@ -86,7 +79,7 @@ export class UplinkHealthRuntime {
 			if (!entry?.ip) {
 				this.#engine.observe({
 					iface,
-					kind: kindFor(iface),
+					...resolveUplinkIdentity(iface),
 					outcome: "definitive_loss",
 					now,
 				});
@@ -114,7 +107,7 @@ export class UplinkHealthRuntime {
 			for (const [index, candidate] of batch.entries()) {
 				this.#engine.observe({
 					iface: candidate.name,
-					kind: kindFor(candidate.name),
+					...resolveUplinkIdentity(candidate.name),
 					outcome: outcomes[index] ?? "failure",
 					now,
 				});
@@ -146,7 +139,7 @@ export class UplinkHealthRuntime {
 				link.nak_count >= UPLINK_HEALTH_CONFIG.passiveNakDegradedCount;
 			this.#engine.observe({
 				iface: link.iface,
-				kind: kindFor(link.iface),
+				...resolveUplinkIdentity(link.iface),
 				outcome: expired
 					? "definitive_loss"
 					: degraded

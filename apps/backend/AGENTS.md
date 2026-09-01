@@ -6401,6 +6401,57 @@ candidates through their steering eligibility. The engine never edits routes;
 `gateways.ts` remains the sole `ip route del default` owner. Post-login hydration
 replays the current records immediately.
 
+### …AND AN UPLINK'S KIND COMES FROM THE DEVICE, NOT FROM ITS NAME [EXISTS]
+
+`modules/network/uplink-identity.ts` (`resolveUplinkIdentity`) is the ONE thing
+the health runtime asks what an interface IS, at all three `observe()` sites. It
+replaced a private `kindFor()` that read the interface NAME, and the two answers
+were board-proven to disagree with the `netif` projection sitting beside them.
+
+**BOARD-PROVEN MISMATCH** (`ceralive2`, 2026-08-30). `eth1` is a Huawei E3372
+LTE dongle (`cdc_ether`, `12d1:14dc`). The `netif` projection reads USB
+descriptors and stamps it `router_cellular` correctly; the health engine matched
+`/^(?:eth|en)/` and published `kind: "ethernet"`. Its IDENTICAL TWIN — same SKU,
+same hub, one port apart — won the udev rename race, is called
+`enx0c5b8f279a64`, matched the `enx` arm first, and published `cellular`. One
+device class, typed two ways, decided entirely by a rename race.
+
+- **The markers are consulted FIRST and are authoritative.**
+  `getRouterCellularMarker` then `getModemNetMarker` — the SAME cache
+  `applyRouterCellularProjection` / `applyModemNetProjection` stamp onto the
+  `netif` wire, so the two surfaces cannot disagree about one device. There is
+  no second classifier and no second sysfs read; this module only reads.
+- **The name ladder BELOW them is a fallback, never a second opinion.** It
+  covers what the USB sweep structurally cannot describe — a PCIe/MHI modem, a
+  PPP link — and it still runs at boot, before the asynchronous marker sweep has
+  landed. `enx*` is DELIBERATELY REMOVED from its cellular arm: it is systemd's
+  predictable name for ANY USB network adapter, so reading it as cellular is
+  precisely the coin-flip above. `ww*` / `ppp*` / `usb*` stay, because those
+  describe a device class rather than guessing at one.
+- **`displayName` is ADDITIVE-OPTIONAL and NEVER FABRICATED.** It composes
+  through `routerCellularDisplayName` — the SAME rule that titles the device's
+  modem row — so a device is called one thing across both surfaces. A device the
+  classifier could not name carries NO name, and the row renders the raw `iface`
+  byte-identically to before the field existed.
+- **The dongle's own admin API is NOT consulted here.** This runs on the 5 s
+  health cadence while the admin cache is filled on a 30 s poll, so a name that
+  changed depending on which poll last landed would be worse than the descriptor
+  answer that is always available.
+- **Absence RETRACTS.** `#reduce` re-derives `displayName` from the observation
+  every tick and omits it when absent, rather than preserving `current`. Keeping
+  it would latch a resolved identity onto whatever re-enumerates under that
+  interface next — the `policy_route_missing` latch, exactly.
+- **`iface` remains the row identity.** Nothing keys, joins or correlates on the
+  name; two units of one SKU legitimately share one.
+
+Coverage: `tests/uplink-identity.test.ts` — the bench topology driven through the
+REAL `refreshUsbNetMarkers` sweep (the eth-named dongle typing `cellular` and
+naming itself, both twins agreeing, the MM-managed data function named after its
+modem), the plain-Ethernet regression lock, the markers-absent fallback proving
+the pre-existing ladder, the `enx`-never-guesses negative, and the record/wire
+half (stamped, omitted, retracted, `iface` still the key). Frontend half:
+`apps/frontend/AGENTS.md` → AN UPLINK ROW NAMES A DEVICE.
+
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
 
 | Event type | Interval | Source |

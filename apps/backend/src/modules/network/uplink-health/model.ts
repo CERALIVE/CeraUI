@@ -27,6 +27,8 @@ export type UplinkHealthOutcome =
 export interface UplinkHealthRecord {
 	readonly iface: string;
 	readonly kind: UplinkKind;
+	/** Absent whenever the device could not be named. Never invented. */
+	readonly displayName?: string;
 	readonly state: UplinkHealthState;
 	readonly reason?: UplinkHealthReason;
 	readonly weight: number;
@@ -45,6 +47,7 @@ export interface UplinkHealthRecord {
 export interface UplinkObservation {
 	readonly iface: string;
 	readonly kind: UplinkKind;
+	readonly displayName?: string;
 	readonly outcome: UplinkHealthOutcome;
 	readonly now: number;
 }
@@ -82,9 +85,7 @@ export class UplinkHealthEngine {
 
 	observe(observation: UplinkObservation): UplinkHealthRecord {
 		const previous = this.#records.get(observation.iface);
-		const current =
-			previous ??
-			this.#initialRecord(observation.iface, observation.kind, observation.now);
+		const current = previous ?? this.#initialRecord(observation);
 		const next = this.#reduce(current, observation);
 		this.#records.set(observation.iface, next);
 		return next;
@@ -110,14 +111,12 @@ export class UplinkHealthEngine {
 		return this.#records.get(iface)?.state !== "down";
 	}
 
-	#initialRecord(
-		iface: string,
-		kind: UplinkKind,
-		now: number,
-	): UplinkHealthRecord {
+	#initialRecord(observation: UplinkObservation): UplinkHealthRecord {
+		const { iface, kind, displayName, now } = observation;
 		return {
 			iface,
 			kind,
+			...(displayName === undefined ? {} : { displayName }),
 			state: "up",
 			weight: 100,
 			lastTransition: now,
@@ -141,6 +140,12 @@ export class UplinkHealthEngine {
 		return {
 			iface: observation.iface,
 			kind: observation.kind,
+			// Absence RETRACTS: a device whose marker sweep stopped naming it must
+			// stop claiming a name, or a resolved identity latches onto whatever
+			// re-enumerates under that interface next.
+			...(observation.displayName === undefined
+				? {}
+				: { displayName: observation.displayName }),
 			state,
 			...(reason === undefined ? {} : { reason }),
 			weight: weightFor(state),

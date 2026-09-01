@@ -132,6 +132,35 @@ enumeration churn from operator-visible state without dropping diagnostic facts.
 `getUplinks()` exposes the replace-whole `UplinksMessage`; `resetState()` clears it.
 Do not add a second socket consumer or infer health from modem signal/netif fields.
 
+### AN UPLINK ROW NAMES A DEVICE, ABOVE THE KERNEL NAME IT ANSWERS TO [EXISTS]
+
+`SharingSection`'s uplink row leads with the device's own name and demotes the
+interface name to a muted mono line beneath it, carried by the additive-optional
+`UplinkRowView.displayName` (`sharing-section-view.ts`, threaded straight off
+the wire record). Testids: `sharing-uplink-name-<iface>` /
+`sharing-uplink-iface-<iface>`.
+
+- **THE IFNAME IS NOT GARBLED, so it is demoted rather than replaced.**
+  `wwu1u4u4i4` is the real predictable kernel name of the Quectel RM530N-GL's
+  QMI netdev (`ww` + USB path `u1u4u4` + interface `i4`), and it is what every
+  diagnostic on the device — `mmcli`, `ip`, the modem row's own `ifname` — will
+  name back at an operator. Hiding it would trade one unreadable row for an
+  unjoinable one.
+- **ABSENT RENDERS EXACTLY AS BEFORE.** No name ⇒ the single mono `iface` line
+  this row has always had, in the same size and weight. A device the backend
+  could not name is the honest common case (a PCIe modem, a plain wired port, a
+  backend that predates the field), so absence must cost nothing — a placeholder
+  or a raw-id stand-in would be the fabrication the wire contract forbids.
+- **The kind label is UNCHANGED and still stated.** The name says which device;
+  the kind says what class it is. A named row keeps both.
+- **The row is still keyed on `iface`.** Two units of one SKU legitimately
+  render the same name, and only the interface tells them apart.
+
+Coverage: `SharingSection.test.ts` → "an uplink is a DEVICE, keyed on its
+interface" (the name/mono split, the byte-identical bare fallback, the twin-SKU
+keying rule, and the kind still on screen). Device half:
+`apps/backend/AGENTS.md` → …AND AN UPLINK'S KIND COMES FROM THE DEVICE.
+
 ### Sharing-coexistence verdict [EXISTS]
 
 `getSharingDiag()` exposes the backend's read-only `sharing_diag` push — the
