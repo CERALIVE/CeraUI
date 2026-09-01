@@ -94,7 +94,8 @@ export type ModemRowState =
 	| "no-sim"
 	| "router-up"
 	| "router-acquiring"
-	| "router-down";
+	| "router-down"
+	| "undriveable";
 
 /**
  * The state dot's register. `idle` is "nothing was reported", not "off".
@@ -185,6 +186,7 @@ const AVAILABILITY_REASON_KEYS: Readonly<Record<string, string>> = {
 	// "wait", so its sentence must promise nothing about the device beyond its
 	// presence — every other fact is genuinely unknown at this point.
 	modem_initializing: "network.cellular.reason.initializing",
+	undriveable: "network.cellular.reason.undriveable",
 };
 
 /**
@@ -196,6 +198,7 @@ const AVAILABILITY_REASON_KEYS: Readonly<Record<string, string>> = {
  * could not read; this device's state is known and is `initializing`.
  */
 const PROVISIONAL_REASON = "modem_initializing";
+const UNDRIVEABLE_REASON = "undriveable";
 
 /**
  * Availability tokens for a dongle whose OWN interface carries the bonded
@@ -272,6 +275,7 @@ const STATE_LABEL_KEYS: Readonly<Record<ModemRowState, string>> = {
 	"router-up": "network.cellular.state.routerLinkUp",
 	"router-acquiring": "network.dongle.stateAcquiring",
 	"router-down": "network.dongle.stateDown",
+	undriveable: "network.cellular.state.undriveable",
 	unknown: "network.cellular.state.unknown",
 };
 
@@ -337,6 +341,7 @@ const STATE_TONES: Readonly<Record<ModemRowState, ModemRowTone>> = {
 	"router-up": "ready",
 	"router-acquiring": "pending",
 	"router-down": "error",
+	undriveable: "attention",
 	unknown: "idle",
 };
 
@@ -412,6 +417,7 @@ export function resolveRowState(
 	// carries no `device_class` and resolves to the `mm-managed` default — the
 	// one band a `router-ethernet` gate would exclude it from.
 	if (modem.availability_reason === PROVISIONAL_REASON) return "initializing";
+	if (modem.availability_reason === UNDRIVEABLE_REASON) return "undriveable";
 
 	if (band === "router-ethernet") {
 		const reason = modem.availability_reason;
@@ -566,6 +572,9 @@ export function bondDisabledReasonKey(
 	hasAddress: boolean,
 ): string | undefined {
 	if (isSimlessModem(modem)) return "network.view.noSimBond";
+	if (modem.availability_reason === UNDRIVEABLE_REASON) {
+		return "network.cellular.reason.undriveable";
+	}
 
 	if (band === "router-ethernet") {
 		if (state === "router-acquiring") return "network.dongle.blockedAcquiring";
@@ -624,6 +633,9 @@ export function configureDisabledReasonKey(
 	band: ModemClassBand,
 	modem?: Modem,
 ): string | undefined {
+	if (modem?.availability_reason === UNDRIVEABLE_REASON) {
+		return "network.cellular.reason.undriveable";
+	}
 	if (band === "router-ethernet") {
 		if (lockWithholdsCapabilities(deriveLockView(modem))) return undefined;
 		return modem?.router_admin?.controls === undefined

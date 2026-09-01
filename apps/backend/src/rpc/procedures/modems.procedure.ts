@@ -88,7 +88,7 @@ import {
 import { dispatchModemNetworkScan } from "../../modules/modems/modem-network-scan.ts";
 import {
 	broadcastModems,
-	buildModemsWireMessage,
+	getCommittedModemsWireMessage,
 } from "../../modules/modems/modem-status.ts";
 import { getModemIdPath } from "../../modules/modems/modem-wire-producer.ts";
 import {
@@ -162,7 +162,7 @@ export const modemProcedure = authedProcedure.use(cellularReadyMiddleware);
 export const getAllModemsProcedure = modemProcedure
 	.output(modemListSchema)
 	.handler(() => {
-		return modemListSchema.parse(buildModemsWireMessage());
+		return modemListSchema.parse(getCommittedModemsWireMessage());
 	});
 
 /**
@@ -190,9 +190,9 @@ export const configureModemProcedure = modemProcedure
 		// AWAITED, and its outcome is REPORTED. This used to dispatch the apply
 		// fire-and-forget through `handleModems` and answer `{success: true}` no
 		// matter what happened, so a refusal reached the operator as a save.
-		// A re-entrant call is DROPPED by the lock rather than queued, so the
-		// pre-lock value has to be the refusal: leaving it optimistic would make a
-		// dropped apply indistinguishable from an applied one. Held on an object
+		// A concurrent call joins the one-slot trailing scheduler, so the pre-lock
+		// value remains a refusal until this request's callback actually runs. Held
+		// on an object
 		// so the assignment inside the closure is visible to the check below.
 		const state: { outcome: ModemConfigOutcome } = {
 			outcome: { ok: false, reason: "device_busy" },

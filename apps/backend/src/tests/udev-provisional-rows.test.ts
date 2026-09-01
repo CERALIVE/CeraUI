@@ -39,6 +39,7 @@ import {
 	getUdevProvisionalCache,
 	PROVISIONAL_AVAILABILITY_REASON,
 	UdevProvisionalCache,
+	UNDRIVEABLE_AVAILABILITY_REASON,
 } from "../modules/cellular/udev-provisional-cache.ts";
 import { buildModemsWireMessage } from "../modules/modems/modem-status.ts";
 import {
@@ -107,6 +108,11 @@ const HILINK_BLOCK = block([
 	"ID_VENDOR_FROM_DATABASE=Huawei Technologies Co., Ltd.",
 	"ID_USB_INTERFACES=:020600:0a0000:080650:",
 ]);
+
+const RNDIS_INVENTORY = RNDIS_BLOCK.slice(1)
+	.filter((line) => !line.startsWith("ACTION="))
+	.map((line) => `E: ${line}`)
+	.join("\n");
 
 // The todo-24 pairing, verbatim from the `ceralive2` drill (2026-08-18): ONE
 // socket, described by udev as an `ID_PATH` and by ModemManager (`Modem.Physdev`)
@@ -287,7 +293,7 @@ describe("provisional rows — precedence is one-directional", () => {
 	let cache: UdevProvisionalCache;
 
 	beforeEach(() => {
-		cache = new UdevProvisionalCache(120);
+		cache = new UdevProvisionalCache();
 	});
 
 	afterEach(() => {
@@ -353,27 +359,35 @@ describe("provisional rows — precedence is one-directional", () => {
 		expect(notifications).toBe(2);
 	});
 
-	test("Given a device that never exports, When the bound elapses, Then the row is REMOVED (no expired-ghost state)", async () => {
+	test("Given a device that never exports, When two authoritative cycles miss it, Then the row persists as undriveable", () => {
 		let notifications = 0;
 		cache.subscribe(() => {
 			notifications++;
 		});
 		cache.noteAttach(attachOf(RNDIS_BLOCK));
 
-		await until(() => cache.readProvisionalSources(new Set()).length === 0);
+		cache.noteAuthoritativeCycle(new Set());
+		expect(
+			cache.readProvisionalSources(new Set())[0]?.additive?.availability_reason,
+		).toBe(PROVISIONAL_AVAILABILITY_REASON);
+		cache.noteAuthoritativeCycle(new Set());
+
+		expect(cache.readProvisionalSources(new Set())).toHaveLength(1);
+		expect(
+			cache.readProvisionalSources(new Set())[0]?.additive?.availability_reason,
+		).toBe(UNDRIVEABLE_AVAILABILITY_REASON);
 		expect(notifications).toBe(2);
 	});
 
-	test("Given a composite device emitting a SECOND add, When the first window is nearly spent, Then the window is not extended", async () => {
+	test("Given one missed cycle, When the composite repeats its attach, Then the lifecycle is not reset", () => {
 		cache.noteAttach(attachOf(RNDIS_BLOCK));
-		await new Promise((resolve) => setTimeout(resolve, 80));
+		cache.noteAuthoritativeCycle(new Set());
 		cache.noteAttach(attachOf(QMI_BLOCK));
-		expect(cache.readProvisionalSources(new Set())).toHaveLength(1);
+		cache.noteAuthoritativeCycle(new Set());
 
-		await until(
-			() => cache.readProvisionalSources(new Set()).length === 0,
-			400,
-		);
+		expect(
+			cache.readProvisionalSources(new Set())[0]?.additive?.availability_reason,
+		).toBe(UNDRIVEABLE_AVAILABILITY_REASON);
 	});
 
 	test("Given rows in hand, When the monitor restarts, Then clear() drops them all", () => {
@@ -445,15 +459,21 @@ describe("the supervised udevadm monitor child", () => {
 	let cache: UdevProvisionalCache;
 	let spawned: FakeUdevProcess[];
 	let supervisor: UdevMonitorSupervisor;
+	let inventory: string;
 
 	beforeEach(() => {
-		cache = new UdevProvisionalCache(5000);
+		cache = new UdevProvisionalCache();
 		spawned = [];
-		supervisor = new UdevMonitorSupervisor(cache, () => {
-			const proc = new FakeUdevProcess();
-			spawned.push(proc);
-			return proc;
-		});
+		inventory = "";
+		supervisor = new UdevMonitorSupervisor(
+			cache,
+			() => {
+				const proc = new FakeUdevProcess();
+				spawned.push(proc);
+				return proc;
+			},
+			async () => inventory,
+		);
 	});
 
 	afterEach(() => {
@@ -505,21 +525,45 @@ describe("the supervised udevadm monitor child", () => {
 		await until(() => rowCount() === 1);
 	});
 
-	test("Given the child dies, When the supervisor notices, Then it respawns AND drops rows it can no longer retire", async () => {
-		supervisor.start();
-		await until(() => spawned.length === 1);
-		const first = spawned[0] as FakeUdevProcess;
+	test("Given an attached inventory device, When the monitor starts, Then the row is reconstructed without a live add", async () => {
+		inventory = RNDIS_INVENTORY;
 
-		first.write(`${RNDIS_BLOCK.join("\n")}\n\n`);
-		await until(() => rowCount() === 1);
+		supervisor.start();
+
+		await until(() => spawned.length === 1 && rowCount() === 1);
+	});
+
+	test("Given an undriveable attached row, When the monitor respawns, Then inventory preserves its lifecycle", async () => {
+		inventory = RNDIS_INVENTORY;
+		supervisor.start();
+		await until(() => spawned.length === 1 && rowCount() === 1);
+		const first = spawned[0] as FakeUdevProcess;
+		cache.noteAuthoritativeCycle(new Set());
+		cache.noteAuthoritativeCycle(new Set());
+		expect(
+			cache.readProvisionalSources(new Set())[0]?.additive?.availability_reason,
+		).toBe(UNDRIVEABLE_AVAILABILITY_REASON);
 
 		first.die();
 
 		await until(() => spawned.length === 2);
-		// The monitor has no replay, so a detach during the gap would leave a row
-		// nothing could retire. Dropping is the honest response.
-		expect(rowCount()).toBe(0);
+		expect(
+			cache.readProvisionalSources(new Set())[0]?.additive?.availability_reason,
+		).toBe(UNDRIVEABLE_AVAILABILITY_REASON);
 		expect(supervisor.isRunning).toBe(true);
+	});
+
+	test("Given a device detaches while the monitor is down, When it respawns, Then inventory retires the row", async () => {
+		inventory = RNDIS_INVENTORY;
+		supervisor.start();
+		await until(() => spawned.length === 1 && rowCount() === 1);
+		const first = spawned[0] as FakeUdevProcess;
+
+		inventory = "";
+		first.die();
+
+		await until(() => spawned.length === 2);
+		expect(rowCount()).toBe(0);
 	});
 
 	test("Given a running monitor, When it is stopped, Then the child is killed, nothing respawns, and the rows go", async () => {

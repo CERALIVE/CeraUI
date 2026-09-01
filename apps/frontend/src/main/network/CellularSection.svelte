@@ -191,6 +191,7 @@ const STATE_ICON = {
 	enabling: Hourglass,
 	disabling: Hourglass,
 	initializing: Hourglass,
+	undriveable: CircleAlert,
 	disabled: CircleOff,
 	failed: CircleAlert,
 	locked: Lock,

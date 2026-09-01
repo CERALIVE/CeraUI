@@ -134,6 +134,30 @@ describe("CellularSection — T20 single-line rows + touch targets", () => {
 	});
 });
 
+describe("CellularSection — attached but undriveable modem", () => {
+	it("renders a persistent quiet row with disabled controls and keyed copy", () => {
+		const { container, getByTestId } = renderSection({
+			modem: {
+				ifname: "",
+				status: undefined,
+				availability_reason: "undriveable",
+			},
+			netif: {},
+		});
+
+		const row = getByTestId("modem-row");
+		expect(row.dataset.modemState).toBe("undriveable");
+		expect(
+			(getByTestId("open-modem-config-dialog") as HTMLButtonElement).disabled,
+		).toBe(true);
+		expect(
+			container.querySelectorAll('[data-testid="modem-note"]'),
+		).toHaveLength(1);
+		expect(container.textContent).not.toContain("undriveable");
+		expect(container.textContent).not.toContain("network.cellular");
+	});
+});
+
 // ── todo 26 — every device class renders a row, none hidden ──────────────────
 
 /** The wire fixtures Wave 4 actually produces, one per state the plan lists. */
@@ -407,7 +431,8 @@ describe("CellularSection — todo 26 state table (every class renders a row)", 
 		// own web interface" sentence), and the row deliberately prints only the
 		// informative one.
 		for (const row of STATE_TABLE) {
-			if (row.modem.availability_reason === undefined) continue;
+			const availabilityReason = row.modem.availability_reason;
+			if (availabilityReason === undefined) continue;
 			const notes = [
 				...container.querySelectorAll(
 					`[data-modem-id="${row.id}"] [data-testid="modem-note"]`,
@@ -420,7 +445,7 @@ describe("CellularSection — todo 26 state table (every class renders a row)", 
 
 			const keys = notes.map((note) => note.getAttribute("data-note-key"));
 			const stated =
-				keys.includes(availabilityReasonKey(row.modem.availability_reason)) ||
+				keys.includes(availabilityReasonKey(availabilityReason) ?? null) ||
 				keys.includes("network.cellular.reason.routerControlsUnverified");
 			expect(stated, row.label).toBe(true);
 		}
