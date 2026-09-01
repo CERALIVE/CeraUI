@@ -31,7 +31,10 @@
  * timers; `LiveAudioMeter.svelte` layers the runes on top.
  */
 
-import type { AudioLevelMessage } from "@ceraui/rpc/schemas";
+import type {
+	AudioLevelMessage,
+	AudioLevelUnavailableReason,
+} from "@ceraui/rpc/schemas";
 
 /**
  * Staleness deadline. The engine sidecar emits at ≤10 Hz (≥100 ms), so a meter
@@ -52,6 +55,61 @@ export const AUDIO_METER_STALE_MS = 2_000;
  * about what the operator is looking at.
  */
 export const AUDIO_METER_FLOOR_DB = -60;
+
+/**
+ * How long a gap BETWEEN TWO LIVE READINGS is held before it is allowed to draw
+ * the `unavailable` band.
+ *
+ * This is a DISPLAY rule and nothing else. The band itself is honest and it is
+ * also instantaneous, so a single dropped frame between two healthy readings
+ * drew the full "Meter unavailable" treatment for one paint and took it away
+ * again — which on a board reads as the meter blinking, and an operator cannot
+ * tell a blink apart from the real thing. Holding the reading that was already
+ * on screen makes a transient gap invisible without softening the sustained one:
+ * a gap that outlasts this window still bands, with the engine's own reason.
+ *
+ * Sized against the two clocks either side of it. Above the engine sidecar's
+ * ~200 ms cadence by 6×, so an ordinary missed frame or two never reaches the
+ * operator; strictly BELOW {@link AUDIO_METER_STALE_MS}, or the staleness
+ * watchdog would draw its own band first and the grace would be unreachable.
+ *
+ * It is deliberately NOT a debounce on `pending`, `stale` or `superseded` —
+ * those three answer questions this window has no evidence about, and delaying
+ * any of them would hide a real outage rather than a paint.
+ */
+export const METER_UNAVAILABLE_DISPLAY_GRACE_MS = 1_200;
+
+/**
+ * The `unavailable` reasons that describe a STATED fact rather than a transient
+ * gap, and are therefore never graced.
+ *
+ * `mode_none` is the operator's own "No audio" pick and `embedded_audio` is a
+ * property of the selected source — both are answers to something somebody just
+ * did, so the band belongs on screen in the same paint. Delaying either would
+ * make a deliberate action look laggy, and both are published SYNCHRONOUSLY by
+ * the backend's own selection-change broadcast (`audio-meter-bridge.ts`
+ * `noteMeterSelection`), i.e. squarely inside this window.
+ */
+export const STATED_UNAVAILABLE_REASONS: ReadonlySet<AudioLevelUnavailableReason> =
+	new Set<AudioLevelUnavailableReason>(["mode_none", "embedded_audio"]);
+
+/**
+ * Is this level an engine gap the display grace may hold over?
+ *
+ * True only for an `unavailable` marker whose reason is transient — a handoff,
+ * a momentarily missing device, a foreign-card suppression. A stated reason and
+ * a real reading both answer false, so the caller's other gates are untouched.
+ * A gap carrying NO reason at all is treated as transient: an unnamed gap is the
+ * weakest claim on the wire, and it is the one worth not flashing.
+ */
+export function isTransientMeterGap(
+	level: AudioLevelMessage | undefined,
+): boolean {
+	if (level?.unavailable !== true) return false;
+	return (
+		level.reason === undefined || !STATED_UNAVAILABLE_REASONS.has(level.reason)
+	);
+}
 
 /** Last-seen content fingerprint + the time that content last changed. */
 export interface MeterFreshness {

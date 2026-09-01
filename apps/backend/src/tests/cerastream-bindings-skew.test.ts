@@ -126,14 +126,47 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.11.0", () => {
-		// device-platform-wave4 Todo 20: the 2026.7.5 pin ships schema 0.11.0 (the
-		// per-device `modes[]`/`input_mode` ladder, `capture_degraded.selected`, and
-		// the new terminal `capture_unrecoverable` error), superseding the 0.10.0 the
-		// prior pin shipped. This value must equal what the on-device engine reports
-		// in `hello` — capabilities.ts raises the advisory `schemaVersionMismatch`
-		// banner off exactly that comparison.
-		expect(SCHEMA_VERSION).toBe("0.11.0");
+	test("SCHEMA_VERSION is pinned to 0.12.0", () => {
+		// hdmi-capture-truth-fixes Todo 8: the 2026.9.0 pin ships schema 0.12.0 (the
+		// typed capture causes — the additive optional `capture_cause` on the
+		// unchanged `capture_video_error` event, and `error.data.capture_causes` on a
+		// rejected start), superseding the 0.11.0 the prior pin shipped. This is a
+		// deliberate VERSION-TRACKING edit, not a weakening: the value must equal
+		// what the on-device engine reports in `hello`, because capabilities.ts
+		// raises the advisory `schemaVersionMismatch` banner off exactly that
+		// comparison.
+		expect(SCHEMA_VERSION).toBe("0.12.0");
+	});
+
+	test("a rejected start carries the engine's typed capture causes", () => {
+		// The taxonomy classifies `capture_source_unavailable` from THIS accessor
+		// and nothing else — never from the human message — so its presence and its
+		// empty-on-absence behaviour are both part of the consumed surface.
+		const rejected = new bindings.CerastreamRpcError(
+			-32602,
+			"invalid params: capture-source-unavailable",
+			"cerastream.params.invalid",
+			null,
+			{
+				code: "cerastream.params.invalid",
+				capture_causes: [{ device: "/dev/video0", cause: "no_signal" }],
+			},
+		);
+		expect(rejected.captureCauses()).toEqual([
+			{ device: "/dev/video0", cause: "no_signal" },
+		]);
+
+		const plain = new bindings.CerastreamRpcError(
+			-32602,
+			"invalid params",
+			"cerastream.params.invalid",
+		);
+		expect(plain.captureCauses()).toEqual([]);
+		expect(bindings.captureCauseSchema.options).toEqual([
+			"negotiation_failed",
+			"no_signal",
+			"device_busy",
+		]);
 	});
 
 	test("audio-level topic + connect-error codes are on the surface (Todo 22)", () => {

@@ -1,4 +1,7 @@
-import type { StartFailureClass } from "@ceraui/rpc/schemas";
+import type {
+	StartFailureCaptureCause,
+	StartFailureClass,
+} from "@ceraui/rpc/schemas";
 
 import { logger } from "../../helpers/logger.ts";
 import { isUpdating } from "../system/software-updates.ts";
@@ -16,16 +19,22 @@ import {
 } from "./start-failure-taxonomy.ts";
 import type { StartRetryDiagnostic } from "./stream-start-retry.ts";
 
+// `capture_source_unavailable` is retriable for exactly one of its causes
+// (`device_busy`), so the retry copy names that condition directly rather than
+// the class — a retry for any other cause is unreachable by construction.
 const RETRY_NOTIFICATION_KEYS = {
 	engine_unavailable: "notifications.streamStartEngineUnavailableRetrying",
 	engine_restarting: "notifications.streamStartEngineRestartingRetrying",
 	start_timeout: "notifications.streamStartTimeoutRetrying",
+	capture_source_unavailable:
+		"notifications.streamStartCaptureDeviceBusyRetrying",
 } as const;
 
 const RETRY_FALLBACK_MESSAGES = {
 	engine_unavailable: "Streaming engine unavailable",
 	engine_restarting: "Streaming engine is restarting",
 	start_timeout: "Streaming engine did not answer in time",
+	capture_source_unavailable: "The video input is busy",
 } as const;
 
 type RetryableStartClass = keyof typeof RETRY_NOTIFICATION_KEYS;
@@ -50,7 +59,54 @@ const TERMINAL_NOTIFICATION_KEYS: Readonly<Record<StartFailureClass, string>> =
 			"notifications.streamStartModemTransitionActiveFailed",
 		recovery_pending: "notifications.streamStartRecoveryPendingFailed",
 		mutation_blocked: "notifications.streamStartMutationBlockedFailed",
+		capture_source_unavailable:
+			"notifications.streamStartCaptureSourceUnavailableFailed",
 	};
+
+// The class alone names no operator action — an unsupported signal format, a
+// dead cable and a momentarily-held input want three different responses — so
+// the terminal copy is selected by CAUSE. The class-level key above is the
+// floor for a future engine that reports the class with no cause at all.
+const CAPTURE_TERMINAL_NOTIFICATION_KEYS: Readonly<
+	Record<StartFailureCaptureCause, string>
+> = {
+	negotiation_failed: "notifications.streamStartCaptureNegotiationFailed",
+	no_signal: "notifications.streamStartCaptureNoSignalFailed",
+	device_busy: "notifications.streamStartCaptureDeviceBusyFailed",
+};
+
+const CAPTURE_TERMINAL_FALLBACK_MESSAGES: Readonly<
+	Record<StartFailureCaptureCause, string>
+> = {
+	negotiation_failed:
+		"Stream failed to start: the video input's signal format is not one this device can capture. Change the camera's HDMI output format, then start again.",
+	no_signal:
+		"Stream failed to start: the video input is not carrying a signal. Check the camera is on and the cable is connected, then start again.",
+	device_busy:
+		"Stream failed to start: the video input was busy and did not free up. Wait a moment, then start again.",
+};
+
+function terminalNotificationKey(diagnostic: StartRetryDiagnostic): string {
+	if (
+		diagnostic.class === "capture_source_unavailable" &&
+		diagnostic.captureCause !== undefined
+	) {
+		return CAPTURE_TERMINAL_NOTIFICATION_KEYS[diagnostic.captureCause];
+	}
+	return TERMINAL_NOTIFICATION_KEYS[diagnostic.class];
+}
+
+function terminalFallbackMessage(
+	diagnostic: StartRetryDiagnostic,
+): string | undefined {
+	if (
+		diagnostic.class === "capture_source_unavailable" &&
+		diagnostic.captureCause !== undefined
+	) {
+		return CAPTURE_TERMINAL_FALLBACK_MESSAGES[diagnostic.captureCause];
+	}
+	return TERMINAL_FALLBACK_MESSAGES[diagnostic.class];
+}
 
 // A class whose terminal cause has nothing to do with the engine needs its own
 // untranslated fallback — the generic one points at the in-app log viewer.
@@ -63,6 +119,8 @@ const TERMINAL_FALLBACK_MESSAGES: Partial<Record<StartFailureClass, string>> = {
 		"Stream failed to start: the device is still finishing modem recovery after a restart. Try again in a moment.",
 	mutation_blocked:
 		"Stream failed to start: a modem change could not be undone, so its state is unknown. Review the blocked modem in Settings before streaming.",
+	capture_source_unavailable:
+		"Stream failed to start: the video input could not be used. Check the camera and cable, then start again.",
 };
 
 function notificationParams(
@@ -75,6 +133,9 @@ function notificationParams(
 		...(diagnostic.code !== undefined ? { code: diagnostic.code } : {}),
 		...(diagnostic.message !== undefined
 			? { message: diagnostic.message }
+			: {}),
+		...(diagnostic.captureCause !== undefined
+			? { captureCause: diagnostic.captureCause }
 			: {}),
 		retryState: diagnostic.retry.state,
 		attempt: diagnostic.retry.attempt,
@@ -116,16 +177,20 @@ export function reportStartTerminalFailure(
 ): void {
 	logger.error("stream start failed", diagnostic);
 	notificationRemove("stream_start_retry");
+	// Deliberately NOT persistent: a capture failure already has its own standing
+	// mechanism (`hdmi_error`, raised and retracted by the signal watcher), and a
+	// second permanent band for the same physical condition is one an operator
+	// has to dismiss twice.
 	notificationBroadcast(
 		"stream_start_failed",
 		"error",
-		TERMINAL_FALLBACK_MESSAGES[diagnostic.class] ??
+		terminalFallbackMessage(diagnostic) ??
 			`Stream failed to start (${diagnostic.class}) after ${diagnostic.retry.attempt}/${diagnostic.retry.maxAttempts} attempts. Open Settings → System Logs for details.`,
 		0,
 		false,
 		true,
 		true,
-		TERMINAL_NOTIFICATION_KEYS[diagnostic.class],
+		terminalNotificationKey(diagnostic),
 		notificationParams(diagnostic),
 	);
 }

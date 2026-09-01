@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
 				retriable: boolean;
 				attemptId: string;
 				message?: string;
+				captureCause?: string;
 		  }
 		| undefined,
 }));
@@ -169,6 +170,46 @@ describe("LiveView typed start-failure rendering (Todo 29)", () => {
 		expect(toastError).toHaveBeenCalledWith(
 			`${startFailure.class.engine_internal} ${startFailure.notRetriable}`,
 		);
+	});
+
+	// `capture_source_unavailable` is the one class whose copy is keyed by cause:
+	// the class names the subsystem, the cause names the operator's next move, so
+	// rendering the class alone would be a band nobody can act on.
+	it.each([
+		["negotiation_failed", false],
+		["no_signal", false],
+		["device_busy", true],
+	] as const)(
+		"renders the per-cause capture copy for %s",
+		async (captureCause, retriable) => {
+			state.failure = {
+				class: "capture_source_unavailable",
+				phase: "start-rpc",
+				retriable,
+				attemptId: `att_${captureCause}`,
+				captureCause,
+			};
+
+			render(LiveView);
+			await tick();
+
+			const reason =
+				startFailure.class.capture_source_unavailable[captureCause];
+			const suffix = retriable
+				? startFailure.retriedThenFailed
+				: startFailure.notRetriable;
+			expect(toastError).toHaveBeenCalledWith(`${reason} ${suffix}`);
+			expect(reason).not.toBe(startFailed.generic);
+		},
+	);
+
+	it("names the signal format and the camera-side fix, never the operator's settings", () => {
+		const negotiation =
+			startFailure.class.capture_source_unavailable.negotiation_failed;
+
+		expect(negotiation.toLowerCase()).toContain("format");
+		expect(negotiation.toLowerCase()).toContain("camera");
+		expect(negotiation.toLowerCase()).not.toContain("check your settings");
 	});
 
 	// The engine's raw diagnostic still travels to the backend logger (and so to

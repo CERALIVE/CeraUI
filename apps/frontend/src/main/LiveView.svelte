@@ -254,8 +254,20 @@ function startFailedMessage(code: string): string {
 // DELIBERATELY not concatenated here: operators have no console, so a verbatim
 // JSON-RPC/ALSA string is unactionable noise in the primary toast. It is still
 // captured verbatim by the backend logger and readable via Settings → System Logs.
-function startFailureMessage(failure: { class: string; retriable: boolean }): string {
-	const cls = m[`live.startFailure.class.${failure.class}`];
+// `capture_source_unavailable` is the one class whose copy is selected by its
+// typed cause: the class names the subsystem, the cause names what the operator
+// can actually do about it (change the camera's output format, reconnect the
+// cable, wait for the input to free up).
+function startFailureMessage(failure: {
+	class: string;
+	retriable: boolean;
+	captureCause?: string;
+}): string {
+	const key =
+		failure.captureCause !== undefined
+			? `live.startFailure.class.${failure.class}.${failure.captureCause}`
+			: `live.startFailure.class.${failure.class}`;
+	const cls = m[key];
 	const reason = typeof cls === 'function' ? cls() : m["live.startFailed.generic"]();
 	const retryState = failure.retriable
 		? m["live.startFailure.retriedThenFailed"]()

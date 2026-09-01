@@ -5,8 +5,9 @@
 // single-chunk budgets retain the pre-migration baseline captured at commit
 // 2b9051b8 (plan todo 19), archived repo-locally under
 // `test-results/premigration-build/`. The aggregate baselines include the
-// accepted modem Phase-C feature footprint documented below. Absolute ceilings
-// are a SECOND constraint, not a replacement: a budget is the SMALLER of the two.
+// accepted feature footprints documented below. Absolute ceilings are a SECOND
+// constraint, not a replacement: a budget is the SMALLER of the two — which is
+// how a re-derived baseline stays bounded rather than reissuing its full ratio.
 //
 // BASELINE (gzip level 9 under Bun — Bun's zlib and Node's differ by ~0.3%, so
 // the baseline is Bun's, matching CI). Reproduce with:
@@ -22,20 +23,39 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
-	// ACCEPTED, TRACKED REGRESSION — modem Phase C adds the complete operator
-	// control surface and its shared wire schemas. Re-derived 2026-08-20 from
-	// commit e5849653. The displaced baseline is preserved below and reported on
-	// every run. Authorised by TD-modem-phase-c-spa-size; the 12% budget remains
-	// bounded, and the initial-route/single-chunk ceilings are not widened.
-	totalGzip: 982_392,
+	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-01 on the capture-truth
+	// branch. Between the Phase-C rebaseline and that date the aggregate reached
+	// 1,099,280 B, i.e. 11.9% of the 12% Phase-C allowance was already spent, and
+	// eight operator-facing message keys x 10 locales (4,009 B of the 4,400 B
+	// measured delta) took it past the ceiling. Both displaced measurements are
+	// preserved below and reported on every run. Authorised by
+	// TD-spa-i18n-catalog-size; the initial-route/single-chunk ceilings are not
+	// widened, and the aggregate keeps a SECOND, absolute ceiling (below) so the
+	// re-derivation does not hand back a fresh 12% to spend silently.
+	totalGzip: 1_103_680,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
 	precacheGzip: 1_123_271,
 };
 
-const SPA_PREMODEM_BASELINE = {
-	totalGzip: { bytes: 762_410, debt: 'TD-modem-phase-c-spa-size' },
-	precacheGzip: { bytes: 903_286, debt: 'TD-modem-phase-c-spa-size' },
+// The aggregate's binding constraint. A ratio applied to a freshly re-derived
+// baseline would release ~118 KiB of unearned headroom — 27x the growth that
+// forced the re-derivation — so the total is capped absolutely instead. Sized
+// from the measured ~500 B gzip that one operator-facing message key costs
+// across 10 locales: roughly 32 further keys, comfortably clear of the 43 B of
+// build nondeterminism observed between this measurement and CI's own, and far
+// too small to absorb another feature-scale surface.
+const SPA_TOTAL_ABSOLUTE_HEADROOM = 16 * KIB;
+
+// The baselines a tracked, accepted regression displaced, newest last. Kept so a
+// budget above can never read as "the size it has always been", and re-stated on
+// every run so each accepted step stays visible instead of living in a comment.
+const SPA_DISPLACED_BASELINES = {
+	totalGzip: [
+		{ bytes: 762_410, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
+		{ bytes: 982_392, label: 'Phase-C', debt: 'TD-spa-i18n-catalog-size' },
+	],
+	precacheGzip: [{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' }],
 };
 
 // Per-file, keyed on the emitted federation filename. Entry names are stable;
@@ -186,7 +206,7 @@ process.stdout.write(`${report.join('\n')}\n\n`);
 check(
 	'total SPA JS+CSS gzip',
 	spa.totalGzip,
-	budget(SPA_BASELINE.totalGzip, 1.12),
+	budget(SPA_BASELINE.totalGzip, 1.12, SPA_TOTAL_ABSOLUTE_HEADROOM),
 	SPA_BASELINE.totalGzip,
 );
 check(
@@ -208,13 +228,15 @@ check(
 	SPA_BASELINE.initialRouteGzip,
 );
 
-for (const [metric, retired] of Object.entries(SPA_PREMODEM_BASELINE)) {
+for (const [metric, displaced] of Object.entries(SPA_DISPLACED_BASELINES)) {
 	const actual = spa[metric];
-	const growth = ((actual / retired.bytes - 1) * 100).toFixed(1);
-	process.stdout.write(
-		`      ^ tracked debt ${retired.debt} (docs/TECHNICAL_DEBT.md): ` +
-			`pre-Phase-C baseline ${kib(retired.bytes)}, now +${growth}%\n`,
-	);
+	for (const retired of displaced) {
+		const growth = ((actual / retired.bytes - 1) * 100).toFixed(1);
+		process.stdout.write(
+			`      ^ tracked debt ${retired.debt} (docs/TECHNICAL_DEBT.md): ` +
+				`${retired.label} ${metric} baseline ${kib(retired.bytes)}, now +${growth}%\n`,
+		);
+	}
 }
 
 // Federation is built by a SEPARATE command, so its absence is not a failure —

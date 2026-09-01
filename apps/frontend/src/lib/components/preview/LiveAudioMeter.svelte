@@ -25,9 +25,24 @@
   the content last moved. The same module owns the selection gate that retires a
   reading the moment the operator picks a different audio source, so the previous
   device's bars never render under the new pick's label.
+
+  A gap BETWEEN TWO LIVE READINGS is held for `METER_UNAVAILABLE_DISPLAY_GRACE_MS`
+  before it may draw the band. That is a display rule and only a display rule: the
+  band is honest and it is also instantaneous, so one dropped frame used to flash
+  the full "Meter unavailable" treatment for a single paint — which reads as the
+  meter blinking, and a blink is indistinguishable from the real thing. Four
+  properties are load-bearing. It holds the reading already ON SCREEN (blanking
+  the bars is a different flash, not the absence of one). It arms ONE deadline per
+  gap, so a feed that keeps publishing `unavailable` at the engine cadence still
+  bands rather than debouncing forever. Recovery is NOT graced — the next live
+  frame restores the bars in that same paint. And `pending`/`stale`/`superseded`
+  plus the two STATED reasons (`mode_none`, `embedded_audio`) are exempt, so
+  nothing an operator or a source positively asserted is ever delayed.
 -->
 <script lang="ts">
 import { untrack } from 'svelte';
+
+import type { AudioLevelMessage } from '@ceraui/rpc/schemas';
 
 import AudioLevelMeter from '$lib/components/preview/AudioLevelMeter.svelte';
 import {
@@ -35,6 +50,8 @@ import {
 	INITIAL_METER_FRESHNESS,
 	INITIAL_METER_SELECTION_GATE,
 	isLevelSuperseded,
+	isTransientMeterGap,
+	METER_UNAVAILABLE_DISPLAY_GRACE_MS,
 	type MeterFreshness,
 	type MeterSelectionGate,
 	trackMeterFreshness,
@@ -103,7 +120,59 @@ $effect(() => {
 // `stale`, and from an engine-sent `unavailable` marker that carries a reason.
 const pending = $derived(level === undefined);
 const superseded = $derived(isLevelSuperseded(selectionGate, level));
-const dead = $derived(pending || stale || superseded || level?.unavailable === true);
+
+// An engine gap the display grace MAY hold over — see `isTransientMeterGap`.
+const transientGap = $derived(isTransientMeterGap(level));
+
+// Everything that draws the band with no delay at all. `pending`, `stale` and
+// `superseded` are untouched by the grace on purpose (each answers a question
+// this window has no evidence about), and so is a STATED `unavailable` reason.
+const hardDead = $derived(
+	pending || stale || superseded || (level?.unavailable === true && !transientGap),
+);
+
+// The reading currently on screen, and therefore the one a transient gap holds
+// over. A gap with nothing behind it — the first frame this meter ever sees, or
+// one arriving onto an already-dead meter — has nothing to suppress, so it bands
+// immediately. Cleared by `hardDead` so a genuinely retired reading can never be
+// resurrected by a later gap.
+let heldLevel = $state<AudioLevelMessage | undefined>(undefined);
+let graceElapsed = $state(false);
+
+$effect(() => {
+	const current = level;
+	const live = !hardDead && !transientGap && current !== undefined;
+	const retired = hardDead;
+	untrack(() => {
+		if (live) heldLevel = current;
+		else if (retired) heldLevel = undefined;
+	});
+});
+
+// ONE deadline per gap, armed when the gap begins and never re-armed by the
+// repeat frames inside it — so a feed that keeps publishing `unavailable` at the
+// engine cadence still bands at the deadline instead of debouncing forever.
+$effect(() => {
+	if (!(transientGap && !hardDead && heldLevel !== undefined)) {
+		graceElapsed = false;
+		return;
+	}
+	graceElapsed = false;
+	const id = setTimeout(() => {
+		graceElapsed = true;
+	}, METER_UNAVAILABLE_DISPLAY_GRACE_MS);
+	return () => clearTimeout(id);
+});
+
+// Inside the window the gap is invisible: the meter keeps rendering the reading
+// it already had. Recovery is NOT graced — the very next live frame drops
+// `transientGap` and the real reading is back in that same paint.
+const gapHeld = $derived(
+	transientGap && !hardDead && heldLevel !== undefined && !graceElapsed,
+);
+
+const dead = $derived(hardDead || (transientGap && !gapHeld));
+const displayLevel = $derived(gapHeld ? heldLevel : level);
 
 // WHICH device these bars belong to. Only shown while they are real: a retired,
 // stale or unavailable reading has no device to name, and labelling one would be
@@ -112,7 +181,7 @@ const meteredDevice = $derived(
 	dead
 		? undefined
 		: meteredAudioLabel(
-				level?.source?.identity,
+				displayLevel?.source?.identity,
 				resolveAudioSourceList(getStatus()?.audio_sources, getStatus()?.asrcs ?? []),
 				resolveMessageKey,
 			),
@@ -121,6 +190,7 @@ const meteredDevice = $derived(
 
 <div
 	class={cn('min-w-0', className)}
+	data-gap-held={gapHeld ? 'true' : 'false'}
 	data-pending={pending ? 'true' : 'false'}
 	data-stale={stale ? 'true' : 'false'}
 	data-superseded={superseded ? 'true' : 'false'}
@@ -128,9 +198,9 @@ const meteredDevice = $derived(
 >
 	<AudioLevelMeter
 		class="space-y-1"
-		peakDb={dead ? [] : (level?.peak_db ?? [])}
-		reason={pending || stale || superseded ? undefined : level?.reason}
-		rmsDb={dead ? [] : (level?.rms_db ?? [])}
+		peakDb={dead ? [] : (displayLevel?.peak_db ?? [])}
+		reason={pending || stale || superseded ? undefined : displayLevel?.reason}
+		rmsDb={dead ? [] : (displayLevel?.rms_db ?? [])}
 		unavailable={dead}
 	/>
 	{#if meteredDevice !== undefined}
