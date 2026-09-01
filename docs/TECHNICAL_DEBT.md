@@ -102,6 +102,36 @@ The Phase-C exception is limited to the two aggregate measurements. The initial-
 and largest-chunk ceilings remain on their pre-feature baselines, and every run reports
 the displaced aggregate measurements so the accepted growth remains visible.
 
+The 982,392 B total-SPA figure above is no longer the live constant — it was displaced on
+2026-09-01 by `TD-spa-i18n-catalog-size` below and is now reported as a retained
+measurement. This entry stays open regardless: the precache baseline it accepted is still
+live, and the reduction it asks for has not happened.
+
+```debt
+id: TD-spa-i18n-catalog-size
+title: Every operator-facing message key costs ~500 B gzip of aggregate SPA across 10 locales
+track: 1
+status: open
+exit_criteria: `bun run build:frontend && bun scripts/ci/bundle-report.mjs`
+owner: ceraui-team
+registered_at: 2026-09-01
+resolved_at: null
+unblock: The total SPA JS+CSS gzip baseline moved from the accepted Phase-C 982,392 B to 1,103,680 B (+12.3%) on 2026-09-01. Growth merged between 2026-08-20 and that date had already taken the aggregate to 1,099,280 B — 99.9% of the Phase-C 12% budget — and the capture-truth branch's eight new operator-facing message keys added 4,400 B, of which 4,009 B (91%) is Paraglide's per-message x 10-locale expansion in the lazily-imported notifications (+2,299 B) and live (+1,710 B) namespace chunks; only 259 B is code. Reduce the per-key aggregate cost in a dedicated bundle effort — evaluate Paraglide outputStructure "locale-modules" so a session loads one locale instead of ten, per-locale precache scoping, and a narrower shipped locale set — without deleting operator copy or dropping a language; keep the entry open until the aggregate baseline can be lowered. The initial-route, largest-chunk, and precache baselines are unchanged by this step.
+```
+
+This is the same root cause as `TD-federation-i18n-catalog-size` on a different surface:
+the SPA splits the catalog into lazy namespace chunks where the federation bundle cannot,
+so the SPA pays the ten-locale tax per namespace rather than all at once. It is recorded
+separately because the remedies and the exit measurements differ.
+
+Two guardrails came with the re-derivation rather than after it. The aggregate total is
+now bounded by a 16 KiB **absolute** ceiling as well as the 12% ratio, so re-deriving the
+baseline released ~16 KiB rather than the ~118 KiB a ratio alone would have handed back;
+and both displaced measurements (762,410 B pre-Phase-C, 982,392 B Phase-C) are re-stated
+on every run. Service-worker precache was **not** re-derived — it still passes on the
+Phase-C baseline, at 1,244,557 B against a 1,258,063 B budget, i.e. roughly 13 KiB from
+its own ceiling. The next surface of this size breaches precache too.
+
 ```debt
 id: TD-federation-i18n-catalog-size
 title: Federation toast-host shared chunk carries an oversized static Paraglide catalog
