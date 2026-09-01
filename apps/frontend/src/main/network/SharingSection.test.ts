@@ -184,7 +184,7 @@ describe("SharingSection — honest bands", () => {
 });
 
 describe("SharingSection — per-uplink rows", () => {
-	it("renders one row per uplink with a state chip and a weight bar", () => {
+	it("renders one row per uplink with a state chip and a steering share", () => {
 		const { container } = mount({
 			uplinks: uplinks(
 				{ iface: "wwan0" },
@@ -224,6 +224,84 @@ describe("SharingSection — per-uplink rows", () => {
 			"sign-in portal",
 		);
 		expect(container.textContent ?? "").not.toContain("captive_portal");
+	});
+
+	it("states WHY a link is not up beside its state word, not behind a disclosure", () => {
+		const { container } = mount({
+			uplinks: uplinks({
+				iface: "wlan0",
+				kind: "wifi",
+				state: "degraded",
+				reason: "captive_portal",
+				weight: 25,
+			}),
+		});
+
+		const state = q(container, "sharing-uplink-state-wlan0");
+		const reason = q(container, "sharing-uplink-reason-wlan0");
+		expect(state?.textContent ?? "").toContain("Degraded");
+		expect(reason?.textContent ?? "").toContain("sign-in portal");
+
+		// Both are on screen at rest, in the SAME row — a state word an operator
+		// cannot act on is exactly what folding the reason away produced.
+		const row = q(container, "sharing-uplink-wlan0");
+		expect(row?.contains(state as Node)).toBe(true);
+		expect(row?.contains(reason as Node)).toBe(true);
+		expect(foldedUnder(reason as Element)).toBeUndefined();
+	});
+
+	it("a healthy row states its state and NO reason — there is nothing to explain", () => {
+		const { container } = mount({ uplinks: uplinks({ iface: "wwan0" }) });
+		expect(q(container, "sharing-uplink-state-wwan0")?.textContent).toContain(
+			"Up",
+		);
+		expect(q(container, "sharing-uplink-reason-wwan0")).toBeNull();
+	});
+});
+
+describe("SharingSection — the weight is a STEERING SHARE, never link quality", () => {
+	it("labels it in words, so a bare percentage cannot read as a quality score", () => {
+		const { container } = mount({ uplinks: uplinks({ iface: "wwan0" }) });
+		const share = q(container, "sharing-uplink-weight-wwan0");
+		expect(share).not.toBeNull();
+		expect(share?.textContent ?? "").toContain("Steering share");
+		expect(share?.textContent ?? "").toContain("100%");
+	});
+
+	it("is WITHHELD when no client zone exists — nothing is being shared", () => {
+		const { container } = mount({
+			hotspotInterfaces: [],
+			netif: undefined,
+			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
+		});
+		expect(q(container, "sharing-uplink-weight-wwan0")).toBeNull();
+		// The row itself is untouched: only the share is withheld.
+		expect(q(container, "sharing-uplink-wwan0")).not.toBeNull();
+		expect(q(container, "sharing-uplink-state-wwan0")?.textContent).toContain(
+			"Up",
+		);
+		expect(container.textContent ?? "").not.toContain("100%");
+	});
+
+	it("is WITHHELD when the device said its steering layer is unavailable", () => {
+		const { container } = mount({
+			steering: uplinkSteeringStatusSchema.parse({
+				state: "steering_unavailable",
+				reason: "policy_route_missing",
+			}),
+			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
+		});
+		expect(q(container, "sharing-uplink-weight-wwan0")).toBeNull();
+		// …and the headline explains it, so the withholding is never silent.
+		expect(q(container, "sharing-band-steering-unavailable")).not.toBeNull();
+	});
+
+	it("an UNREPORTED steering state withholds nothing — absence is not evidence", () => {
+		const { container } = mount({
+			steering: undefined,
+			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
+		});
+		expect(q(container, "sharing-uplink-weight-wwan0")).not.toBeNull();
 	});
 
 	it("degrades a stale row VISIBLY — never fresh-looking dead data", () => {
@@ -547,7 +625,7 @@ describe("SharingSection — the disclosures", () => {
 		);
 	});
 
-	it("compacts an uplink row to name · kind · state · share", () => {
+	it("compacts an uplink row to name · kind · state · reason · share", () => {
 		const { container } = mount({
 			uplinks: uplinks({
 				iface: "wlan0",
@@ -558,22 +636,21 @@ describe("SharingSection — the disclosures", () => {
 			}),
 		});
 
-		// What stays on the row at rest.
+		// What stays on the row at rest. The REASON is here rather than in the
+		// disclosure: "Degraded" alone is the one thing an operator cannot act on,
+		// so the state word and WHY it is not up belong together.
 		for (const testid of [
 			"sharing-uplink-state-wlan0",
+			"sharing-uplink-reason-wlan0",
 			"sharing-uplink-weight-wlan0",
 		]) {
 			expect(foldedUnder(q(container, testid) as Element)).toBeUndefined();
 		}
-		// What the row hands to its own disclosure.
-		for (const testid of [
-			"sharing-uplink-probes-wlan0",
-			"sharing-uplink-reason-wlan0",
-		]) {
-			expect(foldedUnder(q(container, testid) as Element)).toBe(
-				"sharing-uplink-detail-wlan0",
-			);
-		}
+		// What the row hands to its own disclosure: the probe counters, which are
+		// an instrument rather than a state.
+		expect(
+			foldedUnder(q(container, "sharing-uplink-probes-wlan0") as Element),
+		).toBe("sharing-uplink-detail-wlan0");
 	});
 
 	it("opens ONE row's detail without opening its neighbour's", async () => {

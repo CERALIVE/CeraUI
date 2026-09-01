@@ -190,6 +190,7 @@ describe("uplink health runtime", () => {
 				measured_bps: 2_000_000,
 				lastReadMs: 9_999,
 			}),
+			resolveTarget: () => Promise.resolve("142.251.133.99"),
 			probe: async () => {
 				probes++;
 				return "success";
@@ -208,7 +209,7 @@ describe("uplink health runtime", () => {
 		});
 	});
 
-	it("all three unreachable target classes drive up to down at the exact threshold", async () => {
+	it("three unreachable rounds drive up to down at the exact threshold, against ONE resolved target", async () => {
 		// Given
 		const engine = new UplinkHealthEngine();
 		setUplinkHealthEngineForTest(engine);
@@ -228,8 +229,9 @@ describe("uplink health runtime", () => {
 			}),
 			streaming: () => false,
 			telemetry: () => null,
-			probe: async (_iface, target) => {
-				targets.push(target);
+			resolveTarget: () => Promise.resolve("142.251.133.99"),
+			probe: async (_iface, remoteAddr) => {
+				targets.push(remoteAddr);
 				return "failure";
 			},
 			publish: () => undefined,
@@ -240,8 +242,14 @@ describe("uplink health runtime", () => {
 		await runtime.tick();
 		await runtime.tick();
 
-		// Then
-		expect(targets).toEqual(["gateway", "public_ip", "https_204"]);
+		// Then every round aimed at the SAME resolved connectivity-check address:
+		// the retired `gateway`/`public_ip`/`https_204` rotation named three
+		// target CLASSES that were never three different probes.
+		expect(targets).toEqual([
+			"142.251.133.99",
+			"142.251.133.99",
+			"142.251.133.99",
+		]);
 		expect(runtime.records()[0]).toMatchObject({
 			state: "down",
 			lastTransition: 3,

@@ -1675,6 +1675,7 @@
 	"network.sharing.reason.passiveCongestion": "스트림 텔레메트리에 혼잡이 나타나, 이 회선이 나르는 클라이언트 트래픽이 줄었습니다.",
 	"network.sharing.reason.definitiveLoss": "장치가 이 회선을 잃어, 연결된 기기가 더 이상 사용하지 않습니다.",
 	"network.sharing.weightLabel": "클라이언트 트래픽 분담 {weight} 퍼센트",
+	"network.sharing.steeringShare": "분배 비율",
 	"network.sharing.probes": "성공 {successes} · 실패 {failures}",
 	"network.sharing.probesLabel": "연결 확인",
 	"network.sharing.uplinkDetail.disclosure": "세부 정보",

@@ -111,7 +111,6 @@ import {
 	noteLockOpenEvidence,
 } from "../modems/modem-lock-state.ts";
 import { isRealDevice } from "../system/device-detection.ts";
-import { SAFE_IFNAME_RE } from "./device-bound-probe.ts";
 import {
 	HILINK_CONNECTION_PATH,
 	HILINK_DATA_SWITCH_PATH,
@@ -142,6 +141,7 @@ import {
 	type RouterSignalModel,
 	unreachableSignal,
 } from "./router-signal.ts";
+import { SAFE_IFNAME_RE } from "./safe-ifname.ts";
 import { xmlValue } from "./vendor-xml.ts";
 
 export type RouterAdminSim = "absent" | "present" | "unknown";

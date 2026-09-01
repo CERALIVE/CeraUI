@@ -56,24 +56,15 @@ import {
 	CONNECTIVITY_CHECK_PATH,
 	formatUrlHost,
 } from "./internet.ts";
+import { isSafeIfname, SAFE_IFNAME_RE } from "./safe-ifname.ts";
 
 /**
- * A kernel interface name that is safe to hand to an argv slot. Deliberately
- * the SAME shape `router-cellular-admin.ts` guards its own curl binding with —
- * that module imports this constant rather than keeping a second copy, so the
- * two device-bound spawn sites can never disagree about what a name may be.
- *
- * `argMatch(ID_RE, …)`-equivalent, plus the kernel's own 15-character `IFNAMSIZ`
- * ceiling. The FIRST character deliberately excludes `-`, mirroring
- * `argMatch`'s separate `startsWith("-")` refusal: a name like `--upload-file`
- * is otherwise a well-formed member of the character class and would be read by
- * curl as a flag rather than as the value of `--interface`.
+ * The argv-safety rule for an interface name, re-exported so every existing
+ * importer is unchanged. It LIVES in the leaf `safe-ifname.ts`: keeping it here
+ * made `router-cellular-admin.ts` import this module for one constant and closed
+ * a cycle back onto it — see that file's header.
  */
-export const SAFE_IFNAME_RE: RegExp = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,14}$/;
-
-export function isSafeIfname(ifname: string): boolean {
-	return SAFE_IFNAME_RE.test(ifname);
-}
+export { isSafeIfname, SAFE_IFNAME_RE };
 
 /** Wall-clock budget for one device-bound probe. Matches the unbound probe. */
 export const DEVICE_PROBE_TIMEOUT_MS = 4000;

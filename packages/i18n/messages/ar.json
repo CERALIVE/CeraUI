@@ -1732,6 +1732,7 @@
 	"network.sharing.reason.passiveCongestion": "تُظهر قياسات البث ازدحامًا، لذا تحمل هذه الوصلة قدرًا أقل من حركة الأجهزة المتصلة.",
 	"network.sharing.reason.definitiveLoss": "فقد الجهاز هذه الوصلة، لذا لم تعد الأجهزة المتصلة تستخدمها.",
 	"network.sharing.weightLabel": "حصة حركة الأجهزة المتصلة {weight} بالمئة",
+	"network.sharing.steeringShare": "حصة التوجيه",
 	"network.sharing.probes": "{successes} ناجحة · {failures} فاشلة",
 	"network.sharing.probesLabel": "فحوصات الاتصال",
 	"network.sharing.uplinkDetail.disclosure": "التفاصيل",
