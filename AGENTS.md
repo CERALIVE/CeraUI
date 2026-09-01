@@ -537,7 +537,7 @@ additive-optional signals** shipped on top of that lock: `memory`, `cpuFreq`,
 | `ifaceRxTx` | Per-interface RX/TX byte counters |
 | `raucSlot` | Active RAUC A/B slot |
 | `memory` (optional) | Parsed `/proc/meminfo` fields (`memTotalBytes`, etc.) — a genuinely-read `0` is kept; an unreadable source omits the keys |
-| `cpuFreq` (optional) | Array of `{id, curKhz, maxKhz}` per `/sys/devices/system/cpu/cpufreq/policy*` directory. `id` is the directory name verbatim — never relabeled "big"/"little" and never used to infer core counts. `maxKhz` is the hardware ceiling (`cpuinfo_max_freq`), not the governor-movable `scaling_max_freq`. Absent when nothing is measurable, never `[]` |
+| `cpuFreq` (optional) | Array of `{id, curKhz, maxKhz}` per `/sys/devices/system/cpu/cpufreq/policy*` directory, plus the additive-optional `{cpus, cpuCount, governor, label}`. `id` is the directory name verbatim — never relabeled "big"/"little" and never used to infer core counts. `maxKhz` is the hardware ceiling (`cpuinfo_max_freq`), not the governor-movable `scaling_max_freq`. Absent when nothing is measurable, never `[]` |
 | `ddr` (optional) | `{loadPercent, curFreqHz, maxFreqHz}` from the DDR devfreq node. All-three-or-nothing. Probed under `/sys/class/devfreq`: a case-insensitive exact `dmc` match first, then any entry matching `/dmc/i` or `/dfi/i` (lexicographically sorted). Hz, not kHz — do not share a formatter with `cpuFreq` |
 | `gpu` (optional) | `{loadPercent, curFreqHz?, maxFreqHz?}`. `loadPercent` required; frequencies independently optional, because the Mali kbase path (`/sys/class/misc/mali0/device/{utilisation,utilization,gpu_busy_percent}`, probed in that order) structurally cannot report a frequency. Falls through to devfreq GPU (`/\.gpu$/i` suffix match under the same `/sys/class/devfreq` directory) when kbase is absent. Hz, not kHz |
 
@@ -551,6 +551,30 @@ absence on a given kernel is the expected, honest state, not a gap to paper over
 confirmed against a real board yet** — see
 [`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md) leg (i) for
 the outstanding capture step.
+
+**`cpuFreq` grew ADDITIVELY, and its new fields answer "what is this policy" —
+`policy0` never did.** The Settings panel showed the raw sysfs directory names
+and no governor at all, which was not a data bug: the collector deliberately
+emitted the kernel's directory name verbatim and never read `scaling_governor`.
+It now also reads `related_cpus` (→ `cpus: "0-3"` + `cpuCount`),
+`scaling_governor` (→ `governor: "performance"`), and `/proc/cpuinfo` (→ an
+optional `label`), each optional-on-read-failure under the unchanged per-policy
+omission contract — a policy still answers with its two frequencies or is
+omitted, and a device that publishes none of the new nodes emits the
+byte-identical three-field row. The S1 five-signal lock is untouched.
+
+`label` is the one field a consumer could be tempted to fabricate, so it is the
+one that is ABSENT rather than guessed: an ARM core is named only from a checked
+MIDR part table (`0xd05` → Cortex-A55, `0xd0b` → Cortex-A76) and only when the
+implementer is ARM Ltd, every CPU of the policy must agree, and x86 uses the
+shared `model name`. GOVERNOR CONTEXT, board-proven: the fleet runs
+`performance` BY DESIGN via the first-party `ceralive-cpu-governor.service`
+(encode-latency rationale in the unit; overridable via `CERALIVE_CPU_GOVERNOR`),
+so `cur == max` at idle on the big cores is the EXPECTED reading and the chip
+renders plainly — changing the governor policy is a separate owner decision.
+Full contracts: [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → CPU-FREQUENCY
+METADATA and [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) → "A cpufreq
+policy is rendered as the thing it governs".
 
 **A new device signal therefore gets its OWN broadcast**, exactly as `encoder-load`
 did. The CPU core count is the third one, and it exists because `cpuLoad1` above is

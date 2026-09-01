@@ -1937,6 +1937,7 @@
 	"settings.deviceStats.bootSlot": "부트 슬롯",
 	"settings.deviceStats.cpuFreq": "CPU 주파수",
 	"settings.deviceStats.cpuFreqHint": "cpufreq 정책별로 하드웨어 상한 대비 현재 클록입니다. 정책 이름은 sysfs 디렉터리이며 코어 클러스터가 아닙니다.",
+	"settings.deviceStats.cpuFreqGovernorHint": "이 그룹의 클록을 결정하는 커널 정책입니다. CeraLive는 인코딩 지연을 위해 performance로 고정합니다.",
 	"settings.deviceStats.cpuLoad": "CPU 부하",
 	"settings.deviceStats.cpuLoadHeavy": "높음",
 	"settings.deviceStats.cpuLoadHint": "전체 CPU 용량 대비 비율 — {cores}개 코어에 대한 1분 평균 부하입니다.",

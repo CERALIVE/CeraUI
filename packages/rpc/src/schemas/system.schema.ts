@@ -327,10 +327,26 @@ export type IfaceRxTxStat = z.infer<typeof ifaceRxTxStatSchema>;
 //
 // Frequencies are kHz — the unit `scaling_cur_freq` / `cpuinfo_max_freq` report.
 // They are NOT normalized on the wire; a GHz rendering is a display decision.
+//
+// `cpus` / `cpuCount` / `governor` / `label` are ADDITIVE and INDEPENDENTLY
+// optional, each carrying one node the collector managed to read. `id` stays
+// required and stays the fallback: a payload from a device that predates them
+// renders exactly as it did, under its sysfs directory name.
+//
+// `label` is the only one a consumer could be tempted to fabricate, so the
+// contract is that it is ABSENT rather than guessed. The device names an ARM
+// core only from a checked MIDR part table and only when ARM implemented it, and
+// only when every CPU of the policy agrees; on x86 it is the shared model name.
+// A consumer must never derive a label from `id`, from list position, or from a
+// core count.
 export const cpuFreqPolicySchema = z.object({
 	id: z.string(),
 	curKhz: z.number(),
 	maxKhz: z.number(),
+	cpus: z.string().optional(),
+	cpuCount: z.number().optional(),
+	governor: z.string().optional(),
+	label: z.string().optional(),
 });
 export type CpuFreqPolicy = z.infer<typeof cpuFreqPolicySchema>;
 

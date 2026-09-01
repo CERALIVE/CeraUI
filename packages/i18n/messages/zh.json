@@ -1937,6 +1937,7 @@
 	"settings.deviceStats.bootSlot": "启动分区",
 	"settings.deviceStats.cpuFreq": "CPU 频率",
 	"settings.deviceStats.cpuFreqHint": "每个 cpufreq 策略的当前频率与硬件上限之比。策略名称是 sysfs 目录名，而非核心簇。",
+	"settings.deviceStats.cpuFreqGovernorHint": "决定该组频率的内核策略。CeraLive 为降低编码延迟固定使用 performance。",
 	"settings.deviceStats.cpuLoad": "CPU 负载",
 	"settings.deviceStats.cpuLoadHeavy": "高",
 	"settings.deviceStats.cpuLoadHint": "占 CPU 总容量的比例 — {cores} 个核心上的 1 分钟平均负载。",

@@ -1982,6 +1982,7 @@
 	"settings.deviceStats.bootSlot": "बूट स्लॉट",
 	"settings.deviceStats.cpuFreq": "CPU आवृत्ति",
 	"settings.deviceStats.cpuFreqHint": "प्रत्येक cpufreq पॉलिसी के लिए, हार्डवेयर सीमा के मुकाबले वर्तमान क्लॉक। पॉलिसी नाम एक sysfs निर्देशिका है, कोर क्लस्टर नहीं।",
+	"settings.deviceStats.cpuFreqGovernorHint": "कर्नेल पॉलिसी जो इस समूह की क्लॉक चुनती है। CeraLive एन्कोड विलंबता के लिए performance पर स्थिर रखता है।",
 	"settings.deviceStats.cpuLoad": "CPU लोड",
 	"settings.deviceStats.cpuLoadHeavy": "अधिक",
 	"settings.deviceStats.cpuLoadHint": "कुल CPU क्षमता का हिस्सा — {cores} कोर पर 1-मिनट का औसत लोड।",

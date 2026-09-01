@@ -30,7 +30,10 @@
 	production.
 */
 
-import { CPUFREQ_DIR } from "../../modules/system/collectors/cpufreq.ts";
+import {
+	CPUFREQ_DIR,
+	CPUINFO_PATH,
+} from "../../modules/system/collectors/cpufreq.ts";
 import { DEVFREQ_DIR } from "../../modules/system/collectors/ddr.ts";
 import type { DeviceStatsDeps } from "../../modules/system/device-stats.ts";
 import type { MockDeviceStats } from "../mock-schemas.ts";
@@ -67,12 +70,40 @@ export const MOCK_DEVICE_STATS = {
 	memUsedPercent: 25,
 	swapTotalBytes: 2 * GIB,
 	swapFreeBytes: 2 * GIB,
-	// An RK3588-shaped cpufreq tree: one policy per cluster boundary. The ids are
-	// the sysfs directory names the provider writes back out, nothing more.
+	// An RK3588-shaped cpufreq tree: one policy per cluster boundary, 4x A55 +
+	// 2x2 A76. The ids are the sysfs directory names the provider writes back
+	// out; the labels are what the collector DERIVES from the `/proc/cpuinfo`
+	// this fixture is serialized into, never a string the provider states twice.
+	// `performance` is the governor the fleet really runs (the first-party
+	// `ceralive-cpu-governor.service`), which is why cur == max on the big cores.
 	cpuFreq: [
-		{ id: "policy0", curKhz: 1_008_000, maxKhz: 1_800_000 },
-		{ id: "policy4", curKhz: 1_416_000, maxKhz: 2_400_000 },
-		{ id: "policy6", curKhz: 2_016_000, maxKhz: 2_400_000 },
+		{
+			id: "policy0",
+			curKhz: 1_008_000,
+			maxKhz: 1_800_000,
+			cpus: "0-3",
+			cpuCount: 4,
+			governor: "performance",
+			label: "Cortex-A55",
+		},
+		{
+			id: "policy4",
+			curKhz: 1_416_000,
+			maxKhz: 2_400_000,
+			cpus: "4-5",
+			cpuCount: 2,
+			governor: "performance",
+			label: "Cortex-A76",
+		},
+		{
+			id: "policy6",
+			curKhz: 2_016_000,
+			maxKhz: 2_400_000,
+			cpus: "6-7",
+			cpuCount: 2,
+			governor: "performance",
+			label: "Cortex-A76",
+		},
 	],
 	// DDR bus at 528 MHz against a 1.56 GHz ceiling. Hz here, unlike cpuFreq's
 	// kHz — the two collectors report the unit their sysfs class uses.
@@ -134,6 +165,60 @@ function buildMeminfo(stats: MockDeviceStats): string {
 	);
 }
 
+/** Expand the kernel's range notation (`"0-3"`, `"0,2"`) into CPU numbers. */
+function expandCpuRange(spec: string): number[] {
+	const cpus: number[] = [];
+	for (const part of spec.split(",")) {
+		const [from, to] = part.split("-");
+		const start = Number.parseInt(from ?? "", 10);
+		const end = to === undefined ? start : Number.parseInt(to, 10);
+		for (let cpu = start; cpu <= end; cpu++) cpus.push(cpu);
+	}
+	return cpus;
+}
+
+/**
+ * ARM MIDR part numbers, keyed by the label the collector derives from them.
+ * The fixture states the LABEL and this map turns it back into the raw part the
+ * kernel would print, so the collector still does the naming — a provider that
+ * simply echoed the label would prove nothing about the derivation.
+ */
+const ARM_PART_FOR_LABEL: Record<string, string> = {
+	"Cortex-A55": "0xd05",
+	"Cortex-A76": "0xd0b",
+};
+
+/**
+ * Reproduce an arm64 `/proc/cpuinfo` for the cpufreq fixture. Every CPU of every
+ * policy gets its own block carrying ARM Ltd's implementer id and the part
+ * number for that policy's label, which is exactly what `cpuLabelsFromCpuinfo`
+ * reads. A label with no known part number is a fixture bug and throws here
+ * rather than silently serializing a block the collector would refuse to name.
+ */
+function buildCpuinfo(policies: MockDeviceStats["cpuFreq"]): string {
+	const blocks: string[] = [];
+	for (const policy of policies) {
+		const part = ARM_PART_FOR_LABEL[policy.label];
+		if (part === undefined) {
+			throw new Error(
+				`mock device-stats: no ARM part number for label "${policy.label}"`,
+			);
+		}
+		for (const cpu of expandCpuRange(policy.cpus)) {
+			blocks.push(
+				`processor\t: ${cpu}\n` +
+					"BogoMIPS\t: 24.00\n" +
+					"CPU implementer\t: 0x41\n" +
+					"CPU architecture: 8\n" +
+					"CPU variant\t: 0x0\n" +
+					`CPU part\t: ${part}\n` +
+					"CPU revision\t: 0\n",
+			);
+		}
+	}
+	return `${blocks.join("\n")}\n`;
+}
+
 /**
  * Reproduce the `/sys/devices/system/cpu/cpufreq/policy*` tree for the cpufreq
  * fixture — one integer-bearing file per node, exactly as the kernel exposes
@@ -154,7 +239,16 @@ function buildCpuFreq(policies: MockDeviceStats["cpuFreq"]): {
 			`${CPUFREQ_DIR}/${policy.id}/cpuinfo_max_freq`,
 			`${policy.maxKhz}\n`,
 		);
+		files.set(
+			`${CPUFREQ_DIR}/${policy.id}/related_cpus`,
+			`${expandCpuRange(policy.cpus).join(" ")}\n`,
+		);
+		files.set(
+			`${CPUFREQ_DIR}/${policy.id}/scaling_governor`,
+			`${policy.governor}\n`,
+		);
 	}
+	files.set(CPUINFO_PATH, buildCpuinfo(policies));
 	// `boost` is a real sibling of the policy directories on many kernels — it is
 	// listed so the collector's enumeration filter is exercised, not bypassed.
 	return { dir: [...policies.map((p) => p.id), "boost"], files };
