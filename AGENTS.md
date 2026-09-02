@@ -14,11 +14,85 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.9.0"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.9.1"   (public npm, @ceralive scope)
 "@ceralive/srtla-send":  "2026.8.0"   (public npm, @ceralive scope)
 ```
 
 Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
+
+## A REGISTRY PIN IS A VERSION BOUNDARY, AND THE GATE IS THE DELIVERABLE [EXISTS]
+
+CeraUI consumes FOUR npm producers whose wire data is Zod-validated:
+`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`,
+`@ceralive/modem-control`. A pin is a version boundary as well as a path
+boundary, and the failure mode on the wrong side of it is SILENT.
+
+**Zod's `z.object()` STRIPS unrecognized keys on `.parse()`.** So a consumer
+pinned to an OLD binding whose schema does not know a NEW producer field drops
+that field before any business logic sees it — no error, no warning, and a
+PASSING typecheck whenever the consumer declared its own local shape for the
+same wire data. Runtime-only, silent data loss.
+
+The motivating case is recorded in full in the workspace root
+[`AGENTS.md`](../AGENTS.md) → BINDING-SCHEMA DRIFT: cerastream PR #126 added
+`device_address` to `captureDeviceSchema`, and CeraUI PR #303 merged the same day
+shipping BT-mic code reading `node.device_address` while still pinned to
+`@ceralive/cerastream@2026.8.0`, whose gitHead predates PR #126 entirely.
+`bluetooth-audio.ts`, `sources.ts` and `audio-naming.ts` each declared a LOCAL
+`device_address?: string`, so TypeScript never saw the mismatch and the field was
+Zod-stripped on every real device.
+
+**`apps/backend/src/tests/producer-schema-drift.test.ts` is the enforcement.** It
+holds ONE manifest of the producer wire-field paths CeraUI actually reads and
+asserts, against the schemas ACTUALLY INSTALLED in `node_modules`, that every one
+of them resolves. A stale pin plus new-field usage fails CI instead of a device.
+Six properties are load-bearing:
+
+- **It names NO producer version, and it must not.** The gate has to pass against
+  ANY pin that carries the manifest's fields, so an additive bump stays green with
+  no edit and a bump that RETIRES a consumed field fails loudly. Version and
+  export-surface skew are a DIFFERENT axis, already guarded by
+  `cerastream-bindings-skew.test.ts`, `srtla-send-bindings-skew.test.ts`,
+  `modem-control-skew-matrix.test.ts` and
+  `remote-control/protocol.export-surface.test.ts` — those pin the NAMES, this one
+  pins the INSIDE of the schemas they name.
+- **The manifest is a real inventory, not a wish list.** Every entry was
+  established by finding the read site in `apps/backend/src`. Adding a field with
+  no consumer is not harmless: it turns an unused producer field into a merge
+  blocker for a producer that legitimately retires it.
+- **It covers READS, not EMITS.** A field CeraUI only writes through a producer
+  type (`SrtlaSendOptions`, the `device.hello` `deviceCaps` block) is an ordinary
+  typed argument, so `tsc` already fails on a rename. The silent-strip hazard is
+  specific to INBOUND data crossing a `.parse()`.
+- **Schemas are duck-typed on `safeParse`, never `instanceof z.ZodType`.** Each
+  producer bundles its own zod, so a cross-instance `instanceof` is not a reliable
+  guard for a consumer copy — the same reason the bindings-skew tests give.
+- **The resolver is proven able to FAIL.** A broken unwrapper that answered `true`
+  for everything would leave the whole gate silently green, which is the exact
+  defect class it exists to catch, so a non-vacuity test pins both directions.
+- **It additionally asserts lockfile purity** — `bun.lock` carries no `link:`
+  specifier and every producer dep is a bare registry version. The gate only means
+  something while the installed producer really IS the pinned release.
+
+**PUBLISH BEFORE CONSUME.** A producer PR that adds or changes a field in an
+npm-published Zod schema must have its bindings PUBLISHED (tag pushed) BEFORE any
+CeraUI PR referencing that field may merge. Do not let a producer's wire-schema
+change and its npm publish drift apart across several merged PRs — cerastream PRs
+#123–#126 all merged before any publish happened, which is exactly how the gap
+above opened.
+
+**`bun link` is the SANCTIONED DEV-TIME way to verify against an unreleased
+producer, and a committed link is a defect.** The workflow, its rationale, and the
+pre-commit check are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Producer
+schema drift — publish before consume". The one-line rule: the lockfile must stay
+registry-resolved, `grep -c 'link:' bun.lock` must be `0`, and a `link:` in a
+producer dep is a Rule-D path reference wearing a registry dep's clothes.
+
+**NEVER redeclare a local type for producer-owned wire data.** Import the shape
+from the published package's own exported types. A shadow type is what turns a
+stale pin plus new-field usage into a silent runtime strip instead of a
+compile-time error — it is what made the PR #303 case invisible to `tsc`, and it
+is what this gate exists because the type system alone could not catch.
 
 ## STRUCTURE
 
@@ -120,6 +194,7 @@ CeraUI/
 | **Config atomicity (E3)** | `apps/backend/src/helpers/config-loader.ts` — `writeFileAtomicSync` |
 | **Config persistence placement map + storage-engine decision** | `docs/CONFIG_PERSISTENCE.md` |
 | **Runtime config schema (addons key)** | `apps/backend/src/helpers/config-schemas.ts` — `runtimeConfigSchema` |
+| **Producer schema-drift gate (every consumed producer wire field exists in the INSTALLED schema; + lockfile purity)** | `apps/backend/src/tests/producer-schema-drift.test.ts`; contract above → A REGISTRY PIN IS A VERSION BOUNDARY; workflow in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Producer schema drift — publish before consume" |
 | **Logger (dev pretty + prod JSON + redaction + boot banner)** | `apps/backend/src/helpers/logger.ts` + `helpers/boot-banner.ts` |
 | **Per-RPC call tracing** | `apps/backend/src/rpc/rpc-logging.ts` |
 | **Mock subsystem (state, reset, schemas, fixture factory)** | `apps/backend/src/mocks/` — `mock-service.ts`, `mock-schemas.ts`, `fixture-factory.ts` |
@@ -2782,6 +2857,10 @@ Recorded as a hardware gap, not a code gap, in
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
 - Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
+- Don't commit a `bun link` — it is the sanctioned way to verify against an UNRELEASED producer locally and a defect the moment it reaches the lockfile: the drift gate would then be probing a developer's working tree instead of the artifact devices install, and CI (which has no sibling checkout) would install something different from what was tested. Unlink and `bun install` before committing; `grep -c 'link:' bun.lock` must be `0`.
+- Don't redeclare a local type for producer-owned wire data (`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`, `@ceralive/modem-control`) — import the shape from the package's own exported types. A shadow type is exactly what hid the PR #303 `device_address` strip from `tsc`.
+- Don't read a producer field without adding its path to `producer-schema-drift.test.ts`'s manifest, and don't add a manifest path with no read site — the first leaves a stale pin free to strip the field silently, the second turns an unused producer field into a merge blocker for a producer that legitimately retires it.
+- Don't put a producer VERSION assumption in `producer-schema-drift.test.ts` — it must pass against any pin that carries the manifest's fields, or an additive bump turns into a red suite that teaches nothing. Version and export-surface skew belong in the `*-bindings-skew` tests.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't decide a channel or band is AP-usable from the per-channel `iw phy` flags alone — board-proven, an RTL8852BE under the world domain lists 5180/5200/5220 with no `no IR` marker while every 5 GHz rule in `iw reg get` reads `PASSIVE-SCAN`. Ask `buildApInitiationGate`, ask it at **both** producers (the `ch_*` map and the `auto_*` rungs), don't "simplify" it into a hardcoded 5 GHz block, don't make it channel-scoped, and don't make it fail closed.
 - Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.
