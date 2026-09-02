@@ -48,6 +48,7 @@ export function concurrentHotspotBindingFields(
 export type ConcurrentApInterface = {
 	ifname: string;
 	created: boolean;
+	type: "managed";
 };
 
 export async function ensureConcurrentApInterface(
@@ -55,27 +56,33 @@ export async function ensureConcurrentApInterface(
 ): Promise<ConcurrentApInterface | undefined> {
 	const parent = argMatch(ID_RE, parentIfname);
 	const ifname = argMatch(ID_RE, concurrentApIfname(parentIfname));
-	try {
-		await interfaceRunner("iw", ["dev", ifname, "info"]);
-		return (await interfaceWaiter(ifname))
-			? { ifname, created: false }
-			: undefined;
-	} catch {
-		try {
-			await interfaceRunner("iw", [
-				"dev",
-				parent,
-				"interface",
-				"add",
-				ifname,
-				"type",
-				"__ap",
-			]);
-			if (await interfaceWaiter(ifname)) return { ifname, created: true };
-			await releaseConcurrentApInterface(ifname);
-		} catch {
-			return undefined;
+	const info = await interfaceRunner("iw", ["dev", ifname, "info"]).catch(
+		() => undefined,
+	);
+	if (info !== undefined) {
+		if (
+			/^\s*type\s+managed\s*$/m.test(info) &&
+			(await interfaceWaiter(ifname))
+		) {
+			return { ifname, created: false, type: "managed" };
 		}
+		await releaseConcurrentApInterface(ifname);
+	}
+	try {
+		await interfaceRunner("iw", [
+			"dev",
+			parent,
+			"interface",
+			"add",
+			ifname,
+			"type",
+			"managed",
+		]);
+		if (await interfaceWaiter(ifname))
+			return { ifname, created: true, type: "managed" };
+		await releaseConcurrentApInterface(ifname);
+	} catch {
+		return undefined;
 	}
 	return undefined;
 }

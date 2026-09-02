@@ -75,6 +75,7 @@ import {
 	publishHotspotOutcome,
 } from "./wifi-hotspot-outcome.ts";
 import type { HotspotStartResult } from "./wifi-hotspot-types.ts";
+import { HOTSPOT_UP_TO } from "./wifi-hotspot-types.ts";
 import type { WifiInterface } from "./wifi-interfaces.ts";
 
 /** Modes whose target state includes a live access point. */
@@ -106,6 +107,10 @@ export interface AdapterModeTransitionDeps {
 	readonly readPersistedMode: (
 		macAddress: string,
 	) => WifiAdapterMode | undefined;
+	readonly armTerminalTimeout?: (
+		callback: () => void,
+		delayMs: number,
+	) => () => void;
 }
 
 /**
@@ -138,6 +143,11 @@ export const defaultAdapterModeDeps: AdapterModeTransitionDeps = {
 	persistMode: persistWifiAdapterMode,
 	restoreMode: restoreWifiAdapterMode,
 	readPersistedMode: getPersistedWifiAdapterMode,
+	armTerminalTimeout: (callback, delayMs) => {
+		const timer = setTimeout(callback, delayMs);
+		timer.unref();
+		return () => clearTimeout(timer);
+	},
 };
 
 function findAdapterByDevice(
@@ -164,10 +174,16 @@ function chainModeTerminal(
 	deps: AdapterModeTransitionDeps,
 ): HotspotOutcomePublisher {
 	let settled = false;
+	const cancelTimeout = deps.armTerminalTimeout?.(() => {
+		if (settled) return;
+		settled = true;
+		deps.publishOutcome(device, { success: false, error: "not-confirmed" });
+	}, HOTSPOT_UP_TO * 1000);
 	return (kind, hotspotDevice, outcome) => {
 		deps.publishHotspotOutcome(kind, hotspotDevice, outcome);
 		if (settled) return;
 		settled = true;
+		cancelTimeout?.();
 		deps.publishOutcome(
 			device,
 			outcome.success

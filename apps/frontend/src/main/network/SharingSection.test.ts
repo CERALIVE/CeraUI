@@ -184,7 +184,7 @@ describe("SharingSection — honest bands", () => {
 });
 
 describe("SharingSection — per-uplink rows", () => {
-	it("renders one row per uplink with a state chip and a weight bar", () => {
+	it("renders one row per uplink with a state chip and a steering share", () => {
 		const { container } = mount({
 			uplinks: uplinks(
 				{ iface: "wwan0" },
@@ -226,6 +226,80 @@ describe("SharingSection — per-uplink rows", () => {
 		expect(container.textContent ?? "").not.toContain("captive_portal");
 	});
 
+	it("states WHY a link is not up beside its state word, not behind a disclosure", () => {
+		const { container } = mount({
+			uplinks: uplinks({
+				iface: "wlan0",
+				kind: "wifi",
+				state: "degraded",
+				reason: "captive_portal",
+				weight: 25,
+			}),
+		});
+
+		const state = q(container, "sharing-uplink-state-wlan0");
+		const reason = q(container, "sharing-uplink-reason-wlan0");
+		expect(state?.textContent ?? "").toContain("Degraded");
+		expect(reason?.textContent ?? "").toContain("sign-in portal");
+
+		// Both are on screen at rest, in the SAME row — a state word an operator
+		// cannot act on is exactly what folding the reason away produced.
+		const row = q(container, "sharing-uplink-wlan0");
+		expect(row?.contains(state as Node)).toBe(true);
+		expect(row?.contains(reason as Node)).toBe(true);
+		expect(foldedUnder(reason as Element)).toBeUndefined();
+	});
+
+	it("a healthy row states its state and NO reason — there is nothing to explain", () => {
+		const { container } = mount({ uplinks: uplinks({ iface: "wwan0" }) });
+		expect(q(container, "sharing-uplink-state-wwan0")?.textContent).toContain(
+			"Up",
+		);
+		expect(q(container, "sharing-uplink-reason-wwan0")).toBeNull();
+	});
+});
+
+describe("SharingSection — the weight is a STEERING SHARE, never link quality", () => {
+	it("labels it in words, so a bare percentage cannot read as a quality score", () => {
+		const { container } = mount({ uplinks: uplinks({ iface: "wwan0" }) });
+		const share = q(container, "sharing-uplink-weight-wwan0");
+		expect(share).not.toBeNull();
+		expect(share?.textContent ?? "").toContain("Steering share");
+		expect(share?.textContent ?? "").toContain("100%");
+	});
+
+	it("is WITHHELD when no client zone exists — nothing is being shared", () => {
+		const { container } = mount({
+			hotspotInterfaces: [],
+			netif: undefined,
+			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
+		});
+		expect(q(container, "sharing-uplink-weight-wwan0")).toBeNull();
+		expect(q(container, "sharing-uplink-wwan0")).toBeNull();
+		expect(container.textContent ?? "").not.toContain("100%");
+	});
+
+	it("is WITHHELD when the device said its steering layer is unavailable", () => {
+		const { container } = mount({
+			steering: uplinkSteeringStatusSchema.parse({
+				state: "steering_unavailable",
+				reason: "policy_route_missing",
+			}),
+			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
+		});
+		expect(q(container, "sharing-uplink-weight-wwan0")).toBeNull();
+		// …and the headline explains it, so the withholding is never silent.
+		expect(q(container, "sharing-band-steering-unavailable")).not.toBeNull();
+	});
+
+	it("an UNREPORTED steering state withholds nothing — absence is not evidence", () => {
+		const { container } = mount({
+			steering: undefined,
+			uplinks: uplinks({ iface: "wwan0", weight: 100 }),
+		});
+		expect(q(container, "sharing-uplink-weight-wwan0")).not.toBeNull();
+	});
+
 	it("degrades a stale row VISIBLY — never fresh-looking dead data", () => {
 		const fresh = mount({
 			uplinks: uplinks({ iface: "wwan0", staleAt: NOW + 1 }),
@@ -249,6 +323,70 @@ describe("SharingSection — per-uplink rows", () => {
 		);
 		expect(marker).not.toBeNull();
 		expect(marker?.textContent ?? "").not.toHaveLength(0);
+	});
+});
+
+describe("SharingSection — an uplink is a DEVICE, keyed on its interface", () => {
+	it("leads with the model name and demotes the kernel name to mono", () => {
+		const { container } = mount({
+			uplinks: uplinks({
+				iface: "wwu1u4u4i4",
+				displayName: "Quectel RM530N-GL",
+			}),
+		});
+
+		const name = q(container, "sharing-uplink-name-wwu1u4u4i4");
+		const iface = q(container, "sharing-uplink-iface-wwu1u4u4i4");
+		expect(name?.textContent?.trim()).toBe("Quectel RM530N-GL");
+		// The raw name is NOT garbled — it is the real predictable kernel name of
+		// that modem's QMI netdev — so it stays, one step quieter.
+		expect(iface?.textContent?.trim()).toBe("wwu1u4u4i4");
+		expect(iface?.className).toContain("font-mono");
+		expect(name?.className).not.toContain("font-mono");
+	});
+
+	it("keeps the raw-ifname row byte-identical when no name was resolved", () => {
+		const named = mount({
+			uplinks: uplinks({ iface: "eth0", kind: "ethernet", displayName: "X" }),
+		});
+		const bare = mount({
+			uplinks: uplinks({ iface: "eth0", kind: "ethernet" }),
+		});
+
+		expect(q(named.container, "sharing-uplink-name-eth0")).not.toBeNull();
+		expect(q(bare.container, "sharing-uplink-name-eth0")).toBeNull();
+		expect(q(bare.container, "sharing-uplink-iface-eth0")).toBeNull();
+
+		const row = q(bare.container, "sharing-uplink-eth0");
+		expect(row?.textContent ?? "").toContain("eth0");
+		const rawName = row?.querySelector("span.font-mono");
+		expect(rawName?.textContent?.trim()).toBe("eth0");
+		expect(rawName?.className).toContain("text-xs");
+	});
+
+	it("keys the row on `iface`, never on the device name", () => {
+		const { container } = mount({
+			uplinks: uplinks(
+				{ iface: "eth1", displayName: "Huawei E3372" },
+				{ iface: "enx0c5b8f279a64", displayName: "Huawei E3372" },
+			),
+		});
+
+		// Two units of one SKU share a name and must still be two distinct rows.
+		expect(q(container, "sharing-uplink-eth1")).not.toBeNull();
+		expect(q(container, "sharing-uplink-enx0c5b8f279a64")).not.toBeNull();
+		expect(
+			container.querySelectorAll('[data-testid^="sharing-uplink-name-"]'),
+		).toHaveLength(2);
+	});
+
+	it("still states the kind beside the name", () => {
+		const { container } = mount({
+			uplinks: uplinks({ iface: "eth1", displayName: "Huawei E3372" }),
+		});
+
+		const row = q(container, "sharing-uplink-eth1");
+		expect(row?.textContent ?? "").toContain("Cellular");
 	});
 });
 
@@ -276,6 +414,112 @@ describe("SharingSection — client zones", () => {
 		expect(zone?.getAttribute("data-zone")).toBe("serving");
 		expect(zone?.textContent ?? "").toContain("eth0");
 		expect(q(container, "sharing-band-sharing-off")).toBeNull();
+	});
+});
+
+describe("SharingSection — quiet when sharing is off", () => {
+	/** No hotspot and no shared-LAN port: nothing is being shared. */
+	const OFF = { hotspotInterfaces: [], netif: undefined };
+
+	/** Every silenced signal REPORTED, two of them degraded. */
+	const REPORTED = {
+		uplinks: uplinks(
+			{ iface: "wwan0" },
+			{
+				iface: "wlan0",
+				kind: "wifi",
+				state: "degraded",
+				reason: "captive_portal",
+				weight: 25,
+			},
+		),
+		steering: uplinkSteeringStatusSchema.parse({
+			state: "steering_unavailable",
+			reason: "mark_collision",
+		}),
+		shaper: uplinkShaperStatusSchema.parse({
+			state: "shaper_unavailable",
+			reason: "foreign_qdisc",
+			priorityDegraded: true,
+		}),
+		diag: sharingDiagSchema.parse({
+			state: "degraded",
+			checkedAt: NOW,
+			firewallBackend: {
+				state: "degraded",
+				reason: "firewall_backend_mismatch",
+			},
+			steeringRules: { state: "ok" },
+			sharedNat: { state: "ok" },
+			foreignTables: { state: "ok" },
+		}),
+	};
+
+	const SILENCED = [
+		"sharing-uplinks",
+		"sharing-uplink-wwan0",
+		"sharing-zones",
+		"sharing-diagnostics",
+		"sharing-priority",
+		"sharing-diag",
+		"sharing-dns-note",
+	];
+
+	it("renders the hint row and NOTHING below it", () => {
+		// The card is quiet because no client zone exists — never because there
+		// was nothing to say: every signal below is on the wire and two of them
+		// are degraded.
+		const { container } = mount({ ...REPORTED, ...OFF });
+
+		const hint = q(container, "sharing-band-sharing-off");
+		expect(hint).not.toBeNull();
+		expect(hint?.getAttribute("data-headline")).toBe("true");
+
+		for (const testid of SILENCED) {
+			expect(q(container, testid), `${testid} is still rendered`).toBeNull();
+		}
+		// Not merely folded away either — no disclosure is left to open.
+		expect(container.querySelectorAll("details")).toHaveLength(0);
+	});
+
+	it("keeps the card, because the hint row IS the discovery affordance", () => {
+		const { container } = mount(OFF);
+		const card = q(container, "sharing-section");
+		expect(card).not.toBeNull();
+		expect(card?.textContent ?? "").toContain("Internet Sharing");
+		expect(card?.textContent ?? "").toContain("Sharing is off");
+		// …and it names what to switch on.
+		expect(card?.textContent ?? "").toContain("hotspot");
+	});
+
+	it("returns the whole card when a hotspot comes up", () => {
+		const { container } = mount({
+			...REPORTED,
+			hotspotInterfaces: [hotspot(2)],
+			netif: undefined,
+		});
+		expect(q(container, "sharing-band-sharing-off")).toBeNull();
+		for (const testid of SILENCED) {
+			expect(
+				q(container, testid),
+				`${testid} did not come back`,
+			).not.toBeNull();
+		}
+	});
+
+	it("returns the whole card when a wired port takes the shared-LAN role", () => {
+		const { container } = mount({
+			...REPORTED,
+			hotspotInterfaces: [],
+			netif: netif({ eth0: { ethRole: "shared-lan", ip: "10.42.1.1" } }),
+		});
+		expect(q(container, "sharing-band-sharing-off")).toBeNull();
+		for (const testid of SILENCED) {
+			expect(
+				q(container, testid),
+				`${testid} did not come back`,
+			).not.toBeNull();
+		}
 	});
 });
 
@@ -547,7 +791,7 @@ describe("SharingSection — the disclosures", () => {
 		);
 	});
 
-	it("compacts an uplink row to name · kind · state · share", () => {
+	it("compacts an uplink row to name · kind · state · reason · share", () => {
 		const { container } = mount({
 			uplinks: uplinks({
 				iface: "wlan0",
@@ -558,22 +802,21 @@ describe("SharingSection — the disclosures", () => {
 			}),
 		});
 
-		// What stays on the row at rest.
+		// What stays on the row at rest. The REASON is here rather than in the
+		// disclosure: "Degraded" alone is the one thing an operator cannot act on,
+		// so the state word and WHY it is not up belong together.
 		for (const testid of [
 			"sharing-uplink-state-wlan0",
+			"sharing-uplink-reason-wlan0",
 			"sharing-uplink-weight-wlan0",
 		]) {
 			expect(foldedUnder(q(container, testid) as Element)).toBeUndefined();
 		}
-		// What the row hands to its own disclosure.
-		for (const testid of [
-			"sharing-uplink-probes-wlan0",
-			"sharing-uplink-reason-wlan0",
-		]) {
-			expect(foldedUnder(q(container, testid) as Element)).toBe(
-				"sharing-uplink-detail-wlan0",
-			);
-		}
+		// What the row hands to its own disclosure: the probe counters, which are
+		// an instrument rather than a state.
+		expect(
+			foldedUnder(q(container, "sharing-uplink-probes-wlan0") as Element),
+		).toBe("sharing-uplink-detail-wlan0");
 	});
 
 	it("opens ONE row's detail without opening its neighbour's", async () => {
@@ -834,10 +1077,13 @@ describe("SharingSection — wire-field inventory", () => {
 });
 
 describe("SharingSection — the surface's own guarantees", () => {
-	it("always states the known DNS limitation, whatever the wire says", () => {
+	// Scoped to the states sharing is ON in: with no client zone the card is one
+	// hint row and the note goes with the disclosure that carries it — asserted
+	// in "quiet when sharing is off" below, not weakened away here.
+	it("always states the known DNS limitation while sharing is on", () => {
 		for (const props of [
 			{},
-			{ uplinks: undefined, hotspotInterfaces: [] },
+			{ uplinks: undefined },
 			{
 				steering: uplinkSteeringStatusSchema.parse({
 					state: "steering_unavailable",

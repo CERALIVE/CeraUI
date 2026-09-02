@@ -35,6 +35,7 @@ import {
 	SHARING_LINK_TOKENS,
 	type SharingBand,
 	type SharingSectionInput,
+	showSteeringShare,
 	subordinateBands,
 	uplinkReasonKey,
 } from "./sharing-section-view";
@@ -172,6 +173,60 @@ describe("per-uplink rows", () => {
 	});
 });
 
+describe("the steering share is a share, not a quality score", () => {
+	const ZONES_ON = {
+		hotspots: 1,
+		hotspotClients: 2,
+		sharedLan: [],
+		active: true,
+	};
+	const ZONES_OFF = {
+		hotspots: 0,
+		hotspotClients: undefined,
+		sharedLan: [],
+		active: false,
+	};
+	const STEERING_OK = uplinkSteeringStatusSchema.parse({ state: "available" });
+	const STEERING_DOWN = uplinkSteeringStatusSchema.parse({
+		state: "steering_unavailable",
+		reason: "mark_collision",
+	});
+
+	it("shows it while client traffic is really being steered", () => {
+		expect(showSteeringShare(ZONES_ON, STEERING_OK)).toBe(true);
+	});
+
+	it("withholds it when NO client zone exists — there is nothing to share", () => {
+		expect(showSteeringShare(ZONES_OFF, STEERING_OK)).toBe(false);
+		expect(showSteeringShare(ZONES_OFF, undefined)).toBe(false);
+	});
+
+	it("withholds it when the device SAID its steering layer is unavailable", () => {
+		// Clients fall back to the default route, so the share steers nothing.
+		expect(showSteeringShare(ZONES_ON, STEERING_DOWN)).toBe(false);
+	});
+
+	it("an UNREPORTED steering state withholds nothing — absence is not evidence", () => {
+		expect(showSteeringShare(ZONES_ON, undefined)).toBe(true);
+	});
+
+	it("rides the section view, so a render site never re-derives it", () => {
+		expect(section().showSteeringShare).toBe(true);
+		expect(section({ hotspotInterfaces: [] }).showSteeringShare).toBe(false);
+		expect(section({ steering: STEERING_DOWN }).showSteeringShare).toBe(false);
+	});
+
+	it("never touches the row's own weight — only whether it is rendered", () => {
+		// The value is the device's record; withholding is a DISPLAY decision.
+		const withheld = section({
+			hotspotInterfaces: [],
+			uplinks: uplinks({ iface: "wwan0", weight: 70 }),
+		});
+		expect(withheld.showSteeringShare).toBe(false);
+		expect(withheld.rows[0]?.weight).toBe(70);
+	});
+});
+
 describe("client zones", () => {
 	it("sums the hotspot roster through the SAME rule HotspotSection renders", () => {
 		const zones = deriveClientZones([HOTSPOT_WITH_TWO], undefined);
@@ -215,6 +270,66 @@ describe("client zones", () => {
 	it("is inactive with no hotspot and no shared-LAN port", () => {
 		const zones = deriveClientZones([], netif({ eth0: { ethRole: "uplink" } }));
 		expect(zones.active).toBe(false);
+	});
+});
+
+describe("the quiet card", () => {
+	it("is quiet exactly when no client zone exists", () => {
+		expect(section({ hotspotInterfaces: [], netif: undefined }).quiet).toBe(
+			true,
+		);
+		expect(
+			section({
+				hotspotInterfaces: [],
+				netif: netif({ eth0: { ethRole: "uplink", ip: "192.168.0.5" } }),
+			}).quiet,
+		).toBe(true);
+	});
+
+	it("is loud for a hotspot alone, and for a shared-LAN port alone", () => {
+		expect(
+			section({ hotspotInterfaces: [HOTSPOT_NO_ROSTER], netif: undefined })
+				.quiet,
+		).toBe(false);
+		expect(
+			section({
+				hotspotInterfaces: [],
+				netif: netif({ eth1: { ethRole: "shared-lan" } }),
+			}).quiet,
+		).toBe(false);
+	});
+
+	it("reads the client zones, NOT the headline's precedence", () => {
+		// A zone that exists makes the card loud however little else is known —
+		// so the verdict has to track `zones.active` rather than whichever band
+		// happens to lead.
+		const view = section({
+			hotspotInterfaces: [],
+			netif: netif({ eth0: { ethRole: "shared-lan", ip: "10.42.1.1" } }),
+			uplinks: undefined,
+		});
+		expect(view.headline.kind).toBe("uplinks-unreported");
+		expect(view.quiet).toBe(false);
+		expect(view.quiet).toBe(!view.zones.active);
+	});
+
+	it("still derives every instrument it declines to show", () => {
+		// `quiet` gates RENDERING. Truncating the derivation instead would make a
+		// zone appearing mid-session a different code path from one present at
+		// first paint.
+		const view = section({
+			hotspotInterfaces: [],
+			netif: undefined,
+			shaper: uplinkShaperStatusSchema.parse({
+				state: "available",
+				mode: "streaming",
+				algorithm: "cake",
+			}),
+		});
+		expect(view.quiet).toBe(true);
+		expect(view.rows).toHaveLength(1);
+		expect(view.priority.kind).toBe("adaptive-cap");
+		expect(view.headline.kind).toBe("sharing-off");
 	});
 });
 

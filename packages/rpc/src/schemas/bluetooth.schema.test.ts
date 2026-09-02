@@ -137,6 +137,7 @@ describe('the shared mutation-refusal vocabulary', () => {
 			'bt_unavailable_in_emulated_mode',
 			'adapter_busy',
 			'pairing_failed',
+			'unit_missing',
 			'service_start_failed',
 		]) {
 			expect(bluetoothMutationRefusalSchema.safeParse(required).success).toBe(true);
@@ -161,6 +162,7 @@ describe('the shared mutation-refusal vocabulary', () => {
 			'pairing_agent_unavailable',
 			'pairing_failed',
 			'service_start_failed',
+			'unit_missing',
 			'unknown_adapter',
 			'unknown_device',
 		]);

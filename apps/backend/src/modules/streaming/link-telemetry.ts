@@ -73,7 +73,6 @@ import {
 	resetBondIdentities,
 } from "./link-registry.ts";
 import {
-	asCumulativeBytes,
 	buildLinkRows,
 	hasIfaceResolverOverride,
 	type LinkTelemetryMessage,
@@ -381,7 +380,7 @@ export function buildLinkTelemetry(): LinkTelemetryMessage | null {
 	);
 	// Forwarded verbatim, never summed from `links`: the sender's accumulator is
 	// what stays monotonic across a reconnect or an IP-list reload.
-	const bondBytesSentTotal = asCumulativeBytes(lastSnapshot);
+	const bondBytesSentTotal = lastSnapshot.bytes_sent_total;
 	return {
 		links,
 		measured_bps: links.reduce((total, link) => total + link.bitrate_bps, 0),

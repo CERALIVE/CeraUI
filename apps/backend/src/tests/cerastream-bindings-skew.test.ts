@@ -126,16 +126,19 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.12.0", () => {
-		// hdmi-capture-truth-fixes Todo 8: the 2026.9.0 pin ships schema 0.12.0 (the
-		// typed capture causes — the additive optional `capture_cause` on the
-		// unchanged `capture_video_error` event, and `error.data.capture_causes` on a
-		// rejected start), superseding the 0.11.0 the prior pin shipped. This is a
-		// deliberate VERSION-TRACKING edit, not a weakening: the value must equal
-		// what the on-device engine reports in `hello`, because capabilities.ts
-		// raises the advisory `schemaVersionMismatch` banner off exactly that
-		// comparison.
-		expect(SCHEMA_VERSION).toBe("0.12.0");
+	test("SCHEMA_VERSION is pinned to 0.13.0", () => {
+		// trixie-pipewire-build-audit Todo 18: the 2026.9.1 pin ships schema 0.13.0,
+		// superseding the 0.12.0 of 2026.9.0. This is a deliberate VERSION-TRACKING
+		// edit, not a weakening: the value must equal what the on-device engine
+		// reports in `hello`, because capabilities.ts raises the advisory
+		// `schemaVersionMismatch` banner off exactly that comparison.
+		//
+		// The 9.0 -> 9.1 delta is ENTIRELY additive-optional and consumed by nothing
+		// here yet: the PipeWire audio-backend selector (`audioBackendSchema`, the
+		// optional `audio.backend`, and the `audio_backends` capability block) plus
+		// an optional `applies: "next-session"`. `captureDeviceSchema` is byte-
+		// unchanged, so the S1 `Pick` in `devices.ts` is unaffected.
+		expect(SCHEMA_VERSION).toBe("0.13.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {

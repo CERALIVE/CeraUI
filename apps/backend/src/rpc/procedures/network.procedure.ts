@@ -28,8 +28,10 @@ import {
 	setIngestEnabled,
 } from "../../modules/network/network-ingest-control.ts";
 import {
+	getNetworkInterfaces,
 	handleNetif,
 	netIfBuildMsg,
+	readAppliedNetifConfig,
 } from "../../modules/network/network-interfaces.ts";
 import { broadcastSources } from "../../modules/streaming/sources.ts";
 import { isRealDevice } from "../../modules/system/device-detection.ts";
@@ -69,31 +71,37 @@ export const configureNetworkInterfaceProcedure = authedProcedure
 				dhcp: input.ip === undefined,
 				ip: input.ip,
 			});
-			// handleNetif's own netif broadcast is skipped in mock mode: its raw
-			// netif-map IP differs from the mock-overlaid IP the client echoes, so
-			// the IP-match guard early-returns before broadcasting. Emit the
-			// overlaid state here so bonded-link cards react to the toggle
-			// immediately instead of on the next 5s poll.
+			// Publish the overlay before the raw-map mutation so bonded-link cards
+			// react immediately instead of waiting for the next 5 s poll.
 			broadcastMsg("netif", netIfBuildMsg());
 		}
 
+		const observedIp = shouldUseMocks()
+			? getNetworkInterfaces()[input.name]?.ip
+			: input.ip;
 		const outcome = handleNetif(context.ws as unknown as import("ws").default, {
 			name: input.name,
-			ip: input.ip ?? "",
+			ip: observedIp ?? "",
 			enabled: input.enabled,
 		});
 
-		// Under mocks the mutation genuinely applied — to the mock overlay, above —
-		// and `handleNetif` runs against the raw map only as a best effort, where
-		// its IP guard legitimately refuses. Reporting THAT refusal would report a
-		// dev/e2e toggle that visibly worked as a failure.
+		// Under mocks the overlay is authoritative; the raw-map mutation remains a
+		// best effort so dev/e2e reflects the same immediate applied readback.
 		if (!shouldUseMocks() && !outcome.ok) {
 			return { success: false, error: outcome.reason };
 		}
 
+		const applied = shouldUseMocks()
+			? readAppliedNetifConfig(input.name)
+			: outcome.ok
+				? outcome.applied
+				: undefined;
+		if (applied === undefined) {
+			return { success: false, error: "unknown_interface" as const };
+		}
 		return {
 			success: true,
-			applied: { name: input.name, ip: input.ip, enabled: input.enabled },
+			applied,
 		};
 	});
 

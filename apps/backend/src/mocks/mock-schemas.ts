@@ -342,12 +342,23 @@ export const mockDeviceStatsSchema = z.object({
 	// Per-policy CPU frequency, kHz. Required (and non-empty) HERE for the same
 	// reason as the memory fields: dev mode must render every signal. The ids
 	// are sysfs directory names — `policyN`, never a cluster label.
+	//
+	// `cpus`/`cpuCount`/`governor`/`label` are optional ON THE WIRE and required
+	// HERE, again because dev mode has to render them. `label` must be a name the
+	// collector's own MIDR table can derive, or the fixture would round-trip to a
+	// row the provider claimed and the collector refused to say.
 	cpuFreq: z
 		.array(
 			z.object({
 				id: z.string().regex(/^policy\d+$/, "cpuFreq id must be policy<N>"),
 				curKhz: z.number().int().nonnegative(),
 				maxKhz: z.number().int().positive(),
+				cpus: z
+					.string()
+					.regex(/^\d+(-\d+)?(,\d+(-\d+)?)*$/, "cpus must be a CPU range list"),
+				cpuCount: z.number().int().positive(),
+				governor: z.string().regex(/^[a-z][a-z0-9_-]*$/i),
+				label: z.string().min(1),
 			}),
 		)
 		.min(1),

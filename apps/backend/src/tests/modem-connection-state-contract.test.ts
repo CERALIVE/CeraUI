@@ -9,10 +9,12 @@
  * modems disappeared from the operator's Cellular section — which then rendered
  * its "no modems" empty state beside a SIMCom the board had also enumerated.
  */
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { modemListSchema } from "@ceraui/rpc/schemas";
 
+import { getUdevProvisionalCache } from "../modules/cellular/udev-provisional-cache.ts";
 import { buildModemsWireMessage } from "../modules/modems/modem-status.ts";
+import { resetModemWireProducer } from "../modules/modems/modem-wire-producer.ts";
 import {
 	getModemIds,
 	type Modem,
@@ -38,11 +40,19 @@ const MM_STATES = [
 	"connected",
 ] as const;
 
+/**
+ * `buildModemsWireMessage` also reads the udev provisional cache (optimistic
+ * rows keyed from `SYNTHETIC_ID_BASE`) and the producer's retained id map, so
+ * both are cleared here — on ENTRY too, since Bun shares one process across
+ * test files and an earlier file's leftovers precede this file's first test.
+ */
 function cleanupModems(): void {
 	for (const id of getModemIds()) {
 		removeModem(id);
 	}
 	setModemsState({});
+	getUdevProvisionalCache().reset();
+	resetModemWireProducer();
 }
 
 function makeModem(overrides: Partial<Modem> = {}): Modem {
@@ -64,6 +74,7 @@ function makeModem(overrides: Partial<Modem> = {}): Modem {
 }
 
 describe("modem connection state reaches the wire", () => {
+	beforeEach(cleanupModems);
 	afterEach(cleanupModems);
 
 	test.each(MM_STATES)(

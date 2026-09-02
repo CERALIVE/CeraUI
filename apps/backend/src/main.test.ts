@@ -222,6 +222,8 @@ describe("boot contract — degraded-but-up vs critical abort", () => {
 			engineSupportsPcmSpec: () => true,
 			engineSupportsPipewireCapture: () => true,
 			readEngineAudioDevices: () => [],
+			readAudioProvider: async () => "pipewire",
+			readAudioBackend: () => "pipewire",
 		});
 
 		const result = await simulateBoot({

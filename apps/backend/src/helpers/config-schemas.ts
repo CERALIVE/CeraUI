@@ -43,6 +43,7 @@
 import {
 	AddonConfigSchema,
 	AUDIO_SOURCE_AUTO,
+	audioBackendSchema,
 	audioCodecSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
@@ -237,6 +238,13 @@ export const runtimeConfigSchema = z.object({
 	// Audio settings
 	asrc: z.string().optional(),
 	acodec: legacyTolerantAudioCodecSchema.optional(),
+	// Which audio backend the engine builds its audio legs with. Additive-optional
+	// and deliberately ABSENT FROM `RUNTIME_CONFIG_DEFAULTS`: an absent value means
+	// the operator never stated one, and CeraUI then sends the engine NO backend
+	// key at all so the engine's OWN persisted default governs. A default here
+	// would silently revert every existing config — the whole fleet ships with no
+	// such key today, and the engine's default is `pipewire`.
+	audio_backend: audioBackendSchema.optional(),
 
 	// Video/streaming settings
 	bitrate_overlay: z.boolean().optional(),
@@ -384,6 +392,11 @@ export const runtimeConfigSchema = z.object({
 	// itself bound by `connection.interface-name` — so the two agree by
 	// construction rather than by a second lookup that could disagree.
 	eth_roles: z.record(z.string(), ethernetRoleSchema).optional(),
+
+	// Operator exclusions from the SRTLA bond, keyed by the canonical physical
+	// link id. Values can only be true: absence means included. A bare ifname is
+	// never accepted as a durable identity because the Huawei twins swap names.
+	bond_opt_out: z.record(z.string().min(1), z.literal(true)).optional(),
 
 	// Opt-in gate for the guarded USB-composition-mode switch (`modems.setUsbMode`).
 	// DEFAULT-ABSENT ON PURPOSE and given NO entry in RUNTIME_CONFIG_DEFAULTS: a

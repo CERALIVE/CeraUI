@@ -445,12 +445,24 @@ function claimedIdentityKeys(
 	return claimed;
 }
 
-function collectSources(): ProjectedModemSource[] {
+function collectAuthoritativeSources(): ProjectedModemSource[] {
 	const sources = collectRadioSources();
 	for (const metadata of getDongleRecords().values()) {
 		sources.push(fromRouterView(routerViewFromDongleMetadata(metadata)));
 	}
 	sources.push(...collectRouterCellularSources());
+	return sources;
+}
+
+export function noteAuthoritativeModemCycle(): void {
+	const sources = collectAuthoritativeSources();
+	getUdevProvisionalCache().noteAuthoritativeCycle(
+		claimedIdentityKeys(sources),
+	);
+}
+
+function collectSources(): ProjectedModemSource[] {
+	const sources = collectAuthoritativeSources();
 
 	// PROVISIONAL ROWS GO LAST, AND ONLY WHERE NOTHING AUTHORITATIVE STANDS.
 	//

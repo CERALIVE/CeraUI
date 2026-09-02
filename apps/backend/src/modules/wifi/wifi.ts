@@ -179,6 +179,7 @@ export type WifiInterfaceResponseMessage = Pick<
 	supports_ap_sta_concurrency?: true;
 	mode?: "station" | "hotspot";
 	transition?: "activating" | "deactivating";
+	degraded_reason?: BaseWifiInterface["degradedReason"];
 	// Absent means NOT COMPUTED (no `iw`, an unresolvable wiphy, or a dump that
 	// failed its named parser); once computed it rides EVERY tick.
 	capabilities?: WifiAdapterCapabilities;
@@ -298,6 +299,9 @@ export function wifiBuildMsg() {
 			hw: wifiInterface.hw,
 			saved: {},
 		};
+		if (wifiInterface.degradedReason !== undefined) {
+			entry.degraded_reason = wifiInterface.degradedReason;
+		}
 		if (wifiInterface.supportsApStaConcurrency === true) {
 			entry.supports_ap_sta_concurrency = true;
 		}

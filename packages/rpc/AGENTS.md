@@ -23,6 +23,7 @@ src/
 | Add a new RPC procedure | `contracts/{domain}.contract.ts` → wire into `contracts/index.ts` |
 | Add/change input or output shape | `schemas/{domain}.schema.ts` |
 | Shared-client steering status/refusal + transient hard-down reset | `schemas/network.schema.ts` → `uplinkSteeringStatusSchema` / `uplinkFlowsResetEventSchema` |
+| Name the DEVICE behind an uplink-health row without renaming the row | `schemas/network.schema.ts` → `uplinkHealthRecordSchema.displayName`; section below → AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY |
 | Streaming-first shaper mode/algorithm + priority degradation | `schemas/network.schema.ts` → `uplinkShaperStatusSchema` |
 | Correlate a modem across a USB-mode transition | `schemas/modems.schema.ts` → `deriveModemStableKey()` / the `stable_key` field |
 | A ModemManager reading that may be absent, WITHOUT losing why | `schemas/modems.schema.ts` → `modemMetricUnknownReasonSchema` + `modemNumberMetricSchema` / `modemFlagMetricSchema` / `modemTextMetricSchema`; section below → AN ABSENT READING STILL SAYS SOMETHING |
@@ -36,6 +37,7 @@ src/
 | Whether a capability module may be offered, mutated, or claimed | `schemas/capability-modules.schema.ts` + `capabilities/capability-matrix.ts` → `resolveSupportClaim` / `resolveCapabilityMatrix` / `mayRenderModule` / `mayClaimSupport`; section below → THE CAPABILITY FEATURE-GATE FRAMEWORK LIVES HERE, ONCE |
 | Read-only SMS inbox shapes (`modems.getSms`) | `schemas/modems.schema.ts` → `smsMessageSchema` / `modemSmsOutputSchema` / `SMS_INBOX_CAP`; section below → THE SMS INBOX SCHEMAS ARE READ-ONLY BY DESIGN |
 | Bluetooth wire surface (device/adapter rows, the shared mutation refusals, the BT capability claims) | `schemas/bluetooth.schema.ts` + `contracts/bluetooth.contract.ts`; section below → THE BLUETOOTH DOMAIN REUSES THE LADDER WITHOUT JOINING THE REGISTRY |
+| The engine audio-backend enum + the capability block a selector may offer from | `schemas/streaming.schema.ts` → `audioBackendSchema` / `streamingConfigInputSchema.audio_backend` / `capabilitiesMessageSchema.audio_backends`; ABSENT is never a default — see [`../../apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) → THE AUDIO BACKEND IS AN OVERRIDE |
 | Effective caps for a platform/source/mode | `capabilities/intersect-caps.ts` → `intersectCaps()` (pure) |
 | Whether a device can DELIVER a resolution/framerate pairing | `capabilities/device-mode-truth.ts` → `evaluateDeviceMode()` / `nearestDeliverableMode()` (pure) |
 | Root router type (client inference) | `contracts/index.ts` → `AppContract` |
@@ -62,6 +64,31 @@ The backend parses both shapes before broadcast. Only `uplink-steering` is sent 
 the post-login snapshot; `uplink-flows-reset` describes a hard-down action that
 already happened and must never be replayed to a later session. Do not duplicate
 either type under `apps/` or widen the reset event into persisted state.
+
+## AN UPLINK ROW CARRIES A NAME, NOT A SECOND IDENTITY [EXISTS]
+
+`uplinkHealthRecordSchema.displayName` is additive-optional DISPLAY metadata —
+the device's own operator-facing name (`Huawei E3372`, `Quectel RM530N-GL`, an
+hwdb/vendor label), resolved by the device from the SAME USB-descriptor markers
+the `netif` projection stamps.
+
+Three shape decisions carry weight:
+
+- **`iface` remains the row's identity, and nothing may key or join on the
+  name.** Two units of one SKU legitimately publish the SAME name — the bench
+  HiLink twins do — so a name-keyed consumer collapses two links into one. That
+  is `conn_id`'s lesson (`status.schema.ts`) restated for a different field.
+- **Absent is the honest common case, so it must cost nothing.** A PCIe modem, a
+  plain wired port and a backend that predates the field all carry no name, and
+  the consumer then renders the raw `iface` byte-identically to before. A
+  placeholder or an id-shaped stand-in would be the fabrication the rest of this
+  wire refuses everywhere else.
+- **`.min(1)` is what keeps `""` from becoming a third state.** An empty name is
+  neither a name nor an absence, and a consumer would render it as a blank line
+  where a device should be.
+
+Device contract: [`apps/backend/AGENTS.md`](../../apps/backend/AGENTS.md) →
+…AND AN UPLINK'S KIND COMES FROM THE DEVICE, NOT FROM ITS NAME.
 
 `uplinkShaperStatusSchema` is the sibling persistent state. Available states name
 the lifecycle mode and realized algorithm (`cake` or `htb-fq_codel`). Unavailable
@@ -552,9 +579,10 @@ Four shape decisions carry weight:
   device exposes no battery service / is not advertising, which a `0` would lie
   about.
 - **The mutation refusals are ONE shared enum** (`bluetoothMutationRefusalSchema`,
-  the `modemMutationRefusalSchema` lesson). Thirteen members, none collapsible:
+  the `modemMutationRefusalSchema` lesson). Fourteen members, none collapsible:
   `adapter_busy` (wait) is not `pairing_failed` (retry) is not
-  `service_start_failed` (the switch did not take) is not `bluetooth_disabled`
+  `unit_missing` (the image lacks a unit) is not `service_start_failed` (an installed
+  unit refused to start) is not `bluetooth_disabled`
   (turn it on), and `bluez_unavailable` / `bus_unreachable` / `no_adapter` send
   someone to three different places.
 - **`pairing_agent_unavailable` names a gap this build really has.** The shared
@@ -627,3 +655,4 @@ migration by itself.
 - Don't add `bluetooth` to `CAPABILITY_MODULES` — that enum is closed, modem-only and default-OFF-forever, so registering it there hides the whole Bluetooth surface behind a cellular feature gate. Reuse `supportClaimStateSchema`/`resolveSupportClaim` from the separate `bluetoothCapabilityClaimsSchema` registry instead.
 - Don't make a Bluetooth `paired`/`trusted`/`connected`/`blocked` field optional, and don't give a Bluetooth mutation its own refusal strings — the first re-creates the `policy_route_missing` latch on a device that disconnects, the second makes "another mutation holds the radio" indistinguishable from "the pairing failed".
 - Don't collapse `pairing_agent_unavailable` into `pairing_failed`, and don't drop `agent.reason` from the status answer — that gap is real on every device today (the shared `DbusTransport` exports no object), and hiding it turns a known missing capability into a pairing that mysteriously never lands.
+- Don't give `audio_backend` a schema `.default()` on any of the three shapes that carry it, and don't read an absent value as `alsa` — absent means the operator stated nothing, which the device turns into "send the engine no backend key at all". A default here reverts the shipped engine default for every config in the fleet, none of which carries the key.

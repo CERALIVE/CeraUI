@@ -17,12 +17,15 @@
  * filesystem, or a real bus.
  */
 import { beforeEach, describe, expect, test } from "bun:test";
-
+import { detectBluetoothAudioProvider } from "../modules/bluetooth/bluetooth-audio-provider.ts";
 import {
+	BLUEALSA_BINARIES,
 	BLUEALSA_DROPIN_PATH,
+	BLUEALSA_PACKAGE_MARKER,
 	BLUEALSA_UNIT,
 	BLUETOOTH_UNIT,
 	BLUETOOTH_UNITS,
+	PIPEWIRE_BLUETOOTH_PACKAGE_MARKER,
 } from "../modules/bluetooth/bluetooth-constants.ts";
 import {
 	isPersistentlyEnabled,
@@ -165,6 +168,41 @@ describe("the BlueALSA unit name is pinned", () => {
 });
 
 describe("operator enable / disable is persistent-symmetric", () => {
+	test("a PipeWire image governs bluetooth.service without probing or starting BlueALSA", async () => {
+		const h = harness({
+			binaries: [],
+			enabledState: "disabled",
+			activeState: "inactive",
+		});
+		h.files.set(PIPEWIRE_BLUETOOTH_PACKAGE_MARKER, "installed");
+
+		const outcome = await setBluetoothEnabled(true, h.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(verbs(h.calls)).toEqual([["enable", "--now", "bluetooth.service"]]);
+		expect(h.writes).toEqual([]);
+		expect(h.calls.some((call) => call.includes("bluealsa.service"))).toBe(
+			false,
+		);
+	});
+
+	test("a PipeWire image disables bluetooth.service without touching BlueALSA", async () => {
+		const h = harness({
+			binaries: [],
+			enabledState: "enabled",
+			activeState: "active",
+		});
+		h.files.set(PIPEWIRE_BLUETOOTH_PACKAGE_MARKER, "installed");
+
+		const outcome = await setBluetoothEnabled(false, h.deps);
+
+		expect(outcome.ok).toBe(true);
+		expect(verbs(h.calls)).toEqual([["disable", "--now", "bluetooth.service"]]);
+		expect(h.calls.some((call) => call.includes("bluealsa.service"))).toBe(
+			false,
+		);
+	});
+
 	test("enable issues `enable --now` for BOTH units", async () => {
 		const h = harness({ enabledState: "disabled", activeState: "inactive" });
 		const outcome = await setBluetoothEnabled(true, h.deps);
@@ -237,6 +275,57 @@ describe("operator enable / disable is persistent-symmetric", () => {
 		expect(h.warnings.some((w) => w.includes("systemd knows no unit"))).toBe(
 			true,
 		);
+	});
+});
+
+describe("Bluetooth audio provider generation", () => {
+	function detector(existing: readonly string[]) {
+		const paths = new Set(existing);
+		return detectBluetoothAudioProvider({
+			fileExists: async (path) => paths.has(path),
+		});
+	}
+
+	test("libspa with no BlueALSA marker selects PipeWire", async () => {
+		await expect(detector([PIPEWIRE_BLUETOOTH_PACKAGE_MARKER])).resolves.toBe(
+			"pipewire",
+		);
+	});
+
+	test("a legacy package marker selects BlueALSA", async () => {
+		await expect(detector([BLUEALSA_PACKAGE_MARKER])).resolves.toBe("bluealsa");
+	});
+
+	test("a mixed migration image keeps the legacy BlueALSA contract", async () => {
+		await expect(
+			detector([
+				BLUEALSA_BINARIES[0] ?? "/usr/bin/bluealsad",
+				PIPEWIRE_BLUETOOTH_PACKAGE_MARKER,
+			]),
+		).resolves.toBe("bluealsa");
+	});
+
+	test("an image carrying neither provider is unavailable", async () => {
+		await expect(detector([])).resolves.toBe("unavailable");
+	});
+});
+
+describe("the packaged unit keeps the privileged hardware posture", () => {
+	test("ceralive.service runs as root without sandboxing directives", async () => {
+		const unit = await Bun.file(
+			new URL("../../../../deployment/ceralive.service", import.meta.url),
+		).text();
+
+		expect(unit).toContain("User=root");
+		expect(unit).toContain("Group=root");
+		for (const directive of [
+			"CapabilityBoundingSet=",
+			"NoNewPrivileges=",
+			"ProtectSystem=",
+			"PrivateDevices=",
+		]) {
+			expect(unit).not.toContain(directive);
+		}
 	});
 });
 

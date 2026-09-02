@@ -1,4 +1,10 @@
 export {
+	CONNECTIVITY_TARGET_TTL_MS,
+	type ConnectivityTargetDeps,
+	type ConnectivityTargetResolver,
+	createConnectivityTargetResolver,
+} from "./connectivity-target.ts";
+export {
 	UPLINK_HEALTH_CONFIG,
 	UplinkHealthEngine,
 	type UplinkHealthOutcome,
@@ -9,7 +15,6 @@ export {
 } from "./model.ts";
 export {
 	initUplinkHealth,
-	type ProbeTargetClass,
 	setUplinkHealthRuntimeForTest,
 	UPLINKS_EVENT,
 	UplinkHealthRuntime,

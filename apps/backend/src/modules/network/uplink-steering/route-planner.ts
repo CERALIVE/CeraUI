@@ -48,6 +48,8 @@ async function planUplinkRouteInner(
 	assertCandidate(candidate);
 	const ruleOutput = await deps.run("ip", ["rule", "show"]);
 	assertFwmarkPriorityAvailable(ruleOutput, candidate.ifname);
+	if (!candidate.sourceAddressUnique)
+		return await planTwinRoute(candidate, deps);
 	const rules = parseIpRules(ruleOutput);
 	if (rules === null) {
 		throw routeUnavailable(candidate.ifname, "ip rule output was unparseable");
@@ -110,10 +112,55 @@ async function planWithoutSourceRule(
 	if (!isModuleProvisionedUplink(candidate.ifname)) {
 		throw routeUnavailable(candidate.ifname, "source rule is missing");
 	}
-	return await planManagedRoute(
+	return await planManagedRoute(candidate, deps, SOURCE_ROUTE_RULE_PRIORITY);
+}
+
+/*
+  A DUPLICATE-IP TWIN IS STEERED BY ITS MARK, NEVER BY ITS ADDRESS.
+
+  The duplicate-MAC HiLink pair both lease `192.168.8.100`, so on this path the
+  source address names a PAIR and every question asked of it is a coin flip: a
+  `from <ip>` rule matches whichever twin the kernel likes, and two dispatcher
+  rules for one address made the whole steering state refuse with "source address
+  selects several tables". The source-rule dimension therefore carries no
+  information about THIS device and is skipped outright rather than consulted and
+  then second-guessed.
+
+  What CAN name the device is the mark: `stableUplinkMark` keys on the twin's own
+  port-anchored physical identity, so each twin gets a distinct mark, a distinct
+  managed table, and a default route carrying its own `dev <ifname>` — the same
+  fwmark machinery `route-policy.ts` already installs for every other uplink, and
+  the routing twin of the `curl --interface` binding the health probe uses.
+
+  It is deliberately NOT gated on `isModuleProvisionedUplink`. That gate exists
+  because a MISSING source rule on a dispatcher-mapped interface is evidence of
+  broken routing; for a shared address no per-interface source rule can exist at
+  all, so its absence is the expected steady state and proves nothing. The honest
+  precondition is instead the one below: the interface must own a default route.
+*/
+async function planTwinRoute(
+	candidate: UplinkRouteCandidate,
+	deps: UplinkRouteManagerDeps,
+): Promise<UplinkRoutePlan> {
+	const routeOutput = await deps.run("ip", [
+		"-4",
+		"route",
+		"show",
+		"default",
+		"dev",
+		argMatch(ID_RE, candidate.ifname),
+	]);
+	if (!parseHasDefaultRoute(routeOutput)) {
+		throw routeUnavailable(
+			candidate.ifname,
+			`shares source address ${candidate.sourceAddress} with another interface and has no default route of its own, so no per-interface rule can steer it`,
+		);
+	}
+	return managedPlanFromRoute(
 		candidate,
-		deps,
-		candidate.sourceAddressUnique ? SOURCE_ROUTE_RULE_PRIORITY : undefined,
+		managedTable(candidate.mark),
+		routeOutput,
+		undefined,
 	);
 }
 

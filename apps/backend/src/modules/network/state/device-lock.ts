@@ -25,12 +25,11 @@
  * immediately WITHOUT invoking `fn` — the conflict contract that the RPC layer
  * relies on.
  *
- * `withModemUpdateLock` is a single global re-entrancy guard for the modem
- * update loop. Re-entrant calls are dropped (logged) rather than queued, so
- * concurrent modem polls can never stack on top of each other.
+ * `withModemUpdateLock` is a single global trailing scheduler for the modem
+ * update loop. Concurrent requests coalesce into one latest-state follow-up.
  *
  * Intentionally minimal: a `Map<deviceId, boolean>` in-flight registry plus a
- * single boolean for the modem loop. No queue, no scheduler, no dependencies.
+ * one pending callback for the modem loop.
  */
 
 import { logger } from "../../../helpers/logger.ts";
@@ -67,26 +66,42 @@ export async function withDeviceLock<T>(
 	}
 }
 
-/** Single global guard for the modem update loop. */
-let modemUpdateInFlight = false;
+let modemUpdateDrain: Promise<void> | undefined;
+let trailingModemUpdate: (() => Promise<void>) | undefined;
 
 /**
- * Serialize the modem update loop against itself. A re-entrant call (while a
- * previous `fn` is still running) is dropped and logged — it does NOT throw,
- * does NOT queue, and does NOT deadlock. Releases in a `finally`.
+ * Serialize modem work and retain exactly one latest-state follow-up while a
+ * run is active. Every coalesced caller joins the same bounded drain.
  */
 export async function withModemUpdateLock(
 	fn: () => Promise<void>,
 ): Promise<void> {
-	if (modemUpdateInFlight) {
-		logger.debug("Modem update already in progress, dropping re-entrant call");
-		return;
+	if (modemUpdateDrain !== undefined) {
+		trailingModemUpdate = fn;
+		logger.debug("Modem update already in progress, coalescing trailing run");
+		return modemUpdateDrain;
 	}
 
-	modemUpdateInFlight = true;
+	const drain = Promise.resolve().then(async () => {
+		let next: (() => Promise<void>) | undefined = fn;
+		let firstFailure: unknown;
+		let failed = false;
+		while (next !== undefined) {
+			try {
+				await next();
+			} catch (error) {
+				if (!failed) firstFailure = error;
+				failed = true;
+			}
+			next = trailingModemUpdate;
+			trailingModemUpdate = undefined;
+		}
+		if (failed) throw firstFailure;
+	});
+	modemUpdateDrain = drain;
 	try {
-		await fn();
+		await drain;
 	} finally {
-		modemUpdateInFlight = false;
+		if (modemUpdateDrain === drain) modemUpdateDrain = undefined;
 	}
 }

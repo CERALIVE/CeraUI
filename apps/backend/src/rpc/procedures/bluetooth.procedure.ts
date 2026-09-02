@@ -49,12 +49,6 @@ import type { RPCContext } from "../types.ts";
 
 const authedProcedure = os.$context<RPCContext>().use(authMiddleware);
 
-/**
- * `unit_missing` folds into `service_start_failed` because both mean the same
- * thing to the operator: the switch did not take. Every other cause keeps its
- * own member — a dead `bluetoothd`, an unreachable bus and a board with no
- * controller send someone to three different places.
- */
 function refusalFromUnavailable(
 	cause: BtUnavailableCause,
 ): BluetoothMutationRefusal {
@@ -68,7 +62,7 @@ function refusalFromUnavailable(
 		case "no_adapter":
 			return "no_adapter";
 		case "unit_missing":
-			return "service_start_failed";
+			return "unit_missing";
 	}
 }
 
@@ -155,7 +149,9 @@ async function applyEnabled(enabled: boolean): Promise<BluetoothToggleOutput> {
 	if (refused.length > 0) {
 		return {
 			success: false,
-			error: "service_start_failed",
+			error: refused.some((unit) => unit.detail === "unit_missing")
+				? "unit_missing"
+				: "service_start_failed",
 			detail: refused
 				.map((unit) => `${unit.unit}: ${unit.detail ?? "refused"}`)
 				.join("; "),

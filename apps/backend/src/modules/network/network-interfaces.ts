@@ -22,6 +22,7 @@ import { isSimlessForBond } from "@ceraui/rpc";
 import type {
 	EthernetRole,
 	NetifConfigError,
+	NetifConfigInput,
 	NotificationType,
 } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
@@ -36,7 +37,10 @@ import {
 	getMockIfconfigOutput,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
-
+import { isBondLinkMappable } from "../streaming/bond-entry.ts";
+// Type-only: erased at build time, so it adds no runtime edge back into
+// `modules/streaming/`, which imports this module.
+import type { BondMappingState } from "../streaming/link-mapping-report.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -50,6 +54,13 @@ import {
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
 import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
+import {
+	bondPhysicalId,
+	isBondOptedOut,
+	resetPersistentBondOptOutForTest,
+	resetSessionBondOptOutForTest,
+	setPersistentBondOptOut,
+} from "./bond-preference.ts";
 import {
 	type DongleMarker,
 	getDongleMarker,
@@ -187,15 +198,16 @@ export function setNetifDupIpSuppression(ifname: string, suppressed: boolean) {
   forced false by the flag itself, so the operator's own choice is tracked apart
   from it here rather than being read out of a bit the error path overwrites.
 */
-const operatorBondOptOut = new Set<string>();
-
 export function resetBondOptOut(): void {
-	operatorBondOptOut.clear();
+	resetPersistentBondOptOutForTest();
+}
+
+export function resetBondOptOutSession(): void {
+	resetSessionBondOptOutForTest();
 }
 
 export function setBondOptOut(ifname: string, optOut: boolean): void {
-	if (optOut) operatorBondOptOut.add(ifname);
-	else operatorBondOptOut.delete(ifname);
+	setPersistentBondOptOut(ifname, optOut);
 }
 
 export function isDupIpOnly(int: NetworkInterface): boolean {
@@ -215,8 +227,8 @@ export function isBondCandidate(name: string, int: NetworkInterface): boolean {
 	if (isConcurrentApIfname(name)) return false;
 	if (isSharedLanPort(name)) return false;
 	if ((int.error & ~NETIF_ERR_DUPIPV4) !== 0) return false;
-	if (operatorBondOptOut.has(name)) return false;
-	if (isDupIpOnly(int)) return true;
+	if (isBondOptedOut(name)) return false;
+	if (isDupIpOnly(int)) return isBondLinkMappable(name, int.ip);
 	return int.enabled;
 }
 
@@ -302,7 +314,7 @@ export function applySharedLanBondGate(
 
 		if ((int.error & NETIF_ERR_SHAREDLAN) === 0) continue;
 		clearNetifError(int, NETIF_ERR_SHAREDLAN);
-		if (int.error === 0 && !operatorBondOptOut.has(name)) int.enabled = true;
+		if (int.error === 0 && !isBondOptedOut(name)) int.enabled = true;
 	}
 }
 
@@ -351,14 +363,17 @@ export interface DupIpNotice {
  * claiming it is handled.
  */
 export interface DupIpNoticeDeps {
-	/** Is the (ip,iface) bind map actually in force right now? */
-	readonly isMappingActive: () => boolean;
+	/** `none` (nothing described), `active` (in force), or `degraded`. */
+	readonly mappingState: () => BondMappingState;
 	/** Can the writer publish a row for this link — i.e. name its device? */
 	readonly isLinkMappable: (ifname: string, ip: string) => boolean;
 }
 
+// The fail-safe pair is `none` + "nothing is mappable": an unwired process still
+// REPORTS the collision (through the unmappable-member arm) rather than silently
+// claiming it is handled, while never inventing a degraded bond nobody launched.
 const defaultDupIpNoticeDeps: DupIpNoticeDeps = {
-	isMappingActive: () => false,
+	mappingState: () => "none",
 	isLinkMappable: () => false,
 };
 
@@ -378,12 +393,12 @@ export function setDupIpNoticeDeps(deps: DupIpNoticeDeps | null): void {
  * instead of a double that could agree with a rule nothing else uses.
  */
 export async function wireDupIpNoticeDeps(): Promise<void> {
-	const [{ isBondMappingActive }, { isBondLinkMappable }] = await Promise.all([
+	const [{ getBondMappingState }, { isBondLinkMappable }] = await Promise.all([
 		import("../streaming/link-mapping-report.ts"),
 		import("../streaming/srtla.ts"),
 	]);
 	setDupIpNoticeDeps({
-		isMappingActive: isBondMappingActive,
+		mappingState: getBondMappingState,
 		isLinkMappable: isBondLinkMappable,
 	});
 }
@@ -436,19 +451,25 @@ function applyDuplicateIpFlags(
 /**
  * What, if anything, to tell the operator about `groups`.
  *
- * A group is only worth a band while the device genuinely cannot tell its
- * members apart:
+ * The decision is driven by a TRI-STATE, and the third state is the whole point:
  *
- *   * mapping NOT in force — the sender collapses the duplicate source IPs and
- *     keeps one representative, so a link really is missing;
- *   * mapping in force but a member is `unmappable` (`bind-map.ts`) — no row can
+ *   * `none` — no launch has described a bond, so nothing is excluded and there
+ *     is no "only one of them can carry bonded traffic" to report. A group whose
+ *     members are all mappable is therefore SILENT; only a member the device
+ *     cannot identify is worth saying, because that one WILL be left out when a
+ *     stream does start;
+ *   * `active` — the sender binds per interface, so a fully mapped group is
+ *     silent and only an `unmappable` member (`bind-map.ts`) warns: no row can
  *     be published for it, so it is excluded from exactly the mechanism that
- *     would have disambiguated it.
+ *     would have disambiguated it;
+ *   * `degraded` — a launch published a verdict the sender could not honour, so
+ *     the duplicate source IPs really were collapsed and a link really is
+ *     missing. This is the one state that warns about the group as a whole.
  *
- * A fully mapped group is silent. That is not a loss of information: the
- * per-interface `error: "duplicate IPv4 addr"` still rides the `netif` wire and
- * the Network page still renders it, so the operator can see the shared address
- * without being told a handled condition is a fault.
+ * Silence is not a loss of information: the per-interface `error: "duplicate
+ * IPv4 addr"` still rides the `netif` wire and the Network page still renders
+ * it, so the operator can see the shared address without being told a handled —
+ * or not-yet-attempted — condition is a fault.
  */
 export function decideDupIpNotice(
 	groups: readonly DuplicateIpGroup[],
@@ -456,13 +477,13 @@ export function decideDupIpNotice(
 ): DupIpNotice | undefined {
 	if (groups.length === 0) return undefined;
 
-	const mappingActive = deps.isMappingActive();
+	const state = deps.mappingState();
 	const sentences: string[] = [];
 
 	for (const group of groups) {
 		const shared = `Interfaces ${group.ifaces.join(", ")} share the same IP address: ${group.ip}.`;
 
-		if (!mappingActive) {
+		if (state === "degraded") {
 			sentences.push(
 				`${shared} Streaming is not affected. The only consequence is that per-interface link mapping is not active, so checks that steer by address can't tell them apart and only one of them can carry bonded traffic.`,
 			);
@@ -475,7 +496,9 @@ export function decideDupIpNotice(
 		if (unmappable.length === 0) continue;
 
 		sentences.push(
-			`${shared} Streaming is not affected. Per-interface link mapping is active, but ${unmappable.join(", ")} could not be identified as a physical device, so it can't be told apart from its twin and is left out of the bond.`,
+			state === "active"
+				? `${shared} Streaming is not affected. Per-interface link mapping is active, but ${unmappable.join(", ")} could not be identified as a physical device, so it can't be told apart from its twin and is left out of the bond.`
+				: `${shared} Streaming is not affected. ${unmappable.join(", ")} could not be identified as a physical device, so once a stream starts it can't be told apart from its twin and will be left out of the bond.`,
 		);
 	}
 
@@ -1222,7 +1245,7 @@ export function netIfBuildMsg() {
 		const entry: NetworkInterfaceResponseMessage[string] = {
 			...(networkInterface.ip !== undefined ? { ip: networkInterface.ip } : {}),
 			tp: networkInterface.tp,
-			enabled: networkInterface.enabled,
+			enabled: isBondCandidate(i, networkInterface),
 			...(networkInterface.tx_bps !== undefined
 				? { tx_bps: networkInterface.tx_bps }
 				: {}),
@@ -1407,17 +1430,57 @@ function countActiveNetif() {
  * operator as "Saved".
  */
 export type NetifApplyOutcome =
-	| { ok: true }
+	| { ok: true; applied: NetifConfigInput }
 	| { ok: false; reason: NetifConfigError };
+
+export function readAppliedNetifConfig(
+	name: string,
+): NetifConfigInput | undefined {
+	const entry = netIfBuildMsg()[name];
+	if (entry === undefined) return undefined;
+	return {
+		name,
+		...(entry.ip !== undefined ? { ip: entry.ip } : {}),
+		enabled: entry.enabled,
+	};
+}
+
+function finishBondMutation(
+	msg: NetworkInterfaceMessage["netif"],
+	outcome: { ok: false; reason: NetifConfigError } | undefined,
+): NetifApplyOutcome {
+	const applied = readAppliedNetifConfig(msg.name);
+	const reason = outcome?.reason ?? "applied";
+	logger.info("network bond mutation", {
+		iface: msg.name,
+		physical_id: bondPhysicalId(msg.name) ?? null,
+		requested: msg.enabled,
+		resulted: applied?.enabled ?? null,
+		reason,
+	});
+	if (outcome !== undefined) return outcome;
+	if (applied === undefined) return { ok: false, reason: "unknown_interface" };
+	return { ok: true, applied };
+}
 
 export function handleNetif(
 	conn: WebSocket,
 	msg: NetworkInterfaceMessage["netif"],
 ): NetifApplyOutcome {
 	const int = netif[msg.name];
-	if (!int) return { ok: false, reason: "unknown_interface" };
+	if (!int) {
+		return finishBondMutation(msg, {
+			ok: false,
+			reason: "unknown_interface",
+		});
+	}
 
-	if (int.ip !== msg.ip) return { ok: false, reason: "stale_address" };
+	if (int.ip !== msg.ip) {
+		return finishBondMutation(msg, {
+			ok: false,
+			reason: "stale_address",
+		});
+	}
 
 	if (msg.enabled === true || msg.enabled === false) {
 		// A duplicate-IP link's `enabled` is forced false by the flag itself, so a
@@ -1425,10 +1488,16 @@ export function handleNetif(
 		// (and its warning band) is deliberately left standing: the link is still
 		// unusable for a generic source-IP operation, which is a different claim.
 		if (isDupIpOnly(int)) {
+			if (msg.enabled && !isBondLinkMappable(msg.name, int.ip)) {
+				return finishBondMutation(msg, {
+					ok: false,
+					reason: "bond_unmappable",
+				});
+			}
 			setBondOptOut(msg.name, !msg.enabled);
 			triggerNetworkInterfacesChange();
 			conn.send(buildMsg("netif", netIfBuildMsg()));
-			return { ok: true };
+			return finishBondMutation(msg, undefined);
 		}
 
 		if (msg.enabled) {
@@ -1441,7 +1510,10 @@ export function handleNetif(
 					`Can't enable ${msg.name}: ${err}`,
 					10,
 				);
-				return { ok: false, reason: "enable_refused" };
+				return finishBondMutation(msg, {
+					ok: false,
+					reason: "enable_refused",
+				});
 			}
 		} else {
 			if (int.enabled && countActiveNetif() === 1) {
@@ -1452,7 +1524,10 @@ export function handleNetif(
 					"Can't disable all networks",
 					10,
 				);
-				return { ok: false, reason: "disable_all_refused" };
+				return finishBondMutation(msg, {
+					ok: false,
+					reason: "disable_all_refused",
+				});
 			}
 		}
 
@@ -1462,5 +1537,5 @@ export function handleNetif(
 	}
 
 	conn.send(buildMsg("netif", netIfBuildMsg()));
-	return { ok: true };
+	return finishBondMutation(msg, undefined);
 }

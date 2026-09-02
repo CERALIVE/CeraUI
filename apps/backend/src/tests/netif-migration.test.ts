@@ -52,7 +52,7 @@ beforeEach(() => {
 });
 
 describe("netif event migration", () => {
-	test("a device-state up event yields one netif broadcast with eth0 enabled", async () => {
+	test("a device-state up event yields one netif broadcast while eth0 awaits an address", async () => {
 		const monitor = new MockMonitorEmitter([{ delayMs: 0, event: ETH0_UP }]);
 		monitor.on("monitor-event", handleNetifMonitorEvent);
 		monitor.start();
@@ -60,7 +60,7 @@ describe("netif event migration", () => {
 		monitor.stop();
 
 		expect(broadcastCount).toBe(1);
-		expect(netIfBuildMsg().eth0?.enabled).toBe(true);
+		expect(netIfBuildMsg().eth0?.enabled).toBe(false);
 	});
 
 	test("no broadcast when the same up event repeats (state unchanged)", async () => {

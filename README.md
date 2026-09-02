@@ -34,7 +34,7 @@ CeraUI/
 The app is organized into three primary destinations:
 
 - **Live** — a unified device-first source list leads the destination: every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot renders as one picker, with a single "Codec & delay" affordance owning all audio configuration. Below it, a "Stream setup" card shows three always-visible readiness rows (Encoder, Destination, Network — no collapse, no ready bar) each fusing a state dot with its config summary and a one-tap edit/fix affordance, plus the Start control. Pick a source, adjust encoder/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
-- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, and hotspot configuration. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
+- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, hotspot configuration, and provider-aware Bluetooth controls. PipeWire images never try to start the retired BlueALSA unit, and a connected Bluetooth microphone is offered only when the installed provider agrees with the selected audio backend. Newly attached cellular hardware remains visible while modem services probe it; after two authoritative misses it settles into a persistent, non-actionable “Not controllable” row until physical detach. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
 - **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable.
 
 A dev-only DevTools destination is available in development builds.
@@ -52,7 +52,10 @@ A dev-only DevTools destination is available in development builds.
   late, undispatched connection is closed without sending a stale stop.
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
-  switch. Physical-radio validation is still pending; see
+  switch. The deterministic virtual interface is type-checked before reuse, and
+  adapters with temporarily unresolved hardware identity remain visible as
+  degraded rows rather than disappearing. Physical-radio validation is still
+  pending; see
   [`docs/AP-STA-CONCURRENT-MODE.md`](docs/AP-STA-CONCURRENT-MODE.md).
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the

@@ -41,7 +41,7 @@
   does not depend on any of it.
 */
 
-import { SAFE_IFNAME_RE } from "./device-bound-probe.ts";
+import { SAFE_IFNAME_RE } from "./safe-ifname.ts";
 
 /** Wall-clock budget for one proxied admin request. */
 export const ADMIN_PROXY_TIMEOUT_MS = 15_000;

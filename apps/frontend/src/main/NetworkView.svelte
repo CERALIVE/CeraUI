@@ -8,6 +8,8 @@ import { isApRadio } from '$lib/helpers/wifi-mode-outcome';
 import { hotspotIsActive } from '$lib/rpc/os-toggle-predicates';
 import {
 	getBluetooth,
+	getCapabilities,
+	getConfig,
 	getIsConnected,
 	getLinkTelemetry,
 	getModems,
@@ -55,6 +57,7 @@ const netif = $derived<NetifMessage | undefined>(getNetif());
 const isConnected = $derived(getIsConnected());
 const linkTelemetry = $derived(getLinkTelemetry());
 const bluetooth = $derived(getBluetooth());
+const audioBackend = $derived(getConfig()?.audio_backend ?? getCapabilities()?.audio_backends?.active);
 
 // Bonded links come from the HUD store so colour identity (--link-N) is
 // IDENTICAL to the persistent HUD bar — link.linkIndex (0-based) → --link-{n+1}.
@@ -251,7 +254,7 @@ function openModemConfig(id: string) {
 			onConfigure={configureNetif}
 		/>
 		<HotspotSection {hotspotInterfaces} {hotspotTarget} onSetup={() => (hotspotDialogOpen = true)} />
-		<BluetoothSection status={bluetooth} />
+		<BluetoothSection status={bluetooth} {audioBackend} />
 	{/if}
 </div>
 

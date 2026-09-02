@@ -163,6 +163,65 @@ describe.each(ENTRIES)("federation bundle %s.js", (name) => {
 	});
 });
 
+describe("federation additive options — the BUILT audio bundle", () => {
+	// The ABI's additive-only promise is only worth something if the built bytes
+	// actually honour it, and the audio bundle is where Todo 20 exercises it: the
+	// selector must be invisible to a host that passes nothing new, and truthful
+	// to one that passes the snapshot it already holds.
+	it("renders NO backend selector for a legacy host that passes no capabilities", async () => {
+		const module = await loadEntry("audio");
+		const { handle } = await mountInto(module, {
+			locale: "en",
+			host: hostAdapter(),
+		});
+
+		expect(document.querySelectorAll('[data-testid="audio-backend"]')).toHaveLength(0);
+
+		await handle.destroy();
+	});
+
+	it("offers exactly the host's advertised backends when the snapshot is passed", async () => {
+		const module = await loadEntry("audio");
+		const { handle } = await mountInto(module, {
+			locale: "en",
+			host: hostAdapter(),
+			capabilities: {
+				audio_backends: { supported: ["alsa", "pipewire"], active: "pipewire" },
+			},
+		});
+
+		expect(
+			document.querySelectorAll('[data-testid="audio-backend"]').length,
+		).toBeGreaterThan(0);
+		expect(
+			document.querySelector('[data-testid="audio-backend-pipewire"]'),
+		).not.toBeNull();
+		// ABSENT IS NOT `alsa`: with no stated selection the resting value is the
+		// engine's own running arm.
+		expect(
+			document
+				.querySelector('[data-testid="audio-backend-pipewire"]')
+				?.getAttribute("aria-checked"),
+		).toBe("true");
+
+		await handle.destroy();
+	});
+
+	it("never offers a backend the host's snapshot does not list", async () => {
+		const module = await loadEntry("audio");
+		const { handle } = await mountInto(module, {
+			locale: "en",
+			host: hostAdapter(),
+			capabilities: { audio_backends: { supported: ["alsa"], active: "alsa" } },
+		});
+
+		expect(document.querySelector('[data-testid="audio-backend-alsa"]')).not.toBeNull();
+		expect(document.querySelector('[data-testid="audio-backend-pipewire"]')).toBeNull();
+
+		await handle.destroy();
+	});
+});
+
 describe("federation save-failure surface", () => {
 	it("surfaces a resolved {success:false} write instead of reporting success", async () => {
 		const module = await loadEntry("encoder");

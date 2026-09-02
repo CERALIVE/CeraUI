@@ -10,7 +10,7 @@
 
   EVERY REFUSAL RENDERS ON SCREEN, NEXT TO THE CONTROL THAT WAS REFUSED — never
   a toast and never a `title`. The shipped kiosk touchscreen cannot hover, and
-  the thirteen members of `bluetoothMutationRefusalSchema` each name a different
+  the fourteen members of `bluetoothMutationRefusalSchema` each name a different
   thing the operator can do about it, so a generic "operation failed" would
   collapse "wait, the radio is busy" into "the pairing broke". `classify` keeps
   a structured refusal `ok`, which is what keeps it off `osCommand`'s toast path;
@@ -18,7 +18,7 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type { BluetoothDevice, BluetoothStatus } from '@ceraui/rpc/schemas';
+import type { AudioBackend, BluetoothDevice, BluetoothStatus } from '@ceraui/rpc/schemas';
 import { Bluetooth, ChevronRight, LoaderCircle, Mic, Radar } from '@lucide/svelte';
 
 import Badge from '$lib/components/custom/Badge.svelte';
@@ -42,14 +42,16 @@ import {
 	orderedBluetoothDevices,
 	primaryBluetoothAdapter,
 	showsAudioSourceHint,
+	showsBluetoothMicBackendRefusal,
 	showsPairingAgentGap,
 } from './bluetooth-view';
 
 interface Props {
 	status: BluetoothStatus | undefined;
+	audioBackend?: AudioBackend;
 }
 
-const { status }: Props = $props();
+const { status, audioBackend }: Props = $props();
 
 const ENABLE_KEY = 'bluetooth-enable';
 const SCAN_KEY = 'bluetooth-scan';
@@ -440,7 +442,15 @@ async function openLiveSources(): Promise<void> {
 								</p>
 							{/if}
 
-							{#if showsAudioSourceHint(device)}
+							{#if showsBluetoothMicBackendRefusal(device, audioBackend)}
+								<p
+									class="border-status-warning/30 bg-status-warning/10 mt-2 rounded-lg border px-3 py-2 text-xs"
+									data-testid="bluetooth-audio-backend-refused"
+									role="status"
+								>
+									{m["network.bluetooth.audioRequiresPipewire"]()}
+								</p>
+							{:else if showsAudioSourceHint(device, audioBackend)}
 								<div
 									class="border-primary/30 bg-primary/5 mt-2 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2"
 									data-testid="bluetooth-audio-source-hint"

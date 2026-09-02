@@ -60,6 +60,91 @@ gate then confirms there are no orphan markers left pointing at it.
 
 ---
 
+## Producer schema drift — publish before consume
+
+CeraUI consumes four npm producers whose wire data is Zod-validated —
+`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`,
+`@ceralive/modem-control`. Each is a **registry** dependency pinned to an exact
+version, and that pin is a version boundary as well as a path boundary.
+
+### Why this needs a rule at all
+
+`z.object()` **silently strips** unrecognized keys on `.parse()`. A consumer
+pinned to an older binding whose schema does not know a newer producer field
+therefore drops that field before any business logic sees it — no error, no
+warning, and a green `tsc` whenever the consumer declared its own local type for
+the same wire data. It is runtime-only, and it only reproduces on a device.
+
+That is not hypothetical: cerastream PR #126 added `device_address` to
+`captureDeviceSchema`, CeraUI PR #303 merged the same day reading
+`node.device_address` against a pin whose gitHead predates PR #126, and three
+CeraUI modules each carried a local `device_address?: string` — so the field was
+stripped on every real board and nothing said so.
+
+### The gate
+
+[`apps/backend/src/tests/producer-schema-drift.test.ts`](../apps/backend/src/tests/producer-schema-drift.test.ts)
+holds one manifest of the producer wire-field paths CeraUI reads and asserts, on
+the schemas **actually installed in `node_modules`**, that every one of them
+resolves. Run it with the rest of the backend suite (`bun test` in
+`apps/backend`, and in CI's `test` job).
+
+It names no producer version, deliberately — it must pass against any pin that
+carries the manifest's fields. That is what keeps an additive bump a no-op and a
+field-retiring bump a loud failure.
+
+### The three rules
+
+1. **Publish before consume.** A producer PR that adds or changes a field in a
+   published Zod schema must have its bindings **published** (tag pushed) before
+   any CeraUI PR reading that field may merge.
+2. **No shadow wire-types.** Import producer-owned wire shapes from the published
+   package's own exported types. Never redeclare a local interface for the same
+   data — a shadow type is precisely what hides a stale pin from `tsc`.
+3. **When you add a read, add the field to the manifest.** The manifest is an
+   inventory of real read sites, so a new consumed field belongs there in the same
+   change. Do not add a field with no consumer: that turns an unused producer
+   field into a merge blocker for a producer that legitimately retires it.
+
+### Verifying against an UNRELEASED producer — the `bun link` workflow
+
+`bun link` is the sanctioned way to try a producer change locally before it is
+published. It is **dev-time only**, and the link must never reach a commit.
+
+```bash
+# 1. In the producer's own checkout (e.g. ../../cerastream/bindings):
+bun link
+
+# 2. In CeraUI's backend workspace:
+cd apps/backend && bun link @ceralive/cerastream
+
+# 3. Verify — the drift gate now probes YOUR working tree, which is the point:
+bun test src/tests/producer-schema-drift.test.ts
+bun test                      # the rest of the backend suite
+
+# 4. UNDO IT before you commit. This is not optional.
+bun unlink @ceralive/cerastream
+cd ../.. && bun install       # restores the registry-resolved lockfile
+```
+
+**Pre-commit check — must be `0`:**
+
+```bash
+grep -c 'link:' bun.lock
+```
+
+A committed link is how a local verification silently becomes the fleet's
+reality: the drift gate would then be probing a developer's working tree instead
+of the artifact devices install, and every guarantee above evaporates. A `link:`
+in a producer dep is also a Rule-D path reference wearing a registry dep's
+clothes — it resolves by filesystem proximity, so CI (which has no sibling
+checkout) installs something different from what was tested.
+
+This check is enforced by the same test file rather than by a git hook: the
+repo's `pre-commit` hook is best-effort lint only, and CI is the blocking gate.
+
+---
+
 ## Biome reliability rules (S4)
 
 CeraUI layers three reliability rules on top of the shared `@ceralive/biome-config`

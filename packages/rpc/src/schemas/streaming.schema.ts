@@ -228,6 +228,21 @@ export const videoPassthroughSchema = z.enum(['auto', 'force', 'off']);
 export type VideoPassthrough = z.infer<typeof videoPassthroughSchema>;
 export type VideoCodec = z.infer<typeof videoCodecSchema>;
 
+// Engine audio backend. Mirrors the cerastream `audioBackendSchema` / StartParams
+// `audio.backend` wire enum (alsa|pipewire) — the SAME kind of mirror as
+// `videoCodecSchema` above, and CeraUI-owned for the SAME reason: this package
+// is browser-safe and carries no `@ceralive/cerastream` dependency, so it cannot
+// import the producer type. Drift is caught at compile time instead, by the S6
+// assertion in `apps/backend/src/modules/streaming/cerastream-wire-skew.ts`.
+//
+// It is ADDITIVE-OPTIONAL everywhere it is used, and ABSENT IS NOT A DEFAULT: an
+// absent selection means CeraUI serializes NO backend key at all and the ENGINE'S
+// OWN persisted default governs (shipped: pipewire). A CeraUI-side default
+// constant would silently revert every existing config to whatever this file
+// happened to name, which is precisely what must not happen.
+export const audioBackendSchema = z.enum(['alsa', 'pipewire']);
+export type AudioBackend = z.infer<typeof audioBackendSchema>;
+
 // Resolution token ↔ engine "WxH" pixel-pair map (Todo 19). These dimensions MUST
 // match cerastream's `Resolution::dims()` table EXACTLY
 // (crates/cerastream-core/src/graph/spec.rs) so the device round-trips bijectively
@@ -329,6 +344,12 @@ export const streamingConfigInputSchema = z.object({
 	// change NEVER touches a live stream. Additive-optional; absent leaves the
 	// engine's own default (software), which is what every device does today.
 	previewEncode: previewEncodeModeSchema.optional(),
+	// Engine audio backend override. Additive-optional and CAPABILITY-GATED: the
+	// backend accepts a value only while the engine's capability payload lists it
+	// as supported, so a selection can never name a backend the device cannot
+	// honour. Absent means the operator stated nothing — CeraUI then sends NO
+	// backend key and the engine's own default governs.
+	audio_backend: audioBackendSchema.optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -561,6 +582,17 @@ export const capabilitiesMessageSchema = z.object({
 	// the consumer treats it as false (back-compat). Only the engine advertises
 	// this; the backend never synthesizes it.
 	audio_live_switch: z.boolean().optional(),
+	// Which audio backends this engine build can run, and which one it is running
+	// now. Forwarded verbatim from the engine's own `audio_backends` block. This
+	// is the ONLY evidence a backend selection may be offered or accepted on:
+	// absent means the engine never stated a capability, and a selector must then
+	// offer nothing rather than assume the pair.
+	audio_backends: z
+		.object({
+			supported: z.array(audioBackendSchema),
+			active: audioBackendSchema,
+		})
+		.optional(),
 	// SRT receive-profile capability advertised by the engine (cerastream Todo
 	// 10). All ADDITIVE + OPTIONAL — absent on legacy snapshots, in which case
 	// the Stream Tuning card treats the receiver as the Classic-only
@@ -861,6 +893,10 @@ export const configMessageSchema = z.object({
 	// saved choice on reload and can be paired against the live realized mode.
 	// Additive-optional.
 	previewEncode: previewEncodeModeSchema.optional(),
+	// The persisted audio-backend selection, echoed so a selector renders the
+	// saved choice on reload. Absent means no selection was ever stated, which a
+	// consumer must NOT render as `alsa`: the engine's default governs instead.
+	audio_backend: audioBackendSchema.optional(),
 	// SRT receive-profile tuning, echoed back so the card reflects the saved
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),

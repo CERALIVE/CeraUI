@@ -95,7 +95,7 @@ export function parseNetIdPaths(exportDb: string): ReadonlyMap<string, string> {
 	return resolved;
 }
 
-async function readUdevExportDb(): Promise<string> {
+export async function readUdevExportDb(): Promise<string> {
 	const result = await spawnWithTimeout(["udevadm", "info", "--export-db"], {
 		timeoutMs: UDEV_EXPORT_TIMEOUT_MS,
 	});

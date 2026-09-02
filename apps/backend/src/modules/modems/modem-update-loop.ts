@@ -67,7 +67,10 @@ import {
 	registerModemSafe,
 } from "./modem-registration.ts";
 import { broadcastModems } from "./modem-status.ts";
-import { refreshModemIdPaths } from "./modem-wire-producer.ts";
+import {
+	noteAuthoritativeModemCycle,
+	refreshModemIdPaths,
+} from "./modem-wire-producer.ts";
 import { getModem, getModemIds, removeModem } from "./modems-state.ts";
 import { maybeAutoUnlockSimPins } from "./sim-autounlock.ts";
 import {
@@ -283,6 +286,7 @@ async function reconcileModemPresenceLocked(
 		await presenceDeps.refreshIdPaths();
 	}
 
+	noteAuthoritativeModemCycle();
 	publishModemsSnapshot();
 }
 

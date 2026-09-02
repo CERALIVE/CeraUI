@@ -14,11 +14,85 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.9.0"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.9.1"   (public npm, @ceralive scope)
 "@ceralive/srtla-send":  "2026.8.0"   (public npm, @ceralive scope)
 ```
 
 Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
+
+## A REGISTRY PIN IS A VERSION BOUNDARY, AND THE GATE IS THE DELIVERABLE [EXISTS]
+
+CeraUI consumes FOUR npm producers whose wire data is Zod-validated:
+`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`,
+`@ceralive/modem-control`. A pin is a version boundary as well as a path
+boundary, and the failure mode on the wrong side of it is SILENT.
+
+**Zod's `z.object()` STRIPS unrecognized keys on `.parse()`.** So a consumer
+pinned to an OLD binding whose schema does not know a NEW producer field drops
+that field before any business logic sees it — no error, no warning, and a
+PASSING typecheck whenever the consumer declared its own local shape for the
+same wire data. Runtime-only, silent data loss.
+
+The motivating case is recorded in full in the workspace root
+[`AGENTS.md`](../AGENTS.md) → BINDING-SCHEMA DRIFT: cerastream PR #126 added
+`device_address` to `captureDeviceSchema`, and CeraUI PR #303 merged the same day
+shipping BT-mic code reading `node.device_address` while still pinned to
+`@ceralive/cerastream@2026.8.0`, whose gitHead predates PR #126 entirely.
+`bluetooth-audio.ts`, `sources.ts` and `audio-naming.ts` each declared a LOCAL
+`device_address?: string`, so TypeScript never saw the mismatch and the field was
+Zod-stripped on every real device.
+
+**`apps/backend/src/tests/producer-schema-drift.test.ts` is the enforcement.** It
+holds ONE manifest of the producer wire-field paths CeraUI actually reads and
+asserts, against the schemas ACTUALLY INSTALLED in `node_modules`, that every one
+of them resolves. A stale pin plus new-field usage fails CI instead of a device.
+Six properties are load-bearing:
+
+- **It names NO producer version, and it must not.** The gate has to pass against
+  ANY pin that carries the manifest's fields, so an additive bump stays green with
+  no edit and a bump that RETIRES a consumed field fails loudly. Version and
+  export-surface skew are a DIFFERENT axis, already guarded by
+  `cerastream-bindings-skew.test.ts`, `srtla-send-bindings-skew.test.ts`,
+  `modem-control-skew-matrix.test.ts` and
+  `remote-control/protocol.export-surface.test.ts` — those pin the NAMES, this one
+  pins the INSIDE of the schemas they name.
+- **The manifest is a real inventory, not a wish list.** Every entry was
+  established by finding the read site in `apps/backend/src`. Adding a field with
+  no consumer is not harmless: it turns an unused producer field into a merge
+  blocker for a producer that legitimately retires it.
+- **It covers READS, not EMITS.** A field CeraUI only writes through a producer
+  type (`SrtlaSendOptions`, the `device.hello` `deviceCaps` block) is an ordinary
+  typed argument, so `tsc` already fails on a rename. The silent-strip hazard is
+  specific to INBOUND data crossing a `.parse()`.
+- **Schemas are duck-typed on `safeParse`, never `instanceof z.ZodType`.** Each
+  producer bundles its own zod, so a cross-instance `instanceof` is not a reliable
+  guard for a consumer copy — the same reason the bindings-skew tests give.
+- **The resolver is proven able to FAIL.** A broken unwrapper that answered `true`
+  for everything would leave the whole gate silently green, which is the exact
+  defect class it exists to catch, so a non-vacuity test pins both directions.
+- **It additionally asserts lockfile purity** — `bun.lock` carries no `link:`
+  specifier and every producer dep is a bare registry version. The gate only means
+  something while the installed producer really IS the pinned release.
+
+**PUBLISH BEFORE CONSUME.** A producer PR that adds or changes a field in an
+npm-published Zod schema must have its bindings PUBLISHED (tag pushed) BEFORE any
+CeraUI PR referencing that field may merge. Do not let a producer's wire-schema
+change and its npm publish drift apart across several merged PRs — cerastream PRs
+#123–#126 all merged before any publish happened, which is exactly how the gap
+above opened.
+
+**`bun link` is the SANCTIONED DEV-TIME way to verify against an unreleased
+producer, and a committed link is a defect.** The workflow, its rationale, and the
+pre-commit check are in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Producer
+schema drift — publish before consume". The one-line rule: the lockfile must stay
+registry-resolved, `grep -c 'link:' bun.lock` must be `0`, and a `link:` in a
+producer dep is a Rule-D path reference wearing a registry dep's clothes.
+
+**NEVER redeclare a local type for producer-owned wire data.** Import the shape
+from the published package's own exported types. A shadow type is what turns a
+stale pin plus new-field usage into a silent runtime strip instead of a
+compile-time error — it is what made the PR #303 case invisible to `tsc`, and it
+is what this gate exists because the type system alone could not catch.
 
 ## STRUCTURE
 
@@ -120,6 +194,7 @@ CeraUI/
 | **Config atomicity (E3)** | `apps/backend/src/helpers/config-loader.ts` — `writeFileAtomicSync` |
 | **Config persistence placement map + storage-engine decision** | `docs/CONFIG_PERSISTENCE.md` |
 | **Runtime config schema (addons key)** | `apps/backend/src/helpers/config-schemas.ts` — `runtimeConfigSchema` |
+| **Producer schema-drift gate (every consumed producer wire field exists in the INSTALLED schema; + lockfile purity)** | `apps/backend/src/tests/producer-schema-drift.test.ts`; contract above → A REGISTRY PIN IS A VERSION BOUNDARY; workflow in [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Producer schema drift — publish before consume" |
 | **Logger (dev pretty + prod JSON + redaction + boot banner)** | `apps/backend/src/helpers/logger.ts` + `helpers/boot-banner.ts` |
 | **Per-RPC call tracing** | `apps/backend/src/rpc/rpc-logging.ts` |
 | **Mock subsystem (state, reset, schemas, fixture factory)** | `apps/backend/src/mocks/` — `mock-service.ts`, `mock-schemas.ts`, `fixture-factory.ts` |
@@ -155,9 +230,11 @@ CeraUI/
 | **Connected hotspot clients (`iw dev <if> station dump`; dBm tiers, NOT the 0-100 nmcli ramp)** | `apps/backend/src/modules/wifi/wifi-hotspot-clients.ts`; render side `apps/frontend/src/main/network/hotspot-clients-view.ts` → `HotspotSection.svelte` |
 | **Detected-but-driverless wireless/BT adapters (PCI class + USB INTERFACE-node scan, parent-coalesced)** | `apps/backend/src/modules/network/` sysfs probe → additive `status.unclaimed_adapters[]`; band in `apps/frontend/src/main/network/NetworkView.svelte` |
 | **BLUETOOTH foundation (BlueZ D-Bus, pairing agent, device registry, class model, service enablement, boot reconcile)** | `apps/backend/src/modules/bluetooth/` (`bluetooth-stack.ts`, `bluetooth-registry.ts`, `bluetooth-classes.ts`, `bluetooth-services.ts`, `bluez-agent.ts`, `bluez-agent-exporter.ts`, `bluetooth-runtime.ts`, `bluetooth-wire.ts`); RPC `apps/backend/src/rpc/procedures/bluetooth.procedure.ts` + `packages/rpc/src/{contracts,schemas}/bluetooth.*`; render side `apps/frontend/src/main/network/bluetooth-view.ts` → `BluetoothSection.svelte`; contract below → THE BLUETOOTH FOUNDATION |
+| **The operator's ENGINE AUDIO BACKEND override (`alsa`/`pipewire`) — capability-gated, and ABSENT means "send no key, engine default governs"** | `apps/backend/src/modules/streaming/audio-backend.ts` (`isAudioBackendSupported`, `AUDIO_BACKEND_UNSUPPORTED_ERROR`) + `config.audio_backend` in `apps/backend/src/helpers/config-schemas.ts`; wire `packages/rpc/src/schemas/streaming.schema.ts` → `audioBackendSchema` / `capabilitiesMessageSchema.audio_backends`; serialization `modules/streaming/cerastream-backend.ts`; skew gate S6 in `modules/streaming/cerastream-wire-skew.ts`; contract in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE AUDIO BACKEND IS AN OVERRIDE, AND ABSENT IS NOT A DEFAULT |
+| **…and the OPERATOR SURFACE for it (the Audio dialog's backend selector, its honest disabled state, and its typed error band)** | `apps/frontend/src/lib/streaming/audioBackend.ts` (`deriveAudioBackendView`, `canSelectAudioBackend`, `audioBackendSaveErrorMessage`) → `apps/frontend/src/main/dialogs/AudioDialog.svelte` + `audio/AudioDialogContent.svelte`; federated mount `apps/frontend/src/lib/federation/{host-contract,audio-entry}.ts`; contract in [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) → THE AUDIO BACKEND IS OFFERED ONLY WHERE THE ENGINE ADVERTISED IT |
 | **BT MICROPHONE as an audio source (`org.bluealsa` PCM presence is the oracle, NOT BlueZ `Connected`)** | `apps/backend/src/modules/bluetooth/` (PCM probe) + `apps/backend/src/modules/streaming/audio.ts`; loss/reconnect `apps/backend/src/modules/streaming/bluetooth-audio-resilience.ts`; render side `apps/frontend/src/lib/streaming/bluetooth-audio-source.ts` → `SourceSection.svelte`; contract below → THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE |
 | **Durable per-adapter hotspot identity (SSID/password reused forever) + duplicate-profile consolidation** | `apps/backend/src/modules/wifi/hotspot-credentials.ts` + `wifi-hotspot-discovery.ts` (`findHotspotConnForAdapter`, `pruneDuplicateHotspotConns`) |
-| **Capability-gated AP+STA concurrency (`iw phy` proof → virtual `__ap` interface → independent UI controls)** | `apps/backend/src/modules/wifi/wifi-ap-sta-capability.ts` + `wifi-concurrent-interface.ts`; frontend `apps/frontend/src/main/network/WifiSection.svelte`; contract [`docs/AP-STA-CONCURRENT-MODE.md`](docs/AP-STA-CONCURRENT-MODE.md) |
+| **Capability-gated AP+STA concurrency (`iw phy` proof → deterministic managed `clap-*` interface → independent UI controls)** | `apps/backend/src/modules/wifi/wifi-ap-sta-capability.ts` + `wifi-concurrent-interface.ts`; frontend `apps/frontend/src/main/network/WifiSection.svelte`; contract [`docs/AP-STA-CONCURRENT-MODE.md`](docs/AP-STA-CONCURRENT-MODE.md) |
 | **Policy-route self-check for bonded wifi/modem/dongle interfaces** | `apps/backend/src/modules/network/policy-route-check.ts` |
 | **Flow-sticky hotspot/shared-LAN steering + per-uplink NAT** | `apps/backend/src/modules/network/uplink-steering/` + `modules/network/uplink-sharing.ts`; contract [`docs/UPLINK_STEERING.md`](docs/UPLINK_STEERING.md) |
 | **Streaming-first egress priority + adaptive client cap** | `apps/backend/src/modules/network/uplink-shaper/`; contract [`docs/UPLINK_SHAPING.md`](docs/UPLINK_SHAPING.md) |
@@ -537,7 +614,7 @@ additive-optional signals** shipped on top of that lock: `memory`, `cpuFreq`,
 | `ifaceRxTx` | Per-interface RX/TX byte counters |
 | `raucSlot` | Active RAUC A/B slot |
 | `memory` (optional) | Parsed `/proc/meminfo` fields (`memTotalBytes`, etc.) — a genuinely-read `0` is kept; an unreadable source omits the keys |
-| `cpuFreq` (optional) | Array of `{id, curKhz, maxKhz}` per `/sys/devices/system/cpu/cpufreq/policy*` directory. `id` is the directory name verbatim — never relabeled "big"/"little" and never used to infer core counts. `maxKhz` is the hardware ceiling (`cpuinfo_max_freq`), not the governor-movable `scaling_max_freq`. Absent when nothing is measurable, never `[]` |
+| `cpuFreq` (optional) | Array of `{id, curKhz, maxKhz}` per `/sys/devices/system/cpu/cpufreq/policy*` directory, plus the additive-optional `{cpus, cpuCount, governor, label}`. `id` is the directory name verbatim — never relabeled "big"/"little" and never used to infer core counts. `maxKhz` is the hardware ceiling (`cpuinfo_max_freq`), not the governor-movable `scaling_max_freq`. Absent when nothing is measurable, never `[]` |
 | `ddr` (optional) | `{loadPercent, curFreqHz, maxFreqHz}` from the DDR devfreq node. All-three-or-nothing. Probed under `/sys/class/devfreq`: a case-insensitive exact `dmc` match first, then any entry matching `/dmc/i` or `/dfi/i` (lexicographically sorted). Hz, not kHz — do not share a formatter with `cpuFreq` |
 | `gpu` (optional) | `{loadPercent, curFreqHz?, maxFreqHz?}`. `loadPercent` required; frequencies independently optional, because the Mali kbase path (`/sys/class/misc/mali0/device/{utilisation,utilization,gpu_busy_percent}`, probed in that order) structurally cannot report a frequency. Falls through to devfreq GPU (`/\.gpu$/i` suffix match under the same `/sys/class/devfreq` directory) when kbase is absent. Hz, not kHz |
 
@@ -551,6 +628,30 @@ absence on a given kernel is the expected, honest state, not a gap to paper over
 confirmed against a real board yet** — see
 [`docs/DEVICE-STATS-VALIDATION.md`](docs/DEVICE-STATS-VALIDATION.md) leg (i) for
 the outstanding capture step.
+
+**`cpuFreq` grew ADDITIVELY, and its new fields answer "what is this policy" —
+`policy0` never did.** The Settings panel showed the raw sysfs directory names
+and no governor at all, which was not a data bug: the collector deliberately
+emitted the kernel's directory name verbatim and never read `scaling_governor`.
+It now also reads `related_cpus` (→ `cpus: "0-3"` + `cpuCount`),
+`scaling_governor` (→ `governor: "performance"`), and `/proc/cpuinfo` (→ an
+optional `label`), each optional-on-read-failure under the unchanged per-policy
+omission contract — a policy still answers with its two frequencies or is
+omitted, and a device that publishes none of the new nodes emits the
+byte-identical three-field row. The S1 five-signal lock is untouched.
+
+`label` is the one field a consumer could be tempted to fabricate, so it is the
+one that is ABSENT rather than guessed: an ARM core is named only from a checked
+MIDR part table (`0xd05` → Cortex-A55, `0xd0b` → Cortex-A76) and only when the
+implementer is ARM Ltd, every CPU of the policy must agree, and x86 uses the
+shared `model name`. GOVERNOR CONTEXT, board-proven: the fleet runs
+`performance` BY DESIGN via the first-party `ceralive-cpu-governor.service`
+(encode-latency rationale in the unit; overridable via `CERALIVE_CPU_GOVERNOR`),
+so `cur == max` at idle on the big cores is the EXPECTED reading and the chip
+renders plainly — changing the governor policy is a separate owner decision.
+Full contracts: [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → CPU-FREQUENCY
+METADATA and [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) → "A cpufreq
+policy is rendered as the thing it governs".
 
 **A new device signal therefore gets its OWN broadcast**, exactly as `encoder-load`
 did. The CPU core count is the third one, and it exists because `cpuLoad1` above is
@@ -2668,11 +2769,11 @@ off two seconds ago. One documented divergence in the ladder: `emulated` is answ
 *before* the preference gate, because telling someone to switch Bluetooth on when the
 host has no radio is advice they cannot act on.
 
-**All thirteen typed refusals render INLINE, so `osCommand` gets `classify: () => ({ok:true})`.**
+**All fourteen typed refusals render INLINE, so `osCommand` gets `classify: () => ({ok:true})`.**
 A structured `{success:false}` must stay `ok` as far as the async-op store is concerned,
 or the operator gets the reason twice — once inline, once uselessly in a toast. A
 *thrown* RPC still takes the toast path, correctly. `bluetoothRefusalKey` is typed
-`Record<BluetoothMutationRefusal, string>`, so a fourteenth refusal fails `tsc` rather
+`Record<BluetoothMutationRefusal, string>`, so a fifteenth refusal fails `tsc` rather
 than reaching an operator as its own dotted path.
 
 **Absent is not `false` for the persisted preference.** `read()` answers `undefined`
@@ -2696,8 +2797,13 @@ seam is a one-file deletion. A boot-the-mock-service parity test is owed with it
 
 ## THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE [EXISTS]
 
-**The presence oracle follows the engine's configured audio backend, never BlueZ
-`Connected`.** When the engine advertises the exact `pipewire-capture` feature token,
+**The presence oracle follows both the installed provider and the engine's configured
+audio backend, never BlueZ `Connected`.** BlueALSA is detected from its daemon/package;
+PipeWire Bluetooth is detected from `libspa-0.2-bluetooth`. When both are present during
+a migration, BlueALSA wins so the old image retains its working unit contract. An
+explicit `alsa` backend can use only BlueALSA, and an explicit `pipewire` backend can
+use only PipeWire; a mismatch publishes no Bluetooth microphone. When the selected
+arm advertises the exact `pipewire-capture` feature token,
 the oracle is its `list-devices` audio row whose optional `device_address` matches the
 paired registry MAC; CeraUI sends that row's `input_id` (`node.name`) through
 `AudioConfig.device` unchanged. A connected registry device with no matching engine
@@ -2705,7 +2811,7 @@ node yields no source. CeraUI compares the colon-form address case-insensitively
 keeps the persisted id byte-identical as `bt:<upper-case underscored MAC>`; it never
 persists PipeWire `object.serial`.
 
-Without `pipewire-capture`, the oracle remains the `org.bluealsa` capture PCM object
+On a detected BlueALSA image, the oracle remains the `org.bluealsa` capture PCM object
 byte-for-byte. A device can be connected with no PCM behind it, and naming it as an
 available source is a claim the device cannot honour. `scoCapable` + PCM present yields
 the row; connected-but-no-PCM yields none; A2DP-only yields none.
@@ -2720,7 +2826,8 @@ on the minimal-safe fallback rung, which carries no `features` at all. See
 
 **The mic hint is gated on CONNECTED, not on paired.** A bonded-but-disconnected mic has
 no PCM behind it — the same rule the `audio_source_unavailable` start class enforces one
-layer down.
+layer down. With the ALSA backend selected on a PipeWire image, the Network card replaces
+the Live-source pointer with an inline instruction to choose PipeWire first.
 
 **`dropped` and `gone` are different BlueZ facts and must not be one band.**
 `PropertiesChanged{Connected:false}` is expected back (the engine is already rebuilding
@@ -2756,6 +2863,10 @@ Recorded as a hardware gap, not a code gap, in
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
 - Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
+- Don't commit a `bun link` — it is the sanctioned way to verify against an UNRELEASED producer locally and a defect the moment it reaches the lockfile: the drift gate would then be probing a developer's working tree instead of the artifact devices install, and CI (which has no sibling checkout) would install something different from what was tested. Unlink and `bun install` before committing; `grep -c 'link:' bun.lock` must be `0`.
+- Don't redeclare a local type for producer-owned wire data (`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`, `@ceralive/modem-control`) — import the shape from the package's own exported types. A shadow type is exactly what hid the PR #303 `device_address` strip from `tsc`.
+- Don't read a producer field without adding its path to `producer-schema-drift.test.ts`'s manifest, and don't add a manifest path with no read site — the first leaves a stale pin free to strip the field silently, the second turns an unused producer field into a merge blocker for a producer that legitimately retires it.
+- Don't put a producer VERSION assumption in `producer-schema-drift.test.ts` — it must pass against any pin that carries the manifest's fields, or an additive bump turns into a red suite that teaches nothing. Version and export-surface skew belong in the `*-bindings-skew` tests.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
 - Don't decide a channel or band is AP-usable from the per-channel `iw phy` flags alone — board-proven, an RTL8852BE under the world domain lists 5180/5200/5220 with no `no IR` marker while every 5 GHz rule in `iw reg get` reads `PASSIVE-SCAN`. Ask `buildApInitiationGate`, ask it at **both** producers (the `ch_*` map and the `auto_*` rungs), don't "simplify" it into a hardcoded 5 GHz block, don't make it channel-scoped, and don't make it fail closed.
 - Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.

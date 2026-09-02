@@ -56,9 +56,14 @@
 
 import type { DbusValue, DbusVariant } from "@ceralive/modem-control/transport";
 import { isVariant } from "@ceralive/modem-control/transport";
-import type { AudioSourceQuality } from "@ceraui/rpc/schemas";
+import type { AudioBackend, AudioSourceQuality } from "@ceraui/rpc/schemas";
 import { AUDIO_SOURCE_UNAVAILABLE_REASONS } from "@ceraui/rpc/schemas";
 import { logger } from "../../helpers/logger.ts";
+import {
+	type BluetoothAudioProvider,
+	detectBluetoothAudioProvider,
+} from "../bluetooth/bluetooth-audio-provider.ts";
+import { getConfig } from "../config.ts";
 import type { EngineAudioDevice } from "./audio-naming.ts";
 import { getLastCapabilities } from "./capabilities.ts";
 import { getEngineAudioDevices } from "./sources.ts";
@@ -365,6 +370,8 @@ export interface BluetoothAudioDeps {
 	engineSupportsPcmSpec: () => boolean;
 	engineSupportsPipewireCapture: () => boolean;
 	readEngineAudioDevices: () => readonly EngineAudioDevice[];
+	readAudioProvider?: () => Promise<BluetoothAudioProvider>;
+	readAudioBackend?: () => AudioBackend | undefined;
 }
 
 let deps: BluetoothAudioDeps | undefined;
@@ -418,6 +425,36 @@ function defaultReadRegistryDevices(): BluetoothAudioDevice[] {
 	return cachedDevices;
 }
 
+async function defaultReadAudioProvider(): Promise<BluetoothAudioProvider> {
+	return detectBluetoothAudioProvider();
+}
+
+function defaultReadAudioBackend(): AudioBackend | undefined {
+	return getConfig().audio_backend;
+}
+
+export type BluetoothAudioOracle = "bluealsa" | "pipewire" | "disabled";
+
+export function selectBluetoothAudioOracle(input: {
+	readonly provider: BluetoothAudioProvider;
+	readonly backend: AudioBackend | undefined;
+	readonly pipewireCaptureSupported: boolean;
+}): BluetoothAudioOracle {
+	if (input.backend === "alsa") {
+		return input.provider === "bluealsa" ? "bluealsa" : "disabled";
+	}
+	if (input.backend === "pipewire") {
+		return input.provider === "pipewire" && input.pipewireCaptureSupported
+			? "pipewire"
+			: "disabled";
+	}
+	if (input.provider === "bluealsa") return "bluealsa";
+	if (input.provider === "pipewire" && input.pipewireCaptureSupported) {
+		return "pipewire";
+	}
+	return "disabled";
+}
+
 /**
  * Publish the BlueZ registry projection.
  *
@@ -440,6 +477,8 @@ function activeDeps(): BluetoothAudioDeps {
 			engineSupportsPcmSpec: defaultEngineSupportsPcmSpec,
 			engineSupportsPipewireCapture: defaultEngineSupportsPipewireCapture,
 			readEngineAudioDevices: getEngineAudioDevices,
+			readAudioProvider: defaultReadAudioProvider,
+			readAudioBackend: defaultReadAudioBackend,
 		}
 	);
 }
@@ -470,16 +509,28 @@ function defaultEngineSupportsPipewireCapture(): boolean {
  */
 export async function refreshBluetoothAudioSources(): Promise<boolean> {
 	const active = activeDeps();
-	const usesPipewire = active.engineSupportsPipewireCapture();
+	const provider = await (active.readAudioProvider?.() ??
+		defaultReadAudioProvider());
+	const backend = active.readAudioBackend
+		? active.readAudioBackend()
+		: defaultReadAudioBackend();
+	const oracle = selectBluetoothAudioOracle({
+		provider,
+		backend,
+		pipewireCaptureSupported: active.engineSupportsPipewireCapture(),
+	});
+	const usesPipewire = oracle === "pipewire";
 	let pcms: BluealsaCapturePcm[] | undefined;
 	if (usesPipewire) {
 		pcms = [];
-	} else {
+	} else if (oracle === "bluealsa") {
 		try {
 			pcms = await active.readEnumeratedPcms();
 		} catch {
 			pcms = undefined;
 		}
+	} else {
+		pcms = [];
 	}
 	if (pcms === undefined) return false;
 

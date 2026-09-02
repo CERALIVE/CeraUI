@@ -16,6 +16,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 |------|----------|
 | Per-core encoder load (two kernel realities, probed at runtime; `encoder-load` broadcast) | `modules/system/encoder-load.ts` (`collectEncoderLoad`, `parseMppLoad`, `initEncoderLoad`); contract below → PER-CORE ENCODER LOAD |
 | CPU core count — the denominator `device-stats.cpuLoad1` needs to be readable (`cpu` broadcast) | `modules/system/cpu.ts` (`collectCpuInfo`, `getCpuInfo`, `initCpu`); contract below → CPU TOPOLOGY |
+| Which CPUs a cpufreq policy governs, which governor drives it, and what those cores ARE (`cpus`/`cpuCount`/`governor`/`label` on `device-stats.cpuFreq`) | `modules/system/collectors/cpufreq.ts` (`cpuLabelsFromCpuinfo`, `labelForCpus`, `parseRelatedCpus`, `parseGovernor`); contract below → CPU-FREQUENCY METADATA |
 | Fan presence + PWM duty cycle (`pwm-fan` discovered by TYPE string, never an index; `fan` broadcast) | `modules/system/fan.ts` (`discoverPwmFanCoolingDevice`, `parsePwmDuty`, `collectFan`, `initFan`); contract below → FAN |
 | Idle audio-meter device preference (operator's audio pick → engine idle meter) | `modules/streaming/audio-meter-bridge.ts` (`syncAudioMeterPreference`, `pushPreference`) + `modules/streaming/audio.ts` (`resolveMeterPreference`) + `modules/streaming/cerastream-backend.ts` (`supportsMeterDevicePreference`) |
 | Add/change an RPC procedure | `rpc/procedures/<domain>.procedure.ts` + `rpc/router.ts` |
@@ -304,6 +305,62 @@ resolves from the sysfs card map. Keyed on the serialized list, so the 5 s reche
 steady state costs one string compare and broadcasts nothing.
 `setEngineAudioChangeHandler()` is the test seam. Coverage:
 `tests/lost-device-retention.test.ts`.
+
+## THE AUDIO BACKEND IS AN OVERRIDE, AND ABSENT IS NOT A DEFAULT [EXISTS]
+
+`config.audio_backend` (`alsa` | `pipewire`) is the operator's override of the
+engine's audio backend. It is OPTIONAL, and the entire contract is what its
+ABSENCE means — the field is deliberately missing from `RUNTIME_CONFIG_DEFAULTS`,
+so absent stays absent through every load.
+
+**ABSENT ⇒ CeraUI serializes NO backend key at all**, on the start payload AND on
+the reload payload, and the ENGINE'S own persisted default governs (shipped:
+pipewire). Every config in the fleet today carries no such key, so a CeraUI-side
+default constant would silently move the whole fleet onto whichever arm this repo
+happened to name — which is exactly the regression `tests/audio-backend-config.test.ts`
+exists to catch. Do NOT add a `?? "alsa"` to `encodeInputAudioFields`, to
+`toReloadParams`, or to the schema.
+
+- **The wire enum is a MIRROR with a compile-time gate.** `@ceraui/rpc`'s
+  `audioBackendSchema` is CeraUI-owned (that package is browser-safe and carries
+  no `@ceralive/cerastream` dependency), so drift is caught by the S6 assertion in
+  `cerastream-wire-skew.ts` rather than by prose. The backend module itself
+  imports the producer's `AudioBackend`/`audioBackendSchema` directly.
+- **`startParamsWithAudioModeSchema` must RESTATE `backend`.** Zod's `.extend`
+  REPLACES the published `audio` object wholesale, so a field the frozen schema
+  already carries is silently stripped off every start unless it is re-declared in
+  the local raw-bridge schema. Same silent-strip class as `probeEngineDevices`'
+  whitelist copy.
+- **Acceptance is CAPABILITY-GATED and FAIL-CLOSED** (`audio-backend.ts`
+  `isAudioBackendSupported`): a selection is accepted only while the live
+  `capabilities.audio_backends.supported` list names it. An absent block — a
+  legacy engine, or a snapshot that fell back to the minimal safe set — refuses,
+  because the engine never stated a capability and an unverifiable claim must not
+  become a persisted selection. This is the deliberate opposite of
+  `device-mode-truth.ts`'s fail-open rule: that one refuses to BLOCK a save on an
+  unknown, this one refuses to CREATE a selection on one. Nothing is lost, since
+  absent is already the working state on every device.
+- **The gate runs BEFORE the first config mutation**, like the device-mode gate,
+  so a refusal (`audio_backend_unsupported`) leaves `config.json` byte-identical —
+  including the unrelated fields riding the same save.
+- **It is never staged behind `apply_now`.** The engine fixes its backend when it
+  builds the graph and answers a live reload with `applies: "next-session"`, so a
+  change can only ever take effect at the next start. The reload still re-states
+  the choice; it does not switch a running session.
+- **A backend the engine later REFUSES surfaces the engine's own typed error
+  verbatim.** There is no silent revert to the other arm anywhere on this path —
+  an operator whose selection stopped working is told, not quietly moved.
+
+There is deliberately no CLEAR path yet: an absent input field means "do not
+touch", so returning a device to the engine default is a UI concern for the
+selector that offers the field.
+
+Coverage: `tests/audio-backend-config.test.ts` (the stated-selection serialization,
+the ABSENT-field regression on both payloads, the fail-closed gate table, the
+config.json round-trip incl. the never-defaulted assertion, and the RPC surface
+driven through the REAL procedures). Rule-E proof captured in three directions: a
+`?? "alsa"` default reddens 3 tests, dropping `backend` from the raw start schema
+reddens 2, and flipping the gate fail-open reddens 2.
 
 ## "AUTO" AUDIO — SAME PHYSICAL DEVICE ONLY [EXISTS]
 
@@ -2381,7 +2438,7 @@ toggle riding alongside the address it was checking — so the operator was told
   legitimately refuses because the mock-overlaid IP differs. Reporting THAT as a
   failure would report a dev/e2e toggle that visibly worked as broken. Do not
   "unify" the two branches.
-- **The four reasons are not collapsible.** `enable_refused` already carries an
+- **The five reasons are not collapsible.** `enable_refused` already carries an
   operator notification naming the blocking error; `disable_all_refused` is the
   device protecting its last link; `unknown_interface` clears when the link comes
   back; `stale_address` means re-read and retry.
@@ -2445,6 +2502,16 @@ field, so a one-directional role could be raised and never lowered (the
 `policy_route_missing` latch, exactly). ABSENT means "not an ethernet port, or an
 older backend", and is never read as `uplink`. Frontend ingestion allowlist:
 `subscriptions.svelte.ts` `case "netif"`.
+
+**The UI STAGES the role and applies it on Save; none of the above changed for
+it.** `setEthernetRole` is now called from `NetifDialog.save()` alone rather than
+from the role control's own click, because a role change reconfigures the port
+and can drop the LAN path the operator is reading the page over. That is purely a
+consumer-side decision: same procedure, same `.strict()` input, same persist-first
+rollback, same one-pending-then-one-terminal frame contract. Do NOT add a
+"staged" or "deferred" notion to this module — the device applies what it is told,
+when it is told. Frontend contract: `apps/frontend/AGENTS.md` → "The wired port
+ROLE is STAGED, and Save is its ONLY dispatch site".
 
 **A shared-lan port registers as a client zone for the steering layer, and
 NOTHING installs a table.** The nftables client-zone work is the steering
@@ -2953,6 +3020,59 @@ Coverage: `tests/cpu.test.ts` (the read, every unusable-count degradation, the
 never-throws contract, and a no-seam case proving the shipped wiring resolves a
 real count rather than only the injected double).
 
+## CPU-FREQUENCY METADATA — `policy0` IS A DIRECTORY, NOT AN ANSWER [EXISTS]
+
+`modules/system/collectors/cpufreq.ts` emitted `{id, curKhz, maxKhz}` and nothing
+else, so the Settings panel showed `policy0` / `policy4` / `policy6` and no
+governor at all. Neither was a data bug: the collector deliberately emits the
+kernel's own directory name (a policy is NOT a cluster — see the module header),
+and `scaling_governor` was never read. What was missing is that the kernel was
+already answering three more questions in the same tree.
+
+- **`related_cpus` → `cpus` + `cpuCount`.** Compacted to the kernel's own range
+  notation (`"0-3"`), so the row can say WHICH cores it governs — which is also
+  the only thing separating RK3588's two identically-clocked A76 policies.
+- **`scaling_governor` → `governor`.** Guarded by a name shape, so a truncated or
+  binary read is dropped rather than shown to an operator as a token.
+- **`/proc/cpuinfo` → `label`.** THE ONE FIELD THAT COULD BE FABRICATED, and
+  therefore the one with the strictest rule. An ARM core is named ONLY from
+  `ARM_CPU_PARTS`, a table of MIDR part numbers that have been checked
+  (`0xd05` → Cortex-A55, `0xd0b` → Cortex-A76), and ONLY when `CPU implementer`
+  is ARM Ltd (`0x41`) — a vendor-implemented core may reuse a part number, and
+  printing "Cortex-A55" over somebody else's silicon is worse than printing
+  nothing. Every CPU of the policy must resolve to the SAME label; one silent CPU
+  or two disagreeing ones yield nothing. On x86 it is the shared `model name`.
+  Extending the table requires a verified part number, never a plausible guess.
+
+**All three are ADDITIVE and INDEPENDENTLY optional, under the UNCHANGED
+per-policy omission contract.** A policy is still emitted only when BOTH
+frequencies parsed; each new node omits its own field on a read failure and
+changes nothing else. A device that publishes none of them emits the
+byte-identical three-field row — pinned by a `toEqual` plus an explicit key-set
+assertion, so an accidental `cpuCount: 0` or `label: ""` fails rather than ships.
+The five-signal S1 lock is untouched: this rides the existing optional `cpuFreq`
+field.
+
+**GOVERNOR CONTEXT, board-proven.** The fleet runs `performance` BY DESIGN via
+the first-party `ceralive-cpu-governor.service` (encode-latency rationale
+documented in the unit; overridable via `CERALIVE_CPU_GOVERNOR`), so `cur == max`
+at idle on the big cores is the EXPECTED reading rather than a stuck clock. The
+governor is REPORTED and never written — there is no governor control anywhere in
+this backend, and adding one is a separate owner decision.
+
+`/proc/cpuinfo` is read ONCE per tick, and only when at least one policy
+enumerated. The dev provider serializes it back from the fixture through
+`ARM_PART_FOR_LABEL`, so the mock states the LABEL and the REAL collector still
+does the naming — a provider that echoed the label would prove nothing about the
+derivation.
+
+Frontend half: `apps/frontend/AGENTS.md` → "A cpufreq policy is rendered as the
+thing it governs". Coverage: `tests/collectors-cpufreq.test.ts` — the RK3588
+3-cluster fixture, the 12-thread x86 fixture, the metadata-absent byte-compat
+lock, and the five non-fabrication legs (unknown part, non-ARM implementer,
+disagreeing CPUs, a CPU `/proc/cpuinfo` never mentioned, an unparseable
+`related_cpus`), all driven against a REAL fixture tree on disk.
+
 ## FAN — A DUTY CYCLE, AND THE FILES NAMING IT MOVE [EXISTS]
 
 `modules/system/fan.ts` reports whether the board has a controllable fan at all
@@ -3140,8 +3260,9 @@ Seven decisions carry weight:
   not observing BlueZ) and misleading to an operator, for whom a switch they can
   flip and a service fault are opposite facts. Every mutating handler answers
   `bluetooth_disabled` first, and only past that gate does a cause mean what it
-  says. `unit_missing` is the one cause that folds (into `service_start_failed`),
-  because both mean the switch did not take.
+  says. `unit_missing` remains distinct from `service_start_failed`: the first means
+  the image lacks a required unit, while the second means an installed unit refused
+  to start.
 - **The pairing agent is a real inbound D-Bus object.** The production
   `bluez-agent-exporter.ts` uses `@httptoolkit/dbus-native`'s existing
   `exportInterface` capability and issues `RegisterAgent` from that same
@@ -3188,15 +3309,23 @@ schema) plus `packages/rpc/src/schemas/bluetooth.schema.test.ts`.
 
 ### …AND THE MICROPHONE PRESENCE ORACLE FOLLOWS THE ENGINE BACKEND [EXISTS]
 
-`modules/streaming/bluetooth-audio.ts` chooses one of two mutually exclusive
-presence oracles from the engine's `features` array. The exact
-`pipewire-capture` token selects the engine-node arm: `sources.ts` preserves the
+`modules/bluetooth/bluetooth-audio-provider.ts` detects the installed generation
+before either service reconciliation or microphone enumeration. BlueALSA wins a
+mixed legacy image; otherwise `libspa-0.2-bluetooth` selects PipeWire and no marker
+selects `unavailable`. Service reconciliation governs `bluetooth.service` alone on
+PipeWire and adds `bluealsa.service` plus its drop-in only on BlueALSA.
+
+`modules/streaming/bluetooth-audio.ts` intersects that provider with the configured
+engine backend. Explicit `alsa` admits only BlueALSA, explicit `pipewire` admits only
+PipeWire, and absent backend follows the installed provider. A mismatch exposes no
+Bluetooth microphone. The exact `pipewire-capture` token is additionally required for
+the engine-node arm: `sources.ts` preserves the
 additive `device_address` from `list-devices` in `EngineAudioDevice`, CeraUI joins
 that colon-form address case-insensitively to the BlueZ registry MAC, and the
 matched row's `input_id` (`node.name`) becomes `AudioConfig.device` unchanged.
 No matching row means no source, and the BlueALSA bus is not read on this arm.
 
-When the token is absent, the existing `org.bluealsa` capture-PCM enumeration,
+On the BlueALSA provider, the existing `org.bluealsa` capture-PCM enumeration,
 `audio-pcm-spec` gate, `bluealsa:DEV=<MAC>,PROFILE=sco` target, quality projection,
 and retain-on-unreadable-bus behavior are byte-identical. The persisted identity is
 also identical on both arms: `bt:` plus the upper-case MAC with colons replaced by
@@ -3823,15 +3952,14 @@ did not; the pairing the board actually produces is now covered in
 - an attach with NO `ID_PATH` is DROPPED, because the merge key is what makes the
   row retirable and a row nothing can supersede is precisely the ghost class this
   must not introduce;
-- a repeat `add` for a key already held is a no-op, not a timer reset, so a
-  modeswitching composite cannot extend the window its first event opened.
+- a repeat `add` for a key already held is a no-op, so a modeswitching composite
+  cannot reset the authoritative-cycle history already accumulated for it.
 
-**The bound is DERIVED: `PROVISIONAL_TIMEOUT_MS = 40 000`.** The mmcli backstop
-polls every 30 s with ±10 % jitter, so the last scheduled moment a device could
-still reach the authoritative path is ~33 s after the attach, plus that poll's
-read and broadcast. Expiry REMOVES the row — no tombstone, no dimmed
-"expired" state, because "we said a modem was coming and it never did" is not a
-fact about hardware worth keeping on screen.
+**The lifecycle is cycle-based, never timer-based.** An attached device starts at
+`modem_initializing`. Two successful authoritative roster cycles that still cannot
+describe it move the same retained row to `undriveable`; no elapsed-time deadline
+may erase physical presence. The row then remains until an authoritative source
+claims its `stable_key` or udev proves physical detach.
 
 **The source is a SUPERVISED `udevadm monitor --property --udev` CHILD, never the
 npm `udev` binding.** That binding is an unmaintained native addon compiled
@@ -3841,9 +3969,10 @@ load-bearing — the `--kernel` events that precede rule processing carry no `ID
 properties at all, so a monitor without it would see every attach and be able to
 say nothing about any of them. The supervisor is the direct twin of
 `NmcliMonitorManager` (same backoff, same `watcher` spawn class,
-`monitor.udevMonitor` in `SPAWN_POLICY`), and **every restart CLEARS the cache**:
-the monitor has no historical replay, so a detach that happened while the child
-was down would otherwise leave a row nothing could ever retire.
+`monitor.udevMonitor` in `SPAWN_POLICY`). On startup and every child respawn, the
+supervisor reads `udevadm info --export-db` through the same property parser and
+atomically replaces physical inventory. Rows still attached retain their lifecycle;
+a detach that happened while monitoring was down is retired by its absence.
 
 `initUdevProvisionalMonitor` is `isRealDevice()`-gated and skipped under mocks,
 and `readProvisionalSources` answers mocks with NOTHING — this row exists to
@@ -3852,11 +3981,12 @@ a parallel mechanism rather than the scenario roster.
 
 Coverage: `tests/udev-provisional-rows.test.ts` — the decode/refusal table, the
 precedence and retirement rules, the `9024`⇄`9091` flip folding onto one row,
-detach, the derived timeout, the non-extending repeat attach, the supervised
-child (split chunks, EOF flush, malformed block, respawn-and-drop, stop), and the
+detach, the two-cycle transition, repeat-attach retention, the supervised
+child (split chunks, EOF flush, malformed block, respawn inventory, stop), and the
 row reaching the REAL `buildModemsWireMessage()` payload plus its replacement
 there by an mmcli row for the same port. Rule-E proof: deleting the claimed-key
-check reddens 3 tests; dropping the cache clear on restart reddens 1.
+check reddens 3 tests; dropping inventory reconstruction or lifecycle retention
+across restart reddens the supervisor cases.
 
 **Board-measured, no longer modelled.** On `ceralive2` (RK3588, SIMCom
 SIM7600G-H, 9 plug cycles) the optimistic row reaches an authenticated WebSocket
@@ -6401,6 +6531,57 @@ candidates through their steering eligibility. The engine never edits routes;
 `gateways.ts` remains the sole `ip route del default` owner. Post-login hydration
 replays the current records immediately.
 
+### …AND AN UPLINK'S KIND COMES FROM THE DEVICE, NOT FROM ITS NAME [EXISTS]
+
+`modules/network/uplink-identity.ts` (`resolveUplinkIdentity`) is the ONE thing
+the health runtime asks what an interface IS, at all three `observe()` sites. It
+replaced a private `kindFor()` that read the interface NAME, and the two answers
+were board-proven to disagree with the `netif` projection sitting beside them.
+
+**BOARD-PROVEN MISMATCH** (`ceralive2`, 2026-08-30). `eth1` is a Huawei E3372
+LTE dongle (`cdc_ether`, `12d1:14dc`). The `netif` projection reads USB
+descriptors and stamps it `router_cellular` correctly; the health engine matched
+`/^(?:eth|en)/` and published `kind: "ethernet"`. Its IDENTICAL TWIN — same SKU,
+same hub, one port apart — won the udev rename race, is called
+`enx0c5b8f279a64`, matched the `enx` arm first, and published `cellular`. One
+device class, typed two ways, decided entirely by a rename race.
+
+- **The markers are consulted FIRST and are authoritative.**
+  `getRouterCellularMarker` then `getModemNetMarker` — the SAME cache
+  `applyRouterCellularProjection` / `applyModemNetProjection` stamp onto the
+  `netif` wire, so the two surfaces cannot disagree about one device. There is
+  no second classifier and no second sysfs read; this module only reads.
+- **The name ladder BELOW them is a fallback, never a second opinion.** It
+  covers what the USB sweep structurally cannot describe — a PCIe/MHI modem, a
+  PPP link — and it still runs at boot, before the asynchronous marker sweep has
+  landed. `enx*` is DELIBERATELY REMOVED from its cellular arm: it is systemd's
+  predictable name for ANY USB network adapter, so reading it as cellular is
+  precisely the coin-flip above. `ww*` / `ppp*` / `usb*` stay, because those
+  describe a device class rather than guessing at one.
+- **`displayName` is ADDITIVE-OPTIONAL and NEVER FABRICATED.** It composes
+  through `routerCellularDisplayName` — the SAME rule that titles the device's
+  modem row — so a device is called one thing across both surfaces. A device the
+  classifier could not name carries NO name, and the row renders the raw `iface`
+  byte-identically to before the field existed.
+- **The dongle's own admin API is NOT consulted here.** This runs on the 5 s
+  health cadence while the admin cache is filled on a 30 s poll, so a name that
+  changed depending on which poll last landed would be worse than the descriptor
+  answer that is always available.
+- **Absence RETRACTS.** `#reduce` re-derives `displayName` from the observation
+  every tick and omits it when absent, rather than preserving `current`. Keeping
+  it would latch a resolved identity onto whatever re-enumerates under that
+  interface next — the `policy_route_missing` latch, exactly.
+- **`iface` remains the row identity.** Nothing keys, joins or correlates on the
+  name; two units of one SKU legitimately share one.
+
+Coverage: `tests/uplink-identity.test.ts` — the bench topology driven through the
+REAL `refreshUsbNetMarkers` sweep (the eth-named dongle typing `cellular` and
+naming itself, both twins agreeing, the MM-managed data function named after its
+modem), the plain-Ethernet regression lock, the markers-absent fallback proving
+the pre-existing ladder, the `enx`-never-guesses negative, and the record/wire
+half (stamped, omitted, retracted, `iface` still the key). Frontend half:
+`apps/frontend/AGENTS.md` → AN UPLINK ROW NAMES A DEVICE.
+
 The backend pushes typed events to all connected clients via `rpc/events.ts`. Each event type carries a monotonic `seq` counter (`Map<string, number>`) that resets to 0 on server restart.
 
 | Event type | Interval | Source |
@@ -7758,7 +7939,9 @@ Coverage: `tests/wifi-ap-mode-classification.test.ts`.
 are enforced, and every absent/malformed/probe-error path resolves false.
 
 `wifi-concurrent-interface.ts` creates the deterministic `clap-<parent>` cfg80211
-`__ap` interface and waits for NetworkManager to observe it. Hotspot profiles on
+`managed` interface and waits for NetworkManager to observe it. An existing
+interface is reused only after its reported type is confirmed as `managed`; stale
+or wrongly typed instances are deleted before recreation. Hotspot profiles on
 proven radios bind to that virtual interface, so the physical interface retains
 its station connection and bond state. Confirmation, polling, saved-profile
 adoption, reconfiguration, and stop track the virtual AP separately. Radios that
@@ -7992,6 +8175,11 @@ never reported the AP up, which is a different thing to tell someone.
 point is up". Wire contract: `hotspotToggleErrorSchema` (six members, none
 collapsible) + `hotspotToggleOutputSchema` in `@ceraui/rpc`.
 
+The adapter-mode wrapper places a bounded terminal watchdog around that promise.
+If the delegated publisher is lost entirely, the mode operation settles once as
+typed `not-confirmed`; a late publisher is fenced and cannot emit a second mode
+terminal. This does not change admission or re-enter the per-adapter lock.
+
 **`runWifiNew`'s `ok:true, uuid:undefined` is AMBIGUOUS, not failed.** It emits
 `{new:{error:"ambiguous"}}` and deliberately does NOT run
 `wifiDeleteFailedConns()` — the failure path does, because a failure proves the
@@ -8035,6 +8223,14 @@ re-key the registry onto a scan-time address for one poll. `busctl` is
 deliberately NOT used — it is not in the `helpers/run.ts` ALLOWED set, and a
 single sysfs read needs no spawn at all. `setPermanentMacReaderForTest` is the
 test seam.
+
+The cache also correlates the last permanent address through the operational MAC,
+so an ifname rename during a transient sysfs failure keeps the same physical
+identity. Discovery never drops an adapter merely because NetworkManager reports
+`unavailable`, the operational MAC has not landed, or the permanent address cannot
+yet be confirmed: the registry retains a row with a typed `degraded_reason`, keeps
+its numeric id while re-keying on recovery, and the frontend withholds controls
+until identity is trustworthy.
 
 **A monitor event carries an ifname, never a MAC.** `getWifiInterfaceByIfname()`
 (`wifi-connections.ts`) is the bridge; do NOT route a device-state event through
@@ -8701,7 +8897,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't derive a second physical identity anywhere — `physical-identity.ts` is the ONE resolver and the ONE `link_id` authority, or the bind map and the telemetry registry attribute an operator's links to different devices. Don't key a classified dongle on its interface name again (that is the defect this closed), don't add an alias table unifying the serial and port rungs (a stale port alias hands the NEXT device the previous unit's identity), and don't re-key the wire's `stable_key` onto the serial rung — todo 17's consumers, the usage-policy store and the projection fixtures all correlate on the ID_PATH-derived value.
 - Don't write `BIND_IPS_FILE` outside `publishBondMapping` — the two-file ADR-003 publication order (ips rename → sidecar rename as the COMMIT POINT → SIGHUP), the unique temp siblings, the fsync, and the 0600 sidecar mode are all one contract, and a second writer desynchronizes the `generation` counter the reader orders mappings by. Don't swap the sidecar write to `Bun.write`: it neither fsyncs nor sets a mode, and the reader REFUSES a group- or world-writable sidecar.
 - Don't key the SIGHUP on an IP-list diff — a MAPPING-ONLY change (a link moving between interfaces) leaves the IP bytes byte-identical, so only `publication.changed`/`generation` can see it. That is the whole reason the generation increments on every publication.
-- Don't collapse the duplicate-IP flag back into one answer. It stays raised and `probeExclusionReason` still refuses the link for a generic SOURCE-IP operation; bond membership is the separate `isBondCandidate` question, and two same-IP lines in `BIND_IPS_FILE` are LEGAL. Don't read the operator's bond choice out of `enabled` for such a link either — the error path forces that bit false, which is why `operatorBondOptOut` exists.
+- Don't collapse the duplicate-IP flag back into one answer. It stays raised and `probeExclusionReason` still refuses the link for a generic SOURCE-IP operation; bond membership is the separate `isBondCandidate` question, and two same-IP lines in `BIND_IPS_FILE` are LEGAL. That ONE predicate must drive both `netIfBuildMsg().enabled` and `genSrtlaBondEntries()`, or the UI and sender disagree again. Don't persist the operator's choice under an ifname: `config.bond_opt_out` keys on the physical `link_id`, and a genuinely unmappable duplicate-IP include is refused as `bond_unmappable`.
 - Don't pass `--bind-map` without the pre-spawn `--capabilities-json` probe, and don't move that probe below `buildSrtlaSendArgs` — an unknown flag makes an OLD `srtla_send` exit with a usage error, i.e. a failed stream instead of a graceful downgrade. Match on NOTHING: any non-zero exit, unparseable output, or timeout is NO SUPPORT.
 - Don't invent a second disposition vocabulary, and don't let the UI infer a degradation from an absent field — `bind-map-disposition.ts` emits todo 8's exact `bind_map_status`/`disposition` values for EVERY launch path, including the two the sender cannot report, and sender-reported telemetry replaces the synthesized value. A degraded band that names no collision group, or a second twin dropped in silence, is the defect this boundary exists to remove.
 - Don't identify a telemetry row by its `conn_id` — that is a FILE POSITION, so a SIGHUP reload moves it and the row follows the position instead of the modem. Key on todo 10's `link_id` through `link-registry.ts`, and don't resolve a row's interface by looking its source IP up in `netif`: twins share one address, so that answered BOTH rows with ONE interface. Don't let the file-position rung outrank the sender's own `link_id` echo either — the echo names the row the sender actually bound.
@@ -8875,7 +9071,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't write a supersession fixture with the same key encoding on both sides — that is precisely the gap that let this ship. Pair an `ID_PATH`-keyed provisional row against a SYSFS-path-keyed authoritative one, and assert on the WHOLE payload length: a key-filtered assertion cannot see the duplicate row under the other encoding.
 - Don't accept a `usb_interface`, a `bind`/`change`, or an attach with no `ID_PATH` as a provisional row — the first draws one composite stick as several rows, the second describes a device already present, and the third can never be superseded, which is the ghost class this feature must not introduce.
 - Don't make the retained modem poll status-only again, and don't gate modem presence on `modem-added`/`modem-removed` — the production `NmcliMonitorManager` structurally cannot emit either (`nmcli monitor` has no view of the ModemManager lifecycle), so those arms are mock-only and presence would once more be established just once, at boot. Board-measured: a Fibocom FM350-GL created 46 minutes after boot was never registered, never got an NM profile, and sat `registered` with a live SIM and no IP while CeraUI kept polling two indices that no longer existed. And don't read an unreadable `mmcli -L` as an empty roster (`?? []`) — at the 30 s cadence that evicts every modem's resolved profile on one transient failure; `undefined` retains, `[]` is authoritative.
-- Don't reach for the npm `udev` binding, and don't drop `--udev` from the monitor's argv — the binding is an unmaintained native addon a `bun build --compile` binary cannot load, and the `--kernel` events that precede rule processing carry no `ID_*` properties at all. Don't skip the cache clear on a monitor restart either: the child has no replay, so a detach during the gap leaves a row nothing can retire.
+- Don't reach for the npm `udev` binding, and don't drop `--udev` from the monitor's argv — the binding is an unmaintained native addon a `bun build --compile` binary cannot load, and the `--kernel` events that precede rule processing carry no `ID_*` properties at all. Don't clear the cache on monitor restart: rebuild it from `udevadm info --export-db`, preserve still-attached rows and their lifecycle, and retire only devices absent from that complete inventory.
 - Don't seed the dev dongle fixtures PAST `dongle-metadata.ts`'s deps seam, and don't freeze their `updated_at_ms` — entering as file CONTENT is what keeps the real schema/staleness/ambiguity rules on the dev path, and a frozen timestamp makes the rows silently vanish after 90 s. Don't give the duplicate-MAC HiLink pair different MACs to "fix" the fixture: that collision is the whole reason identity is `ID_PATH`-keyed.
 - Don't write a raw ifname as the mmcli-side shadow `deviceKey` — the observer side is opaque-hashed, so the join fails and every cycle emits a matched `only-in-mmcli` + `only-in-dbus` pair instead of a real divergence. That is the state the retirement runbook calls a gate blocker, and it looks like data rather than a bug.
 - Don't give `modem_provisioning` a default, and don't move the provisioning check behind the emulated/streaming ones — default-absent-and-first is what makes a modem re-enumeration unreachable on an unprovisioned device. And don't let `setUsbMode` return `{success:true}` while the transition transaction is unimplemented: past the gates the honest answer is the typed `transition_failed`.
@@ -8895,6 +9091,8 @@ config, an anchored path still held by its own device, and a live row with no
   that is how "up to date" came to mean "couldn't reach any repo" (see
   SOFTWARE-UPDATE CHECK CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
+- Don't give `config.audio_backend` a default — not a `RUNTIME_CONFIG_DEFAULTS` entry, not a schema `.default()`, and not a `?? "alsa"` in `encodeInputAudioFields`/`toReloadParams`. Absent means the operator stated nothing, so NO backend key is serialized and the engine's own default (shipped: pipewire) governs; a default here silently reverts the whole fleet, none of whose configs carry the key. And don't drop `backend` from `startParamsWithAudioModeSchema`: `.extend` REPLACES the published `audio` object, so an unlisted field is stripped off every start in silence.
+- Don't accept an audio backend the engine has not advertised, and don't make that gate fail-OPEN on an absent `audio_backends` block — an absent block means the engine never stated a capability, and persisting an unverifiable selection turns into a start failure the operator cannot undo from the UI. It is the deliberate inverse of `device-mode-truth.ts`'s fail-open rule (that one refuses to BLOCK a save on an unknown; this one refuses to CREATE a selection on one). And never silently swap a refused backend for the other arm — the engine's typed error is what the operator gets.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't resolve an ALSA name to a card by taking the FIRST card that claims it — a PCM id is not unique, so two identical-model USB cards both answer to `USB Audio` and a first-match lookup routes the second unit to the first unit's engine node and then suppresses the second unit's own meter reading as `foreign`. Go through `buildCardAliasOwners`, which answers nothing for a shared name. And don't "fix" the resulting silence by falling back to the first claimant, by collapsing the ambiguous case into `foreign` (that is a positive claim of misidentification, where `unknown` is the honest one), or by deleting `engineAudioDeviceForCard`'s `key === cardId` short-circuit — it looks redundant with the index and is the card-id-only degrade an unreadable `/proc/asound/pcm` lands on.
 - Don't route `isAliasOfCard` through the owner index — it is a MEMBERSHIP test feeding `isHumanAudioName`'s rejection rule, and a generic name shared by two cards must be rejected for both.

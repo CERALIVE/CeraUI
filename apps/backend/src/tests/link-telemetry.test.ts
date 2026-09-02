@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import type { ControlClient, HelloResult } from "@ceralive/srtla-send/control";
-import type {
-	Telemetry,
-	TelemetryUpdate,
-	watchTelemetry as WatchTelemetryFn,
+import {
+	connectionTelemetrySchema,
+	type Telemetry,
+	type TelemetryUpdate,
+	telemetrySchema,
+	type watchTelemetry as WatchTelemetryFn,
 } from "@ceralive/srtla-send/telemetry";
 import {
 	broadcastLinkTelemetryIfChanged,
@@ -23,23 +25,16 @@ import {
 import { addClient, removeClient } from "../rpc/events.ts";
 import type { AppWebSocket } from "../rpc/types.ts";
 
-// The pinned @ceralive/srtla-send build predates srtla_send ADR-002, so its
-// `Telemetry` type carries no `bytes_sent_total`. Widen it here so fixtures can
-// model a post-ADR-002 sender; the production reader is defensive for the same
-// reason (see `asCumulativeBytes`).
-type SenderConnection = Telemetry["connections"][number] & {
-	bytes_sent_total?: number;
-};
-type SenderSnapshot = Omit<Telemetry, "connections"> & {
-	connections: Array<SenderConnection>;
-	bytes_sent_total?: number;
-};
+// Do NOT re-add a local `bytes_sent_total` widening: `2026.8.0` declares it on
+// the producer's own `Telemetry`, so building fixtures against that shape is
+// what makes a producer rename fail this file rather than be masked.
+type SenderConnection = Telemetry["connections"][number];
 
 function snapshot(
 	connections: Array<Partial<SenderConnection>>,
 	bondBytesSentTotal?: number,
 ): Telemetry {
-	const snap: SenderSnapshot = {
+	const snap: Telemetry = {
 		last_updated_ms: Date.now(),
 		connections: connections.map((c, i) => ({
 			conn_id: String(i),
@@ -55,7 +50,7 @@ function snapshot(
 			? {}
 			: { bytes_sent_total: bondBytesSentTotal }),
 	};
-	return snap as Telemetry;
+	return snap;
 }
 
 // A watch double that captures the callback so the test drives ticks directly,
@@ -505,19 +500,51 @@ describe("cumulative session bytes (srtla_send ADR-002 bytes_sent_total)", () =>
 		expect(payload?.measured_bps).toBe(3_500_000);
 	});
 
-	test("a malformed counter reads UNKNOWN rather than a fabricated number", () => {
-		liveWith(
-			[
-				{ conn_id: "0", bytes_sent_total: Number.NaN },
-				{ conn_id: "1", bytes_sent_total: -1 },
-			],
-			Number.NaN,
-		);
+	test("a malformed counter is refused at the PRODUCER, so it never reaches a row", () => {
+		// This case used to be covered by a hand-rolled `asCumulativeBytes` guard in
+		// `link-telemetry-rows.ts`, written when the field was believed unreadable
+		// and therefore read off `unknown`. The field is typed and Zod-validated by
+		// `@ceralive/srtla-send@2026.8.0` itself, so that guard was redundant and is
+		// gone — but the GUARANTEE it encoded still has to hold, so the coverage
+		// moves down to the boundary that now enforces it rather than being deleted.
+		const malformed = [Number.NaN, -1, 1.5];
+		for (const bytes of malformed) {
+			expect(
+				connectionTelemetrySchema.safeParse({
+					conn_id: "0",
+					rtt_ms: 0,
+					nak_count: 0,
+					weight_percent: 100,
+					window: 1000,
+					in_flight: 0,
+					bitrate_bps: 0,
+					bytes_sent_total: bytes,
+				}).success,
+			).toBe(false);
+			expect(
+				telemetrySchema.safeParse({
+					last_updated_ms: Date.now(),
+					connections: [],
+					bytes_sent_total: bytes,
+				}).success,
+			).toBe(false);
+		}
 
-		const payload = buildLinkTelemetry();
-		expect(payload?.links[0]?.bytes_sent_total).toBeUndefined();
-		expect(payload?.links[1]?.bytes_sent_total).toBeUndefined();
-		expect(payload?.bytes_sent_total).toBeUndefined();
+		// Non-vacuity: a WELL-FORMED counter parses and is forwarded verbatim.
+		expect(
+			connectionTelemetrySchema.safeParse({
+				conn_id: "0",
+				rtt_ms: 0,
+				nak_count: 0,
+				weight_percent: 100,
+				window: 1000,
+				in_flight: 0,
+				bitrate_bps: 0,
+				bytes_sent_total: 7,
+			}).success,
+		).toBe(true);
+		liveWith([{ conn_id: "0", bytes_sent_total: 7 }], 7);
+		expect(buildLinkTelemetry()?.links[0]?.bytes_sent_total).toBe(7);
 	});
 
 	test("a running-but-idle bond still reports what it already sent", () => {

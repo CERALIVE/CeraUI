@@ -31,6 +31,7 @@ test("uplink health publishes a removable in-process change signal", async () =>
 		}),
 		streaming: () => false,
 		telemetry: () => null,
+		resolveTarget: () => Promise.resolve("142.251.133.99"),
 		probe: async () => "success",
 		publish: () => {},
 	});

@@ -175,6 +175,15 @@ describe("permanent MAC resolution", () => {
 		expect(await resolveWifiPermanentMac("wlan0", RANDOM_MAC)).toBe(PERM_MAC);
 	});
 
+	test("an ifname rename keeps the permanent identity when the new sysfs read fails", async () => {
+		setPermanentMacReaderForTest(async (ifname) =>
+			ifname === "wlan0" ? PERM_MAC : undefined,
+		);
+		await resolveWifiPermanentMac("wlan0", RANDOM_MAC);
+
+		expect(await resolveWifiPermanentMac("wlp1s0", RANDOM_MAC)).toBe(PERM_MAC);
+	});
+
 	test("with no permanent address at all it degrades to the current one", async () => {
 		setPermanentMacReaderForTest(async () => undefined);
 

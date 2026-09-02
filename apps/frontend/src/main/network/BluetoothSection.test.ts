@@ -13,7 +13,7 @@
  *     resolve AND across the broadcast that follows it.
  *  2. EVERY TYPED REFUSAL RENDERS INLINE, next to the control that was refused,
  *     and NEVER as a toast. The kiosk touchscreen cannot hover, and the shared
- *     enum's thirteen members each name a different operator action.
+ *     enum's fourteen members each name a different operator action.
  *
  * The device fixture is todo 14's `bt-mic-paired` roster shape: one Jabra Talk
  * 65 at `audio-input` + `scoCapable`, paired, trusted, connected, battery 80.
@@ -346,6 +346,19 @@ describe("BluetoothSection — the bt-mic-paired steady state", () => {
 		});
 		expect(screen.getByTestId("bluetooth-audio-source-hint")).toBeTruthy();
 		expect(screen.getByTestId("bluetooth-audio-source-link")).toBeTruthy();
+	});
+
+	it("states that an ALSA backend cannot offer the connected Bluetooth microphone", () => {
+		render(BluetoothSection, {
+			props: {
+				status: status({ devices: [pairedMic()] }),
+				audioBackend: "alsa",
+			},
+		});
+		expect(
+			screen.getByTestId("bluetooth-audio-backend-refused").textContent,
+		).toContain("Bluetooth microphones require the PipeWire audio system");
+		expect(screen.queryByTestId("bluetooth-audio-source-hint")).toBeNull();
 	});
 
 	it("withholds the hint while that microphone is disconnected", () => {

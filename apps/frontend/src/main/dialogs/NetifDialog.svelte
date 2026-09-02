@@ -26,6 +26,18 @@
   pushes for THAT field are ignored until the dialog is reopened, so an
   in-progress edit is never clobbered by live telemetry.
 
+  THE PORT ROLE IS STAGED, AND SAVE IS ITS ONLY DISPATCH SITE. The role control
+  used to apply on the radio click itself, which made a change that reconfigures
+  the port — and can drop the very LAN path this page is being read over —
+  reachable by one stray tap on a touchscreen, with no way back. It is now
+  ordinary dialog state alongside `enabled`: `EthernetRoleSelector` writes it
+  back through `onSelect` and dispatches nothing, `save()` is the only caller of
+  `network.setEthernetRole`, Cancel discards it, and the open edge resets it. A
+  staged role that differs from the applied one renders a standing warning band
+  in the control, so a pending change never looks like an applied one. The
+  BACKEND transaction is untouched — same procedure, same keyed op, same
+  device-moves-the-control settlement on the terminal `eth_role` frame.
+
   A REFUSED SAVE IS RENDERED INLINE, NOT TOASTED. Todo 8 replaced the procedure's
   fabricated `{success:true}` with a typed `{success:false, error}` — the
   `stale_address` concurrency guard being the one that used to report a DISCARDED
@@ -37,7 +49,7 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import type { NetifConfigError, NetifEntry } from '@ceraui/rpc/schemas';
+import type { EthernetRole, NetifConfigError, NetifEntry } from '@ceraui/rpc/schemas';
 import { Info, Network, TriangleAlert } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 
@@ -79,6 +91,12 @@ let dirtyEnabled = $state(false);
 let wasOpen = false;
 let saving = $state(false);
 
+// The port role the operator has PICKED but not yet saved. It is dialog state,
+// exactly like `enabled`: a role change reconfigures the port and can drop the
+// LAN path this page is being read over, so a radio click is not consent to it —
+// `save()` is the only thing that calls `network.setEthernetRole`.
+let stagedRole = $state<EthernetRole | undefined>(undefined);
+
 // The device's typed refusal for the LAST save, held until the next attempt or
 // the next open. `unknown` covers a `{success:false}` carrying no `error`.
 let saveError = $state<NetifConfigError | 'unknown' | undefined>(undefined);
@@ -88,6 +106,7 @@ const SAVE_ERROR_KEY: Record<NetifConfigError | 'unknown', string> = {
 	stale_address: 'network.netifSave.error.staleAddress',
 	enable_refused: 'network.netifSave.error.enableRefused',
 	disable_all_refused: 'network.netifSave.error.disableAllRefused',
+	bond_unmappable: 'network.netifSave.error.generic',
 	unknown: 'network.netifSave.error.generic',
 };
 
@@ -97,6 +116,7 @@ $effect(() => {
 		enabled = iface?.enabled ?? false;
 		dirtyEnabled = false;
 		saveError = undefined;
+		stagedRole = undefined;
 	}
 	wasOpen = open;
 });
@@ -147,16 +167,55 @@ const roleView = $derived(
 );
 const roleContext = $derived(ethernetRoleContext(iface, getIsStreaming()));
 
+// A staged role EQUAL to the applied one is not a change, so it dispatches
+// nothing — Save on an untouched role must be byte-identical to the save that
+// shipped before staging existed.
+const pendingRoleChange = $derived(
+	stagedRole !== undefined && stagedRole !== roleView.displayRole
+		? stagedRole
+		: undefined,
+);
+
+function discardStagedRole() {
+	stagedRole = undefined;
+}
+
 async function save() {
 	if (saving) return;
 	// Cross-surface busy guard: a bond toggle (or another save) on THIS iface is
 	// in flight — refuse with the standard busy feedback, don't dispatch a second.
-	if (isOperationPending(netifKey)) {
+	// The role carries its own key, and a transition another client dispatched is
+	// the same class of contention.
+	if (
+		isOperationPending(netifKey) ||
+		(pendingRoleChange !== undefined && isOperationPending(roleKey))
+	) {
 		toast.error(m["network.os.deviceBusy"]());
 		return;
 	}
 	saving = true;
 	saveError = undefined;
+
+	// The role leads, because every other field on this dialog is read in its
+	// light — a shared-LAN port is excluded from the bond by the device, so the
+	// toggle below means nothing until the role has settled. A refused role
+	// change therefore stops the save outright: applying half of it would leave
+	// the operator reading a bond state that belongs to the role they did NOT get.
+	if (pendingRoleChange !== undefined) {
+		const roleResult = await osCommand({
+			key: roleKey,
+			target: pendingRoleChange,
+			rpc: () =>
+				rpc.network.setEthernetRole({ name, role: pendingRoleChange }),
+			// The reason renders inline in the role control's own band; a toast
+			// would say the same thing twice and then take it away.
+			silent: true,
+		});
+		if (roleResult?.success !== true) {
+			saving = false;
+			return;
+		}
+	}
 	// Echo the OBSERVED address so the backend's `int.ip !== msg.ip` guard reads
 	// as the concurrency check it is, and can never silently discard the bond
 	// change. An address-less interface must OMIT the field (`""` fails the
@@ -197,6 +256,7 @@ async function save() {
 	description={name}
 	icon={Network}
 	onPrimary={save}
+	onSecondary={discardStagedRole}
 	primaryLabel={m["advanced.save"]()}
 	primaryLoading={saving}
 	title={m["network.view.configure"]()}
@@ -207,8 +267,16 @@ async function save() {
 		     below it is read in its light — a shared-LAN port is excluded from the
 		     bond by the device, so the toggle underneath means nothing until the
 		     role says uplink. Renders NOTHING for a row the device published no
-		     role for (a dongle veth, an older backend). -->
-		<EthernetRoleSelector context={roleContext} view={roleView} />
+		     role for (a dongle veth, an older backend).
+
+		     Selection is STAGED: the control writes back through `onSelect` and
+		     dispatches nothing, so the role is applied by `save()` alone. -->
+		<EthernetRoleSelector
+			context={roleContext}
+			onSelect={(role) => (stagedRole = role)}
+			staged={stagedRole}
+			view={roleView}
+		/>
 
 		<!-- Enable / disable -->
 		<div class="flex items-start justify-between gap-4">

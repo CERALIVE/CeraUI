@@ -7,7 +7,7 @@
  * Bluetooth service is broken when they simply switched it off. The second is
  * that every token the device can answer with has keyed copy in all ten
  * catalogs — `resolveMessageKey` renders an unknown key as the key itself, and
- * the required list is DERIVED from the wire enums so a fourteenth refusal
+ * the required list is DERIVED from the wire enums so a fifteenth refusal
  * fails here until its copy lands.
  */
 import {
@@ -30,6 +30,7 @@ import {
 	orderedBluetoothDevices,
 	primaryBluetoothAdapter,
 	showsAudioSourceHint,
+	showsBluetoothMicBackendRefusal,
 	showsPairingAgentGap,
 } from "./bluetooth-view";
 
@@ -153,7 +154,7 @@ describe("bluetoothSurface — the operator's answer outranks the stack's cause"
 });
 
 describe("bluetoothRefusalKey — every member of the shared enum is keyed", () => {
-	it("maps all thirteen refusals to distinct, non-generic keys", () => {
+	it("maps all fourteen refusals to distinct, non-generic keys", () => {
 		const keys = BLUETOOTH_MUTATION_REFUSALS.map(bluetoothRefusalKey);
 		expect(keys).not.toContain("network.bluetooth.refusal.generic");
 		expect(new Set(keys).size).toBe(BLUETOOTH_MUTATION_REFUSALS.length);
@@ -178,9 +179,22 @@ describe("bluetoothRefusalKey — every member of the shared enum is keyed", () 
 	});
 });
 
+describe("Bluetooth microphone backend honesty", () => {
+	it("points to Live on PipeWire and refuses the same microphone on ALSA", () => {
+		const connectedMic = device({ connected: true });
+		expect(showsAudioSourceHint(connectedMic, "pipewire")).toBe(true);
+		expect(showsBluetoothMicBackendRefusal(connectedMic, "pipewire")).toBe(
+			false,
+		);
+		expect(showsAudioSourceHint(connectedMic, "alsa")).toBe(false);
+		expect(showsBluetoothMicBackendRefusal(connectedMic, "alsa")).toBe(true);
+	});
+});
+
 describe("every token the device can answer with has copy, in all ten locales", () => {
 	const REQUIRED_KEYS: readonly string[] = [
 		...BLUETOOTH_MUTATION_REFUSALS.map(bluetoothRefusalKey),
+		"network.bluetooth.audioRequiresPipewire",
 		"network.bluetooth.refusal.generic",
 		...BLUETOOTH_UNAVAILABLE_CAUSES.map((cause) =>
 			bluetoothSurface(unavailable(cause, { enabled: true })),
@@ -206,10 +220,9 @@ describe("every token the device can answer with has copy, in all ten locales", 
 	}
 
 	it("derives a non-trivial key list", () => {
-		expect(BLUETOOTH_MUTATION_REFUSALS.length).toBe(13);
+		expect(BLUETOOTH_MUTATION_REFUSALS.length).toBe(14);
 		expect(BLUETOOTH_UNAVAILABLE_CAUSES.length).toBe(5);
-		// 13 refusals + 1 generic, 5 causes + 1 generic, 2 classes, 3 adapter states.
-		expect(new Set(REQUIRED_KEYS).size).toBe(25);
+		expect(new Set(REQUIRED_KEYS).size).toBe(27);
 	});
 
 	it.each(Object.keys(CATALOGS))("%s", (locale) => {

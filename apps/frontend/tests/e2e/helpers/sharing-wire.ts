@@ -155,6 +155,19 @@ export function degradedUplinks(): SharingWireState {
 	};
 }
 
+/**
+ * Healthy uplinks with NO client zone declared — the card's quiet state.
+ *
+ * Install it as the wire's INITIAL fixture rather than `set()`-ing it later: the
+ * shared-LAN port is patched into the device's own `netif` frame, and the
+ * frontend merge takes its key set from the incoming frame, so a switch to this
+ * fixture only lands on the next device netif tick.
+ */
+export function sharingOff(): SharingWireState {
+	const { sharedLan: _declared, ...rest } = healthyThreeUplinks();
+	return rest;
+}
+
 /** Healthy uplinks, but the steering layer refused to publish its ruleset. */
 export function steeringUnavailable(): SharingWireState {
 	return {

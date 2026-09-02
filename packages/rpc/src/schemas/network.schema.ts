@@ -157,6 +157,18 @@ export type UplinkHealthReason = z.infer<typeof uplinkHealthReasonSchema>;
 export const uplinkHealthRecordSchema = z.object({
 	iface: z.string().min(1),
 	kind: uplinkKindSchema,
+	/**
+	 * The device's own operator-facing name (`Huawei E3372`,
+	 * `Quectel RM530N-GL`, an hwdb/vendor label), resolved from the SAME
+	 * USB-descriptor markers the `netif` projection stamps.
+	 *
+	 * NEVER FABRICATED: a device the classifier could not name — a PCIe modem,
+	 * a plain wired port, a marker sweep that has not run yet — carries NO
+	 * name, and the consumer then renders the raw `iface` exactly as it did
+	 * before this field existed. DISPLAY metadata only; `iface` remains the
+	 * row's identity and nothing may key or join on this string.
+	 */
+	displayName: z.string().min(1).optional(),
 	state: uplinkHealthStateSchema,
 	reason: uplinkHealthReasonSchema.optional(),
 	weight: z.number().min(0).max(100),
@@ -291,6 +303,7 @@ export const netifConfigErrorSchema = z.enum([
 	'stale_address',
 	'enable_refused',
 	'disable_all_refused',
+	'bond_unmappable',
 ]);
 export type NetifConfigError = z.infer<typeof netifConfigErrorSchema>;
 

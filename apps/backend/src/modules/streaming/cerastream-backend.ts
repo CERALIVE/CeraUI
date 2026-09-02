@@ -66,6 +66,8 @@
 
 import { existsSync } from "node:fs";
 import {
+	type AudioBackend,
+	audioBackendSchema,
 	CERASTREAM_BIN,
 	type CerastreamClient,
 	CerastreamConnectionError,
@@ -482,6 +484,10 @@ const videoPassthroughRawSchema = z.enum(["auto", "force", "off"]);
 export const startParamsWithAudioModeSchema = startParamsSchema.extend({
 	audio: z
 		.object({
+			// `.extend` REPLACES the published `audio` object wholesale, so a field
+			// the frozen schema already carries has to be restated here or this
+			// local schema silently strips it off every start.
+			backend: audioBackendSchema.optional(),
 			mode: audioModeSchema.optional(),
 			device: z.string().optional(),
 			codec: z.string().optional(),
@@ -1424,6 +1430,7 @@ export class CerastreamBackend implements StreamingBackend {
 		framerate?: number;
 		video_passthrough?: "auto" | "force" | "off";
 		audio?: {
+			backend?: AudioBackend;
 			mode?: AudioMode;
 			device?: string;
 			codec?: string;
@@ -1444,6 +1451,13 @@ export class CerastreamBackend implements StreamingBackend {
 					)
 				: undefined;
 		const audio = {
+			// Absent means the operator stated no backend, so NO key is serialized
+			// and the engine's own persisted default governs. Substituting a value
+			// here would silently move every unconfigured device onto whichever arm
+			// this file names.
+			...(config.audio_backend !== undefined
+				? { backend: config.audio_backend }
+				: {}),
 			...(selection !== undefined ? { mode: selection.mode } : {}),
 			...(selection?.device !== undefined ? { device: selection.device } : {}),
 			...(config.acodec !== undefined ? { codec: config.acodec } : {}),
@@ -1530,11 +1544,23 @@ export class CerastreamBackend implements StreamingBackend {
 			},
 			srt: { latency_ms: config.srt_latency ?? DEFAULT_SRT_LATENCY },
 		};
-		if (config.delay !== undefined) {
-			params.audio = supportsSignedReloadDelay(schemaVersion)
-				? { delay_ms_signed: config.delay }
-				: { delay_ms: Math.max(0, config.delay) };
-		}
+		const delay =
+			config.delay === undefined
+				? {}
+				: supportsSignedReloadDelay(schemaVersion)
+					? { delay_ms_signed: config.delay }
+					: { delay_ms: Math.max(0, config.delay) };
+		// The engine answers a backend reload with `applies: "next-session"` — it
+		// fixes the backend when it builds the graph — so this re-states the
+		// operator's choice rather than switching a live session. Absent still
+		// sends no key, so an unconfigured device's reload is byte-unchanged.
+		const audio = {
+			...(config.audio_backend !== undefined
+				? { backend: config.audio_backend }
+				: {}),
+			...delay,
+		};
+		if (Object.keys(audio).length > 0) params.audio = audio;
 		return params;
 	}
 

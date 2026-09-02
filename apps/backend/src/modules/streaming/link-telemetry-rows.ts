@@ -35,11 +35,12 @@
     4. the legacy `conn_id -> unique-IP order -> interface` registry, which is
        byte-identical to the pre-mapping behaviour.
 
-  Rungs 1 and 2 read fields the PINNED `@ceralive/srtla-send` build strips (its
-  Zod reader drops unknown keys), so today every launch resolves on rung 3 or 4
-  and lights up on the stronger rungs the moment that binding is republished —
-  with no further change here. That is the same defensive-read discipline
-  `bytes_sent_total` already follows.
+  Rungs 1 and 2 are LIVE. A retired comment here claimed the pinned
+  `@ceralive/srtla-send` build stripped `link_id` and `iface`, so that every
+  launch resolved on rung 3 or 4 until the binding was republished. That was
+  measured false: `2026.8.0` declares BOTH as optional fields on its published
+  `Telemetry` type and parses them at runtime, so the sender's own echo has been
+  outranking the file position all along.
 */
 
 import type { Telemetry } from "@ceralive/srtla-send/telemetry";
@@ -92,7 +93,8 @@ export interface LinkTelemetryEntry {
 	/**
 	 * Cumulative wire BYTES this uplink has sent this session (srtla_send
 	 * ADR-002). Bytes, not bits — no ×8, unlike `bitrate_bps` directly above.
-	 * Absent when the sender predates ADR-002: UNKNOWN, never zero.
+	 * Read straight off the producer's typed optional field: absent means the
+	 * SENDER reported none, which is UNKNOWN, never zero.
 	 */
 	bytes_sent_total?: number;
 	/** True when the underlying snapshot is stale/absent but links are known. */
@@ -108,7 +110,7 @@ export interface LinkTelemetryMessage {
 	 * "total transferred" figure. Forwarded VERBATIM from the sender, which keeps
 	 * it monotonic across per-link reconnects and IP-list reloads; it is NOT the
 	 * sum of `links[].bytes_sent_total`, which regresses when a link is dropped.
-	 * Absent when the sender predates ADR-002: UNKNOWN, never zero.
+	 * Absent means the SENDER reported none: UNKNOWN, never zero.
 	 */
 	bytes_sent_total?: number;
 	/**
@@ -297,21 +299,6 @@ function readOptionalString(source: unknown, key: string): string | undefined {
 	return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-/**
- * Read the additive ADR-002 cumulative byte count off a snapshot.
- *
- * Anything that is not a whole non-negative count yields `undefined` rather than
- * 0: a byte total is the one figure an operator may act on, so guessing is worse
- * than admitting it is unknown.
- */
-export function asCumulativeBytes(source: unknown): number | undefined {
-	const value = (source as { bytes_sent_total?: unknown } | null | undefined)
-		?.bytes_sent_total;
-	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-		? value
-		: undefined;
-}
-
 /** One unreadable link contributes 0 rather than making the whole sum `NaN`. */
 function asMeasuredBps(value: number | undefined): number {
 	return typeof value === "number" && Number.isFinite(value) && value > 0
@@ -362,7 +349,7 @@ export function buildLinkRows(
 ): LinkTelemetryEntry[] {
 	return snapshot.connections.map((conn) => {
 		const identity = resolveIdentity(conn.conn_id, conn, mappingActive);
-		const bytesSentTotal = asCumulativeBytes(conn);
+		const bytesSentTotal = conn.bytes_sent_total;
 		const iface =
 			identity?.iface ??
 			readOptionalString(conn, "iface") ??

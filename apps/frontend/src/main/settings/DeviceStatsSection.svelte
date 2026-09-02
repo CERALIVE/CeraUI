@@ -62,6 +62,7 @@ import {
 import EncoderStatus from '$lib/components/custom/EncoderStatus.svelte';
 import { getCpuInfo, getDeviceStats, getFanSnapshot } from '$lib/rpc/subscriptions.svelte';
 import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
+import { type CpuFreqRow, cpuFreqBar, deriveCpuFreqRows } from '$lib/system/cpu-freq';
 import { type CpuLoadBand, deriveCpuLoad } from '$lib/system/cpu-load';
 import { deriveFanState, fanDutyFraction } from '$lib/system/fan-status';
 import { cn } from '$lib/utils';
@@ -259,10 +260,32 @@ const swapSignal = $derived.by<DeviceStatSignal | null>(() => {
 	};
 });
 
-const cpuFreqPolicies = $derived(stats?.cpuFreq ?? []);
+const cpuFreqView = $derived(deriveCpuFreqRows(stats?.cpuFreq));
+
+// A folded group has no single current clock, so its reading is the RANGE its
+// members occupy. Collapsing that to one figure would pick a core to be about.
+function cpuFreqReading(row: CpuFreqRow): string {
+	const current =
+		row.curMinKhz === row.curMaxKhz
+			? ghzFromKhz(row.curMaxKhz)
+			: `${(row.curMinKhz / 1_000_000).toFixed(2)}\u2013${ghzFromKhz(row.curMaxKhz)}`;
+	return `${current} / ${ghzFromKhz(row.maxKhz)}`;
+}
+
+// The sysfs id stays visible where it names exactly ONE thing. A folded group
+// spans several policies, so naming its first one would be a wrong label rather
+// than a diagnostic.
+function cpuFreqDetail(row: CpuFreqRow): string | undefined {
+	const parts: string[] = [];
+	if (row.named && row.policyIds.length === 1 && row.policyIds[0] !== undefined) {
+		parts.push(row.policyIds[0]);
+	}
+	if (row.cpus !== undefined) parts.push(`cpu${row.cpus}`);
+	return parts.length > 0 ? parts.join(' \u00b7 ') : undefined;
+}
 
 const cpuFreqSignal = $derived.by<DeviceStatSignal | null>(() => {
-	if (cpuFreqPolicies.length === 0) return null;
+	if (cpuFreqView.rows.length === 0) return null;
 	return {
 		key: 'cpuFreq',
 		icon: Gauge,
@@ -401,40 +424,65 @@ const tiers = $derived(partitionSignals(signals));
 	<EncoderStatus compact={true} density="inline" reading={encoderLoad} />
 {/snippet}
 
-<!-- One row per cpufreq policy, keyed on the sysfs id. The id is printed AS
-     GIVEN: `policy0`/`policy4`/`policy6` happens to be RK3588's big.LITTLE
-     split, but that is board knowledge this array does not carry, and x86 runs
-     one policy per CPU. The bar's denominator is `maxKhz` — `cpuinfo_max_freq`,
-     the hardware ceiling — so it does not wander when the governor moves. -->
+<!-- Rows come from `deriveCpuFreqRows`, which reports which SHAPE it folded (see
+     `$lib/system/cpu-freq`). A row is named by the device's own label or by the
+     sysfs id, never by list position and never by a board model — so RK3588's
+     `policy0` reads "Cortex-A55 x4" only because /proc/cpuinfo said so, and a
+     device that sent no metadata still renders exactly `policy0`.
+
+     The bar's denominator is `maxKhz` — `cpuinfo_max_freq`, the hardware ceiling
+     — so it does not wander when the governor moves. -->
 {#snippet cpuFreqBody()}
 	<div
 		class="grid gap-x-4 gap-y-2 sm:grid-cols-2 lg:grid-cols-3"
+		data-cpufreq-shape={cpuFreqView.shape}
 		data-testid="cpufreq-policies"
 		title={m["settings.deviceStats.cpuFreqHint"]()}
 	>
-		{#each cpuFreqPolicies as policy (policy.id)}
-			<div class="min-w-0 space-y-1" data-testid={`cpufreq-policy-${policy.id}`}>
+		{#each cpuFreqView.rows as row (row.key)}
+			{@const bar = cpuFreqBar(row)}
+			{@const detail = cpuFreqDetail(row)}
+			<div
+				class="min-w-0 space-y-1"
+				data-policy-count={row.policyIds.length}
+				data-testid={`cpufreq-policy-${row.key}`}
+			>
 				<span class="flex items-baseline justify-between gap-2 text-xs">
-					<span class="text-muted-foreground truncate">{policy.id}</span>
+					<span class="flex min-w-0 items-baseline gap-1.5">
+						<span class="text-muted-foreground truncate">
+							{row.name}{#if row.named && row.cpuCount !== undefined}&nbsp;&times;{row.cpuCount}{/if}
+						</span>
+						{#if row.governor}
+							<span
+								class="bg-secondary text-muted-foreground shrink-0 rounded px-1 py-px font-mono text-[10px] leading-tight"
+								data-testid={`cpufreq-policy-governor-${row.key}`}
+								title={m["settings.deviceStats.cpuFreqGovernorHint"]()}
+							>{row.governor}</span>
+						{/if}
+					</span>
 					<span
 						class="text-foreground shrink-0 font-mono tabular-nums"
-						data-testid={`cpufreq-policy-value-${policy.id}`}
-					>{ghzFromKhz(policy.curKhz)} / {ghzFromKhz(policy.maxKhz)}</span>
+						data-testid={`cpufreq-policy-value-${row.key}`}
+					>{cpuFreqReading(row)}</span>
 				</span>
-				{#if policy.maxKhz > 0}
+				{#if bar}
 					<span
 						aria-hidden="true"
 						class="bg-secondary relative block h-1 w-full overflow-hidden rounded-full"
-						data-testid={`cpufreq-policy-bar-${policy.id}`}
+						data-bar-kind={bar.kind}
+						data-testid={`cpufreq-policy-bar-${row.key}`}
 					>
 						<span
-							class="bg-primary absolute inset-y-0 start-0 rounded-full"
-							style="inline-size: {Math.min(
-								100,
-								Math.max(0, Math.round((policy.curKhz / policy.maxKhz) * 100)),
-							)}%"
+							class="bg-primary absolute inset-y-0 rounded-full"
+							style="inset-inline-start: {bar.startPercent}%; inline-size: {bar.sizePercent}%"
 						></span>
 					</span>
+				{/if}
+				{#if detail}
+					<span
+						class="text-muted-foreground/70 block truncate font-mono text-[10px]"
+						data-testid={`cpufreq-policy-detail-${row.key}`}
+					>{detail}</span>
 				{/if}
 			</div>
 		{/each}
