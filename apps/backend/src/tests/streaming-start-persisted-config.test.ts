@@ -7,6 +7,8 @@ import {
 	test,
 } from "bun:test";
 
+import { rm } from "node:fs/promises";
+
 import {
 	type GetCapabilitiesResult,
 	SCHEMA_VERSION,
@@ -72,7 +74,17 @@ const provide = () => ({
 const savedMockMode = process.env.MOCK_MODE;
 let previousConfig: ReturnType<typeof getConfig>;
 let previousRelays: RelaysCache | undefined;
-let configFile = "";
+/**
+ * ABSENCE MUST ROUND-TRIP AS ABSENCE — hence `undefined`, never `""`.
+ *
+ * `config.json` is a gitignored runtime artifact, so a fresh checkout has none.
+ * Reading it unconditionally threw ENOENT out of `beforeEach`, and `afterEach`
+ * then wrote that empty snapshot back, leaving a file the rest of the suite
+ * inherited. Which state a run lands in is decided by Bun's file-discovery
+ * order, so it broke only once an unrelated change moved this file ahead of
+ * whichever test creates the artifact.
+ */
+let configFile: string | undefined;
 
 function setValidManualConfig(): void {
 	Object.assign(getConfig(), {
@@ -100,7 +112,8 @@ beforeAll(async () => {
 beforeEach(async () => {
 	previousConfig = structuredClone(getConfig());
 	previousRelays = structuredClone(getRelays());
-	configFile = await Bun.file("config.json").text();
+	const persisted = Bun.file("config.json");
+	configFile = (await persisted.exists()) ? await persisted.text() : undefined;
 	setRelaysCacheMock(structuredClone(RELAYS));
 	setValidManualConfig();
 });
@@ -108,7 +121,8 @@ beforeEach(async () => {
 afterEach(async () => {
 	Object.assign(getConfig(), previousConfig);
 	setRelaysCacheMock(previousRelays);
-	await Bun.write("config.json", configFile);
+	if (configFile === undefined) await rm("config.json", { force: true });
+	else await Bun.write("config.json", configFile);
 });
 
 afterAll(async () => {
