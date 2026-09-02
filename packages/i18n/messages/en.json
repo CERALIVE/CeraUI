@@ -875,6 +875,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "This device can't answer the confirmation prompts the pairing asked for. Start the pairing from the other device.",
 	"network.bluetooth.refusal.pairingFailed": "Pairing didn't complete. Put the device back in pairing mode and try again.",
 	"network.bluetooth.refusal.serviceStartFailed": "The Bluetooth service didn't start, so the switch didn't take.",
+	"network.bluetooth.refusal.unitMissing": "A required Bluetooth service is not installed on this device.",
+	"network.bluetooth.audioRequiresPipewire": "Bluetooth microphones require the PipeWire audio system. Change the audio backend before using this microphone.",
 	"network.bluetooth.refusal.unknownAdapter": "That Bluetooth controller is no longer available.",
 	"network.bluetooth.refusal.unknownDevice": "That device is no longer available.",
 	"network.bluetooth.scan": "Scan",

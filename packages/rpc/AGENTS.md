@@ -579,9 +579,10 @@ Four shape decisions carry weight:
   device exposes no battery service / is not advertising, which a `0` would lie
   about.
 - **The mutation refusals are ONE shared enum** (`bluetoothMutationRefusalSchema`,
-  the `modemMutationRefusalSchema` lesson). Thirteen members, none collapsible:
+  the `modemMutationRefusalSchema` lesson). Fourteen members, none collapsible:
   `adapter_busy` (wait) is not `pairing_failed` (retry) is not
-  `service_start_failed` (the switch did not take) is not `bluetooth_disabled`
+  `unit_missing` (the image lacks a unit) is not `service_start_failed` (an installed
+  unit refused to start) is not `bluetooth_disabled`
   (turn it on), and `bluez_unavailable` / `bus_unreachable` / `no_adapter` send
   someone to three different places.
 - **`pairing_agent_unavailable` names a gap this build really has.** The shared

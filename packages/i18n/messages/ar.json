@@ -887,6 +887,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "لا يستطيع هذا الجهاز الرد على طلبات التأكيد التي طلبها الاقتران. ابدأ الاقتران من الجهاز الآخر.",
 	"network.bluetooth.refusal.pairingFailed": "لم يكتمل الاقتران. أعد ضبط الجهاز على وضع الاقتران وحاول مرة أخرى.",
 	"network.bluetooth.refusal.serviceStartFailed": "لم تبدأ خدمة البلوتوث، لذا لم يُطبَّق التبديل.",
+	"network.bluetooth.refusal.unitMissing": "إحدى خدمات البلوتوث المطلوبة غير مثبتة على هذا الجهاز.",
+	"network.bluetooth.audioRequiresPipewire": "تتطلب ميكروفونات البلوتوث نظام الصوت PipeWire. غيّر نظام الصوت قبل استخدام هذا الميكروفون.",
 	"network.bluetooth.refusal.unknownAdapter": "لم تعد وحدة تحكم البلوتوث هذه متاحة.",
 	"network.bluetooth.refusal.unknownDevice": "لم يعد هذا الجهاز متاحًا.",
 	"network.bluetooth.scan": "بحث",

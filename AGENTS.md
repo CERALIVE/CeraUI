@@ -2769,11 +2769,11 @@ off two seconds ago. One documented divergence in the ladder: `emulated` is answ
 *before* the preference gate, because telling someone to switch Bluetooth on when the
 host has no radio is advice they cannot act on.
 
-**All thirteen typed refusals render INLINE, so `osCommand` gets `classify: () => ({ok:true})`.**
+**All fourteen typed refusals render INLINE, so `osCommand` gets `classify: () => ({ok:true})`.**
 A structured `{success:false}` must stay `ok` as far as the async-op store is concerned,
 or the operator gets the reason twice — once inline, once uselessly in a toast. A
 *thrown* RPC still takes the toast path, correctly. `bluetoothRefusalKey` is typed
-`Record<BluetoothMutationRefusal, string>`, so a fourteenth refusal fails `tsc` rather
+`Record<BluetoothMutationRefusal, string>`, so a fifteenth refusal fails `tsc` rather
 than reaching an operator as its own dotted path.
 
 **Absent is not `false` for the persisted preference.** `read()` answers `undefined`
@@ -2797,8 +2797,13 @@ seam is a one-file deletion. A boot-the-mock-service parity test is owed with it
 
 ## THE BT MICROPHONE IS A SOURCE, NOT A SPECIAL CASE [EXISTS]
 
-**The presence oracle follows the engine's configured audio backend, never BlueZ
-`Connected`.** When the engine advertises the exact `pipewire-capture` feature token,
+**The presence oracle follows both the installed provider and the engine's configured
+audio backend, never BlueZ `Connected`.** BlueALSA is detected from its daemon/package;
+PipeWire Bluetooth is detected from `libspa-0.2-bluetooth`. When both are present during
+a migration, BlueALSA wins so the old image retains its working unit contract. An
+explicit `alsa` backend can use only BlueALSA, and an explicit `pipewire` backend can
+use only PipeWire; a mismatch publishes no Bluetooth microphone. When the selected
+arm advertises the exact `pipewire-capture` feature token,
 the oracle is its `list-devices` audio row whose optional `device_address` matches the
 paired registry MAC; CeraUI sends that row's `input_id` (`node.name`) through
 `AudioConfig.device` unchanged. A connected registry device with no matching engine
@@ -2806,7 +2811,7 @@ node yields no source. CeraUI compares the colon-form address case-insensitively
 keeps the persisted id byte-identical as `bt:<upper-case underscored MAC>`; it never
 persists PipeWire `object.serial`.
 
-Without `pipewire-capture`, the oracle remains the `org.bluealsa` capture PCM object
+On a detected BlueALSA image, the oracle remains the `org.bluealsa` capture PCM object
 byte-for-byte. A device can be connected with no PCM behind it, and naming it as an
 available source is a claim the device cannot honour. `scoCapable` + PCM present yields
 the row; connected-but-no-PCM yields none; A2DP-only yields none.
@@ -2821,7 +2826,8 @@ on the minimal-safe fallback rung, which carries no `features` at all. See
 
 **The mic hint is gated on CONNECTED, not on paired.** A bonded-but-disconnected mic has
 no PCM behind it — the same rule the `audio_source_unavailable` start class enforces one
-layer down.
+layer down. With the ALSA backend selected on a PipeWire image, the Network card replaces
+the Live-source pointer with an inline instruction to choose PipeWire first.
 
 **`dropped` and `gone` are different BlueZ facts and must not be one band.**
 `PropertiesChanged{Connected:false}` is expected back (the engine is already rebuilding

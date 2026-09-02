@@ -875,6 +875,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "Dieses Gerät kann die Bestätigungen der Kopplung nicht beantworten. Starte die Kopplung vom anderen Gerät aus.",
 	"network.bluetooth.refusal.pairingFailed": "Die Kopplung wurde nicht abgeschlossen. Versetze das Gerät erneut in den Kopplungsmodus und versuche es noch einmal.",
 	"network.bluetooth.refusal.serviceStartFailed": "Der Bluetooth-Dienst wurde nicht gestartet, die Umschaltung hat daher nicht gegriffen.",
+	"network.bluetooth.refusal.unitMissing": "Ein erforderlicher Bluetooth-Dienst ist auf diesem Gerät nicht installiert.",
+	"network.bluetooth.audioRequiresPipewire": "Bluetooth-Mikrofone benötigen das PipeWire-Audiosystem. Ändern Sie das Audio-Backend, bevor Sie dieses Mikrofon verwenden.",
 	"network.bluetooth.refusal.unknownAdapter": "Dieser Bluetooth-Controller ist nicht mehr verfügbar.",
 	"network.bluetooth.refusal.unknownDevice": "Dieses Gerät ist nicht mehr verfügbar.",
 	"network.bluetooth.scan": "Suchen",

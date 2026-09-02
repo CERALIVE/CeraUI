@@ -878,6 +878,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "Cet appareil ne peut pas répondre aux confirmations demandées par l'association. Lancez-la depuis l'autre appareil.",
 	"network.bluetooth.refusal.pairingFailed": "L'association n'a pas abouti. Remettez l'appareil en mode association et réessayez.",
 	"network.bluetooth.refusal.serviceStartFailed": "Le service Bluetooth n'a pas démarré, le changement n'a donc pas pris effet.",
+	"network.bluetooth.refusal.unitMissing": "Un service Bluetooth requis n'est pas installé sur cet appareil.",
+	"network.bluetooth.audioRequiresPipewire": "Les microphones Bluetooth nécessitent le système audio PipeWire. Changez le moteur audio avant d'utiliser ce microphone.",
 	"network.bluetooth.refusal.unknownAdapter": "Ce contrôleur Bluetooth n'est plus disponible.",
 	"network.bluetooth.refusal.unknownDevice": "Cet appareil n'est plus disponible.",
 	"network.bluetooth.scan": "Rechercher",

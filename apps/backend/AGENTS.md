@@ -3260,8 +3260,9 @@ Seven decisions carry weight:
   not observing BlueZ) and misleading to an operator, for whom a switch they can
   flip and a service fault are opposite facts. Every mutating handler answers
   `bluetooth_disabled` first, and only past that gate does a cause mean what it
-  says. `unit_missing` is the one cause that folds (into `service_start_failed`),
-  because both mean the switch did not take.
+  says. `unit_missing` remains distinct from `service_start_failed`: the first means
+  the image lacks a required unit, while the second means an installed unit refused
+  to start.
 - **The pairing agent is a real inbound D-Bus object.** The production
   `bluez-agent-exporter.ts` uses `@httptoolkit/dbus-native`'s existing
   `exportInterface` capability and issues `RegisterAgent` from that same
@@ -3308,15 +3309,23 @@ schema) plus `packages/rpc/src/schemas/bluetooth.schema.test.ts`.
 
 ### …AND THE MICROPHONE PRESENCE ORACLE FOLLOWS THE ENGINE BACKEND [EXISTS]
 
-`modules/streaming/bluetooth-audio.ts` chooses one of two mutually exclusive
-presence oracles from the engine's `features` array. The exact
-`pipewire-capture` token selects the engine-node arm: `sources.ts` preserves the
+`modules/bluetooth/bluetooth-audio-provider.ts` detects the installed generation
+before either service reconciliation or microphone enumeration. BlueALSA wins a
+mixed legacy image; otherwise `libspa-0.2-bluetooth` selects PipeWire and no marker
+selects `unavailable`. Service reconciliation governs `bluetooth.service` alone on
+PipeWire and adds `bluealsa.service` plus its drop-in only on BlueALSA.
+
+`modules/streaming/bluetooth-audio.ts` intersects that provider with the configured
+engine backend. Explicit `alsa` admits only BlueALSA, explicit `pipewire` admits only
+PipeWire, and absent backend follows the installed provider. A mismatch exposes no
+Bluetooth microphone. The exact `pipewire-capture` token is additionally required for
+the engine-node arm: `sources.ts` preserves the
 additive `device_address` from `list-devices` in `EngineAudioDevice`, CeraUI joins
 that colon-form address case-insensitively to the BlueZ registry MAC, and the
 matched row's `input_id` (`node.name`) becomes `AudioConfig.device` unchanged.
 No matching row means no source, and the BlueALSA bus is not read on this arm.
 
-When the token is absent, the existing `org.bluealsa` capture-PCM enumeration,
+On the BlueALSA provider, the existing `org.bluealsa` capture-PCM enumeration,
 `audio-pcm-spec` gate, `bluealsa:DEV=<MAC>,PROFILE=sco` target, quality projection,
 and retain-on-unreadable-bus behavior are byte-identical. The persisted identity is
 also identical on both arms: `bt:` plus the upper-case MAC with colons replaced by

@@ -830,6 +830,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "この機器はペアリングが求めた確認に応答できません。相手側の機器からペアリングを開始してください。",
 	"network.bluetooth.refusal.pairingFailed": "ペアリングが完了しませんでした。機器を再度ペアリングモードにしてお試しください。",
 	"network.bluetooth.refusal.serviceStartFailed": "Bluetooth サービスが起動しなかったため、切り替えは反映されませんでした。",
+	"network.bluetooth.refusal.unitMissing": "必要な Bluetooth サービスがこのデバイスにインストールされていません。",
+	"network.bluetooth.audioRequiresPipewire": "Bluetooth マイクには PipeWire オーディオシステムが必要です。このマイクを使用する前にオーディオバックエンドを変更してください。",
 	"network.bluetooth.refusal.unknownAdapter": "その Bluetooth コントローラーは利用できなくなりました。",
 	"network.bluetooth.refusal.unknownDevice": "その機器は利用できなくなりました。",
 	"network.bluetooth.scan": "検索",

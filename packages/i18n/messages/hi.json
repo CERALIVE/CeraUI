@@ -875,6 +875,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "यह डिवाइस पेयरिंग द्वारा माँगी गई पुष्टि का जवाब नहीं दे सकता। पेयरिंग दूसरे डिवाइस से शुरू करें।",
 	"network.bluetooth.refusal.pairingFailed": "पेयरिंग पूरी नहीं हुई। डिवाइस को दोबारा पेयरिंग मोड में रखें और फिर कोशिश करें।",
 	"network.bluetooth.refusal.serviceStartFailed": "ब्लूटूथ सेवा शुरू नहीं हुई, इसलिए बदलाव लागू नहीं हुआ।",
+	"network.bluetooth.refusal.unitMissing": "इस डिवाइस पर आवश्यक ब्लूटूथ सेवा इंस्टॉल नहीं है।",
+	"network.bluetooth.audioRequiresPipewire": "ब्लूटूथ माइक्रोफ़ोन के लिए PipeWire ऑडियो सिस्टम आवश्यक है। इस माइक्रोफ़ोन का उपयोग करने से पहले ऑडियो बैकएंड बदलें।",
 	"network.bluetooth.refusal.unknownAdapter": "वह ब्लूटूथ कंट्रोलर अब उपलब्ध नहीं है।",
 	"network.bluetooth.refusal.unknownDevice": "वह डिवाइस अब उपलब्ध नहीं है।",
 	"network.bluetooth.scan": "खोजें",

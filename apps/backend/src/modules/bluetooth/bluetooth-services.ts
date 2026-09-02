@@ -56,7 +56,10 @@ import { execFileP } from "../../helpers/exec.ts";
 import { logger } from "../../helpers/logger.ts";
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
 import { isRealDevice as defaultIsRealDevice } from "../system/device-detection.ts";
-
+import {
+	type BluetoothAudioProvider,
+	detectBluetoothAudioProvider,
+} from "./bluetooth-audio-provider.ts";
 import { type BtUnavailable, btUnavailable } from "./bluetooth-availability.ts";
 import {
 	BLUEALSA_BINARIES,
@@ -96,6 +99,7 @@ export interface UnitApplyRecord {
 export interface BluetoothServicesApplied {
 	readonly ok: true;
 	readonly enabled: boolean;
+	readonly audioProvider: BluetoothAudioProvider;
 	readonly units: readonly UnitApplyRecord[];
 	/** The BlueALSA argument drop-in state after this apply. */
 	readonly bluealsa: BluealsaDropInOutcome;
@@ -393,19 +397,29 @@ async function applyPreference(
 	preference: BluetoothPreference,
 	deps: BluetoothServicesDeps,
 ): Promise<BluetoothServicesApplied> {
+	const audioProvider = await detectBluetoothAudioProvider(deps);
 	// The drop-in is written BEFORE `bluealsa.service` is started, so the very
 	// first start already carries the HFP-AG profile rather than needing a
 	// second restart to pick it up.
-	const bluealsa = preference.enabled
-		? await ensureBluealsaDropIn(deps)
-		: { binary: undefined, msbc: false, written: false, contents: undefined };
+	const bluealsa =
+		preference.enabled && audioProvider === "bluealsa"
+			? await ensureBluealsaDropIn(deps)
+			: { binary: undefined, msbc: false, written: false, contents: undefined };
 
 	const units: UnitApplyRecord[] = [];
-	for (const unit of BLUETOOTH_UNITS) {
+	const governedUnits =
+		audioProvider === "bluealsa" ? BLUETOOTH_UNITS : [BLUETOOTH_UNIT];
+	for (const unit of governedUnits) {
 		units.push(await applyUnit(deps, unit, preference.enabled));
 	}
 
-	return { ok: true, enabled: preference.enabled, units, bluealsa };
+	return {
+		ok: true,
+		enabled: preference.enabled,
+		audioProvider,
+		units,
+		bluealsa,
+	};
 }
 
 // ─── Boot reconciler (b2) ─────────────────────────────────────────────────────
@@ -442,6 +456,7 @@ export async function reconcileBluetoothServices(
 			return {
 				ok: true,
 				enabled: false,
+				audioProvider: "unavailable",
 				units: [],
 				bluealsa: {
 					binary: undefined,

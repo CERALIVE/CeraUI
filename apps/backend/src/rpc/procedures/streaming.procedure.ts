@@ -63,6 +63,7 @@ import {
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
+import { refreshBluetoothAudioDevices } from "../../modules/streaming/audio.ts";
 import {
 	AUDIO_BACKEND_UNSUPPORTED_ERROR,
 	isAudioBackendSupported,
@@ -1010,6 +1011,9 @@ export const setConfigProcedure = authedProcedure
 		saveConfig();
 		broadcastMsg("config", config);
 		reportActiveProfile();
+		if (input.audio_backend !== undefined) {
+			await refreshBluetoothAudioDevices();
+		}
 
 		// A source/asrc change re-resolves the idle "Auto" preview (no-op unless
 		// config.asrc is the sentinel; frozen while streaming).

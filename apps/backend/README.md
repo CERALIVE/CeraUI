@@ -108,9 +108,12 @@ Mock hardware scenarios are available via `MOCK_SCENARIO`:
 | `bun run dev:bt-mic-paired` | Bluetooth on with an HFP mic already paired, trusted and connected |
 
 Bluetooth microphone source identity remains `bt:<upper-case underscored MAC>`.
-The engine's `pipewire-capture` feature makes an address-matched `list-devices`
-node the presence oracle and routes its `node.name` unchanged; engines without
-the token retain the existing BlueALSA PCM path as the rollback arm.
+The backend detects BlueALSA versus PipeWire Bluetooth packages before governing
+services or enumerating microphones. PipeWire images govern only
+`bluetooth.service`; BlueALSA images additionally govern `bluealsa.service` and
+its drop-in. The selected engine audio backend must agree with that provider.
+PipeWire then requires the engine's `pipewire-capture` feature and an
+address-matched `list-devices` node; BlueALSA retains its capture-PCM oracle.
 
 ### Type-check
 

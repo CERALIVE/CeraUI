@@ -21,6 +21,7 @@ import {
 	noteBluetoothRegistryDevices,
 	parseBluealsaCapturePcms,
 	resetBluetoothAudioForTest,
+	selectBluetoothAudioOracle,
 	setBluetoothAudioDepsForTest,
 } from "../modules/streaming/bluetooth-audio.ts";
 import {
@@ -92,6 +93,8 @@ function installDeps(options: {
 	pcms?: BluealsaCapturePcm[] | undefined;
 	engineSupportsPcmSpec?: boolean;
 	engineSupportsPipewireCapture?: boolean;
+	provider?: "bluealsa" | "pipewire" | "unavailable";
+	backend?: "alsa" | "pipewire";
 	engineDevices?: readonly EngineAudioDevice[];
 	onBluealsaRead?: () => void;
 }) {
@@ -108,6 +111,10 @@ function installDeps(options: {
 		engineSupportsPipewireCapture: () =>
 			options.engineSupportsPipewireCapture ?? false,
 		readEngineAudioDevices: () => [...(options.engineDevices ?? [])],
+		readAudioProvider: async () =>
+			options.provider ??
+			(options.engineSupportsPipewireCapture ? "pipewire" : "bluealsa"),
+		readAudioBackend: () => options.backend,
 	});
 }
 
@@ -119,6 +126,7 @@ describe("Bluetooth microphone as an audio source", () => {
 
 	afterEach(async () => {
 		delete getConfig().asrc;
+		delete getConfig().audio_backend;
 		resetBluetoothAudioForTest();
 		resetEngineDeviceCache();
 		setBluetoothAudioDepsForTest({
@@ -127,12 +135,56 @@ describe("Bluetooth microphone as an audio source", () => {
 			engineSupportsPcmSpec: () => true,
 			engineSupportsPipewireCapture: () => false,
 			readEngineAudioDevices: () => [],
+			readAudioProvider: async () => "bluealsa",
+			readAudioBackend: () => undefined,
 		});
 		await refreshBluetoothAudioDevices();
 		resetBluetoothAudioForTest();
 	});
 
+	test("the installed provider and selected backend choose one honest oracle", () => {
+		expect([
+			selectBluetoothAudioOracle({
+				provider: "pipewire",
+				backend: undefined,
+				pipewireCaptureSupported: true,
+			}),
+			selectBluetoothAudioOracle({
+				provider: "pipewire",
+				backend: "alsa",
+				pipewireCaptureSupported: true,
+			}),
+			selectBluetoothAudioOracle({
+				provider: "bluealsa",
+				backend: undefined,
+				pipewireCaptureSupported: false,
+			}),
+			selectBluetoothAudioOracle({
+				provider: "bluealsa",
+				backend: "pipewire",
+				pipewireCaptureSupported: true,
+			}),
+			selectBluetoothAudioOracle({
+				provider: "unavailable",
+				backend: "pipewire",
+				pipewireCaptureSupported: true,
+			}),
+		]).toEqual(["pipewire", "disabled", "bluealsa", "disabled", "disabled"]);
+	});
+
 	describe("the PipeWire engine node is the presence oracle", () => {
+		test("an explicit ALSA backend refuses a PipeWire-only Bluetooth microphone", async () => {
+			installDeps({
+				engineSupportsPipewireCapture: true,
+				backend: "alsa",
+				engineDevices: [pipewireNode()],
+			});
+
+			await refreshBluetoothAudioDevices();
+
+			expect(getAudioDevices()[MIC_ID]).toBeUndefined();
+		});
+
 		test("the additive engine payload survives the real list-devices projection", async () => {
 			await refreshEngineDeviceCache({
 				fetchEngineDevices: async () => ({
@@ -507,6 +559,8 @@ describe("Bluetooth microphone as an audio source", () => {
 				engineSupportsPcmSpec: () => true,
 				engineSupportsPipewireCapture: () => false,
 				readEngineAudioDevices: () => [],
+				readAudioProvider: async () => "bluealsa",
+				readAudioBackend: () => undefined,
 			});
 			await refreshBluetoothAudioDevices();
 

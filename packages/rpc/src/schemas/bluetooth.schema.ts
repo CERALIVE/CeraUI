@@ -279,8 +279,8 @@ export type BluetoothStatus = z.infer<typeof bluetoothStatusSchema>;
  *                                    which is a different fault from a dead
  *                                    `bluetoothd` and calls for a different look.
  *   no_adapter                     — BlueZ is healthy and the board has no radio.
- *   service_start_failed           — `systemctl enable --now` was refused, or the
- *                                    unit is not installed at all; the
+ *   unit_missing                   — a required systemd unit is not installed.
+ *   service_start_failed           — `systemctl enable --now` was refused; the
  *                                    operator's switch did NOT take.
  *   adapter_busy                   — another mutation holds the radio; WAIT.
  *                                    Refused rather than queued, so a Forget can
@@ -301,6 +301,7 @@ export const BLUETOOTH_MUTATION_REFUSALS = [
 	'bluez_unavailable',
 	'bus_unreachable',
 	'no_adapter',
+	'unit_missing',
 	'service_start_failed',
 	'adapter_busy',
 	'pairing_failed',

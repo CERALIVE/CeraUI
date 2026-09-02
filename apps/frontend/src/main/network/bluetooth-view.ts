@@ -16,6 +16,7 @@
  * to switch Bluetooth on when the host has no radio is advice they cannot act on.
  */
 import type {
+	AudioBackend,
 	BluetoothAdapter,
 	BluetoothDevice,
 	BluetoothDeviceClass,
@@ -50,7 +51,7 @@ const UNAVAILABLE_KEYS: Record<BluetoothUnavailableCause, string> = {
 /**
  * Every member of the shared refusal enum, keyed.
  *
- * TOTAL by type, so a fourteenth refusal fails the build here rather than
+ * TOTAL by type, so a fifteenth refusal fails the build here rather than
  * reaching an operator as its own dotted path — the same reason the device's
  * `refusalFromUnavailable` is a `switch` over the closed cause union.
  */
@@ -60,6 +61,7 @@ const REFUSAL_KEYS: Record<BluetoothMutationRefusal, string> = {
 	bluez_unavailable: "network.bluetooth.refusal.bluezUnavailable",
 	bus_unreachable: "network.bluetooth.refusal.busUnreachable",
 	no_adapter: "network.bluetooth.refusal.noAdapter",
+	unit_missing: "network.bluetooth.refusal.unitMissing",
 	service_start_failed: "network.bluetooth.refusal.serviceStartFailed",
 	adapter_busy: "network.bluetooth.refusal.adapterBusy",
 	pairing_failed: "network.bluetooth.refusal.pairingFailed",
@@ -176,8 +178,26 @@ export function bluetoothDeviceActions(
  * connected has no PCM behind it, so naming it as an available audio source
  * would be a claim the device cannot honour.
  */
-export function showsAudioSourceHint(device: BluetoothDevice): boolean {
-	return device.deviceClass === "audio-input" && device.connected;
+export function showsAudioSourceHint(
+	device: BluetoothDevice,
+	audioBackend?: AudioBackend,
+): boolean {
+	return (
+		device.deviceClass === "audio-input" &&
+		device.connected &&
+		audioBackend !== "alsa"
+	);
+}
+
+export function showsBluetoothMicBackendRefusal(
+	device: BluetoothDevice,
+	audioBackend?: AudioBackend,
+): boolean {
+	return (
+		device.deviceClass === "audio-input" &&
+		device.connected &&
+		audioBackend === "alsa"
+	);
 }
 
 /**

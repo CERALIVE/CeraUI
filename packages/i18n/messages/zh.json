@@ -830,6 +830,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "本设备无法回应配对请求的确认。请从对方设备发起配对。",
 	"network.bluetooth.refusal.pairingFailed": "配对未完成。请将设备重新置于配对模式后再试。",
 	"network.bluetooth.refusal.serviceStartFailed": "蓝牙服务未启动，切换未生效。",
+	"network.bluetooth.refusal.unitMissing": "此设备未安装所需的蓝牙服务。",
+	"network.bluetooth.audioRequiresPipewire": "蓝牙麦克风需要 PipeWire 音频系统。请先更改音频后端，再使用此麦克风。",
 	"network.bluetooth.refusal.unknownAdapter": "该蓝牙控制器已不可用。",
 	"network.bluetooth.refusal.unknownDevice": "该设备已不可用。",
 	"network.bluetooth.scan": "搜索",

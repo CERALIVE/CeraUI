@@ -59,6 +59,12 @@ export const BLUEALSA_BINARIES: readonly string[] = [
 	"/usr/bin/bluealsa",
 ];
 
+export const BLUEALSA_PACKAGE_MARKER =
+	"/var/lib/dpkg/info/bluez-alsa-utils.list";
+
+export const PIPEWIRE_BLUETOOTH_PACKAGE_MARKER =
+	"/var/lib/dpkg/info/libspa-0.2-bluetooth.list";
+
 /** Where the BlueALSA argument drop-in is written. */
 export const BLUEALSA_DROPIN_DIR = "/etc/systemd/system/bluealsa.service.d";
 

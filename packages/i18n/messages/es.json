@@ -878,6 +878,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "Este equipo no puede responder a las confirmaciones que pidió el emparejamiento. Inícialo desde el otro dispositivo.",
 	"network.bluetooth.refusal.pairingFailed": "El emparejamiento no se completó. Vuelve a poner el dispositivo en modo de emparejamiento e inténtalo de nuevo.",
 	"network.bluetooth.refusal.serviceStartFailed": "El servicio Bluetooth no se inició, así que el cambio no se aplicó.",
+	"network.bluetooth.refusal.unitMissing": "Falta un servicio Bluetooth necesario en este dispositivo.",
+	"network.bluetooth.audioRequiresPipewire": "Los micrófonos Bluetooth requieren el sistema de audio PipeWire. Cambia el backend de audio antes de usar este micrófono.",
 	"network.bluetooth.refusal.unknownAdapter": "Ese controlador Bluetooth ya no está disponible.",
 	"network.bluetooth.refusal.unknownDevice": "Ese dispositivo ya no está disponible.",
 	"network.bluetooth.scan": "Buscar",

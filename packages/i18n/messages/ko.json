@@ -830,6 +830,8 @@
 	"network.bluetooth.refusal.pairingAgentUnavailable": "이 장치는 페어링이 요청한 확인에 응답할 수 없습니다. 상대 기기에서 페어링을 시작하세요.",
 	"network.bluetooth.refusal.pairingFailed": "페어링이 완료되지 않았습니다. 기기를 다시 페어링 모드로 두고 시도하세요.",
 	"network.bluetooth.refusal.serviceStartFailed": "블루투스 서비스가 시작되지 않아 전환이 적용되지 않았습니다.",
+	"network.bluetooth.refusal.unitMissing": "이 장치에 필요한 블루투스 서비스가 설치되어 있지 않습니다.",
+	"network.bluetooth.audioRequiresPipewire": "블루투스 마이크에는 PipeWire 오디오 시스템이 필요합니다. 이 마이크를 사용하기 전에 오디오 백엔드를 변경하세요.",
 	"network.bluetooth.refusal.unknownAdapter": "해당 블루투스 컨트롤러를 더 이상 사용할 수 없습니다.",
 	"network.bluetooth.refusal.unknownDevice": "해당 기기를 더 이상 사용할 수 없습니다.",
 	"network.bluetooth.scan": "검색",
