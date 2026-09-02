@@ -234,6 +234,20 @@ test.describe("Engine audio backend selector (functional)", () => {
 		await expect(dialog.getByTestId("audio-backend-alsa")).toHaveCount(0);
 		await expect(dialog.getByTestId("audio-backend-pipewire")).toHaveCount(0);
 	});
+
+	test("the selector remains reachable before a codec and delay pipeline is selected", async ({
+		page,
+	}) => {
+		baseConfig({ pipeline: undefined });
+		sendSources();
+		sendCapabilities({ supported: ["alsa", "pipewire"], active: "alsa" });
+
+		const dialog = await openAudioDialog(page);
+		await expect(dialog).toContainText("Please select a video source first");
+		await expect(dialog.getByTestId("audio-backend")).toBeVisible();
+		await expect(dialog.getByTestId("audio-backend-alsa")).toBeVisible();
+		await expect(dialog.getByTestId("audio-backend-pipewire")).toBeVisible();
+	});
 });
 
 async function installProxy(page: Page, pageRpc: PageRpc): Promise<void> {

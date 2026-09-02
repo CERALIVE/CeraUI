@@ -43,7 +43,7 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 }));
 
 const setConfig = vi.hoisted(() =>
-	vi.fn(async () => ({ success: true, applied: {} }) as unknown),
+	vi.fn(async (_input: unknown) => ({ success: true, applied: {} }) as unknown),
 );
 vi.mock("$lib/rpc", () => ({
 	rpc: { streaming: { setConfig } },
@@ -343,9 +343,7 @@ describe("AudioDialog — the federated mount reads the host's snapshot", () => 
 		);
 	});
 
-	it("MIRROR CONTROL: a DEVICE mount with no pipeline still gates the whole dialog", () => {
-		// The fail-open is the HOSTED branch and nothing else — on a device the
-		// pipeline gate has real evidence, so it keeps deciding.
+	it("keeps the device backend selector reachable when codec and delay have no pipeline", () => {
 		seedHostedBundle();
 		state.capabilities = {
 			audio_backends: { supported: ["alsa", "pipewire"], active: "alsa" },
@@ -357,7 +355,9 @@ describe("AudioDialog — the federated mount reads the host's snapshot", () => 
 		expect(document.body.textContent).toContain(
 			m["settings.selectPipelineFirst"](),
 		);
-		expect(section()).toBeNull();
+		expect(section()).not.toBeNull();
+		expect(rung("alsa")).not.toBeNull();
+		expect(rung("pipewire")).not.toBeNull();
 	});
 
 	it("offers the host's capability even when the device subscription is empty", () => {
