@@ -482,6 +482,99 @@ The persistent updating overlay previously derived ONE `isComplete` boolean from
 - Long-running dialog feedback [EXISTS]: `dialogs/LogsDialog.svelte` tracks a per-log `downloading`/`failed` state — the row button shows an in-flight spinner (`advanced.downloading`) and a failed download renders a calm inline amber retry band (`data-testid="log-download-error"`, `advanced.downloadFailed` + `advanced.retryDownload`) that re-invokes the same download, instead of a bare toast. `dialogs/WifiSelectorDialog.svelte`/`WifiNetworkList.svelte` already disable the Scan button + show `wifi-scan-status` while a scan op is `pending` (async-operation phase). Both use EXISTING async-op state — no new backend events. Covered by `LogsDialog.test.ts` + `WifiNetworkList.test.ts`.
 - Production-readiness signals [EXISTS]: `helpers/disk-warning.ts` (`isDiskLow`) DERIVES a low-disk warning from the EXISTING device-stats `disk` signal (NOT a sixth signal) at a FIXED `< 512 MiB` free floor (strict `<`: 512 MiB does not warn, 511 does); `custom/LowDiskBanner.svelte` renders a calm `role="status"` band in `SettingsView.svelte` that opens the Logs dialog. `dialogs/SimUnlockDialog.svelte` surfaces the remaining PUK retries (`sim-puk-attempts`, from the existing SIM status `pukRetries`), warns at ≤ 2, and disables submit at 0 (`pukExhausted`). Copy: `settings.deviceStats.lowDiskTitle/lowDiskBody/lowDiskAction`. Boundary + gating covered by `disk-warning.test.ts` + `SimUnlockDialog.test.ts`.
 
+## THE AUDIO BACKEND IS OFFERED ONLY WHERE THE ENGINE ADVERTISED IT [EXISTS]
+
+`lib/streaming/audioBackend.ts` (pure, rune-free) is the offer rule behind the
+Audio dialog's engine-backend selector — the operator half of the device contract
+in [`../backend/AGENTS.md`](../backend/AGENTS.md) → THE AUDIO BACKEND IS AN
+OVERRIDE, AND ABSENT IS NOT A DEFAULT. `AudioDialog.svelte` layers state on it and
+`audio/AudioDialogContent.svelte` renders it; neither re-derives the rule.
+
+FOUR rules carry it, and each one is a defect the module exists to prevent:
+
+1. **A backend the capability payload does not list is NEVER offered.** The option
+   list is `capabilities.audio_backends.supported` and nothing else — not the
+   enum, not the persisted selection, not the pair. `canSelectAudioBackend`
+   mirrors the device's OWN `isAudioBackendSupported` gate, so a click can never
+   spend a round-trip to be refused for something the offering already knew.
+2. **ABSENT IS NOT `alsa`.** `config.audio_backend` is absent on every device in
+   the fleet and means "the operator stated nothing", which hands the ENGINE's own
+   default (shipped: pipewire) the decision. The resting selection is therefore
+   the engine's own `active`, rendered beside an always-visible "Running now" line
+   — never the first enum member, which would misreport every unconfigured board.
+3. **An absent capability block renders ZERO nodes** (`data-testid="audio-backend"`
+   is absent entirely). The engine never stated a capability — a legacy build, or
+   a fallback snapshot — so there is nothing being withheld to explain, and a
+   disabled control there would imply one. Same CT-1 rule the modem capability
+   dialog follows, and it is what keeps an older engine byte-identical to today.
+4. **ONE supported backend is a STATE, not a choice.** It renders — the operator
+   still needs to know which arm this build runs — but disabled, with the reason on
+   screen (`audio-backend-single-reason`), because the kiosk touchscreen cannot
+   hover. A radiogroup of one is a control that cannot act.
+
+- **It writes on SELECTION, not on Save, and that split is deliberate.** The field
+  is next-session-only by construction (the engine fixes its backend at graph-build
+  time and answers a live reload `applies: "next-session"`), so it dispatches its
+  own `setConfig`. The dialog's Save button commits the codec/delay DRAFT; folding a
+  platform switch into it would make one press mean two unrelated things. The
+  "takes effect at the next start" line (`audio-backend-next-start`) renders
+  whenever the selection differs from the running arm.
+- **PESSIMISTIC, the `NetworkIngestDialog` discipline.** Nothing is assigned on
+  dispatch: the rendered selection moves only on the device's APPLIED echo
+  (`result.applied.audio_backend`), so an RPC that resolves `{success:false}` is
+  structurally unable to move the control. The spinner
+  (`audio-backend-applying`) is the sole optimistic element.
+- **A REFUSAL IS AN EXPLICIT BAND, never a swallowed result** — the preview-error
+  honesty rule (root `AGENTS.md` → typed preview failures): the operator must never
+  be left with a control that looks busy or unchanged with no stated outcome.
+  `streaming.setConfig` RESOLVES with `{success:false, error}` rather than throwing,
+  so `result.success` is read BEFORE anything else — the same trap
+  `encoderSaveError.ts` exists for — and the typed
+  `audio_backend_unsupported` is mapped through `audioBackendSaveErrorMessage` to
+  keyed copy in a `role="alert"` band (`audio-backend-error`). The machine token is
+  never rendered, and the spinner is always cleared, so the band IS the end of the
+  attempt.
+- **A STORED selection this build no longer advertises is STATED, not offered.**
+  `staleSelection` bands it (`audio-backend-stale`) while the radiogroup stays
+  supported-only, so the truth about what is on disk survives without rule 1 being
+  bent.
+- **The backend NAMES are not translated copy.** `ALSA` and `PipeWire` are the
+  subsystems' own proper nouns and read identically in every locale — the same rule
+  the modem identity line follows for device strings.
+- **A FEDERATED mount reads the HOST's snapshot.** `initSubscriptions()` never runs
+  inside a hosted bundle, so `getCapabilities()` there is permanently `undefined`
+  and the selector would render nothing forever. `FederationMountOptions` gained an
+  ADDITIVE-OPTIONAL `capabilities` (and `audio-entry.ts` threads `config.audio_backend`
+  through the existing `config`), so `federationAbiVersion` stays 1 and a host that
+  passes neither gets the pre-Todo-20 dialog exactly. The ABI's additive-only
+  promise is mechanically pinned by `lib/federation/host-contract.test.ts` (the
+  REQUIRED set is frozen at `host`; every added member must be optional) and by the
+  BUILT-bundle legs in `tests/federation/federation-abi.test.ts`.
+- **…AND THE AUDIO GATE IS ONE RULE, NOT TWO.** `hasAudioSupport` has always failed
+  OPEN for a hosted mount (`hostAdapter !== undefined || gateState === 'enabled'`)
+  — a federated bundle runs no `initSubscriptions()`, so `getSources()` there is
+  permanently `undefined` and the pipeline gate has NO evidence to evaluate — but
+  only the Save button read it. `AudioDialogContent` still read the raw
+  `gateState`, so every hosted mount rendered "Select a pipeline first" beside an
+  ENABLED Save and offered no controls at all: codec, delay and the backend
+  selector alike, whatever the host passed. `contentGateState` applies the same
+  rule to the body. A DEVICE mount is byte-identical — there `hasAudioSupport` IS
+  `gateState === 'enabled'`, so the gate keeps deciding on real evidence. Do NOT
+  re-split the two, and do NOT "fix" a hosted mount by moving the selector outside
+  the gate: that would put a working control under a band telling the operator to
+  pick a pipeline first. Coverage: `AudioDialog.backend.test.ts` → the hosted
+  no-subscription leg with its DEVICE mirror control, and the built-bundle legs in
+  `tests/federation/federation-abi.test.ts`, which are what caught it (the jsdom
+  tests mock the subscriptions the real bundle does not have).
+
+Copy: `settings.audioBackend.*` (9 keys × 10 locales). Coverage:
+`lib/streaming/audioBackend.test.ts` (the pure rule, written against the four rules
+above), `main/dialogs/AudioDialog.backend.test.ts` (rendered DOM — the zero-node
+gate with its positive control, the applied-echo move, both refusal arms, and the
+federated mount), and `tests/e2e/audio-backend.spec.ts` (the two operator
+scenarios; the refusal leg is driven by the device's OWN fail-closed gate rather
+than a stub).
+
 ## A SIM-LESS LINK CANNOT BE TOGGLED INTO THE BOND, ON EITHER MODEM CLASS [EXISTS]
 
 The two modem classes report an empty SIM slot through DIFFERENT wire fields —

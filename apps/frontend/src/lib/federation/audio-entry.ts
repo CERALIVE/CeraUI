@@ -29,6 +29,11 @@ export function mountDialog(
 			audioDelay: options.config?.delay,
 			effectivePipeline: options.config?.pipeline,
 			hostAdapter: options.host,
+			// Both additive-optional on the ABI: a host that supplies neither gets
+			// the pre-Todo-20 dialog exactly, because an absent capability snapshot
+			// renders the backend selector as zero nodes.
+			capabilities: options.capabilities,
+			audioBackend: options.config?.audio_backend,
 		},
 	});
 	return {

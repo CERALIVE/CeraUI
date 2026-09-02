@@ -1,14 +1,16 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { AudioCodec } from '@ceraui/rpc/schemas';
-import { Volume2 } from '@lucide/svelte';
+import type { AudioBackend, AudioCodec } from '@ceraui/rpc/schemas';
+import { CircleAlert, Volume2 } from '@lucide/svelte';
 
 import Badge from '$lib/components/custom/Badge.svelte';
 import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import InfoPopover from '$lib/components/custom/InfoPopover.svelte';
+import InlineSpinner from '$lib/components/custom/InlineSpinner.svelte';
 import { Button } from '$lib/components/ui/button';
 import { Label } from '$lib/components/ui/label';
 import * as Select from '$lib/components/ui/select';
+import type { AudioBackendView } from '$lib/streaming/audioBackend';
 import type { AudioGateState } from '$lib/streaming/audioGate';
 import AudioDelayControl from './AudioDelayControl.svelte';
 
@@ -38,6 +40,17 @@ interface Props {
 	delayMax: number;
 	delayStep: number;
 	onDelayChange: (value: number) => void;
+	/**
+	 * The engine audio-backend offering. ADDITIVE-OPTIONAL: an omitted view (and
+	 * a view whose mode is `absent`) renders ZERO nodes, so a host or a caller
+	 * that never passes one is byte-identical to the pre-selector dialog.
+	 */
+	backendView?: AudioBackendView;
+	/** The backend a write is in flight for — the SOLE optimistic element. */
+	backendPending?: AudioBackend;
+	/** An already-localized refusal sentence for the explicit error band. */
+	backendError?: string;
+	onBackendChange?: (backend: AudioBackend) => void;
 }
 
 let {
@@ -46,7 +59,15 @@ let {
 	draftCodec, codecOptions, codecHasSource,
 	codecDisabledReason, codecTriggerLabel, isCodecAllowed, onCodecChange,
 	draftDelay, delayMin, delayMax, delayStep, onDelayChange,
+	backendView, backendPending, backendError, onBackendChange,
 }: Props = $props();
+
+// The section renders only when the ENGINE stated a capability. `absent` is not
+// a disabled state: nothing is being withheld, so there is nothing to explain.
+const showBackend = $derived(backendView !== undefined && backendView.mode !== 'absent');
+const backendDisabledReason = $derived(
+	backendView?.disabledReasonKey ? m[backendView.disabledReasonKey]() : undefined,
+);
 </script>
 
 {#if gateState === 'no-pipeline'}
@@ -105,5 +126,95 @@ let {
 			</Select.Root>
 		</div>
 		<AudioDelayControl value={draftDelay} min={delayMin} max={delayMax} step={delayStep} onChange={onDelayChange} />
+
+		<!-- Engine audio backend. Last, behind a rule: codec and delay are what an
+		     operator opens this dialog to change; which subsystem builds the audio
+		     path is a platform decision they visit rarely. It writes on selection
+		     (its own setConfig), so it is deliberately NOT behind the dialog's Save
+		     button — that button commits the codec/delay DRAFT, and folding a
+		     next-session platform switch into it would make one press mean two
+		     unrelated things. -->
+		{#if showBackend && backendView}
+			<div class="space-y-2 border-t pt-4" data-testid="audio-backend">
+				<div class="flex items-center gap-1">
+					<Label class="text-sm font-medium">{m["settings.audioBackend.label"]()}</Label>
+					<InfoPopover
+						body={m["settings.audioBackend.infoBody"]()}
+						testId="info-audio-backend"
+						title={m["settings.audioBackend.infoTitle"]()}
+					/>
+					{#if backendPending}
+						<InlineSpinner
+							data-testid="audio-backend-applying"
+							label={m["settings.audioBackend.applying"]()}
+							labelHidden={true}
+						/>
+					{/if}
+				</div>
+				<div
+					aria-label={m["settings.audioBackend.label"]()}
+					class="flex flex-wrap gap-1.5"
+					data-mode={backendView.mode}
+					role="radiogroup"
+				>
+					{#each backendView.options as option (option.backend)}
+						{@const locked = backendView.mode === 'single' || backendPending !== undefined}
+						<button
+							aria-checked={option.selected}
+							class="min-h-11 rounded-md border px-3 py-1 text-xs font-medium transition-colors {option.selected
+								? 'border-primary bg-primary/10 text-primary'
+								: 'border-border text-muted-foreground hover:bg-accent/50'} disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+							data-active={option.active}
+							data-backend={option.backend}
+							data-selected={option.selected}
+							data-testid={`audio-backend-${option.backend}`}
+							disabled={locked || option.selected}
+							onclick={() => onBackendChange?.(option.backend)}
+							role="radio"
+							title={backendDisabledReason}
+							type="button"
+						>
+							{option.label}
+						</button>
+					{/each}
+				</div>
+				{#if backendView.active}
+					<p class="text-muted-foreground text-xs" data-testid="audio-backend-active">
+						<span>{m["settings.audioBackend.activeLabel"]()}</span>
+						<span class="text-foreground font-mono">{backendView.options.find((o) => o.active)?.label ?? backendView.active}</span>
+					</p>
+				{/if}
+				{#if backendDisabledReason}
+					<p class="text-muted-foreground text-xs" data-testid="audio-backend-single-reason">{backendDisabledReason}</p>
+				{:else if backendView.appliesNextStart}
+					<p class="text-muted-foreground text-xs" data-testid="audio-backend-next-start">{m["settings.audioBackend.nextStart"]()}</p>
+				{/if}
+				<!-- A stored pick this engine build no longer advertises. It is STATED,
+				     never offered — the radiogroup above is the advertised set alone. -->
+				{#if backendView.staleSelection}
+					<p
+						class="border-status-warning/40 bg-status-warning/10 rounded-lg border px-3 py-2 text-xs"
+						data-testid="audio-backend-stale"
+						role="status"
+					>
+						{m["settings.audioBackend.staleSelection"]()}
+					</p>
+				{/if}
+				<!-- The typed refusal, rendered as an EXPLICIT band beside the control
+				     that was refused — the preview-error honesty rule: an operator on
+				     the kiosk touchscreen must never be left with a control that looks
+				     busy or unchanged with no stated outcome. -->
+				{#if backendError}
+					<p
+						class="border-destructive/40 bg-destructive/10 text-destructive flex items-start gap-2 rounded-lg border px-3 py-2 text-xs"
+						data-testid="audio-backend-error"
+						role="alert"
+					>
+						<CircleAlert aria-hidden={true} class="mt-0.5 size-3.5 shrink-0" />
+						<span>{backendError}</span>
+					</p>
+				{/if}
+			</div>
+		{/if}
 	</div>
 {/if}

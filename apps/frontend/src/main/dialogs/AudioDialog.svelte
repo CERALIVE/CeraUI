@@ -24,7 +24,13 @@
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
-import { AUDIO_SOURCE_AUTO, audioCodecSchema, type AudioCodec } from '@ceraui/rpc/schemas';
+import {
+	AUDIO_SOURCE_AUTO,
+	type AudioBackend,
+	audioCodecSchema,
+	type AudioCodec,
+	type CapabilitiesMessage,
+} from '@ceraui/rpc/schemas';
 import { Volume2 } from '@lucide/svelte';
 import { toast } from 'svelte-sonner';
 import {
@@ -37,6 +43,11 @@ import {
 	audioCodecAllowedForTransport,
 	streamingConstraints,
 } from '$lib/components/streaming/ValidationAdapter';
+import {
+	audioBackendSaveErrorMessage,
+	canSelectAudioBackend,
+	deriveAudioBackendView,
+} from '$lib/streaming/audioBackend';
 import {
 	resolveAudioGateState,
 	resolveAudioPipelineKey,
@@ -92,6 +103,21 @@ interface Props {
 	 */
 	onOpenEncoder?: () => void;
 	hostAdapter?: FederationHostAdapter;
+	/**
+	 * The host's engine-capability snapshot, for a FEDERATED mount (Todo 20).
+	 * ADDITIVE-OPTIONAL: `initSubscriptions()` never runs inside a hosted bundle,
+	 * so `getCapabilities()` there is permanently `undefined` and the backend
+	 * selector would render nothing forever. Omitted ⇒ the device path is used
+	 * verbatim, which is what every existing (standalone) mount does.
+	 */
+	capabilities?: CapabilitiesMessage;
+	/**
+	 * The persisted `config.audio_backend` for a FEDERATED mount, for the same
+	 * reason: a hosted bundle has no config subscription. Omitted ⇒ read from the
+	 * device's own `config` broadcast. ABSENT IS NOT `alsa` on either path — see
+	 * `lib/streaming/audioBackend.ts`.
+	 */
+	audioBackend?: AudioBackend;
 }
 
 let {
@@ -103,6 +129,8 @@ let {
 	onSave,
 	onOpenEncoder,
 	hostAdapter,
+	capabilities: capabilitiesOverride,
+	audioBackend,
 }: Props = $props();
 
 // Schema-driven slider bounds — single source of truth, zero literals.
@@ -116,7 +144,7 @@ const pipelines = $derived(pipelinesFromSources(getSources()));
 const audioCodecs = $derived(getAudioCodecs());
 const audioSources = $derived(getStatus()?.asrcs ?? []);
 const audioSourceList = $derived(getStatus()?.audio_sources);
-const capabilities = $derived(getCapabilities());
+const capabilities = $derived(capabilitiesOverride ?? getCapabilities());
 const isStreaming = $derived(getIsStreaming());
 
 // Gate follows the DRAFTED encoder pipeline first, the saved config second —
@@ -127,6 +155,15 @@ const pipelineKey = $derived(
 );
 const gateState = $derived(resolveAudioGateState(pipelineKey, pipelines));
 const hasAudioSupport = $derived(hostAdapter !== undefined || gateState === 'enabled');
+// ONE gate, applied to BOTH the Save button and the content it saves.
+// `hasAudioSupport` has always failed OPEN for a hosted mount — a federated
+// bundle never runs `initSubscriptions()`, so `getSources()` there is
+// permanently `undefined` and the pipeline gate has no evidence to evaluate —
+// but only Save read it. The CONTENT still read the raw `gateState`, so a hosted
+// dialog rendered "Select a pipeline first" beside an ENABLED Save and offered
+// no controls at all, the Todo-20 backend selector included. A DEVICE mount is
+// byte-identical: there `hasAudioSupport` IS `gateState === 'enabled'`.
+const contentGateState = $derived(hasAudioSupport ? 'enabled' : gateState);
 
 // Typed audio-source model (Task 13): pseudo-sources translated + grouped last,
 // device entries keep their hardware name + backend order. Used ONLY to resolve
@@ -161,11 +198,67 @@ function coerceIncomingCodec(codec: AudioCodec | undefined): AudioCodec {
 	return codec === undefined || String(codec) === 'pcm' ? 'aac' : codec;
 }
 
+// ---- Engine audio backend (Todo 20) ----
+// NOT part of the codec/delay draft, and deliberately not behind Save: the field
+// is next-session-only by construction (the engine fixes its backend when it
+// builds the graph and answers a live reload `applies: "next-session"`), so it
+// writes on selection through its own `setConfig`.
+//
+// PESSIMISTIC, the `NetworkIngestDialog` discipline: nothing is assigned on
+// dispatch. The rendered selection moves only when the device echoes an APPLIED
+// value, so an RPC that resolves `{success:false}` structurally cannot move the
+// control — the spinner is the sole optimistic element.
+let backendPending = $state<AudioBackend | undefined>(undefined);
+let backendError = $state<string | undefined>(undefined);
+let backendApplied = $state<AudioBackend | undefined>(undefined);
+
+// Precedence: the applied echo from THIS session, then the host's prop (a
+// federated mount has no config subscription), then the device's own config.
+// Every rung may legitimately be absent, and absent means "the operator stated
+// nothing" — never `alsa`.
+const backendSelection = $derived(backendApplied ?? audioBackend ?? config?.audio_backend);
+const backendView = $derived(
+	deriveAudioBackendView({
+		capability: capabilities?.audio_backends,
+		selection: backendSelection,
+	}),
+);
+
+async function handleBackendChange(backend: AudioBackend): Promise<void> {
+	// The device's own gate, mirrored: a click can never spend a round-trip to be
+	// refused for something the offering already knew.
+	if (!canSelectAudioBackend(backendView, backend) || backendPending !== undefined) return;
+	backendPending = backend;
+	backendError = undefined;
+	try {
+		const result = await (hostAdapter?.setConfig({ audio_backend: backend }) ??
+			rpc.streaming.setConfig({ audio_backend: backend }));
+		// Read `result.success` BEFORE anything else: `setConfig` RESOLVES with a
+		// typed refusal rather than throwing, so a bare try/catch would report one
+		// as applied and leave the operator with no stated outcome at all.
+		if (!result.success) {
+			backendError = audioBackendSaveErrorMessage(result.error, m);
+			return;
+		}
+		// Release to what the DEVICE applied, never to the typed value.
+		backendApplied = result.applied?.audio_backend ?? backend;
+	} catch {
+		backendError = m["notifications.saveFailed"]();
+	} finally {
+		backendPending = undefined;
+	}
+}
+
 $effect(() => {
 	if (open && !wasOpen) {
 		// Opening: seed the draft from the effective current values.
 		draftCodec = coerceIncomingCodec(audioCodec);
 		draftDelay = clampDelay(audioDelay ?? 0);
+		// A refusal belongs to the viewing that produced it; the applied echo is
+		// dropped with it so a re-open re-reads the device rather than replaying a
+		// stale session value over a config that may have moved underneath it.
+		backendError = undefined;
+		backendApplied = undefined;
 	}
 	wasOpen = open;
 });
@@ -287,7 +380,7 @@ async function handleSave() {
 	title={m["general.audioSettings"]()}
 >
 	<AudioDialogContent
-		{gateState}
+		gateState={contentGateState}
 		{isStreaming}
 		onOpenEncoder={onOpenEncoder ? () => { open = false; onOpenEncoder(); } : undefined}
 		{audioEmbeddedComingSoon}
@@ -306,5 +399,9 @@ async function handleSave() {
 		delayMax={DELAY_MAX}
 		delayStep={DELAY_STEP}
 		onDelayChange={(value) => (draftDelay = value)}
+		{backendView}
+		{backendPending}
+		{backendError}
+		onBackendChange={(backend) => void handleBackendChange(backend)}
 	/>
 </AppDialog>
