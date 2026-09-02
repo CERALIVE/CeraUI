@@ -10,6 +10,10 @@ import {
 } from "../network-interfaces.ts";
 import { resolveUplinkIdentity } from "../uplink-identity.ts";
 import {
+	type ConnectivityTargetResolver,
+	createConnectivityTargetResolver,
+} from "./connectivity-target.ts";
+import {
 	UPLINK_HEALTH_CONFIG,
 	type UplinkHealthOutcome,
 	type UplinkHealthRecord,
@@ -18,32 +22,50 @@ import { getUplinkHealthEngine, notifyUplinkHealthChange } from "./state.ts";
 
 export const UPLINKS_EVENT = "uplinks" as const;
 
-export type ProbeTargetClass = "gateway" | "public_ip" | "https_204";
-const PROBE_TARGETS: readonly ProbeTargetClass[] = [
-	"gateway",
-	"public_ip",
-	"https_204",
-];
-
 export interface UplinkHealthRuntimeDeps {
 	readonly now: () => number;
 	readonly interfaces: () => Record<string, NetworkInterface>;
 	readonly streaming: () => boolean;
 	readonly telemetry: typeof buildLinkTelemetry;
+	/**
+	 * The address the round's probes are aimed at, or `undefined` when it could
+	 * not be established. `undefined` SKIPS the active probe round — see `tick`.
+	 */
+	readonly resolveTarget: ConnectivityTargetResolver;
+	/**
+	 * One device-bound probe. `remoteAddr` is the RESOLVED connectivity-check
+	 * address, never a hardcoded literal and never a gateway: the probe asserts
+	 * `internet.ts`'s 204-with-empty-body contract, so it has to be aimed at
+	 * something that actually serves it.
+	 */
 	readonly probe: (
 		iface: string,
-		target: ProbeTargetClass,
+		remoteAddr: string,
 	) => Promise<UplinkHealthOutcome>;
 	readonly publish: (records: readonly UplinkHealthRecord[]) => void;
 }
+
+/*
+  Built on FIRST USE, never at module scope. `connectivity-target.ts` reaches
+  `dns.ts`/`internet.ts`, and that graph comes back here through
+  `gateways.ts -> uplink-health/index.ts`, so constructing the resolver while
+  this module is still initializing reads a `const` the cycle has not defined
+  yet. One shared instance, so the TTL cache is shared by every default runtime.
+*/
+let sharedTarget: ConnectivityTargetResolver | undefined;
+const resolveTargetShared: ConnectivityTargetResolver = () => {
+	sharedTarget ??= createConnectivityTargetResolver();
+	return sharedTarget();
+};
 
 const defaultDeps: UplinkHealthRuntimeDeps = {
 	now: Date.now,
 	interfaces: getNetworkInterfaces,
 	streaming: getIsStreaming,
 	telemetry: buildLinkTelemetry,
-	probe: async (iface) => {
-		const result = await probeConnectivityViaDevice("1.1.1.1", iface);
+	resolveTarget: resolveTargetShared,
+	probe: async (iface, remoteAddr) => {
+		const result = await probeConnectivityViaDevice(remoteAddr, iface);
 		switch (result) {
 			case "reachable":
 				return "success";
@@ -59,7 +81,6 @@ const defaultDeps: UplinkHealthRuntimeDeps = {
 export class UplinkHealthRuntime {
 	readonly #engine = getUplinkHealthEngine();
 	readonly #deps: UplinkHealthRuntimeDeps;
-	#round = 0;
 	#lastJson = "";
 
 	constructor(deps: UplinkHealthRuntimeDeps = defaultDeps) {
@@ -86,31 +107,36 @@ export class UplinkHealthRuntime {
 			}
 		}
 
-		const target =
-			PROBE_TARGETS[this.#round % PROBE_TARGETS.length] ?? "https_204";
-		this.#round++;
 		const active = candidates.filter(
 			(candidate) => !passive.has(candidate.name),
 		);
-		for (
-			let offset = 0;
-			offset < active.length;
-			offset += UPLINK_HEALTH_CONFIG.maxConcurrentProbes
-		) {
-			const batch = active.slice(
-				offset,
-				offset + UPLINK_HEALTH_CONFIG.maxConcurrentProbes,
-			);
-			const outcomes = await Promise.all(
-				batch.map((candidate) => this.#deps.probe(candidate.name, target)),
-			);
-			for (const [index, candidate] of batch.entries()) {
-				this.#engine.observe({
-					iface: candidate.name,
-					...resolveUplinkIdentity(candidate.name),
-					outcome: outcomes[index] ?? "failure",
-					now,
-				});
+		// An unresolvable check address is a statement about DNS, not about any
+		// uplink, so the ACTIVE round is skipped whole rather than recording a
+		// failure nothing measured. The passive telemetry and address-loss
+		// observations above are independent evidence and still stand.
+		const target =
+			active.length > 0 ? await this.#deps.resolveTarget() : undefined;
+		if (target !== undefined) {
+			for (
+				let offset = 0;
+				offset < active.length;
+				offset += UPLINK_HEALTH_CONFIG.maxConcurrentProbes
+			) {
+				const batch = active.slice(
+					offset,
+					offset + UPLINK_HEALTH_CONFIG.maxConcurrentProbes,
+				);
+				const outcomes = await Promise.all(
+					batch.map((candidate) => this.#deps.probe(candidate.name, target)),
+				);
+				for (const [index, candidate] of batch.entries()) {
+					this.#engine.observe({
+						iface: candidate.name,
+						...resolveUplinkIdentity(candidate.name),
+						outcome: outcomes[index] ?? "failure",
+						now,
+					});
+				}
 			}
 		}
 		this.#publishIfChanged();

@@ -46,7 +46,6 @@ import {
 	type NetworkInterface,
 } from "../modules/network/network-interfaces.ts";
 import {
-	type ProbeTargetClass,
 	setUplinkHealthEngineForTest,
 	UPLINK_HEALTH_CONFIG,
 	type UplinkHealthOutcome,
@@ -167,16 +166,17 @@ function healthHarness(
 	now: () => number,
 ): {
 	readonly runtime: UplinkHealthRuntime;
-	readonly probed: Array<{ iface: string; target: ProbeTargetClass }>;
+	readonly probed: Array<{ iface: string; target: string }>;
 	readonly published: UplinkHealthRecord[][];
 } {
-	const probed: Array<{ iface: string; target: ProbeTargetClass }> = [];
+	const probed: Array<{ iface: string; target: string }> = [];
 	const published: UplinkHealthRecord[][] = [];
 	const deps: UplinkHealthRuntimeDeps = {
 		now,
 		interfaces: () => TWIN_NETIF,
 		streaming: () => false,
 		telemetry: () => null,
+		resolveTarget: () => Promise.resolve(EXTERNAL_ADDR),
 		probe: async (iface, target) => {
 			probed.push({ iface, target });
 			return outcomeFor(iface);
@@ -204,6 +204,14 @@ describe("the health round probes each twin as its own device", () => {
 		// One probe per interface per round: a shared verdict re-used across the
 		// pair would show up here as a missing dispatch.
 		expect(h.probed).toHaveLength(3);
+		// The DEVICE is what separates the twins; the DESTINATION is the one
+		// resolved connectivity-check address for all three, never a per-link
+		// gateway and never a hardcoded literal.
+		expect(h.probed.map((entry) => entry.target)).toEqual([
+			EXTERNAL_ADDR,
+			EXTERNAL_ADDR,
+			EXTERNAL_ADDR,
+		]);
 	});
 
 	test("a WAN outage behind ONE twin never condemns its sibling", async () => {
