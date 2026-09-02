@@ -27,13 +27,12 @@
 import fs from "node:fs";
 import { readdir } from "node:fs/promises";
 
+import type { CaptureDevice as CerastreamCaptureDevice } from "@ceralive/cerastream";
 import {
-	type CaptureCap,
 	type CaptureDevice,
 	type CaptureMode,
 	captureModeSchema,
 	type DeviceKind,
-	type DeviceMediaClass,
 	type DevicesMessage,
 	deviceKindSchema,
 	type SourceSignal,
@@ -170,25 +169,35 @@ export function mapEngineDeviceKind(
 	return deriveKind(displayName);
 }
 
-export interface EngineCaptureDevice {
-	input_id: string;
-	device_path: string;
-	display_name: string;
-	media_class: DeviceMediaClass;
-	kind?: string | undefined;
-	caps?: CaptureCap[] | undefined;
-	// Per-mode-family ladders (cerastream schema 0.11.0). Typed loosely so an
-	// engine that reports a family this build does not know about is dropped by
-	// the parse below rather than rejecting the whole device.
-	modes?: readonly unknown[] | undefined;
-	// Reboot-stable hardware identity (cerastream Todo 20 `stable_id`). Carried
-	// verbatim so sources reconciliation can migrate a re-enumerated device by
-	// stable identity rather than node path (Todo 34).
-	stable_id?: string | undefined;
-	// `usb:<topology-token>` shared by every row of ONE physical device
-	// (cerastream ADR-0008) — the join key the "Auto" audio resolver matches on.
-	physical_group_id?: string | undefined;
-}
+/**
+ * The engine-video join record derives from the published cerastream device
+ * shape — the VIDEO twin of `audio-naming.ts`'s `EngineAudioDevice` (#312), so
+ * the producer's schema version IS the compile-time boundary.
+ *
+ * `modes` is now the producer's TYPED `CaptureMode[]` rather than the loose
+ * `readonly unknown[]` it was hand-declared as, so mode-family drift is a
+ * compile error. RUNTIME behaviour is unchanged: {@link engineModes} still
+ * `safeParse`s each family and drops the ones this build does not know rather
+ * than rejecting the whole device.
+ *
+ * `stable_id` is reboot-stable hardware identity (cerastream Todo 20), carried
+ * verbatim so sources reconciliation migrates a re-enumerated device by identity
+ * rather than node path (Todo 34). `physical_group_id` is the
+ * `usb:<topology-token>` shared by every row of ONE physical device (cerastream
+ * ADR-0008) — the join key the "Auto" audio resolver matches on.
+ */
+export type EngineCaptureDevice = Pick<
+	CerastreamCaptureDevice,
+	| "input_id"
+	| "device_path"
+	| "display_name"
+	| "media_class"
+	| "kind"
+	| "caps"
+	| "modes"
+	| "stable_id"
+	| "physical_group_id"
+>;
 
 /** Map one engine device onto a CeraUI {@link CaptureDevice}: ids are carried
  *  verbatim (path-preferred, the single id namespace) and the engine's typed

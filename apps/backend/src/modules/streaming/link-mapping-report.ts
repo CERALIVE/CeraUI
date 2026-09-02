@@ -25,12 +25,15 @@
   module is the consumer that wires all three, and it is the ONLY place the raw
   telemetry document is read for a disposition — nothing downstream infers one.
 
-  The parse is DEFENSIVE for the same reason `bytes_sent_total` is: the pinned
-  `@ceralive/srtla-send` build predates todo 8's additive fields and its Zod
-  reader strips unknown keys, so today these read as absent on every tick. An
-  ABSENT field leaves the writer's synthesized verdict standing rather than
-  retracting it — "this sender build does not report it" and "the sender
-  withdrew its claim" are different facts, and only the second is a retraction.
+  The parse is DEFENSIVE because a sender may legitimately report nothing, NOT
+  because the binding cannot read it. A retired comment here claimed the pinned
+  `@ceralive/srtla-send` build stripped todo 8's additive fields so they read as
+  absent on every tick; `2026.8.0` in fact publishes `bind_map_status` and the
+  whole bind-map disposition surface, so a real verdict does arrive. What the
+  defensive parse still buys is the ABSENT case: it leaves the writer's
+  synthesized verdict standing rather than retracting it — "this sender build
+  does not report it" and "the sender withdrew its claim" are different facts,
+  and only the second is a retraction.
 */
 
 import type { BondMapping } from "@ceraui/rpc/schemas";

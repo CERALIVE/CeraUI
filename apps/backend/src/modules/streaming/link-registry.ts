@@ -29,12 +29,13 @@
   it is the ONLY key a row may be identified by. `conn_id` survives strictly as
   the LEGACY fallback for a launch that has no mapping at all.
 
-  WHAT THIS MODULE HOLDS is exactly what the WRITER published, which matters:
-  the pinned `@ceralive/srtla-send` build predates todo 8's additive telemetry
-  fields and its Zod reader STRIPS unknown keys, so on today's binding the
-  sender's `link_id`/`iface` echo is simply not readable. The writer's own
-  record is available regardless, so twin disambiguation works TODAY and gets
-  strictly more authoritative the moment that binding is republished.
+  WHAT THIS MODULE HOLDS is exactly what the WRITER published, and that stays
+  the right thing to hold even though the sender's echo is readable. A retired
+  comment here claimed the pinned `@ceralive/srtla-send` build stripped
+  `link_id`/`iface`; `2026.8.0` in fact declares and parses both, so the echo
+  outranks the file position today. The writer's own record is still what makes
+  twin disambiguation work when a sender reports NEITHER — it is the floor the
+  ladder falls back to, not a stand-in for an unreadable field.
 
   DISAMBIGUATION IS iface + PORT LABEL, AND NEVER A FABRICATED SERIAL. Todo 10
   measured the HiLink twins on the bench: they publish NO usable USB serial and
