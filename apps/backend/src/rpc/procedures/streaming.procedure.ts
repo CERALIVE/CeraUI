@@ -63,6 +63,10 @@ import {
 } from "../../mocks/providers/streaming.ts";
 import { getConfig, saveConfig } from "../../modules/config.ts";
 import { reportActiveProfile } from "../../modules/remote-control/active-profile-reporter.ts";
+import {
+	AUDIO_BACKEND_UNSUPPORTED_ERROR,
+	isAudioBackendSupported,
+} from "../../modules/streaming/audio-backend.ts";
 import { syncAudioMeterPreference } from "../../modules/streaming/audio-meter-bridge.ts";
 import {
 	getResolvedAsrc,
@@ -71,6 +75,7 @@ import {
 	setPendingAudioFollowAsrc,
 } from "../../modules/streaming/auto-audio.ts";
 import { isBluetoothAudioSourceId } from "../../modules/streaming/bluetooth-audio.ts";
+import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
 import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
 import {
@@ -467,6 +472,9 @@ export const getConfigProcedure = authedProcedure
 			asrc: config.asrc,
 			max_br,
 			acodec: config.acodec,
+			// Travels with the audio pick it belongs to; absent means no selection
+			// was ever stated, never `alsa`.
+			audio_backend: config.audio_backend,
 			delay: config.delay,
 			pipeline,
 			srt_latency: config.srt_latency,
@@ -817,6 +825,30 @@ export const setConfigProcedure = authedProcedure
 			}
 		}
 
+		// Same ordering rule as the device-mode gate above, for the same reason: it
+		// runs BEFORE the first config mutation, so a refused backend leaves disk
+		// byte-identical. It is only ever asked about a STATED selection — an
+		// absent field is not a value and is never gated, which is what keeps the
+		// engine's own default reachable on every device that has never chosen.
+		if (input.audio_backend !== undefined) {
+			const capability = getLastCapabilities()?.audio_backends;
+			if (!isAudioBackendSupported(input.audio_backend, capability)) {
+				logger.warn(
+					"setConfig: engine has not advertised the requested audio backend",
+					{
+						module: "streaming",
+						requested: input.audio_backend,
+						supported: capability?.supported,
+					},
+				);
+				return {
+					success: false,
+					error: AUDIO_BACKEND_UNSUPPORTED_ERROR,
+					applied: {},
+				};
+			}
+		}
+
 		// Apply-now splits the save in two: the restart-requiring fields are held
 		// back (staged, never written) so `config.json` keeps describing what the
 		// engine is ACTUALLY running until the transaction says `applied`. Every
@@ -833,6 +865,11 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) config.pipeline = input.pipeline;
 		if (input.acodec !== undefined) config.acodec = input.acodec;
 		if (input.asrc !== undefined) config.asrc = input.asrc;
+		// Never staged behind `apply_now`: the engine fixes its audio backend when
+		// it builds the graph and answers a live reload with `applies:
+		// "next-session"`, so this can only ever take effect at the next start.
+		if (input.audio_backend !== undefined)
+			config.audio_backend = input.audio_backend;
 		if (input.max_br !== undefined) config.max_br = clampBitrate(input.max_br);
 		if (input.resolution !== undefined) config.resolution = input.resolution;
 		if (input.framerate !== undefined) config.framerate = input.framerate;
@@ -921,6 +958,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.pipeline !== undefined) applied.pipeline = config.pipeline;
 		if (input.acodec !== undefined) applied.acodec = config.acodec;
 		if (input.asrc !== undefined) applied.asrc = config.asrc;
+		if (input.audio_backend !== undefined)
+			applied.audio_backend = config.audio_backend;
 		if (input.max_br !== undefined) applied.max_br = config.max_br;
 		if (input.resolution !== undefined) applied.resolution = config.resolution;
 		if (input.framerate !== undefined) applied.framerate = config.framerate;

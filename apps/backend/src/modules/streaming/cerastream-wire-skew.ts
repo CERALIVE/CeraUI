@@ -45,6 +45,7 @@
 
 import type {
 	ActiveEncode as CerastreamActiveEncode,
+	AudioBackend as CerastreamAudioBackend,
 	AudioLevelEvent as CerastreamAudioLevelEvent,
 	CaptureDevice as CerastreamCaptureDevice,
 	CaptureCap as CerastreamCaptureFormatCap,
@@ -59,6 +60,7 @@ import type {
 } from "@ceraui/rpc";
 import type {
 	ActiveEncode,
+	AudioBackend,
 	AudioLevelMessage,
 	BufferingStatus,
 	CaptureDevice,
@@ -256,4 +258,28 @@ export type ProducerMirrorsAudioLevel = AssertAssignable<
 export type ProducerAudioLevelReasonsAreRenderable = AssertAssignable<
 	NonNullable<CerastreamAudioLevelEvent["reason"]>,
 	NonNullable<AudioLevelMessage["reason"]>
+>;
+
+// ---------------------------------------------------------------------------
+// S6 — `streaming.schema.ts` `audioBackendSchema`
+//
+// The operator's audio-backend selection is CeraUI-owned on the wire (it is
+// re-broadcast to the frontend and rides `config.json`), but its VALUES are the
+// producer's `audio.backend` enum verbatim — CeraUI never invents an arm. So it
+// is a mirror in the same sense `captureDeviceSchema` is, and it is asserted
+// two-directionally: a producer that RENAMES an arm must not leave CeraUI
+// persisting a value the engine will refuse, and a producer that ADDS one must
+// not leave the selector silently unable to offer it.
+//
+// It is a bare enum rather than an object, so there is no key list to `Pick` —
+// the assignability pair carries the whole contract on its own.
+// ---------------------------------------------------------------------------
+
+export type AudioBackendMirrorsProducer = AssertAssignable<
+	AudioBackend,
+	CerastreamAudioBackend
+>;
+export type ProducerMirrorsAudioBackend = AssertAssignable<
+	CerastreamAudioBackend,
+	AudioBackend
 >;

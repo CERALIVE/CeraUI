@@ -43,6 +43,7 @@
 import {
 	AddonConfigSchema,
 	AUDIO_SOURCE_AUTO,
+	audioBackendSchema,
 	audioCodecSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
@@ -237,6 +238,13 @@ export const runtimeConfigSchema = z.object({
 	// Audio settings
 	asrc: z.string().optional(),
 	acodec: legacyTolerantAudioCodecSchema.optional(),
+	// Which audio backend the engine builds its audio legs with. Additive-optional
+	// and deliberately ABSENT FROM `RUNTIME_CONFIG_DEFAULTS`: an absent value means
+	// the operator never stated one, and CeraUI then sends the engine NO backend
+	// key at all so the engine's OWN persisted default governs. A default here
+	// would silently revert every existing config — the whole fleet ships with no
+	// such key today, and the engine's default is `pipewire`.
+	audio_backend: audioBackendSchema.optional(),
 
 	// Video/streaming settings
 	bitrate_overlay: z.boolean().optional(),

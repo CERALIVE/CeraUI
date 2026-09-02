@@ -306,6 +306,62 @@ steady state costs one string compare and broadcasts nothing.
 `setEngineAudioChangeHandler()` is the test seam. Coverage:
 `tests/lost-device-retention.test.ts`.
 
+## THE AUDIO BACKEND IS AN OVERRIDE, AND ABSENT IS NOT A DEFAULT [EXISTS]
+
+`config.audio_backend` (`alsa` | `pipewire`) is the operator's override of the
+engine's audio backend. It is OPTIONAL, and the entire contract is what its
+ABSENCE means — the field is deliberately missing from `RUNTIME_CONFIG_DEFAULTS`,
+so absent stays absent through every load.
+
+**ABSENT ⇒ CeraUI serializes NO backend key at all**, on the start payload AND on
+the reload payload, and the ENGINE'S own persisted default governs (shipped:
+pipewire). Every config in the fleet today carries no such key, so a CeraUI-side
+default constant would silently move the whole fleet onto whichever arm this repo
+happened to name — which is exactly the regression `tests/audio-backend-config.test.ts`
+exists to catch. Do NOT add a `?? "alsa"` to `encodeInputAudioFields`, to
+`toReloadParams`, or to the schema.
+
+- **The wire enum is a MIRROR with a compile-time gate.** `@ceraui/rpc`'s
+  `audioBackendSchema` is CeraUI-owned (that package is browser-safe and carries
+  no `@ceralive/cerastream` dependency), so drift is caught by the S6 assertion in
+  `cerastream-wire-skew.ts` rather than by prose. The backend module itself
+  imports the producer's `AudioBackend`/`audioBackendSchema` directly.
+- **`startParamsWithAudioModeSchema` must RESTATE `backend`.** Zod's `.extend`
+  REPLACES the published `audio` object wholesale, so a field the frozen schema
+  already carries is silently stripped off every start unless it is re-declared in
+  the local raw-bridge schema. Same silent-strip class as `probeEngineDevices`'
+  whitelist copy.
+- **Acceptance is CAPABILITY-GATED and FAIL-CLOSED** (`audio-backend.ts`
+  `isAudioBackendSupported`): a selection is accepted only while the live
+  `capabilities.audio_backends.supported` list names it. An absent block — a
+  legacy engine, or a snapshot that fell back to the minimal safe set — refuses,
+  because the engine never stated a capability and an unverifiable claim must not
+  become a persisted selection. This is the deliberate opposite of
+  `device-mode-truth.ts`'s fail-open rule: that one refuses to BLOCK a save on an
+  unknown, this one refuses to CREATE a selection on one. Nothing is lost, since
+  absent is already the working state on every device.
+- **The gate runs BEFORE the first config mutation**, like the device-mode gate,
+  so a refusal (`audio_backend_unsupported`) leaves `config.json` byte-identical —
+  including the unrelated fields riding the same save.
+- **It is never staged behind `apply_now`.** The engine fixes its backend when it
+  builds the graph and answers a live reload with `applies: "next-session"`, so a
+  change can only ever take effect at the next start. The reload still re-states
+  the choice; it does not switch a running session.
+- **A backend the engine later REFUSES surfaces the engine's own typed error
+  verbatim.** There is no silent revert to the other arm anywhere on this path —
+  an operator whose selection stopped working is told, not quietly moved.
+
+There is deliberately no CLEAR path yet: an absent input field means "do not
+touch", so returning a device to the engine default is a UI concern for the
+selector that offers the field.
+
+Coverage: `tests/audio-backend-config.test.ts` (the stated-selection serialization,
+the ABSENT-field regression on both payloads, the fail-closed gate table, the
+config.json round-trip incl. the never-defaulted assertion, and the RPC surface
+driven through the REAL procedures). Rule-E proof captured in three directions: a
+`?? "alsa"` default reddens 3 tests, dropping `backend` from the raw start schema
+reddens 2, and flipping the gate fail-open reddens 2.
+
 ## "AUTO" AUDIO — SAME PHYSICAL DEVICE ONLY [EXISTS]
 
 `resolveAutoAsrc` rule 5 (`modules/streaming/auto-audio.ts`) binds "Auto" to the
@@ -9026,6 +9082,8 @@ config, an anchored path still held by its own device, and a live row with no
   that is how "up to date" came to mean "couldn't reach any repo" (see
   SOFTWARE-UPDATE CHECK CONTRACT).
 - Don't send the idle-meter preference through the typed `reloadConfig()` — the published client Zod-strips `audio.meter_device`; it goes over `rawRequest` behind `supportsMeterDevicePreference`. And don't send `undefined` for "Auto": absent means *unchanged*, `null` means Auto.
+- Don't give `config.audio_backend` a default — not a `RUNTIME_CONFIG_DEFAULTS` entry, not a schema `.default()`, and not a `?? "alsa"` in `encodeInputAudioFields`/`toReloadParams`. Absent means the operator stated nothing, so NO backend key is serialized and the engine's own default (shipped: pipewire) governs; a default here silently reverts the whole fleet, none of whose configs carry the key. And don't drop `backend` from `startParamsWithAudioModeSchema`: `.extend` REPLACES the published `audio` object, so an unlisted field is stripped off every start in silence.
+- Don't accept an audio backend the engine has not advertised, and don't make that gate fail-OPEN on an absent `audio_backends` block — an absent block means the engine never stated a capability, and persisting an unverifiable selection turns into a start failure the operator cannot undo from the UI. It is the deliberate inverse of `device-mode-truth.ts`'s fail-open rule (that one refuses to BLOCK a save on an unknown; this one refuses to CREATE a selection on one). And never silently swap a refused backend for the other arm — the engine's typed error is what the operator gets.
 - Don't report a suppressed foreign-card level as `no_device` when CeraUI still lists the selected card AND that card owns a capture PCM (`isMeterPreferenceDevicePresent()`) — that makes a mis-bound meter indistinguishable from an unplugged cable — and don't try to fix a sustained mismatch by re-pushing the same preference value: `set_preferred_device` early-returns on an unchanged value, so the re-assert must pass through `null`.
 - Don't resolve an ALSA name to a card by taking the FIRST card that claims it — a PCM id is not unique, so two identical-model USB cards both answer to `USB Audio` and a first-match lookup routes the second unit to the first unit's engine node and then suppresses the second unit's own meter reading as `foreign`. Go through `buildCardAliasOwners`, which answers nothing for a shared name. And don't "fix" the resulting silence by falling back to the first claimant, by collapsing the ambiguous case into `foreign` (that is a positive claim of misidentification, where `unknown` is the honest one), or by deleting `engineAudioDeviceForCard`'s `key === cardId` short-circuit — it looks redundant with the index and is the card-id-only degrade an unreadable `/proc/asound/pcm` lands on.
 - Don't route `isAliasOfCard` through the owner index — it is a MEMBERSHIP test feeding `isHumanAudioName`'s rejection rule, and a generic name shared by two cards must be rejected for both.
