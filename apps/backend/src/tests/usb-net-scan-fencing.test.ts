@@ -8,7 +8,7 @@
  * a slow machine could invert.
  */
 
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
 	getRouterCellularMarker,
@@ -160,6 +160,14 @@ function fixture(tree: FixtureTree, gate?: Gate): Fixture {
 
 describe("refreshUsbNetMarkers — generation-fenced single flight", () => {
 	beforeEach(() => {
+		resetUsbNetMarkers();
+	});
+
+	// The marker cache is process-wide and Bun shares one process across test
+	// files, so clearing only on entry leaves this file's LAST sweep behind for
+	// every later file — which is exactly how a `eth1` marker reached the
+	// `modems` wire projection and gave its roster a synthetic row.
+	afterEach(() => {
 		resetUsbNetMarkers();
 	});
 

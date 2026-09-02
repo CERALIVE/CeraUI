@@ -12,6 +12,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { modemListSchema } from "@ceraui/rpc/schemas";
 
+import { resetCellularStack } from "../modules/cellular/cellular-stack.ts";
 import { getUdevProvisionalCache } from "../modules/cellular/udev-provisional-cache.ts";
 import { buildModemsWireMessage } from "../modules/modems/modem-status.ts";
 import { resetModemWireProducer } from "../modules/modems/modem-wire-producer.ts";
@@ -22,6 +23,8 @@ import {
 	setModem,
 } from "../modules/modems/modems-state.ts";
 import { setModemsState } from "../modules/modems/state/modems-state-cache.ts";
+import { resetDongleMetadata } from "../modules/network/dongle-metadata.ts";
+import { resetUsbNetMarkers } from "../modules/network/router-cellular-scan.ts";
 
 /** Every state ModemManager can report through `modem.generic.state`. */
 const MM_STATES = [
@@ -41,10 +44,20 @@ const MM_STATES = [
 ] as const;
 
 /**
- * `buildModemsWireMessage` also reads the udev provisional cache (optimistic
- * rows keyed from `SYNTHETIC_ID_BASE`) and the producer's retained id map, so
- * both are cleared here — on ENTRY too, since Bun shares one process across
- * test files and an earlier file's leftovers precede this file's first test.
+ * This file asserts the wire message's EXACT key set, so it has to own EVERY
+ * source `buildModemsWireMessage` collects — not just the modem map. The
+ * composition root also reads the udev provisional cache, the netns dongle
+ * records, the classified router-dongle markers, the committed cellular backend,
+ * and its own retained synthetic-id map; each is process-wide module state, and
+ * Bun shares one process across test files, so an earlier file's leftovers
+ * precede this file's first test. Everything is therefore cleared on ENTRY as
+ * well as on exit.
+ *
+ * The router-dongle marker cache is the one that actually bit: an earlier file
+ * left a `eth1` marker behind and another left an `eth1` netif entry, so
+ * `collectRouterCellularSources` produced a real row and the roster gained a
+ * synthetic `1000` key — in CI's file order only, which is why the file passed
+ * locally.
  */
 function cleanupModems(): void {
 	for (const id of getModemIds()) {
@@ -52,6 +65,9 @@ function cleanupModems(): void {
 	}
 	setModemsState({});
 	getUdevProvisionalCache().reset();
+	resetDongleMetadata();
+	resetUsbNetMarkers();
+	resetCellularStack();
 	resetModemWireProducer();
 }
 
