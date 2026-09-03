@@ -12,6 +12,7 @@ import {
 	hotspotIsActive,
 	hotspotToggleConfirmed,
 	sshIsActive,
+	sshIsPersistent,
 	sshToggleConfirmed,
 } from "./os-toggle-predicates";
 
@@ -73,6 +74,29 @@ describe("sshIsActive", () => {
 	it("is inactive for a null/undefined status", () => {
 		expect(sshIsActive(null)).toBe(false);
 		expect(sshIsActive(undefined)).toBe(false);
+	});
+});
+
+describe("sshIsPersistent", () => {
+	it("reflects ssh.enabled when present", () => {
+		expect(sshIsPersistent({ enabled: true })).toBe(true);
+		expect(sshIsPersistent({ enabled: false })).toBe(false);
+	});
+
+	it("is not persistent when enabled is absent", () => {
+		expect(sshIsPersistent({})).toBe(false);
+	});
+
+	it("is not persistent for a null/undefined status", () => {
+		expect(sshIsPersistent(null)).toBe(false);
+		expect(sshIsPersistent(undefined)).toBe(false);
+	});
+
+	it("is a SEPARATE axis from sshIsActive", () => {
+		// The board state that caused the outage: running, and not coming back.
+		const ssh = { active: true, enabled: false };
+		expect(sshIsActive(ssh)).toBe(true);
+		expect(sshIsPersistent(ssh)).toBe(false);
 	});
 });
 

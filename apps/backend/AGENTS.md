@@ -6177,6 +6177,9 @@ explicitly are unaffected.
   flips `mockSshActive` and broadcasts `{ssh}` without touching `systemctl` or `passwd`.
   On device, `ceralive` is the default SSH account when `setup.json` has no override;
   start, stop, and reset RPC responses settle only after the privileged action completes.
+- `setSshPersistenceRunner(runner)` is its SIBLING for the `enable`/`disable` verb
+  (see SSH BOOT PERSISTENCE below). Keeping the two seams apart is what lets a
+  test prove a persistence change provably never touched the running service.
 - `MessageSocket` (`modules/ui/message-socket.ts`) is exactly
   `{ readonly data?: { readonly senderId?: string }; send(message: string): void }`;
   SSH, log, and notification producers accept Bun `AppWebSocket` structurally
@@ -6185,6 +6188,63 @@ explicitly are unaffected.
   their applied status. Background status refresh and software-update scheduling remain
   deliberately asynchronous because their responses acknowledge a refresh/scheduled job,
   not completion.
+
+### SSH BOOT PERSISTENCE IS A SECOND AXIS, NOT A SIDE EFFECT [EXISTS]
+
+`startStopSsh` runs `systemctl start|stop ssh` and NOTHING else, so the operator
+could turn SSH on and the device would still come up without it. Measured on the
+bench board: `systemctl is-active ssh` answered `active` — the dialog said
+"Active", the operator was logged in over it — while `systemctl is-enabled ssh`
+answered `disabled`. Every reboot silently dropped remote access until somebody
+re-enabled it over UART, and nothing on any surface said so. That cost a
+multi-hour board-access outage.
+
+`setSshPersistent(enabled)` (`modules/system/ssh.ts`) is the second axis, and the
+two are DELIBERATELY NOT FUSED — an operator must still be able to run SSH for one
+session without committing it to boot. Six rules carry it:
+
+- **`--now` is ABSENT and must stay absent.** The runner spawns exactly
+  `systemctl enable|disable ssh`, so the running service is untouched in BOTH
+  directions: arming for boot never starts sshd, and un-arming never kills the
+  operator's live session. It is a one-word edit away and invisible to every seam
+  spy, so `tests/ssh-persistence.test.ts` greps the module's executable lines for
+  it (comments stripped, so this prose may name it freely).
+- **Its DI seam is a SIBLING, never an overload** —
+  `setSshPersistenceRunner`/`resetSshPersistenceRunner`, mirroring
+  `setSshServiceRunner`'s shape. `enable`/`disable` are different verbs from
+  `start`/`stop`, and separate seams are what let a test assert that each path
+  provably never fired the other's.
+- **`status.ssh.enabled` is REQUIRED on the wire and EXPLICIT on every status
+  object**, never omitted-when-false. The consumer status merge preserves an
+  omitted optional field, so a present-only-when-true flag could be raised and
+  never lowered — the `policy_route_missing` latch, exactly.
+- **`parseSystemctlIsEnabled` accepts the exact word `enabled` and nothing else**,
+  parsed as defensively as `parseSystemctlIsActive`: a non-zero exit is swallowed
+  and the word read off `err.stdout`, and an unreadable probe is not-enabled
+  rather than a throw. `enabled-runtime` is the sharpest rejection — its symlink
+  lives in `/run` and is wiped on reboot, so treating it as enabled would restate
+  the very bug this field exists to surface. `static`/`indirect`/`generated`/
+  `masked`/`linked` likewise mean "no `[Install]` symlink".
+- **The probe rides `getSshStatus`'s existing `Promise.all`** beside the
+  active/hash probes, and `enabled` joins the broadcast change key — so a boot
+  arming that changes with nothing else re-broadcasts exactly once.
+- **The outcome is DEVICE-CONFIRMED.** `setSshPersistent` returns whether the
+  re-probe agrees, so a runner that resolved against a unit that did not take is
+  reported as a failure rather than a silent success.
+
+The RPC is `system.sshSetPersistent` (`.strict()` input, same `authedProcedure` +
+streaming/updating gate as its sibling SSH mutations). Operator surface and its
+pessimistic-toggle contract: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) →
+SSH PERSISTENCE IS A SECOND, INDEPENDENT CONTROL.
+
+Coverage: `tests/ssh-persistence.test.ts` — the verb table with its
+never-start/stop and never-enable/disable proofs in BOTH directions, the
+device-confirmed outcome, the dev no-spawn seam, the `is-enabled` reading matrix
+(incl. `enabled-runtime`), the explicit-in-both-directions wire assertion, the
+non-zero-exit and unreadable-probe paths, the enabled-alone re-broadcast, and the
+`--now` source gate. Rule-E proof in three directions: adding `--now` reddens 1,
+fusing the axes onto the service runner reddens 5, and making `enabled`
+omitted-when-false reddens 6.
 
 ### SSH password sync on boot — OTA slot-swap fix [EXISTS]
 

@@ -17,6 +17,8 @@ import {
 	aptReachabilitySchema,
 	deviceStatsSchema,
 	encoderLoadSchema,
+	sshPersistentInputSchema,
+	sshStatusSchema,
 	UPDATE_CHECK_FAILURE_REASONS,
 	updateCheckFailureReasonSchema,
 	updateLayerSchema,
@@ -394,5 +396,52 @@ describe('the `available` arm grew a package list, additively', () => {
 		expect(updateLayerSchema.parse('app')).toBe('app');
 		expect(updateLayerSchema.parse('platform')).toBe('platform');
 		expect(updateLayerSchema.safeParse('kernel').success).toBe(false);
+	});
+});
+
+/*
+ * `sshStatusSchema.enabled` + `sshPersistentInputSchema`.
+ *
+ * Boot persistence is a SECOND axis beside `active`: a bench board was measured
+ * `is-active: active` alongside `is-enabled: disabled`, which reads as healthy
+ * and loses SSH on the next reboot. These pin the two shape decisions that make
+ * the field trustworthy, both of which a "tidy-up" would silently undo.
+ */
+describe('sshStatusSchema — the boot-persistence axis', () => {
+	const STATUS = { user: 'ceralive', active: true, enabled: false };
+
+	test('`enabled` is REQUIRED, so it can never be omitted-when-false', () => {
+		// The consumer status merge preserves an omitted optional field, so an
+		// optional `enabled` could be raised and never lowered.
+		const { enabled: _dropped, ...withoutEnabled } = STATUS;
+		expect(sshStatusSchema.safeParse(withoutEnabled).success).toBe(false);
+		expect(sshStatusSchema.parse(STATUS)).toEqual(STATUS);
+	});
+
+	test('it is independent of `active` — all four pairings parse', () => {
+		for (const active of [true, false]) {
+			for (const enabled of [true, false]) {
+				const parsed = sshStatusSchema.parse({ user: 'ceralive', active, enabled });
+				expect(parsed).toEqual({ user: 'ceralive', active, enabled });
+			}
+		}
+	});
+});
+
+describe('sshPersistentInputSchema', () => {
+	test('accepts the stated intent', () => {
+		expect(sshPersistentInputSchema.parse({ enabled: true })).toEqual({
+			enabled: true,
+		});
+	});
+
+	test('is `.strict()` — an unknown key is REJECTED, never ignored', () => {
+		// This mutation decides whether an operator keeps remote access after a
+		// reboot; a silently-stripped extra key is not an acceptable failure mode.
+		expect(sshPersistentInputSchema.safeParse({ enabled: true, now: true }).success).toBe(false);
+	});
+
+	test('requires the field — an empty request is not a persistence decision', () => {
+		expect(sshPersistentInputSchema.safeParse({}).success).toBe(false);
 	});
 });

@@ -19,6 +19,7 @@ import {
 	remoteConfigInputSchema,
 	revisionsSchema,
 	sensorsStatusSchema,
+	sshPersistentInputSchema,
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
@@ -55,7 +56,11 @@ import {
 	startSoftwareUpdate,
 	triggerManualUpdateCheck,
 } from "../../modules/system/software-updates.ts";
-import { resetSshPassword, startStopSsh } from "../../modules/system/ssh.ts";
+import {
+	resetSshPassword,
+	setSshPersistent,
+	startStopSsh,
+} from "../../modules/system/ssh.ts";
 import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
 import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -246,6 +251,24 @@ export const sshStopProcedure = authedProcedure
 			return { success: false };
 		}
 		const success = await startStopSsh(context.ws, "stop_ssh");
+		return { success };
+	});
+
+/**
+ * Set SSH boot persistence procedure.
+ *
+ * A SEPARATE mutation from sshStart/sshStop, on the SAME auth + streaming/update
+ * gating: `systemctl enable|disable ssh` writes only the `[Install]` symlink, so
+ * it never disturbs the running service in either direction.
+ */
+export const sshSetPersistentProcedure = authedProcedure
+	.input(sshPersistentInputSchema)
+	.output(successResponseSchema)
+	.handler(async ({ input }) => {
+		if (getIsStreaming() || isUpdating()) {
+			return { success: false };
+		}
+		const success = await setSshPersistent(input.enabled);
 		return { success };
 	});
 

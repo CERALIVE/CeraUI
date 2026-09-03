@@ -99,6 +99,7 @@ import type {
 	SimPukUnlockOutput,
 	SimUnlockInput,
 	SimUnlockOutput,
+	SshPersistentInput,
 	StreamingConfigInput,
 	StreamingSetConfigOutput,
 	StreamingStartOutputExtended,
@@ -867,6 +868,7 @@ export interface TypedRPC {
 		checkForUpdates: () => Promise<SuccessResponse>;
 		sshStart: () => Promise<SuccessResponse>;
 		sshStop: () => Promise<SuccessResponse>;
+		sshSetPersistent: (input: SshPersistentInput) => Promise<SuccessResponse>;
 		sshResetPassword: () => Promise<{ success: boolean; password?: string }>;
 		getCloudProviders: () => Promise<unknown>;
 		setRemoteConfig: (input: RemoteConfigInput) => Promise<SuccessResponse>;

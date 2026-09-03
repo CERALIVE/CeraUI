@@ -53,10 +53,26 @@ export function sshIsActive(
 }
 
 /**
+ * Whether the SSH server survives a reboot — `systemctl is-enabled ssh`, a
+ * SEPARATE axis from {@link sshIsActive}. An absent status is treated as not
+ * persistent, which is the fail-safe direction: a device that has not told us
+ * must never be rendered as "your access is safe across a reboot".
+ */
+export function sshIsPersistent(
+	ssh: { enabled?: boolean } | null | undefined,
+): boolean {
+	return ssh?.enabled ?? false;
+}
+
+/**
  * Whether a pending SSH start/stop should now confirm: the live `ssh.active`
  * exactly matches the intended target. A `null` target (no op in flight) never
  * confirms — distinct from `active === false`, which is a real "now stopped"
  * confirm for a `stop` op.
+ *
+ * Shared verbatim by the boot-persistence toggle, whose confirm asks the same
+ * question of `ssh.enabled` — one predicate, so the two independent controls
+ * cannot drift into two different ideas of "the device agrees now".
  */
 export function sshToggleConfirmed(
 	active: boolean,
