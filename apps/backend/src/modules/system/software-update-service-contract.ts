@@ -58,7 +58,16 @@ export function isExpectedAptUpgradeArgv(argv: readonly string[]): boolean {
 	if (!APT_UPGRADE_PREFIX.every((value, index) => argv[index] === value)) {
 		return false;
 	}
-	const tail = argv.slice(APT_UPGRADE_PREFIX.length);
+	let tailStart = APT_UPGRADE_PREFIX.length;
+	const forcePair = argv.slice(tailStart, tailStart + 2);
+	if (
+		forcePair[0] === "-o" &&
+		(forcePair[1] === "Acquire::ForceIPv4=true" ||
+			forcePair[1] === "Acquire::ForceIPv6=true")
+	) {
+		tailStart += 2;
+	}
+	const tail = argv.slice(tailStart);
 	return (
 		(tail.length === 1 && tail[0] === "dist-upgrade") ||
 		(tail[0] === "install" &&

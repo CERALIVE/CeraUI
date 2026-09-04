@@ -38,6 +38,7 @@ import {
 	validateDetachedAptServiceFragment,
 	validateDetachedAptServiceIdentity,
 } from "../modules/system/software-update-service.ts";
+import { isExpectedAptUpgradeArgv } from "../modules/system/software-update-service-contract.ts";
 import {
 	buildAptInstallArgs,
 	buildAptUpgradeArgs,
@@ -209,6 +210,75 @@ describe("buildDetachedAptUpgradeCommand() — service-cgroup isolation", () => 
 				stderr: "/run/ceralive/software-update.stderr",
 			}),
 		).toThrow(/arguments do not match/);
+	});
+
+	it("accepts the legacy detached upgrade argv without a force flag", () => {
+		expect(
+			isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...DETACHED_APT_ARGS]),
+		).toBe(true);
+	});
+
+	it.each([
+		["ForceIPv4", "Acquire::ForceIPv4=true"],
+		["ForceIPv6", "Acquire::ForceIPv6=true"],
+	])("accepts one %s force pair", (_label, forceValue) => {
+		expect(
+			isExpectedAptUpgradeArgv([
+				"/usr/bin/apt-get",
+				...DETACHED_APT_ARGS.slice(0, -1),
+				"-o",
+				forceValue,
+				"dist-upgrade",
+			]),
+		).toBe(true);
+	});
+
+	it.each([
+		[
+			"both force flags",
+			["-o", "Acquire::ForceIPv4=true", "-o", "Acquire::ForceIPv6=true"],
+		],
+		["foreign force option", ["-o", "Acquire::http::Proxy=http://proxy"]],
+	])("refuses %s", (_label, options) => {
+		expect(
+			isExpectedAptUpgradeArgv([
+				"/usr/bin/apt-get",
+				...DETACHED_APT_ARGS.slice(0, -1),
+				...options,
+				"dist-upgrade",
+			]),
+		).toBe(false);
+	});
+
+	it("refuses remove even with an allowed force pair", () => {
+		expect(
+			isExpectedAptUpgradeArgv([
+				"/usr/bin/apt-get",
+				...DETACHED_APT_ARGS.slice(0, -1),
+				"-o",
+				"Acquire::ForceIPv4=true",
+				"remove",
+				"ceralui",
+			]),
+		).toBe(false);
+	});
+
+	it("reuses the predicate for ExecStart token validation", () => {
+		const base = serviceState({
+			activeState: "active",
+			subState: "running",
+			execStart:
+				"{ path=/usr/bin/apt-get ; argv[]=/usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Acquire::ForceIPv4=true dist-upgrade ; }",
+		});
+		expect(() => validateDetachedAptServiceIdentity(base)).not.toThrow();
+		expect(() =>
+			validateDetachedAptServiceIdentity(
+				base.replace(
+					"Acquire::ForceIPv4=true",
+					"Acquire::http::Proxy=http://proxy",
+				),
+			),
+		).toThrow(DetachedAptServiceIdentityError);
 	});
 
 	it("keeps the production upgrade off the ceralive service cgroup", async () => {
