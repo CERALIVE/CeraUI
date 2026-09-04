@@ -895,7 +895,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 
 | Package | Version |
 |---------|---------|
-| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.31 — EXACT pin, see below |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |
 | Bun pin (`.bun-version`) | 1.4.0 |
 | `svelte` | 5.56.10 |
 | `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
@@ -953,7 +953,7 @@ before the flip it was running Vitest on whatever Node the runner shipped. It is
 Bun 1.4.0 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
-**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.31` would range forward across betas and into stable
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.32` would range forward across betas and into stable
 2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
 serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
 WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
@@ -963,12 +963,14 @@ are declared as a bare `oc`. Do not reintroduce route metadata — CeraUI serves
 Reserved router keys in v2 (`then`, `bind`, `valueOf`, `toString`, `toJSON`) must never be used as a
 procedure or child-router key.
 
-Beta.31's breaking change is likewise outside CeraUI's surface: it changes only
+Beta.31's breaking change remains outside CeraUI's surface: it changes only
 `CORSHandlerPlugin`'s HTTP response default from reflected origin to `*` and permits async
-`origin`/`timingOrigin` resolvers. CeraUI instantiates no handler or CORS plugin; the Bun WebSocket
-adapter navigates the router and invokes `call()` directly. The other beta.31 contract/server edits
-are fixes (including prototype-safe error-code lookup) and do not change the `oc.router()` /
-`oc.input()` / `oc.output()` declarations used in `packages/rpc`.
+`origin`/`timingOrigin` resolvers. Beta.32 adds the prototype-pollution protection handler plugin,
+changes standard-handler interceptor plumbing (including CSRF refusal through `ORPCError`), and
+adds a response-compression content-type resolver; none is used by CeraUI. CeraUI instantiates no
+handler or CORS plugin; the Bun WebSocket adapter navigates the router and invokes `call()` directly.
+The `call()`, `oc.router()`, `oc.input()`/`oc.output()`, and error-code lookup exports used here are
+unchanged; no `adapter.ts` compatibility edit is required.
 
 ### TypeScript: two majors, deliberately
 
