@@ -487,6 +487,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout(CAPABILITY_PROBE_TIMEOUT_MS); the ADR-003 §7 caller contract turns a timeout — like any non-zero exit or unparseable output — into 'no bind-map support' and a legacy spawn, never a failed start",
 	},
 	{
+		id: "aptReachability.probe",
+		file: "modules/system/apt-reachability.ts",
+		symbol: "probeAptReachability",
+		command: "[curl, -4|-6, …, <apt-origin-probe-url>]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"curl's own 3 s transfer cap inside spawnWithTimeout(4 s); failures fold into a typed per-family result, and the complete dual-family verdict is cached for 60 s",
+	},
+	{
 		id: "connectivity.deviceBoundProbe",
 		file: "modules/network/device-bound-probe.ts",
 		symbol: "checkConnectivityViaDevice",

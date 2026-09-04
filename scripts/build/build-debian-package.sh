@@ -152,6 +152,21 @@ cat > dist/debian/postinst << 'EOF'
 #!/bin/bash
 set -e
 
+# ONE seam for the runtime-systemd directory. With CERALIVE_SYSTEMD_RUN_DIR unset —
+# every real install and every image build — this is byte-for-byte the hardcoded
+# /run/systemd/system; the variable exists only so the packaging contract test can
+# point the check at a scratch directory instead of the host's real one.
+SYSTEMD_RUN_DIR="${CERALIVE_SYSTEMD_RUN_DIR:-/run/systemd/system}"
+
+# Non-sensitive observability marker: the dpkg action, and WHETHER a previously
+# configured version exists — never the version value itself.
+if [ -n "$2" ]; then
+    upgrade_from_present=yes
+else
+    upgrade_from_present=no
+fi
+echo "ceralive-postinst: action=$1 upgrade_from_present=$upgrade_from_present"
+
 echo "🚀 Configuring CeraLive after installation..."
 
 # Reload systemd daemon
@@ -195,6 +210,28 @@ echo "To check status:"
 echo "  sudo systemctl status ceralive.service"
 echo ""
 echo "Web interface will be available at: http://localhost:8080"
+
+if [ "$1" = "configure" ]; then
+    systemctl daemon-reload || true
+
+    # Repairs the OLD field prerm, which disabled ceralive.service on every
+    # upgrade: a device updating from such a package arrives here disabled.
+    if command -v deb-systemd-helper >/dev/null 2>&1; then
+        deb-systemd-helper enable ceralive.service || true
+    else
+        systemctl enable ceralive.service || true
+    fi
+
+    # $2 is the previously configured version, so a non-empty value means UPGRADE.
+    # A fresh install keeps today's behaviour: installed and enabled, never started.
+    if [ -n "$2" ] && [ -d "$SYSTEMD_RUN_DIR" ]; then
+        if command -v deb-systemd-invoke >/dev/null 2>&1; then
+            deb-systemd-invoke restart ceralive.service || true
+        else
+            systemctl restart ceralive.service || true
+        fi
+    fi
+fi
 EOF
 
 # Create pre-remove script
@@ -202,12 +239,22 @@ cat > dist/debian/prerm << 'EOF'
 #!/bin/bash
 set -e
 
-echo "🛑 Stopping CERALIVE service..."
+# dpkg runs the OLD prerm before unpacking the new package, so stopping and
+# disabling here on an upgrade is what left the device with no control plane
+# after a self-update — `Restart=always` is inert after an explicit stop.
+case "$1" in
+    remove)
+        echo "🛑 Stopping CERALIVE service..."
 
-# Stop service if running
-systemctl stop ceralive.service 2>/dev/null || true
-systemctl disable ceralive.service 2>/dev/null || true
-systemctl disable --now ceralive.socket 2>/dev/null || true
+        # Stop service if running
+        systemctl stop ceralive.service 2>/dev/null || true
+        systemctl disable ceralive.service 2>/dev/null || true
+        systemctl disable --now ceralive.socket 2>/dev/null || true
+        ;;
+    upgrade|deconfigure|failed-upgrade)
+        :
+        ;;
+esac
 EOF
 
 # Create post-remove script
