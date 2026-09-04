@@ -22,6 +22,7 @@ import {
 	osCommand,
 	reconcileOperationsOnReconnect,
 } from "./async-operation.svelte";
+import { ConnectionResetError } from "./client";
 
 // osCommand's two feedback collaborators are mocked: `toast` is spied so we can
 // assert the SINGLE failure-feedback path, and the mocked `m` returns a minimal shape
@@ -395,6 +396,20 @@ describe("osCommand dispatch helper", () => {
 		expect(result).toBeUndefined();
 		expect(getOperationPhase("update")).toBe("failed");
 		expect(getOperationReason("update")).toBe("boom");
+		expect(toast.error).toHaveBeenCalledTimes(1);
+	});
+
+	it("treats ConnectionResetError as a typed transport failure with existing feedback", async () => {
+		const result = await osCommand({
+			key: "update",
+			rpc: async () => {
+				throw new ConnectionResetError(["system", "startUpdate"]);
+			},
+		});
+
+		expect(result).toBeUndefined();
+		expect(getOperationPhase("update")).toBe("failed");
+		expect(getOperationReason("update")).toBe("connection_reset");
 		expect(toast.error).toHaveBeenCalledTimes(1);
 	});
 

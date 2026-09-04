@@ -39,7 +39,7 @@
 import { m } from "@ceraui/i18n/svelte";
 import { toast } from "svelte-sonner";
 
-import type { ConnectionState } from "./client";
+import { ConnectionResetError, type ConnectionState } from "./client";
 import { shouldReconcileOnReconnect } from "./reconcile-inflight";
 
 // ============================================
@@ -591,7 +591,14 @@ export async function osCommand<T>(opts: {
 		opts.onResult?.(r);
 		return r;
 	} catch (e) {
-		failOperation(opts.key, e instanceof Error ? e.message : "error");
+		failOperation(
+			opts.key,
+			e instanceof ConnectionResetError
+				? "connection_reset"
+				: e instanceof Error
+					? e.message
+					: "error",
+		);
 		if (!opts.silent) {
 			toast.error(opts.failMessage?.() ?? m["network.os.operationFailed"]());
 		}

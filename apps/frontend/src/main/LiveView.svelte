@@ -16,7 +16,7 @@ import { toast } from 'svelte-sonner';
 
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
-import { rpc } from '$lib/rpc';
+import { ConnectionResetError, rpc } from '$lib/rpc';
 import {
 	confirmOperation,
 	failOperation,
@@ -861,7 +861,7 @@ async function handleStart(overrides: { source?: string } = {}) {
 	// for itself (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
 	const overridden =
 		overrides.source !== undefined
-			? ({ ...(config ?? {}), source: overrides.source } as typeof config)
+			? ({ ...config, source: overrides.source } as typeof config)
 			: config;
 	const startBase = reconcileStartSource(overridden, getSources());
 
@@ -897,6 +897,7 @@ async function handleStart(overrides: { source?: string } = {}) {
 			}
 		}
 	} catch (error) {
+		if (error instanceof ConnectionResetError) return;
 		// Transport/validation throw: revert to idle with the error message.
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';
