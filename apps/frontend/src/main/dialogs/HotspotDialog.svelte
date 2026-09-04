@@ -128,9 +128,9 @@ let security = $state<HotspotSecurityId | undefined>(undefined);
 const securityChoice = $derived(deriveHotspotSecurityChoice(iface?.hotspot));
 const radioTruth = $derived(deriveHotspotRadioTruth(iface?.hotspot, iface?.capabilities));
 
-let initialized = false;
+let prevOpen = false;
 $effect.pre(() => {
-	if (!initialized) {
+	if (open && !prevOpen) {
 		name = iface?.hotspot?.name ?? '';
 		password = iface?.hotspot?.password ?? '';
 		channel = iface?.hotspot?.channel ?? 'auto';
@@ -138,8 +138,8 @@ $effect.pre(() => {
 		// on a mode the device would refuse.
 		const choice = deriveHotspotSecurityChoice(iface?.hotspot);
 		security = choice?.kind === 'select' ? choice.selected : undefined;
-		initialized = true;
 	}
+	prevOpen = open;
 });
 
 const securityLabel = $derived(
@@ -201,20 +201,22 @@ const passwordError = $derived(
 // ── QR for the LIVE active credentials (not the unsaved form) ──
 let qrDataUrl = $state('');
 $effect(() => {
+	const controller = new AbortController();
 	const hs = iface?.hotspot;
-	if (hs?.name && hs?.password) {
+	if (open && hs?.name && hs?.password) {
 		// The LIVE mode, not the draft: this QR carries the credentials the AP is
 		// broadcasting right now, so its auth token must describe that AP too.
 		generateWifiQr(hs.name, hs.password, hotspotQrSecurity(hs.security))
 			.then((url) => {
-				qrDataUrl = url;
+				if (!controller.signal.aborted) qrDataUrl = url;
 			})
 			.catch(() => {
-				qrDataUrl = '';
+				if (!controller.signal.aborted) qrDataUrl = '';
 			});
 	} else {
 		qrDataUrl = '';
 	}
+	return () => controller.abort();
 });
 
 // Save dispatches the reconfigure; `hotspotConfigure` resolves immediately with a

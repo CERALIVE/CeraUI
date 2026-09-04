@@ -54,6 +54,7 @@ const PULSE_BASE_R = 9;
 /** Fraction along the link→core line where a parked (static) packet sits. */
 const PARK = 0.62;
 const PULSE_COUNT = 2;
+const PULSE_IDS = Array.from({ length: PULSE_COUNT }, (_, index) => `pulse-${index}`);
 
 interface NodeGeo {
 	/** Stable identifier carried from `link.id` — keys the {#each} blocks and the
@@ -232,7 +233,7 @@ const activeCount = $derived(links.filter((l) => l.isConnected).length);
 		{/each}
 
 		<!-- Outbound pulse rings (animated when live; faint static ring otherwise) -->
-		{#each Array(PULSE_COUNT) as _, i (i)}
+		{#each PULSE_IDS as pulseId, i (pulseId)}
 			<circle
 				bind:this={pulseEls[i]}
 				data-testid="bond-pulse"

@@ -122,6 +122,23 @@ afterEach(() => {
 });
 
 describe("PreviewCanvas", () => {
+	it("removes its document visibility listener on unmount", async () => {
+		const add = vi.spyOn(document, "addEventListener");
+		const remove = vi.spyOn(document, "removeEventListener");
+		const view = render(PreviewCanvas);
+		await tick();
+		const registration = add.mock.calls.find(
+			([type]) => type === "visibilitychange",
+		);
+		expect(registration).toBeDefined();
+
+		view.unmount();
+
+		expect(remove).toHaveBeenCalledWith("visibilitychange", registration?.[1]);
+		add.mockRestore();
+		remove.mockRestore();
+	});
+
 	it("shows the toggle and stays off until the operator enables it", () => {
 		const { container } = render(PreviewCanvas);
 		expect(

@@ -20,7 +20,8 @@
  *      comparison, not by spot-checking testids.
  */
 import type { HotspotConfig, WifiInterface } from "@ceraui/rpc/schemas";
-import { render } from "@testing-library/svelte";
+import { render, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import {
 	afterEach,
 	beforeAll,
@@ -56,9 +57,8 @@ vi.mock("$lib/rpc/client", () => ({
 vi.mock("svelte-sonner", () => ({
 	toast: { error: vi.fn(), success: vi.fn() },
 }));
-vi.mock("qrcode", () => ({
-	default: { toDataURL: vi.fn(async () => "data:image/png;base64,MOCKQR") },
-}));
+const qrDataUrl = vi.hoisted(() => vi.fn());
+vi.mock("qrcode", () => ({ default: { toDataURL: qrDataUrl } }));
 
 const WPA2_ONLY: HotspotConfig["available_security"] = {
 	wpa2: { name: "WPA2 (Personal)" },
@@ -91,6 +91,17 @@ function mount(target?: WifiInterface) {
 	});
 }
 
+function deferred<T>(): {
+	readonly promise: Promise<T>;
+	readonly resolve: (value: T) => void;
+} {
+	let resolve: (value: T) => void = () => undefined;
+	const promise = new Promise<T>((settle) => {
+		resolve = settle;
+	});
+	return { promise, resolve };
+}
+
 /**
  * bits-ui renders Dialog.Content into a PORTAL on document.body, so the render
  * container is empty — every query here must go through the live dialog element.
@@ -120,6 +131,8 @@ beforeAll(() => {
 
 beforeEach(() => {
 	initAsyncOperations();
+	qrDataUrl.mockReset();
+	qrDataUrl.mockResolvedValue("data:image/png;base64,MOCKQR");
 });
 
 afterEach(() => {
@@ -238,6 +251,59 @@ describe("radio truth — stated, never settable", () => {
 		expect(
 			dialog().querySelector('[data-testid="hotspot-radio-truth"]'),
 		).toBeNull();
+	});
+});
+
+describe("dialog lifecycle", () => {
+	it("keeps the newest QR when an older generation resolves after close and reopen", async () => {
+		const oldQr = deferred<string>();
+		const newQr = deferred<string>();
+		qrDataUrl.mockImplementation((payload: string) =>
+			payload.includes("Old hotspot") ? oldQr.promise : newQr.promise,
+		);
+		const oldIface = iface({ name: "Old hotspot", password: "old-password" });
+		const newIface = iface({ name: "New hotspot", password: "new-password" });
+		const view = mount(oldIface);
+		await waitFor(() => expect(qrDataUrl).toHaveBeenCalledTimes(1));
+
+		await view.rerender({ open: false, deviceId: "0", iface: oldIface });
+		await view.rerender({ open: true, deviceId: "0", iface: newIface });
+		await waitFor(() =>
+			expect(qrDataUrl.mock.calls.length).toBeGreaterThanOrEqual(2),
+		);
+
+		newQr.resolve("data:image/png;base64,NEW");
+		await waitFor(() => {
+			expect(dialog().querySelector("img")?.getAttribute("src")).toBe(
+				"data:image/png;base64,NEW",
+			);
+		});
+
+		oldQr.resolve("data:image/png;base64,OLD");
+		await Promise.resolve();
+		await tick();
+		expect(dialog().querySelector("img")?.getAttribute("src")).toBe(
+			"data:image/png;base64,NEW",
+		);
+	});
+
+	it("does not overwrite an open draft when the live interface updates", async () => {
+		const view = mount(iface({ name: "Seeded hotspot" }));
+		const input = dialog().querySelector<HTMLInputElement>("#hotspot-name");
+		expect(input).not.toBeNull();
+		if (input === null) return;
+		input.value = "Operator draft";
+		input.dispatchEvent(new Event("input", { bubbles: true }));
+
+		await view.rerender({
+			open: true,
+			deviceId: "0",
+			iface: iface({ name: "Incoming snapshot" }),
+		});
+
+		expect(
+			dialog().querySelector<HTMLInputElement>("#hotspot-name")?.value,
+		).toBe("Operator draft");
 	});
 });
 

@@ -74,7 +74,7 @@ async function load(): Promise<OfflineStateModule> {
 	const connUx = await import("./connection-ux.svelte");
 	const mod = await import("./offline-state.svelte");
 	loaded = { mod, connUx };
-	pollSpy = vi.spyOn(window, "setInterval");
+	pollSpy = vi.spyOn(window, "setTimeout");
 	return mod;
 }
 
@@ -216,6 +216,24 @@ describe("the browser offline event joins the shared grace", () => {
 		// second stamp would restart the window on every retry.
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(mod.getShouldShowOfflinePage()).toBe(true);
+	});
+
+	it("never overlaps origin checks when one recovery read is still in flight", async () => {
+		const mod = await load();
+		await vi.advanceTimersByTimeAsync(200);
+		const pending = new Promise<Response>(() => undefined);
+		const fetchMock = vi.mocked(fetch);
+		fetchMock.mockClear();
+		fetchMock.mockReturnValue(pending);
+		emit("connected");
+
+		browserOnline = false;
+		window.dispatchEvent(new Event("offline"));
+		await vi.advanceTimersByTimeAsync(graceMs() + mod.PERIODIC_CHECK_INTERVAL);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		await vi.advanceTimersByTimeAsync(mod.PERIODIC_CHECK_INTERVAL * 3);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });
 

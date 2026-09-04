@@ -399,27 +399,37 @@ let advancedOpen = $state(false);
 // Re-seed the form from the live modem each time the dialog opens. Guarded off
 // while a save is in flight so a close/reopen race can't drop the snapshot.
 let prevOpen = false;
+let dialogLoadGeneration = 0;
 $effect(() => {
-	if (open && !prevOpen && !savePending) {
-		formData = readModemConfig();
-		usagePolicySeed = usagePolicyOf(formData);
-		saveExpected = undefined;
-		scanGenerationBaseline = modem.network_scan?.generation ?? 0;
-		scanFailure = undefined;
-		saveRefusal = undefined;
-		saveUnconfirmed = false;
-		unconfirmedExpectation = undefined;
-		reconcileUnresolved = false;
-		advancedOpen = false;
-		resetSmsInbox();
-		void loadUsbModeOptions();
-		bandOutcomeKey = undefined;
-		bandReconciliation = undefined;
-		void loadBands();
-		void loadFccUnlock();
+	if (!open) {
+		dialogLoadGeneration++;
+		prevOpen = open;
+		return;
 	}
+	if (prevOpen || savePending) return;
 	prevOpen = open;
+	const generation = ++dialogLoadGeneration;
+	formData = readModemConfig();
+	usagePolicySeed = usagePolicyOf(formData);
+	saveExpected = undefined;
+	scanGenerationBaseline = modem.network_scan?.generation ?? 0;
+	scanFailure = undefined;
+	saveRefusal = undefined;
+	saveUnconfirmed = false;
+	unconfirmedExpectation = undefined;
+	reconcileUnresolved = false;
+	advancedOpen = false;
+	resetSmsInbox();
+	void loadUsbModeOptions(generation);
+	bandOutcomeKey = undefined;
+	bandReconciliation = undefined;
+	void loadBands(generation);
+	void loadFccUnlock(generation);
 });
+
+function isCurrentDialogLoad(generation: number | undefined): boolean {
+	return generation === undefined || (open && generation === dialogLoadGeneration);
+}
 
 // APN required when Automatic APN is disabled (mirrors backend zod refine).
 const apnError = $derived(!formData.autoconfig && formData.apn.trim().length === 0);
@@ -712,7 +722,7 @@ const usbSwitching = $derived(isUsbModeFlowBusy(usbFlow));
 let usbOptions = $state<UsbModeOptionsOutput | undefined>(undefined);
 let usbSelected = $state<UsbCompositionMode | undefined>(undefined);
 
-async function loadUsbModeOptions(): Promise<void> {
+async function loadUsbModeOptions(generation?: number): Promise<void> {
 	usbOptions = undefined;
 	usbSelected = undefined;
 	const requested = deviceId;
@@ -724,7 +734,7 @@ async function loadUsbModeOptions(): Promise<void> {
 	);
 	// A close/reopen onto another modem while this was in flight must not adopt
 	// the previous device's certified set.
-	if (requested !== deviceId) return;
+	if (!isCurrentDialogLoad(generation) || requested !== deviceId) return;
 	usbOptions = outcome.phase === 'loaded' ? outcome.value : undefined;
 }
 
@@ -743,7 +753,7 @@ let fccDetail = $state<MutationOutcomeDetail | undefined>(undefined);
 
 const fccClaim = $derived(modem.capability_modules?.["fcc-auto-unlock"]);
 
-async function loadFccUnlock(): Promise<void> {
+async function loadFccUnlock(generation?: number): Promise<void> {
 	fccState = undefined;
 	fccOutcome = undefined;
 	fccDetail = undefined;
@@ -753,7 +763,7 @@ async function loadFccUnlock(): Promise<void> {
 	);
 	// A close/reopen onto another modem while this was in flight must not adopt
 	// the previous device's answer.
-	if (requested !== deviceId) return;
+	if (!isCurrentDialogLoad(generation) || requested !== deviceId) return;
 	fccState =
 		outcome.phase === 'loaded' && outcome.value.success ? outcome.value.state : undefined;
 }
@@ -854,13 +864,13 @@ const bandDiagnostics = $derived(
 // re-read immediately after an apply, and clearing there would erase the outcome
 // the operator has to read — including `auto_restored`, the one that says their
 // request did not take effect. The open edge clears it instead.
-async function loadBands(): Promise<void> {
+async function loadBands(generation?: number): Promise<void> {
 	bandResult = undefined;
 	const requested = deviceId;
 	const outcome = await loadWithinBound('getBands', () =>
 		rpc.modems.getBands({ device: String(deviceId) }),
 	);
-	if (requested !== deviceId) return;
+	if (!isCurrentDialogLoad(generation) || requested !== deviceId) return;
 	if (outcome.phase !== 'loaded') {
 		// Neither a failed nor an expired read has established a catalog, and the
 		// band card's absent state is what says so. Seeding a selection from a
