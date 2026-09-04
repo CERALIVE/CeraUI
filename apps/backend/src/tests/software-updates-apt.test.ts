@@ -6,6 +6,7 @@
  *   - each package name is charset-validated, so a name carrying shell
  *     metacharacters or whitespace is rejected before it can reach apt-get.
  */
+
 import { describe, expect, it } from "bun:test";
 import {
 	lstat,
@@ -17,6 +18,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { type UpdatePackage, updateStateSchema } from "@ceraui/rpc";
 import { isParseError } from "../modules/system/cli-parse.ts";
 import {
 	ceralivePackageList,
@@ -45,16 +47,19 @@ import {
 } from "../modules/system/software-update-service.ts";
 import { isExpectedAptUpgradeArgv } from "../modules/system/software-update-service-contract.ts";
 import {
+	actionableAppNames,
 	buildAptDiscoveryArgs,
 	buildAptInstallArgs,
 	buildAptRefreshArgs,
 	buildAptUpgradeArgs,
+	buildDiscoveredPackages,
 	classifyAptUpdateResult,
 	deriveAptProgress,
 	getUpdateState,
 	isSoftwareUpdateRecoveryInconclusive,
 	parseAptUpgradeSummary,
 	parseHeldBackPackages,
+	parseKeptBackPackageNames,
 	recoverSoftwareUpdateIfRunning,
 	resetAptReachabilityProbeForTest,
 	resetSoftwareUpdateSizeRunner,
@@ -63,6 +68,7 @@ import {
 	setAptReachabilityProbeForTest,
 	setSoftwareUpdateSizeRunner,
 } from "../modules/system/software-updates.ts";
+import { deriveUpdateState } from "../modules/system/update-state.ts";
 
 const SOFTWARE_UPDATES_PATH = new URL(
 	"../modules/system/software-updates.ts",
@@ -1259,5 +1265,308 @@ The following packages will be upgraded:
 `);
 		expect(isParseError(result)).toBe(true);
 		if (!result.ok) expect(result.reason).toContain("Need to get");
+	});
+});
+
+/*
+ * Todo 14 — discovery tags every package with its layer and lists kept-back
+ * packages honestly. The whole point is that `layer` and `kept_back` are the
+ * ONLY inputs to `actionable`, and that a platform or kept-back row is reported
+ * without ever reaching an install argv or the actionable count.
+ */
+const APP_ONLY_STDOUT = `Reading package lists...
+Building dependency tree...
+Calculating upgrade...
+The following packages will be upgraded:
+  ceralive-device cerastream
+2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Need to get 12.3 MB of archives.
+`;
+
+const PLATFORM_ONLY_STDOUT = `Calculating upgrade...
+The following packages will be upgraded:
+  gstreamer1.0-rockchip-ceralive linux-image-edge-rockchip-rk3588
+2 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Need to get 88.1 MB of archives.
+`;
+
+const MIXED_STDOUT = `Calculating upgrade...
+The following packages have been kept back:
+  gstreamer1.0-rockchip-ceralive
+The following packages will be upgraded:
+  ceralive-device cerastream linux-image-edge-rockchip-rk3588
+3 upgraded, 0 newly installed, 0 to remove and 1 not upgraded.
+Need to get 91.0 MB of archives.
+`;
+
+const KEPT_BACK_ONLY_STDOUT = `Calculating upgrade...
+The following packages have been kept back:
+  cerastream gstreamer1.0-rockchip-ceralive
+0 upgraded, 0 newly installed, 0 to remove and 2 not upgraded.
+`;
+
+const MODEM_CLOSURE = [
+	"ceralive-modem-support",
+	"libmbim-glib4",
+	"libmbim-proxy",
+	"libmbim-utils",
+	"libmm-glib0",
+	"libqmi-glib5",
+	"libqmi-proxy",
+	"libqmi-utils",
+	"libqrtr-glib0",
+	"modemmanager",
+] as const;
+
+const AVAILABLE_SNAPSHOT_BASE = {
+	checking: false,
+	updating: null,
+	failure: null,
+	succeeded: false,
+} as const;
+
+function availableArm(packages: readonly UpdatePackage[]) {
+	return deriveUpdateState({
+		...AVAILABLE_SNAPSHOT_BASE,
+		available: {
+			identity: { version: "abc123", packages: packages.map((p) => p.name) },
+			package_count: packages.length,
+			packages: [...packages],
+			actionable_count: actionableAppNames(packages).length,
+		},
+	});
+}
+
+describe("discovery classifies every package by layer and kept-back state", () => {
+	it("an app-only upgrade set is fully actionable", () => {
+		const summary = parseAptUpgradeSummary(APP_ONLY_STDOUT);
+		expect(summary.ok).toBe(true);
+		if (!summary.ok) return;
+
+		const packages = buildDiscoveredPackages(
+			summary.value.packages,
+			parseKeptBackPackageNames(APP_ONLY_STDOUT),
+		);
+		expect(packages).toEqual([
+			{ name: "ceralive-device", layer: "app", actionable: true },
+			{ name: "cerastream", layer: "app", actionable: true },
+		]);
+		expect(actionableAppNames(packages)).toEqual([
+			"ceralive-device",
+			"cerastream",
+		]);
+	});
+
+	it("a platform-only upgrade set is reported and counts zero actionable", () => {
+		const summary = parseAptUpgradeSummary(PLATFORM_ONLY_STDOUT);
+		expect(summary.ok).toBe(true);
+		if (!summary.ok) return;
+
+		const packages = buildDiscoveredPackages(
+			summary.value.packages,
+			parseKeptBackPackageNames(PLATFORM_ONLY_STDOUT),
+		);
+		expect(packages).toEqual([
+			{
+				name: "gstreamer1.0-rockchip-ceralive",
+				layer: "platform",
+				actionable: false,
+			},
+			{
+				name: "linux-image-edge-rockchip-rk3588",
+				layer: "platform",
+				actionable: false,
+			},
+		]);
+		expect(actionableAppNames(packages)).toEqual([]);
+	});
+
+	it("a mixed set counts exactly the app packages apt did not keep back", () => {
+		const summary = parseAptUpgradeSummary(MIXED_STDOUT);
+		expect(summary.ok).toBe(true);
+		if (!summary.ok) return;
+
+		const packages = buildDiscoveredPackages(
+			summary.value.packages,
+			parseKeptBackPackageNames(MIXED_STDOUT),
+		);
+		expect(packages).toEqual([
+			{ name: "ceralive-device", layer: "app", actionable: true },
+			{ name: "cerastream", layer: "app", actionable: true },
+			{
+				name: "linux-image-edge-rockchip-rk3588",
+				layer: "platform",
+				actionable: false,
+			},
+			{
+				name: "gstreamer1.0-rockchip-ceralive",
+				layer: "platform",
+				kept_back: true,
+				actionable: false,
+			},
+		]);
+		expect(actionableAppNames(packages)).toEqual([
+			"ceralive-device",
+			"cerastream",
+		]);
+	});
+
+	it("a kept-back-only set is informational: every entry kept_back, none actionable", () => {
+		const packages = buildDiscoveredPackages(
+			[],
+			parseKeptBackPackageNames(KEPT_BACK_ONLY_STDOUT),
+		);
+		expect(packages).toEqual([
+			{
+				name: "cerastream",
+				layer: "app",
+				kept_back: true,
+				actionable: false,
+			},
+			{
+				name: "gstreamer1.0-rockchip-ceralive",
+				layer: "platform",
+				kept_back: true,
+				actionable: false,
+			},
+		]);
+		expect(actionableAppNames(packages)).toEqual([]);
+		expect(
+			buildAptUpgradeArgs(actionableAppNames(packages), "any"),
+		).not.toContain("cerastream");
+	});
+
+	it("an app package kept back is NOT actionable even though its layer is app", () => {
+		const packages = buildDiscoveredPackages(["cerastream"], ["cerastream"]);
+		expect(packages).toEqual([
+			{
+				name: "cerastream",
+				layer: "app",
+				kept_back: true,
+				actionable: false,
+			},
+		]);
+		expect(actionableAppNames(packages)).toEqual([]);
+	});
+
+	it("the COMPLETE ModemManager closure classifies app and is counted in full", () => {
+		const packages = buildDiscoveredPackages(MODEM_CLOSURE, []);
+		expect(packages).toHaveLength(MODEM_CLOSURE.length);
+		for (const entry of packages) {
+			expect(entry.layer).toBe("app");
+			expect(entry.actionable).toBe(true);
+			expect(entry.kept_back).toBeUndefined();
+		}
+		expect(actionableAppNames(packages)).toEqual([...MODEM_CLOSURE]);
+		expect(buildAptUpgradeArgs(actionableAppNames(packages), "any")).toEqual([
+			"-y",
+			"-o",
+			"Dpkg::Options::=--force-confdef",
+			"-o",
+			"Dpkg::Options::=--force-confold",
+			"install",
+			...MODEM_CLOSURE,
+		]);
+	});
+
+	it("drops a kept-back name that fails the apt charset instead of failing the cycle", () => {
+		expect(
+			parseKeptBackPackageNames(`The following packages have been kept back:
+  cerastream bad;name
+0 upgraded, 0 newly installed, 0 to remove and 2 not upgraded.
+`),
+		).toEqual(["cerastream"]);
+	});
+});
+
+describe("gstreamer1.0-rockchip-ceralive is informational in BOTH discovery positions", () => {
+	it("as an upgradable package: reported, never actionable, never in the install argv", () => {
+		const packages = buildDiscoveredPackages(
+			["gstreamer1.0-rockchip-ceralive"],
+			[],
+		);
+		expect(packages).toEqual([
+			{
+				name: "gstreamer1.0-rockchip-ceralive",
+				layer: "platform",
+				actionable: false,
+			},
+		]);
+		expect(actionableAppNames(packages)).toEqual([]);
+
+		const arm = availableArm(packages);
+		expect(arm).toMatchObject({
+			kind: "available",
+			actionable_count: 0,
+			packages,
+		});
+		expect(
+			buildAptUpgradeArgs(actionableAppNames(packages), "any").slice(-1),
+		).toEqual(["install"]);
+	});
+
+	it("as a kept-back package: reported with kept_back, never actionable", () => {
+		const packages = buildDiscoveredPackages(
+			[],
+			["gstreamer1.0-rockchip-ceralive"],
+		);
+		expect(packages).toEqual([
+			{
+				name: "gstreamer1.0-rockchip-ceralive",
+				layer: "platform",
+				kept_back: true,
+				actionable: false,
+			},
+		]);
+		expect(actionableAppNames(packages)).toEqual([]);
+
+		const arm = availableArm(packages);
+		expect(arm).toMatchObject({ kind: "available", actionable_count: 0 });
+		expect(
+			buildAptUpgradeArgs(actionableAppNames(packages), "any").slice(-1),
+		).toEqual(["install"]);
+	});
+});
+
+describe("the available arm carries the layer/kept-back detail on the wire", () => {
+	it("survives updateStateSchema.parse with every classification field intact", () => {
+		const packages = buildDiscoveredPackages(
+			["ceralive-device", "linux-image-edge-rockchip-rk3588"],
+			["gstreamer1.0-rockchip-ceralive"],
+		);
+		const parsed = updateStateSchema.parse(availableArm(packages));
+		expect(parsed).toMatchObject({
+			kind: "available",
+			actionable_count: 1,
+			packages: [
+				{ name: "ceralive-device", layer: "app", actionable: true },
+				{
+					name: "linux-image-edge-rockchip-rk3588",
+					layer: "platform",
+					actionable: false,
+				},
+				{
+					name: "gstreamer1.0-rockchip-ceralive",
+					layer: "platform",
+					kept_back: true,
+					actionable: false,
+				},
+			],
+		});
+	});
+
+	it("a legacy available arm with no classification still parses", () => {
+		const legacy = deriveUpdateState({
+			...AVAILABLE_SNAPSHOT_BASE,
+			available: {
+				identity: { version: "abc123", packages: ["cerastream"] },
+				package_count: 1,
+			},
+		});
+		expect(updateStateSchema.parse(legacy)).toEqual(legacy);
+		expect((legacy as { packages?: unknown }).packages).toBeUndefined();
+		expect(
+			(legacy as { actionable_count?: unknown }).actionable_count,
+		).toBeUndefined();
 	});
 });

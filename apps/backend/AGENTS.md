@@ -2968,6 +2968,49 @@ rejects `dist-upgrade`, platform/unknown packages, and unsorted package vectors;
 service recovery remains tolerant of the historical `dist-upgrade` identity so
 an update started by an older backend can still be reattached safely.
 
+### …AND DISCOVERY REPORTS WHAT IT CANNOT INSTALL [EXISTS]
+
+Discovery no longer answers with a bare package list. `buildDiscoveredPackages`
+tags every name the `dist-upgrade --assume-no` cycle saw with its layer — from
+`classifyPackageLayer`, the ONE exact-name allowlist in
+`modules/system/package-layer.ts`, never a substring or prefix test — and with
+whether apt kept it back. It derives `actionable` ONCE, as
+`layer === "app" && !kept_back`, so the install argv, the wire count and the
+operator's band cannot disagree.
+
+- **The kept-back block is read on EVERY cycle**, from the original dist-upgrade
+  stdout, not only when nothing could be upgraded. apt reports kept-back packages
+  alongside real upgrades, and an operator must be told either way. The existing
+  count-0 `apt-get install --assume-no` fallback is unchanged; in that branch the
+  re-parsed summary describes an explicit install plan rather than an upgrade set,
+  so nothing there is treated as upgradable and every entry is a kept-back one.
+- **Kept-back membership WINS over the upgradable list.** apt can name a package
+  in both, and the honest answer for such an entry is that it is not installable —
+  so an `app`-layer package that was kept back is reported, and is NOT actionable.
+- **`parseKeptBackPackageNames` DROPS a name that fails `APT_PACKAGE_NAME_RE`
+  rather than throwing**, which is the deliberate opposite of its sibling
+  `parseHeldBackPackages`. That one feeds an argv and stays fail-loud; this list
+  is informational, so a malformed entry must cost one row, never the whole
+  discovery cycle. Do not "unify" the two readers.
+- **Platform and kept-back entries never reach an install argv.**
+  `actionableAppNames` is what `buildAptUpgradeArgs` and `doSoftwareUpdate` read,
+  and the existing `actionableAppPackages.length === 0` refusal is what makes a
+  platform-only or kept-back-only discovery uninstallable by construction.
+- **The wire carries both facts.** `update_state`'s `available` arm gains
+  `packages` (each entry `{name, layer, kept_back?, actionable}`) and
+  `actionable_count`. The count is emitted even when it is `0` — that is a real
+  answer, and it is what a consumer gates the Install control on, never
+  `package_count`. `packages` is OMITTED when nothing was classified, so a
+  pre-classification frame keeps parsing.
+
+Coverage: `tests/software-updates-apt.test.ts` — app-only, platform-only, mixed,
+kept-back-only, the app-package-kept-back case, the COMPLETE ModemManager closure
+(every member `app` and counted), the charset drop, and
+`gstreamer1.0-rockchip-ceralive` in BOTH the upgradable and kept-back positions
+proving it is informational, `actionable: false`, absent from the install argv and
+`actionable_count: 0` when it is the sole entry. Rule-E proof in both directions:
+dropping the layer gate reddens 4 tests, dropping the kept-back gate reddens 2.
+
 ## PER-CORE ENCODER LOAD — PROCFS CORE INVENTORY AND LEGACY CLOCK FALLBACK [EXISTS]
 
 `modules/system/encoder-load.ts` publishes `encoder-load`; its pure procfs

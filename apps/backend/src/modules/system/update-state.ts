@@ -4,6 +4,7 @@ import type {
 	AptReachability,
 	UpdateCheckFailureReason,
 	UpdateIdentity,
+	UpdatePackage,
 	UpdateProgress,
 	UpdateState,
 } from "@ceraui/rpc/schemas";
@@ -18,6 +19,8 @@ export interface AvailableUpdate {
 	identity: UpdateIdentity;
 	package_count: number;
 	download_size?: string;
+	packages?: UpdatePackage[];
+	actionable_count?: number;
 }
 
 export interface UpdateFailure {
@@ -58,6 +61,13 @@ export function updateDismissalKey(identity: UpdateIdentity): string {
 	return `update:${identity.version}`;
 }
 
+function optionalField<K extends string, V>(
+	key: K,
+	value: V | undefined,
+): Partial<Record<K, V>> {
+	return value !== undefined ? ({ [key]: value } as Record<K, V>) : {};
+}
+
 function deriveInstallState(progress: UpdateProgress): UpdateState {
 	const installing = progress.unpacking > 0 || progress.setting_up > 0;
 	return installing
@@ -91,23 +101,23 @@ export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 		s.reachability !== undefined ? { reachability: s.reachability } : {};
 
 	if (s.available && s.available.package_count > 0) {
-		const { identity, package_count, download_size } = s.available;
-		return download_size !== undefined
-			? {
-					kind: "available",
-					identity,
-					package_count,
-					download_size,
-					...stamp,
-					...reachability,
-				}
-			: {
-					kind: "available",
-					identity,
-					package_count,
-					...stamp,
-					...reachability,
-				};
+		const {
+			identity,
+			package_count,
+			download_size,
+			packages,
+			actionable_count,
+		} = s.available;
+		return {
+			kind: "available",
+			identity,
+			package_count,
+			...optionalField("download_size", download_size),
+			...optionalField("packages", packages),
+			...optionalField("actionable_count", actionable_count),
+			...stamp,
+			...reachability,
+		};
 	}
 	if (s.checking) return { kind: "checking", ...stamp, ...reachability };
 	if (s.checkFailure) {

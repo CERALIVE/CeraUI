@@ -19,6 +19,7 @@
 import {
 	type AptReachability as AptReachabilityWire,
 	aptReachabilitySchema,
+	type UpdatePackage,
 } from "@ceraui/rpc";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -95,6 +96,7 @@ let aptDiscoveryRunning = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
+let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
 let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
 let softwareUpdateRecoveryRetryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -235,6 +237,7 @@ export function resetSoftwareUpdateState(): void {
 	lastCheckedAt = null;
 	lastAptReachability = undefined;
 	actionableAppPackages = [];
+	discoveredPackages = [];
 }
 
 export type SoftwareUpdateRecoveryDeps = {
@@ -271,6 +274,10 @@ export function getUpdateState(): UpdateState {
 						...(availableUpdates.download_size !== undefined
 							? { download_size: availableUpdates.download_size }
 							: {}),
+						...(discoveredPackages.length > 0
+							? { packages: discoveredPackages }
+							: {}),
+						actionable_count: actionableAppPackages.length,
 					}
 				: null;
 	return deriveUpdateState({
@@ -374,6 +381,59 @@ export function parseHeldBackPackages(packages: string): string[] {
 		);
 	}
 	return names;
+}
+
+// The reporting-side reader of the same block `parseHeldBackPackages` feeds to an
+// argv. It DROPS a name that fails the charset instead of throwing, because this
+// list is informational: a malformed entry must cost the operator one row, never
+// the whole discovery cycle. The argv path stays fail-loud.
+export function parseKeptBackPackageNames(stdout: string): string[] {
+	const section = parseAptPackageList(
+		stdout,
+		"The following packages have been kept back:\n",
+	);
+	if (!section.ok || section.value === undefined) return [];
+	return section.value
+		.split(/\s+/)
+		.filter((name) => name.length > 0 && APT_PACKAGE_NAME_RE.test(name));
+}
+
+// Every package discovery saw, tagged with its layer and whether apt kept it
+// back. `actionable` is derived here ONCE — `layer === "app" && !kept_back` — so
+// the install argv, the wire count and the operator's band can never disagree.
+// Kept-back membership WINS over the upgradable list: apt can name a package in
+// both, and the honest answer for such an entry is that it is not installable.
+export function buildDiscoveredPackages(
+	upgradable: readonly string[],
+	keptBack: readonly string[],
+): UpdatePackage[] {
+	const held = new Set(keptBack);
+	const seen = new Set<string>();
+	const ordered: string[] = [];
+	for (const name of [...upgradable, ...keptBack]) {
+		if (name.length === 0 || seen.has(name)) continue;
+		seen.add(name);
+		ordered.push(name);
+	}
+	return ordered.map((name) => {
+		const layer = classifyPackageLayer(name);
+		const isKeptBack = held.has(name);
+		return {
+			name,
+			layer,
+			...(isKeptBack ? { kept_back: true as const } : {}),
+			actionable: layer === "app" && !isKeptBack,
+		};
+	});
+}
+
+export function actionableAppNames(
+	packages: readonly UpdatePackage[],
+): string[] {
+	return packages
+		.filter((entry) => entry.actionable === true)
+		.map((entry) => entry.name)
+		.sort();
 }
 
 export function buildAptInstallArgs(packages: string[]): string[] {
@@ -593,11 +653,16 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 		// Reset aptHeldBackPackages if some upgrades became available via dist-upgrade
 		aptHeldBackPackages = undefined;
 	}
-	actionableAppPackages = fromHeldBack
-		? []
-		: res.packages
-				.filter((name) => classifyPackageLayer(name) === "app")
-				.sort();
+	// The kept-back block is read from the ORIGINAL dist-upgrade output on every
+	// cycle, not only when nothing could be upgraded: apt reports kept-back
+	// packages alongside real upgrades, and an operator must be told about them
+	// either way. In the held-back fallback branch `res` describes the explicit
+	// install plan rather than an upgrade set, so nothing there is upgradable.
+	discoveredPackages = buildDiscoveredPackages(
+		fromHeldBack ? [] : res.packages,
+		parseKeptBackPackageNames(upgrade.stdout),
+	);
+	actionableAppPackages = actionableAppNames(discoveredPackages);
 
 	availableIdentity =
 		res.upgradeCount > 0

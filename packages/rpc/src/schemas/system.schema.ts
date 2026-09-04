@@ -148,15 +148,23 @@ export const UPDATE_LAYERS = ['app', 'platform'] as const;
 export const updateLayerSchema = z.enum(UPDATE_LAYERS);
 export type UpdateLayer = z.infer<typeof updateLayerSchema>;
 
-// Per-package detail for the `available` arm. Both `layer` and `kept_back` are
-// independently optional so a producer that classified nothing still parses, and
-// `kept_back` is `z.literal(true)` rather than a boolean: apt reports the kept-back
-// SET, so the absence of the key is the only way to say "not kept back" — a
-// `false` would be a claim nothing measured.
+// Per-package detail for the `available` arm. `layer`, `kept_back` and
+// `actionable` are independently optional so a producer that classified nothing
+// still parses, and `kept_back` is `z.literal(true)` rather than a boolean: apt
+// reports the kept-back SET, so the absence of the key is the only way to say
+// "not kept back" — a `false` would be a claim nothing measured.
+//
+// `actionable` is the DERIVED verdict `layer === 'app' && !kept_back`, published
+// rather than re-derived so the device and every consumer answer the install
+// question identically. It IS a plain boolean, because unlike `kept_back` both
+// values are measured: a platform or kept-back row is positively not installable.
+// It stays optional only so a pre-classification frame keeps parsing; a producer
+// that emits `packages` at all emits it on every entry.
 export const updatePackageSchema = z.object({
 	name: z.string(),
 	layer: updateLayerSchema.optional(),
 	kept_back: z.literal(true).optional(),
+	actionable: z.boolean().optional(),
 });
 export type UpdatePackage = z.infer<typeof updatePackageSchema>;
 
@@ -191,6 +199,11 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 		// the Todo-23 dismissal-key source and stays byte-unchanged. A legacy frame
 		// omitting this key must keep parsing.
 		packages: z.array(updatePackageSchema).optional(),
+		// How many of those entries the device may actually install. `0` is a real
+		// answer, not an absence — a platform-only or kept-back-only discovery still
+		// emits this arm so the informational band renders, and the Install path is
+		// gated strictly on this count rather than on `package_count`.
+		actionable_count: z.number().optional(),
 	}),
 	z.object({
 		kind: z.literal('downloading'),
