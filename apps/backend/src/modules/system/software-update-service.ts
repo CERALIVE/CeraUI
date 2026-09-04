@@ -9,6 +9,7 @@
 */
 
 import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
+import { classifyPackageLayer } from "./package-layer.ts";
 import {
 	prepareSoftwareUpdateOutput,
 	readSoftwareUpdateOutput,
@@ -73,6 +74,17 @@ export function buildDetachedAptUpgradeCommand(
 	outputPaths: SoftwareUpdateOutputPaths,
 ): string[] {
 	if (!isExpectedAptUpgradeArgv(["/usr/bin/apt-get", ...aptArgs])) {
+		throw new InvalidDetachedAptUpgradeArgumentsError();
+	}
+	const installAt = aptArgs.indexOf("install");
+	const packages = installAt < 0 ? [] : aptArgs.slice(installAt + 1);
+	if (
+		packages.length === 0 ||
+		packages.some((name) => classifyPackageLayer(name) !== "app") ||
+		packages.some(
+			(name, index) => index > 0 && (packages[index - 1] ?? "") > name,
+		)
+	) {
 		throw new InvalidDetachedAptUpgradeArgumentsError();
 	}
 	const trustedPaths = softwareUpdateOutputPaths();

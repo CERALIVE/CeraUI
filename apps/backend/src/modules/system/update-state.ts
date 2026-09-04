@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type {
+	AptReachability,
 	UpdateCheckFailureReason,
 	UpdateIdentity,
 	UpdateProgress,
@@ -34,6 +35,7 @@ export interface UpdateSnapshot {
 	succeeded: boolean;
 	checkFailure?: UpdateCheckFailureReason | null;
 	checkedAt?: number | null;
+	reachability?: AptReachability;
 }
 
 // The version signature covers the sorted package set + count + download size, so
@@ -85,16 +87,36 @@ export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 
 	const checkedAt = s.checkedAt ?? undefined;
 	const stamp = checkedAt !== undefined ? { checked_at: checkedAt } : {};
+	const reachability =
+		s.reachability !== undefined ? { reachability: s.reachability } : {};
 
 	if (s.available && s.available.package_count > 0) {
 		const { identity, package_count, download_size } = s.available;
 		return download_size !== undefined
-			? { kind: "available", identity, package_count, download_size, ...stamp }
-			: { kind: "available", identity, package_count, ...stamp };
+			? {
+					kind: "available",
+					identity,
+					package_count,
+					download_size,
+					...stamp,
+					...reachability,
+				}
+			: {
+					kind: "available",
+					identity,
+					package_count,
+					...stamp,
+					...reachability,
+				};
 	}
-	if (s.checking) return { kind: "checking", ...stamp };
+	if (s.checking) return { kind: "checking", ...stamp, ...reachability };
 	if (s.checkFailure) {
-		return { kind: "check_failed", reason: s.checkFailure, ...stamp };
+		return {
+			kind: "check_failed",
+			reason: s.checkFailure,
+			...stamp,
+			...reachability,
+		};
 	}
-	return { kind: "idle", ...stamp };
+	return { kind: "idle", ...stamp, ...reachability };
 }
