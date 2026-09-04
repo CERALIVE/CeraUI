@@ -140,6 +140,10 @@ const checkFailureMessage = $derived.by(() => {
 			return m["general.updateCheckReasonRefreshFailed"]();
 		case 'discovery_failed':
 			return m["general.updateCheckReasonDiscoveryFailed"]();
+		case 'repos_unreachable':
+			return m["settings.updates.checkFailed.repos_unreachable"]();
+		case 'captive_portal':
+			return m["settings.updates.checkFailed.captive_portal"]();
 		default:
 			return undefined;
 	}

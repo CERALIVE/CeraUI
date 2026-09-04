@@ -12,7 +12,16 @@
  */
 import { describe, expect, test } from 'bun:test';
 
-import { deviceStatsSchema, encoderLoadSchema } from './system.schema.js';
+import {
+	APT_FAMILY_PROBE_RESULTS,
+	aptReachabilitySchema,
+	deviceStatsSchema,
+	encoderLoadSchema,
+	UPDATE_CHECK_FAILURE_REASONS,
+	updateCheckFailureReasonSchema,
+	updateLayerSchema,
+	updateStateSchema,
+} from './system.schema.js';
 
 const LEGACY_PAYLOAD = {
 	disk: { used: 100, total: 200, type: 'eMMC' },
@@ -221,5 +230,169 @@ describe('encoderLoadSchema — additive growth', () => {
 			decodeCores: [{ core: 'rkvdec0', kind: 'percent', percent: 23.1 }],
 		};
 		expect(encoderLoadSchema.parse(full)).toEqual(full);
+	});
+});
+
+/*
+ * `update_state` — the apt-reachability and package-layer vocabulary.
+ *
+ * Three properties are pinned here because a later producer/consumer pair is
+ * written against them (the device's probe emits the family enum verbatim; the
+ * dialog renders the layer and kept-back detail):
+ *
+ *   1. the two new check-failure reasons exist and the pre-existing two survive;
+ *   2. `reachability` states BOTH families or is absent — never one of them, so
+ *      a merging consumer cannot latch a family it was never told about;
+ *   3. an `available` frame that omits `packages` still parses, and
+ *      `identity.packages` stays the `string[]` the dismissal key is built from.
+ */
+
+const LEGACY_AVAILABLE_FRAME = {
+	kind: 'available',
+	identity: { version: '2026.9.1', packages: ['ceralive-device', 'cerastream'] },
+	package_count: 2,
+	download_size: '12.3 MB',
+	checked_at: 1800000000000,
+};
+
+const REACHABILITY = { ipv4: 'ok', ipv6: 'no_route', used: 'ipv4' } as const;
+
+describe('update-check failure reasons — additive growth', () => {
+	test('carries the two pre-existing reasons and the two new ones', () => {
+		expect([...UPDATE_CHECK_FAILURE_REASONS]).toEqual([
+			'refresh_failed',
+			'discovery_failed',
+			'repos_unreachable',
+			'captive_portal',
+		]);
+	});
+
+	test('every member parses, and an invented reason does not', () => {
+		for (const reason of UPDATE_CHECK_FAILURE_REASONS) {
+			expect(updateCheckFailureReasonSchema.parse(reason)).toBe(reason);
+		}
+		expect(updateCheckFailureReasonSchema.safeParse('portal_captive').success).toBe(false);
+	});
+
+	test('a check_failed frame carries each new reason', () => {
+		for (const reason of ['repos_unreachable', 'captive_portal'] as const) {
+			const parsed = updateStateSchema.parse({ kind: 'check_failed', reason });
+			expect(parsed).toEqual({ kind: 'check_failed', reason });
+		}
+	});
+});
+
+describe('aptReachabilitySchema — both families, always', () => {
+	test('carries the six probe results the device classifier emits', () => {
+		expect([...APT_FAMILY_PROBE_RESULTS]).toEqual([
+			'ok',
+			'blocked',
+			'no_route',
+			'dns_failed',
+			'captive',
+			'unknown',
+		]);
+	});
+
+	test('accepts every family value on both families', () => {
+		for (const result of APT_FAMILY_PROBE_RESULTS) {
+			expect(aptReachabilitySchema.parse({ ipv4: result, ipv6: result, used: 'none' })).toEqual({
+				ipv4: result,
+				ipv6: result,
+				used: 'none',
+			});
+		}
+	});
+
+	test('REFUSES a block that states only one family', () => {
+		expect(aptReachabilitySchema.safeParse({ ipv4: 'ok', used: 'ipv4' }).success).toBe(false);
+		expect(aptReachabilitySchema.safeParse({ ipv6: 'ok', used: 'ipv6' }).success).toBe(false);
+	});
+
+	test('refuses an unknown family verdict and an unknown `used`', () => {
+		expect(
+			aptReachabilitySchema.safeParse({ ipv4: 'ok', ipv6: 'nope', used: 'ipv4' }).success,
+		).toBe(false);
+		expect(aptReachabilitySchema.safeParse({ ipv4: 'ok', ipv6: 'ok', used: 'both' }).success).toBe(
+			false,
+		);
+	});
+
+	test('rides all four post-check arms of update_state', () => {
+		const frames = [
+			{ kind: 'idle' as const },
+			{ kind: 'checking' as const },
+			{ kind: 'check_failed' as const, reason: 'repos_unreachable' as const },
+			{ ...LEGACY_AVAILABLE_FRAME },
+		];
+		for (const frame of frames) {
+			const parsed = updateStateSchema.parse({ ...frame, reachability: REACHABILITY });
+			expect((parsed as { reachability?: unknown }).reachability).toEqual(REACHABILITY);
+		}
+	});
+});
+
+describe('the `available` arm grew a package list, additively', () => {
+	test('a LEGACY frame with no `packages` sibling still parses', () => {
+		const parsed = updateStateSchema.parse(LEGACY_AVAILABLE_FRAME);
+		expect(parsed).toEqual(LEGACY_AVAILABLE_FRAME);
+		expect((parsed as { packages?: unknown }).packages).toBeUndefined();
+	});
+
+	test('`identity.packages` is still a plain string[] — the dismissal-key source', () => {
+		const parsed = updateStateSchema.parse(LEGACY_AVAILABLE_FRAME);
+		expect((parsed as { identity: { packages: string[] } }).identity.packages).toEqual([
+			'ceralive-device',
+			'cerastream',
+		]);
+		expect(
+			updateStateSchema.safeParse({
+				...LEGACY_AVAILABLE_FRAME,
+				identity: { version: '1', packages: [{ name: 'cerastream' }] },
+			}).success,
+		).toBe(false);
+	});
+
+	test('the sibling list carries name, optional layer and kept_back', () => {
+		const packages = [
+			{ name: 'cerastream', layer: 'app' as const },
+			{ name: 'linux-image-edge-rockchip-rk3588', layer: 'platform' as const },
+			{
+				name: 'gstreamer1.0-rockchip-ceralive',
+				layer: 'platform' as const,
+				kept_back: true as const,
+			},
+			{ name: 'srtla-send-rs' },
+		];
+		const parsed = updateStateSchema.parse({ ...LEGACY_AVAILABLE_FRAME, packages });
+		expect((parsed as { packages?: unknown }).packages).toEqual(packages);
+	});
+
+	test('`kept_back` may only ever be true — a false is a claim nothing measured', () => {
+		expect(
+			updateStateSchema.safeParse({
+				...LEGACY_AVAILABLE_FRAME,
+				packages: [{ name: 'cerastream', kept_back: false }],
+			}).success,
+		).toBe(false);
+	});
+
+	test('an entry with no name, or an unknown layer, is refused', () => {
+		expect(
+			updateStateSchema.safeParse({ ...LEGACY_AVAILABLE_FRAME, packages: [{ layer: 'app' }] })
+				.success,
+		).toBe(false);
+		expect(
+			updateStateSchema.safeParse({
+				...LEGACY_AVAILABLE_FRAME,
+				packages: [{ name: 'cerastream', layer: 'firmware' }],
+			}).success,
+		).toBe(false);
+	});
+
+	test('updateLayerSchema names exactly app and platform', () => {
+		expect(updateLayerSchema.parse('app')).toBe('app');
+		expect(updateLayerSchema.parse('platform')).toBe('platform');
+		expect(updateLayerSchema.safeParse('kernel').success).toBe(false);
 	});
 });
