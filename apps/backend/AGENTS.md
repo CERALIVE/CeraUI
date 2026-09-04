@@ -2611,6 +2611,15 @@ working paths.
   `www.gstatic.com`'s AAAA records each produced an
   `Internet connectivity HTTP check error ERR_INVALID_URL` before the probe ever
   left the device.
+- **The gateway check races ONE address per family.** From DNS's complete result,
+  it selects the first A and first AAAA, starts A immediately, starts AAAA 250 ms
+  later, and settles on the first success. Each underlying probe keeps the existing
+  4 s bound, so two dead families settle in about 4.25 s instead of serially
+  spending 4 s on every resolved address. A probe carrying an explicit
+  `localAddress` skips a target from the other family; the device-bound
+  `curl --interface` path deliberately keeps both because that binding names only
+  an interface and has no separate family concept. This race is local to gateway
+  election and is not shared with the independent apt-reachability probes.
 - **The notification is retracted on PROVEN CONNECTIVITY, not on route
   installation.** `setDefaultRoute` reads a per-interface routing table and the
   shipped image provisions those only for `modem0-7`/`wlan0-4`, so on a board
@@ -2626,7 +2635,9 @@ real roster, the `ip route show default` parser against the board's verbatim
 output (metric ordering, `dev`-only routes, no-`dev` and empty negatives), the
 claim matrix in all four arms, the no-escalation lock, and a REAL-socket proof
 that a bound probe egresses the address it was given (the defect type-checked, so
-a mocked assertion could not catch it).
+a mocked assertion could not catch it); `tests/gateway-family-race.test.ts` — the
+Rock dead-IPv6 topology, IPv6-only success, both-family failure bound, and the
+source-address-vs-device-bound family split.
 
 ## …AND A PROBE THAT MUST NAME A DEVICE BINDS ONE [EXISTS]
 
@@ -2940,6 +2951,22 @@ spinner, no result and no error for 11 s while `debug.log` recorded
 
 Coverage: `tests/software-updates-check-visibility.test.ts` + the frontend half in
 `apps/frontend/src/main/dialogs/UpdatesDialog.check.test.ts`.
+
+**Each check chooses an address family before apt runs.**
+`apt-reachability.ts` probes every configured origin over both families; refresh
+and discovery append exactly one `Acquire::ForceIPv4=true` or
+`Acquire::ForceIPv6=true` option when only that family reaches every origin.
+Neither-family and captive-portal verdicts stop before apt and publish
+`check_failed` as `repos_unreachable` or `captive_portal`, with both family
+results carried on the update state. Mock/dev execution never launches curl:
+the default probe is `isRealDevice()`-gated, and `MOCK_SCENARIO` keeps its existing
+software-update simulation path.
+
+Detached installs take a fresh, uncached verdict and install only the sorted app
+allowlist in `modules/system/package-layer.ts`. The transient-service builder
+rejects `dist-upgrade`, platform/unknown packages, and unsorted package vectors;
+service recovery remains tolerant of the historical `dist-upgrade` identity so
+an update started by an older backend can still be reattached safely.
 
 ## PER-CORE ENCODER LOAD — PROCFS CORE INVENTORY AND LEGACY CLOCK FALLBACK [EXISTS]
 

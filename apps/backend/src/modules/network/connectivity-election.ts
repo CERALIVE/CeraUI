@@ -25,6 +25,8 @@
   INJECTED for exactly that reason.
 */
 
+import { isIP } from "node:net";
+
 import type { ProbeCandidate } from "./connectivity-candidates.ts";
 import { checkConnectivityViaDevice } from "./device-bound-probe.ts";
 import { checkConnectivity } from "./internet.ts";
@@ -51,14 +53,75 @@ export type ConnectivityElection = {
 	results: CandidateProbeResult[];
 };
 
-async function probeCandidate(
-	addr: string,
-	candidate: ProbeCandidate,
-	probes: ConnectivityProbes,
+export const CONNECTIVITY_FAMILY_STAGGER_MS = 250;
+
+export type ConnectivityAddressProbe = (addr: string) => Promise<boolean>;
+
+/**
+ * Race at most one address from each family, preferring IPv4 and launching IPv6
+ * after a short stagger. A source-address binding may dial only its own family;
+ * device-bound probes intentionally pass no local address because
+ * `curl --interface` has no separate family concept.
+ */
+export function raceConnectivityAddresses(
+	addrs: readonly string[],
+	probe: ConnectivityAddressProbe,
+	localAddress?: string,
 ): Promise<boolean> {
-	return candidate.binding.kind === "device"
-		? probes.probeViaDevice(addr, candidate.binding.ifname)
-		: probes.probeViaSourceIp(addr, candidate.binding.ip);
+	const localFamily =
+		localAddress === undefined ? undefined : isIP(localAddress);
+	const ipv4 = addrs.find((addr) => isIP(addr) === 4);
+	const ipv6 = addrs.find((addr) => isIP(addr) === 6);
+	const targets = [
+		...(localFamily === undefined || localFamily === 4
+			? ipv4
+				? [{ addr: ipv4, delayMs: 0 }]
+				: []
+			: []),
+		...(localFamily === undefined || localFamily === 6
+			? ipv6
+				? [
+						{
+							addr: ipv6,
+							delayMs: ipv4 ? CONNECTIVITY_FAMILY_STAGGER_MS : 0,
+						},
+					]
+				: []
+			: []),
+	];
+
+	if (targets.length === 0) return Promise.resolve(false);
+
+	return new Promise((resolve) => {
+		let remaining = targets.length;
+		let settled = false;
+		let staggerTimer: ReturnType<typeof setTimeout> | undefined;
+
+		const runProbe = async (addr: string): Promise<void> => {
+			if (settled) return;
+			const reachable = await probe(addr);
+			if (settled) return;
+			if (reachable) {
+				settled = true;
+				if (staggerTimer) clearTimeout(staggerTimer);
+				resolve(true);
+				return;
+			}
+			remaining -= 1;
+			if (remaining === 0) resolve(false);
+		};
+
+		for (const target of targets) {
+			if (target.delayMs === 0) {
+				void runProbe(target.addr);
+			} else {
+				staggerTimer = setTimeout(
+					() => void runProbe(target.addr),
+					target.delayMs,
+				);
+			}
+		}
+	});
 }
 
 /**
@@ -81,12 +144,19 @@ export async function electConnectivityCandidate(
 ): Promise<ConnectivityElection> {
 	const results: CandidateProbeResult[] = [];
 
-	for (const addr of addrs) {
-		for (const candidate of candidates) {
-			const reachable = await probeCandidate(addr, candidate, probes);
-			results.push({ candidate, reachable });
-			if (reachable) return { elected: candidate, results };
-		}
+	for (const candidate of candidates) {
+		const localAddress =
+			candidate.binding.kind === "source-ip" ? candidate.binding.ip : undefined;
+		const reachable = await raceConnectivityAddresses(
+			addrs,
+			(addr) =>
+				candidate.binding.kind === "device"
+					? probes.probeViaDevice(addr, candidate.binding.ifname)
+					: probes.probeViaSourceIp(addr, candidate.binding.ip),
+			localAddress,
+		);
+		results.push({ candidate, reachable });
+		if (reachable) return { elected: candidate, results };
 	}
 
 	return { elected: undefined, results };

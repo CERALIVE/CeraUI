@@ -77,8 +77,10 @@ A dev-only DevTools destination is available in development builds.
   state. Older snapshots retain a golden-pinned board fallback rather than losing
   their encode ceiling.
 - **Per-uplink health**: bounded device-specific checks feed default-route
-  election, while active SRTLA links use passive RTT/NAK telemetry instead of
-  competing probes. Captive portals remain visible as degraded links.
+  election. Gateway checks race the first IPv4 and IPv6 targets with a 250 ms
+  stagger instead of walking every DNS answer serially, while active SRTLA links
+  use passive RTT/NAK telemetry instead of competing probes. Captive portals
+  remain visible as degraded links.
 - **Flow-sticky client sharing**: the backend assigns new hotspot/shared-LAN flows
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the
