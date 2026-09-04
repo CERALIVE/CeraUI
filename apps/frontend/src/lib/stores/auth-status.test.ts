@@ -45,10 +45,12 @@ async function loadAuthStatus(): Promise<AuthStatusModule> {
 }
 
 beforeEach(() => {
+	vi.useRealTimers();
 	seedConnectionState = "connected";
 	onConnectionChangeHandler = undefined;
 	login.mockReset();
 	setPassword.mockReset();
+	localStorage.clear();
 });
 
 describe("auth-status — single mutation path", () => {
@@ -70,8 +72,9 @@ describe("auth-status — single mutation path", () => {
 		const mod = await loadAuthStatus();
 		login.mockResolvedValueOnce({ success: true, auth_token: "abc" });
 
-		await mod.authenticate("hunter2", true);
+		const attempt = await mod.authenticate("hunter2", true);
 
+		expect(attempt).toEqual({ kind: "ok" });
 		expect(login).toHaveBeenCalledTimes(1);
 		expect(login).toHaveBeenCalledWith({
 			password: "hunter2",
@@ -87,8 +90,10 @@ describe("auth-status — single mutation path", () => {
 		const mod = await loadAuthStatus();
 		login.mockResolvedValueOnce({ success: false });
 
-		await mod.authenticate("wrong", false);
+		localStorage.setItem("auth", "stale-password");
+		const attempt = await mod.authenticate("wrong", false);
 
+		expect(attempt).toEqual({ kind: "rejected" });
 		expect(login).toHaveBeenCalledWith({
 			password: "wrong",
 			persistent_token: false,
@@ -96,15 +101,79 @@ describe("auth-status — single mutation path", () => {
 		expect(mod.getAuthMessage()).toEqual({ success: false });
 	});
 
-	it("authenticate() ingests {success:false} on RPC throw (never leaks)", async () => {
+	it("returns unreachable/rpc-error without ingesting an auth rejection", async () => {
 		const mod = await loadAuthStatus();
 		login.mockRejectedValueOnce(new Error("boom"));
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
+		const attempt = await mod.authenticate("hunter2", true);
+
+		expect(attempt).toEqual({ kind: "unreachable", cause: "rpc-error" });
+		expect(mod.getAuthMessage()).toBeUndefined();
+		errorSpy.mockRestore();
+	});
+
+	it("returns unreachable/socket-not-ready after the bounded connection wait without ingesting a rejection", async () => {
+		vi.useFakeTimers();
+		seedConnectionState = "connecting";
+		const mod = await loadAuthStatus();
+
+		const inflight = mod.authenticate("hunter2", true);
+		await vi.advanceTimersByTimeAsync(10_000);
+		const attempt = await inflight;
+
+		expect(attempt).toEqual({
+			kind: "unreachable",
+			cause: "socket-not-ready",
+		});
+		expect(login).not.toHaveBeenCalled();
+		expect(mod.getAuthMessage()).toBeUndefined();
+	});
+
+	it("returns unreachable/timeout without ingesting an auth rejection", async () => {
+		const mod = await loadAuthStatus();
+		login.mockRejectedValueOnce(new Error("Request timeout: auth.login"));
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		const attempt = await mod.authenticate("hunter2", true);
+
+		expect(attempt).toEqual({ kind: "unreachable", cause: "timeout" });
+		expect(mod.getAuthMessage()).toBeUndefined();
+		errorSpy.mockRestore();
+	});
+
+	it("persists before successful auth flips the store", async () => {
+		const mod = await loadAuthStatus();
+		login.mockResolvedValueOnce({ success: true, auth_token: "abc" });
+		const sequence: string[] = [];
+		const setItem = vi
+			.spyOn(localStorage, "setItem")
+			.mockImplementation((key, value) => {
+				sequence.push(`persist:${key}:${value}`);
+			});
+		const unsubscribe = mod.authStatusStore.subscribe((status) => {
+			if (status) sequence.push("store:true");
+		});
+
 		await mod.authenticate("hunter2", true);
 
-		expect(mod.getAuthMessage()).toEqual({ success: false });
-		errorSpy.mockRestore();
+		expect(sequence).toEqual(["persist:auth:hunter2", "store:true"]);
+		unsubscribe();
+		setItem.mockRestore();
+	});
+
+	it("clears a stale saved credential when remember-me is unchecked", async () => {
+		const mod = await loadAuthStatus();
+		localStorage.setItem("auth", "stale-password");
+		login.mockResolvedValueOnce({ success: true, auth_token: "abc" });
+		const removeItem = vi.spyOn(localStorage, "removeItem");
+
+		const attempt = await mod.authenticate("fresh-password", false);
+
+		expect(attempt).toEqual({ kind: "ok" });
+		expect(removeItem).toHaveBeenCalledExactlyOnceWith("auth");
+		expect(localStorage.getItem("auth")).toBeNull();
+		removeItem.mockRestore();
 	});
 
 	it("authenticate() waits for a not-yet-open socket, then dispatches", async () => {
@@ -116,8 +185,9 @@ describe("auth-status — single mutation path", () => {
 		expect(login).not.toHaveBeenCalled();
 
 		onConnectionChangeHandler?.("connected");
-		await inflight;
+		const attempt = await inflight;
 
+		expect(attempt).toEqual({ kind: "ok" });
 		expect(login).toHaveBeenCalledTimes(1);
 		expect(mod.getAuthMessage()).toEqual({
 			success: true,
@@ -135,6 +205,15 @@ describe("auth-status — single mutation path", () => {
 		// createPassword MUST NOT touch authMessage — that state belongs to the
 		// login result exclusively (single mutation path invariant).
 		expect(mod.getAuthMessage()).toBeUndefined();
+	});
+
+	it("createPassword() keeps password-change persistence inside the auth owner", async () => {
+		const mod = await loadAuthStatus();
+		setPassword.mockResolvedValueOnce({ success: true });
+
+		await mod.createPassword("brand-new", true);
+
+		expect(localStorage.getItem("auth")).toBe("brand-new");
 	});
 
 	it("authStatusStore boolean is not written by ingestAuth (orthogonal axes)", async () => {

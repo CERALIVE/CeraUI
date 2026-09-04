@@ -1,10 +1,18 @@
 // Auth status store using Svelte 5 runes with manual subscriber pattern
 // (Cannot use $effect in subscribe - it only works during component initialization)
-import type { LoginOutput } from "@ceraui/rpc/schemas";
+import type { LoginInput, LoginOutput } from "@ceraui/rpc/schemas";
 
 import { rpc, rpcClient } from "$lib/rpc/client";
 
 let authStatus = $state(false);
+
+export type AuthAttempt =
+	| { kind: "ok" }
+	| { kind: "rejected" }
+	| {
+			kind: "unreachable";
+			cause: "socket-not-ready" | "rpc-error" | "timeout";
+	  };
 
 // Last login/create-password RESULT. Mutated ONLY by `ingestAuth` — the single
 // auth-message write path that replaces the old AuthStore._set race.
@@ -57,6 +65,14 @@ export function ingestAuth(message: LoginOutput | undefined): void {
 	authMessage = message;
 }
 
+function persistCredential(result: LoginOutput, persistentToken: boolean): void {
+	if (!persistentToken) {
+		localStorage.removeItem("auth");
+	} else if (result.auth_token) {
+		localStorage.setItem("auth", result.auth_token);
+	}
+}
+
 // rpcClient.call() rejects synchronously on a non-OPEN socket, so the mount-time
 // token login must wait for the connection first (the boot connect is async).
 function whenSocketReady(maxWaitMs = 10_000): Promise<boolean> {
@@ -80,42 +96,53 @@ function whenSocketReady(maxWaitMs = 10_000): Promise<boolean> {
 	});
 }
 
-export async function authenticate(
-	password: string,
-	persistentToken: boolean,
-): Promise<void> {
+async function authenticateInput(input: LoginInput): Promise<AuthAttempt> {
 	if (!(await whenSocketReady())) {
-		ingestAuth({ success: false });
-		return;
+		return { kind: "unreachable", cause: "socket-not-ready" };
 	}
+	let result: LoginOutput;
 	try {
-		ingestAuth(
-			await rpc.auth.login({ password, persistent_token: persistentToken }),
-		);
+		result = await rpc.auth.login(input);
 	} catch (error) {
 		console.error("Failed to authenticate:", error);
-		ingestAuth({ success: false });
+		return {
+			kind: "unreachable",
+			cause:
+				error instanceof Error && error.message.startsWith("Request timeout:")
+					? "timeout"
+					: "rpc-error",
+		};
 	}
+	if (!result.success) {
+		ingestAuth(result);
+		return { kind: "rejected" };
+	}
+	// Token reauthentication succeeds without issuing a replacement. In that
+	// case retain the existing token, just as on an unreachable attempt.
+	persistCredential(result, input.persistent_token);
+	ingestAuth(result);
+	setAuthStatus(true);
+	return { kind: "ok" };
 }
 
-export async function authenticateWithToken(token: string): Promise<void> {
-	if (!(await whenSocketReady())) {
-		ingestAuth({ success: false });
-		return;
-	}
-	try {
-		ingestAuth(await rpc.auth.login({ token, persistent_token: true }));
-	} catch (error) {
-		console.error("Failed to authenticate with stored token:", error);
-		ingestAuth({ success: false });
-	}
+export function authenticate(
+	password: string,
+	persistentToken: boolean,
+): Promise<AuthAttempt> {
+	return authenticateInput({ password, persistent_token: persistentToken });
+}
+
+export function authenticateWithToken(token: string): Promise<AuthAttempt> {
+	return authenticateInput({ token, persistent_token: true });
 }
 
 export async function createPassword(password: string): Promise<void> {
 	if (!(await whenSocketReady())) {
 		throw new Error("Connection timeout");
 	}
-	await rpc.auth.setPassword({ password });
+	const result = await rpc.auth.setPassword({ password });
+	// The device revokes all remembered tokens on a successful password change.
+	if (result.success) localStorage.removeItem("auth");
 }
 
 // Best-effort on purpose: the callers are recovery paths whose premise is that

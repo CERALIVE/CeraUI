@@ -13,7 +13,6 @@ import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticate,
 	createPassword,
-	getAuthMessage,
 } from '$lib/stores/auth-status.svelte';
 import { getSessionExpired } from '$lib/stores/connection-ux.svelte';
 import { getConnectionState } from '$lib/stores/offline-state.svelte';
@@ -86,27 +85,6 @@ $effect(() => {
 	}
 });
 
-/**
- * Remember-me persists the REVOCABLE token the device minted for this login —
- * never the password. A stored password is a permanent credential no operator
- * can retire without changing it everywhere; a token is one record in
- * `auth_tokens.json` that `auth.revokeToken` can drop on its own.
- *
- * `auth_token` is absent unless `persistent_token` was requested, so an
- * unremembered login writes nothing at all.
- */
-$effect(() => {
-	const message = getAuthMessage();
-	if (message?.success === true && remember && message.auth_token) {
-		localStorage.setItem('auth', message.auth_token);
-	}
-	if (message?.success === false) {
-		isLoading = false;
-		// Wrong password surfaces here (rpc.auth.login → success:false), not via a toast.
-		rejectedPassword = password;
-	}
-});
-
 $effect(() => {
 	const messages = getNotifications();
 	if (
@@ -129,10 +107,19 @@ function login(password: string, remember: boolean) {
 		});
 	}
 	setPassword = false;
-	// authenticate() drives the SINGLE auth-state mutation path (ingestAuth on
-	// the login result). The $effect above observes getAuthMessage() and clears
-	// isLoading on success:false; on success:true the component unmounts.
-	void authenticate(password, remember);
+	void authenticate(password, remember).then((attempt) => {
+		switch (attempt.kind) {
+			case 'ok':
+				return;
+			case 'rejected':
+				isLoading = false;
+				rejectedPassword = password;
+				return;
+			case 'unreachable':
+				isLoading = false;
+				return;
+		}
+	});
 }
 
 async function onSubmit(event: SubmitEvent) {

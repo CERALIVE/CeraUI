@@ -2177,13 +2177,23 @@ component).
 ```ts
 export function ingestAuth(message: LoginOutput | undefined): void;   // THE writer
 export function getAuthMessage(): LoginOutput | undefined;             // THE reader
-export async function authenticate(password: string, persistentToken: boolean): Promise<void>;
-export async function createPassword(password: string): Promise<void>;
+export type AuthAttempt = { kind: 'ok' } | { kind: 'rejected' } |
+  { kind: 'unreachable'; cause: 'socket-not-ready' | 'rpc-error' | 'timeout' };
+export async function authenticate(password: string, persistentToken: boolean): Promise<AuthAttempt>;
+export async function createPassword(password: string, persistentToken?: boolean): Promise<void>;
 export const authStatusStore: { value: boolean; set(b): void; subscribe(cb) };
 ```
 
 `Layout.svelte`/`Auth.svelte` call `authenticate`/`createPassword`/`getAuthMessage` —
 never `sendAuthMessage`/`sendCreatePasswordMessage`/`getAuth` (those no longer exist).
+
+`authenticate()` also owns remember-me persistence. A successful persistent
+login writes `localStorage.auth` synchronously before auth state flips; a
+successful non-persistent login removes it. Server rejection is distinct from
+transport unreachability: only `rejected` may make Layout/reconnect delete the
+saved credential, while `unreachable` preserves it for Retry or the explicit
+`clear-saved-session` escape hatch. `Auth.svelte` must not recreate a persistence
+effect — it can unmount on the auth flip before such an effect runs.
 
 **The rule for all future frontend work:** ONLY `subscriptions.svelte.ts` (non-auth
 reactive state + connection state) and `auth-status.svelte.ts` (auth mutation state) own

@@ -9,10 +9,8 @@ import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
-    authenticate,
-    authenticateWithToken,
+	authenticateWithToken,
 	authStatusStore,
-	getAuthMessage,
 	revokePersistentToken,
 } from '$lib/stores/auth-status.svelte';
 import {
@@ -21,9 +19,6 @@ import {
 	getDisconnectedSince,
 	getGraceNow,
 	markAuthenticated,
-	markSessionExpired,
-	shouldExpireSession,
-	wasAuthenticated,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 
@@ -78,16 +73,33 @@ const authTimeout = isPWA ? 500 : isMobile ? 1500 : 3000;
 /**
  * Kick off (or re-run) the stored-token auth check. Called once on mount and
  * again from the timed-out retry surface. Dispatches a typed `rpc.auth.login`
- * via the auth-status store's `authenticate()` — the SINGLE auth-state mutation
- * path (ingestAuth). The `$effect` block below observes the resulting
- * `getAuthMessage()` snapshot to complete/reject the check.
+ * via the auth-status store's `authenticateWithToken()` — the SINGLE auth-state mutation
+ * path — then handles its typed result without treating transport loss as a
+ * credential rejection.
  */
 function runAuthCheck() {
 	authTimedOut = false;
 	const auth = localStorage.getItem('auth');
 	if (auth) {
 		isCheckingAuthStatus = true;
-        void authenticateWithToken(auth);
+		void authenticateWithToken(auth).then((attempt) => {
+			switch (attempt.kind) {
+				case 'ok':
+					isCheckingAuthStatus = false;
+					markAuthenticated();
+					clearSessionExpired();
+					return;
+				case 'rejected':
+					localStorage.removeItem('auth');
+					isCheckingAuthStatus = false;
+					authStatusStore.set(false);
+					return;
+				case 'unreachable':
+					isCheckingAuthStatus = false;
+					authTimedOut = true;
+					return;
+			}
+		});
 	} else {
 		isCheckingAuthStatus = false;
 	}
@@ -134,23 +146,6 @@ $effect(() => {
 		}
 	}, authTimeout);
 	return () => clearTimeout(id);
-});
-
-$effect(() => {
-	const message = getAuthMessage();
-	if (message?.success) {
-		isCheckingAuthStatus = false;
-		markAuthenticated();
-		clearSessionExpired();
-		authStatusStore.set(true);
-	} else if (shouldExpireSession(message?.success, wasAuthenticated()) && authStatusStore.value) {
-		// Auth token rejected mid-session (e.g. expired/invalidated on a reconnect).
-		// Route to the auth gate with an explicit "session expired" message instead
-		// of silently blanking. Device/streaming state in the stores is left intact.
-		markSessionExpired();
-		localStorage.removeItem('auth');
-		authStatusStore.set(false);
-	}
 });
 
 // Reconnect re-authentication + safety hydrate now lives in the RPC layer
