@@ -1,0 +1,18 @@
+Types: deb
+URIs: http://deb.debian.org/debian
+Suites: trixie
+Components: main non-free-firmware
+
+Types: deb
+URIs: http://deb.debian.org/debian-security
+Suites: trixie-security
+Components: main non-free-firmware
+
+Types: deb
+URIs: http://deb.debian.org/debian
+Suites: trixie-updates
+Components: main non-free-firmware
+
+Types: deb
+URIs: https://apt.ceralive.tv/dists/stable/binary-arm64/
+Suites: ./
