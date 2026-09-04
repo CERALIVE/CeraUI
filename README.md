@@ -198,5 +198,6 @@ bun run clean                          # Clean all build artifacts
 
 If you find CeraUI useful, consider supporting CeraLive development:
 
+- 💬 [Join the CeraLive Discord](https://discord.gg/Q2bvU49yx2)
 - ☕ [Ko-fi](https://ko-fi.com/andrescera)
 - 💳 [PayPal](https://www.paypal.com/donate/?business=7KKQS9KBSAMNE&no_recurring=0&item_name=CERALIVE+Development+Support&currency_code=USD)
