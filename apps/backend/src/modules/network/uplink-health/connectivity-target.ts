@@ -90,6 +90,8 @@ export function createConnectivityTargetResolver(
 	const refresh = async (): Promise<string | undefined> => {
 		try {
 			const { addrs } = await deps.resolve(domain);
+			// Default DNS answers are A-first, so dual-stack hosts prefer the IPv4
+			// target while an IPv6-only host still reaches this fallback slot.
 			const addr = addrs[0];
 			if (addr === undefined) throw new Error(`no address for ${domain}`);
 			cachedAddr = addr;

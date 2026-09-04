@@ -2783,6 +2783,19 @@ deadline-cancelled retry. They now fly concurrently and the call costs
   sharing one would let a timing-out leg kill its sibling mid-flight. `resolveP`
   now always builds its own; the old "reuse the resolver after a successful
   validation" path is gone.
+- **An unspecified record type waits for both families.** The A and AAAA queries
+  run concurrently on separate resolvers and each owns its timeout. The result
+  remains `{addrs, fromCache}` and `addrs` is always every A answer followed by
+  every AAAA answer; a missing family contributes nothing, while both live lists
+  are retained by `dnsCacheValidate`. This ordering makes `addrs[0]` the IPv4
+  preference on a dual-stack host without making an IPv6-only host fail.
+- **Every default-record consumer was audited with that contract.** `gateways.ts`
+  iterates the complete list (the family race is a separate change);
+  `uplink-health/connectivity-target.ts` deliberately takes the A-first first
+  element; and the legacy remote relay keeps selecting any cached family but
+  passes the literal through `formatUrlHost` before constructing its WebSocket
+  URL. The relay is not documented as IPv4-only, so forcing an A lookup there
+  would discard a valid IPv6-only endpoint.
 - **`setDnsResolverFactoryForTest(factory | null)`** is the test seam (mirrors
   `setIfaceResolverForTest` / the `set*Runner` seams) — a `DnsResolverLike`
   double, no process-wide `mock.module` on `node:dns`.
@@ -2795,7 +2808,8 @@ back into one shared instance.
 Coverage: `tests/dns-parallel-resolve.test.ts` (the caller's query is dispatched
 before the health check settles, distinct resolver ids per leg, both bad-DNS
 branches discard the speculative answer, query-failure falls back, the IPv4
-short-circuit, and the A+AAAA path).
+short-circuit, AAAA-first/A-first/one-family outcomes, both-family cache
+retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 

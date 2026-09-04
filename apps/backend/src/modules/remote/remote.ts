@@ -70,13 +70,13 @@ import {
 	markConnectionActive,
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
-
 import {
 	buildRelaysMsg,
 	handleRemoteRelays,
 	updateCachedRelays,
 	type ValidateRemoteRelaysMessage,
 } from "./remote-relays.ts";
+import { buildRemoteWsUrl } from "./remote-url.ts";
 
 type RemoteAuthEncoderMessage = {
 	"auth/encoder": unknown;
@@ -411,8 +411,7 @@ async function remoteConnect() {
 		`remote: trying to connect to ${provider.name} (${endpointHost})`,
 	);
 
-	const remoteWsUrl = new URL(`${protocol}://${host}`);
-	remoteWsUrl.pathname = endpointPath;
+	const remoteWsUrl = buildRemoteWsUrl(protocol, host, endpointPath);
 
 	remoteStatusHandled = false;
 	remoteWs = new WebSocket(remoteWsUrl);
