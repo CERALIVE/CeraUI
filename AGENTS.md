@@ -898,7 +898,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.31 — EXACT pin, see below |
 | Bun pin (`.bun-version`) | 1.4.0 |
 | `svelte` | 5.56.10 |
-| `vitest` | 5.0.0-rc.3 — EXACT pin (a PRERELEASE; see the note below the table) |
+| `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
 | `vite` | 8.2.2 |
 | `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
 | Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` shards, `merge-fe-reports`, and `guardrails` are the jobs with NO `setup-node` step — every command in them is Bun (see the Vitest note below). |
@@ -917,13 +917,15 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `vite-plugin-pwa` | 1.3.0 |
 | `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
 
-**`vitest` is on a 5.0 RELEASE CANDIDATE, pinned exact, and it earned that by flipping a
-runtime verdict — which is now ACTED ON, not merely recorded.** Under `vitest@4.1.10` the
+**`vitest` reached stable 5.0.0 during this effort and remains pinned exact, after earning
+that move by flipping a runtime verdict.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
-why the frontend suite ran on Node for as long as it did. Under `5.0.0-rc.3` Bun 1.4.0 runs the
-current suite at **354 files / 5,779 tests, 0 failures**, matching the pre-bump `5.0.0-rc.2`
-baseline exactly. Nothing in the rc.2→rc.3 release notes needed a source or config change here:
+why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun 1.4.0 runs the
+current suite at **361 files / 5,957 tests, 0 failures**, matching the todo-1 baseline exactly.
+The rc.2→rc.3 successor path needed no source or config change here, and Vitest then reached
+stable 5.0.0 during this effort. Nothing in the rc.3→5.0.0 release notes needed a source or
+config change here:
 `clearMocks` now defaults to `true` and the suite is unaffected, and the repo uses none of the
 removed surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench`
 at module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). **The frontend
