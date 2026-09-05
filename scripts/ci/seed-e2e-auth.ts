@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { password as bunPassword, write } from 'bun';
 
@@ -13,7 +13,6 @@ const passwordHash = bunPassword.hashSync(e2ePassword, {
 	cost: 10,
 });
 const token = randomUUID();
-const tokenDigest = createHash('sha256').update(token).digest('hex');
 
 await Promise.all([
 	write(
@@ -28,5 +27,5 @@ await Promise.all([
 			password_hash: passwordHash,
 		}),
 	),
-	write(path.join(backendDir, 'auth_tokens.json'), JSON.stringify({ [tokenDigest]: true })),
+	write(path.join(backendDir, 'auth_tokens.json'), JSON.stringify({ [token]: true })),
 ]);
