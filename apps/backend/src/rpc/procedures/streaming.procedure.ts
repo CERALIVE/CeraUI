@@ -78,6 +78,11 @@ import {
 import { isBluetoothAudioSourceId } from "../../modules/streaming/bluetooth-audio.ts";
 import { getLastCapabilities } from "../../modules/streaming/capabilities.ts";
 import { mapCerastreamError } from "../../modules/streaming/cerastream-error-mapping.ts";
+import {
+	COMPOSITION_UNSUPPORTED_ERROR,
+	compositionResidueShouldClear,
+	isCompositionSupported,
+} from "../../modules/streaming/composition.ts";
 import { getApplyNowGate } from "../../modules/streaming/config-change-bridge.ts";
 import {
 	abandonStagedConfigChange,
@@ -494,6 +499,7 @@ export const getConfigProcedure = authedProcedure
 			// broadcast both carry it, and this PULL path used to omit it.
 			input_mode: config.input_mode,
 			previewEncode: config.previewEncode,
+			composition: config.composition,
 			source_preference: config.source_preference,
 			sources_visibility: config.sources_visibility,
 			srtla_addr: config.srtla_addr,
@@ -850,6 +856,27 @@ export const setConfigProcedure = authedProcedure
 			}
 		}
 
+		// Same pre-mutation ordering as the two gates above. Only a STATED object
+		// is gated; an explicit `null` is the operator turning composition OFF and
+		// must stay reachable on an engine that no longer advertises the token.
+		if (
+			input.composition != null &&
+			!isCompositionSupported(getLastCapabilities())
+		) {
+			logger.warn(
+				"setConfig: engine has not advertised the composition feature",
+				{
+					module: "streaming",
+					features: getLastCapabilities()?.features,
+				},
+			);
+			return {
+				success: false,
+				error: COMPOSITION_UNSUPPORTED_ERROR,
+				applied: {},
+			};
+		}
+
 		// Apply-now splits the save in two: the restart-requiring fields are held
 		// back (staged, never written) so `config.json` keeps describing what the
 		// engine is ACTUALLY running until the transaction says `applied`. Every
@@ -893,6 +920,19 @@ export const setConfigProcedure = authedProcedure
 		// start. Persisting immediately is what lets the replay fence read it.
 		if (input.previewEncode !== undefined)
 			config.previewEncode = input.previewEncode;
+		// Explicit `null` clears; an absent field leaves the persisted value alone.
+		if (input.composition !== undefined)
+			config.composition = input.composition ?? undefined;
+		else if (
+			config.composition !== undefined &&
+			compositionResidueShouldClear(getLastCapabilities())
+		) {
+			logger.warn(
+				"setConfig: clearing stale composition — engine no longer advertises the feature",
+				{ module: "streaming", dropped: config.composition.layout },
+			);
+			config.composition = undefined;
+		}
 		if (input.source_preference !== undefined)
 			config.source_preference = input.source_preference;
 		if (input.selected_video_input !== undefined)
@@ -968,6 +1008,8 @@ export const setConfigProcedure = authedProcedure
 			applied.video_codec = config.video_codec;
 		if (input.previewEncode !== undefined)
 			applied.previewEncode = config.previewEncode;
+		if (input.composition !== undefined)
+			applied.composition = config.composition ?? null;
 		if (input.source_preference !== undefined)
 			applied.source_preference = config.source_preference;
 		if (input.selected_video_input !== undefined)

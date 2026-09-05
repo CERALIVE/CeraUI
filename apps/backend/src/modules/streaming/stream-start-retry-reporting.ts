@@ -73,6 +73,10 @@ const CAPTURE_TERMINAL_NOTIFICATION_KEYS: Readonly<
 	negotiation_failed: "notifications.streamStartCaptureNegotiationFailed",
 	no_signal: "notifications.streamStartCaptureNoSignalFailed",
 	device_busy: "notifications.streamStartCaptureDeviceBusyFailed",
+	"composition-unsupported":
+		"notifications.streamStartCompositionUnsupportedFailed",
+	"secondary-unavailable":
+		"notifications.streamStartCompositionSecondaryUnavailableFailed",
 };
 
 const CAPTURE_TERMINAL_FALLBACK_MESSAGES: Readonly<
@@ -84,6 +88,10 @@ const CAPTURE_TERMINAL_FALLBACK_MESSAGES: Readonly<
 		"Stream failed to start: the video input is not carrying a signal. Check the camera is on and the cable is connected, then start again.",
 	device_busy:
 		"Stream failed to start: the video input was busy and did not free up. Wait a moment, then start again.",
+	"composition-unsupported":
+		"Stream failed to start: this device cannot combine two video inputs. Turn off the Composition card, then start again.",
+	"secondary-unavailable":
+		"Stream failed to start: the second video input for the picture-in-picture layout is not available. Reconnect it or pick another one, then start again.",
 };
 
 function terminalNotificationKey(diagnostic: StartRetryDiagnostic): string {

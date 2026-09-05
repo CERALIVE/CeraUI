@@ -20,6 +20,7 @@
 import { unsupportedPipelineOverrides } from "@ceraui/rpc";
 import {
 	AUDIO_SOURCE_AUTO,
+	type CompositionConfig,
 	RIST_TRANSPORT,
 	SRTLA_MIN_LATENCY_MS,
 } from "@ceraui/rpc/schemas";
@@ -46,7 +47,8 @@ import {
 	setSocketSenderId,
 } from "../ui/websocket-server.ts";
 import { getAudioDevices } from "./audio.ts";
-import { getSupportedTransports } from "./capabilities.ts";
+import { getLastCapabilities, getSupportedTransports } from "./capabilities.ts";
+import { isCompositionSupported } from "./composition.ts";
 import { validateBitrate } from "./encoder.ts";
 import { AUDIO_CODECS } from "./pipeline-sources.ts";
 import { searchPipelines } from "./pipelines.ts";
@@ -77,6 +79,7 @@ export type ConfigParameters = {
 	autostart?: boolean | undefined;
 	source?: string | undefined;
 	selected_video_input?: string | undefined;
+	composition?: CompositionConfig | null | undefined;
 };
 
 let isStreaming = false;
@@ -126,6 +129,11 @@ export function startError(conn: WebSocket, msg: string, id?: string) {
 export async function validateConfig(params: Partial<ConfigParameters>) {
 	if (typeof params !== "object") throw new Error("Invalid config");
 
+	// `null` is setConfig's explicit CLEAR, never a start value, and the runtime
+	// schema carries no null arm — so it is normalized BEFORE the parse rather
+	// than dropped after it, or a start would reject an operator's "off".
+	if (params.composition === null) delete params.composition;
+
 	// Pre-validate with Zod schema for type safety and basic constraints
 	const schemaResult = runtimeConfigSchema.partial().safeParse(params);
 	if (!schemaResult.success) {
@@ -161,6 +169,23 @@ export async function validateConfig(params: Partial<ConfigParameters>) {
 		);
 		delete validated[field];
 		delete params[field];
+	}
+
+	// Same residue rule, one capability up: a start carries the WHOLE persisted
+	// config, so a `composition` saved against a board that advertised the token
+	// would otherwise be re-sent forever to an engine that answers
+	// `composition-unsupported`. Dropped here rather than refused, because the
+	// operator cannot see the card on this engine to clear it themselves.
+	if (
+		validated.composition !== undefined &&
+		!isCompositionSupported(getLastCapabilities())
+	) {
+		logger.warn(
+			"start: dropping composition — engine has not advertised the feature",
+			{ module: "streaming", dropped: validated.composition.layout },
+		);
+		delete validated.composition;
+		delete params.composition;
 	}
 
 	// audio codec

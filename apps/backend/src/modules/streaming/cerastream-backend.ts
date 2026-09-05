@@ -1483,6 +1483,11 @@ export class CerastreamBackend implements StreamingBackend {
 			...(config.input_mode !== undefined
 				? { input_mode: config.input_mode }
 				: {}),
+			// The feature gate is `validateConfig`'s, not this seam's — an
+			// unsupported board arrives with the field already dropped.
+			...(config.composition !== undefined
+				? { composition: config.composition }
+				: {}),
 			...(Object.keys(audio).length > 0 ? { audio } : {}),
 		};
 	}

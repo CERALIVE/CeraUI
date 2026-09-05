@@ -23,19 +23,24 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
-	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-01 on the capture-truth
-	// branch. Between the Phase-C rebaseline and that date the aggregate reached
-	// 1,099,280 B, i.e. 11.9% of the 12% Phase-C allowance was already spent, and
-	// eight operator-facing message keys x 10 locales (4,009 B of the 4,400 B
-	// measured delta) took it past the ceiling. Both displaced measurements are
-	// preserved below and reported on every run. Authorised by
-	// TD-spa-i18n-catalog-size; the initial-route/single-chunk ceilings are not
-	// widened, and the aggregate keeps a SECOND, absolute ceiling (below) so the
-	// re-derivation does not hand back a fresh 12% to spend silently.
-	totalGzip: 1_103_680,
+	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-04 on the media-island
+	// branch, and the SAME root cause as the 2026-09-01 step it displaces. The
+	// PiP/PbP composition surface adds twenty operator-facing message keys x 10
+	// locales, measured at 6,688 B aggregate and 6,759 B precache — 96% of it
+	// Paraglide's per-message x 10-locale expansion, not code. The tree was
+	// already at 99.5% of the aggregate ceiling and 99.8% of the precache one, so
+	// any feature carrying operator copy breached them; trimming this surface's
+	// prose first recovered 941 B and could not close the gap.
+	//
+	// Authorised by TD-spa-i18n-catalog-size (open). Every displaced measurement
+	// is preserved below and reported on every run; the initial-route and
+	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
+	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
+	// silently — precache gained one here for the reason totalGzip already had.
+	totalGzip: 1_121_005,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	precacheGzip: 1_123_271,
+	precacheGzip: 1_261_883,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -47,6 +52,12 @@ const SPA_BASELINE = {
 // too small to absorb another feature-scale surface.
 const SPA_TOTAL_ABSOLUTE_HEADROOM = 16 * KIB;
 
+// The precache aggregate's binding constraint, added 2026-09-04 for exactly the
+// reason the total has one: re-deriving it under the 1.12 ratio alone would
+// release ~135 KiB of unearned headroom, 20x the growth that forced the
+// re-derivation. Same sizing as the total — roughly 32 further message keys.
+const SPA_PRECACHE_ABSOLUTE_HEADROOM = 16 * KIB;
+
 // The baselines a tracked, accepted regression displaced, newest last. Kept so a
 // budget above can never read as "the size it has always been", and re-stated on
 // every run so each accepted step stays visible instead of living in a comment.
@@ -54,8 +65,12 @@ const SPA_DISPLACED_BASELINES = {
 	totalGzip: [
 		{ bytes: 762_410, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
 		{ bytes: 982_392, label: 'Phase-C', debt: 'TD-spa-i18n-catalog-size' },
+		{ bytes: 1_103_680, label: 'pre-composition', debt: 'TD-spa-i18n-catalog-size' },
 	],
-	precacheGzip: [{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' }],
+	precacheGzip: [
+		{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
+		{ bytes: 1_123_271, label: 'pre-composition', debt: 'TD-spa-i18n-catalog-size' },
+	],
 };
 
 // Per-file, keyed on the emitted federation filename. Entry names are stable;
@@ -212,7 +227,7 @@ check(
 check(
 	'service-worker precache gzip',
 	spa.precacheGzip,
-	budget(SPA_BASELINE.precacheGzip, 1.12),
+	budget(SPA_BASELINE.precacheGzip, 1.12, SPA_PRECACHE_ABSOLUTE_HEADROOM),
 	SPA_BASELINE.precacheGzip,
 );
 check(

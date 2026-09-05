@@ -464,10 +464,14 @@ test.describe("Track-1 source overhaul (functional)", () => {
 		const roadmap = page.getByTestId("live-roadmap");
 		await expect(roadmap).toBeVisible({ timeout: 15_000 });
 		await roadmap.locator("summary").click();
-		await expect(roadmap.locator('[data-comingsoon="TD-pip"]')).toBeVisible();
 		await expect(
 			roadmap.locator('[data-comingsoon="TD-mode-fallback"]'),
 		).toBeVisible();
+		// TD-pip is RESOLVED: composition ships as a real, feature-gated control
+		// (`CompositionCard.svelte`), so its pill is gone rather than merely moved.
+		// Asserted as an absence so a reintroduced pill fails here instead of
+		// quietly telling operators a shipped feature is still coming.
+		await expect(roadmap.locator('[data-comingsoon="TD-pip"]')).toHaveCount(0);
 	});
 
 	// ── 8. Destination traffic light reflects the relay.validate verdict (Task 5) ─

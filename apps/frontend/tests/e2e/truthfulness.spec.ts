@@ -1042,9 +1042,11 @@ test.describe("Capability truthfulness (functional)", () => {
 
 		// The surfaces really did render live debt markers (not an empty DOM that
 		// would make the orphan check trivially pass).
+		// `TD-pip` was dropped from this list when composition shipped as a real
+		// feature-gated control — it is resolved, so it renders no marker. The
+		// three below keep the guard non-vacuous.
 		expect(domIds).toEqual(
 			expect.arrayContaining([
-				"TD-pip",
 				"TD-mode-fallback",
 				"TD-rist-egress",
 				"TD-plain-srt-egress",
