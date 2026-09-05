@@ -157,7 +157,10 @@ const audioEmbeddedComingSoon = $derived(
 );
 </script>
 
-<div class="space-y-6" data-testid="idle-cockpit">
+<!-- `gap-6`, not `space-y-6`: the margin utility keys on `:not(:first-child)`, so
+     its rhythm is a property of DOM ORDER and loses an edge the moment a block
+     becomes conditional. The measured 24px is unchanged — mechanism, not value. -->
+<div class="flex flex-col gap-6" data-testid="idle-cockpit">
 	<!-- Source-first (T10): pick WHAT to stream before tuning HOW. -->
 	<SourceSection
 		{activeEncode}
