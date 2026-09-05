@@ -122,6 +122,61 @@ function stripBitrate(): HTMLElement {
 	return el;
 }
 
+function compactStrip(): HTMLElement {
+	const el = document.querySelector<HTMLElement>("[data-hud-region]");
+	if (!el) throw new Error("HUD compact strip not rendered");
+	return el;
+}
+
+/**
+ * Every `hud-`-prefixed testid the COMPACT strip is allowed to carry.
+ *
+ * `AGENTS.md` → "HUD 4-fact scope": the strip states exactly FOUR facts — the
+ * lifecycle badge, the health verdict, the bitrate, and ONE temperature chip.
+ * Only the bitrate fact is `hud-`-keyed, and these three ids are all of it (the
+ * headline plus its two qualifiers). Growing this list is a documented UX
+ * regression, not a routine update — a budget is undone by good commits one at
+ * a time unless something counts them.
+ */
+const STRIP_HUD_TESTIDS = [
+	"hud-bitrate",
+	"hud-bitrate-limit",
+	"hud-bitrate-target",
+] as const;
+
+function stripHudTestIds(): string[] {
+	return [
+		...compactStrip().querySelectorAll<HTMLElement>('[data-testid^="hud-"]'),
+	]
+		.map((el) => el.getAttribute("data-testid") ?? "")
+		.sort();
+}
+
+function throttledLiveHud(): HudState {
+	return makeHud({
+		isStreaming: true,
+		bitrateKbps: 4100,
+		measuredBitrateKbps: 3200,
+		bitrateCeilingKbps: 6000,
+		isBitrateBelowCeiling: true,
+	});
+}
+
+function degradedRollup(detail = "No frames advancing"): HealthRollup {
+	return {
+		state: "degraded",
+		reason: { component: "frames", detail },
+		process: { alive: true },
+		frames: { advancing: false, count: 0 },
+		srt: { reconnecting: false, reconnectCount: 0 },
+		bond: { linkCount: 2, activeLinks: 2 },
+	};
+}
+
+function classesOf(el: HTMLElement): string[] {
+	return el.className.split(/\s+/).filter(Boolean);
+}
+
 beforeEach(() => {
 	state.hud = makeHud();
 	state.health = "unknown";
@@ -449,6 +504,149 @@ describe("HudBar health honesty (Todo 19) — idle dot + tri-state tiles", () =>
 				within(dialog).getByTestId("health-srt").getAttribute("data-state"),
 			).toBe(expected);
 			view.unmount();
+		}
+	});
+});
+
+// ── design-pass 26 ───────────────────────────────────────────────────────────
+// The compact strip's three refinements: a middot instead of a slash between
+// two bitrates, the health reason readable at EVERY width, and the four-fact
+// budget pinned by a gate rather than by a paragraph.
+
+describe("HudBar strip — the ceiling is separated by a middot, never a slash", () => {
+	it("renders the configured ceiling with no '/' anywhere in the chip", () => {
+		state.hud = throttledLiveHud();
+		render(HudBar);
+
+		const limit = screen.getByTestId("hud-bitrate-limit");
+		expect(limit.textContent).toContain("6");
+		expect(limit.textContent).not.toContain("/");
+		expect(stripBitrate().textContent).not.toContain("/");
+	});
+
+	it("separates it with an aria-hidden middot, so the ceiling is not read twice", () => {
+		state.hud = throttledLiveHud();
+		render(HudBar);
+
+		const separator =
+			screen.getByTestId("hud-bitrate-limit").previousElementSibling;
+		expect(separator?.textContent?.trim()).toBe("·");
+		expect(separator?.getAttribute("aria-hidden")).toBe("true");
+	});
+
+	it("keeps the ceiling NAMED in the accessible name, so the middot costs no meaning", () => {
+		state.hud = throttledLiveHud();
+		render(HudBar);
+
+		const label = stripBitrate().getAttribute("aria-label") ?? "";
+		expect(label).toContain("Configured limit");
+		expect(label).toContain("Target");
+	});
+});
+
+describe("HudBar strip — the health reason is visible at EVERY width", () => {
+	it("carries no `hidden` class, so a 375px-class render still states the cause", () => {
+		state.health = "degraded";
+		state.rollup = degradedRollup();
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 4100 });
+		render(HudBar);
+
+		const reason = screen.getByTestId("stream-health-reason");
+		expect(reason.textContent).toContain("No frames advancing");
+
+		const classes = classesOf(reason);
+		expect(classes).not.toContain("hidden");
+		// The retired mechanism: `hidden sm:inline` withheld the cause below `sm`,
+		// leaving a verdict a narrow-viewport operator could not explain.
+		expect(classes).not.toContain("sm:inline");
+	});
+
+	it("stacks it UNDER the badge below `sm` and returns it inline from `sm` up", () => {
+		state.health = "degraded";
+		state.rollup = degradedRollup();
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 4100 });
+		render(HudBar);
+
+		const cluster = screen.getByTestId("stream-health-reason").parentElement;
+		if (cluster === null)
+			throw new Error("reason is not inside the lead cluster");
+
+		const clusterClasses = classesOf(cluster);
+		expect(clusterClasses).toContain("flex-col");
+		expect(clusterClasses).toContain("sm:flex-row");
+		// The lifecycle badge and the health verdict share the row ABOVE it.
+		expect(cluster.contains(screen.getByTestId("stream-health"))).toBe(true);
+	});
+
+	it("keeps the second line inside the strip's own box — the dock never grows", () => {
+		state.health = "degraded";
+		state.rollup = degradedRollup();
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 4100 });
+		render(HudBar);
+
+		// jsdom lays nothing out, so the h-12 ceiling is asserted as the MECHANISM
+		// that keeps `--mobile-dock-height` honest; the rendered geometry is
+		// measured in tests/e2e/visual/hud-sheet.visual.spec.ts at 375x812.
+		expect(classesOf(compactStrip())).toContain("h-12");
+	});
+
+	it("a healthy rollup states no cause at all — absence renders as absence", () => {
+		state.health = "healthy";
+		state.rollup = healthyRollup();
+		state.hud = makeHud({ isStreaming: true, bitrateKbps: 4100 });
+		render(HudBar);
+
+		expect(screen.queryByTestId("stream-health-reason")).toBeNull();
+	});
+});
+
+describe("HudBar strip — the FOUR-fact budget is locked", () => {
+	it("idle: the bitrate is the only hud- fact on the strip", () => {
+		state.hud = makeHud({ isStreaming: false });
+		render(HudBar);
+
+		expect(stripHudTestIds()).toEqual(["hud-bitrate"]);
+	});
+
+	it("live, measured and throttled: exactly the documented bitrate qualifiers, no fifth", () => {
+		state.hud = throttledLiveHud();
+		render(HudBar);
+
+		expect(stripHudTestIds()).toEqual([...STRIP_HUD_TESTIDS]);
+	});
+
+	it("the four facts are the badge, the verdict, the bitrate and ONE temp chip", () => {
+		state.soc = { temp: 42, voltage: 5, current: 1, isStale: false };
+		state.hud = throttledLiveHud();
+		render(HudBar);
+
+		const strip = compactStrip();
+		// The FACT is the `role="img"` chip; the inner value node repeats the title
+		// as its own tooltip, so a bare title query counts one chip twice.
+		expect(
+			strip.querySelectorAll('[role="img"][title="Temperature"]'),
+		).toHaveLength(1);
+		expect(strip.querySelector('[data-testid="stream-health"]')).not.toBeNull();
+		expect(strip.querySelector('[data-testid="hud-bitrate"]')).not.toBeNull();
+		// Never the server target, never the encoder — both have richer owners
+		// elsewhere and either one would be the fifth fact. `hud-bitrate-target`
+		// is a qualifier ON the bitrate fact, not a target of its own.
+		expect(
+			[...strip.querySelectorAll<HTMLElement>("[data-testid]")]
+				.map((el) => el.getAttribute("data-testid") ?? "")
+				.filter((id) => /encoder|server/.test(id)),
+		).toEqual([]);
+	});
+
+	it("the two live regions sit OUTSIDE the strip, so they cannot pad the budget", () => {
+		state.hud = makeHud({ isStreaming: false });
+		render(HudBar);
+
+		const strip = compactStrip();
+		for (const id of ["hud-telemetry-status", "hud-transition-status"]) {
+			const region = screen.getByTestId(id);
+			expect(region).toBeTruthy();
+			expect(strip.contains(region)).toBe(false);
 		}
 	});
 });

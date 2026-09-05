@@ -325,51 +325,63 @@ $effect(() => {
 					className,
 				)}
 			>
-				<!-- Lead status badge -->
-				{#if isOffline}
-					<span
-						class="bg-muted text-muted-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
-					>
-						<ClockIcon class="size-3" aria-hidden="true" />
-						{m["hud.offline"]()}
-					</span>
-				{:else if isLive}
-					<span
-						class="bg-status-live text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
-					>
-						<span class="size-2 rounded-full bg-current motion-safe:animate-pulse"></span>
-						{m["hud.live"]()}
-					</span>
-				{:else}
-					<span
-						class="text-muted-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
-					>
-						<span class="bg-status-idle size-2 rounded-full"></span>
-						{m["hud.idle"]()}
-					</span>
-				{/if}
+				<!--
+				  Below `sm` the reason drops onto its own line under the badge instead
+				  of being `hidden`: a verdict with no cause is what a narrow-viewport
+				  operator cannot recover. The column stays inside the strip's `h-12`
+				  box, so `--mobile-dock-height` does not grow.
+				-->
+				<span class="flex min-w-0 flex-col items-start gap-0.5 sm:flex-row sm:items-center sm:gap-3">
+					<span class="inline-flex shrink-0 items-center gap-3">
+						<!-- Lead status badge -->
+						{#if isOffline}
+							<span
+								class="bg-muted text-muted-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
+							>
+								<ClockIcon class="size-3" aria-hidden="true" />
+								{m["hud.offline"]()}
+							</span>
+						{:else if isLive}
+							<span
+								class="bg-status-live text-primary-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
+							>
+								<span class="size-2 rounded-full bg-current motion-safe:animate-pulse"></span>
+								{m["hud.live"]()}
+							</span>
+						{:else}
+							<span
+								class="text-muted-foreground inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.7rem] font-semibold uppercase tracking-wider"
+							>
+								<span class="bg-status-idle size-2 rounded-full"></span>
+								{m["hud.idle"]()}
+							</span>
+						{/if}
 
-				<!-- Stream-health indicator: icon SHAPE + visible label (never color alone) -->
-				<span
-					data-testid="stream-health"
-					data-state={health}
-					class="inline-flex shrink-0 items-center gap-1"
-					title="{m["hud.streamHealth"]()}: {healthLabel}"
-				>
-					<HealthIcon class={cn('size-3.5 shrink-0', healthIconColor)} aria-hidden="true" />
-					<span class="text-[0.7rem] font-semibold">{healthLabel}</span>
-					<span class="sr-only">{m["hud.streamHealth"]()}</span>
+						<!-- Stream-health indicator: icon SHAPE + visible label (never color alone) -->
+						<span
+							data-testid="stream-health"
+							data-state={health}
+							class="inline-flex shrink-0 items-center gap-1"
+							title="{m["hud.streamHealth"]()}: {healthLabel}"
+						>
+							<HealthIcon class={cn('size-3.5 shrink-0', healthIconColor)} aria-hidden="true" />
+							<span class="text-[0.7rem] font-semibold">{healthLabel}</span>
+							<span class="sr-only">{m["hud.streamHealth"]()}</span>
+						</span>
+					</span>
+
+					{#if healthReason}
+						<!-- Capped below `sm` so the second line cannot widen the cluster
+						     past the badge row above it and steal strip width. -->
+						<span
+							data-testid="stream-health-reason"
+							class="text-muted-foreground max-w-[9rem] min-w-0 truncate text-[0.7rem] leading-tight font-medium sm:max-w-none"
+							title={healthReason.detail}
+						>
+							{healthReason.detail}
+						</span>
+					{/if}
 				</span>
-
-				{#if healthReason}
-					<span
-						data-testid="stream-health-reason"
-						class="text-muted-foreground hidden min-w-0 truncate text-[0.7rem] font-medium sm:inline"
-						title={healthReason.detail}
-					>
-						{healthReason.detail}
-					</span>
-				{/if}
 
 				<!-- Store-and-forward buffering indicator (capability-gated, calm) -->
 				<BufferingIndicator state={buffering} />
@@ -403,8 +415,13 @@ $effect(() => {
 						</span>
 					{/if}
 					{#if bitrateBelowLimit}
+						<!-- A slash between two bitrates reads as a fraction (the
+						     StreamTelemetryStrip report); the separator is an
+						     `aria-hidden` middot, and the accessible name above already
+						     names the ceiling with its own word label. -->
+						<span aria-hidden="true" class="text-muted-foreground/40">·</span>
 						<span class="text-muted-foreground/70 text-[0.7rem]" data-testid="hud-bitrate-limit">
-							/ {bitrateLimitText}
+							{bitrateLimitText}
 						</span>
 					{/if}
 				</span>
