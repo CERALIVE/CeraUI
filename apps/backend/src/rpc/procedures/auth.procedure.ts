@@ -73,7 +73,7 @@ function pruneLegacyTokenRecords(): void {
 	);
 }
 
-pruneLegacyTokenRecords();
+setTimeout(pruneLegacyTokenRecords, 0).unref();
 
 function genAuthToken(isPersistent: boolean): string {
 	const token = randomBase64(32);
