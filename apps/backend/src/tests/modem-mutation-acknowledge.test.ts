@@ -252,7 +252,7 @@ describe("5d — a crash between the acknowledgement write and the archive", () 
 		expect(survived?.state).toBe("acknowledged");
 		expect(survived?.acknowledgedMode).toBe("force-rebaseline");
 		// The rebaselined state — not the pre-state — is what was journaled.
-		expect(survived?.preState["mode"]).toBe("mbim");
+		expect(survived?.preState.mode).toBe("mbim");
 
 		await initMutationRecovery();
 		expect(await readdir(dir)).toEqual([]);

@@ -199,18 +199,9 @@ function deviceName(device: BluetoothDevice): string {
 	return device.name ?? device.address ?? m["network.bluetooth.deviceUnnamed"]();
 }
 
-/**
- * Deep-link to the Live destination.
- *
- * Lazily imported for the reason `dialog-request.svelte.ts` records: `$lib/config`
- * statically pulls the dev-only DevTools → pwa → `window.matchMedia` chain, and
- * `navigation.svelte` pulls `$lib/config` in turn. Resolving them at tap time
- * keeps both out of this component's static graph.
- */
 async function openLiveSources(): Promise<void> {
-	const { navElements } = await import('$lib/config');
-	const { navigateTo } = await import('$lib/stores/navigation.svelte');
-	if (navElements.live) navigateTo({ live: navElements.live });
+	const { navigateToDestination } = await import('$lib/stores/navigation-lazy');
+	navigateToDestination('live');
 }
 </script>
 

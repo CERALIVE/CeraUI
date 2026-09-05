@@ -31,7 +31,6 @@ import {
 	dismiss,
 	dismissNotification,
 	getActive,
-	getPersistent,
 	push,
 	pushNotification,
 	resolveNotificationText,

@@ -179,6 +179,13 @@ imported `async` function returns a Promise, so it under-reports (the T1 audit m
 Promotion to `error` is deferred until Biome resolves imported-async returns or a typed
 `tsc` pass is wired.
 
+The repository's zero-warning pass removed every currently reported instance and
+promoted the stable warning-level rules in the root `biome.json` to `error`. The
+nursery `noFloatingPromises` rule is the sole severity exception for the reasons
+above, but the currently known sites still use an explicit `void` and the complete
+`bunx biome check .` result is zero warnings and zero infos. This keeps the existing
+CI command unchanged while making every promoted class fail on recurrence.
+
 > **Never put `//` or `/* */` comments in any CeraUI `biome.json`.** Biome 2.5.0
 > silently drops the entire `linter.rules` block when the config contains a comment
 > (only the formatter keeps running, with no parse error). Since Biome 2.5.8 the

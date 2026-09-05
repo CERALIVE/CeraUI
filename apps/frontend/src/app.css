@@ -48,7 +48,7 @@
 
 /* ── Semantic Gradient Utilities ──────────────────
    Two-tone gradients using design token endpoints.
-   Use instead of hardcoded from-*/to-* Tailwind classes. */
+   Use instead of hardcoded Tailwind gradient endpoint classes. */
 
 @utility gradient-primary {
 	background-image: linear-gradient(

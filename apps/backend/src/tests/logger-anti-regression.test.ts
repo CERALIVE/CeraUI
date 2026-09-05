@@ -22,6 +22,7 @@
  *   2. a known secret token NEVER survives into ANY transport's output.
  */
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { ok as assert } from "node:assert/strict";
 
 import { logger, REDACTED } from "../helpers/logger.ts";
 
@@ -154,8 +155,8 @@ describe("logger anti-regression — no ANSI in the production path", () => {
 		);
 
 		const console = lines.find((l) => l.transport === "Console");
-		expect(console).toBeDefined();
-		const parsed = JSON.parse(console!.line) as {
+		assert(console);
+		const parsed = JSON.parse(console.line) as {
 			level: string;
 			msg: string;
 			module?: string;
@@ -174,9 +175,9 @@ describe("logger anti-regression — no ANSI in the production path", () => {
 		);
 
 		const file = lines.find((l) => l.transport === "File");
-		expect(file).toBeDefined();
-		expect(file!.line).not.toContain(ANSI_ESCAPE);
-		expect(() => JSON.parse(file!.line)).not.toThrow();
+		assert(file);
+		expect(file.line).not.toContain(ANSI_ESCAPE);
+		expect(() => JSON.parse(file.line)).not.toThrow();
 	});
 });
 
@@ -200,12 +201,12 @@ describe("logger anti-regression — secrets never reach any transport", () => {
 		const lines = await captureTransports(emitWithSecret);
 
 		const console = lines.find((l) => l.transport === "Console");
-		expect(console).toBeDefined();
+		assert(console);
 		// dev + TTY → the line is colorized (proves we are on the pretty branch)…
-		expect(console!.line).toContain(ANSI_ESCAPE);
+		expect(console.line).toContain(ANSI_ESCAPE);
 		// …yet redaction still runs ahead of formatting.
-		expect(console!.line).not.toContain(KNOWN_SECRET);
-		expect(console!.line).not.toContain("hunter2");
+		expect(console.line).not.toContain(KNOWN_SECRET);
+		expect(console.line).not.toContain("hunter2");
 	});
 
 	test("deeply nested secret-shaped values and sensitive keys are scrubbed in the prod record", async () => {
@@ -213,8 +214,8 @@ describe("logger anti-regression — secrets never reach any transport", () => {
 		const lines = await captureTransports(emitWithSecret);
 
 		const file = lines.find((l) => l.transport === "File");
-		expect(file).toBeDefined();
-		const parsed = JSON.parse(file!.line) as {
+		assert(file);
+		const parsed = JSON.parse(file.line) as {
 			meta: {
 				token: string;
 				header: string;
@@ -240,11 +241,11 @@ describe("logger anti-regression — dev/prod format selection through the live 
 		);
 
 		const console = lines.find((l) => l.transport === "Console");
-		expect(console).toBeDefined();
-		expect(console!.line).toContain(ANSI_ESCAPE);
-		expect(console!.line).toMatch(HH_MM_SS_RE);
+		assert(console);
+		expect(console.line).toContain(ANSI_ESCAPE);
+		expect(console.line).toMatch(HH_MM_SS_RE);
 		// pretty form is NOT JSON
-		expect(() => JSON.parse(console!.line)).toThrow();
+		expect(() => JSON.parse(console.line)).toThrow();
 	});
 
 	test("prod console line is the JSON schema form, never the pretty form", async () => {
@@ -254,10 +255,10 @@ describe("logger anti-regression — dev/prod format selection through the live 
 		);
 
 		const console = lines.find((l) => l.transport === "Console");
-		expect(console).toBeDefined();
-		expect(console!.line).not.toContain(ANSI_ESCAPE);
+		assert(console);
+		expect(console.line).not.toContain(ANSI_ESCAPE);
 		// JSON form carries the ISO `ts`, not a bare HH:MM:SS clock token.
-		const parsed = JSON.parse(console!.line) as { ts: string };
+		const parsed = JSON.parse(console.line) as { ts: string };
 		expect(Number.isNaN(new Date(parsed.ts).getTime())).toBe(false);
 	});
 });

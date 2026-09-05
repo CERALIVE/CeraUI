@@ -37,16 +37,9 @@ const singleton: DialogRequestStore = ((): DialogRequestStore => {
 export function requestDialog(target: NotificationActionTarget): void {
 	singleton.set(target);
 	if (target === "updates-dialog") {
-		// Lazy import so `$lib/config` (which statically pulls the dev-only DevTools
-		// → pwa → window.matchMedia chain) stays OUT of this module's static graph.
-		// It only resolves when a notification is actually tapped at runtime, where
-		// the browser has matchMedia — so importers like SettingsView never drag it
-		// into a jsdom test that doesn't stub matchMedia.
-		void (async () => {
-			const { navElements } = await import("$lib/config");
-			const { navigateTo } = await import("$lib/stores/navigation.svelte");
-			if (navElements.settings) navigateTo({ settings: navElements.settings });
-		})();
+		void import("$lib/stores/navigation-lazy").then(
+			({ navigateToDestination }) => navigateToDestination("settings"),
+		);
 	}
 }
 

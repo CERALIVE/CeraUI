@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { ok as assert } from "node:assert/strict";
 import { cleanup, fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -705,7 +707,8 @@ describe("PreviewCanvas", () => {
 		await turnOn(getByTestId);
 
 		expect(FakeWebSocket.instances).toHaveLength(1);
-		const first = FakeWebSocket.instances[0]!;
+		const first = FakeWebSocket.instances[0];
+		assert(first);
 		first.onopen?.({});
 		await tick();
 		expect(mintMock).toHaveBeenCalledTimes(1);
@@ -761,10 +764,14 @@ describe("PreviewCanvas", () => {
 		await fireEvent.click(getByTestId("preview-toggle"));
 		await flush();
 		expect(resolvers).toHaveLength(1);
-		resolvers[0]!({ token: "tok-1", ttlMs: 30000 });
+		const firstMint = resolvers[0];
+		assert(firstMint);
+		firstMint({ token: "tok-1", ttlMs: 30000 });
 		await flush();
 		expect(FakeWebSocket.instances).toHaveLength(1);
-		FakeWebSocket.instances[0]!.onopen?.({});
+		const firstSocket = FakeWebSocket.instances[0];
+		assert(firstSocket);
+		firstSocket.onopen?.({});
 		await tick();
 
 		// Rapid double source change: each restart's start() mints a fresh (held)
@@ -777,9 +784,13 @@ describe("PreviewCanvas", () => {
 
 		// Resolve the STALE mint #2 first: its connect must abort (no socket). Then
 		// resolve the current mint #3: it dials the sole live socket.
-		resolvers[1]!({ token: "tok-2", ttlMs: 30000 });
+		const staleMint = resolvers[1];
+		assert(staleMint);
+		staleMint({ token: "tok-2", ttlMs: 30000 });
 		await flush();
-		resolvers[2]!({ token: "tok-3", ttlMs: 30000 });
+		const currentMint = resolvers[2];
+		assert(currentMint);
+		currentMint({ token: "tok-3", ttlMs: 30000 });
 		await flush();
 
 		// Exactly ONE live socket, zero leaked dials: socket #1 closed by the first

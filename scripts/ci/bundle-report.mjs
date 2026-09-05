@@ -40,7 +40,9 @@ const SPA_BASELINE = {
 	totalGzip: 1_121_005,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
-	precacheGzip: 1_261_883,
+	// Keep the tighter experience-stability precache baseline on integration;
+	// the parallel media-island measurement is retained below, not added to it.
+	precacheGzip: 1_259_658,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -69,7 +71,8 @@ const SPA_DISPLACED_BASELINES = {
 	],
 	precacheGzip: [
 		{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
-		{ bytes: 1_123_271, label: 'pre-composition', debt: 'TD-spa-i18n-catalog-size' },
+		{ bytes: 1_123_271, label: 'pre-composition / pre-experience-stability', debt: 'TD-spa-i18n-catalog-size' },
+		{ bytes: 1_261_883, label: 'parallel media-island measurement', debt: 'TD-spa-i18n-catalog-size' },
 	],
 };
 

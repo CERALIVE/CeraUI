@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { ok as assert } from "node:assert/strict";
 
 import { REDACTED } from "../helpers/logger.ts";
 import {
@@ -83,7 +84,9 @@ describe("rpc-logging", () => {
 
 		expect(result).toEqual({ ok: true });
 		expect(lines).toHaveLength(1);
-		const { message, meta } = lines[0]!;
+		const line = lines[0];
+		assert(line);
+		const { message, meta } = line;
 		expect(message).toBe("RPC streaming.getConfig ok");
 		expect(meta).toBeDefined();
 		expect(meta?.procedure).toBe("streaming.getConfig");
@@ -125,7 +128,9 @@ describe("rpc-logging", () => {
 		);
 
 		expect(lines).toHaveLength(1);
-		const { message, meta } = lines[0]!;
+		const line = lines[0];
+		assert(line);
+		const { message, meta } = line;
 		expect(message).toBe("RPC auth.login ok");
 		expect(meta?.procedure).toBe("auth.login");
 		expect(meta?.ok).toBe(true);

@@ -10,6 +10,7 @@
  * an unknown action without crashing.
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { ok as assert } from "node:assert/strict";
 import {
 	initMockService,
 	shouldUseMocks,
@@ -112,7 +113,8 @@ describe("mock preview server — wire contract under mocks", () => {
 
 		// codec-config MUST be the first text frame (parser gates decode on it).
 		expect(collected.texts[0]?.type).toBe("codec-config");
-		const config = collected.texts.find((m) => m.type === "codec-config")!;
+		const config = collected.texts.find((m) => m.type === "codec-config");
+		assert(config);
 		expect(typeof config.codec).toBe("string");
 		expect(config.codec).toMatch(/^avc1\./);
 		expect(typeof config.description).toBe("string");
@@ -120,7 +122,8 @@ describe("mock preview server — wire contract under mocks", () => {
 		expect(config.coded_height).toBeGreaterThan(0);
 
 		// First binary AU: valid 9-byte header, keyframe-flagged, decodable pts.
-		const first = collected.binaries[0]!;
+		const first = collected.binaries[0];
+		assert(first);
 		expect(first.byteLength).toBeGreaterThan(9);
 		const view = new DataView(first);
 		const flags = view.getUint8(0);
@@ -129,7 +132,8 @@ describe("mock preview server — wire contract under mocks", () => {
 		expect(ptsUs).toBeGreaterThanOrEqual(0n);
 
 		// audio-level shape.
-		const audio = collected.texts.find((m) => m.type === "audio-level")!;
+		const audio = collected.texts.find((m) => m.type === "audio-level");
+		assert(audio);
 		expect(Array.isArray(audio.rms_db)).toBe(true);
 		expect(Array.isArray(audio.peak_db)).toBe(true);
 		expect((audio.rms_db as number[]).length).toBe(

@@ -81,7 +81,7 @@ type Frame = string | ArrayBuffer;
  * drop-oldest + teardown behaviour is drivable without a live socket.
  */
 export interface PreviewDownSocket {
-	send(data: Frame): number | void;
+	send(data: Frame): number | undefined;
 	getBufferedAmount(): number;
 	close(code?: number, reason?: string): void;
 }

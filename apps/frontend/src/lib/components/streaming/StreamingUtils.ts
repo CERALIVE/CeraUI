@@ -31,6 +31,6 @@ export function updateMaxBitrate(
 	isStreaming: boolean | undefined,
 ): void {
 	if (isStreaming && bitrate) {
-		updateBitrate(bitrate);
+		void updateBitrate(bitrate);
 	}
 }

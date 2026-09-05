@@ -159,7 +159,7 @@ let qrDataUrls = $state<Record<string, string>>({});
 $effect(() => {
 	let cancelled = false;
 	const next: Record<string, string> = {};
-	Promise.all(
+	void Promise.all(
 		rows.map(async (row) => {
 			if (!row.url) return;
 			try {

@@ -34,18 +34,18 @@
 				"noUnusedTemplateLiteral": "error",
 				"useNumberNamespace": "error",
 				"noInferrableTypes": "error",
-				"noUselessElse": "warn",
-				"useTemplate": "warn",
+				"noUselessElse": "error",
+				"useTemplate": "error",
 				"useConst": "error",
 				"useImportType": "error",
-				"noNonNullAssertion": "warn"
+				"noNonNullAssertion": "error"
 			},
 
 			"complexity": {
 				"noExtraBooleanCast": "error",
 				"noUselessCatch": "error",
 				"useLiteralKeys": "error",
-				"useOptionalChain": "warn",
+				"useOptionalChain": "error",
 				"noForEach": "off",
 				"noAdjacentSpacesInRegex": "error"
 			},
@@ -69,12 +69,12 @@
 			},
 
 			"performance": {
-				"noAccumulatingSpread": "warn",
-				"noDelete": "warn"
+				"noAccumulatingSpread": "error",
+				"noDelete": "error"
 			},
 
 			"suspicious": {
-				"noArrayIndexKey": "warn",
+				"noArrayIndexKey": "error",
 				"noAssignInExpressions": "error",
 				"noAsyncPromiseExecutor": "error",
 				"noCatchAssign": "error",
@@ -89,7 +89,7 @@
 				"noDuplicateParameters": "error",
 				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
 				"noEmptyBlockStatements": "error",
-				"noExplicitAny": "warn",
+				"noExplicitAny": "error",
 				"noExtraNonNullAssertion": "error",
 				"noFallthroughSwitchClause": "error",
 				"noFunctionAssign": "error",

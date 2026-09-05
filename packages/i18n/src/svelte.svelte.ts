@@ -28,7 +28,6 @@
 
 import {
 	getMessage,
-	isNamespaceLoaded,
 	type MessageFn,
 	type MessageKey,
 	NAMESPACES,

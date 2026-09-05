@@ -103,7 +103,7 @@ describe("duplicate-IP policy split", () => {
 		netIfBuildMsg();
 
 		const netif = getNetworkInterfaces();
-		const twinA = netif["enx0c5b8f279a64"];
+		const twinA = netif.enx0c5b8f279a64;
 		const twinB = netif.eth1;
 		expect(twinA?.error).toBe(NETIF_ERR_DUPIPV4);
 		expect(twinB?.error).toBe(NETIF_ERR_DUPIPV4);

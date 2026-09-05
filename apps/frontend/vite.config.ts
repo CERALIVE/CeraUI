@@ -7,32 +7,32 @@ import { persistPlugin } from "svelte-persistent-runes/plugins";
 import { defineConfig, loadEnv, type ProxyOptions } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
-import { generateUniqueVersion, pwaConfig } from "./pwa.config";
+import { generateUniqueVersion, pwaConfig } from "./pwa.config.ts";
 import {
 	devOnlyI18nNamespacePlugin,
 	i18nManualChunk,
 	PARAGLIDE_OUTDIR,
 	PARAGLIDE_PROJECT,
 	PARAGLIDE_STRATEGY,
-} from "./vite.i18n";
-import { PERSIST_RUNTIME_ALIAS } from "./vite.persist";
+} from "./vite.i18n.ts";
+import { PERSIST_RUNTIME_ALIAS } from "./vite.persist.ts";
 import {
 	SPA_SOURCEMAP_OUT_DIR,
 	spaSourcemapRelocationPlugin,
-} from "./vite.sourcemaps";
+} from "./vite.sourcemaps.ts";
 import {
 	applyPreviewWebSocketRoute,
 	DEVICE_WS_PROXY_CONTEXT,
 	previewUpgradeGuard,
 	rejectWebSocketUpgrade,
 	resolvePreviewWebSocketRoute,
-} from "./vite-preview-routing";
+} from "./vite-preview-routing.ts";
 
 export {
 	applyPreviewWebSocketRoute,
 	DEVICE_WS_PROXY_CONTEXT,
 	resolvePreviewWebSocketRoute,
-} from "./vite-preview-routing";
+} from "./vite-preview-routing.ts";
 
 // Get __dirname equivalent for ES modules
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -279,8 +279,11 @@ export default defineConfig(({ mode }) => {
 					},
 				},
 			},
-			// Set stricter chunk size warning limit
-			chunkSizeWarningLimit: 300,
+			// Vite's raw-size notice is presentation-only. The gzip initial-route,
+			// largest-chunk, precache, and aggregate budgets are enforced by
+			// scripts/ci/bundle-report.mjs; 1,102 kB is the measured largest emitted
+			// chunk plus 5% headroom.
+			chunkSizeWarningLimit: 1102,
 		},
 		resolve: {
 			// Array form, not the object map: object aliases are PREFIX matches, and

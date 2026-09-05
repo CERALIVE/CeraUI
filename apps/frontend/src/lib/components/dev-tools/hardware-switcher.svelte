@@ -83,7 +83,7 @@ async function switchHardware(hardware: HardwareType) {
 // Initialize on mount
 $effect(() => {
 	if (!isInitialized) {
-		loadHardwareState();
+		void loadHardwareState();
 	}
 });
 </script>
