@@ -319,4 +319,26 @@ log_has 'systemctl enable ceralive-addon-reconciler.service' \
 grep -q 'upgrade_from_present=no' "$work/out.txt" \
     || fail "postinst fresh configure must mark upgrade_from_present=no"
 
-printf 'PASS: prerm stops only on remove; postinst re-enables always and restarts only on an upgrade with systemd running\n'
+# Given: old prerm removed the enablement link, but the helper remembers an install.
+# Its successful no-op above reproduces deb-systemd-helper's retained-state branch.
+cat > "$stubdir/systemctl" <<'STUB'
+#!/bin/bash
+printf '%s %s\n' "${0##*/}" "$*" >> "$CERALIVE_STUB_LOG"
+case "$*" in
+    'enable ceralive.service') printf 'enabled\n' > "$CERALIVE_STUB_LOG.enabled" ;;
+esac
+STUB
+cat > "$stubdir/deb-systemd-invoke" <<'STUB'
+#!/bin/bash
+printf '%s %s\n' "${0##*/}" "$*" >> "$CERALIVE_STUB_LOG"
+if [[ "$*" == 'restart ceralive.service' && -f "$CERALIVE_STUB_LOG.enabled" ]]; then
+    printf 'active\n' > "$CERALIVE_STUB_LOG.active"
+fi
+STUB
+# When: the packaged postinst configures an upgrade with systemd running.
+run_maintainer postinst "$rundir_present" configure 2026.8.5
+# Then: actual enablement is repaired before the policy-aware restart runs.
+[[ -f "$stub_log.enabled" && -f "$stub_log.active" ]] \
+    || fail "postinst must restore enabled/active when deb-systemd-helper succeeds without recreating the link"
+
+printf 'PASS: prerm stops only on remove; postinst repairs retained-helper enablement and restarts only on an upgrade with systemd running\n'

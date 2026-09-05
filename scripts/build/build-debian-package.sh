@@ -214,13 +214,9 @@ echo "Web interface will be available at: http://localhost:8080"
 if [ "$1" = "configure" ]; then
     systemctl daemon-reload || true
 
-    # Repairs the OLD field prerm, which disabled ceralive.service on every
-    # upgrade: a device updating from such a package arrives here disabled.
-    if command -v deb-systemd-helper >/dev/null 2>&1; then
-        deb-systemd-helper enable ceralive.service || true
-    else
-        systemctl enable ceralive.service || true
-    fi
+    # The old prerm disables on upgrade. deb-systemd-helper enable is a no-op
+    # after its first install, so only systemctl repairs the missing link reliably.
+    systemctl enable ceralive.service || true
 
     # $2 is the previously configured version, so a non-empty value means UPGRADE.
     # A fresh install keeps today's behaviour: installed and enabled, never started.
