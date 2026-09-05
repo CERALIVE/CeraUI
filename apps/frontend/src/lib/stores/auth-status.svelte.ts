@@ -98,6 +98,19 @@ export async function authenticate(
 	}
 }
 
+export async function authenticateWithToken(token: string): Promise<void> {
+	if (!(await whenSocketReady())) {
+		ingestAuth({ success: false });
+		return;
+	}
+	try {
+		ingestAuth(await rpc.auth.login({ token, persistent_token: true }));
+	} catch (error) {
+		console.error("Failed to authenticate with stored token:", error);
+		ingestAuth({ success: false });
+	}
+}
+
 export async function createPassword(password: string): Promise<void> {
 	if (!(await whenSocketReady())) {
 		throw new Error("Connection timeout");
