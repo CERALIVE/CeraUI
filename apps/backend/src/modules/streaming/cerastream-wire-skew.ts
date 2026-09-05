@@ -19,12 +19,10 @@
  * Compile-time skew assertions for the CeraUI-OWNED wire schemas that MIRROR a
  * producer shape rather than consuming one.
  *
- * Four schemas in `@ceraui/rpc` are re-broadcast to the frontend on CeraUI's own
- * wire, so they are legitimately CeraUI-owned and must NOT import a producer
- * type (`@ceraui/rpc` deliberately carries no `@ceralive/cerastream` dependency,
- * and it is browser-safe). But each declares in prose that it mirrors a producer
- * shape, and prose does not fail a build — a producer rename left them silently
- * describing a field that no longer arrives.
+ * The remaining schemas covered here are re-broadcast to the frontend with
+ * CeraUI-owned projections, so they cannot consume the producer shape wholesale.
+ * Platform/source/encoder capability schemas are deliberately absent: those now
+ * import the published binding directly.
  *
  * This module is that missing gate. It lives in `apps/backend`, the one package
  * that depends on BOTH sides, and it is type-only: it adds no runtime code, no
@@ -49,15 +47,9 @@ import type {
 	AudioLevelEvent as CerastreamAudioLevelEvent,
 	CaptureDevice as CerastreamCaptureDevice,
 	CaptureCap as CerastreamCaptureFormatCap,
-	PlatformCaps as CerastreamPlatformCaps,
 	StatusEvent as CerastreamStatusEvent,
-	VideoSourceCap as CerastreamVideoSourceCap,
 } from "@ceralive/cerastream";
-import type {
-	CaptureFormatCap,
-	PlatformCaps,
-	VideoSourceCap,
-} from "@ceraui/rpc";
+import type { CaptureFormatCap } from "@ceraui/rpc";
 import type {
 	ActiveEncode,
 	AudioBackend,
@@ -111,43 +103,12 @@ export type ProducerMirrorsCaptureDevice = AssertAssignable<
 >;
 
 // ---------------------------------------------------------------------------
-// S3 — `capabilities/intersect-caps.ts` `PlatformCaps` / `VideoSourceCap` /
-// `CaptureFormatCap`
+// S3 — `capabilities/intersect-caps.ts` `CaptureFormatCap`
 //
-// Hand-written interfaces (not Zod), because `intersect-caps.ts` is a pure,
-// browser-safe derivation consumed by the frontend. `PlatformCaps` is a strict
-// SUBSET of the producer's — the producer additionally carries `hardware_kind`
-// and `source`, which this layer has no opinion about — so only the
-// producer-satisfies-mirror direction is asserted for it.
+// PlatformCaps and VideoSourceCap are now imported directly from the producer.
+// CaptureFormatCap remains CeraUI-owned because it models a partial internal
+// formatting input rather than producer wire data.
 // ---------------------------------------------------------------------------
-
-type PlatformCapsProducer = ProducerView<
-	CerastreamPlatformCaps,
-	keyof PlatformCaps
->;
-
-export type PlatformCapsMirrorsProducer = AssertAssignable<
-	PlatformCaps,
-	PlatformCapsProducer
->;
-export type ProducerMirrorsPlatformCaps = AssertAssignable<
-	PlatformCapsProducer,
-	PlatformCaps
->;
-
-type VideoSourceCapProducer = ProducerView<
-	CerastreamVideoSourceCap,
-	keyof VideoSourceCap
->;
-
-export type VideoSourceCapMirrorsProducer = AssertAssignable<
-	VideoSourceCap,
-	VideoSourceCapProducer
->;
-export type ProducerMirrorsVideoSourceCap = AssertAssignable<
-	VideoSourceCapProducer,
-	VideoSourceCap
->;
 
 type CaptureFormatCapProducer = ProducerView<
 	CerastreamCaptureFormatCap,

@@ -9,6 +9,13 @@
 // nothing but zod, and the package ships no `exports` map to forbid the path.
 import { COMPOSITION_FEATURE } from '@ceralive/cerastream/dist/constants.js';
 import {
+	type EncoderCapability,
+	encoderCapabilitySchema,
+	encoderCapsSchema,
+	platformCapsSchema,
+	videoSourceCapSchema,
+} from '@ceralive/cerastream/dist/messages.js';
+import {
 	type CompositionConfig,
 	type CompositionLayout,
 	compositionConfigSchema,
@@ -25,6 +32,11 @@ export {
 	type CompositionLayout,
 	compositionConfigSchema,
 	compositionLayoutSchema,
+	type EncoderCapability,
+	encoderCapabilitySchema,
+	encoderCapsSchema,
+	platformCapsSchema,
+	videoSourceCapSchema,
 };
 
 // Derived from the imported enum, never re-typed. The element's seventh nick
@@ -536,33 +548,8 @@ export const pipelinesSchema = z.record(z.string(), pipelineSchema);
 export type Pipelines = z.infer<typeof pipelinesSchema>;
 
 // Capability contract broadcast (Option A: cerastream emits, CeraUI consumes).
-// Mirrors the backend capability service (`modules/streaming/capabilities.ts`)
-// and the pure `intersectCaps` input types. The encoder dialog reads it to clamp
-// bitrate per-board, offer codecs (incl. generic/software H.265), and warn on
-// software encode. Field names are snake_case to match the engine wire contract.
-export const platformCapsSchema = z.object({
-	supports_h265: z.boolean(),
-	hardware_accelerated: z.boolean(),
-	max_resolution: z.string(),
-});
-
-export const encoderCapsSchema = z.object({
-	codecs: z.array(z.string()),
-	bitrate_range: z.object({
-		min: z.number(),
-		max: z.number(),
-		unit: z.string(),
-	}),
-});
-
-export const videoSourceCapSchema = z.object({
-	id: z.string(),
-	supports_audio: z.boolean(),
-	supports_resolution_override: z.boolean(),
-	supports_framerate_override: z.boolean(),
-	default_resolution: z.string(),
-	default_framerate: z.number(),
-});
+// Producer-owned schemas come directly from the published binding. CeraUI adds
+// only its own freshness and compatibility fields around that parsed payload.
 
 // Per-device capture mode (Task 4). Mirrors one grouped entry derived from
 // cerastream `captureDeviceSchema.caps[]` (docs/adr/schema.md:254-268): a concrete
@@ -610,6 +597,7 @@ export type DeviceModeGroup = z.infer<typeof deviceModeGroupSchema>;
 export const capabilitiesMessageSchema = z.object({
 	platform: platformCapsSchema,
 	encoder: encoderCapsSchema,
+	encoders: z.array(encoderCapabilitySchema).optional(),
 	sources: z.array(videoSourceCapSchema),
 	// Relay transports the engine can honor (e.g. ["srtla", "rist"]). Absent on
 	// legacy snapshots → the consumer treats it as srtla-only (back-compat).
