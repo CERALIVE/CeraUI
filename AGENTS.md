@@ -928,23 +928,39 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 that move by flipping a runtime verdict.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
-why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun 1.4.0 runs the
-current suite at **361 files / 5,957 tests, 0 failures**, matching the todo-1 baseline exactly.
+why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun runs the
+current suite at **370 files / 6,157 tests, 0 failures** (measured 2026-09-05 on this
+tree; the rc.3→stable pin move itself was proven at parity on the then-current
+**361 files / 5,957 tests**, and every count since has only grown with new tests).
 The rc.2→rc.3 successor path needed no source or config change here, and Vitest then reached
 stable 5.0.0 during this effort. Nothing in the rc.3→5.0.0 release notes needed a source or
 config change here:
 `clearMocks` now defaults to `true` and the suite is unaffected, and the repo uses none of the
 removed surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench`
 at module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). **The frontend
-`test` script therefore invokes `bun --bun vitest run`, and `test-fe` has no `setup-node` step.**
+`test` script therefore invokes `bun --bun vitest run`, and `test-fe` has no `setup-node` step.
+That one command now runs TWO Vitest `projects` — `pure` (Node, `isolate:false`) and
+`components` (jsdom, `isolate:true`) — assigned by the import-graph classifier in
+`scripts/ci/vitest-classify.mjs`, so `test.projects` (never the removed `workspace` key) is
+where runner settings are split; see `apps/frontend/README.md` → "Unit-test projects".**
 The explicit `--bun` is load-bearing: `node_modules/.bin/vitest` carries a `#!/usr/bin/env node`
 shebang, so a bare `vitest run` under `bun run` still executes on Node — measured, a probe test
 reported `process.execPath` = node and `process.versions.bun` = `undefined` before the flip, and
 bun / `1.4.0` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
 exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
 
-The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The 355-file,
-5,795-test CI run is transform/import-bound and takes roughly 20–25 minutes; across two CI
+The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The suite is
+setup- and transform-bound, not test-bound: the 370-file / 6,157-test run measured
+**12m05s of LOCAL wall clock** on the development host (Vitest `Duration 718.63s`, of which
+setup 82%, transform 9%, import 4%, tests 4%, environment 2%). Every duration in this
+paragraph is local wall clock on a contended workstation — **no CI minute has been measured
+for this lane, so do not quote one.** Earlier local runs of the same lane landed between
+~10m36s and ~16m39s, and the spread is host load, not a suite change. Because setup
+dominates, teardown micro-trims cannot move the number — the components project's 50 ms
+`afterAll` costs ≈12 s in total (once per FILE, not per test), under 2% of the run, and it is
+retained deliberately: `bits-ui`'s body-scroll-lock arms a 24 ms WALL-CLOCK timer inside
+Testing Library's own auto-`afterEach`, so no macrotask drain and no fake-timer install can
+clear it. Across two CI
 runs, three unrelated async-rendering tests (`PowerDialog.async-state`,
 `ModemConfigDialog.usbmode`, and `ModemConfigDialog.apn`) each exhausted the default 5-second
 budget while every other test passed. The varying victim and identical boundary establish
@@ -1092,9 +1108,12 @@ Four further Build Check facts, all landed 2026-08-14:
 - **The frontend Vitest lane runs on BUN; the Playwright lanes stay on Node 26**
   (`NODE_VERSION: "26"`, still set at workflow level and still consumed by
   `test-be`, `setup-e2e`, `test-e2e`, `merge-e2e-reports` and `build`). The Vitest
-  blocker was `vitest@4.1.10`'s collection failure, not Bun's: under the
-  `vitest@5.0.0-rc.3` pin the current suite is green at **354 files / 5,779 tests —
-  identical to the pre-bump rc.2 baseline**, so the frontend `test`
+  blocker was `vitest@4.1.10`'s collection failure, not Bun's: at the time of that
+  flip, under the then-current `vitest@5.0.0-rc.3` pin, the suite was green at
+  **354 files / 5,779 tests — identical to the pre-bump rc.2 baseline** (a HISTORICAL
+  figure, kept only because it is what the flip was proven against; the pin is now
+  stable `5.0.0` and the suite is **370 files / 6,157 tests**, see DEP BASELINE), so
+  the frontend `test`
   script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
   step at all. **The Playwright half is NOT flipped and has never produced a green
   parity run** — that lane keeps Node 26, and nothing here authorises moving it.
