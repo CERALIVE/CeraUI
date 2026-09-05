@@ -256,6 +256,25 @@ focus return, and block-to-legacy retraction). Copy: `settings.mediaLoad.*` in a
 ten locales. **Board visual QA remains outstanding on both boards**; dev-browser
 evidence is not hardware evidence. Full contract: `docs/ENCODER-LOAD.md` at repo root.
 
+### Vitest project topology [EXISTS]
+
+`vitest.config.ts` uses stable Vitest 5's `test.projects`, with inline
+`extends: true` projects inheriting plugins, defines, aliases, and runner bounds.
+`scripts/ci/vitest-classify.mjs` walks source-test import graphs at config load:
+browser/Svelte-reaching tests use isolated `components`/jsdom; rune-free tests
+use `pure`/Node with `isolate: false`. An explicit no-window assertion or Node
+environment directive takes precedence, preserving the TTL fallback contract.
+NavigationHelper uses jsdom with the setup's inert `matchMedia` default.
+
+The former monolithic setup is split: `vitest.storage.setup.ts` installs fresh
+Storage for every file and clears it before every test in BOTH projects;
+`vitest.components.setup.ts` registers the catalog and retains the 50 ms bits-ui
+teardown wait in jsdom ONLY. The federation config explicitly loads both files.
+The Storage history below refers to that former setup; its replacement retains
+both jobs. Never infer the project at runtime or enable `fsModuleCache` without
+a new measured decision. The classifier's Bun tests pin disjoint, complete
+coverage and both mixed-topology cases.
+
 ```bash
 bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js

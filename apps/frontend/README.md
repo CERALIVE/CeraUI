@@ -88,6 +88,20 @@ Output goes to `dist/`.
 | `biome check .` (from workspace root) | Lint/format via Biome (single toolchain) |
 | `bun run --filter frontend preview` | Preview production build locally |
 
+### Unit-test projects [EXISTS]
+
+`bun run --filter frontend test` runs both Vitest projects. The import-graph
+classifier in `scripts/ci/vitest-classify.mjs` assigns source tests automatically:
+`pure` uses Node with `isolate: false`; `components` uses isolated jsdom. Browser
+globals and transitive Svelte imports select components, except tests explicitly
+requiring the no-window Node fallback. No filename allowlist is maintained.
+
+Both projects load `vitest.storage.setup.ts` for fresh in-memory Web Storage and
+per-test clearing. Only jsdom loads `vitest.components.setup.ts` for catalog
+registration, `matchMedia`, and the retained 50 ms bits-ui teardown wait. The
+separate federation harness explicitly loads both files too. Classifier checks:
+`bun test scripts/ci/vitest-classify.test.mjs` from the repository root.
+
 ### Mock Scenarios
 
 Development mode mocks hardware. Set `MOCK_SCENARIO` to switch scenarios:
