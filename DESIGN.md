@@ -317,6 +317,14 @@ per-surface re-derivation), that no capability decision is duplicated outside
    i18n catalog (no literal user-facing string in a component).
 4. Pass 1's stop-condition checks still pass after the fixes.
 
+**Where a deferred finding is recorded.** Condition 1's "explicitly deferred with a
+named owner todo" is satisfied by an entry in
+[`docs/DESIGN-FOLLOWUPS.md`](docs/DESIGN-FOLLOWUPS.md). That file — not
+`docs/TECHNICAL_DEBT.md` — is the register for design findings, because the
+technical-debt ledger is marker-bound and requires a non-prose `exit_criteria`
+(see [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → Technical-Debt Register). A
+design finding that ships no `data-debt-id` belongs here.
+
 ### Pass 3 — harden / adapt
 
 **Scope.** Responsive, locale, touch/kiosk, reduced-motion, and live-region
