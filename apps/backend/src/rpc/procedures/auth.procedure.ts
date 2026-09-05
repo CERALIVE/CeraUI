@@ -23,6 +23,7 @@ import {
 } from "../../helpers/config-schemas.ts";
 import { randomBase64 } from "../../helpers/crypto.ts";
 import { logger } from "../../helpers/logger.ts";
+import { isDevelopment } from "../../mocks/mock-config.ts";
 import { getPasswordHash, setPasswordHash } from "../state/password.ts";
 import type { RPCContext } from "../types.ts";
 
@@ -73,7 +74,9 @@ function pruneLegacyTokenRecords(): void {
 	);
 }
 
-setTimeout(pruneLegacyTokenRecords, 0).unref();
+if (!isDevelopment()) {
+	setTimeout(pruneLegacyTokenRecords, 0).unref();
+}
 
 function genAuthToken(isPersistent: boolean): string {
 	const token = randomBase64(32);
