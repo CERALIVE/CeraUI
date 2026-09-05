@@ -3171,6 +3171,51 @@ it (never merely made to throw), with the three negatives that matter: a
 differently-named hwmon is not adopted, two `pwmfan` hwmons are ambiguous, and a
 backlink that EXISTS but failed its `pwm1` read does not start the scan.
 
+## A REMEMBER-ME CREDENTIAL IS A REVOCABLE TOKEN, STORED AS A DIGEST [EXISTS]
+
+`auth.procedure.ts` issues an opaque token on a persistent login and stores
+`sha256(token)`; `auth.revokeToken` retires one credential or all of them, and a
+password change revokes every outstanding one.
+
+**What it replaced was two defects, not one.** The browser persisted the
+operator's PLAINTEXT PASSWORD under `localStorage.auth` and resent it as
+`input.password` on every reconnect — so the device's only remember-me credential
+was a PERMANENT one that could not be retired without changing the password
+everywhere — and `auth_tokens.json` held its tokens VERBATIM, so anything that
+could read that file held a working credential for every remembered browser. The
+token-login branch existed the whole time and no shipped client used it.
+
+Six rules carry it:
+
+- **The stored record is a DIGEST, and SHA-256 rather than a KDF.** The token is
+  32 CSPRNG bytes, so there is no guessable structure for a slow hash to defend,
+  and every reconnect pays this lookup. A digest makes the file a lookup table
+  rather than a keyring: a leak proves which credentials exist, not what they are.
+- **Pre-digest records are PRUNED on load.** They were already inert — lookup is
+  keyed on the digest, which a base64 token cannot match — but leaving them keeps
+  credential material on disk and makes "log out everywhere" count entries nothing
+  can use. Affected browsers re-authenticate with the password once.
+- **A password change revokes EVERYTHING, and re-authenticates the caller.** A
+  credential issued against the old password must not outlive it, or changing the
+  password after losing a device leaves that device signed in. The calling socket
+  is re-issued a fresh token so the operator who just changed it is not thrown out
+  — do not delete that as redundant.
+- **`revokeToken` scopes explicitly** (`token` | `all`) rather than by boolean
+  flag, because the two differ only in blast radius. Absent `token` means the
+  caller's own; `revoked` is a COUNT, so retiring an already-gone credential
+  succeeds with `0` and a consumer can tell that from a real revocation.
+- **Only a socket revoking its OWN credential loses its session.** Retiring
+  another browser's token must not sign the caller out.
+- **It is gated in the handler, not by `authedProcedure`.** Every procedure in
+  this file takes the raw context, because `setPassword` must also serve first-run
+  setup.
+
+Frontend half: [`../frontend/AGENTS.md`](../frontend/AGENTS.md) and the root
+charter's **G3** gate. Coverage: `src/tests/auth-persistent-token.test.ts` (the
+digest-not-token file assertion, the token round-trip, individual revocation, the
+foreign-token and unauthenticated negatives, log-out-everywhere, logout's own
+scope, and the password-change sweep).
+
 ## SIM PIN AUTO-UNLOCK [EXISTS]
 
 Opt-in boot auto-unlock for a PIN-locked SIM. Two modules under `modules/modems/`:
@@ -5974,6 +6019,61 @@ PID-1 D-Bus request), so the `--no-block` / deadlock caveats that apply to
 `start`/`stop`/`restart` do not apply. Regression lock:
 `src/tests/udev-rules-sigusr2-scope.test.ts` (static assertion on the shipped rule
 files). Do NOT reintroduce a broad `pkill`, and do NOT drop `--kill-whom=main`.
+
+## …AND A GUARDED SIGNAL IS RESERVED BEFORE THE BOOT LADDER RUNS [EXISTS]
+
+`SIGUSR1` and `SIGUSR2` default to TERMINATE, so a process only survives one by
+installing a handler FIRST — and `main.ts` installed both at the very END of a
+top-level-`await` boot ladder, after config load, the WS bind, the engine probe
+and the network/audio scans. Every second of that ladder was a window in which an
+arriving SIGUSR1 killed `ceralive.service` outright.
+
+The sender fires in exactly that window. `ceralive-addon-reconciler.service` is
+`After=ceralive.service`, so systemd runs its `systemctl kill --signal=SIGUSR1`
+as soon as the unit reports STARTED — which is when the ladder BEGINS, not when
+it ends. Whether the backend survived was a race between systemd's oneshot and
+the backend's own boot.
+
+**A SECOND, INDEPENDENT HAZARD sat in the same unit:** it omitted
+`--kill-whom=main`, and systemctl's default is `all`. `srtla_send` shares
+`ceralive.service`'s cgroup while streaming and does not handle SIGUSR1, so a
+reconcile poke could terminate the sender mid-broadcast. That is byte-for-byte
+the defect the two SIGUSR2 udev rules above were already fixed for; the unit now
+carries the same scoping.
+
+`helpers/boot-signals.ts` is the backend half. Five properties are load-bearing:
+
+- **It RESERVES the signal, it does not handle it early.** The work cannot run
+  early — `runAddonReconciler` and the audio/Cam Link rescan both read modules
+  the ladder has not initialised — so the guard is deliberately inert: it RECORDS
+  that the poke arrived and returns. `armBootSignalHandler` then installs the real
+  handler AND replays a pending poke exactly once, so the signal is never fatal
+  and never lost.
+- **`installBootSignalGuards()` is the FIRST executable statement of the ladder**,
+  before `runCritical("config", …)`, and a static test asserts that ORDER against
+  the shipped `main.ts` — a behavioural test cannot see a reorder inside a
+  top-level-`await` entry module (the `cellular-boot-order.test.ts` precedent).
+- **It is idempotent and ALSO installs at module scope**, so a refactor that drops
+  the explicit call degrades to "reserved a little later" rather than back to
+  "fatal".
+- **A storm replays ONCE** (a `Set`, not a queue), and the pending flag is cleared
+  BEFORE the replay, so a handler that re-arms itself cannot loop.
+- **`process.on("SIGUSR1"/"SIGUSR2", …)` is BANNED in `main.ts`** — a bare
+  registration would shadow the guard's own listener and reopen the window for
+  whichever signal it took over. `SIGTERM`/`SIGINT` are untouched: they are
+  handled at the ladder's end by design and their default disposition is the
+  correct behaviour in the meantime.
+
+**RESIDUAL WINDOW, stated honestly:** ESM evaluates the import graph before any
+module body, and part of that graph awaits (the auth procedure's token-file
+load). A signal arriving inside those few milliseconds still finds no handler.
+Closing that needs a wrapper process; what is closed is the multi-second ladder,
+which is the window the race actually lands in.
+
+Coverage: `src/tests/sigusr1-boot-race.test.ts` — the pure guard (mid-ladder
+survival + replay, storm bound, post-arm passthrough, signal independence, the
+no-re-entry rule), the `main.ts` ordering lock, and the reconciler unit's
+`--kill-whom=main` + leading-`-` + no-`pkill` assertions.
 
 **SIGUSR2 does NOT rebuild the unified `sources` list — video hotplug does.** The
 handler only re-scans audio + Cam Link USB2 (a generic UVC capture dongle like a
