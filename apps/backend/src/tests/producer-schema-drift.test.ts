@@ -1,3 +1,6 @@
+/// <reference types="bun" />
+/// <reference lib="es2022" />
+
 import { describe, expect, test } from "bun:test";
 
 // PRODUCER SCHEMA-DRIFT CONTRACT GATE
@@ -104,11 +107,26 @@ const CERASTREAM_FIELDS: SchemaManifest = {
 		"hardware_kind",
 	],
 	encoderCapsSchema: ["bitrate_range"],
+	encoderCapabilitySchema: [
+		"codec",
+		"max_resolution",
+		"max_framerate",
+		"formats",
+		"gates.4k60",
+		"gates.reason",
+	],
 	getCapabilitiesResultSchema: [
 		"platform",
 		"platform.hardware_kind",
 		"encoder",
 		"encoder.bitrate_range",
+		"encoders",
+		"encoders.codec",
+		"encoders.max_resolution",
+		"encoders.max_framerate",
+		"encoders.formats",
+		"encoders.gates.4k60",
+		"encoders.gates.reason",
 		"sources",
 		"features",
 		"preview.enabled",
