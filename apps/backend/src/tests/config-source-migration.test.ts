@@ -22,7 +22,6 @@ import {
 } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
 import { CerastreamBackend } from "../modules/streaming/cerastream-backend.ts";
-import * as sourcesModule from "../modules/streaming/sources.ts";
 import {
 	deriveEngineRouting,
 	resolveSourceRouting,
