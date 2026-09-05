@@ -188,7 +188,4 @@ export async function ensureAuthenticated(page: Page): Promise<void> {
 
 	await page.locator('form button[type="submit"]').click();
 	await expect(header).toBeVisible({ timeout: 15_000 });
-
-	// Persist the credential so subsequent reloads auto-authenticate.
-	await page.evaluate((value) => localStorage.setItem('auth', value), password);
 }

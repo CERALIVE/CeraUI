@@ -98,9 +98,36 @@ export async function authenticate(
 	}
 }
 
+export async function authenticateWithToken(token: string): Promise<void> {
+	if (!(await whenSocketReady())) {
+		ingestAuth({ success: false });
+		return;
+	}
+	try {
+		ingestAuth(await rpc.auth.login({ token, persistent_token: true }));
+	} catch (error) {
+		console.error("Failed to authenticate with stored token:", error);
+		ingestAuth({ success: false });
+	}
+}
+
 export async function createPassword(password: string): Promise<void> {
 	if (!(await whenSocketReady())) {
 		throw new Error("Connection timeout");
 	}
 	await rpc.auth.setPassword({ password });
+}
+
+// Best-effort on purpose: the callers are recovery paths whose premise is that
+// the stored token may already be dead, so the socket is unauthenticated and the
+// device refuses. Clearing local storage is what the operator asked for either
+// way, so a refusal must never block it.
+export async function revokePersistentToken(token: string): Promise<void> {
+	if (token.length === 0) return;
+	try {
+		if (!rpcClient.isConnected()) return;
+		await rpc.auth.revokeToken({ token, scope: "token" });
+	} catch (error) {
+		console.warn("Failed to revoke the stored credential:", error);
+	}
 }

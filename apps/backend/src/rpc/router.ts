@@ -14,6 +14,7 @@ import {
 import {
 	loginProcedure,
 	logoutProcedure,
+	revokeTokenProcedure,
 	setPasswordProcedure,
 } from "./procedures/auth.procedure.ts";
 import {
@@ -155,6 +156,7 @@ const stableRoutes = {
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,
 		logout: logoutProcedure,
+		revokeToken: revokeTokenProcedure,
 	}),
 
 	streaming: base.router({

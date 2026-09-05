@@ -7,6 +7,8 @@ import {
 	loginInputSchema,
 	loginOutputSchema,
 	logoutOutputSchema,
+	revokeTokenInputSchema,
+	revokeTokenOutputSchema,
 	setPasswordInputSchema,
 	successResponseSchema,
 } from "@ceraui/rpc/schemas";
@@ -27,6 +29,8 @@ import type { RPCContext } from "../types.ts";
 const AUTH_TOKENS_FILE = "auth_tokens.json";
 const BCRYPT_ROUNDS = 10;
 
+const TOKEN_RECORD_RE = /^[0-9a-f]{64}$/;
+
 // Token storage
 const tempTokens: Record<string, true> = {};
 const persistentTokens: AuthTokens = await loadCacheFile(
@@ -37,14 +41,44 @@ const persistentTokens: AuthTokens = await loadCacheFile(
 // Re-export for backward compatibility
 export { getPasswordHash, setPasswordHash };
 
+// `auth_tokens.json` used to hold tokens VERBATIM, so reading the file handed
+// you a working credential for every remembered browser. A digest makes it a
+// lookup table instead: a leak proves which credentials exist, not what they
+// are. SHA-256 rather than a KDF because the token is 32 CSPRNG bytes — there
+// is no guessable structure for a slow hash to defend, and every reconnect
+// pays this.
+function tokenRecord(token: string): string {
+	return new Bun.CryptoHasher("sha256").update(token).digest("hex");
+}
+
 function savePersistentTokens() {
 	writeFileAtomicSync(AUTH_TOKENS_FILE, JSON.stringify(persistentTokens));
 }
 
+// A pre-migration file holds raw tokens. They are already inert — lookup is
+// keyed on the digest, which a base64 token cannot match — but leaving them
+// keeps credential material on disk and makes "log out everywhere" count
+// entries nothing can use.
+function pruneLegacyTokenRecords(): void {
+	let pruned = 0;
+	for (const key of Object.keys(persistentTokens)) {
+		if (TOKEN_RECORD_RE.test(key)) continue;
+		delete persistentTokens[key];
+		pruned += 1;
+	}
+	if (pruned === 0) return;
+	savePersistentTokens();
+	logger.info(
+		`Auth: pruned ${pruned} pre-digest persistent token record(s); affected browsers re-authenticate with the password once`,
+	);
+}
+
+pruneLegacyTokenRecords();
+
 function genAuthToken(isPersistent: boolean): string {
 	const token = randomBase64(32);
 	if (isPersistent) {
-		persistentTokens[token] = true;
+		persistentTokens[tokenRecord(token)] = true;
 		savePersistentTokens();
 	} else {
 		tempTokens[token] = true;
@@ -52,12 +86,40 @@ function genAuthToken(isPersistent: boolean): string {
 	return token;
 }
 
-function invalidateToken(token: string) {
-	delete tempTokens[token];
-	if (persistentTokens[token]) {
-		delete persistentTokens[token];
-		savePersistentTokens();
+function knownToken(token: string): boolean {
+	return (
+		tempTokens[token] === true || persistentTokens[tokenRecord(token)] === true
+	);
+}
+
+function invalidateToken(token: string): number {
+	let revoked = 0;
+	if (tempTokens[token]) {
+		delete tempTokens[token];
+		revoked += 1;
 	}
+	const record = tokenRecord(token);
+	if (persistentTokens[record]) {
+		delete persistentTokens[record];
+		savePersistentTokens();
+		revoked += 1;
+	}
+	return revoked;
+}
+
+function invalidateAllTokens(): number {
+	let revoked = 0;
+	for (const token of Object.keys(tempTokens)) {
+		delete tempTokens[token];
+		revoked += 1;
+	}
+	const records = Object.keys(persistentTokens);
+	for (const record of records) {
+		delete persistentTokens[record];
+		revoked += 1;
+	}
+	if (records.length > 0) savePersistentTokens();
+	return revoked;
 }
 
 /**
@@ -112,7 +174,7 @@ export const loginProcedure = baseProcedure
 
 		// Token authentication
 		if (input.token) {
-			if (tempTokens[input.token] || persistentTokens[input.token]) {
+			if (knownToken(input.token)) {
 				context.authenticate(input.token);
 				logger.info("Auth: token login successful");
 				return { success: true };
@@ -147,7 +209,17 @@ export const setPasswordProcedure = baseProcedure
 			const config = getConfig();
 			config.password = undefined;
 			saveConfig();
-			logger.info("Auth: password updated");
+
+			// A credential issued against the OLD password must not outlive it —
+			// otherwise changing the password after losing a device leaves that
+			// device signed in. The calling socket is re-authenticated on a fresh
+			// token so the operator who just changed it is not thrown out.
+			const revoked = invalidateAllTokens();
+			const replacement = genAuthToken(false);
+			context.authenticate(replacement);
+			logger.info(
+				`Auth: password updated; revoked ${revoked} outstanding credential(s)`,
+			);
 			return { success: true };
 		}
 
@@ -167,4 +239,37 @@ export const logoutProcedure = baseProcedure
 		context.deauthenticate();
 		logger.info("Auth: logout successful");
 		return { success: true };
+	});
+
+// Gated here rather than by `authedProcedure`: every procedure in this file
+// takes the raw context, because setPassword must also serve first-run setup.
+export const revokeTokenProcedure = baseProcedure
+	.input(revokeTokenInputSchema)
+	.output(revokeTokenOutputSchema)
+	.handler(({ input, context }) => {
+		if (!context.isAuthenticated()) {
+			logger.warn("Auth: revokeToken refused — socket is not authenticated");
+			return { success: false, revoked: 0 };
+		}
+
+		if (input.scope === "all") {
+			const revoked = invalidateAllTokens();
+			context.deauthenticate();
+			logger.info(`Auth: revoked all ${revoked} credential(s)`);
+			return { success: true, revoked };
+		}
+
+		const target = input.token ?? context.ws.data.authToken;
+		if (target === undefined) {
+			return { success: true, revoked: 0 };
+		}
+
+		const revoked = invalidateToken(target);
+		// Only a socket revoking its OWN credential loses its session; retiring
+		// some other browser's token must not sign the caller out.
+		if (target === context.ws.data.authToken) {
+			context.deauthenticate();
+		}
+		logger.info(`Auth: revoked ${revoked} credential record(s)`);
+		return { success: true, revoked };
 	});

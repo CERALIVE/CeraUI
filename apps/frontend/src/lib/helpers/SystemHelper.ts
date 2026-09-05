@@ -106,7 +106,12 @@ export const saveRemoteConfig = async (params: RemoteConfigParams) => {
 export const savePassword = async (password: string) => {
 	try {
 		await rpc.auth.setPassword({ password });
-		localStorage.setItem("auth", password);
+		// The device revokes every outstanding credential when the password
+		// changes, so the remembered one is already dead — keeping it would make
+		// the next reconnect fail and route the operator to the login screen with
+		// no explanation. Clearing it makes the next reload ask for the password
+		// they just set.
+		localStorage.removeItem("auth");
 	} catch (error) {
 		console.error("Failed to save password:", error);
 		throw error;
