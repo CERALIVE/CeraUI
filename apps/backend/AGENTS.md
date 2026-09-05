@@ -5767,6 +5767,14 @@ are gated by `shouldUseMocks()` or `isDevelopment()` — never active in product
 
 ### Backend per-file test isolation
 
+The backend `test` script remains serial: the formal parallel stability gate
+finished 9/10 after one isolation pass. `sim-autounlock.test.ts` now seeds a
+private working-directory config and restores cwd after each test, so its
+byte-preservation assertion cannot observe another worker's config writes.
+The remaining observed hazard is `usb-tether-fence.test.ts` enumerating a runtime
+`stream.armed.json` that another worker removes before the scan reads it.
+Do not adopt parallel execution on the strength of isolated passing reruns.
+
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
 dependencies through `setStartStreamDepsForTest()`. Every test that overrides
