@@ -26,7 +26,7 @@ import {
 	type CaptureCap,
 	type CaptureDevice,
 	type DeviceMode,
-	type DeviceModeGroup,
+	type EncoderCapability,
 	type Framerate,
 	type HardwareType,
 	HOTSPOT_NAME_MAX,
@@ -153,13 +153,10 @@ import {
  * VERBATIM on `StreamSource.modes` and are read by {@link resolveDeviceModes} —
  * that path is fully wired, so nothing here is compensating for missing data.
  *
- * The open follow-up is unchanged and is a SEPARATE concern: the engine's real
- * `platform` caps from `get-capabilities` are not yet surfaced to the frontend
- * over RPC, so the board→ceiling values are still hardcoded here rather than
- * engine-reported. When that lands, replace this map with the engine's values.
- * Do NOT delete it before then — removing the platform ceiling would let the UI
- * offer encode targets the board cannot produce, which is the same dishonesty
- * the union retirement was fixing, in the other direction.
+ * Live `get-capabilities.platform` now outranks this table. The table remains
+ * only for a legacy/absent capability snapshot and is pinned to the engine's
+ * platform golden by `ValidationAdapter.caps.test.ts`; deleting it would let a
+ * legacy session offer encode targets the board cannot produce.
  */
 const PLATFORM_CAPS_BY_HARDWARE: Record<HardwareType, PlatformCaps> = {
 	jetson: {
@@ -912,16 +909,38 @@ export interface CodecOption {
 	softwareWarning: boolean;
 }
 
-function codecValueFor(mediaType: string): string {
-	if (mediaType === MEDIA_TYPE_H265) return "h265";
-	if (mediaType === MEDIA_TYPE_H264) return "h264";
-	return mediaType;
-}
-
 export function deriveCodecOptions(
-	platform: PlatformCaps | undefined,
+	encoders: readonly EncoderCapability[] | undefined,
+	fallbackPlatform: PlatformCaps | undefined,
 ): CodecOption[] {
-	if (!platform) {
+	if (encoders !== undefined) {
+		const hardwareAccelerated = fallbackPlatform?.hardware_accelerated ?? false;
+		return encoders.flatMap((encoder) => {
+			switch (encoder.codec.toLowerCase()) {
+				case "h264":
+					return [
+						{
+							mediaType: MEDIA_TYPE_H264,
+							value: "h264",
+							hardwareAccelerated,
+							softwareWarning: false,
+						},
+					];
+				case "h265":
+					return [
+						{
+							mediaType: MEDIA_TYPE_H265,
+							value: "h265",
+							hardwareAccelerated,
+							softwareWarning: !hardwareAccelerated,
+						},
+					];
+				default:
+					return [];
+			}
+		});
+	}
+	if (!fallbackPlatform) {
 		return [
 			{
 				mediaType: MEDIA_TYPE_H264,
@@ -931,13 +950,13 @@ export function deriveCodecOptions(
 			},
 		];
 	}
-	const offered = intersectCaps(platform, undefined, STREAMING_MODE);
+	const offered = intersectCaps(fallbackPlatform, undefined, STREAMING_MODE);
 	return offered.codecs.map((mediaType) => ({
 		mediaType,
-		value: codecValueFor(mediaType),
-		hardwareAccelerated: platform.hardware_accelerated,
+		value: mediaType === MEDIA_TYPE_H265 ? "h265" : "h264",
+		hardwareAccelerated: fallbackPlatform.hardware_accelerated,
 		softwareWarning:
-			mediaType === MEDIA_TYPE_H265 && !platform.hardware_accelerated,
+			mediaType === MEDIA_TYPE_H265 && !fallbackPlatform.hardware_accelerated,
 	}));
 }
 
