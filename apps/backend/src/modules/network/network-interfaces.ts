@@ -35,6 +35,7 @@ import { getms } from "../../helpers/time.ts";
 import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
+	getMockModemNetMarker,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
 import { isBondLinkMappable } from "../streaming/bond-entry.ts";
@@ -1350,7 +1351,9 @@ function applyModemNetProjection(m: NetworkInterfaceResponseMessage): void {
 	for (const name in m) {
 		const entry = m[name];
 		if (!entry) continue;
-		const marker = getModemNetMarker(name);
+		const marker = shouldUseMocks()
+			? getMockModemNetMarker(name)
+			: getModemNetMarker(name);
 		if (marker) {
 			entry.usb_modem_net = marker;
 			marked.add(name);

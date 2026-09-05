@@ -76,8 +76,8 @@ const totalStale = $derived(
 </script>
 
 <!-- ───────────── Bonded Links overview ───────────── -->
-<section class="bg-card rounded-xl border p-4 sm:p-5" aria-label={m["network.view.bondedLinks"]()}>
-	<div class="mb-3 flex items-center gap-2">
+<section class="bg-card rounded-xl border p-4" aria-label={m["network.view.bondedLinks"]()}>
+	<div class="mb-2 flex items-center gap-2">
 		<Radio aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.bondedLinks"]()}</h2>
 	</div>
@@ -88,7 +88,7 @@ const totalStale = $derived(
 	{:else}
 		<!-- SOLE home of live per-link numbers on the Network page (Task 19): the
 		     per-interface sections no longer duplicate them (Task 20). -->
-		<div class="flex flex-col gap-1.5">
+		<div class="flex flex-col gap-1">
 			{#each links as link (linkRowKey(link, telemetryByIface.get(link.id)))}
 				{@const entry = telemetryByIface.get(link.id)}
 				{@const color = `var(--link-${link.linkIndex + 1})`}
@@ -99,7 +99,7 @@ const totalStale = $derived(
 					data-link-id={link.id}
 					data-link-key={linkRowKey(link, entry)}
 					class={cn(
-						'flex flex-wrap items-center gap-2.5 rounded-lg border px-3 py-1.5',
+						'flex flex-wrap items-center gap-2.5 rounded-lg border px-3 py-1',
 						link.isStale && 'opacity-50',
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
@@ -175,7 +175,7 @@ const totalStale = $derived(
 		<!-- total bonded bandwidth (Task 18) — dims with its links when stale -->
 		<div
 			class={cn(
-				'mt-3 flex items-center justify-between border-t pt-3 text-xs transition-opacity',
+				'mt-2 flex items-center justify-between border-t pt-2 text-xs transition-opacity',
 				totalStale && 'opacity-50',
 			)}
 		>
@@ -219,7 +219,7 @@ const totalStale = $derived(
 		<p
 			data-testid="bonded-links-not-bonded"
 			data-not-bonded-count={unbondedCount}
-			class="text-muted-foreground mt-3 text-xs"
+			class="text-muted-foreground mt-2 text-xs"
 		>
 			{unbondedCount === 1
 				? m["network.view.notBondedOne"]()

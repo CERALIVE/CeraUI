@@ -76,6 +76,12 @@ const DEFAULT_MODEM = {
 	network_type: { supported: ["5g", "4g", "3g"], active: "5g" },
 	interfaceName: "usb0",
 	ip: "10.0.0.2",
+	usb_modem_net: {
+		kind: "modem-net",
+		vendor: "Quectel",
+		model: "RM520N-GL",
+		vid_pid: "2c7c:0801",
+	},
 } satisfies MockModemConfig;
 
 const DEFAULT_WIFI_RADIO = {

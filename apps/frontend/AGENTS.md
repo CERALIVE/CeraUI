@@ -103,6 +103,15 @@ src/
 
 ## NETWORK VIEW STRUCTURE [EXISTS]
 
+The destination uses a compact card/row rhythm. Ethernet states bond membership
+once, in `BondToggle`, rather than repeating it as Connected/Off beside the IP.
+`NetworkView` still applies the shared marker-plus-modem-claim handover before
+passing `wiredEntries` into `EthernetSection`; there is no second component-local
+filter. A consolidated `usb_modem_net` interface keeps its name and address in
+the owning Cellular row's mounted Details body (`modem-net-interface`). The
+default mock scenario now supplies the same marker as production. Every disabled
+dongle-control reason remains inline, including on the touch kiosk.
+
 The Network destination deliberately separates operator identity from transient
 enumeration detail. `WifiSection.svelte` derives one `modeView` per radio and
 uses it for the row badge, status line, hotspot setup, and mode popover; the

@@ -507,6 +507,13 @@ SIM-lock state) fails loudly in dev instead of silently feeding malformed data i
 the mmcli/nmcli/relay providers. Schema types are the single source of truth — both
 `mock-config.ts` and `mock-service.ts` re-export `z.infer<...>` types from here.
 
+The modem fixtures also carry the existing `usb_modem_net` marker, validated by
+the shared wire schema. `providers/network.ts` resolves it by the active scenario's
+modem `interfaceName`; `applyModemNetProjection` uses that source only in mock
+mode and retains its ordinary one-frame retraction. This makes the default
+`multi-modem-wifi` topology exercise the same marker-plus-roster-claim handover
+as a real device, without changing addresses, bond membership, or netns dongles.
+
 **`resetMockState()` for per-test isolation:**
 `initMockService()` captures a deep `structuredClone` of the seeded state as a
 pristine snapshot. `resetMockState()` restores that snapshot AND clears all timers

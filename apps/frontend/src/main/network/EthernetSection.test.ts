@@ -60,10 +60,10 @@ describe("EthernetSection — T20 single-line rows + touch targets", () => {
 		expect(container.querySelectorAll("[data-live-value]").length).toBe(0);
 	});
 
-	it("merges identity + controls into ONE row (py-2.5, no .mt-2.5 control row)", () => {
+	it("merges identity + controls into ONE row (py-2, no .mt-2.5 control row)", () => {
 		const { container } = renderSection();
 		expect(container.querySelector(".mt-2\\.5")).toBeNull();
-		expect(container.querySelector(".divide-y > .py-2\\.5")).not.toBeNull();
+		expect(container.querySelector(".divide-y > .py-2")).not.toBeNull();
 		expect(container.querySelector(".divide-y > .py-4")).toBeNull();
 	});
 

@@ -97,15 +97,37 @@ afterEach(() => {
 });
 
 describe("CellularSection — T20 single-line rows + touch targets", () => {
+	it("retains a consolidated modem interface's name and address in its details", () => {
+		const { getByTestId } = renderSection({
+			netif: {
+				usb0: {
+					tp: 500,
+					enabled: true,
+					ip: "10.0.0.5",
+					usb_modem_net: {
+						kind: "modem-net",
+						vendor: "Quectel",
+						model: "RM520N-GL",
+						vid_pid: "2c7c:0801",
+					},
+				},
+			},
+		});
+		const details = getByTestId("modem-details-body");
+		expect(details.textContent).toContain("usb0");
+		expect(details.textContent).toContain("10.0.0.5");
+		expect(getByTestId("bond-state-usb0").textContent).toContain("In Bond");
+	});
+
 	it("renders NO per-row telemetry (no LinkIndicator / signal% / speed Badge)", () => {
 		const { container } = renderSection();
 		expect(container.querySelectorAll("[data-live-value]").length).toBe(0);
 	});
 
-	it("merges identity + controls into ONE row (py-2.5, no .mt-2.5 control row)", () => {
+	it("merges identity + controls into ONE row (py-2, no .mt-2.5 control row)", () => {
 		const { container } = renderSection();
 		expect(container.querySelector(".mt-2\\.5")).toBeNull();
-		expect(container.querySelector(".divide-y > .py-2\\.5")).not.toBeNull();
+		expect(container.querySelector(".divide-y > .py-2")).not.toBeNull();
 		expect(container.querySelector(".divide-y > .py-4")).toBeNull();
 	});
 

@@ -86,12 +86,12 @@ describe("WifiSection — T20 single-line rows + touch targets", () => {
 		expect(container.querySelectorAll("[data-live-value]").length).toBe(0);
 	});
 
-	it("merges identity + controls into ONE row (py-2.5, no .mt-2.5 control row)", () => {
+	it("merges identity + controls into ONE row (py-2, no .mt-2.5 control row)", () => {
 		const { container } = renderSection();
 		expect(container.querySelector(".mt-2\\.5")).toBeNull();
 		// The interface row uses the new compact density.
-		const row = container.querySelector(".divide-y > .py-2\\.5");
-		expect(row, "compact py-2.5 interface row must render").not.toBeNull();
+		const row = container.querySelector(".divide-y > .py-2");
+		expect(row, "compact py-2 interface row must render").not.toBeNull();
 		// Old spacious density is gone from interface rows.
 		expect(container.querySelector(".divide-y > .py-4")).toBeNull();
 	});

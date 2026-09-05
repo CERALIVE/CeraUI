@@ -29,6 +29,7 @@ import { cn } from '$lib/utils';
 import { type EthernetClientZoneState, deriveSharedLanRow } from './ethernet-role-view';
 
 interface Props {
+	/** NetworkView applies the marker + modem-claim handover in section-assignment.ts. */
 	wiredEntries: [string, NetifEntry][];
 	/** Whole-app staleness latch: the WS has been down past the global threshold. */
 	isFullyStale: boolean;
@@ -182,13 +183,13 @@ const ZONE_ICON = {
 
 <!-- ───────────── Ethernet / interfaces ───────────── -->
 <section class="bg-card rounded-xl border">
-	<div class="flex items-center gap-2 border-b px-4 py-3">
+	<div class="flex items-center gap-2 border-b px-4 py-2">
 		<NetworkIcon aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.ethernet"]()}</h2>
 	</div>
 	<div class="divide-y">
 		{#if wiredEntries.length === 0}
-			<p class="text-muted-foreground px-4 py-6 text-center text-sm">
+			<p class="text-muted-foreground px-4 py-4 text-center text-sm">
 				{m["network.view.noEthernet"]()}
 			</p>
 		{:else}
@@ -211,7 +212,7 @@ const ZONE_ICON = {
 					? resolveMessageKey(sharedLan.bondExclusionReasonKey)
 					: undefined}
 				<!-- Single-line row: identity (dot · name · status) left; bond + configure right. -->
-				<div class="flex flex-wrap items-center gap-3 px-4 py-2.5">
+				<div class="flex flex-wrap items-center gap-3 px-4 py-2">
 					<!-- `self-start` because a classified row is several lines tall: a
 					     vertically-centred dot floats away from the name it reports on.
 					     Same rule, same reason, as CellularSection's row dot. -->
@@ -339,29 +340,28 @@ const ZONE_ICON = {
 								</span>
 							</div>
 						{/if}
-						{#if iface.ip || !sharedLan}
+						<!-- THE ADDRESS, AND NOTHING ABOUT THE BOND.
+						     This line used to end in `Connected` / `Off`, which is `enabled` —
+						     i.e. BOND MEMBERSHIP, as the retired comment here said in as many
+						     words — and the BondToggle two columns to the right was already
+						     stating that exact fact as `In Bond` / `Excluded`. One condition,
+						     twice, in two different vocabularies: an operator reading a row
+						     with a live toggle and the word "Off" beside the address has to
+						     work out that those are the same thing before they can act.
+						     The toggle keeps the state word (it renders one in every state,
+						     and reserves the slot for the wider of the two), so nothing about
+						     bond membership stopped being on screen — it is stated ONCE.
+						     A row with no address now renders no line at all rather than a
+						     line whose only content was the duplicate. -->
+						{#if iface.ip}
 							<p class="text-muted-foreground flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs">
-								{#if iface.ip}
-									<code class="font-mono">{iface.ip}</code>
-									{#if linkLocal}
-										<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
-									{/if}
-									{#if !sharedLan}
-										<span aria-hidden="true">·</span>
-									{/if}
-								{/if}
-								<!-- `enabled` is BOND membership, not link state. A shared-LAN port
-								     is forced out of the bond by the device while its zone is up and
-								     serving, so rendering "Off" here would be the same lie as
-								     rendering it "Connected" — its state is the zone badge above. -->
-								{#if !sharedLan}
-									{iface.enabled ? m["network.view.connected"]() : m["network.view.off"]()}
-								{/if}
+								<code class="font-mono">{iface.ip}</code>
 								{#if linkLocal}
 									<!-- Calm, informational: 169.254/16 is an automatic OS address, not a
 									     stuck static config. It rides the address's own line — a wrapped
 									     clause reads as part of the reading it explains, a stacked
 									     paragraph reads as a second finding. -->
+									<Badge variant="info" size="micro" data-testid="netif-link-local" label={m["network.view.linkLocal"]()} />
 									<span class="text-muted-foreground/80" data-testid="netif-link-local-hint">
 										{m["network.view.linkLocalHint"]()}
 									</span>

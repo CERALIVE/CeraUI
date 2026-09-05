@@ -30,6 +30,7 @@ import {
 	kioskStatusSchema,
 	type RelayValidateStage,
 	resolutionSchema,
+	usbModemNetMarkerSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import { mockModems, mockWifiNetworks, mockWifiRadios } from "./mock-config.ts";
@@ -107,6 +108,7 @@ export const mockModemConfigSchema = z
 		}),
 		interfaceName: z.string().min(1),
 		ip: ipv4Schema,
+		usb_modem_net: usbModemNetMarkerSchema.optional(),
 	})
 	.refine((m) => m.network_type.supported.includes(m.network_type.active), {
 		message: "network_type.active must be one of network_type.supported",

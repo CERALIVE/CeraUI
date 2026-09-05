@@ -106,6 +106,11 @@ A dev-only DevTools destination is available in development builds.
 Development mode includes hardware mocking. All mock state is Zod-validated at startup
 and can be reset between tests via `resetMockState()`.
 
+Mock modems identify their own USB-network interfaces with `usb_modem_net`, so
+Network lists each under Cellular once its roster row claims the interface.
+The interface name and address remain in that row's Details disclosure; ordinary
+Ethernet ports and isolated-dongle controls remain separate.
+
 ```bash
 bun run dev                        # Default: 3 modems + WiFi (multi-modem-wifi)
 bun run dev:single-modem           # 1 modem, no WiFi

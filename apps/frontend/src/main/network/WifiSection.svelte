@@ -98,7 +98,7 @@ $effect(() => {
 
 <!-- ───────────── WiFi ───────────── -->
 <section class="bg-card rounded-xl border">
-	<div class="flex items-center gap-2 border-b px-4 py-3">
+	<div class="flex items-center gap-2 border-b px-4 py-2">
 		<Wifi aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.wifi"]()}</h2>
 	</div>
@@ -108,7 +108,7 @@ $effect(() => {
 			     without one, and on others the radio needs a driver the image does not
 			     carry yet (the band above names that second case when it applies). It
 			     says so rather than leaving an unexplained blank section. -->
-			<div class="px-4 py-6 text-center" data-testid="wifi-no-adapter" role="status">
+			<div class="px-4 py-4 text-center" data-testid="wifi-no-adapter" role="status">
 				<p class="text-sm font-medium">{m["network.view.noWifi"]()}</p>
 				<p class="text-muted-foreground mx-auto mt-1 max-w-prose text-sm">
 					{m["network.wifiCapability.noAdapterBody"]()}
@@ -167,7 +167,7 @@ $effect(() => {
 				     The handle exists because the action group below wraps too, so a probe
 				     climbing to the nearest `.flex-wrap` would stop there, not here. -->
 				<div
-					class="flex flex-wrap items-center gap-3 px-4 py-2.5"
+					class="flex flex-wrap items-center gap-3 px-4 py-2"
 					data-testid="wifi-row"
 					data-device={id}
 				>

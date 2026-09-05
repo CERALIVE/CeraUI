@@ -114,7 +114,10 @@ describe("BondedLinksSection — mock link-telemetry join (T5)", () => {
 		for (const row of rows) {
 			// Single-line row: horizontal flex, vertically centered, compact height.
 			expect(row.className).toContain("items-center");
-			expect(row.className).toContain("py-1.5");
+			// A TOKEN check, not a substring one: `toContain("py-1")` is satisfied by
+			// `py-1.5` as well, so the density this leg pins would survive its own
+			// regression.
+			expect(row.classList.contains("py-1")).toBe(true);
 			// The old two-row layout (flex-col) is gone.
 			expect(row.className).not.toContain("flex-col");
 		}

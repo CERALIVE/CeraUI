@@ -198,6 +198,12 @@ export const mockModems = [
 		},
 		interfaceName: "usb0",
 		ip: "10.0.0.2",
+		usb_modem_net: {
+			kind: "modem-net",
+			vendor: "Quectel",
+			model: "RM520N-GL",
+			vid_pid: "2c7c:0801",
+		},
 	},
 	{
 		id: 1,
@@ -213,6 +219,12 @@ export const mockModems = [
 		},
 		interfaceName: "usb1",
 		ip: "10.0.1.2",
+		usb_modem_net: {
+			kind: "modem-net",
+			vendor: "Sierra Wireless",
+			model: "EM7455",
+			vid_pid: "1199:9071",
+		},
 	},
 	{
 		id: 2,
@@ -228,6 +240,12 @@ export const mockModems = [
 		},
 		interfaceName: "usb2",
 		ip: "10.0.2.2",
+		usb_modem_net: {
+			kind: "modem-net",
+			vendor: "Quectel",
+			model: "RM500Q-GL",
+			vid_pid: "2c7c:0800",
+		},
 	},
 ] satisfies MockModemConfig[];
 

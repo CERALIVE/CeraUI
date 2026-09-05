@@ -10,7 +10,12 @@
  *      zone is doing (a WORD, not merely a colour, naming `serving` /
  *      `starting`) — as ONE pill on the port name's line (todo 33).
  *   2. It never says "Connected" and never says "Off" — `enabled` is BOND
- *      membership here, and a zone that is up and serving is neither.
+ *      membership here, and a zone that is up and serving is neither. Todo 25
+ *      then retired that pair from EVERY wired row, duplicate of the toggle's
+ *      own `In Bond` / `Excluded` that it was, so this leg is now satisfied
+ *      section-wide rather than only for a shared port. It is KEPT because the
+ *      claim it defends is about this row, and re-adding the word here is the
+ *      regression it exists to catch.
  *   3. It names WHY the port carries no bonded traffic, as the disabled bond
  *      toggle's accessible name AND one tap away in the badge's "?" explainer
  *      (a kiosk touchscreen cannot hover, so a `title` alone is unreachable).
@@ -216,14 +221,18 @@ describe("EthernetSection — a shared-LAN port is not an uplink", () => {
 
 describe("EthernetSection — every other row is untouched", () => {
 	it("an UPLINK row shows no role badge, no zone, no exclusion reason", () => {
-		const { queryByTestId, container } = renderRows([UPLINK]);
+		const { getByTestId, queryByTestId, container } = renderRows([UPLINK]);
 
 		expect(queryByTestId("netif-eth-role")).toBeNull();
 		expect(queryByTestId("netif-eth-role-zone")).toBeNull();
 		expect(queryByTestId("netif-eth-role-excluded-hint")).toBeNull();
 		// No explainer either: there is no role claim for one to explain.
 		expect(queryByTestId("netif-eth-role-info")).toBeNull();
-		expect(container.textContent).toContain("Connected");
+		// The contrast this leg draws is that an uplink STATES its bond membership
+		// plainly where a shared port cannot. That statement is the toggle's own
+		// word — the identity column's duplicate `Connected` is gone (todo 25).
+		expect(getByTestId("bond-state-eth0").textContent).toContain("In Bond");
+		expect(container.textContent).toContain("192.168.1.50");
 	});
 
 	it("an uplink's bond toggle stays live", () => {
@@ -236,7 +245,8 @@ describe("EthernetSection — every other row is untouched", () => {
 		const { queryByTestId, getByTestId, container } = renderRows([UNCLAIMED]);
 
 		expect(queryByTestId("netif-eth-role")).toBeNull();
-		expect(container.textContent).toContain("Connected");
+		expect(getByTestId("bond-state-eth2").textContent).toContain("In Bond");
+		expect(container.textContent).toContain("192.168.1.60");
 		expect(getByTestId("bond-toggle-eth2").hasAttribute("disabled")).toBe(
 			false,
 		);

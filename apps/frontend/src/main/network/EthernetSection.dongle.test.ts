@@ -169,6 +169,14 @@ describe("EthernetSection — isolated-dongle row", () => {
 	// misaligned columns. The diff against the previous golden is exactly ONE
 	// span becoming three nested ones, and nothing else — the switch, the
 	// Configure button, the text column and the state dot are byte-identical.
+	//
+	// RE-CAPTURED A THIRD TIME, for todo 25's density pass. Exactly three edits,
+	// and every one of them is describable in the terms above: the section header
+	// went `py-3` → `py-2`, the row went `py-2.5` → `py-2`, and the address line
+	// lost its trailing `· Connected` — which was `enabled`, i.e. the same bond
+	// membership the `bond-state-eth0` span in this very golden already states as
+	// `In Bond`. The switch, the Configure button, the state dot and every testid
+	// are byte-identical.
 	it("renders a plain wired row identically to before the dongle change", () => {
 		const { container } = renderRows([["eth0", PLAIN_ROW]]);
 		expect(shapeOf(container)).toBe(plainRowGolden.trimEnd());
