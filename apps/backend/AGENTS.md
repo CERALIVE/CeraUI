@@ -7858,8 +7858,12 @@ across a power cycle, which is a separate product decision and out of scope.
 standalone file, so it can never outlive what it suppresses: no armed stream
 means nothing to write, and the next armed stream starts from a clean marker. A
 separate flag needs its own clearing rule, and getting that wrong disables
-restoration permanently and silently. Written by `startSoftwareUpdate()` and the
-`system.reboot`/`system.poweroff` procedures. The update case is the real one: an
+restoration permanently and silently. The update continuation writes it only
+AFTER direct cache cleanup and space admission succeed, immediately BEFORE the
+detached transaction launch; `startSoftwareUpdate()` stays synchronous and writes
+no marker. A preflight refusal preserves the marker and atomically publishes
+`updating: null` with `update_preflight_failed`. The `system.reboot`/`system.poweroff`
+procedures retain their existing stamp timing. The update case is the real one: an
 apt update restarts `ceralive` WITHOUT changing the boot id, so a stream armed
 before an engine crash earlier in the same boot would otherwise be restored by
 the post-update backend.

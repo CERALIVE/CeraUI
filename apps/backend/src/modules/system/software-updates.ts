@@ -16,10 +16,12 @@
 	along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+// allow: SIZE_OK — legacy update coordinator owns the shared discovery/install/recovery latches; new admission parsing stays in leaf modules.
 import {
 	type AptReachability as AptReachabilityWire,
 	aptReachabilitySchema,
 	type UpdatePackage,
+	type UpdatePreflightReason,
 } from "@ceraui/rpc";
 import { invariant } from "../../helpers/invariant.ts";
 import { logger } from "../../helpers/logger.ts";
@@ -40,6 +42,7 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 import {
@@ -47,6 +50,11 @@ import {
 	defaultAptReachabilityDeps,
 	probeAptReachability,
 } from "./apt-reachability.ts";
+import {
+	defaultAptSpaceDeps,
+	preflightAptSpace,
+} from "./apt-space-admission.ts";
+import { AptPreflightError } from "./apt-space-parser.ts";
 import {
 	logParseError,
 	type ParseResult,
@@ -166,6 +174,11 @@ let availableIdentity: UpdateIdentity | null = null;
 let currentUpdateIdentity: UpdateIdentity | null = null;
 let lastUpdateFailure: UpdateFailure | null = null;
 let lastUpdateSucceeded = false;
+let lastPreflightFailure: UpdatePreflightReason | null = null;
+let lastCleanupWarning: Extract<
+	UpdateState,
+	{ kind: "success" }
+>["cleanup_warning"];
 
 // Check-cycle outcome, separate from the install-cycle signals above. A check
 // that could not complete MUST NOT read as "up to date", and a check that
@@ -234,6 +247,8 @@ export function resetSoftwareUpdateState(): void {
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
 	lastCheckFailure = null;
+	lastPreflightFailure = null;
+	lastCleanupWarning = undefined;
 	lastCheckedAt = null;
 	lastAptReachability = undefined;
 	actionableAppPackages = [];
@@ -289,6 +304,10 @@ export function getUpdateState(): UpdateState {
 				: null,
 		failure: lastUpdateFailure,
 		succeeded: lastUpdateSucceeded,
+		preflightFailure: lastPreflightFailure,
+		...(lastCleanupWarning === undefined
+			? {}
+			: { cleanupWarning: lastCleanupWarning }),
 		checkFailure: lastCheckFailure,
 		checkedAt: lastCheckedAt,
 		...(lastAptReachability !== undefined
@@ -971,6 +990,8 @@ export function triggerManualUpdateCheck(): boolean {
 		lastUpdateFailure = null;
 		lastUpdateSucceeded = false;
 		lastCheckFailure = null;
+		lastPreflightFailure = null;
+		lastCleanupWarning = undefined;
 		lastCheckedAt = Date.now();
 		availableUpdates = { package_count: 0 };
 		availableIdentity = null;
@@ -989,8 +1010,12 @@ export function triggerManualUpdateCheck(): boolean {
 	// rendering a state the device no longer held.
 	const priorFailure = lastUpdateFailure;
 	const priorSucceeded = lastUpdateSucceeded;
+	const priorPreflight = lastPreflightFailure;
+	const priorCleanup = lastCleanupWarning;
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
+	lastPreflightFailure = null;
+	lastCleanupWarning = undefined;
 
 	const started = softwareUpdateCheckRunner(async () => {
 		await runUpdateDiscoveryAndReport();
@@ -998,6 +1023,8 @@ export function triggerManualUpdateCheck(): boolean {
 	if (!started) {
 		lastUpdateFailure = priorFailure;
 		lastUpdateSucceeded = priorSucceeded;
+		lastPreflightFailure = priorPreflight;
+		lastCleanupWarning = priorCleanup;
 	}
 	return started;
 }
@@ -1012,9 +1039,9 @@ export function triggerManualUpdateCheck(): boolean {
 type SoftwareUpdateRunner = () => UpdateStartOutcome;
 
 const defaultSoftwareUpdateRunner: SoftwareUpdateRunner = () => {
-	const checkStarted = softwareUpdateCheckRunner((err) => {
+	const checkStarted = softwareUpdateCheckRunner(async (err) => {
 		if (err === null) {
-			void doSoftwareUpdate();
+			await doSoftwareUpdate();
 		} else if (softUpdateStatus) {
 			const reason =
 				"Failed to fetch the updated package list; aborting the update.";
@@ -1133,16 +1160,12 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 		return refuseUpdateStart("check_unavailable");
 	}
 
-	// An update restarts `ceralive` (and usually reboots) WITHOUT changing the
-	// boot id, so a stream armed before an engine crash earlier in this same boot
-	// would otherwise be restored by the post-update backend. Suppress it here,
-	// where the update is known to be going ahead.
-	notePlannedShutdown("software_update");
-
 	// A fresh install supersedes any prior terminal outcome (Todo 24).
 	currentUpdateIdentity = availableIdentity;
 	lastUpdateFailure = null;
 	lastUpdateSucceeded = false;
+	lastPreflightFailure = null;
+	lastCleanupWarning = undefined;
 
 	// if an apt-get update is already in progress, retry later
 	if (aptGetUpdating || aptDiscoveryRunning) {
@@ -1269,6 +1292,11 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 						: 1;
 			}
 
+			// Keep the in-flight latch until cleanup settles; its result cannot change code.
+			const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
+			lastCleanupWarning =
+				code === 0 && !cleaned ? "post_clean_failed" : undefined;
+
 			if (softUpdateStatus) {
 				if (code === 0) {
 					lastUpdateSucceeded = true;
@@ -1359,18 +1387,32 @@ async function doSoftwareUpdate(): Promise<void> {
 		broadcastUpdateState();
 		return;
 	}
+	const args = buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	try {
+		await preflightAptSpace(args);
+	} catch (error) {
+		if (!(error instanceof AptPreflightError)) throw error;
+		lastPreflightFailure = error.reason;
+		lastUpdateFailure = null;
+		lastUpdateSucceeded = false;
+		lastCleanupWarning = undefined;
+		// Omission preserves the browser's overlay. Clear and terminal must be ONE frame.
+		softUpdateStatus = null;
+		logger.warn("Software update preflight refused", {
+			preflight_reason: error.reason,
+		});
+		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
+		return;
+	}
+	// Admission is now proven. A refused attempt must never suppress stream restoration.
+	notePlannedShutdown("software_update");
 	const monitor = createSoftwareUpdateProcessMonitor();
 
 	// 2026-08-29: apt can restart ceralive.service from a package script;
 	// running it in this unit's cgroup then lets that restart kill the package
 	// transaction itself. PID 1 owns this service, and the next backend process
 	// reattaches to its durable output instead of relaunching apt.
-	monitor.finish(
-		runDetachedAptUpgrade(
-			buildAptUpgradeArgs(actionableAppPackages, reachability.verdict),
-			monitor.handlers,
-		),
-	);
+	monitor.finish(runDetachedAptUpgrade(args, monitor.handlers));
 }
 
 async function recoverSoftwareUpdate(
@@ -1390,6 +1432,8 @@ async function recoverSoftwareUpdate(
 			};
 			lastUpdateFailure = null;
 			lastUpdateSucceeded = false;
+			lastPreflightFailure = null;
+			lastCleanupWarning = undefined;
 			logger.warn(
 				"Software update: reattached to the detached apt transaction",
 			);

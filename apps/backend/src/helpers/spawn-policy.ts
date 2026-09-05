@@ -366,6 +366,57 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout runs the read-only upgrade discovery argv-only with a bounded local probe window",
 	},
 	{
+		id: "softwareUpdates.aptCacheClean",
+		file: "modules/system/apt-cache-clean.ts",
+		symbol: "cleanAptCache",
+		command: "[/usr/bin/apt-get, clean]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Direct spawnWithTimeout with a 30-second bound before admission and after transaction completion",
+	},
+	{
+		id: "softwareUpdates.aptArchiveConfig",
+		file: "modules/system/apt-space-admission.ts",
+		symbol: "preflightAptSpace",
+		command: "[/usr/bin/apt-config, shell, ARCHIVES, Dir::Cache::archives/d]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Direct spawnWithTimeout with a 10-second bound; assignment parsed as data",
+	},
+	{
+		id: "softwareUpdates.aptSpaceProbe",
+		file: "modules/system/apt-space-admission.ts",
+		symbol: "preflightAptSpace",
+		command: "[/usr/bin/apt-get, --print-uris, ...installArgs]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Direct spawnWithTimeout with a 120-second bound and child-local LC_ALL=C",
+	},
+	{
 		id: "softwareUpdates.startTransient",
 		file: "modules/system/software-update-service.ts",
 		symbol: "defaultDetachedAptServiceDeps.start",
@@ -749,7 +800,11 @@ export interface SpawnWithTimeoutResult {
  */
 export async function spawnWithTimeout(
 	argv: string[],
-	opts?: { timeoutMs?: number; signal?: AbortSignal },
+	opts?: {
+		timeoutMs?: number;
+		signal?: AbortSignal;
+		env?: Readonly<Record<string, string | undefined>>;
+	},
 ): Promise<SpawnWithTimeoutResult> {
 	const timeoutMs = opts?.timeoutMs ?? DEFAULT_SPAWN_TIMEOUT_MS;
 	const command = argv.join(" ");
@@ -761,6 +816,7 @@ export async function spawnWithTimeout(
 		stdin: "ignore",
 		stdout: "pipe",
 		stderr: "pipe",
+		...(opts?.env === undefined ? {} : { env: opts.env }),
 	});
 	const kill = () => {
 		try {

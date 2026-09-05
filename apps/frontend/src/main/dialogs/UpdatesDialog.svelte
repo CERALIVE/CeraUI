@@ -14,8 +14,9 @@
   showing a spinner.
 -->
 <script lang="ts">
+// allow: SIZE_OK — this legacy dialog couples dispatch confirmation to its rendered update state; keep the lifecycle fix local.
 import { m } from '@ceraui/i18n/svelte';
-import type { UpdatePackage } from '@ceraui/rpc/schemas';
+import type { UpdatePackage, UpdatePreflightReason } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -80,6 +81,28 @@ const actionableCount = $derived.by(() => {
 
 const failed = $derived(updateState?.kind === 'failed' ? updateState : undefined);
 const succeeded = $derived(updateState?.kind === 'success');
+const preflightFailed = $derived(
+	updateState?.kind === 'update_preflight_failed' ? updateState : undefined,
+);
+const cleanupWarning = $derived(
+	updateState?.kind === 'success' ? updateState.cleanup_warning : undefined,
+);
+const PREFLIGHT_REASON_COPY = {
+	insufficient_space: () => m["settings.updates.update_preflight_failed.insufficient_space"](),
+	apt_config_failed: () => m["settings.updates.update_preflight_failed.apt_config_failed"](),
+	archive_path_invalid: () => m["settings.updates.update_preflight_failed.archive_path_invalid"](),
+	probe_failed: () => m["settings.updates.update_preflight_failed.probe_failed"](),
+	probe_no_uri_rows: () => m["settings.updates.update_preflight_failed.probe_no_uri_rows"](),
+	probe_uri_size_malformed: () => m["settings.updates.update_preflight_failed.probe_uri_size_malformed"](),
+	probe_delta_malformed: () => m["settings.updates.update_preflight_failed.probe_delta_malformed"](),
+	stat_failed: () => m["settings.updates.update_preflight_failed.stat_failed"](),
+	statfs_failed: () => m["settings.updates.update_preflight_failed.statfs_failed"](),
+	value_out_of_range: () => m["settings.updates.update_preflight_failed.value_out_of_range"](),
+	pre_clean_failed: () => m["settings.updates.update_preflight_failed.pre_clean_failed"](),
+} satisfies Readonly<Record<UpdatePreflightReason, () => string>>;
+const preflightMessage = $derived(
+	preflightFailed === undefined ? undefined : PREFLIGHT_REASON_COPY[preflightFailed.preflight_reason](),
+);
 const checkFailed = $derived(
 	updateState?.kind === 'check_failed' ? updateState : undefined,
 );
@@ -266,10 +289,10 @@ $effect(() => {
 
 $effect(() => () => clearTimeout(checkTimeout));
 
-// Confirm the start-dispatch op once the first in-progress state lands.
+// A fast preflight refusal can replace progress before the browser paints it.
 $effect(() => {
 	if (getOperationPhase('update') !== 'pending') return;
-	if (inProgress) confirmOperation('update');
+	if (inProgress || preflightFailed) confirmOperation('update');
 });
 
 // The device accepted the start but never reported a single progress frame.
@@ -282,7 +305,7 @@ $effect(() => {
 
 // A real update (or a fresh terminal state) supersedes the last start outcome.
 $effect(() => {
-	if (inProgress || failed || succeeded) startOutcome = undefined;
+	if (inProgress || failed || succeeded || preflightFailed) startOutcome = undefined;
 });
 </script>
 
@@ -297,7 +320,17 @@ $effect(() => {
 		<!-- Availability summary — the version is already present in the `available`
 		     state, so it renders without any manual re-check. -->
 		<div class="bg-muted/40 rounded-lg border p-4" data-testid="update-summary">
-			{#if failed}
+			{#if preflightFailed}
+				<div class="flex items-start gap-2" data-testid="update-preflight-failed" role="alert">
+					<AlertTriangle class="text-status-warning mt-0.5 size-5 shrink-0" />
+					<div class="min-w-0">
+						<p class="text-lg font-semibold">{m["settings.updates.preflightFailedTitle"]()}</p>
+						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-preflight-reason">
+							{preflightMessage}
+						</p>
+					</div>
+				</div>
+			{:else if failed}
 				<div class="flex items-start gap-2" data-testid="update-failed">
 					<AlertTriangle class="text-destructive mt-0.5 size-5 shrink-0" />
 					<div class="min-w-0">
@@ -319,6 +352,11 @@ $effect(() => {
 						<p class="text-muted-foreground mt-1 text-sm">
 							{m["general.updateCompleteDetail"]()}
 						</p>
+						{#if cleanupWarning}
+							<p class="text-muted-foreground mt-2 text-sm break-words" data-testid="update-cleanup-warning" role="status">
+								{m["settings.updates.cleanup_warning.post_clean_failed"]()}
+							</p>
+						{/if}
 					</div>
 				</div>
 			{:else if count > 0}
@@ -463,7 +501,7 @@ $effect(() => {
 				</div>
 			{/if}
 
-			{#if failed}
+			{#if failed || preflightFailed}
 				<Button
 					aria-busy={checking}
 					class="w-full gap-2"

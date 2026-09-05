@@ -204,6 +204,17 @@ before it can dispatch. If an already-dispatched request misses acknowledgement,
 its outcome is unknown and the lifecycle reconciles engine truth after
 `stop_failed`.
 
+### Software update admission
+
+`startSoftwareUpdate()` acknowledges dispatch synchronously. Its asynchronous
+update-check continuation clears cached downloads and checks space before stamping
+planned shutdown, immediately before the detached package transaction launches.
+A refused preflight leaves the armed-stream marker unchanged and clears the
+update overlay with a typed reason. The 256 MiB reserve is an engineering margin
+for transient unpack overhead, not a guarantee against running out of space.
+After the transaction settles, direct bounded cache cleanup is best-effort;
+failure adds a warning to success without changing the transaction verdict.
+
 ### Broadcast Events
 
 The `encoder-load` collector derives MPP core count from procfs and adds

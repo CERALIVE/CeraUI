@@ -168,6 +168,22 @@ export const updatePackageSchema = z.object({
 });
 export type UpdatePackage = z.infer<typeof updatePackageSchema>;
 
+export const UPDATE_PREFLIGHT_REASONS = [
+	'insufficient_space',
+	'apt_config_failed',
+	'archive_path_invalid',
+	'probe_failed',
+	'probe_no_uri_rows',
+	'probe_uri_size_malformed',
+	'probe_delta_malformed',
+	'stat_failed',
+	'statfs_failed',
+	'value_out_of_range',
+	'pre_clean_failed',
+] as const;
+export const updatePreflightReasonSchema = z.enum(UPDATE_PREFLIGHT_REASONS);
+export type UpdatePreflightReason = z.infer<typeof updatePreflightReasonSchema>;
+
 export const updateStateSchema = z.discriminatedUnion('kind', [
 	// `checked_at` (epoch ms) is the operator's evidence a check actually ran: a
 	// successful check that changes nothing is otherwise indistinguishable from a
@@ -215,7 +231,14 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 		progress: updateProgressSchema,
 		identity: updateIdentitySchema.optional(),
 	}),
-	z.object({ kind: z.literal('success') }),
+	z.object({
+		kind: z.literal('update_preflight_failed'),
+		preflight_reason: updatePreflightReasonSchema,
+	}),
+	z.object({
+		kind: z.literal('success'),
+		cleanup_warning: z.literal('post_clean_failed').optional(),
+	}),
 	z.object({
 		kind: z.literal('failed'),
 		reason: z.string(),

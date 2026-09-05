@@ -5,6 +5,7 @@ import type {
 	UpdateCheckFailureReason,
 	UpdateIdentity,
 	UpdatePackage,
+	UpdatePreflightReason,
 	UpdateProgress,
 	UpdateState,
 } from "@ceraui/rpc/schemas";
@@ -36,6 +37,8 @@ export interface UpdateSnapshot {
 	updating: UpdateProgress | null;
 	failure: UpdateFailure | null;
 	succeeded: boolean;
+	preflightFailure?: UpdatePreflightReason | null;
+	cleanupWarning?: Extract<UpdateState, { kind: "success" }>["cleanup_warning"];
 	checkFailure?: UpdateCheckFailureReason | null;
 	checkedAt?: number | null;
 	reachability?: AptReachability;
@@ -75,7 +78,8 @@ function deriveInstallState(progress: UpdateProgress): UpdateState {
 		: { kind: "downloading", progress };
 }
 
-// Precedence: an in-flight install outranks everything, then a terminal
+// Precedence: a preflight terminal outranks stale progress until an explicit
+// install/check/reset boundary clears it. Otherwise an in-flight install wins, then a terminal
 // failure/success, then an available update, then a bare in-progress check, then
 // a failed check. Failure deliberately outranks `checking` so a background
 // re-check never masks a real failed-update state. A failed CHECK sits BELOW
@@ -83,6 +87,11 @@ function deriveInstallState(progress: UpdateProgress): UpdateState {
 // later refresh could not reach the repos — but ABOVE `idle`, because "we could
 // not check" must never render as "up to date".
 export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
+	if (s.preflightFailure)
+		return {
+			kind: "update_preflight_failed",
+			preflight_reason: s.preflightFailure,
+		};
 	if (s.updating) return deriveInstallState(s.updating);
 	if (s.failure) {
 		return s.failure.identity
@@ -93,7 +102,13 @@ export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 				}
 			: { kind: "failed", reason: s.failure.reason };
 	}
-	if (s.succeeded) return { kind: "success" };
+	if (s.succeeded)
+		return {
+			kind: "success",
+			...(s.cleanupWarning === undefined
+				? {}
+				: { cleanup_warning: s.cleanupWarning }),
+		};
 
 	const checkedAt = s.checkedAt ?? undefined;
 	const stamp = checkedAt !== undefined ? { checked_at: checkedAt } : {};
