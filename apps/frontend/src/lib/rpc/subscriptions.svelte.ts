@@ -122,6 +122,17 @@ let sshState = $state<StatusResponse["ssh"] | undefined>(undefined);
 let availableUpdatesState = $state<
 	StatusResponse["available_updates"] | undefined
 >(undefined);
+// An update in flight OUTLIVES the socket that reported it: the device keeps
+// applying packages across a backend restart, so the full-screen overlay must
+// survive the drop and be REPLACED by the post-login initial push, never
+// retracted by the gap in between. Two properties hold that today and are both
+// load-bearing — the status merge preserves a field an incoming frame omits, so
+// the reconnect safety hydrate cannot clear it by silence, and `resetState()`
+// (which DOES clear this slot) is a test/logout seam that is deliberately NOT
+// wired to `handleConnectionChange`. Do not call `resetState()` — or clear this
+// slot piecemeal — on a socket close: an operator would watch the overlay
+// vanish mid-update and read it as a failed or abandoned update.
+// Locked by `main/Layout.updating-overlay.test.ts`.
 let updatingState = $state<StatusResponse["updating"]>(null);
 let updateStateState = $state<UpdateState | undefined>(undefined);
 

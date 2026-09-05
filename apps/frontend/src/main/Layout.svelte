@@ -28,13 +28,11 @@ import LayoutToastHost from './layout/LayoutToastHost.svelte';
 import UpdateBanner from './layout/UpdateBanner.svelte';
 import Main from './MainView.svelte';
 
-let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
 // Explicit terminal state for a stalled auth check: instead of silently
 // blanking to the auth/loading screen when the check never resolves (offline
 // device, dropped socket), we surface a calm role="status" retry surface.
 let authTimedOut = $state(false);
-let updatingStatus: StatusMessage['updating'] = $state(false);
 
 const connectionSurfaces = $derived(
 	deriveConnectionSurfaceUx(
@@ -50,14 +48,18 @@ const connectionSurfaces = $derived(
 // flag the browser `offline` event could flip instantly.
 const showOfflinePage = $derived(getShouldShowOfflinePage());
 
-// Svelte 5: Use $effect for side effects
-$effect(() => {
-	const status = getStatus();
-	if (status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0) {
-		updatingStatus = status.updating;
-	} else {
-		updatingStatus = false;
+// The overlay is DERIVED from the store, never mirrored into local state by an
+// `$effect`. A mirror is a second copy of the same fact that only converges
+// after the render that read it, so a re-mount or a reconnect renders the idle
+// layout first and pops the overlay in afterwards. Reading the getter directly
+// makes the mount trigger-agnostic AND flash-free by construction — see
+// `Layout.updating-overlay.test.ts`.
+const updatingStatus: StatusMessage['updating'] = $derived.by(() => {
+	const updating = getStatus()?.updating;
+	if (updating && typeof updating !== 'boolean' && updating.result !== 0) {
+		return updating;
 	}
+	return false;
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
@@ -152,10 +154,9 @@ $effect(() => {
 // (subscriptions.svelte `handleConnectionChange` → reconnect.ts), so it routes
 // through the canonical handleMessage path and is unit-tested in isolation.
 
-// Svelte 5: Use $effect for auth status
-$effect(() => {
-	authStatus = authStatusStore.value;
-});
+// Derived, not mirrored — same rule as `updatingStatus` above: a mirror lags the
+// store by one render, which is a flash of the pre-auth shell on every re-mount.
+const authStatus = $derived(authStatusStore.value);
 
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
 const userAgent = navigator.userAgent || '';
