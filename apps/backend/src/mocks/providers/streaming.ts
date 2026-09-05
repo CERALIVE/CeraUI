@@ -72,6 +72,16 @@ const FULL_PROFILE_CAPABILITIES: GetCapabilitiesResult = {
 		codecs: ["H264", "H265"],
 		bitrate_range: { min: 1000, max: 12000, unit: "kbps" },
 	},
+	encoders: ["h265", "h264"].map((codec) => ({
+		codec,
+		max_resolution: "3840x2160",
+		max_framerate: 60,
+		formats: ["NV12"],
+		gates: {
+			"4k60": "untested" as const,
+			reason: "board drill todo 36 pending",
+		},
+	})),
 	// Production-realistic offering (mirrors the on-device pipeline registry): an
 	// HDMI-RX + a UVC/USB (libuvch264) capture source, the two LAN network-ingest
 	// sources (rtmp/srt), and the test pattern. libuvch264 is required so a uvc_h264

@@ -88,6 +88,10 @@ describe("MOCK_SCENARIO=caps-full", () => {
 		// the rich hardware profile flows through (not the TestPattern floor)
 		expect(result.platform.supports_h265).toBe(true);
 		expect(result.platform.hardware_accelerated).toBe(true);
+		expect(result.encoders?.map((encoder) => encoder.codec)).toEqual([
+			"h265",
+			"h264",
+		]);
 		expect(
 			result.sources.some((s) => s.id === "hdmi" && s.supports_audio),
 		).toBe(true);
@@ -141,6 +145,10 @@ describe("MOCK_SCENARIO=multi-modem-wifi (dev default)", () => {
 
 		const snapshot = getMockEngineCapabilities();
 		expect(snapshot.caps.encoder.codecs).toEqual(["H264", "H265"]);
+		expect(snapshot.caps.encoders?.map((encoder) => encoder.codec)).toEqual([
+			"h265",
+			"h264",
+		]);
 		expect(snapshot.caps.platform.hardware_accelerated).toBe(true);
 		expect(snapshot.caps.platform.supports_h265).toBe(true);
 
@@ -259,3 +267,4 @@ describe("production isolation (shouldUseMocks() === false)", () => {
 		expect(bootOverrides).toEqual({});
 	});
 });
+/// <reference lib="es2022" />

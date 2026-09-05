@@ -27,6 +27,18 @@ function makeCaps(): GetCapabilitiesResult {
 			codecs: ["H264", "H265"],
 			bitrate_range: { min: 1000, max: 12000, unit: "kbps" },
 		},
+		encoders: [
+			{
+				codec: "h265",
+				max_resolution: "3840x2160",
+				max_framerate: 60,
+				formats: ["NV12"],
+				gates: {
+					"4k60": "untested",
+					reason: "board drill todo 36 pending",
+				},
+			},
+		],
 		sources: [
 			{
 				id: "hdmi",
@@ -95,6 +107,7 @@ describe("getCapabilities — live", () => {
 		expect(result.schemaVersionMismatch).toBeUndefined();
 		expect(result.sources).toEqual(caps.sources);
 		expect(result.encoder).toEqual(caps.encoder);
+		expect(result.encoders).toEqual(caps.encoders);
 		expect(result.platform).toEqual(caps.platform);
 		// last-known-good is the live snapshot, without the UI freshness flags.
 		expect(getCachedCapabilities()).toEqual(caps);
@@ -126,6 +139,7 @@ describe("getCapabilities — cached fallback", () => {
 		expect(result.engineStarting).toBeUndefined();
 		expect(result.sources).toEqual(caps.sources);
 		expect(result.sources.some((s) => s.id === "hdmi")).toBe(true);
+		expect(result.encoders).toEqual(caps.encoders);
 	});
 });
 
@@ -150,6 +164,7 @@ describe("getCapabilities — minimal safe set", () => {
 			platform: MINIMAL_SAFE_CAPABILITIES.platform,
 			encoder: MINIMAL_SAFE_CAPABILITIES.encoder,
 		});
+		expect(result.encoders).toBeUndefined();
 		expect(spy.warns.length).toBeGreaterThan(0);
 		// a failed engine fetch must not leave a poisoned cache.
 		expect(getCachedCapabilities()).toBeUndefined();
