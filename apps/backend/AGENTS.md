@@ -4115,9 +4115,22 @@ did not; the pairing the board actually produces is now covered in
 
 **The lifecycle is cycle-based, never timer-based.** An attached device starts at
 `modem_initializing`. Two successful authoritative roster cycles that still cannot
-describe it move the same retained row to `undriveable`; no elapsed-time deadline
-may erase physical presence. The row then remains until an authoritative source
-claims its `stable_key` or udev proves physical detach.
+describe it move a strong-evidence row to `undriveable`; no elapsed-time deadline
+may erase that physical presence. Strong evidence means `ID_MM_DEVICE_PROCESS=1`,
+`ID_MM_CANDIDATE=1`, or a known cellular vendor. The row then remains until an
+authoritative source claims its `stable_key` or udev proves physical detach.
+
+**Descriptor shape alone is weak evidence, not a permanent modem claim.** Wireless
+controllers are admitted only by the full `e00103` RNDIS triplet; `e00101`
+(Bluetooth) and `e00104` (Bluetooth AMP) veto shape-only admission even beside an
+otherwise eligible descriptor. Classes `02`, `0a`, and `ff` retain class-byte
+matching. `ID_MM_DEVICE_IGNORE=1` excludes a device before any positive evidence.
+Weak rows are dropped and listeners notified on the second authoritative miss.
+Their internal stable-key tombstones survive repeat adds and monitor-respawn
+inventory while attached; only observed detach, complete-inventory absence, or
+process teardown clears them. Evidence strength and tombstones never reach the
+wire. These rules are covered by `tests/udev-provisional-rows.test.ts`, including
+the Rock `13d3:3572` capture and the unchanged strong `05c6` lifecycle.
 
 **The source is a SUPERVISED `udevadm monitor --property --udev` CHILD, never the
 npm `udev` binding.** That binding is an unmaintained native addon compiled
