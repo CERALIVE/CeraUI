@@ -242,7 +242,8 @@ $effect(() => {
 		<div class="flex min-h-screen items-center justify-center">
 			<div class="text-center">
 				<div
-					class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+					class="border-primary mx-auto mb-4 h-8 w-8 rounded-full border-4 border-t-transparent motion-safe:animate-spin"
+					data-testid="auth-check-spinner"
 				></div>
 				<p class="text-muted-foreground">Loading...</p>
 			</div>

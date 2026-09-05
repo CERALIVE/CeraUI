@@ -178,8 +178,8 @@ const groups = $derived<Group[]>([
 			{ key: 'updates', title: m["settings.index.updates"](), desc: m["settings.index.updatesDesc"](), icon: RefreshCw },
 			{
 				key: 'addons',
-				title: 'Add-ons',
-				desc: 'Install and manage optional device features',
+				title: m["settings.index.addons"](),
+				desc: m["settings.index.addonsDesc"](),
 				icon: Blocks,
 			},
 		],

@@ -241,7 +241,15 @@
 	}
 
 	/* used height = max(height, min-height) regardless of specificity, so this
-	   lifts compact h-* controls to 44px in touch mode; default mode token is 0px. */
+	   lifts compact h-* controls to 44px in touch mode; default mode token is 0px.
+
+	   A control carrying `data-touch-target="hit-area"` is EXCLUDED, and reaches
+	   the target through the overlay below instead. Two reasons, both measured:
+	   `min-height` grows ONE axis, and every host of that attribute is a SQUARE
+	   icon control whose WIDTH is what falls short (36px / 32px / 24px); and a
+	   32px dialog close button grown to 44px pushes its box 6px past a 52px
+	   header into the scrollable body beneath it, where it would own the first
+	   pixels of a scroll gesture. */
 	[data-layout-mode='touch'] :is(
 		[data-slot='button'],
 		[data-slot='alert-dialog-action'],
@@ -249,7 +257,7 @@
 		[data-slot='select-trigger'],
 		[id^='nav-tab-'],
 		[id^='mobile-nav-tab-']
-	) {
+	):not([data-touch-target='hit-area']) {
 		min-height: var(--touch-target-min);
 	}
 
@@ -270,6 +278,24 @@
 [data-layout-mode='touch'] [data-slot='switch']::after {
 	inset-block: min(-0.5rem, calc((100% - var(--touch-target-min)) / 2));
 	inset-inline: min(-0.75rem, calc((100% - var(--touch-target-min)) / 2));
+}
+
+/* The same mechanism on BOTH axes, for the shell's compact icon controls that opt
+   in with `data-touch-target="hit-area"`. Each is square and small (36/32/24px),
+   so the `min-height` lift leaves the WIDTH short while stretching the paint.
+
+   Anchored to the control's own padding box, so `(100% - 44px) / 2` is the
+   overhang each edge needs and `min(0px, …)` pins an already-large control to its
+   own box: the overlay is never bigger than the target and so can never own a
+   scroll gesture in the dialog body below a header. Every host is positioned, so
+   nothing here escapes onto an ancestor.
+
+   UNLAYERED for the same reason as the switch rule above. */
+[data-layout-mode='touch'] [data-touch-target='hit-area']::after {
+	content: '';
+	position: absolute;
+	inset-block: min(0px, calc((100% - var(--touch-target-min)) / 2));
+	inset-inline: min(0px, calc((100% - var(--touch-target-min)) / 2));
 }
 
 /* ── Global Base ──────────────────────────────── */

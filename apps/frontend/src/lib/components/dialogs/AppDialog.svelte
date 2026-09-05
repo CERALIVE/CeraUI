@@ -23,6 +23,10 @@
     open and restored on close).
   • RTL: the close button is pinned to the inline-END edge (`end-3`), so it sits
     on the right in LTR and the left in RTL. Footer buttons follow `dir` flow.
+  • Touch: the close button reaches the 44px target through the `app.css`
+    hit-area overlay (`data-touch-target="hit-area"`), not through `min-height`.
+    Its 32px box grown to 44px would push 6px past a 52px header and take the
+    first pixels of a scroll gesture in the body beneath it.
   • Destructive: when `destructive` is set, the default primary button uses the
     `destructive` variant (`bg-destructive`).
   • Reduced motion: enter/exit animation is suppressed under
@@ -150,6 +154,8 @@ const surfaceClass = cn(
 					{...props}
 					aria-label={m["dialogs.close"]()}
 					class="absolute end-3 top-3.5 size-8 rounded-md"
+					data-testid="app-dialog-close"
+					data-touch-target="hit-area"
 					size="icon"
 					variant="ghost"
 				>

@@ -97,7 +97,10 @@ const transitionParams = $derived.by(() => {
 			out:fade={{ duration: 150 }}
 		>
 			<span class="sr-only">{m["navigation.loading"]()}</span>
-			<div class="border-primary/30 border-t-primary h-6 w-6 animate-spin rounded-full border-2"></div>
+			<div
+				class="border-primary/30 border-t-primary h-6 w-6 rounded-full border-2 motion-safe:animate-spin"
+				data-testid="navigation-transition-spinner"
+			></div>
 		</div>
 	{/if}
 

@@ -62,6 +62,42 @@ without affecting default mode (where the token is `0px`).
 The desktop nav tabs are already `h-11` (44px) and the mobile bar is
 `min-h-[56px]`, so touch mode keeps them consistent rather than shrinking them.
 
+### Hit-area overlays: `data-touch-target="hit-area"`
+
+`min-height` grows ONE axis and it grows the PAINTED box, which is wrong for two
+classes of control. A switch may not grow at all — stretching its track into a
+44px pill strands the thumb, whose checked position is a translate off its own
+width. And a compact SQUARE icon button is short on both axes, so lifting only
+its height leaves the width at 36 / 32 / 24px while turning its hover state into
+a pill that no longer matches the glyph inside it.
+
+Both reach the target through an `::after` overlay instead — a HIT AREA, which is
+what WCAG 2.5.5 is about, not the paint. `[data-slot='switch']` gets it from the
+overlay the component already ships; every other opt-in carries
+`data-touch-target="hit-area"`, and app.css both draws the overlay and EXCLUDES
+that attribute from the `min-height` list above, so a control never gets both.
+
+Three shell controls opt in today: the password reveal in `Auth.svelte`, the
+header close button in `AppDialog.svelte`, and the dismiss in
+`main/layout/UpdateBanner.svelte`. The banner's is the reason the attribute is an
+opt-in rather than a selector list — it is a plain `<button>` with no `data-slot`,
+so the lift above never reached it at all and it sat at 24×24 in touch mode.
+
+The overlay is anchored to the control's own padding box, so
+`min(0px, calc((100% - var(--touch-target-min)) / 2))` gives each edge exactly the
+overhang it needs and pins an already-large control to its own box. It is
+therefore never bigger than the target and cannot reach a neighbouring surface —
+which is load-bearing for the dialog close button, whose box grown to 44px would
+otherwise push 6px past a 52px header and own the first pixels of a scroll
+gesture in the body beneath it. Every host must be positioned (`absolute` or
+`relative`) or the overlay resolves against an ancestor instead.
+
+Gated by `apps/frontend/tests/e2e/touch-targets.spec.ts` (`@a11y`), which measures
+the overlay's resolved insets on both axes at 1024×600 in `?mode=touch` and
+asserts in the same breath that the painted box stayed small — the pair is what
+stops the one-line "fix" of adding these controls to the `min-height` list. The
+modem surfaces' equivalent is `modem-a11y.spec.ts` leg 4.
+
 `--spacing-touch-scale` is reserved for spacing-sensitive surfaces; consume it as
 `calc(<base> * var(--spacing-touch-scale))` when a component needs touch-aware
 padding/gaps.

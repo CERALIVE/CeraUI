@@ -40,7 +40,7 @@ import { BUILD_INFO } from '$lib/env';
 
 			<!-- Dev Mode Badge -->
 			<Badge variant="outline" class="font-mono">
-				<span class="bg-primary mr-1.5 size-1.5 animate-pulse rounded-full"></span>
+				<span class="bg-primary mr-1.5 size-1.5 rounded-full motion-safe:animate-pulse"></span>
 				<span class="hidden sm:inline"
 					>{m["devtools.developmentMode"]()}: {BUILD_INFO.MODE} · {m["devtools.status"]()}: {m["devtools.active"]()}</span
 				>

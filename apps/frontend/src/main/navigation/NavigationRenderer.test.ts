@@ -194,6 +194,23 @@ describe("NavigationRenderer — hash-navigation listener lifecycle", () => {
 		remove.mockRestore();
 	});
 
+	// The transition spinner is the ONE animated node on this surface, and it is
+	// unreachable from a browser: `setTransitioning` has no caller in shipped
+	// source, so `tests/e2e/touch-targets.spec.ts` cannot render it and read its
+	// computed style the way it does for the shell's other two. Driving the store
+	// double is therefore the only place its motion gate can be pinned at all.
+	it("declares its transition spinner motion-safe, never a bare animation", () => {
+		nav.transitioning = true;
+		namespaces.loaded.add("live");
+		publishNavigation({ live: { component: Stub.default } });
+
+		render(NavigationRenderer);
+
+		const spinner = screen.getByTestId("navigation-transition-spinner");
+		expect(spinner.classList.contains("motion-safe:animate-spin")).toBe(true);
+		expect(spinner.classList.contains("animate-spin")).toBe(false);
+	});
+
 	it("does not re-register the listener when the destination changes", async () => {
 		namespaces.loaded.add("live");
 		namespaces.loaded.add("settings");

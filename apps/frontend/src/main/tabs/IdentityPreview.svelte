@@ -141,7 +141,7 @@ const codecLabels: Record<string, string> = {
 				</div>
 				{#if isDev}
 					<Badge variant="outline" class="font-mono">
-						<span class="bg-primary mr-1.5 size-1.5 animate-pulse rounded-full"></span>
+						<span class="bg-primary mr-1.5 size-1.5 rounded-full motion-safe:animate-pulse"></span>
 						DEV · {BUILD_INFO.MODE}
 					</Badge>
 				{/if}
@@ -503,7 +503,7 @@ const codecLabels: Record<string, string> = {
 					style="background-color: color-mix(in oklab, var(--status-live) 16%, transparent); color: var(--status-live)"
 				>
 					<span
-						class="size-2 animate-pulse rounded-full"
+						class="size-2 rounded-full motion-safe:animate-pulse"
 						style="background-color: var(--status-live)"
 					></span>
 					<span class="text-xs font-bold tracking-wide">LIVE</span>
@@ -566,7 +566,7 @@ const codecLabels: Record<string, string> = {
 							style="background-color: color-mix(in oklab, var(--status-live) 14%, transparent); color: var(--status-live)"
 						>
 							<span
-								class="size-2 animate-pulse rounded-full"
+								class="size-2 rounded-full motion-safe:animate-pulse"
 								style="background-color: var(--status-live)"
 							></span>
 							<span class="text-xs font-bold tracking-wide">LIVE</span>

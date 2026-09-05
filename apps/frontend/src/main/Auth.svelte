@@ -68,12 +68,15 @@ const sessionExpired = $derived(getSessionExpired());
 const connection = $derived.by(() => {
 	const state = getConnectionState();
 	if (state === 'connected') {
-		return { tone: 'bg-status-success', label: 'Device connected' };
+		return { tone: 'bg-status-success', label: m["connection.deviceConnected"]() };
 	}
 	if (state === 'connecting') {
-		return { tone: 'bg-status-warning animate-pulse', label: 'Connecting…' };
+		return {
+			tone: 'bg-status-warning motion-safe:animate-pulse',
+			label: m["connection.connecting"](),
+		};
 	}
-	return { tone: 'bg-status-error', label: 'Device unreachable' };
+	return { tone: 'bg-status-error', label: m["connection.deviceUnreachable"]() };
 });
 
 // The device's `set_password` verdict is the only input here; the credential
@@ -238,6 +241,8 @@ async function onSubmit(event: SubmitEvent) {
 						class="absolute end-1 top-1/2 size-9 -translate-y-1/2 text-muted-foreground"
 						aria-label={showPassword ? m["auth.hidePassword"]() : m["auth.showPassword"]()}
 						aria-pressed={showPassword}
+						data-testid="auth-password-visibility"
+						data-touch-target="hit-area"
 						onclick={() => (showPassword = !showPassword)}
 						type="button"
 						variant="ghost"
@@ -315,7 +320,7 @@ async function onSubmit(event: SubmitEvent) {
 				type="submit"
 			>
 				{#if isLoading}
-					<LoaderCircle class="size-4 animate-spin" />
+					<LoaderCircle class="size-4 motion-safe:animate-spin" />
 					{setPassword ? m["auth.creatingPassword"]() : m["auth.signingIn"]()}
 				{:else}
 					{setPassword ? m["auth.setPassword"]() : m["auth.unlock"]()}
