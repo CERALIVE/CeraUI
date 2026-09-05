@@ -22,14 +22,17 @@ import {
 } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
 import { CerastreamBackend } from "../modules/streaming/cerastream-backend.ts";
-import * as configMigration from "../modules/streaming/config-migration.ts";
 import * as sourcesModule from "../modules/streaming/sources.ts";
 import {
 	deriveEngineRouting,
 	resolveSourceRouting,
 } from "../modules/streaming/sources.ts";
 import { updateStatus } from "../modules/streaming/streaming.ts";
-import * as streamloop from "../modules/streaming/streamloop.ts";
+import {
+	setConfigProcedure,
+	setStreamingProcedureDepsForTest,
+	streamingStartProcedure,
+} from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 // ---------------------------------------------------------------------------
@@ -386,21 +389,8 @@ describe("source routing stays isolated from cerastream-backend.ts", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Procedure layer — setConfig + start source resolution (module-mocked)
+// Procedure layer — setConfig + start source resolution
 // ---------------------------------------------------------------------------
-
-const STREAMLOOP_PATH = "../modules/streaming/streamloop.ts";
-const SOURCES_PATH = "../modules/streaming/sources.ts";
-const CONFIG_MIGRATION_PATH = "../modules/streaming/config-migration.ts";
-
-// Snapshot the REAL modules at load time (before any mock.module runs). afterAll
-// MUST restore from these, NOT from the live `sourcesModule`/`configMigration`
-// bindings — bun's mock.module mutates those namespaces in place, so spreading
-// them post-mock would re-install the mock permanently (leaking FIXTURE_SOURCES
-// into every later test's getSourcesMessage — a cross-file isolation break).
-const realStreamloop = { ...streamloop };
-const realSources = { ...sourcesModule };
-const realConfigMigration = { ...configMigration };
 
 // session.start stand-in: records every launch so we can prove it is skipped on a
 // rejected source and dispatches the resolved pipeline on a known one.
@@ -408,50 +398,19 @@ const startSpy = mock(async (_conn: unknown, _params: unknown) => ({
 	success: true as const,
 }));
 
-let setConfigProcedure: Awaited<
-	typeof import("../rpc/procedures/streaming.procedure.ts")
->["setConfigProcedure"];
-let streamingStartProcedure: Awaited<
-	typeof import("../rpc/procedures/streaming.procedure.ts")
->["streamingStartProcedure"];
-
 describe("streaming procedures — device-first source resolution", () => {
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 
-	beforeAll(async () => {
+	beforeAll(() => {
 		// Force the real (non-mock) start path so the start handler reaches
 		// startStream (the mocked session.start), and inject a deterministic
 		// sources list + an always-valid offered-set gate.
 		delete process.env.MOCK_MODE;
 		process.env.NODE_ENV = "test";
-
-		mock.module(SOURCES_PATH, () => ({
-			...sourcesModule,
-			getSourcesMessage: () => ({
-				hardware: "rk3588" as const,
-				sources: FIXTURE_SOURCES,
-			}),
-		}));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({
-			...configMigration,
-			validatePersistedPipeline: () => ({ valid: true }),
-		}));
-		mock.module(STREAMLOOP_PATH, () => ({
-			...realStreamloop,
-			start: startSpy,
-			stop: () => {},
-		}));
-
-		const proc = await import("../rpc/procedures/streaming.procedure.ts");
-		setConfigProcedure = proc.setConfigProcedure;
-		streamingStartProcedure = proc.streamingStartProcedure;
 	});
 
 	afterAll(() => {
-		mock.module(SOURCES_PATH, () => ({ ...realSources }));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({ ...realConfigMigration }));
-		mock.module(STREAMLOOP_PATH, () => ({ ...realStreamloop }));
 		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
 		else process.env.MOCK_MODE = savedMockMode;
 		if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -464,6 +423,14 @@ describe("streaming procedures — device-first source resolution", () => {
 		config.source = undefined;
 		config.pipeline = undefined;
 		config.selected_video_input = undefined;
+		setStreamingProcedureDepsForTest({
+			getSourcesMessage: () => ({
+				hardware: "rk3588",
+				sources: FIXTURE_SOURCES,
+			}),
+			startStream: startSpy,
+			validatePersistedPipeline: () => ({ valid: true }),
+		});
 	});
 
 	afterEach(() => {
@@ -472,6 +439,7 @@ describe("streaming procedures — device-first source resolution", () => {
 		config.source = undefined;
 		config.pipeline = undefined;
 		config.selected_video_input = undefined;
+		setStreamingProcedureDepsForTest(null);
 	});
 
 	test("setConfig({source:'video0'}) applies the derived pipeline + input_id", async () => {

@@ -144,6 +144,29 @@ import { broadcastMsg } from "../../modules/ui/websocket-server.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
 import type { RPCContext } from "../types.ts";
 
+interface StreamingProcedureDeps {
+	readonly getSourcesMessage: typeof getSourcesMessage;
+	readonly startStream: typeof startStream;
+	readonly validatePersistedPipeline: typeof validatePersistedPipeline;
+}
+
+const defaultStreamingProcedureDeps: StreamingProcedureDeps = {
+	getSourcesMessage,
+	startStream,
+	validatePersistedPipeline,
+};
+
+let streamingProcedureDeps = defaultStreamingProcedureDeps;
+
+export function setStreamingProcedureDepsForTest(
+	overrides: Partial<StreamingProcedureDeps> | null,
+): void {
+	streamingProcedureDeps =
+		overrides === null
+			? defaultStreamingProcedureDeps
+			: { ...defaultStreamingProcedureDeps, ...overrides };
+}
+
 // Base procedure with context
 const baseProcedure = os.$context<RPCContext>();
 
@@ -246,7 +269,7 @@ export const streamingStartProcedure = authedProcedure
 				if (effectiveSource !== undefined) {
 					const routed = resolveSourceRouting(
 						effectiveSource,
-						getSourcesMessage().sources,
+						streamingProcedureDeps.getSourcesMessage().sources,
 						getConfig().last_seen_devices,
 						input.source === undefined
 							? configuredSelectionAnchor(effectiveSource)
@@ -266,7 +289,7 @@ export const streamingStartProcedure = authedProcedure
 				// reset; the client surfaces the structured code so the operator re-picks.
 				const effectivePipeline = applied.pipeline ?? getConfig().pipeline;
 				if (effectivePipeline !== undefined) {
-					const check = validatePersistedPipeline(
+					const check = streamingProcedureDeps.validatePersistedPipeline(
 						effectivePipeline,
 						Object.keys(getPipelineList()),
 					);
@@ -344,7 +367,7 @@ export const streamingStartProcedure = authedProcedure
 				// The existing start function handles validation and config saving.
 				// Pass the clamped copy so the persisted config matches the applied
 				// state we report back.
-				const startResult = await startStream(
+				const startResult = await streamingProcedureDeps.startStream(
 					context.ws as unknown as import("ws").default,
 					applied,
 					generation,
@@ -691,7 +714,7 @@ export const setConfigProcedure = authedProcedure
 		// its derived pipeline into `input` so the override-validation + merge below
 		// see it. selected_video_input is recomputed on EVERY source write (persisted
 		// further down) — the capture input_id, or cleared for a non-capture source.
-		const sourcesSnapshot = getSourcesMessage().sources;
+		const sourcesSnapshot = streamingProcedureDeps.getSourcesMessage().sources;
 
 		// A mode belongs to ONE device, so it is resolved BEFORE routing: the mode
 		// decides which pipeline the device is opened through, and a pick carried
@@ -942,7 +965,7 @@ export const setConfigProcedure = authedProcedure
 		if (sourceRouting !== undefined) {
 			config.source = input.source;
 			config.selected_video_input = sourceRouting.selected_video_input;
-			noteSourceSelectionWrite(input.source);
+			noteSourceSelectionWrite(input.source, sourcesSnapshot);
 		}
 		// Written even when it resolves to `undefined`: that is the CLEAR, and it is
 		// what stops a mode chosen for one camera governing the next one.
@@ -1262,7 +1285,10 @@ export function applySwitchInputFollow(
 ): SwitchInputOutput {
 	if (!result.success) return result;
 
-	const routed = resolveSourceRouting(inputId, getSourcesMessage().sources);
+	const routed = resolveSourceRouting(
+		inputId,
+		streamingProcedureDeps.getSourcesMessage().sources,
+	);
 	if (!routed.ok) {
 		logger.debug(
 			"switchInput: switched input is not a known source; skipping durable persistence + audio follow",

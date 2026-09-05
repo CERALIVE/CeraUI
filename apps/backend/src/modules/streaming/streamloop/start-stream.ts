@@ -62,6 +62,38 @@ import { srtlaSendExec } from "./exec-paths.ts";
 import { resolveProcessError } from "./process-error-patterns.ts";
 import { spawnStreamingLoop, stopProcessAndWait } from "./process-runner.ts";
 
+interface StartStreamBackend {
+	setBitrate: ReturnType<typeof getStreamingBackend>["setBitrate"];
+	start: ReturnType<typeof getStreamingBackend>["start"];
+}
+
+export interface StartStreamDeps {
+	readonly getStreamingBackend: () => StartStreamBackend;
+	readonly spawnStreamingLoop: typeof spawnStreamingLoop;
+	readonly startLinkTelemetry: typeof startLinkTelemetry;
+	readonly stopLinkTelemetry: typeof stopLinkTelemetry;
+	readonly stopProcessAndWait: typeof stopProcessAndWait;
+}
+
+const defaultStartStreamDeps: StartStreamDeps = {
+	getStreamingBackend,
+	spawnStreamingLoop,
+	startLinkTelemetry,
+	stopLinkTelemetry,
+	stopProcessAndWait,
+};
+
+let startStreamDeps = defaultStartStreamDeps;
+
+export function setStartStreamDepsForTest(
+	overrides: Partial<StartStreamDeps> | null,
+): void {
+	startStreamDeps =
+		overrides === null
+			? defaultStartStreamDeps
+			: { ...defaultStartStreamDeps, ...overrides };
+}
+
 export interface AudioProbeDeps {
 	probe?: (asrc: string) => Promise<string>;
 	networkEmbeddedAudio?: boolean;
@@ -180,7 +212,7 @@ export async function startStream(
 			? getConfig()
 			: ({ ...getConfig(), ...configOverride } as RuntimeConfig);
 	const launchConfig = resolveLaunchConfig(config);
-	getStreamingBackend().setBitrate(launchConfig);
+	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 
 	// A fresh stream start clears any prior unexpected-exit health flag so the
 	// health rollup tracks this new session (ADR-0005 observe-and-notify). The
@@ -230,7 +262,7 @@ export async function startStream(
 		warn: (message, meta) => logger.warn(message, meta),
 	});
 	try {
-		const sender = spawnStreamingLoop(
+		const sender = startStreamDeps.spawnStreamingLoop(
 			srtlaSendExec,
 			[
 				...buildSrtlaSendArgs({
@@ -258,15 +290,17 @@ export async function startStream(
 				}
 			},
 		);
-		transaction.register(() => stopProcessAndWait(sender));
+		transaction.register(() => startStreamDeps.stopProcessAndWait(sender));
 
 		// Begin ingesting srtla_send's per-uplink telemetry. Seed the conn_id->iface
 		// registry from the exact file srtla_send reads at spawn so tlm_id (file
 		// order) maps back to interface names.
-		startLinkTelemetry(statsFile, ipsContent.split("\n"), { controlSocket });
-		transaction.register(() => stopLinkTelemetry());
+		startStreamDeps.startLinkTelemetry(statsFile, ipsContent.split("\n"), {
+			controlSocket,
+		});
+		transaction.register(() => startStreamDeps.stopLinkTelemetry());
 
-		await getStreamingBackend().start(
+		await startStreamDeps.getStreamingBackend().start(
 			launchConfig,
 			{
 				pipeline: pipeline.source,

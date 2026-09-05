@@ -34,7 +34,6 @@ import {
 	beforeEach,
 	describe,
 	expect,
-	mock,
 	test,
 } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -59,27 +58,23 @@ import {
 	setConfigFilePath,
 } from "../modules/config.ts";
 import { setup } from "../modules/setup.ts";
-import * as linkTelemetryModule from "../modules/streaming/link-telemetry.ts";
 import type { Pipeline } from "../modules/streaming/pipelines.ts";
 import {
 	PreviewEncodeRejectedError,
 	setPreviewEncodeReplayTransport,
 } from "../modules/streaming/preview-encode-replay.ts";
-import * as streamingEngineModule from "../modules/streaming/streaming-engine.ts";
-import * as processRunnerModule from "../modules/streaming/streamloop/process-runner.ts";
+import type { StreamingProcess } from "../modules/streaming/streamloop/process-runner.ts";
+import {
+	PREVIEW_ENCODE_REPLAY_FAILED,
+	setStartStreamDepsForTest,
+	startStream,
+} from "../modules/streaming/streamloop/start-stream.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import {
 	getConfigProcedure,
 	setConfigProcedure,
 } from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
-
-// Snapshot the REAL modules at load time — `mock.module` mutates the namespace
-// in place, so the restore in afterAll has to come from here (the rule
-// `source-selection-stale-cache.test.ts` already documents).
-const realLinkTelemetry = { ...linkTelemetryModule };
-const realProcessRunner = { ...processRunnerModule };
-const realStreamingEngine = { ...streamingEngineModule };
 
 type EngineDispatch =
 	| { readonly kind: "reload-config"; readonly mode: PreviewEncodeMode }
@@ -92,37 +87,7 @@ const fakeSender = {
 	proc: { exited: new Promise<number>(() => {}) },
 	spawnfile: "srtla_send",
 	exitListeners: [],
-} as unknown as processRunnerModule.StreamingProcess;
-
-mock.module("../modules/streaming/streamloop/process-runner.ts", () => ({
-	...realProcessRunner,
-	spawnStreamingLoop: () => {
-		sendersSpawned += 1;
-		return fakeSender;
-	},
-	stopProcessAndWait: async () => {},
-}));
-
-mock.module("../modules/streaming/link-telemetry.ts", () => ({
-	...realLinkTelemetry,
-	startLinkTelemetry: () => {},
-	stopLinkTelemetry: () => {},
-}));
-
-mock.module("../modules/streaming/streaming-engine.ts", () => ({
-	...realStreamingEngine,
-	getStreamingBackend: () => ({
-		setBitrate: () => undefined,
-		start: async () => {
-			dispatches.push({ kind: "start" });
-		},
-	}),
-}));
-
-// Imported AFTER the mocks so the choke point resolves them.
-const { startStream, PREVIEW_ENCODE_REPLAY_FAILED } = await import(
-	"../modules/streaming/streamloop/start-stream.ts"
-);
+} as unknown as StreamingProcess;
 
 const testPipeline = {
 	source: "hdmi",
@@ -208,18 +173,6 @@ afterAll(() => {
 	setConfigFilePath(savedConfigFile);
 	rmSync(tempDir, { recursive: true, force: true });
 	setPreviewEncodeReplayTransport(null);
-	mock.module(
-		"../modules/streaming/streamloop/process-runner.ts",
-		() => realProcessRunner,
-	);
-	mock.module(
-		"../modules/streaming/link-telemetry.ts",
-		() => realLinkTelemetry,
-	);
-	mock.module(
-		"../modules/streaming/streaming-engine.ts",
-		() => realStreamingEngine,
-	);
 });
 
 beforeEach(() => {
@@ -227,6 +180,21 @@ beforeEach(() => {
 	dispatches = [];
 	sendersSpawned = 0;
 	acceptingTransport();
+	setStartStreamDepsForTest({
+		getStreamingBackend: () => ({
+			setBitrate: () => undefined,
+			start: async () => {
+				dispatches.push({ kind: "start" });
+			},
+		}),
+		spawnStreamingLoop: () => {
+			sendersSpawned += 1;
+			return fakeSender;
+		},
+		startLinkTelemetry: () => {},
+		stopLinkTelemetry: () => {},
+		stopProcessAndWait: async () => {},
+	});
 });
 
 afterEach(() => {
@@ -236,6 +204,7 @@ afterEach(() => {
 	}
 	Object.assign(config, savedConfig);
 	setPreviewEncodeReplayTransport(null);
+	setStartStreamDepsForTest(null);
 });
 
 describe("the replay fence — every start waits for the mode", () => {
@@ -403,7 +372,9 @@ describe("the fence covers every start origin, not just the tested ones", () => 
 	test("the fence is awaited BEFORE that dispatch, in the same function", async () => {
 		const text = await read("modules/streaming/streamloop/start-stream.ts");
 		const fence = text.indexOf("await replayPreviewEncodeMode()");
-		const dispatch = text.indexOf("await getStreamingBackend().start(");
+		const dispatch = text.indexOf(
+			"await startStreamDeps.getStreamingBackend().start(",
+		);
 
 		expect(fence).toBeGreaterThan(-1);
 		expect(dispatch).toBeGreaterThan(fence);
@@ -448,13 +419,11 @@ describe("previewEncode survives the full round trip", () => {
 				.map((raw) => JSON.parse(raw) as { config?: unknown })
 				.filter((message) => message.config !== undefined)
 				.map((message) => configMessageSchema.parse(message.config));
-			expect(broadcast.at(-1)?.previewEncode).toBe("hardware");
+			expect(broadcast[broadcast.length - 1]?.previewEncode).toBe("hardware");
 
-			const pulled = await call(
-				getConfigProcedure,
-				{},
-				{ context: makeContext() },
-			);
+			const pulled = await call(getConfigProcedure, undefined, {
+				context: makeContext(),
+			});
 			expect(pulled.previewEncode).toBe("hardware");
 
 			// A backend restart is exactly this: the bytes that reached disk, read

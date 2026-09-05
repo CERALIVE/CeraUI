@@ -275,6 +275,7 @@ afterEach(async () => {
 	setBandCatalogPackageForTest(undefined);
 	setBandIdentityResolver(null);
 	resetBandCapabilityCache();
+	resetLifecycleInterlock();
 	getConfig().modem_capabilities = undefined;
 	await rm(journalDir, { recursive: true, force: true });
 });

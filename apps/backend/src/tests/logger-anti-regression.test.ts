@@ -56,10 +56,14 @@ const flush = (): Promise<void> =>
 
 /**
  * Run `emit` with every live transport's `log()` replaced by a capturing stub
- * that records the post-format serialized line and swallows the write (no real
- * stdout noise, no debug.log churn). Restores the originals afterwards.
+ * that records only the subject message's post-format line and forwards every
+ * write to the real transport. Filtering and forwarding are required because
+ * background loops share the logger singleton. Restores the originals afterwards.
  */
-async function captureTransports(emit: () => void): Promise<CapturedLine[]> {
+async function captureTransports(
+	message: string,
+	emit: () => void,
+): Promise<CapturedLine[]> {
 	const captured: CapturedLine[] = [];
 	const restores: Array<() => void> = [];
 
@@ -67,8 +71,10 @@ async function captureTransports(emit: () => void): Promise<CapturedLine[]> {
 		const name = transport.constructor.name;
 		const original = transport.log;
 		transport.log = (info: Record<symbol, unknown>, next: () => void) => {
-			captured.push({ transport: name, line: String(info[WINSTON_MESSAGE]) });
-			next();
+			const line = String(info[WINSTON_MESSAGE]);
+			if (line.includes(message)) captured.push({ transport: name, line });
+			if (original === undefined) next();
+			else original.call(transport, info, next);
 		};
 		restores.push(() => {
 			transport.log = original;
@@ -136,7 +142,7 @@ const emitWithSecret = () =>
 describe("logger anti-regression — no ANSI in the production path", () => {
 	test("every live transport's prod-mode line is free of ANSI escapes", async () => {
 		forceProd();
-		const lines = await captureTransports(() =>
+		const lines = await captureTransports("stream stalled", () =>
 			logger.error("stream stalled", { module: "streaming", links: 3 }),
 		);
 
@@ -150,7 +156,7 @@ describe("logger anti-regression — no ANSI in the production path", () => {
 
 	test("the prod console line is valid JSON on the fixed schema (no pretty text)", async () => {
 		forceProd();
-		const lines = await captureTransports(() =>
+		const lines = await captureTransports("boom", () =>
 			logger.error("boom", { module: "modems", code: 7 }),
 		);
 
@@ -170,7 +176,7 @@ describe("logger anti-regression — no ANSI in the production path", () => {
 
 	test("the file transport is JSON even in dev mode (only the console goes pretty)", async () => {
 		forceDevTty();
-		const lines = await captureTransports(() =>
+		const lines = await captureTransports("disk event", () =>
 			logger.error("disk event", { module: "system" }),
 		);
 
@@ -184,7 +190,7 @@ describe("logger anti-regression — no ANSI in the production path", () => {
 describe("logger anti-regression — secrets never reach any transport", () => {
 	test("the known token is absent from EVERY transport line in prod", async () => {
 		forceProd();
-		const lines = await captureTransports(emitWithSecret);
+		const lines = await captureTransports("login attempt", emitWithSecret);
 
 		expect(lines.length).toBeGreaterThan(0);
 		for (const { transport, line } of lines) {
@@ -198,7 +204,7 @@ describe("logger anti-regression — secrets never reach any transport", () => {
 
 	test("the known token is absent even from the colorized dev console line", async () => {
 		forceDevTty();
-		const lines = await captureTransports(emitWithSecret);
+		const lines = await captureTransports("login attempt", emitWithSecret);
 
 		const console = lines.find((l) => l.transport === "Console");
 		assert(console);
@@ -211,7 +217,7 @@ describe("logger anti-regression — secrets never reach any transport", () => {
 
 	test("deeply nested secret-shaped values and sensitive keys are scrubbed in the prod record", async () => {
 		forceProd();
-		const lines = await captureTransports(emitWithSecret);
+		const lines = await captureTransports("login attempt", emitWithSecret);
 
 		const file = lines.find((l) => l.transport === "File");
 		assert(file);
@@ -236,7 +242,7 @@ describe("logger anti-regression — secrets never reach any transport", () => {
 describe("logger anti-regression — dev/prod format selection through the live logger", () => {
 	test("dev + TTY console line is the pretty HH:MM:SS form with an ANSI badge", async () => {
 		forceDevTty();
-		const lines = await captureTransports(() =>
+		const lines = await captureTransports("started", () =>
 			logger.error("started", { module: "streaming" }),
 		);
 
@@ -250,7 +256,7 @@ describe("logger anti-regression — dev/prod format selection through the live 
 
 	test("prod console line is the JSON schema form, never the pretty form", async () => {
 		forceProd();
-		const lines = await captureTransports(() =>
+		const lines = await captureTransports("started", () =>
 			logger.error("started", { module: "streaming" }),
 		);
 

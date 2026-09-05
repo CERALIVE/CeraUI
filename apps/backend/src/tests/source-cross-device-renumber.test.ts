@@ -40,7 +40,6 @@ import {
 	beforeEach,
 	describe,
 	expect,
-	mock,
 	test,
 } from "bun:test";
 import { SCHEMA_VERSION } from "@ceralive/cerastream";
@@ -58,18 +57,15 @@ import {
 	clearCapabilitiesCache,
 	getCapabilities,
 } from "../modules/streaming/capabilities.ts";
-import * as configMigration from "../modules/streaming/config-migration.ts";
 import * as sourcesModule from "../modules/streaming/sources.ts";
 import { resolvePreviewStartFrame } from "../modules/ui/preview-proxy.ts";
+import {
+	setConfigProcedure,
+	setStreamingProcedureDepsForTest,
+} from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
-// `mock.module` mutates the namespace in place, so the restore in afterAll must
-// come from a snapshot taken at load time (same rule as the F10 suite).
 const realSources = { ...sourcesModule };
-const realConfigMigration = { ...configMigration };
-
-const SOURCES_PATH = "../modules/streaming/sources.ts";
-const CONFIG_MIGRATION_PATH = "../modules/streaming/config-migration.ts";
 
 const NO_INGEST: NetworkIngest = { rtmp: null, srt: null };
 
@@ -277,44 +273,35 @@ describe("W4A4-F5 — the operator's selection carries an identity anchor", () =
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 
-	let setConfigProcedure: Awaited<
-		typeof import("../rpc/procedures/streaming.procedure.ts")
-	>["setConfigProcedure"];
-
 	/** The list the procedure resolves against — swapped per test. */
 	let procedureView: StreamSource[] = [];
 
-	beforeAll(async () => {
+	beforeAll(() => {
 		delete process.env.MOCK_MODE;
 		process.env.NODE_ENV = "test";
-
-		mock.module(SOURCES_PATH, () => ({
-			...realSources,
-			getSourcesMessage: () => ({
-				hardware: "rk3588" as const,
-				sources: procedureView,
-			}),
-		}));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({
-			...realConfigMigration,
-			validatePersistedPipeline: () => ({ valid: true }),
-		}));
-
-		const proc = await import("../rpc/procedures/streaming.procedure.ts");
-		setConfigProcedure = proc.setConfigProcedure;
 	});
 
 	afterAll(() => {
-		mock.module(SOURCES_PATH, () => ({ ...realSources }));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({ ...realConfigMigration }));
 		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
 		else process.env.MOCK_MODE = savedMockMode;
 		if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
 		else process.env.NODE_ENV = savedNodeEnv;
 	});
 
-	beforeEach(resetConfig);
-	afterEach(resetConfig);
+	beforeEach(() => {
+		resetConfig();
+		setStreamingProcedureDepsForTest({
+			getSourcesMessage: () => ({
+				hardware: "rk3588",
+				sources: procedureView,
+			}),
+			validatePersistedPipeline: () => ({ valid: true }),
+		});
+	});
+	afterEach(() => {
+		resetConfig();
+		setStreamingProcedureDepsForTest(null);
+	});
 
 	test("setConfig persists the selected device's stable id beside its node path", async () => {
 		procedureView = sourcesFrom(preDevices(), "/dev/video3", []);
@@ -457,14 +444,24 @@ describe("W4A4-F5 — a live node path is verified against the anchor", () => {
 		// (2) The RØDE re-enumerates on a new node, seen only by the recheck.
 		await realSources.recheckSourceSignals(crossedDevices(), {
 			fetchEngineDevices: async () => ({
-				devices: crossedDevices().map((d) => ({
-					input_id: d.input_id,
-					device_path: d.device_path,
-					display_name: d.display_name,
-					media_class: "video" as const,
-					kind: d.kind,
-					...(d.stable_id !== undefined ? { stable_id: d.stable_id } : {}),
-				})),
+				devices: [
+					{
+						input_id: "/dev/video1",
+						device_path: "/dev/video1",
+						display_name: RODE_NAME,
+						media_class: "video",
+						kind: "mjpeg",
+						stable_id: RODE_STABLE,
+					},
+					{
+						input_id: "/dev/video3",
+						device_path: "/dev/video3",
+						display_name: OSMO_NAME,
+						media_class: "video",
+						kind: "uvc_h264",
+						stable_id: OSMO_STABLE,
+					},
+				],
 			}),
 		});
 

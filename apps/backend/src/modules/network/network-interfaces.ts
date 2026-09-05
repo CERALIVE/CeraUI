@@ -53,7 +53,7 @@ import {
 	wifiDeviceListEndUpdate,
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
-import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
+import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
 	isBondOptedOut,
@@ -964,7 +964,7 @@ export function processIfconfigOutput(
 	if (wifiDeviceListEndUpdate()) {
 		logger.info("updated wifi devices");
 		// a delay seems to be needed before NM registers new devices
-		setTimeout(wifiUpdateDevices, 1000);
+		scheduleWifiUpdate(1000);
 	}
 
 	netif = newInterfaces;

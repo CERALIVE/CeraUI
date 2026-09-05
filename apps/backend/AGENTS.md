@@ -5765,6 +5765,24 @@ buffers).
 These seams let tests and dev mode exercise real code paths without hardware. All
 are gated by `shouldUseMocks()` or `isDevelopment()` — never active in production.
 
+### Backend per-file test isolation
+
+Backend tests inject procedure launch/source dependencies through
+`setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
+dependencies through `setStartStreamDepsForTest()`. Every test that overrides
+either seam restores it in `afterEach`; do not replace these narrow seams with
+`mock.module`, whose namespace mutation leaks across files in serial runs.
+
+`bunfig.toml` registers `src/tests/test-preload.ts` as the backend test preload.
+Its `modules/setup.ts` mock is therefore the sole intentional process-global
+module mock. `stopWifiUpdateLoopForTest()` cancels every delayed Wi-Fi refresh
+scheduled through `scheduleWifiUpdate()` and resets the unavailable-device retry
+window. Tests that start that loop call the stop seam in `afterEach`.
+
+The lifecycle-admission test reset remains `resetLifecycleInterlock()`. Any test
+that acquires a streaming or modem-transition lease installs it in `afterEach`,
+even when the test also releases its individual grant on the happy path.
+
 ### isDevelopment() power-gate (T1)
 
 `isDevelopment()` (`mocks/mock-config.ts`: `NODE_ENV==="development" ||

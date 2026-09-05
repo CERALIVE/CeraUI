@@ -1,5 +1,6 @@
 import {
 	afterAll,
+	afterEach,
 	beforeAll,
 	beforeEach,
 	describe,
@@ -10,6 +11,7 @@ import {
 import {
 	getMockState,
 	initMockService,
+	resetMockState,
 	stopMockService,
 } from "../mocks/mock-service.ts";
 import {
@@ -98,13 +100,17 @@ describe("modem migration — event-driven presence + retained status poll", () 
 		else process.env.MOCK_MODE = savedMockMode;
 	});
 
-	beforeEach(() => {
+	function resetTestState(): void {
+		resetMockState();
 		// Reset both the legacy record and the T11 cache to a clean baseline.
 		for (const id of getModemIds()) {
 			removeModem(id);
 		}
 		setModemsState({});
-	});
+	}
+
+	beforeEach(resetTestState);
+	afterEach(resetTestState);
 
 	test("modem-added event registers the modem and resets gsm connections once", async () => {
 		expect(getModem(0)).toBeUndefined();

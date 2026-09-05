@@ -16,11 +16,13 @@ import { updateNetif } from "../modules/network/network-interfaces.ts";
 import { withDeviceLock } from "../modules/network/state/device-lock.ts";
 import {
 	addWifiInterface,
-	getWifiInterfaceByMacAddress,
 	getWifiInterfacesByMacAddress,
 	removeWifiInterface,
 } from "../modules/wifi/wifi-connections.ts";
-import type { WifiInterface } from "../modules/wifi/wifi-interfaces.ts";
+import {
+	stopWifiUpdateLoopForTest,
+	type WifiInterface,
+} from "../modules/wifi/wifi-interfaces.ts";
 import { addClient, removeClient } from "../rpc/events.ts";
 import { configureModemProcedure } from "../rpc/procedures/modems.procedure.ts";
 import { configureNetworkInterfaceProcedure } from "../rpc/procedures/network.procedure.ts";
@@ -108,11 +110,6 @@ describe("modems.configure — invalid input", () => {
 });
 
 describe("network.configure — mock immediate netif broadcast (Issue 2)", () => {
-	// The mock ifconfig lists wlan0, so updateNetif() schedules a detached
-	// setTimeout(wifiUpdateDevices, 1000) that registers this adapter into the
-	// process-wide interface registry ~1s later. Drain + evict it in afterAll (see
-	// below) so it can't fire inside a LATER mock suite and leak into every
-	// following file's shared registry.
 	const MOCK_WIFI_MAC = "dc:a6:32:12:34:57";
 	let priorMockMode: string | undefined;
 
@@ -125,14 +122,12 @@ describe("network.configure — mock immediate netif broadcast (Issue 2)", () =>
 		updateNetif();
 	});
 
-	afterAll(async () => {
-		// Let the pending wifiUpdateDevices timer fire while mocks are still on,
-		// then evict the adapter it registered before restoring the environment.
-		for (let i = 0; i < 80; i++) {
-			if (getWifiInterfaceByMacAddress(MOCK_WIFI_MAC)) break;
-			await new Promise((resolve) => setTimeout(resolve, 25));
-		}
+	afterEach(() => {
+		stopWifiUpdateLoopForTest();
 		removeWifiInterface(MOCK_WIFI_MAC);
+	});
+
+	afterAll(() => {
 		stopMockService();
 		if (priorMockMode === undefined) {
 			delete process.env.MOCK_MODE;
