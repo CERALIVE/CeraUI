@@ -118,6 +118,17 @@ Canonical claims (field names fixed by the ADR-0006 claim table — snake_case `
 
 ## THE EXACT-CAPABILITY RULE LIVES HERE, ONCE
 
+### Producer-owned platform, source, and encoder capability shapes [EXISTS]
+
+`intersect-caps.ts` imports `PlatformCaps` and `VideoSourceCap` from the published
+`@ceralive/cerastream` package. `streaming.schema.ts` imports
+`platformCapsSchema`, `videoSourceCapSchema`, `encoderCapsSchema`, and
+`encoderCapabilitySchema` from its browser-safe `dist/messages.js` module and
+re-exports the resulting `EncoderCapability` type. `capabilitiesMessageSchema`
+adds only CeraUI-owned freshness/compatibility fields around those producer
+schemas. Never replace these imports with a local interface or `z.object()`;
+`producer-wire-type-shadow.test.ts` is the blocking gate.
+
 `capabilities/device-mode-truth.ts` is cerastream ADR-0008 §10 in code: a device's
 per-`media_type` mode ladder is the ONLY truth, and a consumer "may filter and it
 may display, but it may not construct a mode the engine did not report, and it may
