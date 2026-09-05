@@ -11,7 +11,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ConnectionState } from "$lib/rpc/client";
+import type { ConnectionState } from "../rpc/client";
 
 const login = vi.fn();
 const setPassword = vi.fn();
@@ -157,7 +157,7 @@ describe("auth-status — single mutation path", () => {
 
 		await mod.authenticate("hunter2", true);
 
-		expect(sequence).toEqual(["persist:auth:hunter2", "store:true"]);
+		expect(sequence).toEqual(["persist:auth:abc", "store:true"]);
 		unsubscribe();
 		setItem.mockRestore();
 	});
@@ -207,13 +207,24 @@ describe("auth-status — single mutation path", () => {
 		expect(mod.getAuthMessage()).toBeUndefined();
 	});
 
-	it("createPassword() keeps password-change persistence inside the auth owner", async () => {
+	it("createPassword() clears the revoked credential inside the auth owner", async () => {
 		const mod = await loadAuthStatus();
+		localStorage.setItem("auth", "previous-issued-token");
 		setPassword.mockResolvedValueOnce({ success: true });
 
-		await mod.createPassword("brand-new", true);
+		await mod.createPassword("brand-new");
 
-		expect(localStorage.getItem("auth")).toBe("brand-new");
+		expect(localStorage.getItem("auth")).toBeNull();
+	});
+
+	it("createPassword() retains the credential when the device refuses the change", async () => {
+		const mod = await loadAuthStatus();
+		localStorage.setItem("auth", "previous-issued-token");
+		setPassword.mockResolvedValueOnce({ success: false });
+
+		await mod.createPassword("brand-new");
+
+		expect(localStorage.getItem("auth")).toBe("previous-issued-token");
 	});
 
 	it("authStatusStore boolean is not written by ingestAuth (orthogonal axes)", async () => {

@@ -2206,8 +2206,9 @@ export function ingestAuth(message: LoginOutput | undefined): void;   // THE wri
 export function getAuthMessage(): LoginOutput | undefined;             // THE reader
 export type AuthAttempt = { kind: 'ok' } | { kind: 'rejected' } |
   { kind: 'unreachable'; cause: 'socket-not-ready' | 'rpc-error' | 'timeout' };
-export async function authenticate(password: string, persistentToken: boolean): Promise<AuthAttempt>;
-export async function createPassword(password: string, persistentToken?: boolean): Promise<void>;
+export function authenticate(password: string, persistentToken: boolean): Promise<AuthAttempt>;
+export function authenticateWithToken(token: string): Promise<AuthAttempt>;
+export async function createPassword(password: string): Promise<void>;
 export const authStatusStore: { value: boolean; set(b): void; subscribe(cb) };
 ```
 
@@ -2215,12 +2216,19 @@ export const authStatusStore: { value: boolean; set(b): void; subscribe(cb) };
 never `sendAuthMessage`/`sendCreatePasswordMessage`/`getAuth` (those no longer exist).
 
 `authenticate()` also owns remember-me persistence. A successful persistent
-login writes `localStorage.auth` synchronously before auth state flips; a
+login writes the device-issued `auth_token` to `localStorage.auth` synchronously
+before auth state flips, never the password; a
 successful non-persistent login removes it. Server rejection is distinct from
 transport unreachability: only `rejected` may make Layout/reconnect delete the
 saved credential, while `unreachable` preserves it for Retry or the explicit
 `clear-saved-session` escape hatch. `Auth.svelte` must not recreate a persistence
 effect — it can unmount on the auth flip before such an effect runs.
+
+`authenticateWithToken()` shares that typed lifecycle and sends `input.token`.
+The device returns success without rotating the token, so a successful restore
+retains it. `createPassword()` clears the old credential after confirmed success,
+matching the device's all-token revocation; `SystemHelper.savePassword()` delegates
+to it. Explicit session clearing also best-effort revokes the token on the device.
 
 **The rule for all future frontend work:** ONLY `subscriptions.svelte.ts` (non-auth
 reactive state + connection state) and `auth-status.svelte.ts` (auth mutation state) own

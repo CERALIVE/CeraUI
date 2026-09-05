@@ -65,7 +65,10 @@ export function ingestAuth(message: LoginOutput | undefined): void {
 	authMessage = message;
 }
 
-function persistCredential(result: LoginOutput, persistentToken: boolean): void {
+function persistCredential(
+	result: LoginOutput,
+	persistentToken: boolean,
+): void {
 	if (!persistentToken) {
 		localStorage.removeItem("auth");
 	} else if (result.auth_token) {

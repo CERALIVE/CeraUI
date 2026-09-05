@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthAttempt } from "../lib/stores/auth-status.svelte";
@@ -30,7 +30,10 @@ const authState = vi.hoisted(() => ({
 	attempt: { kind: "unreachable", cause: "rpc-error" } as AuthAttempt,
 	status: false,
 }));
-const authenticate = vi.hoisted(() => vi.fn(async () => authState.attempt));
+const authenticateWithToken = vi.hoisted(() =>
+	vi.fn(async () => authState.attempt),
+);
+const revokePersistentToken = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 	getStatus: () => undefined,
@@ -52,7 +55,8 @@ vi.mock("$lib/stores/connection-ux.svelte", () => ({
 	wasAuthenticated: () => false,
 }));
 vi.mock("$lib/stores/auth-status.svelte", () => ({
-	authenticate,
+	authenticateWithToken,
+	revokePersistentToken,
 	getAuthMessage: () => undefined,
 	authStatusStore: {
 		get value() {
@@ -82,10 +86,11 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-	authenticate.mockClear();
+	authenticateWithToken.mockClear();
+	revokePersistentToken.mockClear();
 	authState.status = false;
 	localStorage.clear();
-	localStorage.setItem("auth", "saved-password");
+	localStorage.setItem("auth", "saved-issued-token");
 });
 
 describe("Layout — saved credential auth result", () => {
@@ -99,6 +104,9 @@ describe("Layout — saved credential auth result", () => {
 			expect(removeItem).toHaveBeenCalledExactlyOnceWith("auth"),
 		);
 		expect(localStorage.getItem("auth")).toBeNull();
+		expect(authenticateWithToken).toHaveBeenCalledExactlyOnceWith(
+			"saved-issued-token",
+		);
 		removeItem.mockRestore();
 	});
 
@@ -112,8 +120,24 @@ describe("Layout — saved credential auth result", () => {
 
 			await screen.findByTestId("auth-timeout");
 			expect(removeItem).not.toHaveBeenCalled();
-			expect(localStorage.getItem("auth")).toBe("saved-password");
+			expect(localStorage.getItem("auth")).toBe("saved-issued-token");
+			expect(authenticateWithToken).toHaveBeenCalledExactlyOnceWith(
+				"saved-issued-token",
+			);
 			removeItem.mockRestore();
 		},
 	);
+
+	it("explicitly clearing an unreachable session also attempts device revocation", async () => {
+		authState.attempt = { kind: "unreachable", cause: "rpc-error" };
+		render(Layout);
+		await screen.findByTestId("auth-timeout");
+
+		await fireEvent.click(screen.getByTestId("clear-saved-session"));
+
+		expect(localStorage.getItem("auth")).toBeNull();
+		expect(revokePersistentToken).toHaveBeenCalledExactlyOnceWith(
+			"saved-issued-token",
+		);
+	});
 });

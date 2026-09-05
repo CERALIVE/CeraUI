@@ -126,7 +126,10 @@ vi.mock("$lib/stores/auth-status.svelte", () => ({
 	},
 }));
 
-import { initSubscriptions, resetState } from "$lib/rpc/subscriptions.svelte";
+import {
+	initSubscriptions,
+	resetState,
+} from "../lib/rpc/subscriptions.svelte.ts";
 
 beforeAll(() => {
 	window.matchMedia = vi.fn().mockImplementation((query: string) => ({

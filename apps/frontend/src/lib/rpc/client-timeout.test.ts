@@ -12,10 +12,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ConnectionResetError, rpc, rpcClient } from "./client";
 
-vi.mock("../env", () => ({
-	getRpcSocketUrl: () => "ws://test.local/ws",
-}));
-
 class FakeWebSocket {
 	static instances: FakeWebSocket[] = [];
 	static readonly CONNECTING = 0;
@@ -48,14 +44,19 @@ class FakeWebSocket {
 }
 
 const realWebSocket = globalThis.WebSocket;
+const realGetUrl = rpcClient["getUrl"];
 
 beforeEach(() => {
 	FakeWebSocket.instances = [];
 	globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+	// isolate:false can cache the client before this file's env mock. Stub the
+	// instance URL seam so this transport test never depends on import order.
+	rpcClient["getUrl"] = () => "ws://test.local/ws";
 });
 
 afterEach(() => {
 	rpcClient.disconnect();
+	rpcClient["getUrl"] = realGetUrl;
 	globalThis.WebSocket = realWebSocket;
 	vi.restoreAllMocks();
 });
@@ -83,8 +84,10 @@ describe("RPC per-procedure timeout", () => {
 
 	it("rejects every pending promise with ConnectionResetError within 50ms of socket close", async () => {
 		rpcClient.connect();
+		expect(FakeWebSocket.instances).toHaveLength(1);
 		const socket = FakeWebSocket.instances[0];
 		socket?.open();
+		expect(rpcClient.isConnected()).toBe(true);
 
 		const pending = [rpc.streaming.stop(), rpc.streaming.start({} as never)];
 		const outcome = Promise.race([

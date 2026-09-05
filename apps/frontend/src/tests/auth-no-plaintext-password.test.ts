@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // @vitest-environment jsdom
 /**
  * The browser stores a REVOCABLE TOKEN, never the operator's password.
@@ -75,10 +76,10 @@ beforeEach(() => {
 });
 
 async function authStatus() {
-	return await import("$lib/stores/auth-status.svelte");
+	return await import("../lib/stores/auth-status.svelte");
 }
 
-/** Drive the REAL sign-in form: the remember-me write is the component's own. */
+/** Drive the real sign-in form through the auth store's persistence path. */
 async function signIn({ remember }: { remember: boolean }): Promise<void> {
 	render(Auth);
 
@@ -134,7 +135,8 @@ describe("remember-me persists a token, not a password", () => {
 		expect(stored).toContain(ISSUED_TOKEN);
 	});
 
-	it("writes nothing at all for an unremembered login", async () => {
+	it("retains no credential for an unremembered login", async () => {
+		localStorage.setItem("auth", "previous-issued-token");
 		login.mockResolvedValue({ success: true, auth_token: ISSUED_TOKEN });
 
 		await signIn({ remember: false });
@@ -146,11 +148,44 @@ describe("remember-me persists a token, not a password", () => {
 		expect(localStorage.getItem("auth")).toBeNull();
 	});
 
+	it("reauthenticates by token and retains it when success issues no replacement", async () => {
+		localStorage.setItem("auth", ISSUED_TOKEN);
+		login.mockResolvedValue({ success: true });
+		const mod = await authStatus();
+
+		const attempt = await mod.authenticateWithToken(ISSUED_TOKEN);
+
+		expect(attempt).toEqual({ kind: "ok" });
+		expect(login).toHaveBeenCalledExactlyOnceWith({
+			token: ISSUED_TOKEN,
+			persistent_token: true,
+		});
+		expect(localStorage.getItem("auth")).toBe(ISSUED_TOKEN);
+	});
+
+	it.each([
+		["connection reset", "rpc-error"],
+		["Request timeout: auth.login", "timeout"],
+	])("retains the token and auth state after %s", async (message, cause) => {
+		localStorage.setItem("auth", ISSUED_TOKEN);
+		login.mockRejectedValue(new Error(message));
+		const mod = await authStatus();
+		mod.ingestAuth({ success: true });
+		mod.setAuthStatus(true);
+
+		const attempt = await mod.authenticateWithToken(ISSUED_TOKEN);
+
+		expect(attempt).toEqual({ kind: "unreachable", cause });
+		expect(localStorage.getItem("auth")).toBe(ISSUED_TOKEN);
+		expect(mod.getAuthMessage()).toEqual({ success: true });
+		expect(mod.getAuthStatus()).toBe(true);
+	});
+
 	it("a password change CLEARS the stored credential", async () => {
 		localStorage.setItem("auth", ISSUED_TOKEN);
 		setPassword.mockResolvedValue({ success: true });
 
-		const { savePassword } = await import("$lib/helpers/SystemHelper");
+		const { savePassword } = await import("../lib/helpers/SystemHelper");
 		await savePassword("a-brand-new-password");
 
 		expect(setPassword).toHaveBeenCalledWith({
@@ -186,19 +221,23 @@ describe("no shipped source writes a password into browser storage", () => {
 
 	const READ = (relative: string) => readFileSync(join(SRC, relative), "utf8");
 
-	it("Auth.svelte stores the issued token, not the password", () => {
+	it("Auth.svelte delegates token persistence to the auth store, never storing the password", () => {
 		const source = READ("main/Auth.svelte");
+		const owner = READ("lib/stores/auth-status.svelte.ts");
 
-		expect(source).toContain(
-			"localStorage.setItem('auth', message.auth_token)",
-		);
+		expect(owner).toContain('localStorage.setItem("auth", result.auth_token)');
+		expect(source).not.toContain("localStorage.setItem(");
 		expect(source).not.toContain("localStorage.setItem('auth', password)");
+		expect(owner).not.toContain('localStorage.setItem("auth", password)');
 	});
 
 	it("SystemHelper removes the credential on a password change", () => {
 		const source = READ("lib/helpers/SystemHelper.ts");
 
-		expect(source).toContain('localStorage.removeItem("auth")');
+		expect(source).toContain("await createPassword(password)");
+		expect(READ("lib/stores/auth-status.svelte.ts")).toContain(
+			'if (result.success) localStorage.removeItem("auth")',
+		);
 		expect(source).not.toContain('localStorage.setItem("auth", password)');
 	});
 

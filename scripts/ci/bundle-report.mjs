@@ -71,8 +71,16 @@ const SPA_DISPLACED_BASELINES = {
 	],
 	precacheGzip: [
 		{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
-		{ bytes: 1_123_271, label: 'pre-composition / pre-experience-stability', debt: 'TD-spa-i18n-catalog-size' },
-		{ bytes: 1_261_883, label: 'parallel media-island measurement', debt: 'TD-spa-i18n-catalog-size' },
+		{
+			bytes: 1_123_271,
+			label: 'pre-composition / pre-experience-stability',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_261_883,
+			label: 'parallel media-island measurement',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
 	],
 };
 
