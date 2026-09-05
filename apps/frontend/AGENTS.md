@@ -2319,13 +2319,20 @@ dialog, and its whole hit-testing section proved nothing while reporting green.
 ## AN UNCHANGED TICK MUST BE A NO-OP [EXISTS]
 
 `lib/rpc/value-identity.ts` (`isSameWireValue` / `preserveWireIdentity`, pure and
-rune-free) is the rule both `subscriptions.svelte.ts` merges apply before they
-publish. Every broadcast is `JSON.parse`d, so a modem or an interface whose
-fields did not move still arrives as a brand-new object graph — and both merges
-allocated a fresh entry AND a fresh map for it unconditionally. `getModems()` and
-`getNetif()` therefore returned a different reference every 5 s on a completely
-idle board, invalidating every `$derived` beneath them and re-running each row's
-whole `{@const}` derivation block for data that had not changed.
+rune-free) is the rule `subscriptions.svelte.ts` applies before publishing
+replace-whole and merged snapshots. Every broadcast is `JSON.parse`d, so a
+snapshot whose fields did not move still arrives as a brand-new object graph.
+`status`, `sensors`, `device-stats`, `encoder-load`, and partial-map `addons`
+updates now follow the same identity-preserving rule as `modems` and `netif`:
+identical wire values retain the previous public getter reference, while any
+changed value publishes a new one. This removes the idle 5 s invalidation of
+every `$derived` beneath those feeds without changing status preserve-on-omission,
+stop-edge clears, or netif field/key authority.
+
+All subscription slots that hold replace-whole wire objects or immutable merged
+snapshots use `$state.raw`. Ingestion replaces those slots; it never mutates a
+published snapshot in place. Scalar lifecycle/connection slots remain ordinary
+`$state`, where deep proxying is irrelevant.
 
 - **Equality is STRUCTURAL, not shallow.** A shallow compare cannot preserve
   anything here: `modem.status` and `modem.router_admin` are freshly parsed
@@ -2336,6 +2343,10 @@ whole `{@const}` derivation block for data that had not changed.
   and to the map only when the key COUNT also matches; an id or ifname the frame
   stopped publishing is still a change, and `netif-modem-staleness.test.ts`
   remains the contract for that half. Do not "simplify" the length check away.
+- **Merge semantics stay authoritative.** Status still preserves omitted optional
+  fields and still applies explicit false/null retractions plus the
+  `active_encode`/`linkTelemetry` stop-edge clears. `addons` remains a partial map
+  merged by id; identity preservation never turns it into a replace-whole feed.
 - **This is not what made the row unclickable** (see the disclosure contract
   above) — it is the wasted-work half of the same report, and it is measured as
   such, not assumed.

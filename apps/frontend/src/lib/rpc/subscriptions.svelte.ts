@@ -45,7 +45,7 @@ import {
 	uplinkFlowsResetEventSchema,
 } from "@ceraui/rpc/schemas";
 import { downloadLog } from "$lib/helpers/SystemHelper";
-import { preserveWireIdentity } from "$lib/rpc/value-identity";
+import { isSameWireValue, preserveWireIdentity } from "$lib/rpc/value-identity";
 import { authStatusStore } from "$lib/stores/auth-status.svelte";
 import { ingestBuffering } from "$lib/stores/buffering.svelte";
 import {
@@ -99,15 +99,15 @@ export { mergeModemList };
 // ============================================
 
 // Auth state
-let authState = $state<{ success: boolean; auth_token?: string } | undefined>(
-	undefined,
-);
+let authState = $state.raw<
+	{ success: boolean; auth_token?: string } | undefined
+>(undefined);
 
 // Config state
-let configState = $state<ConfigMessage | undefined>(undefined);
+let configState = $state.raw<ConfigMessage | undefined>(undefined);
 
 // Status state (aggregated)
-let statusState = $state<
+let statusState = $state.raw<
 	| (StatusResponse & {
 			is_streaming: boolean;
 			wifi: WifiStatus;
@@ -118,8 +118,8 @@ let statusState = $state<
 
 // Individual status components
 let isStreamingState = $state<boolean>(false);
-let sshState = $state<StatusResponse["ssh"] | undefined>(undefined);
-let availableUpdatesState = $state<
+let sshState = $state.raw<StatusResponse["ssh"] | undefined>(undefined);
+let availableUpdatesState = $state.raw<
 	StatusResponse["available_updates"] | undefined
 >(undefined);
 // An update in flight OUTLIVES the socket that reported it: the device keeps
@@ -133,24 +133,26 @@ let availableUpdatesState = $state<
 // slot piecemeal — on a socket close: an operator would watch the overlay
 // vanish mid-update and read it as a failed or abandoned update.
 // Locked by `main/Layout.updating-overlay.test.ts`.
-let updatingState = $state<StatusResponse["updating"]>(null);
-let updateStateState = $state<UpdateState | undefined>(undefined);
+let updatingState = $state.raw<StatusResponse["updating"]>(null);
+let updateStateState = $state.raw<UpdateState | undefined>(undefined);
 
 // Network state
-let netifState = $state<NetifMessage | undefined>(undefined);
-let uplinksState = $state<UplinksMessage | undefined>(undefined);
+let netifState = $state.raw<NetifMessage | undefined>(undefined);
+let uplinksState = $state.raw<UplinksMessage | undefined>(undefined);
 // The read-only sharing-coexistence verdict. REPLACED wholesale, never merged:
 // every check is an EXPLICIT tri-state, so a field-preserving merge would
 // re-create the raise-but-never-lower latch those explicit values exist to
 // prevent. `undefined` means no snapshot has arrived, which is distinct from a
 // delivered payload whose checks read `unknown`.
-let sharingDiagState = $state<SharingDiag | undefined>(undefined);
+let sharingDiagState = $state.raw<SharingDiag | undefined>(undefined);
 // Replaced wholesale; re-served by the post-login push. `undefined` means no
 // snapshot has arrived and must never render as available/healthy.
-let uplinkSteeringState = $state<UplinkSteeringStatus | undefined>(undefined);
-let uplinkShaperState = $state<UplinkShaperStatus | undefined>(undefined);
-let wifiState = $state<WifiStatus | undefined>(undefined);
-let modemsState = $state<ModemList | undefined>(undefined);
+let uplinkSteeringState = $state.raw<UplinkSteeringStatus | undefined>(
+	undefined,
+);
+let uplinkShaperState = $state.raw<UplinkShaperStatus | undefined>(undefined);
+let wifiState = $state.raw<WifiStatus | undefined>(undefined);
+let modemsState = $state.raw<ModemList | undefined>(undefined);
 
 // The whole BlueZ surface in one payload. `undefined` means no snapshot has
 // arrived — distinct from a delivered `{available:false}`, which is the device
@@ -158,12 +160,12 @@ let modemsState = $state<ModemList | undefined>(undefined);
 // merged: `paired`/`trusted`/`connected` are required booleans precisely so a
 // device that disconnects can say so, and a field-preserving merge would
 // re-create the latch those required fields exist to prevent.
-let bluetoothState = $state<BluetoothStatus | undefined>(undefined);
+let bluetoothState = $state.raw<BluetoothStatus | undefined>(undefined);
 
 // Per-uplink srtla_send telemetry, folded into the `status` flow. `null` while
 // srtla_send is not running or no fresh snapshot has arrived; `undefined` before
 // the first status push. Links carry their own `stale` flag.
-let linkTelemetryState = $state<LinkTelemetryMessage | null | undefined>(
+let linkTelemetryState = $state.raw<LinkTelemetryMessage | null | undefined>(
 	undefined,
 );
 
@@ -171,34 +173,34 @@ let linkTelemetryState = $state<LinkTelemetryMessage | null | undefined>(
 // `audio-level` broadcast the backend audio-meter bridge re-emits from the engine
 // sidecar — drives the LiveView meter OUTSIDE a preview. `undefined` before the
 // first event; an `unavailable` variant renders the meter's unavailable state.
-let audioLevelState = $state<AudioLevelMessage | undefined>(undefined);
+let audioLevelState = $state.raw<AudioLevelMessage | undefined>(undefined);
 
 // Live config-change transaction phase (wave-3 todo 12). Fed by the
 // `config-change` broadcast; folded through the pure attempt-id fence so a
 // phase from a superseded transaction can never render.
-let configChangeState = $state<ConfigChangeView>(undefined);
+let configChangeState = $state.raw<ConfigChangeView>(undefined);
 
 // System state
-let deviceStatsState = $state<DeviceStats | undefined>(undefined);
+let deviceStatsState = $state.raw<DeviceStats | undefined>(undefined);
 // Per-core encoder load, from the device's own privileged collector. `undefined`
 // means no frame has arrived yet (a dev host never publishes this at all) — it is
 // NOT the same as a delivered reading whose cores are all unavailable, which is a
 // real device saying it has no readable interface.
-let encoderLoadState = $state<EncoderLoad | undefined>(undefined);
+let encoderLoadState = $state.raw<EncoderLoad | undefined>(undefined);
 // Fan presence + PWM duty cycle, on its OWN broadcast (the `device-stats`
 // payload is frozen by the S1 lock). `undefined` is the honest `unknown` state —
 // a dev host is `isRealDevice()`-gated silent, and that silence IS the
 // real-vs-mock seam, exactly as it is for `encoder-load`.
-let fanState = $state<FanReading | undefined>(undefined);
+let fanState = $state.raw<FanReading | undefined>(undefined);
 // CPU topology — the denominator `deviceStats.cpuLoad1` is unreadable without.
 // A boot fact rather than a sample, so it arrives once and is re-served by the
 // post-auth initial-state push. `undefined` and a delivered `cores: null` mean
 // the same thing to a consumer (no denominator), which is why the derivation
 // takes `number | null | undefined` and degrades to the raw load average.
-let cpuInfoState = $state<CpuInfo | undefined>(undefined);
-let sensorsState = $state<SensorsStatus | undefined>(undefined);
-let revisionsState = $state<Revisions | undefined>(undefined);
-let pipelinesState = $state<PipelinesMessage | undefined>(undefined);
+let cpuInfoState = $state.raw<CpuInfo | undefined>(undefined);
+let sensorsState = $state.raw<SensorsStatus | undefined>(undefined);
+let revisionsState = $state.raw<Revisions | undefined>(undefined);
+let pipelinesState = $state.raw<PipelinesMessage | undefined>(undefined);
 
 // A pre-`{hardware, pipelines}` backend broadcasts the bare pipeline record, so
 // the wrapper is rebuilt here. Each entry is parsed rather than asserted: an
@@ -220,40 +222,42 @@ export function parseLegacyPipelines(data: unknown): PipelinesMessage {
 		pipelines,
 	};
 }
-let capabilitiesState = $state<CapabilitiesMessage | undefined>(undefined);
+let capabilitiesState = $state.raw<CapabilitiesMessage | undefined>(undefined);
 // Device-first unified source list (Wave 2, T6). Fed by the `sources` broadcast
 // (backend T2) — the SAME seq/post-login-snapshot machinery as `pipelines`.
-let sourcesState = $state<SourcesMessage | undefined>(undefined);
-let audioCodecsState = $state<Record<string, { name: string }> | undefined>(
+let sourcesState = $state.raw<SourcesMessage | undefined>(undefined);
+let audioCodecsState = $state.raw<Record<string, { name: string }> | undefined>(
 	undefined,
 );
 
 // Hotplug input picker (Task 34). `devices` is the live list; `activeInput` is
 // the engine's current source (cerastream is the only engine).
-let devicesState = $state<CaptureDevice[]>([]);
+let devicesState = $state.raw<CaptureDevice[]>([]);
 let activeInputState = $state<string | undefined>(undefined);
 
 // Relay state
-let relaysState = $state<RelayMessage | undefined>(undefined);
+let relaysState = $state.raw<RelayMessage | undefined>(undefined);
 
 // Managed ingest slots (T18/T19): platform-pushed ingest endpoints mapped to
 // selectable managed accounts, delivered via the `ingest.slots` broadcast. The
 // operator's selection is persisted as `config.selected_ingest_endpoint`.
-let managedIngestState = $state<ManagedIngestAccount[]>([]);
+let managedIngestState = $state.raw<ManagedIngestAccount[]>([]);
 
 // Notifications state
-let notificationsState = $state<NotificationsMessage | undefined>(undefined);
+let notificationsState = $state.raw<NotificationsMessage | undefined>(
+	undefined,
+);
 
 // Kiosk state (DC-2). Persisted toggle + live polled state, pushed by the
 // backend `kiosk` broadcast on every transition. The settings UI reads the
 // live `state` field, not just `enabled`, so it never shows "running" on a
 // failed unit.
-let kioskState = $state<KioskStatus | undefined>(undefined);
+let kioskState = $state.raw<KioskStatus | undefined>(undefined);
 
 // Live per-add-on runtime state, keyed by id. The `addons` broadcast carries a
 // PARTIAL map of only the changed add-ons, so it is merged per id, never replaced
 // wholesale. Descriptors come from rpc.addons.list(); this tracks state only.
-let addonsState = $state<Record<string, AddonState>>({});
+let addonsState = $state.raw<Record<string, AddonState>>({});
 
 // Connection state
 let connectionState = $state<ConnectionState>("disconnected");
@@ -497,25 +501,37 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 				isStreamingState = statusData.is_streaming;
 			}
 			if (statusData.ssh !== undefined) {
-				sshState = statusData.ssh;
+				sshState = preserveWireIdentity(sshState, statusData.ssh);
 			}
 			if (statusData.available_updates !== undefined) {
-				availableUpdatesState = statusData.available_updates;
+				availableUpdatesState = preserveWireIdentity(
+					availableUpdatesState,
+					statusData.available_updates,
+				);
 			}
 			if (statusData.updating !== undefined) {
-				updatingState = statusData.updating;
+				updatingState = preserveWireIdentity(
+					updatingState,
+					statusData.updating,
+				);
 			}
 			if (statusData.update_state !== undefined) {
-				updateStateState = statusData.update_state;
+				updateStateState = preserveWireIdentity(
+					updateStateState,
+					statusData.update_state,
+				);
 			}
 			if (statusData.wifi !== undefined) {
-				wifiState = statusData.wifi;
+				wifiState = preserveWireIdentity(wifiState, statusData.wifi);
 			}
 			if (statusData.modems !== undefined) {
 				modemsState = mergeModemList(modemsState, statusData.modems);
 			}
 			if (statusData.linkTelemetry !== undefined) {
-				linkTelemetryState = statusData.linkTelemetry;
+				linkTelemetryState = preserveWireIdentity(
+					linkTelemetryState,
+					statusData.linkTelemetry,
+				);
 			}
 			// Belt-and-braces telemetry clear on a true→false streaming transition.
 			// The T5 backend contract already null-broadcasts linkTelemetry on the
@@ -537,7 +553,7 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			ingestBuffering(statusData.buffering);
 
 			// Update aggregated status
-			statusState = {
+			const nextStatus = {
 				...statusState,
 				...statusData,
 				is_streaming: isStreamingState,
@@ -554,7 +570,8 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 							bond_mapping: null,
 						}
 					: {}),
-			} as typeof statusState;
+			} as Exclude<typeof statusState, undefined>;
+			statusState = preserveWireIdentity(statusState, nextStatus);
 			break;
 		}
 
@@ -825,15 +842,21 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			break;
 
 		case "sensors":
-			sensorsState = data as SensorsStatus;
+			sensorsState = preserveWireIdentity(sensorsState, data as SensorsStatus);
 			break;
 
 		case "device-stats":
-			deviceStatsState = data as DeviceStats;
+			deviceStatsState = preserveWireIdentity(
+				deviceStatsState,
+				data as DeviceStats,
+			);
 			break;
 
 		case "encoder-load":
-			encoderLoadState = data as EncoderLoad;
+			encoderLoadState = preserveWireIdentity(
+				encoderLoadState,
+				data as EncoderLoad,
+			);
 			break;
 
 		case "fan":
@@ -936,10 +959,16 @@ function handleMessage(type: string, data: unknown, seq?: number): void {
 			// Partial map of changed add-ons: merge per id so an untouched add-on's
 			// state is preserved (mirrors the modem per-id merge above).
 			if (data && typeof data === "object") {
-				addonsState = {
-					...addonsState,
-					...(data as Record<string, AddonState>),
-				};
+				const merged = { ...addonsState };
+				let changed = false;
+				for (const [id, state] of Object.entries(
+					data as Record<string, AddonState>,
+				)) {
+					if (isSameWireValue(addonsState[id], state)) continue;
+					merged[id] = state;
+					changed = true;
+				}
+				if (changed) addonsState = merged;
 			}
 			break;
 
