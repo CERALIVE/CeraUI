@@ -60,6 +60,9 @@ vi.mock("$lib/components/custom/pwa", async () => {
 });
 
 const authenticate = vi.hoisted(() => vi.fn(() => new Promise<void>(() => {})));
+const revokePersistentToken = vi.hoisted(() =>
+	vi.fn(() => Promise.resolve<void>(undefined)),
+);
 const authState = vi.hoisted(() => ({
 	auth: undefined as unknown,
 	status: false as unknown,
@@ -94,6 +97,7 @@ vi.mock("$lib/stores/connection-ux.svelte", () => ({
 
 vi.mock("$lib/stores/auth-status.svelte", () => ({
 	authenticate,
+	revokePersistentToken,
 	getAuthMessage: () => authState.auth,
 	authStatusStore: {
 		get value() {
@@ -128,6 +132,7 @@ beforeEach(() => {
 	// stall so the check never completes, letting the auth-timeout timer fire.
 	authenticate.mockReset();
 	authenticate.mockImplementation(() => new Promise<void>(() => {}));
+	revokePersistentToken.mockClear();
 	authState.auth = undefined;
 	authState.status = false;
 	connectionSurfaceState.lossVisible = true;
@@ -229,6 +234,7 @@ describe("Layout — auth-check timeout surface", () => {
 		await tick();
 
 		expect(localStorage.getItem("auth")).toBeNull();
+		expect(revokePersistentToken).toHaveBeenCalledWith("token-abc");
 		await waitFor(() =>
 			expect(screen.queryByTestId("auth-timeout")).toBeNull(),
 		);

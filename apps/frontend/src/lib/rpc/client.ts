@@ -61,6 +61,8 @@ import type {
 	ReloadAudioDelayOutput,
 	RemoteConfigInput,
 	Revisions,
+	RevokeTokenInput,
+	RevokeTokenOutput,
 	SetEthernetRoleInput,
 	SetEthernetRoleOutput,
 	SetFccUnlockInput,
@@ -597,6 +599,7 @@ export interface TypedRPC {
 		login: (input: LoginInput) => Promise<LoginOutput>;
 		setPassword: (input: SetPasswordInput) => Promise<SuccessResponse>;
 		logout: () => Promise<LogoutOutput>;
+		revokeToken: (input: RevokeTokenInput) => Promise<RevokeTokenOutput>;
 	};
 	streaming: {
 		start: (

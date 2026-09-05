@@ -12,6 +12,7 @@ import {
 	authenticate,
 	authStatusStore,
 	getAuthMessage,
+	revokePersistentToken,
 } from '$lib/stores/auth-status.svelte';
 import {
 	clearSessionExpired,
@@ -106,10 +107,15 @@ function retryAuthCheck() {
  * safe with no stored credential.
  */
 function clearSavedSession() {
+	const stored = localStorage.getItem('auth');
 	localStorage.removeItem('auth');
 	authTimedOut = false;
 	isCheckingAuthStatus = false;
 	authStatusStore.set(false);
+	// Retire it on the device too, so a credential this browser is giving up on
+	// does not stay valid in auth_tokens.json forever. Deliberately not awaited:
+	// the local clear is the operator's actual request.
+	if (stored) void revokePersistentToken(stored);
 }
 
 runAuthCheck();
