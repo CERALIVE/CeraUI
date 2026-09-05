@@ -23,8 +23,8 @@ import { evidencePath, navigateTo } from "./helpers";
  * ── WebSocket harness (addInitScript, see installWsHarness) ──────────────────
  * The app's own authenticated socket is wrapped so the test can:
  *   1. Authenticate without knowing the device password — the `auth.login`
- *      frame is transparently rewritten to a valid persistent TOKEN read from
- *      the backend's `auth_tokens.json`. The backend then hydrates initial state
+ *      frame is transparently rewritten to the raw persistent TOKEN read from
+ *      the backend's `.e2e-auth-token`. The backend then hydrates initial state
  *      AND (on every reconnect) replays config — exactly the reconnect path.
  *   2. Inject echoes via `dev.emit` (`window.__cera.emit(type, payload)`).
  *   3. Suppress the backend's own confirm so the lock window is deterministic:
@@ -41,19 +41,24 @@ import { evidencePath, navigateTo } from "./helpers";
  */
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(
+	const tokenPath = path.resolve(
 		import.meta.dirname,
-		"../../../backend/auth_tokens.json",
+		"../../../backend/.e2e-auth-token",
 	);
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, "utf8")) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, "utf8").trim();
+	} catch {
 		throw new Error(
-			`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`,
+			`No persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`,
 		);
 	}
-	return tokens[0];
+	if (token.length === 0) {
+		throw new Error(
+			`Empty persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`,
+		);
+	}
+	return token;
 })();
 
 // Accumulated human-readable evidence, flushed to the repo-local test-results dir at the end.

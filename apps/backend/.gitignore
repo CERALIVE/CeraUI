@@ -19,6 +19,7 @@ dist/
 
 # BelaUI specific runtime files
 auth_tokens.json
+.e2e-auth-token
 config.json
 config.inflight.json
 dns_cache.json

@@ -24,6 +24,10 @@ import {
 } from "./helpers/boot-banner.ts";
 import { cleanupOrphanedTempFiles } from "./helpers/boot-cleanup.ts";
 import { guardNonCritical, runCritical } from "./helpers/boot-guard.ts";
+import {
+	armBootSignalHandler,
+	installBootSignalGuards,
+} from "./helpers/boot-signals.ts";
 import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
@@ -191,6 +195,15 @@ if (isDevelopment()) {
 	);
 	logger.info("   Set MOCK_SCENARIO env var to change scenario");
 }
+
+// FIRST executable statement of the boot ladder, and it must stay first.
+// SIGUSR1/SIGUSR2 default to TERMINATE, and both are sent at us by units that
+// are ordered against this one — `ceralive-addon-reconciler.service` fires
+// SIGUSR1 the moment `ceralive.service` reports started, which is long before
+// the ladder below finishes. Reserving them here makes the whole ladder a
+// survivable window; the real handlers are armed at their own sites via
+// `armBootSignalHandler`, which replays a poke that arrived in the meantime.
+installBootSignalGuards();
 
 checkExecPath(srtlaSendExec);
 
@@ -489,7 +502,10 @@ logger.info(bootTimer.phase("🎵", "audio & devices"));
    * an Elgato USB device is plugged in or out
    * a USB audio card is plugged in or out
 */
-process.on("SIGUSR2", function udevDeviceUpdate() {
+// Armed rather than `process.on`: the guard installed at the top of the ladder
+// already owns the signal, so this hands it the real work and replays a hotplug
+// poke that landed while the audio/device layer was still coming up.
+armBootSignalHandler("SIGUSR2", function udevDeviceUpdate() {
 	logger.error("SIGUSR2");
 	void checkCamlinkUsb2();
 	void updateAudioDevices();
@@ -541,8 +557,13 @@ void checkEngineCompatibilityOnStartup();
 // whose failures are swallowed inside runAddonReconciler(). The
 // ceralive-addon-reconciler.service oneshot re-triggers a pass via SIGUSR1; the
 // run self-serialises, so the boot fire and the signal can both fire harmlessly.
+//
+// The signal itself was reserved at the top of the ladder (boot-signals.ts) —
+// that oneshot is ordered `After=ceralive.service`, i.e. it fires as soon as
+// systemd considers this unit started, which is well before this line. Arming
+// here replays a poke that arrived during the ladder instead of losing it.
 void runAddonReconciler();
-process.on("SIGUSR1", function reconcileAddons() {
+armBootSignalHandler("SIGUSR1", function reconcileAddons() {
 	void runAddonReconciler();
 });
 

@@ -19,9 +19,10 @@
  * that owns the runes is never imported by the unit test (which would throw).
  *
  * NOTE on the "token": the remember-me credential persisted under localStorage
- * `auth` is the *password* (see `Auth.svelte`), and the backend `auth.login`
- * verifies it via `input.password`. We therefore re-authenticate by passing the
- * stored credential as the password, not as a server-issued `token`.
+ * `auth` is a server-issued, individually REVOCABLE token (see `Auth.svelte`),
+ * so the caller re-authenticates through `auth.login`'s `input.token` branch.
+ * It used to be the operator's plaintext password; a stored password cannot be
+ * retired without changing it everywhere, which is why it is no longer stored.
  */
 
 /** Outcome of a single reconnect re-auth attempt. */

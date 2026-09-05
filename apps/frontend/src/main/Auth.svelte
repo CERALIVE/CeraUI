@@ -87,14 +87,18 @@ $effect(() => {
 });
 
 /**
- * Remember-me persists the password in localStorage for auto-login on reload.
- * Intentional for this embedded encoder UI on trusted local networks; plaintext
- * storage is a deliberate tradeoff for simple device UX—avoid on shared or hostile networks.
+ * Remember-me persists the REVOCABLE token the device minted for this login —
+ * never the password. A stored password is a permanent credential no operator
+ * can retire without changing it everywhere; a token is one record in
+ * `auth_tokens.json` that `auth.revokeToken` can drop on its own.
+ *
+ * `auth_token` is absent unless `persistent_token` was requested, so an
+ * unremembered login writes nothing at all.
  */
 $effect(() => {
 	const message = getAuthMessage();
-	if (message?.success === true && remember && password) {
-		localStorage.setItem('auth', password);
+	if (message?.success === true && remember && message.auth_token) {
+		localStorage.setItem('auth', message.auth_token);
 	}
 	if (message?.success === false) {
 		isLoading = false;

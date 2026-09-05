@@ -23,17 +23,15 @@ import path from "node:path";
 
 import { expect, type Page } from "@playwright/test";
 
-/** Load the seeded persistent auth token, or `null` when only the placeholder exists. */
+/** Load the raw seeded persistent auth token, or `null` when it is absent or empty. */
 export function loadE2EToken(): string | null {
 	try {
-		const tokensPath = path.resolve(
+		const tokenPath = path.resolve(
 			import.meta.dirname,
-			"../../../../backend/auth_tokens.json",
+			"../../../../backend/.e2e-auth-token",
 		);
-		const tokens = Object.keys(
-			JSON.parse(fs.readFileSync(tokensPath, "utf8")) as Record<string, true>,
-		).filter((key) => key !== "placeholder");
-		return tokens[0] ?? null;
+		const token = fs.readFileSync(tokenPath, "utf8").trim();
+		return token.length > 0 ? token : null;
 	} catch {
 		return null;
 	}

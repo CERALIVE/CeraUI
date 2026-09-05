@@ -1025,10 +1025,10 @@ async function runReconnectReauth(): Promise<void> {
 		await reauthenticateAndHydrate({
 			getStoredToken: readStoredToken,
 			clearStoredToken,
-			// The remember-me credential under localStorage `auth` is the password,
-			// which the backend verifies via `input.password` (not as a `token`).
-			login: (token) =>
-				rpc.auth.login({ password: token, persistent_token: true }),
+			// A REVOCABLE device-issued token, so it authenticates through
+			// `input.token`; sent as `password` it is bcrypt-compared against
+			// the password hash and every reconnect fails.
+			login: (token) => rpc.auth.login({ token, persistent_token: true }),
 			getConfig: () => rpc.streaming.getConfig(),
 			getStatus: () => rpc.status.getStatus(),
 			dispatch: handleMessage,

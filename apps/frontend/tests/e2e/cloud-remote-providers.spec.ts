@@ -18,7 +18,7 @@ import { evidencePath, navigateTo } from "./helpers";
  *
  * Harness (addInitScript): the app socket is wrapped so the test can
  *   1. authenticate without the device password (auth.login frame rewritten to a
- *      valid persistent token read from the backend's auth_tokens.json), and
+ *      raw persistent token read from the backend's .e2e-auth-token sidecar), and
  *   2. observe RPC frames the dialog sends — recording whether
  *      `system.getCloudProviders` was requested and the last
  *      `system.setRemoteConfig` input. Frames are NOT dropped: the real dev
@@ -31,19 +31,24 @@ import { evidencePath, navigateTo } from "./helpers";
  */
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(
+	const tokenPath = path.resolve(
 		import.meta.dirname,
-		"../../../backend/auth_tokens.json",
+		"../../../backend/.e2e-auth-token",
 	);
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, "utf8")) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, "utf8").trim();
+	} catch {
 		throw new Error(
-			`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`,
+			`No persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`,
 		);
 	}
-	return tokens[0];
+	if (token.length === 0) {
+		throw new Error(
+			`Empty persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`,
+		);
+	}
+	return token;
 })();
 
 /**

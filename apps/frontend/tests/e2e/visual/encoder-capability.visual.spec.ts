@@ -22,17 +22,20 @@ import { evidencePath, navigateTo } from "../helpers/index.js";
  */
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(
+	const tokenPath = path.resolve(
 		import.meta.dirname,
-		"../../../../backend/auth_tokens.json",
+		"../../../../backend/.e2e-auth-token",
 	);
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, "utf8")) as Record<string, true>,
-	).filter((key) => key !== "placeholder");
-	if (tokens.length === 0) {
-		throw new Error(`No persistent auth tokens in ${tokensPath}`);
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, "utf8").trim();
+	} catch {
+		throw new Error(`No persistent auth token at ${tokenPath}`);
 	}
-	return tokens[0] as string;
+	if (token.length === 0) {
+		throw new Error(`Empty persistent auth token at ${tokenPath}`);
+	}
+	return token;
 })();
 
 const GENERIC_PIPELINES = {

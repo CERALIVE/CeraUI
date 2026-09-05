@@ -46,17 +46,15 @@ declare global {
  */
 
 function readMockToken(): string {
-	const tokensPath = path.resolve(
+	const tokenPath = path.resolve(
 		import.meta.dirname,
-		"../../../backend/auth_tokens.json",
+		"../../../backend/.e2e-auth-token",
 	);
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, "utf8")) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
-		throw new Error(`No persistent auth tokens in ${tokensPath}`);
+	const token = fs.readFileSync(tokenPath, "utf8").trim();
+	if (token.length === 0) {
+		throw new Error(`No persistent auth token at ${tokenPath}`);
 	}
-	return tokens[0] as string;
+	return token;
 }
 
 function installWsHarness(token: string): void {

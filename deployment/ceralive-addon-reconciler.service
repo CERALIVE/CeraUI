@@ -15,7 +15,16 @@ RemainAfterExit=yes
 # SIGUSR1 (handled in main.ts). The leading '-' tolerates a non-running backend
 # so this oneshot can never fail the boot transaction — the backend also fires
 # one reconcile pass on its own startup.
-ExecStart=-/usr/bin/systemctl kill --signal=SIGUSR1 ceralive.service
+#
+# --kill-whom=main is NOT optional. systemctl's default is `all`, which signals
+# every process in the unit cgroup — and srtla_send lives in ceralive.service's
+# cgroup while streaming and does not handle SIGUSR1, so the default disposition
+# (terminate) would kill the sender mid-broadcast. This is the exact scoping the
+# two SIGUSR2 udev rules already carry; see apps/backend/AGENTS.md → SIGUSR2
+# UDEV HOTPLUG HOOK. The backend's own survival is the other half of the fix and
+# lives in helpers/boot-signals.ts, which reserves SIGUSR1 before the boot
+# ladder so this oneshot cannot win a race against it.
+ExecStart=-/usr/bin/systemctl kill --kill-whom=main --signal=SIGUSR1 ceralive.service
 
 [Install]
 WantedBy=multi-user.target

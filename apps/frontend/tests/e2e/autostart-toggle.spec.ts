@@ -17,7 +17,7 @@ import { evidencePath, navigateTo } from "./helpers";
  *
  * The WebSocket harness (installWsHarness, addInitScript) lets the test:
  *   1. Authenticate without the device password — the `auth.login` frame is
- *      rewritten to a valid persistent token read from `auth_tokens.json`.
+ *      rewritten to the raw persistent token read from `.e2e-auth-token`.
  *   2. Capture the `applied.autostart` value from the real `system.setAutostart`
  *      response (success path) — proving the lock target, not the intent.
  *   3. Drop the `system.setAutostart` frame and reply with an error (failure
@@ -31,19 +31,24 @@ import { evidencePath, navigateTo } from "./helpers";
 const FAKE_ERR = "Couldn't change autostart. Please try again.";
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(
+	const tokenPath = path.resolve(
 		import.meta.dirname,
-		"../../../backend/auth_tokens.json",
+		"../../../backend/.e2e-auth-token",
 	);
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, "utf8")) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, "utf8").trim();
+	} catch {
 		throw new Error(
-			`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`,
+			`No persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`,
 		);
 	}
-	return tokens[0];
+	if (token.length === 0) {
+		throw new Error(
+			`Empty persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`,
+		);
+	}
+	return token;
 })();
 
 function installWsHarness(token: string): void {

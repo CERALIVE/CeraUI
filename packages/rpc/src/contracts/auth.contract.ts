@@ -7,6 +7,8 @@ import {
 	loginInputSchema,
 	loginOutputSchema,
 	logoutOutputSchema,
+	revokeTokenInputSchema,
+	revokeTokenOutputSchema,
 	setPasswordInputSchema,
 	successResponseSchema,
 } from '../schemas';
@@ -26,4 +28,9 @@ export const authContract = oc.router({
 	 * Logout and invalidate token
 	 */
 	logout: oc.output(logoutOutputSchema),
+
+	/**
+	 * Revoke a persistent credential, or every one of them
+	 */
+	revokeToken: oc.input(revokeTokenInputSchema).output(revokeTokenOutputSchema),
 });

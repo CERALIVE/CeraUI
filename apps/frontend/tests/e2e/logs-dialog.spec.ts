@@ -20,20 +20,23 @@ import { EVIDENCE_DIR, navigateTo } from './helpers/index.js';
  *      is observable through the dialog;
  *   4. download the full system log and assert it too carries real content.
  *
- * Auth mirrors notifications-panel.spec.ts: a persistent token (read from the
- * backend's auth_tokens.json) is injected via addInitScript so the socket
- * authenticates without the device password.
+ * Auth mirrors notifications-panel.spec.ts: the raw persistent token (read from
+ * the backend's .e2e-auth-token sidecar) is injected via addInitScript so the
+ * socket authenticates without the device password.
  */
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(import.meta.dirname, '../../../backend/auth_tokens.json');
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, 'utf8')) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
-		throw new Error(`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`);
+	const tokenPath = path.resolve(import.meta.dirname, '../../../backend/.e2e-auth-token');
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, 'utf8').trim();
+	} catch {
+		throw new Error(`No persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`);
 	}
-	return tokens[0];
+	if (token.length === 0) {
+		throw new Error(`Empty persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`);
+	}
+	return token;
 })();
 
 // A command-injection-shaped unit name the backend rejects (SERVICE_RE) and

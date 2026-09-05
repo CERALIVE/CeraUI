@@ -31,8 +31,8 @@ import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from './helpers/index.j
  * ── Auth + harness (mirrors field-lock.spec.ts) ─────────────────────────────
  * The app's authenticated socket is wrapped via `addInitScript` so the test can
  * authenticate WITHOUT the device password: the `auth.login` frame is rewritten
- * to a valid persistent TOKEN read from the backend's `auth_tokens.json` (the
- * playwright.config seeds a `placeholder` token). The SAME harness optionally
+ * to the raw persistent TOKEN read from the backend's `.e2e-auth-token`
+ * sidecar (`auth_tokens.json` holds only its digest). The SAME harness optionally
  * strips the `relays` key from inbound frames so the relay catalog can be held
  * absent on demand (scenario 5) — the app sets `socket.onmessage` by assignment
  * (client.ts), so the wrapper intercepts that assignment.
@@ -50,14 +50,17 @@ import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from './helpers/index.j
  */
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(import.meta.dirname, '../../../backend/auth_tokens.json');
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, 'utf8')) as Record<string, true>,
-	);
-	if (tokens.length === 0) {
-		throw new Error(`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`);
+	const tokenPath = path.resolve(import.meta.dirname, '../../../backend/.e2e-auth-token');
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, 'utf8').trim();
+	} catch {
+		throw new Error(`No persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`);
 	}
-	return tokens[0];
+	if (token.length === 0) {
+		throw new Error(`Empty persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`);
+	}
+	return token;
 })();
 
 // duration:5 (seconds on the wire) → 5000ms in the store (proves the `* 1000`
