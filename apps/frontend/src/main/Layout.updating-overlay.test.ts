@@ -73,6 +73,7 @@ vi.mock("$lib/stores/connection-ux.svelte", () => ({
 
 vi.mock("$lib/stores/auth-status.svelte", () => ({
 	authenticate: vi.fn(async () => {}),
+	authenticateWithToken: vi.fn(async () => {}),
 	getAuthMessage: () => ({ success: true }),
 	authStatusStore: {
 		value: true,
