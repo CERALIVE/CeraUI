@@ -1,6 +1,7 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { AlertCircle, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
+import { untrack } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
@@ -75,28 +76,39 @@ const connection = $derived.by(() => {
 	return { tone: 'bg-status-error', label: 'Device unreachable' };
 });
 
+// The device's `set_password` verdict is the only input here; the credential
+// wipe is an EDGE effect. Reading `setPassword` inside `untrack` keeps this
+// effect from subscribing to the very slot it writes — otherwise `login()`
+// clearing the flag re-runs the effect, which re-reads the same status frame,
+// puts the create-password form straight back on screen and deletes the
+// credential `authenticate()` had just persisted.
 $effect(() => {
 	const status = getStatus();
-	if (status) {
-		setPassword = status.set_password ?? false;
-		if (setPassword) {
+	if (!status) return;
+	const asksForPassword = status.set_password ?? false;
+	untrack(() => {
+		if (asksForPassword === setPassword) return;
+		setPassword = asksForPassword;
+		if (asksForPassword) {
 			localStorage.removeItem('auth');
 		}
-	}
+	});
 });
 
+// Same shape for the rejection: the notification feed is the dependency, and
+// the field's current value is READ rather than tracked. Tracking it made every
+// keystroke re-run the body while the `auth` entry was still on the feed, so
+// `rejectedPassword` was re-stamped to whatever had just been typed and the
+// inline error could never clear.
 $effect(() => {
 	const messages = getNotifications();
-	if (
-		messages?.show?.find((message) => {
-			return message.name === 'auth';
-		})
-	) {
+	if (!messages?.show?.some((message) => message.name === 'auth')) return;
+	untrack(() => {
 		isLoading = false;
 		localStorage.removeItem('auth');
 		// Surface the failure inline beneath the field instead of a toast.
 		rejectedPassword = password;
-	}
+	});
 });
 
 function login(password: string, remember: boolean) {

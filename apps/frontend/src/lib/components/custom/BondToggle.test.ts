@@ -36,7 +36,12 @@ import BondToggle from "./BondToggle.svelte";
 
 // Isolate the component from the live WebSocket RPC client so the unit stays
 // hermetic — no socket, no env. `configure` is a spy we drive per-test.
-vi.mock("$lib/rpc/client", () => ({
+// `osCommand`'s catch arm narrows on `ConnectionResetError`, so a mock
+// without it throws a vitest "no export defined" error before the failure
+// toast can fire, and the leg below reports as a missing toast rather than a
+// real regression. Spread the real module rather than restating its shape.
+vi.mock("$lib/rpc/client", async (importOriginal) => ({
+	...(await importOriginal<typeof import("$lib/rpc/client")>()),
 	rpc: { network: { configure: vi.fn() } },
 }));
 

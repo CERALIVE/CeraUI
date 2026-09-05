@@ -1,6 +1,5 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
-import type { Component } from 'svelte';
 import { cubicInOut } from 'svelte/easing';
 
 import { einkGatedFade as fade, einkGatedFly as fly } from '$lib/transitions';
@@ -19,9 +18,6 @@ import {
 	transitionDirection,
 } from '$lib/stores/navigation.svelte';
 
-const _previousComponent: Component | undefined = $state(undefined);
-let showContent = $state(true);
-
 // Navigation transition configuration
 const TRANSITION_DURATION = 300;
 const _LOADING_DELAY = 150;
@@ -35,12 +31,10 @@ const CurrentComponent = $derived.by(() => {
 	return undefined;
 });
 
-// Handle showContent as a side effect when component changes
-$effect(() => {
-	if (CurrentComponent) {
-		showContent = true;
-	}
-});
+// Derived, not an `$effect` mirror. The effect this replaced only ever assigned
+// `true` and nothing anywhere cleared it, so the gate was already exactly "a
+// component resolved" — one render behind, for a slot that could not change.
+const showContent = $derived(CurrentComponent !== undefined);
 
 // The destination's i18n namespaces are lazy chunks, so the view must not render
 // until they are in the registry — an unresolved namespace renders every string

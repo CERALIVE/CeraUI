@@ -32,7 +32,12 @@ const setIngestEnabled = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const state = vi.hoisted(() => ({ ingest: null }) as { ingest: unknown });
 
-vi.mock("$lib/rpc/client", () => ({
+// `osCommand`'s catch arm narrows on `ConnectionResetError`, so a mock
+// without it throws a vitest "no export defined" error before the failure
+// toast can fire, and the leg below reports as a missing toast rather than a
+// real regression. Spread the real module rather than restating its shape.
+vi.mock("$lib/rpc/client", async (importOriginal) => ({
+	...(await importOriginal<typeof import("$lib/rpc/client")>()),
 	rpc: {
 		network: { setIngestEnabled },
 		streaming: { setSourceVisibility: vi.fn() },

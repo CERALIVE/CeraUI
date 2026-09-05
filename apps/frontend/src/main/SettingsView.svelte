@@ -107,13 +107,12 @@ const displayDesc = $derived.by(() => {
 // the RPC result is adopted from `applied` (the persisted value), not the
 // intended one. A failed call leaves `autostart` untouched, so AsyncSwitch
 // reverts to the prior position.
-let autostart = $state(getConfig()?.autostart ?? false);
-$effect(() => {
-	const cfg = getConfig();
-	if (cfg && typeof cfg.autostart === 'boolean') {
-		autostart = cfg.autostart;
-	}
-});
+// Derived, never mirrored into `$state` by an `$effect`: a mirror is a second
+// copy of the same fact that only converges after the render that read it, so a
+// re-mount paints the stale position first. `handleAutostartChange` still
+// assigns the applied value — a derived is writable, and the authoritative
+// broadcast that follows re-derives it.
+let autostart = $derived(getConfig()?.autostart ?? false);
 
 // Autostart routes through the keyed async-operation machine (key 'autostart'),
 // which owns the re-entry guard + in-flight `pending` phase + the single failure
