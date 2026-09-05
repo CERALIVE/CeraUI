@@ -9,7 +9,8 @@ import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
-	authenticate,
+    authenticate,
+    authenticateWithToken,
 	authStatusStore,
 	getAuthMessage,
 	revokePersistentToken,
@@ -86,7 +87,7 @@ function runAuthCheck() {
 	const auth = localStorage.getItem('auth');
 	if (auth) {
 		isCheckingAuthStatus = true;
-		void authenticate(auth, true);
+        void authenticateWithToken(auth);
 	} else {
 		isCheckingAuthStatus = false;
 	}
