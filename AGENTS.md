@@ -1126,6 +1126,55 @@ availability from it. `PLATFORM_CAPS_BY_HARDWARE` remains only for a legacy or
 absent `encoders` snapshot and is pinned to the engine platform golden by a test.
 `producer-wire-type-shadow.test.ts` rejects any reintroduced local declaration.
 
+The ladder work landed in PR #326 (`main` @ `b5b7302f`) against cerastream PR #150
+(`0963cfe`) and the published `bindings-v2026.9.4`. Every `gates."4k60"` the engine
+publishes today serializes as the honest `"untested"` with reason `board drill todo 36
+pending` — the UI renders that state and must never promote it. `@ceraui/rpc` already
+carried an exact `@ceralive/cerastream` dependency for its browser-safe deep schema
+imports; the stale "does not depend on the tarball" comments, not the package graph,
+were what made local capability mirrors look necessary.
+
+## RK3588 PiP/PbP COMPOSITION CONTROLS [EXISTS — no board validation]
+
+Shipped in PR #326 (`main` @ `b5b7302f`). Real surfaces, by path:
+
+- `apps/frontend/src/main/live/CompositionCard.svelte` — the operator card (enable,
+  secondary source, six layout presets, secondary alpha).
+- `apps/backend/src/modules/streaming/composition.ts` — `isCompositionSupported`
+  and `compositionResidueShouldClear`.
+- `apps/frontend/tests/e2e/composition.spec.ts` — the rendered-DOM gate. The two
+  assertions that used to cover the `TD-pip` deferral were INVERTED, not deleted, so
+  a reintroduced roadmap pill fails the suite.
+
+Three rules a change here must not break:
+
+- **The card is ABSENT from the DOM without the engine's `composition` token** — not
+  disabled, not hidden-but-present. The engine withholds that token unless a real
+  `rgacompositor` NULL→READY trial passes, so offering the control without it would
+  advertise a session the engine refuses.
+- **The two gates fail in OPPOSITE directions on purpose.**
+  `isCompositionSupported` is fail-closed and refuses a write with no token;
+  `compositionResidueShouldClear` requires a LIVE capability snapshot before dropping
+  saved config, so an engine blip never erases an operator's setup. A config carrying
+  a composition after the capability disappears renders an explicit stale notice
+  rather than silently applying or silently discarding it.
+- **The wire types are IMPORTED, never redeclared.** `CompositionConfig`,
+  `CompositionLayout` and `COMPOSITION_FEATURE` come from `@ceralive/cerastream`, so
+  a stale pin is a compile error instead of a silent Zod strip. The imports are deep
+  because the package ships no exports map and its root barrel re-exports node
+  builtins that would break the browser bundle. `producer-wire-type-shadow.test.ts`
+  (`apps/backend/src/tests/`) is the standing detector — a regex scan over stripped
+  shipped source in `apps/backend/src`, `apps/frontend/src` and `packages/rpc/src`,
+  proven non-vacuous by planted violations.
+
+There are **SIX** layout presets, not seven. `custom` is a real element nick but the
+engine's `compositionLayoutSchema` does not carry it — exposing it through a schema
+with no geometry would guarantee a runtime layout rejection — so the imported
+`CompositionLayout` union is the source of truth for the list.
+
+**No board validation.** Every claim above is code-and-test truth on a dev host. No
+composition session has run on a real RK3588 board with two real capture devices.
+
 **`pipeline-sources.ts` per-board tables deleted [EXISTS].** The static per-board
 capability tables that previously lived in `pipeline-sources.ts` are removed. All
 capability data is now derived from the `get-capabilities` response at runtime. Do not
@@ -1160,8 +1209,9 @@ ceraui-source-experience / ceraui-receiver-experience tracks (Tasks 1–16). New
 components and modules shipped:
 
 - `apps/frontend/src/lib/components/custom/SourceSection.svelte` — live input picker
-  section; renders the active source, a live-switch affordance, and the PiP/fallback
-  coming-soon pills.
+  section; renders the active source, a live-switch affordance, and the remaining
+  fallback coming-soon pill. The PiP pill is GONE — PiP/PbP shipped in PR #326; see
+  "RK3588 PiP/PbP COMPOSITION CONTROLS" below.
 - `apps/frontend/src/lib/components/custom/ComingSoon.svelte` — calm roadmap pill +
   tooltip; takes a `debtId` prop and renders `data-debt-id` into the DOM. Every
   instance MUST point at an `open` entry in `docs/TECHNICAL_DEBT.md`.
@@ -1212,7 +1262,7 @@ open; two are resolved (Task 26):
 | `TD-live-audio-switch` | Live audio source switch | resolved 2026-06-17 | `capability:audio_live_switch` |
 | `TD-live-audio-delay` | Live audio delay change | resolved 2026-06-17 | `capability:audio_live_switch` |
 | `TD-live-audio-codec` | Live audio codec change | open | `capability:audio_codec_switch` |
-| `TD-pip` | Picture-in-picture / compositing | open | `capability:pip_supported` |
+| `TD-pip` | Picture-in-picture / compositing | resolved 2026-09-05 | `capability:composition` |
 | `TD-mode-fallback` | Mode-level automatic source fallback | open | `capability:mode_fallback` |
 | `TD-plain-srt-egress` | Plain-SRT (non-SRTLA) receiver egress | open | `capability:srt` |
 
