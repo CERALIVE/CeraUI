@@ -73,10 +73,12 @@ const password = process.env.E2E_PASSWORD ?? '12345678';
 bun run --filter frontend test:e2e:reset
 
 # Option 2: direct file removal
-rm -f apps/backend/auth_tokens.json
+rm -f apps/backend/auth_tokens.json apps/backend/.e2e-auth-token
 ```
 
 Why this matters: the backend persists auth tokens in `apps/backend/auth_tokens.json`. If that file exists with a valid token, the app skips the set-password flow and goes straight to login. Tests that need to exercise the first-run "set password" branch must clear this file first so the branch is reachable.
+
+The backend stores only `sha256(token)`, so that file cannot hand a harness a usable credential. The RAW token lives beside it in `apps/backend/.e2e-auth-token` — written by `scripts/ci/seed-e2e-auth.ts` in CI and by `global-setup.ts` locally — and the two must be cleared together.
 
 ---
 
@@ -256,7 +258,7 @@ All 14 config dialogs in this app compose `AppDialog.svelte`, which renders as a
 Key patterns it demonstrates:
 
 - **`addInitScript`** to install a WebSocket harness before the page loads, without touching app source code
-- **Token rewrite** to authenticate without knowing the device password (reads `auth_tokens.json` at test startup)
+- **Token rewrite** to authenticate without knowing the device password (reads the raw token from `.e2e-auth-token` at test startup)
 - **`expect.poll`** instead of `waitForTimeout` for async state that has no immediate DOM signal
 - **`emit(page, type, payload)`** to inject server echoes at known times, making timing deterministic
 - **Serial test ordering** (`test.describe.configure({ mode: 'serial' })`) for stateful integration sequences

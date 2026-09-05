@@ -25,7 +25,7 @@
 		"test:e2e:install-browser": "playwright install chromium",
 		"test:e2e:install-deps": "playwright install-deps chromium",
 		"test:e2e:install": "playwright install chromium --with-deps",
-		"test:e2e:reset": "rm -f ../backend/auth_tokens.json",
+		"test:e2e:reset": "rm -f ../backend/auth_tokens.json ../backend/.e2e-auth-token",
 		"clean": "rm -rf dist node_modules/.vite",
 		"generate:i18n": "bun run --filter @ceraui/i18n generate:i18n"
 	},

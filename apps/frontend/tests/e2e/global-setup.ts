@@ -34,12 +34,18 @@ import { chromium, expect, type Page } from '@playwright/test';
  * startup; `hasCiSeededAuthState()` therefore exits before launching a browser.
  * The set-password form never renders the remember-me checkbox, so it never
  * requests a persistent token on its own — hence the two distinct phases.
+ *
+ * Phase 2 additionally hands the RAW issued token to the specs through
+ * `apps/backend/.e2e-auth-token`. The backend stores only sha256(token), so the
+ * value the harnesses must present cannot be recovered from auth_tokens.json;
+ * the browser that just logged in is the only place it still exists.
  */
 
 const PORT = Number(process.env.E2E_PORT ?? 6173);
 const BASE_URL = `http://localhost:${PORT}`;
 const PASSWORD = process.env.E2E_PASSWORD ?? '12345678';
 const NAV_TIMEOUT = 60_000;
+const TOKEN_SIDECAR = path.resolve(import.meta.dirname, '../../../backend/.e2e-auth-token');
 
 function hasCiSeededAuthState(): boolean {
 	if (process.env.CI !== 'true') return false;
@@ -89,6 +95,19 @@ async function submitAuthForm(page: Page, withConfirm: boolean): Promise<void> {
 	await page.locator('header').first().waitFor({ state: 'visible', timeout: NAV_TIMEOUT });
 }
 
+async function persistIssuedToken(page: Page): Promise<void> {
+	const token = await page.waitForFunction(
+		() => localStorage.getItem('auth') || null,
+		undefined,
+		{ timeout: NAV_TIMEOUT },
+	);
+	const value = String(await token.jsonValue()).trim();
+	if (value.length === 0) {
+		throw new Error('remember-me login issued no persistent token; e2e specs cannot authenticate.');
+	}
+	fs.writeFileSync(TOKEN_SIDECAR, value, 'utf8');
+}
+
 export default async function globalSetup(): Promise<void> {
 	if (hasCiSeededAuthState()) return;
 	const browser = await chromium.launch();
@@ -111,6 +130,7 @@ export default async function globalSetup(): Promise<void> {
 			await remember.check();
 		}
 		await submitAuthForm(loginPage, false);
+		await persistIssuedToken(loginPage);
 		await loginContext.close();
 	} finally {
 		await browser.close();

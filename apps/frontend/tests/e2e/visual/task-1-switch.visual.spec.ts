@@ -22,19 +22,22 @@ function repoEvidence(name: string): string {
  *     hit area expands the bare 32x18.4px track into a >=44px-wide target.
  *
  * Auth: the app socket is wrapped (addInitScript) so auth.login is rewritten to
- * a valid persistent token from the backend's auth_tokens.json — no device
+ * the raw persistent token from the backend's .e2e-auth-token — no device
  * password needed. Tagged @visual so evidence screenshots are permitted.
  */
 
 const TOKEN: string = (() => {
-	const tokensPath = path.resolve(import.meta.dirname, '../../../../backend/auth_tokens.json');
-	const tokens = Object.keys(
-		JSON.parse(fs.readFileSync(tokensPath, 'utf8')) as Record<string, true>,
-	).filter((t) => t !== 'placeholder');
-	if (tokens.length === 0) {
-		throw new Error(`No real persistent auth tokens in ${tokensPath}; cannot authenticate.`);
+	const tokenPath = path.resolve(import.meta.dirname, '../../../../backend/.e2e-auth-token');
+	let token: string;
+	try {
+		token = fs.readFileSync(tokenPath, 'utf8').trim();
+	} catch {
+		throw new Error(`No real persistent auth token at ${tokenPath}; cannot authenticate.`);
 	}
-	return tokens[0];
+	if (token.length === 0) {
+		throw new Error(`Empty persistent auth token at ${tokenPath}; cannot authenticate.`);
+	}
+	return token;
 })();
 
 function installAuthHarness(token: string): void {

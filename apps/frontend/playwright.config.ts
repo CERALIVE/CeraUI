@@ -21,6 +21,14 @@ if (!fs.existsSync(tokensPath)) {
 	}
 }
 
+// The specs present the RAW token; auth_tokens.json stores only its digest, so the
+// two cannot share a file. Placeholder for the same reason as above — the specs read
+// it in a module-load IIFE, before globalSetup writes the real one.
+const e2eTokenPath = path.resolve(import.meta.dirname, '../backend/.e2e-auth-token');
+if (!fs.existsSync(e2eTokenPath)) {
+	fs.writeFileSync(e2eTokenPath, 'PLACEHOLDER_NO_TOKEN_YET', 'utf8');
+}
+
 // Seed a server before the backend boots so the Live view leaves its empty state
 // and renders the controls specs drive. Must be srtla_addr (manual), not
 // relay_server, or ServerDialog defaults to Relay and breaks its method test.

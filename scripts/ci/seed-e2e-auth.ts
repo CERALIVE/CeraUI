@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import { password as bunPassword, write } from 'bun';
+import { password as bunPassword, CryptoHasher, write } from 'bun';
 
 const e2ePassword = process.env.E2E_PASSWORD;
 if (e2ePassword === undefined || e2ePassword.length === 0) {
@@ -12,7 +12,11 @@ const passwordHash = bunPassword.hashSync(e2ePassword, {
 	algorithm: 'bcrypt',
 	cost: 10,
 });
+
+// `knownToken()` hashes whatever a client presents, so the STORED record and
+// the PRESENTABLE credential are two different values and cannot share a file.
 const token = randomUUID();
+const tokenRecord = new CryptoHasher('sha256').update(token).digest('hex');
 
 await Promise.all([
 	write(
@@ -27,5 +31,6 @@ await Promise.all([
 			password_hash: passwordHash,
 		}),
 	),
-	write(path.join(backendDir, 'auth_tokens.json'), JSON.stringify({ [token]: true })),
+	write(path.join(backendDir, 'auth_tokens.json'), JSON.stringify({ [tokenRecord]: true })),
+	write(path.join(backendDir, '.e2e-auth-token'), token),
 ]);

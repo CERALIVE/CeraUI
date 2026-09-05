@@ -84,13 +84,12 @@ test.describe('Device pairing (claim code)', () => {
 // ── Layer 2: WebSocket harness fail paths ────────────────────────────────────
 
 const TOKEN: string = (() => {
-	const tokensPath = new URL('../../../backend/auth_tokens.json', import.meta.url);
-	const raw = fs.readFileSync(tokensPath, 'utf8');
-	const tokens = Object.keys(JSON.parse(raw) as Record<string, true>);
-	if (tokens.length === 0) {
-		throw new Error(`No persistent auth tokens in ${tokensPath}; cannot authenticate e2e socket.`);
+	const tokenPath = new URL('../../../backend/.e2e-auth-token', import.meta.url);
+	const token = fs.readFileSync(tokenPath, 'utf8').trim();
+	if (token.length === 0) {
+		throw new Error(`No persistent auth token at ${tokenPath}; cannot authenticate e2e socket.`);
 	}
-	return tokens[0] as string;
+	return token;
 })();
 
 function installPairingHarness(token: string): void {
