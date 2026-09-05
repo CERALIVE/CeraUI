@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
+import type { UpdatePackage } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -47,6 +48,36 @@ const size = $derived(available?.download_size ?? '');
 const version = $derived(available?.identity.version ?? '');
 const packages = $derived(available?.identity.packages ?? []);
 
+// Todo-14 classification. `packages` here is a SIBLING of `identity.packages` —
+// that `string[]` stays the dismissal-key source and is untouched.
+const classified = $derived<readonly UpdatePackage[]>(available?.packages ?? []);
+
+// A package the device positively will NOT install: it said so outright, or it
+// named the layer that ships with the next OS image, or apt held it back. All
+// three are positive evidence; an entry carrying none of them was never
+// classified, and banding it would be a claim nothing measured.
+function isWithheld(pkg: UpdatePackage): boolean {
+	return pkg.actionable === false || pkg.layer === 'platform' || pkg.kept_back === true;
+}
+
+const withheld = $derived(classified.filter(isWithheld));
+const actionableNames = $derived(
+	classified.filter((pkg) => !isWithheld(pkg)).map((pkg) => pkg.name),
+);
+const listedPackages = $derived(classified.length > 0 ? actionableNames : packages);
+
+// `actionable_count` is the device's own verdict and the ONLY gate on Install:
+// offering the control for a platform-layer or kept-back set is a button whose
+// one possible outcome is a refusal. It is optional purely so a producer that
+// classified nothing keeps parsing, so ABSENCE means "not classified" — never
+// "zero installable" — and a backend predating the classification keeps the
+// button it has always had.
+const actionableCount = $derived.by(() => {
+	if (available === undefined) return 0;
+	if (available.actionable_count !== undefined) return available.actionable_count;
+	return classified.length > 0 ? actionableNames.length : count;
+});
+
 const failed = $derived(updateState?.kind === 'failed' ? updateState : undefined);
 const succeeded = $derived(updateState?.kind === 'success');
 const checkFailed = $derived(
@@ -58,6 +89,24 @@ const lastCheckedAt = $derived(
 const lastCheckedLabel = $derived(
 	lastCheckedAt === undefined ? '' : new Date(lastCheckedAt).toLocaleTimeString(),
 );
+const reachability = $derived(
+	updateState && 'reachability' in updateState ? updateState.reachability : undefined,
+);
+
+// One muted line, and only when the answer is not the ordinary healthy one:
+// `any` means both families worked, which is worth no sentence at all. A captive
+// portal outranks the family verdict — it explains WHY neither family reached a
+// repository, which `used: 'none'` alone cannot.
+const reachabilityMessage = $derived.by(() => {
+	if (reachability === undefined) return undefined;
+	if (reachability.ipv4 === 'captive' || reachability.ipv6 === 'captive') {
+		return m["settings.updates.reachability.captivePortal"]();
+	}
+	if (reachability.used === 'ipv4') return m["settings.updates.reachability.ipv4Only"]();
+	if (reachability.used === 'ipv6') return m["settings.updates.reachability.ipv6Only"]();
+	return undefined;
+});
+
 const inProgress = $derived(
 	updateState?.kind === 'downloading' || updateState?.kind === 'installing',
 );
@@ -131,6 +180,37 @@ const checkRefusalMessage = $derived.by(() => {
 			return m["general.updateCheckReasonBusy"]();
 		default:
 			return m["general.updateReasonUnknown"]();
+	}
+});
+
+// `failed.reason` is a free-form wire string, and on a real device it is often
+// an apt stderr line — unactionable for an operator with no console, and exactly
+// the shape `operator-copy-no-internals` exists to keep off screen. A known
+// machine token resolves to keyed copy; anything else resolves to ONE honest
+// sentence pointing at the in-app log viewer, and the raw value goes to the
+// console and nowhere else.
+const FAILED_REASON_COPY: Record<string, () => string> = {
+	updates_disabled: () => m["general.updateReasonDisabled"](),
+	streaming: () => m["general.updateReasonStreaming"](),
+	already_updating: () => m["general.updateReasonAlreadyUpdating"](),
+	check_unavailable: () => m["general.updateReasonCheckUnavailable"](),
+	refresh_failed: () => m["general.updateCheckReasonRefreshFailed"](),
+	discovery_failed: () => m["general.updateCheckReasonDiscoveryFailed"](),
+	repos_unreachable: () => m["settings.updates.checkFailed.repos_unreachable"](),
+	captive_portal: () => m["settings.updates.checkFailed.captive_portal"](),
+};
+
+const failureMessage = $derived(
+	failed === undefined
+		? undefined
+		: (FAILED_REASON_COPY[failed.reason]?.() ??
+				m["settings.updates.failedReasonGeneric"]()),
+);
+
+$effect(() => {
+	const reason = failed?.reason;
+	if (reason !== undefined && FAILED_REASON_COPY[reason] === undefined) {
+		console.warn('Unmapped software-update failure reason:', reason);
 	}
 });
 
@@ -225,7 +305,7 @@ $effect(() => {
 							{m["general.updateFailed"]()}
 						</p>
 						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
-							{failed.reason}
+							{failureMessage}
 						</p>
 					</div>
 				</div>
@@ -254,9 +334,9 @@ $effect(() => {
 						{version}
 					</p>
 				{/if}
-				{#if packages.length > 0}
+				{#if listedPackages.length > 0}
 					<p class="text-muted-foreground mt-1 text-xs break-words" data-testid="update-packages">
-						{packages.join(', ')}
+						{listedPackages.join(', ')}
 					</p>
 				{/if}
 			{:else if checkFailed}
@@ -286,7 +366,40 @@ $effect(() => {
 					</p>
 				{/if}
 			{/if}
+
+			{#if reachabilityMessage}
+				<p
+					class="border-border/60 text-muted-foreground mt-3 border-t pt-2 text-xs"
+					data-testid="update-reachability"
+				>
+					{reachabilityMessage}
+				</p>
+			{/if}
 		</div>
+
+		<!-- Platform-layer and kept-back packages: stated, never offered. The device
+		     refuses to install either, so this band carries NO action control. -->
+		{#if withheld.length > 0}
+			<div
+				class="bg-muted/20 rounded-lg border border-dashed p-3"
+				data-testid="update-platform-band"
+				role="status"
+			>
+				<p class="text-sm font-medium">
+					{m["settings.updates.layer.platformBand"]()}
+				</p>
+				<ul class="mt-1.5 space-y-1">
+					{#each withheld as pkg (pkg.name)}
+						<li class="text-muted-foreground text-xs break-words">
+							<span class="text-foreground/80 font-mono">{pkg.name}</span>
+							{#if pkg.kept_back}
+								<span>— {m["settings.updates.layer.keptBack"]()}</span>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 
 		{#if inProgress}
 			<div class="space-y-2" aria-live="polite">
@@ -363,10 +476,19 @@ $effect(() => {
 					{m["general.retryUpdateCheck"]()}
 				</Button>
 			{:else}
-				{#if count > 0}
-					<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
+				{#if actionableCount > 0}
+					<Button
+						class="w-full gap-2"
+						data-testid="update-install"
+						onclick={() => (confirmOpen = true)}
+					>
 						<Download class="size-4" />
 						{m["general.updateButton"]()}
+						<span aria-hidden="true" class="opacity-50">·</span>
+						<span>
+							{actionableCount}
+							{actionableCount === 1 ? m["general.package"]() : m["general.packages"]()}
+						</span>
 					</Button>
 				{/if}
 				<Button

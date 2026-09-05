@@ -308,7 +308,10 @@ test.describe(
 					download_size: "12 MB",
 				},
 			});
-			const install = updates.getByRole("button", { name: "Update", exact: true });
+			// The install trigger now names the ACTIONABLE count ("Update · 3 Packages"),
+			// so it is no longer reachable by an exact accessible-name match; the
+			// confirmation's primary button below still is.
+			const install = updates.getByTestId("update-install");
 			await expect(install).toBeVisible();
 
 			// Pin the blocked outcome and run the install through its confirmation.

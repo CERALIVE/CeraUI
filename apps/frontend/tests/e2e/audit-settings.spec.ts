@@ -228,7 +228,10 @@ test.describe("Audit A3 — Settings destination + dialogs", { tag: "@audit" }, 
 		const updates = page.getByRole("dialog", { name: "Software Updates" });
 		await expect(updates).toBeVisible();
 
-		const installBtn = updates.getByRole("button", { name: "Update", exact: true });
+		// The install trigger names the ACTIONABLE count ("Update · 2 Packages"), so
+		// it is no longer reachable by an exact accessible-name match; the
+		// confirmation's primary button below still is.
+		const installBtn = updates.getByTestId("update-install");
 		await expect(installBtn).toBeVisible();
 		await installBtn.click();
 
