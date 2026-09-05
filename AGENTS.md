@@ -903,7 +903,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | Package | Version |
 |---------|---------|
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |
-| Bun pin (`.bun-version`) | 1.4.0 |
+| Bun pin (`.bun-version`) | 1.4.2 |
 | `svelte` | 5.56.10 |
 | `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
 | `vite` | 8.2.2 |
@@ -946,7 +946,7 @@ where runner settings are split; see `apps/frontend/README.md` → "Unit-test pr
 The explicit `--bun` is load-bearing: `node_modules/.bin/vitest` carries a `#!/usr/bin/env node`
 shebang, so a bare `vitest run` under `bun run` still executes on Node — measured, a probe test
 reported `process.execPath` = node and `process.versions.bun` = `undefined` before the flip, and
-bun / `1.4.0` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
+bun / `1.4.2` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
 exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
 
 The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The suite is
@@ -973,7 +973,7 @@ documented operation genuinely exceeds the suite-wide budget.
 The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
 same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
 before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
-Bun 1.4.0 like every other command in it. That job's own step ORDER is a separate, documented
+Bun 1.4.2 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
 **oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.32` would range forward across betas and into stable
@@ -1007,7 +1007,7 @@ one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 dev
 non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
 `ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
 dep plus a `typescript-7` npm-alias `check` gate) no longer exists. The former non-blocking
-`svelte-check --tsgo` canary is retired: under Bun 1.4.0 with released `typescript@7.0.2` it reported the
+`svelte-check --tsgo` canary is retired: under Bun 1.4.2 with released `typescript@7.0.2` it reported the
 same **0 errors and 5 warnings in 4 files** as the required frontend check, so it added no independent signal.
 Revisit the frontend TS6→TS7 move when `svelte-check` accepts the TS7 peer range and the released compiler
 provides the programmatic API it consumes; do not restore an advisory native/compiler canary merely to watch
@@ -1016,7 +1016,7 @@ that transition.
 Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
 would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
 which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
-selects the alias). The Bun 1.4.0 retest resolved the current TS 7 backend and TS 6
+selects the alias). The Bun 1.4.2 retest resolved the current TS 7 backend and TS 6
 frontend probes correctly, but `bun tsc` remains banned: only the wrapper guarantees
 package-local compiler selection (oven-sh/bun#37152).
 
