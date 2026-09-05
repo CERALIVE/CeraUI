@@ -126,19 +126,17 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.14.0", () => {
-		// rk3588-media-island Todo 31: the 2026.9.3 pin ships schema 0.14.0,
-		// superseding the 0.13.0 of 2026.9.1. This is a deliberate VERSION-TRACKING
+	test("SCHEMA_VERSION is pinned to 0.16.0", () => {
+		// rk3588-media-island Todo 34: the 2026.9.4 pin ships schema 0.16.0,
+		// superseding the 0.14.0 of 2026.9.3. This is a deliberate VERSION-TRACKING
 		// edit, not a weakening: the value must equal what the on-device engine
 		// reports in `hello`, because capabilities.ts raises the advisory
 		// `schemaVersionMismatch` banner off exactly that comparison.
 		//
-		// The 9.1 -> 9.3 delta is additive-optional: the two-leg composition object
-		// on `start`/`change-config` params, the `composition` member of
-		// `ENGINE_FEATURES`, and three further `captureCauseSchema` members (below).
-		// `captureDeviceSchema` is byte-unchanged, so the S1 `Pick` in `devices.ts`
-		// is unaffected.
-		expect(SCHEMA_VERSION).toBe("0.14.0");
+		// The 9.3 -> 9.4 delta is additive-optional: the engine-owned `encoders[]`
+		// ladder plus the typed encoder/input-format refusal contract. Existing
+		// capability fields remain backward compatible.
+		expect(SCHEMA_VERSION).toBe("0.16.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {
@@ -163,6 +161,7 @@ describe("cerastream bindings version-skew guard", () => {
 			-32602,
 			"invalid params",
 			"cerastream.params.invalid",
+			null,
 		);
 		expect(plain.captureCauses()).toEqual([]);
 		// The engine's list, verbatim and in its own order. CeraUI's own
@@ -176,6 +175,8 @@ describe("cerastream bindings version-skew guard", () => {
 			"no_signal",
 			"device_busy",
 			"no_silicon_converter",
+			"decoder-unavailable",
+			"software-pixel-path-rejected",
 			"composition-unsupported",
 			"secondary-unavailable",
 		]);
