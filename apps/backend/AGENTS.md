@@ -24,7 +24,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Bluetooth operator surface (the 10 `bluetooth.*` procedures, the live stack singleton, the `bluetooth` broadcast) | `rpc/procedures/bluetooth.procedure.ts` + `modules/bluetooth/bluetooth-runtime.ts` + `modules/bluetooth/bluetooth-wire.ts`; contract below → THE BLUETOOTH DOMAIN IS WIRED |
 | **A Bluetooth microphone dropping mid-stream (operator bands + the two reconnect duties; recovery itself is ENGINE-owned)** | `modules/streaming/bluetooth-audio-resilience.ts` (`classifyBluetoothSourcePresence`, `noteBluetoothAudioPresence`) + the 3-step publish order in `modules/bluetooth/bluetooth-runtime.ts`; contract below → …AND A MICROPHONE THAT DROPS MID-STREAM IS TOLD, NOT REPAIRED |
 | Engine seam + registry (cerastream-only) | `modules/streaming/streaming-engine.ts` (`getStreamingBackend`) |
-| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
+| Capability contract service (engine emits, CeraUI consumes; cache + fallback ladder; `encoders[]`, `transports` + `getSupportedTransports()`) | `modules/streaming/capabilities.ts` (`getCapabilities`) |
 | Transport resolver + protocol registry (srtla/rist active, srt reserved; RIST capability-gated via `ristAvailable`) | `modules/streaming/transport/` (`resolveStreamEndpoint`, `registry.ts`, `rist-adapter.ts`) |
 | Pipeline registry (derived from the capability contract; `initPipelines` is async) | `modules/streaming/pipelines.ts` |
 | Engine connection resilience (bounded boot retry → periodic recheck; heals `engine-unavailable` and re-broadcasts caps/pipelines/sources) | `modules/streaming/engine-reconnect.ts` (`initEngineConnection`) |
@@ -124,6 +124,17 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
 ## STREAMING RPC PROCEDURES
+
+### Engine-owned encoder ladder [EXISTS]
+
+`@ceralive/cerastream@2026.9.4` parses the additive `encoders[]` block before
+`capabilities.ts` caches or broadcasts it. The backend performs no codec-table
+reconstruction: live and cached snapshots retain the producer-owned
+`EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend
+uses its explicitly-tested legacy platform fallback. Every consumed nested field
+is listed in `producer-schema-drift.test.ts`; `producer-wire-type-shadow.test.ts`
+separately rejects local `PlatformCaps`, `VideoSourceCap`, `EncoderCapability`, and
+matching schema declarations.
 
 The `streaming` router exposes these procedures:
 

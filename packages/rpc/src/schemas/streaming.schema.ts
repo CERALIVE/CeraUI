@@ -1,10 +1,57 @@
 /**
  * Streaming configuration and status Zod schemas
  */
+// The composition object is producer-owned wire data, so it is IMPORTED rather
+// than redeclared (root AGENTS.md → BINDING-SCHEMA DRIFT). The DEEP path is
+// deliberate and must not be "cleaned up" to the root barrel: that barrel
+// re-exports the UDS client (`node:fs`, `node:child_process`), which this
+// browser-safe package cannot pull into the frontend graph. `types.js` imports
+// nothing but zod, and the package ships no `exports` map to forbid the path.
+import { COMPOSITION_FEATURE } from '@ceralive/cerastream/dist/constants.js';
+import {
+	type EncoderCapability,
+	encoderCapabilitySchema,
+	encoderCapsSchema,
+	platformCapsSchema,
+	videoSourceCapSchema,
+} from '@ceralive/cerastream/dist/messages.js';
+import {
+	type CompositionConfig,
+	type CompositionLayout,
+	compositionConfigSchema,
+	compositionLayoutSchema,
+} from '@ceralive/cerastream/dist/types.js';
 import { z } from 'zod';
 import { configChangeResultSchema } from './config-change.schema';
 import { startFailureSchema, stopResultSchema } from './streaming-lifecycle.schema';
 import { regulatoryCountrySchema } from './wifi.schema';
+
+export {
+	COMPOSITION_FEATURE,
+	type CompositionConfig,
+	type CompositionLayout,
+	compositionConfigSchema,
+	compositionLayoutSchema,
+	type EncoderCapability,
+	encoderCapabilitySchema,
+	encoderCapsSchema,
+	platformCapsSchema,
+	videoSourceCapSchema,
+};
+
+// Derived from the imported enum, never re-typed. The element's seventh nick
+// `custom` is deliberately absent from the wire — it needs four geometry
+// properties per pad that no schema carries — so a seventh option here would be
+// one the engine always refuses.
+export const COMPOSITION_LAYOUTS: readonly CompositionLayout[] = compositionLayoutSchema.options;
+
+const [firstCompositionLayout] = COMPOSITION_LAYOUTS;
+if (firstCompositionLayout === undefined)
+	throw new Error('compositionLayoutSchema advertises no layout options');
+export const COMPOSITION_LAYOUT_DEFAULT: CompositionLayout = firstCompositionLayout;
+
+export const COMPOSITION_ALPHA_MIN = 0;
+export const COMPOSITION_ALPHA_MAX = 1;
 
 /**
  * Canonical bitrate range — SINGLE SOURCE OF TRUTH (Task 14).
@@ -350,6 +397,10 @@ export const streamingConfigInputSchema = z.object({
 	// honour. Absent means the operator stated nothing — CeraUI then sends NO
 	// backend key and the engine's own default governs.
 	audio_backend: audioBackendSchema.optional(),
+	// Two-leg PiP/PbP composition, gated on the engine's `composition` feature
+	// token. `null` is an explicit CLEAR — absent means "leave the persisted value
+	// alone", so without it an operator could never turn composition back off.
+	composition: compositionConfigSchema.nullable().optional(),
 });
 export type StreamingConfigInput = z.infer<typeof streamingConfigInputSchema>;
 
@@ -497,33 +548,8 @@ export const pipelinesSchema = z.record(z.string(), pipelineSchema);
 export type Pipelines = z.infer<typeof pipelinesSchema>;
 
 // Capability contract broadcast (Option A: cerastream emits, CeraUI consumes).
-// Mirrors the backend capability service (`modules/streaming/capabilities.ts`)
-// and the pure `intersectCaps` input types. The encoder dialog reads it to clamp
-// bitrate per-board, offer codecs (incl. generic/software H.265), and warn on
-// software encode. Field names are snake_case to match the engine wire contract.
-export const platformCapsSchema = z.object({
-	supports_h265: z.boolean(),
-	hardware_accelerated: z.boolean(),
-	max_resolution: z.string(),
-});
-
-export const encoderCapsSchema = z.object({
-	codecs: z.array(z.string()),
-	bitrate_range: z.object({
-		min: z.number(),
-		max: z.number(),
-		unit: z.string(),
-	}),
-});
-
-export const videoSourceCapSchema = z.object({
-	id: z.string(),
-	supports_audio: z.boolean(),
-	supports_resolution_override: z.boolean(),
-	supports_framerate_override: z.boolean(),
-	default_resolution: z.string(),
-	default_framerate: z.number(),
-});
+// Producer-owned schemas come directly from the published binding. CeraUI adds
+// only its own freshness and compatibility fields around that parsed payload.
 
 // Per-device capture mode (Task 4). Mirrors one grouped entry derived from
 // cerastream `captureDeviceSchema.caps[]` (docs/adr/schema.md:254-268): a concrete
@@ -571,6 +597,7 @@ export type DeviceModeGroup = z.infer<typeof deviceModeGroupSchema>;
 export const capabilitiesMessageSchema = z.object({
 	platform: platformCapsSchema,
 	encoder: encoderCapsSchema,
+	encoders: z.array(encoderCapabilitySchema).optional(),
 	sources: z.array(videoSourceCapSchema),
 	// Relay transports the engine can honor (e.g. ["srtla", "rist"]). Absent on
 	// legacy snapshots → the consumer treats it as srtla-only (back-compat).
@@ -634,6 +661,12 @@ export const capabilitiesMessageSchema = z.object({
 	// `docs/PIP_EVALUATION.md` for the delivery contract this flag is the first
 	// layer of.
 	pip_supported: z.boolean().optional(),
+	// Named engine features, forwarded VERBATIM from `get-capabilities`. This is
+	// the fail-closed negotiation surface: a consumer sends an out-of-schema field
+	// only while its token is listed, so an engine predating a feature (and
+	// silently ignoring the field) never applies a semantic the caller assumed.
+	// Absent on every fallback rung, which is what keeps the gate fail-closed.
+	features: z.array(z.string()).optional(),
 	// Per-device capture modes (Task 4), keyed by the device's list-devices
 	// input_id; each entry carries the device `kind` (the bridge to a pipeline id)
 	// and its concrete {width,height,framerates} modes. Additive + optional — an
@@ -897,6 +930,9 @@ export const configMessageSchema = z.object({
 	// saved choice on reload. Absent means no selection was ever stated, which a
 	// consumer must NOT render as `alsa`: the engine's default governs instead.
 	audio_backend: audioBackendSchema.optional(),
+	// The persisted composition selection, echoed so the card renders the saved
+	// secondary/layout/alpha on reload. Absent means composition is off.
+	composition: compositionConfigSchema.optional(),
 	// SRT receive-profile tuning, echoed back so the card reflects the saved
 	// values on reload (Tasks 18/19).
 	fec_enabled: z.boolean().optional(),

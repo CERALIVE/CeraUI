@@ -96,6 +96,12 @@ export const START_FAILURE_CAPTURE_CAUSES = [
 	'negotiation_failed',
 	'no_signal',
 	'device_busy',
+	// The two-leg composition causes. Their HYPHENATED spelling is the producer's
+	// own (`captureCauseSchema`) and is mirrored verbatim — the mapping compares
+	// the engine's string directly, so "tidying" these to snake_case would make
+	// both silently unjudgeable and drop them back to the legacy classification.
+	'composition-unsupported',
+	'secondary-unavailable',
 ] as const;
 export const startFailureCaptureCauseSchema = z.enum(START_FAILURE_CAPTURE_CAUSES);
 export type StartFailureCaptureCause = z.infer<typeof startFailureCaptureCauseSchema>;
@@ -296,6 +302,11 @@ export const START_FAILURE_CAPTURE_CAUSE_RETRIABILITY: Record<
 	negotiation_failed: [],
 	no_signal: [],
 	device_busy: ['start-rpc'],
+	// Neither composition cause is transient: a board whose `rgacompositor` trial
+	// failed will not pass it inside a retry budget, and a secondary input that is
+	// not there does not appear because it was asked again.
+	'composition-unsupported': [],
+	'secondary-unavailable': [],
 };
 
 /**

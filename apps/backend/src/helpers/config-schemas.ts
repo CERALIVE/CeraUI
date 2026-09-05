@@ -45,6 +45,7 @@ import {
 	AUDIO_SOURCE_AUTO,
 	audioBackendSchema,
 	audioCodecSchema,
+	compositionConfigSchema,
 	type DetectionMethod,
 	detectionMethodSchema,
 	deviceKindSchema,
@@ -310,6 +311,11 @@ export const runtimeConfigSchema = z.object({
 	// pushes it down before each start. Additive-optional — absent means the
 	// operator never stated a preference and the engine keeps its default.
 	previewEncode: previewEncodeModeSchema.optional(),
+	// Two-leg PiP/PbP composition. Additive-optional and deliberately absent from
+	// `RUNTIME_CONFIG_DEFAULTS` — the engine only advertises `composition` after
+	// its `rgacompositor` READY-trial passes, so a default here would send a
+	// two-leg start to every board that cannot build one.
+	composition: compositionConfigSchema.optional(),
 	// Last-seen capture-device snapshots (C7): deduped-by-id, LRU-capped at 12
 	// with the current `config.source` id eviction-exempt. Serves the
 	// across-restart lost-row case (a configured device unplugged before boot);

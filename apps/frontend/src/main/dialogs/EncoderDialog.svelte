@@ -144,16 +144,16 @@ const platformCaps = $derived(capabilities?.platform ?? platformCapsForHardware(
 // Bitrate clamps to the board's real window (encoder.bitrate_range), falling
 // back to the schema-wide range only until the contract arrives.
 const BITRATE = $derived(bitrateBoundsFromCaps(capabilities));
-const codecOptions = $derived(deriveCodecOptions(platformCaps));
-// Resolved engine default for "Auto": H.265 only when the platform both
-// supports it AND has a hardware encoder; otherwise H.264.
-const resolvedAutoCodec = $derived<VideoCodec>(
-	platformCaps.supports_h265 && platformCaps.hardware_accelerated ? 'h265' : 'h264',
-);
-// H.265 availability (from the offered set) + its software-encode caveat.
+const codecOptions = $derived(deriveCodecOptions(capabilities?.encoders, platformCaps));
 const h265Option = $derived(codecOptions.find((codec) => codec.value === 'h265'));
+const h264Supported = $derived(codecOptions.some((codec) => codec.value === 'h264'));
 const h265Supported = $derived(h265Option !== undefined);
 const h265SoftwareOnly = $derived(h265Option?.softwareWarning ?? false);
+// Resolved engine default for "Auto": prefer hardware H.265, but never resolve
+// onto a codec the engine's own ladder omitted.
+const resolvedAutoCodec = $derived<VideoCodec>(
+	h265Supported && (platformCaps.hardware_accelerated || !h264Supported) ? 'h265' : 'h264',
+);
 const uvcH265Sources = $derived(uvcH265SourcesFromSources(sourcesMessage));
 // ── i18n key resolver (mirrors the legacy EncoderCard helper) ──────────────────
 const t = resolveMessageKey;
@@ -409,9 +409,9 @@ const errors = $derived.by(() => {
 });
 const isValid = $derived(Object.keys(errors).length === 0);
 
-// Codec validity: an explicit H.265 pick is invalid when the platform can't
-// encode it (the same gate that disables the H.265 segment).
-const codecSupported = $derived(localCodec !== 'h265' || h265Supported);
+const codecSupported = $derived(
+	localCodec === undefined || (localCodec === 'h264' ? h264Supported : h265Supported),
+);
 
 // Save-time axis/codec re-validation (C7). The draft is re-checked against the
 // CURRENT offered set — the SAME derivations that drive each control's
@@ -429,7 +429,11 @@ const axisSaveError = $derived.by<string | undefined>(() => {
 		const option = framerateChoices.find((choice) => choice.value === localFramerate);
 		return option?.reason ? framerateOptionTitle(option) : m["validation.invalid"]();
 	}
-	if (!codecSupported) return m["live.encoder.codecH265Unavailable"]();
+	if (!codecSupported) {
+		return localCodec === 'h265'
+			? m["live.encoder.codecH265Unavailable"]()
+			: m["live.education.reason.unsupportedPlatform"]();
+	}
 	return undefined;
 });
 
@@ -613,13 +617,19 @@ function handleSave() {
 				<button
 					type="button"
 					aria-checked={codecIsH264}
+					aria-disabled={h264Supported ? undefined : 'true'}
 					class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 font-mono text-xs font-medium transition-colors {codecIsH264
 						? 'bg-primary/10 text-primary ring-primary ring-1'
-						: 'text-muted-foreground hover:bg-primary/5'}"
+						: h264Supported
+							? 'text-muted-foreground hover:bg-primary/5'
+							: 'text-muted-foreground/50 cursor-not-allowed'}"
 					data-active={codecIsH264}
+					data-supported={h264Supported}
 					data-testid="codec-h264"
+					disabled={!h264Supported}
 					onclick={() => (localCodec = 'h264')}
 					role="radio"
+					title={h264Supported ? undefined : m["live.education.reason.unsupportedPlatform"]()}
 				>
 					H.264
 				</button>

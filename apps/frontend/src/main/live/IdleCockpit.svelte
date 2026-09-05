@@ -42,8 +42,10 @@ import ComingSoon from '$lib/components/custom/ComingSoon.svelte';
 import SourceSection from '$lib/components/custom/SourceSection.svelte';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
 import { m } from '@ceraui/i18n/svelte';
-import { PictureInPicture2, Shuffle, Volume2 } from '@lucide/svelte';
+import { COMPOSITION_FEATURE, type StartFailureCaptureCause } from '@ceraui/rpc/schemas';
+import { Shuffle, TriangleAlert, Volume2 } from '@lucide/svelte';
 
+import CompositionCard from './CompositionCard.svelte';
 import PreviewDisclosure from './PreviewDisclosure.svelte';
 import type { ConfigRow } from './StreamSettingsCard.svelte';
 import StreamSetupChain from './StreamSetupChain.svelte';
@@ -89,6 +91,8 @@ interface Props {
 	selectedPipeline: string | undefined;
 	capabilities: CapabilitiesMessage | undefined;
 	activeEncode: ActiveEncode | null;
+	/** Engine capture verdict from the last start attempt, for the typed bands. */
+	startFailureCaptureCause?: StartFailureCaptureCause | undefined;
 }
 
 const {
@@ -124,7 +128,21 @@ const {
 	selectedPipeline,
 	capabilities,
 	activeEncode,
+	startFailureCaptureCause,
 }: Props = $props();
+
+// FAIL-CLOSED: `features` is absent on every fallback rung of the capability
+// ladder (engine starting, engine unavailable, a build that predates the token),
+// and none of those is a claim that this board can compose.
+const compositionSupported = $derived(
+	capabilities?.features?.includes(COMPOSITION_FEATURE) === true,
+);
+// A config saved while a composing engine was attached, now read by one that
+// cannot. Neither silently applying it nor silently keeping it is honest, so it
+// is stated here — the card itself is absent, so the notice cannot live in it.
+const compositionStale = $derived(
+	config?.composition !== undefined && !compositionSupported,
+);
 
 // Embedded network-ingest audio roadmap pill (T12, relocated from SourceSection).
 // An rtmp/srt pipeline carries its audio muxed into the incoming stream; the engine
@@ -166,6 +184,32 @@ const audioEmbeddedComingSoon = $derived(
 	     confirmed change. -->
 	<PreviewDisclosure />
 
+	<!-- Composition: mounted ONLY while the engine advertises the feature, so a
+	     board that cannot compose renders no node at all rather than a disabled
+	     card. The stale-config notice is its counterpart on the absent branch. -->
+	{#if compositionSupported}
+		<CompositionCard
+			captureCause={startFailureCaptureCause}
+			{config}
+			{isStreaming}
+			{sources}
+		/>
+	{:else if compositionStale}
+		<div
+			class="border-status-warning/50 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3"
+			data-testid="composition-stale-notice"
+			role="status"
+		>
+			<TriangleAlert aria-hidden={true} class="text-status-warning mt-0.5 size-4 shrink-0" />
+			<div class="min-w-0 space-y-0.5">
+				<p class="text-status-warning text-sm font-medium">
+					{m["live.composition.staleTitle"]()}
+				</p>
+				<p class="text-muted-foreground text-xs">{m["live.composition.staleBody"]()}</p>
+			</div>
+		</div>
+	{/if}
+
 	<!-- Stream setup: readiness rows + config edits + the Start control at its foot
 	     (StreamControlButton is mounted ONCE here, never a second time — T10). -->
 	<StreamSetupChain
@@ -197,7 +241,7 @@ const audioEmbeddedComingSoon = $derived(
 		renders a dynamic data-debt-id into the DOM for tests; the static bindings the
 		CI gate (scripts/check-tech-debt.mjs) verifies live in the literal ids in the
 		comments beside each call site.
-		roadmap: data-debt-id="TD-pip" data-debt-id="TD-mode-fallback"
+		roadmap: data-debt-id="TD-mode-fallback"
 	-->
 	<details class="bg-muted/30 rounded-xl border" data-testid="live-roadmap">
 		<summary
@@ -206,13 +250,6 @@ const audioEmbeddedComingSoon = $derived(
 			{m["live.comingSoon.roadmap"]()}
 		</summary>
 		<div class="flex flex-col gap-2.5 px-4 pb-4">
-			<div class="flex items-center justify-between gap-3">
-				<span class="text-muted-foreground flex items-center gap-2 text-sm">
-					<PictureInPicture2 aria-hidden={true} class="size-4 shrink-0" />
-					{m["live.comingSoon.pip"]()}
-				</span>
-				<ComingSoon debtId="TD-pip" />
-			</div>
 			<div class="flex items-center justify-between gap-3">
 				<span class="text-muted-foreground flex items-center gap-2 text-sm">
 					<Shuffle aria-hidden={true} class="size-4 shrink-0" />

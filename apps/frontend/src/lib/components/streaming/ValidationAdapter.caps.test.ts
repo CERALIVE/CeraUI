@@ -3,7 +3,11 @@ import {
 	MEDIA_TYPE_H265,
 	type PlatformCaps,
 } from "@ceraui/rpc";
-import type { CapabilitiesMessage, CaptureDevice } from "@ceraui/rpc/schemas";
+import type {
+	CapabilitiesMessage,
+	CaptureDevice,
+	EncoderCapability,
+} from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,6 +16,7 @@ import {
 	deriveCodecOptions,
 	deriveUvcH265Sources,
 	formatProbedCap,
+	platformCapsForHardware,
 	summarizeProbedCaps,
 } from "./ValidationAdapter";
 
@@ -44,6 +49,19 @@ const noH265: PlatformCaps = {
 	supports_h265: false,
 	hardware_accelerated: true,
 	max_resolution: "1080p",
+};
+
+const h264Encoder: EncoderCapability = {
+	codec: "h264",
+	max_resolution: "3840x2160",
+	max_framerate: 60,
+	formats: ["NV12"],
+	gates: { "4k60": "untested", reason: "board drill todo 36 pending" },
+};
+
+const h265Encoder: EncoderCapability = {
+	...h264Encoder,
+	codec: "h265",
 };
 
 function makeDevice(mediaType: string | undefined): CaptureDevice {
@@ -124,7 +142,7 @@ describe("clampBitrateToBounds", () => {
 
 describe("deriveCodecOptions", () => {
 	it("offers H.264 only when nothing is known", () => {
-		expect(deriveCodecOptions(undefined)).toEqual([
+		expect(deriveCodecOptions(undefined, undefined)).toEqual([
 			{
 				mediaType: MEDIA_TYPE_H264,
 				value: "h264",
@@ -135,36 +153,83 @@ describe("deriveCodecOptions", () => {
 	});
 
 	it("offers H.265 without a warning on a hardware-accelerated board", () => {
-		const options = deriveCodecOptions(accel);
+		const options = deriveCodecOptions(undefined, accel);
 		const h265 = options.find((o) => o.value === "h265");
 		expect(h265).toBeDefined();
 		expect(h265?.softwareWarning).toBe(false);
 	});
 
 	it("offers generic H.265 WITH the software-encode warning", () => {
-		const options = deriveCodecOptions(generic);
+		const options = deriveCodecOptions(undefined, generic);
 		const h265 = options.find((o) => o.value === "h265");
 		expect(h265).toBeDefined();
 		expect(h265?.softwareWarning).toBe(true);
 	});
 
 	it("omits H.265 entirely when the platform does not support it", () => {
-		const options = deriveCodecOptions(noH265);
+		const options = deriveCodecOptions(undefined, noH265);
 		expect(options.some((o) => o.value === "h265")).toBe(false);
 	});
 
 	it("labels EVERY codec hardware-accelerated uniformly on an accelerated board", () => {
-		const options = deriveCodecOptions(accel);
+		const options = deriveCodecOptions(undefined, accel);
 		expect(options.length).toBeGreaterThan(1);
 		expect(options.every((o) => o.hardwareAccelerated)).toBe(true);
 	});
 
 	it("labels EVERY codec software uniformly on a generic board", () => {
-		const options = deriveCodecOptions(generic);
+		const options = deriveCodecOptions(undefined, generic);
 		expect(options.length).toBeGreaterThan(1);
 		expect(options.every((o) => !o.hardwareAccelerated)).toBe(true);
 		const h264 = options.find((o) => o.value === "h264");
 		expect(h264?.hardwareAccelerated).toBe(false);
+	});
+
+	it("uses the engine encoder ladder instead of a contradictory legacy platform flag", () => {
+		expect(
+			deriveCodecOptions([h264Encoder], accel).map((option) => option.value),
+		).toEqual(["h264"]);
+		expect(
+			deriveCodecOptions([h264Encoder, h265Encoder], noH265).map(
+				(option) => option.value,
+			),
+		).toEqual(["h264", "h265"]);
+	});
+
+	it("treats an explicitly empty engine ladder as authoritative", () => {
+		expect(deriveCodecOptions([], accel)).toEqual([]);
+	});
+});
+
+describe("PLATFORM_CAPS_BY_HARDWARE legacy fallback", () => {
+	it("stays pinned to the engine platform golden", () => {
+		expect({
+			jetson: platformCapsForHardware("jetson"),
+			rk3588: platformCapsForHardware("rk3588"),
+			n100: platformCapsForHardware("n100"),
+			generic: platformCapsForHardware("generic"),
+		}).toEqual({
+			jetson: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: "2160p",
+			},
+			rk3588: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: "2160p",
+			},
+			n100: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: "2160p",
+			},
+			generic: {
+				supports_h265: true,
+				hardware_accelerated: false,
+				max_resolution: "1080p",
+			},
+		});
 	});
 });
 

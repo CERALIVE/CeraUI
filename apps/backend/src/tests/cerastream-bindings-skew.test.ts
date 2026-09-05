@@ -126,19 +126,17 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.13.0", () => {
-		// trixie-pipewire-build-audit Todo 18: the 2026.9.1 pin ships schema 0.13.0,
-		// superseding the 0.12.0 of 2026.9.0. This is a deliberate VERSION-TRACKING
+	test("SCHEMA_VERSION is pinned to 0.16.0", () => {
+		// rk3588-media-island Todo 34: the 2026.9.4 pin ships schema 0.16.0,
+		// superseding the 0.14.0 of 2026.9.3. This is a deliberate VERSION-TRACKING
 		// edit, not a weakening: the value must equal what the on-device engine
 		// reports in `hello`, because capabilities.ts raises the advisory
 		// `schemaVersionMismatch` banner off exactly that comparison.
 		//
-		// The 9.0 -> 9.1 delta is ENTIRELY additive-optional and consumed by nothing
-		// here yet: the PipeWire audio-backend selector (`audioBackendSchema`, the
-		// optional `audio.backend`, and the `audio_backends` capability block) plus
-		// an optional `applies: "next-session"`. `captureDeviceSchema` is byte-
-		// unchanged, so the S1 `Pick` in `devices.ts` is unaffected.
-		expect(SCHEMA_VERSION).toBe("0.13.0");
+		// The 9.3 -> 9.4 delta is additive-optional: the engine-owned `encoders[]`
+		// ladder plus the typed encoder/input-format refusal contract. Existing
+		// capability fields remain backward compatible.
+		expect(SCHEMA_VERSION).toBe("0.16.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {
@@ -163,12 +161,24 @@ describe("cerastream bindings version-skew guard", () => {
 			-32602,
 			"invalid params",
 			"cerastream.params.invalid",
+			null,
 		);
 		expect(plain.captureCauses()).toEqual([]);
+		// The engine's list, verbatim and in its own order. CeraUI's own
+		// START_FAILURE_CAPTURE_CAUSES is deliberately a SUBSET: it omits
+		// `no_silicon_converter`, which this build cannot judge, so that cause is
+		// dropped to the legacy classification by design rather than by omission.
+		// The last two are hyphenated in the producer; mirroring that spelling is
+		// what makes them judgeable at all.
 		expect(bindings.captureCauseSchema.options).toEqual([
 			"negotiation_failed",
 			"no_signal",
 			"device_busy",
+			"no_silicon_converter",
+			"decoder-unavailable",
+			"software-pixel-path-rejected",
+			"composition-unsupported",
+			"secondary-unavailable",
 		]);
 	});
 

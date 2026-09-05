@@ -156,6 +156,36 @@ describe('capabilitiesMessageSchema — audio_live_switch field', () => {
 	});
 });
 
+describe('capabilitiesMessageSchema — engine-owned encoder ladder', () => {
+	test('preserves the published per-codec capability entry', () => {
+		const encoder = {
+			codec: 'h265',
+			max_resolution: '3840x2160',
+			max_framerate: 60,
+			formats: ['NV12'],
+			gates: {
+				'4k60': 'untested',
+				reason: 'board drill todo 36 pending',
+			},
+		};
+		const parsed = capabilitiesMessageSchema.parse({
+			platform: {
+				supports_h265: true,
+				hardware_accelerated: true,
+				max_resolution: '3840x2160',
+			},
+			encoder: {
+				codecs: ['h265', 'h264'],
+				bitrate_range: { min: 500, max: 50000, unit: 'kbps' },
+			},
+			encoders: [encoder],
+			sources: [],
+		});
+
+		expect(parsed.encoders).toEqual([encoder]);
+	});
+});
+
 describe('isAudioLiveSwitchEnabled selector', () => {
 	test('returns true only when audio_live_switch is explicitly true', () => {
 		const caps: CapabilitiesMessage = {

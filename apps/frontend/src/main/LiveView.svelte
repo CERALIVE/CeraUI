@@ -1084,6 +1084,7 @@ const configRows = $derived<ConfigRow[]>([
 			selectedPipeline={config?.pipeline}
 			capabilities={getCapabilities()}
 			activeEncode={getStatus()?.active_encode ?? null}
+			startFailureCaptureCause={streamingStartFailure?.captureCause}
 		/>
 	{/if}
 </div>

@@ -7,13 +7,12 @@
  * resolutions, framerates, and codecs to offer, the bitrate window, and which
  * override toggles are live.
  *
- * Pure function — no I/O, no side effects, browser-safe. The capability INPUT
- * types mirror the `@ceralive/cerastream` wire contract (`PlatformCaps`,
- * `VideoSourceCap` from its `get-capabilities` result). They are mirrored here
- * rather than imported because `@ceraui/rpc` deliberately does NOT depend on the
- * cerastream tarball — the same mirroring convention `captureCapSchema` already
- * uses in `streaming.schema.ts`.
+ * Pure function — no I/O, no side effects, browser-safe. Its producer-owned
+ * capability inputs are imported from the published `@ceralive/cerastream`
+ * package, so a producer field change is a compile-time event rather than a
+ * silently drifting local mirror.
  */
+import type { PlatformCaps, VideoSourceCap } from '@ceralive/cerastream';
 import {
 	AVAILABLE_FRAMERATES,
 	AVAILABLE_RESOLUTIONS,
@@ -25,29 +24,7 @@ import {
 	type Resolution,
 } from '../schemas/streaming.schema';
 
-/**
- * Platform (Tier-1 / SBC) capabilities. Mirrors `@ceralive/cerastream`
- * `platformCapsSchema`.
- */
-export interface PlatformCaps {
-	supports_h265: boolean;
-	hardware_accelerated: boolean;
-	max_resolution: string;
-}
-
-/**
- * Capture-source (Tier-2) capabilities. Mirrors `@ceralive/cerastream`
- * `videoSourceCapSchema` — the high-level source descriptor returned by
- * `get-capabilities`, not the per-device `list-devices` format cap.
- */
-export interface VideoSourceCap {
-	id: string;
-	supports_audio: boolean;
-	supports_resolution_override: boolean;
-	supports_framerate_override: boolean;
-	default_resolution: string;
-	default_framerate: number;
-}
+export type { PlatformCaps, VideoSourceCap };
 
 /**
  * A single per-device capture format from cerastream `list-devices`. Mirrors the

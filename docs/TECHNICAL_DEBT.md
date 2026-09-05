@@ -128,9 +128,22 @@ Two guardrails came with the re-derivation rather than after it. The aggregate t
 now bounded by a 16 KiB **absolute** ceiling as well as the 12% ratio, so re-deriving the
 baseline released ~16 KiB rather than the ~118 KiB a ratio alone would have handed back;
 and both displaced measurements (762,410 B pre-Phase-C, 982,392 B Phase-C) are re-stated
-on every run. Service-worker precache was **not** re-derived — it still passes on the
-Phase-C baseline, at 1,244,557 B against a 1,258,063 B budget, i.e. roughly 13 KiB from
-its own ceiling. The next surface of this size breaches precache too.
+on every run. Service-worker precache was **not** re-derived at that step — it still passed
+on the Phase-C baseline, at 1,244,557 B against a 1,258,063 B budget, i.e. roughly 13 KiB
+from its own ceiling. The next surface of this size breaches precache too.
+
+**2026-09-04 — that prediction came true, and precache was re-derived.** The PiP/PbP
+composition surface (`CompositionCard.svelte`) added twenty operator-facing keys × 10
+locales: 6,688 B aggregate, 6,759 B precache. The tree was already at 99.5% of the
+aggregate ceiling and 99.8% of the precache one, so the breach was not this feature being
+large — trimming its prose first recovered 941 B and could not close a 3,820 B precache
+gap. Both baselines moved (1,103,680 → 1,121,005 B total; 1,123,271 → 1,261,883 B
+precache), both displaced measurements are preserved and re-stated on every run, and
+**precache gained the same 16 KiB absolute ceiling the total already had** — without it,
+re-deriving under the 1.12 ratio alone would have released ~135 KiB of unearned headroom,
+20× the growth that forced the step. The initial-route and single-chunk ceilings are
+untouched. This entry stays open: the reduction it asks for still has not happened, and
+the aggregate is now ~32 message keys from its next ceiling on both metrics.
 
 ```debt
 id: TD-federation-i18n-catalog-size
@@ -152,21 +165,27 @@ as a documented, open debt rather than silently treated as resolved.
 id: TD-pip
 title: Picture-in-picture / source compositing
 track: 2
-status: open
-exit_criteria: capability:pip_supported
+status: resolved
+exit_criteria: capability:composition
 owner: ceraui-team
 registered_at: 2026-06-17
-resolved_at: null
-unblock: cerastream advertises pip_supported=true and exposes a compositing/PiP control path; replace the Live "coming soon" affordance (data-debt-id="TD-pip"), now rendered inside the IdleCockpit Roadmap disclosure (apps/frontend/src/main/live/IdleCockpit.svelte, moved there by Task 12), with the real overlay control and flip this entry to resolved.
+resolved_at: 2026-09-04
+unblock: cerastream advertises the `composition` feature token and exposes the two-leg rgacompositor session mode; replace the Live "coming soon" affordance with the real control and flip this entry to resolved.
 ```
 
-Compositing a second source as a picture-in-picture overlay is not yet possible:
-the engine drives a single active input. The Live destination surfaces a calm
-"coming soon" affordance (`data-debt-id="TD-pip"`) inside the collapsed Roadmap
-`<details>` disclosure at the bottom of the idle Live cockpit
-(`IdleCockpit.svelte`, Task 12 — it lived beside the input picker before the
-cockpit split) — purely informational, never an actionable control — until the
-engine advertises `pip_supported`.
+Resolved. cerastream's RK3588 two-leg session mode ships the `composition` token
+in `get-capabilities.features` — filtered out unless the board's `rgacompositor`
+clears a NULL→READY backend trial, so the token means a two-leg session can
+actually be built. `CompositionCard.svelte` is the real control (secondary-input
+picker, six layout presets, alpha), mounted by `IdleCockpit.svelte` ONLY while
+that token is present; the `coming-soon` affordance and its `data-debt-id` marker
+are removed from the Roadmap disclosure.
+
+The exit criterion moved from `capability:pip_supported` to
+`capability:composition` because the engine never shipped the former: the
+capability payload's `pip_supported` boolean is a legacy field no cerastream
+release sets, and the feature is negotiated through the `features` token array
+instead.
 
 ```debt
 id: TD-live-audio-codec
