@@ -14,7 +14,7 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.9.4"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.9.5"   (public npm, @ceralive scope)
 "@ceralive/srtla-send":  "2026.8.0"   (public npm, @ceralive scope)
 ```
 
@@ -1134,7 +1134,7 @@ Options outside the offered set are shown **disabled with a reason tooltip** —
 hidden, so operators can see what the hardware doesn't support and why.
 
 **The encoder universe is engine-owned [EXISTS].** The published
-`@ceralive/cerastream@2026.9.4` binding carries `get-capabilities.encoders[]` with
+`@ceralive/cerastream@2026.9.5` binding carries `get-capabilities.encoders[]` with
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.

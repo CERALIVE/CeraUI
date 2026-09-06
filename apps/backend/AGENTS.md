@@ -127,7 +127,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 
 ### Engine-owned encoder ladder [EXISTS]
 
-`@ceralive/cerastream@2026.9.4` parses the additive `encoders[]` block before
+`@ceralive/cerastream@2026.9.5` parses the additive `encoders[]` block before
 `capabilities.ts` caches or broadcasts it. The backend performs no codec-table
 reconstruction: live and cached snapshots retain the producer-owned
 `EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend
