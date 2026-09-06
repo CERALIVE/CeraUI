@@ -101,6 +101,13 @@ MOCK_SCENARIO=modem-pin-locked bun run dev    # 2 modems, modem 0 SIM PIN-locked
 
 ## Structure
 
+The shared encoder hint also supports the media-island `blocks[]` snapshot.
+**Media details** opens a responsive, lazy-loaded read-only dialog with per-core
+load/utilization, bound session PID/index pairs and explicit RGA limitations.
+Dev-only `?health-mock=island` demonstrates the new states; `vendor`, `mainline`
+and `unavailable` retain the legacy fixture paths. Real device snapshots always
+win. Visual acceptance on Rock 5B+ and Orange Pi 5+ is still hardware-gated.
+
 ```
 src/
 ├── main.ts / App.svelte          # entry: initSubscriptions(), auth gate, Layout

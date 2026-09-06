@@ -1,0 +1,5 @@
+fdc40100.video-codec       load:   6.75% utilization:   6.51%
+fdbe0000.rkvenc-core       load:   0.00% utilization:   0.00%
+fdb90000.jpegd             load:   2.50% utilization:   1.25%
+fdc38100.video-codec       load:  23.10% utilization:  22.87%
+fdbd0000.rkvenc-core       load:  11.34% utilization:  11.08%

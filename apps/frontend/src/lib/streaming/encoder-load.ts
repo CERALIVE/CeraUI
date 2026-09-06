@@ -27,14 +27,16 @@
  * idle under load in the measurements above; mainline did not), and averaging
  * them would hide the one observation that distinguishes the two drivers.
  *
- * Scope note: this pass ships the UI and a dev-only mock. No backend collector
- * reads `/proc/mpp_service` or `/sys/kernel/debug/clk/*` yet — both are
- * root-only reads in the same privileged class as the existing sensors collector
- * — so on real hardware every core reads `unavailable` and the panel says so.
- * Tracked as `TD-encoder-load-telemetry`.
+ * This historical table describes the legacy view. The media island additionally
+ * publishes raw block metrics; docs/ENCODER-LOAD.md defines their distinct scale.
  */
 
-/** Canonical core ids, in hardware order. */
+import type {
+	EncoderLoad,
+	EncoderCoreReading as WireCoreReading,
+} from "@ceraui/rpc/schemas";
+
+/** Legacy clock fixture ids only; live inventory comes from the wire. */
 export const ENCODER_CORE_IDS = ["rkvenc0", "rkvenc1"] as const;
 export type EncoderCoreId = (typeof ENCODER_CORE_IDS)[number];
 
@@ -43,44 +45,19 @@ export type EncoderCoreId = (typeof ENCODER_CORE_IDS)[number];
  * it is what tells an operator whether the figure beside a core is a measurement
  * or a bit.
  */
-export type EncoderLoadSource = "mpp-service" | "clk-enable-count";
+export type EncoderLoadSource = NonNullable<EncoderLoad["source"]>;
 
-export type EncoderCoreReading =
-	/** A real measured duty cycle, 0-100. */
-	| {
-			readonly core: string;
-			readonly kind: "percent";
-			readonly percent: number;
-	  }
-	/** Busy/idle ONLY. No percentage exists for this core on this kernel. */
-	| { readonly core: string; readonly kind: "active"; readonly active: boolean }
-	/** Nothing readable for this core. */
-	| { readonly core: string; readonly kind: "unavailable" };
+export type EncoderCoreReading = Readonly<WireCoreReading>;
 
 export type EncoderLoadPrecision = "percent" | "binary" | "none";
 
-export interface EncoderLoadReading {
-	/** `null` ⇒ no interface at all (or no collector wired). */
-	readonly source: EncoderLoadSource | null;
-	readonly cores: readonly EncoderCoreReading[];
-	/**
-	 * Hardware DECODER cores, when the live kernel interface reports them.
-	 *
-	 * ABSENT rather than `[]` when it does not: an empty array would read as
-	 * "the decoders were measured at nothing", a different claim from "this
-	 * kernel has no decode signal". Only the vendor 6.1 `/proc/mpp_service`
-	 * interface carries decoder rows; mainline/edge 7.1 has no equivalent.
-	 */
-	readonly decodeCores?: readonly EncoderCoreReading[];
-	/** Epoch ms of the sample; `null` when nothing has ever been read. */
-	readonly updatedAt: number | null;
-	/**
-	 * `true` when the figures came from the dev-only mock rather than hardware.
-	 * The UI surfaces this verbatim — a synthetic number is never presented as a
-	 * measurement, even in development.
-	 */
-	readonly simulated: boolean;
-}
+type ReadonlyReading<T> = T extends readonly (infer Item)[]
+	? readonly ReadonlyReading<Item>[]
+	: T extends object
+		? { readonly [Key in keyof T]: ReadonlyReading<T[Key]> }
+		: T;
+
+export type EncoderLoadReading = ReadonlyReading<EncoderLoad>;
 
 /** The honest floor: nothing is instrumented, so nothing is claimed. */
 export const ENCODER_LOAD_UNAVAILABLE: EncoderLoadReading = {
@@ -177,6 +154,17 @@ export type EncoderActivity = "encoding" | "idle" | "unreported";
 export function deriveEncoderActivity(
 	reading: EncoderLoadReading,
 ): EncoderActivity {
+	const encoders = reading.blocks?.filter((group) => group.block === "rkvenc");
+	if (encoders?.length) {
+		const cores = encoders.flatMap((group) => group.cores);
+		if (
+			cores.some((core) => (core.load ?? 0) > 0 || (core.utilization ?? 0) > 0)
+		)
+			return "encoding";
+		return cores.every((core) => core.load === 0 && core.utilization === 0)
+			? "idle"
+			: "unreported";
+	}
 	if (!isEncoderLoadInstrumented(reading)) return "unreported";
 	return anyCoreBusy(reading) ? "encoding" : "idle";
 }

@@ -1,0 +1,16 @@
+session iova range dump:
+   0: 0x0000000010000000..0x0000000010000fff (         4 KiB)
+session: pid=4242 index=7
+ device: fdbd0000.rkvenc-core
+ memory: 0 MiB
+------------------------------------------------------------------------------------------------------------
+| session|  device|
+|       7|  rkvenc|
+session iova range dump:
+session: pid=4242 index=8
+ device: fdbd0000.rkvenc-core
+ memory: 0 MiB
+session iova range dump:
+session: pid=4343 index=9
+ device: fdc40100.video-codec
+ memory: 0 MiB

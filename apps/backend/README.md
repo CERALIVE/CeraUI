@@ -206,6 +206,13 @@ its outcome is unknown and the lifecycle reconciles engine truth after
 
 ### Broadcast Events
 
+The `encoder-load` collector derives MPP core count from procfs and adds
+per-block raw load/utilization plus bound-session ownership. RGA scheduler load
+is read independently; quantities its driver does not publish remain unknown.
+Legacy percentage/clock-active/unavailable readings remain compatible. See
+[`Encoder-load contract`](../../docs/ENCODER-LOAD.md) for exact fields,
+source-derived fixtures, and the clock fallback's retirement condition.
+
 The backend pushes typed events to all connected clients via `src/rpc/events.ts`. Each event type carries a monotonic `seq` counter that resets on server restart.
 
 | Event | Interval | Source |

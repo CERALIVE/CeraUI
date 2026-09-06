@@ -401,3 +401,24 @@ overrides, or reverses anything in `.impeccable.md`.
   enum live in `packages/rpc` and this document only says how to *render* them.
 - Does not authorise a fifth pass. If work remains after Pass 4's confirming
   round, it becomes a new todo.
+
+## 12. Media telemetry extension
+
+The media-load hint and detail dialog extend Ground Control without new tokens.
+They reuse `AppDialog`, the ghost `Button`, Space Grotesk labels, JetBrains Mono
+measurements, `text-xs`/`text-sm`/`text-base`, the existing spacing ramp and semantic
+foreground/muted/primary colors. Positive load may use primary; unknown values
+are proportional text, never bars or zeros. MPP percentages remain unbounded.
+
+The hint is a compact set of per-group tables, with aligned numeric columns and
+data-derived counts. Session ownership and complete identifiers live in the
+explicitly opened detail surface. It has one body scroll owner (AppDialog), a
+pinned close button, inherited keyboard/focus behavior, and no mutation controls.
+On narrow screens each core's session list wraps below its two metrics; at wider
+sizes it shares their row. Accounting and ownership caveats precede the rows.
+
+Device Health widens only on a non-empty block snapshot to fit the data-derived
+groups at kiosk width; absent blocks keep the established legacy geometry. No new
+animation is added. Existing reduced-motion and e-ink chrome rules apply.
+Acceptance requires desktop/mobile rendered evidence; both-board visual acceptance
+is a separate, outstanding hardware gate, not a property of the mock fixture.

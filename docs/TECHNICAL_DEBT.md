@@ -87,6 +87,18 @@ register is "empty" precisely when there are none.
 ## Open Debt
 
 ```debt
+id: TD-encoder-load-clock-fallback
+title: Retire the legacy RK3588 clock-enable-count encoder load fallback
+track: 1
+status: open
+exit_criteria: capability:mpp-procfs-load
+owner: ceraui-team
+registered_at: 2026-09-06
+resolved_at: null
+unblock: Every supported device image provides reliable MPP procfs load telemetry and the legacy image support window is closed; remove collectFromClkEnableCount and its fixed clock-path map only after that fleet capability is established. Until then preserve its active/unavailable boolean contract, never convert reference counts to percentages. Source-derived unit tests alone do not prove fleet retirement readiness.
+```
+
+```debt
 id: TD-modem-phase-c-spa-size
 title: Modem Phase-C operator surfaces increased the aggregate SPA and precache footprint
 track: 1

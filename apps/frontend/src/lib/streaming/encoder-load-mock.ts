@@ -31,6 +31,7 @@ import {
 	type EncoderCoreReading,
 	type EncoderLoadReading,
 } from "./encoder-load";
+import { mockIslandLoadAt } from "./encoder-load-island-mock";
 
 /**
  * Which kernel reality to simulate.
@@ -40,6 +41,7 @@ import {
  * - `unavailable` — neither ⇒ the honest not-instrumented state (production).
  */
 export const ENCODER_LOAD_MOCK_FLAVORS = [
+	"island",
 	"vendor",
 	"mainline",
 	"unavailable",
@@ -131,6 +133,7 @@ export function mockEncoderLoadAt(
 	t: number,
 	streaming: boolean,
 ): EncoderLoadReading {
+	if (flavor === "island") return mockIslandLoadAt(t);
 	if (flavor === "unavailable") return ENCODER_LOAD_UNAVAILABLE;
 
 	const [core0, core1] = ENCODER_CORE_IDS;

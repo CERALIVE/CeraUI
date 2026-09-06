@@ -216,6 +216,46 @@ New procedures: add to `@ceraui/rpc` schemas first, then extend `TypedRPC` in `c
 
 ## COMMANDS
 
+### Media-load hint and detail [EXISTS]
+
+`EncoderStatus.svelte` is the single entry point at Device Stats, Device Health,
+and the Live telemetry strip. Non-empty `EncoderLoad.blocks` selects
+`MediaLoadHint.svelte`; absent/empty blocks select `LegacyEncoderStatus.svelte`,
+the previous renderer with its percent / active / unavailable vocabulary intact.
+The historical dual-core layout notes below describe that **legacy** arm only.
+
+- The hint groups encode, decode, JPEG and RGA from the published block set and
+  counts the rows it actually receives. MPP load and utilization are independent
+  numbers, not bars and never clamped. RGA's hint shows load only.
+- `MediaLoadDialog.svelte` is lazy-loaded on the explicit **Media details** action;
+  its `device-health/MediaLoadPanel.svelte` reads props only and exposes all core
+  identities, block sources, the sample timestamp and every bound PID/index.
+  Null owners mean **Unknown**, an empty array means **No bound sessions**, and
+  RGA utilization/owners say **Not published by this driver**. The ownership note
+  appears before the data: PID is the creating task, not proven process/TGID or
+  executing-core attribution; no preview/program ownership is inferred.
+- The widget owns the open state outside its block/legacy branch, so a snapshot
+  dropping blocks clears all owners and updates an already-open detail dialog to
+  the legacy reading. Nothing merges or retains retired identities.
+- `EncoderLoadReading` is a readonly projection of the shared RPC type, not a
+  shadow wire interface. The encoder's qualitative verdict prefers the encoder
+  block alone, never decoder/RGA activity or session presence. An incomplete
+  all-zero block is unknown rather than a confident idle.
+- Block surfaces share the existing refcounted health clock. Disconnected or
+  older-than-six-second readings retain numbers with muted styling and a visible
+  last-reading notice; no telemetry gates a stream (MNH-37).
+- Device Health widens only with block telemetry, making room for four groups on
+  the short desktop/kiosk layout. The legacy shell width remains unchanged.
+- `?health-mock=island` adds illustrative nine-core data, with above-100% values,
+  empty/unknown owners and independent RGA nulls. It stays dev-only and subordinate
+  to a real snapshot. Existing vendor/mainline/unavailable fixtures are unchanged.
+
+Coverage: `src/tests/media-load{,-ui}.test.ts`, existing encoder/status/health
+suites, and `tests/e2e/media-load.spec.ts` (real socket ingestion, keyboard open,
+focus return, and block-to-legacy retraction). Copy: `settings.mediaLoad.*` in all
+ten locales. **Board visual QA remains outstanding on both boards**; dev-browser
+evidence is not hardware evidence. Full contract: `docs/ENCODER-LOAD.md` at repo root.
+
 ```bash
 bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js

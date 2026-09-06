@@ -1,0 +1,14 @@
+num of scheduler = 3
+================= load ==================
+scheduler[0]: rga3
+	 load = 12%
+-----------------------------------
+scheduler[1]: rga3
+	 load = 0%
+-----------------------------------
+scheduler[2]: rga2
+	 load = 5%
+-----------------------------------
+=========================================
+<session>  <status>  <tgid>  <rga2-stage-bytes>  <process>
+2          active    4242    0                   example-client
