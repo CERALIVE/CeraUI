@@ -2927,21 +2927,21 @@ spinner, no result and no error for 11 s while `debug.log` recorded
 Coverage: `tests/software-updates-check-visibility.test.ts` + the frontend half in
 `apps/frontend/src/main/dialogs/UpdatesDialog.check.test.ts`.
 
-## PER-CORE ENCODER LOAD — TWO KERNELS, AND ONE OF THEM HAS NO NUMBER [EXISTS]
+## PER-CORE ENCODER LOAD — PROCFS CORE INVENTORY AND LEGACY CLOCK FALLBACK [EXISTS]
 
-`modules/system/encoder-load.ts` reads the RK3588's two VEPU580 encoder cores and
-publishes its own `encoder-load` broadcast. It is the producer half of the
-three-state model the Device Health panel renders
-(`apps/frontend/src/lib/streaming/encoder-load.ts` — that module is the CONTRACT,
-and this collector conforms to it, never the other way around).
+`modules/system/encoder-load.ts` publishes `encoder-load`; its pure procfs
+parsers live in `encoder-load-proc.ts`. The core inventory comes from actual
+`/proc/mpp_service/load` rows, never a two-slot encoder constant. The existing
+`cores` / `decodeCores` three-state contract (`percent`, `active`, `unavailable`)
+is retained alongside additive `blocks[]`. Full wire and source grammar:
+[`docs/ENCODER-LOAD.md`](../../docs/ENCODER-LOAD.md).
 
-**The two kernels CeraLive ships report this incomparably**, and both were
-re-verified live on the bench board rather than assumed:
-
-| Kernel | Interface | What it reports |
-|---|---|---|
-| vendor 6.1 BSP | `/proc/mpp_service/load` | a REAL per-core percentage — but only once `load_interval` is armed |
-| mainline / edge 7.1 | `/sys/kernel/debug/clk/clk_rkvenc{0,1}_core/clk_enable_count` | the core's clock ENABLE STATE — a busy/idle bit, and nothing more |
+| Interface | Reading |
+|---|---|
+| `/proc/mpp_service/load` (island and vendor BSP) | Independent raw `load` and `utilization` for each published MPP core |
+| `/proc/mpp_service/sessions-summary` | Session creator PID + driver index, matched to the exact bound device |
+| `/proc/rkrga/load` | Published RGA scheduler load only; utilization and per-core owners remain unknown |
+| Legacy `/sys/kernel/debug/clk/clk_rkvenc{0,1}_core/clk_enable_count` | Unchanged clock enable-state fallback, a boolean and never a percentage |
 
 - **Which one is live is PROBED, never inferred.** No `uname` test, no board-id
   test, no hardware-kind lookup: a device can be moved between the two kernels by
@@ -2961,11 +2961,27 @@ re-verified live on the bench board rather than assumed:
   `/proc`, so the current value is READ first and an already-armed device is left
   exactly as found. A refused write never breaks the read.
 - **Ordering is derived from the block's base ADDRESS, not from file order or a
-  hardcoded address table.** The addresses are the SoC memory map, so ascending
-  address IS hardware order (`fdbd0000` = core 0, `fdbe0000` = core 1), and
-  deriving it keeps the parser off a specific board's addresses. Only
-  `rkvenc-core` rows are encoder cores — the decoders, JPEG unit and RGA share the
-  same file and must be ignored.
+  hardcoded address table.** Numeric address ordering supplies legacy ordinal
+  labels; `blocks[].cores[].core` retains the actual device name for identity.
+  `rkvenc-core`, legacy `rkvdec*`, and `jpegd`/`jpgdec` are grouped separately.
+  A generic `video-codec` row needs the NUL-separated device-tree compatible
+  `rockchip,rkv-decoder-v2` before it can be called `rkvdec`. RGA has its OWN
+  procfs file and is never inferred from MPP or assumed to have three cores.
+- **Load and utilization are different quantities.** Run-to-reap accounting
+  is `load`; hardware time is `utilization`. The driver permits multicore
+  percentages above 100, so raw block metrics preserve them without clamping;
+  the legacy percentage view still refuses values outside 0–100. Malformed
+  metrics become null independently, retaining the core identity.
+- **Ownership is bound-device membership, not executing-core attribution.**
+  `sessions-summary` is re-read each sample. Empty means no owners; missing or
+  malformed means unknown (`sessions: null`). Neither IOVAs nor codec-table
+  strings are broadcast. The creating task's PID is not assumed to be a TGID,
+  engine session ID, preview owner, or live-program owner.
+- **Blocks do not depend on encoder availability.** Decoder/JPEG/RGA telemetry
+  survives even if the legacy encoder view falls back to clock counts or has
+  no usable reading. Consumers replace the whole snapshot; no previous owner
+  or retired core is retained. The fallback is tracked as
+  `TD-encoder-load-clock-fallback`, not removed in this change.
 - **Privilege: none is escalated.** The backend runs as root
   (`deployment/ceralive.service` `User=root`), so both reads use the same plain
   `Bun.file()` seam as the `sensors.ts` `/sys/class/thermal` read. Do not introduce
@@ -2987,9 +3003,11 @@ re-verified live on the bench board rather than assumed:
   the single mocking mechanism for this signal. A backend mock provider here would
   be a parallel mechanism, not the established one.
 
-Coverage: `tests/encoder-load.test.ts` (both realities, the arming contract, the
-address ordering, the fall-through, the emulated-host gate, and the
-never-a-number regression lock) + the frontend halves
+Coverage: `tests/encoder-load.test.ts` (legacy shapes, arming, fall-through,
+emulated-host gate and never-a-number regression), `encoder-load-island.test.ts`
+(source-derived fixtures, dynamic core counts, generic decoder names, raw metrics,
+ownership and RGA), and `encoder-load-proc.test.ts` (malformed/ambiguous input).
+This collector rewrite is code-only; no hardware validation is claimed. Existing frontend coverage:
 `apps/frontend/src/tests/encoder-load-source-precedence.test.ts` and
 `apps/frontend/src/main/dialogs/DeviceHealthDialog.test.ts`.
 

@@ -139,7 +139,27 @@ describe("vendor kernel — /proc/mpp_service", () => {
 			[MPP_INTERVAL]: "1000",
 			[MPP_LOAD]: VENDOR_LOAD_ONE_SESSION,
 		});
-		const reading = await collectEncoderLoad(h.deps, h.state);
+		const { blocks, ...reading } = await collectEncoderLoad(h.deps, h.state);
+		expect(blocks).toEqual([
+			{
+				block: "rkvenc",
+				source: "mpp-service",
+				cores: [
+					{
+						core: "fdbd0000.rkvenc-core",
+						load: 11.34,
+						utilization: 11.08,
+						sessions: null,
+					},
+					{
+						core: "fdbe0000.rkvenc-core",
+						load: 0,
+						utilization: 0,
+						sessions: null,
+					},
+				],
+			},
+		]);
 		expect(reading).toEqual({
 			source: "mpp-service",
 			cores: [
@@ -410,7 +430,46 @@ describe("vendor kernel — decoder rows on the encoder-load topic", () => {
 			[MPP_INTERVAL]: "1000",
 			[MPP_LOAD]: VENDOR_LOAD_WITH_DECODE,
 		});
-		expect(await collectEncoderLoad(h.deps, h.state)).toEqual({
+		const { blocks, ...reading } = await collectEncoderLoad(h.deps, h.state);
+		expect(blocks).toEqual([
+			{
+				block: "rkvenc",
+				source: "mpp-service",
+				cores: [
+					{
+						core: "fdbd0000.rkvenc-core",
+						load: 11.34,
+						utilization: 11.08,
+						sessions: null,
+					},
+					{
+						core: "fdbe0000.rkvenc-core",
+						load: 0,
+						utilization: 0,
+						sessions: null,
+					},
+				],
+			},
+			{
+				block: "rkvdec",
+				source: "mpp-service",
+				cores: [
+					{
+						core: "fdc38100.rkvdec-core",
+						load: 23.1,
+						utilization: 22.87,
+						sessions: null,
+					},
+					{
+						core: "fdc40100.rkvdec-core",
+						load: 6.75,
+						utilization: 6.51,
+						sessions: null,
+					},
+				],
+			},
+		]);
+		expect(reading).toEqual({
 			source: "mpp-service",
 			cores: [
 				{ core: "rkvenc0", kind: "percent", percent: 11.34 },
