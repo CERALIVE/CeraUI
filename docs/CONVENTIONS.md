@@ -93,6 +93,12 @@ It names no producer version, deliberately — it must pass against any pin that
 carries the manifest's fields. That is what keeps an additive bump a no-op and a
 field-retiring bump a loud failure.
 
+The separate `cerastream-bindings-skew.test.ts` gate pins schema `0.17.0` for
+the published `2026.9.5` binding consumed by CeraUI 2026.9.1. It also passes
+`unsupported-format`, `interlaced-unsupported`, and `source-changed` through
+the real `CerastreamRpcError.captureCauses()` accessor. Field-path existence
+alone cannot detect an older enum silently dropping these error causes.
+
 ### The three rules
 
 1. **Publish before consume.** A producer PR that adds or changes a field in a

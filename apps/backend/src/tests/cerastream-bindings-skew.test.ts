@@ -126,17 +126,10 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION is pinned to 0.16.0", () => {
-		// rk3588-media-island Todo 34: the 2026.9.4 pin ships schema 0.16.0,
-		// superseding the 0.14.0 of 2026.9.3. This is a deliberate VERSION-TRACKING
-		// edit, not a weakening: the value must equal what the on-device engine
-		// reports in `hello`, because capabilities.ts raises the advisory
-		// `schemaVersionMismatch` banner off exactly that comparison.
-		//
-		// The 9.3 -> 9.4 delta is additive-optional: the engine-owned `encoders[]`
-		// ladder plus the typed encoder/input-format refusal contract. Existing
-		// capability fields remain backward compatible.
-		expect(SCHEMA_VERSION).toBe("0.16.0");
+	test("SCHEMA_VERSION matches the released engine's 0.17.0 contract", () => {
+		// Package CalVer is independent of the hello schema version. The previous
+		// 2026.9.4 package still declared 0.16.0 and rejected the new HDMI causes.
+		expect(SCHEMA_VERSION).toBe("0.17.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {
@@ -179,8 +172,29 @@ describe("cerastream bindings version-skew guard", () => {
 			"software-pixel-path-rejected",
 			"composition-unsupported",
 			"secondary-unavailable",
+			"unsupported-format",
+			"interlaced-unsupported",
+			"source-changed",
 		]);
 	});
+
+	test.each(["unsupported-format", "interlaced-unsupported", "source-changed"])(
+		"retains %s when the engine rejects an HDMI capture",
+		(cause) => {
+			// Given a schema-0.17 rejection from the released engine.
+			const rejected = new bindings.CerastreamRpcError(
+				-32602,
+				"invalid params: capture-source-unavailable",
+				"cerastream.params.invalid",
+				null,
+				{ capture_causes: [{ device: "/dev/video0", cause }] },
+			);
+			// When the published client's accessor parses the error data.
+			const causes = rejected.captureCauses();
+			// Then the cause survives instead of silently becoming an empty list.
+			expect(causes).toEqual([{ device: "/dev/video0", cause }]);
+		},
+	);
 
 	test("audio-level topic + connect-error codes are on the surface (Todo 22)", () => {
 		const level = eventParamsSchema.parse({
