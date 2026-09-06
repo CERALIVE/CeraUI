@@ -9,6 +9,7 @@ import {
 } from "@testing-library/svelte";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import EncoderStatus from "$lib/components/custom/EncoderStatus.svelte";
+import { mockIslandLoadAt } from "$lib/streaming/encoder-load-island-mock";
 import MediaLoadDialog from "../main/dialogs/MediaLoadDialog.svelte";
 
 vi.mock("$lib/rpc/subscriptions.svelte", () => ({
@@ -74,6 +75,8 @@ const reading: EncoderLoad = {
 		},
 	],
 };
+
+const islandReading = mockIslandLoadAt(1234) as EncoderLoad;
 
 afterEach(cleanup);
 beforeAll(() => {
@@ -274,5 +277,73 @@ describe("media load hint", () => {
 				.getByTestId("encoder-status-headline")
 				.getAttribute("data-activity"),
 		).toBe("unreported");
+	});
+});
+
+/**
+ * jsdom lays nothing out, so these assert the STRUCTURE the browser gate measures
+ * — the cheap half of a two-part lock whose expensive half is
+ * `tests/e2e/visual/device-telemetry-v2.visual.spec.ts` -> the blocks leg.
+ *
+ * PR #328 put `@container` on the widget ROOT. `container-type: inline-size`
+ * applies inline-size CONTAINMENT, so a contained element reports ZERO intrinsic
+ * width to its parent — and the Live cockpit's telemetry strip sizes its cells
+ * from their content, so the widget was starved to the 58px of its own caption
+ * and drew 19px columns that overlapped their headers and split every reading
+ * into per-character lines.
+ */
+describe("media load hint — the layout contract", () => {
+	it("keeps inline-size containment off the root, so the widget reports a real width", () => {
+		render(EncoderStatus, { reading });
+		const root = screen.getByTestId("media-load-hint");
+		expect(root.className).not.toMatch(/(^|\s)@container(\s|$)/);
+		const container = root.querySelector(".\\@container");
+		expect(container, "the grid still needs a query container").not.toBeNull();
+		expect(
+			container?.contains(root),
+			"the container must be INSIDE the root, never the root itself",
+		).toBe(false);
+	});
+
+	it("never lets a reading wrap, and never lets a header outrank its own column", () => {
+		render(EncoderStatus, { reading });
+		const root = screen.getByTestId("media-load-hint");
+
+		for (const cell of root.querySelectorAll("td[data-metric]")) {
+			expect(
+				cell.className,
+				`reading ${cell.textContent?.trim()} may wrap — it must be nowrap`,
+			).toContain("whitespace-nowrap");
+			expect(cell.className).not.toContain("break-words");
+		}
+		// A nowrap column cannot shrink below its own header, so a nowrap header is
+		// exactly what makes overflow — and therefore overlap — unreachable. The
+		// first column is the identity's and is deliberately the one that yields.
+		const headers = [...root.querySelectorAll("thead th:not(:first-child)")];
+		expect(headers.length).toBeGreaterThan(0);
+		for (const header of headers) {
+			expect(
+				header.className,
+				`header ${header.textContent?.trim()} may wrap or overflow`,
+			).toContain("whitespace-nowrap");
+		}
+		// The identity is the one column that yields, and it keeps its full value
+		// in `title` so truncation never costs the operator the reading's subject.
+		for (const label of root.querySelectorAll("tbody th")) {
+			expect(label.className).toContain("truncate");
+			expect(label.getAttribute("title")).toBeTruthy();
+		}
+	});
+
+	it("states a real board's identities, not invented ones", () => {
+		render(EncoderStatus, { reading: islandReading });
+		const hint = screen.getByTestId("media-load-hint");
+		expect(hint.getAttribute("data-core-count")).toBe("8");
+		const identities = [...hint.querySelectorAll("tbody th")].map((th) =>
+			th.getAttribute("title"),
+		);
+		expect(identities).toContain("fdb90000.jpegd");
+		expect(identities).toContain("fdc40100.video-codec");
+		expect(identities).not.toContain("fdba4000.jpegd");
 	});
 });

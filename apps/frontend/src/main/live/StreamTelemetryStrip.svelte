@@ -116,8 +116,14 @@ const {
 			Sheet is that cap's overflow rather than a general telemetry drawer.
 			This container already wraps, so the fourth cell degrades by wrapping
 			instead of overflowing the 1024x600 kiosk viewport.
+
+			It takes a FULL BASIS rather than sharing a line with the three scalar
+			chips beside it. Those are single readings; this is a multi-column table
+			per media block, and it is inline-size-contained, so it reports no
+			intrinsic width of its own — on a shared line it was sized by its
+			"ENCODER" caption alone and rendered 19px columns.
 		-->
-		<div class="min-w-0 space-y-1" data-testid="telemetry-encoder">
+		<div class="min-w-0 basis-full space-y-1" data-testid="telemetry-encoder">
 			<p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
 				{m["hud.encoder"]()}
 			</p>

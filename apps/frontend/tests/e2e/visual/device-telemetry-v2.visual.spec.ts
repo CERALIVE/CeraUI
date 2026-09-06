@@ -2,6 +2,7 @@ import path from "node:path";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
 
+import { mockIslandLoadAt } from "../../../src/lib/streaming/encoder-load-island-mock";
 import { expect, test } from "../fixtures/index.js";
 import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from "../helpers/index.js";
 
@@ -72,6 +73,9 @@ const ENCODER_IDLE = {
 	updatedAt: Date.now(),
 	simulated: false,
 };
+
+/** The media-island shape — the arm that selects `MediaLoadHint` over the legacy renderer. */
+const ENCODER_BLOCKS = mockIslandLoadAt(Date.now());
 
 const ENCODER_BINARY_IDLE = {
 	source: "clk-enable-count",
@@ -453,6 +457,70 @@ test.describe("@visual device telemetry v2", () => {
 			);
 			await strip.screenshot({
 				path: path.join(EVIDENCE_DIR, `telemetry-v2-live-strip-idle-${label}.png`),
+			});
+
+			/**
+			 * The media-island BLOCKS reading, in the same cell. This leg exists
+			 * because its absence is what let PR #328 ship broken: every reading
+			 * pushed above is LEGACY-shaped, so `EncoderStatus` took its
+			 * `LegacyEncoderStatus` arm and `MediaLoadHint` — the only renderer
+			 * that carries a container query — never rendered at this mount at all.
+			 *
+			 * `container-type: inline-size` applies inline-size CONTAINMENT, so a
+			 * contained element reports ZERO intrinsic width. With the query on the
+			 * widget root, this flex cell sized itself from its own "ENCODER"
+			 * caption alone (58px measured), the query then read that 58px, and the
+			 * resulting 19px columns bled `Utilization` across `Load` and split
+			 * `87.75%` into `87`/`.7`/`5%` down four lines.
+			 */
+			await push(page, { "encoder-load": ENCODER_BLOCKS });
+			const hint = cell.getByTestId("media-load-hint");
+			await expect(hint).toBeVisible();
+
+			const geometry = await hint.evaluate((root) => ({
+				width: root.getBoundingClientRect().width,
+				stripWidth:
+					root.closest("section")?.getBoundingClientRect().width ?? 0,
+				heads: [...root.querySelectorAll("thead th")].map((th) => ({
+					text: th.textContent?.trim() ?? "",
+					box: th.clientWidth,
+					ink: th.scrollWidth,
+				})),
+				readings: [...root.querySelectorAll("td[data-metric]")].map((td) => {
+					const lineHeight =
+						Number.parseFloat(getComputedStyle(td).lineHeight) || 16;
+					return {
+						text: td.textContent?.trim() ?? "",
+						lines: Math.max(
+							1,
+							Math.round(td.getBoundingClientRect().height / lineHeight),
+						),
+					};
+				}),
+			}));
+
+			expect(
+				geometry.readings.length,
+				"no readings rendered — the blocks arm did not mount",
+			).toBeGreaterThan(0);
+			expect(
+				geometry.width,
+				`${label}: the widget was starved by the strip — inline-size containment must not sit on its root`,
+			).toBeGreaterThan(geometry.stripWidth * 0.5);
+			for (const head of geometry.heads) {
+				expect(
+					head.ink,
+					`${label}: header ${JSON.stringify(head.text)} overflows its cell and overlaps its neighbour`,
+				).toBeLessThanOrEqual(head.box + 1);
+			}
+			for (const reading of geometry.readings) {
+				expect(
+					reading.lines,
+					`${label}: reading ${JSON.stringify(reading.text)} wrapped across ${reading.lines} lines`,
+				).toBe(1);
+			}
+			await strip.screenshot({
+				path: path.join(EVIDENCE_DIR, `telemetry-v2-live-strip-blocks-${label}.png`),
 			});
 		}
 	});
