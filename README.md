@@ -61,6 +61,12 @@ A dev-only DevTools destination is available in development builds.
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted
   rather than fabricated when its kernel interface is absent.
+- **Media-load detail**: the compact per-core hint uses the driver's reported
+  encode/decode/JPEG/RGA inventory. MPP load and utilization remain separate,
+  including values above 100%; **Media details** opens the full bound-session
+  and provenance view. Older devices keep their percentage/busy/idle/unavailable
+  display. Both-board visual validation remains outstanding; see
+  [`docs/ENCODER-LOAD.md`](docs/ENCODER-LOAD.md).
 - **Hardware preview encoding**: on capable boards (RK3588), an operator can
   toggle the local preview between software and hardware encode, with an
   honest fallback message when the board's encoder plugin is missing or

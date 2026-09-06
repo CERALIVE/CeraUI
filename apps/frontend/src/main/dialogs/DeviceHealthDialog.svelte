@@ -39,7 +39,7 @@ const isCompact = new MediaQuery(HEALTH_COMPACT_QUERY);
 
 <AppDialog
 	bind:open
-	contentClass="sm:max-w-2xl"
+	contentClass="sm:max-w-2xl has-[[data-testid=media-load-hint]]:lg:max-w-4xl"
 	description={m["settings.deviceHealth.description"]()}
 	hideFooter={isCompact.current}
 	icon={Gauge}

@@ -1,7 +1,9 @@
-# Encoder-load collection
+# Encoder-load collection and presentation
 
-**Status:** `[EXISTS]` — backend and shared wire schema; fixture-validated, not
-newly hardware-validated. Frontend block rendering is a separate change.
+**Status:** `[EXISTS]` — backend, shared wire schema, frontend hint and detail
+dialog. Fixture/dev-browser validation does not close the outstanding visual
+acceptance on Rock 5B+ and Orange Pi 5+; neither board was accessed for the
+frontend change.
 
 `apps/backend/src/modules/system/encoder-load.ts` owns the two-second
 `encoder-load` sample and post-login snapshot. It uses injected file I/O; the
@@ -111,6 +113,53 @@ payload, no new broadcast is introduced, and the five-signal `device-stats`
 contract is unchanged.
 
 ## Fallback and tests
+
+### Frontend presentation
+
+`EncoderStatus.svelte` routes non-empty blocks to a compact `MediaLoadHint` at
+the existing three mount sites. It displays each MPP core's load **and**
+utilization in aligned columns, grouped by the reported block; RGA shows its
+load alone. Counts are derived from the arrays, not from a silicon table. No
+block percentage is clamped, averaged or drawn on a misleading 0–100 bar.
+These are advisory readings only (MNH-37), not evidence of a healthy stream.
+
+Compact identifiers are derived from the reported address or scheduler identity
+(for example `fdbd0000` and `rga3[1]`); they never become row keys. The full
+identity remains in the hint's title and is shown without truncation in detail.
+The detail body is a labelled, focusable region so keyboard users can scroll its
+read-only content without leaving the dialog's focus trap.
+
+The explicit **Media details** button lazy-loads `MediaLoadDialog`, using the
+same desktop Dialog/mobile Sheet chrome as Device Health. Its scrollable body
+shows every full identity, source, metric, sample timestamp and bound session:
+`null` owners → Unknown, `[]` → No bound sessions. For RGA, both utilization and
+ownership explicitly read Not published by this driver. The creating-task and
+bound-device caveat precedes the rows rather than being hidden beneath them.
+
+Snapshot replacement retracts omitted blocks, cores and owners immediately. A
+dialog already open during a downgrade remains open on the legacy reading;
+utilization and ownership are stated as unknown rather than fabricated. Without
+blocks, all existing hint mount sites retain their prior renderer, including
+opt-in legacy decoder rows. No backend or RPC producer changed in this UI work.
+
+On the block arm, the shared refcounted health clock marks a sample older than
+six seconds (three collector intervals), or a disconnected source, as a last
+reading. Values remain readable but muted. Simulated readings remain explicitly
+labelled; the existing device-over-fixture precedence is unchanged.
+
+`?health-mock=island` selects a deterministic, illustrative nine-core fixture.
+Its identities follow the documented driver grammar; its numbers and owners are
+not hardware measurements. It covers above-100% queues, independent null
+metrics, two session indices for one PID, empty/unknown owners, and RGA nulls.
+The default fixture and all three existing flavor names remain unchanged.
+
+Frontend gates: `src/tests/media-load.test.ts` (activity, count, staleness,
+schema-valid fixture), `src/tests/media-load-ui.test.ts` (rendered states and
+retraction), and `tests/e2e/media-load.spec.ts` (socket → hint → lazy dialog →
+legacy fallback with keyboard/focus checks). Existing encoder/status/Device
+Health tests remain regression guards. All paths here are under `apps/frontend`.
+
+### Collector compatibility
 
 `clk-enable-count` is a legacy compatibility path (historically needed by
 pre-island mainline images; vendor BSP normally provides MPP procfs). It still

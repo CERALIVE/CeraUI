@@ -486,8 +486,13 @@ fallback is unchanged and registered as `TD-encoder-load-clock-fallback` for
 retirement. Generic `video-codec` names require compatible-string evidence,
 and RGA publishes neither utilization nor per-core owners, so those are null.
 The source grammar and consumer rules are in [`docs/ENCODER-LOAD.md`](docs/ENCODER-LOAD.md).
-This backend/schema change does not implement the separate frontend block view
-and was validated with source-derived fixtures, not new hardware readings.
+The frontend consumes those blocks through `EncoderStatus.svelte` →
+`MediaLoadHint.svelte` at all three existing mount sites. The hint remains read-only
+and compact; its lazy `MediaLoadDialog.svelte` owns full identities, raw metrics,
+bound-session ownership and RGA limitations. With no blocks, the unchanged
+three-state renderer remains in use. `?health-mock=island` is the illustrative
+dev fixture. Desktop/mobile browser QA is separate from the still-outstanding
+Rock 5B+ and Orange Pi 5+ visual checks; no new board validation is claimed.
 
 ## MOCK SUBSYSTEM [EXISTS]
 
