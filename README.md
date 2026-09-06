@@ -167,6 +167,12 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
+CeraUI 2026.9.1 pins the published `@ceralive/cerastream@2026.9.5` in both
+the backend and shared RPC package, matching cerastream 2026.9.2's schema 0.17.0.
+The bindings-skew gate checks the schema version and preservation of the three
+new HDMI capture causes. This release retains the documented early-import
+SIGUSR1 residual window; it does not claim full board qualification.
+
 ### Supported Hardware
 
 **ARM64**: Orange Pi 5/5+, Radxa Rock 5B
