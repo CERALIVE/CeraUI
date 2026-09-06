@@ -434,6 +434,12 @@ export const cpuInfoSchema = z.object({
 });
 export type CpuInfo = z.infer<typeof cpuInfoSchema>;
 
+export type {
+	MediaBlockLoad,
+	MediaCoreLoad,
+	MppBlock,
+	MppSessionOwner,
+} from './media-load.schema.js';
 // =============================================================================
 // Per-core encoder load broadcast (`encoder-load` event)
 // =============================================================================
@@ -454,6 +460,15 @@ export type CpuInfo = z.infer<typeof cpuInfoSchema>;
 // exposes only the cores' clock enable-state (a busy/idle bit) — so a core is
 // `percent`, `active`, or `unavailable`, and NOTHING may turn an `active`
 // reading into a number.
+export {
+	mediaBlockLoadSchema,
+	mediaCoreLoadSchema,
+	mppBlockSchema,
+	mppSessionOwnerSchema,
+} from './media-load.schema.js';
+
+import { mediaBlockLoadSchema } from './media-load.schema.js';
+
 export const encoderLoadSourceSchema = z.enum(['mpp-service', 'clk-enable-count']);
 export type EncoderLoadSource = z.infer<typeof encoderLoadSourceSchema>;
 
@@ -487,6 +502,7 @@ export const encoderLoadSchema = z.object({
 	 * the key entirely.
 	 */
 	decodeCores: z.array(encoderCoreReadingSchema).optional(),
+	blocks: z.array(mediaBlockLoadSchema).optional(),
 	/** Epoch ms of the sample; `null` when nothing has ever been read. */
 	updatedAt: z.number().nullable(),
 	/** Always `false` on the wire — the device never publishes a synthetic read. */

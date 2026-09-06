@@ -46,6 +46,19 @@ src/
 
 ## IMPORT PATHS
 
+### Media block load [EXISTS]
+
+`system.schema.ts` retains `encoderLoadSchema` and the original three-state
+core union. Its optional `blocks` array uses `media-load.schema.ts`:
+`{source, block, cores: [{core, load, utilization, sessions}]}`. MPP blocks
+are `rkvenc`/`rkvdec`/`jpgdec`; the `rkrga` source can describe only `rga`,
+with `utilization: null` and `sessions: null` enforced by its schema. Both raw
+MPP percentages may exceed 100; the legacy `percent` view is not widened.
+`MppSessionOwner` carries only the creating task's `pid` and driver `index`.
+All fields inside a block core are explicit, and no field defaults onto a
+legacy payload. Consumers replace snapshots, not merge owners by ordinal.
+See [`docs/ENCODER-LOAD.md`](../../docs/ENCODER-LOAD.md).
+
 ```typescript
 import { appContract, type AppContract } from '@ceraui/rpc';           // root router
 import { streamingContract } from '@ceraui/rpc/contracts';             // granular
