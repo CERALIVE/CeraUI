@@ -3,7 +3,10 @@
 **Status:** `[EXISTS]`
 
 Deferred **design** findings from the `ceraui-experience-stability` Wave-3 UI pass
-(todos 24–29). Opened by todo 29 (C4 consolidation).
+(todos 24–29), opened by todo 29 (C4 consolidation), plus the marker-less
+**engineering** deferrals from that same effort's other waves (§4, opened by todo 38).
+Both live here for the same reason: neither ships a source marker, so neither is
+admissible to the marker-bound register — see the next section.
 
 ## Why this file and not `docs/TECHNICAL_DEBT.md`
 
@@ -274,3 +277,76 @@ Each was surfaced by the owning todo's own work and deliberately left unfixed.
 - **Exit condition:** decide whether the design-pass evidence standard requires a PNG
   pair per surface at all; if yes, amend the plan template so geometry-only todos are
   not held to it.
+
+---
+
+## 4. Engineering follow-ups from the rest of the effort (opened by todo 38)
+
+These are not design findings. They are deferrals raised while landing the apt
+family-selection, DNS, remember-me and roster-truth work, and they are recorded here
+rather than in `docs/TECHNICAL_DEBT.md` for the reason stated at the top of this file:
+none of them ships a `data-debt-id`, a `coming-soon` affordance or an in-source
+`[PARTIAL]`, and several have exit conditions that are a judgement call rather than a
+command. Registering them there would mean inventing markers for work that has none.
+
+### DF-14 — SRTLA, the control WebSocket and pairing still pick a family implicitly
+
+- **What:** the per-run address-family verdict (`apps/backend/AGENTS.md` → APT REACHES
+  THE REPOSITORY OVER THE FAMILY THAT WORKS) is scoped to apt, and the gateway family
+  race is scoped to default-route election. Three other outbound paths still take
+  whatever the resolver and the routing table hand them: the SRTLA sender's own
+  endpoint resolution, the device→hub control WebSocket, and the platform pairing POST.
+  On a board holding complete AAAA answers with no usable IPv6 route — the measured
+  Orange Pi 5+ topology, and the exact condition that produced the apt work — each of
+  those can spend its budget on an address that cannot carry traffic.
+- **Why it is deferred rather than fixed here:** the three have genuinely different
+  correctness constraints. SRTLA pins a link to a resolved origin at connect time, so a
+  family choice there is a bonding-math decision, not a retry policy. The control
+  channel and the pairing POST are ordinary client sockets whose failure is visible and
+  retried. Applying one rule to all three is the wrong shape, and applying the apt rule
+  in particular would be wrong for SRTLA.
+- **Where:** `apps/backend/src/modules/streaming/srtla.ts`,
+  `apps/backend/src/modules/remote-control/channel.ts`,
+  `apps/backend/src/modules/pairing/`.
+- **Exit condition:** a per-path decision recorded for each of the three — either an
+  explicit family policy with a test naming it, or a written statement that the default
+  behaviour is correct for that path and why. Not one shared helper by default.
+
+### DF-15 — The Debian mirror is still reached over plain HTTP in the shipped image
+
+- **What:** the reachability probe classifies a plain-HTTP redirect to a foreign host as
+  `captive`, which is the right call precisely because the mirror is reached over HTTP
+  and a portal can therefore intercept it transparently. Over HTTPS that interception is
+  visible as a TLS failure instead of a 302, and the whole `captive` heuristic becomes a
+  backstop rather than the primary signal.
+- **Why it is deferred:** the sources list ships in the device image, not in this repo,
+  so the change belongs to `image-building-pipeline` and lands on its release cycle.
+  Flipping it also changes what a genuine outage looks like on a board (a TLS error
+  rather than a redirect), so it wants a board drill of its own.
+- **Where:** the deb822 stanzas under `/etc/apt/sources.list.d` as baked by
+  `image-building-pipeline`; consumed read-only here by
+  `apps/backend/src/modules/system/apt-source-origins.ts`.
+- **Exit condition:** the image's Debian origin is `https://`, and the captive-portal
+  classification is re-verified on a board against a real portal — confirming it still
+  reports honestly rather than silently degrading to "unreachable".
+
+### DF-16 — Remember-me is a device-scoped token; there is no cloud-issued server token
+
+- **What:** `localStorage.auth` holds a token the DEVICE issued and the device can
+  revoke. It does not span devices, so an operator with three boards signs into three
+  boards. A cloud-issued credential that the device would verify instead is a different
+  design and does not exist.
+- **Why it is deferred:** it is a security-boundary decision (who issues, who revokes,
+  what an offline device accepts when the issuer is unreachable), not an implementation
+  gap. Shipping a half of it is worse than shipping none.
+- **Where:** `apps/frontend/src/lib/stores/auth-status.svelte.ts` (the consumer),
+  `apps/backend/AGENTS.md` → A REMEMBER-ME CREDENTIAL IS A REVOCABLE TOKEN (the issuer).
+- **Exit condition:** a written decision on issuance and offline-verification, before
+  any code. If the answer is "device-scoped is correct", close this as not-debt with
+  that reasoning attached.
+
+### DF-17 — Colour-literal consolidation, as re-measured
+
+- **What:** this is DF-1 above, listed here only so a reader arriving from the effort's
+  named follow-up list finds it. Do not open a second entry for it.
+- **Exit condition:** DF-1's.

@@ -900,6 +900,19 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 
 ## DEP BASELINE (as of 2026-08)
 
+**Two rows in this table were moved by the experience-stability effort and are current
+as written: `vitest` is stable `5.0.0` (the earlier `5.0.0-rc.4` target was tentative and
+is superseded), and `@orpc/server`/`@orpc/contract` stay EXACT at `2.0.0-beta.32` —
+checked live against the registry, nothing past beta.32 exists.** Both remain exact pins
+for the reasons stated below the table; do not soften either to a caret.
+
+**Where a change here also moves a WORKSPACE-ROOT document — the root `AGENTS.md`, the
+root `ARCHITECTURE.md`, `docs/COMPLETENESS-MATRIX.md`, `docs/RELIABILITY-FINDINGS.md`, or
+the root `versions.yaml` pin — that edit is NOT made from this repo.** Root truth is owned
+by todo 49 of the `ceraui-experience-stability` plan, on its own docs-only branch and PR,
+so a CeraUI PR that also edits the parent tree is a Rule-D violation wearing a
+documentation hat. Reference the root row here; let todo 49 write it there.
+
 | Package | Version |
 |---------|---------|
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |

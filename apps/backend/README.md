@@ -145,6 +145,16 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 
 See [`docs/BUILD_PIPELINE.md`](../../docs/BUILD_PIPELINE.md) for the full build and CI reference.
 
+That package upgrades itself on the device, so its maintainer scripts carry two rules
+worth knowing before editing them. `prerm` stops and disables `ceralive.service` only
+when it is invoked for a real `remove` — dpkg runs the OLD `prerm` before unpacking a
+new package, so doing it unconditionally left a self-updated device with no control
+plane. And `postinst` re-enables the unit unconditionally with `systemctl enable`,
+because `deb-systemd-helper enable` is a silent no-op once its own installation state
+exists and therefore cannot repair a unit the old `prerm` disabled. Both are pinned by
+`scripts/build/deb-maintainer-scripts.test.sh`, run from
+`scripts/build/release-package-contracts.sh`.
+
 ## RPC Architecture
 
 All device control goes through oRPC over WebSocket. There are no HTTP REST endpoints for device state.
