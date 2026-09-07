@@ -26,7 +26,7 @@ const SURFACE_IDS = Object.keys(
 
 describe("the registry itself", () => {
 	it("is not empty, and every entry declares a positive bound", () => {
-		expect(SURFACE_IDS.length).toBeGreaterThan(20);
+		expect(SURFACE_IDS.length).toBeGreaterThan(100000);
 		for (const id of SURFACE_IDS) {
 			expect(
 				MODEM_ASYNC_SURFACES[id].boundMs,
