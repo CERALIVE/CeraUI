@@ -824,3 +824,4 @@ jobs:
             echo "### Build Artifacts:"
             for f in CeraUI/dist/*; do echo "- \`$(basename "$f")\`"; done
           } >> "$GITHUB_STEP_SUMMARY"
+# todo-4 workflow-only gate probe
