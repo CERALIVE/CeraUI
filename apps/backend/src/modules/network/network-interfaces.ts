@@ -25,6 +25,7 @@ import type {
 	NetifConfigInput,
 	NotificationType,
 } from "@ceraui/rpc/schemas";
+import { NETIF_DUPLICATE_IPV4_ERROR } from "@ceraui/rpc/schemas";
 import type WebSocket from "ws";
 
 import { ipToInt, isSameSubnet } from "../../helpers/ip-addresses.ts";
@@ -1126,7 +1127,7 @@ function computeSameSubnetGroups(
 // The order is deliberate, we want *hotspot* to have higher priority
 const netIfErrors = {
 	2: "WiFi hotspot",
-	1: "duplicate IPv4 addr",
+	1: NETIF_DUPLICATE_IPV4_ERROR,
 	4: "no SIM",
 	8: "shared LAN",
 } as const;

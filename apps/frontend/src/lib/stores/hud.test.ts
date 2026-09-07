@@ -837,7 +837,7 @@ describe("isBondExcluded — the device-condition half of bond membership", () =
 		expect(isBondExcluded({ tp: 0, enabled: true })).toBe(true);
 	});
 
-	it("a link carrying a netif error is excluded (the dup-IP HiLink pair)", () => {
+	it("a duplicate-IP link refused by the backend is excluded", () => {
 		expect(
 			isBondExcluded({
 				tp: 0,
@@ -880,7 +880,7 @@ describe("isBondMember — the frontend mirror of genSrtlaIpList", () => {
 		expect(isBondMember({ tp: 0, enabled: true })).toBe(false);
 	});
 
-	it("a dup-IP entry is not a member", () => {
+	it("a dup-IP entry with enabled:false is not a member", () => {
 		expect(
 			isBondMember({
 				tp: 0,
