@@ -24,8 +24,34 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 |---|---:|---:|---:|---:|---|---:|
 | Current main | 1 | 656.451 | 649.25 | 375 / 6,234 | 84 / 8 / 4 / 3 / 2 % | 0 |
 | Current main | 2 | 669.204 | 661.09 | 375 / 6,234 | 84 / 8 / 4 / 3 / 2 % | 0 |
+| Broad client optimizer | 1 | 65.120 | 61.37 | 375 / 6,234 | 5 / 49 / 29 / 5 / 11 % | 1 |
+| Broad client optimizer | 2 | 59.279 | 56.36 | 375 / 6,234 | 6 / 47 / 29 / 6 / 12 % | 1 |
 
 Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
 seconds or less** (20% faster), plus three green runs at identical counts.
 Vitest's phase percentages are rounded, aggregate worker-time shares; they may
 sum to 101% and are not elapsed wall-time slices. No runner setting is adopted yet.
+
+**Broad optimizer: REJECTED.** Includes `bits-ui`, `@testing-library/svelte`,
+`svelte`, and `@ceraui/i18n/eager` under `test.deps.optimizer.client` with
+`enabled: true`. Both runs failed 181 files / 2,652 tests; failures include
+Svelte `first_child_getter.call` / `effect.nodes`, storage isolation, and
+unregistered message keys. Fast failure is not a speedup.
+
+## Registration scope
+
+A full instrumented baseline passed all 375 files / 6,234 tests (750.791 s wall,
+745.12 s Vitest; phase shares 82 / 11 / 4 / 2 / 2%). Instrumentation identified
+registry instances by UUID and workers by `node:worker_threads.threadId`.
+Observed: **244 registry evaluations, 244 eager evaluations, 244 eager calls,
+7,564 namespace writes, 593,896 message writes, 244 distinct threads**.
+**Zero namespace writes targeted an already-loaded namespace.** Vitest's isolated
+threads are replaced per file, not a persistent 16-worker module cache. A global
+memo flag cannot avoid those imports while preserving isolation.
+
+The command's Paraglide compilation is a separate operation, invoked once before
+Vitest. `vitest.storage.setup.ts` registers nothing; `vitest.setup.ts` no longer
+exists. Federation's three entry modules each call `registerFederationMessages()`;
+that real repeated-call path is not executed by the ordinary suite's current
+tests and needs an explicit regression probe rather than fabricated baseline
+duplicates.
