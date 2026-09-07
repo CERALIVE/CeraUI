@@ -156,6 +156,61 @@ const mutations = [
 			),
 	},
 	{
+		name: 'FE shard fan-out silently narrowed even when the old matrix survives in a comment',
+		expectedError: 'test-fe matrix.shard must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'        shard: [1, 2, 3, 4]',
+				'        # shard: [1, 2, 3, 4]\n        shard: [1, 2]',
+			),
+	},
+	{
+		name: 'FE blob upload losing the hidden-files opt-in a dot-directory needs',
+		expectedError: 'test-fe blob hidden files',
+		apply: (source) => replaceExactly(source, '          include-hidden-files: true\n', ''),
+	},
+	{
+		name: 'FE shards uploading one colliding artifact name',
+		expectedError: 'test-fe blob artifact name',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`          name: vitest-blob-${matrixShard}`,
+				'          name: vitest-blob',
+			),
+	},
+	{
+		name: 'shard env drifting away from the declared matrix width',
+		expectedError: 'test-fe VITEST_SHARD',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`      VITEST_SHARD: ${matrixShard}/4`,
+				`      VITEST_SHARD: ${matrixShard}/3`,
+			),
+	},
+	{
+		name: 'summary job no longer gated on the merged FE report',
+		expectedError: 'test.needs must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'    needs: [test-fe, merge-fe-reports, guardrails, test-be, test-e2e, merge-e2e-reports]',
+				'    needs: [test-fe, guardrails, test-be, test-e2e, merge-e2e-reports]',
+			),
+	},
+	{
+		name: 'hardware preflight dropped along with the frontend test script that chained it',
+		expectedError: 'guardrails must contain exactly one "Input-picker hardware preflight" step',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'      - name: Input-picker hardware preflight\n        working-directory: CeraUI\n        run: bun run --filter frontend test:hardware-preflight\n',
+				'',
+			),
+	},
+	{
 		name: 'reference backend auth seeding removed',
 		expectedError: 'test-e2e must contain exactly one "Seed E2E auth state" step',
 		apply: (source) =>

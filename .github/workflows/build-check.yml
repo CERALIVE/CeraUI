@@ -26,7 +26,62 @@ jobs:
   # this tree has no install lifecycle script for `bun install` to shell out with.
   # Do not re-add setup-node without a command that actually needs Node.
   test-fe:
-    name: FE unit (vitest under Bun) + tech-debt + spec guardrails
+    name: FE unit shard ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    # ~2x the expected worst shard (a quarter of the ~22 min single run): slack for
+    # runner jitter, without letting a genuine hang burn the six-hour default.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      VITEST_SHARD: ${{ matrix.shard }}/4
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      - name: Unit tests (vitest shard)
+        working-directory: CeraUI
+        run: bun run --filter frontend test:ci-shard
+
+      # `!cancelled()`, not `always()`: a FAILING shard still wrote its blob and the
+      # merged report must carry its failures; a cancelled one has nothing to upload.
+      # `.vitest/` is a dot-directory, so the hidden-files opt-in is what makes this
+      # upload non-empty at all.
+      - name: Upload vitest blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: CeraUI/apps/frontend/.vitest/blob
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-fe-reports:
+    name: Merge FE unit blob reports
+    if: ${{ !cancelled() }}
+    needs: test-fe
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
@@ -51,9 +106,44 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
-      - name: Unit tests (vitest)
+      - name: Download vitest blob reports
+        uses: actions/download-artifact@v8
+        with:
+          path: CeraUI/apps/frontend/.vitest/blob
+          pattern: vitest-blob-*
+          merge-multiple: true
+
+      - name: Merge vitest reports
         working-directory: CeraUI
-        run: bun run --filter frontend test
+        run: bun run --filter frontend test:ci-merge
+
+  # The non-vitest gates that used to ride the single FE job. Seconds of work each,
+  # so pinning them behind a 20-minute test lane only delayed their signal.
+  guardrails:
+    name: Tech-debt + spec guardrails + workflow shape
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
 
       - name: Tech-debt register gate (validator unit tests + live register check)
         working-directory: CeraUI
@@ -79,6 +169,12 @@ jobs:
       - name: Build Check workflow shape gate
         working-directory: CeraUI
         run: bun run test:build-check-shape
+
+      # `test:ci-shard` runs vitest alone, so without this step the preflight the
+      # frontend `test` script chains locally would vanish from CI entirely.
+      - name: Input-picker hardware preflight
+        working-directory: CeraUI
+        run: bun run --filter frontend test:hardware-preflight
 
   test-be:
     name: BE unit (bun) + exec-guard + biome
@@ -527,11 +623,11 @@ jobs:
 
   test:
     name: Test (unit + E2E guardrails)
-    needs: [test-fe, test-be, test-e2e, merge-e2e-reports]
+    needs: [test-fe, merge-fe-reports, guardrails, test-be, test-e2e, merge-e2e-reports]
     runs-on: ubuntu-latest
     steps:
       - name: All test jobs passed
-        run: echo "FE unit, BE unit, and all E2E shards passed."
+        run: echo "FE unit shards, FE report merge, guardrails, BE unit, and all E2E shards passed."
 
   build:
     name: Build ${{ matrix.arch }}

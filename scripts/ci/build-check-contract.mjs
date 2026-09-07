@@ -4,6 +4,12 @@ const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
 const totalShards = expression('env.TOTAL_SHARDS');
+// The FE unit lane is sharded STATICALLY. The workspace CI manifest models each
+// leg by literal id, so the shard list is a contract, not a tuning knob.
+const FE_SHARDS = [1, 2, 3, 4];
+const FE_SHARD_SPEC = `${matrixShard}/${FE_SHARDS.length}`;
+const FE_BLOB_ARTIFACT = `vitest-blob-${matrixShard}`;
+const FE_BLOB_DIR = 'apps/frontend/.vitest/blob';
 // `-v2-` retires a cache entry that was missing chromium_headless_shell. Bumping
 // the namespace is what abandons a poisoned entry — actions/cache cannot
 // overwrite one, because it never re-saves on an exact-key hit.
@@ -204,6 +210,89 @@ function assertSrtlaRuntime(setupSteps, e2eSteps) {
 	assertStepOrder(e2eSteps, 'Activate srtla-send runtime', 'Start E2E servers', 'test-e2e');
 }
 
+function assertFrontendShards(frontendTest, mergeFe, guardrails) {
+	assertExact(frontendTest.name, `FE unit shard ${FE_SHARD_SPEC}`, 'test-fe job name');
+	assertExact(frontendTest['timeout-minutes'], 15, 'test-fe timeout');
+	const strategy = asRecord(frontendTest.strategy, 'test-fe.strategy');
+	assertExact(strategy['fail-fast'], false, 'test-fe fail-fast');
+	assertList(
+		asRecord(strategy.matrix, 'test-fe.strategy.matrix').shard,
+		FE_SHARDS,
+		'test-fe matrix.shard',
+	);
+	assertExact(
+		asRecord(frontendTest.env, 'test-fe.env').VITEST_SHARD,
+		FE_SHARD_SPEC,
+		'test-fe VITEST_SHARD',
+	);
+
+	const feSteps = stepsOf(frontendTest, 'test-fe');
+	const unit = findStep(feSteps, 'Unit tests (vitest shard)', 'test-fe');
+	assertExact(unit.run, 'bun run --filter frontend test:ci-shard', 'test-fe shard command');
+
+	// A blob written under a dot-directory is invisible to upload-artifact without
+	// `include-hidden-files`, and a silently empty upload would shrink the merged
+	// report while every job stayed green — so both flags are asserted, not assumed.
+	const upload = findStep(feSteps, 'Upload vitest blob report', 'test-fe');
+	assertExact(upload.uses, 'actions/upload-artifact@v7', 'test-fe blob upload action');
+	assertExact(upload.if, expression('!cancelled()'), 'test-fe blob upload condition');
+	const uploadWith = withValues(upload, 'test-fe blob upload');
+	assertExact(uploadWith.name, FE_BLOB_ARTIFACT, 'test-fe blob artifact name');
+	assertExact(uploadWith.path, `CeraUI/${FE_BLOB_DIR}`, 'test-fe blob artifact path');
+	assertExact(uploadWith['include-hidden-files'], true, 'test-fe blob hidden files');
+	assertExact(uploadWith['if-no-files-found'], 'error', 'test-fe blob missing-file policy');
+	assertExact(uploadWith['retention-days'], 1, 'test-fe blob artifact retention');
+
+	assertExact(mergeFe.needs, 'test-fe', 'merge-fe-reports.needs');
+	assertExact(mergeFe.if, expression('!cancelled()'), 'merge-fe-reports condition');
+	const mergeSteps = stepsOf(mergeFe, 'merge-fe-reports');
+	const download = findStep(mergeSteps, 'Download vitest blob reports', 'merge-fe-reports');
+	assertExact(download.uses, 'actions/download-artifact@v8', 'merge-fe-reports download action');
+	const downloadWith = withValues(download, 'merge-fe-reports download');
+	assertExact(downloadWith.pattern, 'vitest-blob-*', 'merge-fe-reports download pattern');
+	assertExact(downloadWith['merge-multiple'], true, 'merge-fe-reports merge-multiple');
+	assertExact(downloadWith.path, `CeraUI/${FE_BLOB_DIR}`, 'merge-fe-reports download path');
+	assertExact(
+		findStep(mergeSteps, 'Merge vitest reports', 'merge-fe-reports').run,
+		'bun run --filter frontend test:ci-merge',
+		'merge-fe-reports merge command',
+	);
+
+	// Every guardrail the pre-shard `test-fe` owned has to survive the split; the
+	// preflight in particular is no longer chained by any command CI runs.
+	const guardSteps = stepsOf(guardrails, 'guardrails');
+	assertExact(
+		findStep(guardSteps, 'Build Check workflow shape gate', 'guardrails').run,
+		'bun run test:build-check-shape',
+		'shape gate command',
+	);
+	assertExact(
+		findStep(guardSteps, 'Input-picker hardware preflight', 'guardrails').run,
+		'bun run --filter frontend test:hardware-preflight',
+		'guardrails hardware preflight command',
+	);
+	assertExact(
+		findStep(
+			guardSteps,
+			'Tech-debt register gate (validator unit tests + live register check)',
+			'guardrails',
+		)['working-directory'],
+		'CeraUI',
+		'guardrails tech-debt working directory',
+	);
+	// Matched on the grep they run, not on their step names: the `#nav-tab-` step's
+	// unquoted name is truncated at the `#` by YAML, so a name match would encode
+	// that accident as the contract.
+	for (const [pattern, label] of [
+		['page\\.screenshot\\(|toHaveScreenshot\\(', 'screenshot'],
+		['waitForTimeout|page\\.waitFor\\(', 'waitForTimeout'],
+		['#nav-tab-', 'nav-tab selector'],
+	]) {
+		const matches = guardSteps.filter((step) => String(step.run ?? '').includes(pattern));
+		assertExact(matches.length, 1, `guardrails ${label} guard step count`);
+	}
+}
+
 export function assertBuildCheckContract(source) {
 	let document;
 	try {
@@ -219,6 +308,8 @@ export function assertBuildCheckContract(source) {
 	const merge = asRecord(jobs['merge-e2e-reports'], 'merge-e2e-reports');
 	const finalTest = asRecord(jobs.test, 'test');
 	const frontendTest = asRecord(jobs['test-fe'], 'test-fe');
+	const mergeFrontend = asRecord(jobs['merge-fe-reports'], 'merge-fe-reports');
+	const guardrails = asRecord(jobs.guardrails, 'guardrails');
 	const backendTest = asRecord(jobs['test-be'], 'test-be');
 	const setupSteps = stepsOf(setup, 'setup-e2e');
 	const e2eSteps = stepsOf(e2e, 'test-e2e');
@@ -316,16 +407,11 @@ export function assertBuildCheckContract(source) {
 	assertExact(downloadWith['merge-multiple'], true, 'blob download merge-multiple');
 	assertList(
 		finalTest.needs,
-		['test-fe', 'test-be', 'test-e2e', 'merge-e2e-reports'],
+		['test-fe', 'merge-fe-reports', 'guardrails', 'test-be', 'test-e2e', 'merge-e2e-reports'],
 		'test.needs',
 	);
 
-	const shapeGate = findStep(
-		stepsOf(frontendTest, 'test-fe'),
-		'Build Check workflow shape gate',
-		'test-fe',
-	);
-	assertExact(shapeGate.run, 'bun run test:build-check-shape', 'shape gate command');
+	assertFrontendShards(frontendTest, mergeFrontend, guardrails);
 	return root;
 }
 
