@@ -8,10 +8,9 @@ on:
 
 env:
   NODE_VERSION: "26"
-  # E2E fan-out. The union of project×shard lanes runs the same functional
-  # spec×project set as the unsharded run (458 invocations on 2026-07-13);
-  # a11y (desktop-only) runs once on desktop shard 1.
-  TOTAL_SHARDS: "2"
+  # E2E fan-out. The union of project-specific shard lanes runs the same
+  # functional spec×project set as the unsharded run (458 invocations on
+  # 2026-07-13); a11y (desktop-only) runs once on desktop shard 1.
 
 permissions:
   contents: read
@@ -436,15 +435,28 @@ jobs:
           retention-days: 1
 
   test-e2e:
-    name: E2E (${{ matrix.project }} shard ${{ matrix.shard }}/2)
+    name: E2E (${{ matrix.project }} shard ${{ matrix.shard }}/${{ matrix.total }})
     needs: [changes, setup-e2e]
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project: [desktop, mobile]
-        shard: [1, 2]
+        include:
+          - project: desktop
+            shard: 1
+            total: 3
+          - project: desktop
+            shard: 2
+            total: 3
+          - project: desktop
+            shard: 3
+            total: 3
+          - project: mobile
+            shard: 1
+            total: 1
+    env:
+      TOTAL_SHARDS: ${{ matrix.total }}
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -574,15 +586,15 @@ jobs:
         run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-desktop-${{ matrix.shard }}.json
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-desktop-${{ matrix.shard }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}
 
       - name: Upload a11y blob report
         if: ${{ always() && matrix.project == 'desktop' && matrix.shard == 1 }}
         uses: actions/upload-artifact@v7
         with:
-          name: blob-report-a11y-desktop-${{ matrix.shard }}
-          path: CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${{ matrix.shard }}
+          name: blob-report-a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}
+          path: CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}
           if-no-files-found: ignore
           retention-days: 1
 
@@ -596,8 +608,8 @@ jobs:
         run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- --grep-invert "@visual|@a11y|@gallery|@premigration-upgrade" --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ env.TOTAL_SHARDS }} --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-${{ matrix.project }}-${{ matrix.shard }}.json
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}
 
       - name: Stop E2E servers
         if: always()
@@ -624,8 +636,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: blob-report-${{ matrix.project }}-${{ matrix.shard }}
-          path: CeraUI/apps/frontend/test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}
+          name: blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}
+          path: CeraUI/apps/frontend/test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}
           if-no-files-found: ignore
           retention-days: 1
 
@@ -666,7 +678,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: CeraUI/apps/frontend/all-blob-reports
-          pattern: blob-report-*
+          pattern: blob-report-*-of-*
           merge-multiple: true
 
       - name: Merge HTML report

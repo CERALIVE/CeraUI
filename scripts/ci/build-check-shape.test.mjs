@@ -62,8 +62,9 @@ const e2eSourceDependencies = globSync('apps/frontend/tests/e2e/**/*.{ts,tsx}', 
 const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
+const matrixTotal = expression('matrix.total');
 const shellVar = (name) => `${'$' + '{'}${name}}`;
-const uniqueBlobName = `blob-report-${matrixProject}-${matrixShard}`;
+const uniqueBlobName = `blob-report-e2e-${matrixProject}-${matrixShard}-of-${matrixTotal}`;
 const browserCacheKey = `${expression('runner.os')}-ms-playwright-v2-${expression(
 	'steps.playwright-version.outputs.version',
 )}`;
@@ -80,12 +81,12 @@ function replaceExactly(source, before, after, expectedCount = 1) {
 const mutations = [
 	{
 		name: 'single-project matrix even when the old matrix survives in a comment',
-		expectedError: 'test-e2e matrix.project must equal',
+		expectedError: 'test-e2e matrix.include must equal',
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'        project: [desktop, mobile]',
-				'        # project: [desktop, mobile]\n        project: [desktop]',
+				'          - project: mobile\n            shard: 1\n            total: 1',
+				'          # project: mobile\n          - project: desktop\n            shard: 1\n            total: 3',
 			),
 	},
 	{

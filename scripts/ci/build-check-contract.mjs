@@ -4,6 +4,7 @@ const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const shellVar = (name) => `${'$' + '{'}${name}}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
+const matrixTotal = expression('matrix.total');
 const totalShards = expression('env.TOTAL_SHARDS');
 // The FE unit lane is sharded STATICALLY. The workspace CI manifest models each
 // leg by literal id, so the shard list is a contract, not a tuning knob.
@@ -11,6 +12,13 @@ const FE_SHARDS = [1, 2, 3, 4];
 const FE_SHARD_SPEC = `${matrixShard}/${FE_SHARDS.length}`;
 const FE_BLOB_ARTIFACT = `vitest-blob-${matrixShard}`;
 const FE_BLOB_DIR = 'apps/frontend/.vitest/blob';
+const E2E_MATRIX = [
+	{ project: 'desktop', shard: 1, total: 3 },
+	{ project: 'desktop', shard: 2, total: 3 },
+	{ project: 'desktop', shard: 3, total: 3 },
+	{ project: 'mobile', shard: 1, total: 1 },
+];
+const E2E_REPORT_SUFFIX = `${matrixProject}-${matrixShard}-of-${matrixTotal}`;
 // `-v2-` retires a cache entry that was missing chromium_headless_shell. Bumping
 // the namespace is what abandons a poisoned entry — actions/cache cannot
 // overwrite one, because it never re-saves on an exact-key hit.
@@ -160,6 +168,43 @@ function assertBrowserCache(steps, label) {
 		install.run,
 		'bun run --filter frontend test:e2e:install-browser',
 		`${label} browser install command`,
+	);
+}
+
+function assertA11yShard(e2eSteps) {
+	const a11y = findStep(
+		e2eSteps,
+		'Accessibility gate (axe-core — critical/serious, baselined)',
+		'test-e2e',
+	);
+	assertExact(
+		a11y.if,
+		expression("matrix.project == 'desktop' && matrix.shard == 1"),
+		'test-e2e a11y shard condition',
+	);
+	const a11yEnv = asRecord(a11y.env, 'test-e2e a11y env');
+	assertExact(
+		a11yEnv.PLAYWRIGHT_JSON_OUTPUT_NAME,
+		`test-results/a11y-desktop-${matrixShard}-of-${matrixTotal}.json`,
+		'test-e2e a11y JSON output name',
+	);
+	assertExact(
+		a11yEnv.PLAYWRIGHT_BLOB_OUTPUT_DIR,
+		`test-results/blob-report-a11y-desktop-${matrixShard}-of-${matrixTotal}`,
+		'test-e2e a11y blob output directory',
+	);
+
+	const upload = findStep(e2eSteps, 'Upload a11y blob report', 'test-e2e');
+	const uploadWith = withValues(upload, 'test-e2e a11y blob upload');
+	assertExact(
+		uploadWith.name,
+		`blob-report-a11y-desktop-${matrixShard}-of-${matrixTotal}`,
+		'test-e2e a11y blob artifact name',
+	);
+	assertExact(
+		uploadWith.path,
+		`CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${matrixShard}-of-${matrixTotal}`,
+		'test-e2e a11y blob artifact path',
 	);
 }
 
@@ -429,8 +474,18 @@ export function assertBuildCheckContract(source) {
 		asRecord(e2e.strategy, 'test-e2e.strategy').matrix,
 		'test-e2e.strategy.matrix',
 	);
-	assertList(matrix.project, ['desktop', 'mobile'], 'test-e2e matrix.project');
-	assertList(matrix.shard, [1, 2], 'test-e2e matrix.shard');
+	assertList(Object.keys(matrix), ['include'], 'test-e2e matrix keys');
+	assertList(matrix.include, E2E_MATRIX, 'test-e2e matrix.include');
+	assertExact(
+		asRecord(e2e.env, 'test-e2e.env').TOTAL_SHARDS,
+		matrixTotal,
+		'test-e2e total shard environment',
+	);
+	assertExact(
+		e2e.name,
+		`E2E (${matrixProject} shard ${matrixShard}/${matrixTotal})`,
+		'test-e2e job name',
+	);
 
 	const setupDeps = setupSteps.filter((step) =>
 		String(step.run ?? '').includes('test:e2e:install-deps'),
@@ -443,6 +498,7 @@ export function assertBuildCheckContract(source) {
 	assertExact(laneDeps[0].if, undefined, 'test-e2e install-deps condition');
 	assertBrowserCache(setupSteps, 'setup-e2e');
 	assertBrowserCache(e2eSteps, 'test-e2e');
+	assertA11yShard(e2eSteps);
 	assertSrtlaRuntime(setupSteps, e2eSteps);
 	const startServers = findStep(e2eSteps, 'Start E2E servers', 'test-e2e');
 	const seedAuth = findStep(e2eSteps, 'Seed E2E auth state', 'test-e2e');
@@ -485,8 +541,13 @@ export function assertBuildCheckContract(source) {
 	const functionalEnv = asRecord(functional.env, 'functional env');
 	assertExact(
 		functionalEnv.PLAYWRIGHT_BLOB_OUTPUT_DIR,
-		`test-results/blob-report-e2e-${matrixProject}-${matrixShard}`,
+		`test-results/blob-report-e2e-${E2E_REPORT_SUFFIX}`,
 		'functional blob output directory',
+	);
+	assertExact(
+		functionalEnv.PLAYWRIGHT_JSON_OUTPUT_NAME,
+		`test-results/e2e-${E2E_REPORT_SUFFIX}.json`,
+		'functional JSON output name',
 	);
 
 	const blobUpload = findStep(e2eSteps, 'Upload E2E blob report', 'test-e2e');
@@ -494,12 +555,12 @@ export function assertBuildCheckContract(source) {
 	const blobWith = withValues(blobUpload, 'blob upload');
 	assertExact(
 		blobWith.name,
-		`blob-report-${matrixProject}-${matrixShard}`,
+		`blob-report-e2e-${E2E_REPORT_SUFFIX}`,
 		'functional blob artifact name',
 	);
 	assertExact(
 		blobWith.path,
-		`CeraUI/apps/frontend/test-results/blob-report-e2e-${matrixProject}-${matrixShard}`,
+		`CeraUI/apps/frontend/test-results/blob-report-e2e-${E2E_REPORT_SUFFIX}`,
 		'functional blob artifact path',
 	);
 
@@ -511,7 +572,7 @@ export function assertBuildCheckContract(source) {
 	);
 	assertExact(download.uses, 'actions/download-artifact@v8', 'blob download action');
 	const downloadWith = withValues(download, 'blob download');
-	assertExact(downloadWith.pattern, 'blob-report-*', 'blob download pattern');
+	assertExact(downloadWith.pattern, 'blob-report-*-of-*', 'blob download pattern');
 	assertExact(downloadWith['merge-multiple'], true, 'blob download merge-multiple');
 
 	assertChangesGate(jobs);
