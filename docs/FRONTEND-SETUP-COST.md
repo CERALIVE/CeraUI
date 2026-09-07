@@ -20,5 +20,12 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 
 ## Results
 
-Measurements pending. This checkpoint records the protocol, not a performance
-claim. No runner setting has changed.
+| Configuration | Run | Wall seconds | Vitest seconds | Files / tests | Phase shares (setup / transform / import / tests / environment) | Exit |
+|---|---:|---:|---:|---:|---|---:|
+| Current main | 1 | 656.451 | 649.25 | 375 / 6,234 | 84 / 8 / 4 / 3 / 2 % | 0 |
+| Current main | 2 | 669.204 | 661.09 | 375 / 6,234 | 84 / 8 / 4 / 3 / 2 % | 0 |
+
+Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
+seconds or less** (20% faster), plus three green runs at identical counts.
+Vitest's phase percentages are rounded, aggregate worker-time shares; they may
+sum to 101% and are not elapsed wall-time slices. No runner setting is adopted yet.
