@@ -161,7 +161,9 @@ describe("media presentation facts", () => {
 			"jpgdec",
 			"rga",
 		]);
-		expect(mediaLoadCoreCount(fixture.blocks ?? [])).toBe(9);
+		// The Orange Pi 5+ inventory the fixture now mirrors: two encode cores, two
+		// decode, ONE JPEG decoder, three RGA schedulers.
+		expect(mediaLoadCoreCount(fixture.blocks ?? [])).toBe(8);
 	});
 
 	it.each([0, 1, 5])("counts %i reported cores without padding", (count) => {

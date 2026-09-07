@@ -1,6 +1,14 @@
 import type { EncoderLoadReading } from "./encoder-load";
 
-/** Illustrative queue/ownership data, not board measurements; never a wire publisher. */
+/**
+ * Illustrative queue/ownership data, not board measurements; never a wire publisher.
+ *
+ * The core IDENTITIES are the real ones, read from an Orange Pi 5+ running the
+ * mainline media island (`/proc/mpp_service/load`, `/proc/rkrga/load`): one JPEG
+ * decoder, not two, and `fdc40100.video-codec` rather than the invented
+ * `fdc48100`. A fixture whose identities no board publishes cannot stand in for
+ * one during layout QA, which is the job this fixture is actually asked to do.
+ */
 export function mockIslandLoadAt(t: number): EncoderLoadReading {
 	return {
 		source: "mpp-service",
@@ -43,7 +51,7 @@ export function mockIslandLoadAt(t: number): EncoderLoadReading {
 						sessions: [{ pid: 5380, index: 2 }],
 					},
 					{
-						core: "fdc48100.video-codec",
+						core: "fdc40100.video-codec",
 						load: null,
 						utilization: 0,
 						sessions: null,
@@ -54,8 +62,7 @@ export function mockIslandLoadAt(t: number): EncoderLoadReading {
 				source: "mpp-service",
 				block: "jpgdec",
 				cores: [
-					{ core: "fdba0000.jpegd", load: 7.5, utilization: 5, sessions: [] },
-					{ core: "fdba4000.jpegd", load: 0, utilization: 0, sessions: [] },
+					{ core: "fdb90000.jpegd", load: 7.5, utilization: 5, sessions: [] },
 				],
 			},
 			{

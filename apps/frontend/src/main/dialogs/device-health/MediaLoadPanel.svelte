@@ -50,14 +50,14 @@ const legacyEncoder = $derived(!groups.some((group) => group.block === 'rkvenc')
 						<p class="break-all font-mono text-xs" dir="ltr">{core.core}</p>
 						<dl class="grid grid-cols-2 gap-x-5 gap-y-3 text-xs sm:grid-cols-[1fr_1fr_2fr]">
 							<div class="min-w-0 space-y-1">
-								<dt class="text-muted-foreground">{m['settings.mediaLoad.load']()}</dt>
-								<dd class={cn(core.load !== null && 'font-mono text-base tabular-nums', stale && 'text-muted-foreground')} data-metric="load">
+								<dt class="truncate text-muted-foreground">{m['settings.mediaLoad.load']()}</dt>
+								<dd class={cn(core.load !== null && 'font-mono text-base tabular-nums whitespace-nowrap', stale && 'text-muted-foreground')} data-metric="load">
 									{core.load === null ? m['settings.mediaLoad.unknown']() : `${core.load.toFixed(2)}%`}
 								</dd>
 							</div>
 							<div class="min-w-0 space-y-1">
-								<dt class="text-muted-foreground">{m['settings.mediaLoad.utilization']()}</dt>
-								<dd class={cn(core.utilization !== null && 'font-mono text-base tabular-nums', stale && 'text-muted-foreground')} data-metric="utilization">
+								<dt class="truncate text-muted-foreground">{m['settings.mediaLoad.utilization']()}</dt>
+								<dd class={cn(core.utilization !== null && 'font-mono text-base tabular-nums whitespace-nowrap', stale && 'text-muted-foreground')} data-metric="utilization">
 									{group.source === 'rkrga' ? m['settings.mediaLoad.notPublished']() : core.utilization === null ? m['settings.mediaLoad.unknown']() : `${core.utilization.toFixed(2)}%`}
 								</dd>
 							</div>
