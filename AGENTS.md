@@ -1039,10 +1039,12 @@ Rebase onto `origin/<canonical>` between waves (Rule B); conflicts STOP-and-surf
 R2 is a COMPLEMENT to Rule C ("one focused PR per repo"), not an override.
 
 The Build Check E2E topology is intentionally split: `setup-e2e` builds and
-uploads the frontend and caches only Playwright browser binaries, while each
-isolated desktop/mobile × two-shard runner installs its own Playwright OS
-dependencies. Browser cache keys use the exact installed Playwright CLI version,
-and the four lanes retain unique blob artifacts for the merged report. The
+uploads the frontend and caches only Playwright browser binaries, while four
+isolated runners install their own Playwright OS dependencies: desktop shards
+1–3 and mobile shard 1. The matrix `include` row carries each project's `total`
+so the functional command and `-of-<total>` blob artifact names remain
+project-correct. Browser cache keys use the exact installed Playwright CLI
+version, and the four lanes retain unique blob artifacts for the merged report. The
 setup job also downloads the published `srtla-send-rs` v3.2.0 amd64 `.deb`,
 verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
 payload, and uploads that payload as a one-day artifact. Each E2E lane restores
