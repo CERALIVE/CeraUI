@@ -22,3 +22,5 @@
 // resolving to the same symbols.
 
 export * from "./streamloop/index.ts";
+
+// todo-4 code-gate probe
