@@ -17,6 +17,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { ALL_LOCALES, readRenderedOracle } from "../../../../packages/i18n/tests/helpers/catalog";
 
 import { FEDERATION_ABI_VERSION } from "../../src/lib/federation/host-contract";
 import type {
@@ -34,6 +35,11 @@ const VERSION = (
 const OUTPUT = join(ROOT, "dist", "federation", VERSION);
 
 const ENTRIES = ["encoder", "audio", "server"] as const;
+const BASE_CAPABILITIES: NonNullable<FederationMountOptions["capabilities"]> = {
+	platform: { supports_h265: false, hardware_accelerated: false, max_resolution: "1920x1080" },
+	encoder: { codecs: ["h264"], bitrate_range: { min: 500, max: 6000, unit: "kbps" } },
+	sources: [],
+};
 
 interface FederationModule {
 	readonly federationAbiVersion: number;
@@ -164,6 +170,15 @@ describe.each(ENTRIES)("federation bundle %s.js", (name) => {
 });
 
 describe("federation additive options — the BUILT audio bundle", () => {
+	it.each(ALL_LOCALES)("renders the frozen audio title after switching to %s", async (locale) => {
+		const expected = readRenderedOracle(locale)["general.audioSettings"];
+		const module = await loadEntry("audio");
+		const { handle } = await mountInto(module, { host: hostAdapter(), locale });
+		expect(typeof expected).toBe("string");
+		expect(renderedText(document.body)).toContain(expected);
+		await handle.destroy();
+	});
+
 	// The ABI's additive-only promise is only worth something if the built bytes
 	// actually honour it, and the audio bundle is where Todo 20 exercises it: the
 	// selector must be invisible to a host that passes nothing new, and truthful
@@ -186,6 +201,7 @@ describe("federation additive options — the BUILT audio bundle", () => {
 			locale: "en",
 			host: hostAdapter(),
 			capabilities: {
+				...BASE_CAPABILITIES,
 				audio_backends: { supported: ["alsa", "pipewire"], active: "pipewire" },
 			},
 		});
@@ -212,7 +228,7 @@ describe("federation additive options — the BUILT audio bundle", () => {
 		const { handle } = await mountInto(module, {
 			locale: "en",
 			host: hostAdapter(),
-			capabilities: { audio_backends: { supported: ["alsa"], active: "alsa" } },
+			capabilities: { ...BASE_CAPABILITIES, audio_backends: { supported: ["alsa"], active: "alsa" } },
 		});
 
 		expect(document.querySelector('[data-testid="audio-backend-alsa"]')).not.toBeNull();

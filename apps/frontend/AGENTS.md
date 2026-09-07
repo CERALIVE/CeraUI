@@ -309,13 +309,22 @@ via `bun run build:federation` from the CeraUI root (delegates to the frontend
 - **`<ceraui-version>`** is read at build time from the workspace-root `package.json` `version`
 (CalVer, `2026.9.1` at time of writing) — the single source of truth, matching the platform's
   `ceraui-version` claim.
-- **The catalog is STATIC here, not lazy.** The SPA splits its ten-locale Paraglide
-  catalog into per-namespace chunks it awaits in `main.ts`; a federation bundle is
-  fetched as ONE hosted module under a strict CSP against a signed manifest that
-  pins an exact chunk graph, so a sibling chunk is unreachable and every string
-  would render as its own dotted key. Each entry calls `registerFederationMessages()`
-  (`src/lib/federation/messages.ts` → `@ceraui/i18n/eager`) at module scope, and
-  `applyFederationLocale(options.locale)` at the top of `mountDialog`.
+- **The catalog is STATIC here, not lazy.** Each entry still calls
+  `registerFederationMessages()` (`@ceraui/i18n/eager`) at module scope and
+  `applyFederationLocale(options.locale)` at mount. Federation alone compiles
+  Paraglide with `outputStructure: "locale-modules"` into
+  `node_modules/.cache/federation-i18n`; `vite.federation-i18n.ts` routes the
+  generated barrels' direct message imports AND the runtime shim to that output.
+  All keys and ten locales remain bundled, with no externals or new catalog
+  chunks. The SPA keeps its direct imports, message-module compiler output and
+  lazy namespaces unchanged. Never route only messages: a second locale runtime
+  would ignore the host's locale. The final hosted artifacts use full Rolldown
+  output minification rather than ES-library whitespace preservation.
+- **Size and parity gates:** after building both outputs, run
+  `bun scripts/ci/bundle-report.mjs` from the root. All existing ceilings remain
+  unchanged; `sources-view-model` is the existing Audio/Encoder shared projection,
+  now explicitly baselined. The federation harness also renders every locale
+  module against the frozen catalog fixtures (`federation-catalog.test.ts`).
 - **Isolation**: this build NEVER touches the SPA `dist/public` output, runs no
   PWA/service-worker plugin, and emits no `index.html`. The SPA `vite.config.ts` is unmodified.
 - **CI ordering caveat**: the backend `build` script does `rm -rf ../../dist/`, so

@@ -1813,9 +1813,15 @@ so the ABI stays 1: a bundle carries its OWN copy of the Paraglide runtime, whos
 active locale is a module-level binding the host cannot otherwise reach, so a host
 that omits it gets the base locale exactly as before. Each entry also calls
 `registerFederationMessages()` (`lib/federation/messages.ts`) at module scope —
-the SPA resolves its message catalog from lazily-imported per-namespace chunks, and
-a hosted bundle fetched as one module against a signed manifest cannot reach those,
-so it registers the catalog statically via `@ceraui/i18n/eager`. The wrapper uses its bundled Svelte
+the SPA resolves its message catalog from lazily-imported per-namespace chunks,
+whereas federation registers the catalog statically via `@ceraui/i18n/eager`.
+Federation uses an isolated Paraglide `locale-modules` output and full output
+minification; its message imports and locale-runtime shim resolve together through
+`vite.federation-i18n.ts`. All keys/locales remain inside the signed static graph,
+and the SPA's direct imports and lazy message-module output are unchanged.
+`bun scripts/ci/bundle-report.mjs` checks both built outputs without widened
+ceilings; the built federation harness also checks full-catalog fixture parity.
+The wrapper uses its bundled Svelte
 runtime to mount and unmount the dialog, so the host never mounts a component
 compiled against a different Svelte runtime. `host` is the typed adapter in
 `host-contract.ts`; all three dialogs treat a resolved `{ success: false }` host

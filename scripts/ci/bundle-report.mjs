@@ -88,17 +88,9 @@ const SPA_DISPLACED_BASELINES = {
 // shared chunks are hashed, so they are matched on the pre-hash stem. Captured by
 // building `bun run build:federation` in a worktree at the baseline commit.
 //
-// KNOWN BREACH — `toast-host.js`, the shared chunk that carries the message
-// catalog for all three dialogs. A federation bundle is fetched as ONE hosted
-// module against a signed manifest pinning an exact chunk graph, so it cannot use
-// the SPA's lazily-imported namespace chunks: it registers the catalog
-// statically (`lib/federation/messages.ts`). Paraglide's per-message ×10-locale
-// expansion makes that catalog ~3x the typesafe-i18n dictionaries it replaced,
-// and unlike the SPA there is no split to spend. Splitting it here would only
-// move the same bytes into sibling files to slip under a PER-FILE budget, so it
-// is reported rather than dodged. Real remedies, both outside this gate:
-// `outputStructure: "locale-modules"`, or dynamic namespace chunks with manifest
-// + signing + CSP coverage on the platform side.
+// `toast-host.js` carries the static catalog for all three dialogs. Federation
+// uses isolated locale-modules plus full output minification to stay within this
+// budget. No catalog bytes are moved into extra chunks to evade a per-file cap.
 const FEDERATION_BASELINE = {
 	// ACCEPTED, TRACKED REGRESSION — not an accidental widening. Re-derived
 	// 2026-08-15 from the current federation build; the pre-migration number it
@@ -117,6 +109,9 @@ const FEDERATION_BASELINE = {
 	'audio.js': 7_009,
 	'InfoPopover.js': 6_104,
 	'input.js': 3_845,
+	// Shared by Audio and Encoder since before main 0e16840e; not a catalog split.
+	// Measured with the compact federation output (all other ceilings unchanged).
+	'sources-view-model.js': 603,
 };
 
 // The baselines a tracked, approved debt retired. Kept so the budget above can

@@ -80,6 +80,13 @@ Output goes to `dist/`.
 
 ### Other Commands
 
+The separately hosted Encoder/Audio/Server bundles are built with
+`bun run build:federation` from the repository root. Federation compiles the full
+ten-locale catalog in isolated locale-module layout and minifies the final ES
+modules; SPA namespace loading is unaffected. Run `bun run test:federation-abi`
+for built-dialog and frozen-catalog parity, and after building both SPA and
+federation run `bun scripts/ci/bundle-report.mjs` to check both size budgets.
+
 | Command | Description |
 |---------|-------------|
 | `bun run --filter frontend check` | Type-check via `svelte-check` |
