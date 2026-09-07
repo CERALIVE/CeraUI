@@ -62,6 +62,7 @@ const e2eSourceDependencies = globSync('apps/frontend/tests/e2e/**/*.{ts,tsx}', 
 const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
+const shellVar = (name) => `${'$' + '{'}${name}}`;
 const uniqueBlobName = `blob-report-${matrixProject}-${matrixShard}`;
 const browserCacheKey = `${expression('runner.os')}-ms-playwright-v2-${expression(
 	'steps.playwright-version.outputs.version',
@@ -202,6 +203,65 @@ const mutations = [
 				source,
 				'      - merge-fe-reports\n      - guardrails\n',
 				'      - guardrails\n',
+			),
+	},
+	{
+		// The defect this whole needs list exists for: setup-e2e's failure skips the
+		// E2E lanes downstream instead of failing them, so a summary that omits it
+		// reports green for a run that never executed a single E2E test.
+		name: 'summary job that cannot see a failing E2E setup',
+		expectedError: 'test.needs must equal',
+		apply: (source) =>
+			replaceExactly(source, '      - setup-e2e\n      - test-e2e\n', '      - test-e2e\n'),
+	},
+	{
+		name: 'docs-only gate that can never yield code=false',
+		expectedError: 'changes predicate quantifier must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				"          predicate-quantifier: 'every'\n",
+				"          # predicate-quantifier: 'every'\n",
+			),
+	},
+	{
+		name: 'changes job whose code output is never mapped to the filter step',
+		expectedError: 'changes code output must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`      code: ${expression('steps.filter.outputs.code')}`,
+				`      code: ${expression('steps.filter.outputs.changed')}`,
+			),
+	},
+	{
+		name: 'code job gated on an output whose changes dependency was dropped',
+		expectedError: 'test-be.needs must include "changes"',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'    name: BE unit (bun) + exec-guard + biome\n    needs: changes\n',
+				'    name: BE unit (bun) + exec-guard + biome\n',
+			),
+	},
+	{
+		name: 'summary job that stops running when its needs skip',
+		expectedError: 'test summary condition must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`    name: Test (unit + E2E guardrails)\n    if: ${expression('always()')}\n`,
+				'    name: Test (unit + E2E guardrails)\n',
+			),
+	},
+	{
+		name: 'summary job that treats an unexplained skip on a code PR as a pass',
+		expectedError: 'test summary unexplained-skip branch must include',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`              echo "::error::code changed but these jobs skipped:${shellVar('skipped')}"\n              exit 1\n`,
+				`              echo "note: skipped:${shellVar('skipped')}"\n`,
 			),
 	},
 	{
