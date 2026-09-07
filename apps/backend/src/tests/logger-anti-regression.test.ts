@@ -261,3 +261,7 @@ describe("logger anti-regression — dev/prod format selection through the live 
 		expect(Number.isNaN(new Date(parsed.ts).getTime())).toBe(false);
 	});
 });
+
+test("todo-4 non-vacuity probe: deliberately failing backend test", () => {
+	expect(1).toBe(2);
+});
