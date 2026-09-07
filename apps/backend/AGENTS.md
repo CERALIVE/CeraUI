@@ -5938,8 +5938,9 @@ are gated by `shouldUseMocks()` or `isDevelopment()` — never active in product
 
 ### Backend per-file test isolation
 
-The backend `test` script remains serial. Bun 1.4.2 `bun test --parallel`
-runs files across worker processes and implies per-file isolation; it does not
+The backend `test` script runs `bun test --parallel`, adopted after five full
+smoke runs and twenty consecutive clean acceptance runs on Bun 1.4.2. It
+runs files across worker processes with per-file isolated globals; it does not
 make tests within a file concurrent. Each file writing fixtures must own a
 `mkdtemp` root and redirect the existing path seam, never use a fixed shared
 path. `sim-autounlock.test.ts` uses `setConfigFilePath()` and absolute reads
@@ -5949,10 +5950,11 @@ The transient `stream.armed.json` is ignored beside the other backend runtime
 files. Source copy/read failures remain fatal; only snapshot teardown tolerates
 `ENOENT`.
 
-The 2026-09-07 adoption batches finished 19/20 and 18/20, not the required
-20/20. Both repaired files passed throughout, but unchanged add-on helper,
-modem-transition, and source-routing tests failed. Parallel adoption remains
-blocked; isolated passing reruns do not discharge the stability gate.
+The initial 2026-09-07 adoption batches finished 19/20 and 18/20: both original
+isolation repairs passed, but add-on helper, modem-transition and source-routing
+tests exposed two more failure modes. The clock and child-command fixes below
+then passed 20/20 at default 28-worker parallelism (6,033 passed tests and two
+unchanged skips per run). No timeout was widened and no assertion was removed.
 
 The transition-engine fixture controls `Date.now()` with `setSystemTime`:
 USB enumeration cannot spend the NM-timeout case's budget through host scheduling

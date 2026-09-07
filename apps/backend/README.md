@@ -124,17 +124,20 @@ bun run check
 ### Tests
 
 ```bash
-bun test
+bun run test
 ```
 
-The package's `test` script remains serial until the parallel stability gate
-passes. For an opt-in probe, use `bun test --parallel` on Bun 1.4.2: files run
-in isolated worker processes, but filesystem paths are still shared. Tests that
+The package's `test` script runs `bun test --parallel` on Bun 1.4.2, adopted
+after five smoke runs and twenty consecutive clean full-suite runs. Files run
+in isolated worker globals across worker processes, but filesystem paths are still shared. Tests that
 persist fixtures must use per-file `mkdtemp` roots and the existing path setters
 (runtime config: `setConfigFilePath`). The USB-tether source fence scans its own
 temporary snapshot of tracked and new non-ignored source, excluding runtime
-markers; missing source remains an error. See `AGENTS.md` → Backend per-file
-test isolation for the outstanding adoption failures.
+markers; missing source remains an error. The modem-transition fixture controls
+its polling clock. Real add-on/GPG and source-routing Git checks use an async
+test-command helper to avoid Bun 1.4.2's GC-sensitive synchronous-loop defect
+(oven-sh/bun#40078), retaining real child execution and all existing assertions.
+See `AGENTS.md` → Backend per-file test isolation for these contracts.
 
 ## Build
 
