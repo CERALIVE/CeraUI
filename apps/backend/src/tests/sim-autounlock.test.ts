@@ -18,7 +18,6 @@
 
 import {
 	afterAll,
-	afterEach,
 	beforeAll,
 	beforeEach,
 	describe,
@@ -30,6 +29,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { runtimeConfigSchema } from "../helpers/config-schemas.ts";
+import { getConfigFilePath, setConfigFilePath } from "../modules/config.ts";
 import type { SimUnlockResult } from "../modules/modems/mmcli.ts";
 import {
 	type LockedModem,
@@ -44,14 +44,17 @@ import {
 } from "../modules/modems/sim-secrets.ts";
 
 const ORIGINAL_RUN_DIR = process.env.CERALIVE_RUN_DIR;
-const ORIGINAL_CWD = process.cwd();
+const ORIGINAL_CONFIG_PATH = getConfigFilePath();
 const RUN_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ceralive-sim-"));
+const CONFIG_PATH = path.join(RUN_DIR, "config.json");
 
 beforeAll(() => {
 	process.env.CERALIVE_RUN_DIR = RUN_DIR;
+	setConfigFilePath(CONFIG_PATH);
 });
 
 afterAll(() => {
+	setConfigFilePath(ORIGINAL_CONFIG_PATH);
 	fs.rmSync(RUN_DIR, { recursive: true, force: true });
 	if (ORIGINAL_RUN_DIR === undefined) {
 		delete process.env.CERALIVE_RUN_DIR;
@@ -66,12 +69,7 @@ beforeEach(() => {
 		fs.rmSync(path.join(RUN_DIR, entry), { recursive: true, force: true });
 	}
 	// Parallel workers must not supply or mutate this test's config snapshot.
-	process.chdir(RUN_DIR);
-	fs.writeFileSync("config.json", '{"max_br":5000}\n');
-});
-
-afterEach(() => {
-	process.chdir(ORIGINAL_CWD);
+	fs.writeFileSync(CONFIG_PATH, '{"max_br":5000}\n');
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,11 +85,9 @@ describe("sim-secrets store", () => {
 	});
 
 	it("stores an opted-in PIN to a 0600 tmpfs file, leaving config.json unchanged", async () => {
-		// The on-disk config.json (cwd) is the persisted runtime config — capture
+		// The injected config.json is the persisted runtime config — capture
 		// its exact bytes so we can prove the PIN write never touches it.
-		const configBefore = fs.existsSync("config.json")
-			? fs.readFileSync("config.json", "utf8")
-			: null;
+		const configBefore = fs.readFileSync(getConfigFilePath(), "utf8");
 
 		await storeSimPin("1234");
 
@@ -108,14 +104,10 @@ describe("sim-secrets store", () => {
 		const mode = fs.statSync(secretPath).mode & 0o777;
 		expect(mode).toBe(0o600);
 
-		const configAfter = fs.existsSync("config.json")
-			? fs.readFileSync("config.json", "utf8")
-			: null;
+		const configAfter = fs.readFileSync(getConfigFilePath(), "utf8");
 		expect(configAfter).toBe(configBefore);
 		// And config.json gained no PIN field.
-		if (configAfter !== null) {
-			expect(JSON.parse(configAfter)).not.toHaveProperty("simPin");
-		}
+		expect(JSON.parse(configAfter)).not.toHaveProperty("simPin");
 	});
 
 	it("round-trips load and clears idempotently", async () => {

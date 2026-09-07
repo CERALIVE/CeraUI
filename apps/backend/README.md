@@ -127,6 +127,15 @@ bun run check
 bun test
 ```
 
+The package's `test` script remains serial until the parallel stability gate
+passes. For an opt-in probe, use `bun test --parallel` on Bun 1.4.2: files run
+in isolated worker processes, but filesystem paths are still shared. Tests that
+persist fixtures must use per-file `mkdtemp` roots and the existing path setters
+(runtime config: `setConfigFilePath`). The USB-tether source fence scans its own
+temporary snapshot of tracked and new non-ignored source, excluding runtime
+markers; missing source remains an error. See `AGENTS.md` → Backend per-file
+test isolation for the outstanding adoption failures.
+
 ## Build
 
 The backend compiles to a single self-contained binary. Architecture is controlled by `BUILD_ARCH`:

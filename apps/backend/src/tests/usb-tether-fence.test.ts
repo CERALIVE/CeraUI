@@ -19,13 +19,34 @@
  * where it has to be argued.
  */
 
-import { describe, expect, it } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import {
+	copyFileSync,
+	mkdirSync,
+	mkdtempSync,
+	readdirSync,
+	readFileSync,
+} from "node:fs";
+import { rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 import { CERTIFIED_CATALOG } from "@ceralive/modem-control";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..", "..");
+const SCAN_ROOT = mkdtempSync(join(tmpdir(), "ceraui-usb-fence-"));
+
+afterAll(async () => {
+	try {
+		await rm(SCAN_ROOT, { recursive: true });
+	} catch (error) {
+		if (
+			!(error instanceof Error && "code" in error && error.code === "ENOENT")
+		) {
+			throw error;
+		}
+	}
+});
 
 /**
  * The files allowed to name the verb in EXECUTABLE code, because naming it is
@@ -115,14 +136,37 @@ function stripComments(source: string): string {
 		.join("\n");
 }
 
-const FILES = collectFiles(REPO_ROOT);
+let FILES: string[] = [];
+
+beforeAll(() => {
+	// Snapshot working-tree source, including new files, but not ignored runtime
+	// state that other workers create/remove (notably stream.armed.json).
+	const inventory = Bun.spawnSync(
+		["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+		{
+			cwd: REPO_ROOT,
+		},
+	);
+	expect(inventory.exitCode, inventory.stderr.toString()).toBe(0);
+	for (const relative of inventory.stdout
+		.toString()
+		.split("\0")
+		.filter(Boolean)) {
+		if (relative.split("/").some((part) => SKIP_DIRS.has(part))) continue;
+		if (!SCANNED_EXTENSIONS.some((ext) => relative.endsWith(ext))) continue;
+		const target = join(SCAN_ROOT, relative);
+		mkdirSync(dirname(target), { recursive: true });
+		copyFileSync(join(REPO_ROOT, relative), target);
+	}
+	FILES = collectFiles(SCAN_ROOT);
+});
 
 describe("the UFI usb-tether write is absent from every surface, permanently", () => {
 	it("scans the whole repo, not a subdirectory of it", () => {
 		// Guards the gate itself: a moved root or an over-broad skip list would
 		// otherwise make every assertion below pass vacuously.
 		expect(FILES.length).toBeGreaterThan(500);
-		const relative = FILES.map((path) => path.slice(REPO_ROOT.length + 1));
+		const relative = FILES.map((path) => path.slice(SCAN_ROOT.length + 1));
 		for (const surface of [
 			"apps/backend/src/rpc/procedures/modems.procedure.ts",
 			"apps/frontend/src/main/dialogs/ModemConfigDialog.svelte",
@@ -134,6 +178,7 @@ describe("the UFI usb-tether write is absent from every surface, permanently", (
 			relative.some((path) => path.startsWith("apps/frontend/tests/e2e/")),
 			"the e2e suite must be in scan scope",
 		).toBe(true);
+		expect(relative).not.toContain("apps/backend/stream.armed.json");
 		expect(
 			relative.some((path) => path.startsWith(".github/workflows/")),
 			"CI automation must be in scan scope",
@@ -143,7 +188,7 @@ describe("the UFI usb-tether write is absent from every surface, permanently", (
 	it("appears in NO catalog, RPC, UI, test or automation file", () => {
 		const offenders = FILES.filter((path) =>
 			FORBIDDEN.test(stripComments(readFileSync(path, "utf8"))),
-		).map((path) => path.slice(REPO_ROOT.length + 1));
+		).map((path) => path.slice(SCAN_ROOT.length + 1));
 
 		expect(offenders).toEqual([]);
 	});
