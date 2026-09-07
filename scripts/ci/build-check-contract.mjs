@@ -1,6 +1,7 @@
 import { file, YAML } from 'bun';
 
 const expression = (body) => `${'$' + '{{'} ${body} }}`;
+const shellVar = (name) => `${'$' + '{'}${name}}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
 const totalShards = expression('env.TOTAL_SHARDS');
@@ -17,6 +18,31 @@ const PLAYWRIGHT_CACHE_KEY = `${expression('runner.os')}-ms-playwright-v2-${expr
 	'steps.playwright-version.outputs.version',
 )}`;
 const PLAYWRIGHT_RESTORE_KEY = `${expression('runner.os')}-ms-playwright-v2-`;
+// Docs-only gating. `predicate-quantifier: 'every'` is what makes the exclusion
+// list able to yield `code=false` at all; under the action's default `some` the
+// leading `**` matches on its own and a README-only PR still reports `true`.
+const CODE_FILTER_PATTERNS = [
+	'**',
+	'!**/*.md',
+	'!docs/**',
+	'!LICENSE*',
+	'!.github/PULL_REQUEST_TEMPLATE.md',
+	'!.github/ISSUE_TEMPLATE/**',
+	'!inspiration/**',
+];
+const CODE_GATE = expression("needs.changes.outputs.code == 'true'");
+const MERGE_GATE = expression("!cancelled() && needs.changes.outputs.code == 'true'");
+const GATED_JOBS = [
+	'test-fe',
+	'merge-fe-reports',
+	'guardrails',
+	'test-be',
+	'setup-e2e',
+	'test-e2e',
+	'merge-e2e-reports',
+	'build',
+];
+const SUMMARY_NEEDS = ['changes', ...GATED_JOBS];
 const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v3.2.0';
 const SRTLA_RUNTIME_URL =
 	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb';
@@ -210,6 +236,90 @@ function assertSrtlaRuntime(setupSteps, e2eSteps) {
 	assertStepOrder(e2eSteps, 'Activate srtla-send runtime', 'Start E2E servers', 'test-e2e');
 }
 
+function assertChangesGate(jobs) {
+	const changes = asRecord(jobs.changes, 'changes');
+	const permissions = asRecord(changes.permissions, 'changes.permissions');
+	assertExact(permissions.contents, 'read', 'changes contents permission');
+	assertExact(permissions['pull-requests'], 'read', 'changes pull-requests permission');
+	// Without the explicit job-level mapping every `needs.changes.outputs.code`
+	// below resolves to the empty string and the whole gate skips silently.
+	assertExact(
+		asRecord(changes.outputs, 'changes.outputs').code,
+		expression('steps.filter.outputs.code'),
+		'changes code output',
+	);
+
+	const steps = stepsOf(changes, 'changes');
+	const checkout = findStep(steps, 'Checkout', 'changes');
+	assertExact(checkout.uses, 'actions/checkout@v7', 'changes checkout action');
+	assertExact(withValues(checkout, 'changes checkout')['fetch-depth'], 0, 'changes fetch depth');
+
+	const filter = findStep(steps, 'Detect code changes', 'changes');
+	assertExact(filter.uses, 'dorny/paths-filter@v4', 'changes filter action');
+	assertExact(filter.id, 'filter', 'changes filter step id');
+	const filterWith = withValues(filter, 'changes filter');
+	assertExact(filterWith['predicate-quantifier'], 'every', 'changes predicate quantifier');
+	const filters = asRecord(YAML.parse(String(filterWith.filters)), 'changes filters');
+	assertList(filters.code, CODE_FILTER_PATTERNS, 'changes code filter');
+	// A second positive filter sharing this step would be ANDed by `every` and
+	// could never match a file; the `code` exclusion list must stand alone.
+	assertList(Object.keys(filters), ['code'], 'changes filter names');
+}
+
+function assertGatedJobs(jobs) {
+	for (const jobId of GATED_JOBS) {
+		const job = asRecord(jobs[jobId], jobId);
+		const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
+		if (!needs.includes('changes')) {
+			fail(`${jobId}.needs must include "changes", got ${JSON.stringify(job.needs)}`);
+		}
+		// The two report mergers keep `!cancelled()` so a FAILING lane's blob still
+		// reaches the merged report; every other gated job carries the bare gate.
+		const expected = jobId.startsWith('merge-') ? MERGE_GATE : CODE_GATE;
+		assertExact(job.if, expected, `${jobId} change gate`);
+	}
+}
+
+function assertSummary(finalTest) {
+	assertExact(finalTest.if, expression('always()'), 'test summary condition');
+	assertList(finalTest.needs, SUMMARY_NEEDS, 'test.needs');
+	const steps = stepsOf(finalTest, 'test');
+	assertExact(steps.length, 1, 'test summary step count');
+	const verify = findStep(steps, 'Verify every gated job reported', 'test');
+	const env = asRecord(verify.env, 'test summary env');
+	assertExact(
+		env.CODE_CHANGED,
+		expression('needs.changes.outputs.code'),
+		'test summary code input',
+	);
+	// A result this step never reads is a job whose failure it cannot see.
+	for (const jobId of SUMMARY_NEEDS) {
+		const reference = /^[A-Za-z_][A-Za-z0-9_]*$/u.test(jobId)
+			? `needs.${jobId}.result`
+			: `needs['${jobId}'].result`;
+		assertIncludes(
+			String(env.RESULTS),
+			`${jobId}=${expression(reference)}`,
+			'test summary results',
+		);
+	}
+	assertIncludes(
+		String(verify.run),
+		`if [ -n "${shellVar('failed')}" ]; then`,
+		'test summary failure branch',
+	);
+	assertIncludes(
+		String(verify.run),
+		`if [ "${shellVar('CODE_CHANGED')}" = "true" ]; then`,
+		'test summary code branch',
+	);
+	assertIncludes(
+		String(verify.run),
+		`echo "::error::code changed but these jobs skipped:${shellVar('skipped')}"`,
+		'test summary unexplained-skip branch',
+	);
+}
+
 function assertFrontendShards(frontendTest, mergeFe, guardrails) {
 	assertExact(frontendTest.name, `FE unit shard ${FE_SHARD_SPEC}`, 'test-fe job name');
 	assertExact(frontendTest['timeout-minutes'], 15, 'test-fe timeout');
@@ -243,8 +353,7 @@ function assertFrontendShards(frontendTest, mergeFe, guardrails) {
 	assertExact(uploadWith['if-no-files-found'], 'error', 'test-fe blob missing-file policy');
 	assertExact(uploadWith['retention-days'], 1, 'test-fe blob artifact retention');
 
-	assertExact(mergeFe.needs, 'test-fe', 'merge-fe-reports.needs');
-	assertExact(mergeFe.if, expression('!cancelled()'), 'merge-fe-reports condition');
+	assertList(mergeFe.needs, ['changes', 'test-fe'], 'merge-fe-reports.needs');
 	const mergeSteps = stepsOf(mergeFe, 'merge-fe-reports');
 	const download = findStep(mergeSteps, 'Download vitest blob reports', 'merge-fe-reports');
 	assertExact(download.uses, 'actions/download-artifact@v8', 'merge-fe-reports download action');
@@ -315,7 +424,7 @@ export function assertBuildCheckContract(source) {
 	const e2eSteps = stepsOf(e2e, 'test-e2e');
 	const backendSteps = stepsOf(backendTest, 'test-be');
 
-	assertExact(e2e.needs, 'setup-e2e', 'test-e2e.needs');
+	assertList(e2e.needs, ['changes', 'setup-e2e'], 'test-e2e.needs');
 	const matrix = asRecord(
 		asRecord(e2e.strategy, 'test-e2e.strategy').matrix,
 		'test-e2e.strategy.matrix',
@@ -394,8 +503,7 @@ export function assertBuildCheckContract(source) {
 		'functional blob artifact path',
 	);
 
-	assertExact(merge.needs, 'test-e2e', 'merge-e2e-reports.needs');
-	assertExact(merge.if, expression('!cancelled()'), 'merge-e2e-reports condition');
+	assertList(merge.needs, ['changes', 'test-e2e'], 'merge-e2e-reports.needs');
 	const download = findStep(
 		stepsOf(merge, 'merge-e2e-reports'),
 		'Download blob reports',
@@ -405,12 +513,10 @@ export function assertBuildCheckContract(source) {
 	const downloadWith = withValues(download, 'blob download');
 	assertExact(downloadWith.pattern, 'blob-report-*', 'blob download pattern');
 	assertExact(downloadWith['merge-multiple'], true, 'blob download merge-multiple');
-	assertList(
-		finalTest.needs,
-		['test-fe', 'merge-fe-reports', 'guardrails', 'test-be', 'test-e2e', 'merge-e2e-reports'],
-		'test.needs',
-	);
 
+	assertChangesGate(jobs);
+	assertGatedJobs(jobs);
+	assertSummary(finalTest);
 	assertFrontendShards(frontendTest, mergeFrontend, guardrails);
 	return root;
 }

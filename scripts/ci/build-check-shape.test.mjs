@@ -89,9 +89,13 @@ const mutations = [
 	},
 	{
 		name: 'wrong setup dependency even when the old dependency survives in a comment',
-		expectedError: 'test-e2e.needs must be "setup-e2e"',
+		expectedError: 'test-e2e.needs must equal',
 		apply: (source) =>
-			replaceExactly(source, '    needs: setup-e2e', '    # needs: setup-e2e\n    needs: test-fe'),
+			replaceExactly(
+				source,
+				'    needs: [changes, setup-e2e]',
+				'    # needs: [changes, setup-e2e]\n    needs: [changes, test-fe]',
+			),
 	},
 	{
 		name: 'colliding static blob artifact even when the unique name survives in a comment',
@@ -196,8 +200,8 @@ const mutations = [
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'    needs: [test-fe, merge-fe-reports, guardrails, test-be, test-e2e, merge-e2e-reports]',
-				'    needs: [test-fe, guardrails, test-be, test-e2e, merge-e2e-reports]',
+				'      - merge-fe-reports\n      - guardrails\n',
+				'      - guardrails\n',
 			),
 	},
 	{
