@@ -435,6 +435,9 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+      - name: todo-4 non-vacuity probe — force setup-e2e to fail
+        run: exit 1
+
   test-e2e:
     name: E2E (${{ matrix.project }} shard ${{ matrix.shard }}/2)
     needs: [changes, setup-e2e]
