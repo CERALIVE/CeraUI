@@ -1162,6 +1162,12 @@ matrix plus two sibling jobs, and five properties of that split are load-bearing
   `test:ci-merge` are CI-only; `bun run --filter frontend test` still runs the
   whole suite plus the preflight locally. Do not "unify" them — a developer running
   the local script must not need a `VITEST_SHARD` in their environment.
+- **Both Vitest projects run inside this shape.** `test:ci-shard` uses the same
+  `vitest.config.ts` classifier and project-scoped setup files as the local suite;
+  no `--project` filter may retire either `pure` or `components`. Every Build Check
+  `setup-bun` step must match the root `packageManager` runtime pin, including
+  newly introduced shard, guardrail and report jobs. The shape suite checks that
+  agreement so a clean textual rebase cannot silently restore an older runtime.
 - **Four, not more, and the arithmetic is recorded.** Every added lane re-pays a
   measured fixed cost (checkout + setup-bun + install + `generate:i18n`) of ~7.1 s
   against a ~1,343 s vitest step: 4 × 7.077 s = 28.3 s of overhead against 335.8 s

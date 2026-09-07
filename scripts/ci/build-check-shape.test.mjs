@@ -9,6 +9,19 @@ import { assertBuildCheckContract } from './build-check-contract.mjs';
 const workflowUrl = new URL('../../.github/workflows/build-check.yml', import.meta.url);
 const workflowSource = await file(workflowUrl).text();
 const repoRoot = new URL('../../', import.meta.url).pathname;
+test('every Build Check Bun runner matches the workspace runtime pin', async () => {
+	// Given the workspace runtime and every job in the merged workflow
+	const { packageManager } = await file(new URL('../../package.json', import.meta.url)).json();
+	const workflow = YAML.parse(workflowSource);
+	// When provisioning steps are selected across all shard and report jobs
+	const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
+	const bunSteps = steps.filter((step) => step.uses?.startsWith('oven-sh/setup-bun@'));
+	// Then no newly introduced job can silently retain an older runtime
+	expect(bunSteps.length).toBeGreaterThan(0);
+	for (const step of bunSteps)
+		expect(String(step.with['bun-version'])).toBe(packageManager.slice(4));
+});
+
 function staticStringValue(node) {
 	if (ts.isStringLiteralLike(node)) return node.text;
 	if (ts.isParenthesizedExpression(node)) return staticStringValue(node.expression);
