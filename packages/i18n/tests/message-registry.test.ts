@@ -36,6 +36,20 @@ const catalogKeys = Object.keys(
 ).filter((key) => key !== "$schema");
 
 describe("generated namespace map", () => {
+	it("imports message functions directly rather than materializing namespace objects", () => {
+		// Given every namespace the catalog declares
+		const namespaces = new Set(catalogKeys.map(namespaceOf));
+		// When reading the generated import boundaries
+		const sources = [...namespaces].map((namespace) =>
+			readFileSync(join(GENERATED, "namespaces", `${namespace}.js`), "utf8"),
+		);
+		// Then each barrel can be bundled without one export-getter object per key
+		for (const source of sources) {
+			expect(source).not.toMatch(/import\s+\*\s+as/);
+			expect(source).toMatch(/import\s*\{/);
+		}
+	});
+
 	it("covers every catalog key exactly once", () => {
 		expect(Object.keys(NAMESPACE_MAP).sort()).toEqual([...catalogKeys].sort());
 	});
@@ -67,6 +81,19 @@ describe("generated namespace map", () => {
 });
 
 describe("registry bracket access", () => {
+	it("preserves the exact compiled function for every catalog key", async () => {
+		// Given Paraglide's complete export map, independently of the barrels
+		const compiled: Readonly<Record<string, unknown>> = await import(
+			join(PACKAGE_ROOT, "src/paraglide/messages.js")
+		);
+		// When reading every registered function
+		for (const key of catalogKeys) {
+			// Then locale dispatch, interpolation and metadata remain the same function
+			expect(typeof compiled[key]).toBe("function");
+			expect(registry.getMessage(key)).toBe(compiled[key]);
+		}
+	});
+
 	it("resolves a verbatim dotted key", () => {
 		expect(registry.m["live.setup.title"]?.()).toBe("Stream setup");
 	});

@@ -104,6 +104,12 @@ The registry is also what makes `m["a.b.c"]` work at all: Paraglide's own export
 resolve bracket access against nothing unless every per-message module has
 already been imported.
 
+Each namespace barrel imports the compiled functions by their dotted export
+names, then registers them under those same keys. This avoids materializing a
+module namespace object for every message; the compiled functions, translations,
+locale selection and namespace-loading boundaries are unchanged. The production
+bundle and service-worker precache remain subject to the existing size budgets.
+
 ### Namespaces and lazy loading
 
 A message's **namespace** is its first dotted segment (`live.setup.title` → `live`).

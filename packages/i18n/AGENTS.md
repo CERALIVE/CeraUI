@@ -81,6 +81,11 @@ each gate is independently runnable from `bun install` alone.
 - `branding.ts` holds brand names that don't get translated — import from there.
 - Svelte 5 store uses runes — don't convert to stores.
 - Don't hand-edit anything under `generated/` or `src/paraglide/`.
+- Namespace barrels import each compiled message by its verbatim dotted export
+  name and place the function directly in the registry object. Do not spread
+  module namespace objects: that forces an export-getter wrapper per message into
+  the bundle. Direct bindings preserve every key, locale and message function
+  while keeping the SPA and precache within their unchanged budgets.
 - **Every namespace is LAZY, and `EAGER_NAMESPACES` (in `scripts/generate-registry.ts`)
   is empty on purpose.** A compiled Paraglide message inlines all ten locales, so an
   all-eager catalog is one indivisible blob; under rolldown a statically-reachable
