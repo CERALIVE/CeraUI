@@ -6,12 +6,13 @@
  * ifname. Never throws on missing/partial/null inputs.
  */
 
-import type {
-	Modem,
-	ModemList,
-	NetifEntry,
-	NetifMessage,
-	WifiStatus,
+import {
+	type Modem,
+	type ModemList,
+	NETIF_DUPLICATE_IPV4_ERROR,
+	type NetifEntry,
+	type NetifMessage,
+	type WifiStatus,
 } from "@ceraui/rpc/schemas";
 import { isLoopbackIpv4 } from "$lib/helpers/ip-classification";
 import {
@@ -48,26 +49,28 @@ export function modemConnectionState(
  * condition rather than by the operator?
  *
  * True when the interface has no `netif` entry at all (a modem that never
- * attached, a radio with no lease), holds no address, or carries a netif error
- * (the dup-IP HiLink pair).
+ * attached, a radio with no lease), holds no address, or carries a blocking
+ * netif error. The duplicate-IP warning is non-blocking only when the backend
+ * projects `isBondCandidate()` as enabled: that proves mappability and rules out
+ * other error bits, which the wire's single error string cannot distinguish.
  */
 export function isBondExcluded(entry: NetifEntry | undefined): boolean {
 	if (!entry) return true;
+	if (entry.error === NETIF_DUPLICATE_IPV4_ERROR)
+		return entry.enabled !== true || !entry.ip;
 	if (entry.error !== undefined && entry.error !== "") return true;
 	if (!entry.ip) return true;
 	return false;
 }
 
 /**
- * Does this interface actually carry bonded traffic right now?
+ * Is this interface included in the device's eligible bond pool?
  *
  * This is the frontend mirror of the backend's own bond-membership rule —
- * `genSrtlaIpList()` (`modules/streaming/srtla.ts`) writes the srtla source-IP
- * list from exactly the `netif` entries that are `enabled` and hold an `ip`, so
- * an interface satisfying that pair IS a bonded link and one that does not is
- * not. Both halves of the exclusion are folded here: an operator's `enabled:
- * false` (a statement of intent) and a device condition
- * ({@link isBondExcluded}) both mean the link carries nothing.
+ * `netIfBuildMsg().enabled` and `genSrtlaBondEntries()` use `isBondCandidate()`.
+ * An enabled duplicate-IP row is therefore bondable, not necessarily already
+ * bound by a running sender. Session mapping and telemetry remain separate;
+ * their absence while idle must not erase eligible links.
  */
 export function isBondMember(entry: NetifEntry | undefined): boolean {
 	return entry?.enabled === true && !isBondExcluded(entry);
