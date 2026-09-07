@@ -102,6 +102,11 @@ registration, `matchMedia`, and the retained 50 ms bits-ui teardown wait. The
 separate federation harness explicitly loads both files too. Classifier checks:
 `bun test scripts/ci/vitest-classify.test.mjs` from the repository root.
 
+CI keeps the same two projects and their setup files inside the four-way
+`test:ci-shard` lane (`VITEST_SHARD=1/4` through `4/4`); `test:ci-merge` merges
+their blob reports. The ordinary `test` command still runs the whole suite and
+hardware preflight without a shard environment variable.
+
 ### Mock Scenarios
 
 Development mode mocks hardware. Set `MOCK_SCENARIO` to switch scenarios:
