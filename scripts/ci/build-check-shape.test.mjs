@@ -62,7 +62,9 @@ const e2eSourceDependencies = globSync('apps/frontend/tests/e2e/**/*.{ts,tsx}', 
 const expression = (body) => `${'$' + '{{'} ${body} }}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
-const uniqueBlobName = `blob-report-${matrixProject}-${matrixShard}`;
+const matrixTotal = expression('matrix.total');
+const shellVar = (name) => `${'$' + '{'}${name}}`;
+const uniqueBlobName = `blob-report-e2e-${matrixProject}-${matrixShard}-of-${matrixTotal}`;
 const browserCacheKey = `${expression('runner.os')}-ms-playwright-v2-${expression(
 	'steps.playwright-version.outputs.version',
 )}`;
@@ -79,19 +81,23 @@ function replaceExactly(source, before, after, expectedCount = 1) {
 const mutations = [
 	{
 		name: 'single-project matrix even when the old matrix survives in a comment',
-		expectedError: 'test-e2e matrix.project must equal',
+		expectedError: 'test-e2e matrix.include must equal',
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'        project: [desktop, mobile]',
-				'        # project: [desktop, mobile]\n        project: [desktop]',
+				'          - project: mobile\n            shard: 1\n            total: 1',
+				'          # project: mobile\n          - project: desktop\n            shard: 1\n            total: 3',
 			),
 	},
 	{
 		name: 'wrong setup dependency even when the old dependency survives in a comment',
-		expectedError: 'test-e2e.needs must be "setup-e2e"',
+		expectedError: 'test-e2e.needs must equal',
 		apply: (source) =>
-			replaceExactly(source, '    needs: setup-e2e', '    # needs: setup-e2e\n    needs: test-fe'),
+			replaceExactly(
+				source,
+				'    needs: [changes, setup-e2e]',
+				'    # needs: [changes, setup-e2e]\n    needs: [changes, test-fe]',
+			),
 	},
 	{
 		name: 'colliding static blob artifact even when the unique name survives in a comment',
@@ -153,6 +159,120 @@ const mutations = [
 				source,
 				'bun run --filter frontend preview -- --host 127.0.0.1 --port 6173',
 				'bun run --filter frontend dev -- --host 127.0.0.1 --port 6173',
+			),
+	},
+	{
+		name: 'FE shard fan-out silently narrowed even when the old matrix survives in a comment',
+		expectedError: 'test-fe matrix.shard must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'        shard: [1, 2, 3, 4]',
+				'        # shard: [1, 2, 3, 4]\n        shard: [1, 2]',
+			),
+	},
+	{
+		name: 'FE blob upload losing the hidden-files opt-in a dot-directory needs',
+		expectedError: 'test-fe blob hidden files',
+		apply: (source) => replaceExactly(source, '          include-hidden-files: true\n', ''),
+	},
+	{
+		name: 'FE shards uploading one colliding artifact name',
+		expectedError: 'test-fe blob artifact name',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`          name: vitest-blob-${matrixShard}`,
+				'          name: vitest-blob',
+			),
+	},
+	{
+		name: 'shard env drifting away from the declared matrix width',
+		expectedError: 'test-fe VITEST_SHARD',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`      VITEST_SHARD: ${matrixShard}/4`,
+				`      VITEST_SHARD: ${matrixShard}/3`,
+			),
+	},
+	{
+		name: 'summary job no longer gated on the merged FE report',
+		expectedError: 'test.needs must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'      - merge-fe-reports\n      - guardrails\n',
+				'      - guardrails\n',
+			),
+	},
+	{
+		// The defect this whole needs list exists for: setup-e2e's failure skips the
+		// E2E lanes downstream instead of failing them, so a summary that omits it
+		// reports green for a run that never executed a single E2E test.
+		name: 'summary job that cannot see a failing E2E setup',
+		expectedError: 'test.needs must equal',
+		apply: (source) =>
+			replaceExactly(source, '      - setup-e2e\n      - test-e2e\n', '      - test-e2e\n'),
+	},
+	{
+		name: 'docs-only gate that can never yield code=false',
+		expectedError: 'changes predicate quantifier must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				"          predicate-quantifier: 'every'\n",
+				"          # predicate-quantifier: 'every'\n",
+			),
+	},
+	{
+		name: 'changes job whose code output is never mapped to the filter step',
+		expectedError: 'changes code output must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`      code: ${expression('steps.filter.outputs.code')}`,
+				`      code: ${expression('steps.filter.outputs.changed')}`,
+			),
+	},
+	{
+		name: 'code job gated on an output whose changes dependency was dropped',
+		expectedError: 'test-be.needs must include "changes"',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'    name: BE unit (bun) + exec-guard + biome\n    needs: changes\n',
+				'    name: BE unit (bun) + exec-guard + biome\n',
+			),
+	},
+	{
+		name: 'summary job that stops running when its needs skip',
+		expectedError: 'test summary condition must be',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`    name: Test (unit + E2E guardrails)\n    if: ${expression('always()')}\n`,
+				'    name: Test (unit + E2E guardrails)\n',
+			),
+	},
+	{
+		name: 'summary job that treats an unexplained skip on a code PR as a pass',
+		expectedError: 'test summary unexplained-skip branch must include',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				`              echo "::error::code changed but these jobs skipped:${shellVar('skipped')}"\n              exit 1\n`,
+				`              echo "note: skipped:${shellVar('skipped')}"\n`,
+			),
+	},
+	{
+		name: 'hardware preflight dropped along with the frontend test script that chained it',
+		expectedError: 'guardrails must contain exactly one "Input-picker hardware preflight" step',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'      - name: Input-picker hardware preflight\n        working-directory: CeraUI\n        run: bun run --filter frontend test:hardware-preflight\n',
+				'',
 			),
 	},
 	{

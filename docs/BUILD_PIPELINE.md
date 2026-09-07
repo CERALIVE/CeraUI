@@ -141,6 +141,32 @@ or the tag/release identity is already in use.
 Both the normal and recovery workflows require frozen install, lint/typecheck,
 and unit tests before their build jobs can run.
 
+### Pull Request Build Check frontend unit lane
+
+The vitest suite is the workflow's longest job, so `test-fe` runs as a four-way
+static shard matrix (`shard: [1, 2, 3, 4]`, `fail-fast: false`, `timeout-minutes:
+15`). Each leg exports `VITEST_SHARD: <n>/4` and runs `test:ci-shard`, which adds
+`--shard` and the blob reporter to the ordinary run; vitest writes
+`apps/frontend/.vitest/blob/blob-<n>-4.json`, so the per-shard filenames never
+collide. `.vitest/` is a dot-directory, so the upload needs
+`include-hidden-files: true` — without it the artifact is silently empty. Uploads
+run on `!cancelled()` rather than `always()`, because a failing shard's blob is
+exactly what the merged report has to carry.
+
+`merge-fe-reports` downloads every `vitest-blob-*` artifact back into that one
+directory with `merge-multiple: true` and runs `test:ci-merge`
+(`vitest run --merge-reports`), which prints the union file and test counts for
+the whole suite.
+
+`guardrails` carries the seconds-long gates that used to sit behind the vitest
+lane: the tech-debt register, the three spec guardrails, the workflow shape gate,
+and the input-picker hardware preflight. That last one is not optional bookkeeping
+— `test:ci-shard` runs vitest alone, so nothing else in CI chains it.
+
+The local `test` script is deliberately unchanged: it still runs the full
+unsharded suite plus the preflight, so a developer's `bun run --filter frontend
+test` behaves exactly as before.
+
 ### Pull Request Build Check E2E
 
 `.github/workflows/build-check.yml` builds the frontend once in `setup-e2e`, uploads

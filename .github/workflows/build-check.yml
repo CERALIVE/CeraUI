@@ -8,10 +8,9 @@ on:
 
 env:
   NODE_VERSION: "26"
-  # E2E fan-out. The union of project×shard lanes runs the same functional
-  # spec×project set as the unsharded run (458 invocations on 2026-07-13);
-  # a11y (desktop-only) runs once on desktop shard 1.
-  TOTAL_SHARDS: "2"
+  # E2E fan-out. The union of project-specific shard lanes runs the same
+  # functional spec×project set as the unsharded run (458 invocations on
+  # 2026-07-13); a11y (desktop-only) runs once on desktop shard 1.
 
 permissions:
   contents: read
@@ -21,12 +20,120 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Change detection. Every code job below is gated on this job's `code` output so
+  # a documentation-only PR pays for nothing. The scope lives HERE and not on the
+  # `pull_request` trigger, because a trigger filter stops the workflow from
+  # starting at all — and a required check that never reports blocks a merge
+  # instead of passing it. The always-run `test` summary at the bottom is what
+  # branch protection requires, so this workflow must always start, then decide.
+  #
+  # `predicate-quantifier: 'every'` is MANDATORY here and not a tuning knob. The
+  # action's default is `some`, under which the leading `'**'` matches every
+  # changed file on its own and the exclusions below can never take a file out of
+  # `code` — the filter would report `true` for a README-only PR, forever.
+  # `every` makes a file count as `code` only when it matches `'**'` AND every
+  # negation. The quantifier is a property of the STEP, so an exclusion filter
+  # like this one must never share a step with a positive OR list.
+  #
+  # There is deliberately no second `workflows` filter: a workflow file matches
+  # `'**'` and no negation, so editing one already yields `code=true`.
+  changes:
+    name: Change detection
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    # The job-level mapping is mandatory. Without it `needs.changes.outputs.code`
+    # resolves to the empty string in every gated job and the whole gate silently
+    # skips — a misleading green rather than a failure.
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect code changes
+        uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          predicate-quantifier: 'every'
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!LICENSE*'
+              - '!.github/PULL_REQUEST_TEMPLATE.md'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!inspiration/**'
+
   # Deliberately has NO `Setup Node.js` step, unlike every other job here: every
   # command it runs is Bun (vitest via `bun --bun`, the rest `bun`/`bun test`), and
   # this tree has no install lifecycle script for `bun install` to shell out with.
   # Do not re-add setup-node without a command that actually needs Node.
   test-fe:
-    name: FE unit (vitest under Bun) + tech-debt + spec guardrails
+    name: FE unit shard ${{ matrix.shard }}/4
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    # ~2x the expected worst shard (a quarter of the ~22 min single run): slack for
+    # runner jitter, without letting a genuine hang burn the six-hour default.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      VITEST_SHARD: ${{ matrix.shard }}/4
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
+
+      - name: Unit tests (vitest shard)
+        working-directory: CeraUI
+        run: bun run --filter frontend test:ci-shard
+
+      # `!cancelled()`, not `always()`: a FAILING shard still wrote its blob and the
+      # merged report must carry its failures; a cancelled one has nothing to upload.
+      # `.vitest/` is a dot-directory, so the hidden-files opt-in is what makes this
+      # upload non-empty at all.
+      - name: Upload vitest blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: vitest-blob-${{ matrix.shard }}
+          path: CeraUI/apps/frontend/.vitest/blob
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-fe-reports:
+    name: Merge FE unit blob reports
+    # `!cancelled()` stays: a FAILING shard's blob is exactly what the merged
+    # report must carry, so this must not degrade to needs-success.
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    needs: [changes, test-fe]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
@@ -51,9 +158,46 @@ jobs:
         working-directory: CeraUI
         run: bun install --frozen-lockfile
 
-      - name: Unit tests (vitest)
+      - name: Download vitest blob reports
+        uses: actions/download-artifact@v8
+        with:
+          path: CeraUI/apps/frontend/.vitest/blob
+          pattern: vitest-blob-*
+          merge-multiple: true
+
+      - name: Merge vitest reports
         working-directory: CeraUI
-        run: bun run --filter frontend test
+        run: bun run --filter frontend test:ci-merge
+
+  # The non-vitest gates that used to ride the single FE job. Seconds of work each,
+  # so pinning them behind a 20-minute test lane only delayed their signal.
+  guardrails:
+    name: Tech-debt + spec guardrails + workflow shape
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout CeraUI
+        uses: actions/checkout@v7
+        with:
+          path: CeraUI
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Cache Bun install
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-store-${{ hashFiles('CeraUI/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-store-
+
+      - name: Install dependencies
+        working-directory: CeraUI
+        run: bun install --frozen-lockfile
 
       - name: Tech-debt register gate (validator unit tests + live register check)
         working-directory: CeraUI
@@ -80,8 +224,16 @@ jobs:
         working-directory: CeraUI
         run: bun run test:build-check-shape
 
+      # `test:ci-shard` runs vitest alone, so without this step the preflight the
+      # frontend `test` script chains locally would vanish from CI entirely.
+      - name: Input-picker hardware preflight
+        working-directory: CeraUI
+        run: bun run --filter frontend test:hardware-preflight
+
   test-be:
     name: BE unit (bun) + exec-guard + biome
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
@@ -177,6 +329,8 @@ jobs:
 
   setup-e2e:
     name: E2E setup (package deps, browser cache, frontend build)
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
@@ -281,14 +435,28 @@ jobs:
           retention-days: 1
 
   test-e2e:
-    name: E2E (${{ matrix.project }} shard ${{ matrix.shard }}/2)
-    needs: setup-e2e
+    name: E2E (${{ matrix.project }} shard ${{ matrix.shard }}/${{ matrix.total }})
+    needs: [changes, setup-e2e]
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project: [desktop, mobile]
-        shard: [1, 2]
+        include:
+          - project: desktop
+            shard: 1
+            total: 3
+          - project: desktop
+            shard: 2
+            total: 3
+          - project: desktop
+            shard: 3
+            total: 3
+          - project: mobile
+            shard: 1
+            total: 1
+    env:
+      TOTAL_SHARDS: ${{ matrix.total }}
     steps:
       - name: Checkout CeraUI
         uses: actions/checkout@v7
@@ -418,15 +586,15 @@ jobs:
         run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- a11y.spec.ts --project=desktop --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-desktop-${{ matrix.shard }}.json
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-desktop-${{ matrix.shard }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}
 
       - name: Upload a11y blob report
         if: ${{ always() && matrix.project == 'desktop' && matrix.shard == 1 }}
         uses: actions/upload-artifact@v7
         with:
-          name: blob-report-a11y-desktop-${{ matrix.shard }}
-          path: CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${{ matrix.shard }}
+          name: blob-report-a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}
+          path: CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${{ matrix.shard }}-of-${{ matrix.total }}
           if-no-files-found: ignore
           retention-days: 1
 
@@ -440,8 +608,8 @@ jobs:
         run: CI=true E2E_PASSWORD=12345678 bun run --filter frontend test:e2e -- --grep-invert "@visual|@a11y|@gallery|@premigration-upgrade" --project=${{ matrix.project }} --shard=${{ matrix.shard }}/${{ env.TOTAL_SHARDS }} --reporter=line,json,blob
         env:
           MOCK_SCENARIO: multi-modem-wifi
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-${{ matrix.project }}-${{ matrix.shard }}.json
-          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}.json
+          PLAYWRIGHT_BLOB_OUTPUT_DIR: test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}
 
       - name: Stop E2E servers
         if: always()
@@ -468,15 +636,15 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: blob-report-${{ matrix.project }}-${{ matrix.shard }}
-          path: CeraUI/apps/frontend/test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}
+          name: blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}
+          path: CeraUI/apps/frontend/test-results/blob-report-e2e-${{ matrix.project }}-${{ matrix.shard }}-of-${{ matrix.total }}
           if-no-files-found: ignore
           retention-days: 1
 
   merge-e2e-reports:
     name: Merge E2E blob reports
-    if: ${{ !cancelled() }}
-    needs: test-e2e
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
+    needs: [changes, test-e2e]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout CeraUI
@@ -510,7 +678,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: CeraUI/apps/frontend/all-blob-reports
-          pattern: blob-report-*
+          pattern: blob-report-*-of-*
           merge-multiple: true
 
       - name: Merge HTML report
@@ -525,16 +693,73 @@ jobs:
           path: CeraUI/apps/frontend/playwright-report/
           if-no-files-found: ignore
 
+  # The one check branch protection requires. It runs on every event — including a
+  # docs-only PR where every job above skipped — so the required check always
+  # reports instead of leaving a merge waiting on a check that will never arrive.
+  #
+  # `needs` lists EVERY failure-bearing prerequisite, `setup-e2e` included. Omitting
+  # it would make this job green when setup failed: the E2E lanes downstream skip
+  # rather than fail, and a summary that only watches them sees nothing wrong.
   test:
     name: Test (unit + E2E guardrails)
-    needs: [test-fe, test-be, test-e2e, merge-e2e-reports]
+    if: ${{ always() }}
+    needs:
+      - changes
+      - test-fe
+      - merge-fe-reports
+      - guardrails
+      - test-be
+      - setup-e2e
+      - test-e2e
+      - merge-e2e-reports
+      - build
     runs-on: ubuntu-latest
     steps:
-      - name: All test jobs passed
-        run: echo "FE unit, BE unit, and all E2E shards passed."
+      # On a code PR a SKIPPED job is an unexplained skip and is red — the gate
+      # claimed the change was code, so nothing below it had licence to vanish.
+      - name: Verify every gated job reported
+        env:
+          CODE_CHANGED: ${{ needs.changes.outputs.code }}
+          RESULTS: >-
+            changes=${{ needs.changes.result }}
+            test-fe=${{ needs['test-fe'].result }}
+            merge-fe-reports=${{ needs['merge-fe-reports'].result }}
+            guardrails=${{ needs.guardrails.result }}
+            test-be=${{ needs['test-be'].result }}
+            setup-e2e=${{ needs['setup-e2e'].result }}
+            test-e2e=${{ needs['test-e2e'].result }}
+            merge-e2e-reports=${{ needs['merge-e2e-reports'].result }}
+            build=${{ needs.build.result }}
+        run: |
+          set -euo pipefail
+          echo "dependency results: ${RESULTS}"
+          failed=""
+          skipped=""
+          for entry in ${RESULTS}; do
+            case "${entry#*=}" in
+              success) ;;
+              skipped) skipped="${skipped} ${entry%%=*}" ;;
+              *) failed="${failed} ${entry}" ;;
+            esac
+          done
+          if [ -n "${failed}" ]; then
+            echo "::error::Build Check job(s) did not succeed:${failed}"
+            exit 1
+          fi
+          if [ "${CODE_CHANGED}" = "true" ]; then
+            if [ -n "${skipped}" ]; then
+              echo "::error::code changed but these jobs skipped:${skipped}"
+              exit 1
+            fi
+            echo "every code job passed"
+            exit 0
+          fi
+          echo "docs-only change; skipped as expected:${skipped:- none}"
 
   build:
     name: Build ${{ matrix.arch }}
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:

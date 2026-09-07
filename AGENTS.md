@@ -901,7 +901,7 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `vitest` | 5.0.0-rc.3 — EXACT pin (a PRERELEASE; see the note below the table) |
 | `vite` | 8.2.2 |
 | `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
-| Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` job is the one job with NO `setup-node` step — every command in it is Bun (see the Vitest note below). |
+| Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` shards, `merge-fe-reports`, and `guardrails` are the jobs with NO `setup-node` step — every command in them is Bun (see the Vitest note below). |
 | `tailwindcss` (+ `@tailwindcss/vite`/`@tailwindcss/postcss`) | 4.3.3 |
 | `@biomejs/biome` (via the `@ceralive/biome-config` canon) | 2.5.9 — the config dep stays the range `^2026.8.0`; canon `2026.8.1` is committed in the root repo but NOT yet published, and a `^2026.8.1` pin would fail `bun install --frozen-lockfile` today. The caret absorbs it the moment the `biome-config-v2026.8.1` tag publishes. |
 | `bits-ui` | 2.19.0 |
@@ -1039,10 +1039,12 @@ Rebase onto `origin/<canonical>` between waves (Rule B); conflicts STOP-and-surf
 R2 is a COMPLEMENT to Rule C ("one focused PR per repo"), not an override.
 
 The Build Check E2E topology is intentionally split: `setup-e2e` builds and
-uploads the frontend and caches only Playwright browser binaries, while each
-isolated desktop/mobile × two-shard runner installs its own Playwright OS
-dependencies. Browser cache keys use the exact installed Playwright CLI version,
-and the four lanes retain unique blob artifacts for the merged report. The
+uploads the frontend and caches only Playwright browser binaries, while four
+isolated runners install their own Playwright OS dependencies: desktop shards
+1–3 and mobile shard 1. The matrix `include` row carries each project's `total`
+so the functional command and `-of-<total>` blob artifact names remain
+project-correct. Browser cache keys use the exact installed Playwright CLI
+version, and the four lanes retain unique blob artifacts for the merged report. The
 setup job also downloads the published `srtla-send-rs` v3.2.0 amd64 `.deb`,
 verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
 payload, and uploads that payload as a one-day artifact. Each E2E lane restores
@@ -1105,6 +1107,36 @@ Four further Build Check facts, all landed 2026-08-14:
 Any change to this workflow's jobs or run steps also changes the workspace
 manifest — the build-check manifest and execution contract tests model the job set and
 per-job run-step digests with SET EQUALITY and fail on anything unmodeled.
+
+### THE FRONTEND VITEST LANE IS SHARDED FOUR WAYS [EXISTS]
+
+`test-fe` was the workflow's critical path — a single ~22-minute vitest job that
+also carried five unrelated seconds-long gates. It is now a static four-way shard
+matrix plus two sibling jobs, and five properties of that split are load-bearing:
+
+- **`test` is unchanged; the shard scripts are additive.** `test:ci-shard` and
+  `test:ci-merge` are CI-only; `bun run --filter frontend test` still runs the
+  whole suite plus the preflight locally. Do not "unify" them — a developer running
+  the local script must not need a `VITEST_SHARD` in their environment.
+- **Four, not more, and the arithmetic is recorded.** Every added lane re-pays a
+  measured fixed cost (checkout + setup-bun + install + `generate:i18n`) of ~7.1 s
+  against a ~1,343 s vitest step: 4 × 7.077 s = 28.3 s of overhead against 335.8 s
+  of per-shard work, so the fan-out is still overwhelmingly worth it at 4. The rule
+  the number came from is `fixed × N ≤ duration ÷ N`; re-run it before changing N,
+  and change the manifest legs with it.
+- **`include-hidden-files: true` is not boilerplate.** Vitest writes its blob under
+  `apps/frontend/.vitest/blob/`, and `upload-artifact` skips dot-directories by
+  default — without the opt-in the artifact uploads empty and the merged report
+  silently shrinks while every job stays green.
+- **Blob uploads are `!cancelled()`, never `always()` and never `success()`.** A
+  FAILING shard's blob is precisely what the merged report must carry; gating on
+  success would hide the failures the merge exists to show.
+- **`guardrails` owns the hardware preflight, and dropping it is silent.** The
+  frontend `test` script chains `test:hardware-preflight`; `test:ci-shard`
+  deliberately does not, so the only thing keeping that gate in CI is the explicit
+  `guardrails` step. `scripts/ci/build-check-contract.mjs` asserts it, along with
+  the shard width, the `VITEST_SHARD` spec, both upload flags, the artifact name
+  template, and the six-way `test.needs` closure.
 
 ## BUN-NATIVE CONVENTIONS (as of 2026-06)
 

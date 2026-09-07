@@ -1,9 +1,24 @@
 import { file, YAML } from 'bun';
 
 const expression = (body) => `${'$' + '{{'} ${body} }}`;
+const shellVar = (name) => `${'$' + '{'}${name}}`;
 const matrixProject = expression('matrix.project');
 const matrixShard = expression('matrix.shard');
+const matrixTotal = expression('matrix.total');
 const totalShards = expression('env.TOTAL_SHARDS');
+// The FE unit lane is sharded STATICALLY. The workspace CI manifest models each
+// leg by literal id, so the shard list is a contract, not a tuning knob.
+const FE_SHARDS = [1, 2, 3, 4];
+const FE_SHARD_SPEC = `${matrixShard}/${FE_SHARDS.length}`;
+const FE_BLOB_ARTIFACT = `vitest-blob-${matrixShard}`;
+const FE_BLOB_DIR = 'apps/frontend/.vitest/blob';
+const E2E_MATRIX = [
+	{ project: 'desktop', shard: 1, total: 3 },
+	{ project: 'desktop', shard: 2, total: 3 },
+	{ project: 'desktop', shard: 3, total: 3 },
+	{ project: 'mobile', shard: 1, total: 1 },
+];
+const E2E_REPORT_SUFFIX = `${matrixProject}-${matrixShard}-of-${matrixTotal}`;
 // `-v2-` retires a cache entry that was missing chromium_headless_shell. Bumping
 // the namespace is what abandons a poisoned entry — actions/cache cannot
 // overwrite one, because it never re-saves on an exact-key hit.
@@ -11,6 +26,31 @@ const PLAYWRIGHT_CACHE_KEY = `${expression('runner.os')}-ms-playwright-v2-${expr
 	'steps.playwright-version.outputs.version',
 )}`;
 const PLAYWRIGHT_RESTORE_KEY = `${expression('runner.os')}-ms-playwright-v2-`;
+// Docs-only gating. `predicate-quantifier: 'every'` is what makes the exclusion
+// list able to yield `code=false` at all; under the action's default `some` the
+// leading `**` matches on its own and a README-only PR still reports `true`.
+const CODE_FILTER_PATTERNS = [
+	'**',
+	'!**/*.md',
+	'!docs/**',
+	'!LICENSE*',
+	'!.github/PULL_REQUEST_TEMPLATE.md',
+	'!.github/ISSUE_TEMPLATE/**',
+	'!inspiration/**',
+];
+const CODE_GATE = expression("needs.changes.outputs.code == 'true'");
+const MERGE_GATE = expression("!cancelled() && needs.changes.outputs.code == 'true'");
+const GATED_JOBS = [
+	'test-fe',
+	'merge-fe-reports',
+	'guardrails',
+	'test-be',
+	'setup-e2e',
+	'test-e2e',
+	'merge-e2e-reports',
+	'build',
+];
+const SUMMARY_NEEDS = ['changes', ...GATED_JOBS];
 const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v3.2.0';
 const SRTLA_RUNTIME_URL =
 	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb';
@@ -131,6 +171,43 @@ function assertBrowserCache(steps, label) {
 	);
 }
 
+function assertA11yShard(e2eSteps) {
+	const a11y = findStep(
+		e2eSteps,
+		'Accessibility gate (axe-core — critical/serious, baselined)',
+		'test-e2e',
+	);
+	assertExact(
+		a11y.if,
+		expression("matrix.project == 'desktop' && matrix.shard == 1"),
+		'test-e2e a11y shard condition',
+	);
+	const a11yEnv = asRecord(a11y.env, 'test-e2e a11y env');
+	assertExact(
+		a11yEnv.PLAYWRIGHT_JSON_OUTPUT_NAME,
+		`test-results/a11y-desktop-${matrixShard}-of-${matrixTotal}.json`,
+		'test-e2e a11y JSON output name',
+	);
+	assertExact(
+		a11yEnv.PLAYWRIGHT_BLOB_OUTPUT_DIR,
+		`test-results/blob-report-a11y-desktop-${matrixShard}-of-${matrixTotal}`,
+		'test-e2e a11y blob output directory',
+	);
+
+	const upload = findStep(e2eSteps, 'Upload a11y blob report', 'test-e2e');
+	const uploadWith = withValues(upload, 'test-e2e a11y blob upload');
+	assertExact(
+		uploadWith.name,
+		`blob-report-a11y-desktop-${matrixShard}-of-${matrixTotal}`,
+		'test-e2e a11y blob artifact name',
+	);
+	assertExact(
+		uploadWith.path,
+		`CeraUI/apps/frontend/test-results/blob-report-a11y-desktop-${matrixShard}-of-${matrixTotal}`,
+		'test-e2e a11y blob artifact path',
+	);
+}
+
 function assertStepOrder(steps, beforeName, afterName, label) {
 	const beforeIndex = steps.findIndex((step) => step.name === beforeName);
 	const afterIndex = steps.findIndex((step) => step.name === afterName);
@@ -204,6 +281,172 @@ function assertSrtlaRuntime(setupSteps, e2eSteps) {
 	assertStepOrder(e2eSteps, 'Activate srtla-send runtime', 'Start E2E servers', 'test-e2e');
 }
 
+function assertChangesGate(jobs) {
+	const changes = asRecord(jobs.changes, 'changes');
+	const permissions = asRecord(changes.permissions, 'changes.permissions');
+	assertExact(permissions.contents, 'read', 'changes contents permission');
+	assertExact(permissions['pull-requests'], 'read', 'changes pull-requests permission');
+	// Without the explicit job-level mapping every `needs.changes.outputs.code`
+	// below resolves to the empty string and the whole gate skips silently.
+	assertExact(
+		asRecord(changes.outputs, 'changes.outputs').code,
+		expression('steps.filter.outputs.code'),
+		'changes code output',
+	);
+
+	const steps = stepsOf(changes, 'changes');
+	const checkout = findStep(steps, 'Checkout', 'changes');
+	assertExact(checkout.uses, 'actions/checkout@v7', 'changes checkout action');
+	assertExact(withValues(checkout, 'changes checkout')['fetch-depth'], 0, 'changes fetch depth');
+
+	const filter = findStep(steps, 'Detect code changes', 'changes');
+	assertExact(filter.uses, 'dorny/paths-filter@v4', 'changes filter action');
+	assertExact(filter.id, 'filter', 'changes filter step id');
+	const filterWith = withValues(filter, 'changes filter');
+	assertExact(filterWith['predicate-quantifier'], 'every', 'changes predicate quantifier');
+	const filters = asRecord(YAML.parse(String(filterWith.filters)), 'changes filters');
+	assertList(filters.code, CODE_FILTER_PATTERNS, 'changes code filter');
+	// A second positive filter sharing this step would be ANDed by `every` and
+	// could never match a file; the `code` exclusion list must stand alone.
+	assertList(Object.keys(filters), ['code'], 'changes filter names');
+}
+
+function assertGatedJobs(jobs) {
+	for (const jobId of GATED_JOBS) {
+		const job = asRecord(jobs[jobId], jobId);
+		const needs = Array.isArray(job.needs) ? job.needs : [job.needs];
+		if (!needs.includes('changes')) {
+			fail(`${jobId}.needs must include "changes", got ${JSON.stringify(job.needs)}`);
+		}
+		// The two report mergers keep `!cancelled()` so a FAILING lane's blob still
+		// reaches the merged report; every other gated job carries the bare gate.
+		const expected = jobId.startsWith('merge-') ? MERGE_GATE : CODE_GATE;
+		assertExact(job.if, expected, `${jobId} change gate`);
+	}
+}
+
+function assertSummary(finalTest) {
+	assertExact(finalTest.if, expression('always()'), 'test summary condition');
+	assertList(finalTest.needs, SUMMARY_NEEDS, 'test.needs');
+	const steps = stepsOf(finalTest, 'test');
+	assertExact(steps.length, 1, 'test summary step count');
+	const verify = findStep(steps, 'Verify every gated job reported', 'test');
+	const env = asRecord(verify.env, 'test summary env');
+	assertExact(
+		env.CODE_CHANGED,
+		expression('needs.changes.outputs.code'),
+		'test summary code input',
+	);
+	// A result this step never reads is a job whose failure it cannot see.
+	for (const jobId of SUMMARY_NEEDS) {
+		const reference = /^[A-Za-z_][A-Za-z0-9_]*$/u.test(jobId)
+			? `needs.${jobId}.result`
+			: `needs['${jobId}'].result`;
+		assertIncludes(
+			String(env.RESULTS),
+			`${jobId}=${expression(reference)}`,
+			'test summary results',
+		);
+	}
+	assertIncludes(
+		String(verify.run),
+		`if [ -n "${shellVar('failed')}" ]; then`,
+		'test summary failure branch',
+	);
+	assertIncludes(
+		String(verify.run),
+		`if [ "${shellVar('CODE_CHANGED')}" = "true" ]; then`,
+		'test summary code branch',
+	);
+	assertIncludes(
+		String(verify.run),
+		`echo "::error::code changed but these jobs skipped:${shellVar('skipped')}"`,
+		'test summary unexplained-skip branch',
+	);
+}
+
+function assertFrontendShards(frontendTest, mergeFe, guardrails) {
+	assertExact(frontendTest.name, `FE unit shard ${FE_SHARD_SPEC}`, 'test-fe job name');
+	assertExact(frontendTest['timeout-minutes'], 15, 'test-fe timeout');
+	const strategy = asRecord(frontendTest.strategy, 'test-fe.strategy');
+	assertExact(strategy['fail-fast'], false, 'test-fe fail-fast');
+	assertList(
+		asRecord(strategy.matrix, 'test-fe.strategy.matrix').shard,
+		FE_SHARDS,
+		'test-fe matrix.shard',
+	);
+	assertExact(
+		asRecord(frontendTest.env, 'test-fe.env').VITEST_SHARD,
+		FE_SHARD_SPEC,
+		'test-fe VITEST_SHARD',
+	);
+
+	const feSteps = stepsOf(frontendTest, 'test-fe');
+	const unit = findStep(feSteps, 'Unit tests (vitest shard)', 'test-fe');
+	assertExact(unit.run, 'bun run --filter frontend test:ci-shard', 'test-fe shard command');
+
+	// A blob written under a dot-directory is invisible to upload-artifact without
+	// `include-hidden-files`, and a silently empty upload would shrink the merged
+	// report while every job stayed green — so both flags are asserted, not assumed.
+	const upload = findStep(feSteps, 'Upload vitest blob report', 'test-fe');
+	assertExact(upload.uses, 'actions/upload-artifact@v7', 'test-fe blob upload action');
+	assertExact(upload.if, expression('!cancelled()'), 'test-fe blob upload condition');
+	const uploadWith = withValues(upload, 'test-fe blob upload');
+	assertExact(uploadWith.name, FE_BLOB_ARTIFACT, 'test-fe blob artifact name');
+	assertExact(uploadWith.path, `CeraUI/${FE_BLOB_DIR}`, 'test-fe blob artifact path');
+	assertExact(uploadWith['include-hidden-files'], true, 'test-fe blob hidden files');
+	assertExact(uploadWith['if-no-files-found'], 'error', 'test-fe blob missing-file policy');
+	assertExact(uploadWith['retention-days'], 1, 'test-fe blob artifact retention');
+
+	assertList(mergeFe.needs, ['changes', 'test-fe'], 'merge-fe-reports.needs');
+	const mergeSteps = stepsOf(mergeFe, 'merge-fe-reports');
+	const download = findStep(mergeSteps, 'Download vitest blob reports', 'merge-fe-reports');
+	assertExact(download.uses, 'actions/download-artifact@v8', 'merge-fe-reports download action');
+	const downloadWith = withValues(download, 'merge-fe-reports download');
+	assertExact(downloadWith.pattern, 'vitest-blob-*', 'merge-fe-reports download pattern');
+	assertExact(downloadWith['merge-multiple'], true, 'merge-fe-reports merge-multiple');
+	assertExact(downloadWith.path, `CeraUI/${FE_BLOB_DIR}`, 'merge-fe-reports download path');
+	assertExact(
+		findStep(mergeSteps, 'Merge vitest reports', 'merge-fe-reports').run,
+		'bun run --filter frontend test:ci-merge',
+		'merge-fe-reports merge command',
+	);
+
+	// Every guardrail the pre-shard `test-fe` owned has to survive the split; the
+	// preflight in particular is no longer chained by any command CI runs.
+	const guardSteps = stepsOf(guardrails, 'guardrails');
+	assertExact(
+		findStep(guardSteps, 'Build Check workflow shape gate', 'guardrails').run,
+		'bun run test:build-check-shape',
+		'shape gate command',
+	);
+	assertExact(
+		findStep(guardSteps, 'Input-picker hardware preflight', 'guardrails').run,
+		'bun run --filter frontend test:hardware-preflight',
+		'guardrails hardware preflight command',
+	);
+	assertExact(
+		findStep(
+			guardSteps,
+			'Tech-debt register gate (validator unit tests + live register check)',
+			'guardrails',
+		)['working-directory'],
+		'CeraUI',
+		'guardrails tech-debt working directory',
+	);
+	// Matched on the grep they run, not on their step names: the `#nav-tab-` step's
+	// unquoted name is truncated at the `#` by YAML, so a name match would encode
+	// that accident as the contract.
+	for (const [pattern, label] of [
+		['page\\.screenshot\\(|toHaveScreenshot\\(', 'screenshot'],
+		['waitForTimeout|page\\.waitFor\\(', 'waitForTimeout'],
+		['#nav-tab-', 'nav-tab selector'],
+	]) {
+		const matches = guardSteps.filter((step) => String(step.run ?? '').includes(pattern));
+		assertExact(matches.length, 1, `guardrails ${label} guard step count`);
+	}
+}
+
 export function assertBuildCheckContract(source) {
 	let document;
 	try {
@@ -219,18 +462,30 @@ export function assertBuildCheckContract(source) {
 	const merge = asRecord(jobs['merge-e2e-reports'], 'merge-e2e-reports');
 	const finalTest = asRecord(jobs.test, 'test');
 	const frontendTest = asRecord(jobs['test-fe'], 'test-fe');
+	const mergeFrontend = asRecord(jobs['merge-fe-reports'], 'merge-fe-reports');
+	const guardrails = asRecord(jobs.guardrails, 'guardrails');
 	const backendTest = asRecord(jobs['test-be'], 'test-be');
 	const setupSteps = stepsOf(setup, 'setup-e2e');
 	const e2eSteps = stepsOf(e2e, 'test-e2e');
 	const backendSteps = stepsOf(backendTest, 'test-be');
 
-	assertExact(e2e.needs, 'setup-e2e', 'test-e2e.needs');
+	assertList(e2e.needs, ['changes', 'setup-e2e'], 'test-e2e.needs');
 	const matrix = asRecord(
 		asRecord(e2e.strategy, 'test-e2e.strategy').matrix,
 		'test-e2e.strategy.matrix',
 	);
-	assertList(matrix.project, ['desktop', 'mobile'], 'test-e2e matrix.project');
-	assertList(matrix.shard, [1, 2], 'test-e2e matrix.shard');
+	assertList(Object.keys(matrix), ['include'], 'test-e2e matrix keys');
+	assertList(matrix.include, E2E_MATRIX, 'test-e2e matrix.include');
+	assertExact(
+		asRecord(e2e.env, 'test-e2e.env').TOTAL_SHARDS,
+		matrixTotal,
+		'test-e2e total shard environment',
+	);
+	assertExact(
+		e2e.name,
+		`E2E (${matrixProject} shard ${matrixShard}/${matrixTotal})`,
+		'test-e2e job name',
+	);
 
 	const setupDeps = setupSteps.filter((step) =>
 		String(step.run ?? '').includes('test:e2e:install-deps'),
@@ -243,6 +498,7 @@ export function assertBuildCheckContract(source) {
 	assertExact(laneDeps[0].if, undefined, 'test-e2e install-deps condition');
 	assertBrowserCache(setupSteps, 'setup-e2e');
 	assertBrowserCache(e2eSteps, 'test-e2e');
+	assertA11yShard(e2eSteps);
 	assertSrtlaRuntime(setupSteps, e2eSteps);
 	const startServers = findStep(e2eSteps, 'Start E2E servers', 'test-e2e');
 	const seedAuth = findStep(e2eSteps, 'Seed E2E auth state', 'test-e2e');
@@ -285,8 +541,13 @@ export function assertBuildCheckContract(source) {
 	const functionalEnv = asRecord(functional.env, 'functional env');
 	assertExact(
 		functionalEnv.PLAYWRIGHT_BLOB_OUTPUT_DIR,
-		`test-results/blob-report-e2e-${matrixProject}-${matrixShard}`,
+		`test-results/blob-report-e2e-${E2E_REPORT_SUFFIX}`,
 		'functional blob output directory',
+	);
+	assertExact(
+		functionalEnv.PLAYWRIGHT_JSON_OUTPUT_NAME,
+		`test-results/e2e-${E2E_REPORT_SUFFIX}.json`,
+		'functional JSON output name',
 	);
 
 	const blobUpload = findStep(e2eSteps, 'Upload E2E blob report', 'test-e2e');
@@ -294,17 +555,16 @@ export function assertBuildCheckContract(source) {
 	const blobWith = withValues(blobUpload, 'blob upload');
 	assertExact(
 		blobWith.name,
-		`blob-report-${matrixProject}-${matrixShard}`,
+		`blob-report-e2e-${E2E_REPORT_SUFFIX}`,
 		'functional blob artifact name',
 	);
 	assertExact(
 		blobWith.path,
-		`CeraUI/apps/frontend/test-results/blob-report-e2e-${matrixProject}-${matrixShard}`,
+		`CeraUI/apps/frontend/test-results/blob-report-e2e-${E2E_REPORT_SUFFIX}`,
 		'functional blob artifact path',
 	);
 
-	assertExact(merge.needs, 'test-e2e', 'merge-e2e-reports.needs');
-	assertExact(merge.if, expression('!cancelled()'), 'merge-e2e-reports condition');
+	assertList(merge.needs, ['changes', 'test-e2e'], 'merge-e2e-reports.needs');
 	const download = findStep(
 		stepsOf(merge, 'merge-e2e-reports'),
 		'Download blob reports',
@@ -312,20 +572,13 @@ export function assertBuildCheckContract(source) {
 	);
 	assertExact(download.uses, 'actions/download-artifact@v8', 'blob download action');
 	const downloadWith = withValues(download, 'blob download');
-	assertExact(downloadWith.pattern, 'blob-report-*', 'blob download pattern');
+	assertExact(downloadWith.pattern, 'blob-report-*-of-*', 'blob download pattern');
 	assertExact(downloadWith['merge-multiple'], true, 'blob download merge-multiple');
-	assertList(
-		finalTest.needs,
-		['test-fe', 'test-be', 'test-e2e', 'merge-e2e-reports'],
-		'test.needs',
-	);
 
-	const shapeGate = findStep(
-		stepsOf(frontendTest, 'test-fe'),
-		'Build Check workflow shape gate',
-		'test-fe',
-	);
-	assertExact(shapeGate.run, 'bun run test:build-check-shape', 'shape gate command');
+	assertChangesGate(jobs);
+	assertGatedJobs(jobs);
+	assertSummary(finalTest);
+	assertFrontendShards(frontendTest, mergeFrontend, guardrails);
 	return root;
 }
 
