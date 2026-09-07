@@ -9,10 +9,8 @@ import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
 import { getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
-    authenticate,
-    authenticateWithToken,
+	authenticateWithToken,
 	authStatusStore,
-	getAuthMessage,
 	revokePersistentToken,
 } from '$lib/stores/auth-status.svelte';
 import {
@@ -21,9 +19,6 @@ import {
 	getDisconnectedSince,
 	getGraceNow,
 	markAuthenticated,
-	markSessionExpired,
-	shouldExpireSession,
-	wasAuthenticated,
 } from '$lib/stores/connection-ux.svelte';
 import { getShouldShowOfflinePage } from '$lib/stores/offline-state.svelte';
 
@@ -33,13 +28,11 @@ import LayoutToastHost from './layout/LayoutToastHost.svelte';
 import UpdateBanner from './layout/UpdateBanner.svelte';
 import Main from './MainView.svelte';
 
-let authStatus = $state(false);
 let isCheckingAuthStatus = $state(true);
 // Explicit terminal state for a stalled auth check: instead of silently
 // blanking to the auth/loading screen when the check never resolves (offline
 // device, dropped socket), we surface a calm role="status" retry surface.
 let authTimedOut = $state(false);
-let updatingStatus: StatusMessage['updating'] = $state(false);
 
 const connectionSurfaces = $derived(
 	deriveConnectionSurfaceUx(
@@ -55,14 +48,18 @@ const connectionSurfaces = $derived(
 // flag the browser `offline` event could flip instantly.
 const showOfflinePage = $derived(getShouldShowOfflinePage());
 
-// Svelte 5: Use $effect for side effects
-$effect(() => {
-	const status = getStatus();
-	if (status?.updating && typeof status.updating !== 'boolean' && status.updating.result !== 0) {
-		updatingStatus = status.updating;
-	} else {
-		updatingStatus = false;
+// The overlay is DERIVED from the store, never mirrored into local state by an
+// `$effect`. A mirror is a second copy of the same fact that only converges
+// after the render that read it, so a re-mount or a reconnect renders the idle
+// layout first and pops the overlay in afterwards. Reading the getter directly
+// makes the mount trigger-agnostic AND flash-free by construction — see
+// `Layout.updating-overlay.test.ts`.
+const updatingStatus: StatusMessage['updating'] = $derived.by(() => {
+	const updating = getStatus()?.updating;
+	if (updating && typeof updating !== 'boolean' && updating.result !== 0) {
+		return updating;
 	}
+	return false;
 });
 // Environment probes computed once (used to size the auth-check timeout).
 const isMobile = /iphone|ipad|ipod|android/i.test(navigator.userAgent);
@@ -78,16 +75,33 @@ const authTimeout = isPWA ? 500 : isMobile ? 1500 : 3000;
 /**
  * Kick off (or re-run) the stored-token auth check. Called once on mount and
  * again from the timed-out retry surface. Dispatches a typed `rpc.auth.login`
- * via the auth-status store's `authenticate()` — the SINGLE auth-state mutation
- * path (ingestAuth). The `$effect` block below observes the resulting
- * `getAuthMessage()` snapshot to complete/reject the check.
+ * via the auth-status store's `authenticateWithToken()` — the SINGLE auth-state mutation
+ * path — then handles its typed result without treating transport loss as a
+ * credential rejection.
  */
 function runAuthCheck() {
 	authTimedOut = false;
 	const auth = localStorage.getItem('auth');
 	if (auth) {
 		isCheckingAuthStatus = true;
-        void authenticateWithToken(auth);
+		void authenticateWithToken(auth).then((attempt) => {
+			switch (attempt.kind) {
+				case 'ok':
+					isCheckingAuthStatus = false;
+					markAuthenticated();
+					clearSessionExpired();
+					return;
+				case 'rejected':
+					localStorage.removeItem('auth');
+					isCheckingAuthStatus = false;
+					authStatusStore.set(false);
+					return;
+				case 'unreachable':
+					isCheckingAuthStatus = false;
+					authTimedOut = true;
+					return;
+			}
+		});
 	} else {
 		isCheckingAuthStatus = false;
 	}
@@ -136,31 +150,13 @@ $effect(() => {
 	return () => clearTimeout(id);
 });
 
-$effect(() => {
-	const message = getAuthMessage();
-	if (message?.success) {
-		isCheckingAuthStatus = false;
-		markAuthenticated();
-		clearSessionExpired();
-		authStatusStore.set(true);
-	} else if (shouldExpireSession(message?.success, wasAuthenticated()) && authStatusStore.value) {
-		// Auth token rejected mid-session (e.g. expired/invalidated on a reconnect).
-		// Route to the auth gate with an explicit "session expired" message instead
-		// of silently blanking. Device/streaming state in the stores is left intact.
-		markSessionExpired();
-		localStorage.removeItem('auth');
-		authStatusStore.set(false);
-	}
-});
-
 // Reconnect re-authentication + safety hydrate now lives in the RPC layer
 // (subscriptions.svelte `handleConnectionChange` → reconnect.ts), so it routes
 // through the canonical handleMessage path and is unit-tested in isolation.
 
-// Svelte 5: Use $effect for auth status
-$effect(() => {
-	authStatus = authStatusStore.value;
-});
+// Derived, not mirrored — same rule as `updatingStatus` above: a mirror lags the
+// store by one render, which is a flash of the pre-auth shell on every re-mount.
+const authStatus = $derived(authStatusStore.value);
 
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
 const userAgent = navigator.userAgent || '';
@@ -246,7 +242,8 @@ $effect(() => {
 		<div class="flex min-h-screen items-center justify-center">
 			<div class="text-center">
 				<div
-					class="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"
+					class="border-primary mx-auto mb-4 h-8 w-8 rounded-full border-4 border-t-transparent motion-safe:animate-spin"
+					data-testid="auth-check-spinner"
 				></div>
 				<p class="text-muted-foreground">Loading...</p>
 			</div>

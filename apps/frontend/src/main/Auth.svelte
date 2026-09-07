@@ -1,6 +1,7 @@
 <script lang="ts">
 import { m } from '@ceraui/i18n/svelte';
 import { AlertCircle, Eye, EyeOff, LoaderCircle } from '@lucide/svelte';
+import { untrack } from 'svelte';
 
 import { Button } from '$lib/components/ui/button';
 import { Checkbox } from '$lib/components/ui/checkbox';
@@ -13,7 +14,6 @@ import { getNotifications, getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticate,
 	createPassword,
-	getAuthMessage,
 } from '$lib/stores/auth-status.svelte';
 import { getSessionExpired } from '$lib/stores/connection-ux.svelte';
 import { getConnectionState } from '$lib/stores/offline-state.svelte';
@@ -68,57 +68,50 @@ const sessionExpired = $derived(getSessionExpired());
 const connection = $derived.by(() => {
 	const state = getConnectionState();
 	if (state === 'connected') {
-		return { tone: 'bg-status-success', label: 'Device connected' };
+		return { tone: 'bg-status-success', label: m["connection.deviceConnected"]() };
 	}
 	if (state === 'connecting') {
-		return { tone: 'bg-status-warning animate-pulse', label: 'Connecting…' };
+		return {
+			tone: 'bg-status-warning motion-safe:animate-pulse',
+			label: m["connection.connecting"](),
+		};
 	}
-	return { tone: 'bg-status-error', label: 'Device unreachable' };
+	return { tone: 'bg-status-error', label: m["connection.deviceUnreachable"]() };
 });
 
+// The device's `set_password` verdict is the only input here; the credential
+// wipe is an EDGE effect. Reading `setPassword` inside `untrack` keeps this
+// effect from subscribing to the very slot it writes — otherwise `login()`
+// clearing the flag re-runs the effect, which re-reads the same status frame,
+// puts the create-password form straight back on screen and deletes the
+// credential `authenticate()` had just persisted.
 $effect(() => {
 	const status = getStatus();
-	if (status) {
-		setPassword = status.set_password ?? false;
-		if (setPassword) {
+	if (!status) return;
+	const asksForPassword = status.set_password ?? false;
+	untrack(() => {
+		if (asksForPassword === setPassword) return;
+		setPassword = asksForPassword;
+		if (asksForPassword) {
 			localStorage.removeItem('auth');
 		}
-	}
+	});
 });
 
-/**
- * Remember-me persists the REVOCABLE token the device minted for this login —
- * never the password. A stored password is a permanent credential no operator
- * can retire without changing it everywhere; a token is one record in
- * `auth_tokens.json` that `auth.revokeToken` can drop on its own.
- *
- * `auth_token` is absent unless `persistent_token` was requested, so an
- * unremembered login writes nothing at all.
- */
-$effect(() => {
-	const message = getAuthMessage();
-	if (message?.success === true && remember && message.auth_token) {
-		localStorage.setItem('auth', message.auth_token);
-	}
-	if (message?.success === false) {
-		isLoading = false;
-		// Wrong password surfaces here (rpc.auth.login → success:false), not via a toast.
-		rejectedPassword = password;
-	}
-});
-
+// Same shape for the rejection: the notification feed is the dependency, and
+// the field's current value is READ rather than tracked. Tracking it made every
+// keystroke re-run the body while the `auth` entry was still on the feed, so
+// `rejectedPassword` was re-stamped to whatever had just been typed and the
+// inline error could never clear.
 $effect(() => {
 	const messages = getNotifications();
-	if (
-		messages?.show?.find((message) => {
-			return message.name === 'auth';
-		})
-	) {
+	if (!messages?.show?.some((message) => message.name === 'auth')) return;
+	untrack(() => {
 		isLoading = false;
 		localStorage.removeItem('auth');
 		// Surface the failure inline beneath the field instead of a toast.
 		rejectedPassword = password;
-	}
+	});
 });
 
 function login(password: string, remember: boolean) {
@@ -129,10 +122,19 @@ function login(password: string, remember: boolean) {
 		});
 	}
 	setPassword = false;
-	// authenticate() drives the SINGLE auth-state mutation path (ingestAuth on
-	// the login result). The $effect above observes getAuthMessage() and clears
-	// isLoading on success:false; on success:true the component unmounts.
-	void authenticate(password, remember);
+	void authenticate(password, remember).then((attempt) => {
+		switch (attempt.kind) {
+			case 'ok':
+				return;
+			case 'rejected':
+				isLoading = false;
+				rejectedPassword = password;
+				return;
+			case 'unreachable':
+				isLoading = false;
+				return;
+		}
+	});
 }
 
 async function onSubmit(event: SubmitEvent) {
@@ -239,6 +241,8 @@ async function onSubmit(event: SubmitEvent) {
 						class="absolute end-1 top-1/2 size-9 -translate-y-1/2 text-muted-foreground"
 						aria-label={showPassword ? m["auth.hidePassword"]() : m["auth.showPassword"]()}
 						aria-pressed={showPassword}
+						data-testid="auth-password-visibility"
+						data-touch-target="hit-area"
 						onclick={() => (showPassword = !showPassword)}
 						type="button"
 						variant="ghost"
@@ -316,7 +320,7 @@ async function onSubmit(event: SubmitEvent) {
 				type="submit"
 			>
 				{#if isLoading}
-					<LoaderCircle class="size-4 animate-spin" />
+					<LoaderCircle class="size-4 motion-safe:animate-spin" />
 					{setPassword ? m["auth.creatingPassword"]() : m["auth.signingIn"]()}
 				{:else}
 					{setPassword ? m["auth.setPassword"]() : m["auth.unlock"]()}

@@ -33,6 +33,7 @@ import {
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateSizeRunner,
 	resetSoftwareUpdateState,
+	type SoftwareUpdateError,
 	setSoftwareUpdateCheckRunner,
 	setSoftwareUpdateSizeRunner,
 	triggerManualUpdateCheck,
@@ -76,6 +77,11 @@ function snapshot(overrides: Partial<UpdateSnapshot> = {}): UpdateSnapshot {
 }
 
 const IDENTITY = { version: "abc123", packages: ["cerastream"] };
+const REACHABILITY = {
+	ipv4: "no_route",
+	ipv6: "blocked",
+	used: "none",
+} as const;
 
 describe("deriveUpdateState() — a check that cannot reach a verdict says so", () => {
 	test("a failed refresh reports check_failed, NOT 'up to date'", () => {
@@ -103,6 +109,67 @@ describe("deriveUpdateState() — a check that cannot reach a verdict says so", 
 			checked_at: 1000,
 		});
 	});
+
+	test("an unreachable repository set carries both family verdicts", () => {
+		expect(
+			deriveUpdateState(
+				snapshot({
+					checkFailure: "repos_unreachable",
+					checkedAt: 1000,
+					reachability: REACHABILITY,
+				}),
+			),
+		).toEqual({
+			kind: "check_failed",
+			reason: "repos_unreachable",
+			checked_at: 1000,
+			reachability: REACHABILITY,
+		});
+	});
+
+	test("a captive portal remains distinct from an unreachable repository", () => {
+		const reachability = {
+			ipv4: "captive",
+			ipv6: "blocked",
+			used: "none",
+		} as const;
+		expect(
+			deriveUpdateState(
+				snapshot({
+					checkFailure: "captive_portal",
+					checkedAt: 1000,
+					reachability,
+				}),
+			),
+		).toEqual({
+			kind: "check_failed",
+			reason: "captive_portal",
+			checked_at: 1000,
+			reachability,
+		});
+	});
+
+	test.each(["idle", "checking", "available"] as const)(
+		"%s carries reachability after a probe",
+		(kind) => {
+			const available =
+				kind === "available" ? { identity: IDENTITY, package_count: 1 } : null;
+			const state = deriveUpdateState(
+				snapshot({
+					checking: kind === "checking",
+					available,
+					reachability: {
+						ipv4: "ok",
+						ipv6: "blocked",
+						used: "ipv4",
+					},
+				}),
+			);
+			expect(state).toMatchObject({
+				reachability: { ipv4: "ok", ipv6: "blocked", used: "ipv4" },
+			});
+		},
+	);
 
 	test("a known-available update survives a later failed refresh", () => {
 		// Deliberate precedence: we already PROVED an update exists, so it stays
@@ -174,7 +241,9 @@ describe("triggerManualUpdateCheck() — the operator's click is accounted for",
 
 	test("a completed check stamps a fresh checked_at", async () => {
 		setSoftwareUpdateSizeRunner(async () => null);
-		let callback: ((err: unknown, failures: number) => unknown) | undefined;
+		let callback:
+			| ((err: SoftwareUpdateError, failures: number) => unknown)
+			| undefined;
 		setSoftwareUpdateCheckRunner((cb) => {
 			callback = cb;
 			return true;
@@ -222,7 +291,9 @@ describe("system.checkForUpdates — a refusal is named, never silent", () => {
 		setSoftwareUpdateCheckRunner(() => false);
 
 		expect(
-			await call(checkForUpdatesProcedure, {}, { context: makeContext() }),
+			await call(checkForUpdatesProcedure, undefined, {
+				context: makeContext(),
+			}),
 		).toEqual({ success: false, error: "check_unavailable" });
 	});
 
@@ -230,7 +301,9 @@ describe("system.checkForUpdates — a refusal is named, never silent", () => {
 		setup.apt_update_enabled = false;
 
 		expect(
-			await call(checkForUpdatesProcedure, {}, { context: makeContext() }),
+			await call(checkForUpdatesProcedure, undefined, {
+				context: makeContext(),
+			}),
 		).toEqual({ success: false, error: "updates_disabled" });
 	});
 });

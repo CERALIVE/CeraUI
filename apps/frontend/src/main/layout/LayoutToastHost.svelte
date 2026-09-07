@@ -90,14 +90,14 @@ const startStreaming = (config: Parameters<typeof startStreamingFn>[0]) => {
 	toast.dismiss();
 	clearNotifications();
 	renderedAt.clear();
-	startStreamingFn(config);
+	void startStreamingFn(config);
 };
 
 const stopStreaming = () => {
 	toast.dismiss();
 	clearNotifications();
 	renderedAt.clear();
-	stopStreamingFn();
+	void stopStreamingFn();
 };
 
 window.startStreamingWithNotificationClear = startStreaming;

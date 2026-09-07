@@ -128,6 +128,14 @@ import { parseServerPing, shouldForceCloseHalfOpen } from "./half-open";
 import { createHeartbeatTracker, HEARTBEAT_THRESHOLD_MS } from "./heartbeat";
 import { RpcError } from "./rpc-error";
 
+export class ConnectionResetError extends Error {
+	override readonly name = "ConnectionResetError";
+
+	constructor(readonly path: readonly string[]) {
+		super(`Connection reset while awaiting RPC: ${path.join(".")}`);
+	}
+}
+
 /**
  * WebSocket connection state
  */
@@ -159,6 +167,7 @@ interface PendingRequest {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
 	timeout: ReturnType<typeof setTimeout>;
+	path: readonly string[];
 }
 
 /**
@@ -230,26 +239,35 @@ class RPCClient {
 		this.setConnectionState("connecting");
 
 		try {
-			this.socket = new WebSocket(url);
+			if (this.socket !== null) {
+				this.socket = null;
+				this.rejectPendingRequests();
+			}
 
-			this.socket.onopen = () => {
+			const socket = new WebSocket(url);
+			this.socket = socket;
+
+			socket.onopen = () => {
 				this.setConnectionState("connected");
 				this.reconnectAttempts = 0;
 				this.heartbeatTracker.recordTraffic(Date.now());
 				this.startKeepAlive();
 			};
 
-			this.socket.onclose = () => {
+			socket.onclose = () => {
+				if (this.socket !== socket) return;
+				this.socket = null;
+				this.rejectPendingRequests();
 				this.setConnectionState("disconnected");
 				this.stopKeepAlive();
 				this.handleReconnect();
 			};
 
-			this.socket.onerror = () => {
+			socket.onerror = () => {
 				this.setConnectionState("error");
 			};
 
-			this.socket.onmessage = (event) => {
+			socket.onmessage = (event) => {
 				this.handleMessage(event.data);
 			};
 		} catch (error) {
@@ -279,9 +297,19 @@ class RPCClient {
 	disconnect(): void {
 		this.clearReconnectTimer();
 		this.stopKeepAlive();
-		this.socket?.close();
+		const socket = this.socket;
 		this.socket = null;
+		this.rejectPendingRequests();
+		socket?.close();
 		this.setConnectionState("disconnected");
+	}
+
+	private rejectPendingRequests(): void {
+		for (const pending of this.pendingRequests.values()) {
+			clearTimeout(pending.timeout);
+			pending.reject(new ConnectionResetError(pending.path));
+		}
+		this.pendingRequests.clear();
 	}
 
 	/**
@@ -445,6 +473,7 @@ class RPCClient {
 				resolve: resolve as (value: unknown) => void,
 				reject,
 				timeout: timeoutHandle,
+				path,
 			});
 
 			this.socket?.send(JSON.stringify(request));

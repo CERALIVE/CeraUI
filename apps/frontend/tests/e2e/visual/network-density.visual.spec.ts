@@ -2,6 +2,7 @@ import path from "node:path";
 
 import { expect, type Page, test } from "../fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "../helpers/index.js";
+import { expectContained, probeContainment } from "../helpers/modem-containment.js";
 
 /**
  * @visual evidence for the NetworkView per-interface stack (WiFi → Cellular →
@@ -239,6 +240,288 @@ test.describe("@visual NetworkView density — disclosures", () => {
 				path: path.join(TASK24_DIR, "network-disclosures-open.png"),
 				fullPage: true,
 			});
+		},
+	);
+});
+
+/**
+ * The WHOLE destination's height, not the WiFi→Ethernet span the budget above
+ * measures. Those are different questions and both are worth asking: the budget
+ * catches unreviewed growth inside three cards, this catches the page an
+ * operator actually scrolls — Bonded Links → Sharing → WiFi → Cellular →
+ * Ethernet → Hotspot → Bluetooth — which the todo-1 critique measured at
+ * 1280×2761 and called a "golden" nobody can read in one glance.
+ *
+ * THE BASELINE IS A MEASUREMENT, NOT THE GOLDEN PNG's PIXEL HEIGHT. The
+ * committed `network-desktop-desktop-linux.png` is 2761 px tall, but it is
+ * captured at the desktop project's own 1280×800 viewport with `mask.css`
+ * applied, so its height is not the same quantity this probe reads. The constant
+ * below was measured by THIS probe, at 1280×900, on the pre-change tree
+ * (`88516ad4`), with the same collision-band stabiliser applied — see the
+ * evidence file named in the effort's todo 25.
+ *
+ * WHY A STABILISER IS STILL NEEDED. `CollisionBands` is bistable on worker-backend
+ * lifetime (the full rationale is in `network.visual.spec.ts`): the same-subnet
+ * band is present for the whole life of a fresh backend and absent for the whole
+ * life of a warm one, and its box shifts every section below it. A height
+ * measured without removing it from layout is therefore two numbers, not one,
+ * and no wait can pick between them. It is removed from LAYOUT here for the same
+ * reason and by the same rule; the band keeps its own coverage in
+ * `CollisionBands.bondMapping.test.ts`.
+ */
+const COLLISION_BANDS_STABILIZE =
+	'[data-testid="same-subnet-info"],[data-testid="policy-route-warning"]{display:none !important}';
+
+/**
+ * Measured by the probe below, on the pre-change tree, at 1280×900: **2302 px**.
+ *
+ * It is deliberately NOT 2761. Re-using the golden's pixel height would compare
+ * two different measurement methods and produce a meaningless ratio, which is
+ * exactly what "measure the before value in the same test run" exists to stop.
+ */
+const TODO_1_ERA_PAGE_HEIGHT_PX = 2302;
+
+/**
+ * The ACCEPTED todo-25 outcome: ≥18 % shorter. Owner-approved 2026-09-05.
+ *
+ * The original target was ≥25 % (a 1726 px cap), and it is recorded here rather
+ * than deleted because the reason it was missed is the reason it must not be
+ * re-attempted by relaxing an honesty rule. Two rules, both load-bearing, hold
+ * roughly 250 px of the remaining gap:
+ *
+ * - **~138 px — the duplicate usb0/1/2 rows.** A modem's own USB-network
+ *   interface is claimed by its Cellular row only when BOTH a cellular marker
+ *   AND a modem roster claim name it (see `section-assignment.ts`). Collapsing
+ *   the rows on the marker alone would hide the device entirely in the window
+ *   before its modem row exists — trading a duplicated row for a disappeared
+ *   one. The `usb_modem_net` fixture consolidation this pass shipped closes the
+ *   part of that gap a FIXTURE correction legitimately can; the rest is the rule.
+ * - **~112 px — the disabled dongle-control reason lines.** The shipped kiosk
+ *   touchscreen cannot hover, so a disabled control's reason has to render
+ *   inline rather than live in a `title`. Folding these is an accessibility
+ *   regression, not a density win.
+ *
+ * What the fixture consolidation actually bought: **2302 → 1877 px, an 18.46 %
+ * reduction**, with the frozen testid inventory intact (nothing was deleted to
+ * buy it). That is accepted as todo 25's final state.
+ *
+ * The ratio is still written as arithmetic so it stays visible at the assertion,
+ * and this cap is STILL NOT a knob. It sits ~10 px above the measured height —
+ * enough to absorb font-metric noise, not enough to absorb a new row. If the
+ * page grows past it, add height deliberately and re-measure; do not nudge the
+ * ratio. Any further reduction needs owner sign-off on which rule to spend.
+ */
+const MAX_PAGE_HEIGHT_PX = Math.floor(TODO_1_ERA_PAGE_HEIGHT_PX * 0.82);
+
+const DESIGN_PASS_25_DIR = path.resolve(
+	import.meta.dirname,
+	"../../../test-results/design-pass/25",
+);
+
+/**
+ * The C4 capture set: desktop, the 1024×600 kiosk in touch layout, and mobile.
+ *
+ * `?mode=touch` is applied at NAVIGATION rather than toggled afterwards — the
+ * touch token layer grows hit areas, so a page that loaded in default layout and
+ * had the attribute set later measures the PRE-LIFT geometry (the modem-ux
+ * precedent). Each entry therefore owns its own `goto`.
+ */
+const CAPTURES = [
+	{ name: "desktop-1280x900", width: 1280, height: 900, touch: false },
+	{ name: "kiosk-1024x600", width: 1024, height: 600, touch: true },
+	{ name: "mobile-375x812", width: 375, height: 812, touch: false },
+] as const;
+
+/**
+ * Every `data-testid` the destination rendered on the pre-change tree, at 1280.
+ *
+ * It is a FROZEN INVENTORY rather than a hand-written shortlist, because the
+ * claim this pass has to defend is "every row is still present" and a shortlist
+ * can only defend the rows somebody remembered. Post-change the page must render
+ * a SUPERSET of this list: a compaction that DEMOTES a fact behind a disclosure
+ * keeps its testid (the body stays mounted), and a compaction that DELETES one
+ * fails here by name.
+ *
+ * Collected with the same collision-band stabiliser applied, so the bistable
+ * `same-subnet-info` / `policy-route-warning` pair is deliberately absent from
+ * it — those two are the one family whose presence is a property of the worker
+ * backend rather than of the page.
+ */
+const PRE_CHANGE_TESTIDS: readonly string[] = [
+	"bluetooth-enable",
+	"bluetooth-off",
+	"bluetooth-section",
+	"bond-state-dg0h",
+	"bond-state-dg1h",
+	"bond-state-eth0",
+	"bond-state-usb0",
+	"bond-state-usb1",
+	"bond-state-usb2",
+	"bond-state-wlan0",
+	"bond-state-wlan1",
+	"bond-toggle-dg0h",
+	"bond-toggle-dg1h",
+	"bond-toggle-eth0",
+	"bond-toggle-usb0",
+	"bond-toggle-usb1",
+	"bond-toggle-usb2",
+	"bond-toggle-wlan0",
+	"bond-toggle-wlan1",
+	"bonded-link-card",
+	"bonded-links-not-bonded",
+	"destination-content",
+	"link-telemetry",
+	"link-telemetry-skeleton",
+	"modem-carrier-badge",
+	"modem-class-badge",
+	"modem-detail",
+	"modem-details-body",
+	"modem-details-toggle",
+	"modem-name",
+	"modem-note",
+	"modem-row",
+	"modem-signal",
+	"modem-state-badge",
+	"netif-dongle",
+	"netif-dongle-blocked-hint",
+	"netif-dongle-state",
+	"open-hotspot-dialog",
+	"open-modem-config-dialog",
+	"open-netif-dialog",
+	"open-wifi-mode",
+	"open-wifi-selector-dialog",
+	"sharing-band-sharing-off",
+	"sharing-section",
+	"total-bandwidth-down",
+	"total-bandwidth-up",
+	"wifi-mode-badge",
+	"wifi-row",
+];
+
+/** Sorted, de-duplicated `data-testid` values under the network destination. */
+async function testidInventory(page: Page): Promise<string[]> {
+	return page.evaluate(() => {
+		const scope = document.querySelector("#main-content") ?? document.body;
+		return [
+			...new Set(
+				[...scope.querySelectorAll("[data-testid]")].map(
+					(el) => el.getAttribute("data-testid") ?? "",
+				),
+			),
+		]
+			.filter((id) => id.length > 0)
+			.sort();
+	});
+}
+
+test.describe("@visual NetworkView design pass 25", () => {
+	test.beforeEach(async ({ page }, testInfo) => {
+		test.skip(
+			testInfo.project.name !== "desktop",
+			"this pass sets its own three viewports; the mobile project would double every capture",
+		);
+	});
+
+	for (const capture of CAPTURES) {
+		test(
+			`the destination is contained and enumerable at ${capture.name}`,
+			{ tag: "@visual" },
+			async ({ page }) => {
+				await page.setViewportSize({ width: capture.width, height: capture.height });
+				await page.goto(capture.touch ? "/?mode=touch" : "/");
+				await ensureAuthenticated(page);
+				await navigateTo(page, "network");
+				await page.addStyleTag({ content: COLLISION_BANDS_STABILIZE });
+
+				// The one section every containment probe keys on, and the row family
+				// this pass must not lose.
+				await expect(page.getByTestId("modem-row").first()).toBeVisible();
+
+				expectContained(await probeContainment(page), `network ${capture.name}`);
+
+				await page.screenshot({
+					path: path.join(DESIGN_PASS_25_DIR, `network-${capture.name}.png`),
+					fullPage: true,
+				});
+			},
+		);
+	}
+
+	test("modem USB interfaces consolidate without losing their controls or addresses", async ({ page }) => {
+		await page.goto("/");
+		await ensureAuthenticated(page);
+		await navigateTo(page, "network");
+		for (const [iface, ip] of [
+			["usb0", "10.0.0.2"],
+			["usb1", "10.0.1.2"],
+			["usb2", "10.0.2.2"],
+		] as const) {
+			const row = page.getByTestId("modem-row").filter({
+				has: page.getByTestId(`bond-toggle-${iface}`),
+			});
+			await expect(row).toHaveCount(1);
+			await expect(page.getByTestId(`bond-toggle-${iface}`)).toHaveCount(1);
+			await expect(row.getByTestId("open-modem-config-dialog")).toBeEnabled();
+			await row.getByTestId("modem-details-toggle").click();
+			await expect(row.getByTestId("modem-net-interface")).toBeVisible();
+			await expect(row.getByTestId("modem-net-interface")).toHaveText(`${iface} · ${ip}`);
+		}
+		// The consolidation must not reach PAST the modems: the plain wired port and
+		// the isolated-dongle row are still their own rows afterwards. Both dongle
+		// rows survive (`bond-toggle-dg0h` / `-dg1h`), but only ONE carries the
+		// `netif-dongle` marker — the scenario's dg0h is `up` and renders as an
+		// ordinary wired row, while the `acquiring` dg1h is the marked one, which is
+		// also what makes the blocked hint below reachable. That asymmetry predates
+		// this pass and is a property of the fixture, not a ceiling on dongle support.
+		await expect(page.getByTestId("bond-toggle-eth0")).toHaveCount(1);
+		await expect(page.getByTestId("bond-toggle-dg0h")).toHaveCount(1);
+		await expect(page.getByTestId("netif-dongle")).toHaveCount(1);
+		await expect(page.getByTestId("netif-dongle-blocked-hint")).toBeVisible();
+	});
+
+	test(
+		"the destination is at least 18% shorter than the todo-1-era golden",
+		{ tag: "@visual" },
+		async ({ page }) => {
+			await page.setViewportSize({ width: 1280, height: 900 });
+			await page.goto("/");
+			await ensureAuthenticated(page);
+			await navigateTo(page, "network");
+			await page.addStyleTag({ content: COLLISION_BANDS_STABILIZE });
+			await expect(page.getByTestId("modem-row").first()).toBeVisible();
+
+			// Settling matters more here than anywhere else in this file: the
+			// destination flies in with a delay, and a height read mid-transition is
+			// a number for a layout that never existed on screen.
+			expectContained(await probeContainment(page), "network 1280 height probe");
+
+			const { height, sections } = await page.evaluate(() => ({
+				height: document.documentElement.scrollHeight,
+				// A bare "the page is 300px too tall" gets re-diagnosed by hand every
+				// time, so the overrun names its own culprit — the same reason
+				// `probeContainment` reports overflow SOURCES rather than a total.
+				sections: [...document.querySelectorAll("#main-content section")].map(
+					(el) =>
+						`${(el.querySelector("h2")?.textContent ?? el.getAttribute("aria-label") ?? "?").trim()}=${Math.round(el.getBoundingClientRect().height)}`,
+				),
+			}));
+			const inventory = await testidInventory(page);
+			// Printed unconditionally: the BEFORE run of this same probe is how the
+			// baseline above was obtained, and re-deriving it must not need a code
+			// edit.
+			console.log(
+				`[design-pass-25] page height @1280 = ${height}px (cap ${MAX_PAGE_HEIGHT_PX}px)\n` +
+					`[design-pass-25] sections = ${sections.join(" ")}\n` +
+					`[design-pass-25] testids (${inventory.length}) = ${JSON.stringify(inventory)}`,
+			);
+
+			// Non-vacuity: an empty frozen list would satisfy `every` without
+			// measuring anything.
+			expect(PRE_CHANGE_TESTIDS.length).toBeGreaterThan(0);
+			const missing = PRE_CHANGE_TESTIDS.filter((id) => !inventory.includes(id));
+			expect(missing, "a testid the pre-change destination rendered").toEqual([]);
+
+			expect(height).toBeLessThanOrEqual(MAX_PAGE_HEIGHT_PX);
 		},
 	);
 });

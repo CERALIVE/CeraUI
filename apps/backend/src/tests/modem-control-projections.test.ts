@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { modemMutationAdmissionPort } from "../modules/modems/mutation-admission-port.ts";
@@ -8,6 +8,9 @@ import {
 } from "../modules/streaming/lifecycle-admission.ts";
 
 const BACKEND_ROOT = join(import.meta.dir, "..");
+
+beforeEach(resetLifecycleInterlock);
+afterEach(resetLifecycleInterlock);
 
 const MIGRATED_MODULES = [
 	"modules/modems/usb-mode-identity.ts",
@@ -165,7 +168,6 @@ describe("modem-control compatibility projections", () => {
 	});
 
 	test("a stream-active package mutation is refused in the existing vocabulary", async () => {
-		resetLifecycleInterlock();
 		const streaming = tryAcquireLifecycle("streaming");
 		expect(streaming.admitted).toBe(true);
 		const result = await modemMutationAdmissionPort.acquire({
@@ -180,6 +182,5 @@ describe("modem-control compatibility projections", () => {
 			detail: "streaming_active",
 		});
 		if (streaming.admitted) streaming.lease.release();
-		resetLifecycleInterlock();
 	});
 });

@@ -507,6 +507,13 @@ SIM-lock state) fails loudly in dev instead of silently feeding malformed data i
 the mmcli/nmcli/relay providers. Schema types are the single source of truth — both
 `mock-config.ts` and `mock-service.ts` re-export `z.infer<...>` types from here.
 
+The modem fixtures also carry the existing `usb_modem_net` marker, validated by
+the shared wire schema. `providers/network.ts` resolves it by the active scenario's
+modem `interfaceName`; `applyModemNetProjection` uses that source only in mock
+mode and retains its ordinary one-frame retraction. This makes the default
+`multi-modem-wifi` topology exercise the same marker-plus-roster-claim handover
+as a real device, without changing addresses, bond membership, or netns dongles.
+
 **`resetMockState()` for per-test isolation:**
 `initMockService()` captures a deep `structuredClone` of the seeded state as a
 pristine snapshot. `resetMockState()` restores that snapshot AND clears all timers
@@ -893,12 +900,25 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 
 ## DEP BASELINE (as of 2026-08)
 
+**Two rows in this table were moved by the experience-stability effort and are current
+as written: `vitest` is stable `5.0.0` (the earlier `5.0.0-rc.4` target was tentative and
+is superseded), and `@orpc/server`/`@orpc/contract` stay EXACT at `2.0.0-beta.32` —
+checked live against the registry, nothing past beta.32 exists.** Both remain exact pins
+for the reasons stated below the table; do not soften either to a caret.
+
+**Where a change here also moves a WORKSPACE-ROOT document — the root `AGENTS.md`, the
+root `ARCHITECTURE.md`, `docs/COMPLETENESS-MATRIX.md`, `docs/RELIABILITY-FINDINGS.md`, or
+the root `versions.yaml` pin — that edit is NOT made from this repo.** Root truth is owned
+by todo 49 of the `ceraui-experience-stability` plan, on its own docs-only branch and PR,
+so a CeraUI PR that also edits the parent tree is a Rule-D violation wearing a
+documentation hat. Reference the root row here; let todo 49 write it there.
+
 | Package | Version |
 |---------|---------|
-| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.31 — EXACT pin, see below |
-| Bun pin (`.bun-version`) | 1.4.0 |
+| `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |
+| Bun pin (`.bun-version`) | 1.4.2 |
 | `svelte` | 5.56.10 |
-| `vitest` | 5.0.0-rc.3 — EXACT pin (a PRERELEASE; see the note below the table) |
+| `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
 | `vite` | 8.2.2 |
 | `jsdom` | 30.0.1 (requires Node ≥ 24.15; satisfied by the Node 26 pin) |
 | Node | **26 wherever Node runs at all** — REQUIRED baseline, not a canary. `build-check.yml`, `publish-deb.yml`, and `publish-release.yml` all pin `NODE_VERSION: "26"`; `mise.toml` and both `volta.node` fields (root + `apps/frontend`) match. No cache key is keyed on the version, so the flip needs no cache bust. The `test-fe` shards, `merge-fe-reports`, and `guardrails` are the jobs with NO `setup-node` step — every command in them is Bun (see the Vitest note below). |
@@ -917,25 +937,43 @@ Override for tests: set `CERALIVE_DEVICE_TYPE=emulated` or `=real` in `beforeEac
 | `vite-plugin-pwa` | 1.3.0 |
 | `vaul-svelte` | 1.0.0-next.7 — pinned EXACT; the "stable" 0.3.2 is a DOWNGRADE, never bump to it |
 
-**`vitest` is on a 5.0 RELEASE CANDIDATE, pinned exact, and it earned that by flipping a
-runtime verdict — which is now ACTED ON, not merely recorded.** Under `vitest@4.1.10` the
+**`vitest` reached stable 5.0.0 during this effort and remains pinned exact, after earning
+that move by flipping a runtime verdict.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
-why the frontend suite ran on Node for as long as it did. Under `5.0.0-rc.3` Bun 1.4.0 runs the
-current suite at **354 files / 5,779 tests, 0 failures**, matching the pre-bump `5.0.0-rc.2`
-baseline exactly. Nothing in the rc.2→rc.3 release notes needed a source or config change here:
+why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun runs the
+current suite at **370 files / 6,157 tests, 0 failures** (measured 2026-09-05 on this
+tree; the rc.3→stable pin move itself was proven at parity on the then-current
+**361 files / 5,957 tests**, and every count since has only grown with new tests).
+The rc.2→rc.3 successor path needed no source or config change here, and Vitest then reached
+stable 5.0.0 during this effort. Nothing in the rc.3→5.0.0 release notes needed a source or
+config change here:
 `clearMocks` now defaults to `true` and the suite is unaffected, and the repo uses none of the
 removed surfaces (`test.sequential`, `vitest/reporters`/`vitest/coverage`/`vitest/suite`, `bench`
 at module scope, `VITEST_WORKER_ID`, `populateGlobal`, unawaited `.resolves`). **The frontend
-`test` script therefore invokes `bun --bun vitest run`, and `test-fe` has no `setup-node` step.**
+`test` script therefore invokes `bun --bun vitest run`, and `test-fe` has no `setup-node` step.
+That one command now runs TWO Vitest `projects` — `pure` (Node, `isolate:false`) and
+`components` (jsdom, `isolate:true`) — assigned by the import-graph classifier in
+`scripts/ci/vitest-classify.mjs`, so `test.projects` (never the removed `workspace` key) is
+where runner settings are split; see `apps/frontend/README.md` → "Unit-test projects".**
 The explicit `--bun` is load-bearing: `node_modules/.bin/vitest` carries a `#!/usr/bin/env node`
 shebang, so a bare `vitest run` under `bun run` still executes on Node — measured, a probe test
 reported `process.execPath` = node and `process.versions.bun` = `undefined` before the flip, and
-bun / `1.4.0` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
+bun / `1.4.2` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
 exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
 
-The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The 355-file,
-5,795-test CI run is transform/import-bound and takes roughly 20–25 minutes; across two CI
+The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The suite is
+setup- and transform-bound, not test-bound: the 370-file / 6,157-test run measured
+**12m05s of LOCAL wall clock** on the development host (Vitest `Duration 718.63s`, of which
+setup 82%, transform 9%, import 4%, tests 4%, environment 2%). Every duration in this
+paragraph is local wall clock on a contended workstation — **no CI minute has been measured
+for this lane, so do not quote one.** Earlier local runs of the same lane landed between
+~10m36s and ~16m39s, and the spread is host load, not a suite change. Because setup
+dominates, teardown micro-trims cannot move the number — the components project's 50 ms
+`afterAll` costs ≈12 s in total (once per FILE, not per test), under 2% of the run, and it is
+retained deliberately: `bits-ui`'s body-scroll-lock arms a 24 ms WALL-CLOCK timer inside
+Testing Library's own auto-`afterEach`, so no macrotask drain and no fake-timer install can
+clear it. Across two CI
 runs, three unrelated async-rendering tests (`PowerDialog.async-state`,
 `ModemConfigDialog.usbmode`, and `ModemConfigDialog.apn`) each exhausted the default 5-second
 budget while every other test passed. The varying victim and identical boundary establish
@@ -948,10 +986,10 @@ documented operation genuinely exceeds the suite-wide budget.
 The same flip reaches `publish-release.yml`'s `frontend-tests` job for free, because it calls the
 same `bun run --filter frontend test` script — and that job never had a `setup-node` step, so
 before the flip it was running Vitest on whatever Node the runner shipped. It is now pinned to
-Bun 1.4.0 like every other command in it. That job's own step ORDER is a separate, documented
+Bun 1.4.2 like every other command in it. That job's own step ORDER is a separate, documented
 contract (vitest must stay immediately after `bun install`) and is untouched.
 
-**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.31` would range forward across betas and into stable
+**oRPC is pinned EXACT on a 2.0 beta.** `^2.0.0-beta.32` would range forward across betas and into stable
 2.0.0, which is not acceptable for a device runtime. CeraUI is insulated from v2's biggest break — the RPC
 serializer / error-body wire-format change — because `apps/backend/src/rpc/adapter.ts` speaks its own Bun
 WebSocket `{id, path, input}` protocol and calls oRPC's `call()` directly; there is no `RPCHandler` or
@@ -961,12 +999,14 @@ are declared as a bare `oc`. Do not reintroduce route metadata — CeraUI serves
 Reserved router keys in v2 (`then`, `bind`, `valueOf`, `toString`, `toJSON`) must never be used as a
 procedure or child-router key.
 
-Beta.31's breaking change is likewise outside CeraUI's surface: it changes only
+Beta.31's breaking change remains outside CeraUI's surface: it changes only
 `CORSHandlerPlugin`'s HTTP response default from reflected origin to `*` and permits async
-`origin`/`timingOrigin` resolvers. CeraUI instantiates no handler or CORS plugin; the Bun WebSocket
-adapter navigates the router and invokes `call()` directly. The other beta.31 contract/server edits
-are fixes (including prototype-safe error-code lookup) and do not change the `oc.router()` /
-`oc.input()` / `oc.output()` declarations used in `packages/rpc`.
+`origin`/`timingOrigin` resolvers. Beta.32 adds the prototype-pollution protection handler plugin,
+changes standard-handler interceptor plumbing (including CSRF refusal through `ORPCError`), and
+adds a response-compression content-type resolver; none is used by CeraUI. CeraUI instantiates no
+handler or CORS plugin; the Bun WebSocket adapter navigates the router and invokes `call()` directly.
+The `call()`, `oc.router()`, `oc.input()`/`oc.output()`, and error-code lookup exports used here are
+unchanged; no `adapter.ts` compatibility edit is required.
 
 ### TypeScript: two majors, deliberately
 
@@ -980,7 +1020,7 @@ one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 dev
 non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
 `ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
 dep plus a `typescript-7` npm-alias `check` gate) no longer exists. The former non-blocking
-`svelte-check --tsgo` canary is retired: under Bun 1.4.0 with released `typescript@7.0.2` it reported the
+`svelte-check --tsgo` canary is retired: under Bun 1.4.2 with released `typescript@7.0.2` it reported the
 same **0 errors and 5 warnings in 4 files** as the required frontend check, so it added no independent signal.
 Revisit the frontend TS6→TS7 move when `svelte-check` accepts the TS7 peer range and the released compiler
 provides the programmatic API it consumes; do not restore an advisory native/compiler canary merely to watch
@@ -989,7 +1029,7 @@ that transition.
 Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
 would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
 which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
-selects the alias). The Bun 1.4.0 retest resolved the current TS 7 backend and TS 6
+selects the alias). The Bun 1.4.2 retest resolved the current TS 7 backend and TS 6
 frontend probes correctly, but `bun tsc` remains banned: only the wrapper guarantees
 package-local compiler selection (oven-sh/bun#37152).
 
@@ -1010,6 +1050,7 @@ Both are unset by default, so the control channel stays gated until provisioned.
 
 - Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `bun run lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
 - Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. That formatter override is unrelated to the lint one below and is not up for review.
+- **Zero-warning frontend gates [EXISTS]:** the frontend `check` package script runs `svelte-check --fail-on-warnings`; the frontend `build` package script runs `scripts/ci/build-warnings-gate.mjs`, which tees Vite output and rejects warning text, ineffective dynamic imports, and large-chunk notices. `bunx biome check .` is clean, and stable warning-level rules in the root config are promoted to errors; `noFloatingPromises` remains the documented nursery-rule exception. These package-script seams are deliberate: the Build Check workflow run strings remain unchanged while gaining the gates.
 - Svelte lint overrides are down to **exactly two** rules (re-verified 2026-08-21 against Biome 2.5.9): `correctness/noUnusedVariables` and `correctness/noUnusedImports`, both off for `**/*.svelte` because Biome still does not count template references — re-enabling the pair on 2.5.9 takes `biome check .` from **33 warnings + 3 infos** to **1,933 warnings**, i.e. **1,142 `noUnusedVariables` + 760 `noUnusedImports`** new findings (Paraglide `m["<key>"]()` imports used only in markup, such as `BufferingIndicator.svelte`, plus cascading markup-only references). The upstream gap is [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590), still open. 2.5.3 fixed `$store`/`$bindable` for `noUnusedVariables` only and 2.5.7 fixed `{@attach}`; both shipped before 2.5.9 and both are too narrow to retire the overrides. The other three historical entries are gone: `noUnusedFunctionParameters` was genuinely **re-enabled** (it found one real vestigial parameter, now fixed), while `useImportType`/`useConst` were **dead config** — both are inert on `.svelte` even when set to `"error"` directly, though `noNonNullAssertion` does fire, so this is rule-specific rather than a blanket exclusion. Full rationale, reproduction command, and the re-attempt checklist: [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Svelte lint overrides". Do NOT re-add a blanket disable for a rule that is not actually firing.
 - Strict TS: `strict` + `noUncheckedIndexedAccess` + `exactOptionalPropertyTypes` are enabled in `tsconfig.json` (root), `apps/backend`, and `packages/rpc`. The frontend app (`apps/frontend/tsconfig.app.json`) and `tsconfig.node.json` enable `strict` + `noUncheckedIndexedAccess`; `exactOptionalPropertyTypes` is intentionally omitted there because it is incompatible with bits-ui v2 / shadcn-svelte and vite-plugin-pwa types (unfixable "union too complex" errors in CLI-managed components). The e2e tsconfig stays at baseline `strict` (ungated Playwright test code).
 - Mock hardware in dev via `MOCK_SCENARIO` env var (`multi-modem-wifi` default). Use `shouldUseMocks()` — never raw `isDevelopment()` — to gate mock paths.
@@ -1080,9 +1121,12 @@ Four further Build Check facts, all landed 2026-08-14:
 - **The frontend Vitest lane runs on BUN; the Playwright lanes stay on Node 26**
   (`NODE_VERSION: "26"`, still set at workflow level and still consumed by
   `test-be`, `setup-e2e`, `test-e2e`, `merge-e2e-reports` and `build`). The Vitest
-  blocker was `vitest@4.1.10`'s collection failure, not Bun's: under the
-  `vitest@5.0.0-rc.3` pin the current suite is green at **354 files / 5,779 tests —
-  identical to the pre-bump rc.2 baseline**, so the frontend `test`
+  blocker was `vitest@4.1.10`'s collection failure, not Bun's: at the time of that
+  flip, under the then-current `vitest@5.0.0-rc.3` pin, the suite was green at
+  **354 files / 5,779 tests — identical to the pre-bump rc.2 baseline** (a HISTORICAL
+  figure, kept only because it is what the flip was proven against; the pin is now
+  stable `5.0.0` and the suite is **370 files / 6,157 tests**, see DEP BASELINE), so
+  the frontend `test`
   script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
   step at all. **The Playwright half is NOT flipped and has never produced a green
   parity run** — that lane keeps Node 26, and nothing here authorises moving it.
@@ -1118,6 +1162,12 @@ matrix plus two sibling jobs, and five properties of that split are load-bearing
   `test:ci-merge` are CI-only; `bun run --filter frontend test` still runs the
   whole suite plus the preflight locally. Do not "unify" them — a developer running
   the local script must not need a `VITEST_SHARD` in their environment.
+- **Both Vitest projects run inside this shape.** `test:ci-shard` uses the same
+  `vitest.config.ts` classifier and project-scoped setup files as the local suite;
+  no `--project` filter may retire either `pure` or `components`. Every Build Check
+  `setup-bun` step must match the root `packageManager` runtime pin, including
+  newly introduced shard, guardrail and report jobs. The shape suite checks that
+  agreement so a clean textual rebase cannot silently restore an older runtime.
 - **Four, not more, and the arithmetic is recorded.** Every added lane re-pays a
   measured fixed cost (checkout + setup-bun + install + `generate:i18n`) of ~7.1 s
   against a ~1,343 s vitest step: 4 × 7.077 s = 28.3 s of overhead against 335.8 s
@@ -1763,9 +1813,15 @@ so the ABI stays 1: a bundle carries its OWN copy of the Paraglide runtime, whos
 active locale is a module-level binding the host cannot otherwise reach, so a host
 that omits it gets the base locale exactly as before. Each entry also calls
 `registerFederationMessages()` (`lib/federation/messages.ts`) at module scope —
-the SPA resolves its message catalog from lazily-imported per-namespace chunks, and
-a hosted bundle fetched as one module against a signed manifest cannot reach those,
-so it registers the catalog statically via `@ceraui/i18n/eager`. The wrapper uses its bundled Svelte
+the SPA resolves its message catalog from lazily-imported per-namespace chunks,
+whereas federation registers the catalog statically via `@ceraui/i18n/eager`.
+Federation uses an isolated Paraglide `locale-modules` output and full output
+minification; its message imports and locale-runtime shim resolve together through
+`vite.federation-i18n.ts`. All keys/locales remain inside the signed static graph,
+and the SPA's direct imports and lazy message-module output are unchanged.
+`bun scripts/ci/bundle-report.mjs` checks both built outputs without widened
+ceilings; the built federation harness also checks full-catalog fixture parity.
+The wrapper uses its bundled Svelte
 runtime to mount and unmount the dialog, so the host never mounts a component
 compiled against a different Svelte runtime. `host` is the typed adapter in
 `host-contract.ts`; all three dialogs treat a resolved `{ success: false }` host
@@ -2173,13 +2229,31 @@ component).
 ```ts
 export function ingestAuth(message: LoginOutput | undefined): void;   // THE writer
 export function getAuthMessage(): LoginOutput | undefined;             // THE reader
-export async function authenticate(password: string, persistentToken: boolean): Promise<void>;
+export type AuthAttempt = { kind: 'ok' } | { kind: 'rejected' } |
+  { kind: 'unreachable'; cause: 'socket-not-ready' | 'rpc-error' | 'timeout' };
+export function authenticate(password: string, persistentToken: boolean): Promise<AuthAttempt>;
+export function authenticateWithToken(token: string): Promise<AuthAttempt>;
 export async function createPassword(password: string): Promise<void>;
 export const authStatusStore: { value: boolean; set(b): void; subscribe(cb) };
 ```
 
 `Layout.svelte`/`Auth.svelte` call `authenticate`/`createPassword`/`getAuthMessage` —
 never `sendAuthMessage`/`sendCreatePasswordMessage`/`getAuth` (those no longer exist).
+
+`authenticate()` also owns remember-me persistence. A successful persistent
+login writes the device-issued `auth_token` to `localStorage.auth` synchronously
+before auth state flips, never the password; a
+successful non-persistent login removes it. Server rejection is distinct from
+transport unreachability: only `rejected` may make Layout/reconnect delete the
+saved credential, while `unreachable` preserves it for Retry or the explicit
+`clear-saved-session` escape hatch. `Auth.svelte` must not recreate a persistence
+effect — it can unmount on the auth flip before such an effect runs.
+
+`authenticateWithToken()` shares that typed lifecycle and sends `input.token`.
+The device returns success without rotating the token, so a successful restore
+retains it. `createPassword()` clears the old credential after confirmed success,
+matching the device's all-token revocation; `SystemHelper.savePassword()` delegates
+to it. Explicit session clearing also best-effort revokes the token on the device.
 
 **The rule for all future frontend work:** ONLY `subscriptions.svelte.ts` (non-auth
 reactive state + connection state) and `auth-status.svelte.ts` (auth mutation state) own

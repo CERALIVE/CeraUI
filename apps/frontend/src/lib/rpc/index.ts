@@ -25,6 +25,7 @@ export {
 // Client
 export {
 	type ConnectionHandler,
+	ConnectionResetError,
 	type ConnectionState,
 	initRPC,
 	type MessageHandler,

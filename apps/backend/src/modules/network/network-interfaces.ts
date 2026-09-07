@@ -35,6 +35,7 @@ import { getms } from "../../helpers/time.ts";
 import { getMockState, shouldUseMocks } from "../../mocks/mock-service.ts";
 import {
 	getMockIfconfigOutput,
+	getMockModemNetMarker,
 	shouldMockNetwork,
 } from "../../mocks/providers/network.ts";
 import { isBondLinkMappable } from "../streaming/bond-entry.ts";
@@ -53,7 +54,7 @@ import {
 	wifiDeviceListEndUpdate,
 	wifiDeviceListStartUpdate,
 } from "../wifi/wifi-device-list.ts";
-import { wifiUpdateDevices } from "../wifi/wifi-interfaces.ts";
+import { scheduleWifiUpdate } from "../wifi/wifi-interfaces.ts";
 import {
 	bondPhysicalId,
 	isBondOptedOut,
@@ -964,7 +965,7 @@ export function processIfconfigOutput(
 	if (wifiDeviceListEndUpdate()) {
 		logger.info("updated wifi devices");
 		// a delay seems to be needed before NM registers new devices
-		setTimeout(wifiUpdateDevices, 1000);
+		scheduleWifiUpdate(1000);
 	}
 
 	netif = newInterfaces;
@@ -1350,7 +1351,9 @@ function applyModemNetProjection(m: NetworkInterfaceResponseMessage): void {
 	for (const name in m) {
 		const entry = m[name];
 		if (!entry) continue;
-		const marker = getModemNetMarker(name);
+		const marker = shouldUseMocks()
+			? getMockModemNetMarker(name)
+			: getModemNetMarker(name);
 		if (marker) {
 			entry.usb_modem_net = marker;
 			marked.add(name);

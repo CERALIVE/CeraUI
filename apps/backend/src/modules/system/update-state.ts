@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 
 import type {
+	AptReachability,
 	UpdateCheckFailureReason,
 	UpdateIdentity,
+	UpdatePackage,
+	UpdatePreflightReason,
 	UpdateProgress,
 	UpdateState,
 } from "@ceraui/rpc/schemas";
@@ -17,6 +20,8 @@ export interface AvailableUpdate {
 	identity: UpdateIdentity;
 	package_count: number;
 	download_size?: string;
+	packages?: UpdatePackage[];
+	actionable_count?: number;
 }
 
 export interface UpdateFailure {
@@ -32,8 +37,11 @@ export interface UpdateSnapshot {
 	updating: UpdateProgress | null;
 	failure: UpdateFailure | null;
 	succeeded: boolean;
+	preflightFailure?: UpdatePreflightReason | null;
+	cleanupWarning?: Extract<UpdateState, { kind: "success" }>["cleanup_warning"];
 	checkFailure?: UpdateCheckFailureReason | null;
 	checkedAt?: number | null;
+	reachability?: AptReachability;
 }
 
 // The version signature covers the sorted package set + count + download size, so
@@ -56,6 +64,13 @@ export function updateDismissalKey(identity: UpdateIdentity): string {
 	return `update:${identity.version}`;
 }
 
+function optionalField<K extends string, V>(
+	key: K,
+	value: V | undefined,
+): Partial<Record<K, V>> {
+	return value !== undefined ? ({ [key]: value } as Record<K, V>) : {};
+}
+
 function deriveInstallState(progress: UpdateProgress): UpdateState {
 	const installing = progress.unpacking > 0 || progress.setting_up > 0;
 	return installing
@@ -63,7 +78,8 @@ function deriveInstallState(progress: UpdateProgress): UpdateState {
 		: { kind: "downloading", progress };
 }
 
-// Precedence: an in-flight install outranks everything, then a terminal
+// Precedence: a preflight terminal outranks stale progress until an explicit
+// install/check/reset boundary clears it. Otherwise an in-flight install wins, then a terminal
 // failure/success, then an available update, then a bare in-progress check, then
 // a failed check. Failure deliberately outranks `checking` so a background
 // re-check never masks a real failed-update state. A failed CHECK sits BELOW
@@ -71,6 +87,11 @@ function deriveInstallState(progress: UpdateProgress): UpdateState {
 // later refresh could not reach the repos — but ABOVE `idle`, because "we could
 // not check" must never render as "up to date".
 export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
+	if (s.preflightFailure)
+		return {
+			kind: "update_preflight_failed",
+			preflight_reason: s.preflightFailure,
+		};
 	if (s.updating) return deriveInstallState(s.updating);
 	if (s.failure) {
 		return s.failure.identity
@@ -81,20 +102,46 @@ export function deriveUpdateState(s: UpdateSnapshot): UpdateState {
 				}
 			: { kind: "failed", reason: s.failure.reason };
 	}
-	if (s.succeeded) return { kind: "success" };
+	if (s.succeeded)
+		return {
+			kind: "success",
+			...(s.cleanupWarning === undefined
+				? {}
+				: { cleanup_warning: s.cleanupWarning }),
+		};
 
 	const checkedAt = s.checkedAt ?? undefined;
 	const stamp = checkedAt !== undefined ? { checked_at: checkedAt } : {};
+	const reachability =
+		s.reachability !== undefined ? { reachability: s.reachability } : {};
 
 	if (s.available && s.available.package_count > 0) {
-		const { identity, package_count, download_size } = s.available;
-		return download_size !== undefined
-			? { kind: "available", identity, package_count, download_size, ...stamp }
-			: { kind: "available", identity, package_count, ...stamp };
+		const {
+			identity,
+			package_count,
+			download_size,
+			packages,
+			actionable_count,
+		} = s.available;
+		return {
+			kind: "available",
+			identity,
+			package_count,
+			...optionalField("download_size", download_size),
+			...optionalField("packages", packages),
+			...optionalField("actionable_count", actionable_count),
+			...stamp,
+			...reachability,
+		};
 	}
-	if (s.checking) return { kind: "checking", ...stamp };
+	if (s.checking) return { kind: "checking", ...stamp, ...reachability };
 	if (s.checkFailure) {
-		return { kind: "check_failed", reason: s.checkFailure, ...stamp };
+		return {
+			kind: "check_failed",
+			reason: s.checkFailure,
+			...stamp,
+			...reachability,
+		};
 	}
-	return { kind: "idle", ...stamp };
+	return { kind: "idle", ...stamp, ...reachability };
 }

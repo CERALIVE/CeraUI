@@ -93,20 +93,116 @@ export type UpdateIdentity = z.infer<typeof updateIdentitySchema>;
 // update exists, so answering "up to date" would be a lie.
 // `refresh_failed`: `apt-get update` exited non-zero (repos unreachable, apt lock).
 // `discovery_failed`: refresh was fine, `dist-upgrade --assume-no` was unreadable.
-export const UPDATE_CHECK_FAILURE_REASONS = ['refresh_failed', 'discovery_failed'] as const;
+// `repos_unreachable`: the pre-flight reachability probe found NO usable address
+//   family, so apt was never spawned — distinct from `refresh_failed`, which is
+//   apt itself reporting a failure after it ran.
+// `captive_portal`: a configured origin answered with a redirect to a foreign
+//   host (or apt reported the matching sign-in symptom), so the device is behind
+//   a sign-in page rather than off the network.
+export const UPDATE_CHECK_FAILURE_REASONS = [
+	'refresh_failed',
+	'discovery_failed',
+	'repos_unreachable',
+	'captive_portal',
+] as const;
 export const updateCheckFailureReasonSchema = z.enum(UPDATE_CHECK_FAILURE_REASONS);
 export type UpdateCheckFailureReason = z.infer<typeof updateCheckFailureReasonSchema>;
+
+// Per-family APT reachability verdict. These are the SIX values the device's
+// `classifyProbe` emits, so the probing module's own type IS this enum, imported
+// from `@ceraui/rpc` rather than re-declared locally. `captive` is the per-family
+// fold of a captive-portal redirect on ANY configured origin.
+export const APT_FAMILY_PROBE_RESULTS = [
+	'ok',
+	'blocked',
+	'no_route',
+	'dns_failed',
+	'captive',
+	'unknown',
+] as const;
+export const aptFamilyProbeSchema = z.enum(APT_FAMILY_PROBE_RESULTS);
+export type AptFamilyProbe = z.infer<typeof aptFamilyProbeSchema>;
+
+// The reachability block that rides an `update_state` frame.
+//
+// BOTH families are REQUIRED, never present-only-when-true: a family published
+// only when it answered `ok` could be raised and never lowered by a consumer that
+// merges (the `policy_route_missing` latch), and "IPv6 was not mentioned" would be
+// indistinguishable from "IPv6 is fine". `unknown` is the honest value for a
+// family nothing probed.
+//
+// `used` is fixed by the verdict the device derived from the two families, so a
+// consumer never re-derives it: `any` (both usable), `ipv4`/`ipv6` (exactly one),
+// `none` (neither — unreachable, or a captive portal).
+export const aptReachabilitySchema = z.object({
+	ipv4: aptFamilyProbeSchema,
+	ipv6: aptFamilyProbeSchema,
+	used: z.enum(['ipv4', 'ipv6', 'any', 'none']),
+});
+export type AptReachability = z.infer<typeof aptReachabilitySchema>;
+
+// Which layer of the image a package belongs to. `app` is the first-party set the
+// device may install on its own; `platform` ships with the next OS image and is
+// INFORMATIONAL ONLY — it never reaches an install argv.
+export const UPDATE_LAYERS = ['app', 'platform'] as const;
+export const updateLayerSchema = z.enum(UPDATE_LAYERS);
+export type UpdateLayer = z.infer<typeof updateLayerSchema>;
+
+// Per-package detail for the `available` arm. `layer`, `kept_back` and
+// `actionable` are independently optional so a producer that classified nothing
+// still parses, and `kept_back` is `z.literal(true)` rather than a boolean: apt
+// reports the kept-back SET, so the absence of the key is the only way to say
+// "not kept back" — a `false` would be a claim nothing measured.
+//
+// `actionable` is the DERIVED verdict `layer === 'app' && !kept_back`, published
+// rather than re-derived so the device and every consumer answer the install
+// question identically. It IS a plain boolean, because unlike `kept_back` both
+// values are measured: a platform or kept-back row is positively not installable.
+// It stays optional only so a pre-classification frame keeps parsing; a producer
+// that emits `packages` at all emits it on every entry.
+export const updatePackageSchema = z.object({
+	name: z.string(),
+	layer: updateLayerSchema.optional(),
+	kept_back: z.literal(true).optional(),
+	actionable: z.boolean().optional(),
+});
+export type UpdatePackage = z.infer<typeof updatePackageSchema>;
+
+export const UPDATE_PREFLIGHT_REASONS = [
+	'insufficient_space',
+	'apt_config_failed',
+	'archive_path_invalid',
+	'probe_failed',
+	'probe_no_uri_rows',
+	'probe_uri_size_malformed',
+	'probe_delta_malformed',
+	'stat_failed',
+	'statfs_failed',
+	'value_out_of_range',
+	'pre_clean_failed',
+] as const;
+export const updatePreflightReasonSchema = z.enum(UPDATE_PREFLIGHT_REASONS);
+export type UpdatePreflightReason = z.infer<typeof updatePreflightReasonSchema>;
 
 export const updateStateSchema = z.discriminatedUnion('kind', [
 	// `checked_at` (epoch ms) is the operator's evidence a check actually ran: a
 	// successful check that changes nothing is otherwise indistinguishable from a
 	// dead button — same "up to date" line either way.
-	z.object({ kind: z.literal('idle'), checked_at: z.number().optional() }),
-	z.object({ kind: z.literal('checking'), checked_at: z.number().optional() }),
+	z.object({
+		kind: z.literal('idle'),
+		checked_at: z.number().optional(),
+		reachability: aptReachabilitySchema.optional(),
+	}),
+	z.object({
+		kind: z.literal('checking'),
+		checked_at: z.number().optional(),
+		reachability: aptReachabilitySchema.optional(),
+	}),
 	z.object({
 		kind: z.literal('check_failed'),
 		reason: updateCheckFailureReasonSchema,
 		checked_at: z.number().optional(),
+		reachability: aptReachabilitySchema.optional(),
 	}),
 	z.object({
 		kind: z.literal('available'),
@@ -114,6 +210,16 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 		package_count: z.number(),
 		download_size: z.string().optional(),
 		checked_at: z.number().optional(),
+		reachability: aptReachabilitySchema.optional(),
+		// A SIBLING of `identity.packages`, never a replacement: that `string[]` is
+		// the Todo-23 dismissal-key source and stays byte-unchanged. A legacy frame
+		// omitting this key must keep parsing.
+		packages: z.array(updatePackageSchema).optional(),
+		// How many of those entries the device may actually install. `0` is a real
+		// answer, not an absence — a platform-only or kept-back-only discovery still
+		// emits this arm so the informational band renders, and the Install path is
+		// gated strictly on this count rather than on `package_count`.
+		actionable_count: z.number().optional(),
 	}),
 	z.object({
 		kind: z.literal('downloading'),
@@ -125,7 +231,14 @@ export const updateStateSchema = z.discriminatedUnion('kind', [
 		progress: updateProgressSchema,
 		identity: updateIdentitySchema.optional(),
 	}),
-	z.object({ kind: z.literal('success') }),
+	z.object({
+		kind: z.literal('update_preflight_failed'),
+		preflight_reason: updatePreflightReasonSchema,
+	}),
+	z.object({
+		kind: z.literal('success'),
+		cleanup_warning: z.literal('post_clean_failed').optional(),
+	}),
 	z.object({
 		kind: z.literal('failed'),
 		reason: z.string(),

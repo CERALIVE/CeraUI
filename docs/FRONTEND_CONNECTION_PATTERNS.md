@@ -150,11 +150,22 @@ When the WebSocket reconnects after the operator has already authenticated, the 
 
 `reauthenticateAndHydrate(deps)` handles this:
 
-1. Reads the stored credential from `localStorage["auth"]` (the password, not a server-issued token).
-2. Calls `deps.login(token)` — wired to `rpc.auth.login({ password: token, persistent_token: true })`.
+1. Reads the device-issued, revocable token from `localStorage["auth"]`; the password is never persisted.
+2. Calls `deps.login(token)` — wired to `rpc.auth.login({ token, persistent_token: true })`.
 3. Dispatches the auth result through `handleMessage` (the canonical path).
 4. On success: fires a safety hydrate — `rpc.streaming.getConfig()` and `rpc.status.getStatus()` in parallel, dispatching both results through `handleMessage`. This repopulates the HUD and destination views even if the backend's post-login push is incomplete.
-5. On failure: clears the stored credential (loop break — the next reconnect finds no token and short-circuits) and routes to the login screen.
+5. On explicit server rejection: clears the stored credential (loop break — the next reconnect finds no token and short-circuits) and routes to the login screen.
+6. On a socket reset, timeout, or other transport failure: returns `unreachable`, retaining the credential and auth state for a later reconnect. A failed safety hydrate likewise retains the authenticated session.
+
+Initial page-load restoration uses `authenticateWithToken()` in the auth store,
+returning the same `AuthAttempt` variants as password login: `ok`, `rejected`, or
+`unreachable` with a socket/RPC/timeout cause. Password login persists only the
+issued token, before the successful auth-state flip can unmount the form; an
+unchecked successful login clears any previous saved credential. Token login
+returns success without a replacement and retains the existing token.
+An explicit clear-saved-session action also attempts device-side revocation;
+a confirmed password change clears the obsolete local token because the device
+revokes all outstanding credentials.
 
 The function is dependency-injected and rune-free, so it runs under the plain vitest environment.
 

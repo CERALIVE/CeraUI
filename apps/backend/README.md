@@ -145,6 +145,16 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 
 See [`docs/BUILD_PIPELINE.md`](../../docs/BUILD_PIPELINE.md) for the full build and CI reference.
 
+That package upgrades itself on the device, so its maintainer scripts carry two rules
+worth knowing before editing them. `prerm` stops and disables `ceralive.service` only
+when it is invoked for a real `remove` — dpkg runs the OLD `prerm` before unpacking a
+new package, so doing it unconditionally left a self-updated device with no control
+plane. And `postinst` re-enables the unit unconditionally with `systemctl enable`,
+because `deb-systemd-helper enable` is a silent no-op once its own installation state
+exists and therefore cannot repair a unit the old `prerm` disabled. Both are pinned by
+`scripts/build/deb-maintainer-scripts.test.sh`, run from
+`scripts/build/release-package-contracts.sh`.
+
 ## RPC Architecture
 
 All device control goes through oRPC over WebSocket. There are no HTTP REST endpoints for device state.
@@ -203,6 +213,17 @@ lifecycle bound. A connection resolving after the request deadline is closed
 before it can dispatch. If an already-dispatched request misses acknowledgement,
 its outcome is unknown and the lifecycle reconciles engine truth after
 `stop_failed`.
+
+### Software update admission
+
+`startSoftwareUpdate()` acknowledges dispatch synchronously. Its asynchronous
+update-check continuation clears cached downloads and checks space before stamping
+planned shutdown, immediately before the detached package transaction launches.
+A refused preflight leaves the armed-stream marker unchanged and clears the
+update overlay with a typed reason. The 256 MiB reserve is an engineering margin
+for transient unpack overhead, not a guarantee against running out of space.
+After the transaction settles, direct bounded cache cleanup is best-effort;
+failure adds a warning to success without changing the transaction verdict.
 
 ### Broadcast Events
 

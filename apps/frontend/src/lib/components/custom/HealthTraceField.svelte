@@ -213,10 +213,10 @@ $effect(() => () => teardownTimeline());
 				{@const stroke = lanes[laneIndex]?.degraded
 					? 'var(--status-warning)'
 					: 'var(--primary)'}
-				{#each view.segments as points, segmentIndex (segmentIndex)}
+				{#each view.segments as segment (segment.id)}
 					<polyline
 						fill="none"
-						{points}
+						points={segment.points}
 						stroke={stroke}
 						stroke-linecap="round"
 						stroke-linejoin="round"
@@ -226,7 +226,7 @@ $effect(() => () => teardownTimeline());
 				{/each}
 
 				<!-- Pen lifts: a dotted hairline across the hole on the lane baseline. -->
-				{#each view.gaps as gap, gapIndex (gapIndex)}
+				{#each view.gaps as gap (gap.id)}
 					<line
 						opacity="0.4"
 						stroke="var(--muted-foreground)"
@@ -275,7 +275,7 @@ $effect(() => () => teardownTimeline());
 				view.domain.max,
 			) ?? view.domain.max}
 		</span>
-		{#each view.gaps as gap, gapIndex (gapIndex)}
+		{#each view.gaps as gap (gap.id)}
 			<span
 				class="text-muted-foreground/50 pointer-events-none absolute -translate-x-1/2"
 				style="left: {pct((gap.x1 + gap.x2) / 2)}; top: {view.baselineY + 1}px"

@@ -35,7 +35,6 @@ import {
 	beforeEach,
 	describe,
 	expect,
-	mock,
 	test,
 } from "bun:test";
 import type {
@@ -48,18 +47,14 @@ import { call } from "@orpc/server";
 
 import type { LastSeenDevice } from "../helpers/config-schemas.ts";
 import { getConfig } from "../modules/config.ts";
-import * as configMigration from "../modules/streaming/config-migration.ts";
 import * as sourcesModule from "../modules/streaming/sources.ts";
+import {
+	setConfigProcedure,
+	setStreamingProcedureDepsForTest,
+} from "../rpc/procedures/streaming.procedure.ts";
 import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
-// Snapshot the REAL modules at load time — `mock.module` mutates the namespace in
-// place, so the restore in afterAll must come from here (same rule as
-// `config-source-migration.test.ts`).
 const realSources = { ...sourcesModule };
-const realConfigMigration = { ...configMigration };
-
-const SOURCES_PATH = "../modules/streaming/sources.ts";
-const CONFIG_MIGRATION_PATH = "../modules/streaming/config-migration.ts";
 
 const NO_INGEST: NetworkIngest = { rtmp: null, srt: null };
 
@@ -205,34 +200,12 @@ describe("F10a — stale-cache-after-save", () => {
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 
-	let setConfigProcedure: Awaited<
-		typeof import("../rpc/procedures/streaming.procedure.ts")
-	>["setConfigProcedure"];
-
-	beforeAll(async () => {
+	beforeAll(() => {
 		delete process.env.MOCK_MODE;
 		process.env.NODE_ENV = "test";
-
-		// The operator's own view — fresh, and NOT what the reconciler is handed.
-		mock.module(SOURCES_PATH, () => ({
-			...realSources,
-			getSourcesMessage: () => ({
-				hardware: "rk3588" as const,
-				sources: OPERATOR_VIEW,
-			}),
-		}));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({
-			...realConfigMigration,
-			validatePersistedPipeline: () => ({ valid: true }),
-		}));
-
-		const proc = await import("../rpc/procedures/streaming.procedure.ts");
-		setConfigProcedure = proc.setConfigProcedure;
 	});
 
 	afterAll(() => {
-		mock.module(SOURCES_PATH, () => ({ ...realSources }));
-		mock.module(CONFIG_MIGRATION_PATH, () => ({ ...realConfigMigration }));
 		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
 		else process.env.MOCK_MODE = savedMockMode;
 		if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -246,6 +219,13 @@ describe("F10a — stale-cache-after-save", () => {
 		config.source_stable_id = undefined;
 		config.selected_video_input = undefined;
 		config.last_seen_devices = [];
+		setStreamingProcedureDepsForTest({
+			getSourcesMessage: () => ({
+				hardware: "rk3588",
+				sources: OPERATOR_VIEW,
+			}),
+			validatePersistedPipeline: () => ({ valid: true }),
+		});
 	});
 
 	afterEach(() => {
@@ -255,6 +235,7 @@ describe("F10a — stale-cache-after-save", () => {
 		config.source_stable_id = undefined;
 		config.selected_video_input = undefined;
 		config.last_seen_devices = [];
+		setStreamingProcedureDepsForTest(null);
 	});
 
 	/**

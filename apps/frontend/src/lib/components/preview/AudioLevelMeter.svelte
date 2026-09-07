@@ -55,7 +55,7 @@ const channels = $derived(
 	Array.from({ length: channelCount }, (_, i) => {
 		const rms = fraction(rmsDb[i]);
 		const peak = fraction(peakDb[i]);
-		return { rms, peak };
+		return { id: `channel-${i + 1}`, rms, peak };
 	}),
 );
 
@@ -86,7 +86,7 @@ const silent = $derived(channels.length === 0 || channels.every((c) => c.peak ==
 			{m["live.preview.audioSilent"]()}
 		</p>
 	{:else}
-		{#each channels as channel, i (i)}
+		{#each channels as channel, i (channel.id)}
 			{@const clipping = channel.peak >= 0.97}
 			<div
 				class="bg-muted/60 relative h-2 overflow-hidden rounded-full"

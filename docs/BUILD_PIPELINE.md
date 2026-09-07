@@ -106,6 +106,11 @@ The build pipeline runs manually via workflow dispatch.
 
 5. **publish-federation**
    - Builds, signs, verifies, and conditionally uploads version-matched federation bundles
+   - Federation compiles the complete catalog in an isolated Paraglide locale-module
+     layout and fully minifies its final ES modules. It does not externalize i18n or
+     change the SPA's lazy namespace graph. `bun run test:federation-abi` checks built
+     mounts and frozen-catalog parity; after both builds,
+     `bun scripts/ci/bundle-report.mjs` checks SPA, precache, and federation budgets.
    - Reuses an existing version only when its signed payload digest matches
    - Rolls back keys created by a failed fresh attempt; never overwrites an existing key
 

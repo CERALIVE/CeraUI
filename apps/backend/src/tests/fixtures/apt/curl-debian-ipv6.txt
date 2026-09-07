@@ -1,0 +1,3 @@
+curl: (7) Failed to connect to deb.debian.org port 80: Could not connect to server
+000 
+rc=7

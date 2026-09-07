@@ -6,7 +6,7 @@
  *   Bug 2 — a check skipped while streaming/updating never ran its callback, so
  *           the periodic loop stopped rescheduling and died until backend restart.
  */
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, jest } from "bun:test";
 import { oneHour, oneMinute } from "../helpers/time.ts";
 import {
 	computeNextCheckDelay,
@@ -15,6 +15,7 @@ import {
 	resetSoftwareUpdateCheckRunner,
 	resetSoftwareUpdateSizeRunner,
 	SKIP_RETRY_DELAY_MS,
+	type SoftwareUpdateError,
 	setSoftwareUpdateCheckRunner,
 	setSoftwareUpdateSizeRunner,
 	triggerManualUpdateCheck,
@@ -38,32 +39,38 @@ describe("computeNextCheckDelay() — retry backoff", () => {
 		expect(computeNextCheckDelay(null, 0)).toBe(oneHour);
 		expect(computeNextCheckDelay(null, 50)).toBe(oneHour);
 	});
+
+	it.each(["repos_unreachable", "captive_portal"] as const)(
+		"keeps the failure retry cadence for %s",
+		(reason) => {
+			expect(computeNextCheckDelay(reason, 0)).toBe(RETRY_DELAY_SHORT_MS);
+			expect(computeNextCheckDelay(reason, 12)).toBe(oneMinute);
+		},
+	);
 });
 
 describe("periodicCheckForSoftwareUpdates() — reschedule after a skip", () => {
-	afterEach(() => resetSoftwareUpdateCheckRunner());
+	afterEach(() => {
+		resetSoftwareUpdateCheckRunner();
+		jest.restoreAllMocks();
+		jest.useRealTimers();
+	});
 
 	it("still schedules the next check when the current one is skipped", () => {
 		// Force the skip path: the runner declines (streaming/updating/apt busy)
 		// and, like the real code, never invokes the reschedule callback.
 		setSoftwareUpdateCheckRunner(() => false);
+		jest.useFakeTimers();
+		const schedule = jest.spyOn(globalThis, "setTimeout");
+		periodicCheckForSoftwareUpdates();
+		jest.advanceTimersByTime(SKIP_RETRY_DELAY_MS);
 
-		const realSetTimeout = globalThis.setTimeout;
-		const scheduledDelays: number[] = [];
-		globalThis.setTimeout = ((_fn: () => void, ms?: number) => {
-			scheduledDelays.push(ms ?? 0);
-			return 0 as unknown as ReturnType<typeof setTimeout>;
-		}) as typeof globalThis.setTimeout;
-
-		try {
-			periodicCheckForSoftwareUpdates();
-		} finally {
-			globalThis.setTimeout = realSetTimeout;
-		}
-
-		// Pre-fix the skip path scheduled nothing, so this array was empty and the
-		// loop was dead until the next backend restart.
-		expect(scheduledDelays).toContain(SKIP_RETRY_DELAY_MS);
+		// Pre-fix the skip path scheduled nothing, so the loop was dead until the
+		// next backend restart.
+		expect(schedule).toHaveBeenCalledWith(
+			expect.any(Function),
+			SKIP_RETRY_DELAY_MS,
+		);
 	});
 });
 
@@ -88,7 +95,9 @@ describe("triggerManualUpdateCheck() — discovery survives an apt-get update fa
 			discoveryRuns++;
 			return null;
 		});
-		let callback: ((err: unknown, failures: number) => unknown) | undefined;
+		let callback:
+			| ((err: SoftwareUpdateError, failures: number) => unknown)
+			| undefined;
 		setSoftwareUpdateCheckRunner((cb) => {
 			callback = cb;
 			return true;
@@ -97,7 +106,7 @@ describe("triggerManualUpdateCheck() — discovery survives an apt-get update fa
 		return {
 			started,
 			runDiscovery: () => discoveryRuns,
-			fireAptUpdateResult: (err: unknown, failures: number) =>
+			fireAptUpdateResult: (err: SoftwareUpdateError, failures: number) =>
 				callback?.(err, failures),
 		};
 	}

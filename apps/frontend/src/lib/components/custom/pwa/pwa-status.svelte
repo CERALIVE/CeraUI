@@ -56,13 +56,13 @@ const showOfflineBanner = $derived(
 	).showOfflineBanner,
 );
 
-let showIOSBanner = $state(false);
-
 // Reactive derived values for PWA state
 const canInstallApp = $derived(getCanInstall());
 
-// Device detection - includes tablets like iPad
-const isMobile = $derived(() => {
+// Device detection - includes tablets like iPad.
+// `$derived.by`, not `$derived(() => …)`: the latter yields a FUNCTION, so every
+// call site re-ran the probe on every render instead of reading a value.
+const isMobile = $derived.by(() => {
 	if (typeof window === 'undefined') return false;
 
 	// Check for touch capability with NaN safety
@@ -84,42 +84,30 @@ const isMobile = $derived(() => {
 let bannerDismissed = $state(false);
 
 // Detect device type for better install experience
-const isAndroid = $derived(() => {
+const isAndroid = $derived.by(() => {
 	if (typeof window === 'undefined') return false;
 	return /android/i.test(navigator.userAgent);
 });
 
-const isIOS = $derived(() => {
+const isIOS = $derived.by(() => {
 	if (typeof window === 'undefined') return false;
 	return /iPad|iPhone|iPod/.test(navigator.userAgent);
 });
 
-$effect(() => {
-	// Smart banner logic for mobile devices
-	if (isMobile() && !bannerDismissed) {
-		// Don't show if app is already installed
-		const isStandalone =
-			window.matchMedia('(display-mode: standalone)').matches ||
-			(window.navigator as unknown as { standalone?: boolean }).standalone ||
-			false; // Default to false if undefined
-
-		if (isStandalone) {
-			// App already installed, don't show any banner
-			showIOSBanner = false;
-		} else if (isAndroid()) {
-			// Android: Always show install banner (with install button if native prompt available)
-			showIOSBanner = true;
-		} else if (isIOS()) {
-			// iOS: Show install banner with instructions (no native prompt available)
-			showIOSBanner = true;
-		} else {
-			// Other mobile devices: Show generic banner
-			showIOSBanner = true;
-		}
-	} else {
-		showIOSBanner = false;
-	}
+const isStandalone = $derived.by(() => {
+	if (typeof window === 'undefined') return false;
+	return (
+		window.matchMedia('(display-mode: standalone)').matches ||
+		(window.navigator as unknown as { standalone?: boolean }).standalone ||
+		false // Default to false if undefined
+	);
 });
+
+// Android, iOS and "other mobile" all resolved to the same answer, so the
+// branch was one condition wearing three coats: offer the install banner to a
+// mobile browser that has not already installed the app and has not dismissed
+// it. Derived rather than mirrored into `$state` by an `$effect`.
+const showIOSBanner = $derived(isMobile && !bannerDismissed && !isStandalone);
 
 async function handleInstall() {
 	try {
@@ -160,7 +148,6 @@ async function handleInstall() {
 }
 
 function dismissIOSBanner() {
-	showIOSBanner = false;
 	bannerDismissed = true;
 	setShowIOSInstallPrompt(false);
 }
@@ -168,7 +155,7 @@ function dismissIOSBanner() {
 // Handle install for mobile banner (Android can use native prompt)
 async function handleMobileInstall() {
 	// For Android with native prompt available, use it
-	if (isAndroid() && getCanInstall()) {
+	if (isAndroid && getCanInstall()) {
 		await handleInstall();
 		dismissIOSBanner();
 	} else {
@@ -192,7 +179,7 @@ async function handleMobileInstall() {
 {/if}
 
 <!-- Mobile Install App Banner - All mobile devices, fixed to bottom -->
-{#if showIOSBanner && isMobile()}
+{#if showIOSBanner && isMobile}
 	<div
 		style:bottom="0px"
 		style="
@@ -213,13 +200,13 @@ async function handleMobileInstall() {
 				<div class="min-w-0 flex-1">
 					<p class="truncate text-sm font-medium">{m["pwa.installTitle"]()}</p>
 					<p class="truncate text-xs opacity-80">
-						{#if isIOS()}
+						{#if isIOS}
 							Tap
 							<Share class="mx-1 inline h-3 w-3" />
 							{m["pwa.installIosDescription"]()}
-						{:else if isAndroid() && canInstallApp}
+						{:else if isAndroid && canInstallApp}
 							{m["pwa.installAndroidDescription"]()}
-						{:else if isAndroid()}
+						{:else if isAndroid}
 							{m["pwa.installAndroidMenuDescription"]()}
 						{:else}
 							{m["pwa.installDescription"]()}
@@ -228,7 +215,7 @@ async function handleMobileInstall() {
 				</div>
 			</div>
 			<div class="flex flex-shrink-0 gap-2">
-				{#if isAndroid() && canInstallApp}
+				{#if isAndroid && canInstallApp}
 					<Button
 						class="bg-primary-foreground text-primary hover:bg-primary-foreground/90"
 						onclick={handleMobileInstall}
@@ -244,7 +231,7 @@ async function handleMobileInstall() {
 					size="sm"
 					variant="ghost"
 				>
-					{isAndroid() && canInstallApp ? m["pwa.installLater"]() : m["pwa.installIosGotIt"]()}
+					{isAndroid && canInstallApp ? m["pwa.installLater"]() : m["pwa.installIosGotIt"]()}
 				</Button>
 			</div>
 		</div>

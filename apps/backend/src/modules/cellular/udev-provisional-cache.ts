@@ -90,6 +90,7 @@ interface ProvisionalEntry {
 	readonly idPath: string;
 	readonly displayName: string;
 	readonly evidence: string;
+	readonly strength: UdevCellularAttach["strength"];
 	missingAuthoritativeCycles: number;
 	lifecycle: "initializing" | "undriveable";
 }
@@ -120,6 +121,7 @@ function provisionalDisplayName(attach: UdevCellularAttach): string {
 export class UdevProvisionalCache {
 	readonly #listeners = new Set<ProvisionalCacheListener>();
 	readonly #entries = new Map<string, ProvisionalEntry>();
+	readonly #retiredWeakKeys = new Set<string>();
 
 	/**
 	 * Record a cellular-class attach.
@@ -142,6 +144,14 @@ export class UdevProvisionalCache {
 				continue;
 			}
 			entry.missingAuthoritativeCycles++;
+			if (
+				entry.strength === "weak" &&
+				entry.missingAuthoritativeCycles >= UNDRIVEABLE_AUTHORITATIVE_CYCLES
+			) {
+				this.#retiredWeakKeys.add(entry.stableKey);
+				changed = this.#drop(entry.stableKey) || changed;
+				continue;
+			}
 			if (
 				entry.lifecycle === "initializing" &&
 				entry.missingAuthoritativeCycles >= UNDRIVEABLE_AUTHORITATIVE_CYCLES
@@ -167,6 +177,9 @@ export class UdevProvisionalCache {
 				changed = this.#drop(stableKey) || changed;
 			}
 		}
+		for (const stableKey of this.#retiredWeakKeys) {
+			if (!attachedKeys.has(stableKey)) this.#retiredWeakKeys.delete(stableKey);
+		}
 		if (changed) this.#notify();
 	}
 
@@ -179,6 +192,7 @@ export class UdevProvisionalCache {
 		if (this.#drop(stableKey)) {
 			this.#notify();
 		}
+		this.#retiredWeakKeys.delete(stableKey);
 	}
 
 	/**
@@ -189,6 +203,7 @@ export class UdevProvisionalCache {
 	 * retires only devices absent from the complete inventory.
 	 */
 	clear(): void {
+		this.#retiredWeakKeys.clear();
 		if (this.#entries.size === 0) {
 			return;
 		}
@@ -251,6 +266,7 @@ export class UdevProvisionalCache {
 
 	/** Drop every entry and listener (test isolation / teardown). */
 	reset(): void {
+		this.#retiredWeakKeys.clear();
 		for (const key of [...this.#entries.keys()]) {
 			this.#drop(key);
 		}
@@ -268,12 +284,18 @@ export class UdevProvisionalCache {
 
 	#insertAttach(attach: UdevCellularAttach): boolean {
 		const stableKey = deriveModemStableKey(attach.idPath);
-		if (stableKey === undefined || this.#entries.has(stableKey)) return false;
+		if (
+			stableKey === undefined ||
+			this.#entries.has(stableKey) ||
+			this.#retiredWeakKeys.has(stableKey)
+		)
+			return false;
 		this.#entries.set(stableKey, {
 			stableKey,
 			idPath: attach.idPath,
 			displayName: provisionalDisplayName(attach),
 			evidence: attach.evidence,
+			strength: attach.strength,
 			missingAuthoritativeCycles: 0,
 			lifecycle: "initializing",
 		});

@@ -187,6 +187,11 @@ const capChips = $derived.by(() => {
 	for (const codec of summary.codecs) chips.push(formatCodec(codec));
 	return chips;
 });
+// The capability cluster renders under the selected-source line rather than
+// opposite the section title. It keeps its OWN condition — a board can report a
+// ceiling before any config resolves — so the panel below is gated on the union
+// and each line on its own fact.
+const hasCapSummary = $derived(capChips.length > 0 || summary?.audioSupported === true);
 
 // Active-config truth (Todo 23): engine `active_encode` while streaming, else the
 // saved config. Distinct from the capability chips above — these are settings.
@@ -588,9 +593,21 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 </script>
 
 <Card.Root data-testid="source-section" tabindex={-1}>
-	<Card.Content class="space-y-5 p-4 sm:p-6">
-		<!-- Section header + compact capability summary -->
-		<div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+	<!-- `px-*` only: `Card.Root` already owns the vertical inset (`py-4`), and the
+	     old `p-4 sm:p-6` doubled it — 40px of dead height above the title at
+	     desktop, against StreamSetupChain's 16px, so the two cards in one column
+	     opened on two different rhythms. -->
+	<Card.Content class="space-y-5 px-4 sm:px-6">
+		<!-- Header (design-pass-24): the section title and ONE state signal.
+		     The capability cluster used to sit here as a six-element row opposite
+		     the title, with the active-config box as a SECOND competing band
+		     directly beneath — two horizontal layers before the operator reached
+		     the list at all. It is DEMOTED into the panel it describes, never
+		     deleted: every chip and every state word still renders below. -->
+		<div
+			class="flex flex-wrap items-center justify-between gap-x-3 gap-y-2"
+			data-testid="source-header"
+		>
 			<div class="flex items-center gap-1">
 				<Video aria-hidden={true} class="text-primary size-4 shrink-0" />
 				<span class="text-sm font-semibold">{m["live.source.label"]()}</span>
@@ -600,64 +617,69 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					title={m["live.education.field.source.title"]()}
 				/>
 			</div>
-			{#if capChips.length || summary?.audioSupported}
-				<div
-					class="flex flex-wrap items-center gap-1.5"
-					data-testid="source-capabilities"
-					aria-label={m["live.source.capabilities"]()}
-				>
-					<span
-						class="text-muted-foreground text-[0.65rem] font-semibold tracking-wide uppercase"
-					data-testid="cap-device-max"
-				>
-					{m["live.source.sourceMax"]()}
-					</span>
-					<InfoPopover
-						body={m["live.education.field.mode.body"]()}
-						testId="info-mode"
-						title={m["live.education.field.mode.title"]()}
-					/>
-					{#each capChips as chip (chip)}
-						<span
-							class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs"
-						>
-							{chip}
-						</span>
-					{/each}
-					{#if summary?.audioSupported}
-						<span
-							class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
-							data-testid="cap-audio"
-						>
-							<Volume2 aria-hidden={true} class="size-3" />
-							{m["settings.audioSource"]()}
-						</span>
-					{/if}
-				</div>
-			{/if}
-		</div>
-
-		<!-- Active-config line (Todo 23): what the device is DOING (engine truth while
-		     streaming) or the saved config it will start with — visually distinct from
-		     the capability chips above, which are the hardware ceiling, not settings. -->
-		{#if hasActiveConfig}
-			<div
-				class="bg-muted/30 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2"
-				data-testid="source-active-config"
-			>
+			{#if hasActiveConfig}
 				<span
 					class={`inline-flex items-center gap-1 text-xs font-semibold ${
 						activeSummary.live ? 'text-primary' : 'text-muted-foreground'
 					}`}
+					data-testid="source-active-state"
 				>
 					{#if activeSummary.live}
 						<span aria-hidden={true} class="bg-primary size-1.5 rounded-full"></span>
 					{/if}
 					{activeSummary.live ? m["live.source.activeLive"]() : m["live.source.activeConfigured"]()}
 				</span>
-				<span class="text-foreground truncate font-mono text-sm" data-testid="active-config-value">
-					{activeParts.join(' \u00b7 ')}
-				</span>
+			{/if}
+		</div>
+
+		<!-- Selected-source panel: WHAT the device is set to (engine truth while
+		     streaming, else the saved config) on the lead line, and the hardware
+		     CEILING that source can reach on the demoted second one. The two are
+		     different facts — settings vs. what the hardware could do — so the
+		     ceiling stays visually quieter rather than sharing the lead line. -->
+		{#if hasActiveConfig || hasCapSummary}
+			<div
+				class="bg-muted/30 space-y-1.5 rounded-lg border px-3 py-2"
+				data-testid="source-active-config"
+			>
+				{#if hasActiveConfig}
+					<p
+						class="text-foreground truncate font-mono text-sm"
+						data-testid="active-config-value"
+					>
+						{activeParts.join(' \u00b7 ')}
+					</p>
+				{/if}
+				{#if hasCapSummary}
+					<div
+						class="flex flex-wrap items-center gap-1.5"
+						data-testid="source-capabilities"
+						aria-label={m["live.source.capabilities"]()}
+					>
+						<span class="text-muted-foreground text-xs font-medium" data-testid="cap-device-max">
+							{m["live.source.sourceMax"]()}
+						</span>
+						<InfoPopover
+							body={m["live.education.field.mode.body"]()}
+							testId="info-mode"
+							title={m["live.education.field.mode.title"]()}
+						/>
+						{#each capChips as chip (chip)}
+							<span class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 font-mono text-xs">
+								{chip}
+							</span>
+						{/each}
+						{#if summary?.audioSupported}
+							<span
+								class="bg-primary/10 text-primary inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium"
+								data-testid="cap-audio"
+							>
+								<Volume2 aria-hidden={true} class="size-3" />
+								{m["settings.audioSource"]()}
+							</span>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 

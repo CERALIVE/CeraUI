@@ -60,6 +60,16 @@ class StreamingStateManager {
 		if (!asrc || !asrcs) return undefined;
 		return asrcs.includes(asrc) ? undefined : asrc;
 	});
+	readonly state = $derived<StreamingState>({
+		pipelines: this.pipelines,
+		hardware: this.hardware,
+		isStreaming: this.isStreaming,
+		audioSources: this.audioSources,
+		audioCodecs: this.audioCodecs,
+		relayMessage: this.relayMessage,
+		savedConfig: this.savedConfig,
+		notAvailableAudioSource: this.notAvailableAudioSource,
+	});
 
 	/**
 	 * Kept for API compatibility with the pre-migration `.subscribe()` shape.
@@ -70,16 +80,7 @@ class StreamingStateManager {
 	}
 
 	getState(): StreamingState {
-		return {
-			pipelines: this.pipelines,
-			hardware: this.hardware,
-			isStreaming: this.isStreaming,
-			audioSources: this.audioSources,
-			audioCodecs: this.audioCodecs,
-			relayMessage: this.relayMessage,
-			savedConfig: this.savedConfig,
-			notAvailableAudioSource: this.notAvailableAudioSource,
-		};
+		return this.state;
 	}
 }
 

@@ -13,14 +13,12 @@ import { call } from "@orpc/server";
 
 import { getConfig } from "../../modules/config.ts";
 import { updateStatus } from "../../modules/streaming/streaming.ts";
-import * as streamloop from "../../modules/streaming/streamloop.ts";
 import type { AppWebSocket, RPCContext } from "../types.ts";
-
-const STREAMLOOP_PATH = "../../modules/streaming/streamloop.ts";
-
-// Snapshot the real barrel so afterAll can restore it — later suites in the same
-// `bun test` process drive the real launch and must not inherit our spy.
-const realStreamloop = { ...streamloop };
+import {
+	setStreamingProcedureDepsForTest,
+	streamingStartProcedure,
+	streamingStopProcedure,
+} from "./streaming.procedure.ts";
 
 function makeContext(): RPCContext {
 	const ws = {
@@ -57,37 +55,19 @@ const startSpy = mock(async () => {
 	return { success: true as const };
 });
 
-let streamingStartProcedure: Awaited<
-	typeof import("./streaming.procedure.ts")
->["streamingStartProcedure"];
-let streamingStopProcedure: Awaited<
-	typeof import("./streaming.procedure.ts")
->["streamingStopProcedure"];
-
 describe("streaming.start — in-flight re-entry guard (S5)", () => {
 	const savedMockMode = process.env.MOCK_MODE;
 	const savedNodeEnv = process.env.NODE_ENV;
 	let priorPipeline: string | undefined;
 
-	beforeAll(async () => {
+	beforeAll(() => {
 		// Force the real (non-mock) launch path: shouldUseMocks() needs
 		// isDevelopment(), which we disable so the handler reaches startStream.
 		delete process.env.MOCK_MODE;
 		process.env.NODE_ENV = "test";
-
-		mock.module(STREAMLOOP_PATH, () => ({
-			...realStreamloop,
-			start: startSpy,
-			stop: () => {},
-		}));
-
-		({ streamingStartProcedure, streamingStopProcedure } = await import(
-			"./streaming.procedure.ts"
-		));
 	});
 
 	afterAll(() => {
-		mock.module(STREAMLOOP_PATH, () => ({ ...realStreamloop }));
 		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
 		else process.env.MOCK_MODE = savedMockMode;
 		if (savedNodeEnv === undefined) delete process.env.NODE_ENV;
@@ -104,11 +84,15 @@ describe("streaming.start — in-flight re-entry guard (S5)", () => {
 		engineStartSpy.mockClear();
 		startSpy.mockClear();
 		releaseStart = () => {};
+		setStreamingProcedureDepsForTest({ startStream: startSpy });
 	});
 
-	afterEach(() => {
+	afterEach(async () => {
 		getConfig().pipeline = priorPipeline;
 		releaseStart();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		await call(streamingStopProcedure, undefined, { context: makeContext() });
+		setStreamingProcedureDepsForTest(null);
 	});
 
 	test("two overlapping starts spawn srtla_send once and start the engine once; the second returns busy", async () => {

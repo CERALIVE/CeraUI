@@ -204,10 +204,25 @@ export function getMacAddressForWifiInterface(id: WifiInterfaceId) {
 
 let unavailableDeviceRetryExpiry = 0;
 let wifiIfId = 0;
+const wifiUpdateTimers = new Set<ReturnType<typeof setTimeout>>();
+
+export function scheduleWifiUpdate(delayMs: number): void {
+	const timer = setTimeout(() => {
+		wifiUpdateTimers.delete(timer);
+		void wifiUpdateDevices();
+	}, delayMs);
+	wifiUpdateTimers.add(timer);
+}
+
+export function stopWifiUpdateLoopForTest(): void {
+	for (const timer of wifiUpdateTimers) clearTimeout(timer);
+	wifiUpdateTimers.clear();
+	unavailableDeviceRetryExpiry = 0;
+}
 
 export function resetWifiInterfaceDiscoveryForTest(): void {
+	stopWifiUpdateLoopForTest();
 	wifiIfId = 0;
-	unavailableDeviceRetryExpiry = 0;
 }
 
 export function recordDegradedWifiInterface(
@@ -560,12 +575,12 @@ export async function wifiUpdateDevices() {
 	if (unavailableDevices) {
 		if (unavailableDeviceRetryExpiry === 0) {
 			unavailableDeviceRetryExpiry = getms() + 5 * 60 * 1_000; // 5 minute timeout
-			setTimeout(wifiUpdateDevices, 3_000);
+			scheduleWifiUpdate(3_000);
 			logger.warn(
 				"One or more Wifi interfaces are unavailable. Will retry periodically for the next 5 minutes",
 			);
 		} else if (getms() < unavailableDeviceRetryExpiry) {
-			setTimeout(wifiUpdateDevices, 3_000);
+			scheduleWifiUpdate(3_000);
 			logger.warn(
 				"One or more Wifi interfaces are still unavailable. Retrying in 3 seconds...",
 			);

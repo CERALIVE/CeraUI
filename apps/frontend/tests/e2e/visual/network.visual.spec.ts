@@ -12,11 +12,20 @@ import { NetworkPage } from '../pages/network.js';
  * byte-identical, and a re-generation run reported nothing to update. A baseline
  * that cannot see the surface it guards is not a gate.
  *
- * `fullPage: true` makes the desktop baseline 1280×2761 and the mobile one
- * 390×4014, covering Bonded Links → Internet Sharing → WiFi → Cellular →
- * Ethernet → Hotspot → Bluetooth. Verified stable: three consecutive verify runs
- * on both projects passed with no pixel drift, on top of the two stabilizers
- * below and `mask.css`.
+ * `fullPage: true` makes the desktop baseline 1280×2032, covering Bonded Links →
+ * Internet Sharing → WiFi → Cellular → Ethernet → Hotspot → Bluetooth. Verified
+ * stable: three consecutive verify runs passed with no pixel drift, on top of
+ * the two stabilizers below and `mask.css`.
+ *
+ * IT WAS 1280×2761, AND MOST OF THAT DIFFERENCE WAS STALENESS, NOT TODO 25.
+ * `@visual` is grep-inverted out of the CI e2e lane, so this baseline had not
+ * been re-verified since it was captured and it still described the surface as
+ * it looked before the todo-32/33/34 de-noise work landed. Re-measured with the
+ * same probe on the same tree, the destination was 2302 px immediately before
+ * todo 25 and 2036 px immediately after it — so ~460 px of the 2761 → 2032 drop
+ * is the golden catching up, and ~266 px is this pass. Do not read the headline
+ * delta as one change's work; `network-density.visual.spec.ts` carries the
+ * like-for-like measurement.
  */
 
 /**

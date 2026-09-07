@@ -199,23 +199,14 @@ function deviceName(device: BluetoothDevice): string {
 	return device.name ?? device.address ?? m["network.bluetooth.deviceUnnamed"]();
 }
 
-/**
- * Deep-link to the Live destination.
- *
- * Lazily imported for the reason `dialog-request.svelte.ts` records: `$lib/config`
- * statically pulls the dev-only DevTools → pwa → `window.matchMedia` chain, and
- * `navigation.svelte` pulls `$lib/config` in turn. Resolving them at tap time
- * keeps both out of this component's static graph.
- */
 async function openLiveSources(): Promise<void> {
-	const { navElements } = await import('$lib/config');
-	const { navigateTo } = await import('$lib/stores/navigation.svelte');
-	if (navElements.live) navigateTo({ live: navElements.live });
+	const { navigateToDestination } = await import('$lib/stores/navigation-lazy');
+	navigateToDestination('live');
 }
 </script>
 
 <section class="bg-card rounded-xl border" data-testid="bluetooth-section">
-	<div class="flex items-center gap-2 border-b px-4 py-3">
+	<div class="flex items-center gap-2 border-b px-4 py-2">
 		<Bluetooth aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["network.bluetooth.title"]()}</h2>
 
@@ -256,7 +247,7 @@ async function openLiveSources(): Promise<void> {
 		</span>
 	</div>
 
-	<div class="space-y-3 px-4 py-3">
+	<div class="space-y-2.5 px-4 py-2.5">
 		{#if surface.kind === 'unavailable'}
 			<!-- Read from the device's own `getStatus()`, never assumed: an emulated
 			     host, a dead bluetoothd, an unreachable bus and a board with no
@@ -282,7 +273,7 @@ async function openLiveSources(): Promise<void> {
 		{/if}
 
 		{#if surface.kind === 'off'}
-			<div class="py-3 text-center" data-testid="bluetooth-off">
+			<div class="py-2 text-center" data-testid="bluetooth-off">
 				<p class="text-sm font-medium">{m["network.bluetooth.off"]()}</p>
 				<p class="text-muted-foreground mt-0.5 text-xs">{m["network.bluetooth.offHint"]()}</p>
 			</div>

@@ -16,7 +16,7 @@ import { toast } from 'svelte-sonner';
 
 import { getPipelineDisplayName } from '$lib/helpers/PipelineHelper';
 import { startStreaming, stopStreaming } from '$lib/helpers/SystemHelper';
-import { rpc } from '$lib/rpc';
+import { ConnectionResetError, rpc } from '$lib/rpc';
 import {
 	confirmOperation,
 	failOperation,
@@ -60,7 +60,6 @@ import {
 	resolvedAudioLabel,
 } from '$lib/streaming/sourceSummary';
 import { LazyDialog, LazyDialogFallback, lazyDialog } from '$lib/components/dialogs';
-import { navElements } from '$lib/config';
 import {
 	getActiveInput,
 	getCapabilities,
@@ -468,14 +467,8 @@ async function validateSavedDestination() {
 const linkCount = $derived(linkTelemetry ? linkTelemetry.links.length : null);
 
 async function handleManageLinks() {
-	const network = navElements.network;
-	if (!network) return;
-	// Lazy import severs the LiveView→navigation static edge: navigation.svelte.ts
-	// (and $lib/config) statically import LiveView for the default destination, so
-	// a static back-import here closes a module cycle whose initializer touches
-	// LiveView before it is defined (TDZ at app mount). Resolved at click time.
-	const { navigateTo } = await import('$lib/stores/navigation.svelte');
-	navigateTo({ network });
+	const { navigateToDestination } = await import('$lib/stores/navigation-lazy');
+	navigateToDestination('network');
 }
 
 // Source-gate fix + sole-camera "Change" (T10): retarget to the unified source
@@ -861,7 +854,7 @@ async function handleStart(overrides: { source?: string } = {}) {
 	// for itself (T3 streamingStartProcedure reads `input.source ?? getConfig().source`).
 	const overridden =
 		overrides.source !== undefined
-			? ({ ...(config ?? {}), source: overrides.source } as typeof config)
+			? ({ ...config, source: overrides.source } as typeof config)
 			: config;
 	const startBase = reconcileStartSource(overridden, getSources());
 
@@ -897,6 +890,7 @@ async function handleStart(overrides: { source?: string } = {}) {
 			}
 		}
 	} catch (error) {
+		if (error instanceof ConnectionResetError) return;
 		// Transport/validation throw: revert to idle with the error message.
 		const reason =
 			error instanceof Error ? error.message : 'unknown_error';

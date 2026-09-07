@@ -120,13 +120,17 @@ describe("UpdatesDialog — unified state machine", () => {
 		expect(checkForUpdates).not.toHaveBeenCalled();
 	});
 
+	// The reason is now RESOLVED, never echoed: `failed.reason` is a free-form wire
+	// string that on a device carries an apt stderr line, which an operator with no
+	// console cannot act on. An unknown token renders one honest sentence pointing
+	// at the in-app log viewer — see UpdatesDialog.check.test.ts for the full table.
 	it("surfaces the failure reason and a retry affordance (state=failed)", async () => {
 		mockState = { kind: "failed", reason: "dpkg was interrupted" };
 		const { getByTestId } = render(UpdatesDialog, { open: true });
 
 		await waitFor(() => {
 			expect(getByTestId("update-failed-reason").textContent).toContain(
-				"dpkg was interrupted",
+				"didn't say why",
 			);
 		});
 
@@ -216,10 +220,9 @@ describe("UpdatesDialog — a start attempt always ends somewhere visible", () =
 				document.querySelector('[data-testid="update-start-refused"]'),
 			).not.toBeNull();
 		});
-		const stillOfferingUpdate = [...document.querySelectorAll("button")].some(
-			(b) => b.textContent?.trim() === "Update",
-		);
-		expect(stillOfferingUpdate).toBe(true);
+		expect(
+			document.querySelector('[data-testid="update-install"]'),
+		).not.toBeNull();
 	});
 
 	it("reports an installed update explicitly (state=success)", async () => {

@@ -7,6 +7,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 
 import { rpc } from "$lib/rpc/client";
+import { createPassword } from "$lib/stores/auth-status.svelte";
 
 // Re-export type for backward compatibility
 export type { AudioCodecs };
@@ -105,13 +106,7 @@ export const saveRemoteConfig = async (params: RemoteConfigParams) => {
 
 export const savePassword = async (password: string) => {
 	try {
-		await rpc.auth.setPassword({ password });
-		// The device revokes every outstanding credential when the password
-		// changes, so the remembered one is already dead — keeping it would make
-		// the next reconnect fail and route the operator to the login screen with
-		// no explanation. Clearing it makes the next reload ask for the password
-		// they just set.
-		localStorage.removeItem("auth");
+		await createPassword(password);
 	} catch (error) {
 		console.error("Failed to save password:", error);
 		throw error;

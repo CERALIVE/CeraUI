@@ -18,6 +18,7 @@
 
 import {
 	afterAll,
+	afterEach,
 	beforeAll,
 	beforeEach,
 	describe,
@@ -43,6 +44,7 @@ import {
 } from "../modules/modems/sim-secrets.ts";
 
 const ORIGINAL_RUN_DIR = process.env.CERALIVE_RUN_DIR;
+const ORIGINAL_CWD = process.cwd();
 const RUN_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "ceralive-sim-"));
 
 beforeAll(() => {
@@ -63,6 +65,13 @@ beforeEach(() => {
 	for (const entry of fs.readdirSync(RUN_DIR)) {
 		fs.rmSync(path.join(RUN_DIR, entry), { recursive: true, force: true });
 	}
+	// Parallel workers must not supply or mutate this test's config snapshot.
+	process.chdir(RUN_DIR);
+	fs.writeFileSync("config.json", '{"max_br":5000}\n');
+});
+
+afterEach(() => {
+	process.chdir(ORIGINAL_CWD);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

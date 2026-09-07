@@ -85,13 +85,15 @@ describe("buildDeviceBoundProbeArgv", () => {
 
 	test("the destination is the external check URL, not a gateway", () => {
 		const argv = buildDeviceBoundProbeArgv("142.251.133.99", "eth1");
-		expect(argv.at(-1)).toBe("http://142.251.133.99/generate_204");
+		expect(argv[argv.length - 1]).toBe("http://142.251.133.99/generate_204");
 		expect(argv.join(" ")).not.toContain(TWIN_ADMIN_GATEWAY);
 	});
 
 	test("an IPv6 literal is bracketed so the URL parses", () => {
 		const argv = buildDeviceBoundProbeArgv("2a00:1450:4001:80f::2003", "eth1");
-		expect(argv.at(-1)).toBe("http://[2a00:1450:4001:80f::2003]/generate_204");
+		expect(argv[argv.length - 1]).toBe(
+			"http://[2a00:1450:4001:80f::2003]/generate_204",
+		);
 	});
 
 	test("the twins produce two DIFFERENT argvs from one address", () => {
@@ -313,7 +315,7 @@ describe("electConnectivityCandidate — ordinary roster is unchanged", () => {
 		expect(probes.calls.device).toEqual([]);
 	});
 
-	test("every resolved address is tried before giving up", async () => {
+	test("only the first resolved address from a family is tried before giving up", async () => {
 		const probes = recordingProbes(new Set(), new Set());
 		const election = await electConnectivityCandidate(
 			["142.251.133.99", "142.251.133.100"],
@@ -324,7 +326,6 @@ describe("electConnectivityCandidate — ordinary roster is unchanged", () => {
 		expect(election.elected).toBeUndefined();
 		expect(probes.calls.sourceIp.map((c) => c.addr)).toEqual([
 			"142.251.133.99",
-			"142.251.133.100",
 		]);
 	});
 });

@@ -20,7 +20,10 @@ export default defineConfig({
 	test: {
 		globals: true,
 		environment: 'jsdom',
-		setupFiles: ['./vitest.setup.ts'],
+		setupFiles: [
+			'./vitest.storage.setup.ts',
+			'./vitest.components.setup.ts',
+		],
 		include: ['tests/federation/**/*.test.ts'],
 		exclude: ['**/node_modules/**'],
 		pool: 'threads',

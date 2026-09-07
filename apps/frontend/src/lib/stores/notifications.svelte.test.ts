@@ -13,7 +13,9 @@
  * never evaluates those runes; the pure resolver under test receives an
  * explicit `translations` tree rather than reading the live registry.
  */
+// @vitest-environment jsdom
 import type { Notification } from "@ceraui/rpc/schemas";
+import { render } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { messageRegistry } = vi.hoisted(() => ({
@@ -21,6 +23,7 @@ const { messageRegistry } = vi.hoisted(() => ({
 }));
 vi.mock("@ceraui/i18n/svelte", () => ({ m: messageRegistry }));
 
+import NotificationSelectorConsumer from "./__fixtures__/NotificationSelectorConsumer.svelte";
 import {
 	type ActiveNotification,
 	clearNotifications,
@@ -306,6 +309,15 @@ describe("notification store (reactive API)", () => {
 		const active = getActive();
 		expect(active.length).toBe(1);
 		expect(active[0]?.name).toBe("jetson-undervoltage");
+	});
+
+	it("memoizes selectors until the active notification map changes", () => {
+		push(makeNotification({ name: "stable", is_persistent: true }));
+		const { getByTestId } = render(NotificationSelectorConsumer);
+		const consumer = getByTestId("notification-selector-consumer");
+
+		expect(consumer.getAttribute("data-active-stable")).toBe("true");
+		expect(consumer.getAttribute("data-persistent-stable")).toBe("true");
 	});
 
 	it("resolves `key` via the mocked registry with `params` (not the raw key string)", () => {

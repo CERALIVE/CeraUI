@@ -14,7 +14,9 @@
   showing a spinner.
 -->
 <script lang="ts">
+// allow: SIZE_OK — this legacy dialog couples dispatch confirmation to its rendered update state; keep the lifecycle fix local.
 import { m } from '@ceraui/i18n/svelte';
+import type { UpdatePackage, UpdatePreflightReason } from '@ceraui/rpc/schemas';
 import { AlertTriangle, CheckCircle2, Download, RefreshCw } from '@lucide/svelte';
 
 import { AppDialog } from '$lib/components/dialogs';
@@ -47,8 +49,60 @@ const size = $derived(available?.download_size ?? '');
 const version = $derived(available?.identity.version ?? '');
 const packages = $derived(available?.identity.packages ?? []);
 
+// Todo-14 classification. `packages` here is a SIBLING of `identity.packages` —
+// that `string[]` stays the dismissal-key source and is untouched.
+const classified = $derived<readonly UpdatePackage[]>(available?.packages ?? []);
+
+// A package the device positively will NOT install: it said so outright, or it
+// named the layer that ships with the next OS image, or apt held it back. All
+// three are positive evidence; an entry carrying none of them was never
+// classified, and banding it would be a claim nothing measured.
+function isWithheld(pkg: UpdatePackage): boolean {
+	return pkg.actionable === false || pkg.layer === 'platform' || pkg.kept_back === true;
+}
+
+const withheld = $derived(classified.filter(isWithheld));
+const actionableNames = $derived(
+	classified.filter((pkg) => !isWithheld(pkg)).map((pkg) => pkg.name),
+);
+const listedPackages = $derived(classified.length > 0 ? actionableNames : packages);
+
+// `actionable_count` is the device's own verdict and the ONLY gate on Install:
+// offering the control for a platform-layer or kept-back set is a button whose
+// one possible outcome is a refusal. It is optional purely so a producer that
+// classified nothing keeps parsing, so ABSENCE means "not classified" — never
+// "zero installable" — and a backend predating the classification keeps the
+// button it has always had.
+const actionableCount = $derived.by(() => {
+	if (available === undefined) return 0;
+	if (available.actionable_count !== undefined) return available.actionable_count;
+	return classified.length > 0 ? actionableNames.length : count;
+});
+
 const failed = $derived(updateState?.kind === 'failed' ? updateState : undefined);
 const succeeded = $derived(updateState?.kind === 'success');
+const preflightFailed = $derived(
+	updateState?.kind === 'update_preflight_failed' ? updateState : undefined,
+);
+const cleanupWarning = $derived(
+	updateState?.kind === 'success' ? updateState.cleanup_warning : undefined,
+);
+const PREFLIGHT_REASON_COPY = {
+	insufficient_space: () => m["settings.updates.update_preflight_failed.insufficient_space"](),
+	apt_config_failed: () => m["settings.updates.update_preflight_failed.apt_config_failed"](),
+	archive_path_invalid: () => m["settings.updates.update_preflight_failed.archive_path_invalid"](),
+	probe_failed: () => m["settings.updates.update_preflight_failed.probe_failed"](),
+	probe_no_uri_rows: () => m["settings.updates.update_preflight_failed.probe_no_uri_rows"](),
+	probe_uri_size_malformed: () => m["settings.updates.update_preflight_failed.probe_uri_size_malformed"](),
+	probe_delta_malformed: () => m["settings.updates.update_preflight_failed.probe_delta_malformed"](),
+	stat_failed: () => m["settings.updates.update_preflight_failed.stat_failed"](),
+	statfs_failed: () => m["settings.updates.update_preflight_failed.statfs_failed"](),
+	value_out_of_range: () => m["settings.updates.update_preflight_failed.value_out_of_range"](),
+	pre_clean_failed: () => m["settings.updates.update_preflight_failed.pre_clean_failed"](),
+} satisfies Readonly<Record<UpdatePreflightReason, () => string>>;
+const preflightMessage = $derived(
+	preflightFailed === undefined ? undefined : PREFLIGHT_REASON_COPY[preflightFailed.preflight_reason](),
+);
 const checkFailed = $derived(
 	updateState?.kind === 'check_failed' ? updateState : undefined,
 );
@@ -58,6 +112,24 @@ const lastCheckedAt = $derived(
 const lastCheckedLabel = $derived(
 	lastCheckedAt === undefined ? '' : new Date(lastCheckedAt).toLocaleTimeString(),
 );
+const reachability = $derived(
+	updateState && 'reachability' in updateState ? updateState.reachability : undefined,
+);
+
+// One muted line, and only when the answer is not the ordinary healthy one:
+// `any` means both families worked, which is worth no sentence at all. A captive
+// portal outranks the family verdict — it explains WHY neither family reached a
+// repository, which `used: 'none'` alone cannot.
+const reachabilityMessage = $derived.by(() => {
+	if (reachability === undefined) return undefined;
+	if (reachability.ipv4 === 'captive' || reachability.ipv6 === 'captive') {
+		return m["settings.updates.reachability.captivePortal"]();
+	}
+	if (reachability.used === 'ipv4') return m["settings.updates.reachability.ipv4Only"]();
+	if (reachability.used === 'ipv6') return m["settings.updates.reachability.ipv6Only"]();
+	return undefined;
+});
+
 const inProgress = $derived(
 	updateState?.kind === 'downloading' || updateState?.kind === 'installing',
 );
@@ -134,12 +206,47 @@ const checkRefusalMessage = $derived.by(() => {
 	}
 });
 
+// `failed.reason` is a free-form wire string, and on a real device it is often
+// an apt stderr line — unactionable for an operator with no console, and exactly
+// the shape `operator-copy-no-internals` exists to keep off screen. A known
+// machine token resolves to keyed copy; anything else resolves to ONE honest
+// sentence pointing at the in-app log viewer, and the raw value goes to the
+// console and nowhere else.
+const FAILED_REASON_COPY: Record<string, () => string> = {
+	updates_disabled: () => m["general.updateReasonDisabled"](),
+	streaming: () => m["general.updateReasonStreaming"](),
+	already_updating: () => m["general.updateReasonAlreadyUpdating"](),
+	check_unavailable: () => m["general.updateReasonCheckUnavailable"](),
+	refresh_failed: () => m["general.updateCheckReasonRefreshFailed"](),
+	discovery_failed: () => m["general.updateCheckReasonDiscoveryFailed"](),
+	repos_unreachable: () => m["settings.updates.checkFailed.repos_unreachable"](),
+	captive_portal: () => m["settings.updates.checkFailed.captive_portal"](),
+};
+
+const failureMessage = $derived(
+	failed === undefined
+		? undefined
+		: (FAILED_REASON_COPY[failed.reason]?.() ??
+				m["settings.updates.failedReasonGeneric"]()),
+);
+
+$effect(() => {
+	const reason = failed?.reason;
+	if (reason !== undefined && FAILED_REASON_COPY[reason] === undefined) {
+		console.warn('Unmapped software-update failure reason:', reason);
+	}
+});
+
 const checkFailureMessage = $derived.by(() => {
 	switch (checkFailed?.reason) {
 		case 'refresh_failed':
 			return m["general.updateCheckReasonRefreshFailed"]();
 		case 'discovery_failed':
 			return m["general.updateCheckReasonDiscoveryFailed"]();
+		case 'repos_unreachable':
+			return m["settings.updates.checkFailed.repos_unreachable"]();
+		case 'captive_portal':
+			return m["settings.updates.checkFailed.captive_portal"]();
 		default:
 			return undefined;
 	}
@@ -182,10 +289,10 @@ $effect(() => {
 
 $effect(() => () => clearTimeout(checkTimeout));
 
-// Confirm the start-dispatch op once the first in-progress state lands.
+// A fast preflight refusal can replace progress before the browser paints it.
 $effect(() => {
 	if (getOperationPhase('update') !== 'pending') return;
-	if (inProgress) confirmOperation('update');
+	if (inProgress || preflightFailed) confirmOperation('update');
 });
 
 // The device accepted the start but never reported a single progress frame.
@@ -198,7 +305,7 @@ $effect(() => {
 
 // A real update (or a fresh terminal state) supersedes the last start outcome.
 $effect(() => {
-	if (inProgress || failed || succeeded) startOutcome = undefined;
+	if (inProgress || failed || succeeded || preflightFailed) startOutcome = undefined;
 });
 </script>
 
@@ -213,7 +320,17 @@ $effect(() => {
 		<!-- Availability summary — the version is already present in the `available`
 		     state, so it renders without any manual re-check. -->
 		<div class="bg-muted/40 rounded-lg border p-4" data-testid="update-summary">
-			{#if failed}
+			{#if preflightFailed}
+				<div class="flex items-start gap-2" data-testid="update-preflight-failed" role="alert">
+					<AlertTriangle class="text-status-warning mt-0.5 size-5 shrink-0" />
+					<div class="min-w-0">
+						<p class="text-lg font-semibold">{m["settings.updates.preflightFailedTitle"]()}</p>
+						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-preflight-reason">
+							{preflightMessage}
+						</p>
+					</div>
+				</div>
+			{:else if failed}
 				<div class="flex items-start gap-2" data-testid="update-failed">
 					<AlertTriangle class="text-destructive mt-0.5 size-5 shrink-0" />
 					<div class="min-w-0">
@@ -221,7 +338,7 @@ $effect(() => {
 							{m["general.updateFailed"]()}
 						</p>
 						<p class="text-muted-foreground mt-1 text-sm break-words" data-testid="update-failed-reason">
-							{failed.reason}
+							{failureMessage}
 						</p>
 					</div>
 				</div>
@@ -235,6 +352,11 @@ $effect(() => {
 						<p class="text-muted-foreground mt-1 text-sm">
 							{m["general.updateCompleteDetail"]()}
 						</p>
+						{#if cleanupWarning}
+							<p class="text-muted-foreground mt-2 text-sm break-words" data-testid="update-cleanup-warning" role="status">
+								{m["settings.updates.cleanup_warning.post_clean_failed"]()}
+							</p>
+						{/if}
 					</div>
 				</div>
 			{:else if count > 0}
@@ -250,9 +372,9 @@ $effect(() => {
 						{version}
 					</p>
 				{/if}
-				{#if packages.length > 0}
+				{#if listedPackages.length > 0}
 					<p class="text-muted-foreground mt-1 text-xs break-words" data-testid="update-packages">
-						{packages.join(', ')}
+						{listedPackages.join(', ')}
 					</p>
 				{/if}
 			{:else if checkFailed}
@@ -282,7 +404,40 @@ $effect(() => {
 					</p>
 				{/if}
 			{/if}
+
+			{#if reachabilityMessage}
+				<p
+					class="border-border/60 text-muted-foreground mt-3 border-t pt-2 text-xs"
+					data-testid="update-reachability"
+				>
+					{reachabilityMessage}
+				</p>
+			{/if}
 		</div>
+
+		<!-- Platform-layer and kept-back packages: stated, never offered. The device
+		     refuses to install either, so this band carries NO action control. -->
+		{#if withheld.length > 0}
+			<div
+				class="bg-muted/20 rounded-lg border border-dashed p-3"
+				data-testid="update-platform-band"
+				role="status"
+			>
+				<p class="text-sm font-medium">
+					{m["settings.updates.layer.platformBand"]()}
+				</p>
+				<ul class="mt-1.5 space-y-1">
+					{#each withheld as pkg (pkg.name)}
+						<li class="text-muted-foreground text-xs break-words">
+							<span class="text-foreground/80 font-mono">{pkg.name}</span>
+							{#if pkg.kept_back}
+								<span>— {m["settings.updates.layer.keptBack"]()}</span>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 
 		{#if inProgress}
 			<div class="space-y-2" aria-live="polite">
@@ -346,7 +501,7 @@ $effect(() => {
 				</div>
 			{/if}
 
-			{#if failed}
+			{#if failed || preflightFailed}
 				<Button
 					aria-busy={checking}
 					class="w-full gap-2"
@@ -359,10 +514,19 @@ $effect(() => {
 					{m["general.retryUpdateCheck"]()}
 				</Button>
 			{:else}
-				{#if count > 0}
-					<Button class="w-full gap-2" onclick={() => (confirmOpen = true)}>
+				{#if actionableCount > 0}
+					<Button
+						class="w-full gap-2"
+						data-testid="update-install"
+						onclick={() => (confirmOpen = true)}
+					>
 						<Download class="size-4" />
 						{m["general.updateButton"]()}
+						<span aria-hidden="true" class="opacity-50">·</span>
+						<span>
+							{actionableCount}
+							{actionableCount === 1 ? m["general.package"]() : m["general.packages"]()}
+						</span>
 					</Button>
 				{/if}
 				<Button

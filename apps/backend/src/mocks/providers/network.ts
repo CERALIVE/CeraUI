@@ -3,6 +3,8 @@
 	Simulates ifconfig output for development mode
 */
 
+import type { UsbModemNetMarker } from "@ceraui/rpc/schemas";
+
 import {
 	getMockState,
 	getScenarioConfig,
@@ -13,6 +15,15 @@ import {
 
 const resolveNetifIp = (name: string, fallback: string): string =>
 	getMockState().netifConfigs.get(name)?.ip ?? fallback;
+
+export function getMockModemNetMarker(
+	name: string,
+): UsbModemNetMarker | undefined {
+	if (!shouldUseMocks()) return undefined;
+	return mockModems
+		.slice(0, getScenarioConfig().modems)
+		.find((modem) => modem.interfaceName === name)?.usb_modem_net;
+}
 
 // network-interfaces.ts derives `tp = txBytes - prevTxBytes` each ~1s ifconfig
 // poll, so these cumulative counters must advance by interfaceThroughput[name]

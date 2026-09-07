@@ -24,11 +24,13 @@ $effect(() => {
 		class="bg-status-warning/10 border-status-warning/30 text-foreground sticky top-0 z-40 flex items-center gap-2.5 border-b px-4 py-2.5 text-sm backdrop-blur-sm"
 		role="status"
 	>
-		<ArrowUpToLineIcon class="text-status-warning size-4 shrink-0 animate-pulse" />
+		<ArrowUpToLineIcon class="text-status-warning size-4 shrink-0 motion-safe:animate-pulse" />
 		<span class="font-medium">{m["notifications.updateInProgress"]()}</span>
 		<button
 			aria-label={m["a11y.close"]()}
-			class="text-muted-foreground hover:text-foreground hover:bg-status-warning/15 ms-auto inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors"
+			class="text-muted-foreground hover:text-foreground hover:bg-status-warning/15 relative ms-auto inline-flex size-6 shrink-0 items-center justify-center rounded-md transition-colors"
+			data-testid="update-banner-dismiss"
+			data-touch-target="hit-area"
 			onclick={() => (updateBannerDismissed = true)}
 			type="button"
 		>

@@ -54,7 +54,7 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 
 <!-- ───────────── Hotspot (independent of WiFi: simultaneous state) ───────────── -->
 <section class="bg-card rounded-xl border">
-	<div class="flex items-center gap-2 border-b px-4 py-3">
+	<div class="flex items-center gap-2 border-b px-4 py-2">
 		<Router aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.hotspot"]()}</h2>
 		<Button
@@ -71,7 +71,7 @@ const CATEGORY_PROBE_PERCENT = { excellent: 80, good: 60, fair: 40, weak: 10 } a
 	</div>
 	<div class="divide-y">
 		{#if hotspotInterfaces.length === 0}
-			<div class="px-4 py-6 text-center">
+			<div class="px-4 py-4 text-center">
 				<p class="text-sm font-medium">{m["network.view.hotspotOff"]()}</p>
 				<p class="text-muted-foreground mt-0.5 text-xs">{m["network.view.hotspotOffHint"]()}</p>
 			</div>

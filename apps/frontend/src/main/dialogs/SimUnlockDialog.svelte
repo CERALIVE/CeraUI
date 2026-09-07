@@ -325,7 +325,7 @@ async function handleSubmitPin2() {
 function handlePin2Keydown(event: KeyboardEvent) {
 	if (event.key === 'Enter') {
 		event.preventDefault();
-		handleSubmitPin2();
+		void handleSubmitPin2();
 	}
 }
 
@@ -368,14 +368,14 @@ async function handleSubmitPuk() {
 function handlePinKeydown(event: KeyboardEvent) {
 	if (event.key === 'Enter') {
 		event.preventDefault();
-		handleSubmit();
+		void handleSubmit();
 	}
 }
 
 function handlePukKeydown(event: KeyboardEvent) {
 	if (event.key === 'Enter') {
 		event.preventDefault();
-		handleSubmitPuk();
+		void handleSubmitPuk();
 	}
 }
 </script>

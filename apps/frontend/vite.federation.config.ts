@@ -8,11 +8,14 @@ import { persistPlugin } from "svelte-persistent-runes/plugins";
 import { defineConfig } from "vite";
 
 import {
-	PARAGLIDE_OUTDIR,
+	FEDERATION_PARAGLIDE_OUTDIR,
+	federationI18nPlugin,
+} from "./vite.federation-i18n.ts";
+import {
 	PARAGLIDE_PROJECT,
 	PARAGLIDE_STRATEGY,
-} from "./vite.i18n";
-import { PERSIST_RUNTIME_ALIAS } from "./vite.persist";
+} from "./vite.i18n.ts";
+import { PERSIST_RUNTIME_ALIAS } from "./vite.persist.ts";
 
 // Federation lib-mode build (Task 39) — emits standalone ES-module bundles for the
 // Encoder/Audio/Server config dialogs so ceralive-platform's web dashboard can load
@@ -55,14 +58,13 @@ export default defineConfig({
 	// Load .env from monorepo root for unified configuration (matches the SPA build).
 	envDir: path.resolve(__dirname, "../.."),
 	plugins: [
-		// The federated dialogs render i18n strings, so their bundles must carry
-		// compiled messages too. `cleanOutdir: false` keeps this build from
-		// wiping an outdir the SPA build may be reading.
+		// The entire catalog is static here. Grouping functions by locale compresses
+		// that graph better than per-message modules without omitting any messages.
+		federationI18nPlugin(),
 		paraglideVitePlugin({
 			project: PARAGLIDE_PROJECT,
-			outdir: PARAGLIDE_OUTDIR,
-			outputStructure: "message-modules",
-			cleanOutdir: false,
+			outdir: FEDERATION_PARAGLIDE_OUTDIR,
+			outputStructure: "locale-modules",
 			strategy: [...PARAGLIDE_STRATEGY],
 		}),
 		persistPlugin(),
@@ -85,6 +87,9 @@ export default defineConfig({
 		emptyOutDir: true,
 		sourcemap: false,
 		manifest: "federation-build.json",
+		// These are final browser artifacts, not npm library inputs for rebundling.
+		// Vite's ES-library default preserves whitespace for downstream tree-shaking.
+		rolldownOptions: { output: { minify: true } },
 		// Self-contained ES modules loadable via dynamic import() — bundle deps inline
 		// (no externals) so each dialog bundle stands alone under the platform CSP.
 		lib: {

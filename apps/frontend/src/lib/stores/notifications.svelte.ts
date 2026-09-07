@@ -237,7 +237,9 @@ export function selectPersistent(
  * pure functions above directly.
  */
 function createNotificationStore(): NotificationStore {
-	let active = $state<Map<string, ActiveNotification>>(new Map());
+	let active = $state.raw<Map<string, ActiveNotification>>(new Map());
+	const activeList = $derived(Array.from(active.values()));
+	const persistentList = $derived(selectPersistent(active.values()));
 
 	return {
 		push: (notification) => {
@@ -246,8 +248,8 @@ function createNotificationStore(): NotificationStore {
 		dismiss: (name) => {
 			active = dismissNotification(active, name);
 		},
-		getActive: () => Array.from(active.values()),
-		getPersistent: () => selectPersistent(active.values()),
+		getActive: () => activeList,
+		getPersistent: () => persistentList,
 		clear: () => {
 			active = new Map();
 		},

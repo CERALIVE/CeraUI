@@ -51,7 +51,12 @@ const state = vi.hoisted(() => ({ autostart: false }));
 const setAutostart = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 
-vi.mock("$lib/rpc/client", () => ({
+// `osCommand`'s catch arm narrows on `ConnectionResetError`, so a mock without
+// it throws a vitest "no export defined" error before the failure toast can
+// fire and the revert leg reports as a missing toast rather than a real
+// regression. Import the real class rather than restating its shape.
+vi.mock("$lib/rpc/client", async (importOriginal) => ({
+	...(await importOriginal<typeof import("$lib/rpc/client")>()),
 	rpc: { system: { setAutostart } },
 }));
 

@@ -29,6 +29,7 @@
 
 import type { Modem } from "@ceraui/rpc/schemas";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import {
 	afterEach,
 	beforeAll,
@@ -102,6 +103,17 @@ function certified(current: string[] = ["any"]) {
 			unlocked: current.length === 1 && current[0] === "any",
 		},
 	};
+}
+
+function deferred<T>(): {
+	readonly promise: Promise<T>;
+	readonly resolve: (value: T) => void;
+} {
+	let resolve: (value: T) => void = () => undefined;
+	const promise = new Promise<T>((settle) => {
+		resolve = settle;
+	});
+	return { promise, resolve };
 }
 
 function mount() {
@@ -192,6 +204,38 @@ describe("the control is HIDDEN without certification evidence", () => {
 });
 
 describe("a certified device", () => {
+	it("keeps the newest catalog when an older open generation resolves late", async () => {
+		const oldCatalog = deferred<ReturnType<typeof certified>>();
+		const newCatalog = deferred<ReturnType<typeof certified>>();
+		getBands
+			.mockReturnValueOnce(oldCatalog.promise)
+			.mockReturnValueOnce(newCatalog.promise);
+		const view = render(ModemConfigDialog, {
+			props: { open: true, modem: modem(), deviceId: "0" },
+		});
+		await waitFor(() => expect(getBands).toHaveBeenCalledTimes(1));
+
+		await view.rerender({ open: false, modem: modem(), deviceId: "0" });
+		await view.rerender({ open: true, modem: modem(), deviceId: "0" });
+		await waitFor(() => expect(getBands).toHaveBeenCalledTimes(2));
+
+		newCatalog.resolve({
+			...certified(),
+			bands: { ...certified().bands, offerable: ["eutran-7"] },
+		});
+		await screen.findByTestId("modem-band-option-eutran-7");
+
+		oldCatalog.resolve({
+			...certified(),
+			bands: { ...certified().bands, offerable: ["eutran-3"] },
+		});
+		for (let index = 0; index < 6; index++) await Promise.resolve();
+		await tick();
+
+		expect(screen.queryByTestId("modem-band-option-eutran-3")).toBeNull();
+		expect(screen.getByTestId("modem-band-option-eutran-7")).toBeTruthy();
+	});
+
 	it("renders the card in the PRIMARY surface, outside the Advanced disclosure", async () => {
 		getBands.mockResolvedValue(certified());
 		mount();

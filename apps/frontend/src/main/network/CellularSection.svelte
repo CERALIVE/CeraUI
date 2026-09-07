@@ -415,7 +415,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 
 <!-- ───────────── Cellular ───────────── -->
 <section class="bg-card rounded-xl border">
-	<div class="flex items-center gap-2 border-b px-4 py-3">
+	<div class="flex items-center gap-2 border-b px-4 py-2">
 		<Radio aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m["network.view.cellular"]()}</h2>
 	</div>
@@ -441,7 +441,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 	<div class="divide-y">
 		{#if modemEntries.length === 0}
 			{#if !cellularInitializing}
-				<p class="text-muted-foreground px-4 py-6 text-center text-sm">
+				<p class="text-muted-foreground px-4 py-4 text-center text-sm">
 					{m["network.view.noModems"]()}
 				</p>
 			{/if}
@@ -504,7 +504,7 @@ async function openAdminUi(rowId: string): Promise<void> {
 				{@const detailsOpen = openDetails[id] === true}
 				{@const detailsId = `modem-details-${id}`}
 				<div
-					class="px-4 py-2.5"
+					class="px-4 py-2"
 					data-testid="modem-row"
 					data-modem-id={id}
 					data-ifname={modem.ifname}
@@ -876,6 +876,14 @@ async function openAdminUi(rowId: string): Promise<void> {
 						style:visibility={detailsOpen ? 'visible' : 'hidden'}
 					>
 						<div class="mt-2 space-y-1.5 border-t pt-2 ps-5">
+							{#if entry?.usb_modem_net}
+								<!-- The separator rides an EXPRESSION, not a text node. Svelte trims
+								     leading whitespace at a block boundary, so a literal " · " here
+								     loses its leading space and renders "usb0· 10.0.0.2". -->
+								<p class="text-muted-foreground break-words font-mono text-xs" data-testid="modem-net-interface">
+									{modem.ifname}{#if entry.ip}{' · '}{entry.ip}{/if}
+								</p>
+							{/if}
 							<!-- ── ORDERED BY §2, NOT BY THE ORDER THE TODOS LANDED ─────────
 							     Signal (tier 2) → the row's one ACTION (tier 3) → identity and
 							     hardware tags (tiers 4-5). The admin button used to come LAST,

@@ -32,7 +32,8 @@ export type ReauthOutcome =
 	/** Re-auth succeeded and the safety hydrate ran. */
 	| "hydrated"
 	/** Stored credential rejected — cleared and routed to the login screen. */
-	| "expired";
+	| "expired"
+	| "unreachable";
 
 export interface ReauthDeps {
 	/** Read the stored credential (localStorage `auth`); null when absent. */
@@ -56,10 +57,11 @@ export interface ReauthDeps {
 /**
  * Re-authenticate on a reconnect, then safety-hydrate the view state.
  *
- * Guarantees no auth loop: on rejection (or a transport error) the stored
+ * Guarantees no rejected-credential loop: on server rejection the stored
  * credential is cleared, so a subsequent invocation short-circuits at
  * {@link ReauthDeps.getStoredToken} returning `null` (→ `"no-token"`) and never
- * calls {@link ReauthDeps.login} again.
+ * calls {@link ReauthDeps.login} again. Transport failure returns
+ * `"unreachable"` without changing the credential or auth state.
  */
 export async function reauthenticateAndHydrate(
 	deps: ReauthDeps,
@@ -71,13 +73,8 @@ export async function reauthenticateAndHydrate(
 	try {
 		result = await deps.login(token);
 	} catch (error) {
-		// A transport/RPC error during re-auth is treated as a dead session:
-		// clear the credential and route to login (no retry → no loop).
 		deps.onError?.(error);
-		deps.clearStoredToken();
-		deps.dispatch("auth", { success: false });
-		deps.routeToLogin();
-		return "expired";
+		return "unreachable";
 	}
 
 	// Feed the auth result through the canonical handleMessage path.

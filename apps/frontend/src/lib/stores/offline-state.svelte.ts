@@ -73,7 +73,8 @@ export const PERIODIC_CHECK_INTERVAL = 5000;
 let offlineStartTime: number | null = null;
 /** Pending arm of the recovery poll (fires at the grace boundary). */
 let periodicCheckArm: number | null = null;
-let periodicCheckInterval: number | null = null;
+let periodicCheckTimer: number | null = null;
+let periodicCheckGeneration = 0;
 
 // ============================================
 // Pure logic (rune-free, unit-testable)
@@ -168,17 +169,18 @@ function disarmPeriodicCheck() {
 
 function stopPeriodicCheck() {
 	disarmPeriodicCheck();
-	if (periodicCheckInterval) {
-		clearInterval(periodicCheckInterval);
-		periodicCheckInterval = null;
+	periodicCheckGeneration++;
+	if (periodicCheckTimer !== null) {
+		clearTimeout(periodicCheckTimer);
+		periodicCheckTimer = null;
 	}
 }
 
-function startPeriodicCheck() {
-	stopPeriodicCheck();
-
-	periodicCheckInterval = window.setInterval(async () => {
+function schedulePeriodicCheck(generation: number) {
+	periodicCheckTimer = window.setTimeout(async () => {
+		periodicCheckTimer = null;
 		const canConnect = await checkConnection();
+		if (generation !== periodicCheckGeneration) return;
 		if (canConnect) {
 			clearOfflineRequest();
 
@@ -190,8 +192,15 @@ function startPeriodicCheck() {
 			if (isPWA || rpcClient.getConnectionState() !== "connected") {
 				window.location.reload();
 			}
+			return;
 		}
+		schedulePeriodicCheck(generation);
 	}, PERIODIC_CHECK_INTERVAL);
+}
+
+function startPeriodicCheck() {
+	stopPeriodicCheck();
+	schedulePeriodicCheck(periodicCheckGeneration);
 }
 
 /**
@@ -204,7 +213,7 @@ function startPeriodicCheck() {
  */
 function armPeriodicCheck(delayMs: number) {
 	if (typeof window === "undefined") return;
-	if (periodicCheckInterval !== null || periodicCheckArm !== null) return;
+	if (periodicCheckTimer !== null || periodicCheckArm !== null) return;
 	if (delayMs <= 0) {
 		startPeriodicCheck();
 		return;

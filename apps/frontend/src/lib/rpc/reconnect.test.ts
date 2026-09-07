@@ -105,7 +105,7 @@ describe("reauthenticateAndHydrate", () => {
 		expect(deps.routeToLogin).toHaveBeenCalledOnce();
 	});
 
-	it("a transport error during re-auth is treated as an expired session", async () => {
+	it("a transport error during re-auth preserves the credential for retry", async () => {
 		const { deps, dispatched } = makeDeps({
 			login: vi.fn(async () => {
 				throw new Error("WebSocket not connected");
@@ -114,12 +114,12 @@ describe("reauthenticateAndHydrate", () => {
 
 		const outcome = await reauthenticateAndHydrate(deps);
 
-		expect(outcome).toBe("expired");
+		expect(outcome).toBe("unreachable");
 		expect(deps.onError).toHaveBeenCalledOnce();
-		expect(deps.clearStoredToken).toHaveBeenCalledOnce();
-		expect(deps.routeToLogin).toHaveBeenCalledOnce();
+		expect(deps.clearStoredToken).not.toHaveBeenCalled();
+		expect(deps.routeToLogin).not.toHaveBeenCalled();
 		expect(deps.getConfig).not.toHaveBeenCalled();
-		expect(dispatched).toEqual([["auth", { success: false }]]);
+		expect(dispatched).toEqual([]);
 	});
 
 	it("keeps the authed session when the safety hydrate fails", async () => {

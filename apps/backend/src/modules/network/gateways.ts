@@ -38,6 +38,7 @@ import {
 import {
 	describeBinding,
 	electConnectivityCandidate,
+	raceConnectivityAddresses,
 } from "./connectivity-election.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
@@ -197,15 +198,13 @@ async function updateGw() {
 		return false;
 	}
 
-	for (const addr of addrs) {
-		if (await checkConnectivity(addr)) {
-			if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+	if (await raceConnectivityAddresses(addrs, checkConnectivity)) {
+		if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
 
-			logger.info("Internet reachable via the default route");
-			notificationRemove(NO_INTERNET_NOTIFICATION);
+		logger.info("Internet reachable via the default route");
+		notificationRemove(NO_INTERNET_NOTIFICATION);
 
-			return true;
-		}
+		return true;
 	}
 
 	const netif = getNetworkInterfaces();

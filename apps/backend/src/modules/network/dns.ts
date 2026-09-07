@@ -25,6 +25,7 @@ import { loadCacheFile } from "../../helpers/config-loader.ts";
 import { type DnsCache, dnsCacheSchema } from "../../helpers/config-schemas.ts";
 import { logger } from "../../helpers/logger.ts";
 import { writeTextFileAtomic } from "../../helpers/text-files.ts";
+import { haveSameElements } from "./dns-cache.ts";
 
 const DNS_CACHE_FILE = "dns_cache.json";
 /* Minimum age of an updated record to trigger a persistent DNS cache update (in ms)
@@ -84,6 +85,62 @@ export function setDnsResolverFactoryForTest(
   pending query on that channel time out with it.
 */
 function resolveP(hostname: string, rrtype: ResolveType | undefined) {
+	if (rrtype === undefined) {
+		const ipv4Resolver = resolverFactory(),
+			ipv6Resolver = resolverFactory();
+
+		return new Promise<ResolveResult>((resolve, reject) => {
+			let ipv4Res: ResolveResult | undefined;
+			let ipv6Res: ResolveResult | undefined;
+			let ipv4Settled = false,
+				ipv6Settled = false;
+			let ipv4Timeout: ReturnType<typeof setTimeout> | undefined;
+			let ipv6Timeout: ReturnType<typeof setTimeout> | undefined;
+
+			const returnResults = () => {
+				if (!ipv4Settled || !ipv6Settled) return;
+				if (ipv4Timeout) clearTimeout(ipv4Timeout);
+				if (ipv6Timeout) clearTimeout(ipv6Timeout);
+
+				const res = [...(ipv4Res ?? []), ...(ipv6Res ?? [])];
+				if (res.length === 0)
+					return reject(`DNS record not found for ${hostname}`);
+				resolve(res);
+			};
+
+			const complete = (family: ResolveType, result: ResolveResult) => {
+				if (family === "a") {
+					if (ipv4Settled) return;
+					ipv4Settled = true;
+					ipv4Res = result;
+					if (ipv4Timeout) clearTimeout(ipv4Timeout);
+				} else {
+					if (ipv6Settled) return;
+					ipv6Settled = true;
+					ipv6Res = result;
+					if (ipv6Timeout) clearTimeout(ipv6Timeout);
+				}
+				returnResults();
+			};
+			const armTimeout = (family: ResolveType, resolver: DnsResolverLike) =>
+				DNS_TIMEOUT
+					? setTimeout(() => {
+							resolver.cancel();
+							complete(family, null);
+						}, DNS_TIMEOUT)
+					: undefined;
+			ipv4Timeout = armTimeout("a", ipv4Resolver);
+			ipv6Timeout = armTimeout("aaaa", ipv6Resolver);
+
+			ipv4Resolver.resolve4(hostname, (err, addresses) => {
+				complete("a", err ? null : addresses);
+			});
+			ipv6Resolver.resolve6(hostname, (err, addresses) => {
+				complete("aaaa", err ? null : addresses);
+			});
+		});
+	}
+
 	const resolver = resolverFactory();
 
 	return new Promise<ResolveResult>((resolve, reject) => {
@@ -97,7 +154,7 @@ function resolveP(hostname: string, rrtype: ResolveType | undefined) {
 		}
 
 		let ipv4Res: ResolveResult = null;
-		if (rrtype === undefined || rrtype === "a") {
+		if (rrtype === "a") {
 			resolver.resolve4(hostname, (err, address) => {
 				ipv4Res = err ? null : address;
 				returnResults();
@@ -105,7 +162,7 @@ function resolveP(hostname: string, rrtype: ResolveType | undefined) {
 		}
 
 		let ipv6Res: ResolveResult = null;
-		if (rrtype === undefined || rrtype === "aaaa") {
+		if (rrtype === "aaaa") {
 			resolver.resolve6(hostname, (err, address) => {
 				ipv6Res = err ? null : address;
 				returnResults();
@@ -113,9 +170,6 @@ function resolveP(hostname: string, rrtype: ResolveType | undefined) {
 		}
 
 		const returnResults = () => {
-			// If querying both for A and AAAA records, wait for the IPv4 result
-			if (rrtype === undefined && ipv4Res === undefined) return;
-
 			let res: ResolveResult = null;
 			if (ipv4Res) {
 				res = ipv4Res;
@@ -137,6 +191,19 @@ function resolveP(hostname: string, rrtype: ResolveType | undefined) {
 
 const dnsCache: DnsCache = await loadCacheFile(DNS_CACHE_FILE, dnsCacheSchema);
 const dnsResults: Record<string, ResolveResult> = {};
+
+/** Test seam for proving cache replacement without writing a fixture into the checkout. */
+export function setDnsCacheEntryForTest(
+	name: string,
+	results: readonly string[] | null,
+): void {
+	delete dnsResults[name];
+	if (results === null) {
+		delete dnsCache[name];
+		return;
+	}
+	dnsCache[name] = { ts: Date.now(), results: [...results] };
+}
 
 function isIpv4Addr(val: string) {
 	return val.match(/^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$/) != null;
@@ -213,33 +280,6 @@ export async function dnsCacheResolve(name: string, rrtype_?: string) {
 	throw "DNS query failed and no cached value is available";
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: typescript workaround
-type SomeValue = keyof any;
-
-function compareArrayElements(a1: Array<SomeValue>, a2: Array<SomeValue>) {
-	if (!Array.isArray(a1) || !Array.isArray(a2)) return false;
-
-	const cmp: Record<SomeValue, boolean> = {};
-	for (const e of a1) {
-		cmp[e] = false;
-	}
-
-	// check that all elements of a2 are in a1
-	for (const e of a2) {
-		if (cmp[e] === undefined) {
-			return false;
-		}
-		cmp[e] = true;
-	}
-
-	// check that all elements of a1 are in a2
-	for (const e in cmp) {
-		if (!cmp[e]) return false;
-	}
-
-	return true;
-}
-
 export async function dnsCacheValidate(name: string) {
 	if (!dnsResults[name]) {
 		logger.warn(`DNS: error validating results for ${name}: not found`);
@@ -250,7 +290,7 @@ export async function dnsCacheValidate(name: string) {
 
 	if (
 		!cachedEntry ||
-		!compareArrayElements(dnsResults[name], cachedEntry.results)
+		!haveSameElements(dnsResults[name], cachedEntry.results)
 	) {
 		const writeFile = !(
 			cachedEntry?.ts && Date.now() - cachedEntry.ts < DNS_MIN_AGE

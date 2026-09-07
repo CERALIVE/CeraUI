@@ -247,6 +247,31 @@ describe("buildLaneView", () => {
 		expect(view.gaps[0]?.x1).toBeLessThan(view.gaps[0]?.x2 ?? 0);
 	});
 
+	it("keeps segment and gap identities stable while wall-clock geometry advances", () => {
+		const samples: TraceSample[] = [
+			{ t: NOW - 200_000, v: 50 },
+			{ t: NOW - 199_000, v: 51 },
+			{ t: NOW - 20_000, v: 52 },
+			{ t: NOW - 19_000, v: 53 },
+		];
+		const input = {
+			id: "temp",
+			samples,
+			domain: TEMP_DOMAIN,
+			gapMs: TEMP_GAP_MS,
+		};
+		const first = buildLaneView(input, NOW, DESKTOP_GEOMETRY, 0);
+		const later = buildLaneView(input, NOW + 1_000, DESKTOP_GEOMETRY, 0);
+
+		expect(later.segments.map((segment) => segment.id)).toEqual(
+			first.segments.map((segment) => segment.id),
+		);
+		expect(later.gaps.map((gap) => gap.id)).toEqual(
+			first.gaps.map((gap) => gap.id),
+		);
+		expect(later.segments[0]?.points).not.toBe(first.segments[0]?.points);
+	});
+
 	it("an empty window yields no stats and no fabricated zero", () => {
 		const view = buildLaneView(
 			{ id: "load", samples: [], domain: "auto", gapMs: LOAD_GAP_MS },
@@ -273,7 +298,7 @@ describe("buildLaneView", () => {
 			0,
 		);
 		const firstX = Number.parseFloat(
-			(view.segments[0] as string).split(" ")[0]?.split(",")[0] ?? "0",
+			view.segments[0]?.points.split(" ")[0]?.split(",")[0] ?? "0",
 		);
 		expect(firstX).toBeGreaterThan(TRACE_W * 0.9);
 	});

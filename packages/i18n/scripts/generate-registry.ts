@@ -115,11 +115,11 @@ function barrelSource(keys: string[], relativeToParaglide: string): string {
 	const imports = keys
 		.map(
 			(key, index) =>
-				`import * as _${index} from ${quote(`${relativeToParaglide}/messages/${toSafeModuleId(key)}.js`)};`,
+				`import { ${quote(key)} as _${index} } from ${quote(`${relativeToParaglide}/messages/${toSafeModuleId(key)}.js`)};`,
 		)
 		.join("\n");
-	const spread = keys.map((_key, index) => `\t...(_${index}),`).join("\n");
-	return `${BANNER}${imports}\n\nexport const messages = {\n${spread}\n};\n`;
+	const entries = keys.map((key, index) => `\t[${quote(key)}]: _${index},`).join("\n");
+	return `${BANNER}${imports}\n\nexport const messages = {\n${entries}\n};\n`;
 }
 
 const BARREL_DECLARATION = `${BANNER}import type { MessageFn } from "../types.js";

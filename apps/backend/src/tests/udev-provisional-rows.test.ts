@@ -21,11 +21,14 @@
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+// allow: SIZE_OK — this contract suite keeps parser, supervisor and real-wire regressions together with their shared lifecycle fixtures.
+
 import { deriveModemStableKey, modemListSchema } from "@ceraui/rpc/schemas";
 
 import { stopMockService } from "../mocks/mock-service.ts";
 import { resetCellularStack } from "../modules/cellular/cellular-stack.ts";
 import {
+	cellularAttachesFromUdevDatabase,
 	cellularAttachFromUdev,
 	detachIdPathFromUdev,
 	parseUdevPropertyBlock,
@@ -114,6 +117,31 @@ const RNDIS_INVENTORY = RNDIS_BLOCK.slice(1)
 	.map((line) => `E: ${line}`)
 	.join("\n");
 
+/** Rock 5B+ 13d3:3572 properties captured on 2026-09-03; ACTION supplies the add edge. */
+const ROCK_BLUETOOTH_BLOCK = [
+	"ACTION=add",
+	"SUBSYSTEM=usb",
+	"DEVTYPE=usb_device",
+	"ID_VENDOR_ID=13d3",
+	"ID_MODEL_ID=3572",
+	"ID_VENDOR=Realtek",
+	"ID_MODEL=Bluetooth_Radio",
+	"ID_USB_INTERFACES=:e00101:",
+	"ID_VENDOR_FROM_DATABASE=IMC Networks",
+	"ID_PATH=platform-fc800000.usb-usb-0:1.3",
+	"TYPE=224/1/1",
+] as const;
+
+const WEAK_BLOCK = [
+	"ACTION=add",
+	"SUBSYSTEM=usb",
+	"DEVTYPE=usb_device",
+	`ID_PATH=${PORT_PATH}`,
+	"ID_VENDOR_ID=abcd",
+	"ID_MODEL_ID=1234",
+	"ID_USB_INTERFACES=:ffffff:",
+] as const;
+
 // The todo-24 pairing, verbatim from the `ceralive2` drill (2026-08-18): ONE
 // socket, described by udev as an `ID_PATH` and by ModemManager (`Modem.Physdev`)
 // as a raw sysfs DEVPATH. Todo 18's own fixtures pair ID_PATH against ID_PATH on
@@ -156,6 +184,103 @@ async function until(predicate: () => boolean, budgetMs = 2000): Promise<void> {
 // ── 1. Reading the monitor's output ─────────────────────────────────────────
 
 describe("udev property blocks — what is, and is NOT, an attach", () => {
+	test.each([
+		["ID_MM_DEVICE_PROCESS=1", "strong"],
+		["ID_MM_CANDIDATE=1", "strong"],
+		["ID_VENDOR_ID=05c6", "strong"],
+		["ID_USB_INTERFACES=:ffffff:", "weak"],
+	] as const)(
+		"Given %s, When eligibility is resolved, Then strength is %s",
+		(property, strength) => {
+			const attach = attachOf([
+				"ACTION=add",
+				"SUBSYSTEM=usb",
+				"DEVTYPE=usb_device",
+				`ID_PATH=${PORT_PATH}`,
+				property,
+			]);
+			expect(attach.strength).toBe(strength);
+		},
+	);
+
+	test.each([
+		"ID_MM_DEVICE_PROCESS=1",
+		"ID_MM_CANDIDATE=1",
+		"ID_VENDOR_ID=05c6",
+	])(
+		"Given Bluetooth shape with independent %s evidence, When classified, Then the strong claim survives",
+		(property) => {
+			const lines = ROCK_BLUETOOTH_BLOCK.filter(
+				(line) => !line.startsWith("ID_VENDOR_ID="),
+			);
+			expect(attachOf([...lines, property]).strength).toBe("strong");
+		},
+	);
+	test.each([
+		":e00101:",
+		":e00104:",
+		":ffffff:e00101:",
+		":e00104:020600:",
+		":e00203:",
+	])(
+		"Given Bluetooth or non-RNDIS wireless shape %s, When classified, Then no attach is admitted",
+		(interfaces) => {
+			const event = parseUdevPropertyBlock(
+				ROCK_BLUETOOTH_BLOCK.map((line) =>
+					line.startsWith("ID_USB_INTERFACES=")
+						? `ID_USB_INTERFACES=${interfaces}`
+						: line,
+				),
+			);
+			expect(
+				cellularAttachFromUdev(event ?? { action: "", properties: new Map() }),
+			).toBeUndefined();
+		},
+	);
+
+	test("Given the Rock Bluetooth export-db block, When boot inventory is decoded, Then no modem row is admitted", () => {
+		const inventory = ROCK_BLUETOOTH_BLOCK.filter(
+			(line) => !line.startsWith("ACTION="),
+		)
+			.map((line) => `E: ${line}`)
+			.join("\n");
+		expect(cellularAttachesFromUdevDatabase(inventory)).toEqual([]);
+	});
+
+	test.each(["ID_MM_DEVICE_PROCESS=1", "ID_MM_CANDIDATE=1"])(
+		"Given ID_MM_DEVICE_IGNORE=1 plus known vendor, RNDIS and %s, When classified, Then ignore wins",
+		(tag) => {
+			const event = parseUdevPropertyBlock([
+				...RNDIS_BLOCK,
+				tag,
+				"ID_MM_DEVICE_IGNORE=1",
+			]);
+			expect(
+				cellularAttachFromUdev(event ?? { action: "", properties: new Map() }),
+			).toBeUndefined();
+		},
+	);
+
+	test.each([
+		":020600:",
+		":02ffff:",
+		":0a0000:",
+		":0affff:",
+		":ffffff:",
+		":ff4201:",
+		":e00103:",
+		":E00103:",
+	])(
+		"Given unknown-vendor data shape %s, When classified, Then the optimistic attach remains eligible",
+		(interfaces) => {
+			const lines = WEAK_BLOCK.map((line) =>
+				line.startsWith("ID_USB_INTERFACES=")
+					? `ID_USB_INTERFACES=${interfaces}`
+					: line,
+			);
+			expect(attachOf(lines).idPath).toBe(PORT_PATH);
+		},
+	);
 	test("Given a property block, When decoded, Then the header is ignored and every KEY=VALUE is kept", () => {
 		const event = parseUdevPropertyBlock(RNDIS_BLOCK);
 		expect(event?.action).toBe("add");
@@ -299,6 +424,56 @@ describe("provisional rows — precedence is one-directional", () => {
 	afterEach(() => {
 		cache.reset();
 	});
+
+	test("Given an unknown-vendor weak row, When cycle two misses it, Then it disappears and notifies", () => {
+		const seen: number[] = [];
+		cache.subscribe(() =>
+			seen.push(cache.readProvisionalSources(new Set()).length),
+		);
+		cache.noteAttach(attachOf(WEAK_BLOCK));
+		cache.noteAuthoritativeCycle(new Set());
+		expect(
+			cache.readProvisionalSources(new Set())[0]?.additive?.availability_reason,
+		).toBe(PROVISIONAL_AVAILABILITY_REASON);
+		cache.noteAuthoritativeCycle(new Set());
+		expect(cache.readProvisionalSources(new Set())).toEqual([]);
+		expect(seen).toEqual([1, 0]);
+	});
+
+	test("Given a retired weak key still attached, When inventory and add repeat, Then it stays absent", () => {
+		const attach = attachOf(WEAK_BLOCK);
+		cache.noteAttach(attach);
+		cache.noteAuthoritativeCycle(new Set());
+		cache.noteAuthoritativeCycle(new Set());
+		cache.replaceInventory([attach]);
+		cache.replaceInventory([attach]);
+		cache.noteAttach(attach);
+		expect(cache.readProvisionalSources(new Set())).toEqual([]);
+	});
+
+	test.each([
+		["detach", (store: UdevProvisionalCache) => store.noteDetach(PORT_PATH)],
+		[
+			"empty inventory",
+			(store: UdevProvisionalCache) => store.replaceInventory([]),
+		],
+		["clear", (store: UdevProvisionalCache) => store.clear()],
+		["reset", (store: UdevProvisionalCache) => store.reset()],
+	] as const)(
+		"Given a retired weak key, When %s precedes reattach, Then it is eligible again",
+		(_label, release) => {
+			const attach = attachOf(WEAK_BLOCK);
+			cache.noteAttach(attach);
+			cache.noteAuthoritativeCycle(new Set());
+			cache.noteAuthoritativeCycle(new Set());
+			release(cache);
+			cache.noteAttach(attach);
+			expect(
+				cache.readProvisionalSources(new Set())[0]?.additive
+					?.availability_reason,
+			).toBe(PROVISIONAL_AVAILABILITY_REASON);
+		},
+	);
 
 	test("Given a cellular-class attach, When the rows are read, Then ONE provisional row stands and it claims nothing it has not observed", () => {
 		cache.noteAttach(attachOf(HILINK_BLOCK));
@@ -483,6 +658,21 @@ describe("the supervised udevadm monitor child", () => {
 
 	const rowCount = (): number => cache.readProvisionalSources(new Set()).length;
 
+	test("Given a retired weak row, When the monitor respawns with the same inventory, Then it stays absent", async () => {
+		inventory = WEAK_BLOCK.filter((line) => !line.startsWith("ACTION="))
+			.map((line) => `E: ${line}`)
+			.join("\n");
+		supervisor.start();
+		await until(() => spawned.length === 1 && rowCount() === 1);
+		const first = spawned[0];
+		if (first === undefined) throw new Error("monitor was not spawned");
+		cache.noteAuthoritativeCycle(new Set());
+		cache.noteAuthoritativeCycle(new Set());
+		first.die();
+		await until(() => spawned.length === 2);
+		expect(rowCount()).toBe(0);
+	});
+
 	test("Given a block split ACROSS chunk boundaries, When it is streamed, Then the attach still lands", async () => {
 		supervisor.start();
 		await until(() => spawned.length === 1);
@@ -625,10 +815,33 @@ describe("the optimistic row on the REAL modems payload", () => {
 			(entry) => entry.availability_reason === PROVISIONAL_AVAILABILITY_REASON,
 		);
 
+	test("Given the verbatim Rock Bluetooth block, When the real modem payload is built, Then IMC 3572 never appears", () => {
+		const event = parseUdevPropertyBlock(ROCK_BLUETOOTH_BLOCK);
+		if (event === undefined) throw new Error("fixture carries no ACTION");
+		const attach = cellularAttachFromUdev(event);
+		if (attach !== undefined) getUdevProvisionalCache().noteAttach(attach);
+		const rows = wireRows();
+		expect(rows.map((row) => row.name)).not.toContain("IMC 3572");
+		expect(rows).toEqual([]);
+	});
+
+	test("Given a weak attach, When two authoritative misses settle, Then the real wire roster is empty", () => {
+		const cache = getUdevProvisionalCache();
+		cache.noteAttach(attachOf(WEAK_BLOCK));
+		expect(provisionalRows(wireRows())).toHaveLength(1);
+		cache.noteAuthoritativeCycle(new Set());
+		cache.noteAuthoritativeCycle(new Set());
+		expect(wireRows()).toEqual([]);
+	});
+
 	test("Given an attach and no modem service answer yet, When the payload is built, Then a schema-valid optimistic row is on it", () => {
 		getUdevProvisionalCache().noteAttach(attachOf(RNDIS_BLOCK));
 
 		const rows = wireRows();
+		for (const row of Object.values(buildModemsWireMessage())) {
+			expect(row).not.toHaveProperty("strength");
+			expect(row).not.toHaveProperty("retiredWeakKeys");
+		}
 
 		expect(provisionalRows(rows)).toHaveLength(1);
 		expect(rows.filter((entry) => entry.stable_key === PORT_KEY)).toHaveLength(

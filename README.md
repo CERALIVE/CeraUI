@@ -34,8 +34,8 @@ CeraUI/
 The app is organized into three primary destinations:
 
 - **Live** — a unified device-first source list leads the destination: every capture device, built-in pipeline, test pattern, and LAN network-ingest (RTMP/SRT) slot renders as one picker, with a single "Codec & delay" affordance owning all audio configuration. Below it, a "Stream setup" card shows three always-visible readiness rows (Encoder, Destination, Network — no collapse, no ready bar) each fusing a state dot with its config summary and a one-tap edit/fix affordance, plus the Start control. Pick a source, adjust encoder/server settings, and go live. While streaming, the view switches to a live cockpit: telemetry strip, bitrate hot-adjust, per-link ingest stats, and Stop. A persistent HUD bar shows four at-a-glance facts (live/idle/offline state, health verdict, bitrate, SoC temperature) across all destinations, with per-link signal detail and full telemetry available in an expanded sheet.
-- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, hotspot configuration, and provider-aware Bluetooth controls. PipeWire images never try to start the retired BlueALSA unit, and a connected Bluetooth microphone is offered only when the installed provider agrees with the selected audio backend. Newly attached cellular hardware remains visible while modem services probe it; after two authoritative misses it settles into a persistent, non-actionable “Not controllable” row until physical detach. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
-- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable.
+- **Network** — connectivity overview. Bonded link status, WiFi networks (connect/disconnect/forget), cellular modems (APN, roaming, network type), Ethernet interfaces, hotspot configuration, and provider-aware Bluetooth controls. PipeWire images never try to start the retired BlueALSA unit, and a connected Bluetooth microphone is offered only when the installed provider agrees with the selected audio backend. Newly attached cellular hardware remains visible while modem services probe it. After two authoritative misses, only strong cellular evidence retains a non-actionable “Not controllable” row; descriptor-only guesses disappear and stay retired while attached, including across monitor restarts. Bluetooth descriptors never qualify by shape alone: wireless admission requires the full RNDIS triplet `e00103`, and `ID_MM_DEVICE_IGNORE=1` always excludes the device. Successful SIM PIN, PUK, and PIN2 unlocks update the affected modem row immediately over the existing push channel, without a page reload. Calm info/warning bands surface interface-topology issues without ever blocking a connection: a same-subnet notice when two bonded links deliberately share a subnet (normal for policy-routed bonding), and a policy-route warning if a bonded WiFi/modem link is missing its expected routing table.
+- **Settings** — system and device configuration. All actions open focused dialogs: cloud remote, LAN password, SSH, logs, software updates, power, version info, and per-protocol network-ingest (RTMP/SRT) enable/disable. The software-update dialog now answers rather than going quiet: a check that could not reach the repositories, or that landed on a captive portal, says so instead of reporting "up to date"; the result names which address family worked when only one did; a package that ships with the next OS image or that apt kept back is listed as such rather than offered for install; and an update refused before it starts — most often for insufficient free space — reports its own reason and clears the progress overlay instead of leaving "Applying…" on screen.
 
 A dev-only DevTools destination is available in development builds.
 
@@ -77,8 +77,10 @@ A dev-only DevTools destination is available in development builds.
   state. Older snapshots retain a golden-pinned board fallback rather than losing
   their encode ceiling.
 - **Per-uplink health**: bounded device-specific checks feed default-route
-  election, while active SRTLA links use passive RTT/NAK telemetry instead of
-  competing probes. Captive portals remain visible as degraded links.
+  election. Gateway checks race the first IPv4 and IPv6 targets with a 250 ms
+  stagger instead of walking every DNS answer serially, while active SRTLA links
+  use passive RTT/NAK telemetry instead of competing probes. Captive portals
+  remain visible as degraded links.
 - **Flow-sticky client sharing**: the backend assigns new hotspot/shared-LAN flows
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the
@@ -103,6 +105,11 @@ A dev-only DevTools destination is available in development builds.
 
 Development mode includes hardware mocking. All mock state is Zod-validated at startup
 and can be reset between tests via `resetMockState()`.
+
+Mock modems identify their own USB-network interfaces with `usb_modem_net`, so
+Network lists each under Cellular once its roster row claims the interface.
+The interface name and address remain in that row's Details disclosure; ordinary
+Ethernet ports and isolated-dongle controls remain separate.
 
 ```bash
 bun run dev                        # Default: 3 modems + WiFi (multi-modem-wifi)

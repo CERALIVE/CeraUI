@@ -119,17 +119,16 @@ onMount(() => {
 	<Drawer.Root closeOnEscape={false} closeOnOutsideClick={false} open={true}>
 		<Drawer.Content
 			class="from-background/95 via-background/90 to-background/95 h-full w-full border-0 bg-gradient-to-br backdrop-blur-xl"
+			data-testid="updating-overlay"
 			data-vaul-no-drag
 			disableDrag={true}
 		>
-			<!-- Animated Background Pattern -->
+			<!-- Background wash. Static: a takeover an operator cannot dismiss is the
+			     wrong surface to animate for decoration. -->
 			<div class="pointer-events-none absolute inset-0 overflow-hidden">
+				<div class="bg-primary/5 absolute -top-1/2 -left-1/2 h-96 w-96 rounded-full blur-3xl"></div>
 				<div
-					class="bg-primary/5 absolute -top-1/2 -left-1/2 h-96 w-96 animate-pulse rounded-full blur-3xl"
-				></div>
-				<div
-					style:animation-delay="1s"
-					class="bg-secondary/5 absolute -right-1/2 -bottom-1/2 h-96 w-96 animate-pulse rounded-full blur-3xl"
+					class="bg-secondary/5 absolute -right-1/2 -bottom-1/2 h-96 w-96 rounded-full blur-3xl"
 				></div>
 			</div>
 
@@ -140,11 +139,8 @@ onMount(() => {
 					class="mx-auto mb-4 max-w-2xl space-y-2 text-center sm:mb-8 sm:space-y-4"
 					class:nav-entrance={isVisible}
 				>
-					<!-- Main Title with Gradient -->
-					<h1
-						class="from-foreground via-primary to-foreground bg-gradient-to-r bg-clip-text text-xl font-bold text-transparent sm:text-3xl md:text-4xl"
-					>
-						<span class="loading-pulse">{m["updatingOverlay.title"]()}</span>
+					<h1 class="text-foreground text-xl font-bold sm:text-3xl md:text-4xl">
+						{m["updatingOverlay.title"]()}
 					</h1>
 
 					<!-- Subtitle with Better Typography -->
@@ -152,23 +148,26 @@ onMount(() => {
 						{m["updatingOverlay.description"]()}
 					</p>
 
-					<!-- Enhanced Status Badge -->
+					<!-- Status register: one chip, one phase word, one glyph, all static.
+					     Motion is carried once — by the progress ring below — so the phase
+					     an operator reads is never itself in motion. -->
 					<div
-						class="bg-primary/10 border-primary/20 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 backdrop-blur-sm sm:px-5 sm:py-2.5"
+						class="bg-primary/10 border-primary/20 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 sm:px-5 sm:py-2.5"
+						data-testid="update-phase"
 					>
 						<div class="flex items-center gap-1 sm:gap-2">
 							{#if animationPhase === 'downloading'}
-								<Download class="text-primary h-4 w-4 animate-bounce sm:h-5 sm:w-5" />
+								<Download class="text-primary h-4 w-4 sm:h-5 sm:w-5" />
 								<span class="text-primary text-sm font-medium sm:text-base"
 									>{m["updatingOverlay.downloading"]()}</span
 								>
 							{:else if animationPhase === 'unpacking'}
-								<Package class="h-4 w-4 animate-pulse text-status-warning sm:h-5 sm:w-5" />
+								<Package class="h-4 w-4 text-status-warning sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-warning sm:text-base"
 									>{m["updatingOverlay.unpacking"]()}</span
 								>
 							{:else if animationPhase === 'installing'}
-								<Cog class="h-4 w-4 animate-spin text-status-info sm:h-5 sm:w-5" />
+								<Cog class="h-4 w-4 text-status-info sm:h-5 sm:w-5" />
 								<span class="text-sm font-medium text-status-info sm:text-base"
 									>{m["updatingOverlay.installing"]()}</span
 								>
@@ -197,7 +196,9 @@ onMount(() => {
 							{:else if animationPhase === 'complete'}
 								<CheckCircle2 class="h-32 w-32 text-status-success sm:h-40 sm:w-40" />
 							{:else}
-								<RotateCw class="text-primary h-32 w-32 animate-spin sm:h-40 sm:w-40" />
+								<RotateCw
+									class="text-primary h-32 w-32 motion-safe:animate-spin sm:h-40 sm:w-40"
+								/>
 							{/if}
 
 							<!-- Percentage Overlay -->
@@ -277,9 +278,7 @@ onMount(() => {
 							class:text-muted-foreground={!(details?.downloading > 0)}
 							class:text-primary-foreground={details?.downloading > 0}
 						>
-							<Download
-								class={`h-3 w-3 sm:h-5 sm:w-5 ${details?.downloading > 0 ? 'animate-bounce' : ''}`}
-							/>
+							<Download class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
@@ -311,9 +310,7 @@ onMount(() => {
 							class:text-muted-foreground={!(details?.unpacking > 0)}
 							class:text-white={details?.unpacking > 0}
 						>
-							<Package
-								class={`h-3 w-3 sm:h-5 sm:w-5 ${details?.unpacking > 0 ? 'animate-pulse' : ''}`}
-							/>
+							<Package class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
@@ -345,9 +342,7 @@ onMount(() => {
 							class:text-muted-foreground={!(details?.setting_up > 0)}
 							class:text-white={details?.setting_up > 0}
 						>
-							<Cog
-								class={`h-3 w-3 sm:h-5 sm:w-5 ${details?.setting_up > 0 ? 'animate-spin' : ''}`}
-							/>
+							<Cog class="h-3 w-3 sm:h-5 sm:w-5" />
 						</div>
 						<span
 							class="text-center text-[10px] font-medium sm:text-xs"
@@ -370,7 +365,7 @@ onMount(() => {
 	<div class="bg-background/95 fixed inset-0 z-50 backdrop-blur-xl">
 		<div class="relative flex h-full w-full flex-col items-center justify-center p-4 sm:p-8">
 			<div class="text-center">
-				<RotateCw class="text-primary mx-auto mb-4 h-32 w-32 animate-spin" />
+				<RotateCw class="text-primary mx-auto mb-4 h-32 w-32 motion-safe:animate-spin" />
 				<div class="text-muted-foreground text-sm">Loading...</div>
 			</div>
 		</div>

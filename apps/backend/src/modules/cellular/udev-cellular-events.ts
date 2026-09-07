@@ -71,22 +71,23 @@ export interface UdevCellularAttach {
 	readonly hwdbModel?: string;
 	/** Which signal made this device eligible — recorded, never guessed. */
 	readonly evidence: string;
+	readonly strength: "strong" | "weak";
 }
 
 // ── USB-IF interface classes that indicate a cellular data function ──────────
-// Mirrors `usb-net-classifier.ts`'s codes; `ID_USB_INTERFACES` publishes the
-// same descriptor bytes as `:CCSSPP:` triplets, so the two tables must agree.
+// Wireless controllers require the full RNDIS triplet: class e0 also includes Bluetooth.
 const CLASS_COMM = "02"; // CDC communications (ECM / NCM / MBIM control)
 const CLASS_CDC_DATA = "0a";
-const CLASS_WIRELESS = "e0"; // wireless controller — RNDIS lives here
 const CLASS_VENDOR = "ff"; // QMI / AT composites are vendor-specific
 
 const CELLULAR_INTERFACE_CLASSES: ReadonlySet<string> = new Set([
 	CLASS_COMM,
 	CLASS_CDC_DATA,
-	CLASS_WIRELESS,
 	CLASS_VENDOR,
 ]);
+
+export const CELLULAR_WIRELESS_INTERFACE_TRIPLETS: ReadonlySet<string> =
+	new Set(["e00103"]);
 
 /**
  * Decode one block of `KEY=VALUE` lines.
@@ -160,15 +161,21 @@ function trimmed(
  * the device an operator just plugged in.
  */
 function hasCellularInterfaceClass(interfaces: string): boolean {
+	let eligible = false;
 	for (const triplet of interfaces.split(":")) {
 		if (triplet.length !== 6) {
 			continue;
 		}
-		if (CELLULAR_INTERFACE_CLASSES.has(triplet.slice(0, 2).toLowerCase())) {
-			return true;
+		const normalized = triplet.toLowerCase();
+		if (normalized === "e00101" || normalized === "e00104") return false;
+		if (
+			CELLULAR_INTERFACE_CLASSES.has(normalized.slice(0, 2)) ||
+			CELLULAR_WIRELESS_INTERFACE_TRIPLETS.has(normalized)
+		) {
+			eligible = true;
 		}
 	}
-	return false;
+	return eligible;
 }
 
 /**
@@ -179,13 +186,16 @@ function hasCellularInterfaceClass(interfaces: string): boolean {
  * id is a statement about the silicon, and an interface class is the weakest —
  * a shape a cellular device has, which other devices also have.
  */
-function cellularEligibility(event: UdevPropertyEvent): string | undefined {
+function cellularEligibility(
+	event: UdevPropertyEvent,
+): Pick<UdevCellularAttach, "evidence" | "strength"> | undefined {
+	if (event.properties.get("ID_MM_DEVICE_IGNORE") === "1") return undefined;
 	// `ID_MM_DEVICE_PROCESS` / `ID_MM_CANDIDATE` are set by the device image's
 	// own quirk rules for modem vendor ids, so a device carrying one has already
 	// been named a modem by the layer that owns that decision.
 	for (const tag of ["ID_MM_DEVICE_PROCESS", "ID_MM_CANDIDATE"] as const) {
 		if (event.properties.get(tag) === "1") {
-			return `udev tag ${tag}=1`;
+			return { evidence: `udev tag ${tag}=1`, strength: "strong" };
 		}
 	}
 
@@ -193,12 +203,18 @@ function cellularEligibility(event: UdevPropertyEvent): string | undefined {
 	const vendorName =
 		vid === undefined ? undefined : CELLULAR_USB_VENDOR_IDS.get(vid);
 	if (vid !== undefined && vendorName !== undefined) {
-		return `USB vendor ${vid} is ${vendorName}, a cellular-module vendor`;
+		return {
+			evidence: `USB vendor ${vid} is ${vendorName}, a cellular-module vendor`,
+			strength: "strong",
+		};
 	}
 
 	const interfaces = trimmed(event, "ID_USB_INTERFACES");
 	if (interfaces !== undefined && hasCellularInterfaceClass(interfaces)) {
-		return `USB interface classes ${interfaces} include a cellular data function`;
+		return {
+			evidence: `USB interface classes ${interfaces} include a cellular data function`,
+			strength: "weak",
+		};
 	}
 
 	return undefined;
@@ -228,7 +244,7 @@ export function cellularAttachFromUdev(
 	}
 	return {
 		idPath,
-		evidence,
+		...evidence,
 		...optional("vid", trimmed(event, "ID_VENDOR_ID", true)),
 		...optional("pid", trimmed(event, "ID_MODEL_ID", true)),
 		...optional("serial", trimmed(event, "ID_SERIAL_SHORT")),

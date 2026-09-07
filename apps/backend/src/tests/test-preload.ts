@@ -1,4 +1,5 @@
-import { mock } from "bun:test";
+import { afterAll, mock } from "bun:test";
+import { rm } from "node:fs/promises";
 import { loadJsonConfigSync } from "../helpers/config-loader.ts";
 import {
 	SETUP_CONFIG_DEFAULTS,
@@ -12,3 +13,8 @@ const setup = await loadJsonConfigSync(
 	false,
 );
 mock.module("../modules/setup.ts", () => ({ setup }));
+
+afterAll(async () => {
+	await Bun.sleep(0);
+	await rm("stream.armed.json", { force: true });
+});

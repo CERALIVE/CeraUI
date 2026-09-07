@@ -200,7 +200,14 @@ function openModemConfig(id: string) {
 }
 </script>
 
-<div class="mx-auto w-full max-w-5xl space-y-5 p-4 sm:p-6">
+<!--
+	`space-y-3`, not `space-y-5`. Every child below is a FRAMED card that already
+	carries its own border and 16px of internal padding, so 20px between them
+	stacked a third boundary on top of two and read as seven unrelated pages
+	rather than one instrument panel. Proximity is the grouping here, and the
+	frames are what separate the cards.
+-->
+<div class="mx-auto w-full max-w-5xl space-y-3 p-4 sm:px-6 sm:py-5">
 	<!-- Destination header -->
 	<header class="flex items-center gap-2.5">
 		<NetworkIcon aria-hidden="true" class="text-primary size-5 shrink-0" />
@@ -209,7 +216,7 @@ function openModemConfig(id: string) {
 
 	{#if isLoading}
 		<!-- Loading state -->
-		<div class="space-y-5" aria-busy="true" aria-label={m["network.view.loading"]()}>
+		<div class="space-y-3" aria-busy="true" aria-label={m["network.view.loading"]()}>
 			<Skeleton class="h-24 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />
 			<Skeleton class="h-32 w-full rounded-xl" />

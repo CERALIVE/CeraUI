@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
-import { cleanup, render } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { ConnectionResetError } from "../lib/rpc/client";
+import { runStartWatchdog } from "../lib/rpc/streaming-start-watchdog";
 
 import { en } from "./helpers/catalog";
 
 const state = vi.hoisted(() => ({
+	optimismState: "idle" as "idle" | "starting" | "stopping",
+	startOptimism: vi.fn(),
+	revertOptimism: vi.fn(),
 	stopReason: undefined as string | undefined,
 	failure: undefined as
 		| {
@@ -19,8 +25,18 @@ const state = vi.hoisted(() => ({
 		| undefined,
 }));
 const toastError = vi.hoisted(() => vi.fn());
+const startStreaming = vi.hoisted(() => vi.fn());
 
 vi.mock("svelte-sonner", () => ({ toast: { error: toastError } }));
+
+vi.mock("$lib/helpers/SystemHelper", () => ({
+	startStreaming,
+	stopStreaming: vi.fn(),
+}));
+
+vi.mock("$lib/streaming/sources-view-model", () => ({
+	pipelinesFromSources: () => ({ hdmi: {} }),
+}));
 
 vi.mock("$lib/config", () => ({
 	navElements: { network: { label: "Network" } },
@@ -47,21 +63,21 @@ vi.mock("$lib/rpc/subscriptions.svelte", () => ({
 }));
 
 vi.mock("$lib/rpc/streaming-optimism.svelte", () => ({
-	getStreamingOptimismState: () => "idle",
+	getStreamingOptimismState: () => state.optimismState,
 	getStreamingStopReason: () => state.stopReason,
 	getStreamingStartFailure: () => state.failure,
 	getStreamingAttemptGeneration: () => 1,
 	getStopStuckBannerVisible: () => false,
-	startStreamingOptimism: vi.fn(),
+	startStreamingOptimism: state.startOptimism,
 	stopStreamingOptimism: vi.fn(),
 	reconcileStreamingOptimism: vi.fn(),
-	revertStreamingOptimism: vi.fn(),
+	revertStreamingOptimism: state.revertOptimism,
 	revertStreamingOptimismFailure: vi.fn(),
 	retryStopStreaming: vi.fn(),
 }));
 
 vi.mock("$main/live/IdleCockpit.svelte", async () => ({
-	default: (await import("./fixtures/IdleCockpitStub.svelte")).default,
+	default: (await import("./fixtures/IdleCockpitStartStub.svelte")).default,
 }));
 vi.mock("$main/live/LiveCockpit.svelte", async () => ({
 	default: (await import("./fixtures/LiveCockpitStub.svelte")).default,
@@ -88,12 +104,44 @@ const startFailed = en.live.startFailed as Readonly<Record<string, string>>;
 
 afterEach(() => {
 	cleanup();
+	state.optimismState = "idle";
+	state.startOptimism.mockReset();
+	state.revertOptimism.mockReset();
 	state.stopReason = undefined;
 	state.failure = undefined;
 	toastError.mockReset();
+	startStreaming.mockReset();
 });
 
 describe("LiveView start-failure output", () => {
+	it("keeps starting after ConnectionResetError until the watchdog reconciles", async () => {
+		state.startOptimism.mockImplementation(() => {
+			state.optimismState = "starting";
+		});
+		state.revertOptimism.mockImplementation(() => {
+			state.optimismState = "idle";
+		});
+		startStreaming.mockRejectedValueOnce(
+			new ConnectionResetError(["streaming", "start"]),
+		);
+
+		const view = render(LiveView);
+		await fireEvent.click(view.getByTestId("start-stream"));
+		await waitFor(() => expect(startStreaming).toHaveBeenCalledTimes(1));
+
+		expect(state.optimismState).toBe("starting");
+		expect(state.revertOptimism).not.toHaveBeenCalled();
+
+		await runStartWatchdog({
+			pullStatus: async () => true,
+			reconcile: (isStreaming: boolean) => {
+				if (isStreaming) state.optimismState = "idle";
+			},
+			revert: state.revertOptimism,
+		});
+		expect(state.optimismState).toBe("idle");
+	});
+
 	it.each([
 		"audio_source_probe_failed",
 		"audio_codec_unsupported_transport",

@@ -254,8 +254,14 @@ export interface LaneStats {
 
 /** A pen-lift, expressed on the lane baseline in user-space x units. */
 export interface LaneGap {
+	readonly id: string;
 	readonly x1: number;
 	readonly x2: number;
+}
+
+export interface LaneSegment {
+	readonly id: string;
+	readonly points: string;
 }
 
 export interface LaneInput {
@@ -278,7 +284,7 @@ export interface LaneView {
 	readonly plotH: number;
 	readonly baselineY: number;
 	/** One `points` payload per unbroken pen stroke. Empty ⇒ nothing to draw. */
-	readonly segments: readonly string[];
+	readonly segments: readonly LaneSegment[];
 	/** Pen-lifts inside the window, in draw order. */
 	readonly gaps: readonly LaneGap[];
 	/** The domain actually used — printed on the lane so it is disclosed. */
@@ -459,6 +465,7 @@ export function buildLaneView(
 		const nextFirst = nextSeg?.[0];
 		if (prevLast === undefined || nextFirst === undefined) continue;
 		gaps.push({
+			id: `${input.id}:gap:${prevLast.t}:${nextFirst.t}`,
 			x1: projectX(prevLast.t, now, windowMs),
 			x2: projectX(nextFirst.t, now, windowMs),
 		});
@@ -474,10 +481,18 @@ export function buildLaneView(
 			// A single-sample stroke has no line to draw, but its dot still matters
 			// for the "where did the feed stop" read, so it is kept as a 1-point
 			// payload the component renders as a vertex marker.
-			.map((seg) =>
-				projectSegment(seg, now, domain, box.plotTop, box.plotH, windowMs),
-			)
-			.filter((points) => points.length > 0),
+			.map((seg) => ({
+				id: `${input.id}:segment:${seg[0]?.t}:${seg[seg.length - 1]?.t}`,
+				points: projectSegment(
+					seg,
+					now,
+					domain,
+					box.plotTop,
+					box.plotH,
+					windowMs,
+				),
+			}))
+			.filter((segment) => segment.points.length > 0),
 		gaps,
 		domain,
 		latest: last?.v ?? null,

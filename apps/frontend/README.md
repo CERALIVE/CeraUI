@@ -80,6 +80,13 @@ Output goes to `dist/`.
 
 ### Other Commands
 
+The separately hosted Encoder/Audio/Server bundles are built with
+`bun run build:federation` from the repository root. Federation compiles the full
+ten-locale catalog in isolated locale-module layout and minifies the final ES
+modules; SPA namespace loading is unaffected. Run `bun run test:federation-abi`
+for built-dialog and frozen-catalog parity, and after building both SPA and
+federation run `bun scripts/ci/bundle-report.mjs` to check both size budgets.
+
 | Command | Description |
 |---------|-------------|
 | `bun run --filter frontend check` | Type-check via `svelte-check` |
@@ -87,6 +94,25 @@ Output goes to `dist/`.
 | `bun run --filter frontend test:e2e` | Run Playwright E2E tests |
 | `biome check .` (from workspace root) | Lint/format via Biome (single toolchain) |
 | `bun run --filter frontend preview` | Preview production build locally |
+
+### Unit-test projects [EXISTS]
+
+`bun run --filter frontend test` runs both Vitest projects. The import-graph
+classifier in `scripts/ci/vitest-classify.mjs` assigns source tests automatically:
+`pure` uses Node with `isolate: false`; `components` uses isolated jsdom. Browser
+globals and transitive Svelte imports select components, except tests explicitly
+requiring the no-window Node fallback. No filename allowlist is maintained.
+
+Both projects load `vitest.storage.setup.ts` for fresh in-memory Web Storage and
+per-test clearing. Only jsdom loads `vitest.components.setup.ts` for catalog
+registration, `matchMedia`, and the retained 50 ms bits-ui teardown wait. The
+separate federation harness explicitly loads both files too. Classifier checks:
+`bun test scripts/ci/vitest-classify.test.mjs` from the repository root.
+
+CI keeps the same two projects and their setup files inside the four-way
+`test:ci-shard` lane (`VITEST_SHARD=1/4` through `4/4`); `test:ci-merge` merges
+their blob reports. The ordinary `test` command still runs the whole suite and
+hardware preflight without a shard environment variable.
 
 ### Mock Scenarios
 

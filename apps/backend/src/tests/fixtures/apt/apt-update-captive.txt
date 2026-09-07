@@ -1,0 +1,4 @@
+HTTP/1.1 302 Found
+Location: [REDACTED_FOREIGN_REDIRECT]
+
+Clearsigned file isn't valid, got 'NOSPLIT' (does the network require authentication?)

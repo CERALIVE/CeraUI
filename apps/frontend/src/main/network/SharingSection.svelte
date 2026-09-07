@@ -108,11 +108,11 @@ const SUMMARY =
 {/snippet}
 
 <section
-	class="bg-card rounded-xl border p-4 sm:p-5"
+	class="bg-card rounded-xl border p-4"
 	data-testid="sharing-section"
 	aria-label={m['network.sharing.title']()}
 >
-	<div class="mb-3 flex items-center gap-2">
+	<div class="mb-2 flex items-center gap-2">
 		<Share2 aria-hidden="true" class="text-muted-foreground size-4 shrink-0" />
 		<h2 class="text-sm font-semibold tracking-tight">{m['network.sharing.title']()}</h2>
 	</div>
