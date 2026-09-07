@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linkVisualState, signalBarCount } from "./signal";
+import { linkVisualState, signalBarCount, tierBarCount } from "./signal";
 
 // ============================================
 // signalBarCount tests
@@ -163,5 +163,91 @@ describe("linkVisualState", () => {
 			});
 			expect(result).toEqual({ kind: "zero" });
 		});
+	});
+});
+
+// ============================================
+// tierBarCount + the signalTier arm of linkVisualState
+// ============================================
+
+describe("tierBarCount", () => {
+	it("maps each tier onto the same three-bar cluster a percentage resolves to", () => {
+		expect(tierBarCount("high")).toBe(3);
+		expect(tierBarCount("medium")).toBe(2);
+		expect(tierBarCount("low")).toBe(1);
+		expect(tierBarCount("none")).toBe(0);
+	});
+
+	it("agrees with signalBarCount about what 'nothing being heard' looks like", () => {
+		// A device-stated zero is the one honest route to an empty cluster on
+		// either instrument; the two must not disagree about it.
+		expect(tierBarCount("none")).toBe(signalBarCount(0));
+	});
+});
+
+describe("linkVisualState — a device that reports a tier, not a percentage", () => {
+	it("draws the SAME bar cluster a percentage would", () => {
+		expect(
+			linkVisualState({
+				type: "modem",
+				connectionState: "disconnected",
+				signal: null,
+				signalTier: "high",
+			}),
+		).toEqual({ kind: "bars", filled: 3 });
+	});
+
+	it("is outranked by an empty SIM slot", () => {
+		expect(
+			linkVisualState({
+				type: "modem",
+				connectionState: "no_sim",
+				signal: null,
+				signalTier: "high",
+			}),
+		).toEqual({ kind: "no-sim" });
+	});
+
+	it("is outranked by a real percentage", () => {
+		expect(
+			linkVisualState({
+				type: "modem",
+				connectionState: "connected",
+				signal: 10,
+				signalTier: "high",
+			}),
+		).toEqual({ kind: "bars", filled: 1 });
+	});
+
+	it("never overrides a wired link", () => {
+		expect(
+			linkVisualState({
+				type: "ethernet",
+				connectionState: "connected",
+				signal: null,
+				signalTier: "low",
+			}),
+		).toEqual({ kind: "ethernet" });
+	});
+
+	it("changes NOTHING for a caller that passes no tier", () => {
+		// The regression lock for the reordered decision tree: every state the
+		// percentage-only rule produced must still be produced byte-identically.
+		const cases = [
+			["modem", "no_sim", { kind: "no-sim" }],
+			["modem", "scanning", { kind: "scanning" }],
+			["modem", "connected", { kind: "acquiring" }],
+			["modem", "disconnected", { kind: "zero" }],
+			["wifi", "no_sim", { kind: "no-sim" }],
+			["wifi", "scanning", { kind: "scanning" }],
+			["wifi", "connected", { kind: "acquiring" }],
+			["wifi", "disconnected", { kind: "wifi-off" }],
+		] as const;
+		for (const [type, connectionState, expected] of cases) {
+			expect(
+				linkVisualState({ type, connectionState, signal: null }),
+				`${type} + ${connectionState}`,
+			).toEqual(expected);
+		}
 	});
 });

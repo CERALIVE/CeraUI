@@ -20,6 +20,7 @@ import {
 } from "$lib/helpers/network-speed";
 import { modemSignal } from "$lib/helpers/signal";
 import type { LinkSignal } from "$lib/types/hud";
+import { resolveSignalInstrument } from "$main/network/router-signal";
 import { MAX_LINKS } from "./constants";
 
 /**
@@ -41,6 +42,48 @@ export function modemConnectionState(
 		default:
 			return "disconnected";
 	}
+}
+
+/**
+ * The tier a bonded link may draw when its device publishes NO percentage.
+ *
+ * A `router-ethernet` dongle has no ModemManager `status` block and never will,
+ * so {@link modemSignal} answers `null` for it — which used to leave the bond's
+ * indicator on its "nothing was reported" fallback, a bare muted glyph beside a
+ * managed modem's spectral bar cluster. Two treatments, one question, in one
+ * list. The dongle DOES publish a reading, on its own admin API, and this is the
+ * same instrument-precedence rule the Cellular card resolves
+ * ({@link resolveSignalInstrument}) rather than a second copy of it.
+ *
+ * Three refusals are deliberate:
+ *
+ *  - a `device-stack` answer is never used here. That branch is ModemManager's
+ *    own, so it is already the percentage above; consuming it would resurrect a
+ *    tier for a modem {@link modemSignal} intentionally suppressed (a `no_sim`
+ *    row, a negative sentinel);
+ *  - an empty slot draws no tier — the caller's `no_sim` state owns that fact,
+ *    and `resolveRouterSignalReadout` already withholds a reading for it;
+ *  - an `unknown` readout draws no tier. An unreachable dongle, a refused
+ *    session and a blank field are all "no reading was taken", and a bar cluster
+ *    would report one.
+ *
+ * Freshness is deliberately NOT a filter. Todo 20 re-serves one cycle's last
+ * live value precisely so a single missed 30 s poll does not blank a row, and
+ * blanking it here would reintroduce that flicker on the coarsest surface. The
+ * Cellular card remains the surface that distinguishes live from carried — it
+ * has the dedicated chip, its muted treatment and `data-freshness`; a
+ * three-bucket bar cluster never claimed measurement recency.
+ */
+function bondedSignalTier(
+	modem: Modem,
+	connectionState: LinkSignal["connectionState"],
+): LinkSignal["signalTier"] {
+	if (connectionState === "no_sim") return undefined;
+	const instrument = resolveSignalInstrument(modem);
+	if (instrument.kind !== "device-admin") return undefined;
+	return instrument.readout.kind === "reading"
+		? instrument.readout.tier
+		: undefined;
 }
 
 /**
@@ -162,11 +205,15 @@ export function buildBond(
 			continue;
 		}
 		const connectionState = modemConnectionState(modem);
+		const signal = modemSignal(modem);
 		links.push({
 			id,
 			type: "modem",
 			linkIndex: 0,
-			signal: modemSignal(modem),
+			signal,
+			...(signal === null
+				? { signalTier: bondedSignalTier(modem, connectionState) }
+				: {}),
 			label: modem.name || modem.status?.network || "Modem",
 			isConnected: connectionState === "connected",
 			isStale: modemsStale || fullyStale || staleIds.has(id),
