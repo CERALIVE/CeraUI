@@ -312,7 +312,11 @@ describe("ethernetRoleContext — bond membership mirrors the device's own rule"
 		["operator-excluded", iface({ ethRole: "uplink", enabled: false })],
 		[
 			"device-excluded",
-			iface({ ethRole: "uplink", error: "duplicate IPv4 addr" }),
+			iface({
+				ethRole: "uplink",
+				enabled: false,
+				error: "duplicate IPv4 addr",
+			}),
 		],
 		[
 			"already shared",

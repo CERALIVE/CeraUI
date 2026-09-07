@@ -2217,6 +2217,16 @@ neither fsyncs nor sets a mode — is deliberately not used here).
 
 ### THE DUPLICATE-IP POLICY SPLIT
 
+**Wire projection:** `netifEntrySchema.error` is an optional string.
+`netIfBuildMsg()` obtains it from `getNetifErrorMsg()`, which returns ONE matching
+bit's description, not the complete bitmask. `NETIF_DUPLICATE_IPV4_ERROR` in
+`@ceraui/rpc/schemas` names the existing spelling without changing serialized
+bytes. A compound error can therefore carry that same string; only the paired
+`enabled:true` projection proves `isBondCandidate()` admitted the link. The HUD
+mirror consumes that pair, not telemetry availability. Characterization coverage:
+`tests/bond-eligibility-wire.test.ts` (mappable, unmappable, opted-out and compound
+cases through the real projection and sender-list generator).
+
 `NETIF_ERR_DUPIPV4` answered two questions with one bit, and they have OPPOSITE
 correct answers once a mapping exists:
 
