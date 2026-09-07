@@ -1636,3 +1636,157 @@ describe("per-interface staleness threads onto one link, not its siblings", () =
 		expect(state.links.every((l) => !l.isStale)).toBe(true);
 	});
 });
+
+/**
+ * A self-managed router dongle publishes NO ModemManager percentage — it has no
+ * `status` block and never will — so `modemSignal` correctly answers `null` for
+ * it. That used to be the end of the story, and the bond's indicator fell to its
+ * "nothing was reported" fallback: a bare muted glyph beside a managed modem's
+ * bar cluster, in one list, for one question.
+ */
+describe("buildLinks — a self-managed dongle's own reading reaches the bond", () => {
+	function makeDongle(overrides: Partial<Modem> = {}): Modem {
+		return {
+			ifname: "enx344b50000000",
+			name: "ZTE MF79U",
+			network_type: { supported: [], active: null },
+			device_class: "router-ethernet",
+			availability_reason: "router_direct",
+			router_admin: {
+				admin_url: "http://192.168.0.1",
+				reachable: true,
+				signal: {
+					provenance: "zte-goform",
+					freshness: "live",
+					bars: { state: "known", value: 4 },
+					max_bars: { state: "known", value: 5 },
+					dbm: { state: "known", value: -71 },
+					rsrp: { state: "unknown", reason: "unsupported" },
+					rsrq: { state: "unknown", reason: "unsupported" },
+					snr: { state: "unknown", reason: "unsupported" },
+					sinr: { state: "unknown", reason: "unsupported" },
+				},
+			},
+			...overrides,
+		} as Modem;
+	}
+
+	function tierOf(modem: Modem) {
+		const modems: ModemList = { dongle: modem };
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
+		return links[0]?.signalTier;
+	}
+
+	it("carries the dongle's tier, and no fabricated percentage with it", () => {
+		const modems: ModemList = { dongle: makeDongle() };
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
+
+		expect(links).toHaveLength(1);
+		expect(links[0]?.signalTier).toBe("high");
+		// The percentage stays absent: a tier is not a number, and inventing one
+		// would put a fabricated figure in the row's numeric readout.
+		expect(links[0]?.signal).toBeNull();
+	});
+
+	it("reports a WEAK dongle differently from a strong one", () => {
+		const weak = makeDongle({
+			router_admin: {
+				admin_url: "http://192.168.0.1",
+				reachable: true,
+				signal: {
+					provenance: "ufi-himiapi",
+					freshness: "live",
+					bars: { state: "unknown", reason: "unsupported" },
+					max_bars: { state: "unknown", reason: "unsupported" },
+					dbm: { state: "known", value: -96 },
+					rsrp: { state: "unknown", reason: "unsupported" },
+					rsrq: { state: "unknown", reason: "unsupported" },
+					snr: { state: "unknown", reason: "unsupported" },
+					sinr: { state: "unknown", reason: "unsupported" },
+				},
+			},
+		} as Partial<Modem>);
+		expect(tierOf(weak)).toBe("low");
+	});
+
+	it("draws NO tier when the dongle never answered", () => {
+		const unreachable = makeDongle({
+			router_admin: {
+				admin_url: "http://192.168.0.1",
+				reachable: false,
+				signal: {
+					provenance: "zte-goform",
+					freshness: "unknown",
+					bars: { state: "unknown", reason: "unreachable" },
+					max_bars: { state: "unknown", reason: "unreachable" },
+					dbm: { state: "unknown", reason: "unreachable" },
+					rsrp: { state: "unknown", reason: "unreachable" },
+					rsrq: { state: "unknown", reason: "unreachable" },
+					snr: { state: "unknown", reason: "unreachable" },
+					sinr: { state: "unknown", reason: "unreachable" },
+				},
+			},
+		} as Partial<Modem>);
+		expect(tierOf(unreachable)).toBeUndefined();
+	});
+
+	it("draws NO tier for an empty slot — the SIM fact outranks the radio", () => {
+		expect(
+			tierOf(makeDongle({ no_sim: true } as Partial<Modem>)),
+		).toBeUndefined();
+	});
+
+	it("leaves a ModemManager-managed modem untouched — percentage, never tier", () => {
+		const modems: ModemList = { modem1: makeModem() };
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
+		expect(links[0]?.signal).toBe(80);
+		expect(links[0]?.signalTier).toBeUndefined();
+	});
+
+	it("never resurrects a tier for a modem whose percentage was suppressed", () => {
+		// A no-SIM MM modem with a stale reading: `modemSignal` suppresses the
+		// percentage on purpose, and the tier must not smuggle it back in.
+		const modems: ModemList = {
+			modem1: makeModem({
+				no_sim: true,
+				status: {
+					connection: "connected",
+					network_type: "4G",
+					signal: 90,
+					roaming: false,
+				},
+			}),
+		};
+		const links = buildLinks(
+			modems,
+			undefined,
+			bondedNetifFor(modems),
+			false,
+			false,
+			false,
+		);
+		expect(links[0]?.signal).toBeNull();
+		expect(links[0]?.signalTier).toBeUndefined();
+	});
+});

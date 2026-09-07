@@ -1,9 +1,9 @@
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import type { LinkTelemetryEntry, LinkTelemetryMessage, Modem } from '@ceraui/rpc/schemas';
 import { Radio } from '@lucide/svelte';
 
-import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
+import LinkBadge from '$lib/components/custom/LinkBadge.svelte';
 import LinkTelemetry from '$lib/components/custom/LinkTelemetry.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import { aggregateBondBandwidth, linkUpKbps } from '$lib/helpers/bond-bandwidth';
@@ -11,6 +11,7 @@ import { formatThroughput } from '$lib/helpers/network-speed';
 import { getStalenessState } from '$lib/helpers/staleness';
 import type { LinkSignal } from '$lib/types/hud';
 import { cn } from '$lib/utils';
+import { signalLabelKey } from './cellular-row';
 import {
 	ambiguousLinkLabels,
 	linkDisambiguation,
@@ -104,35 +105,11 @@ const totalStale = $derived(
 					)}
 					style="border-color: color-mix(in oklab, {color} 35%, transparent); background-color: color-mix(in oklab, {color} 10%, transparent);"
 				>
-					<span class="shrink-0 text-xs font-bold tabular-nums" style="color: {color};"
-						>L{link.linkIndex + 1}</span
-					>
-					<LinkIndicator
-						shape="bars"
-						size="md"
-						type={link.type}
-						signal={link.signal}
-						connectionState={link.connectionState}
-						linkIndex={link.linkIndex}
-					/>
-					<!-- A REAL BASIS, not `flex-1`'s zero. Every instrument to the right is
-					     `shrink-0`, so a zero-basis identity column is the only thing in the
-					     row that can absorb a squeeze — and at 375px it absorbed all of it
-					     and measured 0, which is the known gap this pass closes. With a
-					     basis the instruments wrap to a second line instead, and the device
-					     name keeps its width. Written as ONE `flex` shorthand on purpose:
-					     `flex-1 basis-32` sets `flex-basis` twice and which one wins is
-					     decided by Tailwind's stylesheet order, not by the class attribute. -->
-					<div class="flex min-w-0 flex-[1_1_8rem] flex-col leading-tight">
-						<span class="truncate text-xs font-medium">{link.label}</span>
-						<span class="text-muted-foreground truncate text-[10px] uppercase tracking-wide">
-							{linkTypeLabel(link)}{#if identity}<!--
-							-->&nbsp;·&nbsp;<!--
-							--><span data-testid="bonded-link-identity" dir="ltr" class="font-mono normal-case"
-									>{identity}</span
-								>{/if}
-						</span>
-					</div>
+					<!-- The ordinal, the glyph and the identity column are ONE badge,
+					     shared with the HUD strip so the two surfaces cannot disagree
+					     about which glyph a link gets — which is exactly how a
+					     self-managed dongle came to draw a different one here. -->
+					<LinkBadge {link} typeLabel={linkTypeLabel(link)} {identity} />
 					<!-- The instruments travel as ONE unit so a wrap cannot strand the
 					     speed badge on a line away from the telemetry it belongs with, and
 					     so the group wraps whole rather than item by item. Every member is
@@ -146,6 +123,21 @@ const totalStale = $derived(
 								style="color: {color};"
 							>
 								{link.signal}%
+							</span>
+						{:else if link.signalTier !== undefined}
+							<!-- A device that publishes a TIER instead of a percentage still
+							     owes the operator a word: colour and a bar count alone are a
+							     state carried by a mark, which the kiosk touchscreen cannot
+							     hover to resolve. The vocabulary is the SAME four the
+							     Cellular card uses for both instruments, so one reading is
+							     never named two ways. -->
+							<span
+								data-testid="bonded-link-signal-tier"
+								data-signal-tier={link.signalTier}
+								class="shrink-0 text-[10px] uppercase tracking-wide"
+								style="color: {color};"
+							>
+								{resolveMessageKey(signalLabelKey(link.signalTier))}
 							</span>
 						{:else if link.type === 'modem' && link.connectionState === 'no_sim'}
 							<span class="text-muted-foreground shrink-0 text-[10px] uppercase tracking-wide">

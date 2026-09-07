@@ -18,6 +18,7 @@ import type {
 	UpdatingStatus,
 	WifiStatus,
 } from "@ceraui/rpc/schemas";
+import type { ModemSignalTier } from "$main/network/cellular-row";
 
 /**
  * WebSocket connection lifecycle (mirrors `ConnectionState` in rpc/client.ts).
@@ -44,6 +45,21 @@ export interface LinkSignal {
 	linkIndex: number;
 	/** 0–100, or `null` when unavailable (no-SIM / null / sentinel). */
 	signal: number | null;
+	/**
+	 * Qualitative strength for a link whose DEVICE publishes no percentage.
+	 *
+	 * Today that is exactly one class: a router-mode dongle, which has no
+	 * ModemManager `status` block and never will, and whose only radio reading
+	 * is its own admin API's — normalized onto `router_admin.signal` and already
+	 * rendered on the Cellular card. Carrying the TIER rather than a synthesised
+	 * percentage is the point: the bond's indicator quantizes to three bars
+	 * anyway, so a tier renders honestly there while no fabricated number ever
+	 * reaches a numeric readout.
+	 *
+	 * `undefined` for every link that reports a percentage (which wins) and for
+	 * every link that reports nothing at all.
+	 */
+	signalTier?: ModemSignalTier;
 	/** Operator name, SSID, or a generic fallback label. */
 	label: string;
 	isConnected: boolean;

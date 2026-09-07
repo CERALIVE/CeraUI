@@ -18,6 +18,7 @@ import ZapIcon from '@lucide/svelte/icons/zap';
 
 import BondConstellation from '$lib/components/custom/BondConstellation.svelte';
 import BufferingIndicator from '$lib/components/custom/BufferingIndicator.svelte';
+import LinkBadge from '$lib/components/custom/LinkBadge.svelte';
 import LinkIndicator from '$lib/components/custom/LinkIndicator.svelte';
 import Badge from '$lib/components/custom/Badge.svelte';
 import * as Sheet from '$lib/components/ui/sheet';
@@ -279,6 +280,7 @@ $effect(() => {
 		size="sm"
 		type={link.type}
 		signal={link.signal}
+		signalTier={link.signalTier}
 		connectionState={link.connectionState}
 		linkIndex={link.linkIndex}
 	/>
@@ -439,10 +441,7 @@ $effect(() => {
 								role="img"
 								aria-label={linkLabel(link)}
 							>
-								<span class="font-mono text-[0.7rem] leading-none" style:color={linkColor(link)}>
-									L{link.linkIndex + 1}
-								</span>
-								{@render miniBars(link)}
+								<LinkBadge {link} variant="compact" />
 							</span>
 						{/each}
 					{/if}
