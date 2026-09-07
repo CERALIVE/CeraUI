@@ -270,7 +270,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 	echo "  1. auth.login on ws://$HOST:$PORT/ws"
 	echo "  2. streaming.setConfig { video_codec: $CODEC, srtla_addr: $RELAY_HOST, srtla_port: $RELAY_PORT }"
 	if [ "$RECEIVER" = "auto" ]; then
-		echo "  3. srtla_rec $RELAY_PORT 127.0.0.1 $SRT_PORT  +  ffmpeg SRT listener on $SRT_PORT"
+		echo "  3. srtla_rec --srtla_port $RELAY_PORT --srt_hostname 127.0.0.1 --srt_port $SRT_PORT  +  ffmpeg SRT listener on $SRT_PORT"
 	else
 		echo "  3. (external receiver — already recording to $CAPTURE_FILE)"
 	fi
@@ -439,7 +439,7 @@ trap cleanup EXIT INT TERM
 # --- Step 1: receiver -------------------------------------------------------
 if [ "$RECEIVER" = "auto" ]; then
 	log "[1/5] starting srtla_rec on :$RELAY_PORT -> srt 127.0.0.1:$SRT_PORT"
-	srtla_rec "$RELAY_PORT" 127.0.0.1 "$SRT_PORT" >>"$RECEIVER_LOG" 2>&1 &
+	srtla_rec --srtla_port "$RELAY_PORT" --srt_hostname 127.0.0.1 --srt_port "$SRT_PORT" >>"$RECEIVER_LOG" 2>&1 &
 	SRTLA_PID=$!
 	sleep 1
 	kill -0 "$SRTLA_PID" 2>/dev/null || fail "srtla_rec exited immediately (see $RECEIVER_LOG)"
