@@ -5954,6 +5954,11 @@ The 2026-09-07 adoption batches finished 19/20 and 18/20, not the required
 modem-transition, and source-routing tests failed. Parallel adoption remains
 blocked; isolated passing reruns do not discharge the stability gate.
 
+The transition-engine fixture controls `Date.now()` with `setSystemTime`:
+USB enumeration cannot spend the NM-timeout case's budget through host scheduling
+delay. Only the unresolved NM reader advances time, including the failure-path
+re-probe; teardown restores the real clock. Production polling is unchanged.
+
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
 dependencies through `setStartStreamDepsForTest()`. Every test that overrides

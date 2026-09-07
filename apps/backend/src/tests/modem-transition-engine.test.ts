@@ -11,7 +11,14 @@
  * engine would: an AT `OK` proves nothing, and a device that answers `OK` and
  * re-enumerates as the WRONG thing has to fail. Both are asserted.
  */
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import {
+	afterEach,
+	beforeEach,
+	describe,
+	expect,
+	setSystemTime,
+	test,
+} from "bun:test";
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -205,6 +212,8 @@ function useDispatch(
 }
 
 beforeEach(async () => {
+	// Both polling layers read Date.now(); only the fixture may advance them.
+	setSystemTime(new Date(1_000));
 	dir = await mkdtemp(join(tmpdir(), "ceraui-transition-engine-"));
 	setMutationJournalDeps({
 		fs: defaultMutationJournalFs,
@@ -219,6 +228,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+	setSystemTime();
 	resetUsbModeDispatchDeps();
 	resetMutationJournalDeps();
 	resetMutationCaptureDeps();
@@ -314,11 +324,22 @@ describe("the full gate chain with the engine wired", () => {
 
 	test("an NM interface that never appears times out and keeps the rollback armed", async () => {
 		const bus = scriptedBus(MBIM_IFACES, undefined);
+		const activated: string[] = [];
+		let resolutionAttempts = 0;
 		useDispatch({
 			createEngine: (identity) =>
 				createTransitionEngine(
 					{ stableKey: identity.stableKey, ports: identity.ports },
-					engineDeps(bus, [], () => Promise.resolve(undefined), 15),
+					engineDeps(
+						bus,
+						activated,
+						() => {
+							resolutionAttempts += 1;
+							setSystemTime(new Date(Date.now() + 1));
+							return Promise.resolve(undefined);
+						},
+						15,
+					),
 				),
 		});
 
@@ -341,6 +362,9 @@ describe("the full gate chain with the engine wired", () => {
 		expect(entry?.detail).toContain(
 			"post-switch NetworkManager interface did not resolve within 15ms",
 		);
+		// The transaction re-probes once after failure, spending the same NM bound.
+		expect(resolutionAttempts).toBe(30);
+		expect(activated).toEqual([]);
 	});
 
 	test("an OK that re-enumerates as the WRONG thing FAILS and stays blocked", async () => {
