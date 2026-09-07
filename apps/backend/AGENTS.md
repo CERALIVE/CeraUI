@@ -5959,6 +5959,15 @@ USB enumeration cannot spend the NM-timeout case's budget through host schedulin
 delay. Only the unresolved NM reader advances time, including the failure-path
 re-probe; teardown restores the real clock. Production polling is unchanged.
 
+The add-on shell/GPG suite and historical source-routing Git guard use
+`tests/helpers/run-test-command.ts`: asynchronous spawn, concurrent stdout/stderr
+drains and exit observation, with scoped disposal. Bun 1.4.2's synchronous spawn
+loop can lose poll accounting when GC finalizes main-loop resources during the
+wait (oven-sh/bun#40078), stalling later children even after they exited.
+The helper's regression reproduces that state in a disposable process; do not
+replace real shell/GPG verification or Git history with mocks, or switch these
+calls back to `spawnSync`. No test or production timeout was increased.
+
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
 dependencies through `setStartStreamDepsForTest()`. Every test that overrides
