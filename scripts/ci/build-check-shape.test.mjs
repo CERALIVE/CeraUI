@@ -9,6 +9,24 @@ import { assertBuildCheckContract } from './build-check-contract.mjs';
 const workflowUrl = new URL('../../.github/workflows/build-check.yml', import.meta.url);
 const workflowSource = await file(workflowUrl).text();
 const repoRoot = new URL('../../', import.meta.url).pathname;
+for (const filename of ['build-check.yml', 'publish-release.yml']) {
+	test(`${filename} supplies full history to every backend unit-test job`, async () => {
+		const source = await file(
+			new URL(`../../.github/workflows/${filename}`, import.meta.url),
+		).text();
+		const workflow = YAML.parse(source);
+		const backendJobs = Object.values(workflow.jobs).filter((job) =>
+			job.steps?.some((step) => String(step.run ?? '').includes('bun run --filter backend test')),
+		);
+		expect(backendJobs.length).toBeGreaterThan(0);
+		for (const job of backendJobs) {
+			const checkouts = job.steps.filter((step) => step.uses?.startsWith('actions/checkout@'));
+			expect(checkouts).toHaveLength(1);
+			expect(checkouts[0].with?.['fetch-depth']).toBe(0);
+		}
+	});
+}
+
 test('every Build Check Bun runner matches the workspace runtime pin', async () => {
 	// Given the workspace runtime and every job in the merged workflow
 	const { packageManager } = await file(new URL('../../package.json', import.meta.url)).json();
