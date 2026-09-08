@@ -942,7 +942,7 @@ that move by flipping a runtime verdict.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
 why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun runs the
-current suite at **375 files / 6,234 tests, 0 failures** (measured 2026-09-08 on this
+current suite at **378 files / 6,271 tests, 0 failures locally** (measured 2026-09-08 on this
 tree; the rc.3→stable pin move itself was proven at parity on the then-current
 **361 files / 5,957 tests**, and every count since has only grown with new tests).
 The rc.2→rc.3 successor path needed no source or config change here, and Vitest then reached
@@ -963,6 +963,12 @@ bun / `1.4.2` after it. A caret would range forward into stable 5.0.0 unreviewed
 exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
 
 The frontend Vitest config keeps a global `testTimeout` of **20 seconds**. The
+worker pool is capped at `min(16, availableParallelism())`, not a fixed16 workers.
+PR345's first hosted run exposed resource starvation despite the local results
+below; a constrained shard reproduces it at16 workers and clears it at the runtime
+budget with no timeout or isolation change. The new full local run after merging
+#342/#344 passes378files/6,271tests on four CPUs; hosted acceptance is a separate
+required gate recorded in `docs/FRONTEND-SETUP-COST.md`. The
 2026-09-08 setup-cost measurements passed **375 files / 6,234 tests** three times
 at **132.286 / 131.299 / 124.110 seconds wall clock** (mean **129.232 seconds**;
 Vitest Duration **124.62 / 125.91 / 118.60 seconds**). The same-main baseline
