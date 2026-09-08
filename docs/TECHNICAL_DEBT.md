@@ -86,6 +86,56 @@ register is "empty" precisely when there are none.
 
 ## Open Debt
 
+### Frontend assertion-presence audit follow-ups (2026-09-08)
+
+The one-shot global `expect.hasAssertions()` probe found the following two
+non-asserting cases. Neither was selected in the ten-assertion random mutation
+sample, so neither is a mutation-confirmed phantom-green file and neither was
+edited in this bounded audit. The source-picker case remains suspicious, not
+cleared by the unrelated sample's 10/10 kill result. Full evidence:
+[`FRONTEND-PHANTOM-GREEN-AUDIT.md`](FRONTEND-PHANTOM-GREEN-AUDIT.md).
+
+| File / case | Observed cause | Follow-up |
+|---|---|---|
+| `apps/frontend/src/tests/sim-unlock-trigger-gate.test.ts` — explicit action, not an effect | No effect blocks match, so the assertion loop is empty; separate planted-relapse coverage still asserts. | Prove the intended absence contract under a targeted mutation before changing the guard. |
+| `apps/frontend/src/lib/components/custom/SourceSection.test.ts` — multi-source selection callback | No native option is found; nested guards bypass the callback assertion. | Target that callback assertion with a mutation, then exercise the current selection control if the mutation survives. |
+
+```debt
+id: TD-sim-unlock-assertion-presence
+title: Make the zero-effect trigger-gate case explicitly assert its absence contract
+track: 1
+status: open
+exit_criteria: `bun run --filter frontend test`
+owner: ceraui-team
+registered_at: 2026-09-08
+resolved_at: null
+unblock: Run a targeted mutation of the explicit-action case in sim-unlock-trigger-gate.test.ts and retain the planted-relapse control; make the intended zero-match outcome explicit without requiring a nonexistent effect.
+```
+
+```debt
+id: TD-source-selection-assertion-presence
+title: Prove and repair the guarded native-option callback test
+track: 1
+status: open
+exit_criteria: `bun run --filter frontend test`
+owner: ceraui-team
+registered_at: 2026-09-08
+resolved_at: null
+unblock: Mutate the callback assertion in SourceSection.test.ts multi-source selection case, record whether it survives, and replace the obsolete native-select interaction with the actual rendered selection control if confirmed; no skip or deletion.
+```
+
+```debt
+id: TD-frontend-test-use-await
+title: Classify existing missing-await warnings before enforcing the rule as an error
+track: 1
+status: open
+exit_criteria: `bunx --no-install biome check . --error-on-warnings`
+owner: ceraui-team
+registered_at: 2026-09-08
+resolved_at: null
+unblock: Classify the 29 test-only suspicious/useAwait warnings exposed by Biome 2.5.9, preserving deliberate promise rejection semantics in mocks; remove unnecessary async or document narrow intentional exceptions, then promote the test-only override from warn to error. Do not expand the product rule or add a custom equivalent guard.
+```
+
 ```debt
 id: TD-encoder-load-clock-fallback
 title: Retire the legacy RK3588 clock-enable-count encoder load fallback

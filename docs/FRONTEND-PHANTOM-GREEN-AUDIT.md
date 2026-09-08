@@ -1,7 +1,7 @@
 # Frontend phantom-green audit
 
-Status: [PARTIAL] — local investigation complete; hosted mutation receipt and
-final two-run verification pending. No backend or board changes.
+Status: [EXISTS] — bounded audit complete, with explicit follow-up debt below.
+No backend or board changes.
 
 ## Baseline and boundaries
 
@@ -64,8 +64,9 @@ use the shipped nursery rule rather than inventing a guard script.
 
 Only frontend `*.test.ts` / `*.spec.ts` overrides change: floating promises is
 error-level (the audit found no diagnostics); useAwait is warning-level.
-The latter reports existing unnecessary async functions, including promise-shaped
-mocks. Making it an error would require editing files outside this audit's
+The latter reports 29 existing test warnings, including promise-shaped mocks
+(the initial whole-source diagnostic sweep reported 36, seven outside tests).
+Making it an error would require editing files outside this audit's
 authorized defect set. Those warnings remain visible, not suppressed; this is
 not a zero-warning lint claim. No product lint rule was relaxed.
 
@@ -86,10 +87,88 @@ and `.json`. No temporary assertion-count global remains.
 
 ## Mutation-kill probe
 
-Pending hosted receipt. Selection is fixed in
+Selection is fixed in
 `test-results/phantom-green/{components,pure}-selection.txt` using `shuf -n 5`
 over existing single-line assertions in each classifier project. No seed or
 hand-picked replacement was used. Five assertions per project, ten total;
-two component selections are in different cases of `SharingSection.test.ts`.
+two component selections are in `SharingSection.test.ts` (a directly-called
+shared helper and an independent client-zone case).
 Inversion must preserve the original expression and matcher; a compile error
 or a different failure is not a kill receipt.
+
+The candidate population was line-start `expect(...)` expressions with a
+single-line `toBe`, `toEqual`, `toHaveLength`, `toBeTruthy`, `toBeFalsy`,
+`toBeNull` or `toBeDefined` matcher. Each project's candidate stream was piped
+through `shuf -n 5` independently. Helpers and parameterized assertions were
+eligible; multiline assertions and other matchers were outside this bounded
+sample. The temporary candidate-list script was removed after selection.
+
+**10/10 killed in hosted CI**, with assertion stacks at all ten selected lines.
+Probe head: `40436c39ca7cbc2ea038a3431bf751ef5091399c`, forked from audit head
+`0f17fd4e`. [Throwaway PR #347](https://github.com/CERALIVE/CeraUI/pull/347)
+was closed without merging and its remote branch deleted. The ordinary audit
+branch contains none of the inversions.
+
+Run: **[34185568466](https://github.com/CERALIVE/CeraUI/actions/runs/34185568466)**.
+All paths below are relative to `apps/frontend/`; each mutation inserted `.not`
+before the original matcher and left the expression and expected value unchanged.
+
+| Project | Selected assertion | Owning shard | Result |
+|---|---|---|---|
+| components | `src/main/network/SharingSection.test.ts:414` — zone is serving | [3/4][shard3] | RED at 414:47 |
+| components | `src/tests/encoder-status.test.ts:366` — core tone equals tone | [1/4][shard1] | RED at 366:66 |
+| components | `src/lib/streaming/destination-validation.test.ts:312` — failed verdict is false | [3/4][shard3] | RED at 312:65 |
+| components | `src/main/dialogs/ModemConfigDialog.detail.test.ts:292` — radio text is 5G NR | [3/4][shard3] | RED at 292:40 |
+| components | `src/main/network/SharingSection.test.ts:131` — disclosure is DETAILS | [3/4][shard3] | RED at 131:31 |
+| pure | `src/lib/helpers/wifi-mode-outcome.test.ts:24` — station is confirmed | [4/4][shard4] | RED at 24:55 |
+| pure | `src/main/dialogs/modem-detail.test.ts:69` — keys are tech/sinr | [2/4][shard2] | RED at 69:36 |
+| pure | `src/main/network/cellular-row.test.ts:889` — unmanaged action is configure | [3/4][shard3] | RED at 889:64 |
+| pure | `src/lib/rpc/rpc-error.test.ts:125` — internal error name | [1/4][shard1] | RED at 125:29 |
+| pure | `src/main/dialogs/modem-five-g.test.ts:120` — distinct key count | [1/4][shard1] | RED at 120:34 |
+
+[shard1]: https://github.com/CERALIVE/CeraUI/actions/runs/34185568466/job/101933147751
+[shard2]: https://github.com/CERALIVE/CeraUI/actions/runs/34185568466/job/101933147747
+[shard3]: https://github.com/CERALIVE/CeraUI/actions/runs/34185568466/job/101933147872
+[shard4]: https://github.com/CERALIVE/CeraUI/actions/runs/34185568466/job/101933147716
+
+The [merged report](https://github.com/CERALIVE/CeraUI/actions/runs/34185568466/job/101933506046)
+is RED: **9 failed / 369 passed files; 26 failed / 6,246 passed tests**.
+Its total remains **378 / 6,272**. Ten assertion sites produce 26 failing cases
+because the disclosure helper and core-tone table execute in multiple cases;
+both SharingSection sites independently appear in the failure stacks.
+The [required summary](https://github.com/CERALIVE/CeraUI/actions/runs/34185568466/job/101934442430)
+is RED specifically for `test-fe=failure merge-fe-reports=failure`.
+Every non-FE prerequisite passed, including backend, both builds and all E2E lanes.
+
+No selected mutation survived. Thus no additional file is authorized for a
+phantom-green repair by this sample. The two assertion-presence findings and
+test-only missing-await warnings remain explicit entries in
+[`TECHNICAL_DEBT.md`](TECHNICAL_DEBT.md), not claims that those cases were cleared.
+Raw receipt: `test-results/phantom-green/mutation-ci.log` and `mutation-jobs.json`.
+
+## Final restored-tree verification
+
+Both ordinary commands ran sequentially after all mutation inversions and both
+temporary assertion-presence hooks were removed:
+
+| Command | Files | Tests | Vitest Duration | Exit |
+|---|---:|---:|---:|---:|
+| `bun run --filter frontend test` — run 1 | 378 passed | 6,272 passed | 132.19 s | 0 |
+| `bun run --filter frontend test` — run 2 | 378 passed | 6,272 passed | 114.38 s | 0 |
+
+Both also passed all four hardware-preflight **unit** tests (no board access).
+Neither full log contains `TimeoutNaNWarning`. Raw logs: `final-1.log` and
+`final-2.log` in the receipt directory. Counts match current main's file inventory;
+the historical 375-file difference is accounted for above.
+
+Frontend typecheck: zero errors/warnings. Production frontend build: PASS.
+Workflow-shape tests: 41 pass. Runner/classifier tests: 12 pass.
+Debt gate: 28 entries, 22 open, no orphan markers. Biome check exits zero with
+29 documented `useAwait` warnings and three pre-existing `useLiteralKeys` infos;
+no errors. Source/config language-server error diagnostics are clean; the Biome
+JSON language server is not installed (previously declined), so JSON validation
+uses the installed 2.5.9 CLI. No LSP installation or dependency pin changed.
+
+This proves the ten sampled assertions propagate failure, not that every
+assertion in the suite is non-vacuous. The two assertion-presence follow-ups
+remain open intentionally under the audit's mutation-proven-only repair rule.
