@@ -84,3 +84,25 @@ exists. Federation's three entry modules each call `registerFederationMessages()
 that real repeated-call path is not executed by the ordinary suite's current
 tests and needs an explicit regression probe rather than fabricated baseline
 duplicates.
+
+### Reentrant registration regression (controlled full-suite probe)
+
+The three-call case is deliberately injected at component setup to model the
+three federation entrypoints, NOT presented as naturally occurring duplicates
+in the ordinary baseline. A temporary transform calls the real eager function
+three times and counts `Map.set` calls only inside each synchronous call,
+restoring the method in `finally`. Both full runs use native catalog loading.
+
+| Version | Calls | Registrations doing work | Message writes | Threads | Files / tests | Wall / Vitest seconds | Exit |
+|---|---:|---:|---:|---:|---|---|---:|
+| Before memo | 732 | 732 | 1,781,688 | 244 | 375 / 6,234 | 135.890 / 128.95 | 0 |
+| After memo | 732 | 244 | 593,896 | 244 | 375 / 6,234 | 149.304 / 142.51 | 0 |
+
+**Adopt the registration fix:** 488 redundant registrations removed (66.67% of
+the controlled workload), without suppressing initialization of any worker.
+Timing is secondary and showed no improvement for this small synchronous loop.
+The generated eager entry memoizes only AFTER a successful registration, per
+module instance. No process-global flag, persistent mutable catalog, or cache
+outside the isolated worker is introduced. Package regression test: RED at
+three calls instead of one, then GREEN (3 tests); full package gate: 709 tests
+across 14 files, zero failures; package typecheck passes.

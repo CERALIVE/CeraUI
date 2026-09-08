@@ -54,6 +54,12 @@ test harnesses (`apps/frontend/vitest.setup.ts`, `packages/i18n/tests/setup.ts`)
 Importing it from app code re-fuses the ten-locale catalog into the entry chunk —
 a measured ~400 KB gzip regression.
 
+`registerAllNamespaces()` is idempotent per eager-module/registry instance. The
+three federation entries may initialize the same static graph, so only the first
+successful call writes the catalog. The memo is module-local, not process-global:
+a fresh isolated registry must still be populated. A failed registration is not
+memoized. `tests/eager-registration.test.ts` pins all three properties.
+
 ## GENERATE
 
 ```bash
