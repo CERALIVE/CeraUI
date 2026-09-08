@@ -56,7 +56,10 @@ bun run dev
 
 Starts the frontend (Vite, port 6173) and ordinary local development backend
 (port 3002) together via mprocs. Functional E2E pages use separate worker-scoped
-31xx backends. Run from the workspace root.
+31xx backends, re-seeded on each test's backend acquisition so process and disk
+state cannot leak to the next test. The scenario remains worker-scoped. See
+[`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
+for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
 To run the frontend alone:
 

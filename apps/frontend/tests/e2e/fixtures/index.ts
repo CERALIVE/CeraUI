@@ -25,11 +25,12 @@ function ciPreviewOrigin(): string {
 
 type WorkerFixtures = {
 	backendScenario: string;
-	workerBackend: WorkerBackend;
-	backendRpc: BackendRpc;
+	backendHost: { start(): Promise<WorkerBackend> };
 };
 
 type Fixtures = {
+	workerBackend: WorkerBackend;
+	backendRpc: BackendRpc;
 	authedPage: Page;
 	pageRpc: PageRpc;
 };
@@ -42,26 +43,40 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 	// mismatched backend. Default keeps every existing spec on multi-modem-wifi.
 	backendScenario: ['multi-modem-wifi', { scope: 'worker', option: true }],
 
-	// One isolated mock backend per worker (own port + own CWD state dir), so
-	// config.json mutation and dev.emit broadcasts never bleed across workers.
-	workerBackend: [
+	// Keep the process until the next test acquires a backend: auth.spec.ts has
+	// an explicit serial flow that retains its own page without requesting fixtures.
+	backendHost: [
 		async ({ backendScenario }, use) => {
-			const backend = await startWorkerBackend({ scenario: backendScenario });
-			await use(backend);
-			await backend.stop();
+			let backend: WorkerBackend | undefined;
+			try {
+				await use({
+					async start() {
+						await backend?.stop();
+						backend = await startWorkerBackend({ scenario: backendScenario });
+						return backend;
+					},
+				});
+			} finally {
+				await backend?.stop();
+			}
 		},
 		{ scope: 'worker' },
 	],
-	backendRpc: [
-		async ({ workerBackend }, use) => {
-			const rpc = await BackendRpc.connect(workerBackend.port, {
-				proxySecret: workerBackend.proxySecret,
-			});
+	// Test-scoped acquisition resets process globals, timers AND CWD state through
+	// the existing stop/seed/start path before either a page or an RPC client uses it.
+	workerBackend: async ({ backendHost }, use) => {
+		await use(await backendHost.start());
+	},
+	backendRpc: async ({ workerBackend }, use) => {
+		const rpc = await BackendRpc.connect(workerBackend.port, {
+			proxySecret: workerBackend.proxySecret,
+		});
+		try {
 			await use(rpc);
+		} finally {
 			rpc.close();
-		},
-		{ scope: 'worker' },
-	],
+		}
+	},
 
 	// Override page to (1) route this worker's browser to its own backend and
 	// (2) add the screenshot guard in non-@visual tests.
