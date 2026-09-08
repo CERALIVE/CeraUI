@@ -1,0 +1,1636 @@
+2026-09-08T14:41:28Z
+Current status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 1: 02a0 power 5gbps Rx.Detect
+Sent power off request
+New status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 1: 00a0 off
+Current status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 1: 0503 power highspeed enable connect [19d2:1405 ZTE,Incorporated ZTE Mobile Boardband <redacted>]
+Sent power off request
+New status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 1: 0000 off
+OFF_DEVICE_ABSENT
+Current status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 1: 00a0 off
+Sent power on request
+New status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 1: 02a0 power 5gbps Rx.Detect
+Current status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 1: 0000 off
+Sent power on request
+New status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 1: 0100 power
+2026-09-08T14:42:17Z
+
+USB-PARENT 5-1.1
+DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1
+DEVNAME=/dev/bus/usb/005/029
+DEVTYPE=usb_device
+DRIVER=usb
+PRODUCT=19d2/1405/5886
+TYPE=0/0/0
+BUSNUM=005
+DEVNUM=029
+MAJOR=189
+MINOR=540
+SUBSYSTEM=usb
+USEC_INITIALIZED=25835955268
+ID_BUS=usb
+ID_MODEL=ZTE_Mobile_Boardband
+ID_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+ID_MODEL_ID=1405
+ID_SERIAL=<redacted-serial>
+ID_SERIAL_SHORT=<redacted-serial>
+ID_VENDOR=ZTE_Incorporated
+ID_VENDOR_ENC=ZTE\x2cIncorporated
+ID_VENDOR_ID=19d2
+ID_REVISION=5886
+ID_USB_MODEL=ZTE_Mobile_Boardband
+ID_USB_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+ID_USB_MODEL_ID=1405
+ID_USB_SERIAL=<redacted-serial>
+ID_USB_SERIAL_SHORT=<redacted-serial>
+ID_USB_VENDOR=ZTE_Incorporated
+ID_USB_VENDOR_ENC=ZTE\x2cIncorporated
+ID_USB_VENDOR_ID=19d2
+ID_USB_REVISION=5886
+ID_USB_INTERFACES=:020600:0a0000:080650:
+ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1
+ID_PATH=platform-fc880000.usb-usb-0:1.1
+ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1
+ID_CERALIVE_MODEM=1
+ID_CERALIVE_MODEM_CLASS=router
+ID_CERALIVE_MODEM_SKU=zte-mf79u
+ID_FOR_SEAT=usb-platform-fc880000_usb-usb-0_1_1
+TAGS=:seat:
+CURRENT_TAGS=:seat:
+
+UDEV-TREE
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1
+M: 5-1.1
+R: 1
+J: c189:540
+U: usb
+T: usb_device
+D: c 189:540
+N: bus/usb/005/029
+L: 0
+V: usb
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1
+E: SUBSYSTEM=usb
+E: DEVNAME=/dev/bus/usb/005/029
+E: DEVTYPE=usb_device
+E: DRIVER=usb
+E: PRODUCT=19d2/1405/5886
+E: TYPE=0/0/0
+E: BUSNUM=005
+E: DEVNUM=029
+E: MAJOR=189
+E: MINOR=540
+E: USEC_INITIALIZED=25835955268
+E: ID_BUS=usb
+E: ID_MODEL=ZTE_Mobile_Boardband
+E: ID_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+E: ID_MODEL_ID=1405
+E: ID_SERIAL=<redacted-serial>
+E: ID_SERIAL_SHORT=<redacted-serial>
+E: ID_VENDOR=ZTE_Incorporated
+E: ID_VENDOR_ENC=ZTE\x2cIncorporated
+E: ID_VENDOR_ID=19d2
+E: ID_REVISION=5886
+E: ID_USB_MODEL=ZTE_Mobile_Boardband
+E: ID_USB_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+E: ID_USB_MODEL_ID=1405
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_SERIAL_SHORT=<redacted-serial>
+E: ID_USB_VENDOR=ZTE_Incorporated
+E: ID_USB_VENDOR_ENC=ZTE\x2cIncorporated
+E: ID_USB_VENDOR_ID=19d2
+E: ID_USB_REVISION=5886
+E: ID_USB_INTERFACES=:020600:0a0000:080650:
+E: ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1
+E: ID_PATH=platform-fc880000.usb-usb-0:1.1
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1
+E: ID_CERALIVE_MODEM=1
+E: ID_CERALIVE_MODEM_CLASS=router
+E: ID_CERALIVE_MODEM_SKU=zte-mf79u
+E: ID_FOR_SEAT=usb-platform-fc880000_usb-usb-0_1_1
+E: TAGS=:seat:
+E: CURRENT_TAGS=:seat:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.0
+M: 5-1.1:1.0
+R: 0
+J: +usb:5-1.1:1.0
+U: usb
+T: usb_interface
+V: cdc_ether
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.0
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=cdc_ether
+E: PRODUCT=19d2/1405/5886
+E: TYPE=0/0/0
+E: INTERFACE=2/6/0
+E: MODALIAS=usb:v19D2p1405d5886dc00dsc00dp00ic02isc06ip00in00
+E: USEC_INITIALIZED=25835956408
+E: ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1:1.0
+E: ID_PATH=platform-fc880000.usb-usb-0:1.1:1.0
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1_1_0
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.0/net/enx344b50000000
+M: enx344b50000000
+R: 50000000
+J: n21
+U: net
+I: 21
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.0/net/enx344b50000000
+E: SUBSYSTEM=net
+E: INTERFACE=enx344b50000000
+E: IFINDEX=21
+E: USEC_INITIALIZED=25835958048
+E: ID_NET_DRIVER=cdc_ether
+E: ID_BUS=usb
+E: ID_MODEL=ZTE_Mobile_Boardband
+E: ID_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+E: ID_MODEL_ID=1405
+E: ID_SERIAL=<redacted-serial>
+E: ID_SERIAL_SHORT=<redacted-serial>
+E: ID_VENDOR=ZTE_Incorporated
+E: ID_VENDOR_ENC=ZTE\x2cIncorporated
+E: ID_VENDOR_ID=19d2
+E: ID_REVISION=5886
+E: ID_TYPE=generic
+E: ID_USB_MODEL=ZTE_Mobile_Boardband
+E: ID_USB_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+E: ID_USB_MODEL_ID=1405
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_SERIAL_SHORT=<redacted-serial>
+E: ID_USB_VENDOR=ZTE_Incorporated
+E: ID_USB_VENDOR_ENC=ZTE\x2cIncorporated
+E: ID_USB_VENDOR_ID=19d2
+E: ID_USB_REVISION=5886
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:020600:0a0000:080650:
+E: ID_USB_INTERFACE_NUM=00
+E: ID_USB_DRIVER=cdc_ether
+E: ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+E: ID_NET_NAMING_SCHEME=v257
+E: ID_NET_NAME_MAC=enx344b50000000
+E: ID_OUI_FROM_DATABASE=zte corporation
+E: ID_NET_NAME_PATH=enu1u1
+E: ID_MM_CANDIDATE=1
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1:1.0
+E: ID_PATH=platform-fc880000.usb-usb-0:1.1:1.0
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1_1_0
+E: ID_NET_LINK_FILE=/usr/lib/systemd/network/73-usb-net-by-mac.link
+E: ID_NET_NAME=enx344b50000000
+E: SYSTEMD_ALIAS=/sys/subsystem/net/devices/enx344b50000000
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.1
+M: 5-1.1:1.1
+R: 1
+J: +usb:5-1.1:1.1
+U: usb
+T: usb_interface
+V: cdc_ether
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.1
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=cdc_ether
+E: PRODUCT=19d2/1405/5886
+E: TYPE=0/0/0
+E: INTERFACE=10/0/0
+E: MODALIAS=usb:v19D2p1405d5886dc00dsc00dp00ic0Aisc00ip00in01
+E: USEC_INITIALIZED=25835959667
+E: ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1:1.1
+E: ID_PATH=platform-fc880000.usb-usb-0:1.1:1.1
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1_1_1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2
+M: 5-1.1:1.2
+R: 2
+J: +usb:5-1.1:1.2
+U: usb
+T: usb_interface
+V: usb-storage
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=usb-storage
+E: PRODUCT=19d2/1405/5886
+E: TYPE=0/0/0
+E: INTERFACE=8/6/80
+E: MODALIAS=usb:v19D2p1405d5886dc00dsc00dp00ic08isc06ip50in02
+E: USEC_INITIALIZED=25835962691
+E: ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1:1.2
+E: ID_PATH=platform-fc880000.usb-usb-0:1.1:1.2
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1_1_2
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2
+M: host2
+R: 2
+J: +scsi:host2
+U: scsi
+T: scsi_host
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2
+E: SUBSYSTEM=scsi
+E: DEVTYPE=scsi_host
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/scsi_host/host2
+M: host2
+R: 2
+J: +scsi_host:host2
+U: scsi_host
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/scsi_host/host2
+E: SUBSYSTEM=scsi_host
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0
+M: target2:0:0
+R: 0
+J: +scsi:target2:0:0
+U: scsi
+T: scsi_target
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0
+E: SUBSYSTEM=scsi
+E: DEVTYPE=scsi_target
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:0
+M: 2:0:0:0
+R: 0
+J: +scsi:2:0:0:0
+U: scsi
+T: scsi_device
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:0
+E: SUBSYSTEM=scsi
+E: DEVTYPE=scsi_device
+E: MODALIAS=scsi:t-0x05
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:0/bsg/2:0:0:0
+M: 2:0:0:0
+R: 0
+J: c243:2
+U: bsg
+D: c 243:2
+N: bsg/2:0:0:0
+L: 0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:0/bsg/2:0:0:0
+E: SUBSYSTEM=bsg
+E: DEVNAME=/dev/bsg/2:0:0:0
+E: MAJOR=243
+E: MINOR=2
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:0/scsi_device/2:0:0:0
+M: 2:0:0:0
+R: 0
+J: +scsi_device:2:0:0:0
+U: scsi_device
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:0/scsi_device/2:0:0:0
+E: SUBSYSTEM=scsi_device
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1
+M: 2:0:0:1
+R: 1
+J: +scsi:2:0:0:1
+U: scsi
+T: scsi_device
+V: sd
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1
+E: SUBSYSTEM=scsi
+E: DEVTYPE=scsi_device
+E: DRIVER=sd
+E: MODALIAS=scsi:t-0x00
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/block/sdc
+M: sdc
+J: b8:32
+U: block
+T: disk
+D: b 8:32
+N: sdc
+L: 0
+S: disk/by-diskseq/24
+S: disk/by-path/platform-fc880000.usb-usbv2-0:1.1:1.2-scsi-0:0:0:1
+S: disk/by-id/usb-ZTE_MMC_Storage_2.31_<redacted>-0:1
+S: disk/by-path/platform-fc880000.usb-usb-0:1.1:1.2-scsi-0:0:0:1
+Q: 24
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/block/sdc
+E: SUBSYSTEM=block
+E: DEVNAME=/dev/sdc
+E: DEVTYPE=disk
+E: DISKSEQ=24
+E: MAJOR=8
+E: MINOR=32
+E: USEC_INITIALIZED=25837016395
+E: ID_BUS=usb
+E: ID_MODEL=Storage_2.31
+E: ID_MODEL_ENC=Storage\x202.31\x20\x20\x20\x20
+E: ID_MODEL_ID=1405
+E: ID_SERIAL=<redacted-serial>
+E: ID_SERIAL_SHORT=<redacted-serial>
+E: ID_VENDOR=ZTE_MMC
+E: ID_VENDOR_ENC=ZTE\x20MMC\x20
+E: ID_VENDOR_ID=19d2
+E: ID_REVISION=5886
+E: ID_TYPE=disk
+E: ID_INSTANCE=0:1
+E: ID_USB_MODEL=Storage_2.31
+E: ID_USB_MODEL_ENC=Storage\x202.31\x20\x20\x20\x20
+E: ID_USB_MODEL_ID=1405
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_SERIAL_SHORT=<redacted-serial>
+E: ID_USB_VENDOR=ZTE_MMC
+E: ID_USB_VENDOR_ENC=ZTE\x20MMC\x20
+E: ID_USB_VENDOR_ID=19d2
+E: ID_USB_REVISION=5886
+E: ID_USB_TYPE=disk
+E: ID_USB_INSTANCE=0:1
+E: ID_USB_INTERFACES=:020600:0a0000:080650:
+E: ID_USB_INTERFACE_NUM=02
+E: ID_USB_DRIVER=usb-storage
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1:1.2-scsi-0:0:0:1
+E: ID_PATH=platform-fc880000.usb-usb-0:1.1:1.2-scsi-0:0:0:1
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1_1_2-scsi-0_0_0_1
+E: DEVLINKS=/dev/disk/by-diskseq/24 /dev/disk/by-path/platform-fc880000.usb-usbv2-0:1.1:1.2-scsi-0:0:0:1 /dev/disk/by-id/usb-ZTE_MMC_Storage_2.31_<redacted>-0:1 /dev/disk/by-path/platform-fc880000.usb-usb-0:1.1:1.2-scsi-0:0:0:1
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/bsg/2:0:0:1
+M: 2:0:0:1
+R: 1
+J: c243:3
+U: bsg
+D: c 243:3
+N: bsg/2:0:0:1
+L: 0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/bsg/2:0:0:1
+E: SUBSYSTEM=bsg
+E: DEVNAME=/dev/bsg/2:0:0:1
+E: MAJOR=243
+E: MINOR=3
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/scsi_device/2:0:0:1
+M: 2:0:0:1
+R: 1
+J: +scsi_device:2:0:0:1
+U: scsi_device
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/scsi_device/2:0:0:1
+E: SUBSYSTEM=scsi_device
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/scsi_disk/2:0:0:1
+M: 2:0:0:1
+R: 1
+J: +scsi_disk:2:0:0:1
+U: scsi_disk
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.2/host2/target2:0:0/2:0:0:1/scsi_disk/2:0:0:1
+E: SUBSYSTEM=scsi_disk
+
+
+INTERFACES
+5-1.1:1.0 bInterfaceNumber=00 bInterfaceClass=02 bInterfaceSubClass=06 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/cdc_ether
+5-1.1:1.1 bInterfaceNumber=01 bInterfaceClass=0a bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/cdc_ether
+5-1.1:1.2 bInterfaceNumber=02 bInterfaceClass=08 bInterfaceSubClass=06 bInterfaceProtocol=50 driver=/sys/bus/usb/drivers/usb-storage
+
+MM-LIST
+    /org/freedesktop/ModemManager1/Modem/8 [Sierra Wireless, Incorporated] Sierra Wireless EM7595 Mobile Broadband Adapter
+    /org/freedesktop/ModemManager1/Modem/5 [Fibocom Wireless Inc.] FM350-GL
+    /org/freedesktop/ModemManager1/Modem/7 [1] 0
+    /org/freedesktop/ModemManager1/Modem/9 [Quectel] RM530N-GL
+    /org/freedesktop/ModemManager1/Modem/6 [QUALCOMM INCORPORATED] SIMCOM_SIM7600G-H
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/8
+  -----------------------------------
+  General  |                    path: /org/freedesktop/ModemManager1/Modem/8
+           |               device id: <redacted-identity>
+  -----------------------------------
+  Hardware |            manufacturer: Sierra Wireless, Incorporated
+           |                   model: Sierra Wireless EM7595 Mobile Broadband Adapter
+           |       firmware revision: SWIX12C_02.02.03.00
+           |          carrier config: Non_VoLTE-ATT
+           | carrier config revision: 08010311
+           |            h/w revision: EM7595
+           |               supported: gsm-umts, lte
+           |                 current: gsm-umts, lte
+           |            equipment id: <redacted>
+  -----------------------------------
+  System   |                  device: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+           |                 physdev: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+           |                 drivers: cdc_mbim, qcserial
+           |                  plugin: sierra
+           |            primary port: cdc-wdm3
+           |                   ports: cdc-wdm3 (mbim), ttyUSB11 (at), wwu1u4u3i12 (net)
+  -----------------------------------
+  Status   |                   state: [31mfailed[0m
+           |           failed reason: [31msim-missing[0m
+           |             power state: on
+  -----------------------------------
+  Modes    |               supported: allowed: 3g; preferred: none
+           |                          allowed: 4g; preferred: none
+           |                          allowed: 3g, 4g; preferred: 4g
+           |                          allowed: 3g, 4g; preferred: 3g
+           |                 current: allowed: 3g, 4g; preferred: 4g
+  -----------------------------------
+  Bands    |               supported: utran-1, utran-4, utran-6, utran-5, utran-8, utran-9, 
+           |                          utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, 
+           |                          eutran-8, eutran-12, eutran-13, eutran-14, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-32, 
+           |                          eutran-38, eutran-39, eutran-40, eutran-41, eutran-42, eutran-43, 
+           |                          eutran-48, eutran-66, eutran-71, utran-19
+           |                 current: utran-1, utran-4, utran-6, utran-5, utran-8, utran-9, 
+           |                          utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, 
+           |                          eutran-8, eutran-12, eutran-13, eutran-14, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-32, 
+           |                          eutran-38, eutran-39, eutran-40, eutran-41, eutran-42, eutran-43, 
+           |                          eutran-48, eutran-66, eutran-71, utran-19
+  -----------------------------------
+  IP       |               supported: ipv4, ipv6, ipv4v6
+  -----------------------------------
+  3GPP     |                    imei: <redacted-identity>
+  -----------------------------------
+  SIM      |          sim slot paths: slot 1: none (active)
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/8
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : Sierra Wireless, Incorporated
+modem.generic.model                             : Sierra Wireless EM7595 Mobile Broadband Adapter
+modem.generic.revision                          : SWIX12C_02.02.03.00
+modem.generic.carrier-configuration             : Non_VoLTE-ATT
+modem.generic.carrier-configuration-revision    : 08010311
+modem.generic.hardware-revision                 : EM7595
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+modem.generic.physdev                           : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : cdc_mbim
+modem.generic.drivers.value[2]                  : qcserial
+modem.generic.plugin                            : sierra
+modem.generic.primary-port                      : cdc-wdm3
+modem.generic.ports.length                      : 3
+modem.generic.ports.value[1]                    : cdc-wdm3 (mbim)
+modem.generic.ports.value[2]                    : ttyUSB11 (at)
+modem.generic.ports.value[3]                    : wwu1u4u3i12 (net)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries                    : --
+modem.generic.state                             : failed
+modem.generic.state-failed-reason               : sim-missing
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 0
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 4
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 35
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-4
+modem.generic.supported-bands.value[3]          : utran-6
+modem.generic.supported-bands.value[4]          : utran-5
+modem.generic.supported-bands.value[5]          : utran-8
+modem.generic.supported-bands.value[6]          : utran-9
+modem.generic.supported-bands.value[7]          : utran-2
+modem.generic.supported-bands.value[8]          : eutran-1
+modem.generic.supported-bands.value[9]          : eutran-2
+modem.generic.supported-bands.value[10]         : eutran-3
+modem.generic.supported-bands.value[11]         : eutran-4
+modem.generic.supported-bands.value[12]         : eutran-5
+modem.generic.supported-bands.value[13]         : eutran-7
+modem.generic.supported-bands.value[14]         : eutran-8
+modem.generic.supported-bands.value[15]         : eutran-12
+modem.generic.supported-bands.value[16]         : eutran-13
+modem.generic.supported-bands.value[17]         : eutran-14
+modem.generic.supported-bands.value[18]         : eutran-18
+modem.generic.supported-bands.value[19]         : eutran-19
+modem.generic.supported-bands.value[20]         : eutran-20
+modem.generic.supported-bands.value[21]         : eutran-25
+modem.generic.supported-bands.value[22]         : eutran-26
+modem.generic.supported-bands.value[23]         : eutran-28
+modem.generic.supported-bands.value[24]         : eutran-29
+modem.generic.supported-bands.value[25]         : eutran-32
+modem.generic.supported-bands.value[26]         : eutran-38
+modem.generic.supported-bands.value[27]         : eutran-39
+modem.generic.supported-bands.value[28]         : eutran-40
+modem.generic.supported-bands.value[29]         : eutran-41
+modem.generic.supported-bands.value[30]         : eutran-42
+modem.generic.supported-bands.value[31]         : eutran-43
+modem.generic.supported-bands.value[32]         : eutran-48
+modem.generic.supported-bands.value[33]         : eutran-66
+modem.generic.supported-bands.value[34]         : eutran-71
+modem.generic.supported-bands.value[35]         : utran-19
+modem.generic.current-bands.length              : 35
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-4
+modem.generic.current-bands.value[3]            : utran-6
+modem.generic.current-bands.value[4]            : utran-5
+modem.generic.current-bands.value[5]            : utran-8
+modem.generic.current-bands.value[6]            : utran-9
+modem.generic.current-bands.value[7]            : utran-2
+modem.generic.current-bands.value[8]            : eutran-1
+modem.generic.current-bands.value[9]            : eutran-2
+modem.generic.current-bands.value[10]           : eutran-3
+modem.generic.current-bands.value[11]           : eutran-4
+modem.generic.current-bands.value[12]           : eutran-5
+modem.generic.current-bands.value[13]           : eutran-7
+modem.generic.current-bands.value[14]           : eutran-8
+modem.generic.current-bands.value[15]           : eutran-12
+modem.generic.current-bands.value[16]           : eutran-13
+modem.generic.current-bands.value[17]           : eutran-14
+modem.generic.current-bands.value[18]           : eutran-18
+modem.generic.current-bands.value[19]           : eutran-19
+modem.generic.current-bands.value[20]           : eutran-20
+modem.generic.current-bands.value[21]           : eutran-25
+modem.generic.current-bands.value[22]           : eutran-26
+modem.generic.current-bands.value[23]           : eutran-28
+modem.generic.current-bands.value[24]           : eutran-29
+modem.generic.current-bands.value[25]           : eutran-32
+modem.generic.current-bands.value[26]           : eutran-38
+modem.generic.current-bands.value[27]           : eutran-39
+modem.generic.current-bands.value[28]           : eutran-40
+modem.generic.current-bands.value[29]           : eutran-41
+modem.generic.current-bands.value[30]           : eutran-42
+modem.generic.current-bands.value[31]           : eutran-43
+modem.generic.current-bands.value[32]           : eutran-48
+modem.generic.current-bands.value[33]           : eutran-66
+modem.generic.current-bands.value[34]           : eutran-71
+modem.generic.current-bands.value[35]           : utran-19
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : --
+modem.3gpp.operator-name                        : --
+modem.3gpp.registration-state                   : --
+modem.3gpp.packet-service-state                 : --
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : --
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : --
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : --
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 1
+modem.generic.sim-slots.value[1]                : /
+modem.generic.bearers                           : --
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/5
+  ----------------------------------
+  General  |                   path: /org/freedesktop/ModemManager1/Modem/5
+           |              device id: <redacted-identity>
+  ----------------------------------
+  Hardware |           manufacturer: Fibocom Wireless Inc.
+           |                  model: FM350-GL
+           |      firmware revision: 81600.0000.00.19.17.10
+           |              supported: gsm-umts, lte
+           |                current: gsm-umts, lte
+           |           equipment id: <redacted-identity>
+  ----------------------------------
+  System   |                 device: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+           |                physdev: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+           |                drivers: option, rndis_host
+           |                 plugin: fm350gl
+           |           primary port: ttyUSB15
+           |                  ports: enx000011121314 (net), ttyUSB12 (ignored), 
+           |                         ttyUSB13 (ignored), ttyUSB14 (ignored), ttyUSB15 (at), ttyUSB16 (ignored), 
+           |                         ttyUSB17 (ignored), ttyUSB18 (ignored)
+  ----------------------------------
+  Status   |         unlock retries: sim-pin (4), sim-puk (10)
+           |                  state: [32mconnected[0m
+           |            power state: on
+           |            access tech: lte
+           |         signal quality: 40% (recent)
+  ----------------------------------
+  Modes    |              supported: allowed: 3g; preferred: none
+           |                         allowed: 4g; preferred: none
+           |                         allowed: 5g; preferred: none
+           |                         allowed: 3g, 4g; preferred: 3g
+           |                         allowed: 3g, 4g; preferred: 4g
+           |                         allowed: 3g, 5g; preferred: 3g
+           |                         allowed: 3g, 5g; preferred: 5g
+           |                         allowed: 4g, 5g; preferred: 4g
+           |                         allowed: 4g, 5g; preferred: 5g
+           |                         allowed: 3g, 4g, 5g; preferred: 3g
+           |                         allowed: 3g, 4g, 5g; preferred: 4g
+           |                         allowed: 3g, 4g, 5g; preferred: 5g
+           |                current: allowed: 3g, 4g; preferred: 4g
+  ----------------------------------
+  IP       |              supported: ipv4, ipv6, ipv4v6
+  ----------------------------------
+  3GPP     |                   imei: <redacted-identity>
+           |            operator id: 732101
+           |          operator name: Claro
+           |           registration: home
+           |   packet service state: attached
+  ----------------------------------
+  3GPP EPS |   ue mode of operation: csps-2
+           |    initial bearer path: /org/freedesktop/ModemManager1/Bearer/4
+           | initial bearer ip type: ipv4v6
+  ----------------------------------
+  SIM      |       primary sim path: /org/freedesktop/ModemManager1/SIM/3
+  ----------------------------------
+  Bearer   |                  paths: /org/freedesktop/ModemManager1/Bearer/5
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/5
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : Fibocom Wireless Inc.
+modem.generic.model                             : FM350-GL
+modem.generic.revision                          : 81600.0000.00.19.17.10
+modem.generic.carrier-configuration             : --
+modem.generic.carrier-configuration-revision    : --
+modem.generic.hardware-revision                 : --
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+modem.generic.physdev                           : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : option
+modem.generic.drivers.value[2]                  : rndis_host
+modem.generic.plugin                            : fm350gl
+modem.generic.primary-port                      : ttyUSB15
+modem.generic.ports.length                      : 8
+modem.generic.ports.value[1]                    : enx000011121314 (net)
+modem.generic.ports.value[2]                    : ttyUSB12 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB13 (ignored)
+modem.generic.ports.value[4]                    : ttyUSB14 (ignored)
+modem.generic.ports.value[5]                    : ttyUSB15 (at)
+modem.generic.ports.value[6]                    : ttyUSB16 (ignored)
+modem.generic.ports.value[7]                    : ttyUSB17 (ignored)
+modem.generic.ports.value[8]                    : ttyUSB18 (ignored)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries.length             : 2
+modem.generic.unlock-retries.value[1]           : sim-pin (4)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.state                             : connected
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies.length        : 1
+modem.generic.access-technologies.value[1]      : lte
+modem.generic.signal-quality.value              : 40
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 5g; preferred: none
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[6]          : allowed: 3g, 5g; preferred: 3g
+modem.generic.supported-modes.value[7]          : allowed: 3g, 5g; preferred: 5g
+modem.generic.supported-modes.value[8]          : allowed: 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[9]          : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[10]         : allowed: 3g, 4g, 5g; preferred: 3g
+modem.generic.supported-modes.value[11]         : allowed: 3g, 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[12]         : allowed: 3g, 4g, 5g; preferred: 5g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands                   : --
+modem.generic.current-bands                     : --
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : 732101
+modem.3gpp.operator-name                        : Claro
+modem.3gpp.registration-state                   : home
+modem.3gpp.packet-service-state                 : attached
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-2
+modem.3gpp.eps.initial-bearer.dbus-path         : /org/freedesktop/ModemManager1/Bearer/4
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/3
+modem.generic.primary-sim-slot                  : --
+modem.generic.sim-slots                         : --
+modem.generic.bearers.length                    : 1
+modem.generic.bearers.value[1]                  : /org/freedesktop/ModemManager1/Bearer/5
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/7
+  -----------------------------------------------
+  General  |                                path: /org/freedesktop/ModemManager1/Modem/7
+           |                           device id: <redacted-identity>
+  -----------------------------------------------
+  Hardware |                        manufacturer: 1
+           |                               model: 0
+           |                   firmware revision: HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]
+           |                      carrier config: ROW_Generic_3GPP
+           |             carrier config revision: 02010801
+           |                        h/w revision: 10000
+           |                           supported: gsm-umts, lte
+           |                             current: gsm-umts, lte
+           |                        equipment id: <redacted-identity>
+  -----------------------------------------------
+  System   |                              device: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+           |                             physdev: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+           |                             drivers: qmi_wwan
+           |                              plugin: generic
+           |                        primary port: cdc-wdm1
+           |                               ports: cdc-wdm1 (qmi), wwu1u4u1i2 (net)
+  -----------------------------------------------
+  Status   |                                lock: sim-pin2
+           |                      unlock retries: sim-pin (3), sim-puk (10), sim-pin2 (3), sim-puk2 (10)
+           |                               state: searching
+           |                         power state: on
+           |                      signal quality: 81% (cached)
+  -----------------------------------------------
+  Modes    |                           supported: allowed: 3g; preferred: none
+           |                                      allowed: 4g; preferred: none
+           |                                      allowed: 3g, 4g; preferred: 4g
+           |                                      allowed: 3g, 4g; preferred: 3g
+           |                             current: allowed: 3g, 4g; preferred: 4g
+  -----------------------------------------------
+  Bands    |                           supported: utran-1, utran-5, utran-8, eutran-1, eutran-3, eutran-5, 
+           |                                      eutran-8
+           |                             current: utran-1, utran-5, utran-8, eutran-1, eutran-3, eutran-5, 
+           |                                      eutran-8
+  -----------------------------------------------
+  IP       |                           supported: ipv4, ipv6, ipv4v6
+  -----------------------------------------------
+  3GPP     |                                imei: <redacted-identity>
+           |                       enabled locks: fixed-dialing
+           |                         operator id: 732101
+           |                       operator name: Claro
+           |                        registration: searching
+           |                packet service state: detached
+           |             network rejection error: roaming-not-allowed-in-location-area
+           | network rejection access technology: lte
+  -----------------------------------------------
+  3GPP EPS |                ue mode of operation: csps-1
+           |              initial bearer ip type: ipv4v6
+  -----------------------------------------------
+  SIM      |                    primary sim path: /org/freedesktop/ModemManager1/SIM/4
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/7
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : 1
+modem.generic.model                             : 0
+modem.generic.revision                          : HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]
+modem.generic.carrier-configuration             : ROW_Generic_3GPP
+modem.generic.carrier-configuration-revision    : 02010801
+modem.generic.hardware-revision                 : 10000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+modem.generic.physdev                           : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+modem.generic.drivers.length                    : 1
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.plugin                            : generic
+modem.generic.primary-port                      : cdc-wdm1
+modem.generic.ports.length                      : 2
+modem.generic.ports.value[1]                    : cdc-wdm1 (qmi)
+modem.generic.ports.value[2]                    : wwu1u4u1i2 (net)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : sim-pin2
+modem.generic.unlock-retries.length             : 4
+modem.generic.unlock-retries.value[1]           : sim-pin (3)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.unlock-retries.value[3]           : sim-pin2 (3)
+modem.generic.unlock-retries.value[4]           : sim-puk2 (10)
+modem.generic.state                             : searching
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 81
+modem.generic.signal-quality.recent             : no
+modem.generic.supported-modes.length            : 4
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 7
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-5
+modem.generic.supported-bands.value[3]          : utran-8
+modem.generic.supported-bands.value[4]          : eutran-1
+modem.generic.supported-bands.value[5]          : eutran-3
+modem.generic.supported-bands.value[6]          : eutran-5
+modem.generic.supported-bands.value[7]          : eutran-8
+modem.generic.current-bands.length              : 7
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-5
+modem.generic.current-bands.value[3]            : utran-8
+modem.generic.current-bands.value[4]            : eutran-1
+modem.generic.current-bands.value[5]            : eutran-3
+modem.generic.current-bands.value[6]            : eutran-5
+modem.generic.current-bands.value[7]            : eutran-8
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks.length                 : 1
+modem.3gpp.enabled-locks.value[1]               : fixed-dialing
+modem.3gpp.operator-code                        : 732101
+modem.3gpp.operator-name                        : Claro
+modem.3gpp.registration-state                   : searching
+modem.3gpp.packet-service-state                 : detached
+modem.3gpp.network-rejection-error              : roaming-not-allowed-in-location-area
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : lte
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-1
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : 
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/4
+modem.generic.primary-sim-slot                  : --
+modem.generic.sim-slots                         : --
+modem.generic.bearers                           : --
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/9
+  -----------------------------------
+  General  |                    path: /org/freedesktop/ModemManager1/Modem/9
+           |               device id: <redacted-identity>
+  -----------------------------------
+  Hardware |            manufacturer: Quectel
+           |                   model: RM530N-GL
+           |       firmware revision: RM530NGLAAR05A01M4G
+           |          carrier config: ROW_Commercial
+           | carrier config revision: 0A010809
+           |            h/w revision: 20000
+           |               supported: gsm-umts, lte, 5gnr
+           |                 current: gsm-umts, lte, 5gnr
+           |            equipment id: <redacted-identity>
+  -----------------------------------
+  System   |                  device: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+           |                 physdev: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+           |                 drivers: qmi_wwan, option
+           |                  plugin: quectel
+           |            primary port: cdc-wdm2
+           |                   ports: cdc-wdm2 (qmi), ttyUSB5 (ignored), ttyUSB6 (gps), 
+           |                          ttyUSB7 (at), ttyUSB8 (at), wwu1u4u4i4 (net)
+  -----------------------------------
+  Numbers  |                     own: <redacted-msisdn>
+  -----------------------------------
+  Status   |                    lock: sim-pin2
+           |          unlock retries: sim-pin (3), sim-puk (10), sim-pin2 (3), sim-puk2 (10)
+           |                   state: registered
+           |             power state: on
+           |             access tech: lte
+           |          signal quality: 81% (recent)
+  -----------------------------------
+  Modes    |               supported: allowed: 3g; preferred: none
+           |                          allowed: 4g; preferred: none
+           |                          allowed: 3g, 4g; preferred: 4g
+           |                          allowed: 3g, 4g; preferred: 3g
+           |                          allowed: 5g; preferred: none
+           |                          allowed: 4g, 5g; preferred: 5g
+           |                          allowed: 4g, 5g; preferred: 4g
+           |                          allowed: 3g, 5g; preferred: 5g
+           |                          allowed: 3g, 5g; preferred: 3g
+           |                          allowed: 3g, 4g, 5g; preferred: 5g
+           |                          allowed: 3g, 4g, 5g; preferred: 4g
+           |                          allowed: 3g, 4g, 5g; preferred: 3g
+           |                 current: allowed: 3g, 4g; preferred: 4g
+  -----------------------------------
+  Bands    |               supported: utran-1, utran-4, utran-6, utran-5, utran-8, utran-2, 
+           |                          eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, eutran-8, 
+           |                          eutran-12, eutran-13, eutran-14, eutran-17, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-30, 
+           |                          eutran-32, eutran-34, eutran-38, eutran-39, eutran-40, eutran-41, 
+           |                          eutran-42, eutran-43, eutran-46, eutran-48, eutran-66, eutran-71, 
+           |                          utran-19, ngran-1, ngran-2, ngran-3, ngran-5, ngran-7, ngran-8, 
+           |                          ngran-12, ngran-13, ngran-14, ngran-18, ngran-20, ngran-25, ngran-26, 
+           |                          ngran-28, ngran-29, ngran-30, ngran-38, ngran-40, ngran-41, ngran-48, 
+           |                          ngran-66, ngran-70, ngran-71, ngran-75, ngran-76, ngran-77, ngran-78, 
+           |                          ngran-79, ngran-257, ngran-258, (null), ngran-260, ngran-261
+           |                 current: utran-1, utran-4, utran-5, utran-8, utran-2, eutran-1, 
+           |                          eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, eutran-8, 
+           |                          eutran-12, eutran-13, eutran-14, eutran-17, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-30, 
+           |                          eutran-32, eutran-34, eutran-38, eutran-39, eutran-40, eutran-41, 
+           |                          eutran-42, eutran-43, eutran-46, eutran-48, eutran-66, eutran-71, 
+           |                          utran-19, ngran-1, ngran-2, ngran-3, ngran-5, ngran-7, ngran-8, 
+           |                          ngran-12, ngran-13, ngran-14, ngran-18, ngran-20, ngran-25, ngran-26, 
+           |                          ngran-28, ngran-29, ngran-30, ngran-38, ngran-40, ngran-41, ngran-48, 
+           |                          ngran-66, ngran-70, ngran-71, ngran-75, ngran-76, ngran-77, ngran-78, 
+           |                          ngran-79
+  -----------------------------------
+  IP       |               supported: ipv4, ipv6, ipv4v6
+  -----------------------------------
+  3GPP     |                    imei: <redacted-identity>
+           |           enabled locks: fixed-dialing
+           |             operator id: 732123
+           |           operator name: Movistar
+           |            registration: home
+           |    packet service state: attached
+  -----------------------------------
+  3GPP EPS |    ue mode of operation: csps-2
+           |     initial bearer path: /org/freedesktop/ModemManager1/Bearer/6
+           |  initial bearer ip type: ipv4v6
+  -----------------------------------
+  SIM      |        primary sim path: /org/freedesktop/ModemManager1/SIM/5
+           |          sim slot paths: slot 1: /org/freedesktop/ModemManager1/SIM/5 (active)
+           |                          slot 2: none
+  -----------------------------------
+  Bearer   |                   paths: /org/freedesktop/ModemManager1/Bearer/7
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/9
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : Quectel
+modem.generic.model                             : RM530N-GL
+modem.generic.revision                          : RM530NGLAAR05A01M4G
+modem.generic.carrier-configuration             : ROW_Commercial
+modem.generic.carrier-configuration-revision    : 0A010809
+modem.generic.hardware-revision                 : 20000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte, 5gnr
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte, 5gnr
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+modem.generic.physdev                           : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.drivers.value[2]                  : option
+modem.generic.plugin                            : quectel
+modem.generic.primary-port                      : cdc-wdm2
+modem.generic.ports.length                      : 6
+modem.generic.ports.value[1]                    : cdc-wdm2 (qmi)
+modem.generic.ports.value[2]                    : ttyUSB5 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB6 (gps)
+modem.generic.ports.value[4]                    : ttyUSB7 (at)
+modem.generic.ports.value[5]                    : ttyUSB8 (at)
+modem.generic.ports.value[6]                    : wwu1u4u4i4 (net)
+modem.generic.own-numbers.length                : <redacted-identity>
+modem.generic.own-numbers.value[1]              : <redacted-identity>
+modem.generic.unlock-required                   : sim-pin2
+modem.generic.unlock-retries.length             : 4
+modem.generic.unlock-retries.value[1]           : sim-pin (3)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.unlock-retries.value[3]           : sim-pin2 (3)
+modem.generic.unlock-retries.value[4]           : sim-puk2 (10)
+modem.generic.state                             : registered
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies.length        : 1
+modem.generic.access-technologies.value[1]      : lte
+modem.generic.signal-quality.value              : 81
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 5g; preferred: none
+modem.generic.supported-modes.value[6]          : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[7]          : allowed: 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[8]          : allowed: 3g, 5g; preferred: 5g
+modem.generic.supported-modes.value[9]          : allowed: 3g, 5g; preferred: 3g
+modem.generic.supported-modes.value[10]         : allowed: 3g, 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[11]         : allowed: 3g, 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[12]         : allowed: 3g, 4g, 5g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 71
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-4
+modem.generic.supported-bands.value[3]          : utran-6
+modem.generic.supported-bands.value[4]          : utran-5
+modem.generic.supported-bands.value[5]          : utran-8
+modem.generic.supported-bands.value[6]          : utran-2
+modem.generic.supported-bands.value[7]          : eutran-1
+modem.generic.supported-bands.value[8]          : eutran-2
+modem.generic.supported-bands.value[9]          : eutran-3
+modem.generic.supported-bands.value[10]         : eutran-4
+modem.generic.supported-bands.value[11]         : eutran-5
+modem.generic.supported-bands.value[12]         : eutran-7
+modem.generic.supported-bands.value[13]         : eutran-8
+modem.generic.supported-bands.value[14]         : eutran-12
+modem.generic.supported-bands.value[15]         : eutran-13
+modem.generic.supported-bands.value[16]         : eutran-14
+modem.generic.supported-bands.value[17]         : eutran-17
+modem.generic.supported-bands.value[18]         : eutran-18
+modem.generic.supported-bands.value[19]         : eutran-19
+modem.generic.supported-bands.value[20]         : eutran-20
+modem.generic.supported-bands.value[21]         : eutran-25
+modem.generic.supported-bands.value[22]         : eutran-26
+modem.generic.supported-bands.value[23]         : eutran-28
+modem.generic.supported-bands.value[24]         : eutran-29
+modem.generic.supported-bands.value[25]         : eutran-30
+modem.generic.supported-bands.value[26]         : eutran-32
+modem.generic.supported-bands.value[27]         : eutran-34
+modem.generic.supported-bands.value[28]         : eutran-38
+modem.generic.supported-bands.value[29]         : eutran-39
+modem.generic.supported-bands.value[30]         : eutran-40
+modem.generic.supported-bands.value[31]         : eutran-41
+modem.generic.supported-bands.value[32]         : eutran-42
+modem.generic.supported-bands.value[33]         : eutran-43
+modem.generic.supported-bands.value[34]         : eutran-46
+modem.generic.supported-bands.value[35]         : eutran-48
+modem.generic.supported-bands.value[36]         : eutran-66
+modem.generic.supported-bands.value[37]         : eutran-71
+modem.generic.supported-bands.value[38]         : utran-19
+modem.generic.supported-bands.value[39]         : ngran-1
+modem.generic.supported-bands.value[40]         : ngran-2
+modem.generic.supported-bands.value[41]         : ngran-3
+modem.generic.supported-bands.value[42]         : ngran-5
+modem.generic.supported-bands.value[43]         : ngran-7
+modem.generic.supported-bands.value[44]         : ngran-8
+modem.generic.supported-bands.value[45]         : ngran-12
+modem.generic.supported-bands.value[46]         : ngran-13
+modem.generic.supported-bands.value[47]         : ngran-14
+modem.generic.supported-bands.value[48]         : ngran-18
+modem.generic.supported-bands.value[49]         : ngran-20
+modem.generic.supported-bands.value[50]         : ngran-25
+modem.generic.supported-bands.value[51]         : ngran-26
+modem.generic.supported-bands.value[52]         : ngran-28
+modem.generic.supported-bands.value[53]         : ngran-29
+modem.generic.supported-bands.value[54]         : ngran-30
+modem.generic.supported-bands.value[55]         : ngran-38
+modem.generic.supported-bands.value[56]         : ngran-40
+modem.generic.supported-bands.value[57]         : ngran-41
+modem.generic.supported-bands.value[58]         : ngran-48
+modem.generic.supported-bands.value[59]         : ngran-66
+modem.generic.supported-bands.value[60]         : ngran-70
+modem.generic.supported-bands.value[61]         : ngran-71
+modem.generic.supported-bands.value[62]         : ngran-75
+modem.generic.supported-bands.value[63]         : ngran-76
+modem.generic.supported-bands.value[64]         : ngran-77
+modem.generic.supported-bands.value[65]         : ngran-78
+modem.generic.supported-bands.value[66]         : ngran-79
+modem.generic.supported-bands.value[67]         : ngran-257
+modem.generic.supported-bands.value[68]         : ngran-258
+modem.generic.supported-bands.value[69]         : (null)
+modem.generic.supported-bands.value[70]         : ngran-260
+modem.generic.supported-bands.value[71]         : ngran-261
+modem.generic.current-bands.length              : 65
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-4
+modem.generic.current-bands.value[3]            : utran-5
+modem.generic.current-bands.value[4]            : utran-8
+modem.generic.current-bands.value[5]            : utran-2
+modem.generic.current-bands.value[6]            : eutran-1
+modem.generic.current-bands.value[7]            : eutran-2
+modem.generic.current-bands.value[8]            : eutran-3
+modem.generic.current-bands.value[9]            : eutran-4
+modem.generic.current-bands.value[10]           : eutran-5
+modem.generic.current-bands.value[11]           : eutran-7
+modem.generic.current-bands.value[12]           : eutran-8
+modem.generic.current-bands.value[13]           : eutran-12
+modem.generic.current-bands.value[14]           : eutran-13
+modem.generic.current-bands.value[15]           : eutran-14
+modem.generic.current-bands.value[16]           : eutran-17
+modem.generic.current-bands.value[17]           : eutran-18
+modem.generic.current-bands.value[18]           : eutran-19
+modem.generic.current-bands.value[19]           : eutran-20
+modem.generic.current-bands.value[20]           : eutran-25
+modem.generic.current-bands.value[21]           : eutran-26
+modem.generic.current-bands.value[22]           : eutran-28
+modem.generic.current-bands.value[23]           : eutran-29
+modem.generic.current-bands.value[24]           : eutran-30
+modem.generic.current-bands.value[25]           : eutran-32
+modem.generic.current-bands.value[26]           : eutran-34
+modem.generic.current-bands.value[27]           : eutran-38
+modem.generic.current-bands.value[28]           : eutran-39
+modem.generic.current-bands.value[29]           : eutran-40
+modem.generic.current-bands.value[30]           : eutran-41
+modem.generic.current-bands.value[31]           : eutran-42
+modem.generic.current-bands.value[32]           : eutran-43
+modem.generic.current-bands.value[33]           : eutran-46
+modem.generic.current-bands.value[34]           : eutran-48
+modem.generic.current-bands.value[35]           : eutran-66
+modem.generic.current-bands.value[36]           : eutran-71
+modem.generic.current-bands.value[37]           : utran-19
+modem.generic.current-bands.value[38]           : ngran-1
+modem.generic.current-bands.value[39]           : ngran-2
+modem.generic.current-bands.value[40]           : ngran-3
+modem.generic.current-bands.value[41]           : ngran-5
+modem.generic.current-bands.value[42]           : ngran-7
+modem.generic.current-bands.value[43]           : ngran-8
+modem.generic.current-bands.value[44]           : ngran-12
+modem.generic.current-bands.value[45]           : ngran-13
+modem.generic.current-bands.value[46]           : ngran-14
+modem.generic.current-bands.value[47]           : ngran-18
+modem.generic.current-bands.value[48]           : ngran-20
+modem.generic.current-bands.value[49]           : ngran-25
+modem.generic.current-bands.value[50]           : ngran-26
+modem.generic.current-bands.value[51]           : ngran-28
+modem.generic.current-bands.value[52]           : ngran-29
+modem.generic.current-bands.value[53]           : ngran-30
+modem.generic.current-bands.value[54]           : ngran-38
+modem.generic.current-bands.value[55]           : ngran-40
+modem.generic.current-bands.value[56]           : ngran-41
+modem.generic.current-bands.value[57]           : ngran-48
+modem.generic.current-bands.value[58]           : ngran-66
+modem.generic.current-bands.value[59]           : ngran-70
+modem.generic.current-bands.value[60]           : ngran-71
+modem.generic.current-bands.value[61]           : ngran-75
+modem.generic.current-bands.value[62]           : ngran-76
+modem.generic.current-bands.value[63]           : ngran-77
+modem.generic.current-bands.value[64]           : ngran-78
+modem.generic.current-bands.value[65]           : ngran-79
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks.length                 : 1
+modem.3gpp.enabled-locks.value[1]               : fixed-dialing
+modem.3gpp.operator-code                        : 732123
+modem.3gpp.operator-name                        : Movistar
+modem.3gpp.registration-state                   : home
+modem.3gpp.packet-service-state                 : attached
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-2
+modem.3gpp.eps.initial-bearer.dbus-path         : /org/freedesktop/ModemManager1/Bearer/6
+modem.3gpp.eps.initial-bearer.settings.apn      : 
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/5
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 2
+modem.generic.sim-slots.value[1]                : /org/freedesktop/ModemManager1/SIM/5
+modem.generic.sim-slots.value[2]                : /
+modem.generic.bearers.length                    : 1
+modem.generic.bearers.value[1]                  : /org/freedesktop/ModemManager1/Bearer/7
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/6
+  -----------------------------------
+  General  |                    path: /org/freedesktop/ModemManager1/Modem/6
+           |               device id: <redacted-identity>
+  -----------------------------------
+  Hardware |            manufacturer: QUALCOMM INCORPORATED
+           |                   model: SIMCOM_SIM7600G-H
+           |       firmware revision: LE20B04SIM7600G22
+           |          carrier config: Volte_OpenMkt-Commercial-CMCC
+           | carrier config revision: 05012075
+           |            h/w revision: 10000
+           |               supported: gsm-umts, lte
+           |                 current: gsm-umts, lte
+           |            equipment id: <redacted-identity>
+  -----------------------------------
+  System   |                  device: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+           |                 physdev: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+           |                 drivers: qmi_wwan, option
+           |                  plugin: simtech
+           |            primary port: cdc-wdm0
+           |                   ports: cdc-wdm0 (qmi), ttyUSB0 (ignored), ttyUSB1 (gps), 
+           |                          ttyUSB2 (at), ttyUSB3 (at), ttyUSB4 (audio), wwu1u3u4i5 (net)
+  -----------------------------------
+  Status   |                   state: [31mfailed[0m
+           |           failed reason: [31msim-missing[0m
+           |             power state: on
+  -----------------------------------
+  Modes    |               supported: allowed: 2g; preferred: none
+           |                          allowed: 3g; preferred: none
+           |                          allowed: 4g; preferred: none
+           |                          allowed: 2g, 3g; preferred: 3g
+           |                          allowed: 2g, 3g; preferred: 2g
+           |                          allowed: 2g, 4g; preferred: 4g
+           |                          allowed: 2g, 4g; preferred: 2g
+           |                          allowed: 3g, 4g; preferred: 4g
+           |                          allowed: 3g, 4g; preferred: 3g
+           |                          allowed: 2g, 3g, 4g; preferred: 4g
+           |                          allowed: 2g, 3g, 4g; preferred: 3g
+           |                          allowed: 2g, 3g, 4g; preferred: 2g
+           |                 current: allowed: 2g, 3g, 4g; preferred: 4g
+  -----------------------------------
+  Bands    |               supported: egsm, dcs, pcs, g850, utran-1, utran-4, utran-6, utran-5, 
+           |                          utran-8, utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, 
+           |                          eutran-7, eutran-8, eutran-12, eutran-13, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-34, eutran-38, 
+           |                          eutran-39, eutran-40, eutran-41, eutran-66, utran-19
+           |                 current: egsm, dcs, pcs, g850, utran-1, utran-4, utran-6, utran-5, 
+           |                          utran-8, utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, 
+           |                          eutran-7, eutran-8, eutran-12, eutran-13, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-34, eutran-38, 
+           |                          eutran-39, eutran-40, eutran-41, eutran-66, utran-19
+  -----------------------------------
+  IP       |               supported: ipv4, ipv6, ipv4v6
+  -----------------------------------
+  3GPP     |                    imei: <redacted-identity>
+  -----------------------------------
+  SIM      |          sim slot paths: slot 1: none (active)
+           |                          slot 2: none
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/6
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : QUALCOMM INCORPORATED
+modem.generic.model                             : SIMCOM_SIM7600G-H
+modem.generic.revision                          : LE20B04SIM7600G22
+modem.generic.carrier-configuration             : Volte_OpenMkt-Commercial-CMCC
+modem.generic.carrier-configuration-revision    : 05012075
+modem.generic.hardware-revision                 : 10000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+modem.generic.physdev                           : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.drivers.value[2]                  : option
+modem.generic.plugin                            : simtech
+modem.generic.primary-port                      : cdc-wdm0
+modem.generic.ports.length                      : 7
+modem.generic.ports.value[1]                    : cdc-wdm0 (qmi)
+modem.generic.ports.value[2]                    : ttyUSB0 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB1 (gps)
+modem.generic.ports.value[4]                    : ttyUSB2 (at)
+modem.generic.ports.value[5]                    : ttyUSB3 (at)
+modem.generic.ports.value[6]                    : ttyUSB4 (audio)
+modem.generic.ports.value[7]                    : wwu1u3u4i5 (net)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries                    : --
+modem.generic.state                             : failed
+modem.generic.state-failed-reason               : sim-missing
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 0
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 2g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[4]          : allowed: 2g, 3g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 2g, 3g; preferred: 2g
+modem.generic.supported-modes.value[6]          : allowed: 2g, 4g; preferred: 4g
+modem.generic.supported-modes.value[7]          : allowed: 2g, 4g; preferred: 2g
+modem.generic.supported-modes.value[8]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[9]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[10]         : allowed: 2g, 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[11]         : allowed: 2g, 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[12]         : allowed: 2g, 3g, 4g; preferred: 2g
+modem.generic.current-modes                     : allowed: 2g, 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 32
+modem.generic.supported-bands.value[1]          : egsm
+modem.generic.supported-bands.value[2]          : dcs
+modem.generic.supported-bands.value[3]          : pcs
+modem.generic.supported-bands.value[4]          : g850
+modem.generic.supported-bands.value[5]          : utran-1
+modem.generic.supported-bands.value[6]          : utran-4
+modem.generic.supported-bands.value[7]          : utran-6
+modem.generic.supported-bands.value[8]          : utran-5
+modem.generic.supported-bands.value[9]          : utran-8
+modem.generic.supported-bands.value[10]         : utran-2
+modem.generic.supported-bands.value[11]         : eutran-1
+modem.generic.supported-bands.value[12]         : eutran-2
+modem.generic.supported-bands.value[13]         : eutran-3
+modem.generic.supported-bands.value[14]         : eutran-4
+modem.generic.supported-bands.value[15]         : eutran-5
+modem.generic.supported-bands.value[16]         : eutran-7
+modem.generic.supported-bands.value[17]         : eutran-8
+modem.generic.supported-bands.value[18]         : eutran-12
+modem.generic.supported-bands.value[19]         : eutran-13
+modem.generic.supported-bands.value[20]         : eutran-18
+modem.generic.supported-bands.value[21]         : eutran-19
+modem.generic.supported-bands.value[22]         : eutran-20
+modem.generic.supported-bands.value[23]         : eutran-25
+modem.generic.supported-bands.value[24]         : eutran-26
+modem.generic.supported-bands.value[25]         : eutran-28
+modem.generic.supported-bands.value[26]         : eutran-34
+modem.generic.supported-bands.value[27]         : eutran-38
+modem.generic.supported-bands.value[28]         : eutran-39
+modem.generic.supported-bands.value[29]         : eutran-40
+modem.generic.supported-bands.value[30]         : eutran-41
+modem.generic.supported-bands.value[31]         : eutran-66
+modem.generic.supported-bands.value[32]         : utran-19
+modem.generic.current-bands.length              : 32
+modem.generic.current-bands.value[1]            : egsm
+modem.generic.current-bands.value[2]            : dcs
+modem.generic.current-bands.value[3]            : pcs
+modem.generic.current-bands.value[4]            : g850
+modem.generic.current-bands.value[5]            : utran-1
+modem.generic.current-bands.value[6]            : utran-4
+modem.generic.current-bands.value[7]            : utran-6
+modem.generic.current-bands.value[8]            : utran-5
+modem.generic.current-bands.value[9]            : utran-8
+modem.generic.current-bands.value[10]           : utran-2
+modem.generic.current-bands.value[11]           : eutran-1
+modem.generic.current-bands.value[12]           : eutran-2
+modem.generic.current-bands.value[13]           : eutran-3
+modem.generic.current-bands.value[14]           : eutran-4
+modem.generic.current-bands.value[15]           : eutran-5
+modem.generic.current-bands.value[16]           : eutran-7
+modem.generic.current-bands.value[17]           : eutran-8
+modem.generic.current-bands.value[18]           : eutran-12
+modem.generic.current-bands.value[19]           : eutran-13
+modem.generic.current-bands.value[20]           : eutran-18
+modem.generic.current-bands.value[21]           : eutran-19
+modem.generic.current-bands.value[22]           : eutran-20
+modem.generic.current-bands.value[23]           : eutran-25
+modem.generic.current-bands.value[24]           : eutran-26
+modem.generic.current-bands.value[25]           : eutran-28
+modem.generic.current-bands.value[26]           : eutran-34
+modem.generic.current-bands.value[27]           : eutran-38
+modem.generic.current-bands.value[28]           : eutran-39
+modem.generic.current-bands.value[29]           : eutran-40
+modem.generic.current-bands.value[30]           : eutran-41
+modem.generic.current-bands.value[31]           : eutran-66
+modem.generic.current-bands.value[32]           : utran-19
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : --
+modem.3gpp.operator-name                        : --
+modem.3gpp.registration-state                   : --
+modem.3gpp.packet-service-state                 : --
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : --
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : --
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : --
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 2
+modem.generic.sim-slots.value[1]                : /
+modem.generic.sim-slots.value[2]                : /
+modem.generic.bearers                           : --
+
+NM-DEVICE
+DEVICE           TYPE      STATE                   CONNECTION         
+eth0             ethernet  connected               Wired connection 1 
+enx344b50000000  ethernet  connected               Wired connection 4 
+enx0c5b8f279a64  ethernet  connected               Wired connection 2 
+eth1             ethernet  connected               Wired connection 3 
+ttyUSB15         gsm       connected               gsm-2              
+cdc-wdm1         gsm       connecting (prepare)    gsm                
+lo               loopback  connected (externally)  lo                 
+cdc-wdm2         gsm       disconnected            --                 
+wlan0            wifi      disconnected            --                 
+p2p-dev-wlan0    wifi-p2p  disconnected            --                 
+cdc-wdm0         gsm       unavailable             --                 
+cdc-wdm3         gsm       unavailable             --                 
+clap-wlan0       wifi      unavailable             --                 
+
+TARGET-NETDEV
+IFNAME=enx344b50000000
+DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.0/net/enx344b50000000
+INTERFACE=enx344b50000000
+IFINDEX=21
+SUBSYSTEM=net
+USEC_INITIALIZED=25835958048
+ID_NET_DRIVER=cdc_ether
+ID_BUS=usb
+ID_MODEL=ZTE_Mobile_Boardband
+ID_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+ID_MODEL_ID=1405
+ID_SERIAL=<redacted-serial>
+ID_SERIAL_SHORT=<redacted-serial>
+ID_VENDOR=ZTE_Incorporated
+ID_VENDOR_ENC=ZTE\x2cIncorporated
+ID_VENDOR_ID=19d2
+ID_REVISION=5886
+ID_TYPE=generic
+ID_USB_MODEL=ZTE_Mobile_Boardband
+ID_USB_MODEL_ENC=ZTE\x20Mobile\x20Boardband
+ID_USB_MODEL_ID=1405
+ID_USB_SERIAL=<redacted-serial>
+ID_USB_SERIAL_SHORT=<redacted-serial>
+ID_USB_VENDOR=ZTE_Incorporated
+ID_USB_VENDOR_ENC=ZTE\x2cIncorporated
+ID_USB_VENDOR_ID=19d2
+ID_USB_REVISION=5886
+ID_USB_TYPE=generic
+ID_USB_INTERFACES=:020600:0a0000:080650:
+ID_USB_INTERFACE_NUM=00
+ID_USB_DRIVER=cdc_ether
+ID_VENDOR_FROM_DATABASE=ZTE WCDMA Technologies MSM
+ID_NET_NAMING_SCHEME=v257
+ID_NET_NAME_MAC=enx344b50000000
+ID_OUI_FROM_DATABASE=zte corporation
+ID_NET_NAME_PATH=enu1u1
+ID_MM_CANDIDATE=1
+ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.1:1.0
+ID_PATH=platform-fc880000.usb-usb-0:1.1:1.0
+ID_PATH_TAG=platform-fc880000_usb-usb-0_1_1_1_0
+ID_NET_LINK_FILE=/usr/lib/systemd/network/73-usb-net-by-mac.link
+ID_NET_NAME=enx344b50000000
+SYSTEMD_ALIAS=/sys/subsystem/net/devices/enx344b50000000
+TAGS=:systemd:
+CURRENT_TAGS=:systemd:
+GENERAL.DEVICE:                         enx344b50000000
+GENERAL.TYPE:                           ethernet
+GENERAL.NM-TYPE:                        NMDeviceEthernet
+GENERAL.DBUS-PATH:                      /org/freedesktop/NetworkManager/Devices/24
+GENERAL.VENDOR:                         ZTE WCDMA Technologies MSM
+GENERAL.PRODUCT:                        ZTE Mobile Boardband
+GENERAL.DRIVER:                         cdc_ether
+GENERAL.DRIVER-VERSION:                 7.2.0-ceralive-rk3588
+GENERAL.FIRMWARE-VERSION:               ZTE CDC Ethernet Device
+GENERAL.HWADDR:                         34:4B:50:00:00:00
+GENERAL.MTU:                            1500
+GENERAL.STATE:                          100 (connected)
+GENERAL.REASON:                         0 (No reason given)
+GENERAL.IP4-CONNECTIVITY:               4 (full)
+GENERAL.IP6-CONNECTIVITY:               4 (full)
+GENERAL.UDI:                            /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.1/5-1.1:1.0/net/enx344b50000000
+GENERAL.PATH:                           platform-fc880000.usb-usb-0:1.1:1.0
+GENERAL.IP-IFACE:                       enx344b50000000
+GENERAL.IS-SOFTWARE:                    no
+GENERAL.NM-MANAGED:                     yes
+GENERAL.AUTOCONNECT:                    yes
+GENERAL.FIRMWARE-MISSING:               no
+GENERAL.NM-PLUGIN-MISSING:              no
+GENERAL.PHYS-PORT-ID:                   --
+GENERAL.CONNECTION:                     Wired connection 4
+GENERAL.CON-UUID:                       25d8c058-dce1-3c63-87bf-66c0f8dc11f8
+GENERAL.CON-PATH:                       /org/freedesktop/NetworkManager/ActiveConnection/1190
+GENERAL.METERED:                        no (guessed)
+IP4.ADDRESS[1]:                         192.168.0.169/24
+IP4.GATEWAY:                            192.168.0.1
+IP4.ROUTE[1]:                           dst = 192.168.0.0/24, nh = 0.0.0.0, mt = 106
+IP4.ROUTE[2]:                           dst = 0.0.0.0/0, nh = 192.168.0.1, mt = 106
+IP4.DNS[1]:                             192.168.0.1
+IP6.ADDRESS[1]:                         2803:1800:4000:24de:4459:3920:fbce:f0cd/64
+IP6.ADDRESS[2]:                         fe80::f183:c252:da25:a7ef/64
+IP6.GATEWAY:                            fe80::5c7d:ae94:4646:1
+IP6.ROUTE[1]:                           dst = fe80::/64, nh = ::, mt = 1024
+IP6.ROUTE[2]:                           dst = 2803:1800:4000:24de::/64, nh = ::, mt = 106
+IP6.ROUTE[3]:                           dst = ::/0, nh = fe80::5c7d:ae94:4646:1, mt = 106
+IP6.DNS[1]:                             fe80::5c7d:ae94:4646:1
+
+IP-ADDR
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+eth0             UP             169.254.149.160/16 <redacted>/24 fd5d:843d:c852::cd7/128 fd5d:843d:c852:0:db60:2567:8d60:b76e/64 fe80::94ed:a115:30ef:70d1/64 
+wlan0            DOWN           
+clap-wlan0       DOWN           
+enx000011121314  UNKNOWN        10.18.254.26/32 
+enx0c5b8f279a64  UP             192.168.8.100/24 fe80::5a99:ab38:c3ea:d487/64 
+eth1             UP             192.168.8.100/24 fe80::a048:4403:d5eb:55fe/64 
+wwu1u3u4i5       DOWN           
+wwu1u4u1i2       DOWN           
+wwu1u4u3i12      DOWN           
+wwu1u4u4i4       DOWN           
+enx344b50000000  UP             192.168.0.169/24 2803:1800:4000:24de:4459:3920:fbce:f0cd/64 fe80::f183:c252:da25:a7ef/64 
+
+IP-ROUTE
+default via 192.168.78.1 dev eth0 proto dhcp src <redacted> metric 100 
+default via 192.168.8.1 dev enx0c5b8f279a64 proto dhcp src 192.168.8.100 metric 104 
+default via 192.168.8.1 dev eth1 proto dhcp src 192.168.8.100 metric 105 
+default via 192.168.0.1 dev enx344b50000000 proto dhcp src 192.168.0.169 metric 106 
+default via 190.157.8.46 dev enx000011121314 proto static metric 700 
+169.254.0.0/16 dev eth0 proto kernel scope link src 169.254.149.160 metric 100 
+190.157.8.46 dev enx000011121314 proto static scope link metric 700 
+192.168.0.0/24 dev enx344b50000000 proto kernel scope link src 192.168.0.169 metric 106 
+192.168.8.0/24 dev enx0c5b8f279a64 proto kernel scope link src 192.168.8.100 metric 104 
+192.168.8.0/24 dev eth1 proto kernel scope link src 192.168.8.100 metric 105 
+192.168.78.0/24 dev eth0 proto kernel scope link src <redacted> metric 100 
+224.0.0.0/4 dev eth0 proto static scope link metric 100 
+
+PROBE
+ModemManager: version=1.24.2 objects=5
+modems: 5
+
+modem /org/freedesktop/ModemManager1/Modem/8
+  path=/org/freedesktop/ModemManager1/Modem/8 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+  presence=present health=live mm=failed radio=on reg=unknown(-) nm=unavailable rev=1
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=SWIX12C_02.02.03.00 simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+modem /org/freedesktop/ModemManager1/Modem/5
+  path=/org/freedesktop/ModemManager1/Modem/5 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+  presence=present health=live mm=connected radio=on reg=unknown(-) nm=unavailable rev=2
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=81600.0000.00.19.17.10 simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+modem /org/freedesktop/ModemManager1/Modem/7
+  path=/org/freedesktop/ModemManager1/Modem/7 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+  presence=present health=live mm=searching radio=on reg=unknown(-) nm=unavailable rev=3
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00] simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+modem /org/freedesktop/ModemManager1/Modem/9
+  path=/org/freedesktop/ModemManager1/Modem/9 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+  presence=present health=live mm=registered radio=on reg=unknown(-) nm=unavailable rev=4
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=RM530NGLAAR05A01M4G simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+modem /org/freedesktop/ModemManager1/Modem/6
+  path=/org/freedesktop/ModemManager1/Modem/6 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+  presence=present health=live mm=failed radio=on reg=unknown(-) nm=unavailable rev=5
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=LE20B04SIM7600G22 simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+usb-devices: 24
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0003 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1a40:0101 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  13d3:3572 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0001 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:5411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  19d2:1405 class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable
+  0e8d:7127 class=mm-managed mode=rndis reason=recognized AT control interface — ModemManager-manageable
+  0bda:5411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable
+  12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable
+  1e0e:9001 class=mm-managed mode=qmi reason=recognized AT control interface — ModemManager-manageable
+  0bda:5411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  05c6:9091 class=mm-managed mode=qmi reason=recognized QMI control interface — ModemManager-manageable
+  1d6b:0001 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0003 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:0411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:0411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:0411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1199:c081 class=mm-managed mode=mbim reason=recognized AT control interface — ModemManager-manageable
+  2c7c:0801 class=mm-managed mode=qmi reason=recognized AT control interface — ModemManager-manageable
+
+PROBE OK: external-auth, objects=5
+PROBE_EXIT=0
+2026-09-08T14:42:18Z

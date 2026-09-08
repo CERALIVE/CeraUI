@@ -1,0 +1,110 @@
+{
+	"usbPath": "5-1.3.1",
+	"vidPidBeforeCycle": "12d1:14dc",
+	"observedClassifications": [
+		"12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port \u2014 router-ethernet class, not MM-manageable",
+		"12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port \u2014 router-ethernet class, not MM-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:43:55.309Z",
+	"wirePhase": "huawei-e3372-a",
+	"wireRowsMatchedByIdPath": {
+		"1001": {
+			"ifname": "enx0c5b8f279a64",
+			"name": "Huawei E3372",
+			"model": "Huawei E3372",
+			"manufacturer": "Huawei",
+			"network_type": {
+				"supported": [],
+				"active": null
+			},
+			"device_class": "router-ethernet",
+			"availability_reason": "router_direct",
+			"router_admin": {
+				"admin_url": "http://192.168.8.1",
+				"reachable": true,
+				"sim": "present",
+				"connection": "connected",
+				"signal": {
+					"provenance": "hilink-admin-api",
+					"freshness": "live",
+					"bars": {
+						"state": "known",
+						"value": 4
+					},
+					"max_bars": {
+						"state": "known",
+						"value": 5
+					},
+					"dbm": {
+						"state": "known",
+						"value": -69
+					},
+					"rsrp": {
+						"state": "known",
+						"value": -101
+					},
+					"rsrq": {
+						"state": "known",
+						"value": -16
+					},
+					"snr": {
+						"state": "unknown",
+						"reason": "unsupported"
+					},
+					"sinr": {
+						"state": "known",
+						"value": -7
+					}
+				},
+				"model": "E3372",
+				"serial": "<redacted-identity>",
+				"imei": "<redacted-identity>",
+				"firmware": "22.333.01.00.00",
+				"hardware": "CL2E3372HM",
+				"signal_bars": 4,
+				"signal_max_bars": 5,
+				"apn": "ba.amx",
+				"details": {
+					"registration": "LTE",
+					"imsi": "<redacted-identity>",
+					"iccid": "<redacted-identity>",
+					"wan_ip": "10.12.173.92",
+					"network_type": "7",
+					"cell_id": "134318440",
+					"pci": "336"
+				},
+				"capabilities": {
+					"net_mode": {
+						"state": "unavailable",
+						"reason": "not-reported"
+					}
+				},
+				"controls": {
+					"mobile_data": true,
+					"roaming_autoconnect": false
+				}
+			},
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.3.1",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			},
+			"usb_mode": "router-ethernet",
+			"lock_state": "open",
+			"lock_detail": {
+				"credential_configured": false
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

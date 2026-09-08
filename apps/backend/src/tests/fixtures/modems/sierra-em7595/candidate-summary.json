@@ -1,0 +1,36 @@
+{
+	"usbPath": "8-1.4.3",
+	"vidPidBeforeCycle": "1199:c081",
+	"observedClassifications": [
+		"1199:c081 class=mm-managed mode=mbim reason=recognized AT control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:47:08.632Z",
+	"wirePhase": "sierra-em7595",
+	"wireRowsMatchedByIdPath": {
+		"1003": {
+			"ifname": "",
+			"name": "Sierra c081",
+			"network_type": {
+				"supported": [],
+				"active": null
+			},
+			"availability_reason": "modem_initializing",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-xhci-hcd.9.auto-usb-0:1.4.3",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

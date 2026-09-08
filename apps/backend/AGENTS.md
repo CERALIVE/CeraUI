@@ -14,6 +14,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 
 | Task | Location |
 |------|----------|
+| Redacted Rock modem diagnosis inputs (per-port installed/candidate captures, MM detail, roster, Bluetooth negative control) | `src/tests/fixtures/modems/README.md` — timing and unexercised credential cases are part of the fixture contract |
 | Per-core encoder load (two kernel realities, probed at runtime; `encoder-load` broadcast) | `modules/system/encoder-load.ts` (`collectEncoderLoad`, `parseMppLoad`, `initEncoderLoad`); contract below → PER-CORE ENCODER LOAD |
 | CPU core count — the denominator `device-stats.cpuLoad1` needs to be readable (`cpu` broadcast) | `modules/system/cpu.ts` (`collectCpuInfo`, `getCpuInfo`, `initCpu`); contract below → CPU TOPOLOGY |
 | Which CPUs a cpufreq policy governs, which governor drives it, and what those cores ARE (`cpus`/`cpuCount`/`governor`/`label` on `device-stats.cpuFreq`) | `modules/system/collectors/cpufreq.ts` (`cpuLabelsFromCpuinfo`, `labelForCpus`, `parseRelatedCpus`, `parseGovernor`); contract below → CPU-FREQUENCY METADATA |

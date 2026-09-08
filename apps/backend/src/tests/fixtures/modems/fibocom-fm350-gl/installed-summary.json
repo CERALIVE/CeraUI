@@ -1,0 +1,107 @@
+{
+	"usbPath": "5-1.2",
+	"vidPidBeforeCycle": "0e8d:7127",
+	"observedClassifications": [
+		"0e8d:7127 class=mm-managed mode=rndis reason=recognized AT control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:41:03.560Z",
+	"wirePhase": "resume",
+	"wireRowsMatchedByIdPath": {
+		"5": {
+			"ifname": "enx000011121314",
+			"name": "FM350-GL - <redacted-identity-suffix>",
+			"model": "FM350-GL",
+			"manufacturer": "Fibocom Wireless Inc.",
+			"network_type": {
+				"supported": ["3g", "4g", "5g", "4g3g", "5g3g", "5g4g", "5g4g3g"],
+				"active": "4g3g"
+			},
+			"config": {
+				"apn": "",
+				"username": "",
+				"password": "<redacted-identity>",
+				"roaming": true,
+				"network": "",
+				"autoconfig": true,
+				"autoconfig_supported": true
+			},
+			"status": {
+				"connection": "connected",
+				"network_type": "4G",
+				"signal": 60,
+				"roaming": false,
+				"network": "Claro"
+			},
+			"sim_presence": "present",
+			"sim_lock": {
+				"required": "none"
+			},
+			"usb_mode": "rndis",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"firmware_revision": "81600.0000.00.19.17.10",
+			"iccid": "<redacted-identity>",
+			"packet_service_state": "attached",
+			"radio_power": "on",
+			"signal_detail": {
+				"quality_recent": {
+					"state": "known",
+					"value": true
+				},
+				"rsrp": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"rsrq": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"snr": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"sinr": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"registration_context": {
+				"operator_name": {
+					"state": "known",
+					"value": "Claro"
+				},
+				"operator_code": {
+					"state": "known",
+					"value": "732101"
+				},
+				"cell_id": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"tac": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"sim_presence_evidence": {
+				"kind": "sim-object-path",
+				"field": "sim",
+				"value": "/org/freedesktop/ModemManager1/SIM/3"
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.2",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

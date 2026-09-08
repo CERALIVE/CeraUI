@@ -1,0 +1,93 @@
+{
+	"usbPath": "8-1.4.3",
+	"vidPidBeforeCycle": "1199:c081",
+	"observedClassifications": [
+		"1199:c081 class=mm-managed mode=mbim reason=recognized AT control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:41:03.560Z",
+	"wirePhase": "resume",
+	"wireRowsMatchedByIdPath": {
+		"8": {
+			"ifname": "wwu1u4u3i12",
+			"name": "Sierra Wireless EM7595 Mobile Broadband Adapter - <redacted-identity-suffix>",
+			"model": "Sierra Wireless EM7595 Mobile Broadband Adapter",
+			"manufacturer": "Sierra Wireless, Incorporated",
+			"network_type": {
+				"supported": ["3g", "4g", "4g3g"],
+				"active": "4g3g"
+			},
+			"status": {
+				"connection": "failed",
+				"network_type": "",
+				"signal": 0,
+				"roaming": false
+			},
+			"no_sim": true,
+			"sim_presence": "absent",
+			"usb_mode": "mbim",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"firmware_revision": "SWIX12C_02.02.03.00",
+			"radio_power": "on",
+			"signal_detail": {
+				"quality_recent": {
+					"state": "known",
+					"value": true
+				},
+				"rsrp": {
+					"state": "unknown",
+					"reason": "not-observed"
+				},
+				"rsrq": {
+					"state": "unknown",
+					"reason": "not-observed"
+				},
+				"snr": {
+					"state": "unknown",
+					"reason": "not-observed"
+				},
+				"sinr": {
+					"state": "unknown",
+					"reason": "not-observed"
+				}
+			},
+			"registration_context": {
+				"operator_name": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"operator_code": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"cell_id": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"tac": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"sim_presence_evidence": {
+				"kind": "state-failed-reason",
+				"field": "failedReason",
+				"value": "sim-missing"
+			},
+			"stable_key": "platform-xhci-hcd.9.auto-usb-0:1.4.3",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "unavailable",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

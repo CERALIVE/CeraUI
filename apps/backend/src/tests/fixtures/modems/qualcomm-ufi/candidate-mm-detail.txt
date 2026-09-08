@@ -1,0 +1,148 @@
+Source capture: quectel-rm530n-gl; first timestamp: 2026-09-08T14:47:21Z
+This is a separately timed MM observation, not necessarily the post-cycle snapshot.
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/12
+  -----------------------------------------------
+  General  |                                path: /org/freedesktop/ModemManager1/Modem/12
+           |                           device id: <redacted-identity>
+  -----------------------------------------------
+  Hardware |                        manufacturer: 1
+           |                               model: 0
+           |                   firmware revision: HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]
+           |                      carrier config: ROW_Generic_3GPP
+           |             carrier config revision: 02010801
+           |                        h/w revision: 10000
+           |                           supported: gsm-umts, lte
+           |                             current: gsm-umts, lte
+           |                        equipment id: <redacted-identity>
+  -----------------------------------------------
+  System   |                              device: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+           |                             physdev: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+           |                             drivers: qmi_wwan
+           |                              plugin: generic
+           |                        primary port: cdc-wdm1
+           |                               ports: cdc-wdm1 (qmi), wwu1u4u1i2 (net)
+  -----------------------------------------------
+  Status   |                                lock: sim-pin2
+           |                      unlock retries: sim-pin (3), sim-puk (10), sim-pin2 (3), sim-puk2 (10)
+           |                               state: enabled
+           |                         power state: on
+           |                      signal quality: 83% (recent)
+  -----------------------------------------------
+  Modes    |                           supported: allowed: 3g; preferred: none
+           |                                      allowed: 4g; preferred: none
+           |                                      allowed: 3g, 4g; preferred: 4g
+           |                                      allowed: 3g, 4g; preferred: 3g
+           |                             current: allowed: 3g, 4g; preferred: 4g
+  -----------------------------------------------
+  Bands    |                           supported: utran-1, utran-5, utran-8, eutran-1, eutran-3, eutran-5, 
+           |                                      eutran-8
+           |                             current: utran-1, utran-5, utran-8, eutran-1, eutran-3, eutran-5, 
+           |                                      eutran-8
+  -----------------------------------------------
+  IP       |                           supported: ipv4, ipv6, ipv4v6
+  -----------------------------------------------
+  3GPP     |                                imei: <redacted-identity>
+           |                       enabled locks: fixed-dialing
+           |                       operator name: Claro
+           |                        registration: idle
+           |                packet service state: detached
+           |             network rejection error: roaming-not-allowed-in-location-area
+           | network rejection access technology: lte
+  -----------------------------------------------
+  3GPP EPS |                ue mode of operation: csps-1
+           |              initial bearer ip type: ipv4v6
+  -----------------------------------------------
+  SIM      |                    primary sim path: /org/freedesktop/ModemManager1/SIM/7
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/12
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : 1
+modem.generic.model                             : 0
+modem.generic.revision                          : HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]
+modem.generic.carrier-configuration             : ROW_Generic_3GPP
+modem.generic.carrier-configuration-revision    : 02010801
+modem.generic.hardware-revision                 : 10000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+modem.generic.physdev                           : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.4/5-1.4.1
+modem.generic.drivers.length                    : 1
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.plugin                            : generic
+modem.generic.primary-port                      : cdc-wdm1
+modem.generic.ports.length                      : 2
+modem.generic.ports.value[1]                    : cdc-wdm1 (qmi)
+modem.generic.ports.value[2]                    : wwu1u4u1i2 (net)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : sim-pin2
+modem.generic.unlock-retries.length             : 4
+modem.generic.unlock-retries.value[1]           : sim-pin (3)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.unlock-retries.value[3]           : sim-pin2 (3)
+modem.generic.unlock-retries.value[4]           : sim-puk2 (10)
+modem.generic.state                             : enabled
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 83
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 4
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 7
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-5
+modem.generic.supported-bands.value[3]          : utran-8
+modem.generic.supported-bands.value[4]          : eutran-1
+modem.generic.supported-bands.value[5]          : eutran-3
+modem.generic.supported-bands.value[6]          : eutran-5
+modem.generic.supported-bands.value[7]          : eutran-8
+modem.generic.current-bands.length              : 7
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-5
+modem.generic.current-bands.value[3]            : utran-8
+modem.generic.current-bands.value[4]            : eutran-1
+modem.generic.current-bands.value[5]            : eutran-3
+modem.generic.current-bands.value[6]            : eutran-5
+modem.generic.current-bands.value[7]            : eutran-8
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks.length                 : 1
+modem.3gpp.enabled-locks.value[1]               : fixed-dialing
+modem.3gpp.operator-code                        : --
+modem.3gpp.operator-name                        : Claro
+modem.3gpp.registration-state                   : idle
+modem.3gpp.packet-service-state                 : detached
+modem.3gpp.network-rejection-error              : roaming-not-allowed-in-location-area
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : lte
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-1
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : 
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/7
+modem.generic.primary-sim-slot                  : --
+modem.generic.sim-slots                         : --
+modem.generic.bearers                           : --

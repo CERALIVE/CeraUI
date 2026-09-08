@@ -1,0 +1,112 @@
+{
+	"usbPath": "5-1.4.1",
+	"vidPidBeforeCycle": "05c6:9091",
+	"observedClassifications": [
+		"05c6:9091 class=mm-managed mode=qmi reason=recognized QMI control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": ["/org/freedesktop/ModemManager1/Modem/7"],
+	"wireCapturedAt": "2026-09-08T14:41:03.560Z",
+	"wirePhase": "resume",
+	"wireRowsMatchedByIdPath": {
+		"7": {
+			"ifname": "wwu1u4u1i2",
+			"name": "HIMI_U01_MODEM_V1.0 - <redacted-identity-suffix>",
+			"model": "0",
+			"manufacturer": "1",
+			"network_type": {
+				"supported": ["3g", "4g", "4g3g"],
+				"active": "4g3g"
+			},
+			"config": {
+				"apn": "internet",
+				"username": "",
+				"password": "<redacted-identity>",
+				"roaming": true,
+				"network": "",
+				"autoconfig": false,
+				"autoconfig_supported": true
+			},
+			"status": {
+				"connection": "scanning",
+				"network_type": "",
+				"signal": 81,
+				"roaming": false,
+				"network": "Claro"
+			},
+			"sim_presence": "present",
+			"sim_lock": {
+				"required": "sim-pin2",
+				"remainingAttempts": 3
+			},
+			"usb_mode": "qmi",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"firmware_revision": "HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]",
+			"iccid": "<redacted-identity>",
+			"registration_rejection": {
+				"error": "roaming-not-allowed-in-location-area",
+				"access_technology": "lte"
+			},
+			"packet_service_state": "detached",
+			"radio_power": "on",
+			"signal_detail": {
+				"quality_recent": {
+					"state": "known",
+					"value": true
+				},
+				"rsrp": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"rsrq": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"snr": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"sinr": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"registration_context": {
+				"operator_name": {
+					"state": "known",
+					"value": "Claro"
+				},
+				"operator_code": {
+					"state": "known",
+					"value": "732101"
+				},
+				"cell_id": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"tac": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"sim_presence_evidence": {
+				"kind": "sim-object-path",
+				"field": "sim",
+				"value": "/org/freedesktop/ModemManager1/SIM/4"
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.4.1",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "unavailable",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

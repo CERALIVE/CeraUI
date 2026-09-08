@@ -1,0 +1,44 @@
+{
+	"usbPath": "5-1.1",
+	"vidPidBeforeCycle": "19d2:1405",
+	"observedClassifications": [
+		"19d2:1405 class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port \u2014 router-ethernet class, not MM-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:42:08.929Z",
+	"wirePhase": "zte-mf79u",
+	"wireRowsMatchedByIdPath": {
+		"1000": {
+			"ifname": "enx344b50000000",
+			"name": "ZTE Mobile Boardband",
+			"model": "ZTE Mobile Boardband",
+			"manufacturer": "ZTE,Incorporated",
+			"network_type": {
+				"supported": [],
+				"active": null
+			},
+			"device_class": "router-ethernet",
+			"availability_reason": "dongle_acquiring",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.1",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			},
+			"usb_mode": "router-ethernet",
+			"lock_state": "locked",
+			"lock_detail": {
+				"credential_configured": false
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}
