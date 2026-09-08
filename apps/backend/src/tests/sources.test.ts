@@ -23,6 +23,7 @@ import {
 	SOURCE_UNAVAILABLE_ERROR,
 	UNKNOWN_SOURCE_ERROR,
 } from "../modules/streaming/sources.ts";
+import { runTestCommand } from "./helpers/run-test-command.ts";
 
 type CapabilitySource = GetCapabilitiesResult["sources"][number];
 
@@ -657,15 +658,15 @@ describe("engine-device cache", () => {
 });
 
 describe("source routing stays isolated from cerastream-backend.ts", () => {
-	function git(args: string[], cwd: string): string {
-		const proc = Bun.spawnSync(["git", ...args], { cwd });
-		return new TextDecoder().decode(proc.stdout);
+	async function git(args: string[], cwd: string): Promise<string> {
+		const proc = await runTestCommand(["git", "--no-pager", ...args], { cwd });
+		expect(proc.code, `git ${args.join(" ")}: ${proc.stderr}`).toBe(0);
+		return proc.stdout;
 	}
 
-	it("Todo 26 lifecycle changes do not import or rebuild source routing", () => {
-		const repoRoot = git(
-			["rev-parse", "--show-toplevel"],
-			process.cwd(),
+	it("Todo 26 lifecycle changes do not import or rebuild source routing", async () => {
+		const repoRoot = (
+			await git(["rev-parse", "--show-toplevel"], process.cwd())
 		).trim();
 		expect(repoRoot.length).toBeGreaterThan(0);
 
@@ -676,13 +677,17 @@ describe("source routing stays isolated from cerastream-backend.ts", () => {
 		// baseline = the commit that ADDED sources.ts, minus one (this todo's parent
 		// tree). Before that commit exists (initial local run), sources.ts is
 		// untracked, so fall back to HEAD (working-tree vs the last commit).
-		const addCommit = git(
-			["log", "--diff-filter=A", "--format=%H", "-1", "--", SOURCES_REL],
-			repoRoot,
+		const addCommit = (
+			await git(
+				["log", "--diff-filter=A", "--format=%H", "-1", "--", SOURCES_REL],
+				repoRoot,
+			)
 		).trim();
 		const baseline = addCommit.length > 0 ? `${addCommit}^` : "HEAD";
 
-		const diff = git(["diff", baseline, "--", BACKEND_REL], repoRoot).trim();
+		const diff = (
+			await git(["diff", baseline, "--", BACKEND_REL], repoRoot)
+		).trim();
 		// The guard's scope is the START ASSEMBLY routing (buildStartParams /
 		// encodeInputAudioFields) and the no-sources-import rule — not whole-file
 		// byte-equality. Telemetry reads like extractActiveEncode evolve

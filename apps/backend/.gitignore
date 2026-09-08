@@ -22,6 +22,7 @@ auth_tokens.json
 .e2e-auth-token
 config.json
 config.inflight.json
+stream.armed.json
 dns_cache.json
 debug.log
 gsm_operator_cache.json

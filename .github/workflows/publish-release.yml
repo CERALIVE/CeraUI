@@ -213,6 +213,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           path: CeraUI
+          fetch-depth: 0 # This job runs the same history-dependent backend suite as Build Check.
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2

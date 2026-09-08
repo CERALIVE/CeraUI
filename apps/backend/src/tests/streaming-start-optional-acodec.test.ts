@@ -7,12 +7,19 @@ import {
 	test,
 } from "bun:test";
 
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	type GetCapabilitiesResult,
 	SCHEMA_VERSION,
 } from "@ceralive/cerastream";
 import { initMockService, stopMockService } from "../mocks/mock-service.ts";
-import { getConfig } from "../modules/config.ts";
+import {
+	getConfig,
+	getConfigFilePath,
+	setConfigFilePath,
+} from "../modules/config.ts";
 import {
 	initPipelines,
 	setMockHardware,
@@ -42,10 +49,13 @@ const CAPS: GetCapabilitiesResult = {
 };
 
 const savedMockMode = process.env.MOCK_MODE;
+const savedConfigPath = getConfigFilePath();
 let previousConfig: ReturnType<typeof getConfig>;
-let configFile = "";
+let configRoot: string | undefined;
 
 beforeAll(async () => {
+	configRoot = await mkdtemp(join(tmpdir(), "ceraui-optional-acodec-"));
+	setConfigFilePath(join(configRoot, "config.json"));
 	process.env.MOCK_MODE = "true";
 	initMockService("caps-full");
 	setMockHardware("rk3588");
@@ -58,9 +68,8 @@ beforeAll(async () => {
 	});
 });
 
-beforeEach(async () => {
+beforeEach(() => {
 	previousConfig = structuredClone(getConfig());
-	configFile = await Bun.file("config.json").text();
 	Object.assign(getConfig(), {
 		delay: 0,
 		pipeline: "hdmi",
@@ -75,17 +84,22 @@ beforeEach(async () => {
 	});
 });
 
-afterEach(async () => {
+afterEach(() => {
 	Object.assign(getConfig(), previousConfig);
-	await Bun.write("config.json", configFile);
 });
 
 afterAll(async () => {
-	stopMockService();
-	setMockHardware("rk3588");
-	await initPipelines();
-	if (savedMockMode === undefined) delete process.env.MOCK_MODE;
-	else process.env.MOCK_MODE = savedMockMode;
+	try {
+		stopMockService();
+		setMockHardware("rk3588");
+		await initPipelines();
+	} finally {
+		if (savedMockMode === undefined) delete process.env.MOCK_MODE;
+		else process.env.MOCK_MODE = savedMockMode;
+		setConfigFilePath(savedConfigPath);
+		if (configRoot !== undefined)
+			await rm(configRoot, { recursive: true, force: true });
+	}
 });
 
 test("empty start input leaves an omitted optional audio codec to the engine default", async () => {
