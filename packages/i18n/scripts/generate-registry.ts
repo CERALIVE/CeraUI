@@ -118,7 +118,9 @@ function barrelSource(keys: string[], relativeToParaglide: string): string {
 				`import { ${quote(key)} as _${index} } from ${quote(`${relativeToParaglide}/messages/${toSafeModuleId(key)}.js`)};`,
 		)
 		.join("\n");
-	const entries = keys.map((key, index) => `\t[${quote(key)}]: _${index},`).join("\n");
+	const entries = keys
+		.map((key, index) => `\t[${quote(key)}]: _${index},`)
+		.join("\n");
 	return `${BANNER}${imports}\n\nexport const messages = {\n${entries}\n};\n`;
 }
 
@@ -179,8 +181,7 @@ function loaderConfigSource(
 	const lazySet = new Set(lazy);
 	const entries = namespaces
 		.map(
-			(ns) =>
-				`\t[${quote(ns)}]: ${quote(lazySet.has(ns) ? "lazy" : "eager")},`,
+			(ns) => `\t[${quote(ns)}]: ${quote(lazySet.has(ns) ? "lazy" : "eager")},`,
 		)
 		.join("\n");
 	return `${BANNER}/**
@@ -205,10 +206,7 @@ export declare const EAGER_NAMESPACES: readonly Namespace[];
 export declare const LAZY_NAMESPACES: readonly Namespace[];
 `;
 
-function registrySource(
-	namespaces: string[],
-	lazy: readonly string[],
-): string {
+function registrySource(namespaces: string[], lazy: readonly string[]): string {
 	const lazySet = new Set(lazy);
 	const eager = namespaces.filter((ns) => !lazySet.has(ns));
 	const lazyOnly = namespaces.filter((ns) => lazySet.has(ns));
@@ -217,7 +215,9 @@ function registrySource(
 		.map((ns, index) => `import * as _ns${index} from "./namespaces/${ns}.js";`)
 		.join("\n");
 	const eagerRegistrations = eager
-		.map((ns, index) => `registerNamespace(${quote(ns)}, _ns${index}.messages);`)
+		.map(
+			(ns, index) => `registerNamespace(${quote(ns)}, _ns${index}.messages);`,
+		)
 		.join("\n");
 	// A STATIC map of thunks, not `import(\`./namespaces/${ns}.js\`)` — a template
 	// literal specifier makes the bundler emit every namespace as a candidate
@@ -349,10 +349,14 @@ function eagerEntrySource(namespaces: string[]): string {
 	return `${BANNER}import { registerNamespaces } from "./registry.js";
 ${imports}
 
+let registered = false;
+
 export function registerAllNamespaces() {
+	if (registered) return;
 	registerNamespaces({
 ${entries}
 	});
+	registered = true;
 }
 `;
 }
@@ -415,7 +419,9 @@ export declare function resolveMessageKey(
 ): string;
 `;
 
-export function generateRegistry(options: GenerateOptions = {}): GenerateResult {
+export function generateRegistry(
+	options: GenerateOptions = {},
+): GenerateResult {
 	const outDir = options.outDir ?? GENERATED_DIR;
 	const paraglideDir = options.paraglideDir ?? PARAGLIDE_DIR;
 	const keys = readCatalogKeys();

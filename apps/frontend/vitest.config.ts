@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { persistPlugin } from 'svelte-persistent-runes/plugins';
@@ -6,7 +7,17 @@ import { defineConfig } from 'vitest/config';
 import { classifyVitestFiles } from '../../scripts/ci/vitest-classify.mjs';
 
 const { pure, components } = classifyVitestFiles();
-const threadWorkerBounds = { maxWorkers: 16, minWorkers: 4 } as const;
+const availableCpus = availableParallelism();
+
+export function calculateMaxWorkers(availableCpus: number): number {
+	return Math.min(16, availableCpus);
+}
+
+const maxWorkers = calculateMaxWorkers(availableCpus);
+
+if (process.env.CI === 'true') {
+	console.info('[vitest] worker budget', { availableCpus, maxWorkers });
+}
 
 export default defineConfig({
 	plugins: [persistPlugin(), svelte({ compilerOptions: { hmr: false } })],
@@ -19,19 +30,25 @@ export default defineConfig({
 		}),
 	},
 	test: {
+		server: {
+			deps: {
+				// Already-compiled ESM: keep its registry and locale runtime in ONE
+				// native graph. The Svelte facade and test-generated registries stay isolated.
+				external: [/\/packages\/i18n\/(?:generated|src\/paraglide)\/.*\.js$/],
+			},
+		},
 		globals: true,
 		exclude: ['**/node_modules/**', '**/dist/**'],
 		// CI compiles ~355 Svelte-heavy files for 20+ minutes; three unrelated
 		// async rendering tests have each exhausted Vitest's 5 s default under load.
 		// Four times that budget absorbs scheduler pressure while keeping hangs bounded.
 		testTimeout: 20_000,
-		// The suite is transform/import-bound (Svelte compile), not CPU-bound on the
-		// assertions, so wall-clock scales with how many files compile in parallel.
-		// Threads start far cheaper than forks for this workload; fan out across
-		// more workers than the default to compile files concurrently.
+		// Rendering and worker teardown compete with compilation for CPU and memory.
+		// A fixed 16-worker pool starves small runners; respect their actual allocation
+		// (including affinity/cgroup quotas) while retaining the measured local ceiling.
 		pool: 'threads',
 		fileParallelism: true,
-		...threadWorkerBounds,
+		maxWorkers,
 		projects: [
 			{
 				extends: true,

@@ -21,6 +21,11 @@ adapter, its plural resolver, and the TypeScript locale dictionaries are gone â€
 There is no `/node` subpath and no legacy adapter subpath â€” both retired with the
 generator.
 
+Repeated `registerAllNamespaces()` calls are no-ops after the first successful
+registration in the same module graph. Independent registries still initialize
+independently; a failed registration can retry. This lets multiple standalone
+federation entries share the catalog without rewriting it.
+
 ---
 
 ## Rendering a message

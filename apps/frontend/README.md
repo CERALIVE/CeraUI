@@ -109,6 +109,21 @@ registration, `matchMedia`, and the retained 50 ms bits-ui teardown wait. The
 separate federation harness explicitly loads both files too. Classifier checks:
 `bun test scripts/ci/vitest-classify.test.mjs` from the repository root.
 
+The ordinary suite lets Bun load the already-compiled i18n ESM natively, keeping
+the catalog registry and its locale runtime in one graph per isolated worker.
+Svelte, the reactive locale facade, application modules and test-generated
+registries still use Vite transforms. Catalog registration is idempotent within
+each module graph; fresh workers still receive the complete catalog. No lazy-key
+scanner, dependency optimizer or filesystem module cache is enabled. The
+measurements and rejected alternatives are in
+[`../../docs/FRONTEND-SETUP-COST.md`](../../docs/FRONTEND-SETUP-COST.md).
+
+Worker concurrency is capped at the runtime's available CPU allocation, up to
+16 workers on larger hosts. This respects CPU affinity and cgroup quotas rather
+than assuming the development workstation's capacity on a hosted runner. CI
+prints the selected CPU/worker budget. Test timeouts and component isolation are
+unchanged; reducing contention must not be replaced by longer timeout allowances.
+
 CI keeps the same two projects and their setup files inside the four-way
 `test:ci-shard` lane (`VITEST_SHARD=1/4` through `4/4`); `test:ci-merge` merges
 their blob reports. The ordinary `test` command still runs the whole suite and

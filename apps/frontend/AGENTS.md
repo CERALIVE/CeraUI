@@ -284,6 +284,43 @@ both jobs. Never infer the project at runtime or enable `fsModuleCache` without
 a new measured decision. The classifier's Bun tests pin disjoint, complete
 coverage and both mixed-topology cases.
 
+Already-compiled i18n `.js` files under `packages/i18n/generated/` and
+`packages/i18n/src/paraglide/` load natively in the ordinary suite. Keep BOTH
+the registry and locale runtime on that boundary: splitting their module
+identities leaves the facade reading an empty registry or the wrong locale.
+The reactive Svelte facade, Svelte itself, app code and independently generated
+test registries stay transformed. Eager registration is memoized per module
+instance after success, never by a process-global flag. Full catalog coverage,
+Storage isolation, the 50 ms teardown wait and both project policies stay intact.
+See `docs/FRONTEND-SETUP-COST.md` at repo root for the measured alternatives.
+
+### DEP BASELINE — measured 2026-09-08 [EXISTS]
+
+**Hosted reliability correction:** the following timings are the original
+local-only measurements, not hosted acceptance. PR345 run34177597851 failed
+three component tests and reported worker-shutdown timeouts. `maxWorkers` now
+uses `min(16, availableParallelism())`; the obsolete, ignored `minWorkers` setting
+is removed. The runtime API observes affinity and cgroup CPU quotas, unlike
+`os.cpus().length`. CI logs its selected budget. A constrained full-shard toggle
+reproduces the timeout/shutdown class at16 workers and removes it at the runtime
+budget without altering native loading, isolation, assertions or any timeout.
+The three named failures had their own existing `vi.setConfig({testTimeout:15000})`
+overrides; they were not default-timeout or project-inheritance failures. Those
+overrides remain unchanged. Full evidence and hosted acceptance status:
+`docs/FRONTEND-SETUP-COST.md` at repo root.
+
+Bun 1.4.2 / Vitest 5.0.0: **375 files / 6,234 tests, zero failures in three
+consecutive full `bun run --filter frontend test` runs**, identical to the
+current-main baseline (`ca5b0b20`). Final wall times: **132.286 / 131.299 /
+124.110 seconds**, mean **129.232 seconds**; Vitest Duration: **124.62 / 125.91 /
+118.60 seconds**, setup **3 / 3 / 4%** of aggregate phase time. Baseline wall
+times were **656.451 / 669.204 seconds**, mean **662.827 seconds**, with setup
+84% in both. The full command is **80.50% faster locally**; these are workstation
+measurements, not CI timings. Adopted: native loading of the compiled catalog
+and module-scoped eager-registration memoization. Rejected/not selected: broad
+optimizer, filesystem cache, shared components, pure-isolation flip and heuristic
+per-file namespace selection. Storage, full catalog and the teardown wait remain.
+
 ```bash
 bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js
