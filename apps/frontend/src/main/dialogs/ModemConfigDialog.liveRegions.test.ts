@@ -21,7 +21,12 @@
  *          `undefined` leaking through a template.
  */
 
-import type { CapabilityModuleClaims, Modem } from "@ceraui/rpc/schemas";
+import type {
+	CapabilityModuleClaims,
+	Modem,
+	ModemGpsOutput,
+	SetModemGpsOutput,
+} from "@ceraui/rpc/schemas";
 import { CAPABILITY_MODULES } from "@ceraui/rpc/schemas";
 import { cleanup, render, screen } from "@testing-library/svelte";
 import {
@@ -42,8 +47,8 @@ import ModemConfigDialog from "./ModemConfigDialog.svelte";
 
 const getFccUnlock = vi.hoisted(() => vi.fn());
 const setFccUnlock = vi.hoisted(() => vi.fn());
-const getGps = vi.hoisted(() => vi.fn());
-const setGps = vi.hoisted(() => vi.fn());
+const getGps = vi.hoisted(() => vi.fn<() => Promise<ModemGpsOutput>>());
+const setGps = vi.hoisted(() => vi.fn<() => Promise<SetModemGpsOutput>>());
 const getBands = vi.hoisted(() => vi.fn());
 const getUsbModeOptions = vi.hoisted(() => vi.fn());
 
@@ -156,16 +161,48 @@ beforeEach(() => {
 	});
 	getGps.mockResolvedValue({
 		success: true,
-		status: { gnssEnabled: false },
+		status: {
+			capabilities: ["gps-raw"],
+			enabledSources: [],
+			gnssCapable: true,
+			gnssEnabled: false,
+		},
 		state: { kind: "off" },
 	});
 	setGps.mockResolvedValue({
 		success: true,
-		status: { gnssEnabled: true },
-		state: { kind: "acquiring" },
+		status: {
+			capabilities: ["gps-raw"],
+			enabledSources: ["gps-raw"],
+			gnssCapable: true,
+			gnssEnabled: true,
+		},
+		state: {
+			kind: "acquiring",
+			since: Date.now(),
+			deadline: Date.now() + 60_000,
+		},
 	});
 	getBands.mockResolvedValue({ success: false, error: "unsupported" });
 	getUsbModeOptions.mockResolvedValue({ certified: [] });
+});
+
+it("schedules finite acquisition delays after the GPS success reply", async () => {
+	// Given the same RPC fixture used by the live-region scenarios
+	const timer = vi.spyOn(globalThis, "setTimeout");
+	try {
+		mount();
+		// When GPS is enabled and the acquisition state reaches the component
+		(await screen.findByTestId("modem-gps-toggle")).click();
+		await screen.findByTestId("modem-gps-outcome");
+		// Then no timer falls through the runtime's NaN-to-1ms coercion
+		expect(timer).toHaveBeenCalled();
+		expect(timer.mock.calls.some(([, delay]) => Number.isNaN(delay))).toBe(
+			false,
+		);
+	} finally {
+		timer.mockRestore();
+	}
 });
 
 afterEach(() => {
