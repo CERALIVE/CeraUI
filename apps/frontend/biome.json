@@ -36,8 +36,12 @@
 			"linter": {
 				"rules": {
 					"suspicious": {
+						"useAwait": "warn",
 						"noConsole": "off",
 						"noEmptyBlockStatements": "off"
+					},
+					"nursery": {
+						"noFloatingPromises": "error"
 					}
 				}
 			}
