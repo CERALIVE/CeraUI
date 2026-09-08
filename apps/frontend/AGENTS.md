@@ -267,6 +267,16 @@ evidence is not hardware evidence. Full contract: `docs/ENCODER-LOAD.md` at repo
 
 ### Vitest project topology [EXISTS]
 
+Unhandled errors are never filtered: `dangerouslyIgnoreUnhandledErrors: false`
+and a rethrowing `onUnhandledError` apply to the ordinary suite and its shards.
+Test-only Biome overrides enforce `nursery/noFloatingPromises` as an error and
+report `suspicious/useAwait` warnings; both ship in 2.5.9, but floating promises
+is not a `suspicious` rule in that version. No custom equivalent guard exists.
+GPS live-region mocks use the exported RPC reply types so an acquiring state
+cannot omit its `since`/`deadline` and schedule a NaN timeout. The timer regression
+is in `ModemConfigDialog.liveRegions.test.ts`. Audit evidence and limitations:
+[`../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md`](../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md).
+
 `vitest.config.ts` uses stable Vitest 5's `test.projects`, with inline
 `extends: true` projects inheriting plugins, defines, aliases, and runner bounds.
 `scripts/ci/vitest-classify.mjs` walks source-test import graphs at config load:
