@@ -97,6 +97,11 @@ federation run `bun scripts/ci/bundle-report.mjs` to check both size budgets.
 
 ### Unit-test projects [EXISTS]
 
+Unhandled errors fail the run without filtering. Frontend tests enable Biome's
+floating-promise error rule and missing-await warning rule. The bounded suite
+audit, timer regression and mutation receipts are documented in
+[`../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md`](../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md).
+
 `bun run --filter frontend test` runs both Vitest projects. The import-graph
 classifier in `scripts/ci/vitest-classify.mjs` assigns source tests automatically:
 `pure` uses Node with `isolate: false`; `components` uses isolated jsdom. Browser
