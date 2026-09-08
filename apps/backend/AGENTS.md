@@ -5970,6 +5970,21 @@ The helper's regression reproduces that state in a disposable process; do not
 replace real shell/GPG verification or Git history with mocks, or switch these
 calls back to `spawnSync`. No test or production timeout was increased.
 
+The historical source-routing Git guard requires a full checkout. At a depth-one
+boundary Git reports the checkout commit as the file's addition; its parent is
+unavailable, so `git diff <addition>^` exits 128. The guard checks exit status and
+prints stderr rather than accepting an empty failed diff. Both Build Check's
+`test-be` checkout and `publish-release.yml`'s `release-package-contracts` checkout
+use `fetch-depth: 0`, enforced by `scripts/ci/build-check-shape.test.mjs`.
+Twenty local passes are stability evidence, not a substitute for the complete
+hosted PR gate. Readiness requires every check on the current hosted run to pass.
+
+The optional-audio-codec start fixture also owns a `mkdtemp` config root through
+`setConfigFilePath`, installed before mock initialization. It must not read or
+restore a shared cwd `config.json`: a fresh checkout has none, and another file
+creating it is not a test prerequisite. Teardown restores the path and removes
+only this fixture's directory.
+
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
 dependencies through `setStartStreamDepsForTest()`. Every test that overrides
