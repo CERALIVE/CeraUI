@@ -30,6 +30,8 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 | Components isolate:false | 2 | 141.334 | 138.53 | 375 / 6,234 | 35 / 11 / 2 / 47 / 5 % | 1 |
 | fsModuleCache:true | 1 | 597.532 | 591.63 | 375 / 6,234 | 88 / 3 / 5 / 3 / 2 % | 0 |
 | fsModuleCache:true | 2 | 591.017 | 585.78 | 375 / 6,234 | 89 / 2 / 5 / 3 / 2 % | 0 |
+| Native compiled catalog | 1 | 148.495 | 140.80 | 375 / 6,234 | 3 / 21 / 38 / 29 / 8 % | 0 |
+| Native compiled catalog | 2 | 126.658 | 121.21 | 375 / 6,234 | 4 / 16 / 35 / 36 / 9 % | 0 |
 
 Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
 seconds or less** (20% faster), plus three green runs at identical counts.
@@ -53,6 +55,17 @@ not the obsolete `test.experimental.fsModuleCache`. Mean wall time 594.275 s is
 was terminated with its tool process group and produced no result; it is excluded.
 These two complete retry runs used the cache left by that partial attempt, so
 even this warm-cache result cannot justify adoption.
+
+**Native compiled catalog: qualifies for final parity testing.** The compiler
+already emits plain ESM. `test.server.deps.external` narrowly selects only
+`packages/i18n/generated/` and `packages/i18n/src/paraglide/`, letting Bun load
+those modules natively instead of reprocessing the compiled graph through Vite.
+The Svelte facade, Svelte itself, application code, and generated temporary
+registries used by the lazy-loading tests stay transformed and isolated.
+Mean wall time **137.576 s**, **79.24% faster** than current main. This is a
+profile-driven additional candidate, not a relabeling of the rejected broad
+optimizer. It keeps one coherent native registry/runtime graph and does not
+share Svelte component state. Adoption still awaits three final parity runs.
 
 ## Registration scope
 
