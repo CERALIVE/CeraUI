@@ -24,6 +24,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runTestCommand as sh } from "./helpers/run-test-command.ts";
 
 const HELPER = join(import.meta.dir, "..", "..", "ceralive-addon-helper");
 
@@ -38,23 +39,7 @@ let LEGIT_HOME = "";
 let ATTACKER_HOME = "";
 let KEYRING = "";
 
-function sh(
-	cmd: string[],
-	opts: { env?: Record<string, string> } = {},
-): { code: number; stdout: string; stderr: string } {
-	const proc = Bun.spawnSync(cmd, {
-		env: opts.env ? { ...process.env, ...opts.env } : process.env,
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	return {
-		code: proc.exitCode,
-		stdout: proc.stdout.toString(),
-		stderr: proc.stderr.toString(),
-	};
-}
-
-function gpgGenKey(home: string, name: string): void {
+async function gpgGenKey(home: string, name: string): Promise<void> {
 	mkdirSync(home, { recursive: true });
 	chmodSync(home, 0o700);
 	const params = join(home, "params");
@@ -62,23 +47,34 @@ function gpgGenKey(home: string, name: string): void {
 		params,
 		`%no-protection\nKey-Type: RSA\nKey-Length: 2048\nKey-Usage: sign\nName-Real: ${name}\nExpire-Date: 0\n%commit\n`,
 	);
-	const r = sh(["gpg", "--homedir", home, "--batch", "--gen-key", params]);
+	const r = await sh([
+		"gpg",
+		"--homedir",
+		home,
+		"--batch",
+		"--gen-key",
+		params,
+	]);
 	if (r.code !== 0) throw new Error(`gpg gen-key failed: ${r.stderr}`);
 }
 
-function gpgExportPub(home: string, out: string): void {
-	const proc = Bun.spawnSync(["gpg", "--homedir", home, "--export"], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	if (proc.exitCode !== 0) {
-		throw new Error(`gpg export failed: ${proc.stderr.toString()}`);
+async function gpgExportPub(home: string, out: string): Promise<void> {
+	const proc = await sh([
+		"gpg",
+		"--homedir",
+		home,
+		"--batch",
+		"--output",
+		out,
+		"--export",
+	]);
+	if (proc.code !== 0) {
+		throw new Error(`gpg export failed: ${proc.stderr}`);
 	}
-	writeFileSync(out, proc.stdout);
 }
 
-function gpgSign(home: string, raw: string, sig: string): void {
-	const r = sh([
+async function gpgSign(home: string, raw: string, sig: string): Promise<void> {
+	const r = await sh([
 		"gpg",
 		"--homedir",
 		home,
@@ -92,9 +88,10 @@ function gpgSign(home: string, raw: string, sig: string): void {
 	if (r.code !== 0) throw new Error(`gpg sign failed: ${r.stderr}`);
 }
 
-function sha256(file: string): string {
-	const proc = Bun.spawnSync(["sha256sum", file], { stdout: "pipe" });
-	return proc.stdout.toString().split(/\s+/)[0] ?? "";
+async function sha256(file: string): Promise<string> {
+	const proc = await sh(["sha256sum", file]);
+	if (proc.code !== 0) throw new Error(`sha256sum failed: ${proc.stderr}`);
+	return proc.stdout.split(/\s+/)[0] ?? "";
 }
 
 type Descriptor = {
@@ -135,7 +132,7 @@ type Sandbox = {
 };
 
 /** A fresh, fully wired sandbox with one baked, validly-signed `debug-toolset`. */
-function mkSandbox(): Sandbox {
+async function mkSandbox(): Promise<Sandbox> {
 	const dir = mkdtempSync(join(ROOT, "sb-"));
 	const registry = join(dir, "registry");
 	const cache = join(dir, "cache");
@@ -160,10 +157,10 @@ function mkSandbox(): Sandbox {
 	// A baked, validly-signed add-on with units to exercise the lifecycle.
 	const raw = join(cache, "debug-toolset.raw");
 	writeFileSync(raw, "SYSEXT-RAW-debug-toolset-v1");
-	gpgSign(LEGIT_HOME, raw, `${raw}.sig`);
+	await gpgSign(LEGIT_HOME, raw, `${raw}.sig`);
 	writeDescriptor(join(registry, "debug-toolset.json"), {
 		id: "debug-toolset",
-		sha256: sha256(raw),
+		sha256: await sha256(raw),
 		units: {
 			unmask: ["debug-toolset.service"],
 			enable: ["debug-toolset.service"],
@@ -186,20 +183,20 @@ function mkSandbox(): Sandbox {
 function helper(
 	sb: Sandbox,
 	args: string[],
-): { code: number; stdout: string; stderr: string } {
+): Promise<{ code: number; stdout: string; stderr: string }> {
 	return sh([HELPER, ...args], { env: sb.env });
 }
 
-beforeAll(() => {
+beforeAll(async () => {
 	if (!HAVE_TOOLS) return;
 	ROOT = mkdtempSync(join(tmpdir(), "addon-helper-"));
 	LEGIT_HOME = join(ROOT, "gnupg-legit");
 	ATTACKER_HOME = join(ROOT, "gnupg-attacker");
 	KEYRING = join(ROOT, "addon-keyring.gpg");
-	gpgGenKey(LEGIT_HOME, "CeraLive Add-on Signing (test)");
-	gpgGenKey(ATTACKER_HOME, "Attacker (test)");
+	await gpgGenKey(LEGIT_HOME, "CeraLive Add-on Signing (test)");
+	await gpgGenKey(ATTACKER_HOME, "Attacker (test)");
 	// The baked keyring holds ONLY the legitimate public key.
-	gpgExportPub(LEGIT_HOME, KEYRING);
+	await gpgExportPub(LEGIT_HOME, KEYRING);
 });
 
 afterAll(() => {
@@ -221,8 +218,8 @@ afterAll(() => {
  */
 describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 	it("enable verifies + activates a baked, validly-signed add-on", async () => {
-		const sb = mkSandbox();
-		const r = helper(sb, ["enable", "debug-toolset"]);
+		const sb = await mkSandbox();
+		const r = await helper(sb, ["enable", "debug-toolset"]);
 
 		expect(r.code).toBe(0);
 		const out = JSON.parse(r.stdout) as { ok: boolean; action: string };
@@ -241,10 +238,10 @@ describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 	});
 
 	it("status emits JSON with the baked registry + installed flag", async () => {
-		const sb = mkSandbox();
+		const sb = await mkSandbox();
 
 		// Before enable: present in registry, not installed.
-		const before = JSON.parse(helper(sb, ["status"]).stdout) as {
+		const before = JSON.parse((await helper(sb, ["status"])).stdout) as {
 			ok: boolean;
 			addons: Array<{ id: string; installed: boolean; units: unknown }>;
 		};
@@ -253,8 +250,8 @@ describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 		expect(a0?.installed).toBe(false);
 
 		// After enable: installed flips true, units surfaced from the descriptor.
-		expect(helper(sb, ["enable", "debug-toolset"]).code).toBe(0);
-		const after = JSON.parse(helper(sb, ["status"]).stdout) as {
+		expect((await helper(sb, ["enable", "debug-toolset"])).code).toBe(0);
+		const after = JSON.parse((await helper(sb, ["status"])).stdout) as {
 			addons: Array<{
 				id: string;
 				installed: boolean;
@@ -267,10 +264,10 @@ describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 	});
 
 	it("disable reverses enable: stop/disable/mask, removes .raw, refresh", async () => {
-		const sb = mkSandbox();
-		expect(helper(sb, ["enable", "debug-toolset"]).code).toBe(0);
+		const sb = await mkSandbox();
+		expect((await helper(sb, ["enable", "debug-toolset"])).code).toBe(0);
 
-		const r = helper(sb, ["disable", "debug-toolset"]);
+		const r = await helper(sb, ["disable", "debug-toolset"]);
 		expect(r.code).toBe(0);
 		expect((JSON.parse(r.stdout) as { action: string }).action).toBe("disable");
 
@@ -282,8 +279,8 @@ describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
 	});
 
 	it("refresh runs systemd-sysext refresh only", async () => {
-		const sb = mkSandbox();
-		const r = helper(sb, ["refresh"]);
+		const sb = await mkSandbox();
+		const r = await helper(sb, ["refresh"]);
 		expect(r.code).toBe(0);
 		expect((JSON.parse(r.stdout) as { action: string }).action).toBe("refresh");
 		expect((await Bun.file(sb.callsLog).text()).trim()).toBe("sysext refresh");
@@ -295,57 +292,57 @@ describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — happy path", () => {
  * details on the gate and how to install required tools.
  */
 describe.skipIf(!HAVE_TOOLS)("ceralive-addon-helper — G-trust refusals", () => {
-	it("refuses an id with no baked descriptor (allowlist = baked registry only)", () => {
-		const sb = mkSandbox();
-		const r = helper(sb, ["enable", "ghost-addon"]);
+	it("refuses an id with no baked descriptor (allowlist = baked registry only)", async () => {
+		const sb = await mkSandbox();
+		const r = await helper(sb, ["enable", "ghost-addon"]);
 		expect(r.code).not.toBe(0);
 		expect(r.stderr).toMatch(/not in baked registry/);
 		// Nothing was staged.
 		expect(existsSync(join(sb.ext, "ghost-addon.raw"))).toBe(false);
 	});
 
-	it("refuses a tampered artifact (sha256 no longer matches the baked descriptor)", () => {
-		const sb = mkSandbox();
+	it("refuses a tampered artifact (sha256 no longer matches the baked descriptor)", async () => {
+		const sb = await mkSandbox();
 		// Tamper AFTER signing + hashing: the descriptor's sha256 is now stale.
 		writeFileSync(join(sb.cache, "debug-toolset.raw"), "TAMPERED-PAYLOAD");
 
-		const r = helper(sb, ["enable", "debug-toolset"]);
+		const r = await helper(sb, ["enable", "debug-toolset"]);
 		expect(r.code).not.toBe(0);
 		expect(r.stderr).toMatch(/sha256 mismatch/);
 		expect(existsSync(join(sb.ext, "debug-toolset.raw"))).toBe(false);
 	});
 
-	it("refuses a sysext-injected descriptor: a non-baked key cannot pass gpgv", () => {
-		const sb = mkSandbox();
+	it("refuses a sysext-injected descriptor: a non-baked key cannot pass gpgv", async () => {
+		const sb = await mkSandbox();
 		// Simulate an attacker who shadows a descriptor into the registry (as a
 		// merged sysext overlaying /usr could) AND supplies a matching-sha256
 		// artifact — but signs it with a key NOT in the baked keyring.
 		const evilRaw = join(sb.cache, "evil-addon.raw");
 		writeFileSync(evilRaw, "EVIL-PAYLOAD");
-		gpgSign(ATTACKER_HOME, evilRaw, `${evilRaw}.sig`);
+		await gpgSign(ATTACKER_HOME, evilRaw, `${evilRaw}.sig`);
 		writeDescriptor(join(sb.registry, "evil-addon.json"), {
 			id: "evil-addon",
-			sha256: sha256(evilRaw), // sha256 deliberately CORRECT — isolates gpg gate
+			sha256: await sha256(evilRaw), // sha256 deliberately CORRECT — isolates gpg gate
 		});
 
-		const r = helper(sb, ["enable", "evil-addon"]);
+		const r = await helper(sb, ["enable", "evil-addon"]);
 		expect(r.code).not.toBe(0);
 		expect(r.stderr).toMatch(/GPG verify failed/);
 		expect(existsSync(join(sb.ext, "evil-addon.raw"))).toBe(false);
 	});
 
-	it("refuses when the cached artifact is missing", () => {
-		const sb = mkSandbox();
+	it("refuses when the cached artifact is missing", async () => {
+		const sb = await mkSandbox();
 		rmSync(join(sb.cache, "debug-toolset.raw"));
-		const r = helper(sb, ["enable", "debug-toolset"]);
+		const r = await helper(sb, ["enable", "debug-toolset"]);
 		expect(r.code).not.toBe(0);
 		expect(r.stderr).toMatch(/artifact not present/);
 	});
 
-	it("rejects a traversal / malformed id before any filesystem access", () => {
-		const sb = mkSandbox();
+	it("rejects a traversal / malformed id before any filesystem access", async () => {
+		const sb = await mkSandbox();
 		for (const bad of ["../../etc/passwd", "Debug", "a/b", "-rf"]) {
-			const r = helper(sb, ["enable", bad]);
+			const r = await helper(sb, ["enable", bad]);
 			expect(r.code).not.toBe(0);
 			expect(r.stderr).toMatch(/invalid add-on id/);
 		}

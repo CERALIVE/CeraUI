@@ -1,4 +1,5 @@
 import type { Modem } from "@ceraui/rpc/schemas";
+import type { ModemSignalTier } from "$main/network/cellular-row";
 
 export type SignalCategory = "excellent" | "good" | "fair" | "weak";
 
@@ -70,6 +71,29 @@ export function signalBarCount(signal: number | null): 0 | 1 | 2 | 3 {
 }
 
 /**
+ * A qualitative tier's filled-bar count, on the SAME three-bar cluster a
+ * percentage resolves to through {@link signalBarCount}.
+ *
+ * Nothing is fabricated by this map: the cluster has always been a three-bucket
+ * quantization of strength, and a tier is that same quantization arriving from a
+ * device that publishes no percentage at all — a router-mode dongle, whose only
+ * radio reading is its own admin API's bar count or dBm figure. The tier is
+ * rendered; no number is invented, and none is displayed.
+ */
+export function tierBarCount(tier: ModemSignalTier): 0 | 1 | 2 | 3 {
+	switch (tier) {
+		case "high":
+			return 3;
+		case "medium":
+			return 2;
+		case "low":
+			return 1;
+		default:
+			return 0;
+	}
+}
+
+/**
  * Discriminated union representing the visual state of a link indicator.
  * Encodes all possible rendering modes: bars, ethernet, no-sim, scanning, acquiring, wifi-off, zero.
  */
@@ -87,19 +111,29 @@ export type LinkVisualState =
  * Decision tree (order matters):
  * 1. ethernet type → {kind:'ethernet'} (always, regardless of signal)
  * 2. signal !== null → {kind:'bars', filled: signalBarCount(signal)}
- * 3. signal === null:
- *    - no_sim → {kind:'no-sim'}
+ * 3. no_sim → {kind:'no-sim'} — an empty slot outranks any reading
+ * 4. signalTier → {kind:'bars', filled: tierBarCount(tier)} — the device
+ *    publishes no percentage, only a tier (a router-mode dongle's own admin
+ *    reading). It draws the SAME cluster: "how strong is this link" is one
+ *    question, and an operator must not have to learn a second answer to it
+ *    because of which kind of device happens to be in the port.
+ * 5. signal and tier both absent:
  *    - scanning → {kind:'scanning'}
  *    - connected (any type) → {kind:'acquiring'} (bug fix: wifi+connected+null was wrongly wifi-off)
  *    - wifi + disconnected → {kind:'wifi-off'}
  *    - otherwise → {kind:'zero'}
+ *
+ * With `signalTier` absent this is byte-identical to the percentage-only rule it
+ * replaced — `no_sim` was already the switch's first arm, so promoting it above
+ * the tier changes nothing for a caller that passes no tier.
  */
 export function linkVisualState(input: {
 	type: "modem" | "wifi" | "ethernet";
 	connectionState: "connected" | "scanning" | "disconnected" | "no_sim";
 	signal: number | null;
+	signalTier?: ModemSignalTier | undefined;
 }): LinkVisualState {
-	const { type, connectionState, signal } = input;
+	const { type, connectionState, signal, signalTier } = input;
 
 	// 1. Ethernet always wins
 	if (type === "ethernet") {
@@ -111,16 +145,24 @@ export function linkVisualState(input: {
 		return { kind: "bars", filled: signalBarCount(signal) };
 	}
 
-	// 3. Signal absent → check connection state
+	// 3. An empty slot is a fact about the CARD and outranks every reading.
+	if (connectionState === "no_sim") {
+		return { kind: "no-sim" };
+	}
+
+	// 4. A device that reports a tier rather than a percentage
+	if (signalTier !== undefined) {
+		return { kind: "bars", filled: tierBarCount(signalTier) };
+	}
+
+	// 5. Nothing was reported → check connection state
 	switch (connectionState) {
-		case "no_sim":
-			return { kind: "no-sim" };
 		case "scanning":
 			return { kind: "scanning" };
 		case "connected":
 			// Bug fix: both modem AND wifi connected with null signal → acquiring
 			return { kind: "acquiring" };
-		case "disconnected":
+		default:
 			// Only wifi shows wifi-off; modems show zero
 			if (type === "wifi") {
 				return { kind: "wifi-off" };

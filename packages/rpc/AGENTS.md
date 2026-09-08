@@ -67,6 +67,11 @@ import { loginInputSchema } from '@ceraui/rpc/schemas';                // valida
 
 ## UPLINK STEERING WIRE STATE IS SHARED [EXISTS]
 
+`NETIF_DUPLICATE_IPV4_ERROR` names the legacy `netif.error` spelling. It adds no
+wire field: `error` remains an optional string and `enabled` remains the backend's
+bond-eligibility projection. Error text alone cannot distinguish a pure flag from
+a compound bitmask; a duplicate-IP entry is eligible only with `enabled:true`.
+
 `schemas/network.schema.ts` owns both steering channels. The persistent
 `uplinkSteeringStatusSchema` is a discriminated union: `available`, or
 `steering_unavailable` with one of the six machine-stable reasons and an optional

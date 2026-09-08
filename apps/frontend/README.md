@@ -166,6 +166,11 @@ src/
 
 ## Key Conventions
 
+- **Bond membership**: HUD and Network use the backend's `netif.enabled` eligibility
+  verdict plus an address and no blocking error. The exact duplicate-IPv4 warning
+  is allowed only with `enabled:true`, which already includes the backend's
+  mappability check; unmappable and compound-error links remain excluded.
+  Idle eligibility is distinct from a running sender's mapping and telemetry.
 - **RPC only**: all backend calls go through `rpc.*` or `rpcClient.onMessage`. No direct hardware access.
 - **Validation bounds**: import from `ValidationAdapter.ts` (which sources from `@ceraui/rpc/schemas`). No inline numeric literals in dialog components.
 - **Stores**: Svelte 5 runes only. Files named `*.svelte.ts`.

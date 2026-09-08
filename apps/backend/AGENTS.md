@@ -2217,6 +2217,16 @@ neither fsyncs nor sets a mode — is deliberately not used here).
 
 ### THE DUPLICATE-IP POLICY SPLIT
 
+**Wire projection:** `netifEntrySchema.error` is an optional string.
+`netIfBuildMsg()` obtains it from `getNetifErrorMsg()`, which returns ONE matching
+bit's description, not the complete bitmask. `NETIF_DUPLICATE_IPV4_ERROR` in
+`@ceraui/rpc/schemas` names the existing spelling without changing serialized
+bytes. A compound error can therefore carry that same string; only the paired
+`enabled:true` projection proves `isBondCandidate()` admitted the link. The HUD
+mirror consumes that pair, not telemetry availability. Characterization coverage:
+`tests/bond-eligibility-wire.test.ts` (mappable, unmappable, opted-out and compound
+cases through the real projection and sender-list generator).
+
 `NETIF_ERR_DUPIPV4` answered two questions with one bit, and they have OPPOSITE
 correct answers once a mapping exists:
 
@@ -5322,9 +5332,11 @@ guard covers the rest. Nothing else changes: `modems.setUsbMode`'s existing
   as a typed `failed`, so it exercises the ordinary return path — the `finally`
   needs its own fixture (a dep that throws mid-admission).
 - **`admitLifecycle` is an OPTIONAL orchestrator dep, wired only at the
-  production singleton.** The lease is process-wide and `bun test` runs one
-  process, so defaulting it on inside the factory would let any unit test that
-  leaves a start pending strand every later test's admission.
+  production singleton.** The lease is process-wide. Bun 1.4.2 `--parallel`
+  runs files in isolated worker processes, but tests within each file still
+  share module state: a pending start can strand later admissions in that file.
+  Keep explicit lease cleanup and use a per-file `mkdtemp` root for persisted
+  fixtures; worker isolation does not isolate shared filesystem paths.
 
 **The `"modem-transition"` holder is now acquired by `modems.setUsbMode`**
 (`rpc/procedures/modems.procedure.ts`, gate 4 — see USB-COMPOSITION SWITCH above).
@@ -5936,13 +5948,52 @@ are gated by `shouldUseMocks()` or `isDevelopment()` — never active in product
 
 ### Backend per-file test isolation
 
-The backend `test` script remains serial: the formal parallel stability gate
-finished 9/10 after one isolation pass. `sim-autounlock.test.ts` now seeds a
-private working-directory config and restores cwd after each test, so its
-byte-preservation assertion cannot observe another worker's config writes.
-The remaining observed hazard is `usb-tether-fence.test.ts` enumerating a runtime
-`stream.armed.json` that another worker removes before the scan reads it.
-Do not adopt parallel execution on the strength of isolated passing reruns.
+The backend `test` script runs `bun test --parallel`, adopted after five full
+smoke runs and twenty consecutive clean acceptance runs on Bun 1.4.2. It
+runs files across worker processes with per-file isolated globals; it does not
+make tests within a file concurrent. Each file writing fixtures must own a
+`mkdtemp` root and redirect the existing path seam, never use a fixed shared
+path. `sim-autounlock.test.ts` uses `setConfigFilePath()` and absolute reads
+instead of changing cwd. `usb-tether-fence.test.ts` scans a private source
+snapshot: tracked plus new non-ignored working-tree files, not runtime state.
+The transient `stream.armed.json` is ignored beside the other backend runtime
+files. Source copy/read failures remain fatal; only snapshot teardown tolerates
+`ENOENT`.
+
+The initial 2026-09-07 adoption batches finished 19/20 and 18/20: both original
+isolation repairs passed, but add-on helper, modem-transition and source-routing
+tests exposed two more failure modes. The clock and child-command fixes below
+then passed 20/20 at default 28-worker parallelism (6,033 passed tests and two
+unchanged skips per run). No timeout was widened and no assertion was removed.
+
+The transition-engine fixture controls `Date.now()` with `setSystemTime`:
+USB enumeration cannot spend the NM-timeout case's budget through host scheduling
+delay. Only the unresolved NM reader advances time, including the failure-path
+re-probe; teardown restores the real clock. Production polling is unchanged.
+
+The add-on shell/GPG suite and historical source-routing Git guard use
+`tests/helpers/run-test-command.ts`: asynchronous spawn, concurrent stdout/stderr
+drains and exit observation, with scoped disposal. Bun 1.4.2's synchronous spawn
+loop can lose poll accounting when GC finalizes main-loop resources during the
+wait (oven-sh/bun#40078), stalling later children even after they exited.
+The helper's regression reproduces that state in a disposable process; do not
+replace real shell/GPG verification or Git history with mocks, or switch these
+calls back to `spawnSync`. No test or production timeout was increased.
+
+The historical source-routing Git guard requires a full checkout. At a depth-one
+boundary Git reports the checkout commit as the file's addition; its parent is
+unavailable, so `git diff <addition>^` exits 128. The guard checks exit status and
+prints stderr rather than accepting an empty failed diff. Both Build Check's
+`test-be` checkout and `publish-release.yml`'s `release-package-contracts` checkout
+use `fetch-depth: 0`, enforced by `scripts/ci/build-check-shape.test.mjs`.
+Twenty local passes are stability evidence, not a substitute for the complete
+hosted PR gate. Readiness requires every check on the current hosted run to pass.
+
+The optional-audio-codec start fixture also owns a `mkdtemp` config root through
+`setConfigFilePath`, installed before mock initialization. It must not read or
+restore a shared cwd `config.json`: a fresh checkout has none, and another file
+creating it is not a test prerequisite. Teardown restores the path and removes
+only this fixture's directory.
 
 Backend tests inject procedure launch/source dependencies through
 `setStreamingProcedureDepsForTest()` and stream-start process/telemetry/engine
@@ -9458,7 +9509,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't let anything but VERIFIED-ROLLBACK or FORCE-REBASELINE unblock a failed mutation, and don't archive before the `acknowledged` write commits — that ordering is what makes a crash between the two replayable instead of a lost operator decision.
 - Don't make `decommissioned` terminal, and don't let it hold GLOBAL streaming: identity is PORT-based for serial-less devices, so a replacement modem inherits the key and must be caught as `recommission-pending`, while a destroyed modem must never strand the remaining links.
 - Don't release the `modem.reconfig` mutation lease when the handler returns — its 30 s confirm/auto-revert watchdog is still live, and that window is precisely when the modem is half-applied.
-- Don't acquire the lifecycle interlock ahead of the orchestrator's duplicate-start rejection — a second `streaming.start` would then answer a generic lease-busy refusal instead of its own `START_IN_PROGRESS`, and the duplicate is the one case the operator can act on. Don't move the acquisition into `streaming.procedure.ts` either (four other launch origins bypass it), don't default `admitLifecycle` on inside the orchestrator factory (the lease is process-wide and `bun test` is one process), and don't release by HOLDER instead of by grant token — a stale `finally` would then free whoever holds it now.
+- Don't acquire the lifecycle interlock ahead of the orchestrator's duplicate-start rejection — a second `streaming.start` would then answer a generic lease-busy refusal instead of its own `START_IN_PROGRESS`, and the duplicate is the one case the operator can act on. Don't move the acquisition into `streaming.procedure.ts` either (four other launch origins bypass it), don't default `admitLifecycle` on inside the orchestrator factory (parallel workers isolate files, not tests sharing a file's lease), and don't release by HOLDER instead of by grant token — a stale `finally` would then free whoever holds it now. Persisted fixtures additionally need per-file `mkdtemp` roots; separate workers still share the filesystem.
 - Don't move either cellular guard below `initModemUpdateLoop` in `main.ts`, and don't reorder them relative to each other — the loop's first discovery + `modems` broadcast fire immediately, and `initCellularStack` publishes `{ready:false}` synchronously, so a reordered boot puts the operator's first modem snapshot inside the window where every modem procedure refuses `CELLULAR_STACK_INITIALIZING`. Don't reclassify either as `runCritical` either: the dbus→mmcli fallback lives INSIDE the stack, so reaching the guard means the cellular subsystem is down and the device must still keep its UI.
 - Don't rewrite `buildModemsMessage` in terms of the projection, and don't delete it as dead — it is NOT on the wire (`buildModemsWireMessage` is) precisely so it can stay the independent implementation `modem-wire-projection.test.ts` asserts byte-compat against. "De-duplicating" it makes that assertion compare the projector to itself. And don't drop the fail-safe fallback: the additive fields are enrichment, the legacy ones are the operator's whole modem list.
 - Don't fabricate a `stable_key` for a modem whose `ID_PATH` did not resolve, and don't clear the id-path cache when a refresh FAILS — absence yields the pre-Phase-B wire (honest), while a cleared cache makes every row look like new hardware to a frontend correlating a USB-mode switch. Don't refresh it on the 30 s status poll either: an `ID_PATH` names where a device is plugged in, so only presence edges can move it.
@@ -9585,7 +9636,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't resolve a persisted selection through a node path more than one remembered device answers to — `findRememberingId`'s holder-beats-alias preference picks a camera rather than proving one. Use `unambiguousStableId`, keep the refusal suppression-only (the literal id must still reach the engine), and don't "unify" it with `findRememberingId`, which correctly keeps that preference for `collectLostCandidates`.
 - Don't let the v4l2 scan's `deriveKind()` guess overwrite a kind the engine has already reported for that device, and don't clear `lastEngineVideoDevices` when a device leaves the list — a `usb` guess bridges to no pipeline, so the row is dropped and its coarse slot renders "not connected" for a device that is physically present. Don't relax the display-name gate on the restore to an `input_id`-only lookup either: node paths are recycled, and a fabricated identity is worse than a coarse one. And don't widen that restore past IDENTITY (`kind`/`stable_id`) back onto the remembered `caps`/`signal` — re-asserting a past probe's verdict is how a device that loses its signal keeps claiming it has one, forever.
 - Don't let the periodic signal recheck start a second probe while its own is still out (`signalRecheckInFlight`) — a fixed-interval loop whose probe outlives its interval supersedes ITSELF on every tick and publishes nothing at all, and a link-losing receiver is exactly what makes an enumeration slow.
-- Don't assert a GLOBAL call count on a process-wide seam like `helpers/run.ts` — `bun test` loads every file into ONE process, and background work started by an earlier file keeps issuing OS commands. `wifiUpdateDevices()` is the known offender: while any Wi-Fi adapter reads unavailable it re-arms itself every 3 s for a five-minute budget (`modules/wifi/wifi-interfaces.ts`), firing several `run("nmcli", …)` calls per pass. Filter the spy's calls to the binary under test instead (`logs-injection.test.ts`), which asserts the same property and cannot be flipped by a foreign command.
+- Don't assert a GLOBAL call count on a process-wide seam like `helpers/run.ts` — Bun's parallel mode isolates each file in a worker, but background work still outlives individual tests within that file (and serial runs can share it across files). `wifiUpdateDevices()` can re-arm every 3 s for a five-minute unavailable-adapter budget. Cancel it with `stopWifiUpdateLoopForTest()` in teardown and filter spies to the binary under test (`logs-injection.test.ts`). Filesystem fixtures need per-file `mkdtemp` roots independently of the worker model; a process boundary does not protect a shared path.
 - Don't make an address-family choice PERSISTENT. Not `/etc/apt/apt.conf`, not `gai.conf`, not a sysctl, not `disable_ipv6`, not an interface binding — a verdict about one apt run must expire with that run, or a device whose IPv6 comes back stays pinned to IPv4 by a file nothing remembers writing. The option goes on the argv, per run (see APT REACHES THE REPOSITORY OVER THE FAMILY THAT WORKS).
 - Don't match a detached apt service's argv by substring, `arrayContaining`, or a "contains the option" test. The predicate exists to refuse a foreign same-named unit, so it matches the exact flags-first prefix and admits at most one pair from a CLOSED option set; widening it to accept the new family flag by looseness rather than by enumeration is how an adopted unit stops being ours.
 - Don't stop-and-disable a service in `prerm` without gating on `$1`, and don't "simplify" `postinst`'s unconditional `systemctl enable … || true` back into a `deb-systemd-helper` conditional. The helper's `enable` is a silent no-op once its installation state exists, so on the second upgrade of a real board the old `prerm`'s disable wins and the unit never comes back — board-proven on the Rock 5B+, with both helper binaries present.

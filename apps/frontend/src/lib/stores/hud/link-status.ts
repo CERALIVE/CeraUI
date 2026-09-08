@@ -6,12 +6,13 @@
  * ifname. Never throws on missing/partial/null inputs.
  */
 
-import type {
-	Modem,
-	ModemList,
-	NetifEntry,
-	NetifMessage,
-	WifiStatus,
+import {
+	type Modem,
+	type ModemList,
+	NETIF_DUPLICATE_IPV4_ERROR,
+	type NetifEntry,
+	type NetifMessage,
+	type WifiStatus,
 } from "@ceraui/rpc/schemas";
 import { isLoopbackIpv4 } from "$lib/helpers/ip-classification";
 import {
@@ -20,6 +21,7 @@ import {
 } from "$lib/helpers/network-speed";
 import { modemSignal } from "$lib/helpers/signal";
 import type { LinkSignal } from "$lib/types/hud";
+import { resolveSignalInstrument } from "$main/network/router-signal";
 import { MAX_LINKS } from "./constants";
 
 /**
@@ -44,30 +46,74 @@ export function modemConnectionState(
 }
 
 /**
+ * The tier a bonded link may draw when its device publishes NO percentage.
+ *
+ * A `router-ethernet` dongle has no ModemManager `status` block and never will,
+ * so {@link modemSignal} answers `null` for it — which used to leave the bond's
+ * indicator on its "nothing was reported" fallback, a bare muted glyph beside a
+ * managed modem's spectral bar cluster. Two treatments, one question, in one
+ * list. The dongle DOES publish a reading, on its own admin API, and this is the
+ * same instrument-precedence rule the Cellular card resolves
+ * ({@link resolveSignalInstrument}) rather than a second copy of it.
+ *
+ * Three refusals are deliberate:
+ *
+ *  - a `device-stack` answer is never used here. That branch is ModemManager's
+ *    own, so it is already the percentage above; consuming it would resurrect a
+ *    tier for a modem {@link modemSignal} intentionally suppressed (a `no_sim`
+ *    row, a negative sentinel);
+ *  - an empty slot draws no tier — the caller's `no_sim` state owns that fact,
+ *    and `resolveRouterSignalReadout` already withholds a reading for it;
+ *  - an `unknown` readout draws no tier. An unreachable dongle, a refused
+ *    session and a blank field are all "no reading was taken", and a bar cluster
+ *    would report one.
+ *
+ * Freshness is deliberately NOT a filter. Todo 20 re-serves one cycle's last
+ * live value precisely so a single missed 30 s poll does not blank a row, and
+ * blanking it here would reintroduce that flicker on the coarsest surface. The
+ * Cellular card remains the surface that distinguishes live from carried — it
+ * has the dedicated chip, its muted treatment and `data-freshness`; a
+ * three-bucket bar cluster never claimed measurement recency.
+ */
+function bondedSignalTier(
+	modem: Modem,
+	connectionState: LinkSignal["connectionState"],
+): LinkSignal["signalTier"] {
+	if (connectionState === "no_sim") return undefined;
+	const instrument = resolveSignalInstrument(modem);
+	if (instrument.kind !== "device-admin") return undefined;
+	return instrument.readout.kind === "reading"
+		? instrument.readout.tier
+		: undefined;
+}
+
+/**
  * Is this link present-but-not-carrying — kept out of the bond by a DEVICE
  * condition rather than by the operator?
  *
  * True when the interface has no `netif` entry at all (a modem that never
- * attached, a radio with no lease), holds no address, or carries a netif error
- * (the dup-IP HiLink pair).
+ * attached, a radio with no lease), holds no address, or carries a blocking
+ * netif error. The duplicate-IP warning is non-blocking only when the backend
+ * projects `isBondCandidate()` as enabled: that proves mappability and rules out
+ * other error bits, which the wire's single error string cannot distinguish.
  */
 export function isBondExcluded(entry: NetifEntry | undefined): boolean {
 	if (!entry) return true;
+	if (entry.error === NETIF_DUPLICATE_IPV4_ERROR)
+		return entry.enabled !== true || !entry.ip;
 	if (entry.error !== undefined && entry.error !== "") return true;
 	if (!entry.ip) return true;
 	return false;
 }
 
 /**
- * Does this interface actually carry bonded traffic right now?
+ * Is this interface included in the device's eligible bond pool?
  *
  * This is the frontend mirror of the backend's own bond-membership rule —
- * `genSrtlaIpList()` (`modules/streaming/srtla.ts`) writes the srtla source-IP
- * list from exactly the `netif` entries that are `enabled` and hold an `ip`, so
- * an interface satisfying that pair IS a bonded link and one that does not is
- * not. Both halves of the exclusion are folded here: an operator's `enabled:
- * false` (a statement of intent) and a device condition
- * ({@link isBondExcluded}) both mean the link carries nothing.
+ * `netIfBuildMsg().enabled` and `genSrtlaBondEntries()` use `isBondCandidate()`.
+ * An enabled duplicate-IP row is therefore bondable, not necessarily already
+ * bound by a running sender. Session mapping and telemetry remain separate;
+ * their absence while idle must not erase eligible links.
  */
 export function isBondMember(entry: NetifEntry | undefined): boolean {
 	return entry?.enabled === true && !isBondExcluded(entry);
@@ -162,11 +208,15 @@ export function buildBond(
 			continue;
 		}
 		const connectionState = modemConnectionState(modem);
+		const signal = modemSignal(modem);
 		links.push({
 			id,
 			type: "modem",
 			linkIndex: 0,
-			signal: modemSignal(modem),
+			signal,
+			...(signal === null
+				? { signalTier: bondedSignalTier(modem, connectionState) }
+				: {}),
 			label: modem.name || modem.status?.network || "Modem",
 			isConnected: connectionState === "connected",
 			isStale: modemsStale || fullyStale || staleIds.has(id),

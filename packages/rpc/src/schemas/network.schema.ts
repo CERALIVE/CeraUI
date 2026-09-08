@@ -6,6 +6,9 @@ import { z } from 'zod';
 // Accepts dotted-quad IPv4 or a colon-delimited IPv6 hextet string.
 export const IP_ADDRESS_REGEX = /^(\d{1,3}\.){3}\d{1,3}$|^[0-9a-fA-F:]+$/;
 
+/** Legacy wire spelling; only `enabled:true` also proves bond eligibility. */
+export const NETIF_DUPLICATE_IPV4_ERROR = 'duplicate IPv4 addr';
+
 // A claimed router-mode USB dongle's runtime state, as reported by the device
 // image's netns manager (image-building-pipeline `docs/dongle-netns-contract.md`
 // §6.1). `slot` is the manager's durable 0..7 slot; `state` is the claim's

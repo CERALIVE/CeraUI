@@ -16,11 +16,18 @@ import WifiZeroIcon from '@lucide/svelte/icons/wifi-zero';
 import { m } from '@ceraui/i18n/svelte';
 
 import { getSignalCategory, linkVisualState, signalTextClass } from '$lib/helpers/signal';
+import type { ModemSignalTier } from '$main/network/cellular-row';
 import { cn } from '$lib/utils';
 
 interface Props {
 	/** Signal percentage 0–100, or null when no data */
 	signal: number | null;
+	/**
+	 * Qualitative tier for a device that publishes no percentage — a router-mode
+	 * dongle's own admin reading. Consulted only when `signal` is null, so a
+	 * managed modem's rendering is untouched; both then draw the SAME cluster.
+	 */
+	signalTier?: ModemSignalTier | undefined;
 	/** Link type drives glyph selection and color rules */
 	type: 'modem' | 'wifi' | 'ethernet';
 	/** Connection state for null-signal glyph selection */
@@ -38,6 +45,7 @@ interface Props {
 
 const {
 	signal,
+	signalTier = undefined,
 	type,
 	connectionState = 'connected',
 	linkIndex,
@@ -63,7 +71,7 @@ function getSizeConfig(s: 'sm' | 'md' | 'lg') {
 
 const sizeConfig = $derived(getSizeConfig(size));
 
-const visualState = $derived(linkVisualState({ type, connectionState, signal }));
+const visualState = $derived(linkVisualState({ type, connectionState, signal, signalTier }));
 
 const identityColor = $derived(
 	linkIndex != null ? `var(--link-${linkIndex + 1})` : 'var(--muted-foreground)',
@@ -83,8 +91,13 @@ const linkAriaLabel = $derived(linkLevel != null ? `${m["hud.link"]()} ${linkLev
 {#snippet barCluster(filled: number)}
 	<span class="flex items-end" style:gap="{sizeConfig.gap}px" dir="ltr">
 		{#each [0, 1, 2] as barIdx (barIdx)}
+			<!-- `data-bar` is the colour-INDEPENDENT hook. Filled-ness is carried by
+			     a `--link-{n}` custom property, which `getComputedStyle` resolves to
+			     the same string a regression would, so a test that reads the colour
+			     proves nothing; the attribute states the fill directly. -->
 			<span
 				class="rounded-[1px]"
+				data-bar={barIdx < filled ? 'filled' : 'empty'}
 				style:width="{sizeConfig.barW}px"
 				style:height="{sizeConfig.barH[barIdx]}px"
 				style:background-color={barIdx < filled ? identityColor : 'var(--link-bar-empty)'}
