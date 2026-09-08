@@ -19,6 +19,13 @@ export default defineConfig({
 		}),
 	},
 	test: {
+		server: {
+			deps: {
+				// Already-compiled ESM: keep its registry and locale runtime in ONE
+				// native graph. The Svelte facade and test-generated registries stay isolated.
+				external: [/\/packages\/i18n\/(?:generated|src\/paraglide)\/.*\.js$/],
+			},
+		},
 		globals: true,
 		exclude: ['**/node_modules/**', '**/dist/**'],
 		// CI compiles ~355 Svelte-heavy files for 20+ minutes; three unrelated

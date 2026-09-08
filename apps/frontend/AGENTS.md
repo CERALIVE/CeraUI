@@ -284,6 +284,16 @@ both jobs. Never infer the project at runtime or enable `fsModuleCache` without
 a new measured decision. The classifier's Bun tests pin disjoint, complete
 coverage and both mixed-topology cases.
 
+Already-compiled i18n `.js` files under `packages/i18n/generated/` and
+`packages/i18n/src/paraglide/` load natively in the ordinary suite. Keep BOTH
+the registry and locale runtime on that boundary: splitting their module
+identities leaves the facade reading an empty registry or the wrong locale.
+The reactive Svelte facade, Svelte itself, app code and independently generated
+test registries stay transformed. Eager registration is memoized per module
+instance after success, never by a process-global flag. Full catalog coverage,
+Storage isolation, the 50 ms teardown wait and both project policies stay intact.
+See `docs/FRONTEND-SETUP-COST.md` at repo root for the measured alternatives.
+
 ```bash
 bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js

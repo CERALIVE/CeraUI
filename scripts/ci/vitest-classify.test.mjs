@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { globSync } from 'glob';
-
+import config from '../../apps/frontend/vitest.config.ts';
 import { classifyVitestFiles } from './vitest-classify.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
@@ -51,5 +51,47 @@ describe('frontend Vitest classifier', () => {
 		// Then Navigation gets jsdom while the TTL fallback keeps window absent
 		expect(components).toContain('src/lib/helpers/NavigationHelper.test.ts');
 		expect(pure).toContain('src/lib/rpc/ttl-seam.test.ts');
+	});
+});
+
+describe('compiled i18n native import boundary', () => {
+	test('loads every part of the compiled catalog through one native module graph', () => {
+		// Given the ordinary config, without experimental environment switches
+		const external = config.test.server?.deps?.external ?? [];
+		// When resolving the catalog entry, registry, namespaces and locale runtime
+		const modules = [
+			'generated/eager.js',
+			'generated/registry.js',
+			'generated/runtime.js',
+			'generated/namespaces/network.js',
+			'src/paraglide/runtime.js',
+			'src/paraglide/messages/live_setup_title.js',
+		];
+		// Then every entry reaches the same native graph, not a second Vite registry
+		for (const module of modules) {
+			expect(external.some((pattern) => pattern.test(`${repoRoot}/packages/i18n/${module}`))).toBe(
+				true,
+			);
+		}
+	});
+
+	test('keeps rune modules, application code and temporary registries transformed', () => {
+		// Given the native import rule
+		const external = config.test.server?.deps?.external ?? [];
+		// When resolving source or a test-generated independent registry
+		const modules = [
+			'packages/i18n/src/svelte.svelte.ts',
+			'packages/i18n/src/locale-lifecycle.ts',
+			'packages/i18n/scripts/generate-registry.ts',
+			'packages/i18n/generated/registry.d.ts',
+			'packages/i18n/test-results/independent/generated/registry.js',
+			'packages/rpc/src/index.ts',
+			'apps/frontend/src/main/LiveView.svelte',
+			'node_modules/svelte/src/internal/client/index.js',
+		];
+		// Then none escapes Vitest's transform and isolation boundary
+		for (const module of modules) {
+			expect(external.some((pattern) => pattern.test(`${repoRoot}/${module}`))).toBe(false);
+		}
 	});
 });

@@ -32,6 +32,10 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 | fsModuleCache:true | 2 | 591.017 | 585.78 | 375 / 6,234 | 89 / 2 / 5 / 3 / 2 % | 0 |
 | Native compiled catalog | 1 | 148.495 | 140.80 | 375 / 6,234 | 3 / 21 / 38 / 29 / 8 % | 0 |
 | Native compiled catalog | 2 | 126.658 | 121.21 | 375 / 6,234 | 4 / 16 / 35 / 36 / 9 % | 0 |
+| Native catalog + pure isolate:true | 1 | 139.631 | 133.74 | 375 / 6,234 | 4 / 18 / 38 / 33 / 8 % | 0 |
+| Native catalog + pure isolate:true | 2 | 134.593 | 128.39 | 375 / 6,234 | 4 / 18 / 37 / 34 / 8 % | 0 |
+| Native catalog + per-file namespaces | 1 | 126.363 | 120.87 | 375 / 6,234 | 7 / 18 / 33 / 33 / 9 % | 0 |
+| Native catalog + per-file namespaces | 2 | 127.820 | 122.32 | 375 / 6,234 | 7 / 17 / 32 / 35 / 9 % | 0 |
 
 Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
 seconds or less** (20% faster), plus three green runs at identical counts.
@@ -66,6 +70,22 @@ Mean wall time **137.576 s**, **79.24% faster** than current main. This is a
 profile-driven additional candidate, not a relabeling of the rejected broad
 optimizer. It keeps one coherent native registry/runtime graph and does not
 share Svelte component state. Adoption still awaits three final parity runs.
+
+**Pure isolation retest: retain isolate:false.** Tested both settings with the
+same native-catalog boundary. `true` averaged 137.112 s versus 137.576 s for
+`false`: 0.34%, not a meaningful improvement or a reason to replace the existing
+policy. Components remain isolated; no tests, worker bounds or timeouts changed.
+
+**Per-file namespace selection: measured, not adopted.** Task-1's profile justified
+testing setup lightening. A temporary setup replaced the eager import with
+`ensureNamespaces()` over namespaces detected in the test's transitive source
+imports, using the inherited scanner under the native-catalog boundary. Both
+full suites passed. Mean 127.092 s is 80.83% faster than original main, but only
+7.62% faster than native loading alone; the substantial gain is already available
+without the scanner. The scanner adds per-file synchronous source I/O and cannot
+prove coverage of computed keys or package imports. We deliberately choose the
+simpler full catalog, rather than make future test correctness depend on that
+heuristic. Its current green runs do not prove its future key coverage.
 
 ## Registration scope
 
