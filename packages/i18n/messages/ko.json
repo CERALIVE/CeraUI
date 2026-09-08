@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "동글의 로그인 페이지에 연결할 수 없습니다. 이 비밀번호는 저장되지 않았습니다. 연결을 확인한 후 다시 시도하세요.",
+	"network.routerCellular.lock.verification.credentials_rejected": "동글이 이 로그인을 거부했습니다. 이 비밀번호는 저장되지 않았습니다. 사용자 이름과 비밀번호를 확인한 후 다시 시도하세요.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "미디어 부하",
 	"settings.mediaLoad.description": "코어별 드라이버 측정값과 연결된 세션 소유 정보",

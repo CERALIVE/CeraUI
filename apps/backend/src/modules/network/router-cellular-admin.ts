@@ -125,6 +125,7 @@ import {
 	parseHilinkCapabilities,
 	type RouterAdminCapabilities,
 } from "./router-capabilities.ts";
+import { ROUTER_CREDENTIAL_DEFAULTS } from "./router-credentials.ts";
 import {
 	parseHilinkDetails,
 	parseUfiDetails,
@@ -237,8 +238,7 @@ const BODY_SEPARATOR = "<<<CERA-ADMIN-SPLIT>>>";
 const UFI_API_PATH = "/himiapi/json";
 const UFI_DEFAULT_LOGIN = JSON.stringify({
 	cmdid: "login",
-	username: "admin",
-	password: "admin",
+	...ROUTER_CREDENTIAL_DEFAULTS["generic-rndis"],
 });
 
 export const UFI_READ_COMMANDS = [

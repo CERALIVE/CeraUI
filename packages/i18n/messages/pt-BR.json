@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "Não foi possível acessar a página de login do modem. Esta senha não foi salva. Verifique a conexão antes de tentar novamente.",
+	"network.routerCellular.lock.verification.credentials_rejected": "O modem rejeitou este login. Esta senha não foi salva. Verifique o usuário e a senha antes de tentar novamente.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "Carga de mídia",
 	"settings.mediaLoad.description": "Leituras do driver por núcleo e sessões vinculadas",

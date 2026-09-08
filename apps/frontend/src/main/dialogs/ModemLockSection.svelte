@@ -61,10 +61,9 @@
   The password lives in this component's own `$state` — never a store, never a
   URL, never `localStorage`, never a `$persist`. `AppDialog` renders children
   only while open, so closing the dialog drops it: the retention bound is the
-  mount rather than a cleanup somebody has to remember. It is additionally
-  cleared BEFORE the await (the `ModemUssdSection` rule), so it is out of the
-  component the instant it is dispatched and can never be echoed back into a
-  heading, an outcome band or a retry affordance. There is no reveal toggle and
+  mount rather than a cleanup somebody has to remember. A failed draft stays
+  only in this mount; success clears it. It is never echoed into a heading,
+  an outcome band or a retry affordance. There is no reveal toggle and
   no autofill: the field is `type="password"` with `autocomplete="off"`
   throughout.
 
@@ -85,6 +84,7 @@ import { Button } from '$lib/components/ui/button';
 import { Input } from '$lib/components/ui/input';
 import { Label } from '$lib/components/ui/label';
 import {
+	CREDENTIAL_VERIFICATION_COPY,
 	lockErrorKey,
 	lockoutRemainingMinutes,
 	type LockView,
@@ -103,7 +103,7 @@ interface Props {
 let { deviceId, lock }: Props = $props();
 
 /**
- * The operator's typed credential. LOCAL, cleared before every dispatch, and
+ * The operator's typed credential. LOCAL, cleared after successful verification, and
  * dropped with the mount — see the header. Nothing else in this app may hold it.
  */
 let password = $state('');
@@ -154,47 +154,35 @@ const canSubmit = $derived(
 let clearConfirming = $state(false);
 
 function refuse(result: ModemCredentialsOutput): void {
-	outcome = mutationOutcome('refused', t(lockErrorKey(result.error)));
+	outcome = mutationOutcome('refused', t(result.verification === undefined
+		? lockErrorKey(result.error)
+		: CREDENTIAL_VERIFICATION_COPY[result.verification]));
 }
 
-/**
- * Store the credential, then present it EXACTLY ONCE.
- *
- * Two procedures because the device separates them: `setCredentials` performs
- * zero device requests (so it can never itself spend an attempt), and
- * `verifyCredentials` is the one bounded attempt. The unlock is a CAPABILITY
- * EXPANSION rather than a private fact because the device re-broadcasts the
- * roster afterwards — the withheld capability and control blocks arrive through
- * the same `modems` surface they always rode, and this dialog renders them
- * through the same uniform sections as everything else.
- */
+/** The backend verifies once and persists only an accepted credential. */
 async function unlock(): Promise<void> {
 	if (!canSubmit) return;
-	// Cleared BEFORE the await. The captured values are the only copies left, and
-	// they are function-local, so nothing survives the dispatch.
+	const submittedDevice = deviceId;
 	const credential = { username, password };
-	password = '';
-	username = '';
 	busy = true;
 	outcome = undefined;
 	try {
-		const stored = await rpc.modems.setCredentials({
-			device: deviceId,
+		const verified = await rpc.modems.setCredentials({
+			device: submittedDevice,
 			...credential,
 		});
-		if (!stored.success) {
-			refuse(stored);
+		if (submittedDevice !== deviceId) return;
+		if (!verified.success) {
+			refuse(verified);
 			return;
 		}
-		const verified = await rpc.modems.verifyCredentials({ device: deviceId });
-		outcome = verified.success
-			? mutationOutcome(
-					'applied',
-					m['network.routerCellular.lock.outcome.unlocked'](),
-				)
-			: mutationOutcome('refused', t(lockErrorKey(verified.error)));
+		password = '';
+		username = '';
+		outcome = mutationOutcome('applied', m['network.routerCellular.lock.outcome.unlocked']());
 	} catch {
-		outcome = mutationOutcome('refused', t(lockErrorKey(undefined)));
+		if (submittedDevice === deviceId) {
+			outcome = mutationOutcome('refused', t(lockErrorKey(undefined)));
+		}
 	} finally {
 		busy = false;
 	}

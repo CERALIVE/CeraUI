@@ -1,4 +1,8 @@
 import type { WebSocketRoute } from "@playwright/test";
+import type { Modem, ModemCredentialsOutput, ModemLockState } from "@ceraui/rpc/schemas";
+import { modemSchema } from "@ceraui/rpc/schemas";
+import captured from "../../../backend/src/tests/fixtures/modems/zte-mf79u/installed-summary.json" with { type: "json" };
+import en from "../../../../packages/i18n/messages/en.json" with { type: "json" };
 
 import { expect, test } from "./fixtures/index.js";
 
@@ -35,8 +39,9 @@ const DONGLE_ID = "dongle-locked";
 const DONGLE_IFNAME = "enx0c5b8f279a64";
 
 let pageWs: WebSocketRoute | null = null;
-/** What the next `modems.verifyCredentials` answers. Armed per test. */
-let verifyReply: Record<string, unknown> = { success: true };
+let verifyReply: ModemCredentialsOutput = { success: true, verification: "verified" };
+let submissions = 0;
+let separateVerifications = 0;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
@@ -63,12 +68,10 @@ function serverConfig(): void {
  * `open`/`unlocked`, and the whole expansion this spec proves is that they
  * arrive when the lock clears.
  */
-type WireLockState = "open" | "locked" | "unlocked" | "auth-failed" | "locked-out";
-
 function dongle(
-	lock: WireLockState,
+	lock: ModemLockState,
 	options: { controls?: boolean; lockoutUntil?: number } = {},
-): Record<string, unknown> {
+): Modem {
 	return {
 		ifname: DONGLE_IFNAME,
 		name: "Huawei E3372",
@@ -94,7 +97,7 @@ function dongle(
 	};
 }
 
-function sendRoster(entry: Record<string, unknown>): void {
+function sendRoster(entry: Modem): void {
 	send({ status: { cellular_initializing: false, modems: { [DONGLE_ID]: entry } } });
 }
 
@@ -113,7 +116,9 @@ test.describe(
 				"desktop layout drives the dongle dialog",
 			);
 			pageWs = null;
-			verifyReply = { success: true };
+			verifyReply = { success: true, verification: "verified" };
+			submissions = 0;
+			separateVerifications = 0;
 
 			await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 				pageWs = ws;
@@ -131,16 +136,19 @@ test.describe(
 							? frame.path.join(".")
 							: null;
 						if (frame.id !== undefined && rpc !== null) {
-							if (
-								rpc === "modems.setCredentials" ||
-								rpc === "modems.clearCredentials"
-							) {
+							if (rpc === "modems.clearCredentials") {
 								ws.send(
 									JSON.stringify({ id: frame.id, result: { success: true } }),
 								);
 								return;
 							}
+							if (rpc === "modems.setCredentials") {
+								submissions += 1;
+								ws.send(JSON.stringify({ id: frame.id, result: verifyReply }));
+								return;
+							}
 							if (rpc === "modems.verifyCredentials") {
+								separateVerifications += 1;
 								ws.send(JSON.stringify({ id: frame.id, result: verifyReply }));
 								return;
 							}
@@ -222,8 +230,10 @@ test.describe(
 				"data-outcome",
 				"applied",
 			);
-			// Cleared the instant it was dispatched.
+			// Cleared only after the verified submission succeeds.
 			await expect(field).toHaveValue("");
+			expect(submissions).toBe(1);
+			expect(separateVerifications).toBe(0);
 
 			// The device re-broadcasts the roster after a successful verify, and the
 			// withheld control arrives through the SAME uniform section.
@@ -299,6 +309,31 @@ test.describe(
 			await expect(page.getByTestId("dongle-lock-password")).toBeVisible();
 			await expect(page.getByTestId("dongle-lock-submit")).toBeVisible();
 		});
+
+		for (const verification of ["admin_unreachable", "credentials_rejected"] as const) {
+			test(`the captured ZTE keeps a failed draft only until close: ${verification}`, async ({ page }) => {
+				verifyReply = {
+					success: false,
+					error: verification === "admin_unreachable" ? "unreachable" : "auth_failed",
+					verification,
+				};
+				sendRoster(modemSchema.parse(captured.wireRowsMatchedByIdPath["1003"]));
+				const configure = page.locator(`[data-modem-id=${JSON.stringify(DONGLE_ID)}]`).getByTestId("open-modem-config-dialog");
+				await configure.click();
+				const field = page.getByTestId("dongle-lock-password");
+				await field.fill(SECRET);
+				await page.getByTestId("dongle-lock-submit").click();
+				await expect(page.getByTestId("dongle-lock-outcome")).toHaveText(en[`network.routerCellular.lock.verification.${verification}`]);
+				await expect(field).toHaveValue(SECRET);
+				expect(submissions).toBe(1);
+				expect(separateVerifications).toBe(0);
+				expect(await page.evaluate((secret) => [document.documentElement.outerHTML, JSON.stringify(localStorage), JSON.stringify(sessionStorage), location.href].some((value) => value.includes(secret)), SECRET)).toBe(false);
+				await page.keyboard.press("Escape");
+				await expect(page.getByRole("dialog")).toHaveCount(0);
+				await configure.click();
+				await expect(field).toHaveValue("");
+			});
+		}
 
 		test("a lockout renders the wait and offers NO retry", async ({ page }) => {
 			sendRoster(

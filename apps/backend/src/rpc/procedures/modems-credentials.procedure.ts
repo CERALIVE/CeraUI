@@ -42,6 +42,7 @@ import {
 } from "@ceraui/rpc/schemas";
 import type { CredentialTarget } from "../../modules/modems/modem-credential-verify.ts";
 import {
+	cancelModemCredentialVerification,
 	resolveCredentialTarget,
 	verifyModemCredential,
 } from "../../modules/modems/modem-credential-verify.ts";
@@ -49,7 +50,6 @@ import {
 	clearModemCredential,
 	modemCredentialKey,
 	projectModemCredential,
-	writeModemCredential,
 } from "../../modules/modems/modem-credentials.ts";
 import {
 	forgetLockSession,
@@ -86,20 +86,13 @@ function answerFor(
 }
 
 /**
- * Store a router-WebUI login for one device.
- *
- * It performs ZERO device requests: the open verdict is the one the 30 s admin
- * read cycle already observed, so storing a credential cannot itself spend an
- * attempt against a lockout counter. A device DETECTED as open is refused —
- * writing a secret nothing will ever present is worse than no write at all.
- *
- * A newly stored credential DROPS any session verdict, because the previous
- * `unlocked` or `auth-failed` was about a different secret.
+ * Verify the request-local login once before the existing store may persist it.
+ * Failed candidates never enter the store; the dialog owns their remaining life.
  */
 export const setModemCredentialsProcedure = authedProcedure
 	.input(setModemCredentialsInputSchema)
 	.output(modemCredentialsOutputSchema)
-	.handler(({ input }) => {
+	.handler(async ({ input }) => {
 		const target = resolveCredentialTarget(input.device);
 		if (target === undefined) {
 			return answerFor(undefined, false, "unknown_device");
@@ -111,16 +104,17 @@ export const setModemCredentialsProcedure = authedProcedure
 			return answerFor(target, false, "device_open");
 		}
 
-		forgetLockSession(target.device.identityKey);
-		const stored = writeModemCredential(target.device, {
+		const outcome = await verifyModemCredential(input.device, undefined, {
 			username: input.username,
 			password: input.password,
 		});
-		if (!stored) {
-			return answerFor(target, false, "identity_unresolved");
-		}
 		broadcastModems();
-		return answerFor(target, true);
+		return {
+			...answerFor(outcome.target, outcome.success, outcome.error),
+			...(outcome.verification !== undefined
+				? { verification: outcome.verification }
+				: {}),
+		};
 	});
 
 /**
@@ -138,6 +132,7 @@ export const clearModemCredentialsProcedure = authedProcedure
 		if (target === undefined) {
 			return answerFor(undefined, false, "unknown_device");
 		}
+		cancelModemCredentialVerification(target.device.identityKey);
 		clearModemCredential(target.device);
 		forgetLockSession(target.device.identityKey);
 		broadcastModems();
@@ -158,5 +153,10 @@ export const verifyModemCredentialsProcedure = authedProcedure
 	.handler(async ({ input }) => {
 		const outcome = await verifyModemCredential(input.device);
 		broadcastModems();
-		return answerFor(outcome.target, outcome.success, outcome.error);
+		return {
+			...answerFor(outcome.target, outcome.success, outcome.error),
+			...(outcome.verification !== undefined
+				? { verification: outcome.verification }
+				: {}),
+		};
 	});

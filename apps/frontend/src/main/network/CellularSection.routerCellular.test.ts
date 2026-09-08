@@ -380,9 +380,7 @@ describe("configuration surface — exactly what the device reported", () => {
 				k === "network.cellular.reason.routerManaged" ||
 				k === "network.cellular.reason.routerControlsUnverified",
 		);
-		expect(owningKeys).toEqual([
-			"network.cellular.reason.routerControlsUnverified",
-		]);
+		expect(owningKeys).toEqual(["network.cellular.reason.routerManaged"]);
 	});
 
 	/**
@@ -393,7 +391,7 @@ describe("configuration surface — exactly what the device reported", () => {
 	 * difference between them is that one button is greyed out — with the row
 	 * offering no answer to the obvious "why not this one?".
 	 */
-	it("tells a verified dongle apart from an unverified one, in words", () => {
+	it("keeps both router dialogs reachable without claiming a failed settings write", () => {
 		const verified = renderRow(
 			dongle({
 				ifname: "enx344b50000000",
@@ -415,7 +413,7 @@ describe("configuration surface — exactly what the device reported", () => {
 		expect(noteKeys(verified.container)).not.toContain(
 			"network.cellular.reason.routerControlsUnverified",
 		);
-		expect(noteKeys(unverified.container)).toContain(
+		expect(noteKeys(unverified.container)).not.toContain(
 			"network.cellular.reason.routerControlsUnverified",
 		);
 
@@ -424,7 +422,7 @@ describe("configuration surface — exactly what the device reported", () => {
 				'[data-testid="open-modem-config-dialog"]',
 			);
 		expect(configureButton(verified.container)?.disabled).toBe(false);
-		expect(configureButton(unverified.container)?.disabled).toBe(true);
+		expect(configureButton(unverified.container)?.disabled).toBe(false);
 	});
 
 	// The whole point of the relocation: a dongle WITH a live address must never

@@ -38,11 +38,16 @@
 import {
 	MODEM_LOCK_STATES,
 	modemCredentialsRefusalSchema,
+	modemCredentialVerificationSchema,
 	modemLockSubReasonSchema,
 } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
 
-import { lockErrorKey, lockMessageKey } from "$lib/modem/lock-state";
+import {
+	CREDENTIAL_VERIFICATION_COPY,
+	lockErrorKey,
+	lockMessageKey,
+} from "../lib/modem/lock-state";
 import { CATALOGS } from "./helpers/catalog";
 
 /** The section's own frame — the surface a state sentence sits inside. */
@@ -77,6 +82,9 @@ const SITUATION_KEYS: readonly string[] = [
 /** Every typed refusal the three credential procedures may answer, plus ours. */
 const ERROR_KEYS: readonly string[] = [
 	lockErrorKey(undefined),
+	...modemCredentialVerificationSchema.options.map(
+		(token) => CREDENTIAL_VERIFICATION_COPY[token],
+	),
 	...modemCredentialsRefusalSchema.options.map((token) => lockErrorKey(token)),
 ];
 
@@ -119,7 +127,8 @@ function withoutKey(catalog: unknown, key: string): unknown {
 	for (const segment of segments.slice(0, -1)) {
 		cursor = cursor[segment] as Record<string, unknown>;
 	}
-	delete cursor[segments.at(-1) as string];
+	const lastSegment = segments[segments.length - 1];
+	if (lastSegment !== undefined) delete cursor[lastSegment];
 	return clone;
 }
 
@@ -134,7 +143,7 @@ describe("the required list is DERIVED from the wire, not re-typed", () => {
 	it("covers every credential refusal the device can answer", () => {
 		expect(modemCredentialsRefusalSchema.options.length).toBe(9);
 		// …plus our own transport fallback, which must not borrow a device claim.
-		expect(new Set(ERROR_KEYS).size).toBe(10);
+		expect(new Set(ERROR_KEYS).size).toBe(13);
 	});
 
 	it("names the three FAILURE causes explicitly", () => {

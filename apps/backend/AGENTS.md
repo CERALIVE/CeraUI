@@ -1980,11 +1980,16 @@ everything. They take no lease and touch no radio.
   withdraws any cached `open` evidence, because that claim widens the row and the
   device can no longer support it. Neither rejection records `auth-failed`, and
   neither is retried.
-- **`setCredentials` performs zero device requests too** — it reads the open
-  verdict the admin cycle already observed — and REFUSES an `open` device
-  (`device_open`) rather than storing a secret nothing will ever present.
+- **`setCredentials` verifies before storing.** Its request-local candidate is
+  presented once through the existing login port; only accepted authentication
+  writes the existing mode-0600 atomic store. Failed candidates never enter the
+  entries map, and failure outcomes never reserialize an old credential.
+  An `open` device remains refused as `device_open`. The additive `verification`
+  field distinguishes `admin_unreachable`, `credentials_rejected`, and `verified`;
+  unsupported profiles and lockouts retain their existing distinct refusals.
 - **Clearing a credential drops the session verdict with it**: a credential that
-  no longer exists cannot keep a row `unlocked`.
+  no longer exists cannot keep a row `unlocked`. It also cancels pending
+  verification so a late successful reply cannot resurrect the forgotten login.
 - **No output carries a password.** `modemCredentialsOutputSchema` is a plain
   `z.object`, so a field added upstream by mistake is STRIPPED, and
   `rpc-logging.ts` omits these three procedures' args entirely (a per-PROCEDURE
@@ -2003,7 +2008,15 @@ D and NOT run against a device that demands it; ZTE and HIMI ship no login at al
 and answer `protocol-mismatch` deliberately, because an unproven credential
 derivation would burn a real operator's attempts against a real lockout counter.
 
-Coverage: `tests/modem-credential-unlock.test.ts` — all five states reachable and
+The public defaults live in `network/router-credentials.ts`; the existing UFI
+read session consumes its generic-RNDIS `admin` pair. HiLink and unknown profiles
+have no implicit credential. No new login protocol is added: the captured ZTE
+row's password outcomes are injected in regression tests, not hardware-proven.
+Persistence and session-draft contract: `../../docs/CONFIG_PERSISTENCE.md`.
+
+Coverage: `tests/modem-credential-persistence.test.ts` (real temporary store,
+failed replacement, pending clear, mode-0600 restart reload),
+`tests/router-credentials.test.ts`, and `tests/modem-credential-unlock.test.ts` — all five states reachable and
 EXPLICIT on the wire (including the no-admin-surface negative), the resolution
 ladder with its withdraw-the-open-claim case, the four refusal mappings with the
 `protocol-mismatch` ≠ `auth-failed` assertion, the capability withhold/offer pair

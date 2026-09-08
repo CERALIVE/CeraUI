@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "No se pudo acceder a la página de inicio de sesión del módem. Esta contraseña no se guardó. Comprueba la conexión antes de volver a intentarlo.",
+	"network.routerCellular.lock.verification.credentials_rejected": "El módem rechazó este inicio de sesión. Esta contraseña no se guardó. Comprueba el usuario y la contraseña antes de volver a intentarlo.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "Carga multimedia",
 	"settings.mediaLoad.description": "Lecturas del controlador por núcleo y sesiones vinculadas",

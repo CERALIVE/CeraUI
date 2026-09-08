@@ -77,10 +77,10 @@ const FULL_ADMIN: RouterAdmin = {
 	capabilities: {
 		net_mode: {
 			state: "reported",
-			modes: [{ id: "00", label: "AUTO" }],
+			modes: [{ id: "00", name: "AUTO" }],
 		},
 	},
-	controls: { mobile_data: true },
+	controls: { mobile_data: true, roaming_autoconnect: false },
 };
 
 function deviceRecord() {
@@ -342,6 +342,7 @@ describe("verifying a stored credential", () => {
 		expect(outcome).toEqual({
 			success: false,
 			error: "unreachable",
+			verification: "admin_unreachable",
 			target,
 		});
 		expect(readLockOpenEvidence(target.ifname)).toBeUndefined();
@@ -361,6 +362,7 @@ describe("verifying a stored credential", () => {
 		expect(outcome).toEqual({
 			success: false,
 			error: "unreachable",
+			verification: "admin_unreachable",
 			target,
 		});
 		expect(rec.requests).toEqual(["detect", "attempt"]);

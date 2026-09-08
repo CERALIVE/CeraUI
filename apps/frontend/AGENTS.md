@@ -554,8 +554,8 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 - EVERY cellular device gets a row, and an uncontrollable one is DIMMED-WITH-A-REASON, never hidden (modem-stack Phase B, todo 26) [PARTIAL — never rendered against real cellular hardware]: `main/network/CellularSection.svelte` renders ONE calm summary row per device off the Wave-4 additive wire fields (`device_class`, `availability_reason`, `slot_label`), and `main/network/cellular-row.ts` is the pure, rune-free derivation behind it. Three classes share the row: `mm-managed` (`usb`/`pcie-mhi`/`pcie-mtk`/`soc-qrtr`, and an ABSENT `device_class` — the pre-Phase-B wire came from mmcli only, which lists nothing else), `router-ethernet`, and `unmanaged` for a transport this build does not recognise. The BAND vocabulary is `docs/MODEM-SUPPORT-MATRIX.md` §1's verbatim, but the BADGE's is not, and that split is the §3 OL-1 fix: the copy used to be the band with a capital glued on (`MM-managed`, `Router-ethernet`), which is the name of the daemon that controls the device rather than anything an operator can act on. It now reads `Directly managed` / `Router dongle` / `Unrecognised`; the band itself stays on `data-class-band` and in the diagnostics `transport` row. `CellularSection.test.ts` asserts BOTH directions — the three operator words, and that no badge's text contains its own band. Six rules are load-bearing:
   1. **An unrecognised `device_class` resolves to `unmanaged`, never to a known band** — the honest generic row, not a guess. Likewise an unrecognised `availability_reason` never becomes `router-up`: a lifecycle claim drawn from a token we could not read is the fabrication the backend refused to make when it omitted the dongle's status block.
   2. **`availability_reason` is a wire-stable machine token and is NEVER rendered raw** — `router_managed` / `dongle_acquiring` / `dongle_down` are keyed to copy (the last two REUSE `EthernetSection`'s existing sentences: same physical device, second surface, so the two must not describe it differently), and an unknown token resolves to a generic sentence. Every resolver returns an i18n DOT-PATH KEY, resolved at the component through `resolveMessageKey`.
-  3. **No control is ever removed, and none is bare.** The bond toggle renders on EVERY row — a modem with no address keeps it, disabled-with-reason, where the pre-redesign row simply omitted it and made "cannot bond" indistinguishable from "not a bonding candidate". A `router-ethernet` row's toggle is disabled even when `up`: its veth already owns a LIVE toggle on its own `EthernetSection` row, and two live controls for one link is how they disagree. Configure is disabled-with-reason for `router-ethernet`/`unmanaged` rather than opening a dialog with nothing in it.
-  4. **Reasons are DE-DUPLICATED into at most two lines** (`rowNoteKeys`). A router dongle's Configure reason is deliberately the SAME key its `router_managed` availability token resolves to, so the two collapse instead of restating one fact twice — rendered naively the row grew three sentences saying two things, which reads as a wall rather than as an instrument.
+  3. **No control is ever removed, and none is bare.** The bond toggle renders on EVERY row — a modem with no address keeps it, disabled-with-reason. An isolated router's veth owns its bond control; a `router_direct` row keeps its own subject to the ordinary bond gates. Router Configure remains enabled for diagnostics and portal access even without writable settings; only `unmanaged` Configure is disabled-with-reason.
+  4. **Reasons are DE-DUPLICATED into at most two lines** (`rowNoteKeys`). Availability and bond reasons stay inline without restating the same fact. Router dialog access is independent of those reasons; individual settings keep their own capability gates.
   5. **Absence renders as absence.** A device that reported no `status` draws NO signal glyph; an empty meter reads as "no signal" on a dongle carrying traffic. The glyph itself is a qualitative tier with a word behind it — no digits, no `data-live-value` — so it does NOT re-add the per-row telemetry `BondedLinksSection` owns and T20 removed.
   6. **The state dot is `self-start mt-1.5`, not centred** — a row with note lines is tall, and a vertically-centred dot floats away from the name it reports on. Every state carries its own WORD and GLYPH; colour is only reinforcement.
 
@@ -850,19 +850,12 @@ collision in consistencies give a really bad UI UX."*
   IDENTICALLY here, and the `No SIM` pill beside it carries the difference.
   Collapsing the two is what made one pill contradict the other.
 
-**…and the Configure refusal names WHY, in its own words.** The gating is
-UNCHANGED — Configure is refused exactly when `router_admin.controls` is absent,
-i.e. when no write to this dongle was ever proven to land. What changed is that
-the refusal stopped borrowing the generic `routerManaged` availability sentence:
-board-measured, two Huawei rows with WORKING Configure and a ZTE and a Qualcomm
-with REFUSED Configure all printed the identical "manages this connection
-itself", so the row answered every "why not this one?" the same way.
-`network.cellular.reason.routerControlsUnverified` states the real reason and
-still points at the dongle's own web interface. Because it CONTAINS the generic
-sentence's content, `rowNoteKeys` SUPERSEDES rather than stacks
-(`SUPERSEDED_NOTE_KEYS`) — the row keeps its two-line ceiling, and a verified
-dongle's generic line is untouched. Do NOT re-merge the keys to "save a
-translation": the distinction IS the answer to the operator's question.
+**…and Configure now separates dialog access from writable settings.** The
+earlier `routerControlsUnverified` refusal blocked a useful diagnostics/login
+surface whenever `router_admin.controls` was absent. Router Configure now stays
+reachable across link and lock states. Missing controls still withhold their
+individual settings, but do not establish rejected credentials or an unreachable
+portal. Login outcomes and unconfirmed settings writes retain separate bands.
 
 Coverage: `cellular-row.test.ts` ("the router link-state badge names the LINK…",
 the `configureDisabledReasonKey` distinctness block, and the `rowNoteKeys`
@@ -1202,9 +1195,9 @@ FOUR phases, and the two that render nothing are NOT the same fact:
   mutation-safety contract landed.
 - **A device with no `stable_key` is refused the control AND the list**, because a
   switch that could never be confirmed is not an option to display.
-- **A UFI/router-ethernet row gets no card at all** — it reports no composition, and
-  its Configure button is disabled-with-reason, so there is no surface a switch
-  could live on. `sethimiusbtether` is a PERMANENT fence, enforced by a repo-wide
+- **A UFI/router-ethernet row gets no USB-composition card at all** — its
+  diagnostics dialog remains reachable, but offers no composition switch.
+  `sethimiusbtether` is a PERMANENT fence, enforced by a repo-wide
   grep gate (`apps/backend/src/tests/usb-tether-fence.test.ts`), not by a UI state.
 
 Coverage: `src/tests/usb-mode-offer.test.ts` (the pure rule),
@@ -1756,10 +1749,12 @@ reads as a retry, which the enumeration test asserts.
 the section's own `$state` — never a store, never `$persist`, never
 `localStorage`, never a URL — and `AppDialog` renders children only while open,
 so the retention bound is the mount rather than a cleanup somebody has to
-remember (the `ModemUssdSection` rule, for the same reason). It is additionally
-cleared BEFORE the await, so it is out of the component the instant it is
-dispatched and can never be echoed into a heading, an outcome band or a retry
-affordance. There is no reveal toggle and no autofill: `type="password"` +
+remember. A failed draft stays only in that mount; success clears it, and a
+device change discards it. One `setCredentials` RPC performs verification before
+persistence; no second login is dispatched. Typed `admin_unreachable` and
+`credentials_rejected` results have distinct translated outcome bands.
+The draft is never echoed into a heading or outcome band.
+There is no reveal toggle and no autofill: `type="password"` +
 `autocomplete="off"`, and no `value` ATTRIBUTE, so the secret is never in the
 serialized document.
 
@@ -1777,7 +1772,9 @@ were both defects before they were rules:
 2. **A locked dongle's Configure must still open.** `configureDisabledReasonKey`
    read that same absence as an unverified write and DISABLED the row's
    Configure — so the operator was refused entry to the only surface carrying
-   the login. A lock now opens the dialog; `open`/`unlocked` are unchanged.
+   the login. Every router row now keeps that dialog reachable, including
+   `open`/`unlocked` without controls: diagnostics and portal access are useful
+   independently of settings writes. Individual settings retain their gates.
 
 Copy: `network.routerCellular.lock.*` (29 keys × 10 locales). Coverage:
 `lib/modem/lock-state.test.ts` (the entry/clear/withhold tables swept over
@@ -2182,7 +2179,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't add a `data-touch-target="hit-area"` control to that `min-height` list either, and don't remove the `:not([data-touch-target='hit-area'])` carve-out that keeps it out. The three shell controls carrying it (the `Auth.svelte` password reveal, `AppDialog.svelte`'s header close, `UpdateBanner.svelte`'s dismiss) are compact SQUARE icon buttons, so `min-height` fixes the wrong axis and leaves the width at 36/32/24px while turning a ghost button's hover state into a pill that no longer matches its glyph; the dialog close additionally reaches 6px past a 52px header into the scrollable body and takes the first pixels of a scroll gesture. And don't reach for a selector list instead of the attribute — the banner's dismiss is a plain `<button>` with no `data-slot`, which is exactly why the lift never reached it. `tests/e2e/touch-targets.spec.ts` (`@a11y`) measures the overlay on BOTH axes and asserts the box stayed small; the mechanism is written up in `docs/TOUCHSCREEN.md`.
 - Don't assert a reduced-motion fix with an animation-DURATION sweep on these surfaces — `app.css` already collapses every animation to `0.01ms` under `prefers-reduced-motion: reduce`, so a duration assertion is green before and after a `motion-safe:` is added. The falsifiable property is `animation-name`: `motion-safe:` declares no animation at all, a bare `animate-*` still names one. Note `NavigationRenderer`'s transition spinner cannot be reached from a browser at all (`setTransitioning` has no caller in shipped source), so its gate is the class-list lock in `NavigationRenderer.test.ts`.
 - Don't re-declare `present ? { mode: 'available' } : { mode: 'absent' }` on a modem surface — import `readingView` from `$lib/modem/sections`. Five surfaces had written it by hand, and the way a local copy drifts is documented: pointed at a capability that can be UNKNOWN it renders "nobody has established this" as ZERO nodes, byte-identical to a modem that positively has none. `src/tests/modem-reading-view-gate.test.ts` fails the build on a second copy.
-- Don't hold a dongle password anywhere but `ModemLockSection`'s own `$state`, and don't skip clearing it BEFORE the await — no store, no `$persist`, no `localStorage`, no URL, no `value` attribute, no reveal toggle, no autofill. The mount is the retention bound, exactly as it is for the USSD command.
+- Don't hold a dongle password anywhere but `ModemLockSection`'s own `$state`: keep a failed draft only until close/device change, clear it on success, and send one verification request. No store, `$persist`, Web Storage, URL, `value` attribute, reveal toggle, or autofill.
 - Don't fold the three credential failure causes into one message. Wrong password, unsupported firmware profile and device lockout call for three different actions, and `lockMessageKey` is a table over the wire vocabulary precisely so a component branch cannot quietly merge two of them.
 - Don't read an absent `router_admin.controls` as "no write was ever proven" without asking `lockWithholdsCapabilities` first — a signed-out dongle withholds the same block, so that reading both blamed the hardware in the no-controls band AND disabled the row's Configure, which is the only way into the dialog carrying the login.
 - Don't confirm a router-dongle write on the RPC reply (`result.controls` included) — the observation is what moves the switch, so confirming on the reply lets the band claim applied while the control still shows the old value. Don't arm the bound at dispatch either, and don't let a late broadcast upgrade an `unconfirmed` write into a success.

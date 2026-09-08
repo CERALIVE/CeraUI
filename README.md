@@ -41,6 +41,13 @@ A dev-only DevTools destination is available in development builds.
 
 ### Other Highlights
 
+- **Verified dongle credentials**: login submission verifies before saving to the
+  existing permission-protected store. Failed attempts preserve a previous saved
+  login; failed drafts remain only until the dialog closes. Portal reachability
+  and rejected authentication have distinct messages in all ten locales.
+  Router diagnostics remain reachable even without writable settings. See
+  [`CONFIG_PERSISTENCE.md`](docs/CONFIG_PERSISTENCE.md) for protocol limitations.
+
 - **Progressive Web App**: offline capabilities and native app-like performance
 - **Internationalization**: 10 languages with full RTL support
 - **Touch/kiosk mode**: `?mode=touch` URL flag scales touch targets to 44px minimum

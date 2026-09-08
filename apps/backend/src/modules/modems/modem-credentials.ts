@@ -338,18 +338,15 @@ export function writeModemCredential(
 }
 
 /**
- * Record how the last attempt ended WITHOUT re-handling the password.
- *
- * The outcome moves far more often than the secret does (every verify, every
- * refusal), so making callers read-modify-write the whole credential would push
- * the password through another call site for no reason. A device with nothing
- * stored is a no-op: an outcome is a fact about a credential, not a credential.
+ * Record successful verification without re-handling the password.
+ * Failures belong to the volatile lock session, never the secret-bearing file.
  */
 export function recordModemCredentialOutcome(
 	device: PhysicalDeviceRecord,
 	outcome: ModemLockState,
 	verifiedAt?: number,
 ): boolean {
+	if (outcome !== "unlocked" || verifiedAt === undefined) return false;
 	const key = modemCredentialKey(device);
 	if (key === undefined) return false;
 	const entry = entries[key];

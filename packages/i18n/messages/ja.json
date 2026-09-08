@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "ドングルのログインページに接続できませんでした。このパスワードは保存されていません。接続を確認してから、もう一度お試しください。",
+	"network.routerCellular.lock.verification.credentials_rejected": "ドングルがこのログインを拒否しました。このパスワードは保存されていません。ユーザー名とパスワードを確認してから、もう一度お試しください。",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "メディア負荷",
 	"settings.mediaLoad.description": "コア別のドライバー測定値と紐づくセッション",

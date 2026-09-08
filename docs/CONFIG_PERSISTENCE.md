@@ -138,6 +138,43 @@ transient behavior.
 
 ### Credentials
 
+Portal logins retain the existing `/data/ceralive/modem-credentials.json` store
+(`modules/modems/modem-credentials.ts`): permission-protected plaintext, mode
+0600, written through its existing temp/fsync/chmod/rename sequence. This is not
+encryption and does not introduce a new storage abstraction.
+
+`modems.setCredentials` verifies its request-local candidate before writing.
+Rejected, unreachable, unsupported-profile and locked-out attempts never enter
+the stored entries map or create a temporary credential file. They leave any
+previously successful credential and its verification timestamp unchanged.
+`verifyCredentials` likewise records only successful verification on disk;
+failed outcomes belong to the volatile lock session. Explicit forgetting cancels
+pending verification before removing the stored login, preventing a late reply
+from restoring it. Existing files load without migration or automatic deletion.
+
+The dialog sends one `setCredentials` request. Failed drafts remain only in its
+mounted component state and disappear on close or device change; success clears
+them. Neither Web Storage nor serialized markup holds the password. Typed
+`verification` outcomes distinguish `admin_unreachable`, `credentials_rejected`
+and `verified` without replacing the existing refusal vocabulary.
+
+`modules/network/router-credentials.ts` names the public vendor defaults:
+HiLink has none, generic RNDIS uses `admin`/`admin`, and other profiles require
+operator input. The existing UFI read session consumes that public default;
+the resolver gives an explicitly supplied credential precedence. A default is
+not evidence that authentication is unnecessary. ZTE and UFI operator-login
+verification remain unsupported in the current login port; no new Basic-auth
+or form-login protocol is inferred from a reachable portal page.
+
+Coverage: `modem-credential-persistence.test.ts`, `modem-credentials.test.ts`,
+`router-credentials.test.ts`, and frontend `modem-credential-verification.test.ts`.
+The persistence tests use a redacted captured ZTE row with injected login
+outcomes, not a successful hardware password attempt.
+
+Local gate results, the clean-base E2E comparison, and the router GPS
+claim-ladder correction are recorded in
+[`MODEM-CREDENTIAL-VERIFICATION.md`](MODEM-CREDENTIAL-VERIFICATION.md).
+
 | File / field | Writer | Atomicity | Notes |
 |---|---|---|---|
 | `auth_tokens.json` | `savePersistentTokens` (`rpc/procedures/auth.procedure.ts:41`) | Atomic (`writeFileAtomicSync`, direct) | Persistent login tokens. Made atomic in T6 — previously routed through the non-atomic `writeTextFile`. |

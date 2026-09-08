@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "تعذر الوصول إلى صفحة تسجيل الدخول للمودم. لم تُحفظ كلمة المرور هذه. تحقق من الاتصال قبل المحاولة مجددًا.",
+	"network.routerCellular.lock.verification.credentials_rejected": "رفض المودم تسجيل الدخول هذا. لم تُحفظ كلمة المرور هذه. تحقق من اسم المستخدم وكلمة المرور قبل المحاولة مجددًا.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "حمل الوسائط",
 	"settings.mediaLoad.description": "قراءات برنامج التشغيل لكل نواة والجلسات المرتبطة",

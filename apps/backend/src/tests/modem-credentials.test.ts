@@ -397,7 +397,8 @@ describe("an empty credential is not a credential", () => {
 
 describe("the outcome moves without re-handling the password", () => {
 	it("records a lock state and a verification stamp against a stored login", async () => {
-		await initModemCredentials(tempStorePath());
+		const storePath = tempStorePath();
+		await initModemCredentials(storePath);
 		const device = resolvePhysicalDevice(SERIAL_STICK);
 		writeModemCredential(device, { username: USERNAME, password: PASSWORD });
 
@@ -410,12 +411,13 @@ describe("the outcome moves without re-handling the password", () => {
 			lastVerifiedAt: 1_700_000_000_000,
 			lastOutcome: "unlocked",
 		});
-		// A rejection must NOT advance the verification stamp.
-		expect(recordModemCredentialOutcome(device, "auth-failed")).toBe(true);
+		const beforeFailure = await Bun.file(storePath).text();
+		expect(recordModemCredentialOutcome(device, "auth-failed")).toBe(false);
+		expect(await Bun.file(storePath).text()).toBe(beforeFailure);
 		expect(projectModemCredential(device)).toEqual({
 			configured: true,
 			lastVerifiedAt: 1_700_000_000_000,
-			lastOutcome: "auth-failed",
+			lastOutcome: "unlocked",
 		});
 		expect(readModemCredential(device)?.password).toBe(PASSWORD);
 	});

@@ -180,6 +180,13 @@ All device control goes through oRPC over WebSocket. There are no HTTP REST endp
 
 ### Procedures
 
+Dongle login submission verifies before saving to the existing mode-0600 atomic
+credential store. Failed submissions and failed re-verification preserve any
+previously saved credential; forgetting cancels pending verification as well.
+The RPC distinguishes portal unreachability from rejected authentication without
+returning a password. See [`CONFIG_PERSISTENCE.md`](../../docs/CONFIG_PERSISTENCE.md)
+for the at-rest mechanism and the still-unsupported ZTE/UFI operator-login paths.
+
 Procedures live in `src/rpc/procedures/<domain>.procedure.ts` and are wired into `src/rpc/router.ts`. The shared schema types and validation constants are defined in `@ceraui/rpc` (`packages/rpc/`) and consumed by both the backend and frontend.
 
 Key streaming procedures:

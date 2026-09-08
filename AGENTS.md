@@ -289,6 +289,14 @@ CeraUI/
 
 ## COMMANDS
 
+Portal credentials use the existing mode-0600 atomic store, now written only
+after successful verification in `modems.setCredentials`. Failed candidates stay
+request-local on the backend and mount-local in `ModemLockSection`; failed
+replacement and re-verification preserve the prior stored credential. Clearing
+cancels in-flight verification. Router Configure remains reachable for login,
+portal access and diagnostics independently of writable settings. Contract and
+unsupported-login boundaries: [`docs/CONFIG_PERSISTENCE.md`](docs/CONFIG_PERSISTENCE.md).
+
 ```bash
 bun install           # installs all workspaces; resolves registry deps (no sibling checkout required)
 bun run dev           # frontend + backend via mprocs TUI (Vite 6173 + backend 3002)

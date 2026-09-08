@@ -177,6 +177,13 @@ src/
 
 ## Key Conventions
 
+- **Dongle login**: a submission makes one verify-before-save RPC. A failed
+  password remains only in the mounted dialog, is never written to Web Storage,
+  and disappears on close or device change. Portal unreachability and rejected
+  authentication have separate translated bands. Router Configure remains
+  reachable for portal access and diagnostics even without writable settings;
+  individual settings keep their own capability gates.
+
 - **Bond membership**: HUD and Network use the backend's `netif.enabled` eligibility
   verdict plus an address and no blocking error. The exact duplicate-IPv4 warning
   is allowed only with `enabled:true`, which already includes the backend's
