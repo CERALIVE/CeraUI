@@ -13,8 +13,8 @@
 		// global declared by `svelte/types/index.d.ts`. The frontend gets it from
 		// svelte-check's svelte2tsx injection; a plain `tsc` gate has to ask for it
 		// explicitly or every rune reads as TS2304 "Cannot find name '$state'".
-		"types": ["svelte"]
+		"types": ["svelte", "bun"]
 	},
-	"include": ["src/**/*"],
+	"include": ["src/**/*", "scripts/**/*", "tests/eager-registration.test.ts"],
 	"exclude": ["node_modules", "src/**/*.test.ts"]
 }

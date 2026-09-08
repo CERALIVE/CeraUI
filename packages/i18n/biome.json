@@ -3,6 +3,10 @@
 	"$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
 	"files": {
 		"includes": [
+			"scripts/generate-registry.ts",
+			"tests/eager-registration.test.ts",
+			"package.json",
+			"tsconfig.json",
 			"src/**/*.ts",
 			"src/**/*.js",
 			"src/**/*.mjs",
