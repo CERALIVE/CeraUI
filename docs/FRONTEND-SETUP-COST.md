@@ -28,6 +28,8 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 | Broad client optimizer | 2 | 59.279 | 56.36 | 375 / 6,234 | 6 / 47 / 29 / 6 / 12 % | 1 |
 | Components isolate:false | 1 | 182.844 | 178.13 | 375 / 6,234 | 31 / 10 / 2 / 53 / 4 % | 1 |
 | Components isolate:false | 2 | 141.334 | 138.53 | 375 / 6,234 | 35 / 11 / 2 / 47 / 5 % | 1 |
+| fsModuleCache:true | 1 | 597.532 | 591.63 | 375 / 6,234 | 88 / 3 / 5 / 3 / 2 % | 0 |
+| fsModuleCache:true | 2 | 591.017 | 585.78 | 375 / 6,234 | 89 / 2 / 5 / 3 / 2 % | 0 |
 
 Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
 seconds or less** (20% faster), plus three green runs at identical counts.
@@ -44,6 +46,13 @@ unregistered message keys. Fast failure is not a speedup.
 117 files / 712 tests; run 2 failed 119 files / 811 tests. Cached mocks and
 singleton state leak between files (including absent RPC methods and real
 connection timeouts). Neither reaches the mandatory 3/3-green admission gate.
+
+**Filesystem cache: REJECTED.** The installed Vitest 5 API is `test.fsModuleCache`,
+not the obsolete `test.experimental.fsModuleCache`. Mean wall time 594.275 s is
+10.34% faster, below the 20% threshold. The initially launched background attempt
+was terminated with its tool process group and produced no result; it is excluded.
+These two complete retry runs used the cache left by that partial attempt, so
+even this warm-cache result cannot justify adoption.
 
 ## Registration scope
 
