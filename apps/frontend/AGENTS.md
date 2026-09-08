@@ -296,6 +296,19 @@ See `docs/FRONTEND-SETUP-COST.md` at repo root for the measured alternatives.
 
 ### DEP BASELINE — measured 2026-09-08 [EXISTS]
 
+**Hosted reliability correction:** the following timings are the original
+local-only measurements, not hosted acceptance. PR345 run34177597851 failed
+three component tests and reported worker-shutdown timeouts. `maxWorkers` now
+uses `min(16, availableParallelism())`; the obsolete, ignored `minWorkers` setting
+is removed. The runtime API observes affinity and cgroup CPU quotas, unlike
+`os.cpus().length`. CI logs its selected budget. A constrained full-shard toggle
+reproduces the timeout/shutdown class at16 workers and removes it at the runtime
+budget without altering native loading, isolation, assertions or any timeout.
+The three named failures had their own existing `vi.setConfig({testTimeout:15000})`
+overrides; they were not default-timeout or project-inheritance failures. Those
+overrides remain unchanged. Full evidence and hosted acceptance status:
+`docs/FRONTEND-SETUP-COST.md` at repo root.
+
 Bun 1.4.2 / Vitest 5.0.0: **375 files / 6,234 tests, zero failures in three
 consecutive full `bun run --filter frontend test` runs**, identical to the
 current-main baseline (`ca5b0b20`). Final wall times: **132.286 / 131.299 /

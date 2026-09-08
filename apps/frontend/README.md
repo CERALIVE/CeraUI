@@ -118,6 +118,12 @@ scanner, dependency optimizer or filesystem module cache is enabled. The
 measurements and rejected alternatives are in
 [`../../docs/FRONTEND-SETUP-COST.md`](../../docs/FRONTEND-SETUP-COST.md).
 
+Worker concurrency is capped at the runtime's available CPU allocation, up to
+16 workers on larger hosts. This respects CPU affinity and cgroup quotas rather
+than assuming the development workstation's capacity on a hosted runner. CI
+prints the selected CPU/worker budget. Test timeouts and component isolation are
+unchanged; reducing contention must not be replaced by longer timeout allowances.
+
 CI keeps the same two projects and their setup files inside the four-way
 `test:ci-shard` lane (`VITEST_SHARD=1/4` through `4/4`); `test:ci-merge` merges
 their blob reports. The ordinary `test` command still runs the whole suite and

@@ -1,5 +1,10 @@
 # Frontend setup-cost measurements
 
+> Hosted reliability correction: the original local-only acceptance below was
+> insufficient. PR345 run34177597851 failed. The worker-budget correction and
+> constrained reproduction are recorded at the end; a new full hosted check set
+> is required before this work can be accepted.
+
 ## Measurement contract
 
 Base: `ca5b0b20ab0b78698461dafa866b2bffa5505127` (current `origin/main`
@@ -154,3 +159,70 @@ config's native graph. Changed source-file LSP diagnostics are clean. The
 federation build exits zero but reports static/dynamic catalog-import warnings;
 it is not claimed to be warning-free. No backend or board code was changed, and
 no board drill or hosted CI result is claimed.
+
+## Hosted timeout diagnosis and worker-budget correction
+
+Run34177597851 checked merge4b8aa10 (head6fbab467 onto main468f3d9d).
+Shard3 failed3 tests across94files/1,598tests. The three specs explicitly set
+`testTimeout:15000` with `vi.setConfig`; root20000 inheritance works correctly.
+The old `minWorkers:4` option is ignored by installed Vitest5. Only `maxWorkers:16`
+actually bounded the shared pool. Shutdown warnings have their own10-second
+deadline and are distinct from assertion timeouts.
+
+The five named files were compared with the original configuration (native
+externalization removed) and the native loader on two physical CPUs,0 and2.
+All17 tests passed in both cases. First-case timings, original versus native:
+usage-policy955/930ms, preview639/656ms, passthrough633/690ms,
+bitrate-remount66/46ms, autostart161/205ms. There is no measured basis for a
+timeout increase or a native-loader regression in those isolated-file comparisons.
+In the full pre-merge shard, original/native first passthrough cases took
+5,284/1,539ms; native did not shave margin off that already-heavy case.
+
+| Source / resource condition | Loader / workers | Files / tests | Wall seconds | Failures | Shutdown warnings | Peak RSS KiB |
+|---|---|---|---:|---:|---:|---:|
+| Original PR head; two CPUs | original /16 | 94/1594 | 285.861 | 0 | 5 | unmeasured |
+| Original PR head; two CPUs | native /16 | 94/1594 | 85.663 | 0 | 0 | unmeasured |
+| Hosted-equivalent merged tree; two CPUs | native /16 | 94/1598 | 87.625 | 0 | 0 | 8,212,388 |
+| Hosted-equivalent merged tree; two CPUs | native /2 | 94/1598 | 83.403 | 0 | 0 | 2,206,676 |
+| Bounded stress | native /16 | 94/1598 | 445.169 | 3 | 12 | transcript truncated after timing |
+| SAME bounded stress | native /1 | 94/1598 | 225.344 | 0 | 0 | 1,341,920 |
+| Toggle back, SAME bounded stress | native /16 | 94/1598 | 325.806 | 2 | 5 | transcript truncated after timing |
+| Fixed config, SAME bounded stress | native /auto(1) | 94/1598 | 310.287 | 0 | 0 | 1,371,640 |
+
+The bounded stress is a transient user scope: `CPUQuota=100%`,
+`AllowedCPUs=0,2`, `MemoryHigh=6G`, `MemoryMax=10G`, `MemorySwapMax=0`.
+It deliberately reproduces resource pressure; it is NOT claimed to be the exact
+hosted hardware allocation. `availableParallelism()` reports1 in that scope and2
+under affinity alone, while `os.cpus().length` remains28. Scope exit removes the
+constraints; no desktop, board or persistent system configuration was changed.
+
+The first stress run reproduces the SAME passthrough case at17,094ms against its
+existing15-second limit, plus two other render/async tests. At one worker the
+passthrough case takes992ms and all1598tests pass. Returning to16 workers brings
+back failures and shutdown warnings; leaving the corrected config to choose its
+own budget clears both again. Varying victims under fixed resource pressure,
+and recovery by changing only concurrency, identify pool oversubscription rather
+than a missing mock or a new catalog-identity defect. CPU-only results also show
+that fewer workers substantially reduce resident memory without costing shard
+throughput. The native loader and all test-specific timeouts remain intact.
+
+**Fix:** cap workers by `min(16, availableParallelism())`, preserving the local
+ceiling and choosing a feasible pool on smaller machines. A configuration
+regression test checks the real runtime budget; under `taskset -c0` it fails
+before the fix (`Expected <=1, Received16`) and passes afterwards. CI prints its
+selected budget so a future incident does not have to guess the allocation.
+
+Current main was merged into the published branch, rather than rewriting pushed
+history. The five investigated specs are unchanged from the original base.
+No backend changes were authored; the merge incorporates the already-merged
+independent #343 work. Hosted acceptance requires every check of the new run to
+pass; the earlier review/local completion is not carried forward. The latest
+complete check set on PR345 is the acceptance authority, not this local table.
+
+Local verification of the fixed, merged tree: the full frontend command under
+four-CPU affinity and `CI=true` passes **378files /6,271tests** in161.154s wall
+(Vitest155.70s, transform32%, import31%, tests17%, environment13%, setup7%).
+The count increase is the merged #342/#344 test additions, not a test-scope
+change here. The worker-budget/classifier suite passes7tests; frontend check
+reports0errors/0warnings; SPA build and root Biome pass (three pre-existing
+informational literal-key suggestions). Changed-source LSP diagnostics are clean.

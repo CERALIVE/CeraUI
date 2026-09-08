@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { availableParallelism } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { globSync } from 'glob';
@@ -7,6 +8,17 @@ import { classifyVitestFiles } from './vitest-classify.mjs';
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 const frontendRoot = path.join(repoRoot, 'apps/frontend');
+
+test('the frontend worker pool fits the runtime CPU budget', () => {
+	// Given the actual CPU allocation (including affinity and cgroup quotas)
+	const cpuBudget = availableParallelism();
+	// When the ordinary frontend config chooses its pool capacity
+	const workers = config.test.maxWorkers;
+	// Then small runners are not oversubscribed and large hosts retain the cap
+	expect(workers).toBeGreaterThanOrEqual(1);
+	expect(workers).toBeLessThanOrEqual(cpuBudget);
+	expect(workers).toBeLessThanOrEqual(16);
+});
 
 describe('frontend Vitest classifier', () => {
 	test('puts every source test in exactly one project', () => {
