@@ -8,7 +8,12 @@ import { classifyVitestFiles } from '../../scripts/ci/vitest-classify.mjs';
 
 const { pure, components } = classifyVitestFiles();
 const availableCpus = availableParallelism();
-const maxWorkers = Math.min(16, availableCpus);
+
+export function calculateMaxWorkers(availableCpus: number): number {
+	return Math.min(16, availableCpus);
+}
+
+const maxWorkers = calculateMaxWorkers(availableCpus);
 
 if (process.env.CI === 'true') {
 	console.info('[vitest] worker budget', { availableCpus, maxWorkers });
