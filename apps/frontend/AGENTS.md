@@ -294,6 +294,20 @@ instance after success, never by a process-global flag. Full catalog coverage,
 Storage isolation, the 50 ms teardown wait and both project policies stay intact.
 See `docs/FRONTEND-SETUP-COST.md` at repo root for the measured alternatives.
 
+### DEP BASELINE — measured 2026-09-08 [EXISTS]
+
+Bun 1.4.2 / Vitest 5.0.0: **375 files / 6,234 tests, zero failures in three
+consecutive full `bun run --filter frontend test` runs**, identical to the
+current-main baseline (`ca5b0b20`). Final wall times: **132.286 / 131.299 /
+124.110 seconds**, mean **129.232 seconds**; Vitest Duration: **124.62 / 125.91 /
+118.60 seconds**, setup **3 / 3 / 4%** of aggregate phase time. Baseline wall
+times were **656.451 / 669.204 seconds**, mean **662.827 seconds**, with setup
+84% in both. The full command is **80.50% faster locally**; these are workstation
+measurements, not CI timings. Adopted: native loading of the compiled catalog
+and module-scoped eager-registration memoization. Rejected/not selected: broad
+optimizer, filesystem cache, shared components, pure-isolation flip and heuristic
+per-file namespace selection. Storage, full catalog and the teardown wait remain.
+
 ```bash
 bun run dev / build / check / test       # Vite :6173 / dist/ / svelte-check / vitest
 bun run build:federation                  # Vite lib-mode → dist/federation/<ceraui-version>/{encoder,audio,server}.js

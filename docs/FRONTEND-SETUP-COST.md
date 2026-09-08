@@ -40,7 +40,7 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
 seconds or less** (20% faster), plus three green runs at identical counts.
 Vitest's phase percentages are rounded, aggregate worker-time shares; they may
-sum to 101% and are not elapsed wall-time slices. No runner setting is adopted yet.
+sum to 101% and are not elapsed wall-time slices. Final adoption is recorded below.
 
 **Broad optimizer: REJECTED.** Includes `bits-ui`, `@testing-library/svelte`,
 `svelte`, and `@ceraui/i18n/eager` under `test.deps.optimizer.client` with
@@ -69,7 +69,7 @@ registries used by the lazy-loading tests stay transformed and isolated.
 Mean wall time **137.576 s**, **79.24% faster** than current main. This is a
 profile-driven additional candidate, not a relabeling of the rejected broad
 optimizer. It keeps one coherent native registry/runtime graph and does not
-share Svelte component state. Adoption still awaits three final parity runs.
+share Svelte component state. The three final parity runs below authorize adoption.
 
 **Pure isolation retest: retain isolate:false.** Tested both settings with the
 same native-catalog boundary. `true` averaged 137.112 s versus 137.576 s for
@@ -125,4 +125,32 @@ The generated eager entry memoizes only AFTER a successful registration, per
 module instance. No process-global flag, persistent mutable catalog, or cache
 outside the isolated worker is introduced. Package regression test: RED at
 three calls instead of one, then GREEN (3 tests); full package gate: 709 tests
-across 14 files, zero failures; package typecheck passes.
+across 14 files, zero failures; package typecheck passes. The tooling and this
+regression are now included in the package typecheck, with a package-local Bun
+typing dependency; the generator and regression are also included in Biome.
+
+## Final adopted configuration — 2026-09-08
+
+Only native loading of compiled i18n ESM and the eager-registration memo are
+adopted. No experimental environment switches or instrumentation remain in
+tracked config. Existing worker bounds, project membership, full catalog, Storage
+reset, 20-second timeout, 50 ms teardown and CI shard layout are unchanged.
+
+| Full command run | Wall seconds | Vitest seconds | Files / tests | Setup / transform / import / tests / environment | Exit |
+|---|---:|---:|---|---|---:|
+| Final 1 | 132.286 | 124.62 | 375 / 6,234 | 3 / 23 / 33 / 32 / 8 % | 0 |
+| Final 2 | 131.299 | 125.91 | 375 / 6,234 | 3 / 15 / 38 / 35 / 9 % | 0 |
+| Final 3 | 124.110 | 118.60 | 375 / 6,234 | 4 / 17 / 36 / 34 / 10 % | 0 |
+
+Mean **129.232 s**, **80.50% faster** than the 662.827 s current-main baseline
+(5.13× throughput for this command). All three include catalog generation and
+the hardware-preflight unit tests; no hardware is contacted. The three new
+registration tests belong to the i18n package, not the frontend file/test count.
+
+Verification: frontend `check` (zero errors/warnings), SPA build, federation
+build, i18n package check and 709-test suite, and the six classifier/native-boundary
+tests all pass. The new boundary test was RED before enabling the ordinary
+config's native graph. Changed source-file LSP diagnostics are clean. The
+federation build exits zero but reports static/dynamic catalog-import warnings;
+it is not claimed to be warning-free. No backend or board code was changed, and
+no board drill or hosted CI result is claimed.

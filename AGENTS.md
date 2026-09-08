@@ -942,7 +942,7 @@ that move by flipping a runtime verdict.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
 why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun runs the
-current suite at **370 files / 6,157 tests, 0 failures** (measured 2026-09-05 on this
+current suite at **375 files / 6,234 tests, 0 failures** (measured 2026-09-08 on this
 tree; the rc.3→stable pin move itself was proven at parity on the then-current
 **361 files / 5,957 tests**, and every count since has only grown with new tests).
 The rc.2→rc.3 successor path needed no source or config change here, and Vitest then reached
@@ -962,16 +962,19 @@ reported `process.execPath` = node and `process.versions.bun` = `undefined` befo
 bun / `1.4.2` after it. A caret would range forward into stable 5.0.0 unreviewed, so the pin is
 exact; when 5.0 ships stable this pin moves, but the runtime does not have to move with it.
 
-The frontend Vitest config sets a global `testTimeout` of **20 seconds**. The suite is
-setup- and transform-bound, not test-bound: the 370-file / 6,157-test run measured
-**12m05s of LOCAL wall clock** on the development host (Vitest `Duration 718.63s`, of which
-setup 82%, transform 9%, import 4%, tests 4%, environment 2%). Every duration in this
-paragraph is local wall clock on a contended workstation — **no CI minute has been measured
-for this lane, so do not quote one.** Earlier local runs of the same lane landed between
-~10m36s and ~16m39s, and the spread is host load, not a suite change. Because setup
-dominates, teardown micro-trims cannot move the number — the components project's 50 ms
-`afterAll` costs ≈12 s in total (once per FILE, not per test), under 2% of the run, and it is
-retained deliberately: `bits-ui`'s body-scroll-lock arms a 24 ms WALL-CLOCK timer inside
+The frontend Vitest config keeps a global `testTimeout` of **20 seconds**. The
+2026-09-08 setup-cost measurements passed **375 files / 6,234 tests** three times
+at **132.286 / 131.299 / 124.110 seconds wall clock** (mean **129.232 seconds**;
+Vitest Duration **124.62 / 125.91 / 118.60 seconds**). The same-main baseline
+averaged **662.827 seconds**, so the full command is **80.50% faster locally**.
+Only already-compiled i18n ESM is loaded natively; its registry and locale runtime
+stay in one graph, while Svelte and app code remain transformed and isolated.
+Setup's aggregate phase share falls from 84% to 3–4%. These are LOCAL workstation
+measurements, not hosted-CI timings; phase shares are aggregate worker time, not
+wall-time slices. Full table: `docs/FRONTEND-SETUP-COST.md`; the frontend's own
+`AGENTS.md` carries the current DEP BASELINE. The components project's 50 ms
+`afterAll` remains once per FILE, not per test, and is retained deliberately:
+`bits-ui`'s body-scroll-lock arms a 24 ms WALL-CLOCK timer inside
 Testing Library's own auto-`afterEach`, so no macrotask drain and no fake-timer install can
 clear it. Across two CI
 runs, three unrelated async-rendering tests (`PowerDialog.async-state`,
