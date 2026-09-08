@@ -660,7 +660,7 @@ describe("engine-device cache", () => {
 describe("source routing stays isolated from cerastream-backend.ts", () => {
 	async function git(args: string[], cwd: string): Promise<string> {
 		const proc = await runTestCommand(["git", "--no-pager", ...args], { cwd });
-		expect(proc.code).toBe(0);
+		expect(proc.code, `git ${args.join(" ")}: ${proc.stderr}`).toBe(0);
 		return proc.stdout;
 	}
 

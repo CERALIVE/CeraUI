@@ -139,6 +139,13 @@ test-command helper to avoid Bun 1.4.2's GC-sensitive synchronous-loop defect
 (oven-sh/bun#40078), retaining real child execution and all existing assertions.
 See `AGENTS.md` → Backend per-file test isolation for these contracts.
 
+Run the complete suite from a full Git checkout. The historical source-routing
+guard needs the commit that introduced `sources.ts` and its parent, so a shallow
+clone cannot run that assertion. Build Check's backend job and the release/package
+contract job both fetch full history; Git failures remain test failures, never an
+empty diff. Local stability runs do not establish PR readiness: every hosted check
+on the current PR revision must succeed before the change is handed off.
+
 ## Build
 
 The backend compiles to a single self-contained binary. Architecture is controlled by `BUILD_ARCH`:
