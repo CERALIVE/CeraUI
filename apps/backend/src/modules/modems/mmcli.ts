@@ -400,11 +400,38 @@ export function mmConvertAccessTech(accessTechs?: Array<string>): string {
 // Regex: a ModemManager modem object path `…/Modem/<index>`.
 const MODEM_PATH_INDEX_RE = /\/org\/freedesktop\/ModemManager1\/Modem\/(\d+)/;
 
+/** Regex: mmcli's bare-count rendering of an EMPTY repeated field. */
+const MMCLI_LIST_COUNT_RE = /^\d+$/;
+
 /**
  * Extract modem indices from a parsed `mmcli -K -L` record. A MISSING
  * `modem-list` key is drift (mmcli always emits it, empty when no modems); a
  * non-empty list matching NO path is drift (path grammar changed). Both fail
  * loud instead of returning a silently-empty list that hides every modem.
+ *
+ * MMCLI PUBLISHES AN EMPTY LIST AS ITS BARE COUNT, NOT AS AN EMPTY ARRAY. Its
+ * `-K` dumper only emits the `<key>.length` + `<key>.value[N]` pair that
+ * {@link mmcliParseSep} folds into an array when the field HAS members; an
+ * empty one is written as `<key> : <count>`, which folds to the bare string
+ * "0". Board-measured on an Orange Pi 5+ running mmcli 1.24.2 with no modem
+ * attached — `mmcli -K -L | od -c` gives exactly
+ * `m o d e m - l i s t   :   0 \n`, 15 bytes and no `.length` anywhere.
+ *
+ * So the path-grammar check below was rejecting mmcli's own "no modems"
+ * statement, once per 30 s poll:
+ *
+ *   CLI output drift in parseModemList: no modem indices matched the
+ *   ModemManager path grammar   meta={"raw":"0"}
+ *
+ * That is not merely a spurious warning. {@link mmList} answers `undefined` on
+ * a parse failure, so an empty roster was reported as a FAILED READ — and a
+ * failed read is deliberately RETAINING for the presence reconcile (a statement
+ * about the read is never a statement about the hardware), so a board holding no
+ * modem could never commit a removal.
+ *
+ * Only the ZERO count is accepted. A non-zero count with no `value[N]` members
+ * is mmcli claiming modems it did not then publish, which is real drift and
+ * still fails loud.
  */
 export function parseModemList(
 	parsed: Record<string, string | Array<string>>,
@@ -415,6 +442,14 @@ export function parseModemList(
 			"parseModemList",
 			"missing modem-list key",
 			Object.keys(parsed).join(", "),
+		);
+	}
+	if (typeof raw === "string" && MMCLI_LIST_COUNT_RE.test(raw)) {
+		if (Number.parseInt(raw, 10) === 0) return parseOk([]);
+		return parseFail(
+			"parseModemList",
+			`mmcli counted ${raw} modems but published no modem-list entries`,
+			raw,
 		);
 	}
 	const entries = Array.isArray(raw) ? raw : [raw];
