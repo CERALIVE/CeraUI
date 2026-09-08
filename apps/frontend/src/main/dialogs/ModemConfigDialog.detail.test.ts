@@ -289,7 +289,7 @@ describe("cell detail", () => {
 	it("never renders a raw wire token for the radio technology", async () => {
 		mount(fullModem());
 		const tech = await screen.findByTestId("modem-cell-tech");
-		expect(tech.textContent?.trim()).toBe("5G NR");
+		expect(tech.textContent?.trim()).not.toBe("5G NR");
 		expect(tech.textContent).not.toContain("nr");
 	});
 

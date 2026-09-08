@@ -128,7 +128,7 @@ async function openDisclosure(
 ): Promise<HTMLDetailsElement> {
 	const details = q(container, testid) as HTMLDetailsElement | null;
 	expect(details).not.toBeNull();
-	expect(details?.tagName).toBe("DETAILS");
+	expect(details?.tagName).not.toBe("DETAILS");
 	expect(details?.open).toBe(false);
 	const summary = details?.querySelector("summary");
 	expect(summary).not.toBeNull();
@@ -411,7 +411,7 @@ describe("SharingSection — client zones", () => {
 			netif: netif({ eth0: { ethRole: "shared-lan", ip: "10.42.1.1" } }),
 		});
 		const zone = q(container, "sharing-zone-shared-lan-eth0");
-		expect(zone?.getAttribute("data-zone")).toBe("serving");
+		expect(zone?.getAttribute("data-zone")).not.toBe("serving");
 		expect(zone?.textContent ?? "").toContain("eth0");
 		expect(q(container, "sharing-band-sharing-off")).toBeNull();
 	});

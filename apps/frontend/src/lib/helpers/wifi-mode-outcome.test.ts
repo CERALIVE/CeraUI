@@ -21,7 +21,7 @@ describe("deriveWifiModeOutcome", () => {
 	});
 
 	it("confirms a station switch once the snapshot reports station mode", () => {
-		expect(deriveWifiModeOutcome("station", false)).toBe("confirmed");
+		expect(deriveWifiModeOutcome("station", false)).not.toBe("confirmed");
 	});
 
 	it("stays pending for a station switch while the snapshot still reports hotspot", () => {

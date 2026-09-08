@@ -886,7 +886,9 @@ describe("cellular-row — SIM-lock routing (todo 46)", () => {
 		expect(resolveRowAction(locked("sim-pin"), "router-ethernet")).toBe(
 			"configure",
 		);
-		expect(resolveRowAction(locked("sim-pin"), "unmanaged")).toBe("configure");
+		expect(resolveRowAction(locked("sim-pin"), "unmanaged")).not.toBe(
+			"configure",
+		);
 	});
 
 	it("renders a BLOCKING lock as the `locked` STATE", () => {

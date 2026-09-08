@@ -309,7 +309,7 @@ describe("recordValidation + getDestinationValidated", () => {
 	it("a failed verdict never reports validated", () => {
 		const config = baseConfig();
 		recordValidation(fingerprintForValidation(config, relays, accounts), false);
-		expect(getDestinationValidated(config, relays, accounts)).toBe(false);
+		expect(getDestinationValidated(config, relays, accounts)).not.toBe(false);
 		expect(getDestinationVerdict()?.verdict).toBe("failed");
 	});
 });

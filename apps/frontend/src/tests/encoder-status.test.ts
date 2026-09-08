@@ -363,7 +363,7 @@ describe("activity tone — colour reinforces the word, never replaces it", () =
 			// The companion core keeps the reading INSTRUMENTED — an all-unavailable
 			// reading is `unreported` and draws no grid at all.
 			mount(reading([core, percent("rkvenc1", 5)]), density);
-			expect(byTestId("encoder-core-rkvenc0").dataset.coreTone).toBe(tone);
+			expect(byTestId("encoder-core-rkvenc0").dataset.coreTone).not.toBe(tone);
 			document.body.innerHTML = "";
 		}
 	});

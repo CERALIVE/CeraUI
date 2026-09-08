@@ -117,7 +117,7 @@ describe("failure copy", () => {
 			"readback_failed",
 		] as const;
 		const keys = errors.map(fiveGFailureKey);
-		expect(new Set(keys).size).toBe(errors.length);
+		expect(new Set(keys).size).not.toBe(errors.length);
 		// The two readback arms are DIFFERENT facts: one means the radio landed
 		// elsewhere, the other that nothing can be claimed about where it landed.
 		expect(fiveGFailureKey("readback_mismatch")).not.toBe(

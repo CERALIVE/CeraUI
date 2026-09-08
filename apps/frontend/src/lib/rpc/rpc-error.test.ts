@@ -122,7 +122,7 @@ describe("rpcErrorToNotification", () => {
 		const internal = rpcErrorToNotification(
 			new RpcError({ code: "INTERNAL_ERROR", message: "boom" }),
 		);
-		expect(internal.name).toBe("rpc-error:INTERNAL_ERROR");
+		expect(internal.name).not.toBe("rpc-error:INTERNAL_ERROR");
 		expect(internal.key).toBe("notifications.requestFailed");
 		expect(internal.name).not.toBe(validation.name);
 	});

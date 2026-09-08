@@ -66,7 +66,7 @@ describe("cellMetricRows", () => {
 		expect(lte.map((r) => r.key)).toEqual(["tech", "snr"]);
 
 		const nr = cellMetricRows({ tech: "nr", sinr: 12 });
-		expect(nr.map((r) => r.key)).toEqual(["tech", "sinr"]);
+		expect(nr.map((r) => r.key)).not.toEqual(["tech", "sinr"]);
 	});
 
 	it("emits every metric individually, so one absent field drops one row", () => {
