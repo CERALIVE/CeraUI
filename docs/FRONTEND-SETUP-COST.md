@@ -26,6 +26,8 @@ in eager namespace imports, not in test assertions or the retained 50 ms teardow
 | Current main | 2 | 669.204 | 661.09 | 375 / 6,234 | 84 / 8 / 4 / 3 / 2 % | 0 |
 | Broad client optimizer | 1 | 65.120 | 61.37 | 375 / 6,234 | 5 / 49 / 29 / 5 / 11 % | 1 |
 | Broad client optimizer | 2 | 59.279 | 56.36 | 375 / 6,234 | 6 / 47 / 29 / 6 / 12 % | 1 |
+| Components isolate:false | 1 | 182.844 | 178.13 | 375 / 6,234 | 31 / 10 / 2 / 53 / 4 % | 1 |
+| Components isolate:false | 2 | 141.334 | 138.53 | 375 / 6,234 | 35 / 11 / 2 / 47 / 5 % | 1 |
 
 Baseline mean wall time: **662.827 seconds**. Adoption threshold: **530.262
 seconds or less** (20% faster), plus three green runs at identical counts.
@@ -37,6 +39,11 @@ sum to 101% and are not elapsed wall-time slices. No runner setting is adopted y
 `enabled: true`. Both runs failed 181 files / 2,652 tests; failures include
 Svelte `first_child_getter.call` / `effect.nodes`, storage isolation, and
 unregistered message keys. Fast failure is not a speedup.
+
+**Components isolate:false: REJECTED.** Threads remained enabled. Run 1 failed
+117 files / 712 tests; run 2 failed 119 files / 811 tests. Cached mocks and
+singleton state leak between files (including absent RPC methods and real
+connection timeouts). Neither reaches the mandatory 3/3-green admission gate.
 
 ## Registration scope
 
