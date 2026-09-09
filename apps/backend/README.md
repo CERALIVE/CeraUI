@@ -240,6 +240,13 @@ before it can dispatch. If an already-dispatched request misses acknowledgement,
 its outcome is unknown and the lifecycle reconciles engine truth after
 `stop_failed`.
 
+### Cellular activation
+
+Cellular status polling is observation-only. NetworkManager owns automatic GSM
+activation and its retry budget; a refused APN no longer causes CeraUI to issue
+another explicit activation every 30 seconds. Profile creation and operator
+configuration remain unchanged, and status still reports the modem's live state.
+
 ### Software update admission
 
 `startSoftwareUpdate()` acknowledges dispatch synchronously. Its asynchronous

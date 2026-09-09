@@ -4157,6 +4157,17 @@ condition; it does not — and must not — trigger any part of it.
 
 ## PRESENCE IS POLLED, BECAUSE NOTHING IN PRODUCTION EMITS `modem-added` [EXISTS]
 
+**Status polling observes; NetworkManager owns automatic activation.**
+`refreshModemStatus` must not issue `nmcli conn up`. On Rock, a registered
+RM530N-GL with a present SIM and a refused APN was retried by CeraUI every poll,
+bypassing NM's `connection.autoconnect-retries=2` and accumulating over 500
+throttled bearer attempts. The retired `GENERAL.STATE` check tested array length,
+which also admitted `activating` and `activated`. Profile creation still enables
+NM autoconnect with its bounded attempt batch; NM owns later retry scheduling.
+Operator configuration and its reconnect scope are unchanged. No APN is guessed
+or silently repaired, and no SIM-less device is blamed for this registered-modem
+failure. Regression: `tests/modem-activation-ownership.test.ts`.
+
 `handleMonitorEvent` (`modem-update-loop.ts`) switches on `modem-added` /
 `modem-removed` / `device-state`. **The first two arms are unreachable on real
 hardware.** The production emitter is `NmcliMonitorManager`, and its
