@@ -42,8 +42,6 @@ import {
 	type NetworkManagerConnection,
 	type NetworkManagerConnectionModemConfig,
 	nmConnAdd,
-	nmConnect,
-	nmConnGetFields,
 } from "../network/network-manager.ts";
 import { resolveGsmAutoconfigSupport } from "./gsm-autoconfig.ts";
 import { getGsmConnections, resetGsmConnections } from "./gsm-connections.ts";
@@ -145,28 +143,6 @@ async function getModemConfig(
 		roaming: true,
 		network: "",
 	};
-}
-
-async function connectModemIfNeededAndPossible(modem: Modem, modemId: number) {
-	// If the modem has an inactive NM connection and isn't otherwise busy, then try to bring it up
-	if (
-		!modem.inhibit &&
-		!modem.is_scanning &&
-		(modem.status?.connection === "registered" ||
-			modem.status?.connection === "enabled") &&
-		modem.config?.conn
-	) {
-		// Don't try to activate NM connections that are already active
-		const nmConnection = await nmConnGetFields(modem.config.conn, [
-			"GENERAL.STATE",
-		] as const);
-		if (nmConnection?.length === 1) {
-			logger.info(
-				`Trying to bring up connection ${modem.config.conn} for modem ${modemId}...`,
-			);
-			void nmConnect(modem.config.conn);
-		}
-	}
 }
 
 function buildModemStatus(
@@ -699,6 +675,4 @@ export async function refreshModemStatus(id: ModemId): Promise<void> {
 
 	const updated = mergeRefreshedModem(modem, modemInfo);
 	setModem(id, updated);
-
-	await connectModemIfNeededAndPossible(updated, id);
 }

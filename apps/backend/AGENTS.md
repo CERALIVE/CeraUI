@@ -124,6 +124,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **Admitting an apt transaction against real free space (pre-clean → `--print-uris` estimate → `statfs` → post-clean)** | `modules/system/apt-space-admission.ts` (`APT_SPACE_RESERVE_BYTES`), `modules/system/apt-space-parser.ts`, `modules/system/apt-cache-clean.ts`; contract below → …AND THE TRANSACTION IS ADMITTED AGAINST REAL FREE SPACE |
 | **`.deb` maintainer scripts (why `prerm` must gate on `$1` and `postinst` must enable unconditionally)** | `scripts/build/build-debian-package.sh` + its contract test `scripts/build/deb-maintainer-scripts.test.sh`; contract below → …AND THE PACKAGE MUST NOT DISABLE THE DEVICE IT IS UPGRADING |
 | Mock hardware data | `mocks/providers/` |
+| **The suite's PARALLEL topology — why `test` is `bun test --parallel`, what a fixture owes a per-file `mkdtemp` root, and why the Git-history guard needs `fetch-depth: 0`** | `package.json` (`"test": "bun test --parallel"`), `bunfig.toml` preload, `src/tests/helpers/run-test-command.ts`; contract below → DEV MOCK SEAMS → "Backend per-file test isolation" |
 | Shared RPC schema types | `../../../packages/rpc/` (`@ceraui/rpc`) |
 
 ## STREAMING RPC PROCEDURES
@@ -1979,11 +1980,16 @@ everything. They take no lease and touch no radio.
   withdraws any cached `open` evidence, because that claim widens the row and the
   device can no longer support it. Neither rejection records `auth-failed`, and
   neither is retried.
-- **`setCredentials` performs zero device requests too** — it reads the open
-  verdict the admin cycle already observed — and REFUSES an `open` device
-  (`device_open`) rather than storing a secret nothing will ever present.
+- **`setCredentials` verifies before storing.** Its request-local candidate is
+  presented once through the existing login port; only accepted authentication
+  writes the existing mode-0600 atomic store. Failed candidates never enter the
+  entries map, and failure outcomes never reserialize an old credential.
+  An `open` device remains refused as `device_open`. The additive `verification`
+  field distinguishes `admin_unreachable`, `credentials_rejected`, and `verified`;
+  unsupported profiles and lockouts retain their existing distinct refusals.
 - **Clearing a credential drops the session verdict with it**: a credential that
-  no longer exists cannot keep a row `unlocked`.
+  no longer exists cannot keep a row `unlocked`. It also cancels pending
+  verification so a late successful reply cannot resurrect the forgotten login.
 - **No output carries a password.** `modemCredentialsOutputSchema` is a plain
   `z.object`, so a field added upstream by mistake is STRIPPED, and
   `rpc-logging.ts` omits these three procedures' args entirely (a per-PROCEDURE
@@ -2002,7 +2008,15 @@ D and NOT run against a device that demands it; ZTE and HIMI ship no login at al
 and answer `protocol-mismatch` deliberately, because an unproven credential
 derivation would burn a real operator's attempts against a real lockout counter.
 
-Coverage: `tests/modem-credential-unlock.test.ts` — all five states reachable and
+The public defaults live in `network/router-credentials.ts`; the existing UFI
+read session consumes its generic-RNDIS `admin` pair. HiLink and unknown profiles
+have no implicit credential. No new login protocol is added: the captured ZTE
+row's password outcomes are injected in regression tests, not hardware-proven.
+Persistence and session-draft contract: `../../docs/CONFIG_PERSISTENCE.md`.
+
+Coverage: `tests/modem-credential-persistence.test.ts` (real temporary store,
+failed replacement, pending clear, mode-0600 restart reload),
+`tests/router-credentials.test.ts`, and `tests/modem-credential-unlock.test.ts` — all five states reachable and
 EXPLICIT on the wire (including the no-admin-surface negative), the resolution
 ladder with its withdraw-the-open-claim case, the four refusal mappings with the
 `protocol-mismatch` ≠ `auth-failed` assertion, the capability withhold/offer pair
@@ -4142,6 +4156,17 @@ on a real board) to have even started, and it hasn't. This todo documents the
 condition; it does not — and must not — trigger any part of it.
 
 ## PRESENCE IS POLLED, BECAUSE NOTHING IN PRODUCTION EMITS `modem-added` [EXISTS]
+
+**Status polling observes; NetworkManager owns automatic activation.**
+`refreshModemStatus` must not issue `nmcli conn up`. On Rock, a registered
+RM530N-GL with a present SIM and a refused APN was retried by CeraUI every poll,
+bypassing NM's `connection.autoconnect-retries=2` and accumulating over 500
+throttled bearer attempts. The retired `GENERAL.STATE` check tested array length,
+which also admitted `activating` and `activated`. Profile creation still enables
+NM autoconnect with its bounded attempt batch; NM owns later retry scheduling.
+Operator configuration and its reconnect scope are unchanged. No APN is guessed
+or silently repaired, and no SIM-less device is blamed for this registered-modem
+failure. Regression: `tests/modem-activation-ownership.test.ts`.
 
 `handleMonitorEvent` (`modem-update-loop.ts`) switches on `modem-added` /
 `modem-removed` / `device-state`. **The first two arms are unreachable on real
@@ -9341,6 +9366,10 @@ config, an anchored path still held by its own device, and a live row with no
 
 ## ANTI-PATTERNS
 
+- Don't make apt's address-family choice PERSISTENT. No `/etc/apt/apt.conf` drop-in, no `gai.conf` edit, no `disable_ipv6` sysctl, no interface binding — the verdict is a per-run `-o Acquire::Force*` option and nothing else. The failure mode is silent and long-lived: a board whose IPv6 comes back stays pinned to IPv4 by a file some earlier check wrote, and nothing on the device ever says so. `tests/apt-reachability.test.ts` scans the module's own source for every one of those literals, and that guard was proven falsifiable rather than assumed.
+- Don't match the detached apt unit's `ExecStart` with a substring test or `arrayContaining`. `validateDetachedAptServiceIdentity` tokenizes the argv and matches an exact flags-first prefix against a CLOSED option set; loosening it is what would let a foreign same-named transient unit be adopted as ours, which is the one thing that predicate exists to prevent. Admitting a NEW option means widening that closed set deliberately, never relaxing the comparison.
+- Don't hand a `bun test --parallel` fixture a fixed shared path. Files run in separate worker processes with per-file isolated globals, but they share ONE filesystem and ONE cwd, so a fixture that writes `config.json` beside the repo is racing every other file that reads it. Own a per-file `mkdtemp` root and redirect the existing path seam (`setConfigFilePath` for runtime config); do NOT `chdir`, which is process-global and therefore not isolation at all. And don't "fix" a resulting flake by making the suite serial again — the isolation defect is the bug, and it is equally real in a serial run that happens to order the files favourably.
+- Don't let a test read Git history under a shallow checkout. The historical source-routing guard needs the commit that introduced `sources.ts` AND that commit's parent; at `fetch-depth: 1` Git reports the checkout commit as the addition and `git diff <addition>^` exits 128. Both backend-suite-running CI jobs (`build-check.yml`'s `test-be` and `publish-release.yml`'s `release-package-contracts`) therefore request `fetch-depth: 0` — narrowly, those two, not every job — and `scripts/ci/build-check-shape.test.mjs` enforces it. Never make the guard accept an empty diff to get past it: an ignored exit 128 is a passing test that proves nothing, which is exactly how this stayed green locally on a full clone for months.
 - Don't insert a dongle union row into the live `netif` map and filter it out of `genSrtlaIpList` later — the whole point is that a gated veth never enters that map, so bonding is safe BY CONSTRUCTION rather than by a filter a refactor can drop. And don't publish the `dongle` marker true-only: the frontend merge preserves an omitted optional field, so a marker raised that way can never be lowered (the `policy_route_missing` latch, exactly).
 - Don't classify a USB network interface by its NAME — not `enx*`, not `eth*`, not any prefix. This bench's two HiLink units share one factory MAC, so one is named `enx0c5b8f279a64` and its twin falls back to `eth1`; either prefix rule badges exactly one of a matched pair. `classifyUsbNetDevice` is not given a name at all, and it must stay that way.
 - Don't import modem-stack's `device-classifier.ts` across the sibling boundary (Rule D) — `usb-net-classifier.ts` is a re-derived MIRROR with its own bench-captured fixtures. And don't drop the cellular-evidence gate on top of it: modem-stack's `router-mode` verdict means "a tether with no control port", which is equally true of a plain USB-to-Ethernet adapter, so claiming CELLULAR on that alone would put the word on a wired NIC.

@@ -181,6 +181,8 @@ CeraUI/
 | System data flow | `docs/ARCHITECTURE.md` |
 | **Repo conventions (incl. tech-debt register)** | `docs/CONVENTIONS.md` |
 | **Technical-debt register (machine-checkable ledger)** | `docs/TECHNICAL_DEBT.md` + `scripts/check-tech-debt.mjs` |
+| **Test topology — how each suite is actually executed** | Frontend: two Vitest `projects` (`apps/frontend/vitest.config.ts` + `scripts/ci/vitest-classify.mjs`), two project-scoped setup files, a four-way CI shard lane, a `min(16, availableParallelism())` worker budget, and native i18n loading — sections below → "THE FRONTEND VITEST LANE IS SHARDED FOUR WAYS" + DEP BASELINE, measurements in `docs/FRONTEND-SETUP-COST.md`. Backend: `bun test --parallel` with per-file `mkdtemp` fixture roots and two `fetch-depth: 0` CI jobs — [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → DEV MOCK SEAMS → "Backend per-file test isolation" |
+| **Design-pass follow-up register (prose findings with no shipped marker — NOT the tech-debt ledger)** | `docs/DESIGN-FOLLOWUPS.md` (DF-1…DF-17) |
 | Touch/kiosk CSS spec | `docs/TOUCHSCREEN.md` |
 | **Kiosk capability + inert-by-default model** | `docs/ON_DEVICE_DISPLAY.md` (cross-repo arch) |
 | Kiosk state machine (DC-2) | `docs/KIOSK_STATE_MACHINE.md` |
@@ -286,6 +288,14 @@ CeraUI/
 | **`device.activeProfile` status-frame emitter (drift-detection loop)** | `apps/backend/src/modules/remote-control/active-profile-reporter.ts` (`reportActiveProfile({force?})` — reads the ACTUALLY-applied `StreamConfig` via injected `readActiveProfile`, de-dups on the 4 fields, emits `{config}` via injected `broadcast`) + `active-profile-wiring.ts` (`wireActiveProfileReporter()` — binds `readActiveProfile` to the persisted `stream_profile`/`srt_latency`/`fec_enabled`/`recovery_mode` config, `broadcast` to `broadcastMsg`; called from `main.ts` after `wireSetProfile()`). Three emit sites: `set-profile-wiring.ts` (after a successful `setProfile` apply), `rpc/procedures/streaming.procedure.ts` (after a UI Stream-Tuning config change), `modules/remote-control/channel.ts` `handleOpen()` (force re-emit on control-channel connect/reconnect — reseeds the hub, which loses its snapshot on disconnect). Frame type registered in `protocol.ts` `STATUS_TYPES` + `RELAYABLE_TYPES` (`status-relay.ts`) as `ACTIVE_PROFILE_STATUS = "device.activeProfile"`. Platform-side consumer: `ceralive-platform/apps/api/lib/remote-control/hub/internal-gate.ts` `applyActiveProfile` (see `ceralive-platform/AGENTS.md` → SRT-receive profile reconciliation) |
 
 ## COMMANDS
+
+Portal credentials use the existing mode-0600 atomic store, now written only
+after successful verification in `modems.setCredentials`. Failed candidates stay
+request-local on the backend and mount-local in `ModemLockSection`; failed
+replacement and re-verification preserve the prior stored credential. Clearing
+cancels in-flight verification. Router Configure remains reachable for login,
+portal access and diagnostics independently of writable settings. Contract and
+unsupported-login boundaries: [`docs/CONFIG_PERSISTENCE.md`](docs/CONFIG_PERSISTENCE.md).
 
 ```bash
 bun install           # installs all workspaces; resolves registry deps (no sibling checkout required)
@@ -916,7 +926,7 @@ documentation hat. Reference the root row here; let todo 49 write it there.
 | Package | Version |
 |---------|---------|
 | `@orpc/server` (backend), `@orpc/contract` (packages/rpc) | 2.0.0-beta.32 — EXACT pin, see below |
-| Bun pin (`.bun-version`) | 1.4.2 |
+| Bun pin (`.bun-version`) | 1.4.2 — and so are `package.json` `packageManager`, every workflow's `bun-version`, and `scripts/tsc.mjs`'s resolution note. **`mise.toml` is the one surface still reading `1.4.0`**, recorded here rather than quietly bumped: `oven-sh/setup-bun` reads `packageManager`, so CI is on the canon regardless, and only a developer whose shell resolves Bun through `mise` gets the older runtime. It is a residual from the workspace-wide Bun canon sweep, whose verification grep matched `bun-version:` / `bun@` / `bun:` / a bare `1.4.2` line but not `mise.toml`'s `bun = "1.4.0"` form — the blind spot is worth knowing before trusting that grep again. |
 | `svelte` | 5.56.10 |
 | `vitest` | 5.0.0 — EXACT stable pin (see the note below the table) |
 | `vite` | 8.2.2 |
@@ -942,9 +952,15 @@ that move by flipping a runtime verdict.** Under `vitest@4.1.10` the
 frontend suite could not be collected under Bun at all — 110 of 281 files died on a shared
 `undefined is not an object (evaluating 'z.enum')` in the Zod schema import graph — and that is
 why the frontend suite ran on Node for as long as it did. Under `5.0.0` Bun runs the
-current suite at **378 files / 6,271 tests, 0 failures locally** (measured 2026-09-08 on this
-tree; the rc.3→stable pin move itself was proven at parity on the then-current
+current suite at **378 files / 6,271 tests, 0 failures locally** — re-confirmed 2026-09-08 on
+merged `main` at `4ba8a774`, one clean `bun run --filter frontend test` in 145.68 s with the
+phase split `import 30% / tests 30% / transform 29% / environment 8% / setup 4%` (the
+rc.3→stable pin move itself was proven at parity on the then-current
 **361 files / 5,957 tests**, and every count since has only grown with new tests).
+**This table row is the ONE place the count is maintained.** Three other paragraphs quote a
+file count for a specific historical proof and each says so in place; when this number moves,
+move it here and leave those alone. The 4% setup share is the measured result of the native
+i18n loading change, not an aspiration.
 The rc.2→rc.3 successor path needed no source or config change here, and Vitest then reached
 stable 5.0.0 during this effort. Nothing in the rc.3→5.0.0 release notes needed a source or
 config change here:
@@ -1134,8 +1150,8 @@ Four further Build Check facts, all landed 2026-08-14:
   flip, under the then-current `vitest@5.0.0-rc.3` pin, the suite was green at
   **354 files / 5,779 tests — identical to the pre-bump rc.2 baseline** (a HISTORICAL
   figure, kept only because it is what the flip was proven against; the pin is now
-  stable `5.0.0` and the suite is **370 files / 6,157 tests**, see DEP BASELINE), so
-  the frontend `test`
+  stable `5.0.0` and the suite has since grown — see DEP BASELINE for the current
+  count, and never re-copy the figure into this paragraph), so the frontend `test`
   script now invokes `bun --bun vitest run` and `test-fe` carries no `setup-node`
   step at all. **The Playwright half is NOT flipped and has never produced a green
   parity run** — that lane keeps Node 26, and nothing here authorises moving it.

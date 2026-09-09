@@ -18,9 +18,9 @@ import { EVIDENCE_DIR, ensureAuthenticated, navigateTo } from './helpers/index.j
  *   empty: with no persistent notifications the panel shows its empty state and
  *     the badge is absent.
  *
- * Browser contexts are fresh per test. The backend is scoped to and reused by
- * the Playwright worker, so UI state resets between tests while backend state
- * remains isolated by worker.
+ * Browser contexts are fresh per test. The shared fixture also re-seeds the
+ * backend before each test acquires it, so the empty state has no device
+ * notifications left by an earlier test on the same worker.
  */
 
 const evidence = new Map<string, string[]>();

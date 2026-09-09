@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "无法访问上网卡的登录页面。此密码未保存。请检查连接后重试。",
+	"network.routerCellular.lock.verification.credentials_rejected": "上网卡拒绝了此次登录。此密码未保存。请检查用户名和密码后重试。",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "媒体负载",
 	"settings.mediaLoad.description": "各核心的驱动读数及绑定会话归属",

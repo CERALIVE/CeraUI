@@ -192,6 +192,32 @@ The `authedPage` fixture handles the full auth flow (first-run set-password or r
 
 ## Per-Worker Backend Scenario Override
 
+### Per-test backend state [EXISTS]
+
+`workerBackend` and `backendRpc` are test-scoped. The worker-scoped
+`backendHost` stops the previous process before calling the existing
+`startWorkerBackend()` seed/start helper on each acquisition. This resets both
+CWD-relative persisted files and all process-owned state (mock providers, live
+modem caches, notification membership and timers), before page navigation or a
+backend-only RPC test. Clearing browser storage alone does not reset a device.
+
+The host retains its last process until the next acquisition or worker teardown.
+This preserves the explicit serial remember-me flow in `auth.spec.ts`, whose
+second leg keeps its own browser and requests no fresh backend/page fixture.
+Ordinary tests must request the shared fixtures rather than retain those handles.
+Do not add a product reset endpoint or per-notification suppression for isolation.
+`resetMockState()` remains an in-process unit-test helper, not a whole-running-
+backend reset: it does not clear the live modem cache or notification store.
+
+`backend-isolation.spec.ts` runs successive tests on one worker, leaving real
+roaming/notification and persisted-config mutations behind and asserting fresh
+baselines through RPC and the rendered panel. Scenario selection and per-worker
+port isolation below are unchanged.
+
+Both local and CI runs default to four workers. Each test now pays backend
+startup, so a CPU-count-derived browser budget also multiplies backend startup
+load; use the CLI `--workers` override for a deliberately sized run.
+
 By default every worker backend boots on `MOCK_SCENARIO=multi-modem-wifi` (see `fixtures/backend.ts`). Worker state explicitly selects `modem_backend: "mmcli"` because scenario mutations such as PIN retry/unlock live in the legacy mock modem state machine; production configs still default to D-Bus. Modem-config refusal fakes use the lowercase RPC enum (`device_busy`), not the WiFi async-operation token (`DEVICE_BUSY`), because the dialog resolves `network.modem.saveRefused.<enum>` verbatim. A spec that needs a *different* backend state — a PIN-locked modem, an engine-unavailable snapshot, etc. — opts in with the worker-scoped `backendScenario` option, set at **file top level**:
 
 ```typescript

@@ -46,6 +46,14 @@ src/
 
 ## IMPORT PATHS
 
+### Portal credential verification [EXISTS]
+
+`modemCredentialsOutputSchema.verification` is additive-optional, with
+`verified`, `admin_unreachable`, and `credentials_rejected`. The existing
+credential refusal enum is unchanged; unsupported profiles and lockouts retain
+their distinct legacy errors. No credential material is returned. Legacy replies
+gain no default field. Both consumers import the inferred types from this package.
+
 ### Media block load [EXISTS]
 
 `system.schema.ts` retains `encoderLoadSchema` and the original three-state

@@ -101,6 +101,8 @@ const TRANSPORT_KEEP_ALLOWLIST = new Set([
 	"modules/network/policy-route-check.ts",
 	"modules/network/router-cellular-admin.ts",
 	"modules/network/router-cellular-control.ts",
+	// The public profile key contains `hilink`; this table owns no transport.
+	"modules/network/router-credentials.ts",
 	"modules/network/router-details.ts",
 	"modules/network/router-signal-model.ts",
 	"modules/network/router-signal.ts",
@@ -127,6 +129,17 @@ async function typeScriptFiles(directory: string): Promise<readonly string[]> {
 }
 
 describe("modem-control compatibility projections", () => {
+	test("the credential-default table has no runtime dependencies or transport access", async () => {
+		const source = stripComments(
+			await Bun.file(
+				join(BACKEND_ROOT, "modules/network/router-credentials.ts"),
+			).text(),
+		);
+		expect(source).not.toMatch(/\bimport\s*(?:\(|(?!type\b)[\w{*])/);
+		expect(source).not.toMatch(
+			/\b(?:require|fetch|spawn|fetchViaInterface|postViaInterface)\s*\(|\b(?:Bun|process|globalThis)\s*\./,
+		);
+	});
 	test("all fourteen frozen MIGRATE modules route through the package seam", async () => {
 		for (const module of MIGRATED_MODULES) {
 			const source = await Bun.file(join(BACKEND_ROOT, module)).text();

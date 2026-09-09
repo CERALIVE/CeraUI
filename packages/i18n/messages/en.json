@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "The dongle's login page could not be reached. This password was not saved. Check the connection before trying again.",
+	"network.routerCellular.lock.verification.credentials_rejected": "The dongle rejected this login. This password was not saved. Check the username and password before trying again.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "Media load",
 	"settings.mediaLoad.description": "Per-core driver readings and bound session ownership",

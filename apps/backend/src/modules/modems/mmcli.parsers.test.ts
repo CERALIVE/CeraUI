@@ -51,6 +51,63 @@ describe("parseModemList — modem index extraction", () => {
 	});
 });
 
+/*
+ * BOARD-MEASURED, and the reason every case above stayed green while the device
+ * warned. Each of them hands `parseModemList` a hand-built record; none of them
+ * drives mmcli's own TEXT, which is where the two shapes diverge.
+ *
+ * Orange Pi 5+, mmcli 1.24.2, no modem attached:
+ *
+ *   $ mmcli -K -L
+ *   modem-list : 0
+ *   $ mmcli -K -L | od -c
+ *   0000000   m   o   d   e   m   -   l   i   s   t       :       0  \n
+ *
+ * mmcli's `-K` dumper renders an EMPTY repeated field as its bare COUNT, and
+ * only a NON-EMPTY one as the `<key>.length` + `<key>.value[N]` pair. So
+ * `mmcliParseSep` folded the empty answer to the STRING "0" rather than to an
+ * array, and the path-grammar check rejected mmcli's own "no modems" statement
+ * once per 30 s poll:
+ *
+ *   CLI output drift in parseModemList: no modem indices matched the
+ *   ModemManager path grammar   meta={"raw":"0"}
+ *
+ * (`.omo/evidence/media-stack-convergence/task-27-opi-main/pre-install.log`)
+ *
+ * That was never only noise: `mmList()` returns `undefined` on a parse failure,
+ * so the roster read reported a FAILURE rather than an empty roster — and the
+ * presence reconcile deliberately RETAINS every known modem on an unreadable
+ * read, so on a board with no modem a removal could never be committed.
+ */
+describe("parseModemList — mmcli's own `-K` text (board captures)", () => {
+	it("accepts the bare-count form an empty list is published as", () => {
+		const r = parseModemList(mmcliParseSep("modem-list : 0\n"));
+		expect(r.ok).toBe(true);
+		if (r.ok) expect(r.value).toEqual([]);
+	});
+
+	it("still reads the length+value form a non-empty list is published as", () => {
+		const r = parseModemList(
+			mmcliParseSep(
+				[
+					"modem-list.length                               : 2",
+					"modem-list.value[1]                             : /org/freedesktop/ModemManager1/Modem/0",
+					"modem-list.value[2]                             : /org/freedesktop/ModemManager1/Modem/3",
+					"",
+				].join("\n"),
+			),
+		);
+		expect(r.ok).toBe(true);
+		if (r.ok) expect(r.value).toEqual([0, 3]);
+	});
+
+	it("fails loud when mmcli counts modems it then never lists (drift)", () => {
+		const r = parseModemList(mmcliParseSep("modem-list : 2\n"));
+		expect(isParseError(r)).toBe(true);
+		if (!r.ok) expect(r.raw).toBe("2");
+	});
+});
+
 describe("parseNetworkScanResults — 3GPP scan rows", () => {
 	it("parses operator rows into structured results", () => {
 		const r = parseNetworkScanResults({

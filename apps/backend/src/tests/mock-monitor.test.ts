@@ -288,8 +288,8 @@ describe("network fixtures — load + shape sanity", () => {
 	});
 
 	test("mmcli list fixtures advertise the right modem counts", () => {
-		expect(loadFixture("network/mmcli-list-0.txt")).toContain(
-			"modem-list.length",
+		expect(loadFixture("network/mmcli-list-0.txt").trim()).toBe(
+			"modem-list : 0",
 		);
 		expect(
 			loadFixtureLines("network/mmcli-list-1.txt").filter((l) =>

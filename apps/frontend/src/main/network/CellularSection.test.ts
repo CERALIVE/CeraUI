@@ -250,7 +250,7 @@ const STATE_TABLE: ReadonlyArray<{
 		label: "router-ethernet up",
 		band: "router-ethernet",
 		state: "router-up",
-		configurable: false,
+		configurable: true,
 		bondLive: false,
 		modem: {
 			ifname: "dg0h",
@@ -266,7 +266,7 @@ const STATE_TABLE: ReadonlyArray<{
 		label: "router-ethernet acquiring",
 		band: "router-ethernet",
 		state: "router-acquiring",
-		configurable: false,
+		configurable: true,
 		bondLive: false,
 		modem: {
 			ifname: "dg1h",
@@ -282,7 +282,7 @@ const STATE_TABLE: ReadonlyArray<{
 		label: "router-ethernet down",
 		band: "router-ethernet",
 		state: "router-down",
-		configurable: false,
+		configurable: true,
 		bondLive: false,
 		modem: {
 			ifname: "dg2h",

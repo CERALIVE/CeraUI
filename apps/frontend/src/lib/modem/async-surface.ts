@@ -291,14 +291,7 @@ export const MODEM_ASYNC_SURFACES = {
 		staleAfterMs: undefined,
 	},
 	setCredentials: {
-		what: "storing a router dongle's admin login",
-		bound: "reply-bounded",
-		boundMs: MODEM_READ_BOUND_MS,
-		terminal: ["applied", "refused", "failed", "timed-out"],
-		staleAfterMs: undefined,
-	},
-	verifyCredentials: {
-		what: "one bounded login attempt against the dongle",
+		what: "one bounded dongle login attempt, stored only after verification",
 		bound: "reply-bounded",
 		boundMs: MODEM_READ_BOUND_MS,
 		terminal: ["applied", "refused", "failed", "timed-out"],

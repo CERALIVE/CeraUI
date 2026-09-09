@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type { Page, WebSocketRoute } from "@playwright/test";
+import { modemSchema } from "@ceraui/rpc/schemas";
+import capturedRouter from "../../../backend/src/tests/fixtures/modems/zte-mf79u/installed-summary.json" with { type: "json" };
 
 import { expect, test } from "./fixtures/index.js";
 import {
@@ -1913,10 +1915,8 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(page.getByTestId("modem-gps-reason")).toHaveText(/\S/);
 	});
 
-	// The other two fleet families never reach that dialog, so CT-1 holds for
-	// them at the SURFACE: a device this build cannot control contributes zero
-	// capability nodes anywhere, however loudly its payload claims a module.
-	test("a fleet family with no config surface renders zero capability nodes, whatever it claims", {
+	// GPS follows the claim in BOTH dialogs; dialog admission is not capability evidence.
+	test("router diagnostics preserve the GPS claim ladder while unmanaged rows have no capability surface", {
 		annotation: {
 			type: DROP_SERVER_STATUS_ANNOTATION,
 			description:
@@ -1928,10 +1928,11 @@ test.describe("Capability truthfulness (functional)", () => {
 		const certified = {
 			"fcc-auto-unlock": "certified",
 			gps: "certified",
-		};
+		} as const;
+		const router = modemSchema.parse(capturedRouter.wireRowsMatchedByIdPath["1003"]);
 		sendModems({
 			[DONGLE_MODEM_ID]: {
-				...routerDongle("router_managed"),
+				...router,
 				capability_modules: certified,
 			},
 			"fleet-unmanaged": {
@@ -1949,19 +1950,44 @@ test.describe("Capability truthfulness (functional)", () => {
 		for (const id of [DONGLE_MODEM_ID, "fleet-unmanaged"]) {
 			const row = modemRow(page, id);
 			await expect(row).toBeVisible();
-			// Disabled-with-reason, never hidden: the row is the whole point.
-			const configure = row.getByTestId("open-modem-config-dialog");
-			await expect(configure, `${id}: expects a refused Configure`).toBeDisabled();
-			await expect(configure).toHaveAttribute("title", /\S/);
 			await expect(row.getByTestId("modem-note").first()).toHaveText(/\S/);
 		}
 
+		const unmanagedConfigure = modemRow(page, "fleet-unmanaged").getByTestId(
+			"open-modem-config-dialog",
+		);
+		await expect(unmanagedConfigure).toBeDisabled();
+		await expect(unmanagedConfigure).toHaveAttribute("title", /\S/);
 		for (const { testId, controlTestId } of GATED_MODULE_TESTIDS) {
-			await expect(page.getByTestId(testId)).toHaveCount(0);
-			await expect(page.getByTestId(controlTestId)).toHaveCount(0);
-			await expect(page.getByTestId(`${testId}-unknown`)).toHaveCount(0);
+			await expectCapabilityRender(page, testId, controlTestId, "absent", "no dialog open");
 		}
-		await expect(page.getByRole("dialog")).toHaveCount(0);
+		const routerConfigure = modemRow(page, DONGLE_MODEM_ID).getByTestId(
+			"open-modem-config-dialog",
+		);
+		await expect(routerConfigure).toBeEnabled();
+		await routerConfigure.click();
+		const dialog = page.getByRole("dialog");
+		await expect(dialog).toBeVisible();
+		await expectCapabilityRender(page, "modem-gps", "modem-gps-toggle", "offered", "injected certified router");
+		await expectCapabilityRender(page, "modem-fcc-unlock", "modem-fcc-unlock-toggle", "absent", "router has no FCC surface");
+
+		// Real hardware reports implementation, NOT a proven capability. Preserve
+		// its unknown diagnostic, then exercise explicit counterfactual claim states.
+		expect(router.capability_modules?.gps).toBe("implemented");
+		sendModems({ [DONGLE_MODEM_ID]: router });
+		await expectCapabilityRender(page, "modem-gps", "modem-gps-toggle", "unknown", "captured router");
+		for (const { claim, label, expected } of OPERATION_STATES) {
+			sendModems({
+				[DONGLE_MODEM_ID]: {
+					...router,
+					capability_modules: claim === undefined ? undefined : { gps: claim },
+				},
+			});
+			await expectCapabilityRender(page, "modem-gps", "modem-gps-toggle", expected, `router claiming ${label}`);
+		}
+		await expect(page.getByTestId("modem-usb-mode-card")).toHaveCount(0);
+		await page.keyboard.press("Escape");
+		await expect(dialog).toBeHidden();
 	});
 
 	// DESIGN.md §3: the two engine vocabularies this surface renders — USB
@@ -2026,9 +2052,7 @@ test.describe("Capability truthfulness (functional)", () => {
 		await expect(dialog).toBeHidden();
 	});
 
-	// A router dongle is a device this stack cannot control, so every state must
-	// be VISIBLE and disabled-with-reason — never hidden, and never a raw wire
-	// token rendered at the operator.
+	// Link lifecycle never blocks diagnostics or fabricates radio capability.
 	test("a router-dongle cellular row stays honest across up / acquiring / down", {
 		annotation: {
 			type: DROP_SERVER_STATUS_ANNOTATION,
@@ -2060,11 +2084,9 @@ test.describe("Capability truthfulness (functional)", () => {
 				row.locator('[data-testid="modem-state-badge"]'),
 			).toHaveText(/\S/);
 
-			// …the row is dimmed-with-a-reason rather than dropped: Configure is
-			// disabled AND names why, in its accessible name and on screen.
+			// …diagnostics stay reachable, with the link's reason still on screen.
 			const configure = row.getByTestId("open-modem-config-dialog");
-			await expect(configure).toBeDisabled();
-			await expect(configure).toHaveAttribute("title", /\S/);
+			await expect(configure).toBeEnabled();
 			const notes = row.locator('[data-testid="modem-note"]');
 			await expect(notes.first()).toHaveText(/\S/);
 

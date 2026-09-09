@@ -56,7 +56,10 @@ bun run dev
 
 Starts the frontend (Vite, port 6173) and ordinary local development backend
 (port 3002) together via mprocs. Functional E2E pages use separate worker-scoped
-31xx backends. Run from the workspace root.
+31xx backends, re-seeded on each test's backend acquisition so process and disk
+state cannot leak to the next test. The scenario remains worker-scoped. See
+[`E2E backend isolation`](tests/e2e/PLAYBOOK.md#per-test-backend-state-exists)
+for lifecycle and deliberate shared-browser sequence rules. Run from the workspace root.
 
 To run the frontend alone:
 
@@ -96,6 +99,11 @@ federation run `bun scripts/ci/bundle-report.mjs` to check both size budgets.
 | `bun run --filter frontend preview` | Preview production build locally |
 
 ### Unit-test projects [EXISTS]
+
+Unhandled errors fail the run without filtering. Frontend tests enable Biome's
+floating-promise error rule and missing-await warning rule. The bounded suite
+audit, timer regression and mutation receipts are documented in
+[`../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md`](../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md).
 
 `bun run --filter frontend test` runs both Vitest projects. The import-graph
 classifier in `scripts/ci/vitest-classify.mjs` assigns source tests automatically:
@@ -171,6 +179,13 @@ src/
 ```
 
 ## Key Conventions
+
+- **Dongle login**: a submission makes one verify-before-save RPC. A failed
+  password remains only in the mounted dialog, is never written to Web Storage,
+  and disappears on close or device change. Portal unreachability and rejected
+  authentication have separate translated bands. Router Configure remains
+  reachable for portal access and diagnostics even without writable settings;
+  individual settings keep their own capability gates.
 
 - **Bond membership**: HUD and Network use the backend's `netif.enabled` eligibility
   verdict plus an address and no blocking error. The exact duplicate-IPv4 warning

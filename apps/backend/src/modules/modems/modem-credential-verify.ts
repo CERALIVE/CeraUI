@@ -45,6 +45,7 @@ import { createHash } from "node:crypto";
 
 import type {
 	ModemCredentialsRefusal,
+	ModemCredentialVerification,
 	ModemLockState,
 } from "@ceraui/rpc/schemas";
 
@@ -62,12 +63,14 @@ import {
 	getRouterCellularAdmin,
 } from "../network/router-cellular-admin.ts";
 import { getRouterCellularMarker } from "../network/router-cellular-scan.ts";
+import { resolveRouterCredential } from "../network/router-credentials.ts";
 import { xmlValue } from "../network/vendor-xml.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import type { ModemCredential } from "./modem-credentials.ts";
 import {
+	modemCredentialKey,
 	readModemCredential,
-	recordModemCredentialOutcome,
+	writeModemCredential,
 } from "./modem-credentials.ts";
 import type { AuthAttemptDetail } from "./modem-lock-state.ts";
 import {
@@ -276,7 +279,16 @@ export const defaultCredentialVerifyDeps: CredentialVerifyDeps = {
 export interface VerifyOutcome {
 	readonly success: boolean;
 	readonly error?: ModemCredentialsRefusal;
+	readonly verification?: ModemCredentialVerification;
 	readonly target?: CredentialTarget;
+}
+
+const pendingVerifications = new Map<string, Set<{ cancelled: boolean }>>();
+
+export function cancelModemCredentialVerification(identityKey: string): void {
+	for (const attempt of pendingVerifications.get(identityKey) ?? []) {
+		attempt.cancelled = true;
+	}
 }
 
 function refusalFor(
@@ -300,55 +312,91 @@ function refusalFor(
 export async function verifyModemCredential(
 	device: string,
 	deps: CredentialVerifyDeps = defaultCredentialVerifyDeps,
+	candidate?: ModemCredential,
 ): Promise<VerifyOutcome> {
 	const target = deps.resolveTarget(device);
 	if (target === undefined) return { success: false, error: "unknown_device" };
-
-	const now = deps.now();
-	if (lockoutRemainingMs(target.device.identityKey, now) !== undefined) {
-		return { success: false, error: "locked_out", target };
+	if (modemCredentialKey(target.device) === undefined) {
+		return { success: false, error: "identity_unresolved", target };
 	}
-
-	if (!(await deps.isRealDevice())) {
-		return { success: false, error: "unavailable_in_emulated_mode", target };
-	}
-
-	let evidence: "open" | "locked" | undefined;
+	const attempt = { cancelled: false };
+	const pending =
+		pendingVerifications.get(target.device.identityKey) ?? new Set();
+	pending.add(attempt);
+	pendingVerifications.set(target.device.identityKey, pending);
 	try {
-		evidence = await deps.loginPort.detectOpen(target, deps.transport);
-	} catch {
-		noteLockOpenEvidence(target.ifname, undefined);
-		return { success: false, error: "unreachable", target };
-	}
-	noteLockOpenEvidence(target.ifname, evidence);
-	if (evidence === "open") {
-		return { success: false, error: "device_open", target };
-	}
+		const now = deps.now();
+		if (lockoutRemainingMs(target.device.identityKey, now) !== undefined) {
+			return { success: false, error: "locked_out", target };
+		}
 
-	const credential = deps.readCredential(target.device);
-	if (credential === undefined) {
-		return { success: false, error: "no_credential", target };
-	}
+		if (!(await deps.isRealDevice())) {
+			return { success: false, error: "unavailable_in_emulated_mode", target };
+		}
 
-	let detail: AuthAttemptDetail;
-	try {
-		detail = await deps.loginPort.attempt(target, credential, deps.transport);
-	} catch {
-		return { success: false, error: "unreachable", target };
-	}
-	const classification = classifyAuthAttempt(detail);
-	noteLockOutcome(target.device.identityKey, classification, now);
-	recordModemCredentialOutcome(
-		target.device,
-		classification.state,
-		classification.state === "unlocked" ? now : undefined,
-	);
-
-	return classification.state === "unlocked"
-		? { success: true, target }
-		: {
+		let evidence: "open" | "locked" | undefined;
+		try {
+			evidence = await deps.loginPort.detectOpen(target, deps.transport);
+		} catch {
+			noteLockOpenEvidence(target.ifname, undefined);
+			return {
 				success: false,
-				error: refusalFor(classification.state, classification.subReason),
+				error: "unreachable",
+				verification: "admin_unreachable",
 				target,
 			};
+		}
+		noteLockOpenEvidence(target.ifname, evidence);
+		if (evidence === "open") {
+			return { success: false, error: "device_open", target };
+		}
+
+		const credential = resolveRouterCredential(
+			target.dialect === "hilink" ? "huawei-hilink" : "default",
+			candidate ?? deps.readCredential(target.device),
+		);
+		if (credential === undefined) {
+			return { success: false, error: "no_credential", target };
+		}
+
+		let detail: AuthAttemptDetail;
+		if (attempt.cancelled)
+			return { success: false, error: "no_credential", target };
+		try {
+			detail = await deps.loginPort.attempt(target, credential, deps.transport);
+		} catch {
+			return {
+				success: false,
+				error: "unreachable",
+				verification: "admin_unreachable",
+				target,
+			};
+		}
+		if (attempt.cancelled)
+			return { success: false, error: "no_credential", target };
+		const classification = classifyAuthAttempt(detail);
+		noteLockOutcome(target.device.identityKey, classification, now);
+		if (classification.state === "unlocked") {
+			writeModemCredential(target.device, {
+				username: credential.username,
+				password: credential.password,
+				lastOutcome: "unlocked",
+				lastVerifiedAt: deps.now(),
+			});
+			return { success: true, verification: "verified", target };
+		}
+
+		return {
+			success: false,
+			error: refusalFor(classification.state, classification.subReason),
+			...(classification.state === "auth-failed"
+				? { verification: "credentials_rejected" as const }
+				: {}),
+			target,
+		};
+	} finally {
+		pending.delete(attempt);
+		if (pending.size === 0)
+			pendingVerifications.delete(target.device.identityKey);
+	}
 }

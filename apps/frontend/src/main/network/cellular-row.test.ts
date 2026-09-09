@@ -448,16 +448,16 @@ describe("bondDisabledReasonKey", () => {
 });
 
 describe("configureDisabledReasonKey", () => {
-	it("MM-managed is the only configurable band", () => {
+	it("MM-managed remains configurable", () => {
 		expect(configureDisabledReasonKey("mm-managed")).toBeUndefined();
 	});
 
-	it.each([
-		["router-ethernet", "network.cellular.reason.routerControlsUnverified"],
-		["unmanaged", "network.cellular.config.unmanaged"],
-	] as const)("%s is disabled with a reason", (band, key) => {
-		expect(configureDisabledReasonKey(band)).toBe(key);
-	});
+	it.each([["unmanaged", "network.cellular.config.unmanaged"]] as const)(
+		"%s is disabled with a reason",
+		(band, key) => {
+			expect(configureDisabledReasonKey(band)).toBe(key);
+		},
+	);
 
 	/**
 	 * WHY IT IS REFUSED IS THE QUESTION, AND EVERY REFUSAL USED TO ANSWER IT
@@ -471,10 +471,10 @@ describe("configureDisabledReasonKey", () => {
 	 * itself". The reason must therefore be its own key — distinct from every
 	 * other reason on this surface, so no future collapse can re-merge them.
 	 */
-	it("names the unverified-write refusal in its own words", () => {
+	it("does not infer an unconfirmed settings write from a router class", () => {
 		const key = configureDisabledReasonKey("router-ethernet");
 
-		expect(key).toBe("network.cellular.reason.routerControlsUnverified");
+		expect(key).toBeUndefined();
 		expect(key).not.toBe(availabilityReasonKey("router_managed"));
 		expect(key).not.toBe(availabilityReasonKey("router_direct"));
 		expect(key).not.toBe(configureDisabledReasonKey("unmanaged"));
@@ -497,13 +497,13 @@ describe("configureDisabledReasonKey", () => {
 		).toBeUndefined();
 	});
 
-	it("a readable-but-unwritable dongle stays refused", () => {
+	it("a readable-but-unwritable dongle keeps its diagnostic dialog", () => {
 		const readOnly = {
 			router_admin: { admin_url: "http://192.168.0.1", reachable: true },
 		} as unknown as Modem;
-		expect(configureDisabledReasonKey("router-ethernet", readOnly)).toBe(
-			"network.cellular.reason.routerControlsUnverified",
-		);
+		expect(
+			configureDisabledReasonKey("router-ethernet", readOnly),
+		).toBeUndefined();
 	});
 
 	/**
@@ -533,25 +533,22 @@ describe("configureDisabledReasonKey", () => {
 		},
 	);
 
-	it("…but an `open` dongle with no proven write is still refused", () => {
-		// The lock exemption must not become a blanket one: `open` and `unlocked`
-		// are the states the device DOES serve its control block in, so absence
-		// there really is "nothing here is provably settable".
-		expect(configureDisabledReasonKey("router-ethernet", locked("open"))).toBe(
-			"network.cellular.reason.routerControlsUnverified",
-		);
+	it("open and unlocked dongles keep the portal and diagnostics without controls", () => {
+		expect(
+			configureDisabledReasonKey("router-ethernet", locked("open")),
+		).toBeUndefined();
 		expect(
 			configureDisabledReasonKey("router-ethernet", locked("unlocked")),
-		).toBe("network.cellular.reason.routerControlsUnverified");
+		).toBeUndefined();
 	});
 
-	it("…and a dongle with no login surface at all is unchanged", () => {
+	it("a dongle with no login surface still offers its diagnostics", () => {
 		const noLock = {
 			router_admin: { admin_url: "http://192.168.0.1", reachable: true },
 		} as unknown as Modem;
-		expect(configureDisabledReasonKey("router-ethernet", noLock)).toBe(
-			"network.cellular.reason.routerControlsUnverified",
-		);
+		expect(
+			configureDisabledReasonKey("router-ethernet", noLock),
+		).toBeUndefined();
 	});
 });
 

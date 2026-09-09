@@ -1121,9 +1121,17 @@ export type ModemCredentialsRefusal = z.infer<typeof modemCredentialsRefusalSche
  * password, no username and no derivative of either. `z.object` strips unknown
  * keys, so a field added upstream by mistake cannot reach a client through here.
  */
+export const modemCredentialVerificationSchema = z.enum([
+	'verified',
+	'admin_unreachable',
+	'credentials_rejected',
+]);
+export type ModemCredentialVerification = z.infer<typeof modemCredentialVerificationSchema>;
+
 export const modemCredentialsOutputSchema = z.object({
 	success: z.boolean(),
 	error: modemCredentialsRefusalSchema.optional(),
+	verification: modemCredentialVerificationSchema.optional(),
 	lock_state: modemLockStateSchema.optional(),
 	lock_detail: modemLockDetailSchema.optional(),
 });

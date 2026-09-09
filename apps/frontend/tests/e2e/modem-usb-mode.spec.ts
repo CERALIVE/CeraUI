@@ -433,14 +433,7 @@ test.describe(
 			record("native-PCIe fixture: NO control (identity_unresolved)");
 			await closeDialog();
 
-			// (4) UFI STICK — a router-ethernet row. The guarantee here is stronger
-			// than "no control", which is why this leg asserts a different shape
-			// from the three above: the dialog that would host a control is itself
-			// UNREACHABLE, because the dongle owns its own settings and its
-			// Configure button is disabled-with-reason. A composition switch has no
-			// surface to live on at all — which is precisely why the
-			// `sethimiusbtether` fence is a grep gate over the source rather than a
-			// UI state anyone could assert on.
+			// Router diagnostics remain reachable; that does not offer USB mutation.
 			await patchModem(page, key, {
 				usb_mode: undefined,
 				recommended_usb_mode: undefined,
@@ -451,10 +444,13 @@ test.describe(
 			const configure = page.getByTestId("open-modem-config-dialog").nth(
 				MODEM_INDEX,
 			);
-			await expect(configure).toBeDisabled();
-			// Disabled WITH its reason, on screen and in the accessible name.
-			await expect(configure).toHaveAttribute("title", /.+/);
-			await expect(configure).toHaveAttribute("aria-label", /.+/);
+			await expect(configure).toBeEnabled();
+			await configure.click();
+			await expect(page.getByRole("dialog").first()).toBeVisible();
+			await expect(page.getByTestId("modem-usb-mode-card")).toHaveCount(0);
+			await expect(page.getByTestId("modem-usb-mode-targets")).toHaveCount(0);
+			await page.keyboard.press("Escape");
+			await expect(page.getByRole("dialog")).toHaveCount(0);
 			// Nothing anywhere on the page offers a composition switch.
 			// Scoped to the cellular section: at page scope `/Switch to/i` also
 			// matches app chrome such as the theme toggle's "Switch to dark mode".
@@ -470,7 +466,7 @@ test.describe(
 			await cellular
 				.screenshot({ path: shot("usb-mode-ufi-no-control") });
 			record(
-				"UFI fixture: Configure disabled-with-reason; no USB-mode card and no switch anywhere",
+				"UFI fixture: router diagnostics reachable; no USB-mode card and no switch anywhere",
 			);
 		});
 	},

@@ -30,6 +30,10 @@ export default defineConfig({
 		}),
 	},
 	test: {
+		dangerouslyIgnoreUnhandledErrors: false,
+		onUnhandledError(error) {
+			throw error;
+		},
 		server: {
 			deps: {
 				// Already-compiled ESM: keep its registry and locale runtime in ONE

@@ -52,10 +52,6 @@
 import { isSimlessForBond } from "@ceraui/rpc";
 import type { ConnectionStatus, Modem } from "@ceraui/rpc/schemas";
 
-import {
-	deriveLockView,
-	lockWithholdsCapabilities,
-} from "$lib/modem/lock-state";
 import { accessTechnologyDisplay } from "$lib/modem/operator-labels";
 
 /**
@@ -603,31 +599,9 @@ export function bondDisabledReasonKey(
 /**
  * Why this row's Configure control cannot open anything, or `undefined`.
  *
- * A router dongle is no longer refused CATEGORICALLY. It is refused when the
- * device has published no setting whose write this build has verified —
- * `router_admin.controls` is the backend's capability claim, and it is only
- * emitted after a real round-trip proved the write lands. So a Huawei HiLink
- * opens a dialog with two working switches, and a ZTE whose firmware accepts
- * every request and applies none still says so instead of offering them.
- *
- * That refusal gets its OWN sentence rather than the generic `routerManaged`
- * one every dongle's availability token already resolves to. Sharing the key
- * made the two collapse into one line, which was tidy and uninformative: an
- * operator comparing a working Huawei row against a refused ZTE row read the
- * identical "manages this connection itself" on both and had no way to see why
- * only one of them offers settings. The distinction IS the answer to their
- * question, so it has to be on screen. {@link rowNoteKeys} keeps the row's
- * two-line ceiling by superseding the generic line instead of collapsing it.
- *
- * ── A WITHHELD CONTROL SET IS NOT ALWAYS A DEVICE LIMITATION ────────────────
- *
- * `router_admin.controls` is ALSO absent while the dongle's own login stands:
- * the device's `gateRouterAdminByLock` withholds the capability and control
- * blocks below `open`/`unlocked`. Reading that as "no write was ever proven"
- * disabled Configure on exactly the devices whose dialog now carries the login
- * form — so the one control that can fix the state was unreachable, and the row
- * additionally blamed the hardware for it. A lock therefore OPENS the dialog:
- * there is genuinely something to do in there.
+ * Router dialogs also carry login, portal access and diagnostics. Missing
+ * settings controls therefore cannot close the dialog or imply a failed write.
+ * Each setting keeps its own capability gate inside the dialog.
  */
 export function configureDisabledReasonKey(
 	band: ModemClassBand,
@@ -637,10 +611,7 @@ export function configureDisabledReasonKey(
 		return "network.cellular.reason.undriveable";
 	}
 	if (band === "router-ethernet") {
-		if (lockWithholdsCapabilities(deriveLockView(modem))) return undefined;
-		return modem?.router_admin?.controls === undefined
-			? "network.cellular.reason.routerControlsUnverified"
-			: undefined;
+		return undefined;
 	}
 	if (band === "unmanaged") return "network.cellular.config.unmanaged";
 	return undefined;

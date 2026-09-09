@@ -58,6 +58,7 @@
 import type {
 	Modem,
 	ModemCredentialsRefusal,
+	ModemCredentialVerification,
 	ModemLockDetail,
 	ModemLockState,
 	ModemLockSubReason,
@@ -67,6 +68,14 @@ import { modemRefusalCopyKey } from "./refusal-taxonomy";
 
 /** The i18n stem every key on this surface hangs off. */
 export const LOCK_COPY_PREFIX = "network.routerCellular.lock";
+
+export const CREDENTIAL_VERIFICATION_COPY = {
+	verified: "network.routerCellular.lock.outcome.unlocked",
+	admin_unreachable:
+		"network.routerCellular.lock.verification.admin_unreachable",
+	credentials_rejected:
+		"network.routerCellular.lock.verification.credentials_rejected",
+} as const satisfies Record<ModemCredentialVerification, string>;
 
 /**
  * What the operator is looking at, and what may be offered.

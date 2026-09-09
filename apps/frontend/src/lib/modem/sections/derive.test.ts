@@ -15,10 +15,10 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { CAPABILITY_MODULES } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
-import { fccUnlockView } from "$main/dialogs/modem-fcc-unlock";
-import { gpsView } from "$main/dialogs/modem-gps";
-import { gatedSurfaceCapability } from "$main/network/capability-modules";
-import { isSimlessModem } from "$main/network/cellular-row";
+import { fccUnlockView } from "../../../main/dialogs/modem-fcc-unlock";
+import { gpsView } from "../../../main/dialogs/modem-gps";
+import { gatedSurfaceCapability } from "../../../main/network/capability-modules";
+import { isSimlessModem } from "../../../main/network/cellular-row";
 
 import {
 	BASELINE_UNAVAILABLE_KEY,
@@ -426,9 +426,11 @@ describe("unavailability is the row's own authority, re-shaped", () => {
 
 		const keys = set.unavailability.map((n) => n.reasonKey);
 		expect(new Set(keys).size).toBe(keys.length);
-		// The specific refusal supersedes the generic sentence it contains.
-		expect(keys).toContain("network.cellular.reason.routerControlsUnverified");
-		expect(keys).not.toContain("network.cellular.reason.routerManaged");
+		// No settings write was attempted; retain only the router ownership note.
+		expect(keys).not.toContain(
+			"network.cellular.reason.routerControlsUnverified",
+		);
+		expect(keys).toContain("network.cellular.reason.routerManaged");
 	});
 
 	it("names WHERE each surviving reason came from", () => {
@@ -521,13 +523,8 @@ describe("a gated surface's own view maps to the ladder ONCE", () => {
 	}
 
 	it("accepts a surface view carrying its own extras", () => {
-		expect(
-			gatedSurfaceCapability({
-				kind: "toggle",
-				enabled: true,
-				key: "12d1:14dc",
-			}),
-		).toEqual({ mode: "available" });
+		const view = { kind: "toggle", enabled: true, key: "12d1:14dc" } as const;
+		expect(gatedSurfaceCapability(view)).toEqual({ mode: "available" });
 	});
 });
 
@@ -568,8 +565,13 @@ describe("…and the ladder's `absent` line is decided by the CLAIM alone", () =
 		(claim) => {
 			const withoutState = fccUnlockView(claim, undefined).kind === "absent";
 			const withState =
-				fccUnlockView(claim, { enabled: true, key: "12d1:14dc" }).kind ===
-				"absent";
+				fccUnlockView(claim, {
+					enabled: true,
+					key: "12d1:14dc",
+					coverage: "present",
+					model_wide: true,
+					requires_reprobe: true,
+				}).kind === "absent";
 
 			expect(withState).toBe(withoutState);
 		},

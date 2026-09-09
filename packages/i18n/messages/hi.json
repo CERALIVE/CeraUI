@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "डोंगल के लॉगिन पेज तक नहीं पहुँचा जा सका। यह पासवर्ड सहेजा नहीं गया। दोबारा प्रयास करने से पहले कनेक्शन जाँचें।",
+	"network.routerCellular.lock.verification.credentials_rejected": "डोंगल ने यह लॉगिन अस्वीकार कर दिया। यह पासवर्ड सहेजा नहीं गया। दोबारा प्रयास करने से पहले उपयोगकर्ता नाम और पासवर्ड जाँचें।",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "मीडिया लोड",
 	"settings.mediaLoad.description": "प्रत्येक कोर की ड्राइवर रीडिंग और उससे जुड़े सत्र",

@@ -30,6 +30,14 @@ test('the frontend config uses the actual runtime CPU budget', () => {
 });
 
 describe('frontend Vitest classifier', () => {
+	test('never filters unhandled errors out of the frontend run', () => {
+		expect(config.test.dangerouslyIgnoreUnhandledErrors).toBe(false);
+		for (const type of ['Unhandled Rejection', 'Uncaught Exception']) {
+			const error = Object.assign(new Error('unhandled policy probe'), { type });
+			expect(() => config.test.onUnhandledError(error)).toThrow(error);
+		}
+	});
+
 	test('puts every source test in exactly one project', () => {
 		// Given the source tests Vitest can collect
 		const sourceTests = globSync('src/**/*.test.ts', {

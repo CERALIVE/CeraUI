@@ -267,6 +267,16 @@ evidence is not hardware evidence. Full contract: `docs/ENCODER-LOAD.md` at repo
 
 ### Vitest project topology [EXISTS]
 
+Unhandled errors are never filtered: `dangerouslyIgnoreUnhandledErrors: false`
+and a rethrowing `onUnhandledError` apply to the ordinary suite and its shards.
+Test-only Biome overrides enforce `nursery/noFloatingPromises` as an error and
+report `suspicious/useAwait` warnings; both ship in 2.5.9, but floating promises
+is not a `suspicious` rule in that version. No custom equivalent guard exists.
+GPS live-region mocks use the exported RPC reply types so an acquiring state
+cannot omit its `since`/`deadline` and schedule a NaN timeout. The timer regression
+is in `ModemConfigDialog.liveRegions.test.ts`. Audit evidence and limitations:
+[`../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md`](../../docs/FRONTEND-PHANTOM-GREEN-AUDIT.md).
+
 `vitest.config.ts` uses stable Vitest 5's `test.projects`, with inline
 `extends: true` projects inheriting plugins, defines, aliases, and runner bounds.
 `scripts/ci/vitest-classify.mjs` walks source-test import graphs at config load:
@@ -311,7 +321,12 @@ overrides remain unchanged. Full evidence and hosted acceptance status:
 
 Bun 1.4.2 / Vitest 5.0.0: **375 files / 6,234 tests, zero failures in three
 consecutive full `bun run --filter frontend test` runs**, identical to the
-current-main baseline (`ca5b0b20`). Final wall times: **132.286 / 131.299 /
+then-current-main baseline (`ca5b0b20`). That pair of numbers is the SETUP-COST
+EXPERIMENT'S OWN before/after control and is frozen at its base commit — the
+point was that native loading changed the clock and not the counts. The
+suite has since absorbed PRs #342/#344 and stands at **378 files / 6,271
+tests** on merged `main`; `../../AGENTS.md` → DEP BASELINE is the single place
+that figure is maintained, and this paragraph must not be re-synced to it. Final wall times: **132.286 / 131.299 /
 124.110 seconds**, mean **129.232 seconds**; Vitest Duration: **124.62 / 125.91 /
 118.60 seconds**, setup **3 / 3 / 4%** of aggregate phase time. Baseline wall
 times were **656.451 / 669.204 seconds**, mean **662.827 seconds**, with setup
@@ -539,8 +554,8 @@ CI job that uploads the signed bundles to R2. Pipeline (each step gates the next
 - EVERY cellular device gets a row, and an uncontrollable one is DIMMED-WITH-A-REASON, never hidden (modem-stack Phase B, todo 26) [PARTIAL — never rendered against real cellular hardware]: `main/network/CellularSection.svelte` renders ONE calm summary row per device off the Wave-4 additive wire fields (`device_class`, `availability_reason`, `slot_label`), and `main/network/cellular-row.ts` is the pure, rune-free derivation behind it. Three classes share the row: `mm-managed` (`usb`/`pcie-mhi`/`pcie-mtk`/`soc-qrtr`, and an ABSENT `device_class` — the pre-Phase-B wire came from mmcli only, which lists nothing else), `router-ethernet`, and `unmanaged` for a transport this build does not recognise. The BAND vocabulary is `docs/MODEM-SUPPORT-MATRIX.md` §1's verbatim, but the BADGE's is not, and that split is the §3 OL-1 fix: the copy used to be the band with a capital glued on (`MM-managed`, `Router-ethernet`), which is the name of the daemon that controls the device rather than anything an operator can act on. It now reads `Directly managed` / `Router dongle` / `Unrecognised`; the band itself stays on `data-class-band` and in the diagnostics `transport` row. `CellularSection.test.ts` asserts BOTH directions — the three operator words, and that no badge's text contains its own band. Six rules are load-bearing:
   1. **An unrecognised `device_class` resolves to `unmanaged`, never to a known band** — the honest generic row, not a guess. Likewise an unrecognised `availability_reason` never becomes `router-up`: a lifecycle claim drawn from a token we could not read is the fabrication the backend refused to make when it omitted the dongle's status block.
   2. **`availability_reason` is a wire-stable machine token and is NEVER rendered raw** — `router_managed` / `dongle_acquiring` / `dongle_down` are keyed to copy (the last two REUSE `EthernetSection`'s existing sentences: same physical device, second surface, so the two must not describe it differently), and an unknown token resolves to a generic sentence. Every resolver returns an i18n DOT-PATH KEY, resolved at the component through `resolveMessageKey`.
-  3. **No control is ever removed, and none is bare.** The bond toggle renders on EVERY row — a modem with no address keeps it, disabled-with-reason, where the pre-redesign row simply omitted it and made "cannot bond" indistinguishable from "not a bonding candidate". A `router-ethernet` row's toggle is disabled even when `up`: its veth already owns a LIVE toggle on its own `EthernetSection` row, and two live controls for one link is how they disagree. Configure is disabled-with-reason for `router-ethernet`/`unmanaged` rather than opening a dialog with nothing in it.
-  4. **Reasons are DE-DUPLICATED into at most two lines** (`rowNoteKeys`). A router dongle's Configure reason is deliberately the SAME key its `router_managed` availability token resolves to, so the two collapse instead of restating one fact twice — rendered naively the row grew three sentences saying two things, which reads as a wall rather than as an instrument.
+  3. **No control is ever removed, and none is bare.** The bond toggle renders on EVERY row — a modem with no address keeps it, disabled-with-reason. An isolated router's veth owns its bond control; a `router_direct` row keeps its own subject to the ordinary bond gates. Router Configure remains enabled for diagnostics and portal access even without writable settings; only `unmanaged` Configure is disabled-with-reason.
+  4. **Reasons are DE-DUPLICATED into at most two lines** (`rowNoteKeys`). Availability and bond reasons stay inline without restating the same fact. Router dialog access is independent of those reasons; individual settings keep their own capability gates.
   5. **Absence renders as absence.** A device that reported no `status` draws NO signal glyph; an empty meter reads as "no signal" on a dongle carrying traffic. The glyph itself is a qualitative tier with a word behind it — no digits, no `data-live-value` — so it does NOT re-add the per-row telemetry `BondedLinksSection` owns and T20 removed.
   6. **The state dot is `self-start mt-1.5`, not centred** — a row with note lines is tall, and a vertically-centred dot floats away from the name it reports on. Every state carries its own WORD and GLYPH; colour is only reinforcement.
 
@@ -835,19 +850,12 @@ collision in consistencies give a really bad UI UX."*
   IDENTICALLY here, and the `No SIM` pill beside it carries the difference.
   Collapsing the two is what made one pill contradict the other.
 
-**…and the Configure refusal names WHY, in its own words.** The gating is
-UNCHANGED — Configure is refused exactly when `router_admin.controls` is absent,
-i.e. when no write to this dongle was ever proven to land. What changed is that
-the refusal stopped borrowing the generic `routerManaged` availability sentence:
-board-measured, two Huawei rows with WORKING Configure and a ZTE and a Qualcomm
-with REFUSED Configure all printed the identical "manages this connection
-itself", so the row answered every "why not this one?" the same way.
-`network.cellular.reason.routerControlsUnverified` states the real reason and
-still points at the dongle's own web interface. Because it CONTAINS the generic
-sentence's content, `rowNoteKeys` SUPERSEDES rather than stacks
-(`SUPERSEDED_NOTE_KEYS`) — the row keeps its two-line ceiling, and a verified
-dongle's generic line is untouched. Do NOT re-merge the keys to "save a
-translation": the distinction IS the answer to the operator's question.
+**…and Configure now separates dialog access from writable settings.** The
+earlier `routerControlsUnverified` refusal blocked a useful diagnostics/login
+surface whenever `router_admin.controls` was absent. Router Configure now stays
+reachable across link and lock states. Missing controls still withhold their
+individual settings, but do not establish rejected credentials or an unreachable
+portal. Login outcomes and unconfirmed settings writes retain separate bands.
 
 Coverage: `cellular-row.test.ts` ("the router link-state badge names the LINK…",
 the `configureDisabledReasonKey` distinctness block, and the `rowNoteKeys`
@@ -1187,9 +1195,9 @@ FOUR phases, and the two that render nothing are NOT the same fact:
   mutation-safety contract landed.
 - **A device with no `stable_key` is refused the control AND the list**, because a
   switch that could never be confirmed is not an option to display.
-- **A UFI/router-ethernet row gets no card at all** — it reports no composition, and
-  its Configure button is disabled-with-reason, so there is no surface a switch
-  could live on. `sethimiusbtether` is a PERMANENT fence, enforced by a repo-wide
+- **A UFI/router-ethernet row gets no USB-composition card at all** — its
+  diagnostics dialog remains reachable, but offers no composition switch.
+  `sethimiusbtether` is a PERMANENT fence, enforced by a repo-wide
   grep gate (`apps/backend/src/tests/usb-tether-fence.test.ts`), not by a UI state.
 
 Coverage: `src/tests/usb-mode-offer.test.ts` (the pure rule),
@@ -1741,10 +1749,12 @@ reads as a retry, which the enumeration test asserts.
 the section's own `$state` — never a store, never `$persist`, never
 `localStorage`, never a URL — and `AppDialog` renders children only while open,
 so the retention bound is the mount rather than a cleanup somebody has to
-remember (the `ModemUssdSection` rule, for the same reason). It is additionally
-cleared BEFORE the await, so it is out of the component the instant it is
-dispatched and can never be echoed into a heading, an outcome band or a retry
-affordance. There is no reveal toggle and no autofill: `type="password"` +
+remember. A failed draft stays only in that mount; success clears it, and a
+device change discards it. One `setCredentials` RPC performs verification before
+persistence; no second login is dispatched. Typed `admin_unreachable` and
+`credentials_rejected` results have distinct translated outcome bands.
+The draft is never echoed into a heading or outcome band.
+There is no reveal toggle and no autofill: `type="password"` +
 `autocomplete="off"`, and no `value` ATTRIBUTE, so the secret is never in the
 serialized document.
 
@@ -1762,7 +1772,9 @@ were both defects before they were rules:
 2. **A locked dongle's Configure must still open.** `configureDisabledReasonKey`
    read that same absence as an unverified write and DISABLED the row's
    Configure — so the operator was refused entry to the only surface carrying
-   the login. A lock now opens the dialog; `open`/`unlocked` are unchanged.
+   the login. Every router row now keeps that dialog reachable, including
+   `open`/`unlocked` without controls: diagnostics and portal access are useful
+   independently of settings writes. Individual settings retain their gates.
 
 Copy: `network.routerCellular.lock.*` (29 keys × 10 locales). Coverage:
 `lib/modem/lock-state.test.ts` (the entry/clear/withhold tables swept over
@@ -2130,7 +2142,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - No `$:` reactive statements — Svelte 5 runes only.
 - Don't delete the remembered credential on a TRANSPORT failure. `unreachable` (socket-not-ready / RPC error / timeout) says nothing about whether the token is still valid; only a server `rejected` may clear `localStorage.auth`. Getting this wrong turns every backend restart into a password prompt, and the operator has no way to tell it apart from a real revocation.
 - Don't write a store's value from a mirror `$effect` that watches the source it derives from. `$derived` where it is a derivation; an explicit write at the one place the value changes where it is not. A mirror effect subscribes to what it writes, so it re-runs on its own write, and the two copies disagree exactly when a late frame lands between them — the credential persistence in `authenticate()` settles SYNCHRONOUSLY before auth state flips for this reason, and `Auth.svelte` can unmount on that flip before a persistence effect would ever run.
-- Keep the merged four-way CI shard lane around BOTH Vitest projects; do not replace it with the earlier single-job shape. The local run is **setup-bound, not test-bound** — measured at 370 files / 6,157 tests, the phase breakdown is setup 82% / transform 9% / import 4% / tests 4%. Sharding distributes files rather than repeating every file in every lane; it buys wall clock with more runners but does not remove per-file setup cost. Two separate levers were measured and both are refused: `happy-dom` is 2.95× faster on DOM-environment init but that sub-phase is under 2% of the run (7.25 s of ~650 s), a real 20-file pilot returned 7.6% and surfaced a genuine `srcObject` incompatibility; and `pool: 'vmThreads'` — architecturally the right lever, since it builds the DOM once per WORKER instead of once per FILE — is HARD INCOMPATIBLE on this runtime (jsdom's global is Proxy-based and Bun's `node:vm` refuses it with `Proxy is not allowed in the global prototype chain`, reproduced in a minimal repro with no Vitest, Svelte or i18n involved; zero of 243 component files could even collect). Do not retry `vmThreads` without a Bun release that fixes vm Proxy support. Reducing setup cost through lazy/memoized i18n that survives `isolate: true` remains a separate infrastructure change, not a reason to undo CI sharding.
+- Keep the merged four-way CI shard lane around BOTH Vitest projects; do not replace it with the earlier single-job shape. The local run **was setup-bound, not test-bound** — measured at 370 files / 6,157 tests, the phase breakdown was setup 82% / transform 9% / import 4% / tests 4%. That is the state sharding was sized against, and it is HISTORICAL now: native i18n loading (the `server.deps.external` boundary described under "DEP BASELINE — measured 2026-09-08") cut setup's aggregate share to 3–4% and the full local command by 80.50%. Sharding is retained anyway, because it answers a different question — it distributes files across runners rather than repeating every file in every lane, so it buys hosted wall clock that a per-file setup fix cannot. Do NOT read the setup-cost win as a reason to collapse the lane back to one job; the arithmetic that chose four shards is in `CeraUI/AGENTS.md` → "THE FRONTEND VITEST LANE IS SHARDED FOUR WAYS", and it is the thing to re-run before changing N. Two separate levers were measured and both are refused: `happy-dom` is 2.95× faster on DOM-environment init but that sub-phase is under 2% of the run (7.25 s of ~650 s), a real 20-file pilot returned 7.6% and surfaced a genuine `srcObject` incompatibility; and `pool: 'vmThreads'` — architecturally the right lever, since it builds the DOM once per WORKER instead of once per FILE — is HARD INCOMPATIBLE on this runtime (jsdom's global is Proxy-based and Bun's `node:vm` refuses it with `Proxy is not allowed in the global prototype chain`, reproduced in a minimal repro with no Vitest, Svelte or i18n involved; zero of 243 component files could even collect). Do not retry `vmThreads` without a Bun release that fixes vm Proxy support. The third lever — reducing setup cost through i18n that survives `isolate: true` — was the one that landed, as a separate infrastructure change and NOT as a reason to undo CI sharding; `fsModuleCache` (10.34% on warm runs) and shared components (712 of 811 tests failed) were measured beside it and both refused.
 - Don't route a persistent notification back through svelte-sonner, and don't give the band a `fixed` position or a `z-*` class — an infinite toast at z-999999999 owned the mobile dock's hit-test point and covered every dialog's primary action (see A PERSISTENT NOTICE IS NOT A TOAST). Don't "fix" a future instance of that with a lower toaster z-index either: the dialogs fire their own "Copied"/"Saved"/refusal toasts while open, and those would end up under the scrim.
 - Don't assert a dialog-occlusion claim with `document.elementFromPoint` — bits-ui sets `pointer-events: none` on `<body>` while a modal is open, so the probe skips the overlay and answers with the button underneath it. Compare stacking layers.
 - Don't hardcode the mobile dock's height, and don't key the toast clearance on sonner's own `max-width: 600px` breakpoint — the dock is still mounted at 768x900, where that rule does not fire. `--mobile-dock-height` + `DESKTOP_CHROME_QUERY` are the shared sources.
@@ -2167,7 +2179,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't add a `data-touch-target="hit-area"` control to that `min-height` list either, and don't remove the `:not([data-touch-target='hit-area'])` carve-out that keeps it out. The three shell controls carrying it (the `Auth.svelte` password reveal, `AppDialog.svelte`'s header close, `UpdateBanner.svelte`'s dismiss) are compact SQUARE icon buttons, so `min-height` fixes the wrong axis and leaves the width at 36/32/24px while turning a ghost button's hover state into a pill that no longer matches its glyph; the dialog close additionally reaches 6px past a 52px header into the scrollable body and takes the first pixels of a scroll gesture. And don't reach for a selector list instead of the attribute — the banner's dismiss is a plain `<button>` with no `data-slot`, which is exactly why the lift never reached it. `tests/e2e/touch-targets.spec.ts` (`@a11y`) measures the overlay on BOTH axes and asserts the box stayed small; the mechanism is written up in `docs/TOUCHSCREEN.md`.
 - Don't assert a reduced-motion fix with an animation-DURATION sweep on these surfaces — `app.css` already collapses every animation to `0.01ms` under `prefers-reduced-motion: reduce`, so a duration assertion is green before and after a `motion-safe:` is added. The falsifiable property is `animation-name`: `motion-safe:` declares no animation at all, a bare `animate-*` still names one. Note `NavigationRenderer`'s transition spinner cannot be reached from a browser at all (`setTransitioning` has no caller in shipped source), so its gate is the class-list lock in `NavigationRenderer.test.ts`.
 - Don't re-declare `present ? { mode: 'available' } : { mode: 'absent' }` on a modem surface — import `readingView` from `$lib/modem/sections`. Five surfaces had written it by hand, and the way a local copy drifts is documented: pointed at a capability that can be UNKNOWN it renders "nobody has established this" as ZERO nodes, byte-identical to a modem that positively has none. `src/tests/modem-reading-view-gate.test.ts` fails the build on a second copy.
-- Don't hold a dongle password anywhere but `ModemLockSection`'s own `$state`, and don't skip clearing it BEFORE the await — no store, no `$persist`, no `localStorage`, no URL, no `value` attribute, no reveal toggle, no autofill. The mount is the retention bound, exactly as it is for the USSD command.
+- Don't hold a dongle password anywhere but `ModemLockSection`'s own `$state`: keep a failed draft only until close/device change, clear it on success, and send one verification request. No store, `$persist`, Web Storage, URL, `value` attribute, reveal toggle, or autofill.
 - Don't fold the three credential failure causes into one message. Wrong password, unsupported firmware profile and device lockout call for three different actions, and `lockMessageKey` is a table over the wire vocabulary precisely so a component branch cannot quietly merge two of them.
 - Don't read an absent `router_admin.controls` as "no write was ever proven" without asking `lockWithholdsCapabilities` first — a signed-out dongle withholds the same block, so that reading both blamed the hardware in the no-controls band AND disabled the row's Configure, which is the only way into the dialog carrying the login.
 - Don't confirm a router-dongle write on the RPC reply (`result.controls` included) — the observation is what moves the switch, so confirming on the reply lets the band claim applied while the control still shows the old value. Don't arm the bound at dispatch either, and don't let a late broadcast upgrade an `unconfirmed` write into a success.
@@ -2243,7 +2255,7 @@ See [`docs/FRONTEND_CONNECTION_PATTERNS.md`](../../docs/FRONTEND_CONNECTION_PATT
 - Don't re-inline the preview `<details>` into a cockpit — `PreviewDisclosure.svelte` is mounted by BOTH, and the idle-only copy is exactly why mid-stream preview shipped with no UI. Don't give the mid-stream mount its own socket, token flow, or auto-open default either: it must dial the same `mintPreviewToken` → `/preview` proxy path and stay off until the operator opens it.
 - Don't add a second QR to `HotspotDialog` (the connect-your-phone device-access QR was removed as noise), and don't interpolate a raw SSID/password into a `WIFI:` payload — `generateWifiQr` must escape `\ ; , :` via `escapeWifiQrField`. Full contract: `../../AGENTS.md` → HOTSPOT QR SURFACE.
 - Don't let `StreamControlButton` show a spinner beside the idle "Start Stream"/"Stop Stream" label — the label must switch to `live.starting`/`live.stopping` for the transient. That button is the only start-progress affordance on screen once `LiveView` swaps in `LiveCockpit`, and a start legitimately runs for seconds.
-- Don't reach for `--localstorage-file` when a `$persist` store misbehaves under vitest, and don't "fix" storage by editing `vitest.config.ts`. `vitest.setup.ts` installs a fresh in-memory spec-compliant `Storage` over `globalThis.localStorage`/`sessionStorage` (`Object.defineProperty`) before any store module loads, plus a `beforeEach` clear. WHY it exists: Node ≥ 25 owns a built-in `globalThis.localStorage` that is `undefined` unless the process was started with `--localstorage-file`; vitest's jsdom environment only copies a window key onto the global when the global does not already own it, and it aliases `globalThis.window` back to `globalThis` — so jsdom's real Storage was skipped and every `window.localStorage` read resolved to that empty built-in, making `$persist` (`display-profile.svelte.ts` ← `transitions.ts` ← `$lib/utils` ← every shadcn component) throw `TypeError: Cannot read properties of undefined (reading 'getItem')` at module load. Measured on this tree at `40cbad15`: **80 of 210 test files** failed to import under Node 26.7.0. WHY not the flag: one fixed path is a SQLite DB shared by every thread worker and persisted across runs — measured, a 2-worker run of the isolation pair failed `Error: database is locked`, and a second run read back the first run's value, i.e. it converts a hard failure into false-green cross-spec leakage. **The setup-file Storage override is the SOLE mechanism — no `NODE_OPTIONS` wrapper is required and none exists in the tree**; the Layer-1-only probe (`mise exec node@26 -- bun run --filter frontend test`) was green twice in a row at 212/212 files, matching the Node 24 baseline (evidence: `.omo/evidence/task-17-ts7-node26-i18n-quality.md`). `src/tests/persist-isolation-{a,b}.test.ts` pin the contract — run them concurrently with `bunx --bun vitest run --pool=threads --maxWorkers=2` (CLI flags only; never edit the config). **The suite now runs on BUN, and the shim STAYS — the paragraph above is its history, not its only justification.** Measured against `Object.getOwnPropertyDescriptor(globalThis, 'localStorage')`: Node 26 OWNS an accessor for it (`get`/`set`/`enumerable`/`configurable`), which is precisely the ownership that makes jsdom skip its own Storage; Bun 1.4.0 does not own the key at all, so the Node-25+ root cause is genuinely absent under the current runtime. That does NOT retire the shim, because it was never only a Node workaround — its second, independent job is the disjoint-by-construction per-file instance the two `persist-isolation` specs pin, and no full-suite Bun run without it has ever been taken. Retiring it needs that run plus a fresh isolation verdict, as its own change; do not delete it on the strength of the ownership probe alone.
+- Don't reach for `--localstorage-file` when a `$persist` store misbehaves under vitest, and don't "fix" storage by editing `vitest.config.ts`. `vitest.storage.setup.ts` (the Storage half of the former single `vitest.setup.ts`, loaded by BOTH projects) installs a fresh in-memory spec-compliant `Storage` over `globalThis.localStorage`/`sessionStorage` (`Object.defineProperty`) before any store module loads, plus a `beforeEach` clear. WHY it exists: Node ≥ 25 owns a built-in `globalThis.localStorage` that is `undefined` unless the process was started with `--localstorage-file`; vitest's jsdom environment only copies a window key onto the global when the global does not already own it, and it aliases `globalThis.window` back to `globalThis` — so jsdom's real Storage was skipped and every `window.localStorage` read resolved to that empty built-in, making `$persist` (`display-profile.svelte.ts` ← `transitions.ts` ← `$lib/utils` ← every shadcn component) throw `TypeError: Cannot read properties of undefined (reading 'getItem')` at module load. Measured on this tree at `40cbad15`: **80 of 210 test files** failed to import under Node 26.7.0. WHY not the flag: one fixed path is a SQLite DB shared by every thread worker and persisted across runs — measured, a 2-worker run of the isolation pair failed `Error: database is locked`, and a second run read back the first run's value, i.e. it converts a hard failure into false-green cross-spec leakage. **The setup-file Storage override is the SOLE mechanism — no `NODE_OPTIONS` wrapper is required and none exists in the tree**; the Layer-1-only probe (`mise exec node@26 -- bun run --filter frontend test`) was green twice in a row at 212/212 files, matching the Node 24 baseline (evidence: `.omo/evidence/task-17-ts7-node26-i18n-quality.md`). `src/tests/persist-isolation-{a,b}.test.ts` pin the contract — run them concurrently with `bunx --bun vitest run --pool=threads --maxWorkers=2` (CLI flags only; never edit the config). **The suite now runs on BUN, and the shim STAYS — the paragraph above is its history, not its only justification.** Measured against `Object.getOwnPropertyDescriptor(globalThis, 'localStorage')`: Node 26 OWNS an accessor for it (`get`/`set`/`enumerable`/`configurable`), which is precisely the ownership that makes jsdom skip its own Storage; Bun 1.4.0 does not own the key at all, so the Node-25+ root cause is genuinely absent under the current runtime. That does NOT retire the shim, because it was never only a Node workaround — its second, independent job is the disjoint-by-construction per-file instance the two `persist-isolation` specs pin, and no full-suite Bun run without it has ever been taken. Retiring it needs that run plus a fresh isolation verdict, as its own change; do not delete it on the strength of the ownership probe alone.
 
 ## EVERY REFUSAL AN OPERATOR CAN TRIGGER HAS ITS OWN MESSAGE [EXISTS]
 

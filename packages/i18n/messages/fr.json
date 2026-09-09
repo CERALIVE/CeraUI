@@ -1,4 +1,6 @@
 {
+	"network.routerCellular.lock.verification.admin_unreachable": "La page de connexion du modem est inaccessible. Ce mot de passe n'a pas été enregistré. Vérifiez la connexion avant de réessayer.",
+	"network.routerCellular.lock.verification.credentials_rejected": "Le modem a refusé cette connexion. Ce mot de passe n'a pas été enregistré. Vérifiez le nom d'utilisateur et le mot de passe avant de réessayer.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
 	"settings.mediaLoad.title": "Charge multimédia",
 	"settings.mediaLoad.description": "Mesures du pilote par cœur et sessions rattachées",

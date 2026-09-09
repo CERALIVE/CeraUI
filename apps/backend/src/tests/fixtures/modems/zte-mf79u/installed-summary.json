@@ -1,0 +1,65 @@
+{
+	"usbPath": "5-1.1",
+	"vidPidBeforeCycle": "19d2:1405",
+	"observedClassifications": [
+		"19d2:1405 class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:41:03.560Z",
+	"wirePhase": "resume",
+	"wireRowsMatchedByIdPath": {
+		"1003": {
+			"ifname": "enx344b50000000",
+			"name": "ZTE MF79U",
+			"model": "ZTE MF79U",
+			"manufacturer": "ZTE,Incorporated",
+			"network_type": { "supported": [], "active": null },
+			"device_class": "router-ethernet",
+			"availability_reason": "router_direct",
+			"usb_mode": "router-ethernet",
+			"data_usage_policy": { "supported": true },
+			"router_admin": {
+				"admin_url": "http://192.168.0.1",
+				"reachable": true,
+				"model": "MF79U",
+				"imei": "<redacted-identity>",
+				"firmware": "BD_XCBZHKMF79UV1.0.0B03",
+				"sim": "present",
+				"connection": "unknown",
+				"signal_bars": 5,
+				"signal_max_bars": 5,
+				"signal": {
+					"provenance": "zte-goform",
+					"freshness": "live",
+					"bars": { "state": "known", "value": 5 },
+					"max_bars": { "state": "known", "value": 5 },
+					"dbm": { "state": "unknown", "reason": "not-reported" },
+					"rsrp": { "state": "known", "value": -79 },
+					"rsrq": { "state": "known", "value": -10 },
+					"snr": { "state": "known", "value": 4 },
+					"sinr": { "state": "unknown", "reason": "unsupported" }
+				},
+				"details": {
+					"network_type": "LTE",
+					"provider": "732103",
+					"cell_id": "2c20f34",
+					"roaming": "Home"
+				}
+			},
+			"lock_state": "locked",
+			"lock_detail": { "credential_configured": false },
+			"stable_key": "platform-fc880000.usb-usb-0:1.1",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

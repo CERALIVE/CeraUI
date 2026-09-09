@@ -43,7 +43,7 @@ import {
 	vi,
 } from "vitest";
 
-import { lockErrorKey } from "$lib/modem/lock-state";
+import { lockErrorKey } from "../../lib/modem/lock-state";
 import RouterDongleDialog from "./RouterDongleDialog.svelte";
 
 const setCredentials = vi.hoisted(() => vi.fn());
@@ -408,7 +408,7 @@ describe("the credential reaches the RPC and nothing else", () => {
 		await fireEvent.input(field, { target: { value } });
 	}
 
-	it("posts to the backend, and is CLEARED before the await", async () => {
+	it("keeps a pending draft local and clears it only after verification", async () => {
 		let release: ((value: { success: boolean }) => void) | undefined;
 		setCredentials.mockReturnValue(
 			new Promise<{ success: boolean }>((resolve) => {
@@ -430,13 +430,18 @@ describe("the credential reaches the RPC and nothing else", () => {
 			username: "",
 			password: SECRET,
 		});
-		// …and the component no longer holds it, WHILE the request is still open.
+		// Pending verification must not discard the only editable draft.
 		expect(
 			(testid("dongle-lock-password") as HTMLInputElement | null)?.value ?? "",
-		).toBe("");
+		).toBe(SECRET);
 		expect(document.body.innerHTML).not.toContain(SECRET);
 
 		release?.({ success: true });
+		await screen.findByTestId("dongle-lock-outcome");
+		expect(
+			screen.getByTestId<HTMLInputElement>("dongle-lock-password").value,
+		).toBe("");
+		expect(verifyCredentials).not.toHaveBeenCalled();
 	});
 
 	it("leaves no copy in the DOM, in web storage, or in the URL", async () => {
@@ -484,8 +489,7 @@ describe("the credential reaches the RPC and nothing else", () => {
 	});
 
 	it("a rejected credential renders `auth_failed` in the operator's own words", async () => {
-		setCredentials.mockResolvedValue({ success: true });
-		verifyCredentials.mockResolvedValue({
+		setCredentials.mockResolvedValue({
 			success: false,
 			error: "auth_failed",
 			lock_state: "auth-failed",
