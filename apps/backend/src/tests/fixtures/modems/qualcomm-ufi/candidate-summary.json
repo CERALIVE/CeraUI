@@ -1,0 +1,97 @@
+{
+	"usbPath": "5-1.4.1",
+	"vidPidBeforeCycle": "05c6:9091",
+	"observedClassifications": [
+		"05c6:9091 class=mm-managed mode=qmi reason=recognized QMI control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": ["/org/freedesktop/ModemManager1/Modem/12"],
+	"wireCapturedAt": "2026-09-08T14:46:25.325Z",
+	"wirePhase": "qualcomm-ufi",
+	"wireRowsMatchedByIdPath": {
+		"12": {
+			"status": {
+				"connection": "scanning",
+				"network_type": "",
+				"signal": 0,
+				"roaming": false
+			},
+			"ifname": "wwu1u4u1i2",
+			"name": "HIMI_U01_MODEM_V1.0 - <redacted-identity-suffix>",
+			"model": "0",
+			"manufacturer": "1",
+			"network_type": {
+				"supported": ["3g", "4g", "4g3g"],
+				"active": "4g3g"
+			},
+			"sim_presence": "present",
+			"sim_lock": {
+				"required": "sim-pin2",
+				"remainingAttempts": 3
+			},
+			"firmware_revision": "HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]",
+			"packet_service_state": "detached",
+			"radio_power": "on",
+			"signal_detail": {
+				"quality_recent": {
+					"state": "known",
+					"value": true
+				},
+				"rsrp": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"rsrq": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"snr": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"sinr": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"registration_context": {
+				"operator_name": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"operator_code": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"cell_id": {
+					"state": "unknown",
+					"reason": "not-reported"
+				},
+				"tac": {
+					"state": "unknown",
+					"reason": "not-reported"
+				}
+			},
+			"sim_presence_evidence": {
+				"kind": "sim-object-path",
+				"field": "sim",
+				"value": "/org/freedesktop/ModemManager1/SIM/7"
+			},
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.4.1",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			},
+			"usb_mode": "qmi"
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

@@ -1,0 +1,36 @@
+{
+	"usbPath": "5-1.2",
+	"vidPidBeforeCycle": "0e8d:7127",
+	"observedClassifications": [
+		"0e8d:7127 class=mm-managed mode=rndis reason=recognized AT control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:43:04.008Z",
+	"wirePhase": "fibocom-fm350-gl",
+	"wireRowsMatchedByIdPath": {
+		"1003": {
+			"ifname": "",
+			"name": "MediaTek 7127",
+			"network_type": {
+				"supported": [],
+				"active": null
+			},
+			"availability_reason": "modem_initializing",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.2",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

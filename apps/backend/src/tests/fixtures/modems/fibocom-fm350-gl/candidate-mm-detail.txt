@@ -1,0 +1,151 @@
+Source capture: quectel-rm530n-gl; first timestamp: 2026-09-08T14:47:21Z
+This is a separately timed MM observation, not necessarily the post-cycle snapshot.
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/10
+  ----------------------------------
+  General  |                   path: /org/freedesktop/ModemManager1/Modem/10
+           |              device id: <redacted-identity>
+  ----------------------------------
+  Hardware |           manufacturer: Fibocom Wireless Inc.
+           |                  model: FM350-GL
+           |      firmware revision: 81600.0000.00.19.17.10
+           |              supported: gsm-umts, lte
+           |                current: gsm-umts, lte
+           |           equipment id: <redacted-identity>
+  ----------------------------------
+  System   |                 device: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+           |                physdev: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+           |                drivers: option, rndis_host
+           |                 plugin: fm350gl
+           |           primary port: ttyUSB15
+           |                  ports: enx000011121314 (net), ttyUSB12 (ignored), 
+           |                         ttyUSB13 (ignored), ttyUSB14 (ignored), ttyUSB15 (at), ttyUSB16 (ignored), 
+           |                         ttyUSB17 (ignored), ttyUSB18 (ignored)
+  ----------------------------------
+  Status   |         unlock retries: sim-pin (4), sim-puk (10)
+           |                  state: [32mconnected[0m
+           |            power state: on
+           |            access tech: lte
+           |         signal quality: 60% (recent)
+  ----------------------------------
+  Modes    |              supported: allowed: 3g; preferred: none
+           |                         allowed: 4g; preferred: none
+           |                         allowed: 5g; preferred: none
+           |                         allowed: 3g, 4g; preferred: 3g
+           |                         allowed: 3g, 4g; preferred: 4g
+           |                         allowed: 3g, 5g; preferred: 3g
+           |                         allowed: 3g, 5g; preferred: 5g
+           |                         allowed: 4g, 5g; preferred: 4g
+           |                         allowed: 4g, 5g; preferred: 5g
+           |                         allowed: 3g, 4g, 5g; preferred: 3g
+           |                         allowed: 3g, 4g, 5g; preferred: 4g
+           |                         allowed: 3g, 4g, 5g; preferred: 5g
+           |                current: allowed: 3g, 4g; preferred: 4g
+  ----------------------------------
+  IP       |              supported: ipv4, ipv6, ipv4v6
+  ----------------------------------
+  3GPP     |                   imei: <redacted-identity>
+           |            operator id: 732101
+           |          operator name: Claro
+           |           registration: home
+           |   packet service state: attached
+  ----------------------------------
+  3GPP EPS |   ue mode of operation: csps-2
+           |    initial bearer path: /org/freedesktop/ModemManager1/Bearer/8
+           | initial bearer ip type: ipv4v6
+  ----------------------------------
+  SIM      |       primary sim path: /org/freedesktop/ModemManager1/SIM/6
+  ----------------------------------
+  Bearer   |                  paths: /org/freedesktop/ModemManager1/Bearer/9
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/10
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : Fibocom Wireless Inc.
+modem.generic.model                             : FM350-GL
+modem.generic.revision                          : 81600.0000.00.19.17.10
+modem.generic.carrier-configuration             : --
+modem.generic.carrier-configuration-revision    : --
+modem.generic.hardware-revision                 : --
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+modem.generic.physdev                           : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : option
+modem.generic.drivers.value[2]                  : rndis_host
+modem.generic.plugin                            : fm350gl
+modem.generic.primary-port                      : ttyUSB15
+modem.generic.ports.length                      : 8
+modem.generic.ports.value[1]                    : enx000011121314 (net)
+modem.generic.ports.value[2]                    : ttyUSB12 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB13 (ignored)
+modem.generic.ports.value[4]                    : ttyUSB14 (ignored)
+modem.generic.ports.value[5]                    : ttyUSB15 (at)
+modem.generic.ports.value[6]                    : ttyUSB16 (ignored)
+modem.generic.ports.value[7]                    : ttyUSB17 (ignored)
+modem.generic.ports.value[8]                    : ttyUSB18 (ignored)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries.length             : 2
+modem.generic.unlock-retries.value[1]           : sim-pin (4)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.state                             : connected
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies.length        : 1
+modem.generic.access-technologies.value[1]      : lte
+modem.generic.signal-quality.value              : 60
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 5g; preferred: none
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[6]          : allowed: 3g, 5g; preferred: 3g
+modem.generic.supported-modes.value[7]          : allowed: 3g, 5g; preferred: 5g
+modem.generic.supported-modes.value[8]          : allowed: 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[9]          : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[10]         : allowed: 3g, 4g, 5g; preferred: 3g
+modem.generic.supported-modes.value[11]         : allowed: 3g, 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[12]         : allowed: 3g, 4g, 5g; preferred: 5g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands                   : --
+modem.generic.current-bands                     : --
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : 732101
+modem.3gpp.operator-name                        : Claro
+modem.3gpp.registration-state                   : home
+modem.3gpp.packet-service-state                 : attached
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-2
+modem.3gpp.eps.initial-bearer.dbus-path         : /org/freedesktop/ModemManager1/Bearer/8
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/6
+modem.generic.primary-sim-slot                  : --
+modem.generic.sim-slots                         : --
+modem.generic.bearers.length                    : 1
+modem.generic.bearers.value[1]                  : /org/freedesktop/ModemManager1/Bearer/9

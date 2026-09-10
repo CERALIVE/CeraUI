@@ -1,0 +1,1779 @@
+2026-09-08T14:24:49Z
+Current status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 2: 02a0 power 5gbps Rx.Detect
+Sent power off request
+New status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 2: 00a0 off
+Current status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 2: 0503 power highspeed enable connect [0e8d:7127 Fibocom Wireless Inc. FM350-GL]
+Sent power off request
+New status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 2: 0000 off
+OFF_DEVICE_ABSENT
+Current status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 2: 00a0 off
+Sent power on request
+New status for hub 8-1 [0bda:0411 Generic USB3.2 Hub, USB 3.20, 4 ports, ppps]
+  Port 2: 02a0 power 5gbps Rx.Detect
+Current status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 2: 0000 off
+Sent power on request
+New status for hub 5-1 [0bda:5411 Generic USB2.1 Hub, USB 2.10, 4 ports, ppps]
+  Port 2: 0100 power
+2026-09-08T14:25:38Z
+
+USB-PARENT 5-1.2
+DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+DEVNAME=/dev/bus/usb/005/020
+DEVTYPE=usb_device
+DRIVER=usb
+PRODUCT=e8d/7127/1
+TYPE=239/2/1
+BUSNUM=005
+DEVNUM=020
+MAJOR=189
+MINOR=531
+SUBSYSTEM=usb
+USEC_INITIALIZED=24845730442
+ID_BUS=usb
+ID_MODEL=FM350-GL
+ID_MODEL_ENC=FM350-GL
+ID_MODEL_ID=7127
+ID_SERIAL=<redacted-serial>
+ID_VENDOR=Fibocom_Wireless_Inc.
+ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+ID_VENDOR_ID=0e8d
+ID_REVISION=0001
+ID_USB_MODEL=FM350-GL
+ID_USB_MODEL_ENC=FM350-GL
+ID_USB_MODEL_ID=7127
+ID_USB_SERIAL=<redacted-serial>
+ID_USB_VENDOR=Fibocom_Wireless_Inc.
+ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+ID_USB_VENDOR_ID=0e8d
+ID_USB_REVISION=0001
+ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2
+ID_PATH=platform-fc880000.usb-usb-0:1.2
+ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2
+ID_DEBUG_APPLIANCE=android
+ID_FOR_SEAT=usb-platform-fc880000_usb-usb-0_1_2
+ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+TAGS=:uaccess:seat:
+CURRENT_TAGS=:uaccess:seat:
+
+UDEV-TREE
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2
+M: 5-1.2
+R: 2
+J: c189:531
+U: usb
+T: usb_device
+D: c 189:531
+N: bus/usb/005/020
+L: 0
+V: usb
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2
+E: SUBSYSTEM=usb
+E: DEVNAME=/dev/bus/usb/005/020
+E: DEVTYPE=usb_device
+E: DRIVER=usb
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: BUSNUM=005
+E: DEVNUM=020
+E: MAJOR=189
+E: MINOR=531
+E: USEC_INITIALIZED=24845730442
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2
+E: ID_DEBUG_APPLIANCE=android
+E: ID_FOR_SEAT=usb-platform-fc880000_usb-usb-0_1_2
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: TAGS=:seat:uaccess:
+E: CURRENT_TAGS=:seat:uaccess:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.0
+M: 5-1.2:1.0
+R: 0
+J: +usb:5-1.2:1.0
+U: usb
+T: usb_interface
+V: rndis_host
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.0
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=rndis_host
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=2/2/255
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01ic02isc02ipFFin00
+E: USEC_INITIALIZED=24845736806
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.0
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.0
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_0
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.0/net/enx000011121314
+M: enx000011121314
+R: 000011121314
+J: n14
+U: net
+I: 14
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.0/net/enx000011121314
+E: SUBSYSTEM=net
+E: INTERFACE=enx000011121314
+E: IFINDEX=14
+E: USEC_INITIALIZED=24845737043
+E: ID_NET_DRIVER=rndis_host
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=00
+E: ID_USB_DRIVER=rndis_host
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_NET_NAMING_SCHEME=v257
+E: ID_NET_NAME_MAC=enx000011121314
+E: ID_OUI_FROM_DATABASE=NORMEREL SYSTEMES
+E: ID_NET_NAME_PATH=enu1u2
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_CANDIDATE=1
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.0
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.0
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_0
+E: ID_NET_LINK_FILE=/usr/lib/systemd/network/73-usb-net-by-mac.link
+E: ID_NET_NAME=enx000011121314
+E: SYSTEMD_ALIAS=/sys/subsystem/net/devices/enx000011121314
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.1
+M: 5-1.2:1.1
+R: 1
+J: +usb:5-1.2:1.1
+U: usb
+T: usb_interface
+V: rndis_host
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.1
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=rndis_host
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=10/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01ic0Aisc00ip00in01
+E: USEC_INITIALIZED=24845737228
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.1
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.1
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_1
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.2
+M: 5-1.2:1.2
+R: 2
+J: +usb:5-1.2:1.2
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.2
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in02
+E: USEC_INITIALIZED=24845737414
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.2
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.2
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_2
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.2/ttyUSB12
+M: ttyUSB12
+R: 12
+J: +usb-serial:ttyUSB12
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.2/ttyUSB12
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845737468
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.2/ttyUSB12/tty/ttyUSB12
+M: ttyUSB12
+R: 12
+J: c188:12
+U: tty
+D: c 188:12
+N: ttyUSB12
+L: 0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.2-port0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.2-port0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if02-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.2/ttyUSB12/tty/ttyUSB12
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB12
+E: MAJOR=188
+E: MINOR=12
+E: USEC_INITIALIZED=24845737550
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=02
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.2
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.2
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_2
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_IGNORE=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.2-port0 /dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.2-port0 /dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if02-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.3
+M: 5-1.2:1.3
+R: 3
+J: +usb:5-1.2:1.3
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.3
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in03
+E: USEC_INITIALIZED=24845737776
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.3
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.3
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_3
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.3/ttyUSB13
+M: ttyUSB13
+R: 13
+J: +usb-serial:ttyUSB13
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.3/ttyUSB13
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845738267
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.3/ttyUSB13/tty/ttyUSB13
+M: ttyUSB13
+R: 13
+J: c188:13
+U: tty
+D: c 188:13
+N: ttyUSB13
+L: 0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.3-port0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.3-port0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if03-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.3/ttyUSB13/tty/ttyUSB13
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB13
+E: MAJOR=188
+E: MINOR=13
+E: USEC_INITIALIZED=24845738376
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=03
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.3
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.3
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_3
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_IGNORE=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.3-port0 /dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.3-port0 /dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if03-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.4
+M: 5-1.2:1.4
+R: 4
+J: +usb:5-1.2:1.4
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.4
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in04
+E: USEC_INITIALIZED=24845739283
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.4
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.4
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_4
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.4/ttyUSB14
+M: ttyUSB14
+R: 14
+J: +usb-serial:ttyUSB14
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.4/ttyUSB14
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845739942
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.4/ttyUSB14/tty/ttyUSB14
+M: ttyUSB14
+R: 14
+J: c188:14
+U: tty
+D: c 188:14
+N: ttyUSB14
+L: 0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.4-port0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if04-port0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.4-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.4/ttyUSB14/tty/ttyUSB14
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB14
+E: MAJOR=188
+E: MINOR=14
+E: USEC_INITIALIZED=24845740071
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=04
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.4
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.4
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_4
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_IGNORE=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.4-port0 /dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if04-port0 /dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.4-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.5
+M: 5-1.2:1.5
+R: 5
+J: +usb:5-1.2:1.5
+U: usb
+T: usb_interface
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.5
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/66/1
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc42ip01in05
+E: USEC_INITIALIZED=24845741090
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.5
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.5
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_5
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.6
+M: 5-1.2:1.6
+R: 6
+J: +usb:5-1.2:1.6
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.6
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in06
+E: USEC_INITIALIZED=24845741399
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.6
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.6
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_6
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.6/ttyUSB15
+M: ttyUSB15
+R: 15
+J: +usb-serial:ttyUSB15
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.6/ttyUSB15
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845742054
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.6/ttyUSB15/tty/ttyUSB15
+M: ttyUSB15
+R: 15
+J: c188:15
+U: tty
+D: c 188:15
+N: ttyUSB15
+L: 0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if06-port0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.6-port0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.6-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.6/ttyUSB15/tty/ttyUSB15
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB15
+E: MAJOR=188
+E: MINOR=15
+E: USEC_INITIALIZED=24845742238
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=06
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.6
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.6
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_6
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_TYPE_AT_PRIMARY=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if06-port0 /dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.6-port0 /dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.6-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.7
+M: 5-1.2:1.7
+R: 7
+J: +usb:5-1.2:1.7
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.7
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in07
+E: USEC_INITIALIZED=24845743153
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.7
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.7
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_7
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.7/ttyUSB16
+M: ttyUSB16
+R: 16
+J: +usb-serial:ttyUSB16
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.7/ttyUSB16
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845743807
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.7/ttyUSB16/tty/ttyUSB16
+M: ttyUSB16
+R: 16
+J: c188:16
+U: tty
+D: c 188:16
+N: ttyUSB16
+L: 0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if07-port0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.7-port0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.7-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.7/ttyUSB16/tty/ttyUSB16
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB16
+E: MAJOR=188
+E: MINOR=16
+E: USEC_INITIALIZED=24845743914
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=07
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.7
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.7
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_7
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_IGNORE=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if07-port0 /dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.7-port0 /dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.7-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.8
+M: 5-1.2:1.8
+R: 8
+J: +usb:5-1.2:1.8
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.8
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in08
+E: USEC_INITIALIZED=24845744975
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.8
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.8
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_8
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.8/ttyUSB17
+M: ttyUSB17
+R: 17
+J: +usb-serial:ttyUSB17
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.8/ttyUSB17
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845745632
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.8/ttyUSB17/tty/ttyUSB17
+M: ttyUSB17
+R: 17
+J: c188:17
+U: tty
+D: c 188:17
+N: ttyUSB17
+L: 0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if08-port0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.8-port0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.8-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.8/ttyUSB17/tty/ttyUSB17
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB17
+E: MAJOR=188
+E: MINOR=17
+E: USEC_INITIALIZED=24845745796
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=08
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.8
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.8
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_8
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_IGNORE=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if08-port0 /dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.8-port0 /dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.8-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.9
+M: 5-1.2:1.9
+R: 9
+J: +usb:5-1.2:1.9
+U: usb
+T: usb_interface
+V: option
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.9
+E: SUBSYSTEM=usb
+E: DEVTYPE=usb_interface
+E: DRIVER=option
+E: PRODUCT=e8d/7127/1
+E: TYPE=239/2/1
+E: INTERFACE=255/0/0
+E: MODALIAS=usb:v0E8Dp7127d0001dcEFdsc02dp01icFFisc00ip00in09
+E: USEC_INITIALIZED=24845746657
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.9
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.9
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_9
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.9/ttyUSB18
+M: ttyUSB18
+R: 18
+J: +usb-serial:ttyUSB18
+U: usb-serial
+V: option1
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.9/ttyUSB18
+E: SUBSYSTEM=usb-serial
+E: DRIVER=option1
+E: USEC_INITIALIZED=24845747302
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+
+P: /devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.9/ttyUSB18/tty/ttyUSB18
+M: ttyUSB18
+R: 18
+J: c188:18
+U: tty
+D: c 188:18
+N: ttyUSB18
+L: 0
+S: serial/by-path/platform-fc880000.usb-usb-0:1.2:1.9-port0
+S: serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.9-port0
+S: serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if09-port0
+E: DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.9/ttyUSB18/tty/ttyUSB18
+E: SUBSYSTEM=tty
+E: DEVNAME=/dev/ttyUSB18
+E: MAJOR=188
+E: MINOR=18
+E: USEC_INITIALIZED=24845747500
+E: ID_BUS=usb
+E: ID_MODEL=FM350-GL
+E: ID_MODEL_ENC=FM350-GL
+E: ID_MODEL_ID=7127
+E: ID_SERIAL=<redacted-serial>
+E: ID_VENDOR=Fibocom_Wireless_Inc.
+E: ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_VENDOR_ID=0e8d
+E: ID_REVISION=0001
+E: ID_TYPE=generic
+E: ID_USB_MODEL=FM350-GL
+E: ID_USB_MODEL_ENC=FM350-GL
+E: ID_USB_MODEL_ID=7127
+E: ID_USB_SERIAL=<redacted-serial>
+E: ID_USB_VENDOR=Fibocom_Wireless_Inc.
+E: ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+E: ID_USB_VENDOR_ID=0e8d
+E: ID_USB_REVISION=0001
+E: ID_USB_TYPE=generic
+E: ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+E: ID_USB_INTERFACE_NUM=09
+E: ID_USB_DRIVER=option
+E: ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+E: ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+E: ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+E: ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.9
+E: ID_PATH=platform-fc880000.usb-usb-0:1.2:1.9
+E: ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_9
+E: ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+E: ID_MM_PORT_IGNORE=1
+E: ID_MM_CANDIDATE=1
+E: DEVLINKS=/dev/serial/by-path/platform-fc880000.usb-usb-0:1.2:1.9-port0 /dev/serial/by-path/platform-fc880000.usb-usbv2-0:1.2:1.9-port0 /dev/serial/by-id/usb-Fibocom_Wireless_Inc._FM350-GL-if09-port0
+E: TAGS=:systemd:
+E: CURRENT_TAGS=:systemd:
+
+
+INTERFACES
+5-1.2:1.0 bInterfaceNumber=00 bInterfaceClass=02 bInterfaceSubClass=02 bInterfaceProtocol=ff driver=/sys/bus/usb/drivers/rndis_host
+5-1.2:1.1 bInterfaceNumber=01 bInterfaceClass=0a bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/rndis_host
+5-1.2:1.2 bInterfaceNumber=02 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+5-1.2:1.3 bInterfaceNumber=03 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+5-1.2:1.4 bInterfaceNumber=04 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+5-1.2:1.5 bInterfaceNumber=05 bInterfaceClass=ff bInterfaceSubClass=42 bInterfaceProtocol=01 driver=/sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.5/driver
+5-1.2:1.6 bInterfaceNumber=06 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+5-1.2:1.7 bInterfaceNumber=07 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+5-1.2:1.8 bInterfaceNumber=08 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+5-1.2:1.9 bInterfaceNumber=09 bInterfaceClass=ff bInterfaceSubClass=00 bInterfaceProtocol=00 driver=/sys/bus/usb/drivers/option
+
+MM-LIST
+    /org/freedesktop/ModemManager1/Modem/1 [QUALCOMM INCORPORATED] SIMCOM_SIM7600G-H
+    /org/freedesktop/ModemManager1/Modem/2 [Quectel] RM530N-GL
+    /org/freedesktop/ModemManager1/Modem/4 [Sierra Wireless, Incorporated] Sierra Wireless EM7595 Mobile Broadband Adapter
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/1
+  -----------------------------------
+  General  |                    path: /org/freedesktop/ModemManager1/Modem/1
+           |               device id: <redacted-identity>
+  -----------------------------------
+  Hardware |            manufacturer: QUALCOMM INCORPORATED
+           |                   model: SIMCOM_SIM7600G-H
+           |       firmware revision: LE20B04SIM7600G22
+           |          carrier config: Volte_OpenMkt-Commercial-CMCC
+           | carrier config revision: 05012075
+           |            h/w revision: 10000
+           |               supported: gsm-umts, lte
+           |                 current: gsm-umts, lte
+           |            equipment id: <redacted-identity>
+  -----------------------------------
+  System   |                  device: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+           |                 physdev: /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+           |                 drivers: qmi_wwan, option
+           |                  plugin: simtech
+           |            primary port: cdc-wdm0
+           |                   ports: cdc-wdm0 (qmi), ttyUSB0 (ignored), ttyUSB1 (gps), 
+           |                          ttyUSB2 (at), ttyUSB3 (at), ttyUSB4 (audio), wwu1u3u4i5 (net)
+  -----------------------------------
+  Status   |                   state: [31mfailed[0m
+           |           failed reason: [31msim-missing[0m
+           |             power state: on
+  -----------------------------------
+  Modes    |               supported: allowed: 2g; preferred: none
+           |                          allowed: 3g; preferred: none
+           |                          allowed: 4g; preferred: none
+           |                          allowed: 2g, 3g; preferred: 3g
+           |                          allowed: 2g, 3g; preferred: 2g
+           |                          allowed: 2g, 4g; preferred: 4g
+           |                          allowed: 2g, 4g; preferred: 2g
+           |                          allowed: 3g, 4g; preferred: 4g
+           |                          allowed: 3g, 4g; preferred: 3g
+           |                          allowed: 2g, 3g, 4g; preferred: 4g
+           |                          allowed: 2g, 3g, 4g; preferred: 3g
+           |                          allowed: 2g, 3g, 4g; preferred: 2g
+           |                 current: allowed: 2g, 3g, 4g; preferred: 4g
+  -----------------------------------
+  Bands    |               supported: egsm, dcs, pcs, g850, utran-1, utran-4, utran-6, utran-5, 
+           |                          utran-8, utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, 
+           |                          eutran-7, eutran-8, eutran-12, eutran-13, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-34, eutran-38, 
+           |                          eutran-39, eutran-40, eutran-41, eutran-66, utran-19
+           |                 current: egsm, dcs, pcs, g850, utran-1, utran-4, utran-6, utran-5, 
+           |                          utran-8, utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, 
+           |                          eutran-7, eutran-8, eutran-12, eutran-13, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-34, eutran-38, 
+           |                          eutran-39, eutran-40, eutran-41, eutran-66, utran-19
+  -----------------------------------
+  IP       |               supported: ipv4, ipv6, ipv4v6
+  -----------------------------------
+  3GPP     |                    imei: <redacted-identity>
+  -----------------------------------
+  SIM      |          sim slot paths: slot 1: none (active)
+           |                          slot 2: none
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/1
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : QUALCOMM INCORPORATED
+modem.generic.model                             : SIMCOM_SIM7600G-H
+modem.generic.revision                          : LE20B04SIM7600G22
+modem.generic.carrier-configuration             : Volte_OpenMkt-Commercial-CMCC
+modem.generic.carrier-configuration-revision    : 05012075
+modem.generic.hardware-revision                 : 10000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+modem.generic.physdev                           : /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.drivers.value[2]                  : option
+modem.generic.plugin                            : simtech
+modem.generic.primary-port                      : cdc-wdm0
+modem.generic.ports.length                      : 7
+modem.generic.ports.value[1]                    : cdc-wdm0 (qmi)
+modem.generic.ports.value[2]                    : ttyUSB0 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB1 (gps)
+modem.generic.ports.value[4]                    : ttyUSB2 (at)
+modem.generic.ports.value[5]                    : ttyUSB3 (at)
+modem.generic.ports.value[6]                    : ttyUSB4 (audio)
+modem.generic.ports.value[7]                    : wwu1u3u4i5 (net)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries                    : --
+modem.generic.state                             : failed
+modem.generic.state-failed-reason               : sim-missing
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 0
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 2g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[4]          : allowed: 2g, 3g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 2g, 3g; preferred: 2g
+modem.generic.supported-modes.value[6]          : allowed: 2g, 4g; preferred: 4g
+modem.generic.supported-modes.value[7]          : allowed: 2g, 4g; preferred: 2g
+modem.generic.supported-modes.value[8]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[9]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[10]         : allowed: 2g, 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[11]         : allowed: 2g, 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[12]         : allowed: 2g, 3g, 4g; preferred: 2g
+modem.generic.current-modes                     : allowed: 2g, 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 32
+modem.generic.supported-bands.value[1]          : egsm
+modem.generic.supported-bands.value[2]          : dcs
+modem.generic.supported-bands.value[3]          : pcs
+modem.generic.supported-bands.value[4]          : g850
+modem.generic.supported-bands.value[5]          : utran-1
+modem.generic.supported-bands.value[6]          : utran-4
+modem.generic.supported-bands.value[7]          : utran-6
+modem.generic.supported-bands.value[8]          : utran-5
+modem.generic.supported-bands.value[9]          : utran-8
+modem.generic.supported-bands.value[10]         : utran-2
+modem.generic.supported-bands.value[11]         : eutran-1
+modem.generic.supported-bands.value[12]         : eutran-2
+modem.generic.supported-bands.value[13]         : eutran-3
+modem.generic.supported-bands.value[14]         : eutran-4
+modem.generic.supported-bands.value[15]         : eutran-5
+modem.generic.supported-bands.value[16]         : eutran-7
+modem.generic.supported-bands.value[17]         : eutran-8
+modem.generic.supported-bands.value[18]         : eutran-12
+modem.generic.supported-bands.value[19]         : eutran-13
+modem.generic.supported-bands.value[20]         : eutran-18
+modem.generic.supported-bands.value[21]         : eutran-19
+modem.generic.supported-bands.value[22]         : eutran-20
+modem.generic.supported-bands.value[23]         : eutran-25
+modem.generic.supported-bands.value[24]         : eutran-26
+modem.generic.supported-bands.value[25]         : eutran-28
+modem.generic.supported-bands.value[26]         : eutran-34
+modem.generic.supported-bands.value[27]         : eutran-38
+modem.generic.supported-bands.value[28]         : eutran-39
+modem.generic.supported-bands.value[29]         : eutran-40
+modem.generic.supported-bands.value[30]         : eutran-41
+modem.generic.supported-bands.value[31]         : eutran-66
+modem.generic.supported-bands.value[32]         : utran-19
+modem.generic.current-bands.length              : 32
+modem.generic.current-bands.value[1]            : egsm
+modem.generic.current-bands.value[2]            : dcs
+modem.generic.current-bands.value[3]            : pcs
+modem.generic.current-bands.value[4]            : g850
+modem.generic.current-bands.value[5]            : utran-1
+modem.generic.current-bands.value[6]            : utran-4
+modem.generic.current-bands.value[7]            : utran-6
+modem.generic.current-bands.value[8]            : utran-5
+modem.generic.current-bands.value[9]            : utran-8
+modem.generic.current-bands.value[10]           : utran-2
+modem.generic.current-bands.value[11]           : eutran-1
+modem.generic.current-bands.value[12]           : eutran-2
+modem.generic.current-bands.value[13]           : eutran-3
+modem.generic.current-bands.value[14]           : eutran-4
+modem.generic.current-bands.value[15]           : eutran-5
+modem.generic.current-bands.value[16]           : eutran-7
+modem.generic.current-bands.value[17]           : eutran-8
+modem.generic.current-bands.value[18]           : eutran-12
+modem.generic.current-bands.value[19]           : eutran-13
+modem.generic.current-bands.value[20]           : eutran-18
+modem.generic.current-bands.value[21]           : eutran-19
+modem.generic.current-bands.value[22]           : eutran-20
+modem.generic.current-bands.value[23]           : eutran-25
+modem.generic.current-bands.value[24]           : eutran-26
+modem.generic.current-bands.value[25]           : eutran-28
+modem.generic.current-bands.value[26]           : eutran-34
+modem.generic.current-bands.value[27]           : eutran-38
+modem.generic.current-bands.value[28]           : eutran-39
+modem.generic.current-bands.value[29]           : eutran-40
+modem.generic.current-bands.value[30]           : eutran-41
+modem.generic.current-bands.value[31]           : eutran-66
+modem.generic.current-bands.value[32]           : utran-19
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : --
+modem.3gpp.operator-name                        : --
+modem.3gpp.registration-state                   : --
+modem.3gpp.packet-service-state                 : --
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : --
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : --
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : --
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 2
+modem.generic.sim-slots.value[1]                : /
+modem.generic.sim-slots.value[2]                : /
+modem.generic.bearers                           : --
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/2
+  -----------------------------------
+  General  |                    path: /org/freedesktop/ModemManager1/Modem/2
+           |               device id: <redacted-identity>
+  -----------------------------------
+  Hardware |            manufacturer: Quectel
+           |                   model: RM530N-GL
+           |       firmware revision: RM530NGLAAR05A01M4G
+           |          carrier config: ROW_Commercial
+           | carrier config revision: 0A010809
+           |            h/w revision: 20000
+           |               supported: gsm-umts, lte, 5gnr
+           |                 current: gsm-umts, lte, 5gnr
+           |            equipment id: <redacted-identity>
+  -----------------------------------
+  System   |                  device: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+           |                 physdev: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+           |                 drivers: qmi_wwan, option
+           |                  plugin: quectel
+           |            primary port: cdc-wdm2
+           |                   ports: cdc-wdm2 (qmi), ttyUSB5 (ignored), ttyUSB6 (gps), 
+           |                          ttyUSB7 (at), ttyUSB8 (at), wwu1u4u4i4 (net)
+  -----------------------------------
+  Numbers  |                     own: <redacted-msisdn>
+  -----------------------------------
+  Status   |                    lock: sim-pin2
+           |          unlock retries: sim-pin (3), sim-puk (10), sim-pin2 (3), sim-puk2 (10)
+           |                   state: registered
+           |             power state: on
+           |             access tech: lte
+           |          signal quality: 83% (recent)
+  -----------------------------------
+  Modes    |               supported: allowed: 3g; preferred: none
+           |                          allowed: 4g; preferred: none
+           |                          allowed: 3g, 4g; preferred: 4g
+           |                          allowed: 3g, 4g; preferred: 3g
+           |                          allowed: 5g; preferred: none
+           |                          allowed: 4g, 5g; preferred: 5g
+           |                          allowed: 4g, 5g; preferred: 4g
+           |                          allowed: 3g, 5g; preferred: 5g
+           |                          allowed: 3g, 5g; preferred: 3g
+           |                          allowed: 3g, 4g, 5g; preferred: 5g
+           |                          allowed: 3g, 4g, 5g; preferred: 4g
+           |                          allowed: 3g, 4g, 5g; preferred: 3g
+           |                 current: allowed: 3g, 4g; preferred: 4g
+  -----------------------------------
+  Bands    |               supported: utran-1, utran-4, utran-6, utran-5, utran-8, utran-2, 
+           |                          eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, eutran-8, 
+           |                          eutran-12, eutran-13, eutran-14, eutran-17, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-30, 
+           |                          eutran-32, eutran-34, eutran-38, eutran-39, eutran-40, eutran-41, 
+           |                          eutran-42, eutran-43, eutran-46, eutran-48, eutran-66, eutran-71, 
+           |                          utran-19, ngran-1, ngran-2, ngran-3, ngran-5, ngran-7, ngran-8, 
+           |                          ngran-12, ngran-13, ngran-14, ngran-18, ngran-20, ngran-25, ngran-26, 
+           |                          ngran-28, ngran-29, ngran-30, ngran-38, ngran-40, ngran-41, ngran-48, 
+           |                          ngran-66, ngran-70, ngran-71, ngran-75, ngran-76, ngran-77, ngran-78, 
+           |                          ngran-79, ngran-257, ngran-258, (null), ngran-260, ngran-261
+           |                 current: utran-1, utran-4, utran-5, utran-8, utran-2, eutran-1, 
+           |                          eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, eutran-8, 
+           |                          eutran-12, eutran-13, eutran-14, eutran-17, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-30, 
+           |                          eutran-32, eutran-34, eutran-38, eutran-39, eutran-40, eutran-41, 
+           |                          eutran-42, eutran-43, eutran-46, eutran-48, eutran-66, eutran-71, 
+           |                          utran-19, ngran-1, ngran-2, ngran-3, ngran-5, ngran-7, ngran-8, 
+           |                          ngran-12, ngran-13, ngran-14, ngran-18, ngran-20, ngran-25, ngran-26, 
+           |                          ngran-28, ngran-29, ngran-30, ngran-38, ngran-40, ngran-41, ngran-48, 
+           |                          ngran-66, ngran-70, ngran-71, ngran-75, ngran-76, ngran-77, ngran-78, 
+           |                          ngran-79
+  -----------------------------------
+  IP       |               supported: ipv4, ipv6, ipv4v6
+  -----------------------------------
+  3GPP     |                    imei: <redacted-identity>
+           |           enabled locks: fixed-dialing
+           |             operator id: 732123
+           |           operator name: Movistar
+           |            registration: home
+           |    packet service state: attached
+  -----------------------------------
+  3GPP EPS |    ue mode of operation: csps-2
+           |     initial bearer path: /org/freedesktop/ModemManager1/Bearer/0
+           |  initial bearer ip type: ipv4v6
+  -----------------------------------
+  SIM      |        primary sim path: /org/freedesktop/ModemManager1/SIM/1
+           |          sim slot paths: slot 1: /org/freedesktop/ModemManager1/SIM/1 (active)
+           |                          slot 2: none
+  -----------------------------------
+  Bearer   |                   paths: /org/freedesktop/ModemManager1/Bearer/2
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/2
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : Quectel
+modem.generic.model                             : RM530N-GL
+modem.generic.revision                          : RM530NGLAAR05A01M4G
+modem.generic.carrier-configuration             : ROW_Commercial
+modem.generic.carrier-configuration-revision    : 0A010809
+modem.generic.hardware-revision                 : 20000
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte, 5gnr
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte, 5gnr
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+modem.generic.physdev                           : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : qmi_wwan
+modem.generic.drivers.value[2]                  : option
+modem.generic.plugin                            : quectel
+modem.generic.primary-port                      : cdc-wdm2
+modem.generic.ports.length                      : 6
+modem.generic.ports.value[1]                    : cdc-wdm2 (qmi)
+modem.generic.ports.value[2]                    : ttyUSB5 (ignored)
+modem.generic.ports.value[3]                    : ttyUSB6 (gps)
+modem.generic.ports.value[4]                    : ttyUSB7 (at)
+modem.generic.ports.value[5]                    : ttyUSB8 (at)
+modem.generic.ports.value[6]                    : wwu1u4u4i4 (net)
+modem.generic.own-numbers.length                : <redacted-identity>
+modem.generic.own-numbers.value[1]              : <redacted-identity>
+modem.generic.unlock-required                   : sim-pin2
+modem.generic.unlock-retries.length             : 4
+modem.generic.unlock-retries.value[1]           : sim-pin (3)
+modem.generic.unlock-retries.value[2]           : sim-puk (10)
+modem.generic.unlock-retries.value[3]           : sim-pin2 (3)
+modem.generic.unlock-retries.value[4]           : sim-puk2 (10)
+modem.generic.state                             : registered
+modem.generic.state-failed-reason               : --
+modem.generic.power-state                       : on
+modem.generic.access-technologies.length        : 1
+modem.generic.access-technologies.value[1]      : lte
+modem.generic.signal-quality.value              : 83
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 12
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.supported-modes.value[5]          : allowed: 5g; preferred: none
+modem.generic.supported-modes.value[6]          : allowed: 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[7]          : allowed: 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[8]          : allowed: 3g, 5g; preferred: 5g
+modem.generic.supported-modes.value[9]          : allowed: 3g, 5g; preferred: 3g
+modem.generic.supported-modes.value[10]         : allowed: 3g, 4g, 5g; preferred: 5g
+modem.generic.supported-modes.value[11]         : allowed: 3g, 4g, 5g; preferred: 4g
+modem.generic.supported-modes.value[12]         : allowed: 3g, 4g, 5g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 71
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-4
+modem.generic.supported-bands.value[3]          : utran-6
+modem.generic.supported-bands.value[4]          : utran-5
+modem.generic.supported-bands.value[5]          : utran-8
+modem.generic.supported-bands.value[6]          : utran-2
+modem.generic.supported-bands.value[7]          : eutran-1
+modem.generic.supported-bands.value[8]          : eutran-2
+modem.generic.supported-bands.value[9]          : eutran-3
+modem.generic.supported-bands.value[10]         : eutran-4
+modem.generic.supported-bands.value[11]         : eutran-5
+modem.generic.supported-bands.value[12]         : eutran-7
+modem.generic.supported-bands.value[13]         : eutran-8
+modem.generic.supported-bands.value[14]         : eutran-12
+modem.generic.supported-bands.value[15]         : eutran-13
+modem.generic.supported-bands.value[16]         : eutran-14
+modem.generic.supported-bands.value[17]         : eutran-17
+modem.generic.supported-bands.value[18]         : eutran-18
+modem.generic.supported-bands.value[19]         : eutran-19
+modem.generic.supported-bands.value[20]         : eutran-20
+modem.generic.supported-bands.value[21]         : eutran-25
+modem.generic.supported-bands.value[22]         : eutran-26
+modem.generic.supported-bands.value[23]         : eutran-28
+modem.generic.supported-bands.value[24]         : eutran-29
+modem.generic.supported-bands.value[25]         : eutran-30
+modem.generic.supported-bands.value[26]         : eutran-32
+modem.generic.supported-bands.value[27]         : eutran-34
+modem.generic.supported-bands.value[28]         : eutran-38
+modem.generic.supported-bands.value[29]         : eutran-39
+modem.generic.supported-bands.value[30]         : eutran-40
+modem.generic.supported-bands.value[31]         : eutran-41
+modem.generic.supported-bands.value[32]         : eutran-42
+modem.generic.supported-bands.value[33]         : eutran-43
+modem.generic.supported-bands.value[34]         : eutran-46
+modem.generic.supported-bands.value[35]         : eutran-48
+modem.generic.supported-bands.value[36]         : eutran-66
+modem.generic.supported-bands.value[37]         : eutran-71
+modem.generic.supported-bands.value[38]         : utran-19
+modem.generic.supported-bands.value[39]         : ngran-1
+modem.generic.supported-bands.value[40]         : ngran-2
+modem.generic.supported-bands.value[41]         : ngran-3
+modem.generic.supported-bands.value[42]         : ngran-5
+modem.generic.supported-bands.value[43]         : ngran-7
+modem.generic.supported-bands.value[44]         : ngran-8
+modem.generic.supported-bands.value[45]         : ngran-12
+modem.generic.supported-bands.value[46]         : ngran-13
+modem.generic.supported-bands.value[47]         : ngran-14
+modem.generic.supported-bands.value[48]         : ngran-18
+modem.generic.supported-bands.value[49]         : ngran-20
+modem.generic.supported-bands.value[50]         : ngran-25
+modem.generic.supported-bands.value[51]         : ngran-26
+modem.generic.supported-bands.value[52]         : ngran-28
+modem.generic.supported-bands.value[53]         : ngran-29
+modem.generic.supported-bands.value[54]         : ngran-30
+modem.generic.supported-bands.value[55]         : ngran-38
+modem.generic.supported-bands.value[56]         : ngran-40
+modem.generic.supported-bands.value[57]         : ngran-41
+modem.generic.supported-bands.value[58]         : ngran-48
+modem.generic.supported-bands.value[59]         : ngran-66
+modem.generic.supported-bands.value[60]         : ngran-70
+modem.generic.supported-bands.value[61]         : ngran-71
+modem.generic.supported-bands.value[62]         : ngran-75
+modem.generic.supported-bands.value[63]         : ngran-76
+modem.generic.supported-bands.value[64]         : ngran-77
+modem.generic.supported-bands.value[65]         : ngran-78
+modem.generic.supported-bands.value[66]         : ngran-79
+modem.generic.supported-bands.value[67]         : ngran-257
+modem.generic.supported-bands.value[68]         : ngran-258
+modem.generic.supported-bands.value[69]         : (null)
+modem.generic.supported-bands.value[70]         : ngran-260
+modem.generic.supported-bands.value[71]         : ngran-261
+modem.generic.current-bands.length              : 65
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-4
+modem.generic.current-bands.value[3]            : utran-5
+modem.generic.current-bands.value[4]            : utran-8
+modem.generic.current-bands.value[5]            : utran-2
+modem.generic.current-bands.value[6]            : eutran-1
+modem.generic.current-bands.value[7]            : eutran-2
+modem.generic.current-bands.value[8]            : eutran-3
+modem.generic.current-bands.value[9]            : eutran-4
+modem.generic.current-bands.value[10]           : eutran-5
+modem.generic.current-bands.value[11]           : eutran-7
+modem.generic.current-bands.value[12]           : eutran-8
+modem.generic.current-bands.value[13]           : eutran-12
+modem.generic.current-bands.value[14]           : eutran-13
+modem.generic.current-bands.value[15]           : eutran-14
+modem.generic.current-bands.value[16]           : eutran-17
+modem.generic.current-bands.value[17]           : eutran-18
+modem.generic.current-bands.value[18]           : eutran-19
+modem.generic.current-bands.value[19]           : eutran-20
+modem.generic.current-bands.value[20]           : eutran-25
+modem.generic.current-bands.value[21]           : eutran-26
+modem.generic.current-bands.value[22]           : eutran-28
+modem.generic.current-bands.value[23]           : eutran-29
+modem.generic.current-bands.value[24]           : eutran-30
+modem.generic.current-bands.value[25]           : eutran-32
+modem.generic.current-bands.value[26]           : eutran-34
+modem.generic.current-bands.value[27]           : eutran-38
+modem.generic.current-bands.value[28]           : eutran-39
+modem.generic.current-bands.value[29]           : eutran-40
+modem.generic.current-bands.value[30]           : eutran-41
+modem.generic.current-bands.value[31]           : eutran-42
+modem.generic.current-bands.value[32]           : eutran-43
+modem.generic.current-bands.value[33]           : eutran-46
+modem.generic.current-bands.value[34]           : eutran-48
+modem.generic.current-bands.value[35]           : eutran-66
+modem.generic.current-bands.value[36]           : eutran-71
+modem.generic.current-bands.value[37]           : utran-19
+modem.generic.current-bands.value[38]           : ngran-1
+modem.generic.current-bands.value[39]           : ngran-2
+modem.generic.current-bands.value[40]           : ngran-3
+modem.generic.current-bands.value[41]           : ngran-5
+modem.generic.current-bands.value[42]           : ngran-7
+modem.generic.current-bands.value[43]           : ngran-8
+modem.generic.current-bands.value[44]           : ngran-12
+modem.generic.current-bands.value[45]           : ngran-13
+modem.generic.current-bands.value[46]           : ngran-14
+modem.generic.current-bands.value[47]           : ngran-18
+modem.generic.current-bands.value[48]           : ngran-20
+modem.generic.current-bands.value[49]           : ngran-25
+modem.generic.current-bands.value[50]           : ngran-26
+modem.generic.current-bands.value[51]           : ngran-28
+modem.generic.current-bands.value[52]           : ngran-29
+modem.generic.current-bands.value[53]           : ngran-30
+modem.generic.current-bands.value[54]           : ngran-38
+modem.generic.current-bands.value[55]           : ngran-40
+modem.generic.current-bands.value[56]           : ngran-41
+modem.generic.current-bands.value[57]           : ngran-48
+modem.generic.current-bands.value[58]           : ngran-66
+modem.generic.current-bands.value[59]           : ngran-70
+modem.generic.current-bands.value[60]           : ngran-71
+modem.generic.current-bands.value[61]           : ngran-75
+modem.generic.current-bands.value[62]           : ngran-76
+modem.generic.current-bands.value[63]           : ngran-77
+modem.generic.current-bands.value[64]           : ngran-78
+modem.generic.current-bands.value[65]           : ngran-79
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks.length                 : 1
+modem.3gpp.enabled-locks.value[1]               : fixed-dialing
+modem.3gpp.operator-code                        : 732123
+modem.3gpp.operator-name                        : Movistar
+modem.3gpp.registration-state                   : home
+modem.3gpp.packet-service-state                 : attached
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : csps-2
+modem.3gpp.eps.initial-bearer.dbus-path         : /org/freedesktop/ModemManager1/Bearer/0
+modem.3gpp.eps.initial-bearer.settings.apn      : 
+modem.3gpp.eps.initial-bearer.settings.ip-type  : ipv4v6
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : /org/freedesktop/ModemManager1/SIM/1
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 2
+modem.generic.sim-slots.value[1]                : /org/freedesktop/ModemManager1/SIM/1
+modem.generic.sim-slots.value[2]                : /
+modem.generic.bearers.length                    : 1
+modem.generic.bearers.value[1]                  : /org/freedesktop/ModemManager1/Bearer/2
+
+MM-DETAIL /org/freedesktop/ModemManager1/Modem/4
+  -----------------------------------
+  General  |                    path: /org/freedesktop/ModemManager1/Modem/4
+           |               device id: <redacted-identity>
+  -----------------------------------
+  Hardware |            manufacturer: Sierra Wireless, Incorporated
+           |                   model: Sierra Wireless EM7595 Mobile Broadband Adapter
+           |       firmware revision: SWIX12C_02.02.03.00
+           |          carrier config: Non_VoLTE-ATT
+           | carrier config revision: 08010311
+           |            h/w revision: EM7595
+           |               supported: gsm-umts, lte
+           |                 current: gsm-umts, lte
+           |            equipment id: <redacted>
+  -----------------------------------
+  System   |                  device: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+           |                 physdev: /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+           |                 drivers: cdc_mbim, qcserial
+           |                  plugin: sierra
+           |            primary port: cdc-wdm3
+           |                   ports: cdc-wdm3 (mbim), ttyUSB11 (at), wwu1u4u3i12 (net)
+  -----------------------------------
+  Status   |                   state: [31mfailed[0m
+           |           failed reason: [31msim-missing[0m
+           |             power state: on
+  -----------------------------------
+  Modes    |               supported: allowed: 3g; preferred: none
+           |                          allowed: 4g; preferred: none
+           |                          allowed: 3g, 4g; preferred: 4g
+           |                          allowed: 3g, 4g; preferred: 3g
+           |                 current: allowed: 3g, 4g; preferred: 4g
+  -----------------------------------
+  Bands    |               supported: utran-1, utran-4, utran-6, utran-5, utran-8, utran-9, 
+           |                          utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, 
+           |                          eutran-8, eutran-12, eutran-13, eutran-14, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-32, 
+           |                          eutran-38, eutran-39, eutran-40, eutran-41, eutran-42, eutran-43, 
+           |                          eutran-48, eutran-66, eutran-71, utran-19
+           |                 current: utran-1, utran-4, utran-6, utran-5, utran-8, utran-9, 
+           |                          utran-2, eutran-1, eutran-2, eutran-3, eutran-4, eutran-5, eutran-7, 
+           |                          eutran-8, eutran-12, eutran-13, eutran-14, eutran-18, eutran-19, 
+           |                          eutran-20, eutran-25, eutran-26, eutran-28, eutran-29, eutran-32, 
+           |                          eutran-38, eutran-39, eutran-40, eutran-41, eutran-42, eutran-43, 
+           |                          eutran-48, eutran-66, eutran-71, utran-19
+  -----------------------------------
+  IP       |               supported: ipv4, ipv6, ipv4v6
+  -----------------------------------
+  3GPP     |                    imei: <redacted-identity>
+  -----------------------------------
+  SIM      |          sim slot paths: slot 1: none (active)
+modem.dbus-path                                 : /org/freedesktop/ModemManager1/Modem/4
+modem.generic.device-identifier                 : <redacted-identity>
+modem.generic.manufacturer                      : Sierra Wireless, Incorporated
+modem.generic.model                             : Sierra Wireless EM7595 Mobile Broadband Adapter
+modem.generic.revision                          : SWIX12C_02.02.03.00
+modem.generic.carrier-configuration             : Non_VoLTE-ATT
+modem.generic.carrier-configuration-revision    : 08010311
+modem.generic.hardware-revision                 : EM7595
+modem.generic.supported-capabilities.length     : 1
+modem.generic.supported-capabilities.value[1]   : gsm-umts, lte
+modem.generic.current-capabilities.length       : 1
+modem.generic.current-capabilities.value[1]     : gsm-umts, lte
+modem.generic.equipment-identifier              : <redacted-identity>
+modem.generic.device                            : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+modem.generic.physdev                           : /sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+modem.generic.drivers.length                    : 2
+modem.generic.drivers.value[1]                  : cdc_mbim
+modem.generic.drivers.value[2]                  : qcserial
+modem.generic.plugin                            : sierra
+modem.generic.primary-port                      : cdc-wdm3
+modem.generic.ports.length                      : 3
+modem.generic.ports.value[1]                    : cdc-wdm3 (mbim)
+modem.generic.ports.value[2]                    : ttyUSB11 (at)
+modem.generic.ports.value[3]                    : wwu1u4u3i12 (net)
+modem.generic.own-numbers                       : <redacted-identity>
+modem.generic.unlock-required                   : --
+modem.generic.unlock-retries                    : --
+modem.generic.state                             : failed
+modem.generic.state-failed-reason               : sim-missing
+modem.generic.power-state                       : on
+modem.generic.access-technologies               : --
+modem.generic.signal-quality.value              : 0
+modem.generic.signal-quality.recent             : yes
+modem.generic.supported-modes.length            : 4
+modem.generic.supported-modes.value[1]          : allowed: 3g; preferred: none
+modem.generic.supported-modes.value[2]          : allowed: 4g; preferred: none
+modem.generic.supported-modes.value[3]          : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-modes.value[4]          : allowed: 3g, 4g; preferred: 3g
+modem.generic.current-modes                     : allowed: 3g, 4g; preferred: 4g
+modem.generic.supported-bands.length            : 35
+modem.generic.supported-bands.value[1]          : utran-1
+modem.generic.supported-bands.value[2]          : utran-4
+modem.generic.supported-bands.value[3]          : utran-6
+modem.generic.supported-bands.value[4]          : utran-5
+modem.generic.supported-bands.value[5]          : utran-8
+modem.generic.supported-bands.value[6]          : utran-9
+modem.generic.supported-bands.value[7]          : utran-2
+modem.generic.supported-bands.value[8]          : eutran-1
+modem.generic.supported-bands.value[9]          : eutran-2
+modem.generic.supported-bands.value[10]         : eutran-3
+modem.generic.supported-bands.value[11]         : eutran-4
+modem.generic.supported-bands.value[12]         : eutran-5
+modem.generic.supported-bands.value[13]         : eutran-7
+modem.generic.supported-bands.value[14]         : eutran-8
+modem.generic.supported-bands.value[15]         : eutran-12
+modem.generic.supported-bands.value[16]         : eutran-13
+modem.generic.supported-bands.value[17]         : eutran-14
+modem.generic.supported-bands.value[18]         : eutran-18
+modem.generic.supported-bands.value[19]         : eutran-19
+modem.generic.supported-bands.value[20]         : eutran-20
+modem.generic.supported-bands.value[21]         : eutran-25
+modem.generic.supported-bands.value[22]         : eutran-26
+modem.generic.supported-bands.value[23]         : eutran-28
+modem.generic.supported-bands.value[24]         : eutran-29
+modem.generic.supported-bands.value[25]         : eutran-32
+modem.generic.supported-bands.value[26]         : eutran-38
+modem.generic.supported-bands.value[27]         : eutran-39
+modem.generic.supported-bands.value[28]         : eutran-40
+modem.generic.supported-bands.value[29]         : eutran-41
+modem.generic.supported-bands.value[30]         : eutran-42
+modem.generic.supported-bands.value[31]         : eutran-43
+modem.generic.supported-bands.value[32]         : eutran-48
+modem.generic.supported-bands.value[33]         : eutran-66
+modem.generic.supported-bands.value[34]         : eutran-71
+modem.generic.supported-bands.value[35]         : utran-19
+modem.generic.current-bands.length              : 35
+modem.generic.current-bands.value[1]            : utran-1
+modem.generic.current-bands.value[2]            : utran-4
+modem.generic.current-bands.value[3]            : utran-6
+modem.generic.current-bands.value[4]            : utran-5
+modem.generic.current-bands.value[5]            : utran-8
+modem.generic.current-bands.value[6]            : utran-9
+modem.generic.current-bands.value[7]            : utran-2
+modem.generic.current-bands.value[8]            : eutran-1
+modem.generic.current-bands.value[9]            : eutran-2
+modem.generic.current-bands.value[10]           : eutran-3
+modem.generic.current-bands.value[11]           : eutran-4
+modem.generic.current-bands.value[12]           : eutran-5
+modem.generic.current-bands.value[13]           : eutran-7
+modem.generic.current-bands.value[14]           : eutran-8
+modem.generic.current-bands.value[15]           : eutran-12
+modem.generic.current-bands.value[16]           : eutran-13
+modem.generic.current-bands.value[17]           : eutran-14
+modem.generic.current-bands.value[18]           : eutran-18
+modem.generic.current-bands.value[19]           : eutran-19
+modem.generic.current-bands.value[20]           : eutran-20
+modem.generic.current-bands.value[21]           : eutran-25
+modem.generic.current-bands.value[22]           : eutran-26
+modem.generic.current-bands.value[23]           : eutran-28
+modem.generic.current-bands.value[24]           : eutran-29
+modem.generic.current-bands.value[25]           : eutran-32
+modem.generic.current-bands.value[26]           : eutran-38
+modem.generic.current-bands.value[27]           : eutran-39
+modem.generic.current-bands.value[28]           : eutran-40
+modem.generic.current-bands.value[29]           : eutran-41
+modem.generic.current-bands.value[30]           : eutran-42
+modem.generic.current-bands.value[31]           : eutran-43
+modem.generic.current-bands.value[32]           : eutran-48
+modem.generic.current-bands.value[33]           : eutran-66
+modem.generic.current-bands.value[34]           : eutran-71
+modem.generic.current-bands.value[35]           : utran-19
+modem.generic.supported-ip-families.length      : 3
+modem.generic.supported-ip-families.value[1]    : ipv4
+modem.generic.supported-ip-families.value[2]    : ipv6
+modem.generic.supported-ip-families.value[3]    : ipv4v6
+modem.3gpp.imei                                 : <redacted-identity>
+modem.3gpp.enabled-locks                        : --
+modem.3gpp.operator-code                        : --
+modem.3gpp.operator-name                        : --
+modem.3gpp.registration-state                   : --
+modem.3gpp.packet-service-state                 : --
+modem.3gpp.network-rejection-error              : --
+modem.3gpp.network-rejection-operator-id        : --
+modem.3gpp.network-rejection-operator-name      : --
+modem.3gpp.network-rejection-access-technology  : --
+modem.3gpp.pco                                  : --
+modem.3gpp.eps.ue-mode-operation                : --
+modem.3gpp.eps.initial-bearer.dbus-path         : --
+modem.3gpp.eps.initial-bearer.settings.apn      : --
+modem.3gpp.eps.initial-bearer.settings.ip-type  : --
+modem.3gpp.eps.initial-bearer.settings.user     : --
+modem.3gpp.eps.initial-bearer.settings.password : --
+modem.3gpp.5gnr.registration-settings.mico-mode : --
+modem.3gpp.5gnr.registration-settings.drx-cycle : --
+modem.cdma.meid                                 : --
+modem.cdma.esn                                  : --
+modem.cdma.sid                                  : --
+modem.cdma.nid                                  : --
+modem.cdma.cdma1x-registration-state            : --
+modem.cdma.evdo-registration-state              : --
+modem.cdma.activation-state                     : --
+modem.generic.sim                               : --
+modem.generic.primary-sim-slot                  : 1
+modem.generic.sim-slots.length                  : 1
+modem.generic.sim-slots.value[1]                : /
+modem.generic.bearers                           : --
+
+NM-DEVICE
+DEVICE           TYPE      STATE                                  CONNECTION         
+eth0             ethernet  connected                              Wired connection 1 
+enx344b50000000  ethernet  connected                              Wired connection 4 
+enx0c5b8f279a64  ethernet  connected                              Wired connection 2 
+eth1             ethernet  connected                              Wired connection 3 
+enx000011121314  ethernet  connecting (getting IP configuration)  Wired connection 5 
+lo               loopback  connected (externally)                 lo                 
+cdc-wdm2         gsm       disconnected                           --                 
+wlan0            wifi      disconnected                           --                 
+p2p-dev-wlan0    wifi-p2p  disconnected                           --                 
+cdc-wdm0         gsm       unavailable                            --                 
+cdc-wdm3         gsm       unavailable                            --                 
+clap-wlan0       wifi      unavailable                            --                 
+
+TARGET-NETDEV
+IFNAME=enx000011121314
+DEVPATH=/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.0/net/enx000011121314
+INTERFACE=enx000011121314
+IFINDEX=14
+SUBSYSTEM=net
+USEC_INITIALIZED=24845737043
+ID_NET_DRIVER=rndis_host
+ID_BUS=usb
+ID_MODEL=FM350-GL
+ID_MODEL_ENC=FM350-GL
+ID_MODEL_ID=7127
+ID_SERIAL=<redacted-serial>
+ID_VENDOR=Fibocom_Wireless_Inc.
+ID_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+ID_VENDOR_ID=0e8d
+ID_REVISION=0001
+ID_TYPE=generic
+ID_USB_MODEL=FM350-GL
+ID_USB_MODEL_ENC=FM350-GL
+ID_USB_MODEL_ID=7127
+ID_USB_SERIAL=<redacted-serial>
+ID_USB_VENDOR=Fibocom_Wireless_Inc.
+ID_USB_VENDOR_ENC=Fibocom\x20Wireless\x20Inc.
+ID_USB_VENDOR_ID=0e8d
+ID_USB_REVISION=0001
+ID_USB_TYPE=generic
+ID_USB_INTERFACES=:0202ff:0a0000:ff0000:ff4201:
+ID_USB_INTERFACE_NUM=00
+ID_USB_DRIVER=rndis_host
+ID_USB_CLASS_FROM_DATABASE=Miscellaneous Device
+ID_USB_PROTOCOL_FROM_DATABASE=Interface Association
+ID_VENDOR_FROM_DATABASE=MediaTek Inc.
+ID_NET_NAMING_SCHEME=v257
+ID_NET_NAME_MAC=enx000011121314
+ID_OUI_FROM_DATABASE=NORMEREL SYSTEMES
+ID_NET_NAME_PATH=enu1u2
+ID_MM_PREFERRED_NETWORKS_CPOL_DISABLED=1
+ID_MM_CANDIDATE=1
+ID_PATH_WITH_USB_REVISION=platform-fc880000.usb-usbv2-0:1.2:1.0
+ID_PATH=platform-fc880000.usb-usb-0:1.2:1.0
+ID_PATH_TAG=platform-fc880000_usb-usb-0_1_2_1_0
+ID_NET_LINK_FILE=/usr/lib/systemd/network/73-usb-net-by-mac.link
+ID_NET_NAME=enx000011121314
+SYSTEMD_ALIAS=/sys/subsystem/net/devices/enx000011121314
+TAGS=:systemd:
+CURRENT_TAGS=:systemd:
+GENERAL.DEVICE:                         enx000011121314
+GENERAL.TYPE:                           ethernet
+GENERAL.NM-TYPE:                        NMDeviceEthernet
+GENERAL.DBUS-PATH:                      /org/freedesktop/NetworkManager/Devices/16
+GENERAL.VENDOR:                         MediaTek Inc.
+GENERAL.PRODUCT:                        FM350-GL
+GENERAL.DRIVER:                         rndis_host
+GENERAL.DRIVER-VERSION:                 7.2.0-ceralive-rk3588
+GENERAL.FIRMWARE-VERSION:               RNDIS device
+GENERAL.HWADDR:                         00:00:11:12:13:14
+GENERAL.MTU:                            1500
+GENERAL.STATE:                          70 (connecting (getting IP configuration))
+GENERAL.REASON:                         0 (No reason given)
+GENERAL.IP4-CONNECTIVITY:               1 (none)
+GENERAL.IP6-CONNECTIVITY:               1 (none)
+GENERAL.UDI:                            /sys/devices/platform/fc880000.usb/usb5/5-1/5-1.2/5-1.2:1.0/net/enx000011121314
+GENERAL.PATH:                           platform-fc880000.usb-usb-0:1.2:1.0
+GENERAL.IP-IFACE:                       --
+GENERAL.IS-SOFTWARE:                    no
+GENERAL.NM-MANAGED:                     yes
+GENERAL.AUTOCONNECT:                    yes
+GENERAL.FIRMWARE-MISSING:               no
+GENERAL.NM-PLUGIN-MISSING:              no
+GENERAL.PHYS-PORT-ID:                   --
+GENERAL.CONNECTION:                     Wired connection 5
+GENERAL.CON-UUID:                       d153493b-7c84-32ba-9933-fbb35a1e7ad4
+GENERAL.CON-PATH:                       /org/freedesktop/NetworkManager/ActiveConnection/1141
+GENERAL.METERED:                        unknown
+IP4.GATEWAY:                            --
+IP6.ADDRESS[1]:                         fe80::5cf:5723:64c2:63ef/64
+IP6.GATEWAY:                            --
+IP6.ROUTE[1]:                           dst = fe80::/64, nh = ::, mt = 1024
+
+IP-ADDR
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+eth0             UP             169.254.149.160/16 <redacted>/24 fd5d:843d:c852::cd7/128 fd5d:843d:c852:0:db60:2567:8d60:b76e/64 fe80::94ed:a115:30ef:70d1/64 
+wlan0            DOWN           
+wwu1u3u4i5       DOWN           
+enx0c5b8f279a64  UP             192.168.8.100/24 fe80::5a99:ab38:c3ea:d487/64 
+eth1             UP             192.168.8.100/24 fe80::a048:4403:d5eb:55fe/64 
+wwu1u4u1i2       DOWN           
+wwu1u4u4i4       DOWN           
+clap-wlan0       DOWN           
+wwu1u4u3i12      DOWN           
+enx344b50000000  UP             192.168.0.169/24 2803:1800:4200:49ff:a5a2:f751:2c6d:4bf0/64 fe80::f183:c252:da25:a7ef/64 
+enx000011121314  UNKNOWN        fe80::5cf:5723:64c2:63ef/64 
+
+IP-ROUTE
+default via 192.168.78.1 dev eth0 proto dhcp src <redacted> metric 100 
+default via 192.168.8.1 dev eth1 proto dhcp src 192.168.8.100 metric 101 
+default via 192.168.8.1 dev enx0c5b8f279a64 proto dhcp src 192.168.8.100 metric 102 
+default via 192.168.0.1 dev enx344b50000000 proto dhcp src 192.168.0.169 metric 103 
+169.254.0.0/16 dev eth0 proto kernel scope link src 169.254.149.160 metric 100 
+192.168.0.0/24 dev enx344b50000000 proto kernel scope link src 192.168.0.169 metric 103 
+192.168.8.0/24 dev eth1 proto kernel scope link src 192.168.8.100 metric 101 
+192.168.8.0/24 dev enx0c5b8f279a64 proto kernel scope link src 192.168.8.100 metric 102 
+192.168.78.0/24 dev eth0 proto kernel scope link src <redacted> metric 100 
+224.0.0.0/4 dev eth0 proto static scope link metric 100 
+
+PROBE
+ModemManager: version=1.24.2 objects=3
+modems: 3
+
+modem /org/freedesktop/ModemManager1/Modem/1
+  path=/org/freedesktop/ModemManager1/Modem/1 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fc880000.usb/usb5/5-1/5-1.3/5-1.3.4
+  presence=present health=live mm=failed radio=on reg=unknown(-) nm=unavailable rev=1
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=LE20B04SIM7600G22 simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+modem /org/freedesktop/ModemManager1/Modem/2
+  path=/org/freedesktop/ModemManager1/Modem/2 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.4
+  presence=present health=live mm=registered radio=on reg=unknown(-) nm=unavailable rev=2
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=RM530NGLAAR05A01M4G simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+modem /org/freedesktop/ModemManager1/Modem/4
+  path=/org/freedesktop/ModemManager1/Modem/4 equipment=imei: <redacted-identity>
+  ladder: source=physdev confidence=high key=physdev:/sys/devices/platform/fcd00000.usb/xhci-hcd.9.auto/usb8/8-1/8-1.4/8-1.4.3
+  presence=present health=live mm=failed radio=on reg=unknown(-) nm=unavailable rev=3
+  features: physdev=true cellInfo=rich esim=true opSerialization=true
+  enrichment: firmware=SWIX12C_02.02.03.00 simType=unknown esimStatus=unknown signalCadence=unsupported
+  cell-info: (none)
+
+usb-devices: 24
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0003 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1a40:0101 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  13d3:3572 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0001 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:5411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  19d2:1405 class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable
+  0e8d:7127 class=mm-managed mode=rndis reason=recognized AT control interface — ModemManager-manageable
+  0bda:5411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable
+  12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port — router-ethernet class, not MM-manageable
+  1e0e:9001 class=mm-managed mode=qmi reason=recognized AT control interface — ModemManager-manageable
+  0bda:5411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  05c6:9091 class=mm-managed mode=qmi reason=recognized QMI control interface — ModemManager-manageable
+  1d6b:0001 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0002 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1d6b:0003 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:0411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:0411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  0bda:0411 class=unmanaged mode=unknown reason=no recognized modem control port, Ethernet tether, or installer interface
+  1199:c081 class=mm-managed mode=mbim reason=recognized AT control interface — ModemManager-manageable
+  2c7c:0801 class=mm-managed mode=qmi reason=recognized AT control interface — ModemManager-manageable
+
+PROBE OK: external-auth, objects=3
+PROBE_EXIT=0
+2026-09-08T14:25:39Z

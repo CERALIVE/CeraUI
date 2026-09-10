@@ -1,0 +1,36 @@
+{
+	"usbPath": "8-1.4.4",
+	"vidPidBeforeCycle": "2c7c:0801",
+	"observedClassifications": [
+		"2c7c:0801 class=mm-managed mode=qmi reason=recognized AT control interface \u2014 ModemManager-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:48:06.631Z",
+	"wirePhase": "quectel-rm530n-gl",
+	"wireRowsMatchedByIdPath": {
+		"1003": {
+			"ifname": "",
+			"name": "Quectel 0801",
+			"network_type": {
+				"supported": [],
+				"active": null
+			},
+			"availability_reason": "modem_initializing",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-xhci-hcd.9.auto-usb-0:1.4.4",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

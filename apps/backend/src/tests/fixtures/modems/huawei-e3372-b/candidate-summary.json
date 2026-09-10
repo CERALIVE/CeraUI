@@ -1,0 +1,45 @@
+{
+	"usbPath": "5-1.3.2",
+	"vidPidBeforeCycle": "12d1:14dc",
+	"observedClassifications": [
+		"12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port \u2014 router-ethernet class, not MM-manageable",
+		"12d1:14dc class=router-mode mode=router-ethernet reason=ECM/NCM Ethernet tether with no modem control port \u2014 router-ethernet class, not MM-manageable"
+	],
+	"mmObjectPaths": [],
+	"wireCapturedAt": "2026-09-08T14:44:30.419Z",
+	"wirePhase": "huawei-e3372-b",
+	"wireRowsMatchedByIdPath": {
+		"1002": {
+			"ifname": "eth1",
+			"name": "Huawei E3372 LTE/UMTS/GSM HiLink Modem/Networkcard",
+			"model": "Huawei E3372 LTE/UMTS/GSM HiLink Modem/Networkcard",
+			"manufacturer": "Huawei",
+			"network_type": {
+				"supported": [],
+				"active": null
+			},
+			"device_class": "router-ethernet",
+			"availability_reason": "router_direct",
+			"data_usage_policy": {
+				"supported": true
+			},
+			"stable_key": "platform-fc880000.usb-usb-0:1.3.2",
+			"capability_modules": {
+				"band-lock": "implemented",
+				"sms": "unavailable",
+				"five-g-pref": "implemented",
+				"fcc-auto-unlock": "unavailable",
+				"gps": "implemented",
+				"ussd": "implemented",
+				"esim": "unavailable"
+			},
+			"usb_mode": "router-ethernet",
+			"lock_state": "open",
+			"lock_detail": {
+				"credential_configured": false
+			}
+		}
+	},
+	"powerOffDisappearanceObserved": true,
+	"probeSucceeded": true
+}

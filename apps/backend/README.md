@@ -146,6 +146,12 @@ contract job both fetch full history; Git failures remain test failures, never a
 empty diff. Local stability runs do not establish PR readiness: every hosted check
 on the current PR revision must succeed before the change is handed off.
 
+Redacted, hardware-derived modem diagnosis inputs live in
+[`src/tests/fixtures/modems/`](src/tests/fixtures/modems/README.md). Their README
+records the installed/candidate versions, per-port timing, separately observed
+MM details, and unexercised portal-credential cases. These are observations for
+regression tests, not a device-support certification.
+
 ## Build
 
 The backend compiles to a single self-contained binary. Architecture is controlled by `BUILD_ARCH`:

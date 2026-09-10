@@ -1,0 +1,709 @@
+{
+	"capturedAt": "2026-09-08T14:46:25.325Z",
+	"phase": "qualcomm-ufi",
+	"projection": "status.modems (other status fields excluded)",
+	"payload": {
+		"status": {
+			"modems": {
+				"8": {
+					"status": {
+						"connection": "failed",
+						"network_type": "",
+						"signal": 0,
+						"roaming": false
+					},
+					"ifname": "wwu1u4u3i12",
+					"name": "Sierra Wireless EM7595 Mobile Broadband Adapter - <redacted-identity-suffix>",
+					"model": "Sierra Wireless EM7595 Mobile Broadband Adapter",
+					"manufacturer": "Sierra Wireless, Incorporated",
+					"network_type": {
+						"supported": ["3g", "4g", "4g3g"],
+						"active": "4g3g"
+					},
+					"no_sim": true,
+					"sim_presence": "absent",
+					"firmware_revision": "SWIX12C_02.02.03.00",
+					"radio_power": "on",
+					"signal_detail": {
+						"quality_recent": {
+							"state": "known",
+							"value": true
+						},
+						"rsrp": {
+							"state": "unknown",
+							"reason": "not-observed"
+						},
+						"rsrq": {
+							"state": "unknown",
+							"reason": "not-observed"
+						},
+						"snr": {
+							"state": "unknown",
+							"reason": "not-observed"
+						},
+						"sinr": {
+							"state": "unknown",
+							"reason": "not-observed"
+						}
+					},
+					"registration_context": {
+						"operator_name": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"operator_code": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"cell_id": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"tac": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"sim_presence_evidence": {
+						"kind": "state-failed-reason",
+						"field": "failedReason",
+						"value": "sim-missing"
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-xhci-hcd.9.auto-usb-0:1.4.3",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "unavailable",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "mbim"
+				},
+				"9": {
+					"status": {
+						"connection": "registered",
+						"network": "Movistar",
+						"network_type": "4G",
+						"signal": 81,
+						"roaming": false
+					},
+					"ifname": "wwu1u4u4i4",
+					"name": "RM530N-GL - <redacted-identity-suffix>",
+					"model": "RM530N-GL",
+					"manufacturer": "Quectel",
+					"network_type": {
+						"supported": ["3g", "4g", "4g3g", "5g", "5g4g", "5g3g", "5g4g3g"],
+						"active": "4g3g"
+					},
+					"config": {
+						"apn": "internet",
+						"username": "",
+						"password": "<redacted-identity>",
+						"roaming": true,
+						"network": "",
+						"autoconfig": false,
+						"autoconfig_supported": true
+					},
+					"sim_presence": "present",
+					"sim_lock": {
+						"required": "sim-pin2",
+						"remainingAttempts": 3
+					},
+					"firmware_revision": "RM530NGLAAR05A01M4G",
+					"own_numbers": ["<redacted-identity>"],
+					"iccid": "<redacted-identity>",
+					"packet_service_state": "attached",
+					"radio_power": "on",
+					"signal_detail": {
+						"quality_recent": {
+							"state": "known",
+							"value": false
+						},
+						"rsrp": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"rsrq": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"snr": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"sinr": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"registration_context": {
+						"operator_name": {
+							"state": "known",
+							"value": "Movistar"
+						},
+						"operator_code": {
+							"state": "known",
+							"value": "732123"
+						},
+						"cell_id": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"tac": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"sim_presence_evidence": {
+						"kind": "sim-object-path",
+						"field": "sim",
+						"value": "/org/freedesktop/ModemManager1/SIM/5"
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-xhci-hcd.9.auto-usb-0:1.4.4",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "implemented",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "qmi"
+				},
+				"10": {
+					"status": {
+						"connection": "connected",
+						"network": "Claro",
+						"network_type": "4G",
+						"signal": 60,
+						"roaming": false
+					},
+					"ifname": "enx000011121314",
+					"name": "FM350-GL - <redacted-identity-suffix>",
+					"model": "FM350-GL",
+					"manufacturer": "Fibocom Wireless Inc.",
+					"network_type": {
+						"supported": ["3g", "4g", "5g", "4g3g", "5g3g", "5g4g", "5g4g3g"],
+						"active": "4g3g"
+					},
+					"config": {
+						"apn": "",
+						"username": "",
+						"password": "<redacted-identity>",
+						"roaming": true,
+						"network": "",
+						"autoconfig": true,
+						"autoconfig_supported": true
+					},
+					"sim_presence": "present",
+					"sim_lock": {
+						"required": "none"
+					},
+					"firmware_revision": "81600.0000.00.19.17.10",
+					"iccid": "<redacted-identity>",
+					"packet_service_state": "attached",
+					"radio_power": "on",
+					"signal_detail": {
+						"quality_recent": {
+							"state": "known",
+							"value": true
+						},
+						"rsrp": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"rsrq": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"snr": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"sinr": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"registration_context": {
+						"operator_name": {
+							"state": "known",
+							"value": "Claro"
+						},
+						"operator_code": {
+							"state": "known",
+							"value": "732101"
+						},
+						"cell_id": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"tac": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"sim_presence_evidence": {
+						"kind": "sim-object-path",
+						"field": "sim",
+						"value": "/org/freedesktop/ModemManager1/SIM/6"
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-fc880000.usb-usb-0:1.2",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "implemented",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "rndis"
+				},
+				"11": {
+					"status": {
+						"connection": "failed",
+						"network_type": "",
+						"signal": 0,
+						"roaming": false
+					},
+					"ifname": "wwu1u3u4i5",
+					"name": "SIMCOM_SIM7600G-H - <redacted-identity-suffix>",
+					"model": "SIMCOM_SIM7600G-H",
+					"manufacturer": "QUALCOMM INCORPORATED",
+					"network_type": {
+						"supported": ["2g", "3g", "4g", "3g2g", "4g2g", "4g3g", "4g3g2g"],
+						"active": "4g3g2g"
+					},
+					"no_sim": true,
+					"sim_presence": "absent",
+					"firmware_revision": "LE20B04SIM7600G22",
+					"radio_power": "on",
+					"signal_detail": {
+						"quality_recent": {
+							"state": "known",
+							"value": true
+						},
+						"rsrp": {
+							"state": "unknown",
+							"reason": "not-observed"
+						},
+						"rsrq": {
+							"state": "unknown",
+							"reason": "not-observed"
+						},
+						"snr": {
+							"state": "unknown",
+							"reason": "not-observed"
+						},
+						"sinr": {
+							"state": "unknown",
+							"reason": "not-observed"
+						}
+					},
+					"registration_context": {
+						"operator_name": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"operator_code": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"cell_id": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"tac": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"sim_presence_evidence": {
+						"kind": "state-failed-reason",
+						"field": "failedReason",
+						"value": "sim-missing"
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-fc880000.usb-usb-0:1.3.4",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "unavailable",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "qmi"
+				},
+				"12": {
+					"status": {
+						"connection": "scanning",
+						"network_type": "",
+						"signal": 0,
+						"roaming": false
+					},
+					"ifname": "wwu1u4u1i2",
+					"name": "HIMI_U01_MODEM_V1.0 - <redacted-identity-suffix>",
+					"model": "0",
+					"manufacturer": "1",
+					"network_type": {
+						"supported": ["3g", "4g", "4g3g"],
+						"active": "4g3g"
+					},
+					"sim_presence": "present",
+					"sim_lock": {
+						"required": "sim-pin2",
+						"remainingAttempts": 3
+					},
+					"firmware_revision": "HIMI_U01_MODEM_V1.0  1  [Sep 09 2015 10:00:00]",
+					"packet_service_state": "detached",
+					"radio_power": "on",
+					"signal_detail": {
+						"quality_recent": {
+							"state": "known",
+							"value": true
+						},
+						"rsrp": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"rsrq": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"snr": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"sinr": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"registration_context": {
+						"operator_name": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"operator_code": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"cell_id": {
+							"state": "unknown",
+							"reason": "not-reported"
+						},
+						"tac": {
+							"state": "unknown",
+							"reason": "not-reported"
+						}
+					},
+					"sim_presence_evidence": {
+						"kind": "sim-object-path",
+						"field": "sim",
+						"value": "/org/freedesktop/ModemManager1/SIM/7"
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-fc880000.usb-usb-0:1.4.1",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "implemented",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "qmi"
+				},
+				"1000": {
+					"ifname": "enx344b50000000",
+					"name": "ZTE MF79U",
+					"model": "ZTE MF79U",
+					"manufacturer": "ZTE,Incorporated",
+					"network_type": {
+						"supported": [],
+						"active": null
+					},
+					"device_class": "router-ethernet",
+					"availability_reason": "router_direct",
+					"router_admin": {
+						"admin_url": "http://192.168.0.1",
+						"reachable": true,
+						"sim": "present",
+						"connection": "unknown",
+						"signal": {
+							"provenance": "zte-goform",
+							"freshness": "live",
+							"bars": {
+								"state": "known",
+								"value": 5
+							},
+							"max_bars": {
+								"state": "known",
+								"value": 5
+							},
+							"dbm": {
+								"state": "unknown",
+								"reason": "not-reported"
+							},
+							"rsrp": {
+								"state": "known",
+								"value": -79
+							},
+							"rsrq": {
+								"state": "known",
+								"value": -10
+							},
+							"snr": {
+								"state": "known",
+								"value": 4
+							},
+							"sinr": {
+								"state": "unknown",
+								"reason": "unsupported"
+							}
+						},
+						"signal_bars": 5,
+						"signal_max_bars": 5,
+						"model": "MF79U",
+						"imei": "<redacted-identity>",
+						"firmware": "BD_XCBZHKMF79UV1.0.0B03",
+						"details": {
+							"network_type": "LTE",
+							"provider": "732103",
+							"cell_id": "2c20f34",
+							"roaming": "Home"
+						}
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-fc880000.usb-usb-0:1.1",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "implemented",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "router-ethernet",
+					"lock_state": "locked",
+					"lock_detail": {
+						"credential_configured": false
+					}
+				},
+				"1001": {
+					"ifname": "enx0c5b8f279a64",
+					"name": "Huawei E3372",
+					"model": "Huawei E3372",
+					"manufacturer": "Huawei",
+					"network_type": {
+						"supported": [],
+						"active": null
+					},
+					"device_class": "router-ethernet",
+					"availability_reason": "router_direct",
+					"router_admin": {
+						"admin_url": "http://192.168.8.1",
+						"reachable": true,
+						"sim": "present",
+						"connection": "connected",
+						"signal": {
+							"provenance": "hilink-admin-api",
+							"freshness": "live",
+							"bars": {
+								"state": "known",
+								"value": 4
+							},
+							"max_bars": {
+								"state": "known",
+								"value": 5
+							},
+							"dbm": {
+								"state": "known",
+								"value": -67
+							},
+							"rsrp": {
+								"state": "known",
+								"value": -102
+							},
+							"rsrq": {
+								"state": "known",
+								"value": -15
+							},
+							"snr": {
+								"state": "unknown",
+								"reason": "unsupported"
+							},
+							"sinr": {
+								"state": "known",
+								"value": -9
+							}
+						},
+						"model": "E3372",
+						"serial": "<redacted-identity>",
+						"imei": "<redacted-identity>",
+						"firmware": "22.333.01.00.00",
+						"hardware": "CL2E3372HM",
+						"signal_bars": 4,
+						"signal_max_bars": 5,
+						"apn": "ba.amx",
+						"details": {
+							"registration": "LTE",
+							"imsi": "<redacted-identity>",
+							"iccid": "<redacted-identity>",
+							"wan_ip": "10.12.173.92",
+							"network_type": "7",
+							"cell_id": "134318440",
+							"pci": "336"
+						},
+						"capabilities": {
+							"net_mode": {
+								"state": "unavailable",
+								"reason": "not-reported"
+							}
+						},
+						"controls": {
+							"mobile_data": true,
+							"roaming_autoconnect": false
+						}
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-fc880000.usb-usb-0:1.3.1",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "implemented",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "router-ethernet",
+					"lock_state": "open",
+					"lock_detail": {
+						"credential_configured": false
+					}
+				},
+				"1002": {
+					"ifname": "eth1",
+					"name": "Huawei E3372",
+					"model": "Huawei E3372",
+					"manufacturer": "Huawei",
+					"network_type": {
+						"supported": [],
+						"active": null
+					},
+					"device_class": "router-ethernet",
+					"availability_reason": "router_direct",
+					"router_admin": {
+						"admin_url": "http://192.168.8.1",
+						"reachable": true,
+						"sim": "present",
+						"connection": "connected",
+						"signal": {
+							"provenance": "hilink-admin-api",
+							"freshness": "live",
+							"bars": {
+								"state": "known",
+								"value": 5
+							},
+							"max_bars": {
+								"state": "known",
+								"value": 5
+							},
+							"dbm": {
+								"state": "known",
+								"value": -55
+							},
+							"rsrp": {
+								"state": "known",
+								"value": -80
+							},
+							"rsrq": {
+								"state": "known",
+								"value": -10
+							},
+							"snr": {
+								"state": "unknown",
+								"reason": "unsupported"
+							},
+							"sinr": {
+								"state": "known",
+								"value": -1
+							}
+						},
+						"model": "E3372",
+						"serial": "<redacted-identity>",
+						"imei": "<redacted-identity>",
+						"firmware": "22.333.01.00.00",
+						"hardware": "CL2E3372HM",
+						"signal_bars": 5,
+						"signal_max_bars": 5,
+						"apn": "web.colombiamovil.com.co",
+						"details": {
+							"registration": "LTE",
+							"imsi": "<redacted-identity>",
+							"iccid": "<redacted-identity>",
+							"wan_ip": "10.108.48.16",
+							"network_type": "7",
+							"cell_id": "46166579",
+							"pci": "237"
+						},
+						"capabilities": {
+							"net_mode": {
+								"state": "unavailable",
+								"reason": "not-reported"
+							}
+						},
+						"controls": {
+							"mobile_data": true,
+							"roaming_autoconnect": false
+						}
+					},
+					"data_usage_policy": {
+						"supported": true
+					},
+					"stable_key": "platform-fc880000.usb-usb-0:1.3.2",
+					"capability_modules": {
+						"band-lock": "implemented",
+						"sms": "unavailable",
+						"five-g-pref": "implemented",
+						"fcc-auto-unlock": "unavailable",
+						"gps": "implemented",
+						"ussd": "implemented",
+						"esim": "unavailable"
+					},
+					"usb_mode": "router-ethernet",
+					"lock_state": "open",
+					"lock_detail": {
+						"credential_configured": false
+					}
+				}
+			}
+		}
+	}
+}
