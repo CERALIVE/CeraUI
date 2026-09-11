@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { expect, type Page } from "@playwright/test";
 
 import { test, type PageRpc } from "./fixtures/index.js";
+import { settleBackendHealthBroadcast } from "./helpers/backend-health.js";
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
 
 /**
@@ -67,6 +68,12 @@ async function openHud(page: Page): Promise<void> {
 	await expect(page.getByRole("dialog", { name: "Status" })).toBeVisible();
 }
 
+async function closeHud(page: Page): Promise<void> {
+	const statusDialog = page.getByRole("dialog", { name: "Status" });
+	await statusDialog.getByRole("button", { name: "Close" }).click();
+	await expect(statusDialog).toBeHidden();
+}
+
 const evidence: string[] = [];
 function record(line: string): void {
 	evidence.push(line);
@@ -104,6 +111,7 @@ test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toBeVisible({ timeout: 15_000 });
+		await settleBackendHealthBroadcast(pageRpc);
 
 		await driveHealth(page, pageRpc, "degraded");
 		await openHud(page);
@@ -135,6 +143,7 @@ test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toBeVisible({ timeout: 15_000 });
+		await settleBackendHealthBroadcast(pageRpc);
 
 		// Seed healthy and pull it into the frozen snapshot via a manual refresh.
 		await driveHealth(page, pageRpc, "healthy");
@@ -151,9 +160,7 @@ test.describe("stream-health rollup + tooltip (dev.emit driven)", () => {
 		record("eink: live dot=degraded but frozen rollup HELD at healthy (Bond 2/2) — no auto-repaint ✓");
 
 		// Manual refresh is the single release path: now the rollup catches up.
-		const statusDialog = page.getByRole("dialog", { name: "Status" });
-		await statusDialog.getByRole("button", { name: "Close" }).click();
-		await expect(statusDialog).toBeHidden();
+		await closeHud(page);
 		await manualRefresh(page);
 		await openHud(page);
 		await expect(page.getByTestId("stream-health-detail")).toHaveAttribute("data-state", "degraded");
@@ -173,11 +180,11 @@ test.describe("stream-health dead-state cue (non-color, mono-legible)", () => {
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(page.locator(HEALTH_INDICATOR).first()).toBeVisible({ timeout: 15_000 });
+		await settleBackendHealthBroadcast(pageRpc);
 
 		await driveHealth(page, pageRpc, "dead");
 		await manualRefresh(page);
-		await page.locator("[data-hud-region]").first().click();
-		await expect(page.getByRole("dialog", { name: "Status" })).toBeVisible();
+		await openHud(page);
 
 		const stateCell = page.getByTestId("stream-health-state");
 		await expect(page.getByTestId("stream-health-detail")).toHaveAttribute("data-state", "dead");
