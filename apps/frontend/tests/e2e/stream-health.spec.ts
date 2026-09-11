@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { expect, type Page } from "@playwright/test";
 
 import { test, type PageRpc } from "./fixtures/index.js";
+import { settleBackendHealthBroadcast } from "./helpers/backend-health.js";
 import { ensureAuthenticated, evidencePath, navigateTo } from "./helpers/index.js";
 
 /**
@@ -69,11 +70,11 @@ test.describe("stream-health HUD surfacing (dev.emit driven)", () => {
 
 	test.beforeEach(async ({ page, pageRpc }, testInfo) => {
 		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
-		void pageRpc;
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(healthIndicator(page)).toBeVisible({ timeout: 15_000 });
+		await settleBackendHealthBroadcast(pageRpc);
 	});
 
 	test.afterAll(() => {
@@ -125,11 +126,11 @@ test.describe("stream-health rapid flapping (failure-guard)", () => {
 
 	test.beforeEach(async ({ page, pageRpc }, testInfo) => {
 		test.skip(testInfo.project.name !== "desktop", "desktop layout exposes the persistent HUD bar");
-		void pageRpc;
 		await page.goto("/");
 		await ensureAuthenticated(page);
 		await navigateTo(page, "live");
 		await expect(healthIndicator(page)).toBeVisible({ timeout: 15_000 });
+		await settleBackendHealthBroadcast(pageRpc);
 	});
 
 	test("20 rapid transitions never crash; indicator settles on the final state", async ({ page, pageRpc }) => {
