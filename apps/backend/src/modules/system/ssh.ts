@@ -35,6 +35,12 @@ import { describeCliError } from "./cli-parse.ts";
 type SshStatus = {
 	user: string;
 	active: boolean;
+	// Boot persistence — `systemctl is-enabled ssh`. A SEPARATE axis from
+	// `active`, and EXPLICIT on every status object rather than
+	// omitted-when-false: the consumer status merge preserves an omitted
+	// optional field, so a present-only-when-true flag could be raised and
+	// never lowered (the `policy_route_missing` latch).
+	enabled: boolean;
 	// Omitted when the shadow hash is unreadable (password state unknowable).
 	user_pass?: boolean;
 };
@@ -90,6 +96,8 @@ function parseShadowHash(shadow: string, user: string): string | undefined {
 export type SshStatusDeps = {
 	/** `systemctl is-active ssh` — argv-only, may reject on non-zero exit. */
 	systemctlIsActive: () => Promise<{ stdout: string; stderr: string }>;
+	/** `systemctl is-enabled ssh` — argv-only, may reject on non-zero exit. */
+	systemctlIsEnabled: () => Promise<{ stdout: string; stderr: string }>;
 	/** Read the raw /etc/shadow document (JS, no `grep` subprocess). */
 	readShadow: () => string | Promise<string>;
 	/** Emit the completed SSH status to clients. */
@@ -98,6 +106,7 @@ export type SshStatusDeps = {
 
 const defaultSshStatusDeps: SshStatusDeps = {
 	systemctlIsActive: () => execFileP("systemctl", ["is-active", "ssh"]),
+	systemctlIsEnabled: () => execFileP("systemctl", ["is-enabled", "ssh"]),
 	readShadow: () => Bun.file("/etc/shadow").text(),
 	broadcast: (status) => broadcastMsg("status", { ssh: status }),
 };
@@ -105,6 +114,20 @@ const defaultSshStatusDeps: SshStatusDeps = {
 /** True only when `systemctl is-active ssh` printed exactly `active`. */
 export function parseSystemctlIsActive(stdout: string): boolean {
 	return stdout.trim() === "active";
+}
+
+/**
+ * True only when `systemctl is-enabled ssh` printed exactly `enabled`.
+ *
+ * Every other word systemd can print here answers "no" to the only question
+ * this field asks — will the unit come back after a reboot. `enabled-runtime`
+ * is the sharpest case: its symlink lives in `/run` and is wiped on reboot, so
+ * treating it as enabled would restate the very bug this field exists to
+ * surface. `static` / `indirect` / `generated` / `masked` / `linked` likewise
+ * mean "not enabled by an [Install] symlink".
+ */
+export function parseSystemctlIsEnabled(stdout: string): boolean {
+	return stdout.trim() === "enabled";
 }
 
 /** Resolve whether the ssh service is active, swallowing the non-zero exit. */
@@ -119,6 +142,21 @@ async function probeSshActive(
 		// simply not active. Treat ANY failure as not-active (never "missing").
 		const stdout = (err as { stdout?: string } | null)?.stdout ?? "";
 		return parseSystemctlIsActive(stdout);
+	}
+}
+
+/** Resolve whether the ssh service is boot-enabled, swallowing the exit code. */
+async function probeSshEnabled(
+	systemctlIsEnabled: SshStatusDeps["systemctlIsEnabled"],
+): Promise<boolean> {
+	try {
+		const { stdout } = await systemctlIsEnabled();
+		return parseSystemctlIsEnabled(stdout);
+	} catch (err) {
+		// `is-enabled` exits non-zero for disabled/static/masked/unknown, and
+		// still prints the word on stdout. Read it; ANY failure is not-enabled.
+		const stdout = (err as { stdout?: string } | null)?.stdout ?? "";
+		return parseSystemctlIsEnabled(stdout);
 	}
 }
 
@@ -155,21 +193,23 @@ async function probeSshUserHash(
 export async function getSshStatus(
 	deps: Partial<SshStatusDeps> = {},
 ): Promise<SshStatus | undefined> {
-	const { systemctlIsActive, readShadow, broadcast } = {
+	const { systemctlIsActive, systemctlIsEnabled, readShadow, broadcast } = {
 		...defaultSshStatusDeps,
 		...deps,
 	};
 
 	const ssh_user = resolveSshUser();
 
-	const [active, hash] = await Promise.all([
+	const [active, enabled, hash] = await Promise.all([
 		probeSshActive(systemctlIsActive),
+		probeSshEnabled(systemctlIsEnabled),
 		probeSshUserHash(readShadow, ssh_user),
 	]);
 
 	const status: SshStatus = {
 		user: ssh_user,
 		active,
+		enabled,
 		...(hash !== undefined ? { user_pass: hash !== sshPasswordHash } : {}),
 	};
 
@@ -178,6 +218,7 @@ export async function getSshStatus(
 		!sshStatus ||
 		status.user !== sshStatus.user ||
 		status.active !== sshStatus.active ||
+		status.enabled !== sshStatus.enabled ||
 		status.user_pass !== sshStatus.user_pass
 	) {
 		sshStatus = status;
@@ -216,13 +257,52 @@ export function resetSshServiceRunner(): void {
 	sshServiceRunner = defaultSshServiceRunner;
 }
 
-// Dev-mock SSH active flag, flipped by startStopSsh under shouldUseMocks()
-// without spawning systemctl. resetMockSshState() clears it for test isolation.
+// systemctl ssh BOOT-PERSISTENCE seam. A SIBLING of sshServiceRunner, never an
+// overload of it: `enable`/`disable` are different verbs from `start`/`stop`,
+// and keeping the seams apart is what lets a test assert that a persistence
+// change provably never touched the running service.
+//
+// `--now` is deliberately ABSENT and must stay absent — it would fuse the two
+// axes back together and make "arm this for boot" silently start sshd (or
+// "un-arm it" silently kill the operator's live session).
+type SshPersistenceRunner = (action: "enable" | "disable") => Promise<void>;
+
+const defaultSshPersistenceRunner: SshPersistenceRunner = async (action) => {
+	await execFileP("systemctl", [action, "ssh"]);
+};
+
+let sshPersistenceRunner: SshPersistenceRunner = defaultSshPersistenceRunner;
+
+export function setSshPersistenceRunner(runner: SshPersistenceRunner): void {
+	sshPersistenceRunner = runner;
+}
+
+export function resetSshPersistenceRunner(): void {
+	sshPersistenceRunner = defaultSshPersistenceRunner;
+}
+
+// Dev-mock SSH active/enabled flags, flipped by startStopSsh and
+// setSshPersistent under shouldUseMocks() without spawning systemctl.
+// resetMockSshState() clears them for test isolation.
 let mockSshActive = false;
+let mockSshEnabled = false;
 
 export function resetMockSshState(): void {
 	mockSshActive = false;
+	mockSshEnabled = false;
 	sshStatus = null;
+}
+
+/** Cache + broadcast the dev-mock SSH status without spawning systemctl. */
+function broadcastMockSshStatus(ssh_user: string): void {
+	const status: SshStatus = {
+		user: ssh_user,
+		active: mockSshActive,
+		enabled: mockSshEnabled,
+		user_pass: getConfig().ssh_pass !== undefined,
+	};
+	sshStatus = status;
+	broadcastMsg("status", { ssh: status });
 }
 
 export async function startStopSsh(
@@ -238,13 +318,7 @@ export async function startStopSsh(
 	// systemctl (or resetting a real password), so the toggle works on a dev box.
 	if (shouldUseMocks()) {
 		mockSshActive = action === "start";
-		const status: SshStatus = {
-			user: ssh_user,
-			active: mockSshActive,
-			user_pass: getConfig().ssh_pass !== undefined,
-		};
-		sshStatus = status;
-		broadcastMsg("status", { ssh: status });
+		broadcastMockSshStatus(ssh_user);
 		return true;
 	}
 
@@ -265,6 +339,51 @@ export async function startStopSsh(
 	return action === "start"
 		? status?.active === true
 		: status?.active === false;
+}
+
+/**
+ * Arm (or un-arm) the ssh unit for boot — `systemctl enable|disable ssh`.
+ *
+ * The SECOND, independent axis beside {@link startStopSsh}. It writes (or
+ * removes) the `[Install]` symlink and NOTHING else: no `--now`, so the running
+ * service is untouched in both directions. An operator can therefore run SSH
+ * for one session without committing it to boot, or arm it for boot without
+ * starting it now.
+ *
+ * WHY it exists: the device shipped with `start`/`stop` only, so an operator who
+ * enabled SSH from the UI lost it on the next reboot with nothing on screen
+ * saying so — measured on the bench board as `is-active: active` beside
+ * `is-enabled: disabled`, which cost a multi-hour board-access outage.
+ *
+ * Returns whether the device's own re-probe confirms the requested state, so a
+ * caller never reports a persistence change the unit did not take.
+ */
+export async function setSshPersistent(
+	enabled: boolean,
+	statusDeps: Partial<SshStatusDeps> = {},
+): Promise<boolean> {
+	const ssh_user = resolveSshUser();
+	const action = enabled ? "enable" : "disable";
+
+	// Dev/mock seam: flip the mock boot-persistence flag and broadcast it without
+	// spawning systemctl, so the toggle works on a dev box (mirrors startStopSsh).
+	if (shouldUseMocks()) {
+		mockSshEnabled = enabled;
+		broadcastMockSshStatus(ssh_user);
+		return true;
+	}
+
+	try {
+		await sshPersistenceRunner(action);
+	} catch (err) {
+		logger.error(
+			`Error running systemctl ${action} ssh: ${describeCliError(err)}`,
+		);
+		return false;
+	}
+
+	const status = await getSshStatus(statusDeps);
+	return status?.enabled === enabled;
 }
 
 /**
@@ -344,11 +463,13 @@ export async function resetSshPassword(
 
 /**
  * Boot-time provisioning of an initial SSH password when the device has never
- * had one. SSH is enabled-by-default at the OS/systemd level (image-baked), but
- * CeraUI only ever minted a password on an explicit operator "Start SSH" /
- * "Reset" click — so a fresh device ran `sshd` with `ssh_pass` permanently
- * `undefined` until a manual reset. When NO `ssh_pass` is persisted this mints
- * one through the SAME {@link mintAndApplySshPassword} path the reset uses.
+ * had one. Boot persistence is NOT image-baked — it is whatever
+ * {@link setSshPersistent} last wrote, and a shipped board was measured
+ * `is-enabled: disabled` while sshd was actively running. Meanwhile CeraUI only
+ * ever minted a password on an explicit operator "Start SSH" / "Reset" click, so
+ * a fresh device could reach `sshd` with `ssh_pass` permanently `undefined`
+ * until a manual reset. When NO `ssh_pass` is persisted this mints one through
+ * the SAME {@link mintAndApplySshPassword} path the reset uses.
  *
  * Called UNCONDITIONALLY at boot (independent of the `ssh.service` active/enabled
  * state) so even a production device shipping with SSH disabled-by-default has a

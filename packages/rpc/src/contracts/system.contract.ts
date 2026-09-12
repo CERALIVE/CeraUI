@@ -18,6 +18,7 @@ import {
 	remoteConfigInputSchema,
 	revisionsSchema,
 	sensorsStatusSchema,
+	sshPersistentInputSchema,
 	successResponseSchema,
 } from '../schemas';
 
@@ -66,6 +67,15 @@ export const systemContract = oc.router({
 	 * Stop SSH service
 	 */
 	sshStop: oc.output(successResponseSchema),
+
+	/**
+	 * Set whether the SSH service survives a reboot.
+	 *
+	 * Deliberately SEPARATE from sshStart/sshStop: persistence and the running
+	 * state are two independent axes, so an operator can run SSH for one session
+	 * without committing it to boot, or arm it for boot without starting it now.
+	 */
+	sshSetPersistent: oc.input(sshPersistentInputSchema).output(successResponseSchema),
 
 	/**
 	 * Reset SSH password

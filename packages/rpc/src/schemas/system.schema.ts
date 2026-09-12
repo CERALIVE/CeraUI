@@ -38,6 +38,12 @@ export type Revisions = z.infer<typeof revisionsSchema>;
 export const ENGINE_UNREACHABLE_REVISION = 'engine unreachable';
 
 // SSH status schema
+//
+// `active` and `enabled` are TWO INDEPENDENT AXES and must never be collapsed:
+// `active` is "is sshd running right now" (`systemctl is-active`), `enabled` is
+// "will systemd start it at the next boot" (`systemctl is-enabled`). A device
+// can be — and on the bench board WAS — `active: true, enabled: false`, which
+// reads as healthy and silently loses SSH on the next reboot.
 export const sshStatusSchema = z.object({
 	user: z.string(),
 	// Optional: the backend omits `user_pass` when the shadow hash is unreadable
@@ -45,8 +51,23 @@ export const sshStatusSchema = z.object({
 	// on the wire. Consumers must treat an absent value as "unknown".
 	user_pass: z.boolean().optional(),
 	active: z.boolean(),
+	// REQUIRED, and explicit on every status object — never omitted-when-false.
+	// The consumer status merge preserves an omitted optional field, so a
+	// present-only-when-true flag could be raised and never lowered (the
+	// `policy_route_missing` latch, exactly).
+	enabled: z.boolean(),
 });
 export type SshStatus = z.infer<typeof sshStatusSchema>;
+
+// SSH boot-persistence input (`systemctl enable|disable ssh`, never `--now`).
+// `.strict()` because this mutation decides whether an operator keeps remote
+// access after a reboot: an unknown extra key must be REJECTED, not ignored.
+export const sshPersistentInputSchema = z
+	.object({
+		enabled: z.boolean(),
+	})
+	.strict();
+export type SshPersistentInput = z.infer<typeof sshPersistentInputSchema>;
 
 // Available updates schema
 export const availableUpdatesSchema = z.object({
