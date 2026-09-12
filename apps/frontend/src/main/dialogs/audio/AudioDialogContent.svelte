@@ -70,6 +70,7 @@ const backendDisabledReason = $derived(
 );
 </script>
 
+<div class="space-y-5">
 {#if gateState === 'no-pipeline'}
 	<div class="bg-muted/50 flex flex-col items-center gap-3 rounded-lg px-4 py-5 text-center">
 		<p class="text-muted-foreground text-sm">{m["settings.selectPipelineFirst"]()}</p>
@@ -126,16 +127,18 @@ const backendDisabledReason = $derived(
 			</Select.Root>
 		</div>
 		<AudioDelayControl value={draftDelay} min={delayMin} max={delayMax} step={delayStep} onChange={onDelayChange} />
+	</div>
+{/if}
 
-		<!-- Engine audio backend. Last, behind a rule: codec and delay are what an
-		     operator opens this dialog to change; which subsystem builds the audio
-		     path is a platform decision they visit rarely. It writes on selection
-		     (its own setConfig), so it is deliberately NOT behind the dialog's Save
-		     button — that button commits the codec/delay DRAFT, and folding a
-		     next-session platform switch into it would make one press mean two
-		     unrelated things. -->
-		{#if showBackend && backendView}
-			<div class="space-y-2 border-t pt-4" data-testid="audio-backend">
+	<!-- Engine audio backend. Last, behind a rule: codec and delay are what an
+	     operator opens this dialog to change; which subsystem builds the audio
+	     path is a platform decision they visit rarely. It writes on selection
+	     (its own setConfig), so it is deliberately NOT behind the dialog's Save
+	     button — that button commits the codec/delay DRAFT, and folding a
+	     next-session platform switch into it would make one press mean two
+	     unrelated things. -->
+	{#if showBackend && backendView}
+		<div class="space-y-2 border-t pt-4" data-testid="audio-backend">
 				<div class="flex items-center gap-1">
 					<Label class="text-sm font-medium">{m["settings.audioBackend.label"]()}</Label>
 					<InfoPopover
@@ -214,7 +217,6 @@ const backendDisabledReason = $derived(
 						<span>{backendError}</span>
 					</p>
 				{/if}
-			</div>
-		{/if}
-	</div>
-{/if}
+		</div>
+	{/if}
+</div>

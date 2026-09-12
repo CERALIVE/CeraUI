@@ -694,20 +694,22 @@ FOUR rules carry it, and each one is a defect the module exists to prevent:
   promise is mechanically pinned by `lib/federation/host-contract.test.ts` (the
   REQUIRED set is frozen at `host`; every added member must be optional) and by the
   BUILT-bundle legs in `tests/federation/federation-abi.test.ts`.
-- **…AND THE AUDIO GATE IS ONE RULE, NOT TWO.** `hasAudioSupport` has always failed
+- **…AND THE CODEC/DELAY GATE IS ONE RULE, NOT TWO.** `hasAudioSupport` has always failed
   OPEN for a hosted mount (`hostAdapter !== undefined || gateState === 'enabled'`)
   — a federated bundle runs no `initSubscriptions()`, so `getSources()` there is
   permanently `undefined` and the pipeline gate has NO evidence to evaluate — but
   only the Save button read it. `AudioDialogContent` still read the raw
   `gateState`, so every hosted mount rendered "Select a pipeline first" beside an
-  ENABLED Save and offered no controls at all: codec, delay and the backend
-  selector alike, whatever the host passed. `contentGateState` applies the same
-  rule to the body. A DEVICE mount is byte-identical — there `hasAudioSupport` IS
-  `gateState === 'enabled'`, so the gate keeps deciding on real evidence. Do NOT
-  re-split the two, and do NOT "fix" a hosted mount by moving the selector outside
-  the gate: that would put a working control under a band telling the operator to
-  pick a pipeline first. Coverage: `AudioDialog.backend.test.ts` → the hosted
-  no-subscription leg with its DEVICE mirror control, and the built-bundle legs in
+  ENABLED Save and offered no codec or delay controls, whatever the host passed.
+  `contentGateState` applies the same rule to those controls. The backend selector
+  is deliberately OUTSIDE that gate: it changes which subsystem builds audio on
+  the NEXT start and may be the prerequisite for making that start possible, so it
+  remains reachable while codec/delay honestly show the no-pipeline or
+  no-audio-support band. Its own `audio_backends` capability remains the sole
+  visibility gate. Do NOT re-split the Save/content codec-delay gate, and do not
+  nest the backend selector beneath it again. Coverage: `AudioDialog.backend.test.ts`
+  → the hosted no-subscription leg and the device no-pipeline selector regression,
+  and the built-bundle legs in
   `tests/federation/federation-abi.test.ts`, which are what caught it (the jsdom
   tests mock the subscriptions the real bundle does not have).
 

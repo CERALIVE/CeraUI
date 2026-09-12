@@ -4,15 +4,18 @@
   Scoped to ENCODING knobs only (Task 15): the audio-source SELECTION now lives
   exclusively in the unified Source section (`SourceSection.svelte`, the sole
   `asrc` writer). This dialog is a read-only CONSUMER of the active audio source
-  and owns just two controls:
+  and owns three controls:
     • Audio codec  — Select (aac / opus) over the device-supported codecs.
     • Audio delay  — center-zero slider, bounds driven by
                      `streamingConstraints.audioDelay.{min,max}` (no literals).
+    • Audio backend — independent next-start selector, capability-gated and
+                      available even when codec/delay lack a pipeline.
 
   Above them a READ-ONLY line surfaces the active audio source (device label or
   the embedded-stream state) with a "change it in the Source section" hint — the
   operator changes the source there, not here. The `hasAudioSupport` gate (from
-  `resolveAudioGateState`) is preserved verbatim.
+  `resolveAudioGateState`) applies only to codec/delay; backend visibility follows
+  the engine's independent `audio_backends` capability.
 
   Persistence: Save persists the audio fields via `rpc.streaming.setConfig`
   (no stream restart) and also commits them optimistically to the caller via
