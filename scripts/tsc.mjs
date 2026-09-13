@@ -1,26 +1,14 @@
 #!/usr/bin/env node
 // Run the TypeScript compiler that the INVOKING package actually depends on.
 //
-// This workspace deliberately runs two TypeScript majors side by side. TS 7 is the
-// compiler for every plain `tsc --noEmit` gate (apps/backend, packages/rpc,
-// packages/i18n). TS 6 stays the workspace catalog default because svelte-check
-// (apps/frontend) imports the CLASSIC programmatic compiler API, which TS 7.0 does
-// not ship (it is expected in 7.1): it refuses to start outright, see
-// svelte-check/bin/ts-version-check.js — "TypeScript 7 support currently requires
-// both TypeScript 7 and TypeScript 6 installed ... and requires using the --tsgo
-// ... flag".
+// The workspace catalog provides TypeScript 6.0.3 to every package. A bare `tsc`
+// resolves through PATH, so a hoisted compiler could silently differ between a
+// developer machine and CI. Resolving from the invoking package's dependency graph
+// keeps the selected compiler explicit. `bun tsc` remains banned: only this wrapper
+// guarantees package-local compiler selection (oven-sh/bun#37152).
 //
-// A bare `tsc` resolves through PATH, so whichever copy hoisting happened to leave in
-// `node_modules/.bin` wins — silently, and differently on a developer machine than in
-// CI. Resolving from the invoking package's own dependency graph makes the choice
-// explicit instead. Bun 1.4.2 — the workspace pin — resolved both current package-major
-// probes correctly, but `bun tsc` remains banned: only this wrapper guarantees
-// package-local compiler selection (oven-sh/bun#37152).
-//
-// `<pkg>/package.json` is the anchor because TS 7 ships an `exports` map that does not
-// expose `./bin/tsc`: resolving that subpath directly throws
-// ERR_PACKAGE_PATH_NOT_EXPORTED. `./package.json` is exported, and the bin sits beside
-// it.
+// `<pkg>/package.json` is the anchor because TypeScript's exports map does not expose
+// `./bin/tsc`. The package metadata is exported, and the bin sits beside it.
 //
 // `--compiler-package <name>` selects a differently-named compiler package, for a
 // package that must keep a bare `typescript` on a different major than its gate.

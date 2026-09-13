@@ -304,7 +304,7 @@ bun run build         # compile backend binary + frontend static
 bun run test:release-package-contracts   # provenance + release graph + dispatch-input security
 BUILD_ARCH=arm64 ./scripts/build/build-debian-package.sh   # .deb for ARM64
 BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh   # .deb for AMD64
-bun run --filter backend check   # type-check backend (TS 7 via scripts/tsc.mjs) + exec guards
+bun run --filter backend check   # type-check backend via scripts/tsc.mjs + exec guards
 bun run --filter frontend test   # vitest frontend unit tests
 bun run build:frontend && bun apps/frontend/scripts/check-precache.mjs   # PWA precache-manifest gate
 ```
@@ -1033,30 +1033,21 @@ handler or CORS plugin; the Bun WebSocket adapter navigates the router and invok
 The `call()`, `oc.router()`, `oc.input()`/`oc.output()`, and error-code lookup exports used here are
 unchanged; no `adapter.ts` compatibility edit is required.
 
-### TypeScript: two majors, deliberately
+### TypeScript: one catalog
 
-| Scope | Compiler | Why |
-|-------|----------|-----|
-| workspace catalog + `apps/frontend` | **6.0.3** | `svelte-check` refuses to start on TS 7 (`bin/ts-version-check.js`); its peer range is `^5.0.0 \|\| ^6.0.0` |
-| `apps/backend`, `packages/rpc`, `packages/i18n` | **7.0.2** (direct devDep) | plain `tsc --noEmit`, no compiler-API consumer |
+The workspace catalog is the single source of truth for **TypeScript 6.0.3**.
+Every workspace package declares `"typescript": "catalog:"`, including the
+backend, RPC, and i18n packages. This makes each package's declared compiler
+equal the version Bun resolves rather than leaving an unsatisfied direct range.
 
-TypeScript 7.0 does not ship the programmatic compiler API (expected in 7.1), which is the root cause of the
-one remaining TS6 holdout above. `packages/i18n` moved onto the shared 7.0.2 devDep with the rest of the
-non-Svelte packages once the Paraglide cutover (todo 24) retired the `typesafe-i18n` generator and its
-`ts.createProgram` postinstall hook — the earlier split-TS6/TS7 arrangement for this package (a bare 6.0.3
-dep plus a `typescript-7` npm-alias `check` gate) no longer exists. The former non-blocking
-`svelte-check --tsgo` canary is retired: under Bun 1.4.2 with released `typescript@7.0.2` it reported the
-same **0 errors and 5 warnings in 4 files** as the required frontend check, so it added no independent signal.
-Revisit the frontend TS6→TS7 move when `svelte-check` accepts the TS7 peer range and the released compiler
-provides the programmatic API it consumes; do not restore an advisory native/compiler canary merely to watch
-that transition.
+TypeScript 7 remains a separate major-version migration. Do not change the
+catalog until `svelte-check` supports its peer/API surface and the migration has
+an explicit owner decision and full gate run.
 
-Because two majors coexist, **never invoke a bare `tsc`** — whichever copy hoisting left in `node_modules/.bin`
-would win, silently and differently per machine. Every typecheck goes through [`scripts/tsc.mjs`](scripts/tsc.mjs),
-which resolves the compiler from the *invoking package's own* dependency graph (`--compiler-package <name>`
-selects the alias). The Bun 1.4.2 retest resolved the current TS 7 backend and TS 6
-frontend probes correctly, but `bun tsc` remains banned: only the wrapper guarantees
-package-local compiler selection (oven-sh/bun#37152).
+Never invoke a bare `tsc`; every typecheck goes through
+[`scripts/tsc.mjs`](scripts/tsc.mjs), which resolves the compiler from the
+invoking package's dependency graph. `bun tsc` remains banned: only the wrapper
+guarantees package-local compiler selection (oven-sh/bun#37152).
 
 Fast-reload development loop (dev-sync / dev-push): [`image-building-pipeline/v2/docs/fast-reload.md`](../image-building-pipeline/v2/docs/fast-reload.md)
 
@@ -1160,11 +1151,9 @@ Four further Build Check facts, all landed 2026-08-14:
   prerelease `vitest` pin is now load-bearing for a required lane, so bumping it to
   stable 5.0 means re-confirming the same-lockfile parity counts, not just editing
   the version.
-- **The former `tsgo-canary` is retired.** Released TypeScript 7 is already the
-  native compiler, and the Bun 1.4 probe produced no diagnostics beyond the
-  required TS6 frontend check. Revisit the frontend compiler when
-  `svelte-check` supports TS7's peer/API surface; do not recreate an advisory
-  canary without a demonstrated additional signal.
+- **The former `tsgo-canary` is retired.** TypeScript 7 remains a separately
+  owned major-version migration; do not recreate an advisory canary without a
+  demonstrated additional signal.
 - **`setup-e2e` typechecks and measures before it uploads**: `bun run --filter
   frontend check` gates the build, and `bun scripts/ci/bundle-report.mjs` fails
   the job when the initial-route JS gzip set exceeds its documented budget.
