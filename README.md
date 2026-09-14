@@ -67,7 +67,9 @@ A dev-only DevTools destination is available in development builds.
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted
-  rather than fabricated when its kernel interface is absent.
+  rather than fabricated when its kernel interface is absent. A newly signed-in
+  browser receives the latest completed device-stats reading immediately rather
+  than waiting for the next periodic sample.
 - **Media-load detail**: the compact per-core hint uses the driver's reported
   encode/decode/JPEG/RGA inventory. MPP load and utilization remain separate,
   including values above 100%; **Media details** opens the full bound-session

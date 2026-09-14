@@ -640,6 +640,13 @@ stream is idle; the override is cleared by `resetMockState()`.
 
 ## DEVICE STATS [EXISTS]
 
+The browser's authenticated initial push includes the latest completed
+`device-stats` sample, retained before broadcast in `device-stats-snapshot.ts`.
+It does not depend on catching the next periodic tick. Samples replace whole;
+an unavailable optional signal never inherits an older value, and an unsampled
+backend invents no reading. This hydration boundary is independent of systemd
+readiness; see [`docs/BOOT-READINESS.md`](docs/BOOT-READINESS.md).
+
 `apps/backend/src/modules/system/device-stats.ts` broadcasts the original **5
 signals** on a `device-stats` event every 5 seconds (S1 lock), plus **four
 additive-optional signals** shipped on top of that lock: `memory`, `cpuFreq`,

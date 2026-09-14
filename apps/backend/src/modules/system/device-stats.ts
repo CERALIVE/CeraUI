@@ -79,6 +79,7 @@ import { collectDdr, type DdrStats } from "./collectors/ddr.ts";
 import { type CollectorFs, createCollectorFs } from "./collectors/fs.ts";
 import { collectGpu, type GpuStats } from "./collectors/gpu.ts";
 import { collectMemory, type MemoryStats } from "./collectors/memory.ts";
+import { recordDeviceStatsSnapshot } from "./device-stats-snapshot.ts";
 import { getSensors } from "./sensors.ts";
 
 /** Broadcast cadence for the `device-stats` event. */
@@ -659,6 +660,7 @@ export function initDeviceStats(): void {
 				resolveDeviceStatsDeps(),
 				deviceStatsState,
 			);
+			recordDeviceStatsSnapshot(payload);
 			broadcastMsg(DEVICE_STATS_EVENT, payload, getms() - ACTIVE_TO);
 		} catch (err) {
 			logger.error(`device-stats tick failed: ${err}`);

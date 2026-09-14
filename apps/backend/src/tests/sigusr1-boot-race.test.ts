@@ -1,3 +1,4 @@
+/// <reference types="bun" />
 /*
  * Regression guard for the SIGUSR1 boot-race kill of `ceralive.service`.
  *

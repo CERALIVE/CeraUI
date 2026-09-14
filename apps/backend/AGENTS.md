@@ -7187,6 +7187,13 @@ keep it even though the panel does not call it.
 
 After a client authenticates, the backend immediately broadcasts a full snapshot of every event type. Clients don't need to wait for the first periodic tick to render.
 
+For `device-stats`, `device-stats-snapshot.ts` retains the completed collector
+payload before fan-out, and `rpc/adapter.ts` sends it to the newly authenticated
+browser. Before sampling it sends nothing rather than fabricating values.
+Replacement is whole-snapshot, never a merge of old optional readings. Coverage:
+`tests/device-stats-initial-push.test.ts` and the browser
+`device-health-initial-snapshot.spec.ts`; the latter excludes periodic rescue.
+
 ### Heartbeat emitter
 
 `rpc/events.ts` emits `{ ping: { t: number } }` every 5 s to all connected clients. This lets the frontend detect half-open connections (no ping for ~15 s triggers a reconnect) without relying on TCP keepalive alone.
