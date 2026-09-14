@@ -70,6 +70,11 @@ type SchemaManifest = Readonly<Record<string, readonly string[]>>;
 
 /** `@ceralive/cerastream` — the streaming engine's IPC wire. */
 const CERASTREAM_FIELDS: SchemaManifest = {
+	listSwitchTargetsResultSchema: [
+		"switch_targets.input_id",
+		"switch_targets.kind",
+	],
+	sessionSwitchTargetSchema: ["input_id", "kind"],
 	// `probeEngineDevices` (sources.ts) copies these off `list-devices` through a
 	// hand-maintained whitelist; an unlisted field never reaches the wire at all.
 	captureDeviceSchema: [
@@ -154,6 +159,8 @@ const CERASTREAM_FIELDS: SchemaManifest = {
 		"preview_encoder_realized",
 	],
 	activeEncodeSchema: [
+		"switch_targets.input_id",
+		"switch_targets.kind",
 		"codec",
 		"resolution",
 		"framerate",
@@ -494,7 +501,9 @@ describe("producer pins stay registry-resolved", () => {
 	test("every producer dep is a bare registry version", async () => {
 		const manifest = (await Bun.file(
 			`${import.meta.dir}/../../package.json`,
-		).json()) as { dependencies?: Record<string, string> };
+		).json()) as {
+			dependencies?: Record<string, string>;
+		};
 		const deps = manifest.dependencies ?? {};
 
 		const offending: string[] = [];

@@ -25,7 +25,10 @@
 
 import type { StreamingEngine } from "../../helpers/config-schemas.ts";
 import { setup } from "../setup.ts";
-import { cerastreamBackend } from "./cerastream-backend.ts";
+import {
+	type CerastreamBackend,
+	cerastreamBackend,
+} from "./cerastream-backend.ts";
 import type { StreamingBackend } from "./streaming-backend.ts";
 
 export const DEFAULT_STREAMING_ENGINE: StreamingEngine = "cerastream";
@@ -43,6 +46,6 @@ export function getConfiguredEngine(): StreamingEngine {
 }
 
 /** The active backend every streaming call site drives. */
-export function getStreamingBackend(): StreamingBackend {
+export function getStreamingBackend(): CerastreamBackend {
 	return cerastreamBackend;
 }
