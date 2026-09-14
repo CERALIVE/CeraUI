@@ -127,5 +127,5 @@ and unknown states at 375/768/1280 px. Pointer switch to B and keyboard return t
 HDMI each reached the existing callback; no page errors or horizontal overflow.
 This uses the real component with injected props, not a media engine. The e2e
 spec separately exercises the mounted cockpit and authenticated socket path.
-Logs are retained in the ignored repository-local `test-results/u6/`; screenshots
-are in `apps/frontend/test-results/u6-*.png`. This is consumer evidence only.
+The QA run produced local, ephemeral artifacts (logs and screenshots) that are
+not retained in the repository.
