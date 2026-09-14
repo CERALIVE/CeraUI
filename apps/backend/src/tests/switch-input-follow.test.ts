@@ -353,7 +353,7 @@ describe("applySwitchInputFollow — durable switch + deferred auto-audio follow
 					{ context: makeContext() },
 				);
 				// Then: an explicit empty roster never takes the legacy path.
-				expect(out).toEqual({ success: false, error: "SOURCE_LOST" });
+				expect(out).toEqual({ success: false, error: "SWITCH_FAILED" });
 				expect(legacy).not.toHaveBeenCalled();
 				expect(dispatch).not.toHaveBeenCalled();
 				expect(getConfig().source).toBe("hdmi-existing");

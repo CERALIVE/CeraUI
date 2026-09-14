@@ -1,5 +1,5 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
-import type { SessionSwitchTarget } from "@ceraui/rpc/schemas";
+import type { SessionSwitchTarget, SwitchInputOutput } from "@ceraui/rpc/schemas";
 
 import { expect, test } from "./fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
@@ -39,6 +39,7 @@ let interceptSwitchInput = false;
 let switchInputInput: Record<string, unknown> | null = null;
 let sessionTargets: SessionSwitchTarget[] | undefined;
 let sessionActive = "video0";
+let switchRefusal: SwitchInputOutput | undefined;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
@@ -156,6 +157,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		interceptSwitchInput = false;
 		switchInputInput = null;
 		sessionTargets = undefined;
+		switchRefusal = undefined;
 
 		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
@@ -177,7 +179,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 								ws.send(
 									JSON.stringify({
 										id: frame.id,
-										result: { success: true, gap_ms: 12, ...(sessionTargets ? {} : { audio_follow_pending: true }) },
+										result: switchRefusal ?? { success: true, gap_ms: 12, ...(sessionTargets ? {} : { audio_follow_pending: true }) },
 									}),
 								);
 							}
@@ -281,6 +283,29 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		sessionActive = "video0";
 		sendStreamingStatus(sessionActive);
 		await expect(page.getByTestId("source-selected-video0")).toBeVisible();
+	});
+
+	test("a stale synthetic target refusal reports a failed switch, never an unplug", async ({ page }) => {
+		// Given: the displayed snapshot still offers b when fresh admission refuses it.
+		sessionTargets = [
+			{ input_id: "video0", kind: "capture" },
+			{ input_id: "b", kind: "synthetic" },
+		];
+		sessionActive = "video0";
+		serverConfig({ source: "video0" });
+		sendSources([CAP_HDMI]);
+		sendStreamingStatus(sessionActive);
+		switchRefusal = { success: false, error: "SWITCH_FAILED" };
+		interceptSwitchInput = true;
+		// When: the operator selects b through the mounted LiveView handler.
+		const button = page.getByRole("button", { name: "Switch – Test Pattern · b", exact: true });
+		await button.click();
+		// Then: the neutral result is localized and the running leg stays selected.
+		await expect.poll(() => switchInputInput?.input_id).toBe("b");
+		await expect(page.getByText("Failed to switch input", { exact: true })).toBeVisible();
+		await expect(page.getByText("Source unavailable — it was unplugged", { exact: true })).toHaveCount(0);
+		await expect(page.getByTestId("source-selected-video0")).toBeVisible();
+		await expect(button).toBeEnabled();
 	});
 
 	for (const mode of ["passthrough", "composition"]) {

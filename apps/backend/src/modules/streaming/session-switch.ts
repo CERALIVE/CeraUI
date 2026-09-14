@@ -31,7 +31,7 @@ export async function switchSessionInput(
 		(entry) => entry.input_id === inputId,
 	);
 	if (target === undefined)
-		return { success: false, error: SWITCH_INPUT_ERRORS.SOURCE_LOST };
+		return { success: false, error: SWITCH_INPUT_ERRORS.SWITCH_FAILED };
 	const switched = await deps.switchTarget(target.input_id);
 	const result = {
 		success: true,

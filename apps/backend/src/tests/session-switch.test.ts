@@ -31,6 +31,17 @@ function fixture(roster = targets) {
 }
 
 describe("session namespace admission", () => {
+	it("refuses a stale synthetic target without claiming a physical unplug", async () => {
+		// Given: the displayed snapshot contained b, but the fresh graph no longer does.
+		const f = fixture(targets.filter((target) => target.input_id !== "b"));
+		// When: the operator submits the stale selector's synthetic id.
+		const result = await switchSessionInput("b", f.deps);
+		// Then: non-admission is neutral and cannot change capture or audio state.
+		expect(result).toEqual({ success: false, error: "SWITCH_FAILED" });
+		expect(f.switchTarget).not.toHaveBeenCalled();
+		expect(f.legacySwitch).not.toHaveBeenCalled();
+		expect(f.captureFollow).not.toHaveBeenCalled();
+	});
 	it("switches SMPTE without discovery, persistence or audio follow", async () => {
 		const f = fixture();
 		expect(await switchSessionInput("b", f.deps)).toEqual({
