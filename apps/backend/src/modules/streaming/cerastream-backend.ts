@@ -85,6 +85,8 @@ import {
 	type EventParams,
 	type ListDevicesParams,
 	type ListDevicesResult,
+	type ListSwitchTargetsResult,
+	listSwitchTargetsResultSchema,
 	type PartialCerastreamConfig,
 	type ReloadConfigParams,
 	type ReloadConfigResult,
@@ -327,6 +329,9 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 	const ae = (event as Record<string, unknown>).active_encode;
 	if (ae === null || typeof ae !== "object") return null;
 	const a = ae as Record<string, unknown>;
+	const targets = listSwitchTargetsResultSchema.safeParse({
+		switch_targets: a.switch_targets,
+	});
 	if (
 		typeof a.codec !== "string" ||
 		typeof a.resolution !== "string" ||
@@ -337,6 +342,7 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 	}
 	return {
 		codec: a.codec,
+		...(targets.success ? { switch_targets: targets.data.switch_targets } : {}),
 		resolution: a.resolution,
 		framerate: a.framerate,
 		...(typeof a.active_input === "string"
@@ -1090,6 +1096,18 @@ export class CerastreamBackend implements StreamingBackend {
 		return this.withSessionClient("list-devices", (client) =>
 			client.listDevices(params),
 		);
+	}
+
+	async listSwitchTargets(): Promise<ListSwitchTargetsResult | undefined> {
+		try {
+			return await this.withSessionClient("list-switch-targets", (client) =>
+				client.listSwitchTargets(),
+			);
+		} catch (error) {
+			if (error instanceof CerastreamRpcError && error.code === -32601)
+				return undefined;
+			throw error;
+		}
 	}
 
 	async changeConfig(params: ChangeConfigParams): Promise<ChangeConfigResult> {

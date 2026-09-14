@@ -1,4 +1,6 @@
 {
+	"live.summary.switchUnknown": "이 엔진은 라이브 전환 대상을 보고하지 않습니다.",
+	"live.summary.switchEmpty": "이 세션에서는 소스를 전환할 수 없습니다.",
 	"network.routerCellular.lock.verification.admin_unreachable": "동글의 로그인 페이지에 연결할 수 없습니다. 이 비밀번호는 저장되지 않았습니다. 연결을 확인한 후 다시 시도하세요.",
 	"network.routerCellular.lock.verification.credentials_rejected": "동글이 이 로그인을 거부했습니다. 이 비밀번호는 저장되지 않았습니다. 사용자 이름과 비밀번호를 확인한 후 다시 시도하세요.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",

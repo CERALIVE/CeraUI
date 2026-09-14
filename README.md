@@ -41,6 +41,12 @@ A dev-only DevTools destination is available in development builds.
 
 ### Other Highlights
 
+- **Live session source switching**: the cockpit can offer engine-reported
+  synthetic fallback legs alongside capture legs without adding devices to discovery.
+  It retains the legacy two-capture gate when the engine lacks the contract.
+  Explicit empty rosters offer no switches; legacy unknown rosters have a distinct
+  notice. The [U6 hardware drill](docs/LIVE-SESSION-SWITCHING.md) remains 0/10.
+
 - **Verified dongle credentials**: login submission verifies before saving to the
   existing permission-protected store. Failed attempts preserve a previous saved
   login; failed drafts remain only until the dialog closes. Portal reachability
@@ -183,8 +189,8 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
-CeraUI 2026.9.1 pins the published `@ceralive/cerastream@2026.9.5` in both
-the backend and shared RPC package, matching cerastream 2026.9.2's schema 0.17.0.
+CeraUI pins the published `@ceralive/cerastream@2026.9.6` in both
+the backend and shared RPC package, carrying schema 0.18.0's session-switch roster.
 The bindings-skew gate checks the schema version and preservation of the three
 new HDMI capture causes. The released 2026.9.1 build retains the early-import
 SIGUSR1 window. The current source closes the ordered add-on poke's startup race

@@ -28,6 +28,7 @@ import {
 	type StreamingSetConfigInput,
 	type StreamSource,
 	SWITCH_AUDIO_ERRORS,
+	SWITCH_INPUT_ERRORS,
 	type SwitchInputOutput,
 	setMockDeviceAttachedInputSchema,
 	setMockDeviceAttachedOutputSchema,
@@ -114,6 +115,7 @@ import {
 	VALID_HARDWARE_TYPES,
 	validatePipelineOverrides,
 } from "../../modules/streaming/pipelines.ts";
+import { switchSessionInput } from "../../modules/streaming/session-switch.ts";
 import {
 	broadcastSources,
 	configuredSelectionAnchor,
@@ -1321,8 +1323,22 @@ export const switchInputProcedure = authedProcedure
 	.input(switchInputInputSchema)
 	.output(switchInputOutputSchema)
 	.handler(async ({ input }) => {
-		const result = await deviceRegistry.switchInput(input.input_id);
-		return applySwitchInputFollow(input.input_id, result);
+		const backend = getStreamingBackend();
+		try {
+			return await switchSessionInput(input.input_id, {
+				isStreaming: () => !shouldUseMocks() && getIsStreaming(),
+				listTargets: () => backend.listSwitchTargets(),
+				switchTarget: (id) =>
+					backend.switchInput({ input_id: id, mode: "manual" }),
+				legacySwitch: async (id) =>
+					applySwitchInputFollow(id, await deviceRegistry.switchInput(id)),
+				captureFollow: applySwitchInputFollow,
+				now: () => performance.now(),
+			});
+		} catch (error) {
+			logger.error("session input switch failed", { error });
+			return { success: false, error: SWITCH_INPUT_ERRORS.SWITCH_FAILED };
+		}
 	});
 
 /**

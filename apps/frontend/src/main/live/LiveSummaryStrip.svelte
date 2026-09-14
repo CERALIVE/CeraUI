@@ -19,7 +19,7 @@
   targeting; the container is `data-testid="live-summary-strip"`.
 -->
 <script lang="ts">
-import { m } from '@ceraui/i18n/svelte';
+import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { ArrowRightLeft, Radio, Zap } from '@lucide/svelte';
 
 import LiveAudioMeter from '$lib/components/preview/LiveAudioMeter.svelte';
@@ -57,7 +57,10 @@ interface Segment {
 const segments = $derived.by<Segment[]>(() => {
 	const segs: Segment[] = [];
 	if (summary.source) {
-		segs.push({ key: 'source', values: [{ key: 'source', text: summary.source }] });
+		const text = summary.sourceLabelKey
+			? `${resolveMessageKey(summary.sourceLabelKey)} · ${summary.source}`
+			: summary.source;
+		segs.push({ key: 'source', values: [{ key: 'source', text }] });
 	}
 	const modeValues: { key: string; text: string }[] = [];
 	if (summary.resolution) modeValues.push({ key: 'resolution', text: summary.resolution });

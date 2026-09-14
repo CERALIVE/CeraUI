@@ -1,7 +1,11 @@
 /**
  * Status Zod schemas (full application status)
  */
+
+import { sessionSwitchTargetSchema } from '@ceralive/cerastream/dist/session-switch.js';
 import { z } from 'zod';
+
+export type { SessionSwitchTarget } from '@ceralive/cerastream/dist/session-switch.js';
 
 import { modemListSchema } from './modems.schema';
 import { audioSourceSchema, previewEncodeModeSchema } from './streaming.schema';
@@ -297,6 +301,7 @@ export type EngineBitrate = z.infer<typeof engineBitrateSchema>;
 // surfaces no field (same capability-gate pattern as `buffering` above).
 // snake_case mirrors the engine wire shape so the backend passes it through.
 export const activeEncodeSchema = z.object({
+	switch_targets: z.array(sessionSwitchTargetSchema).optional(),
 	codec: z.string(),
 	resolution: z.string(),
 	framerate: z.number(),

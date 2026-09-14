@@ -1,4 +1,6 @@
 {
+	"live.summary.switchUnknown": "Este mecanismo não informa os destinos de troca ao vivo.",
+	"live.summary.switchEmpty": "Nenhuma troca de fonte está disponível nesta sessão.",
 	"network.routerCellular.lock.verification.admin_unreachable": "Não foi possível acessar a página de login do modem. Esta senha não foi salva. Verifique a conexão antes de tentar novamente.",
 	"network.routerCellular.lock.verification.credentials_rejected": "O modem rejeitou este login. Esta senha não foi salva. Verifique o usuário e a senha antes de tentar novamente.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",

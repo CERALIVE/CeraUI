@@ -15,6 +15,7 @@
  */
 import type {
 	ActiveEncode,
+	SessionSwitchTarget,
 	SourcesMessage,
 	StreamSource,
 } from "@ceraui/rpc/schemas";
@@ -102,6 +103,33 @@ function renderSwitch(
 }
 
 describe("LiveSourceSwitch — R7-2: capture rows + switch semantics", () => {
+	it("offers a synthetic session leg with only one discovered capture (U6)", async () => {
+		// Given: discovery contains only HDMI; SMPTE belongs to the session.
+		const onSwitch = vi.fn();
+		const props = {
+			sources: makeSources(capture("cam-1", "HDMI Capture")),
+			activeInput: "cam-1",
+			switchTargets: [
+				{
+					input_id: "cam-1",
+					kind: "capture",
+				},
+				{ input_id: "b", kind: "synthetic" },
+			] satisfies SessionSwitchTarget[],
+			onSwitch,
+		};
+		// When: the actual mounted live-switch surface receives the session roster.
+		const { container } = render(LiveSourceSwitch, { props });
+		// Then: its SMPTE action is reachable without a virtual discovery row.
+		const button = container.querySelector<HTMLButtonElement>(
+			'[data-switch-input="b"]',
+		);
+		expect(button).not.toBeNull();
+		if (!button) throw new Error("SMPTE session action is absent");
+		await fireEvent.click(button);
+		expect(onSwitch).toHaveBeenCalledWith("b");
+	});
+
 	it("renders one row per capture; the active row states Active with no Switch button", () => {
 		const { container } = renderSwitch({
 			sources: makeSources(
@@ -221,6 +249,62 @@ describe("LiveSourceSwitch — R7-2: capture rows + switch semantics", () => {
 });
 
 describe("LiveSourceSwitch — R8-1: absent for non-capture running sources", () => {
+	it("keeps virtual discovery rows excluded while rendering an authoritative session pair", () => {
+		const { container } = render(LiveSourceSwitch, {
+			props: {
+				sources: makeSources(capture("cam-1", "HDMI"), virtual("test")),
+				activeInput: "b",
+				switchTargets: [
+					{
+						input_id: "cam-1",
+						kind: "capture",
+					},
+					{ input_id: "b", kind: "synthetic" },
+				],
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="source-selected-b"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-switch-input="cam-1"]'),
+		).not.toBeNull();
+		expect(
+			container.querySelector('[data-source-switch-row="test"]'),
+		).toBeNull();
+	});
+
+	it("does not replace an empty session roster with capture discovery", () => {
+		const { container } = render(LiveSourceSwitch, {
+			props: {
+				sources: makeSources(capture("cam-1", "HDMI"), capture("cam-2", "USB")),
+				activeInput: "cam-1",
+				switchTargets: [],
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="live-source-switch"]'),
+		).toBeNull();
+	});
+
+	it("does not count a synthetic leg omitted by the engine as a switchable pair", () => {
+		const { container } = render(LiveSourceSwitch, {
+			props: {
+				sources: makeSources(capture("cam-1", "HDMI")),
+				activeInput: "cam-1",
+				switchTargets: [
+					{
+						input_id: "cam-1",
+						kind: "capture",
+					},
+				],
+			},
+		});
+		expect(
+			container.querySelector('[data-testid="live-source-switch"]'),
+		).toBeNull();
+	});
+
 	it("running source is network (rtmp) → card absent even with ≥2 captures", () => {
 		const { container } = renderSwitch({
 			sources: makeSources(

@@ -1,4 +1,5 @@
 import type { Page, WebSocketRoute } from "@playwright/test";
+import type { SessionSwitchTarget, SwitchInputOutput } from "@ceraui/rpc/schemas";
 
 import { expect, test } from "./fixtures/index.js";
 import { ensureAuthenticated, navigateTo } from "./helpers/index.js";
@@ -36,6 +37,9 @@ let dropServerSources = false;
 // with audio_follow_pending so the T7 toast fires without touching the real backend.
 let interceptSwitchInput = false;
 let switchInputInput: Record<string, unknown> | null = null;
+let sessionTargets: SessionSwitchTarget[] | undefined;
+let sessionActive = "video0";
+let switchRefusal: SwitchInputOutput | undefined;
 
 function send(payload: unknown): void {
 	pageWs?.send(JSON.stringify(payload));
@@ -133,7 +137,7 @@ function sendStreamingStatus(activeInput: string): void {
 	send({
 		status: {
 			is_streaming: true,
-			active_encode: { active_input: activeInput, resolution: "1920x1080", framerate: 60, codec: "h265" },
+			active_encode: { active_input: activeInput, resolution: "1920x1080", framerate: 60, codec: "h265", ...(sessionTargets ? { switch_targets: sessionTargets } : {}) },
 		},
 	});
 }
@@ -152,6 +156,8 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		dropServerSources = true;
 		interceptSwitchInput = false;
 		switchInputInput = null;
+		sessionTargets = undefined;
+		switchRefusal = undefined;
 
 		await page.routeWebSocket(/:(3002|31\d\d|6173|8090|8091)\//, (ws) => {
 			pageWs = ws;
@@ -173,7 +179,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 								ws.send(
 									JSON.stringify({
 										id: frame.id,
-										result: { success: true, gap_ms: 12, audio_follow_pending: true },
+										result: switchRefusal ?? { success: true, gap_ms: 12, ...(sessionTargets ? {} : { audio_follow_pending: true }) },
 									}),
 								);
 							}
@@ -194,6 +200,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 					if (dropServerSources && "sources" in (frame as object)) return;
 					if (controlStreaming && frame?.status && typeof frame.status === "object") {
 						frame.status.is_streaming = streamingFlag;
+						if (sessionTargets) frame.status.active_encode = { active_input: sessionActive, resolution: "1920x1080", framerate: 60, codec: "h265", switch_targets: sessionTargets };
 						ws.send(JSON.stringify(frame));
 						return;
 					}
@@ -223,6 +230,7 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		// the running source is capture AND two capture sources exist.
 		await expect(page.getByTestId("live-cockpit")).toBeVisible({ timeout: 15_000 });
 		await expect(page.getByTestId("live-source-switch")).toBeVisible();
+		await expect(page.getByTestId("live-switch-roster-state")).toHaveAttribute("data-state", "unknown");
 
 		// The running (HDMI) row states that it is Active and offers no button at all;
 		// only the USB row is switchable.
@@ -250,6 +258,69 @@ test.describe("LiveSourceSwitch (functional)", () => {
 		await expect(page.getByTestId("live-cockpit")).toBeVisible();
 		await expect(page.getByTestId("live-summary-strip")).toBeVisible();
 	});
+
+	test("one capture plus a session SMPTE leg offers both live switch directions", async ({ page }) => {
+		sessionTargets = [
+			{ input_id: "video0", kind: "capture" },
+			{ input_id: "b", kind: "synthetic" },
+		];
+		sessionActive = "video0";
+		serverConfig({ source: "video0" });
+		sendDevices("video0", [HDMI]);
+		sendSources([CAP_HDMI]);
+		sendStreamingStatus(sessionActive);
+		await expect(page.getByTestId("live-source-switch")).toBeVisible();
+		interceptSwitchInput = true;
+		await page.getByRole("button", { name: "Switch – Test Pattern · b", exact: true }).click();
+		await expect.poll(() => switchInputInput?.input_id).toBe("b");
+		sessionActive = "b";
+		sendStreamingStatus(sessionActive);
+		await expect(page.getByTestId("source-selected-b")).toBeVisible();
+		await expect(page.getByTestId("live-summary-strip").locator('[data-live-value="source"]')).toHaveText("Test Pattern · b");
+		await expect(page.getByTestId("active-source-lost-banner")).toHaveCount(0);
+		await page.getByRole("button", { name: "Switch – HDMI Camera", exact: true }).click();
+		await expect.poll(() => switchInputInput?.input_id).toBe("video0");
+		sessionActive = "video0";
+		sendStreamingStatus(sessionActive);
+		await expect(page.getByTestId("source-selected-video0")).toBeVisible();
+	});
+
+	test("a stale synthetic target refusal reports a failed switch, never an unplug", async ({ page }) => {
+		// Given: the displayed snapshot still offers b when fresh admission refuses it.
+		sessionTargets = [
+			{ input_id: "video0", kind: "capture" },
+			{ input_id: "b", kind: "synthetic" },
+		];
+		sessionActive = "video0";
+		serverConfig({ source: "video0" });
+		sendSources([CAP_HDMI]);
+		sendStreamingStatus(sessionActive);
+		switchRefusal = { success: false, error: "SWITCH_FAILED" };
+		interceptSwitchInput = true;
+		// When: the operator selects b through the mounted LiveView handler.
+		const button = page.getByRole("button", { name: "Switch – Test Pattern · b", exact: true });
+		await button.click();
+		// Then: the neutral result is localized and the running leg stays selected.
+		await expect.poll(() => switchInputInput?.input_id).toBe("b");
+		await expect(page.getByText("Failed to switch input", { exact: true })).toBeVisible();
+		await expect(page.getByText("Source unavailable — it was unplugged", { exact: true })).toHaveCount(0);
+		await expect(page.getByTestId("source-selected-video0")).toBeVisible();
+		await expect(button).toBeEnabled();
+	});
+
+	for (const mode of ["passthrough", "composition"]) {
+		test(`${mode} explicitly empty roster cannot authorize discovered cameras`, async ({ page }) => {
+			sessionTargets = [];
+			sessionActive = "video0";
+			serverConfig({ source: "video0" });
+			sendSources([CAP_HDMI, CAP_USB]);
+			sendStreamingStatus(sessionActive);
+			await expect(page.getByTestId("live-cockpit")).toBeVisible();
+			await expect(page.locator("[data-switch-input]")).toHaveCount(0);
+			await expect(page.getByTestId("live-switch-roster-state")).toHaveAttribute("data-state", "empty");
+			await expect(page.getByTestId("live-switch-roster-state")).toHaveText("No source switches are available in this session.");
+		});
+	}
 
 	test("streaming a network source renders no switch buttons (leg-less session)", async ({
 		page,

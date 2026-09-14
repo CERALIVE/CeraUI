@@ -1,34 +1,10 @@
 <!--
-  LiveSourceSwitch.svelte — the live capture-source switch card (Task T12).
-
-  While streaming, LiveView mounts LiveCockpit (NOT IdleCockpit), so SourceSection's
-  streaming-branch switch buttons — the only place the live input switch lived — are
-  never rendered: the live switch was UNREACHABLE from any mounted surface. This
-  compact card is that surface. Every SWITCHABLE row mirrors SourceSection's
-  streaming-branch button contract exactly (`data-switch-input`, disabled/label
-  semantics) so the live switch — and T7's deferred audio-follow flow that rides on
-  it — is reachable end-to-end.
-
-  The RUNNING row is the deliberate exception: it renders SourceSection's selected-row
-  affirmation (lime Check + label, `data-testid="source-selected-<id>"`) and NO button
-  at all. A disabled "Switch" on the source already on air still reads as an action the
-  operator could take; live QA showed two identically-buttoned rows with nothing saying
-  which one was actually live. The match is on the RESOLVED row id (`runningSource.id`),
-  not the raw `activeInput` prop, so a mid-stream re-enumeration cannot leave every row
-  looking switchable.
-
-  RENDER GATE (load-bearing): the card renders ONLY when BOTH hold —
-    (a) the CURRENTLY-RUNNING source is capture-origin (resolved via the shared
-        `deriveLiveSourceState`) — cerastream sessions are mutually exclusive, so a
-        network/test stream has no capture legs and `switch_input` on a leg-less id
-        always fails; a Switch button in that mode would be a lie — OR the running
-        source is LOST (`sourceLost`, LiveCockpit's banner verdict): that banner
-        tells the operator to switch, so the affordance it names must be on screen
-        whenever it is; AND
-    (b) ≥2 capture sources exist (nothing to switch between with one).
-  Otherwise it renders NOTHING (absent from the DOM — not an empty card).
-
-  Presentational: owns NO `$state`, NO RPC. `onSwitch` is LiveView's handleSwitchInput.
+  Session targets, when reported, are authoritative: two available legs make a
+  switchable pair, including one capture plus one synthetic fallback. An empty
+  roster must not fall back to discovery. Without the contract, retain the legacy
+  two-capture gate and identity-aware re-enumeration behavior. Discovery's virtual
+  rows never become live targets. The active row remains an affirmation, not a button.
+  Presentational only; onSwitch is LiveView's existing switch-input handler.
 -->
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
@@ -38,17 +14,20 @@ import type {
 	ConfigMessage,
 	DeviceKind,
 	SourcesMessage,
+	SessionSwitchTarget,
 } from '@ceraui/rpc/schemas';
 import { Cable, Check, Radio, RefreshCw, Usb, Video } from '@lucide/svelte';
 
 import { Button } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import { liveSwitchRows } from '$lib/streaming/live-switch-rows';
 import {
 	canOfferLiveSourceSwitch,
 	deriveLiveSourceState,
 } from '$lib/streaming/live-source-state';
 
 interface Props {
+	switchTargets?: readonly SessionSwitchTarget[] | undefined;
 	/** The unified `sources` broadcast — capture rows are filtered out of it here. */
 	sources?: SourcesMessage | undefined;
 	/** Active-config truth — `config.source` names the selected source id. */
@@ -79,6 +58,7 @@ const {
 	switchingInput,
 	onSwitch,
 	sourceLost = false,
+	switchTargets,
 }: Props = $props();
 
 // Every capture-origin source, in broadcast order (mirrors SourceSection's filter).
@@ -88,12 +68,17 @@ const captureSources = $derived(
 	),
 );
 
+const sessionTargets = $derived(switchTargets ?? activeEncode?.switch_targets);
+const rosterState = $derived(sessionTargets === undefined ? 'unknown' : sessionTargets.length === 0 ? 'empty' : undefined);
+const rows = $derived(sessionTargets === undefined ? captureSources : liveSwitchRows(sessionTargets, sources?.sources ?? []));
+
 // The running source, resolved by the SAME rule that decides the lost banner —
 // including the identity-aware lookup that follows a node path retired by a
 // mid-stream re-enumeration onto its successor row.
 const runningSource = $derived(
 	deriveLiveSourceState({
-		activeInput: activeEncode?.active_input,
+		activeInput: activeEncode?.active_input ?? activeInput,
+		switchTargets: sessionTargets,
 		configSource: config?.source,
 		sources: sources?.sources,
 		isStreaming: true,
@@ -102,7 +87,9 @@ const runningSource = $derived(
 );
 
 const showCard = $derived(
-	canOfferLiveSourceSwitch(runningSource, captureSources.length, sourceLost),
+	sessionTargets === undefined
+		? canOfferLiveSourceSwitch(runningSource, captureSources.length, sourceLost)
+		: new Set(sessionTargets.map((target) => target.input_id)).size >= 2,
 );
 
 // The row that IS the running source. `runningSource.id` (not the raw `activeInput`
@@ -111,7 +98,9 @@ const showCard = $derived(
 // the id the list actually renders. `activeInput` remains the fallback for the state
 // the resolver cannot answer — a running id that resolves to no row at all — where
 // nothing matches anyway and every row keeps its Switch button.
-const activeSourceId = $derived(runningSource?.id ?? activeInput);
+const activeSourceId = $derived(sessionTargets === undefined
+	? runningSource?.id ?? activeInput
+	: activeEncode?.active_input ?? activeInput);
 
 // Capture kind → coarse device family (drives icon + badge) — mirrors SourceSection.
 type KindFamily = 'hdmi' | 'usb' | 'network' | 'other';
@@ -156,7 +145,8 @@ function kindBadgeClass(kind: DeviceKind): string {
 			</div>
 
 			<ul class="space-y-2">
-				{#each captureSources as source (source.id)}
+				{#each rows as source (source.id)}
+					{@const displayName = 'labelKey' in source && source.labelKey ? `${t(source.labelKey)} · ${source.displayName}` : source.displayName}
 					{@const RowIcon = KIND_ICON[kindFamily(source.kind)]}
 					{@const isActive = source.id === activeSourceId}
 					<!-- A running source that VANISHED gets no lime affirmation — the lost
@@ -174,7 +164,7 @@ function kindBadgeClass(kind: DeviceKind): string {
 								aria-hidden={true}
 								class="size-4 shrink-0 {isActive ? 'text-primary' : 'text-muted-foreground'}"
 							/>
-							<span class="truncate text-sm font-medium">{source.displayName}</span>
+							<span class="truncate text-sm font-medium" title={displayName}>{displayName}</span>
 							<span
 								class="{kindBadgeClass(source.kind)} shrink-0 rounded px-1.5 py-0.5 text-xs font-medium"
 								data-source-kind={source.kind}
@@ -197,7 +187,7 @@ function kindBadgeClass(kind: DeviceKind): string {
 							</span>
 						{:else}
 							<Button
-								aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${source.displayName}`}
+								aria-label={`${m["live.inputPicker.switch"]()} \u2013 ${displayName}`}
 								data-switch-input={source.id}
 								disabled={source.id === switchingInput || source.lost === true}
 								onclick={() => onSwitch?.(source.id)}
@@ -216,4 +206,10 @@ function kindBadgeClass(kind: DeviceKind): string {
 			</ul>
 		</Card.Content>
 	</Card.Root>
+{/if}
+
+{#if rosterState && (activeEncode || activeInput)}
+	<p class="text-muted-foreground text-sm" role="status" data-testid="live-switch-roster-state" data-state={rosterState}>
+		{rosterState === 'unknown' ? m["live.summary.switchUnknown"]() : m["live.summary.switchEmpty"]()}
+	</p>
 {/if}

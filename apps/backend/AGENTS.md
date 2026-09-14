@@ -130,9 +130,22 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 
 ## STREAMING RPC PROCEDURES
 
+`streaming.switchInput` uses `session-switch.ts` admission against a fresh engine
+`list-switch-targets` result while live. Synthetic session legs bypass discovery,
+not admission, and never persist capture config or trigger audio follow. Only an
+unsupported query uses the legacy registry path. See
+[LIVE-SESSION-SWITCHING](../../docs/LIVE-SESSION-SWITCHING.md) for the published
+2026.9.6/schema 0.18.0 contract. Targets carry only `input_id` and `kind`;
+membership is authoritative, including explicit `[]` for passthrough/composition.
+Non-membership is `SWITCH_FAILED`, not evidence of a physical unplug. The
+`session-switch-adapter.test.ts` gate drives the real published UDS client through
+the adapter and authenticated procedure: only numeric RPC `-32601` permits
+legacy discovery. Other RPC errors, transport failures and malformed replies
+leave discovery, capture persistence and pending audio follow untouched.
+
 ### Engine-owned encoder ladder [EXISTS]
 
-`@ceralive/cerastream@2026.9.5` parses the additive `encoders[]` block before
+`@ceralive/cerastream@2026.9.6` parses the additive `encoders[]` block before
 `capabilities.ts` caches or broadcasts it. The backend performs no codec-table
 reconstruction: live and cached snapshots retain the producer-owned
 `EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend

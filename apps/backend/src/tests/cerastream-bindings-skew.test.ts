@@ -126,10 +126,10 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION matches the released engine's 0.17.0 contract", () => {
+	test("SCHEMA_VERSION matches the session-switch 0.18.0 contract", () => {
 		// Package CalVer is independent of the hello schema version. The previous
 		// 2026.9.4 package still declared 0.16.0 and rejected the new HDMI causes.
-		expect(SCHEMA_VERSION).toBe("0.17.0");
+		expect(SCHEMA_VERSION).toBe("0.18.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {

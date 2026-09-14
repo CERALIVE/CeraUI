@@ -331,6 +331,122 @@ describe("applySwitchInputFollow — durable switch + deferred auto-audio follow
 		expect(broadcasts).toEqual([]);
 	});
 
+	test.each(["passthrough", "composition"])(
+		"%s empty session roster rejects before discovery or persistence",
+		async () => {
+			// Given: discovery would accept a capture, but the live graph has no switch pads.
+			updateStatus(true);
+			getConfig().source = "hdmi-existing";
+			const roster = spyOn(
+				cerastreamBackend,
+				"listSwitchTargets",
+			).mockResolvedValue({ switch_targets: [] });
+			const legacy = spyOn(deviceRegistry, "switchInput").mockResolvedValue(
+				switchOk("usb-cam-1"),
+			);
+			const dispatch = spyOn(cerastreamBackend, "switchInput");
+			try {
+				// When: the authenticated procedure receives the capture switch.
+				const out = await call(
+					switchInputProcedure,
+					{ input_id: "usb-cam-1" },
+					{ context: makeContext() },
+				);
+				// Then: an explicit empty roster never takes the legacy path.
+				expect(out).toEqual({ success: false, error: "SWITCH_FAILED" });
+				expect(legacy).not.toHaveBeenCalled();
+				expect(dispatch).not.toHaveBeenCalled();
+				expect(getConfig().source).toBe("hdmi-existing");
+				expect(configPayloads(sink)).toHaveLength(0);
+				expect(getPendingAudioFollowAsrc()).toBeNull();
+			} finally {
+				roster.mockRestore();
+				legacy.mockRestore();
+				dispatch.mockRestore();
+				updateStatus(false);
+			}
+		},
+	);
+
+	test("a synthetic switch uses the session roster without persisting a capture or following audio", async () => {
+		// Given: the synthetic leg is not in device discovery.
+		updateStatus(true);
+		getConfig().source = "usb-cam-1";
+		getConfig().asrc = AUDIO_SOURCE_AUTO;
+		const roster = spyOn(
+			cerastreamBackend,
+			"listSwitchTargets",
+		).mockResolvedValue({
+			switch_targets: [{ input_id: "b", kind: "synthetic" }],
+		});
+		const legacy = spyOn(deviceRegistry, "switchInput");
+		const dispatch = spyOn(cerastreamBackend, "switchInput").mockResolvedValue({
+			active_input: "b",
+			mode: "manual",
+		});
+		try {
+			// When: the operator selects that built leg.
+			const out = await call(
+				switchInputProcedure,
+				{ input_id: "b" },
+				{ context: makeContext() },
+			);
+			// Then: the ordinary engine seam carries it, with capture state untouched.
+			expect(out.success).toBe(true);
+			expect(out.active_input).toBe("b");
+			expect(dispatch).toHaveBeenCalledWith({ input_id: "b", mode: "manual" });
+			expect(legacy).not.toHaveBeenCalled();
+			expect(getConfig().source).toBe("usb-cam-1");
+			expect(configPayloads(sink)).toHaveLength(0);
+			expect(getPendingAudioFollowAsrc()).toBeNull();
+		} finally {
+			roster.mockRestore();
+			legacy.mockRestore();
+			dispatch.mockRestore();
+			updateStatus(false);
+		}
+	});
+
+	test.each(["query", "switch"])(
+		"a %s failure never falls back to discovery or changes capture config",
+		async (failure) => {
+			// Given: the roster read or final admission can fail independently.
+			updateStatus(true);
+			getConfig().source = "hdmi-existing";
+			const roster = spyOn(
+				cerastreamBackend,
+				"listSwitchTargets",
+			).mockImplementation(async () => {
+				if (failure === "query") throw new Error("engine disconnected");
+				return { switch_targets: [{ input_id: "usb-cam-1", kind: "capture" }] };
+			});
+			const dispatch = spyOn(
+				cerastreamBackend,
+				"switchInput",
+			).mockRejectedValue(new Error("leg retired after snapshot"));
+			const legacy = spyOn(deviceRegistry, "switchInput");
+			try {
+				// When: the procedure attempts a live capture switch.
+				const out = await call(
+					switchInputProcedure,
+					{ input_id: "usb-cam-1" },
+					{ context: makeContext() },
+				);
+				// Then: the failure is reported, not converted into an idle-catalog authorization.
+				expect(out).toEqual({ success: false, error: "SWITCH_FAILED" });
+				expect(legacy).not.toHaveBeenCalled();
+				expect(getConfig().source).toBe("hdmi-existing");
+				expect(configPayloads(sink)).toHaveLength(0);
+				expect(getPendingAudioFollowAsrc()).toBeNull();
+			} finally {
+				roster.mockRestore();
+				legacy.mockRestore();
+				dispatch.mockRestore();
+				updateStatus(false);
+			}
+		},
+	);
+
 	test("end-to-end wiring: switchInputProcedure awaits the switch then applies the follow", async () => {
 		const realSwitchInput = deviceRegistry.switchInput;
 		deviceRegistry.switchInput = async (inputId: string) =>
