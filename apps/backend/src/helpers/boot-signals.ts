@@ -23,18 +23,17 @@
  * yet. So the guard installed here is deliberately inert — it RECORDS that the
  * poke arrived and returns. Once the owning subsystem is up it calls
  * `armBootSignalHandler`, which installs the real handler AND replays a pending
- * poke exactly once. The signal is therefore never fatal and never lost.
+ * poke exactly once. Signals received after reservation are neither fatal nor lost.
  *
  * The guard is installed as a module-scope side effect so that merely importing
  * this file reserves both signals; `installBootSignalGuards()` is exported as
  * an idempotent, explicit call for the one site that must not depend on import
  * ordering (`main.ts`) and for tests.
  *
- * NOTE ON THE RESIDUAL WINDOW: ESM evaluates the import graph before any module
- * body, and part of that graph awaits (e.g. the auth procedure's token-file
- * load). A signal arriving inside those few milliseconds still finds no
- * handler. Closing that would need a wrapper process; what is closed here is
- * the multi-second ladder, which is the window the race actually lands in.
+ * Native startup and import evaluation precede this reservation. The service's
+ * Type=notify barrier therefore holds the ordered add-on oneshot until main.ts
+ * has installed these guards and bound the control server. Unordered senders
+ * (including udev SIGUSR2) are not protected before this module runs.
  */
 
 /** The two signals CeraUI drives as IPC pokes. Both default to terminate. */

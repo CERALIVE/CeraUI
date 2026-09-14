@@ -112,6 +112,23 @@ export interface SpawnSite {
  */
 export const SPAWN_POLICY: readonly SpawnSite[] = [
 	{
+		id: "boot.systemdReady",
+		file: "helpers/systemd-ready.ts",
+		symbol: "notifyServiceReady",
+		command: "/usr/bin/systemd-notify --ready --pid=parent",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"argv-only run(), 5-second acknowledgement bound; absent NOTIFY_SOCKET skips",
+	},
+	{
 		id: "exec.execFileP",
 		file: "helpers/exec.ts",
 		symbol: "execFileP",

@@ -67,7 +67,9 @@ A dev-only DevTools destination is available in development builds.
 - **Device Health telemetry**: memory, per-cluster CPU frequency, DDR bus load,
   GPU load, and (on the vendor kernel) per-core decoder load, alongside the
   existing SoC temperature and load-average traces. Every signal is omitted
-  rather than fabricated when its kernel interface is absent.
+  rather than fabricated when its kernel interface is absent. A newly signed-in
+  browser receives the latest completed device-stats reading immediately rather
+  than waiting for the next periodic sample.
 - **Media-load detail**: the compact per-core hint uses the driver's reported
   encode/decode/JPEG/RGA inventory. MPP load and utilization remain separate,
   including values above 100%; **Media details** opens the full bound-session
@@ -184,8 +186,10 @@ Release assets are published through `publish-release.yml`; see
 CeraUI 2026.9.1 pins the published `@ceralive/cerastream@2026.9.5` in both
 the backend and shared RPC package, matching cerastream 2026.9.2's schema 0.17.0.
 The bindings-skew gate checks the schema version and preservation of the three
-new HDMI capture causes. This release retains the documented early-import
-SIGUSR1 residual window; it does not claim full board qualification.
+new HDMI capture causes. The released 2026.9.1 build retains the early-import
+SIGUSR1 window. The current source closes the ordered add-on poke's startup race
+with a systemd readiness barrier; see [Boot readiness](docs/BOOT-READINESS.md).
+This is not a claim of full board qualification.
 
 ### Supported Hardware
 

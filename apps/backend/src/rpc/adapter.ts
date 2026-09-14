@@ -13,13 +13,19 @@ import {
 	HEALTH_EVENT_TYPE,
 } from "../modules/streaming/health.ts";
 import { CPU_EVENT } from "../modules/system/cpu.ts";
+import { getDeviceStatsSnapshot } from "../modules/system/device-stats-snapshot.ts";
 import {
 	createPreviewWebSocketHandler,
 	isPreviewSocket,
 } from "../modules/ui/preview-proxy.ts";
 import { createContext, initSocketData } from "./context.ts";
 import { extractValidationDetails } from "./error-enrichment.ts";
-import { addClient, removeClient, sendToClient } from "./events.ts";
+import {
+	addClient,
+	DEVICE_STATS_EVENT,
+	removeClient,
+	sendToClient,
+} from "./events.ts";
 import {
 	buildInitialNotifications,
 	buildInitialStatus,
@@ -192,6 +198,10 @@ function sendInitialStatusToClient(ws: AppWebSocket): void {
 	sendToClient(ws, "uplink-shaper", initialStatus.uplinkShaper);
 	sendToClient(ws, SHARING_DIAG_EVENT, initialStatus.sharingDiag);
 	sendToClient(ws, "sensors", initialStatus.sensors);
+	const deviceStats = getDeviceStatsSnapshot();
+	if (deviceStats !== undefined) {
+		sendToClient(ws, DEVICE_STATS_EVENT, deviceStats);
+	}
 	sendToClient(ws, CPU_EVENT, initialStatus.cpu);
 	sendToClient(ws, "revisions", initialStatus.revisions);
 	sendToClient(ws, "acodecs", initialStatus.acodecs);

@@ -1,3 +1,4 @@
+/// <reference types="bun" />
 /*
  * Regression guard for the SIGUSR1 boot-race kill of `ceralive.service`.
  *
@@ -193,6 +194,19 @@ describe("boot-signal guards — the ladder is a survivable window", () => {
 describe("main.ts wiring — the guard is installed before the ladder", () => {
 	const source = readFileSync(MAIN_TS, "utf8");
 
+	it("reports systemd readiness only after the guards and critical server bind, before optional initialization", () => {
+		const code = source.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, "");
+		const ready = code.indexOf(
+			'await runCritical("systemd-ready", notifyServiceReady)',
+		);
+		expect(ready).toBeGreaterThan(-1);
+		expect(code.indexOf("installBootSignalGuards()")).toBeLessThan(ready);
+		expect(
+			code.indexOf('await runCritical("ws-control-server", initServer)'),
+		).toBeLessThan(ready);
+		expect(ready).toBeLessThan(code.indexOf("await guardNonCritical("));
+	});
+
 	it("installs the guard before the FIRST runCritical phase", () => {
 		const install = source.indexOf("installBootSignalGuards()");
 		const firstCritical = source.indexOf("await runCritical(");
@@ -224,6 +238,16 @@ describe("ceralive-addon-reconciler.service — the poke is scoped to the main p
 		unit
 			.split("\n")
 			.find((line) => line.trimStart().startsWith("ExecStart=")) ?? "";
+
+	it("waits for an application readiness notification, not merely fork/exec", () => {
+		const backend = readFileSync(
+			join(REPO_ROOT, "deployment", "ceralive.service"),
+			"utf8",
+		);
+		expect(backend).toMatch(/^Type=notify$/m);
+		expect(backend).toMatch(/^NotifyAccess=main$/m);
+		expect(unit).toMatch(/^After=.*\bceralive\.service\b/m);
+	});
 
 	it("targets ONLY the unit's main pid", () => {
 		expect(execLine).toContain("--kill-whom=main");

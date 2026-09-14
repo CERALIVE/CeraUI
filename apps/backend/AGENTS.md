@@ -6462,11 +6462,11 @@ top-level-`await` boot ladder, after config load, the WS bind, the engine probe
 and the network/audio scans. Every second of that ladder was a window in which an
 arriving SIGUSR1 killed `ceralive.service` outright.
 
-The sender fires in exactly that window. `ceralive-addon-reconciler.service` is
-`After=ceralive.service`, so systemd runs its `systemctl kill --signal=SIGUSR1`
-as soon as the unit reports STARTED — which is when the ladder BEGINS, not when
-it ends. Whether the backend survived was a race between systemd's oneshot and
-the backend's own boot.
+The sender is `ceralive-addon-reconciler.service`, confirmed by a real boot trace
+linking its systemctl PID's `Manager.KillUnit` call to PID 1's SIGUSR1 delivery
+and the backend's death. With the former `Type=simple`, `After=ceralive.service`
+released that oneshot at process creation, before JavaScript could reserve the
+signal. The service now uses the readiness barrier described below.
 
 **A SECOND, INDEPENDENT HAZARD sat in the same unit:** it omitted
 `--kill-whom=main`, and systemctl's default is `all`. `srtla_send` shares
@@ -6481,8 +6481,8 @@ carries the same scoping.
   early — `runAddonReconciler` and the audio/Cam Link rescan both read modules
   the ladder has not initialised — so the guard is deliberately inert: it RECORDS
   that the poke arrived and returns. `armBootSignalHandler` then installs the real
-  handler AND replays a pending poke exactly once, so the signal is never fatal
-  and never lost.
+  handler AND replays a pending poke exactly once, so a signal received after
+  reservation is neither fatal nor lost.
 - **`installBootSignalGuards()` is the FIRST executable statement of the ladder**,
   before `runCritical("config", …)`, and a static test asserts that ORDER against
   the shipped `main.ts` — a behavioural test cannot see a reorder inside a
@@ -6498,16 +6498,28 @@ carries the same scoping.
   handled at the ladder's end by design and their default disposition is the
   correct behaviour in the meantime.
 
-**RESIDUAL WINDOW, stated honestly:** ESM evaluates the import graph before any
-module body, and part of that graph awaits (the auth procedure's token-file
-load). A signal arriving inside those few milliseconds still finds no handler.
-Closing that needs a wrapper process; what is closed is the multi-second ladder,
-which is the window the race actually lands in.
+**READINESS COVERS THE ORDERED SENDER.** `deployment/ceralive.service` uses
+`Type=notify`, `NotifyAccess=main`. After signal reservation and the critical
+control-server bind, `main.ts` awaits `runCritical("systemd-ready",
+notifyServiceReady)` before any optional initialization. The bounded argv-only
+`/usr/bin/systemd-notify --ready --pid=parent` call uses the root service's main
+PID identity and retains the manager-acknowledgement barrier (no `--no-block`).
+An absent `NOTIFY_SOCKET` or a non-production environment does nothing; a failed
+notification in the notify service fails startup visibly, never claims readiness.
+The ordered add-on poke can arrive during the remaining ladder and is replayed
+when its owner arms. Optional add-on/network/engine work does not gate readiness.
+
+Native startup and import evaluation still precede any JavaScript handler.
+UNORDERED callers, including the udev SIGUSR2 rules, are not protected in that
+window. This change closes the proven add-on SIGUSR1 race, not every possible
+signal race. Full contract: [`docs/BOOT-READINESS.md`](../../docs/BOOT-READINESS.md).
 
 Coverage: `src/tests/sigusr1-boot-race.test.ts` — the pure guard (mid-ladder
 survival + replay, storm bound, post-arm passthrough, signal independence, the
 no-re-entry rule), the `main.ts` ordering lock, and the reconciler unit's
-`--kill-whom=main` + leading-`-` + no-`pkill` assertions.
+`--kill-whom=main` + leading-`-` + no-`pkill` assertions, plus the notify-unit and
+readiness-call ordering. `src/tests/systemd-ready.test.ts` covers acknowledgement,
+failure propagation and standalone execution.
 
 **SIGUSR2 does NOT rebuild the unified `sources` list — video hotplug does.** The
 handler only re-scans audio + Cam Link USB2 (a generic UVC capture dongle like a
@@ -7175,6 +7187,13 @@ keep it even though the panel does not call it.
 
 After a client authenticates, the backend immediately broadcasts a full snapshot of every event type. Clients don't need to wait for the first periodic tick to render.
 
+For `device-stats`, `device-stats-snapshot.ts` retains the completed collector
+payload before fan-out, and `rpc/adapter.ts` sends it to the newly authenticated
+browser. Before sampling it sends nothing rather than fabricating values.
+Replacement is whole-snapshot, never a merge of old optional readings. Coverage:
+`tests/device-stats-initial-push.test.ts` and the browser
+`device-health-initial-snapshot.spec.ts`; the latter excludes periodic rescue.
+
 ### Heartbeat emitter
 
 `rpc/events.ts` emits `{ ping: { t: number } }` every 5 s to all connected clients. This lets the frontend detect half-open connections (no ping for ~15 s triggers a reconnect) without relying on TCP keepalive alone.
@@ -7403,6 +7422,7 @@ hand-written, independently-drifting per-repo `protocol.ts` derivations.
 ```
 runCritical("config", loadConfig)            # CRITICAL — abort on failure
 runCritical("ws-control-server", initServer) # CRITICAL — bind the operator lifeline FIRST
+runCritical("systemd-ready", notifyServiceReady) # release ordered units after signal reservation + bind
 guardNonCritical("identity", initIdentity)            # resolves device_id + paired
 guardNonCritical("control-channel", initControlChannel) # gates on canDialControlChannel()
 guardNonCritical("pipelines", initEngineConnection)   # streaming engine init + reconnect loop
@@ -7418,7 +7438,8 @@ NOT the raw `initPipelines`. See ENGINE CONNECTION RESILIENCE below.
 init can no longer brick the device in the field. Two helpers classify every
 awaited init (`helpers/boot-guard.ts`):
 
-- **`runCritical(name, fn)`** — config load + WS-control-server bind. A failure is
+- **`runCritical(name, fn)`** — config load, WS-control-server bind, then systemd
+  readiness notification (production notify services only). A failure is
   logged loudly and re-thrown so the process aborts (systemd restarts cleanly).
   The WS control server is bound **before** any non-critical init — it is the
   operator's only lifeline, so it must come up even when identity, the cloud

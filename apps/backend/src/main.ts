@@ -32,6 +32,7 @@ import { checkExecPath } from "./helpers/exec.ts";
 import killall from "./helpers/killall.ts";
 import { logger } from "./helpers/logger.ts";
 import { handleTerminationSignal } from "./helpers/shutdown.ts";
+import { notifyServiceReady } from "./helpers/systemd-ready.ts";
 import { isDevelopment } from "./mocks/mock-config.ts";
 import {
 	initMockService,
@@ -198,9 +199,9 @@ if (isDevelopment()) {
 
 // FIRST executable statement of the boot ladder, and it must stay first.
 // SIGUSR1/SIGUSR2 default to TERMINATE, and both are sent at us by units that
-// are ordered against this one — `ceralive-addon-reconciler.service` fires
-// SIGUSR1 the moment `ceralive.service` reports started, which is long before
-// the ladder below finishes. Reserving them here makes the whole ladder a
+// use this process as an IPC target. The ordered add-on SIGUSR1 poke waits for
+// the READY=1 notification after the control-server bind below. Reserving them
+// here makes the remainder of the ladder a
 // survivable window; the real handlers are armed at their own sites via
 // `armBootSignalHandler`, which replays a poke that arrived in the meantime.
 installBootSignalGuards();
@@ -245,6 +246,10 @@ void initRemote();
 await runCritical("ws-control-server", initServer);
 const boundPort = Number(getServer()?.url.port) || null;
 logger.info(bootTimer.phase("🚀", "server"));
+
+// Type=notify holds the add-on poke until the guard exists, including the
+// native-runtime/import window before this module could install any handler.
+await runCritical("systemd-ready", notifyServiceReady);
 
 // --- NON-CRITICAL boot phase. Each init is wrapped in guardNonCritical(): a
 //     failure is logged, flags the device readiness-reduced (surfaced on

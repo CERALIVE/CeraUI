@@ -28,10 +28,16 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 33 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(33);
+	it("classifies all 34 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(34);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(33);
+		expect(ids.size).toBe(34);
+		expect(getSpawnSite("boot.systemdReady")).toMatchObject({
+			file: "helpers/systemd-ready.ts",
+			class: "bounded-command",
+			status: "enforced",
+			contract: { timed: true, lifetimeTimeoutExempt: false },
+		});
 	});
 
 	// The diagnostic's `nft list ruleset` is a READ on its own slow cadence, so it
