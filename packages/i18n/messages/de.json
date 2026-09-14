@@ -1,4 +1,6 @@
 {
+	"live.summary.switchUnknown": "Diese Engine meldet keine Ziele für den Live-Quellenwechsel.",
+	"live.summary.switchEmpty": "In dieser Sitzung ist kein Quellenwechsel verfügbar.",
 	"network.routerCellular.lock.verification.admin_unreachable": "Die Anmeldeseite des Modemsticks ist nicht erreichbar. Dieses Passwort wurde nicht gespeichert. Prüfe die Verbindung, bevor du es erneut versuchst.",
 	"network.routerCellular.lock.verification.credentials_rejected": "Der Modemstick hat diese Anmeldung abgelehnt. Dieses Passwort wurde nicht gespeichert. Prüfe Benutzername und Passwort, bevor du es erneut versuchst.",
 	"$schema": "https://inlang.com/schema/inlang-message-format",

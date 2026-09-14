@@ -11,11 +11,11 @@
  */
 import type { StreamSource } from "@ceraui/rpc/schemas";
 import { describe, expect, it } from "vitest";
-
 import {
 	canOfferLiveSourceSwitch,
 	deriveLiveSourceState,
 } from "./live-source-state";
+import { deriveActiveSummary } from "./sourceSummary";
 
 const RODE_NAME = "RØDE HDMI to USB-C: RØDE HDMI";
 const RODE_STABLE_ID = "usb:19f7:0037";
@@ -66,6 +66,38 @@ const RODE_RENUMBERED = capture("/dev/video2", {
 const STREAMING = { isStreaming: true, summaryMode: false };
 
 describe("deriveLiveSourceState — the mid-stream source verdict", () => {
+	it("names the synthetic session leg in the live summary rather than its opaque id", () => {
+		expect(
+			deriveActiveSummary(
+				undefined,
+				{
+					codec: "h264",
+					resolution: "1920x1080",
+					framerate: 30,
+					active_input: "b",
+					switch_targets: [
+						{
+							input_id: "b",
+							kind: "synthetic",
+						},
+					],
+				},
+				undefined,
+				[ONBOARD_HDMI],
+			),
+		).toMatchObject({ source: "b", sourceLabelKey: "settings.sources.test" });
+	});
+	it("does not report an admitted synthetic session leg as a lost device", () => {
+		const result = deriveLiveSourceState({
+			...STREAMING,
+			activeInput: "b",
+			configSource: "/dev/video0",
+			sources: [ONBOARD_HDMI],
+			switchTargets: [{ input_id: "b", kind: "synthetic" }],
+		});
+		expect(result.sourceLost).toBe(false);
+		expect(result.runningSource).toBeUndefined();
+	});
 	it("reports lost while the device is unplugged", () => {
 		const state = deriveLiveSourceState({
 			...STREAMING,

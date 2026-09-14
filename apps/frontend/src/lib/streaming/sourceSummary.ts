@@ -593,6 +593,8 @@ export interface ActiveSummary {
 	 * (engine `active_input`, else saved input/pipeline).
 	 */
 	source: string | undefined;
+	/** Localized kind qualifier for an engine-owned session leg. */
+	sourceLabelKey?: string;
 	/** Display resolution — a token (`1080p`) when resolvable, else the raw `WxH`. */
 	resolution: string | undefined;
 	framerate: number | undefined;
@@ -694,10 +696,16 @@ export function deriveActiveSummary(
 	const isNetworkSource =
 		resolveSourceOrigin(sourceId || undefined, sources) === "network";
 	const inputCodecToken = live ? activeEncode?.input_codec : undefined;
+	const sessionTarget = activeEncode?.switch_targets?.find(
+		(target) => target.input_id === sourceId,
+	);
 
 	return {
 		live,
 		source: resolveSourceName(sourceId || undefined, sources),
+		...(sessionTarget?.kind === "synthetic"
+			? { sourceLabelKey: "settings.sources.test" }
+			: {}),
 		resolution: resolution || undefined,
 		framerate: typeof framerate === "number" ? framerate : undefined,
 		codec: codecToken ? formatCodec(codecToken) : undefined,

@@ -157,6 +157,15 @@ the device's own `netif` frame.
 
 ## RPC PATTERN
 
+`LiveSourceSwitch` uses `active_encode.switch_targets` when present, including
+synthetic legs; two distinct roster members form a switchable pair. Empty is authoritative,
+absent retains the old two-capture gate. Each has its own localized notice, so unknown
+does not read as explicitly unsupported. Discovery's virtual rows remain excluded.
+Synthetic labels use the translated Test Pattern name plus the session's opaque id;
+neither availability nor a display label is read from the producer target.
+`deriveLiveSourceState` recognizes active session targets without fabricating a source.
+See [LIVE-SESSION-SWITCHING](../../docs/LIVE-SESSION-SWITCHING.md) for U6/release limits.
+
 ### Uplink-health state [EXISTS]
 
 `subscriptions.svelte.ts` is the sole consumer of the backend's `uplinks` push.

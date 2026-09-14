@@ -11,7 +11,7 @@
  *
  * Pure and rune-free, like `go-live-readiness.ts` and `coarse-source-hint.ts`.
  */
-import type { StreamSource } from "@ceraui/rpc/schemas";
+import type { SessionSwitchTarget, StreamSource } from "@ceraui/rpc/schemas";
 
 import { findSourceById } from "./sourceSummary";
 
@@ -22,6 +22,7 @@ export interface LiveSourceStateInput {
 	configSource: string | undefined;
 	/** The unified `sources` broadcast rows (undefined before the first frame). */
 	sources: readonly StreamSource[] | undefined;
+	switchTargets?: readonly SessionSwitchTarget[] | undefined;
 	isStreaming: boolean;
 	/** The post-stream summary window — every live verdict is suppressed in it. */
 	summaryMode: boolean;
@@ -39,12 +40,16 @@ export function deriveLiveSourceState(
 ): LiveSourceState {
 	const runningId = input.activeInput ?? input.configSource;
 	const runningSource = findSourceById(runningId, input.sources);
+	const runningTarget = input.switchTargets?.find(
+		(target) => target.input_id === runningId,
+	);
 	const sourceLost =
 		input.isStreaming &&
 		!input.summaryMode &&
 		runningId !== undefined &&
 		// An empty list is the pre-first-broadcast state, not a loss.
 		(input.sources?.length ?? 0) > 0 &&
+		runningTarget === undefined &&
 		(runningSource === undefined || runningSource.lost === true);
 	return { runningId, runningSource, sourceLost };
 }

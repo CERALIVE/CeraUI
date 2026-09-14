@@ -163,6 +163,7 @@ const {
 const activeSourceLost = $derived(
 	deriveLiveSourceState({
 		activeInput: activeEncode?.active_input,
+		switchTargets: activeEncode?.switch_targets,
 		configSource: config?.source,
 		sources: sources?.sources,
 		isStreaming,

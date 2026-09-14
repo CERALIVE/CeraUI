@@ -430,3 +430,16 @@ groups at kiosk width; absent blocks keep the established legacy geometry. No ne
 animation is added. Existing reduced-motion and e-ink chrome rules apply.
 Acceptance requires desktop/mobile rendered evidence; both-board visual acceptance
 is a separate, outstanding hardware gate, not a property of the mock fixture.
+
+## 13. Live session source switching
+
+The live selector reuses the existing Card, Button, kind badge and Active affirmation;
+no new tokens or motion. Only engine-reported session legs enter the new target set.
+An absent roster retains legacy capture admission and states that targets are not
+reported; an explicit empty roster states that no session switches are available and
+offers no action. Both notices use muted, wrapping `text-sm` with `role="status"`.
+Synthetic legs are labeled with the translated Test Pattern name and their session
+identifier in both the selector and live summary. Labels never authorize a switch.
+The existing two-source threshold remains; the active row is an affirmation, not a
+button. Browser acceptance covers 375/768/1280 px and both switch directions;
+hardware/color qualification remains separate and unclaimed.

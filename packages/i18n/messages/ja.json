@@ -1,4 +1,6 @@
 {
+	"live.summary.switchUnknown": "このエンジンはライブ切り替え先を報告していません。",
+	"live.summary.switchEmpty": "このセッションではソースを切り替えられません。",
 	"network.routerCellular.lock.verification.admin_unreachable": "ドングルのログインページに接続できませんでした。このパスワードは保存されていません。接続を確認してから、もう一度お試しください。",
 	"network.routerCellular.lock.verification.credentials_rejected": "ドングルがこのログインを拒否しました。このパスワードは保存されていません。ユーザー名とパスワードを確認してから、もう一度お試しください。",
 	"$schema": "https://inlang.com/schema/inlang-message-format",
