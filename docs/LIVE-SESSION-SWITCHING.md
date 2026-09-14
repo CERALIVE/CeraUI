@@ -37,7 +37,10 @@ A reported active synthetic leg is not mislabeled as a lost capture device.
 
 The existing authenticated `streaming.switchInput` procedure takes a fresh
 `list-switch-targets` snapshot before a live switch. A non-member is refused
-before any engine switch or capture-config write. Only JSON-RPC method-not-found
+before any engine switch or capture-config write, with the neutral `SWITCH_FAILED`
+result. In particular, a stale synthetic target cannot establish a physical unplug
+and must never produce `SOURCE_LOST`. The existing localized switch-failure toast
+reports the refusal without inventing a hardware cause. Only JSON-RPC method-not-found
 permits the legacy device-registry path; connection, query and final switch errors
 never retry via discovery. The engine performs final admission against its current
 session, so a target retiring after the snapshot is a normal possible refusal.
@@ -66,6 +69,17 @@ round-trips for absent, empty and populated rosters; a real local NDJSON/UDS exc
 through the registry client; installed-path/version checks for both consumers;
 procedure-level empty-roster and query/switch-failure negatives; and rendered
 synthetic switching, legacy behavior and distinct absent/empty notices.
+
+`session-switch-adapter.test.ts` additionally drives the real backend adapter and
+authenticated procedure through the published client over a local Unix socket.
+Numeric `-32601` alone takes the legacy path. Other standard, server and unknown
+RPC codes refuse even with “method not found” in their message; socket loss, a
+closed/missing client, timeout, malformed JSON, malformed target data and malformed
+error envelopes never consult discovery. Every negative case checks the request
+list, capture-follow entry, config writes and disk bytes, resolved audio and an
+already-pending audio selection. Stale synthetic requests cover both empty and
+populated fresh rosters. The browser regression exercises LiveView's actual
+localized error mapping and keeps the current source selected after refusal.
 
 ## U6 hardware boundary
 

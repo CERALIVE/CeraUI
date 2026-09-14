@@ -137,6 +137,11 @@ unsupported query uses the legacy registry path. See
 [LIVE-SESSION-SWITCHING](../../docs/LIVE-SESSION-SWITCHING.md) for the published
 2026.9.6/schema 0.18.0 contract. Targets carry only `input_id` and `kind`;
 membership is authoritative, including explicit `[]` for passthrough/composition.
+Non-membership is `SWITCH_FAILED`, not evidence of a physical unplug. The
+`session-switch-adapter.test.ts` gate drives the real published UDS client through
+the adapter and authenticated procedure: only numeric RPC `-32601` permits
+legacy discovery. Other RPC errors, transport failures and malformed replies
+leave discovery, capture persistence and pending audio follow untouched.
 
 ### Engine-owned encoder ladder [EXISTS]
 
