@@ -184,8 +184,10 @@ Release assets are published through `publish-release.yml`; see
 CeraUI 2026.9.1 pins the published `@ceralive/cerastream@2026.9.5` in both
 the backend and shared RPC package, matching cerastream 2026.9.2's schema 0.17.0.
 The bindings-skew gate checks the schema version and preservation of the three
-new HDMI capture causes. This release retains the documented early-import
-SIGUSR1 residual window; it does not claim full board qualification.
+new HDMI capture causes. The released 2026.9.1 build retains the early-import
+SIGUSR1 window. The current source closes the ordered add-on poke's startup race
+with a systemd readiness barrier; see [Boot readiness](docs/BOOT-READINESS.md).
+This is not a claim of full board qualification.
 
 ### Supported Hardware
 

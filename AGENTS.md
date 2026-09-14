@@ -397,6 +397,11 @@ never throws and self-serialises (a concurrent call is a no-op).
 - Triggered from `main.ts` at startup (non-blocking) and re-pokable via SIGUSR1
   from the `ceralive-addon-reconciler.service` oneshot (deployment/), which is
   deliberately NOT wired into any rollback/healthcheck target.
+- The main service uses `Type=notify`: it reports ready after reserving boot
+  signals and binding the control server, before optional subsystem initialization.
+  The ordered oneshot therefore cannot signal the native-runtime/import window.
+  Add-on work remains asynchronous and never gates readiness. See
+  [`docs/BOOT-READINESS.md`](docs/BOOT-READINESS.md).
 - All effectful surface is injected via `ReconcilerDeps`; default deps are built
   lazily (dynamic import) so the module never pulls the streaming/config graph or
   requires `setup.json` at test-import time.

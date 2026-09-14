@@ -3,6 +3,8 @@ Description=CeraLive service
 After=network.target
 
 [Service]
+Type=notify
+NotifyAccess=main
 User=root
 Group=root
 Environment=NODE_ENV=production

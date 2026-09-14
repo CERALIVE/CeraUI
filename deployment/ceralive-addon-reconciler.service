@@ -1,8 +1,8 @@
 [Unit]
 Description=CeraLive post-boot add-on reconciler (desired-state; non-blocking)
 Documentation=https://github.com/CERALIVE/CeraUI
-# Run after the main service so the backend (which owns the reconcile logic) is
-# up to receive the trigger. Add-ons NEVER gate boot or the OS-update
+# Run after the main service's READY=1 (Type=notify), not merely its exec, so
+# the backend has reserved SIGUSR1 before this trigger. Add-ons NEVER gate boot or the OS-update
 # healthcheck/rollback, so this unit is deliberately NOT a dependency of any
 # rollback/healthcheck target and never blocks the boot transaction.
 After=ceralive.service network-online.target
@@ -22,8 +22,8 @@ RemainAfterExit=yes
 # (terminate) would kill the sender mid-broadcast. This is the exact scoping the
 # two SIGUSR2 udev rules already carry; see apps/backend/AGENTS.md → SIGUSR2
 # UDEV HOTPLUG HOOK. The backend's own survival is the other half of the fix and
-# lives in helpers/boot-signals.ts, which reserves SIGUSR1 before the boot
-# ladder so this oneshot cannot win a race against it.
+# lives in helpers/boot-signals.ts plus the main service's readiness barrier.
+# A JavaScript handler alone cannot protect native-runtime/import startup.
 ExecStart=-/usr/bin/systemctl kill --kill-whom=main --signal=SIGUSR1 ceralive.service
 
 [Install]

@@ -116,6 +116,7 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"nmcli",
 	"mmcli",
 	"systemctl",
+	"/usr/bin/systemd-notify",
 	"journalctl",
 	"ip",
 	"apt-get",
