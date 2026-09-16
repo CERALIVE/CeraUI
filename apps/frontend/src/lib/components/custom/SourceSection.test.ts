@@ -372,7 +372,7 @@ describe("SourceSection — unified device-first source list (Task 13)", () => {
 			return el;
 		});
 		expect(link.getAttribute("href")).toBe(
-			"https://github.com/CERALIVE/gstlibuvch264src/blob/main/docs/notes/uvc-h264-detection.md",
+			"https://github.com/CERALIVE/gstlibuvcsrc/blob/main/docs/notes/uvc-h264-detection.md",
 		);
 	});
 

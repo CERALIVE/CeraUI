@@ -3054,3 +3054,10 @@ Recorded as a hardware gap, not a code gap, in
 - Don't key a WiFi adapter (or pin a NetworkManager profile) on the MAC `ifconfig`/`GENERAL.HWADDR` reports — it is the scan-randomized OPERATIONAL address. Use `resolveWifiPermanentMac()`; see `apps/backend/AGENTS.md` → WIFI ADAPTER IDENTITY IS THE PERMANENT MAC.
 - Don't generate a hotspot SSID/password before `findHotspotConnForAdapter()` and the credential store have been consulted — that ordering is what stops a new `Hotspot-N` profile appearing on every start.
 - Don't delete a hotspot profile on ABSENCE (a MAC binding no present adapter claims) — that is what an unplugged radio looks like, and it destroys the credentials the store exists to preserve. Deletion needs positive ownership evidence from `hotspot_credentials.json`; see `apps/backend/AGENTS.md` → DURABLE PER-ADAPTER HOTSPOT IDENTITY.
+## UVC package identity
+
+`gstreamer1.0-libuvcsrc` from `gstlibuvcsrc` is classified as an app-layer package.
+It provides/replaces `gstreamer1.0-libuvch264src`; package metadata and element
+factory names are separate contracts. Canonical `libuvcsrc` and both aliases
+(`libuvch264src`, `libuvch26xsrc`) share one implementation. CeraUI still consumes
+engine-owned source IDs and does not instantiate capture factories itself.

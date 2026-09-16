@@ -169,7 +169,7 @@ describe("package-layer classifier", () => {
 			"ceralive-device",
 			"ceralive-modem-support",
 			"cerastream",
-			"gstreamer1.0-libuvch264src",
+			"gstreamer1.0-libuvcsrc",
 			"libmbim-glib4",
 			"libmbim-proxy",
 			"libmbim-utils",
