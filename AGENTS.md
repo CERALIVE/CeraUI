@@ -294,6 +294,12 @@ CeraUI/
 
 ## COMMANDS
 
+Functional E2E backend readiness is child-owned IPC, never a generic TCP probe.
+Linux local runs lease 3100–3149 RPC slots across processes; CI keeps its existing
+isolated-runner proxy range. Each acquisition owns fresh disk state and an
+OS-assigned mock-preview listener. See [`docs/E2E-BACKEND-OWNERSHIP.md`](docs/E2E-BACKEND-OWNERSHIP.md)
+and the frontend E2E playbook before changing this lifecycle.
+
 Portal credentials use the existing mode-0600 atomic store, now written only
 after successful verification in `modems.setCredentials`. Failed candidates stay
 request-local on the backend and mount-local in `ModemLockSection`; failed
