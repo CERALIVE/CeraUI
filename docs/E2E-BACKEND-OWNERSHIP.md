@@ -1,7 +1,8 @@
 # Full-suite E2E backend ownership investigation
 
-Status: [PARTIAL] — backend-ownership controls pass; the full gate retains one
-unresolved post-auth navigation failure. This is not a merge-ready receipt.
+Status: [PARTIAL] — backend-ownership controls pass, but the fresh draft-PR full
+run returned 265 failures and did not reproduce the earlier one-failure result.
+This is not a merge-ready receipt; see the post-commit result below.
 
 ## Baseline, before changes
 
@@ -144,3 +145,25 @@ PR #362. The post-commit full-suite rerun is reported on that PR; earlier counts
 above are investigation evidence, not a substitute for that fresh run. The
 remaining e-ink navigation failure belongs to a separate lane and is not repaired
 or investigated by this change.
+
+## Fresh post-commit full-suite result
+
+Draft PR: [#363](https://github.com/CERALIVE/CeraUI/pull/363), targeting `main`.
+After opening it, the unchanged `bun run test:e2e` ran on the clean committed
+checkout at **`f99e2e4affb3a6e0922bca51a95a687bfaa3436e`**, based on `c668f9af`
+with this ownership fix alone, without PR #362. Bun 1.4.2 / Node 26.7.0, four
+workers, no retries or command-level test filters beyond the existing entrypoint.
+
+The result was **171 passed / 265 failed / 277 skipped / 13 did not run**
+(726 total) in **12.6 minutes**, exit code 1. The earlier **44 → 1** failure
+improvement **did not reproduce**. The desktop `eink-transitions.spec.ts:217`
+case passed in this run; its source and failure mechanism were not investigated
+or changed. No attribution for the new full-run failures is established here.
+
+The full receipt is retained privately at
+`test-results/e2e-ownership-fresh-full.log`, with Playwright artifacts under
+`apps/frontend/test-results/`. The only subsequent tracked edit is this result
+record; no implementation, test, configuration or gate was changed to repair the
+run. PID 2772455 was not signalled or cleaned up. Keep the PR draft and blocked
+on its own CI/review and full-gate reconciliation; do not substitute the older
+444/1/281 result for this fresh evidence.
