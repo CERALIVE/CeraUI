@@ -203,9 +203,11 @@ export function stopGeneration(generation: number): Promise<void> {
 	// cancels it so the picker never keeps a stale "follows on restart" hint.
 	setPendingAudioFollowAsrc(null);
 
-	return new Promise((resolve) => {
+	return new Promise((resolve, reject) => {
 		let finishPromise: Promise<void> | undefined;
-		const finish = () => {
+		const finish = (
+			outcome: { ok: true } | { ok: false; error: unknown } = { ok: true },
+		) => {
 			if (finishPromise !== undefined) return finishPromise;
 			finishPromise = (async () => {
 				if (sessionResources?.generation === generation) {
@@ -222,9 +224,10 @@ export function stopGeneration(generation: number): Promise<void> {
 				// band is retracted rather than left standing over nothing.
 				clearBindMapReport();
 				announceBindMapReport();
+				if (!outcome.ok) throw outcome.error;
 				updateStatus(false);
-				resolve();
 			})();
+			void finishPromise.then(resolve, reject);
 			return finishPromise;
 		};
 
@@ -244,9 +247,14 @@ export function stopGeneration(generation: number): Promise<void> {
 
 		// Bring the engine down first (it owns the engine-first shutdown ordering),
 		// then sweep the rest once it has exited.
-		const foundEngine = getStreamingBackend().stop(() => {
-			void finish();
-		});
+		const foundEngine = getStreamingBackend().stop(
+			() => {
+				void finish();
+			},
+			(error) => {
+				void finish({ ok: false, error });
+			},
+		);
 
 		if (!foundEngine) {
 			if (

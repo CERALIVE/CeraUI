@@ -91,11 +91,11 @@ export interface StreamingBackend {
 		transaction?: LaunchTransaction,
 	): Promise<void>;
 	/**
-	 * Stop the engine process. `onStopped` fires once the engine has terminated
-	 * (synchronously if it was already dead). Returns whether an engine process
-	 * was found to stop.
+	 * Stop the engine session. `onStopped` requires an idle acknowledgement;
+	 * `onFailed` completes an unconfirmed stop without claiming idle. Returns
+	 * whether this adapter owned an active session to stop.
 	 */
-	stop(onStopped: () => void): boolean;
+	stop(onStopped: () => void, onFailed?: (error: unknown) => void): boolean;
 	/**
 	 * Hot-adjust the max bitrate while streaming: persist it and signal a reload.
 	 * Returns the applied value, or `undefined` when the input fails validation.

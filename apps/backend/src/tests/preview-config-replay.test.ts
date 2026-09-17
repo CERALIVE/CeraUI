@@ -82,6 +82,7 @@ type EngineDispatch =
 
 let dispatches: EngineDispatch[] = [];
 let sendersSpawned = 0;
+let launchedConfigs: RuntimeConfig[] = [];
 
 const fakeSender = {
 	proc: { exited: new Promise<number>(() => {}) },
@@ -179,11 +180,13 @@ beforeEach(() => {
 	savedConfig = { ...getConfig() };
 	dispatches = [];
 	sendersSpawned = 0;
+	launchedConfigs = [];
 	acceptingTransport();
 	setStartStreamDepsForTest({
 		getStreamingBackend: () => ({
 			setBitrate: () => undefined,
-			start: async () => {
+			start: async (config) => {
+				launchedConfigs.push(config);
 				dispatches.push({ kind: "start" });
 			},
 		}),
@@ -208,6 +211,27 @@ afterEach(() => {
 });
 
 describe("the replay fence — every start waits for the mode", () => {
+	test("a restoration snapshot without composition cannot inherit saved composition", async () => {
+		getConfig().composition = {
+			secondary_input_id: "camera-b",
+			layout: "pip-top-right",
+		};
+		const result = await runStart({ pipeline: "hdmi", asrc: "No audio" });
+		expect(result.success).toBe(true);
+		expect(launchedConfigs).toHaveLength(1);
+		expect(launchedConfigs[0]?.composition).toBeUndefined();
+	});
+	test("an ordinary start still consumes the saved composition", async () => {
+		const composition = {
+			secondary_input_id: "camera-b",
+			layout: "pip-top-right",
+		} as const;
+		getConfig().composition = composition;
+		getConfig().asrc = "No audio";
+		const result = await runStart();
+		expect(result.success).toBe(true);
+		expect(launchedConfigs[0]?.composition).toEqual(composition);
+	});
 	// Each leg is named for the ORIGIN whose call shape it reproduces. The three
 	// restoration origins reach this function through
 	// `runStreamRestoration()` → its launch → `startStream(..., attemptId,

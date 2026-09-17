@@ -76,6 +76,7 @@ import {
 	type ChangeConfigParams,
 	type ChangeConfigResult,
 	type ConnectOptions,
+	changeConfigResultSchema,
 	connect,
 	DEFAULT_BALANCER,
 	DEFAULT_CONFIG_PATH,
@@ -889,7 +890,7 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 	}
 
-	stop(onStopped: () => void): boolean {
+	stop(onStopped: () => void, onFailed?: (error: unknown) => void): boolean {
 		if (!this.active) return false;
 		this.active = false;
 		// A crashed or already-gone engine sends no final idle status, so the
@@ -912,9 +913,10 @@ export class CerastreamBackend implements StreamingBackend {
 			}
 			onStopped();
 		})();
-		this.interrupt = operation.catch((error) =>
-			this.handleOpFailure("stop", error),
-		);
+		this.interrupt = operation.catch((error: unknown) => {
+			this.handleOpFailure("stop", error);
+			onFailed?.(error);
+		});
 		return true;
 	}
 
@@ -1110,10 +1112,21 @@ export class CerastreamBackend implements StreamingBackend {
 		}
 	}
 
-	async changeConfig(params: ChangeConfigParams): Promise<ChangeConfigResult> {
-		return this.withSessionClient("change-config", (client) =>
-			client.changeConfig(params),
+	async changeConfig(
+		params: ChangeConfigParams,
+		clearComposition = false,
+	): Promise<ChangeConfigResult> {
+		if (!clearComposition)
+			return this.withSessionClient("change-config", (client) =>
+				client.changeConfig(params),
+			);
+		const result = await this.withSessionClient("change-config", (client) =>
+			asRawRequestClient(client, "change-config").rawRequest("change-config", {
+				...params,
+				composition: null,
+			}),
 		);
+		return changeConfigResultSchema.parse(result);
 	}
 
 	/**

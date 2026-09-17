@@ -139,6 +139,7 @@ export function buildEngineEncodeSnapshot(
 
 	return {
 		streaming: true,
+		...(encode.switch_targets?.length ? { switching: true } : {}),
 		...(resolution === undefined ? {} : { resolution }),
 		...(framerate === undefined ? {} : { framerate }),
 		codec: encode.codec,

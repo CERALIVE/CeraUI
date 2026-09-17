@@ -1,9 +1,11 @@
 import fs from "node:fs";
+import { compositionConfigSchema } from "@ceralive/cerastream";
 
 import {
 	inputModeSchema,
 	normalizeFramerateToRung,
 	normalizeResolutionToRung,
+	videoCodecSchema,
 } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 
@@ -13,12 +15,13 @@ import { logger } from "../../helpers/logger.ts";
 export const INFLIGHT_MARKER_FILE = "config.inflight.json";
 
 const stagedFieldsSchema = z.object({
+	composition: compositionConfigSchema.nullable().optional(),
 	source: z.string().optional(),
 	pipeline: z.string().optional(),
 	selected_video_input: z.string().optional(),
 	resolution: z.string().optional(),
 	framerate: z.number().optional(),
-	video_codec: z.string().optional(),
+	video_codec: videoCodecSchema.optional(),
 	// Switching a dual-format camera between H.264 and MJPEG rebuilds the capture
 	// leg, so it is a transaction like the axes above — never a live reload.
 	input_mode: inputModeSchema.optional(),
@@ -110,6 +113,7 @@ export function readInflightMarker(
 
 export type EngineEncodeSnapshot = {
 	readonly streaming: boolean;
+	readonly switching?: boolean;
 	readonly resolution?: string;
 	readonly framerate?: number;
 	readonly codec?: string;
@@ -167,6 +171,8 @@ function paramsMatch(
 	engine: EngineEncodeSnapshot,
 ): boolean {
 	return (
+		(fields.composition === undefined ||
+			(fields.composition === null && engine.switching === true)) &&
 		resolutionMatches(fields.resolution, engine.resolution) &&
 		framerateMatches(fields.framerate, engine.framerate) &&
 		matches(fields.video_codec, engine.codec) &&
