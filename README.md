@@ -66,8 +66,10 @@ A dev-only DevTools destination is available in development builds.
   Failed stop IPC also completes local cleanup without claiming engine idle;
   restoration reconciles that state before admitting its one restart. Live
   composition disable now uses staged transactional reconfiguration rather than
-  a save-only acknowledgement. This requires the companion unreleased engine
-  correction; see [composition lifecycle evidence](docs/COMPOSITION-LIFECYCLE.md).
+  a save-only acknowledgement. The companion engine correction is released in
+  cerastream 2026.9.5; CeraUI 2026.9.2 prepares the consumer release. Released-build
+  product-path qualification remains separate from the candidate evidence; see
+  [composition lifecycle evidence](docs/COMPOSITION-LIFECYCLE.md).
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
   switch. The deterministic virtual interface is type-checked before reuse, and
