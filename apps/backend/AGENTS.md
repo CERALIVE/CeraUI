@@ -7934,6 +7934,13 @@ Coverage: `tests/one-row-per-camera.test.ts`.
 
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
+Composition now follows the same staging/dispatch/outcome path, including explicit
+null. The current published binding rejects null, so the adapter uses its existing
+raw-request primitive for that literal only, with producer-owned ordinary params
+and result validation. No shadow wire type or dependency pin is added. This draft
+must not merge before the companion engine/bindings correction is published.
+See [`docs/COMPOSITION-LIFECYCLE.md`](../../docs/COMPOSITION-LIFECYCLE.md).
+
 Resolution, framerate, codec and source are baked into the engine graph at build
 time, so changing one mid-stream means REPLACING the session. cerastream's
 `change-config` (engine schema `0.10.0`) makes that replacement recoverable;
@@ -8121,6 +8128,14 @@ procedure: applied-writes vs reverted/rollback_failed-don't, the delta contents,
 both apply-now fallbacks, and marker-present vs marker-absent reconciliation).
 
 ## ONE-SHOT STREAM RESTORATION AFTER ENGINE DEATH [EXISTS]
+
+Failed stop IPC now completes through an optional failure callback. Local sender
+and listener cleanup runs on both outcomes, but a failure never publishes a false
+idle acknowledgement. Restoration queries through the orchestrator's reconciliation
+seam, so authoritative engine idle retires `stop_failed` before new admission.
+Its snapshot cannot inherit persisted composition, and successful recovery retracts
+an earlier recovery-failed notification. Hardware and mutation evidence are in
+[`docs/COMPOSITION-LIFECYCLE.md`](../../docs/COMPOSITION-LIFECYCLE.md).
 
 `noteConnectionLoss` retires a session whose control connection died (see SESSION
 CONTROL CONNECTION above) and, until now, that was the end of it: systemd

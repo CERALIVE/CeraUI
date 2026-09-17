@@ -1581,6 +1581,12 @@ credentials are byte-unchanged.
 
 ## STREAMING BACKEND QUALITY [EXISTS]
 
+The OPi composition lifecycle repairs cover explicit apply-now disable, failed-stop
+completion, reconciliation before restoration and composition-free snapshot restore.
+The companion engine must preserve a null clear delta and accept pre-videorate
+allocation cadence. Publication/merge boundaries and hardware receipts:
+[`docs/COMPOSITION-LIFECYCLE.md`](docs/COMPOSITION-LIFECYCLE.md).
+
 Quality improvements landed in `chore/backend-quality` (Tasks 5–7, 13–14).
 
 ### streamloop module split

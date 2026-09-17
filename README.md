@@ -63,6 +63,11 @@ A dev-only DevTools destination is available in development builds.
   while the media session continues in the background. The request and cleanup
   budgets leave an explicit margin inside the existing 12-second bound, and a
   late, undispatched connection is closed without sending a stale stop.
+  Failed stop IPC also completes local cleanup without claiming engine idle;
+  restoration reconciles that state before admitting its one restart. Live
+  composition disable now uses staged transactional reconfiguration rather than
+  a save-only acknowledgement. This requires the companion unreleased engine
+  correction; see [composition lifecycle evidence](docs/COMPOSITION-LIFECYCLE.md).
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
   switch. The deterministic virtual interface is type-checked before reuse, and
