@@ -210,7 +210,11 @@ export async function startStream(
 	const config =
 		configOverride === undefined
 			? getConfig()
-			: ({ ...getConfig(), ...configOverride } as RuntimeConfig);
+			: ({
+					...getConfig(),
+					...configOverride,
+					composition: configOverride.composition,
+				} as RuntimeConfig);
 	const launchConfig = resolveLaunchConfig(config);
 	startStreamDeps.getStreamingBackend().setBitrate(launchConfig);
 

@@ -47,7 +47,10 @@ import type { LifecycleState } from "@ceraui/rpc/schemas";
 
 import { logger as defaultLogger } from "../../helpers/logger.ts";
 import { getConfig } from "../config.ts";
-import { notificationBroadcast } from "../ui/notifications.ts";
+import {
+	notificationBroadcast,
+	notificationRemove,
+} from "../ui/notifications.ts";
 import {
 	type ArmedStreamConfig,
 	type ArmedStreamMarker,
@@ -63,9 +66,11 @@ import {
 	readArmedStreamMarker,
 	writeArmedStreamMarker,
 } from "./armed-stream-marker.ts";
-import { queryEngineRuntimeStreaming } from "./engine-runtime-state.ts";
 import { awaitRecoveryBarrier } from "./recovery-barrier.ts";
-import { getStreamSessionSnapshot } from "./stream-session-orchestrator.ts";
+import {
+	getStreamSessionSnapshot,
+	reconcileStreamSession,
+} from "./stream-session-orchestrator.ts";
 import type { EngineRuntimeState } from "./streaming-backend.ts";
 
 /**
@@ -268,6 +273,7 @@ async function defaultLaunch(
 
 function defaultPublish(outcome: RestorationRunOutcome): void {
 	if (outcome.result === "recovered") {
+		notificationRemove("stream_recovery_failed");
 		notificationBroadcast(
 			"stream_recovered",
 			"success",
@@ -298,7 +304,10 @@ function defaultPublish(outcome: RestorationRunOutcome): void {
 function defaultDeps(): StreamRestorationDeps {
 	return {
 		marker: defaultArmedStreamMarkerDeps,
-		runtimeState: queryEngineRuntimeStreaming,
+		runtimeState: async () => {
+			const state = await reconcileStreamSession();
+			return state === "idle" || state === "streaming" ? state : "unknown";
+		},
 		lifecycleState: () => getStreamSessionSnapshot().state,
 		launch: defaultLaunch,
 		publish: defaultPublish,
