@@ -52,7 +52,7 @@ test("both consumer packages resolve the exact installed registry version inside
 		const manifest = await Bun.file(
 			join(dirname(entry), "../package.json"),
 		).json();
-		expect(manifest.version).toBe("2026.9.6");
+		expect(manifest.version).toBe("2026.9.8");
 	}
 	expect(SCHEMA_VERSION).toBe("0.18.0");
 });
