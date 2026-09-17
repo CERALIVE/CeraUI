@@ -84,6 +84,15 @@ function makeClient(options: FakeClientOptions): CerastreamClient {
 		setBitrate: async (params) => ({
 			applied: { max_bitrate: params.max_bitrate },
 		}),
+		requestKeyframe: async () => {
+			throw new Error("unexpected request-keyframe");
+		},
+		setEdidProfile: async () => {
+			throw new Error("unexpected set-edid-profile");
+		},
+		listSwitchTargets: async () => {
+			throw new Error("unexpected list-switch-targets");
+		},
 		switchInput: async (params) => ({
 			active_input: params.input_id,
 			mode: params.mode,
