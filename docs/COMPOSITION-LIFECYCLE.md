@@ -9,11 +9,19 @@ the delta and clears persisted composition only after an `applied` result;
 refusal/rollback leaves the previous value. Without `apply_now`, save-only
 semantics are unchanged.
 
-The currently pinned producer schema accepts an object but not null. Ordinary
-params still use producer-owned `ChangeConfigParams`; the explicit clear uses
-the client's existing raw-request primitive and the producer's result schema.
-This introduces no local wire-shape declaration, package link or pin bump.
-The companion producer correction must publish before this consumer draft merges.
+The producer correction merged in cerastream #170 before publication of
+**`@ceralive/cerastream@2026.9.8`**, registry `gitHead`
+`fcb9737d95160fcc96a7fbc638ea5bfd5a23c053`. Both backend and shared RPC consumers
+pin that exact registry version. A clean registry install compiled an imported
+`ChangeConfigParams` with `composition: null` and preserved null/object/omitted
+values through the exported schema. The committed binding-contract regression
+fails against the former 2026.9.6 pin and passes against 2026.9.8.
+
+The hardware-verified adapter's narrow raw-request path is unchanged, with
+producer-owned ordinary params and result validation. No local wire-shape
+declaration, package link or vendored tarball is introduced. The npm release
+ships the control contract, not the Rust engine binary; engine delivery remains
+separate from this consumer merge.
 An older engine rejects null before changing its graph; the existing transaction
 classification reports that rejection rather than echoing a completed clear.
 
