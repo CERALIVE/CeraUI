@@ -1,13 +1,13 @@
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
-import net from "node:net";
 import path from "node:path";
+import { leaseBackendPort } from "./backend-port.js";
 
 /**
  * Per-worker mock-backend lifecycle for the Playwright e2e suite.
  *
- * Each Playwright worker spawns its OWN backend on a unique port with its OWN
+ * Each acquisition spawns its OWN backend on a leased port with its OWN
  * working directory, so the backend's CWD-relative state files (`config.json`,
  * `auth_tokens.json`, `setup.json` — see apps/backend AGENTS.md "Config files …
  * read/written from working dir") are isolated per worker. This removes both
@@ -20,15 +20,14 @@ import path from "node:path";
  */
 
 const BACKEND_DIR = path.resolve(import.meta.dirname, "../../../../backend");
-const BACKEND_ENTRY = path.join(BACKEND_DIR, "src/main.ts");
+const BACKEND_ENTRY = path.join(import.meta.dirname, "backend-entry.ts");
 
-/** Mutable CWD-relative state files; plain-copied so each worker owns its own. */
+/** Mutable CWD-relative state files; each acquisition owns its copy. */
 const STATE_FILES = ["config.json", "auth_tokens.json"] as const;
 
-/** First per-worker port. Clears Vite (6173) and the reference backend (3002). */
+/** Preferred slot; local leases skip occupied slots without changing parallelism. */
 const BASE_PORT = 3100;
 const READY_TIMEOUT_MS = 60_000;
-const PROBE_INTERVAL_MS = 200;
 const STOP_GRACE_MS = 4_000;
 
 /**
@@ -78,6 +77,7 @@ const STATE_ROOT = path.resolve(
 
 export interface WorkerBackend {
 	readonly port: number;
+	readonly previewPort: number;
 	readonly proxySecret: string;
 	stop(): Promise<void>;
 }
@@ -88,25 +88,51 @@ export function workerBackendPort(): number {
 	return BASE_PORT + (Number.isFinite(idx) ? idx : 0);
 }
 
-function probePort(port: number): Promise<boolean> {
-	return new Promise((resolve) => {
-		const socket = net.connect({ port, host: "127.0.0.1" });
-		const finish = (ok: boolean) => {
-			socket.destroy();
-			resolve(ok);
+function waitUntilReady(
+	child: ChildProcess,
+	requestedPort: number,
+	logPath: string,
+): Promise<{ port: number; previewPort: number }> {
+	return new Promise((resolve, reject) => {
+		const cleanup = () => {
+			clearTimeout(timeout);
+			child.off("message", onMessage);
+			child.off("error", onError);
+			child.off("exit", onExit);
 		};
-		socket.once("connect", () => finish(true));
-		socket.once("error", () => finish(false));
+		const onError = (error: Error) => {
+			cleanup();
+			reject(new Error(`worker backend startup failed; see ${logPath}`, { cause: error }));
+		};
+		const onExit = (code: number | null, signal: string | null) => {
+			onError(new Error(`worker backend exited before readiness (${code ?? signal})`));
+		};
+		const onMessage = (message: unknown) => {
+			if (
+				typeof message !== "object" || message === null ||
+				!("type" in message) || message.type !== "backend-ready" ||
+				!("port" in message) || typeof message.port !== "number" ||
+				!("previewPort" in message) || typeof message.previewPort !== "number" ||
+				!Number.isInteger(message.port) || message.port < 1 || message.port > 65535 ||
+				!Number.isInteger(message.previewPort) || message.previewPort < 1 || message.previewPort > 65535
+			) {
+				onError(new Error("worker backend sent invalid readiness"));
+				return;
+			}
+			if (requestedPort !== 0 && message.port !== requestedPort) {
+				onError(new Error(`worker backend bound unexpected port ${message.port}, requested ${requestedPort}`));
+				return;
+			}
+			cleanup();
+			resolve({ port: message.port, previewPort: message.previewPort });
+		};
+		const timeout = setTimeout(() => {
+			onError(new Error("worker backend readiness timed out"));
+		}, READY_TIMEOUT_MS);
+		child.on("message", onMessage);
+		child.once("error", onError);
+		child.once("exit", onExit);
 	});
-}
-
-async function waitUntilListening(port: number): Promise<void> {
-	const deadline = Date.now() + READY_TIMEOUT_MS;
-	while (Date.now() < deadline) {
-		if (await probePort(port)) return;
-		await new Promise((r) => setTimeout(r, PROBE_INTERVAL_MS));
-	}
-	throw new Error(`worker backend never listened on :${port}`);
 }
 
 /**
@@ -135,8 +161,6 @@ function seedSetupJson(stateDir: string): void {
 }
 
 function seedStateDir(stateDir: string): void {
-	fs.rmSync(stateDir, { recursive: true, force: true });
-	fs.mkdirSync(stateDir, { recursive: true });
 	for (const file of STATE_FILES) {
 		const src = path.join(BACKEND_DIR, file);
 		if (!fs.existsSync(src)) {
@@ -168,7 +192,7 @@ function seedStateDir(stateDir: string): void {
 
 function stopChild(child: ChildProcess): Promise<void> {
 	return new Promise((resolve) => {
-		if (child.exitCode !== null || child.signalCode !== null) {
+		if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) {
 			resolve();
 			return;
 		}
@@ -190,19 +214,46 @@ export interface StartWorkerBackendOptions {
 export async function startWorkerBackend(
 	options: StartWorkerBackendOptions = {},
 ): Promise<WorkerBackend> {
+	const lease = options.port === undefined && process.env.CI !== "true"
+		? await leaseBackendPort(workerBackendPort())
+		: undefined;
+	try {
+		const backend = await spawnWorkerBackend({
+			...options,
+			port: options.port ?? lease?.port ?? workerBackendPort(),
+		});
+		let stopped: Promise<void> | undefined;
+		return {
+			...backend,
+			stop: () => {
+				stopped ??= backend.stop().finally(() => lease?.release());
+				return stopped;
+			},
+		};
+	} catch (error) {
+		await lease?.release();
+		throw error;
+	}
+}
+
+async function spawnWorkerBackend(
+	options: StartWorkerBackendOptions & { port: number },
+): Promise<WorkerBackend> {
 	const scenario = options.scenario ?? DEFAULT_SCENARIO;
-	const port = options.port ?? workerBackendPort();
+	const port = options.port;
 	const proxySecret = randomBytes(32).toString("hex");
-	const stateDir = path.join(STATE_ROOT, String(port));
+	fs.mkdirSync(STATE_ROOT, { recursive: true });
+	const stateDir = fs.mkdtempSync(path.join(STATE_ROOT, `${port}-`));
 	seedStateDir(stateDir);
 
-	const logFd = fs.openSync(path.join(stateDir, "backend.log"), "w");
+	const logPath = path.join(stateDir, "backend.log");
+	const logFd = fs.openSync(logPath, "w");
 	const childEnv: NodeJS.ProcessEnv = {
 		...process.env,
 		NODE_ENV: "development",
 		MOCK_SCENARIO: scenario,
 		PORT: String(port),
-		PREVIEW_PORT: String(port + 100),
+		PREVIEW_PORT: "0",
 	};
 	if (process.env.CI === "true") {
 		childEnv.E2E_WORKER_PROXY_SECRET = proxySecret;
@@ -212,20 +263,19 @@ export async function startWorkerBackend(
 	const child = spawn("bun", [BACKEND_ENTRY], {
 		cwd: stateDir,
 		env: childEnv,
-		stdio: ["ignore", logFd, logFd],
+		stdio: ["ignore", logFd, logFd, "ipc"],
 	});
 	fs.closeSync(logFd);
 
 	try {
-		await waitUntilListening(port);
+		const ready = await waitUntilReady(child, port, logPath);
+		return {
+			...ready,
+			proxySecret,
+			stop: () => stopChild(child),
+		};
 	} catch (error) {
 		await stopChild(child);
 		throw error;
 	}
-
-	return {
-		port,
-		proxySecret,
-		stop: () => stopChild(child),
-	};
 }

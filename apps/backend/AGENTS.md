@@ -4,6 +4,12 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
 
+The dev mock-preview server accepts explicit `PREVIEW_PORT=0` for an OS-assigned
+listener, matching its existing `startMockPreviewServer(0)` test seam. Unset or
+non-numeric values retain the previous 9997 fallback. E2E uses this to isolate preview
+upstreams; its private child readiness protocol lives in frontend test fixtures,
+not in a production endpoint. See [`../../docs/E2E-BACKEND-OWNERSHIP.md`](../../docs/E2E-BACKEND-OWNERSHIP.md).
+
 Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` public-npm registry dep) and `srtla-send-rs` via the `@ceralive/srtla-send` npm package.
 
 ## STRUCTURE
