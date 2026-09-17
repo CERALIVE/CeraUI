@@ -194,8 +194,10 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
-CeraUI pins the published `@ceralive/cerastream@2026.9.6` in both
-the backend and shared RPC package, carrying schema 0.18.0's session-switch roster.
+CeraUI pins the published `@ceralive/cerastream@2026.9.8` in both
+the backend and shared RPC package, carrying schema 0.18.0's session-switch roster
+and the nullable composition-clear correction. The producer's exported
+`ChangeConfigParams` and installed schema are regression-tested directly.
 The bindings-skew gate checks the schema version and preservation of the three
 new HDMI capture causes. The released 2026.9.1 build retains the early-import
 SIGUSR1 window. The current source closes the ordered add-on poke's startup race
