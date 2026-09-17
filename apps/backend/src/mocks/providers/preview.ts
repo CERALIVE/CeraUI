@@ -43,6 +43,12 @@ type PreviewServer = ReturnType<typeof Bun.serve<PreviewConn>>;
  *  Overridable via `PREVIEW_PORT`. */
 const DEFAULT_PREVIEW_PORT = 9997;
 
+function configuredPreviewPort(): number {
+	return process.env.PREVIEW_PORT === "0"
+		? 0
+		: Number(process.env.PREVIEW_PORT) || DEFAULT_PREVIEW_PORT;
+}
+
 /** `audio-level` cadence — 200 ms = 5 Hz, comfortably within the <=10 Hz
  *  (>=100 000 µs spacing) ceiling the contract mandates. */
 const AUDIO_LEVEL_INTERVAL_MS = 200;
@@ -208,8 +214,7 @@ export function startMockPreviewServer(
 	if (!shouldUseMocks()) return null;
 	if (previewServer) return previewServer;
 
-	const port =
-		portOverride ?? (Number(process.env.PREVIEW_PORT) || DEFAULT_PREVIEW_PORT);
+	const port = portOverride ?? configuredPreviewPort();
 
 	try {
 		previewServer = Bun.serve<PreviewConn>({
@@ -267,10 +272,7 @@ export function getMockPreviewServer(): PreviewServer | null {
  * back to the configured `PREVIEW_PORT` / the 9997 default before the server binds.
  */
 export function getMockPreviewPort(): number {
-	return (
-		previewServer?.port ??
-		(Number(process.env.PREVIEW_PORT) || DEFAULT_PREVIEW_PORT)
-	);
+	return previewServer?.port ?? configuredPreviewPort();
 }
 
 /** Test seam: count of connections still streaming (0 == all timers cleared). */

@@ -214,6 +214,35 @@ roaming/notification and persisted-config mutations behind and asserting fresh
 baselines through RPC and the rendered panel. Scenario selection and per-worker
 port isolation below are unchanged.
 
+### Backend listener ownership [EXISTS]
+
+On Linux, local acquisitions lease an available RPC port in 3100–3149 using a
+kernel-held abstract Unix socket, and reject slots already bound by another
+service. Leases are shared across processes/checkouts in the same network
+namespace, held until child teardown, and disappear when their owner exits.
+There are no stale lockfiles to delete. Local allocation requires Linux; CI keeps
+its fixed parallel-index ports on isolated runners and its existing proxy policy.
+Explicit `port` requests are never silently relocated.
+
+Every acquisition uses a fresh `mkdtemp` state directory under
+`test-results/worker-backends/`; it never deletes another acquisition's files.
+The mock preview asks the OS for its own port (`PREVIEW_PORT=0`). The private
+`backend-entry.ts` launcher reports both actual listener ports over child IPC
+after boot. Only that message establishes readiness: a TCP connection to the
+requested port proves nothing about which process owns it. Child exit/error,
+missing readiness, or a different bound RPC port fails startup with its log path.
+Losing the parent IPC channel terminates the child rather than orphaning it.
+Test reports annotate the assigned `backend-port` without recording credentials.
+
+`backend-startup.spec.ts` holds a foreign listener open and requires startup
+rejection, then boots simultaneous backends and verifies distinct RPC/preview
+listeners and independent configuration. No login assertions, retries, timeouts,
+or worker counts are relaxed. Diagnosis receipts: [`E2E-BACKEND-OWNERSHIP.md`](../../../../docs/E2E-BACKEND-OWNERSHIP.md).
+
+This does not namespace the run-wide Vite/reference-backend setup. Do not run two
+whole local suites against the same frontend/reference ports; those remain a
+separate runner-level resource boundary.
+
 Both local and CI runs default to four workers. Each test now pays backend
 startup, so a CPU-count-derived browser budget also multiplies backend startup
 load; use the CLI `--workers` override for a deliberately sized run.

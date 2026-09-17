@@ -64,8 +64,13 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
 	],
 	// Test-scoped acquisition resets process globals, timers AND CWD state through
 	// the existing stop/seed/start path before either a page or an RPC client uses it.
-	workerBackend: async ({ backendHost }, use) => {
-		await use(await backendHost.start());
+	workerBackend: async ({ backendHost }, use, testInfo) => {
+		const backend = await backendHost.start();
+		testInfo.annotations.push({
+			type: 'backend-port',
+			description: String(backend.port),
+		});
+		await use(backend);
 	},
 	backendRpc: async ({ workerBackend }, use) => {
 		const rpc = await BackendRpc.connect(workerBackend.port, {
