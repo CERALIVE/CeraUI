@@ -164,6 +164,7 @@ function toFramerate(value: number): Framerate | undefined {
 // `@ceraui/rpc` so the frontend axis intersection and the backend share ONE table.
 // The typed re-export is a compile-time exhaustiveness gate: every engine
 // `CaptureDeviceKind` must have an entry, or this assignment fails to type-check.
+// raw_video/unknown deliberately map to undefined: classification is not support.
 export const DEVICE_KIND_TO_PIPELINE_ID: Record<
 	CaptureDeviceKind,
 	string | undefined
