@@ -380,3 +380,10 @@ The authoritative `is_streaming=false` broadcast the Todo-27 rollback emits (on 
 terminal failure that HAD reached streaming) is consumed by `subscriptions.svelte`
 and drives `getIsStreaming()` — proven through the WS layer by
 `streaming-status-broadcast.integration.test.ts`.
+## Composition lifecycle follow-up (2026-09-17)
+
+Failed stop IPC must complete the session cleanup promise with its error, not
+leave it waiting for an acknowledgement that cannot arrive. Restoration must
+reconcile the lifecycle through the same owner that admits starts; querying engine
+idle alone does not clear `stop_failed`. See
+[the traced failures, fixes and hardware evidence](COMPOSITION-LIFECYCLE.md).

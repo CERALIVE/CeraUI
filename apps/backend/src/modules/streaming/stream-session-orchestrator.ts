@@ -90,9 +90,12 @@ export type StreamSessionSnapshot = {
  * build time — everything else is a live `reload-config`, not a transaction.
  */
 export type StreamConfigChangeDelta = {
+	readonly composition?:
+		| import("@ceralive/cerastream").ChangeConfigParams["composition"]
+		| null;
 	readonly resolution?: string;
 	readonly framerate?: number;
-	readonly video_codec?: string;
+	readonly video_codec?: import("@ceralive/cerastream").ChangeConfigParams["codec"];
 	readonly input_id?: string;
 	readonly pipeline?: string;
 	// The ENGINE owns the libuvc-release → re-enumeration-barrier → open
@@ -611,11 +614,16 @@ export function createStreamSessionOrchestrator(
 		} catch (error) {
 			transition("stop_failed");
 			const reason = error instanceof Error ? error.message : "stop_failed";
-			logger.error("stream stop did not settle within its deadline", {
-				generation: stoppedGeneration,
-				deadlineMs: stopDeadlineMs,
-				reason,
-			});
+			logger.error(
+				reason === "stop_timeout"
+					? "stream stop did not settle within its deadline"
+					: "stream stop failed",
+				{
+					generation: stoppedGeneration,
+					deadlineMs: stopDeadlineMs,
+					reason,
+				},
+			);
 			return { result: "stop_failed", reason };
 		}
 	};

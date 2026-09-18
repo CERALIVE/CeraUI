@@ -7,6 +7,7 @@ import type {
 	ListDevicesResult,
 	StartResult,
 } from "@ceralive/cerastream";
+import { CerastreamConnectionError } from "@ceralive/cerastream";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import {
 	CerastreamBackend,
@@ -60,6 +61,7 @@ interface FakeClientOptions {
 
 function makeClient(options: FakeClientOptions): CerastreamClient {
 	const closed = deferred<never>();
+	void closed.promise.catch(() => undefined);
 	const record = (operation: string): void => {
 		options.trace.push(`${options.name}:${operation}`);
 	};
@@ -82,6 +84,15 @@ function makeClient(options: FakeClientOptions): CerastreamClient {
 		setBitrate: async (params) => ({
 			applied: { max_bitrate: params.max_bitrate },
 		}),
+		requestKeyframe: async () => {
+			throw new Error("unexpected request-keyframe");
+		},
+		setEdidProfile: async () => {
+			throw new Error("unexpected set-edid-profile");
+		},
+		listSwitchTargets: async () => {
+			throw new Error("unexpected list-switch-targets");
+		},
 		switchInput: async (params) => ({
 			active_input: params.input_id,
 			mode: params.mode,
@@ -211,4 +222,65 @@ test("stop is not acknowledged until a separately dispatched engine stop reaches
 	expect(trace).toContain("stop:close");
 	expect(connection).toBe(2);
 	expect(stopped).toBe(true);
+});
+
+test("a failed fresh stop connection completes with its error, never a false idle acknowledgement", async () => {
+	// Given a session whose engine disappears before the independent stop dial.
+	const trace: string[] = [];
+	const client = makeClient({ name: "session", trace });
+	const failure = new CerastreamConnectionError(
+		"engine exited",
+		undefined,
+		"closed",
+	);
+	let reachable = true;
+	const backend = new CerastreamBackend({
+		connect: async () => {
+			if (!reachable) throw failure;
+			return client;
+		},
+		logger: { debug() {}, info() {}, warn() {}, error() {} },
+	});
+	await backend.start(STREAM_CONFIG, RUN_OPTIONS);
+	reachable = false;
+	let acknowledged = false;
+	const failures: unknown[] = [];
+
+	// When Stop cannot reach the restarted service yet.
+	backend.stop(
+		() => {
+			acknowledged = true;
+		},
+		(error) => {
+			failures.push(error);
+		},
+	);
+	await backend.settle();
+
+	// Then the caller can settle cleanup without spending the outer deadline.
+	expect(failures).toEqual([failure]);
+	expect(acknowledged).toBe(false);
+	expect(trace).toContain("session:close");
+});
+
+test("composition clear reaches raw IPC as null rather than disappearing in the pinned schema", async () => {
+	const requests: unknown[] = [];
+	const client = Object.assign(makeClient({ name: "session", trace: [] }), {
+		rawRequest: async (method: string, params: unknown) => {
+			requests.push({ method, params });
+			return { attempt_id: "clear-1", phase: "applied", state: "streaming" };
+		},
+	});
+	const backend = new CerastreamBackend({ connect: async () => client });
+	await backend.start(STREAM_CONFIG, RUN_OPTIONS);
+	const result = await backend.changeConfig({ resolution: "1920x1080" }, true);
+	expect(requests).toEqual([
+		{
+			method: "change-config",
+			params: { resolution: "1920x1080", composition: null },
+		},
+	]);
+	expect(result.phase).toBe("applied");
+	backend.stop(() => {});
+	await backend.settle();
 });

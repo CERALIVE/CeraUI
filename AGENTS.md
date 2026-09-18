@@ -14,7 +14,7 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.9.6"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.9.8"   (public npm, @ceralive scope)
 "@ceralive/srtla-send":  "2026.8.0"   (public npm, @ceralive scope)
 ```
 
@@ -97,7 +97,7 @@ is what this gate exists because the type system alone could not catch.
 ## STRUCTURE
 
 The live cockpit consumes an authoritative session-switch namespace, distinct from
-device discovery. Both consumers pin published cerastream 2026.9.6, schema 0.18.0.
+device discovery. Both consumers pin published cerastream 2026.9.8, schema 0.18.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,
 and the outstanding U6 colour drill are in [LIVE-SESSION-SWITCHING](docs/LIVE-SESSION-SWITCHING.md).
 
@@ -293,6 +293,12 @@ CeraUI/
 | **`device.activeProfile` status-frame emitter (drift-detection loop)** | `apps/backend/src/modules/remote-control/active-profile-reporter.ts` (`reportActiveProfile({force?})` — reads the ACTUALLY-applied `StreamConfig` via injected `readActiveProfile`, de-dups on the 4 fields, emits `{config}` via injected `broadcast`) + `active-profile-wiring.ts` (`wireActiveProfileReporter()` — binds `readActiveProfile` to the persisted `stream_profile`/`srt_latency`/`fec_enabled`/`recovery_mode` config, `broadcast` to `broadcastMsg`; called from `main.ts` after `wireSetProfile()`). Three emit sites: `set-profile-wiring.ts` (after a successful `setProfile` apply), `rpc/procedures/streaming.procedure.ts` (after a UI Stream-Tuning config change), `modules/remote-control/channel.ts` `handleOpen()` (force re-emit on control-channel connect/reconnect — reseeds the hub, which loses its snapshot on disconnect). Frame type registered in `protocol.ts` `STATUS_TYPES` + `RELAYABLE_TYPES` (`status-relay.ts`) as `ACTIVE_PROFILE_STATUS = "device.activeProfile"`. Platform-side consumer: `ceralive-platform/apps/api/lib/remote-control/hub/internal-gate.ts` `applyActiveProfile` (see `ceralive-platform/AGENTS.md` → SRT-receive profile reconciliation) |
 
 ## COMMANDS
+
+Functional E2E backend readiness is child-owned IPC, never a generic TCP probe.
+Linux local runs lease 3100–3149 RPC slots across processes; CI keeps its existing
+isolated-runner proxy range. Each acquisition owns fresh disk state and an
+OS-assigned mock-preview listener. See [`docs/E2E-BACKEND-OWNERSHIP.md`](docs/E2E-BACKEND-OWNERSHIP.md)
+and the frontend E2E playbook before changing this lifecycle.
 
 Portal credentials use the existing mode-0600 atomic store, now written only
 after successful verification in `modems.setCredentials`. Failed candidates stay
@@ -1247,7 +1253,7 @@ Options outside the offered set are shown **disabled with a reason tooltip** —
 hidden, so operators can see what the hardware doesn't support and why.
 
 **The encoder universe is engine-owned [EXISTS].** The published
-`@ceralive/cerastream@2026.9.6` binding carries `get-capabilities.encoders[]` with
+`@ceralive/cerastream@2026.9.8` binding carries `get-capabilities.encoders[]` with
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.
@@ -1574,6 +1580,12 @@ encoder — including a plain-alphanumeric regression guard proving today's boar
 credentials are byte-unchanged.
 
 ## STREAMING BACKEND QUALITY [EXISTS]
+
+The OPi composition lifecycle repairs cover explicit apply-now disable, failed-stop
+completion, reconciliation before restoration and composition-free snapshot restore.
+The companion engine must preserve a null clear delta and accept pre-videorate
+allocation cadence. Publication/merge boundaries and hardware receipts:
+[`docs/COMPOSITION-LIFECYCLE.md`](docs/COMPOSITION-LIFECYCLE.md).
 
 Quality improvements landed in `chore/backend-quality` (Tasks 5–7, 13–14).
 

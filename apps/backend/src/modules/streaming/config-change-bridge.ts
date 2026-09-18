@@ -3,7 +3,6 @@ import {
 	CONFIG_CHANGE_EVENT,
 	CONFIG_CHANGE_REASON_ENGINE_LOST,
 	CONFIG_CHANGE_REASON_REJECTED,
-	type ConfigChangePhase,
 	type ConfigChangeResult,
 	type Resolution,
 	resolutionSchema,
@@ -12,6 +11,7 @@ import {
 
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../../rpc/compat.ts";
+import type { CerastreamBackend } from "./cerastream-backend.ts";
 import {
 	type ConfigChangePhaseEvent,
 	changeStreamSessionConfig,
@@ -21,20 +21,9 @@ import {
 } from "./stream-session-orchestrator.ts";
 import { getStreamingBackend } from "./streaming-engine.ts";
 
-type ChangeConfigCapableBackend = {
-	changeConfig?: (params: {
-		resolution?: string;
-		framerate?: number;
-		codec?: string;
-		input_id?: string;
-		pipeline?: string;
-		input_mode?: string;
-	}) => Promise<{
-		attempt_id: string;
-		phase: ConfigChangePhase;
-		reason?: string;
-	}>;
-};
+type ChangeConfigCapableBackend = Partial<
+	Pick<CerastreamBackend, "changeConfig">
+>;
 
 /**
  * The engine speaks PIXELS (`"1280x720"`), never the UI's rung token (`"720p"`).
@@ -68,22 +57,28 @@ export async function changeEngineRuntimeConfig(
 	delta: StreamConfigChangeDelta,
 	attemptId: string,
 ): Promise<EngineConfigChangeOutcome> {
-	const backend =
-		getStreamingBackend() as unknown as ChangeConfigCapableBackend;
+	const backend: ChangeConfigCapableBackend = getStreamingBackend();
 	const dispatch = backend.changeConfig;
 	if (dispatch === undefined)
 		throw new Error("engine does not support change-config");
 
-	const result = await dispatch.call(backend, {
-		...(delta.resolution === undefined
-			? {}
-			: { resolution: encodeResolutionForEngine(delta.resolution) }),
-		...(delta.framerate === undefined ? {} : { framerate: delta.framerate }),
-		...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
-		...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
-		...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
-		...(delta.input_mode === undefined ? {} : { input_mode: delta.input_mode }),
-	});
+	const result = await dispatch.call(
+		backend,
+		{
+			...(delta.resolution === undefined
+				? {}
+				: { resolution: encodeResolutionForEngine(delta.resolution) }),
+			...(delta.framerate === undefined ? {} : { framerate: delta.framerate }),
+			...(delta.video_codec === undefined ? {} : { codec: delta.video_codec }),
+			...(delta.input_id === undefined ? {} : { input_id: delta.input_id }),
+			...(delta.pipeline === undefined ? {} : { pipeline: delta.pipeline }),
+			...(delta.input_mode === undefined
+				? {}
+				: { input_mode: delta.input_mode }),
+			...(delta.composition == null ? {} : { composition: delta.composition }),
+		},
+		delta.composition === null,
+	);
 
 	logger.info("config change transaction settled", {
 		module: "streaming",

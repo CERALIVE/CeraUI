@@ -4,6 +4,12 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
 
+The dev mock-preview server accepts explicit `PREVIEW_PORT=0` for an OS-assigned
+listener, matching its existing `startMockPreviewServer(0)` test seam. Unset or
+non-numeric values retain the previous 9997 fallback. E2E uses this to isolate preview
+upstreams; its private child readiness protocol lives in frontend test fixtures,
+not in a production endpoint. See [`../../docs/E2E-BACKEND-OWNERSHIP.md`](../../docs/E2E-BACKEND-OWNERSHIP.md).
+
 Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` public-npm registry dep) and `srtla-send-rs` via the `@ceralive/srtla-send` npm package.
 
 ## STRUCTURE
@@ -135,7 +141,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 not admission, and never persist capture config or trigger audio follow. Only an
 unsupported query uses the legacy registry path. See
 [LIVE-SESSION-SWITCHING](../../docs/LIVE-SESSION-SWITCHING.md) for the published
-2026.9.6/schema 0.18.0 contract. Targets carry only `input_id` and `kind`;
+2026.9.8/schema 0.18.0 contract. Targets carry only `input_id` and `kind`;
 membership is authoritative, including explicit `[]` for passthrough/composition.
 Non-membership is `SWITCH_FAILED`, not evidence of a physical unplug. The
 `session-switch-adapter.test.ts` gate drives the real published UDS client through
@@ -145,7 +151,7 @@ leave discovery, capture persistence and pending audio follow untouched.
 
 ### Engine-owned encoder ladder [EXISTS]
 
-`@ceralive/cerastream@2026.9.6` parses the additive `encoders[]` block before
+`@ceralive/cerastream@2026.9.8` parses the additive `encoders[]` block before
 `capabilities.ts` caches or broadcasts it. The backend performs no codec-table
 reconstruction: live and cached snapshots retain the producer-owned
 `EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend
@@ -7928,6 +7934,15 @@ Coverage: `tests/one-row-per-camera.test.ts`.
 
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
+Composition now follows the same staging/dispatch/outcome path, including explicit
+null. Both consumers now pin the verified published `@ceralive/cerastream@2026.9.8`,
+whose exported `ChangeConfigParams` and schema preserve null. The already-verified
+adapter retains its narrow raw-request path and producer-owned result validation;
+no local wire type is introduced. `composition-binding-contract.test.ts` fails
+against the former pin and guards the installed producer contract directly.
+The device engine separately needs the merged cerastream #170 correction.
+See [`docs/COMPOSITION-LIFECYCLE.md`](../../docs/COMPOSITION-LIFECYCLE.md).
+
 Resolution, framerate, codec and source are baked into the engine graph at build
 time, so changing one mid-stream means REPLACING the session. cerastream's
 `change-config` (engine schema `0.10.0`) makes that replacement recoverable;
@@ -8115,6 +8130,14 @@ procedure: applied-writes vs reverted/rollback_failed-don't, the delta contents,
 both apply-now fallbacks, and marker-present vs marker-absent reconciliation).
 
 ## ONE-SHOT STREAM RESTORATION AFTER ENGINE DEATH [EXISTS]
+
+Failed stop IPC now completes through an optional failure callback. Local sender
+and listener cleanup runs on both outcomes, but a failure never publishes a false
+idle acknowledgement. Restoration queries through the orchestrator's reconciliation
+seam, so authoritative engine idle retires `stop_failed` before new admission.
+Its snapshot cannot inherit persisted composition, and successful recovery retracts
+an earlier recovery-failed notification. Hardware and mutation evidence are in
+[`docs/COMPOSITION-LIFECYCLE.md`](../../docs/COMPOSITION-LIFECYCLE.md).
 
 `noteConnectionLoss` retires a session whose control connection died (see SESSION
 CONTROL CONNECTION above) and, until now, that was the end of it: systemd

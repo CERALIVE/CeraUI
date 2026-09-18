@@ -558,6 +558,7 @@ const APPLY_NOW_FIELDS = [
 	"framerate",
 	"video_codec",
 	"input_mode",
+	"composition",
 ] as const;
 
 /**
@@ -586,6 +587,9 @@ function stageApplyNowFields(
 			? {}
 			: { video_codec: input.video_codec }),
 		...(input.input_mode === undefined ? {} : { input_mode: input.input_mode }),
+		...(input.composition === undefined
+			? {}
+			: { composition: input.composition }),
 		...(sourceRouting?.pipeline === undefined
 			? {}
 			: { pipeline: sourceRouting.pipeline }),
@@ -594,6 +598,9 @@ function stageApplyNowFields(
 			: { selected_video_input: sourceRouting.selected_video_input }),
 	};
 	const previous: StagedConfigFields = {
+		...(input.composition === undefined
+			? {}
+			: { composition: config.composition ?? null }),
 		...(config.source === undefined ? {} : { source: config.source }),
 		...(config.resolution === undefined
 			? {}
@@ -1118,6 +1125,9 @@ export const setConfigProcedure = authedProcedure
 			...(staged.input_mode === undefined
 				? {}
 				: { input_mode: staged.input_mode }),
+			...(staged.composition === undefined
+				? {}
+				: { composition: staged.composition }),
 		});
 
 		if (outcome.result !== "applied") {
@@ -1133,6 +1143,8 @@ export const setConfigProcedure = authedProcedure
 
 		commitStagedConfigChange();
 		const persisted = getConfig();
+		if (staged.composition !== undefined)
+			applied.composition = persisted.composition ?? null;
 		broadcastMsg("config", persisted);
 		// Post-clamp echo for the staged half, same rule as the merge above.
 		if (staged.resolution !== undefined)
