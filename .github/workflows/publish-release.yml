@@ -602,7 +602,7 @@ jobs:
             echo ""
             echo "\`\`\`"
             echo "srt (SRT library with bonding)"
-            echo "gstlibuvch264src ─┤"
+            echo "gstlibuvcsrc ─────┤"
             echo "                  │"
             echo "                  └── ceralive-device (this package)"
             echo "                        ├── Depends: cerastream"

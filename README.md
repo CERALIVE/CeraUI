@@ -66,8 +66,10 @@ A dev-only DevTools destination is available in development builds.
   Failed stop IPC also completes local cleanup without claiming engine idle;
   restoration reconciles that state before admitting its one restart. Live
   composition disable now uses staged transactional reconfiguration rather than
-  a save-only acknowledgement. This requires the companion unreleased engine
-  correction; see [composition lifecycle evidence](docs/COMPOSITION-LIFECYCLE.md).
+  a save-only acknowledgement. The companion engine correction is released in
+  cerastream 2026.9.5; CeraUI 2026.9.2 prepares the consumer release. Released-build
+  product-path qualification remains separate from the candidate evidence; see
+  [composition lifecycle evidence](docs/COMPOSITION-LIFECYCLE.md).
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
   hosting a hotspot; unsupported or unreadable drivers retain the honest exclusive
   switch. The deterministic virtual interface is type-checked before reuse, and
@@ -97,7 +99,11 @@ A dev-only DevTools destination is available in development builds.
   state. Older snapshots retain a golden-pinned board fallback rather than losing
   their encode ceiling.
 - **Per-uplink health**: bounded device-specific checks feed default-route
-  election. Gateway checks race the first IPv4 and IPv6 targets with a 250 ms
+  election. Host election prefers device-bound repository HTTPS, retaining an
+  ordinary-connectivity fallback when no NIC passes. Apt waits for route repair
+  and a fresh unbound family check before dispatch; see
+  [host uplink policy and limitations](docs/HOST-UPLINK-ELECTION.md).
+  Generic gateway checks race the first IPv4 and IPv6 targets with a 250 ms
   stagger instead of walking every DNS answer serially, while active SRTLA links
   use passive RTT/NAK telemetry instead of competing probes. Captive portals
   remain visible as degraded links.
@@ -248,3 +254,8 @@ If you find CeraUI useful, consider supporting CeraLive development:
 - 💬 [Join the CeraLive Discord](https://discord.gg/Q2bvU49yx2)
 - ☕ [Ko-fi](https://ko-fi.com/andrescera)
 - 💳 [PayPal](https://www.paypal.com/donate/?business=7KKQS9KBSAMNE&no_recurring=0&item_name=CERALIVE+Development+Support&currency_code=USD)
+### UVC package integration
+
+Software updates classify `gstreamer1.0-libuvcsrc` as an application package.
+The portable libuvc source supports H.264/H.265; it is separate from RK3588's
+MPP/RGA acceleration. Existing engine source IDs and factory aliases stay intact.

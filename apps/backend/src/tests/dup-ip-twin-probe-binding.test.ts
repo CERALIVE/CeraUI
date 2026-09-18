@@ -117,7 +117,7 @@ describe("the shipped argv names the interface, never the shared address", () =>
 			const argv = buildDeviceBoundProbeArgv(EXTERNAL_ADDR, twin);
 			const at = argv.indexOf("--interface");
 			expect(at).toBeGreaterThan(-1);
-			expect(argv[at + 1]).toBe(twin);
+			expect(argv[at + 1]).toBe(`if!${twin}`);
 		}
 	});
 
@@ -133,8 +133,8 @@ describe("the shipped argv names the interface, never the shared address", () =>
 		const a = buildDeviceBoundProbeArgv(EXTERNAL_ADDR, TWIN_A);
 		const b = buildDeviceBoundProbeArgv(EXTERNAL_ADDR, TWIN_B);
 		expect(a).not.toEqual(b);
-		expect(a.filter((token) => token !== TWIN_A)).toEqual(
-			b.filter((token) => token !== TWIN_B),
+		expect(a.filter((token) => token !== `if!${TWIN_A}`)).toEqual(
+			b.filter((token) => token !== `if!${TWIN_B}`),
 		);
 	});
 
@@ -152,8 +152,8 @@ describe("the shipped argv names the interface, never the shared address", () =>
 		await probeConnectivityViaDevice(EXTERNAL_ADDR, TWIN_B, deps);
 
 		expect(argvs.map((argv) => argv[argv.indexOf("--interface") + 1])).toEqual([
-			TWIN_A,
-			TWIN_B,
+			`if!${TWIN_A}`,
+			`if!${TWIN_B}`,
 		]);
 	});
 });
@@ -275,7 +275,7 @@ describe("the SHIPPED default probe is the device-bound one", () => {
 		const source = readFileSync(
 			new URL("../modules/network/uplink-health/runtime.ts", import.meta.url),
 			"utf8",
-		).replaceAll(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+		).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
 
 		expect(source).toContain("probeConnectivityViaDevice");
 		expect(source).toContain("probeConnectivityViaDevice(");

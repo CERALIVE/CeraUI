@@ -63,8 +63,7 @@ describe("setDefaultRoute — fail-loud on a garbled route line", () => {
 
 		await expect(
 			setDefaultRoute("wwan0", {
-				runner: runner as never,
-				clearDefaultGws: async () => {},
+				runner,
 			}),
 		).rejects.toThrow("setDefaultRoute");
 

@@ -56,24 +56,17 @@ describe("setDefaultRoute — argv-only add path", () => {
 		const runner = mock(async (bin: string, args: string[]) => {
 			calls.push([bin, args]);
 			if (args[0] === "route" && args[1] === "show") {
-				return "default via 10.0.0.1 dev wwan0\n";
+				return args.includes("table") ? "default via 10.0.0.1 dev wwan0\n" : "";
 			}
 			return "";
 		});
 
 		await setDefaultRoute("wwan0", {
-			runner: runner as never,
-			clearDefaultGws: async () => {},
+			runner,
 		});
 
 		expect(calls[0]?.[0]).toBe("ip");
-		expect(calls[0]?.[1]).toEqual([
-			"route",
-			"show",
-			"table",
-			"wwan0",
-			"default",
-		]);
+		expect(calls[0]?.[1]).toEqual(["route", "show", "default"]);
 
 		const add = calls.find((c) => c[1][0] === "route" && c[1][1] === "add");
 		expect(add?.[0]).toBe("ip");
@@ -90,24 +83,21 @@ describe("setDefaultRoute — argv-only add path", () => {
 		expect(add?.[1]).not.toContain("default via 10.0.0.1 dev wwan0");
 	});
 
-	test("clears existing default routes before adding the new one", async () => {
+	test("adds a demoted route before removing the competing preference", async () => {
 		const order: string[] = [];
 		const runner = mock(async (_bin: string, args: string[]) => {
 			if (args[1] === "add") order.push("add");
+			if (args[1] === "del") order.push("del");
 			return args[0] === "route" && args[1] === "show"
-				? "default via 10.0.0.1 dev wwan0\n"
+				? "default via 192.0.2.1 dev uplink-a metric 7\ndefault via 10.0.0.1 dev wwan0 metric 19\n"
 				: "";
-		});
-		const clearDefaultGws = mock(async () => {
-			order.push("clear");
 		});
 
 		await setDefaultRoute("wwan0", {
-			runner: runner as never,
-			clearDefaultGws,
+			runner,
 		});
 
-		expect(order).toEqual(["clear", "add"]);
+		expect(order).toEqual(["add", "del"]);
 	});
 
 	test("rejects an interface name outside the ifname charset", async () => {

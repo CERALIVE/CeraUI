@@ -16,14 +16,9 @@
 */
 
 import { logger } from "../../helpers/logger.ts";
-import { argMatch, ID_RE, run } from "../../helpers/run.ts";
+import { run } from "../../helpers/run.ts";
 import { getms } from "../../helpers/time.ts";
-import {
-	logParseError,
-	type ParseResult,
-	parseFail,
-	parseOk,
-} from "../system/cli-parse.ts";
+import { isRealDevice } from "../system/device-detection.ts";
 import {
 	notificationBroadcast,
 	notificationRemove,
@@ -36,134 +31,33 @@ import {
 	probeExclusionReason,
 } from "./connectivity-candidates.ts";
 import {
+	type ConnectivityProbes,
+	defaultConnectivityProbes,
 	describeBinding,
 	electConnectivityCandidate,
 	raceConnectivityAddresses,
 } from "./connectivity-election.ts";
+import { setDefaultRoute } from "./default-route.ts";
 import { dnsCacheResolve, dnsCacheValidate } from "./dns.ts";
 import { CONNECTIVITY_CHECK_DOMAIN, checkConnectivity } from "./internet.ts";
 import { getNetworkInterfaces } from "./network-interfaces.ts";
 import { isUplinkClientSteeringEligible } from "./uplink-health/state.ts";
 
+export {
+	buildRouteAddArgv,
+	GatewayRouteError,
+	type GwDeps,
+	parseDefaultRouteLine,
+	setDefaultRoute,
+} from "./default-route.ts";
+
 export const UPDATE_GW_INT = 2000;
 
 export const NO_INTERNET_NOTIFICATION = "no_internet";
 
-let updateGwLock = false;
+let updateGwInFlight: Promise<boolean> | undefined;
 let updateGwLastRun = 0;
 let updateGwQueue = true;
-
-async function clear_default_gws() {
-	try {
-		while (true) {
-			await run("ip", ["route", "del", "default"]);
-		}
-	} catch (_err) {
-		return;
-	}
-}
-
-/**
- * Split a default-route line from `ip route show ... default` into a well-formed
- * `ip route add` argv. The `gw` string (e.g. `"default via 192.168.1.1 dev eth0"`)
- * is tokenized on whitespace into SEPARATE argv elements — security-critical: it
- * is never passed back as one re-interpolated shell token.
- */
-export function buildRouteAddArgv(gw: string): string[] {
-	const tokens = gw
-		.trim()
-		.split(/\s+/)
-		.filter((t) => t.length > 0);
-	return ["route", "add", ...tokens];
-}
-
-/**
- * Validate the line from `ip route show … default` before turning it into an
- * `ip route add` argv. An empty/garbled line (no leading `default`, or neither
- * a `via` nor `dev` clause) is drift: it fails loud instead of building a
- * meaningless `ip route add` that would clear the default route and install
- * nothing.
- */
-export function parseDefaultRouteLine(gw: string): ParseResult<string[]> {
-	const tokens = gw
-		.trim()
-		.split(/\s+/)
-		.filter((t) => t.length > 0);
-	if (tokens[0] !== "default") {
-		return parseFail(
-			"parseDefaultRouteLine",
-			"route line does not start with 'default'",
-			gw,
-		);
-	}
-	if (!tokens.includes("via") && !tokens.includes("dev")) {
-		return parseFail(
-			"parseDefaultRouteLine",
-			"route line has neither a 'via' nor a 'dev' clause",
-			gw,
-		);
-	}
-	return parseOk(buildRouteAddArgv(gw));
-}
-
-export type GwDeps = {
-	runner: typeof run;
-	clearDefaultGws: () => Promise<void>;
-};
-
-/*
-  THE TWIN-GATEWAY CASE: two interfaces, ONE gateway address.
-
-  Both HiLink twins run the same factory firmware, so both hand the host a lease
-  whose gateway is `192.168.8.1` — the SAME address, on the SAME subnet, from two
-  physically distinct dongles. `ip route show default` on the bench really does
-  print two `default via 192.168.8.1` lines that differ only in their `dev`
-  clause.
-
-  So NOTHING here may identify an uplink by an address:
-
-   - the ELECTION reads a PER-INTERFACE table (`ip route show table <ifname>`),
-     so the line it gets back is already the one belonging to that device;
-   - `parseDefaultRouteLine` tokenizes that line and `buildRouteAddArgv` replays
-     EVERY token, so the `dev <ifname>` clause survives into `ip route add`
-     verbatim and the installed route names the device, not just the gateway.
-     Two twins therefore produce two DIFFERENT argvs from two identical `via`
-     addresses;
-   - the PROBE that decides which interface won never dials `192.168.8.1` at all
-     — see {@link electConnectivityCandidate}. It targets the externally-resolved
-     connectivity address with the socket bound to one device.
-
-  Reaching a twin's admin gateway and reaching the Internet through that twin are
-  separate assertions, and a SIM-less dongle answers the first while
-  captive-portalling the second (board-measured). Neither may stand in for the
-  other.
-*/
-export async function setDefaultRoute(
-	goodIf: string,
-	deps: Partial<GwDeps> = {},
-): Promise<void> {
-	const runner = deps.runner ?? run;
-	const clearGws = deps.clearDefaultGws ?? clear_default_gws;
-
-	const gw = await runner("ip", [
-		"route",
-		"show",
-		"table",
-		argMatch(ID_RE, goodIf),
-		"default",
-	]);
-
-	await clearGws();
-
-	const parsed = parseDefaultRouteLine(gw);
-	if (!parsed.ok) {
-		logParseError(parsed);
-		throw new Error(`setDefaultRoute: ${parsed.reason}`);
-	}
-	await runner("ip", parsed.value);
-
-	logger.info(`Set default route: ip ${parsed.value.join(" ")}`);
-}
 
 export function queueUpdateGw() {
 	updateGwQueue = true;
@@ -175,10 +69,17 @@ export function queueUpdateGw() {
  * `undefined` when it cannot be determined. Never throws: an unreadable routing
  * table must not be mistaken for an excluded interface.
  */
-async function resolveDefaultRouteInterface(): Promise<string | undefined> {
+async function resolveDefaultRouteInterface(
+	family: 4 | 6,
+): Promise<string | undefined> {
 	try {
 		return parseDefaultRouteInterface(
-			await run("ip", ["route", "show", "default"]),
+			await run("ip", [
+				...(family === 6 ? ["-6"] : []),
+				"route",
+				"show",
+				"default",
+			]),
 		);
 	} catch (err) {
 		logger.debug(`Could not read the default route: ${err}`);
@@ -186,33 +87,69 @@ async function resolveDefaultRouteInterface(): Promise<string | undefined> {
 	}
 }
 
-async function updateGw() {
-	let addrs: Array<string>;
+export type GatewayElectionDeps = {
+	readonly isRealDevice: () => Promise<boolean>;
+	readonly resolve: () => ReturnType<typeof dnsCacheResolve>;
+	readonly validateDns: () => void;
+	readonly checkConnectivity: typeof checkConnectivity;
+	readonly interfaces: typeof getNetworkInterfaces;
+	readonly eligible: (ifname: string) => boolean;
+	readonly defaultInterface: typeof resolveDefaultRouteInterface;
+	readonly installRoute: (ifname: string, family: 4 | 6) => Promise<void>;
+	readonly probes: ConnectivityProbes;
+};
+
+function defaultGatewayElectionDeps(): GatewayElectionDeps {
+	return {
+		isRealDevice,
+		resolve: () => dnsCacheResolve(CONNECTIVITY_CHECK_DOMAIN),
+		validateDns: () => {
+			void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+		},
+		checkConnectivity,
+		interfaces: getNetworkInterfaces,
+		eligible: isUplinkClientSteeringEligible,
+		defaultInterface: resolveDefaultRouteInterface,
+		installRoute: (ifname, family) => setDefaultRoute(ifname, { family }),
+		probes: defaultConnectivityProbes,
+	};
+}
+
+export async function updateGw(
+	deps: GatewayElectionDeps = defaultGatewayElectionDeps(),
+): Promise<boolean> {
+	if (!(await deps.isRealDevice())) return true;
+	let addrs: Array<string> = [];
 	let fromCache = false;
 	try {
-		const resolveResult = await dnsCacheResolve(CONNECTIVITY_CHECK_DOMAIN);
+		const resolveResult = await deps.resolve();
 		addrs = resolveResult.addrs;
 		fromCache = resolveResult.fromCache;
 	} catch (err) {
 		logger.warn(`Failed to resolve ${CONNECTIVITY_CHECK_DOMAIN}: ${err}`);
-		return false;
 	}
 
-	if (await raceConnectivityAddresses(addrs, checkConnectivity)) {
-		if (!fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+	const defaultReachable = await raceConnectivityAddresses(
+		addrs,
+		deps.checkConnectivity,
+	);
+	if (defaultReachable) {
+		if (!fromCache) deps.validateDns();
 
 		logger.info("Internet reachable via the default route");
 		notificationRemove(NO_INTERNET_NOTIFICATION);
-
-		return true;
 	}
 
-	const netif = getNetworkInterfaces();
+	const netif = deps.interfaces();
 	const candidates = eligibleProbeCandidates(netif).filter((candidate) =>
-		isUplinkClientSteeringEligible(candidate.name),
+		deps.eligible(candidate.name),
 	);
 
-	const defaultIf = await resolveDefaultRouteInterface();
+	const defaultIf = await deps.defaultInterface(4);
+	// Keep the current default ahead of equal-ranked peers to avoid route churn.
+	candidates.sort(
+		(a, b) => Number(b.name === defaultIf) - Number(a.name === defaultIf),
+	);
 	const claim = decideConnectivityClaim({
 		candidateCount: candidates.length,
 		defaultIfname: defaultIf,
@@ -225,7 +162,7 @@ async function updateGw() {
 		logger.info(
 			`Default route is on ${claim.ifname} (${claim.reason}) — not a connectivity verdict; re-electing from ${candidates.length} eligible interface(s)`,
 		);
-	} else {
+	} else if (!defaultReachable) {
 		notificationBroadcast(
 			NO_INTERNET_NOTIFICATION,
 			"warning",
@@ -245,30 +182,49 @@ async function updateGw() {
 		}
 	}
 
-	const election = await electConnectivityCandidate(addrs, candidates);
-	for (const { candidate, reachable } of election.results) {
+	const election = await electConnectivityCandidate(
+		addrs,
+		candidates,
+		deps.probes,
+	);
+	for (const { candidate, reachable, repository } of election.results) {
 		logger.info(
 			`Internet ${reachable ? "reachable" : "unreachable"} via ${candidate.name} (${describeBinding(candidate)})`,
+			{
+				repository: repository.verdict,
+				ipv4: repository.ipv4,
+				ipv6: repository.ipv6,
+			},
 		);
 	}
 
 	const goodIf = election.elected?.name;
-	if (goodIf && !fromCache) void dnsCacheValidate(CONNECTIVITY_CHECK_DOMAIN);
+	if (goodIf && !fromCache && addrs.length > 0) deps.validateDns();
 
 	if (goodIf) {
-		// The notification claims the DEVICE has no Internet, and an eligible
-		// interface just proved otherwise — so retract it here, before and
-		// independently of installing a route. `setDefaultRoute` reads a
-		// per-interface routing table, and the shipped image provisions those only
-		// for modem*/wlan*: on a board reaching the Internet through eth0 it fails
-		// with "table id value is invalid", which used to leave "No Internet
-		// connectivity" standing over a working link.
+		// Connectivity and route application are distinct claims; retract only the former.
 		notificationRemove(NO_INTERNET_NOTIFICATION);
+		if (
+			election.results.find(({ candidate }) => candidate.name === goodIf)
+				?.repository.used === "none"
+		) {
+			logger.warn(
+				"Using connectivity-only host uplink; repository HTTPS unavailable",
+				{ ifname: goodIf },
+			);
+		}
 
 		try {
-			await setDefaultRoute(goodIf);
+			const family = election.family ?? 4;
+			const activeIf =
+				family === 4 ? defaultIf : await deps.defaultInterface(family);
+			if (activeIf !== goodIf) await deps.installRoute(goodIf, family);
 		} catch (err) {
-			logger.warn(`Error updating the default route via ${goodIf}: ${err}`);
+			logger.warn("Default-route application failed", {
+				ifname: goodIf,
+				error: err,
+			});
+			return false;
 		}
 
 		return true;
@@ -284,29 +240,37 @@ async function updateGw() {
 		);
 	}
 
-	return false;
+	return defaultReachable;
 }
 
-export async function updateGwWrapper() {
+export function updateGwWrapper(
+	force = false,
+	deps: GatewayElectionDeps = defaultGatewayElectionDeps(),
+): Promise<boolean> {
+	if (updateGwInFlight) return updateGwInFlight;
 	// Do nothing if no request is queued
-	if (!updateGwQueue) return;
+	if (!force && !updateGwQueue) return Promise.resolve(false);
 
 	// Rate limit
 	const ts = getms();
 	const to = updateGwLastRun + UPDATE_GW_INT;
-	if (ts < to) return;
-
-	// Don't allow simultaneous execution
-	if (updateGwLock) return;
+	if (!force && ts < to) return Promise.resolve(false);
 
 	// Proceeding, update status
 	updateGwLastRun = ts;
-	updateGwLock = true;
 	updateGwQueue = false;
 
-	const r = await updateGw();
-	if (!r) {
-		updateGwQueue = true;
-	}
-	updateGwLock = false;
+	updateGwInFlight = updateGw(deps)
+		.catch((error: unknown) => {
+			logger.warn("Gateway election failed", { error });
+			return false;
+		})
+		.then((result) => {
+			if (!result) updateGwQueue = true;
+			return result;
+		})
+		.finally(() => {
+			updateGwInFlight = undefined;
+		});
+	return updateGwInFlight;
 }

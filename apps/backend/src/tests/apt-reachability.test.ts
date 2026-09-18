@@ -91,7 +91,10 @@ describe("apt source parsing and curl argv", () => {
 	it("builds the exact bounded family-specific curl argv", () => {
 		expect(buildProbeArgv(4, "http://example.test/probe")).toEqual([
 			"curl",
+			"-q",
 			"-4",
+			"--noproxy",
+			"*",
 			"--connect-timeout",
 			"2",
 			"--max-time",
@@ -104,7 +107,7 @@ describe("apt source parsing and curl argv", () => {
 			"%{http_code} %{redirect_url}",
 			"http://example.test/probe",
 		]);
-		expect(buildProbeArgv(6, "https://example.test/")[1]).toBe("-6");
+		expect(buildProbeArgv(6, "https://example.test/")[2]).toBe("-6");
 	});
 });
 

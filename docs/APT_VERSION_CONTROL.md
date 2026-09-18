@@ -226,5 +226,5 @@ the `srtla-send-rs` package compares `srtla`'s own version, not `srtla-send-rs`'
 version, so the cutover logic is unaffected.
 
 **All other first-party packages** (`ceralive-device`, `srtla`, `cerastream`,
-`gstreamer1.0-libuvch264src`) remain on CalVer (`YYYY.MINOR.PATCH`) as described
+`gstreamer1.0-libuvcsrc`) remain on CalVer (`YYYY.MINOR.PATCH`) as described
 above.

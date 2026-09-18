@@ -4,6 +4,13 @@ Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
 
+Host default-route election now ranks device-bound repository HTTPS ahead of
+ordinary connectivity, with a sole-uplink fallback. All apt paths await route
+application and a fresh unbound family reading; an install failure re-arms gateway
+maintenance rather than returning success. The policy, shared primitives and
+source-only validation boundary are in
+[`HOST-UPLINK-ELECTION`](../../docs/HOST-UPLINK-ELECTION.md).
+
 The dev mock-preview server accepts explicit `PREVIEW_PORT=0` for an OS-assigned
 listener, matching its existing `startMockPreviewServer(0)` test seam. Unset or
 non-numeric values retain the previous 9997 fallback. E2E uses this to isolate preview
@@ -3105,10 +3112,11 @@ verdict, taken fresh, spent on ONE run.
 - **Mock/dev execution never launches curl.** The default probe is
   `isRealDevice()`-gated and `MOCK_SCENARIO` keeps its existing simulation path.
 
-This probe is INDEPENDENT of the gateway family race documented above. That one
-elects a default route; this one decides which family apt spends its run on. They
-share no cache and no verdict, and unifying them would let a repository outage
-change the device's connectivity claim.
+The family probe now also supplies uncached device-bound HTTPS observations to
+host election as a ranking input. A repository outage does not erase the ordinary
+connectivity fallback or change shared-client health. Apt still consumes a separate
+fresh UNBOUND verdict after awaited route repair; a bound success cannot stand in
+for that reading. See `docs/HOST-UPLINK-ELECTION.md` from the repo root.
 
 Board evidence: the Orange Pi 5+ drill observed the real `apt-get` argv from
 `/proc` carrying `-o Acquire::ForceIPv4=true` on BOTH the refresh and the discovery

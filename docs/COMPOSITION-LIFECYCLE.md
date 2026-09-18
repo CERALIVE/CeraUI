@@ -1,5 +1,14 @@
 # Composition lifecycle repair [PARTIAL — candidate verified, unreleased]
 
+## Release preparation
+
+CeraUI 2026.9.2 includes merged PRs #362 (composition/lifecycle) and #363
+(child-owned E2E backend readiness). The companion binary is released as
+cerastream 2026.9.5; its npm binding version remains independently numbered.
+The receipts below describe candidates, not qualification of the released
+CeraUI package. That package still needs live-disable, kill/restart and
+fractional-input allocation checks through CeraUI's real product path.
+
 ## Live disable
 
 `streaming.setConfig({composition:null, apply_now:true})` formerly wrote config

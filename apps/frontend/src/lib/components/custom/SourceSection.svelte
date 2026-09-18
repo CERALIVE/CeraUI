@@ -109,12 +109,12 @@ import {
 } from '$lib/streaming/sourceSummary';
 import { planAudioSelectionForSource } from '$lib/streaming/embedded-audio-selection';
 
-// Durable engineering note (public GitHub, gstlibuvch264src repo) explaining how a
+// Durable engineering note (public GitHub, gstlibuvcsrc repo) explaining how a
 // UVC device's descriptors are read to decide whether it has hardware H.264 — the
 // full decision tree behind the "Why MJPEG?" explainer. NEVER a `../` sibling path
 // (Rule D: repos are self-contained).
 const UVC_H264_DETECTION_DOC_URL =
-	'https://github.com/CERALIVE/gstlibuvch264src/blob/main/docs/notes/uvc-h264-detection.md';
+	'https://github.com/CERALIVE/gstlibuvcsrc/blob/main/docs/notes/uvc-h264-detection.md';
 
 interface Props {
 	// ── Unified device-first source list (T6 getSources()) ──

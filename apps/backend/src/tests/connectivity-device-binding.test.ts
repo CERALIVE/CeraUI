@@ -36,6 +36,7 @@ import {
 	NETIF_ERR_DUPIPV4,
 	type NetworkInterface,
 } from "../modules/network/network-interfaces.ts";
+import { deriveVerdict } from "../modules/system/apt-reachability.ts";
 
 function iface(over: Partial<NetworkInterface> = {}): NetworkInterface {
 	return {
@@ -80,7 +81,7 @@ describe("buildDeviceBoundProbeArgv", () => {
 		const argv = buildDeviceBoundProbeArgv("142.251.133.99", "eth1");
 		const at = argv.indexOf("--interface");
 		expect(at).toBeGreaterThan(-1);
-		expect(argv[at + 1]).toBe("eth1");
+		expect(argv[at + 1]).toBe("if!eth1");
 	});
 
 	test("the destination is the external check URL, not a gateway", () => {
@@ -194,6 +195,7 @@ function recordingProbes(
 	const calls: ProbeCalls = { device: [], sourceIp: [] };
 	return {
 		calls,
+		probeRepository: async () => deriveVerdict([]),
 		probeViaDevice: async (addr, ifname) => {
 			calls.device.push({ addr, ifname });
 			return reachableDevices.has(ifname);
