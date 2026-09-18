@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // @vitest-environment jsdom
 /**
  * EthernetSection — isolated-dongle row (modem-stack Phase B, todo 19).
@@ -177,6 +178,9 @@ describe("EthernetSection — isolated-dongle row", () => {
 	// membership the `bond-state-eth0` span in this very golden already states as
 	// `In Bond`. The switch, the Configure button, the state dot and every testid
 	// are byte-identical.
+	// Lucide 1.42.0's shared icon builder (#4409) reorders only the SVG classes.
+	// Changelog: https://github.com/lucide-icons/lucide/releases/tag/1.42.0
+	// The 1.46.0 golden retains the complete element/attribute/text comparison.
 	it("renders a plain wired row identically to before the dongle change", () => {
 		const { container } = renderRows([["eth0", PLAIN_ROW]]);
 		expect(shapeOf(container)).toBe(plainRowGolden.trimEnd());
