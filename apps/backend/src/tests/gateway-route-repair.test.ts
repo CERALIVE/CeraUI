@@ -68,7 +68,7 @@ describe("host route application", () => {
 		const runner = async (_bin: string, args: string[]) => {
 			calls.push(args);
 			if (args.includes("show")) return `${OLD}\n${other}\n${GOOD}\n`;
-			if (args[1] === "del" && args.at(-1) === "51")
+			if (args[1] === "del" && args[args.length - 1] === "51")
 				throw new Error("injected route delete failure");
 			return "";
 		};

@@ -60,7 +60,7 @@ describe("repository-aware host election", () => {
 		expect(
 			probes.calls.every(
 				(argv) =>
-					argv.at(-1) ===
+					argv[argv.length - 1] ===
 					"https://packages.example.test/repo/dists/stable/InRelease",
 			),
 		).toBe(true);
@@ -122,7 +122,7 @@ describe("device-bound repository probe", () => {
 					argv.indexOf("--interface") + 2,
 				),
 			).toEqual(["--interface", `if!${FIRST.name}`]);
-			expect(argv.at(-1)).toBe(
+			expect(argv[argv.length - 1]).toBe(
 				"https://packages.example.test/repo/dists/stable/InRelease",
 			);
 			expect(argv).toContain("-I");
