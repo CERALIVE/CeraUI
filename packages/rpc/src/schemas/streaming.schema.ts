@@ -112,6 +112,8 @@ export const inputModeSchema = z.enum([
 	'camlink',
 	'test',
 	'network',
+	'raw_video',
+	'unknown',
 ]);
 export type InputMode = z.infer<typeof inputModeSchema>;
 
@@ -580,6 +582,8 @@ export const deviceKindSchema = z.enum([
 	'uvc_h265',
 	'mjpeg',
 	'camlink',
+	'raw_video',
+	'unknown',
 ]);
 export type DeviceKind = z.infer<typeof deviceKindSchema>;
 

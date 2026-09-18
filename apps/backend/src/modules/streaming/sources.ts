@@ -726,6 +726,13 @@ export function buildSources(input: BuildSourcesInput): StreamSource[] {
 	for (const device of input.devices) {
 		if (device.media_class !== "video") continue;
 		liveVideoIds.add(device.input_id);
+		if (device.kind === "raw_video") {
+			unofferedCaptures.push({
+				...buildUnofferedCaptureEntry(device, ""),
+				unavailableReason: "live.education.reason.rawCaptureNotStreamable",
+			});
+			continue;
+		}
 		const bridged = deviceKindToPipelineId(device.kind);
 		if (bridged === undefined) continue;
 		const coarse = coarseByPipeline.get(bridged);
@@ -832,6 +839,11 @@ export function deriveEngineRouting(
 ): EngineRouting | undefined {
 	const source = sources.find((s) => s.id === sourceId);
 	if (source === undefined) return undefined;
+	if (
+		source.origin === "capture" &&
+		(source.kind === "raw_video" || source.kind === "unknown")
+	)
+		return undefined;
 	if (source.origin === "capture") {
 		// A dual-format camera does not reach the engine through ONE pipeline: the
 		// same hardware is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG mode.

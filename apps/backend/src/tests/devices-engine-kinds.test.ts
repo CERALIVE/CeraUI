@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
-
+import { captureDeviceSchema as engineDeviceSchema } from "@ceralive/cerastream";
 import type { CaptureDevice } from "@ceraui/rpc/schemas";
+import { logger } from "../helpers/logger.ts";
 import {
 	createDeviceRegistry,
 	type DeviceRegistryDeps,
@@ -8,6 +9,10 @@ import {
 	fromEngineDevice,
 	mapEngineDeviceKind,
 } from "../modules/streaming/devices.ts";
+import {
+	buildSources,
+	deriveEngineRouting,
+} from "../modules/streaming/sources.ts";
 
 // Engine-off deps: force the v4l2 fallback path unless a test overrides
 // getEngineDevices. Every effectful collaborator is a silent stub.
@@ -27,7 +32,7 @@ function makeDeps(
 		notify: () => undefined,
 		broadcast: () => undefined,
 		now: () => 0,
-		logger: { debug() {}, warn() {}, error() {} },
+		logger: { debug: () => logger, warn: () => logger, error: () => logger },
 		...overrides,
 	};
 }
@@ -47,6 +52,12 @@ describe("deriveKind — USB/UVC never mislabeled HDMI (acceptance fixtures)", (
 });
 
 describe("mapEngineDeviceKind — engine kind is authoritative when present", () => {
+	test.each(["raw_video", "unknown"])(
+		"preserves %s without a name-based hardware claim",
+		(kind) => {
+			expect(mapEngineDeviceKind(kind, "Cam Link 4K")).toBe(kind);
+		},
+	);
 	test("engine kind wins over the display-name heuristic", () => {
 		// A name that WOULD heuristically be "hdmi", but the engine typed it uvc.
 		expect(mapEngineDeviceKind("uvc_h264", "Some HDMI Capture")).toBe(
@@ -71,6 +82,84 @@ describe("mapEngineDeviceKind — engine kind is authoritative when present", ()
 });
 
 describe("fromEngineDevice — verbatim ids, typed kinds, no heuristic", () => {
+	test("keeps a raw IR sensor visible but non-streamable beside its working colour sensor", () => {
+		const raw = fromEngineDevice(
+			engineDeviceSchema.parse({
+				input_id: "/dev/video9",
+				device_path: "/dev/video9",
+				display_name: "Logitech BRIO",
+				media_class: "video",
+				kind: "raw_video",
+				caps: [
+					{
+						width: 340,
+						height: 340,
+						framerate: "30/1",
+						media_type: "video/x-raw",
+					},
+				],
+			}),
+		);
+		const color = fromEngineDevice(
+			engineDeviceSchema.parse({
+				input_id: "/dev/video7",
+				device_path: "/dev/video7",
+				display_name: "Logitech BRIO",
+				media_class: "video",
+				kind: "mjpeg",
+				caps: [
+					{
+						width: 1920,
+						height: 1080,
+						framerate: "60/1",
+						media_type: "image/jpeg",
+					},
+				],
+			}),
+		);
+		const metadata = fromEngineDevice(
+			engineDeviceSchema.parse({
+				input_id: "/dev/video8",
+				device_path: "/dev/video8",
+				display_name: "Logitech BRIO",
+				media_class: "video",
+				kind: "unknown",
+			}),
+		);
+		const sources = buildSources({
+			sources: [
+				{
+					id: "usb_mjpeg",
+					supports_audio: true,
+					supports_resolution_override: true,
+					supports_framerate_override: true,
+					default_resolution: "1080p",
+					default_framerate: 30,
+				},
+			],
+			devices: [raw, color, metadata],
+			networkIngest: { rtmp: null, srt: null },
+		});
+		expect(sources.find((source) => source.id === raw.input_id)).toMatchObject({
+			origin: "capture",
+			kind: "raw_video",
+			available: false,
+			unavailableReason: "live.education.reason.rawCaptureNotStreamable",
+			displayName: "Logitech BRIO",
+			pipelineId: "",
+		});
+		expect(deriveEngineRouting(raw.input_id, sources)).toBeUndefined();
+		expect(
+			sources.find((source) => source.id === color.input_id)?.available,
+		).toBe(true);
+		expect(deriveEngineRouting(color.input_id, sources)).toEqual({
+			pipeline: "usb_mjpeg",
+			selected_video_input: color.input_id,
+		});
+		expect(sources.some((source) => source.id === metadata.input_id)).toBe(
+			false,
+		);
+	});
 	test("carries engine ids verbatim and applies the typed kind", () => {
 		const device = fromEngineDevice({
 			input_id: "/dev/video0",
@@ -144,7 +233,9 @@ describe("device registry — engine-as-source", () => {
 describe("device registry — engine-up reconciliation", () => {
 	test("clears a stale persisted selection + notifies on engine-up transition", async () => {
 		const clearSelectedVideoInput = mock(() => undefined);
-		const notify = mock(() => undefined);
+		const notify = mock(
+			(..._args: Parameters<DeviceRegistryDeps["notify"]>) => undefined,
+		);
 		let engineReachable = false;
 		const registry = createDeviceRegistry(
 			makeDeps({
