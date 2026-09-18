@@ -126,10 +126,25 @@ describe("cerastream bindings version-skew guard", () => {
 		expect(processErrorCodeSchema.options.length).toBe(8);
 	});
 
-	test("SCHEMA_VERSION matches the session-switch 0.18.0 contract", () => {
+	test.each(["raw_video", "unknown", "camlink"])(
+		"the producer preserves %s device classification",
+		(kind) => {
+			expect(
+				bindings.captureDeviceSchema.parse({
+					input_id: "capture",
+					device_path: "/dev/video9",
+					display_name: "Capture",
+					media_class: "video",
+					kind,
+				}).kind,
+			).toBe(kind);
+		},
+	);
+
+	test("SCHEMA_VERSION matches the raw-classification 0.19.0 contract", () => {
 		// Package CalVer is independent of the hello schema version. The previous
 		// 2026.9.4 package still declared 0.16.0 and rejected the new HDMI causes.
-		expect(SCHEMA_VERSION).toBe("0.18.0");
+		expect(SCHEMA_VERSION).toBe("0.19.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {
