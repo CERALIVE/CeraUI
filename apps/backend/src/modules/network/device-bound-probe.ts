@@ -76,6 +76,19 @@ export const DEVICE_PROBE_TIMEOUT_MS = 4000;
  */
 export const PROBE_STATUS_MARKER = "\n<<<ceraui-probe-status>>>";
 
+export class InvalidProbeInterfaceError extends Error {
+	override readonly name = "InvalidProbeInterfaceError";
+	constructor(readonly ifname: string) {
+		super(`refusing to bind a probe to a suspect ifname: ${ifname}`);
+	}
+}
+
+export function deviceBindingArgs(ifname: string): string[] {
+	if (!isSafeIfname(ifname)) throw new InvalidProbeInterfaceError(ifname);
+	// if! forbids curl's address/hostname fallback when the device disappears.
+	return ["--interface", `if!${ifname}`];
+}
+
 /**
  * The argv for one device-bound probe. Pure, so the binding is assertable
  * without a board: the interface reaches argv as its own `--interface <name>`
@@ -87,15 +100,11 @@ export function buildDeviceBoundProbeArgv(
 	ifname: string,
 	timeoutMs: number = DEVICE_PROBE_TIMEOUT_MS,
 ): string[] {
-	if (!isSafeIfname(ifname)) {
-		throw new Error(`refusing to bind a probe to a suspect ifname: ${ifname}`);
-	}
 	const seconds = Math.max(1, Math.round(timeoutMs / 1000));
 	return [
 		"curl",
 		"--silent",
-		"--interface",
-		ifname,
+		...deviceBindingArgs(ifname),
 		"--max-time",
 		String(seconds),
 		"--header",

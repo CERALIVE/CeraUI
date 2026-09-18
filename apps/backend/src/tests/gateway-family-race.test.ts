@@ -6,6 +6,7 @@ import {
 	electConnectivityCandidate,
 	raceConnectivityAddresses,
 } from "../modules/network/connectivity-election.ts";
+import { deriveVerdict } from "../modules/system/apt-reachability.ts";
 
 const IPV4_TARGET = "142.251.133.99";
 const IPV6_TARGETS = [
@@ -45,6 +46,7 @@ describe("gateway connectivity family race", () => {
 		// Given: stale cached ordering from the Rock, where IPv6 has no usable route.
 		jest.useFakeTimers();
 		const probes: ConnectivityProbes = {
+			probeRepository: async () => deriveVerdict([]),
 			probeViaDevice: async () => false,
 			probeViaSourceIp: async (addr) => {
 				if (addr === IPV4_TARGET) return true;
@@ -112,6 +114,7 @@ describe("gateway connectivity family race", () => {
 		jest.useFakeTimers();
 		const calls: string[] = [];
 		const probes: ConnectivityProbes = {
+			probeRepository: async () => deriveVerdict([]),
 			probeViaDevice: async () => false,
 			probeViaSourceIp: async (addr) => {
 				calls.push(addr);
@@ -141,6 +144,7 @@ describe("gateway connectivity family race", () => {
 			binding: { kind: "device", ifname: "eth1" },
 		};
 		const probes: ConnectivityProbes = {
+			probeRepository: async () => deriveVerdict([]),
 			probeViaSourceIp: async () => false,
 			probeViaDevice: async (addr) => {
 				calls.push(addr);

@@ -1162,6 +1162,7 @@ describe("update discovery admission", () => {
 
 	it("coalesces concurrent discovery cycles", async () => {
 		let calls = 0;
+		const entered = Promise.withResolvers<void>();
 		let release: (() => void) | undefined;
 		setAptReachabilityProbeForTest(async () => ({
 			ipv4: "ok",
@@ -1175,11 +1176,12 @@ describe("update discovery admission", () => {
 				new Promise((resolve) => {
 					calls++;
 					release = () => resolve(null);
+					entered.resolve();
 				}),
 		);
 		try {
 			const first = runUpdateDiscoveryAndReport();
-			await Bun.sleep(0);
+			await entered.promise;
 			expect(await runUpdateDiscoveryAndReport()).toBe("busy");
 			expect(calls).toBe(1);
 			release?.();

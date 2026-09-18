@@ -99,7 +99,11 @@ A dev-only DevTools destination is available in development builds.
   state. Older snapshots retain a golden-pinned board fallback rather than losing
   their encode ceiling.
 - **Per-uplink health**: bounded device-specific checks feed default-route
-  election. Gateway checks race the first IPv4 and IPv6 targets with a 250 ms
+  election. Host election prefers device-bound repository HTTPS, retaining an
+  ordinary-connectivity fallback when no NIC passes. Apt waits for route repair
+  and a fresh unbound family check before dispatch; see
+  [host uplink policy and limitations](docs/HOST-UPLINK-ELECTION.md).
+  Generic gateway checks race the first IPv4 and IPv6 targets with a 250 ms
   stagger instead of walking every DNS answer serially, while active SRTLA links
   use passive RTT/NAK telemetry instead of competing probes. Captive portals
   remain visible as degraded links.
