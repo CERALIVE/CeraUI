@@ -153,7 +153,9 @@ export async function electConnectivityCandidate(
 	probes: ConnectivityProbes = defaultConnectivityProbes,
 ): Promise<ConnectivityElection> {
 	const results: CandidateProbeResult[] = [];
-	let fallback: ProbeCandidate | undefined;
+	let fallback:
+		| { readonly candidate: ProbeCandidate; readonly family: 4 | 6 }
+		| undefined;
 
 	for (const candidate of candidates) {
 		const repository = await probes.probeRepository(candidate.name);
@@ -165,19 +167,30 @@ export async function electConnectivityCandidate(
 		}
 		const localAddress =
 			candidate.binding.kind === "source-ip" ? candidate.binding.ip : undefined;
+		let reachableFamily: 4 | 6 | undefined;
 		const reachable = await raceConnectivityAddresses(
 			addrs,
-			(addr) =>
-				candidate.binding.kind === "device"
-					? probes.probeViaDevice(addr, candidate.binding.ifname)
-					: probes.probeViaSourceIp(addr, candidate.binding.ip),
+			async (addr) => {
+				const success =
+					candidate.binding.kind === "device"
+						? await probes.probeViaDevice(addr, candidate.binding.ifname)
+						: await probes.probeViaSourceIp(addr, candidate.binding.ip);
+				if (success) reachableFamily ??= isIP(addr) === 6 ? 6 : 4;
+				return success;
+			},
 			localAddress,
 		);
 		results.push({ candidate, reachable, repository });
-		if (reachable && fallback === undefined) fallback = candidate;
+		if (reachableFamily !== undefined && fallback === undefined) {
+			fallback = { candidate, family: reachableFamily };
+		}
 	}
 
-	return { elected: fallback, results };
+	return {
+		elected: fallback?.candidate,
+		results,
+		...(fallback ? { family: fallback.family } : {}),
+	};
 }
 
 export function describeBinding(candidate: ProbeCandidate): string {

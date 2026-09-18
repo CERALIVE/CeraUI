@@ -5,6 +5,7 @@ import {
 	updateGw,
 	updateGwWrapper,
 } from "../modules/network/gateways.ts";
+import { NETIF_ERR_DUPIPV4 } from "../modules/network/network-interfaces.ts";
 import { deriveVerdict } from "../modules/system/apt-reachability.ts";
 
 afterEach(() => mock.restore());
@@ -61,6 +62,41 @@ function fixture() {
 }
 
 describe("host repository policy reaches route application", () => {
+	test.each([4, 6] as const)(
+		"the sole TLS-impaired uplink still applies its working IPv%i fallback",
+		async (family) => {
+			// Given: a device-bound candidate, no repository TLS, and one usable HTTP family.
+			const h = fixture();
+			const result = await updateGw({
+				...h.deps,
+				resolve: async () => ({
+					addrs: ["203.0.113.10", "2001:db8::10"],
+					fromCache: true,
+				}),
+				checkConnectivity: async () => false,
+				interfaces: () => ({
+					"uplink-a": {
+						ip: "192.0.2.2",
+						tp: 0,
+						txb: 0,
+						rxb: 0,
+						enabled: true,
+						error: NETIF_ERR_DUPIPV4,
+					},
+				}),
+				defaultInterface: async () => undefined,
+				probes: {
+					probeRepository: async () => deriveVerdict([]),
+					probeViaSourceIp: async () => false,
+					probeViaDevice: async (addr) => addr.includes(":") === (family === 6),
+				},
+			});
+			// Then: repository failure cannot strand the only working family.
+			expect(result).toBe(true);
+			expect(h.installed).toEqual([["uplink-a", family]]);
+		},
+	);
+
 	test("unbound HTTP success cannot short-circuit repository-aware election", async () => {
 		// Given: ordinary host HTTP works through the wrong NIC.
 		const h = fixture();

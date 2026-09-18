@@ -204,7 +204,10 @@ export async function updateGw(
 	if (goodIf) {
 		// Connectivity and route application are distinct claims; retract only the former.
 		notificationRemove(NO_INTERNET_NOTIFICATION);
-		if (election.family === undefined) {
+		if (
+			election.results.find(({ candidate }) => candidate.name === goodIf)
+				?.repository.used === "none"
+		) {
 			logger.warn(
 				"Using connectivity-only host uplink; repository HTTPS unavailable",
 				{ ifname: goodIf },
