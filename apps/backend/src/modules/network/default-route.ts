@@ -44,7 +44,7 @@ export type GwDeps = {
 };
 
 export class GatewayRouteError extends Error {
-	readonly name = "GatewayRouteError";
+	override readonly name = "GatewayRouteError";
 	constructor(
 		readonly ifname: string,
 		readonly reason: "invalid-route" | "apply-failed",

@@ -77,7 +77,7 @@ export const DEVICE_PROBE_TIMEOUT_MS = 4000;
 export const PROBE_STATUS_MARKER = "\n<<<ceraui-probe-status>>>";
 
 export class InvalidProbeInterfaceError extends Error {
-	readonly name = "InvalidProbeInterfaceError";
+	override readonly name = "InvalidProbeInterfaceError";
 	constructor(readonly ifname: string) {
 		super(`refusing to bind a probe to a suspect ifname: ${ifname}`);
 	}
