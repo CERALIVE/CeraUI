@@ -19,20 +19,25 @@ unchanged. `pipeline-sources.ts` describes selectable IDs, not discovery kinds.
 The existing audio-reason enum is unchanged; a non-streamable raw input must not
 gain Cam Link's fixed audio-card policy.
 
-## Release prerequisite — not merge-ready until published
+## Published dependency boundary
 
 This consumer requires companion cerastream bindings **2026.9.9 / schema 0.19.0**.
-The package is prepared, not published. Both committed registry pins intentionally
-remain at 2026.9.8 until publication; replace BOTH pins and regenerate `bun.lock`
-from the registry before merging. The strengthened skew and exact-registry gates
-remain blocking. No local link or fabricated integrity is committed.
+The package was published on 2026-09-18 from cerastream PR #177's merge commit
+`c80e0ccc55c5ae5c0d1c7b75540efa8899ad543a`, tagged `bindings-v2026.9.9`.
+The [publish workflow](https://github.com/CERALIVE/cerastream/actions/runs/35395597683)
+passed, including 181 binding tests, and npm reports that exact `gitHead`.
+Both backend and shared RPC now pin 2026.9.9; the regenerated `bun.lock` carries
+the registry tarball's SHA-512 integrity. The skew and exact-registry gates remain
+unchanged. No local link or fabricated integrity is committed.
 
-Local candidate tests use the documented development-link workflow. Bun's isolated
+Earlier local candidate tests used the documented development-link workflow. Bun's isolated
 workspace installs need the link at both backend and RPC package resolution sites.
 The Zod catalog is aligned to the producer lock's 4.6.2 because Zod 4.4 and 4.6
 schema internals are not type-compatible when schemas are composed. During linked
 builds they must also resolve one physical Zod copy, or duplicate bundling trips
-the existing chunk-warning gate. No gate was relaxed.
+the existing chunk-warning gate. Release validation instead uses a forced frozen
+registry install at both resolution sites. No gate was relaxed. Publication removes
+the dependency blocker, not the requirement for green consumer CI and final review.
 
 ## Copy and scope
 
@@ -45,7 +50,9 @@ translations or edits to the frozen rendered fixtures were made.
 The separate multi-node enumeration repair is CeraUI PR #367. This PR does not
 duplicate its `seenNames` removal or audio naming changes. The live verification
 candidate used #367's exact head plus this patch, preserving the already-deployed
-BRIO colour-source repair. Review/land #367 alongside the classification rollout.
+BRIO colour-source repair. PR #367 merged separately on 2026-09-18; this PR still
+requires its own final merge authorization. Deploy this consumer before or together
+with an engine emitting the new classifications; publishing npm does not update a board.
 
 The Rock candidate reported video9 as unavailable `raw_video` and video7 as
 available `mjpeg`, verified through authenticated source pushes. No reboot,
