@@ -1,5 +1,9 @@
 # CeraUI
 
+Generic raw capture inputs now have an honest, non-streamable **Raw video** row
+rather than a false Cam Link identity. This consumer change requires coordinated
+bindings publication; see [rollout prerequisites](docs/RAW-CAPTURE-CLASSIFICATION.md).
+
 [![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
 [![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
 
