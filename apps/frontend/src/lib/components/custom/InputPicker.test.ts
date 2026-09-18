@@ -41,6 +41,9 @@ describe("InputPicker — hotplug picker (Task 34)", () => {
 		expect(picker).not.toBeNull();
 		expect(picker?.textContent).toContain("QA-Cam");
 		expect(picker?.textContent).toContain("USB audio");
+		// Lucide 1.42.0's shared icon builder (#4409) reorders SVG classes/attributes.
+		// Changelog: https://github.com/lucide-icons/lucide/releases/tag/1.42.0
+		// Keep the exact 1.46.0 markup, including aria-hidden and every path.
 		expect(picker?.outerHTML).toMatchSnapshot();
 	});
 });
