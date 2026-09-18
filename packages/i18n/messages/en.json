@@ -1,4 +1,7 @@
 {
+	"live.inputPicker.groups.raw_video": "Raw video",
+	"live.inputPicker.groups.unknown": "Unclassified input",
+	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
 	"live.summary.switchUnknown": "Live switch targets are not reported by this engine.",
 	"live.summary.switchEmpty": "No source switches are available in this session.",
 	"network.routerCellular.lock.verification.admin_unreachable": "The dongle's login page could not be reached. This password was not saved. Check the connection before trying again.",

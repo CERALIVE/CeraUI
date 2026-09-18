@@ -1,4 +1,7 @@
 {
+	"live.inputPicker.groups.raw_video": "Raw video",
+	"live.inputPicker.groups.unknown": "Unclassified input",
+	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
 	"live.summary.switchUnknown": "यह इंजन लाइव स्विच के लिए उपलब्ध स्रोतों की जानकारी नहीं देता।",
 	"live.summary.switchEmpty": "इस सत्र में स्रोत बदलने का कोई विकल्प उपलब्ध नहीं है।",
 	"network.routerCellular.lock.verification.admin_unreachable": "डोंगल के लॉगिन पेज तक नहीं पहुँचा जा सका। यह पासवर्ड सहेजा नहीं गया। दोबारा प्रयास करने से पहले कनेक्शन जाँचें।",

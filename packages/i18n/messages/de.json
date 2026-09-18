@@ -1,4 +1,7 @@
 {
+	"live.inputPicker.groups.raw_video": "Raw video",
+	"live.inputPicker.groups.unknown": "Unclassified input",
+	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
 	"live.summary.switchUnknown": "Diese Engine meldet keine Ziele für den Live-Quellenwechsel.",
 	"live.summary.switchEmpty": "In dieser Sitzung ist kein Quellenwechsel verfügbar.",
 	"network.routerCellular.lock.verification.admin_unreachable": "Die Anmeldeseite des Modemsticks ist nicht erreichbar. Dieses Passwort wurde nicht gespeichert. Prüfe die Verbindung, bevor du es erneut versuchst.",

@@ -1,4 +1,7 @@
 {
+	"live.inputPicker.groups.raw_video": "Raw video",
+	"live.inputPicker.groups.unknown": "Unclassified input",
+	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
 	"live.summary.switchUnknown": "此引擎未报告可用于直播切换的源。",
 	"live.summary.switchEmpty": "此会话中没有可用的源切换选项。",
 	"network.routerCellular.lock.verification.admin_unreachable": "无法访问上网卡的登录页面。此密码未保存。请检查连接后重试。",

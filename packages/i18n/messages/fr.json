@@ -1,4 +1,7 @@
 {
+	"live.inputPicker.groups.raw_video": "Raw video",
+	"live.inputPicker.groups.unknown": "Unclassified input",
+	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
 	"live.summary.switchUnknown": "Ce moteur ne communique pas les sources accessibles en direct.",
 	"live.summary.switchEmpty": "Aucun changement de source n’est disponible dans cette session.",
 	"network.routerCellular.lock.verification.admin_unreachable": "La page de connexion du modem est inaccessible. Ce mot de passe n'a pas été enregistré. Vérifiez la connexion avant de réessayer.",
