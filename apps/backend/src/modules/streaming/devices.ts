@@ -266,20 +266,15 @@ function engineModes(
 	return parsed.length > 0 ? { modes: parsed } : undefined;
 }
 
-/** Pure: collapse a v4l2 scan + audio map into the deduped device list. */
+/** Preserve node membership; equal display names do not identify a capture node. */
 export function buildDeviceList(
 	videoCards: Array<{ card: string; name: string }>,
 	audioSources: Record<string, string>,
 ): CaptureDevice[] {
 	const devices: CaptureDevice[] = [];
-	const seenNames = new Set<string>();
 	for (const { card, name } of videoCards) {
 		if (!VIDEO_CARD_RE.test(card)) continue;
 		const display = name.trim() || card;
-		// Cameras expose multiple /dev/videoN nodes under one name (capture +
-		// metadata); the picker wants one entry per physical source.
-		if (seenNames.has(display)) continue;
-		seenNames.add(display);
 		devices.push({
 			// Path-form id (`/dev/<card>`) matches the engine's path-preferred id
 			// scheme, so a device switched by id from this fallback scan uses the

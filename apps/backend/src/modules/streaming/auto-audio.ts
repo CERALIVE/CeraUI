@@ -98,7 +98,7 @@ import { getIsStreaming } from "./streaming.ts";
  * board reporting more than one resolves deterministically and a vendor-6.1
  * board behaves byte-identically to before this list existed.
  */
-const HDMI_CARD_IDS: readonly string[] = ["rockchiphdmiin", "hdmirx"];
+const HDMI_CARD_IDS: readonly string[] = ["rockchiphdmiin", "hdmirx", "HDMIIN"];
 
 /** The ALSA card id rule 4 keys off (the resolver's contract). */
 const CAMLINK_CARD_ID = "C4K";

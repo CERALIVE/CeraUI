@@ -198,6 +198,23 @@ below the RPC layer so every start origin receives identical behavior.
 
 ## AUDIO-DEVICE NAMING [EXISTS]
 
+**Production v7.2 also reports `HDMIIN` / `RK3588 HDMI-IN`.** Rock's
+2026-09-18 raw ALSA inventory uses that third spelling, not `hdmirx`.
+The onboard display table accepts the card ID and longname; Auto's ordered
+`HDMI_CARD_IDS` appends `HDMIIN` without changing the older spellings' precedence
+or the capture-PCM gate. No persisted selector is renamed. A missing PipeWire
+node still falls to the kernel longname and receives the same onboard label.
+
+**A video presence scan must retain EVERY node before the engine join.**
+`buildDeviceList` no longer deduplicates display names. Rock's BRIO publishes
+`video7`–`video10` under one name: lexicographic order picks metadata-only
+`video10` first, and the former dedup removed both real capture nodes. The
+membership-authoritative merge then discarded the engine's healthy `video7`
+and `video9` rows. Numeric sorting alone would still lose same-model cameras
+and other capture interfaces. Keep node membership complete; only engine-typed,
+pipeline-bridged rows become sources. Regression:
+`tests/source-enumeration-regression.test.ts`, including a true-unplug control.
+
 `modules/streaming/audio-naming.ts` turns the raw audio-card map into per-card
 operator-facing labels. Resolution is PURE (the one documented exception is the
 tier-3 diagnostic below) and runs a **4-tier** ladder:

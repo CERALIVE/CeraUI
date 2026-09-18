@@ -280,6 +280,8 @@ const ONBOARD_AUDIO_DISPLAY_RULES: ReadonlyMap<string, string> = new Map([
 	["rockchiphdmiin", "HDMI Input"],
 	["rockchiphdmiind", "HDMI Input"],
 	["hdmirx", "HDMI Input"],
+	["hdmiin", "HDMI Input"],
+	["rk3588hdmiin", "HDMI Input"],
 	["rockchipes8388", "Onboard Audio"],
 	["rk3588es8316", "Onboard Audio"],
 ]);

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import { logger } from "../helpers/logger.ts";
 import {
 	buildDeviceList,
 	createDeviceRegistry,
@@ -36,7 +37,7 @@ function makeDeps(
 		broadcast: () => undefined,
 		onDevicesChanged: () => undefined,
 		now: () => 0,
-		logger: { debug() {}, warn() {}, error() {} },
+		logger: { debug: () => logger, warn: () => logger, error: () => logger },
 		...overrides,
 	};
 }
@@ -60,7 +61,7 @@ describe("fromEngineDevice — signal verdict", () => {
 		device_path: "/dev/video0",
 		display_name: "rk_hdmirx",
 		media_class: "video" as const,
-		kind: "hdmi",
+		kind: "hdmi" as const,
 		stable_id: "port:fdee0000.hdmirx-controller",
 	};
 
@@ -87,7 +88,7 @@ describe("fromEngineDevice — signal verdict", () => {
 });
 
 describe("buildDeviceList", () => {
-	test("dedups video by display name, keeps one node per source", () => {
+	test("preserves same-named nodes for the engine metadata join", () => {
 		const list = buildDeviceList(
 			[
 				{ card: "video0", name: "RØDE HDMI" },
@@ -97,7 +98,11 @@ describe("buildDeviceList", () => {
 			{},
 		);
 		const video = list.filter((d) => d.media_class === "video");
-		expect(video.map((d) => d.display_name)).toEqual(["RØDE HDMI", "QA-Cam"]);
+		expect(video.map((d) => d.display_name)).toEqual([
+			"RØDE HDMI",
+			"RØDE HDMI",
+			"QA-Cam",
+		]);
 		expect(video[0]?.input_id).toBe("/dev/video0");
 	});
 
@@ -118,14 +123,13 @@ describe("buildDeviceList", () => {
 });
 
 describe("device registry", () => {
-	test("scan surfaces v4l2 + audio devices, deduped", async () => {
+	test("scan surfaces every v4l2 node plus audio devices", async () => {
 		const registry = createDeviceRegistry(makeDeps());
 		const devices = await registry.scan();
 		const names = devices.map((d) => d.display_name);
 		expect(names).toContain("QA-Cam");
 		expect(names).toContain("USB audio");
-		// RØDE collapsed to one entry
-		expect(names.filter((n) => n.includes("RØDE"))).toHaveLength(1);
+		expect(names.filter((n) => n.includes("RØDE"))).toHaveLength(2);
 	});
 
 	test("rescan broadcasts only when the list changes", async () => {
