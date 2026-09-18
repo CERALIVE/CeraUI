@@ -22,7 +22,8 @@ The policy is now a **two-tier ranking**, not an eligibility filter:
   IPv6-only success selects an IPv6 route operation.
 - If none passes, keep the first ordinary-connectivity-successful candidate.
   A sole TLS-impaired uplink therefore remains usable for host connectivity;
-  repository failure is logged, not relabelled as working TLS.
+  its winning HTTP address family is retained for route application. Repository
+  failure is logged, not relabelled as working TLS.
 - The current IPv4 default is tried first; otherwise existing interface record
   order breaks ties. There is no LAN-over-cellular heuristic, weight, fixed
   metric, adapter identity, or NetworkManager route-metric controller.
@@ -63,9 +64,15 @@ configuration is copied into curl. No redirects are followed.
 candidate's observed main-table DHCP default, with the existing named-table path
 as a fallback; it never creates policy-routing tables. The complete route,
 including its device and observed metric, is validated before defaults are
-removed. Deletions are bounded to that snapshot. An apply failure attempts to
-restore the snapshot and still fails; rollback failures are retained in the
-typed error's cause. The other address family's defaults are untouched.
+changed. The selected default stays in place; competing defaults that would win
+or tie are moved above the largest observed metric. Each demoted default is added
+before its old preference is removed, retaining every NIC's route for subsequent
+device-bound probes and failback. Metrics are range-checked before mutation.
+An apply failure undoes completed operations in reverse order and still fails;
+rollback failures are retained in the typed error's cause. The other address
+family's defaults are untouched. This is live kernel route ranking, not a
+persistent NetworkManager profile rewrite; DHCP can restore its own metrics, so
+each apt operation re-elects rather than trusting a previous repair.
 
 The updater returns false on failed application and re-arms maintenance. Concurrent
 callers join one in-flight promise, which releases on every outcome. Apt's explicit
@@ -89,7 +96,17 @@ Regression suites: `repository-uplink-election`, `gateway-repository-policy`,
 `gateway-route-repair`, `apt-gateway-precondition`, and `repository-probe-socket`
 under `apps/backend/src/tests/`. The socket test runs real curl against private,
 ephemeral loopback HTTP/TLS listeners with an ephemeral trusted certificate. The
-route tests inject the OS runner and never mutate the workstation network.
+socket suite also reproduces a peer that accepts TCP and resets immediately after
+ClientHello without sending a certificate, while serving HTTP successfully. The
+route unit tests inject the OS runner and never mutate the workstation network.
+
+Non-vacuity was checked by temporary behavioral mutations: removing HTTPS caused
+the resetting peer to pass; returning the first HTTP success elected the impaired
+NIC; detaching the apt repair let family probing run before route completion and
+admitted a failed repair; returning true after a refused route write disarmed the
+next retry. Each mutation failed its targeted regression and was restored before
+the passing run. The IPv6-only fallback additionally failed before its winning
+family was retained.
 
 Not covered or claimed:
 
