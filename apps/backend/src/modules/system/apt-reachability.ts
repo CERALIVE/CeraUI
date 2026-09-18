@@ -19,6 +19,7 @@ import {
 	type SpawnWithTimeoutResult,
 	spawnWithTimeout,
 } from "../../helpers/spawn-policy.ts";
+import { deviceBindingArgs } from "../network/device-bound-probe.ts";
 import { type AptOrigin, parseAptSourceOrigins } from "./apt-source-origins.ts";
 
 export { type AptOrigin, parseAptSourceOrigins } from "./apt-source-origins.ts";
@@ -57,12 +58,21 @@ export type AptReachabilityDeps = {
 	) => Promise<Pick<SpawnWithTimeoutResult, "exitCode" | "stdout">>;
 	readonly now?: () => number;
 	readonly maxAgeMs?: number;
+	readonly ifname?: string;
 };
 
-export function buildProbeArgv(family: 4 | 6, url: string): string[] {
+export function buildProbeArgv(
+	family: 4 | 6,
+	url: string,
+	ifname?: string,
+): string[] {
 	return [
 		"curl",
+		"-q",
 		family === 4 ? "-4" : "-6",
+		...(ifname === undefined ? [] : deviceBindingArgs(ifname)),
+		"--noproxy",
+		"*",
 		"--connect-timeout",
 		"2",
 		"--max-time",
@@ -73,7 +83,7 @@ export function buildProbeArgv(family: 4 | 6, url: string): string[] {
 		"/dev/null",
 		"-w",
 		"%{http_code} %{redirect_url}",
-		url,
+		ifname === undefined ? url : url.replace(/^http:/, "https:"),
 	];
 }
 
@@ -194,7 +204,14 @@ export async function probeAptReachability(
 	const now = deps.now?.() ?? Date.now();
 	const maxAgeMs = deps.maxAgeMs ?? APT_REACHABILITY_TTL_MS;
 	const age = cache === undefined ? undefined : now - cache.at;
-	if (cache !== undefined && age !== undefined && age >= 0 && age < maxAgeMs) {
+	// Bound observations must neither borrow nor populate the unbound host cache.
+	if (
+		deps.ifname === undefined &&
+		cache !== undefined &&
+		age !== undefined &&
+		age >= 0 &&
+		age < maxAgeMs
+	) {
 		return cache.value;
 	}
 
@@ -203,7 +220,7 @@ export async function probeAptReachability(
 		origins = parseAptSourceOrigins(await deps.readSources());
 	} catch {
 		const value = deriveVerdict([]);
-		cache = { at: now, value };
+		if (deps.ifname === undefined) cache = { at: now, value };
 		return value;
 	}
 
@@ -212,13 +229,13 @@ export async function probeAptReachability(
 			const probe = async (family: 4 | 6): Promise<AptFamilyProbe> => {
 				try {
 					const result = await deps.runProbe(
-						buildProbeArgv(family, origin.probeUrl),
+						buildProbeArgv(family, origin.probeUrl, deps.ifname),
 					);
 					return classifyProbe({
 						exitCode: result.exitCode,
 						stdout: result.stdout,
 						originHost: origin.host,
-						scheme: origin.scheme,
+						scheme: deps.ifname === undefined ? origin.scheme : "https",
 					});
 				} catch {
 					return "unknown";
@@ -229,6 +246,6 @@ export async function probeAptReachability(
 		}),
 	);
 	const value = deriveVerdict(byOrigin);
-	cache = { at: now, value };
+	if (deps.ifname === undefined) cache = { at: now, value };
 	return value;
 }

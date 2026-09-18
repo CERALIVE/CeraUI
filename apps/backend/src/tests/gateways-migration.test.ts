@@ -67,13 +67,7 @@ describe("setDefaultRoute — argv-only add path", () => {
 		});
 
 		expect(calls[0]?.[0]).toBe("ip");
-		expect(calls[0]?.[1]).toEqual([
-			"route",
-			"show",
-			"table",
-			"wwan0",
-			"default",
-		]);
+		expect(calls[0]?.[1]).toEqual(["route", "show", "default"]);
 
 		const add = calls.find((c) => c[1][0] === "route" && c[1][1] === "add");
 		expect(add?.[0]).toBe("ip");

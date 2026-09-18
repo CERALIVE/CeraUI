@@ -33,7 +33,7 @@ import {
 import { getms, oneHour, oneMinute } from "../../helpers/time.ts";
 import { isDevelopment } from "../../mocks/mock-config.ts";
 import { shouldUseMocks } from "../../mocks/mock-service.ts";
-import { queueUpdateGw } from "../network/gateways.ts";
+import { updateGwWrapper } from "../network/gateways.ts";
 import { setup } from "../setup.ts";
 import { notePlannedShutdown } from "../streaming/armed-stream-marker.ts";
 import { getIsStreaming } from "../streaming/streaming.ts";
@@ -48,6 +48,7 @@ import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
 import {
 	type AptReachability,
 	defaultAptReachabilityDeps,
+	deriveVerdict,
 	probeAptReachability,
 } from "./apt-reachability.ts";
 import {
@@ -139,6 +140,18 @@ export function setAptReachabilityProbeForTest(
 
 export function resetAptReachabilityProbeForTest(): void {
 	aptReachabilityProbe = defaultAptReachabilityProbe;
+}
+
+async function prepareAptNetwork(options?: {
+	readonly maxAgeMs?: number;
+}): Promise<AptReachability> {
+	if (!(await isRealDevice())) return aptReachabilityProbe(options);
+	if (!(await updateGwWrapper(true))) {
+		logger.warn("Apt preflight refused: host default-route repair failed");
+		return deriveVerdict([]);
+	}
+	// A bound NIC probe is not evidence for apt's unbound sockets after a route change.
+	return aptReachabilityProbe({ maxAgeMs: 0 });
 }
 
 function aptReachabilityWire(
@@ -796,7 +809,7 @@ function checkForSoftwareUpdates(
 	broadcastUpdateState();
 
 	void (async () => {
-		const reachability = await aptReachabilityProbe();
+		const reachability = await prepareAptNetwork();
 		lastAptReachability = aptReachabilityWire(reachability);
 		broadcastUpdateState();
 		if (
@@ -833,7 +846,6 @@ function checkForSoftwareUpdates(
 
 		if (stderr.length) {
 			aptGetUpdateFailures++;
-			queueUpdateGw();
 		} else {
 			aptGetUpdateFailures = 0;
 		}
@@ -910,7 +922,7 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 	aptDiscoveryRunning = true;
 	lastCheckedAt = Date.now();
 	try {
-		const reachability = await aptReachabilityProbe();
+		const reachability = await prepareAptNetwork();
 		lastAptReachability = aptReachabilityWire(reachability);
 		if (reachability.verdict === "unreachable") {
 			failCurrentCheck("repos_unreachable");
@@ -1363,7 +1375,7 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 async function doSoftwareUpdate(): Promise<void> {
 	if (!aptUpdatesEnabled() || getIsStreaming()) return;
 
-	const reachability = await aptReachabilityProbe({ maxAgeMs: 0 });
+	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
 	lastAptReachability = aptReachabilityWire(reachability);
 	if (
 		reachability.verdict === "unreachable" ||

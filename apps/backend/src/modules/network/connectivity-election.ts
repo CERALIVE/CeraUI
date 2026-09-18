@@ -27,17 +27,25 @@
 
 import { isIP } from "node:net";
 
+import {
+	type AptReachability,
+	defaultAptReachabilityDeps,
+	probeAptReachability,
+} from "../system/apt-reachability.ts";
 import type { ProbeCandidate } from "./connectivity-candidates.ts";
 import { checkConnectivityViaDevice } from "./device-bound-probe.ts";
 import { checkConnectivity } from "./internet.ts";
 
 /** The two ways a probe can be steered, injected so the binding is provable. */
 export type ConnectivityProbes = {
+	readonly probeRepository: (ifname: string) => Promise<AptReachability>;
 	probeViaSourceIp: (addr: string, ip: string) => Promise<boolean>;
 	probeViaDevice: (addr: string, ifname: string) => Promise<boolean>;
 };
 
 export const defaultConnectivityProbes: ConnectivityProbes = {
+	probeRepository: (ifname) =>
+		probeAptReachability({ ...defaultAptReachabilityDeps, ifname }),
 	probeViaSourceIp: (addr, ip) => checkConnectivity(addr, ip),
 	probeViaDevice: (addr, ifname) => checkConnectivityViaDevice(addr, ifname),
 };
@@ -46,11 +54,13 @@ export const defaultConnectivityProbes: ConnectivityProbes = {
 export type CandidateProbeResult = {
 	candidate: ProbeCandidate;
 	reachable: boolean;
+	readonly repository: AptReachability;
 };
 
 export type ConnectivityElection = {
 	elected: ProbeCandidate | undefined;
 	results: CandidateProbeResult[];
+	readonly family?: 4 | 6;
 };
 
 export const CONNECTIVITY_FAMILY_STAGGER_MS = 250;
@@ -125,8 +135,8 @@ export function raceConnectivityAddresses(
 }
 
 /**
- * Probe each candidate with ITS OWN binding until one answers, and report every
- * verdict reached along the way.
+ * Prefer device-bound repository HTTPS over generic HTTP. Record order breaks
+ * ties; a repository outage never removes the first ordinary working uplink.
  *
  * `addrs` are the externally-resolved connectivity-check addresses and nothing
  * else — no gateway, no admin API, no LAN address is ever a probe target, so a
@@ -143,8 +153,16 @@ export async function electConnectivityCandidate(
 	probes: ConnectivityProbes = defaultConnectivityProbes,
 ): Promise<ConnectivityElection> {
 	const results: CandidateProbeResult[] = [];
+	let fallback: ProbeCandidate | undefined;
 
 	for (const candidate of candidates) {
+		const repository = await probes.probeRepository(candidate.name);
+		const family =
+			repository.ipv4 === "ok" ? 4 : repository.ipv6 === "ok" ? 6 : undefined;
+		if (family !== undefined) {
+			results.push({ candidate, reachable: true, repository });
+			return { elected: candidate, results, family };
+		}
 		const localAddress =
 			candidate.binding.kind === "source-ip" ? candidate.binding.ip : undefined;
 		const reachable = await raceConnectivityAddresses(
@@ -155,11 +173,11 @@ export async function electConnectivityCandidate(
 					: probes.probeViaSourceIp(addr, candidate.binding.ip),
 			localAddress,
 		);
-		results.push({ candidate, reachable });
-		if (reachable) return { elected: candidate, results };
+		results.push({ candidate, reachable, repository });
+		if (reachable && fallback === undefined) fallback = candidate;
 	}
 
-	return { elected: undefined, results };
+	return { elected: fallback, results };
 }
 
 export function describeBinding(candidate: ProbeCandidate): string {
