@@ -53,9 +53,9 @@ boot-readiness behavior, or `change-config` transaction is introduced.
 
 ## Published dependency boundary
 
-Both `apps/backend` and `packages/rpc` pin **`@ceralive/cerastream@2026.9.8`**
-exactly, from npm, with schema **0.18.0** and registry `gitHead`
-`fcb9737d95160fcc96a7fbc638ea5bfd5a23c053`. The generated Bun lockfile carries
+Both `apps/backend` and `packages/rpc` pin **`@ceralive/cerastream@2026.9.9`**
+exactly, from npm, with schema **0.19.0** and registry `gitHead`
+`c80e0ccc55c5ae5c0d1c7b75540efa8899ad543a`. The generated Bun lockfile carries
 the registry artifact integrity. No producer link or local tarball is used.
 
 The inherited work was blocked correctly: its installed local producer claimed

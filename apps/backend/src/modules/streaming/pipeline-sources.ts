@@ -31,7 +31,7 @@ import type { Framerate, Resolution } from "../../helpers/config-schemas.ts";
 
 export type { Framerate, Resolution };
 
-/** All video source ids across all hardware platforms. */
+/** Selectable pipeline ids only; raw_video/unknown are discovery kinds, not pipelines. */
 export type VideoSource =
 	| "camlink" // Elgato Cam Link 4K (uncompressed YUY2)
 	| "libuvch264" // UVC H264 camera (hardware compressed)

@@ -151,7 +151,7 @@ export function deriveKind(name: string): DeviceKind {
 
 /**
  * Map the cerastream engine's typed capture `kind`
- * (`hdmi|uvc_h264|uvc_h265|mjpeg|camlink|audio|test|network`) onto the CeraUI
+ * (including non-streamable `raw_video` and capless `unknown`) onto the CeraUI
  * {@link DeviceKind}. When the engine reports a `kind` it is AUTHORITATIVE — the
  * heuristic {@link deriveKind} is skipped entirely; an unknown/unrecognized
  * engine kind (a future engine value) collapses to `"other"`. When `kind` is

@@ -15,7 +15,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-/* Check if there are any Cam Links plugged into a USB2 port */
+/* USB-link warning for identified Elgato products only, never generic raw_video nodes. */
 import { readdirP } from "../../helpers/files.ts";
 import { logger } from "../../helpers/logger.ts";
 import { readTextFile } from "../../helpers/text-files.ts";

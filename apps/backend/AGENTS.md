@@ -1,5 +1,10 @@
 # CeraUI Backend — Agent Knowledge Base
 
+`raw_video` is present-but-not-streamable, never a Cam Link fallback. `unknown`
+capless nodes do not become source choices. The engine owns identity; CeraUI
+preserves it and refuses routing. Publication, PR #367 coordination, and local
+validation limits: [raw classification](../../docs/RAW-CAPTURE-CLASSIFICATION.md).
+
 Parent: [`../../AGENTS.md`](../../AGENTS.md)
 
 ## OVERVIEW
@@ -148,7 +153,7 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 not admission, and never persist capture config or trigger audio follow. Only an
 unsupported query uses the legacy registry path. See
 [LIVE-SESSION-SWITCHING](../../docs/LIVE-SESSION-SWITCHING.md) for the published
-2026.9.8/schema 0.18.0 contract. Targets carry only `input_id` and `kind`;
+2026.9.9/schema 0.19.0 contract. Targets carry only `input_id` and `kind`;
 membership is authoritative, including explicit `[]` for passthrough/composition.
 Non-membership is `SWITCH_FAILED`, not evidence of a physical unplug. The
 `session-switch-adapter.test.ts` gate drives the real published UDS client through
@@ -158,7 +163,7 @@ leave discovery, capture persistence and pending audio follow untouched.
 
 ### Engine-owned encoder ladder [EXISTS]
 
-`@ceralive/cerastream@2026.9.8` parses the additive `encoders[]` block before
+`@ceralive/cerastream@2026.9.9` parses the additive `encoders[]` block before
 `capabilities.ts` caches or broadcasts it. The backend performs no codec-table
 reconstruction: live and cached snapshots retain the producer-owned
 `EncoderCapability[]`, while the minimal cold-start floor omits it so the frontend
@@ -7960,7 +7965,7 @@ Coverage: `tests/one-row-per-camera.test.ts`.
 ## APPLY-NOW CONFIG CHANGE — TRANSACTION + STAGED PERSISTENCE [EXISTS]
 
 Composition now follows the same staging/dispatch/outcome path, including explicit
-null. Both consumers now pin the verified published `@ceralive/cerastream@2026.9.8`,
+null. Both consumers now pin the verified published `@ceralive/cerastream@2026.9.9`,
 whose exported `ChangeConfigParams` and schema preserve null. The already-verified
 adapter retains its narrow raw-request path and producer-owned result validation;
 no local wire type is introduced. `composition-binding-contract.test.ts` fails

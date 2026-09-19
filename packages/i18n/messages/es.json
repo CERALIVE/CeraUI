@@ -1,4 +1,7 @@
 {
+	"live.inputPicker.groups.raw_video": "Raw video",
+	"live.inputPicker.groups.unknown": "Unclassified input",
+	"live.education.reason.rawCaptureNotStreamable": "This raw video input is detected, but streaming from it is not supported.",
 	"live.summary.switchUnknown": "Este motor no informa de los destinos de cambio en directo.",
 	"live.summary.switchEmpty": "No hay cambios de fuente disponibles en esta sesión.",
 	"network.routerCellular.lock.verification.admin_unreachable": "No se pudo acceder a la página de inicio de sesión del módem. Esta contraseña no se guardó. Comprueba la conexión antes de volver a intentarlo.",

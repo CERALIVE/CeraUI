@@ -226,6 +226,31 @@ afterEach(() => {
 });
 
 describe("SourceSection — unified device-first source list (Task 13)", () => {
+	it("renders a present raw input with a neutral label and a non-streamable reason", () => {
+		const raw: CaptureStreamSource = {
+			...RODE,
+			id: "ir",
+			devicePath: "/dev/video9",
+			displayName: "Logitech BRIO",
+			kind: "raw_video",
+			pipelineId: "",
+			available: false,
+			supportsAudio: false,
+			audioKind: "none",
+			supportsResolutionOverride: false,
+			supportsFramerateOverride: false,
+			unavailableReason: "live.education.reason.rawCaptureNotStreamable",
+		};
+		const { container } = mount({ sources: sourcesMsg([raw]) });
+		const row = container.querySelector('[data-testid="source-row-ir"]');
+		expect(row?.textContent).toContain("Raw video");
+		expect(row?.querySelector("button")?.getAttribute("title")).toContain(
+			"This raw video input is detected, but streaming from it is not supported.",
+		);
+		expect(row?.textContent).not.toContain("Cam Link");
+		expect(row?.querySelector("button")?.disabled).toBe(true);
+		expect(setConfig).not.toHaveBeenCalled();
+	});
 	it("renders the section and the unified source list", () => {
 		const { container } = mount({ sources: sourcesMsg([RODE]) });
 		expect(

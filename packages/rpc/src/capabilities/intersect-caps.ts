@@ -123,6 +123,8 @@ export const DEVICE_KIND_TO_PIPELINE_ID = {
 	uvc_h265: 'libuvch264',
 	mjpeg: 'usb_mjpeg',
 	camlink: 'camlink',
+	raw_video: undefined,
+	unknown: undefined,
 	test: 'test',
 	network: undefined,
 	audio: undefined,
