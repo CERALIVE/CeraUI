@@ -180,7 +180,7 @@ describe("package-layer classifier", () => {
 			"libqrtr-glib0",
 			"libsrt1.5-ceralive",
 			"modemmanager",
-			"srtla-send-rs",
+			"srtla",
 		];
 		expect([...ceralivePackageList].sort()).toEqual(expected);
 		expect(Object.keys(PACKAGE_LAYERS).sort()).toEqual(expected);
