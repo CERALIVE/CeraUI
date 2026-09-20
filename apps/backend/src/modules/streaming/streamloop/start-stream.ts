@@ -20,11 +20,11 @@
 // wires srtla per-uplink telemetry, then starts the engine session over the
 // StreamingBackend seam.
 
+import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
-} from "@ceralive/srtla-send/sender";
-import { AUDIO_SOURCE_AUTO, type StartFailureClass } from "@ceraui/rpc/schemas";
+} from "@ceraui/srtla-send/sender";
 import type { RuntimeConfig } from "../../../helpers/config-schemas.ts";
 import { logger } from "../../../helpers/logger.ts";
 import { getConfig } from "../../config.ts";

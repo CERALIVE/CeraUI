@@ -27,7 +27,7 @@
 
   The parse is DEFENSIVE because a sender may legitimately report nothing, NOT
   because the binding cannot read it. A retired comment here claimed the pinned
-  `@ceralive/srtla-send` build stripped todo 8's additive fields so they read as
+  `@ceraui/srtla-send` build stripped todo 8's additive fields so they read as
   absent on every tick; `2026.8.0` in fact publishes `bind_map_status` and the
   whole bind-map disposition surface, so a real verdict does arrive. What the
   defensive parse still buys is the ABSENT case: it leaves the writer's

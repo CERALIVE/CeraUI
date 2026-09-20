@@ -18,7 +18,7 @@
 
 // Resolved executable paths for the supervised stream subprocesses.
 
-import { getSrtlaSendExec } from "@ceralive/srtla-send/sender";
+import { getSrtlaSendExec } from "@ceraui/srtla-send/sender";
 import { setup } from "../../setup.ts";
 
 export const srtlaSendExec = getSrtlaSendExec(setup.srtla_path);

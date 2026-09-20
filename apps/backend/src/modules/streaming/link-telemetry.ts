@@ -46,13 +46,13 @@
 import {
 	createControlClient,
 	supportsStatsSubscription,
-} from "@ceralive/srtla-send/control";
+} from "@ceraui/srtla-send/control";
 import {
 	senderTelemetryPath,
 	type Telemetry,
 	type WatchTelemetryHandle,
 	watchTelemetry,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import type { BondEntry } from "./bind-map.ts";

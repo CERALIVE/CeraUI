@@ -23,7 +23,7 @@
  * Registry-dependency consumption stays Rule-D-compatible (root `AGENTS.md`):
  * `@ceralive/control-protocol` resolves through the package registry identically
  * whether or not the sibling repo is checked out — it is a CalVer registry dep like
- * `@ceralive/cerastream` / `@ceralive/srtla-send`, NOT a sibling `link:` or a `../`
+ * `@ceralive/cerastream` / `@ceraui/srtla-send`, NOT a sibling `link:` or a `../`
  * path reference. Evolution is additive-optional forever (see the package README →
  * "Evolution policy"): a change that would make a currently-optional field required
  * is a new protocol `v`, never a version bump of the package.
