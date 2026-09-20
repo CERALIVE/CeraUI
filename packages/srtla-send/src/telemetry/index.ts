@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Sender telemetry reader for `srtla-send-rs` (ADR-001, Option A — JSON stats file).
+ * Sender telemetry reader for the `srtla` sender (ADR-001, Option A — JSON stats file).
  *
  * The Rust sender (`src/telemetry_file.rs`) publishes a per-uplink snapshot to a
  * stats file via atomic `rename(2)` when started with `--stats-file`. This module

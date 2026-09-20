@@ -1,6 +1,6 @@
 /**
- * `@ceraui/srtla-send` — sender args builder + telemetry reader for
- * `srtla-send-rs`, absorbed from the retired npm sender binding (plan
+ * `@ceraui/srtla-send` — sender args builder + telemetry reader for the
+ * `srtla` sender, absorbed from the retired npm sender binding (plan
  * upstream-rebase-hard-fork, D13). Private workspace package; never published.
  *
  * The `./control` subpath speaks the hard-forked sender's own JSON-RPC dialect

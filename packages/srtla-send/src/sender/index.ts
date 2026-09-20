@@ -1,4 +1,4 @@
-// Sender CLI args, validation, and process helpers for srtla-send-rs.
+// Sender CLI args, validation, and process helpers for the srtla sender.
 //
 // Absorbed from the retired npm sender binding (plan upstream-rebase-hard-fork,
 // D13): the binding is no longer published, it lives here as a private
@@ -15,7 +15,7 @@ import { z } from "zod";
 
 const DEFAULT_BINARY = "srtla_send";
 
-/** Where the `srtla-send-rs` Debian package installs the sender. */
+/** Where the `srtla` Debian package installs the sender. */
 export const DEFAULT_SRTLA_SEND_PATH = "/usr/bin/srtla_send";
 
 /**

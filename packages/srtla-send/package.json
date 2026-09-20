@@ -2,7 +2,7 @@
 	"name": "@ceraui/srtla-send",
 	"version": "2026.9.0",
 	"private": true,
-	"description": "Sender args builder, telemetry reader, and control client for srtla-send-rs (absorbed from the retired npm sender binding)",
+	"description": "Sender args builder, telemetry reader, and control client for the srtla sender (absorbed from the retired npm sender binding)",
 	"type": "module",
 	"main": "./src/index.ts",
 	"types": "./src/index.ts",
