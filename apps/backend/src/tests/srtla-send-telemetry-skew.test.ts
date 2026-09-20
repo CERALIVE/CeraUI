@@ -19,7 +19,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 // `build_telemetry_json` → atomic `rename(2)`) and asserts the CeraUI reader
 // parses it into the typed snapshot the `linkTelemetry` flow depends on.
 //
-// The contract being skew-tested (srtla-send-rs AGENTS.md → PARITY CONTRACT):
+// The contract being skew-tested (the sender's AGENTS.md → PARITY CONTRACT):
 //   {"schema_version":1,"last_updated_ms":<ms>,"connections":[
 //     {"conn_id","rtt_ms","nak_count","weight_percent","window","in_flight","bitrate_bps"}]}
 //   - schema_version is the literal 1 (Rust adds it; the reader validates it).

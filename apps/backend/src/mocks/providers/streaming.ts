@@ -530,7 +530,7 @@ export function buildMockLinkTelemetry(): LinkTelemetryMessage | null {
 
 	// `weight_percent` is each active link's NORMALIZED share of the total
 	// selection weight (base_score × quality), summing to ~100 across links — NOT
-	// a per-link constant. Source of truth: srtla-send-rs
+	// a per-link constant. Source of truth: the srtla sender's
 	// `src/telemetry_file.rs` `conns_from_stats` + `weight_share_percent`
 	// (a lone link → 100, two equal → 50/50). Varied per-index bases + a gentle
 	// drift simulate a rebalancing bond; strictly positive so the total is never 0.

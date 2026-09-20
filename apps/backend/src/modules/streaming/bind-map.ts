@@ -18,7 +18,7 @@
 /*
   THE WRITER SIDE OF ADR-003 — pure half.
 
-  `srtla-send-rs/docs/adr/ADR-003-bind-map-contract.md` defines the READER; this
+  The srtla sender's `docs/adr/ADR-003-bind-map-contract.md` defines the READER; this
   module defines the document that reader parses, byte-for-byte compatibly. Two
   files, one directory, one writer:
 
