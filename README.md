@@ -2,7 +2,7 @@
 
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
-2026.9.9; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
+2026.9.10; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
 
 [![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
 [![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
@@ -71,7 +71,7 @@ A dev-only DevTools destination is available in development builds.
   restoration reconciles that state before admitting its one restart. Live
   composition disable now uses staged transactional reconfiguration rather than
   a save-only acknowledgement. The companion engine correction is released in
-  cerastream 2026.9.5; CeraUI 2026.9.2 prepares the consumer release. Released-build
+  cerastream 2026.9.5; CeraUI 2026.9.3 prepares the consumer release. Released-build
   product-path qualification remains separate from the candidate evidence; see
   [composition lifecycle evidence](docs/COMPOSITION-LIFECYCLE.md).
 - **Capability-gated AP+STA WiFi**: proven radios can keep their station link while
@@ -204,8 +204,8 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
-CeraUI pins the published `@ceralive/cerastream@2026.9.9` in both
-the backend and shared RPC package, carrying schema 0.19.0's raw-input classifications
+CeraUI pins the published `@ceralive/cerastream@2026.9.10` in both
+the backend and shared RPC package, carrying schema 0.20.0's raw-input classifications
 alongside the session-switch roster and nullable composition-clear correction. The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.
 The bindings-skew gate checks the schema version and preservation of the three

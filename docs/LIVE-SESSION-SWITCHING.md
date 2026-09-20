@@ -53,9 +53,12 @@ boot-readiness behavior, or `change-config` transaction is introduced.
 
 ## Published dependency boundary
 
-Both `apps/backend` and `packages/rpc` pin **`@ceralive/cerastream@2026.9.9`**
-exactly, from npm, with schema **0.19.0** and registry `gitHead`
-`c80e0ccc55c5ae5c0d1c7b75540efa8899ad543a`. The generated Bun lockfile carries
+Both `apps/backend` and `packages/rpc` pin **`@ceralive/cerastream@2026.9.10`**
+exactly, from npm, with schema **0.20.0** and registry `gitHead`
+`0b063784eb67ed6e72682b255d4e4eda16ad8960`. That bump is additive over the
+`2026.9.9`/`0.19.0` roster contract described above: `active_encode` gains only
+the optional `encoder_restarts`, `kernel_faults` and `skip_to_live` fields.
+The generated Bun lockfile carries
 the registry artifact integrity. No producer link or local tarball is used.
 
 The inherited work was blocked correctly: its installed local producer claimed

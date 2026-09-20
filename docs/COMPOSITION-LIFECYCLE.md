@@ -21,7 +21,7 @@ semantics are unchanged.
 The producer correction merged in cerastream #170 before publication of
 **`@ceralive/cerastream@2026.9.8`**, registry `gitHead`
 `fcb9737d95160fcc96a7fbc638ea5bfd5a23c053`. Both backend and shared RPC consumers
-now pin published 2026.9.9/schema 0.19.0, retaining that correction; its publication
+now pin published 2026.9.10/schema 0.20.0, retaining that correction; its publication
 receipt is in [raw capture classification](RAW-CAPTURE-CLASSIFICATION.md).
 A clean 2026.9.8 registry install compiled an imported
 `ChangeConfigParams` with `composition: null` and preserved null/object/omitted

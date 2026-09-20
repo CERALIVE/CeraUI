@@ -141,10 +141,13 @@ describe("cerastream bindings version-skew guard", () => {
 		},
 	);
 
-	test("SCHEMA_VERSION matches the raw-classification 0.19.0 contract", () => {
+	test("SCHEMA_VERSION matches the encode-telemetry 0.20.0 contract", () => {
 		// Package CalVer is independent of the hello schema version. The previous
 		// 2026.9.4 package still declared 0.16.0 and rejected the new HDMI causes.
-		expect(SCHEMA_VERSION).toBe("0.19.0");
+		// 2026.9.10 moves 0.19.0 → 0.20.0 additively: `active_encode` gains the
+		// optional `encoder_restarts`, `kernel_faults` and `skip_to_live` fields,
+		// so every 0.19.0 payload this consumer already reads still parses.
+		expect(SCHEMA_VERSION).toBe("0.20.0");
 	});
 
 	test("a rejected start carries the engine's typed capture causes", () => {

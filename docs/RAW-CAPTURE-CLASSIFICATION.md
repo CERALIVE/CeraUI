@@ -26,7 +26,9 @@ The package was published on 2026-09-18 from cerastream PR #177's merge commit
 `c80e0ccc55c5ae5c0d1c7b75540efa8899ad543a`, tagged `bindings-v2026.9.9`.
 The [publish workflow](https://github.com/CERALIVE/cerastream/actions/runs/35395597683)
 passed, including 181 binding tests, and npm reports that exact `gitHead`.
-Both backend and shared RPC now pin 2026.9.9; the regenerated `bun.lock` carries
+Both backend and shared RPC now pin 2026.9.10, which carries this schema
+additively (schema 0.20.0 adds only optional `active_encode` encode-telemetry
+fields); the regenerated `bun.lock` carries
 the registry tarball's SHA-512 integrity. The skew and exact-registry gates remain
 unchanged. No local link or fabricated integrity is committed.
 
