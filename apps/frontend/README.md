@@ -31,7 +31,7 @@ private workspace package `packages/srtla-send` (`@ceraui/srtla-send`):
 
 ```
 ceralive/
-├── srtla-send-rs/            ← source of the srtla_send BINARY only (no npm package)
+├── srtla sender repo/        ← source of the srtla_send BINARY only (no npm package)
 └── CeraUI/
     └── packages/srtla-send/  ← @ceraui/srtla-send, private, consumed as workspace:*
 ```

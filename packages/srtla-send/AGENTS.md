@@ -17,9 +17,10 @@ telemetry schema stays in that test's drift MANIFEST — that half probes the
 schema, not the pin.
 
 The `srtla_send` BINARY is still external: it is built and released by the
-`srtla-send-rs` repo and installed at `/usr/bin/srtla_send`. Only the helper
-layer lives here, so the binary's CLI and telemetry contracts are still that
-repo's to define — read `srtla-send-rs/AGENTS.md` before touching a call site.
+sender repository as the `srtla` Debian package and installed at
+`/usr/bin/srtla_send`. Only the helper layer lives here, so the binary's CLI and
+telemetry contracts are still that repo's to define — read its
+[AGENTS.md](https://github.com/CERALIVE/srtla-send-rs/blob/main/AGENTS.md) before touching a call site.
 
 ## STRUCTURE
 
