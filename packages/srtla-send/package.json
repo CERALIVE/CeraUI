@@ -1,0 +1,49 @@
+{
+	"name": "@ceraui/srtla-send",
+	"version": "2026.9.0",
+	"private": true,
+	"description": "Sender args builder, telemetry reader, and control client for srtla-send-rs (absorbed from the retired npm sender binding)",
+	"type": "module",
+	"main": "./src/index.ts",
+	"types": "./src/index.ts",
+	"exports": {
+		".": {
+			"types": "./src/index.ts",
+			"import": "./src/index.ts"
+		},
+		"./sender": {
+			"types": "./src/sender/index.ts",
+			"import": "./src/sender/index.ts"
+		},
+		"./telemetry": {
+			"types": "./src/telemetry/index.ts",
+			"import": "./src/telemetry/index.ts"
+		},
+		"./control": {
+			"types": "./src/control/index.ts",
+			"import": "./src/control/index.ts"
+		}
+	},
+	"scripts": {
+		"check": "bun ../../scripts/tsc.mjs --noEmit",
+		"test": "bun test",
+		"lint": "echo 'srtla-send linting handled by root Biome'",
+		"lint:fix": "echo 'srtla-send fixing handled by root Biome'"
+	},
+	"dependencies": {
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@types/bun": "1.4.2",
+		"typescript": "catalog:"
+	},
+	"keywords": [
+		"srtla",
+		"srt",
+		"ceralive",
+		"link-aggregation",
+		"sender",
+		"telemetry"
+	],
+	"license": "GPL-3.0"
+}
