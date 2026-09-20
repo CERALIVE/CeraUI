@@ -38,7 +38,7 @@ beforeAll(() => {
 
 const pushed: Revisions = {
 	ceralive: "abc1234",
-	srtla: "3.2.0 (main@974c8b9) [srtla_send]",
+	srtla: "4.1.0 (main@974c8b9) [srtla_send]",
 	bun: "1.4.0",
 	kernel: "6.1.115-vendor-rk35xx",
 	cerastream: "engine unreachable",
@@ -77,11 +77,26 @@ describe("VersionsDialog", () => {
 		expect(rowValue(container, "cerastream")).toEqual(["engine unreachable"]);
 	});
 
-	it("promotes the SRTLA version and demotes its build metadata", async () => {
+	it("promotes the SRTLA version and demotes a dev build's metadata", async () => {
 		render(VersionsDialog, { props: { open: true } });
 		const container = document.body;
 		await waitFor(() => {
-			expect(rowValue(container, "SRTLA")).toEqual(["3.2.0", "main@974c8b9"]);
+			expect(rowValue(container, "SRTLA")).toEqual(["4.1.0", "main@974c8b9"]);
+		});
+	});
+
+	// What a released image actually reports: the sender's .deb builds with no git
+	// context, so `-v` carries no parenthetical and the row must be one clean
+	// version with NO empty second line. Captured from shipped srtla 4.1.0.
+	it("renders the shipped release's metadata-free line as one clean row", async () => {
+		vi.mocked(rpc.system.getRevisions).mockResolvedValueOnce({
+			...pushed,
+			srtla: "4.1.0 [srtla_send]",
+		});
+		render(VersionsDialog, { props: { open: true } });
+		const container = document.body;
+		await waitFor(() => {
+			expect(rowValue(container, "SRTLA")).toEqual(["4.1.0"]);
 		});
 	});
 
