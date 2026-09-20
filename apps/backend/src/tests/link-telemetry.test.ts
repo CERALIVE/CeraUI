@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { ControlClient, HelloResult } from "@ceralive/srtla-send/control";
+import type { ControlClient, HelloResult } from "@ceraui/srtla-send/control";
 import {
 	connectionTelemetrySchema,
 	type Telemetry,
 	type TelemetryUpdate,
 	telemetrySchema,
 	type watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import {
 	broadcastLinkTelemetryIfChanged,
 	buildLinkTelemetry,
@@ -504,7 +504,7 @@ describe("cumulative session bytes (srtla_send ADR-002 bytes_sent_total)", () =>
 		// This case used to be covered by a hand-rolled `asCumulativeBytes` guard in
 		// `link-telemetry-rows.ts`, written when the field was believed unreadable
 		// and therefore read off `unknown`. The field is typed and Zod-validated by
-		// `@ceralive/srtla-send@2026.8.0` itself, so that guard was redundant and is
+		// `@ceraui/srtla-send@2026.8.0` itself, so that guard was redundant and is
 		// gone — but the GUARANTEE it encoded still has to hold, so the coverage
 		// moves down to the boundary that now enforces it rather than being deleted.
 		const malformed = [Number.NaN, -1, 1.5];

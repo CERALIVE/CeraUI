@@ -94,7 +94,7 @@ function ignoredEvidenceCitations(filename, markdown) {
 describe("documentation contracts", () => {
 	it("documents the installed registry dependency pins as standalone packages", () => {
 		const expected = new Map(
-			["@ceralive/cerastream", "@ceralive/srtla-send"].map((name) => [
+			["@ceralive/cerastream"].map((name) => [
 				name,
 				backendManifest.dependencies[name],
 			]),

@@ -1,20 +1,18 @@
 import { describe, expect, test } from "bun:test";
 
-// Version-skew guard for the @ceralive/srtla-send binding surface
-// (registry-pinned dep).
+// Surface guard for the @ceraui/srtla-send binding.
 //
-// CeraUI's backend resolves @ceralive/srtla-send from the registry
-// (GitHub Packages, @ceralive scope) — pinned in apps/backend/package.json,
-// NOT a sibling `link:` and NOT a vendored tarball. A registry republish that
-// drifts the exported surface (rename / removal / signature change) can pass
-// `bun tsc` against a stale lockfile while the actual import explodes when the
-// stream starts on-device.
+// The binding used to be a registry-pinned npm dep, and this guard existed
+// because a republish could drift the exported surface under a stale lockfile.
+// It is now a private workspace package (packages/srtla-send, "workspace:*"),
+// so the drift it guards against is an in-repo edit rather than a republish —
+// the same failure, one commit closer. An export renamed or removed there still
+// type-checks nowhere useful and still explodes at stream start on-device.
 //
 // This test imports the EXACT exports that streamloop.ts + link-telemetry.ts
-// consume from `@ceralive/srtla-send/{sender,telemetry}` and asserts their
-// identity and runtime contract. If a refreshed @ceralive/srtla-send renames,
-// removes, or changes the shape of any of these, this test fails immediately
-// and loudly instead of failing silently in production.
+// consume from `@ceraui/srtla-send/{sender,telemetry}` and asserts their
+// identity and runtime contract, so the breakage surfaces here, immediately and
+// loudly, instead of silently in production.
 //
 // Guarded sender exports (must stay in lockstep with the consumers):
 //   - buildSrtlaSendArgs
@@ -26,10 +24,10 @@ import { describe, expect, test } from "bun:test";
 //   - SrtlaSendOptions (type)
 //
 // The link-telemetry module (modules/streaming/link-telemetry.ts) additionally
-// consumes the @ceralive/srtla-send/telemetry surface; those exports are
+// consumes the @ceraui/srtla-send/telemetry surface; those exports are
 // guarded in the second describe block below for the same fail-loud reason.
 
-import * as sender from "@ceralive/srtla-send/sender";
+import * as sender from "@ceraui/srtla-send/sender";
 import {
 	buildSrtlaSendArgs,
 	controlSocketPath,
@@ -39,8 +37,8 @@ import {
 	sendSrtlaSendHup,
 	spawnSrtlaSend,
 	srtlaSendOptionsSchema,
-} from "@ceralive/srtla-send/sender";
-import * as telemetry from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/sender";
+import * as telemetry from "@ceraui/srtla-send/telemetry";
 import {
 	connectionTelemetrySchema,
 	readTelemetry,
@@ -49,7 +47,7 @@ import {
 	senderTelemetryPath,
 	telemetrySchema,
 	watchTelemetry,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import { SRTLA_LISTEN_PORT } from "../modules/streaming/constants.ts";
 
 // Compile-time guard: SrtlaSendOptions must remain an exported type whose shape
@@ -87,8 +85,9 @@ describe("srtla-send bindings version-skew guard", () => {
 	});
 
 	test("buildSrtlaSendArgs honors the positional CLI contract streamloop relies on", () => {
-		// Shape: <listen_port> <srtla_host> <srtla_port> <ips_file> [--verbose]
-		//        [--control-socket <path>]. The argv array is returned directly.
+		// Shape: <listen_port> <srtla_host> <srtla_port> <ips_file>
+		//        --conn-timeout-ms 15000 [--verbose] [--control-socket <path>].
+		// The argv array is returned directly.
 		const args = buildSrtlaSendArgs({
 			listenPort: 9000,
 			srtlaHost: "relay.example.com",
@@ -102,11 +101,16 @@ describe("srtla-send bindings version-skew guard", () => {
 
 		// Positional ordering is load-bearing for srtla_send — a reordering or a
 		// flag-shape change (incl. the ADR-001 --control-socket flag) must fail here.
+		// `--conn-timeout-ms 15000` is unconditional: the hard-forked sender keeps
+		// upstream's 5 s CONN_TIMEOUT constant unpatched, so this flag IS the
+		// device's 15 s link-liveness timeout and must never drop off a spawn.
 		expect(args).toEqual([
 			"9000",
 			"relay.example.com",
 			"8890",
 			"/tmp/srtla_ips",
+			"--conn-timeout-ms",
+			"15000",
 			"--verbose",
 			"--control-socket",
 			"/tmp/srtla-send-control-9000.sock",

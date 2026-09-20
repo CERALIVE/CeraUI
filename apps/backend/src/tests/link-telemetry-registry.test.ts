@@ -4,7 +4,7 @@ import type {
 	Telemetry,
 	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 
 import type { BondEntry } from "../modules/streaming/bind-map.ts";
 import {
@@ -27,7 +27,7 @@ import {
 	stopLinkTelemetry,
 } from "../modules/streaming/link-telemetry.ts";
 
-// The pinned @ceralive/srtla-send build predates todo 8's additive telemetry
+// The pinned @ceraui/srtla-send build predates todo 8's additive telemetry
 // fields and its Zod reader STRIPS unknown keys, so the production reader is
 // defensive about them. Fixtures widen the type the same way to model both a
 // today's-binding sender (no echo) and a republished one (full echo).

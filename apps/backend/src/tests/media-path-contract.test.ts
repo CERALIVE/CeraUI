@@ -9,12 +9,12 @@ import type {
 	ControlClient,
 	createControlClient,
 	HelloResult,
-} from "@ceralive/srtla-send/control";
+} from "@ceraui/srtla-send/control";
 import type {
 	Telemetry,
 	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import {
 	CerastreamBackend,

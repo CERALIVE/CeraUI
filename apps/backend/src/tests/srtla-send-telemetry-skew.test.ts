@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 //
 // At the C → Rust srtla_send cutover the *producer* of the telemetry stats file
 // changes, but the CeraUI *consumer* (`readTelemetry` from
-// `@ceralive/srtla-send/telemetry`) must keep reading it verbatim. This test
+// `@ceraui/srtla-send/telemetry`) must keep reading it verbatim. This test
 // proves that compatibility end-to-end: it writes the exact ADR-001 stats
 // document the Rust sender publishes (`src/telemetry_file.rs`,
 // `build_telemetry_json` → atomic `rename(2)`) and asserts the CeraUI reader
@@ -25,7 +25,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 // `rtt_ms` from the Rust producer, or would wrongly accept a re-versioned
 // document. Both failure modes are asserted below.
 
-import { readTelemetry, type Telemetry } from "@ceralive/srtla-send/telemetry";
+import { readTelemetry, type Telemetry } from "@ceraui/srtla-send/telemetry";
 
 // Each test gets a unique stats path so a parallel run never reads a sibling's
 // file; everything lives under /tmp (Rule D — never escapes the repo root) and

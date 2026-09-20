@@ -27,7 +27,7 @@ import type {
 	Telemetry,
 	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import { resolveModemPhysicalIdentity } from "../modules/modems/physical-identity-source.ts";
 import {
 	getNetworkInterfaces,
