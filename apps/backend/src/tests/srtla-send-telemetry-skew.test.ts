@@ -2,6 +2,15 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 // Rust-sender telemetry skew guard (Phase D · Cutover).
 //
+// RETAINED, not superseded by `srtla-send-live-producer.test.ts`. That test runs
+// the real binary and is therefore the stronger proof of the HAPPY path — but it
+// SKIPS unless `SRTLA_SEND_BIN` is set, and even when it runs it can only observe
+// documents the sender chooses to emit. Every rejection case below (a future
+// `schema_version`, a missing required field, truncated/garbage/empty input) is
+// unreachable from a healthy producer by construction, so the two are
+// complementary: this file pins what the reader must REFUSE, the live-producer
+// test pins what it must ACCEPT from the binary that actually ships.
+//
 // At the C → Rust srtla_send cutover the *producer* of the telemetry stats file
 // changes, but the CeraUI *consumer* (`readTelemetry` from
 // `@ceraui/srtla-send/telemetry`) must keep reading it verbatim. This test

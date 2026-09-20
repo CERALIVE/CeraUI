@@ -18,5 +18,5 @@
 		"types": ["bun"]
 	},
 	"include": ["src/**/*", "tests/**/*"],
-	"exclude": ["node_modules", "dist", "src/control/**/*"]
+	"exclude": ["node_modules", "dist"]
 }

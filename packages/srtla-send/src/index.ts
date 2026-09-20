@@ -3,11 +3,12 @@
  * `srtla-send-rs`, absorbed from the retired npm sender binding (plan
  * upstream-rebase-hard-fork, D13). Private workspace package; never published.
  *
- * The `./control` subpath is deliberately NOT re-exported here: it is the legacy
- * control dialect awaiting the todo-41 rewrite and is excluded from this
- * package's build. Import it explicitly from `@ceraui/srtla-send/control` if you
- * must touch it before then.
+ * The `./control` subpath speaks the hard-forked sender's own JSON-RPC dialect
+ * (`get_capabilities` / `get_stats` / topic `subscribe`), NOT the retired
+ * binding's `hello` + `subscribe-events`. It is re-exported here alongside the
+ * other two surfaces; `@ceraui/srtla-send/control` remains the narrower import.
  */
+export * from "./control/index";
 export * from "./sender/index";
 export type { TelemetryUpdate } from "./telemetry/index";
 export * from "./telemetry/index";
