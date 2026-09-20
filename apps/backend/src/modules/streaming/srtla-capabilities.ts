@@ -31,10 +31,10 @@
 
       non-zero exit  |  unparseable output  |  timeout  ⇒  NO SUPPORT
 
-  We match on NOTHING — not the exit code, not the message text. The shipped
-  3.2.0 binary answers `error: unexpected argument` with exit `2`, and a future
-  build might answer differently; treating any non-success identically is what
-  makes the fallback correct for binaries that do not exist yet.
+  We match on NOTHING — not the exit code, not the message text. A pre-fork 3.x
+  binary answers `error: unexpected argument` with exit `2`, and a future build
+  might answer differently; treating any non-success identically is what makes
+  the fallback correct for binaries that do not exist yet.
 */
 
 import { logger } from "../../helpers/logger.ts";
