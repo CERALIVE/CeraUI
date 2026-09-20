@@ -62,10 +62,14 @@ gate then confirms there are no orphan markers left pointing at it.
 
 ## Producer schema drift — publish before consume
 
-CeraUI consumes four npm producers whose wire data is Zod-validated —
-`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`,
-`@ceralive/modem-control`. Each is a **registry** dependency pinned to an exact
-version, and that pin is a version boundary as well as a path boundary.
+CeraUI consumes three npm producers whose wire data is Zod-validated —
+`@ceralive/cerastream`, `@ceralive/control-protocol`, `@ceralive/modem-control`.
+Each is a **registry** dependency pinned to an exact version, and that pin is a
+version boundary as well as a path boundary.
+
+The sender's telemetry schema (`@ceraui/srtla-send`) is validated by the same
+gate but has no pin: it is a workspace package, so schema and consumer move in
+one commit.
 
 ### Why this needs a rule at all
 

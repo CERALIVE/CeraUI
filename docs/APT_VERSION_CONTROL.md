@@ -215,9 +215,10 @@ version it was built from.
 triggers the `.deb` build workflow; the package version comes from `Cargo.toml`. A
 `v1.x` tag can produce a `3.0.0` package if that is what `Cargo.toml` carries.
 
-**npm binding version:** The `@ceralive/srtla-send` npm binding ships on its own
-`bindings-vYYYY.M.P` tag namespace and uses CalVer (matching `@ceralive/cerastream`).
-The binding version is independent of the Rust crate / `.deb` version.
+**npm binding version:** there is none. The sender's TypeScript binding was
+absorbed into CeraUI as the private workspace package `packages/srtla-send`
+(`@ceraui/srtla-send`) and is never published, so no binding tag namespace or
+binding version exists. Only the Rust crate / `.deb` version applies.
 
 **Debian version ordering:** APT's version comparison still works correctly across the
 mixed scheme. A future CalVer release of any other component (e.g. `2026.7.1`) sorts
