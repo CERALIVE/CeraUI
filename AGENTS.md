@@ -4,7 +4,7 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 
 ## ROLE IN THE GROUP
 
-Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla-send-rs` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
+Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and the `srtla` sender (`srtla_send`) at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
 
 **Single engine.** `@ceralive/cerastream` is the ONLY streaming engine, consumed
 as a public-npm registry dep. The legacy ceracoder engine and its sibling `link:`
@@ -17,7 +17,7 @@ The backend resolves both streaming deps as public-npm registry packages — no 
 "@ceralive/cerastream":  "2026.9.10"   (public npm, @ceralive scope)
 ```
 
-It is a published npm package (`@ceralive` scope on npmjs.org) consumed as a normal registry dep, not a `link:` path and not a vendored `.tgz`. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
+It is a published npm package (`@ceralive` scope on npmjs.org) consumed as a normal registry dep, not a `link:` path and not a vendored `.tgz`. No sibling checkout of the `srtla` receiver or sender repositories is needed for `CeraUI` to install or build.
 
 The **sender binding is no longer a registry dep at all**: it was absorbed into
 this monorepo as the private workspace package `packages/srtla-send`
@@ -1137,9 +1137,12 @@ isolated runners install their own Playwright OS dependencies: desktop shards
 so the functional command and `-of-<total>` blob artifact names remain
 project-correct. Browser cache keys use the exact installed Playwright CLI
 version, and the four lanes retain unique blob artifacts for the merged report. The
-setup job also downloads the published `srtla-send-rs` v3.2.0 amd64 `.deb`,
+setup job also downloads the published `srtla` 4.1.0 amd64 `.deb`,
 verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
-payload, and uploads that payload as a one-day artifact. Each E2E lane restores
+payload, and uploads that payload as a one-day artifact. The backend unit lane
+fetches the same pinned package independently — it does not depend on the E2E
+setup job — and exports `SRTLA_SEND_BIN` so the live-producer contract test runs
+against the real sender instead of skipping. Each E2E lane restores
 the executable bit, adds the extracted `usr/bin` to `PATH`, rewrites its local
 `setup.json` `srtla_path`, and asserts the real `srtla_send` binary before server
 startup. No stub, `sudo` install, sibling checkout, or skipped backend preflight
@@ -3060,7 +3063,7 @@ Recorded as a hardware gap, not a code gap, in
 - Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.
 - Don't build the `org.bluez.Agent1` object on the shared `DbusTransport` — it is client-only. Use `bluez-agent-exporter.ts`'s dedicated connection, and never `RegisterAgent` a path before its object is exported: BlueZ then blocks on every callback until it times out, which is worse than having no agent.
 - Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the address-matched engine node when `pipewire-capture` is advertised and the `org.bluealsa` capture PCM otherwise; a connected device with neither must yield no source row. Never persist PipeWire `object.serial` or change the existing `bt:` id.
-- Don't touch `@ceraui/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first — the package is ours now, but the BINARY's CLI/telemetry contract it encodes still lives in that repo.
+- Don't touch `@ceraui/srtla-send` call sites without checking the sender's [AGENTS.md](https://github.com/CERALIVE/srtla-send-rs/blob/main/AGENTS.md) first — the package is ours now, but the BINARY's CLI/telemetry contract it encodes still lives in that repo.
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
 - Don't hardcode timeout/retry values in streaming modules — import from `timing-constants.ts`.

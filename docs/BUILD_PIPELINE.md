@@ -180,14 +180,20 @@ desktop/mobile × two-shard matrix. The setup job caches only Playwright browser
 binaries, keyed by the exact version reported by the installed Playwright CLI;
 it does not install runner-local OS packages.
 
-The same setup job downloads the immutable `srtla-send-rs` v3.2.0 amd64 release
+The same setup job downloads the immutable `srtla` 4.1.0 amd64 release
 package, pinned to SHA-256
-`cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae`.
+`496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8`.
 Before extraction it verifies the Debian `Package`, `Version`, and `Architecture`
 fields, then uploads only the extracted runtime as the one-day
-`srtla-send-runtime-amd64-v3.2.0` artifact. This proves the backend against the
+`srtla-send-runtime-amd64-v4.1.0` artifact. This proves the backend against the
 released executable without a test stub, system-wide install, sibling checkout,
 or weakened production preflight.
+
+The backend unit lane runs the same pinned fetch against one shared command plan
+and then exports `SRTLA_SEND_BIN`, which is what lets the live-producer contract
+test spawn the real sender rather than skip itself. It deliberately fetches its
+own copy instead of consuming the E2E setup artifact: taking that dependency
+would serialize the backend lane behind the entire frontend build.
 
 Each isolated matrix runner runs `test:e2e:install-deps` for its own Ubuntu image,
 restores the versioned browser cache, and installs the browser only on a cache
