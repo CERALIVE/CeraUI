@@ -128,7 +128,7 @@ Append `-rc.N` (starting at `1`) for release candidates:
 2026.6.1          ← stable release
 ```
 
-When publishing to npm, `-rc.N` versions go to the `next` dist-tag; stable versions go to `latest`. This matches the trigger logic in `srtla-send-rs/.github/workflows/publish-bindings.yml` (tag `bindings-vYYYY.M.P-rc.N` → `next`; `bindings-vYYYY.M.P` → `latest`) and mirrors the `@ceralive/cerastream` publish flow.
+When publishing to npm, `-rc.N` versions go to the `next` dist-tag; stable versions go to `latest`, following the `@ceralive/cerastream` publish flow (tag `bindings-vYYYY.M.P-rc.N` → `next`; `bindings-vYYYY.M.P` → `latest`).
 
 ### Per-Repo Bump Artifact
 
@@ -137,10 +137,9 @@ Each repo owns its version in one place. Bump that file, commit, then tag:
 | Repo | Version file | Field |
 |------|-------------|-------|
 | `cerastream` | `Cargo.toml` | `[workspace.package] version` |
-| `srtla-send-rs` | `Cargo.toml` | `[workspace.package] version` (Rust crate) |
-| `srtla-send-rs` bindings | `bindings/typescript/package.json` | `"version"` |
+| `srtla` (Rust sender) | `Cargo.toml` | `[workspace.package] version` (Rust crate) |
 | `CeraUI` | `package.json` (root workspace) | `"version"` |
-| `srtla` | CMakeLists.txt | `project(VERSION ...)` |
+| `srtla` (C receiver) | CMakeLists.txt | `project(VERSION ...)` |
 | `srt` | CMakeLists.txt | `project(VERSION ...)` |
 
 Never hand-bump individual crate versions inside a Cargo workspace — they share `[workspace.package]`.
@@ -189,43 +188,53 @@ the same source commit.
 ### Cross-References
 
 - `cerastream/Cargo.toml` — `[workspace.package]` comment cites this file as the convention anchor.
-- `srtla-send-rs/.github/workflows/publish-bindings.yml` — implements the `-rc.N` → `next` dist-tag rule.
+- `cerastream`'s binding publish workflow — implements the `-rc.N` → `next` dist-tag rule.
 - `versions.yaml` — pins component versions; header links here for the format spec.
 
 ---
 
-## Exception: srtla-send-rs (upstream semver)
+## Exception: srtla (Rust sender, upstream semver)
 
-`srtla-send-rs` is the **one** first-party component that does NOT use CalVer for its
-Debian package version.
+The Debian package `srtla` — the Rust SRTLA **sender**, installed at
+`/usr/bin/srtla_send` — is the **one** first-party component that does NOT use CalVer
+for its package version.
 
-**Why:** `srtla-send-rs` is a CERALIVE fork of the upstream
-[irlserver/srtla_send](https://github.com/irlserver/srtla_send) Rust sender. The
-upstream project uses conventional semver (`MAJOR.MINOR.PATCH`). Keeping the upstream
-version line in `Cargo.toml` preserves direct traceability to upstream releases and
-avoids a confusing divergence between the fork's package version and the upstream
-version it was built from.
+**Why:** it is a CERALIVE hard fork of the upstream
+[irlserver/srtla_send](https://github.com/irlserver/srtla_send) Rust sender, which
+uses conventional semver (`MAJOR.MINOR.PATCH`). Keeping the upstream version line in
+`Cargo.toml` preserves direct traceability to the upstream release a build came from,
+and avoids a confusing divergence between the fork's package version and its upstream
+base.
+
+**Where it lives:** releases are published at
+[`CERALIVE/srtla-send-rs/releases`](https://github.com/CERALIVE/srtla-send-rs/releases).
+The repository kept its name through the fork; only the package identity changed, so
+the repository name and the package name deliberately differ, and neither is derivable
+from the other — resolve a component to its repository through an explicit mapping,
+never by assuming they share a name.
 
 **Package version source:** `ci/build-deb.sh` derives the `.deb` version directly from
-`Cargo.toml` `[workspace.package] version`. The current package version is `3.0.0`.
-`versions.yaml` pins it at `v3.0.0`.
+`Cargo.toml` `[workspace.package] version`. The current package version is `4.1.0`,
+and `versions.yaml` pins it at `v4.1.0`.
 
-**Tag namespace:** The CERALIVE fork's GitHub release tags follow `v1.0.0+` (e.g.
-`v1.0.0`, `v1.1.0`). These tags are **decoupled** from the package version — the tag
-triggers the `.deb` build workflow; the package version comes from `Cargo.toml`. A
-`v1.x` tag can produce a `3.0.0` package if that is what `Cargo.toml` carries.
+**Tag namespace:** GitHub release tags are `v<package-version>` (currently `v4.1.0`).
+The tag triggers the `.deb` build workflow and the build refuses a tag that disagrees
+with `Cargo.toml`, so tag and package version move together.
 
 **npm binding version:** there is none. The sender's TypeScript binding was
 absorbed into CeraUI as the private workspace package `packages/srtla-send`
 (`@ceraui/srtla-send`) and is never published, so no binding tag namespace or
 binding version exists. Only the Rust crate / `.deb` version applies.
 
+**Rename history:** before the 4.x hard fork this package was published as
+`srtla-send-rs`; the `srtla` package declares `Conflicts`/`Replaces` against that
+retired name, so APT migrates an already-deployed device in place on upgrade.
+
 **Debian version ordering:** APT's version comparison still works correctly across the
 mixed scheme. A future CalVer release of any other component (e.g. `2026.7.1`) sorts
-above `3.0.0` as expected. The `Conflicts/Replaces: srtla (<< 2026.6.2)` relation in
-the `srtla-send-rs` package compares `srtla`'s own version, not `srtla-send-rs`'s
-version, so the cutover logic is unaffected.
+above `4.1.0` as expected — but nothing compares the two, because each package's
+version is only ever compared against its own stream.
 
-**All other first-party packages** (`ceralive-device`, `srtla`, `cerastream`,
+**All other first-party packages** (`ceralive-device`, `cerastream`,
 `gstreamer1.0-libuvcsrc`) remain on CalVer (`YYYY.MINOR.PATCH`) as described
 above.
