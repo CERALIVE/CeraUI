@@ -338,7 +338,7 @@ describe("UpdatesDialog — Install is gated on the ACTIONABLE set", () => {
 	it("app-only: Install is offered and its label names the actionable count", async () => {
 		reactiveUpdateState.value = availableWith([
 			APP("cerastream"),
-			APP("srtla-send-rs"),
+			APP("srtla"),
 		]);
 		const { getByTestId, queryByTestId } = render(UpdatesDialog, {
 			open: true,

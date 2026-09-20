@@ -302,7 +302,7 @@ test.describe(
 					kind: "available",
 					identity: {
 						version: "e2e-power-01",
-						packages: ["cerastream", "ceraui", "srtla-send-rs"],
+						packages: ["cerastream", "ceraui", "srtla"],
 					},
 					package_count: 3,
 					download_size: "12 MB",
