@@ -100,8 +100,18 @@ const browserCacheKey = `${expression('runner.os')}-ms-playwright-v2-${expressio
 	'steps.playwright-version.outputs.version',
 )}`;
 const srtlaRuntimeUrl =
-	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb';
-const srtlaRuntimeSha256 = 'cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae';
+	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb';
+const srtlaRuntimeSha256 = '496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8';
+const srtlaDriftedUrl =
+	'https://github.com/CERALIVE/srtla-send-rs/releases/latest/download/srtla_amd64.deb';
+// `setup-e2e` and `test-be` each fetch the pinned runtime, so every mutation
+// aimed at the shared prepare plan has TWO sites to rewrite. Mutating only one
+// would leave the other pinned and the gate would pass for the wrong reason.
+const SRTLA_PREPARE_LANES = 2;
+// `chmod +x "$runtime_bin"` appears in both the e2e activate step and the backend
+// export step. Anchoring on the line that follows it in the activate step is what
+// keeps these mutations aimed at the lane their expected error names.
+const activateChmodSuccessor = '          echo "$runtime_dir" >> "$GITHUB_PATH"';
 
 function replaceExactly(source, before, after, expectedCount = 1) {
 	const count = source.split(before).length - 1;
@@ -173,14 +183,10 @@ const mutations = [
 			),
 	},
 	{
-		name: 'E2E startup without the pinned srtla-send-rs runtime',
+		name: 'E2E startup without the pinned srtla runtime',
 		expectedError: 'setup-e2e srtla command plan must equal',
 		apply: (source) =>
-			replaceExactly(
-				source,
-				'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb',
-				'https://github.com/CERALIVE/srtla-send-rs/releases/latest/download/srtla-send-rs_amd64.deb',
-			),
+			replaceExactly(source, srtlaRuntimeUrl, srtlaDriftedUrl, SRTLA_PREPARE_LANES),
 	},
 	{
 		name: 'functional E2E startup using the Vite dev server',
@@ -326,7 +332,8 @@ const staticOnlyFalseGreenMutations = [
 			replaceExactly(
 				source,
 				`            ${srtlaRuntimeUrl}`,
-				`            https://github.com/CERALIVE/srtla-send-rs/releases/latest/download/srtla-send-rs_amd64.deb # ${srtlaRuntimeUrl}`,
+				`            ${srtlaDriftedUrl} # ${srtlaRuntimeUrl}`,
+				SRTLA_PREPARE_LANES,
 			),
 	},
 	{
@@ -337,6 +344,7 @@ const staticOnlyFalseGreenMutations = [
 				source,
 				`            ${srtlaRuntimeSha256} \\`,
 				`            ${'0'.repeat(64)} \\ # ${srtlaRuntimeSha256}`,
+				SRTLA_PREPARE_LANES,
 			),
 	},
 	{
@@ -345,8 +353,9 @@ const staticOnlyFalseGreenMutations = [
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'          test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs',
-				'          if false; then\n            test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs\n          fi',
+				'          test "$(dpkg-deb --field "$package_path" Package)" = srtla',
+				'          if false; then\n            test "$(dpkg-deb --field "$package_path" Package)" = srtla\n          fi',
+				SRTLA_PREPARE_LANES,
 			),
 	},
 	{
@@ -355,8 +364,28 @@ const staticOnlyFalseGreenMutations = [
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'          chmod +x "$runtime_bin"',
-				'          if false; then\n            chmod +x "$runtime_bin"\n          fi',
+				`          chmod +x "$runtime_bin"\n${activateChmodSuccessor}`,
+				`          if false; then\n            chmod +x "$runtime_bin"\n          fi\n${activateChmodSuccessor}`,
+			),
+	},
+	{
+		name: 'live-producer binary export retained only in a comment',
+		expectedError: 'test-be srtla export command plan must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'          echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"',
+				'          # echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"',
+			),
+	},
+	{
+		name: 'live-producer binary export hidden in a false branch',
+		expectedError: 'test-be srtla export command plan must equal',
+		apply: (source) =>
+			replaceExactly(
+				source,
+				'          echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"',
+				'          if false; then\n            echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"\n          fi',
 			),
 	},
 	{
@@ -395,8 +424,8 @@ const staticOnlyFalseGreenMutations = [
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'          chmod +x "$runtime_bin"',
-				"          printf '%s\\n' 'chmod +x \"$runtime_bin\"'",
+				`          chmod +x "$runtime_bin"\n${activateChmodSuccessor}`,
+				`          printf '%s\\n' 'chmod +x "$runtime_bin"'\n${activateChmodSuccessor}`,
 			),
 	},
 	{
@@ -406,7 +435,8 @@ const staticOnlyFalseGreenMutations = [
 			replaceExactly(
 				source,
 				`            ${srtlaRuntimeUrl}`,
-				`            https://github.com/CERALIVE/srtla-send-rs/releases/latest/download/srtla-send-rs_amd64.deb\n          cat <<'PINNED_URL'\n          ${srtlaRuntimeUrl}\n          PINNED_URL`,
+				`            ${srtlaDriftedUrl}\n          cat <<'PINNED_URL'\n          ${srtlaRuntimeUrl}\n          PINNED_URL`,
+				SRTLA_PREPARE_LANES,
 			),
 	},
 	{
@@ -415,8 +445,9 @@ const staticOnlyFalseGreenMutations = [
 		apply: (source) =>
 			replaceExactly(
 				source,
-				'          test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs',
-				'          verify_package() {\n            test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs\n          }',
+				'          test "$(dpkg-deb --field "$package_path" Package)" = srtla',
+				'          verify_package() {\n            test "$(dpkg-deb --field "$package_path" Package)" = srtla\n          }',
+				SRTLA_PREPARE_LANES,
 			),
 	},
 	{

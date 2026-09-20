@@ -308,6 +308,42 @@ jobs:
         working-directory: CeraUI
         run: bun run test:service-contract
 
+      # `srtla-send-live-producer.test.ts` SKIPS unless `SRTLA_SEND_BIN` is set,
+      # so without the export below it stays silently dormant in CI. Fetched here
+      # rather than downloaded from `setup-e2e`'s artifact because `test-be`
+      # deliberately does not `need` that job — the dependency would serialize the
+      # backend unit lane behind the whole frontend build. The shape gate asserts
+      # both copies of this step against ONE command plan, so they cannot drift.
+      - name: Prepare pinned srtla-send runtime
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          package_dir="dist/ci-packages"
+          package_path="$package_dir/srtla_4.1.0_amd64.deb"
+          runtime_root="dist/ci-runtime"
+          mkdir -p "$package_dir" "$runtime_root"
+
+          curl --fail --location --silent --show-error \
+            --output "$package_path" \
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb
+          printf '%s  %s\n' \
+            496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8 \
+            "$package_path" | sha256sum --check
+          test "$(dpkg-deb --field "$package_path" Package)" = srtla
+          test "$(dpkg-deb --field "$package_path" Version)" = 4.1.0
+          test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
+          dpkg-deb --extract "$package_path" "$runtime_root"
+          test -f "$runtime_root/usr/bin/srtla_send"
+
+      - name: Export the live sender binary
+        working-directory: CeraUI
+        run: |
+          set -euo pipefail
+          runtime_bin="$GITHUB_WORKSPACE/CeraUI/dist/ci-runtime/usr/bin/srtla_send"
+          chmod +x "$runtime_bin"
+          test -x "$runtime_bin"
+          echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"
+
       - name: Unit tests (bun)
         working-directory: CeraUI
         run: bun run --filter backend test
@@ -391,18 +427,18 @@ jobs:
         run: |
           set -euo pipefail
           package_dir="dist/ci-packages"
-          package_path="$package_dir/srtla-send-rs_3.2.0_amd64.deb"
+          package_path="$package_dir/srtla_4.1.0_amd64.deb"
           runtime_root="dist/ci-runtime"
           mkdir -p "$package_dir" "$runtime_root"
 
           curl --fail --location --silent --show-error \
             --output "$package_path" \
-            https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb
+            https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb
           printf '%s  %s\n' \
-            cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae \
+            496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8 \
             "$package_path" | sha256sum --check
-          test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs
-          test "$(dpkg-deb --field "$package_path" Version)" = 3.2.0
+          test "$(dpkg-deb --field "$package_path" Package)" = srtla
+          test "$(dpkg-deb --field "$package_path" Version)" = 4.1.0
           test "$(dpkg-deb --field "$package_path" Architecture)" = amd64
           dpkg-deb --extract "$package_path" "$runtime_root"
           test -f "$runtime_root/usr/bin/srtla_send"
@@ -430,7 +466,7 @@ jobs:
       - name: Upload srtla-send runtime
         uses: actions/upload-artifact@v7
         with:
-          name: srtla-send-runtime-amd64-v3.2.0
+          name: srtla-send-runtime-amd64-v4.1.0
           path: CeraUI/dist/ci-runtime/
           if-no-files-found: error
           retention-days: 1
@@ -524,7 +560,7 @@ jobs:
       - name: Download srtla-send runtime
         uses: actions/download-artifact@v8
         with:
-          name: srtla-send-runtime-amd64-v3.2.0
+          name: srtla-send-runtime-amd64-v4.1.0
           path: CeraUI/dist/ci-runtime
 
       - name: Activate srtla-send runtime
