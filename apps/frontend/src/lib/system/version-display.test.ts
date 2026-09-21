@@ -3,22 +3,38 @@ import { describe, expect, test } from "vitest";
 import { splitVersionValue } from "./version-display";
 
 describe("splitVersionValue — the Versions dialog row format", () => {
-	test("promotes the version and demotes srtla_send build metadata", () => {
-		expect(splitVersionValue("3.2.0 (main@974c8b9) [srtla_send]")).toEqual({
-			value: "3.2.0",
+	/**
+	 * Captured by RUNNING the shipped `srtla_4.1.0_amd64.deb`, not inferred from
+	 * the `-v` grammar: the release builds in a container with no usable git
+	 * context, so `build.rs` resolves no commit and omits the parenthetical.
+	 */
+	test("drops the package tag on the shipped release, which carries no git context", () => {
+		expect(splitVersionValue("4.1.0 [srtla_send]")).toEqual({ value: "4.1.0" });
+	});
+
+	/**
+	 * A tag build checks out a detached HEAD, so when git IS resolvable the
+	 * metadata is a bare commit with no `branch@` prefix.
+	 */
+	test("promotes the version and demotes a bare-commit tag build", () => {
+		expect(splitVersionValue("4.1.0 (7d4c1af) [srtla_send]")).toEqual({
+			value: "4.1.0",
+			detail: "7d4c1af",
+		});
+	});
+
+	test("promotes the version and demotes a dev build's branch@commit metadata", () => {
+		expect(splitVersionValue("4.1.0 (main@974c8b9) [srtla_send]")).toEqual({
+			value: "4.1.0",
 			detail: "main@974c8b9",
 		});
 	});
 
-	test("drops the package tag when the build carried no git context", () => {
-		expect(splitVersionValue("3.2.0 [srtla_send]")).toEqual({ value: "3.2.0" });
-	});
-
 	test("keeps a dirty marker with the rest of the build metadata", () => {
 		expect(
-			splitVersionValue("3.2.0 (main@974c8b9-dirty) [srtla_send]"),
+			splitVersionValue("4.1.0 (main@974c8b9-dirty) [srtla_send]"),
 		).toEqual({
-			value: "3.2.0",
+			value: "4.1.0",
 			detail: "main@974c8b9-dirty",
 		});
 	});

@@ -2,15 +2,24 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 // Rust-sender telemetry skew guard (Phase D · Cutover).
 //
+// RETAINED, not superseded by `srtla-send-live-producer.test.ts`. That test runs
+// the real binary and is therefore the stronger proof of the HAPPY path — but it
+// SKIPS unless `SRTLA_SEND_BIN` is set, and even when it runs it can only observe
+// documents the sender chooses to emit. Every rejection case below (a future
+// `schema_version`, a missing required field, truncated/garbage/empty input) is
+// unreachable from a healthy producer by construction, so the two are
+// complementary: this file pins what the reader must REFUSE, the live-producer
+// test pins what it must ACCEPT from the binary that actually ships.
+//
 // At the C → Rust srtla_send cutover the *producer* of the telemetry stats file
 // changes, but the CeraUI *consumer* (`readTelemetry` from
-// `@ceralive/srtla-send/telemetry`) must keep reading it verbatim. This test
+// `@ceraui/srtla-send/telemetry`) must keep reading it verbatim. This test
 // proves that compatibility end-to-end: it writes the exact ADR-001 stats
 // document the Rust sender publishes (`src/telemetry_file.rs`,
 // `build_telemetry_json` → atomic `rename(2)`) and asserts the CeraUI reader
 // parses it into the typed snapshot the `linkTelemetry` flow depends on.
 //
-// The contract being skew-tested (srtla-send-rs AGENTS.md → PARITY CONTRACT):
+// The contract being skew-tested (the sender's AGENTS.md → PARITY CONTRACT):
 //   {"schema_version":1,"last_updated_ms":<ms>,"connections":[
 //     {"conn_id","rtt_ms","nak_count","weight_percent","window","in_flight","bitrate_bps"}]}
 //   - schema_version is the literal 1 (Rust adds it; the reader validates it).
@@ -25,7 +34,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 // `rtt_ms` from the Rust producer, or would wrongly accept a re-versioned
 // document. Both failure modes are asserted below.
 
-import { readTelemetry, type Telemetry } from "@ceralive/srtla-send/telemetry";
+import { readTelemetry, type Telemetry } from "@ceraui/srtla-send/telemetry";
 
 // Each test gets a unique stats path so a parallel run never reads a sibling's
 // file; everything lives under /tmp (Rule D — never escapes the repo root) and

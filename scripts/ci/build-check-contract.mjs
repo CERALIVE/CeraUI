@@ -51,23 +51,34 @@ const GATED_JOBS = [
 	'build',
 ];
 const SUMMARY_NEEDS = ['changes', ...GATED_JOBS];
-const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v3.2.0';
+const SRTLA_RUNTIME_ARTIFACT = 'srtla-send-runtime-amd64-v4.1.0';
 const SRTLA_RUNTIME_URL =
-	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v3.2.0/srtla-send-rs_3.2.0_amd64.deb';
-const SRTLA_RUNTIME_SHA256 = 'cfd2cc6a0bcb3716c25861daffca9b67e5a56b1c8cf9cb519093588496a928ae';
+	'https://github.com/CERALIVE/srtla-send-rs/releases/download/v4.1.0/srtla_4.1.0_amd64.deb';
+const SRTLA_RUNTIME_SHA256 = '496217e93cde36eeac0bde1b742c21fed6347a198f05a8cd898be116946b1eb8';
 const SRTLA_PREPARE_COMMANDS = [
 	'set -euo pipefail',
 	'package_dir="dist/ci-packages"',
-	'package_path="$package_dir/srtla-send-rs_3.2.0_amd64.deb"',
+	'package_path="$package_dir/srtla_4.1.0_amd64.deb"',
 	'runtime_root="dist/ci-runtime"',
 	'mkdir -p "$package_dir" "$runtime_root"',
 	`curl --fail --location --silent --show-error --output "$package_path" ${SRTLA_RUNTIME_URL}`,
 	`printf '%s  %s\\n' ${SRTLA_RUNTIME_SHA256} "$package_path" | sha256sum --check`,
-	'test "$(dpkg-deb --field "$package_path" Package)" = srtla-send-rs',
-	'test "$(dpkg-deb --field "$package_path" Version)" = 3.2.0',
+	'test "$(dpkg-deb --field "$package_path" Package)" = srtla',
+	'test "$(dpkg-deb --field "$package_path" Version)" = 4.1.0',
 	'test "$(dpkg-deb --field "$package_path" Architecture)" = amd64',
 	'dpkg-deb --extract "$package_path" "$runtime_root"',
 	'test -f "$runtime_root/usr/bin/srtla_send"',
+];
+// The backend lane fetches its own copy instead of consuming `setup-e2e`'s
+// artifact, so the live-producer test can run without `test-be` depending on the
+// frontend build. Asserting the SAME command plan in both jobs is what stops the
+// two copies pinning different releases.
+const SRTLA_EXPORT_COMMANDS = [
+	'set -euo pipefail',
+	'runtime_bin="$GITHUB_WORKSPACE/CeraUI/dist/ci-runtime/usr/bin/srtla_send"',
+	'chmod +x "$runtime_bin"',
+	'test -x "$runtime_bin"',
+	'echo "SRTLA_SEND_BIN=$runtime_bin" >> "$GITHUB_ENV"',
 ];
 const SRTLA_ACTIVATE_COMMANDS = [
 	'set -euo pipefail',
@@ -242,7 +253,7 @@ function straightLineShellCommands(run, label) {
 	return commands;
 }
 
-function assertSrtlaRuntime(setupSteps, e2eSteps) {
+function assertSrtlaRuntime(setupSteps, e2eSteps, backendSteps) {
 	const prepare = findStep(setupSteps, 'Prepare pinned srtla-send runtime', 'setup-e2e');
 	assertExact(prepare['working-directory'], 'CeraUI', 'setup-e2e srtla working directory');
 	assertList(
@@ -250,6 +261,35 @@ function assertSrtlaRuntime(setupSteps, e2eSteps) {
 		SRTLA_PREPARE_COMMANDS,
 		'setup-e2e srtla command plan',
 	);
+
+	const backendPrepare = findStep(backendSteps, 'Prepare pinned srtla-send runtime', 'test-be');
+	assertExact(backendPrepare['working-directory'], 'CeraUI', 'test-be srtla working directory');
+	assertList(
+		straightLineShellCommands(backendPrepare.run, 'test-be srtla commands'),
+		SRTLA_PREPARE_COMMANDS,
+		'test-be srtla command plan',
+	);
+
+	const backendExport = findStep(backendSteps, 'Export the live sender binary', 'test-be');
+	assertExact(
+		backendExport['working-directory'],
+		'CeraUI',
+		'test-be srtla export working directory',
+	);
+	assertList(
+		straightLineShellCommands(backendExport.run, 'test-be srtla export commands'),
+		SRTLA_EXPORT_COMMANDS,
+		'test-be srtla export command plan',
+	);
+	// An export that lands AFTER the suite leaves the live-producer test skipping
+	// while every job stays green — the exact false green this gate exists for.
+	assertStepOrder(
+		backendSteps,
+		'Prepare pinned srtla-send runtime',
+		'Export the live sender binary',
+		'test-be',
+	);
+	assertStepOrder(backendSteps, 'Export the live sender binary', 'Unit tests (bun)', 'test-be');
 
 	const upload = findStep(setupSteps, 'Upload srtla-send runtime', 'setup-e2e');
 	assertExact(upload.uses, 'actions/upload-artifact@v7', 'setup-e2e srtla upload action');
@@ -499,7 +539,7 @@ export function assertBuildCheckContract(source) {
 	assertBrowserCache(setupSteps, 'setup-e2e');
 	assertBrowserCache(e2eSteps, 'test-e2e');
 	assertA11yShard(e2eSteps);
-	assertSrtlaRuntime(setupSteps, e2eSteps);
+	assertSrtlaRuntime(setupSteps, e2eSteps, backendSteps);
 	const startServers = findStep(e2eSteps, 'Start E2E servers', 'test-e2e');
 	const seedAuth = findStep(e2eSteps, 'Seed E2E auth state', 'test-e2e');
 	assertExact(

@@ -80,7 +80,7 @@ describe("buildMockLinkTelemetry — active-only per-link emission", () => {
 
 	// weight_percent is each active link's NORMALIZED share of total selection
 	// weight, summing to ~100 across active links — NOT a per-link constant 100.
-	// Contract source: srtla-send-rs src/telemetry_file.rs `conns_from_stats` /
+	// Contract source: the srtla sender's src/telemetry_file.rs `conns_from_stats` /
 	// `weight_share_percent` (round(w/total×100); two equal links → 50/50). The
 	// independent per-link rounding lets the sum drift by up to ±(link count).
 	test("streaming-active -> weight_percent is a normalized share summing to ~100, not all 100", () => {

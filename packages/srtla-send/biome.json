@@ -1,0 +1,40 @@
+{
+	"root": false,
+	"$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+	"files": {
+		"includes": ["package.json", "src/**/*.ts", "tests/**/*.ts", "!tests/fixtures"]
+	},
+	"javascript": {
+		"globals": ["Bun"]
+	},
+	"linter": {
+		"rules": {
+			"correctness": {
+				"noUndeclaredVariables": "off"
+			},
+			"suspicious": {
+				"noConsole": { "level": "error", "options": { "allow": ["warn", "error"] } },
+				"noEmptyBlockStatements": "error"
+			},
+			"nursery": {
+				"noFloatingPromises": "warn"
+			}
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.test.ts"],
+			"linter": {
+				"rules": {
+					"performance": {
+						"noDelete": "off"
+					},
+					"suspicious": {
+						"noConsole": "off",
+						"noEmptyBlockStatements": "off"
+					}
+				}
+			}
+		}
+	]
+}

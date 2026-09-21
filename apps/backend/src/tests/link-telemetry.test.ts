@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { ControlClient, HelloResult } from "@ceralive/srtla-send/control";
+import type {
+	SenderCapabilityDocument,
+	TelemetryControlClient,
+} from "@ceraui/srtla-send/control";
 import {
 	connectionTelemetrySchema,
 	type Telemetry,
 	type TelemetryUpdate,
 	telemetrySchema,
 	type watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import {
 	broadcastLinkTelemetryIfChanged,
 	buildLinkTelemetry,
@@ -85,10 +88,16 @@ function captureWatch() {
 
 // A control-client double: drives the JSON-RPC stats-subscription cutover path.
 // `subscribed` resolves once subscribeStats is invoked (cutover confirmed live),
-// and `emit` pushes an `event` snapshot (or null for disconnect/parse-failure).
+// and `emit` pushes a projected `stats.update` snapshot (or null for
+// disconnect/parse-failure).
+//
+// `methods` is the sender's own advertised method table — feature detection
+// reads it off `get_capabilities`, never off a `hello` that the hard-forked
+// binary does not implement. `capabilitiesNull` models the legacy binary, whose
+// `get_capabilities` answers -32601 and which the client reports as null.
 function fakeControlClient(opts: {
-	capabilities: Array<string>;
-	helloThrows?: boolean;
+	methods: Array<string>;
+	capabilitiesNull?: boolean;
 }) {
 	let onEventCb: ((s: Telemetry | null) => void) | null = null;
 	let closed = false;
@@ -96,16 +105,24 @@ function fakeControlClient(opts: {
 	const subscribed = new Promise<void>((r) => {
 		resolveSubscribed = r;
 	});
-	const client: ControlClient = {
-		hello: async (): Promise<HelloResult> => {
-			if (opts.helloThrows) throw new Error("hello failed");
+	const client: TelemetryControlClient = {
+		getCapabilities: async (): Promise<SenderCapabilityDocument | null> => {
+			if (opts.capabilitiesNull) return null;
 			return {
 				schema_version: 1,
-				engine: "srtla_send",
-				capabilities: opts.capabilities,
+				binary: "srtla_send",
+				version: "4.1.0",
+				capabilities: {
+					bind_map: true,
+					stats_file: true,
+					dry_run: true,
+					control_socket_jsonrpc: true,
+					conn_timeout_ms: true,
+					modes: ["classic", "enhanced"],
+				},
+				methods: opts.methods,
 			};
 		},
-		rawRequest: async () => null,
 		subscribeStats: (onEvent) => {
 			onEventCb = onEvent;
 			resolveSubscribed();
@@ -504,7 +521,7 @@ describe("cumulative session bytes (srtla_send ADR-002 bytes_sent_total)", () =>
 		// This case used to be covered by a hand-rolled `asCumulativeBytes` guard in
 		// `link-telemetry-rows.ts`, written when the field was believed unreadable
 		// and therefore read off `unknown`. The field is typed and Zod-validated by
-		// `@ceralive/srtla-send@2026.8.0` itself, so that guard was redundant and is
+		// `@ceraui/srtla-send@2026.8.0` itself, so that guard was redundant and is
 		// gone — but the GUARANTEE it encoded still has to hold, so the coverage
 		// moves down to the boundary that now enforces it rather than being deleted.
 		const malformed = [Number.NaN, -1, 1.5];
@@ -652,7 +669,7 @@ describe("broadcastLinkTelemetryIfChanged — status flow integration", () => {
 describe("control-socket subscription cutover + airtight file-poll fallback", () => {
 	test("subscription path broadcasts the same LinkTelemetryMessage shape as file-poll", async () => {
 		const w = captureWatch();
-		const fake = fakeControlClient({ capabilities: ["stats-subscription"] });
+		const fake = fakeControlClient({ methods: ["subscribe", "unsubscribe"] });
 		setControlClientFactoryForTest(async () => fake.client);
 		setIfaceResolverForTest(() => "usb0");
 
@@ -704,9 +721,9 @@ describe("control-socket subscription cutover + airtight file-poll fallback", ()
 		expect(buildLinkTelemetry()?.links[0]?.nak_count).toBe(1);
 	});
 
-	test("capability absent (no stats-subscription) closes the client and stays on file-poll", async () => {
+	test("a build advertising no subscribe method closes the client and stays on file-poll", async () => {
 		const w = captureWatch();
-		const fake = fakeControlClient({ capabilities: ["set-mode"] });
+		const fake = fakeControlClient({ methods: ["get_stats", "set_mode"] });
 		setControlClientFactoryForTest(async () => fake.client);
 		setIfaceResolverForTest(() => "usb0");
 
@@ -723,9 +740,35 @@ describe("control-socket subscription cutover + airtight file-poll fallback", ()
 		expect(buildLinkTelemetry()?.links[0]?.nak_count).toBe(2);
 	});
 
+	// The legacy-binary path: a sender predating the hard fork answers
+	// `get_capabilities` with -32601, which the client surfaces as null. The
+	// cutover must read that as "no support" and leave the poll untouched —
+	// never throw, because this runs on the stream-start path.
+	test("a null capability document (legacy binary, -32601) stays on file-poll without throwing", async () => {
+		const w = captureWatch();
+		const fake = fakeControlClient({
+			methods: [],
+			capabilitiesNull: true,
+		});
+		setControlClientFactoryForTest(async () => fake.client);
+		setIfaceResolverForTest(() => "usb0");
+
+		startLinkTelemetry("/tmp/stats.json", ["10.0.0.1"], {
+			watch: w.watch,
+			controlSocket: "/tmp/srtla-send-control-9000.sock",
+		});
+		await flushCutover();
+
+		expect(fake.closed).toBe(true);
+		expect(w.stopped).toBe(0);
+		expect(isLinkTelemetryActive()).toBe(true);
+		w.emit(snapshot([{ conn_id: "0", nak_count: 9 }]));
+		expect(buildLinkTelemetry()?.links[0]?.nak_count).toBe(9);
+	});
+
 	test("mid-stream subscription disconnect (onEvent null) re-arms the file-poll", async () => {
 		const w = captureWatch();
-		const fake = fakeControlClient({ capabilities: ["stats-subscription"] });
+		const fake = fakeControlClient({ methods: ["subscribe", "unsubscribe"] });
 		setControlClientFactoryForTest(async () => fake.client);
 		setIfaceResolverForTest(() => "usb0");
 

@@ -31,7 +31,7 @@
 
   WHAT THIS MODULE HOLDS is exactly what the WRITER published, and that stays
   the right thing to hold even though the sender's echo is readable. A retired
-  comment here claimed the pinned `@ceralive/srtla-send` build stripped
+  comment here claimed the pinned `@ceraui/srtla-send` build stripped
   `link_id`/`iface`; `2026.8.0` in fact declares and parses both, so the echo
   outranks the file position today. The writer's own record is still what makes
   twin disambiguation work when a sender reports NEITHER — it is the floor the

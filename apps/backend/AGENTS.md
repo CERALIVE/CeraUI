@@ -22,7 +22,7 @@ non-numeric values retain the previous 9997 fallback. E2E uses this to isolate p
 upstreams; its private child readiness protocol lives in frontend test fixtures,
 not in a production endpoint. See [`../../docs/E2E-BACKEND-OWNERSHIP.md`](../../docs/E2E-BACKEND-OWNERSHIP.md).
 
-Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` public-npm registry dep) and `srtla-send-rs` via the `@ceralive/srtla-send` npm package.
+Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, exposes all device control via oRPC over WebSocket, drives the `cerastream` engine over structured IPC (`@ceralive/cerastream` public-npm registry dep) and the `srtla` sender (`srtla_send`) via the private workspace package `@ceraui/srtla-send` (`packages/srtla-send/`).
 
 ## STRUCTURE
 
@@ -2206,8 +2206,8 @@ from `lsusb` would be a device the operator cannot bond, act on, or explain.
 
 ## …AND THAT IDENTITY IS PUBLISHED AS A BIND-MAP, SO TWIN MODEMS BOTH BOND [EXISTS]
 
-CeraUI is the WRITER of `srtla-send-rs`'s ADR-003 bind-map contract
-([`docs/adr/ADR-003-bind-map-contract.md`](../../../srtla-send-rs/docs/adr/ADR-003-bind-map-contract.md)).
+CeraUI is the WRITER of the `srtla` sender's ADR-003 bind-map contract
+([`docs/adr/ADR-003-bind-map-contract.md`](https://github.com/CERALIVE/srtla-send-rs/blob/main/docs/adr/ADR-003-bind-map-contract.md)).
 The sender identifies an uplink by its local SOURCE IP, and two identical HiLink
 twins both lease `192.168.8.100` — so the sender's pool builder silently
 collapsed the second one and the operator saw ONE link with two modems plugged
@@ -2430,7 +2430,7 @@ link that left the bond stops resolving instead of lingering with stale numbers.
 | 3 | `conn_id` as a FILE LINE position | ONLY while the mapping is in force |
 | 4 | `conn_id` → unique-IP order → interface | byte-identical to the pre-mapping behaviour |
 
-- **Rungs 1-2 read fields the PINNED binding strips.** `@ceralive/srtla-send`
+- **Rungs 1-2 read fields the PINNED binding stripped.** The retired npm binding at
   2026.6.2 predates todo 8 and its Zod reader drops unknown keys, so today every
   launch resolves on rung 3 or 4 and the stronger rungs light up on a republish
   with no further change — the same defensive-read discipline `bytes_sent_total`
@@ -7288,7 +7288,7 @@ linkTelemetry: {
     iface: string;         // human name from the backend-owned IP list
     rtt_ms: number;        // sender reports 0 (RTT is receiver-side)
     nak_count: number;
-    weight_percent: number; // link's normalized share of total selection weight (0-100, active links sum to ~100; lone link = 100). Source: srtla-send-rs src/telemetry_file.rs weight_share_percent
+    weight_percent: number; // link's normalized share of total selection weight (0-100, active links sum to ~100; lone link = 100). Source: the srtla sender's src/telemetry_file.rs weight_share_percent
     bytes_sent_total?: number; // CUMULATIVE wire BYTES this uplink sent this session (srtla_send ADR-002). Absent = UNKNOWN.
     stale: boolean;
   }>;
@@ -7305,9 +7305,9 @@ while its bytes stay banked, so summing the live links would make an operator's
 backend restart that re-adopts a running stream (the sender owns the counter, not
 CeraUI), and restarts at 0 only on a genuinely new stream — `srtla_send` is
 spawned once per session, so process lifetime IS session lifetime. Full contract:
-`srtla-send-rs/docs/adr/ADR-002-session-bytes-telemetry.md`.
+[ADR-002](https://github.com/CERALIVE/srtla-send-rs/blob/main/docs/adr/ADR-002-session-bytes-telemetry.md).
 
-**It reads `undefined` until `@ceralive/srtla-send` is republished**, and that is
+**It read `undefined` while the npm binding was pinned**, and that was
 expected, not a bug: the pinned binding's Zod reader strips unknown keys, so
 `asCumulativeBytes` (which reads the field defensively, like the audio join keys
 in `sources.ts`) finds nothing. Absent means UNKNOWN, never zero — the same
@@ -7435,7 +7435,7 @@ hand-written, independently-drifting per-repo `protocol.ts` derivations.
   directly.
 - **Registry-dep, Rule-D-compatible.** `@ceralive/control-protocol` resolves through
   the package registry identically whether or not the sibling repo is checked out —
-  a CalVer registry dep like `@ceralive/cerastream` / `@ceralive/srtla-send`, NOT a
+  a CalVer registry dep like `@ceralive/cerastream`, NOT a
   sibling `link:` or a `../` path. Evolution is **additive-optional forever**: a
   change that would make a currently-optional field required is a new protocol `v`,
   never a package version bump.
@@ -9648,7 +9648,7 @@ config, an anchored path still held by its own device, and a live row with no
 - Don't hardcode a `cooling_deviceN` or `hwmonN` index to reach the fan — both index spaces are registration-order artefacts and were measured SHIFTING across a reboot on the reference board, so a hardcoded one silently starts reporting an unrelated device. Discover by the exact `type` string `pwm-fan` (see FAN), and don't collapse "no thermal class at all" (provable `absent`) into "the read failed" (`unknown`).
 - Don't assume a cooling device has a `device` backlink — on `7.1.5-ceralive-rk3588` the `pwm-fan` cdev has none at all, which made the first shipped collector report `unknown` on a board whose fan was running at `pwm1=120`. The `hwmon<N>/name == "pwmfan"` correlation covers it, and its three gates are not optional: it requires an already-confirmed `pwm-fan` cooling device, it fires ONLY when the backlink is absent (never merely because a `pwm1` read under an existing one failed — that could adopt a different fan on a multi-fan board), and two matching hwmons report `unknown` rather than a guess. Don't widen it into a general "find any fan" scan.
 - Don't derive a fan percentage from `cur_state / max_state`, and don't report or infer an RPM anywhere — the levels index a devicetree `cooling-levels` table rather than scaling airflow, and the reference fan is 2-wire with no `fan1_input` at all. `pwm1 / 255` is the ONLY sanctioned duty-cycle source, and the collector deliberately never reads the cooling-level nodes so the division is unreachable.
-- Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceralive/srtla-send` (the `srtla-send-rs` binding, registry dep). Check `../../../srtla-send-rs/AGENTS.md` before touching call sites.
+- Don't import from `@ceralive/srtla` — that package is retired from CeraUI. Use `@ceraui/srtla-send` (the sender binding, now a private workspace package at `packages/srtla-send/`, never published). Check the sender's [AGENTS.md](https://github.com/CERALIVE/srtla-send-rs/blob/main/AGENTS.md) before touching call sites — the binary's CLI/telemetry contract still lives there.
 - Don't blame "the default connection" when the elected default route sits on an interface CeraUI has already excluded — the kernel elects it from whatever DHCP hands it, and a dup-IP dongle's metric-0 lease outranks eth0. Route the decision through `decideConnectivityClaim`, and don't give `suppressed` an escalation branch: a candidate probe steers by SOURCE ADDRESS, which selects a route only where the kernel supports policy routing, so a failed probe there is evidence about steering rather than connectivity (see AN EXCLUDED DEFAULT ROUTE IS NOT A CONNECTIVITY VERDICT).
 - Don't probe a duplicate-IP interface by SOURCE ADDRESS, and don't "unify" `probeExclusionReason` with `deviceBoundProbeExclusionReason` — the twins share one address AND one admin gateway, so only `SO_BINDTODEVICE` (`curl --interface`) can name one of them. Don't let a dongle's own `192.168.8.1` answer stand in for a WAN verdict either: reaching the admin API and reaching the Internet are separate assertions, and a SIM-less HiLink passes the first while captive-portalling the second.
 - Don't identify an uplink by its GATEWAY address on the default-route path — two twins publish the same `via 192.168.8.1` and differ only in `dev`. `buildRouteAddArgv` replays every token for exactly that reason.

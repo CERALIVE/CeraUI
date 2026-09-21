@@ -6,15 +6,15 @@ import type {
 	Subscription,
 } from "@ceralive/cerastream";
 import type {
-	ControlClient,
 	createControlClient,
-	HelloResult,
-} from "@ceralive/srtla-send/control";
+	SenderCapabilityDocument,
+	TelemetryControlClient,
+} from "@ceraui/srtla-send/control";
 import type {
 	Telemetry,
 	TelemetryUpdate,
 	watchTelemetry as WatchTelemetryFn,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import type { RuntimeConfig } from "../helpers/config-schemas.ts";
 import {
 	CerastreamBackend,
@@ -196,13 +196,21 @@ describe("media-path backend contracts", () => {
 		let push = (_data: Telemetry | null): void => {
 			throw new Error("stats subscription was not registered");
 		};
-		const client: ControlClient = {
-			hello: async (): Promise<HelloResult> => ({
+		const client: TelemetryControlClient = {
+			getCapabilities: async (): Promise<SenderCapabilityDocument> => ({
 				schema_version: 1,
-				engine: "srtla_send",
-				capabilities: ["stats-subscription"],
+				binary: "srtla_send",
+				version: "4.1.0",
+				capabilities: {
+					bind_map: true,
+					stats_file: true,
+					dry_run: true,
+					control_socket_jsonrpc: true,
+					conn_timeout_ms: true,
+					modes: ["classic", "enhanced"],
+				},
+				methods: ["get_capabilities", "get_stats", "subscribe", "unsubscribe"],
 			}),
-			rawRequest: async () => null,
 			subscribeStats: (onEvent) => {
 				push = onEvent;
 				return () => {};
@@ -211,7 +219,7 @@ describe("media-path backend contracts", () => {
 		};
 		const factory = async (
 			opts: Parameters<typeof createControlClient>[0],
-		): Promise<ControlClient | null> => {
+		): Promise<TelemetryControlClient | null> => {
 			capturedSocket = opts.socketPath;
 			return client;
 		};

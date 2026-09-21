@@ -4,7 +4,7 @@ Parent: [`../AGENTS.md`](../AGENTS.md)
 
 ## ROLE IN THE GROUP
 
-Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and `srtla-send-rs` at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
+Device control plane. Svelte 5 PWA (frontend) + Bun/TypeScript WebSocket-RPC backend. Drives `cerastream` (active engine) and the `srtla` sender (`srtla_send`) at runtime. Produces the `ceraui` .deb for ARM64 and AMD64 device images.
 
 **Single engine.** `@ceralive/cerastream` is the ONLY streaming engine, consumed
 as a public-npm registry dep. The legacy ceracoder engine and its sibling `link:`
@@ -15,17 +15,27 @@ The backend resolves both streaming deps as public-npm registry packages — no 
 
 ```
 "@ceralive/cerastream":  "2026.9.10"   (public npm, @ceralive scope)
-"@ceralive/srtla-send":  "2026.8.0"   (public npm, @ceralive scope)
 ```
 
-Both are published npm packages (`@ceralive` scope on npmjs.org) consumed as normal registry deps, not `link:` paths and not vendored `.tgz` files. No sibling checkout of `srtla` or `srtla-send-rs` is needed for `CeraUI` to install or build.
+It is a published npm package (`@ceralive` scope on npmjs.org) consumed as a normal registry dep, not a `link:` path and not a vendored `.tgz`. No sibling checkout of the `srtla` receiver or sender repositories is needed for `CeraUI` to install or build.
+
+The **sender binding is no longer a registry dep at all**: it was absorbed into
+this monorepo as the private workspace package `packages/srtla-send`
+(`@ceraui/srtla-send`, consumed by the backend as `workspace:*`). It is never
+published. The `srtla_send` BINARY remains an external artifact — only its
+TypeScript helper layer moved here.
 
 ## A REGISTRY PIN IS A VERSION BOUNDARY, AND THE GATE IS THE DELIVERABLE [EXISTS]
 
-CeraUI consumes FOUR npm producers whose wire data is Zod-validated:
-`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`,
-`@ceralive/modem-control`. A pin is a version boundary as well as a path
-boundary, and the failure mode on the wrong side of it is SILENT.
+CeraUI consumes THREE npm producers whose wire data is Zod-validated:
+`@ceralive/cerastream`, `@ceralive/control-protocol`, `@ceralive/modem-control`.
+A pin is a version boundary as well as a path boundary, and the failure mode on
+the wrong side of it is SILENT.
+
+A fourth producer schema — the sender's telemetry — is still Zod-validated and
+still in the drift manifest, but it is no longer PINNED: `@ceraui/srtla-send` is
+a workspace package, so its schema and its consumer move in the same commit and
+the version boundary does not exist for it.
 
 **Zod's `z.object()` STRIPS unrecognized keys on `.parse()`.** So a consumer
 pinned to an OLD binding whose schema does not know a NEW producer field drops
@@ -147,7 +157,8 @@ CeraUI/
 │   │   └── src/schemas/
 │   │       ├── addons.schema.ts           # AddonDescriptorSchema + AddonStateSchema (T21)
 │   │       └── system.schema.ts           # KIOSK_UNAVAILABLE_ERROR + system schemas
-│   └── i18n/         # Paraglide runtime + hand-editable JSON catalogs, 10 languages (workspace:*)
+│   ├── i18n/         # Paraglide runtime + hand-editable JSON catalogs, 10 languages (workspace:*)
+│   └── srtla-send/   # @ceraui/srtla-send — srtla_send args builder + telemetry reader (workspace:*, PRIVATE, never published)
 ├── scripts/build/    # build-debian-package.sh — produces ceraui .deb
 ├── docs/             # ARCHITECTURE, BUILD_PIPELINE, APT_VERSION_CONTROL, BRANDING, TOUCHSCREEN, LIFECYCLE-INDICATORS
 └── .impeccable.md    # UI/UX design constraints — read before touching frontend visuals
@@ -180,6 +191,7 @@ CeraUI/
 | Backend RPC handlers | `apps/backend/src/` |
 | Shared RPC contract | `packages/rpc/` |
 | i18n strings | `packages/i18n/` |
+| `srtla_send` argv, telemetry reader/watcher, control client | `packages/srtla-send/` — contract in [`packages/srtla-send/AGENTS.md`](packages/srtla-send/AGENTS.md) |
 | .deb build | `scripts/build/build-debian-package.sh` |
 | Build system / CI | `docs/BUILD_PIPELINE.md` |
 | Debian versioning | `docs/APT_VERSION_CONTROL.md` |
@@ -1087,7 +1099,7 @@ Both are unset by default, so the control channel stays gated until provisioned.
 
 ## CONVENTIONS
 
-- Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `bun run lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`.
+- Linting/formatting: Biome 2.5 via `@ceralive/biome-config` — ESLint and Prettier are fully removed. The root `biome.json` extends `@ceralive/biome-config` (`"extends": ["@ceralive/biome-config"]`). Run `biome check .` (or `bun run lint`) from the workspace root. Nested non-root configs live in `apps/frontend/`, `apps/backend/`, `packages/i18n/`, `packages/srtla-send/`. The root config additionally excludes `packages/srtla-send/tests/fixtures` — those are byte-frozen Rust-producer documents and pretty-printing them breaks the telemetry byte-parity proof.
 - Svelte+TS: Biome's experimental HTML/Svelte support is enabled via the shared config (`html.experimentalFullSupportEnabled: true` + `html.formatter.enabled: true`). `.svelte` files are linted by Biome; their formatter is disabled in `apps/frontend/biome.json` (`overrides`) because Biome's experimental HTML formatter rewrites the `<script>` block to double quotes and cannot parse Svelte control-flow — so `.svelte` markup is still formatted by the Svelte VS Code extension. That formatter override is unrelated to the lint one below and is not up for review.
 - **Zero-warning frontend gates [EXISTS]:** the frontend `check` package script runs `svelte-check --fail-on-warnings`; the frontend `build` package script runs `scripts/ci/build-warnings-gate.mjs`, which tees Vite output and rejects warning text, ineffective dynamic imports, and large-chunk notices. `bunx biome check .` is clean, and stable warning-level rules in the root config are promoted to errors; `noFloatingPromises` remains the documented nursery-rule exception. These package-script seams are deliberate: the Build Check workflow run strings remain unchanged while gaining the gates.
 - Svelte lint overrides are down to **exactly two** rules (re-verified 2026-08-21 against Biome 2.5.9): `correctness/noUnusedVariables` and `correctness/noUnusedImports`, both off for `**/*.svelte` because Biome still does not count template references — re-enabling the pair on 2.5.9 takes `biome check .` from **33 warnings + 3 infos** to **1,933 warnings**, i.e. **1,142 `noUnusedVariables` + 760 `noUnusedImports`** new findings (Paraglide `m["<key>"]()` imports used only in markup, such as `BufferingIndicator.svelte`, plus cascading markup-only references). The upstream gap is [biomejs/biome#8590](https://github.com/biomejs/biome/issues/8590), still open. 2.5.3 fixed `$store`/`$bindable` for `noUnusedVariables` only and 2.5.7 fixed `{@attach}`; both shipped before 2.5.9 and both are too narrow to retire the overrides. The other three historical entries are gone: `noUnusedFunctionParameters` was genuinely **re-enabled** (it found one real vestigial parameter, now fixed), while `useImportType`/`useConst` were **dead config** — both are inert on `.svelte` even when set to `"error"` directly, though `noNonNullAssertion` does fire, so this is rule-specific rather than a blanket exclusion. Full rationale, reproduction command, and the re-attempt checklist: [`docs/CONVENTIONS.md`](docs/CONVENTIONS.md) → "Svelte lint overrides". Do NOT re-add a blanket disable for a rule that is not actually firing.
@@ -1125,9 +1137,12 @@ isolated runners install their own Playwright OS dependencies: desktop shards
 so the functional command and `-of-<total>` blob artifact names remain
 project-correct. Browser cache keys use the exact installed Playwright CLI
 version, and the four lanes retain unique blob artifacts for the merged report. The
-setup job also downloads the published `srtla-send-rs` v3.2.0 amd64 `.deb`,
+setup job also downloads the published `srtla` 4.1.0 amd64 `.deb`,
 verifies its pinned SHA-256 and Debian package metadata, extracts only its runtime
-payload, and uploads that payload as a one-day artifact. Each E2E lane restores
+payload, and uploads that payload as a one-day artifact. The backend unit lane
+fetches the same pinned package independently — it does not depend on the E2E
+setup job — and exports `SRTLA_SEND_BIN` so the live-producer contract test runs
+against the real sender instead of skipping. Each E2E lane restores
 the executable bit, adds the extracted `usr/bin` to `PATH`, rewrites its local
 `setup.json` `srtla_path`, and asserts the real `srtla_send` binary before server
 startup. No stub, `sudo` install, sibling checkout, or skipped backend preflight
@@ -3038,9 +3053,9 @@ Recorded as a hardware gap, not a code gap, in
 ## ANTI-PATTERNS
 
 - Don't run `npm install`, `yarn`, or `pnpm install` — this workspace runs **Bun** exclusively. `bun.lock` is the authoritative lockfile; `pnpm-lock.yaml`/`pnpm-workspace.yaml`/`.pnpmrc` are gone and catalogs live in `package.json` `workspaces.catalog`. Use `bun install`.
-- Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceralive/srtla-send` (public-npm registry dep, `@ceralive` scope). **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
+- Don't add `@ceralive/srtla` to `package.json` — that package is retired from CeraUI. The sender binding is `@ceraui/srtla-send`, a PRIVATE workspace package at `packages/srtla-send` consumed as `workspace:*` — not a registry dep, never published. **`@ceralive/cerastream` is a public-npm registry dep** (`@ceralive` scope, pinned to a CalVer version; ADR-0002 Decision 13 / ARCHITECTURE §7) — never a sibling `link:` or vendored `.tgz`.
 - Don't commit a `bun link` — it is the sanctioned way to verify against an UNRELEASED producer locally and a defect the moment it reaches the lockfile: the drift gate would then be probing a developer's working tree instead of the artifact devices install, and CI (which has no sibling checkout) would install something different from what was tested. Unlink and `bun install` before committing; `grep -c 'link:' bun.lock` must be `0`.
-- Don't redeclare a local type for producer-owned wire data (`@ceralive/cerastream`, `@ceralive/srtla-send`, `@ceralive/control-protocol`, `@ceralive/modem-control`) — import the shape from the package's own exported types. A shadow type is exactly what hid the PR #303 `device_address` strip from `tsc`.
+- Don't redeclare a local type for producer-owned wire data (`@ceralive/cerastream`, `@ceraui/srtla-send`, `@ceralive/control-protocol`, `@ceralive/modem-control`) — import the shape from the package's own exported types. A shadow type is exactly what hid the PR #303 `device_address` strip from `tsc`.
 - Don't read a producer field without adding its path to `producer-schema-drift.test.ts`'s manifest, and don't add a manifest path with no read site — the first leaves a stale pin free to strip the field silently, the second turns an unused producer field into a merge blocker for a producer that legitimately retires it.
 - Don't put a producer VERSION assumption in `producer-schema-drift.test.ts` — it must pass against any pin that carries the manifest's fields, or an additive bump turns into a red suite that teaches nothing. Version and export-surface skew belong in the `*-bindings-skew` tests.
 - Don't edit `.impeccable.md` for code changes — it's a design reference, not config.
@@ -3048,7 +3063,7 @@ Recorded as a hardware gap, not a code gap, in
 - Don't register Bluetooth in `CAPABILITY_MODULES` — that enum is closed, modem-only and default-off-forever; it would put a headset behind a cellular feature gate. Reuse the claim vocabulary, not the registry.
 - Don't build the `org.bluez.Agent1` object on the shared `DbusTransport` — it is client-only. Use `bluez-agent-exporter.ts`'s dedicated connection, and never `RegisterAgent` a path before its object is exported: BlueZ then blocks on every callback until it times out, which is worse than having no agent.
 - Don't treat BlueZ `Connected` as proof a microphone can be opened. The presence oracle is the address-matched engine node when `pipewire-capture` is advertised and the `org.bluealsa` capture PCM otherwise; a connected device with neither must yield no source row. Never persist PipeWire `object.serial` or change the existing `bt:` id.
-- Don't touch `@ceralive/srtla-send` call sites without checking `../srtla-send-rs/AGENTS.md` first (binding API).
+- Don't touch `@ceraui/srtla-send` call sites without checking the sender's [AGENTS.md](https://github.com/CERALIVE/srtla-send-rs/blob/main/AGENTS.md) first — the package is ours now, but the BINARY's CLI/telemetry contract it encodes still lives in that repo.
 - Don't add custom UI components to `lib/components/ui/` — that directory is managed by the shadcn-svelte CLI. Custom components go in `lib/components/custom/`.
 - Don't hardcode validation bounds (min/max lengths, bitrate limits, port ranges) in dialog components — import from `ValidationAdapter.ts` which sources from `packages/rpc/src/schemas/`.
 - Don't hardcode timeout/retry values in streaming modules — import from `timing-constants.ts`.

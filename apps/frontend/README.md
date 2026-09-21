@@ -16,20 +16,24 @@ Svelte 5 PWA for CeraUI — the on-device control plane for CeraLive streaming h
 
 ## Registry Dependencies
 
-The `backend` app consumes both streaming bindings as pinned public npm packages:
+The `backend` app consumes the streaming engine binding as a pinned public npm
+package:
 
 ```
 "@ceralive/cerastream": "2026.9.10"   (public npm, @ceralive scope)
-"@ceralive/srtla-send": "2026.8.0"   (public npm, @ceralive scope)
 ```
 
 No sibling checkout or vendored tarball is required for CeraUI to install or
-build. Both packages resolve from npm under the `@ceralive` scope.
+build.
+
+The sender binding is NOT a registry dependency — it lives in this repo as the
+private workspace package `packages/srtla-send` (`@ceraui/srtla-send`):
 
 ```
 ceralive/
-├── srtla-send-rs/bindings/   ← source of @ceralive/srtla-send (published to public npm)
-└── CeraUI/                   ← workspace root; backend resolves @ceralive/srtla-send as registry dep
+├── srtla sender repo/        ← source of the srtla_send BINARY only (no npm package)
+└── CeraUI/
+    └── packages/srtla-send/  ← @ceraui/srtla-send, private, consumed as workspace:*
 ```
 
 ## Development

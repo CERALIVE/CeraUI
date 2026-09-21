@@ -55,7 +55,7 @@ import { describe, expect, test } from "bun:test";
 import * as cerastream from "@ceralive/cerastream";
 import * as controlProtocol from "@ceralive/control-protocol";
 import * as modemControl from "@ceralive/modem-control";
-import * as srtlaSend from "@ceralive/srtla-send";
+import * as srtlaSend from "@ceraui/srtla-send";
 
 // ---------------------------------------------------------------------------
 // THE MANIFEST — producer wire fields CeraUI reads, grouped by producer schema.
@@ -198,7 +198,7 @@ const CERASTREAM_FIELDS: SchemaManifest = {
 	bitrateEventSchema: ["current_bitrate", "max_bitrate"],
 };
 
-/** `@ceralive/srtla-send` — the sender's telemetry + bind-map report. */
+/** `@ceraui/srtla-send` — the sender's telemetry + bind-map report. */
 const SRTLA_SEND_FIELDS: SchemaManifest = {
 	telemetrySchema: [
 		"connections",
@@ -274,7 +274,7 @@ const PRODUCERS: readonly {
 		fields: CERASTREAM_FIELDS,
 	},
 	{
-		name: "@ceralive/srtla-send",
+		name: "@ceraui/srtla-send",
 		module: srtlaSend as unknown as Record<string, unknown>,
 		fields: SRTLA_SEND_FIELDS,
 	},
@@ -429,7 +429,7 @@ describe("producer schema drift — every consumed field exists in the installed
 			"@ceralive/cerastream",
 			"@ceralive/control-protocol",
 			"@ceralive/modem-control",
-			"@ceralive/srtla-send",
+			"@ceraui/srtla-send",
 		]);
 		for (const producer of PRODUCERS) {
 			expect(Object.keys(producer.fields).length).toBeGreaterThan(0);
@@ -481,11 +481,16 @@ describe("producer schema drift — every consumed field exists in the installed
 
 const REPO_ROOT = `${import.meta.dir}/../../../..`;
 
+// `@ceraui/srtla-send` is deliberately absent: it is no longer a registry
+// producer at all. The sender binding was absorbed into this monorepo as a
+// private `packages/srtla-send` workspace package, so its only honest specifier
+// is `workspace:*` — which the registry-purity assertion below rejects by
+// design. Its schema-drift coverage is unaffected; it stays in the manifest
+// above, where the gate probes the schema rather than the pin.
 const PRODUCER_PACKAGE_NAMES = [
 	"@ceralive/cerastream",
 	"@ceralive/control-protocol",
 	"@ceralive/modem-control",
-	"@ceralive/srtla-send",
 ] as const;
 
 describe("producer pins stay registry-resolved", () => {

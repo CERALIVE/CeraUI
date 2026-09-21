@@ -36,15 +36,15 @@
        byte-identical to the pre-mapping behaviour.
 
   Rungs 1 and 2 are LIVE. A retired comment here claimed the pinned
-  `@ceralive/srtla-send` build stripped `link_id` and `iface`, so that every
+  `@ceraui/srtla-send` build stripped `link_id` and `iface`, so that every
   launch resolved on rung 3 or 4 until the binding was republished. That was
   measured false: `2026.8.0` declares BOTH as optional fields on its published
   `Telemetry` type and parses them at runtime, so the sender's own echo has been
   outranking the file position all along.
 */
 
-import type { Telemetry } from "@ceralive/srtla-send/telemetry";
 import type { BondLinkIdentityState } from "@ceraui/rpc/schemas";
+import type { Telemetry } from "@ceraui/srtla-send/telemetry";
 
 import { logger } from "../../helpers/logger.ts";
 import {

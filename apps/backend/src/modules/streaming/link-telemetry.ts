@@ -44,15 +44,17 @@
 */
 
 import {
+	type ControlClientOptions,
 	createControlClient,
 	supportsStatsSubscription,
-} from "@ceralive/srtla-send/control";
+	type TelemetryControlClient,
+} from "@ceraui/srtla-send/control";
 import {
 	senderTelemetryPath,
 	type Telemetry,
 	type WatchTelemetryHandle,
 	watchTelemetry,
-} from "@ceralive/srtla-send/telemetry";
+} from "@ceraui/srtla-send/telemetry";
 import { logger } from "../../helpers/logger.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
 import type { BondEntry } from "./bind-map.ts";
@@ -168,7 +170,12 @@ let subscriptionCleanup: (() => void) | null = null;
 // normalized stream for the whole session rather than being re-announced per tick.
 let bindMapReportCleanup: (() => void) | null = null;
 
-type ControlClientFactory = typeof createControlClient;
+// Only the three calls the cutover makes, so a test double is three members
+// rather than the sender's whole method table. `createControlClient` is
+// assignable to this.
+type ControlClientFactory = (
+	options: ControlClientOptions,
+) => Promise<TelemetryControlClient | null>;
 let controlClientFactoryOverride: ControlClientFactory | null = null;
 
 /** Test seam: inject a fake control-client factory (null restores the real one). */
@@ -281,10 +288,18 @@ function startFilePollWatcher(
  * Best-effort cutover from file-poll to the control-socket stats subscription.
  *
  * Every exit that is not a confirmed, live subscription leaves the file-poll
- * watcher running (connect failure, hello timeout, capability absent, subscribe
- * error). Only once the sender advertises `stats-subscription` AND the stream is
- * open do we stop the poll and source telemetry from pushed `event` frames. A
- * mid-stream null (parse failure / disconnect) re-arms the file-poll.
+ * watcher running (connect failure, probe timeout, capability absent, subscribe
+ * error). Only once the sender's own `get_capabilities` document advertises the
+ * `subscribe`/`unsubscribe` pair AND the stream is open do we stop the poll and
+ * source telemetry from pushed `stats.update` frames. A mid-stream null (parse
+ * failure / disconnect) re-arms the file-poll.
+ *
+ * FEATURE DETECTION IS `get_capabilities`, NOT `hello`. `hello` belonged to the
+ * retired npm binding's dialect and does not exist on the hard-forked sender;
+ * `get_capabilities` is the same document the pre-spawn `--capabilities-json`
+ * probe returns, plus the live `methods` array. A binary that predates the fork
+ * answers `-32601`, which the client reports as `null` rather than throwing —
+ * "no capability support" is an answer, and this runs on the start path.
  */
 async function attemptSubscriptionCutover(
 	socketPath: string,
@@ -300,8 +315,19 @@ async function attemptSubscriptionCutover(
 		});
 		if (!client) return;
 
-		const hello = await client.hello().catch(() => null);
-		if (!hello || !supportsStatsSubscription(hello)) {
+		const capabilities = await client.getCapabilities().catch(() => null);
+		if (!capabilities) {
+			logger.debug(
+				"link-telemetry: sender reports no capabilities support, staying on file-poll",
+			);
+			client.close();
+			return;
+		}
+		if (!supportsStatsSubscription(capabilities)) {
+			logger.debug(
+				"link-telemetry: sender advertises no stats subscription, staying on file-poll",
+				{ version: capabilities.version },
+			);
 			client.close();
 			return;
 		}

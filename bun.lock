@@ -21,8 +21,8 @@
         "@ceralive/cerastream": "2026.9.10",
         "@ceralive/control-protocol": "2026.7.0",
         "@ceralive/modem-control": "1.4.0",
-        "@ceralive/srtla-send": "2026.8.0",
         "@ceraui/rpc": "workspace:*",
+        "@ceraui/srtla-send": "workspace:*",
         "@httptoolkit/dbus-native": "0.1.5",
         "@orpc/server": "2.0.0-beta.35",
         "finalhandler": "^2.1.1",
@@ -108,6 +108,17 @@
       "dependencies": {
         "@ceralive/cerastream": "2026.9.10",
         "@orpc/contract": "2.0.0-beta.35",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.2",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/srtla-send": {
+      "name": "@ceraui/srtla-send",
+      "version": "2026.9.0",
+      "dependencies": {
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -371,11 +382,11 @@
 
     "@ceralive/modem-control": ["@ceralive/modem-control@1.4.0", "", { "dependencies": { "@httptoolkit/dbus-native": "0.1.5", "zod": "4.4.3" } }, "sha512-z2waEoxWmPwezPJB/HDKfaglRCfk4nYxEmVy7yk6N6vgRl9u8czSWQvSiWjl0RmpCaZDVKUwIMCKcyInh6dvNQ=="],
 
-    "@ceralive/srtla-send": ["@ceralive/srtla-send@2026.8.0", "", { "dependencies": { "zod": "^4.4.3" } }, "sha512-IJNFN3oNplaNbQVuE/9PA3QPNqsyo4UGGokEyd+iqkgm7FzEw+yNmTpgJKFGwvTmZOeRmIwwMPWONTotT1lXoQ=="],
-
     "@ceraui/i18n": ["@ceraui/i18n@workspace:packages/i18n"],
 
     "@ceraui/rpc": ["@ceraui/rpc@workspace:packages/rpc"],
+
+    "@ceraui/srtla-send": ["@ceraui/srtla-send@workspace:packages/srtla-send"],
 
     "@colors/colors": ["@colors/colors@1.6.0", "", {}, "sha512-Ir+AOibqzrIsL6ajt3Rz3LskB7OiMVHqltZmspbW/TJuTVuyOMirVqAkjfY6JISiLHgyNqicAC8AyHHGzNd/dA=="],
 

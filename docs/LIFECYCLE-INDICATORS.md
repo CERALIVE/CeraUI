@@ -478,8 +478,8 @@ These are the specific named follow-ups called out by `device-stability-wrapup`
 Todos 19-21. Registering them here does **not** schedule or commit to the work —
 it makes them discoverable for whoever plans the next indicator wave.
 
-1. **Sender-side SRT reconnect-state contract (Todo 19b).** `srtla-send-rs`'s
-   ADR-001 stats file (`src/telemetry_file.rs`) carries no per-link
+1. **Sender-side SRT reconnect-state contract (Todo 19b).** The `srtla`
+   sender's ADR-001 stats file (`src/telemetry_file.rs`) carries no per-link
    reconnect/connected flag, so CeraUI's `srt.reconnecting` field cannot be
    truthfully `true`/`false` on real hardware today — by the honesty contract
    Todo 19 established, the **live value is always `null`** (unknown), and the
@@ -489,7 +489,7 @@ it makes them discoverable for whoever plans the next indicator wave.
    sender-side half of what would make `one-link-drops`/`engine-unavailable`'s
    SRT-reconnect dimension fully truthful, rather than honestly-unknown.
    **Triage verdict (Todo 37 · Audit b): `backlog`.** Re-verified at execution:
-   `srtla-send-rs/src/telemetry_file.rs`'s emitted `ConnRecord` has exactly
+   the sender's `src/telemetry_file.rs` emitted `ConnRecord` has exactly
    seven fields (`conn_id`, `rtt_ms`, `nak_count`, `weight_percent`, `window`,
    `in_flight`, `bitrate_bps`) — no `connected`/`reconnecting` field; the
    internal `LinkStats.connected` is used only to compute `weight_percent` and is
@@ -549,7 +549,7 @@ construction, a registered *backend-event-cost* follow-up, so all were
 
 | # | Follow-up | Verdict | Cost / resolving todo |
 |---|-----------|---------|-----------------------|
-| 1 | Sender-side SRT reconnect-state contract (Todo 19b) | `backlog` | = **Audit (b)**. `srtla-send-rs/src/telemetry_file.rs` emits no `connected`/`reconnecting` field; CeraUI already consumes `srt.reconnecting` tri-state so the live value is honestly `null`. Cost: cross-repo ADR-001 telemetry schema v2 (sender producer + `@ceralive/srtla` Zod-reader unfreeze + C-reference parity + binding republish); consumer lights up with zero change. ≈4–5 PRs across two sibling repos. |
+| 1 | Sender-side SRT reconnect-state contract (Todo 19b) | `backlog` | = **Audit (b)**. The `srtla` sender's `src/telemetry_file.rs` emits no `connected`/`reconnecting` field; CeraUI already consumes `srt.reconnecting` tri-state so the live value is honestly `null`. Cost: cross-repo ADR-001 telemetry schema v2 (sender producer + `@ceralive/srtla` Zod-reader unfreeze + C-reference parity + binding republish); consumer lights up with zero change. ≈4–5 PRs across two sibling repos. |
 | 2 | Thermal threshold indicator | `backlog` | = `thermal-warning` row (dedup). |
 | 3 | Disk-full stream-facing warning | `backlog` | General low-disk banner already EXISTS (`LowDiskBanner` + `isDiskLow` off the existing device-stats `disk` signal — no new collector); the gap is a stream-start-path-specific warning. Reuses the existing signal but still needs a Live-path surface + a streaming-specific threshold design + tests. Deferred. |
 | 4 | Backend-restart signal | `backlog` | = `backend-restart-dashboard-open` row (dedup). |
@@ -578,7 +578,7 @@ item, not a CeraUI change.
 
 **(b) Sender `srt.reconnecting` field — verdict: `backlog` (= Named Follow-up
 #1); CeraUI consumer already wired.**
-`srtla-send-rs/src/telemetry_file.rs`'s emitted `ConnRecord` has exactly seven
+The `srtla` sender's `src/telemetry_file.rs` emitted `ConnRecord` has exactly seven
 fields (`conn_id`, `rtt_ms`, `nak_count`, `weight_percent`, `window`,
 `in_flight`, `bitrate_bps`) — **no** `connected`/`reconnecting`. The internal
 `LinkStats.connected` drives `weight_percent` only and is never serialized. CeraUI

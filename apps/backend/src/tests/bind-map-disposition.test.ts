@@ -45,11 +45,21 @@ const UNIQUE: BondEntry[] = [
 	entry("10.0.0.2", "wwan0"),
 ];
 
+// Verbatim `--capabilities-json` output of the shipped srtla 4.1.0 binary. It
+// carries no `bind_map_schema_version`, so the absence-is-1 branch below is the
+// one the real sender exercises.
 const CAPABILITY_DOC = JSON.stringify({
 	schema_version: 1,
 	binary: "srtla_send",
-	version: "3.2.0",
-	capabilities: { bind_map: true, bind_map_schema_version: 1 },
+	version: "4.1.0",
+	capabilities: {
+		bind_map: true,
+		stats_file: true,
+		dry_run: true,
+		control_socket_jsonrpc: true,
+		conn_timeout_ms: true,
+		modes: ["classic", "enhanced"],
+	},
 });
 
 beforeEach(() => {
@@ -65,8 +75,8 @@ describe("pre-spawn capability probe (ADR-003 §7 caller contract)", () => {
 	});
 
 	test("EVERY failure mode is read as NO SUPPORT", () => {
-		// The shipped 3.2.0 binary answers `error: unexpected argument` with exit
-		// 2 — we match on nothing, so a future build's different refusal lands here
+		// A pre-fork 3.x binary answers `error: unexpected argument` with exit 2 —
+		// we match on nothing, so a future build's different refusal lands here
 		// identically.
 		expect(classifyCapabilityDocument(2, "error: unexpected argument")).toEqual(
 			{ bindMap: false, reason: "nonzero-exit" },

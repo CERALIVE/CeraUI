@@ -364,7 +364,7 @@ describe('the `available` arm grew a package list, additively', () => {
 				layer: 'platform' as const,
 				kept_back: true as const,
 			},
-			{ name: 'srtla-send-rs' },
+			{ name: 'srtla' },
 		];
 		const parsed = updateStateSchema.parse({ ...LEGACY_AVAILABLE_FRAME, packages });
 		expect((parsed as { packages?: unknown }).packages).toEqual(packages);

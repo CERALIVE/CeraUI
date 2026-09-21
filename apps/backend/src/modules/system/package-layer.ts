@@ -4,7 +4,7 @@ export const PACKAGE_LAYERS: Record<string, "app" | "platform"> = {
 	"libsrt1.5-ceralive": "app",
 	cerastream: "app",
 	"ceralive-device": "app",
-	"srtla-send-rs": "app",
+	srtla: "app",
 	"gstreamer1.0-libuvcsrc": "app",
 	modemmanager: "app",
 	"libmm-glib0": "app",
