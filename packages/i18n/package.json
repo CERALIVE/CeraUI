@@ -31,7 +31,7 @@
 		"generate:i18n": "bun scripts/compile-messages.ts && bun scripts/generate-registry.ts"
 	},
 	"devDependencies": {
-		"@inlang/paraglide-js": "2.25.2",
+		"@inlang/paraglide-js": "2.25.4",
 		"@types/bun": "^1.4.2",
 		"svelte": "^5.57.0",
 		"typescript": "catalog:"
