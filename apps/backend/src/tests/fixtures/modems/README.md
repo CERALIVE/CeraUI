@@ -63,7 +63,7 @@ grep) should be able to tell them apart on sight:
   and it is topology, not identity: the board's own `src` address on that
   subnet is already replaced with the literal `<redacted>` marker in every
   capture. A genuine leak on this subnet would be a numeric host octet other
-  than `.0` (the network) or `.1` (the gateway) — e.g. `192.168.78.145` — which
+  than `.0` (the network) or `.1` (the gateway) — e.g. `192.168.78.<host-octet>` — which
   does not appear anywhere in this directory.
 
 The identity-check regex (`.omo/plans/media-stack-convergence.md` F2 procedure)
