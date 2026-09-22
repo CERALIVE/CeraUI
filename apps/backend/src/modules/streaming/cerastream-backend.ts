@@ -1359,14 +1359,32 @@ export class CerastreamBackend implements StreamingBackend {
 	 * any other non-selected) leg's `capture_video_error` carries no `selected`
 	 * flag, and the primary streaming healthily is not evidence about it — the
 	 * secondary can be permanently missing from a session that is, by every
-	 * other measure, healthy. Only when the standing error names the SAME leg
-	 * the healthy frame is reporting on does the frame retract it. `start()`
-	 * and `stop()` keep calling the unconditional `clearRecoveredEngineError`
-	 * directly: a new attempt or an explicit stop ends ANY standing claim,
-	 * selected or not, which is a session-boundary reset, not a recovery proof.
+	 * other measure, healthy. `start()` and `stop()` keep calling the
+	 * unconditional `clearRecoveredEngineError` directly: a new attempt or an
+	 * explicit stop ends ANY standing claim, selected or not, which is a
+	 * session-boundary reset, not a recovery proof.
+	 *
+	 * The gate is deliberately NOT "was the LATEST error selected" — that
+	 * conflates two different questions. `standingEngineErrorSelected` only
+	 * tracks the CURRENT standing error's own flag, so once a later, unrelated
+	 * error (e.g. `srt_connection_lost`) takes the shared `cerastream`
+	 * notification slot, that new error is (correctly) unselected too, and the
+	 * naive check would block the clear for a claim that no longer describes
+	 * anything the snapshot latched on. The real question is "is the standing
+	 * error STILL the SAME capture claim the snapshot latched for" — i.e. does
+	 * the slot still name `capture_video_error` at all. Only THAT case (still
+	 * capture_video_error, still not selected — a composition secondary that
+	 * has not recovered) blocks the clear; a slot that has moved on to any
+	 * other code falls through to `clearRecoveredEngineError()`, whose own
+	 * first line unconditionally drops the stale capture-degraded snapshot
+	 * ahead of the (unrelated) standing-error membership check.
 	 */
 	private clearRecoveredEngineErrorIfSelected(): void {
-		if (!this.standingEngineErrorSelected) return;
+		const standing = this.standingEngineError;
+		const standingIsUnrecoveredCaptureLeg =
+			standing?.code === PROCESS_ERROR_CODES.CAPTURE_VIDEO_ERROR &&
+			!this.standingEngineErrorSelected;
+		if (standingIsUnrecoveredCaptureLeg) return;
 		this.clearRecoveredEngineError();
 	}
 
