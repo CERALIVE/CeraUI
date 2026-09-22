@@ -689,6 +689,14 @@ export class CerastreamBackend implements StreamingBackend {
 	// so a blind remove-by-name would retract whichever error happens to be
 	// standing rather than the one the recovery signal actually falsifies.
 	private standingEngineError: ResolvedCerastreamError | undefined;
+	// Whether the standing error concerns the OPERATOR'S SELECTED leg — the
+	// SAME `event.selected` signal `noteDegradedSelectedCapture` already gates
+	// on. A composition SECONDARY (or any non-selected) leg degrading carries
+	// `selected` absent, and a healthy `streaming` status frame proves nothing
+	// about it: the primary can stream perfectly while the secondary never
+	// joined, which is exactly the shape a degraded composition start takes.
+	// See `clearRecoveredEngineError` for why this gates ONLY that one signal.
+	private standingEngineErrorSelected = false;
 	// Serializes non-stop IPC ops; stop uses a fresh client so this queue cannot hide it.
 	private queue: Promise<void> = Promise.resolve();
 	private interrupt: Promise<void> = Promise.resolve();
@@ -1219,7 +1227,7 @@ export class CerastreamBackend implements StreamingBackend {
 				if (
 					classifyRuntimeState(event.state, event.streaming) === "streaming"
 				) {
-					this.clearRecoveredEngineError();
+					this.clearRecoveredEngineErrorIfSelected();
 				}
 				const buffering = extractBufferingStatus(event);
 				const activeEncode = extractActiveEncode(event);
@@ -1308,6 +1316,7 @@ export class CerastreamBackend implements StreamingBackend {
 				true,
 			);
 			this.standingEngineError = resolved;
+			this.standingEngineErrorSelected = event.selected === true;
 		}
 
 		const raw = `cerastream ${event.source} error [${event.code}]${
@@ -1339,7 +1348,26 @@ export class CerastreamBackend implements StreamingBackend {
 		if (standing === undefined) return;
 		if (!ENGINE_ERRORS_CLEARED_BY_HEALTHY_SESSION.has(standing.code)) return;
 		this.standingEngineError = undefined;
+		this.standingEngineErrorSelected = false;
 		this.deps.bridge.removeNotification(standing.channel);
+	}
+
+	/**
+	 * The narrow half of the boundary above: called on every `streaming`
+	 * status heartbeat rather than only at start/stop, so it must NOT clear a
+	 * standing error the heartbeat cannot falsify. A composition SECONDARY (or
+	 * any other non-selected) leg's `capture_video_error` carries no `selected`
+	 * flag, and the primary streaming healthily is not evidence about it — the
+	 * secondary can be permanently missing from a session that is, by every
+	 * other measure, healthy. Only when the standing error names the SAME leg
+	 * the healthy frame is reporting on does the frame retract it. `start()`
+	 * and `stop()` keep calling the unconditional `clearRecoveredEngineError`
+	 * directly: a new attempt or an explicit stop ends ANY standing claim,
+	 * selected or not, which is a session-boundary reset, not a recovery proof.
+	 */
+	private clearRecoveredEngineErrorIfSelected(): void {
+		if (!this.standingEngineErrorSelected) return;
+		this.clearRecoveredEngineError();
 	}
 
 	/**

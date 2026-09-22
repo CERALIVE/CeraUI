@@ -390,12 +390,20 @@ function makeEngineHarness(): EngineHarness {
 	return { backend, notified, removed };
 }
 
-function engineError(code: string): RuntimeErrorEvent {
+/**
+ * `selected` defaults to `true` — every pre-existing test in this describe
+ * block is about the OPERATOR'S OWN active capture leg recovering, which is
+ * the one case a healthy `streaming` frame may retract on. Pass `false` (or
+ * omit `selected` entirely, as the real engine does for a composition
+ * SECONDARY leg) to drive the non-selected case below.
+ */
+function engineError(code: string, selected = true): RuntimeErrorEvent {
 	return {
 		type: "error",
 		seq: 0,
 		code,
 		source: "engine",
+		...(selected ? { selected: true } : {}),
 	} as unknown as RuntimeErrorEvent;
 }
 
@@ -497,5 +505,51 @@ describe("capture_video_error clears when the engine proves capture is healthy",
 		backend.handleEvent(statusEvent("streaming", true));
 
 		expect(removed).toEqual([]);
+	});
+});
+
+/*
+ * Board-confirmed 2026-09-21 (Orange Pi 5+, F3 Addendum C follow-up): a
+ * composition SECONDARY leg failing to negotiate at start (e.g. the
+ * secondary camera cannot reach the requested program resolution) raises the
+ * exact same `capture_video_error` notification as a SELECTED leg failure —
+ * but the engine never sets `selected` on it, because `selected: true` names
+ * "the operator's own chosen leg", not "the whole session". The retired
+ * behaviour retracted it on the very next `streaming` status frame — which a
+ * degraded composition start ALWAYS produces, since the primary is exactly
+ * what kept playing — so the notification was live for well under 100ms on
+ * the real board and no operator could ever see it. The engine-side typed
+ * refusal (`capture_cause: "negotiation_failed"`) was real the whole time;
+ * this is CeraUI's own honesty gap in how it retracted it.
+ */
+describe("a composition SECONDARY (non-selected) leg's error is not falsified by the primary streaming", () => {
+	test("a healthy streaming frame does NOT retract it — the primary streaming proves nothing about a leg it never selected", () => {
+		const { backend, removed } = makeEngineHarness();
+		backend.handleEvent(engineError("capture_video_error", false));
+
+		backend.handleEvent(statusEvent("streaming", true));
+		backend.handleEvent(statusEvent("streaming", true));
+
+		expect(removed).toEqual([]);
+	});
+
+	test("a new session start still clears it — a fresh attempt is a real boundary, not a recovery proof", async () => {
+		const { backend, removed } = makeEngineHarness();
+		backend.handleEvent(engineError("capture_video_error", false));
+
+		await backend
+			.start({} as RuntimeConfig, {} as never)
+			.catch(() => undefined);
+
+		expect(removed).toEqual(["cerastream"]);
+	});
+
+	test("the SAME code still clears normally once it IS about the selected leg", () => {
+		const { backend, removed } = makeEngineHarness();
+		backend.handleEvent(engineError("capture_video_error", true));
+
+		backend.handleEvent(statusEvent("streaming", true));
+
+		expect(removed).toEqual(["cerastream"]);
 	});
 });
