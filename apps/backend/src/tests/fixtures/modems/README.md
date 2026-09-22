@@ -42,6 +42,34 @@ redaction markers. Empty credential strings are also masked. Consequently these
 are diagnostic fixtures, not guaranteed schema-valid mutation inputs. Do not
 replace redaction markers with plausible subscriber numbers to make a test pass.
 
+## Reference address classes (F2-R1)
+
+These captures carry `192.168.*` literals from **three distinct, deliberate
+classes** — none of them a board-identity leak. A future reader (or an identity
+grep) should be able to tell them apart on sight:
+
+- **HiLink vendor defaults (`192.168.8.0/24`)** — `192.168.8.100` /
+  `192.168.8.1` / `192.168.8.0/24` are the client address, portal gateway and
+  subnet Huawei's HiLink firmware hands out on every unit. The router-mode
+  portal feature exists to recognise exactly this range; it is fixture data the
+  code under test must match, not something a board leased on our own network.
+- **Generic RFC1918 example (`192.168.0.0/24`)** — `192.168.0.169` /
+  `192.168.0.1` / `192.168.0.0/24` come from the ZTE unit's composition capture
+  and are an ordinary, unremarkable private-network example — the same class of
+  literal you'd see in any router's factory documentation.
+- **Bench LAN topology (`192.168.78.0/24`)** — `192.168.78.1` (gateway) and
+  `192.168.78.0/24` (subnet), present in the `*-capture.txt` `ip addr`/`ip route`
+  lines. This is the ONLY subnet that is actually ours (the lab bench network),
+  and it is topology, not identity: the board's own `src` address on that
+  subnet is already replaced with the literal `<redacted>` marker in every
+  capture. A genuine leak on this subnet would be a numeric host octet other
+  than `.0` (the network) or `.1` (the gateway) — e.g. `192.168.78.145` — which
+  does not appear anywhere in this directory.
+
+The identity-check regex (`.omo/plans/media-stack-convergence.md` F2 procedure)
+is scoped to catch exactly that third case and deliberately ignores the first
+two, since neither can ever represent this bench's own identity.
+
 ## Observed limits
 
 The installed roster wrongly contains the Bluetooth `13d3:3572` device; the
