@@ -1913,6 +1913,94 @@ describe("SourceSection — degraded SELECTED leg (todo 23)", () => {
 			container.querySelector('[data-testid="source-degraded-banner"]'),
 		).toBeNull();
 	});
+
+	// Each engine cause calls for a different operator action, so the copy splits.
+	function activeEncodeWithCause(cause: string | undefined) {
+		return {
+			codec: "h264",
+			resolution: "1920x1080",
+			framerate: 30,
+			active_input: DEGRADED.id,
+			capture: {
+				state: "degraded",
+				live_inputs: [],
+				degraded_inputs: [
+					{ input_id: DEGRADED.id, ...(cause ? { cause } : {}) },
+				],
+				failover_rate_policy: "retime",
+			},
+		};
+	}
+
+	function degradedBody(container: HTMLElement): string {
+		const body = container.querySelector<HTMLElement>(
+			'[data-testid="source-degraded-banner-body"]',
+		);
+		if (!body) throw new Error("degraded body not rendered");
+		return body.textContent ?? "";
+	}
+
+	it("picks cause-specific copy from the engine's degraded_inputs cause", () => {
+		const cases: Array<[string, string]> = [
+			["no_signal", "isn't carrying a signal"],
+			["negotiation_failed", "signal format"],
+			["device_busy", "busy"],
+			["unsupported-format", "format"],
+			["interlaced-unsupported", "interlaced"],
+			["source-changed", "changed"],
+		];
+		for (const [cause, fragment] of cases) {
+			const { container, unmount } = mount({
+				sources: sourcesMsg([DEGRADED]),
+				config: { source: DEGRADED.id },
+				activeEncode: activeEncodeWithCause(cause),
+			});
+			const band = container.querySelector<HTMLElement>(
+				'[data-testid="source-degraded-banner"]',
+			);
+			expect(band?.dataset.degradedCause).toBe(cause);
+			expect(degradedBody(container).toLowerCase()).toContain(fragment);
+			unmount();
+		}
+	});
+
+	it("falls back to the generic body for an unknown cause and when no cause is reported", () => {
+		for (const cause of ["something_new", undefined]) {
+			const { container, unmount } = mount({
+				sources: sourcesMsg([DEGRADED]),
+				config: { source: DEGRADED.id },
+				activeEncode: activeEncodeWithCause(cause),
+			});
+			const band = container.querySelector<HTMLElement>(
+				'[data-testid="source-degraded-banner"]',
+			);
+			expect(band?.dataset.degradedCause).toBeUndefined();
+			expect(degradedBody(container)).toContain(
+				"The device is still connected, but the encoder reported a problem",
+			);
+			unmount();
+		}
+	});
+
+	it("ignores a cause reported for a DIFFERENT input than the selected one", () => {
+		const { container } = mount({
+			sources: sourcesMsg([DEGRADED]),
+			config: { source: DEGRADED.id },
+			activeEncode: {
+				...activeEncodeWithCause("no_signal"),
+				capture: {
+					state: "degraded",
+					live_inputs: [DEGRADED.id],
+					degraded_inputs: [{ input_id: "some-other-cam", cause: "no_signal" }],
+					failover_rate_policy: "retime",
+				},
+			},
+		});
+		const band = container.querySelector<HTMLElement>(
+			'[data-testid="source-degraded-banner"]',
+		);
+		expect(band?.dataset.degradedCause).toBeUndefined();
+	});
 });
 
 describe("SourceSection — empty state + lost-banner scoping (todo 23)", () => {

@@ -30,11 +30,12 @@ import type {
 	LinkTelemetryMessage,
 	SourcesMessage,
 } from '@ceraui/rpc/schemas';
-import { TriangleAlert } from '@lucide/svelte';
+import { Gauge, Layers, MonitorOff, Repeat, TriangleAlert } from '@lucide/svelte';
 
 import IngestStats from '$lib/components/custom/IngestStats.svelte';
 import { Button } from '$lib/components/ui/button';
 import type { StreamingOptimismState } from '$lib/rpc/streaming-optimism.svelte';
+import { deriveCaptureBands, type MatchAction } from '$lib/streaming/capture-failover';
 import type { EncoderLoadReading } from '$lib/streaming/encoder-load';
 import { deriveLiveSourceState } from '$lib/streaming/live-source-state';
 import type { ActiveSummary } from '$lib/streaming/sourceSummary';
@@ -60,6 +61,8 @@ interface Props {
 	activeInput?: string | undefined;
 	switchingInput?: string | undefined;
 	onSwitch?: (id: string) => void;
+	/** Adopt the backup camera's mode as the stream settings (LiveView's apply-now save). */
+	onMatchCamera?: (action: MatchAction) => void;
 	// ── StreamTelemetryStrip ────────────────────────────────────────────────────
 	/** The headline rate (already formatted): MEASURED throughput, else the target. */
 	bitrate: string;
@@ -128,6 +131,7 @@ const {
 	activeInput = undefined,
 	switchingInput = undefined,
 	onSwitch = undefined,
+	onMatchCamera = undefined,
 	bitrate,
 	bitrateMeasured = false,
 	bitrateTarget = undefined,
@@ -160,16 +164,31 @@ const {
 // SourceSection, which never mounts while streaming — so an unplugged running
 // source was previously silent here. The verdict is SHARED with LiveSourceSwitch
 // (see live-source-state.ts) so the alert and the affordance it names agree.
-const activeSourceLost = $derived(
+const liveSource = $derived(
 	deriveLiveSourceState({
 		activeInput: activeEncode?.active_input,
 		switchTargets: activeEncode?.switch_targets,
+		captureState: activeEncode?.capture?.state,
 		configSource: config?.source,
 		sources: sources?.sources,
 		isStreaming,
 		summaryMode,
-	}).sourceLost,
+	}),
 );
+const activeSourceLost = $derived(liveSource.sourceLost);
+
+// Capture failover bands, derived from the engine's own capture block. Standby
+// takes precedence over the source-lost and signal-lost alerts: all three name
+// the same missing picture, and only standby says what the stream is doing
+// about it. The all-links-down alert stays independent — a dead bond is a
+// different fact from a dead camera.
+const captureBands = $derived(
+	isStreaming && !summaryMode ? deriveCaptureBands(activeEncode?.capture) : [],
+);
+const onStandby = $derived(
+	isStreaming && !summaryMode && (liveSource.standby || captureBands.some((band) => band.kind === 'standby')),
+);
+const showSourceLost = $derived(activeSourceLost && !onStandby);
 
 // All bonded links down mid-stream: every reported link is stale while ≥1 link
 // exists. Distinct from a partial drop (some links still active).
@@ -187,12 +206,60 @@ const showAudioLost = $derived(isStreaming && !summaryMode && audioSourceLost);
 // specific cause and a different action (reconnect / switch source), so showing
 // both would stack two alerts for one outage and split the operator's attention.
 const showVideoSignalLost = $derived(
-	isStreaming && !summaryMode && videoSignalLost && !activeSourceLost,
+	isStreaming && !summaryMode && videoSignalLost && !activeSourceLost && !onStandby,
 );
+
+const BAND_CLASS =
+	'border-status-warning/50 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3';
+const BAND_ICON_CLASS = 'text-status-warning mt-0.5 size-4 shrink-0';
 </script>
 
 <div class="space-y-6" data-testid="live-cockpit" data-summary-mode={summaryMode ? 'true' : 'false'}>
-	{#if activeSourceLost}
+	{#each captureBands as band (band.kind)}
+		{#if band.kind === 'standby'}
+			<div class={BAND_CLASS} data-testid="capture-standby-banner" role="status">
+				<MonitorOff aria-hidden={true} class={BAND_ICON_CLASS} />
+				<div class="min-w-0 space-y-0.5">
+					<p class="text-status-warning text-sm font-medium">{m["live.capture.standbyTitle"]()}</p>
+					<p class="text-muted-foreground text-xs">{m["live.capture.standbyBody"]()}</p>
+				</div>
+			</div>
+		{:else if band.kind === 'composition-suspended'}
+			<div class={BAND_CLASS} data-testid="composition-suspended-banner" role="status">
+				<Layers aria-hidden={true} class={BAND_ICON_CLASS} />
+				<div class="min-w-0 space-y-0.5">
+					<p class="text-status-warning text-sm font-medium">
+						{m["live.capture.compositionSuspendedTitle"]()}
+					</p>
+					<p class="text-muted-foreground text-xs">{m["live.capture.compositionSuspendedBody"]()}</p>
+				</div>
+			</div>
+		{:else if band.kind === 'passthrough-suspended'}
+			<div class={BAND_CLASS} data-testid="passthrough-suspended-banner" role="status">
+				<Repeat aria-hidden={true} class={BAND_ICON_CLASS} />
+				<div class="min-w-0 space-y-0.5">
+					<p class="text-status-warning text-sm font-medium">
+						{m["live.capture.passthroughSuspendedTitle"]()}
+					</p>
+					<p class="text-muted-foreground text-xs">{m["live.capture.passthroughSuspendedBody"]()}</p>
+				</div>
+			</div>
+		{:else if band.kind === 'rate-adapted'}
+			<div class={BAND_CLASS} data-mode={band.mode} data-testid="rate-adapted-banner" role="status">
+				<Gauge aria-hidden={true} class={BAND_ICON_CLASS} />
+				<div class="min-w-0 space-y-0.5">
+					<p class="text-status-warning text-sm font-medium">{m["live.capture.rateAdaptedTitle"]()}</p>
+					<p class="text-muted-foreground text-xs">
+						{band.mode === undefined
+							? m["live.capture.rateAdaptedBodyUnknownMode"]()
+							: m["live.capture.rateAdaptedBody"]({ mode: band.mode })}
+					</p>
+				</div>
+			</div>
+		{/if}
+	{/each}
+
+	{#if showSourceLost}
 		<div
 			class="border-destructive/40 bg-destructive/10 flex items-start gap-3 rounded-lg border p-3"
 			data-testid="active-source-lost-banner"
@@ -280,6 +347,7 @@ const showVideoSignalLost = $derived(
 			{activeInput}
 			{switchingInput}
 			{onSwitch}
+			{onMatchCamera}
 			sourceLost={activeSourceLost}
 		/>
 

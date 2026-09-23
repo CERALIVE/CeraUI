@@ -93,6 +93,7 @@ import { getEncoderLoad } from '$lib/stores/device-health-history.svelte';
 import { deriveBitrateReading, deriveMeasuredBitrateKbps } from '$lib/stores/hud/derive';
 import { getStreamHealthRollup, isVideoSignalLost } from '$lib/stores/stream-health.svelte';
 import { isSelectedAudioLost } from '$lib/streaming/audioLost';
+import type { MatchAction } from '$lib/streaming/capture-failover';
 import { buildEncoderSetConfig } from '$lib/streaming/encoderConfig';
 import { isConfigChangeInFlight } from '$lib/streaming/configChangePhase';
 import { reconcileStartSource } from '$lib/streaming/effective-source';
@@ -574,6 +575,25 @@ async function handleEncoderSave(saved: EncoderConfig) {
 	}
 }
 
+// Capture failover: adopt the backup camera's mode as the stream settings. It
+// rides the SAME apply-now save the encoder dialog uses, so the transaction,
+// the field locks and the outcome report are one code path — the draft is
+// updated the way the dialog updates it on Save, so a later open seeds from it.
+function handleMatchCamera(action: MatchAction) {
+	encoderConfig = {
+		...encoderConfig,
+		resolution: action.resolution,
+		framerate: action.framerate,
+	};
+	void handleEncoderSave({
+		resolution: action.resolution,
+		framerate: action.framerate,
+		bitrate: undefined,
+		bitrateOverlay: undefined,
+		applyNow: true,
+	});
+}
+
 const effectiveAudioSource = $derived(audioOverride?.asrc ?? config?.asrc);
 const effectiveAudioCodec = $derived(
 	(audioOverride?.acodec ?? config?.acodec) as AudioCodec | undefined,
@@ -1003,6 +1023,7 @@ const configRows = $derived<ConfigRow[]>([
 			{activeInput}
 			{switchingInput}
 			onSwitch={handleSwitchInput}
+			onMatchCamera={handleMatchCamera}
 			bitrate={formatBitrate(liveBitrate.primaryKbps ?? undefined)}
 			bitrateMeasured={liveBitrate.isMeasured}
 			bitrateTarget={liveBitrate.isMeasured && liveBitrate.targetKbps != null

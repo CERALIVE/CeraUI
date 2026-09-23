@@ -10,7 +10,9 @@ import { toast } from "svelte-sonner";
 import "../../app.css";
 import { buildEncoderSetConfig } from "$lib/streaming/encoderConfig";
 import { encoderSaveErrorMessage } from "$lib/streaming/encoderSaveError";
-import EncoderDialog from "$main/dialogs/EncoderDialog.svelte";
+import EncoderDialog, {
+	type FailoverRatePolicy,
+} from "$main/dialogs/EncoderDialog.svelte";
 import {
 	FEDERATION_ABI_VERSION,
 	type FederationMountHandle,
@@ -31,15 +33,18 @@ type HostedEncoderConfig = {
 	readonly bitrate: number | undefined;
 	readonly bitrateOverlay: boolean | undefined;
 	readonly codec?: VideoCodec;
+	readonly failoverRatePolicy?: FailoverRatePolicy;
 };
 
 function encoderConfig(config: ConfigMessage | undefined): HostedEncoderConfig {
+	const policy = config?.failover_rate_policy;
 	return {
 		resolution: config?.resolution,
 		framerate: config?.framerate,
 		bitrate: config?.max_br,
 		bitrateOverlay: config?.bitrate_overlay,
 		codec: config?.video_codec,
+		...(policy === undefined ? {} : { failoverRatePolicy: policy }),
 	};
 }
 
@@ -74,6 +79,7 @@ export function mountDialog(
 		props: {
 			open: true,
 			config: encoderConfig(options.config),
+			capabilities: options.capabilities,
 			onSave: (draft: HostedEncoderConfig) => {
 				void saveEncoderConfig(options, draft);
 			},

@@ -11,6 +11,7 @@
  *   draft.bitrate        → max_br
  *   draft.codec          → video_codec  (only when explicitly chosen — Auto omits it)
  *   draft.passthrough    → video_passthrough  (auto/force/off, forwarded verbatim)
+ *   draft.failoverRatePolicy → failover_rate_policy (only when the dialog offered it)
  *   draft.resolution     → resolution  (CAPABILITY-GATED)
  *   draft.framerate      → framerate   (CAPABILITY-GATED)
  *
@@ -82,6 +83,11 @@ export function buildEncoderSetConfig(
 	// engine receives the operator's policy at start.
 	if (draft.passthrough !== undefined) {
 		input.video_passthrough = draft.passthrough;
+	}
+	// Backup-camera rate policy: present on the draft only when the engine
+	// advertised the feature, so forwarding it verbatim is already gated.
+	if (draft.failoverRatePolicy !== undefined) {
+		input.failover_rate_policy = draft.failoverRatePolicy;
 	}
 
 	// Capability-gated overrides: only forward when the pipeline supports them.

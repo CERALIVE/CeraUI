@@ -16,10 +16,12 @@ import type {
 	SourcesMessage,
 	SessionSwitchTarget,
 } from '@ceraui/rpc/schemas';
-import { Cable, Check, Radio, RefreshCw, Usb, Video } from '@lucide/svelte';
+import { Cable, Check, Radio, RefreshCw, Repeat, Usb, Video } from '@lucide/svelte';
 
-import { Button } from '$lib/components/ui/button';
+import SimpleAlertDialog from '$lib/components/custom/simple-alert-dialog.svelte';
+import { Button, buttonVariants } from '$lib/components/ui/button';
 import * as Card from '$lib/components/ui/card';
+import { deriveMatchAction, type MatchAction } from '$lib/streaming/capture-failover';
 import { liveSwitchRows } from '$lib/streaming/live-switch-rows';
 import {
 	canOfferLiveSourceSwitch,
@@ -40,6 +42,8 @@ interface Props {
 	switchingInput?: string | undefined;
 	/** Dispatch a live input switch (LiveView's handleSwitchInput). */
 	onSwitch?: (id: string) => void;
+	/** Adopt the backup camera's mode as the stream settings, after the operator confirms. */
+	onMatchCamera?: (action: MatchAction) => void;
 	/**
 	 * LiveCockpit's active-source-lost verdict — the SAME boolean that renders the
 	 * "switch to another source to keep your stream alive" alert. It opens the
@@ -57,6 +61,7 @@ const {
 	activeInput,
 	switchingInput,
 	onSwitch,
+	onMatchCamera = undefined,
 	sourceLost = false,
 	switchTargets,
 }: Props = $props();
@@ -79,12 +84,26 @@ const runningSource = $derived(
 	deriveLiveSourceState({
 		activeInput: activeEncode?.active_input ?? activeInput,
 		switchTargets: sessionTargets,
+		captureState: activeEncode?.capture?.state,
 		configSource: config?.source,
 		sources: sources?.sources,
 		isStreaming: true,
 		summaryMode: false,
 	}).runningSource,
 );
+
+// Capture failover: the engine names the leg it is actually encoding and whether
+// it is repeating frames (retimed) or scaling (rescaled) to keep the operator's
+// settings. Both facts are read off the engine's own capture block — never
+// inferred from the row's reported mode — so the indicator and the offer cannot
+// disagree with what the stream is doing.
+const captureActiveSource = $derived(activeEncode?.capture?.active_source);
+const retimedInputId = $derived(
+	captureActiveSource?.retimed === true ? captureActiveSource.input_id : undefined,
+);
+const matchAction = $derived(deriveMatchAction(activeEncode?.capture));
+
+const matchButtonClasses = buttonVariants({ variant: 'outline', size: 'sm' });
 
 const showCard = $derived(
 	sessionTargets === undefined
@@ -149,6 +168,7 @@ function kindBadgeClass(kind: DeviceKind): string {
 					{@const displayName = 'labelKey' in source && source.labelKey ? `${t(source.labelKey)} · ${source.displayName}` : source.displayName}
 					{@const RowIcon = KIND_ICON[kindFamily(source.kind)]}
 					{@const isActive = source.id === activeSourceId}
+					{@const sourceMode = 'mode' in source ? source.mode : undefined}
 					<!-- A running source that VANISHED gets no lime affirmation — the lost
 					     banner is up and the operator is being told to leave this row. -->
 					{@const affirmActive = isActive && source.lost !== true}
@@ -171,19 +191,58 @@ function kindBadgeClass(kind: DeviceKind): string {
 							>
 								{kindLabel(source.kind)}
 							</span>
+							{#if sourceMode !== undefined}
+								<span
+									class="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 font-mono text-xs"
+									data-testid={`source-mode-chip-${source.id}`}
+								>
+									{sourceMode}
+								</span>
+							{/if}
 						</span>
 
 						<!-- The running row states what it IS; it offers no action, because
 						     switching to the source already on air is a no-op dressed as a
 						     control. Same affirmation SourceSection uses for the selected row
-						     (lime Check + label), so one visual language covers both surfaces. -->
+						     (lime Check + label), so one visual language covers both surfaces.
+						     The one action it MAY carry is the failover match: adopting the
+						     backup's mode changes the SETTINGS, not the source on air. -->
 						{#if affirmActive}
-							<span
-								class="text-primary inline-flex shrink-0 items-center gap-1 text-xs font-semibold"
-								data-testid={`source-selected-${source.id}`}
-							>
-								<Check aria-hidden={true} class="size-4" />
-								{m["live.inputPicker.active"]()}
+							<span class="flex shrink-0 flex-wrap items-center justify-end gap-2">
+								{#if retimedInputId === source.id}
+									<span
+										class="text-status-warning inline-flex items-center gap-1 text-xs font-medium"
+										data-testid="source-retimed-indicator"
+									>
+										<Repeat aria-hidden={true} class="size-3.5" />
+										{m["live.capture.repeatingFrames"]()}
+									</span>
+								{/if}
+								<span
+									class="text-primary inline-flex items-center gap-1 text-xs font-semibold"
+									data-testid={`source-selected-${source.id}`}
+								>
+									<Check aria-hidden={true} class="size-4" />
+									{m["live.inputPicker.active"]()}
+								</span>
+								{#if matchAction !== undefined && matchAction.inputId === source.id}
+									{@const action = matchAction}
+									<span data-testid="match-camera-action">
+										<SimpleAlertDialog
+											buttonClasses={matchButtonClasses}
+											buttonText={m["live.capture.matchCamera"]({ mode: action.mode })}
+											confirmButtonText={m["live.capture.matchConfirmAction"]()}
+											onconfirm={() => onMatchCamera?.(action)}
+										>
+											{#snippet dialogTitle()}
+												{m["live.capture.matchConfirmTitle"]()}
+											{/snippet}
+											{#snippet description()}
+												{m["live.capture.matchConfirmBody"]({ mode: action.mode })}
+											{/snippet}
+										</SimpleAlertDialog>
+									</span>
+								{/if}
 							</span>
 						{:else}
 							<Button
