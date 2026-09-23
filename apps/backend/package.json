@@ -15,7 +15,7 @@
 		"@ceraui/rpc": "workspace:*",
 		"@ceraui/srtla-send": "workspace:*",
 		"@httptoolkit/dbus-native": "0.1.5",
-		"@orpc/server": "2.0.0-beta.35",
+		"@orpc/server": "2.0.0-beta.37",
 		"finalhandler": "^2.1.1",
 		"zod": "catalog:",
 		"http-proxy": "^1.18.1",
