@@ -1,4 +1,8 @@
 import {
+	type EventParams,
+	INTERNAL_TRANSITION_WORST_CASE_BOUND_MS,
+} from "@ceralive/cerastream";
+import {
 	CONFIG_CHANGE_REASON_DEADLINE,
 	type ConfigChangePhase,
 	type ConfigChangeResult,
@@ -40,6 +44,7 @@ import {
 	typedStartFailure,
 } from "./start-failure-taxonomy.ts";
 import {
+	ENGINE_TRANSITION_STOP_DEADLINE_MS,
 	RECONFIGURE_DEADLINE_MS,
 	STOP_DEADLINE_MS,
 } from "./start-lifecycle-timing.ts";
@@ -259,6 +264,9 @@ export type StreamSessionOrchestrator = {
 	 * `applying` until the outer deadline.
 	 */
 	readonly noteConfigChangePhase: (event: ConfigChangePhaseEvent) => void;
+	readonly noteEngineStatus: (
+		event: Extract<EventParams, { type: "status" }>,
+	) => void;
 };
 
 export function createStreamSessionOrchestrator(
@@ -270,6 +278,12 @@ export function createStreamSessionOrchestrator(
 	let reconciliationEpoch = 0;
 	let activeChange: ActiveConfigChange | undefined;
 	let queuedStop: QueuedStop | undefined;
+	let engineTransitionLatched = false;
+	let engineTransitionTimer:
+		| ReturnType<typeof globalThis.setTimeout>
+		| number
+		| undefined;
+	let engineQueuedStop: QueuedStop | undefined;
 	const stopDeadlineMs = deps.stopDeadlineMs ?? STOP_DEADLINE_MS;
 	const reconfigureDeadlineMs =
 		deps.reconfigureDeadlineMs ?? RECONFIGURE_DEADLINE_MS;
@@ -568,7 +582,74 @@ export function createStreamSessionOrchestrator(
 		};
 	};
 
+	const releaseEngineStop = (): void => {
+		const pending = engineQueuedStop;
+		if (pending === undefined) return;
+		engineQueuedStop = undefined;
+		pending.cancelDeadline();
+		pending.release(stop(pending.cause));
+	};
+
+	const clearEngineTransition = (): void => {
+		engineTransitionLatched = false;
+		if (engineTransitionTimer !== undefined)
+			cancelTimeout(engineTransitionTimer);
+		engineTransitionTimer = undefined;
+		releaseEngineStop();
+	};
+
+	const noteEngineStatus = (
+		event: Extract<EventParams, { type: "status" }>,
+	): void => {
+		if (event.state === "idle") {
+			if (engineTransitionLatched && state === "streaming") {
+				transition("reconciling");
+				transition("idle");
+				active = undefined;
+				deps.setStreamingStatus(false);
+			}
+			clearEngineTransition();
+			return;
+		}
+		if (event.active_encode?.capture?.transition !== undefined) {
+			if (!engineTransitionLatched) {
+				engineTransitionLatched = true;
+				engineTransitionTimer = scheduleTimeout(
+					clearEngineTransition,
+					INTERNAL_TRANSITION_WORST_CASE_BOUND_MS,
+				);
+			}
+		} else if (event.streaming && event.active_encode !== undefined) {
+			clearEngineTransition();
+		}
+	};
+
+	const parkEngineStop = (cause: StreamStopCause): QueuedStop => {
+		let resolveStop:
+			| ((result: StopResult | Promise<StopResult>) => void)
+			| undefined;
+		const promise = new Promise<StopResult>((resolve) => {
+			resolveStop = resolve;
+		});
+		const timer = scheduleTimeout(
+			clearEngineTransition,
+			ENGINE_TRANSITION_STOP_DEADLINE_MS,
+		);
+		logger.warn("stream stop parked behind an engine capture transition", {
+			budgetMs: ENGINE_TRANSITION_STOP_DEADLINE_MS,
+		});
+		return {
+			promise,
+			cause,
+			release: (result) => resolveStop?.(result),
+			cancelDeadline: () => cancelTimeout(timer),
+		};
+	};
+
 	const stop = async (cause: StreamStopCause): Promise<StopResult> => {
+		void import("./capture-resilience.ts").then(({ noteCaptureStatus }) =>
+			noteCaptureStatus(undefined, false),
+		);
 		// The cause is reported from the INTENT, ahead of the outcome. An operator
 		// who pressed Stop meant it whether or not the engine answered, and a stop
 		// that parks behind a transaction must not leave the marker armed for the
@@ -581,6 +662,11 @@ export function createStreamSessionOrchestrator(
 		if (state === "reconfiguring") {
 			if (queuedStop === undefined) queuedStop = parkStop(cause);
 			return queuedStop.promise;
+		}
+		if (engineTransitionLatched) {
+			if (engineQueuedStop === undefined)
+				engineQueuedStop = parkEngineStop(cause);
+			return engineQueuedStop.promise;
 		}
 		if (state === "idle") return { result: "stopped" };
 		if (state === "reconciling") {
@@ -778,6 +864,7 @@ export function createStreamSessionOrchestrator(
 		snapshot: () => ({ state, generation }),
 		changeConfig,
 		noteConfigChangePhase,
+		noteEngineStatus,
 	};
 }
 
@@ -871,4 +958,10 @@ export function noteStreamSessionConfigChangePhase(
 	event: ConfigChangePhaseEvent,
 ): void {
 	productionOrchestrator.noteConfigChangePhase(event);
+}
+
+export function noteStreamSessionEngineStatus(
+	event: Extract<EventParams, { type: "status" }>,
+): void {
+	productionOrchestrator.noteEngineStatus(event);
 }

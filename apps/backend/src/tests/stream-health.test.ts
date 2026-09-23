@@ -89,6 +89,16 @@ afterEach(() => {
 });
 
 describe("deriveStreamHealth — tri-state derivation", () => {
+	test("standby reports degraded capture even with advancing frames and all links healthy", () => {
+		const health = deriveStreamHealth({ ...HEALTHY, captureState: "standby" });
+		expect(health).toMatchObject({
+			state: "degraded",
+			reason: { component: "capture" },
+		});
+		expect(
+			deriveStreamHealth({ ...HEALTHY, captureState: "normal" }).state,
+		).toBe("healthy");
+	});
 	test("healthy when process alive, frames advancing, all links active", () => {
 		const h = deriveStreamHealth(HEALTHY);
 		expect(h.state).toBe("healthy");

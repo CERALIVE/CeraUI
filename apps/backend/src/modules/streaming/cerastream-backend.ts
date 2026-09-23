@@ -124,6 +124,7 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { type AudioMode, resolveAudioMode } from "./audio.ts";
+import { getLastCapabilities } from "./capabilities.ts";
 import {
 	clearSelectedCaptureDegraded,
 	noteSelectedCaptureDegraded,
@@ -154,6 +155,14 @@ import type {
 import { PROCESS_ERROR_CODES } from "./streamloop/process-error-patterns.ts";
 
 const CERASTREAM_PIPELINE_PATH = "/tmp/cerastream-pipeline.txt";
+
+function engineAdvertises(feature: string): boolean {
+	const capabilities = getLastCapabilities();
+	return (
+		capabilities?.engineUnavailable === false &&
+		capabilities.features?.includes(feature) === true
+	);
+}
 
 /**
  * Engine error codes a healthy session boundary PROVES are history. Membership
@@ -704,6 +713,7 @@ export class CerastreamBackend implements StreamingBackend {
 	// Serializes non-stop IPC ops; stop uses a fresh client so this queue cannot hide it.
 	private queue: Promise<void> = Promise.resolve();
 	private interrupt: Promise<void> = Promise.resolve();
+	private lastPolicyReloadRequested: string | undefined;
 
 	constructor(deps: Partial<CerastreamBackendDeps> = {}) {
 		this.deps = { ...defaultCerastreamBackendDeps(), ...deps };
@@ -1228,6 +1238,34 @@ export class CerastreamBackend implements StreamingBackend {
 				this.deps.bridge.broadcastStatus();
 				break;
 			case "status": {
+				const capture = event.active_encode?.capture;
+				if (engineAdvertises("capture-standby")) {
+					void import("./capture-resilience.ts").then(({ noteCaptureStatus }) =>
+						noteCaptureStatus(capture, event.state !== "idle"),
+					);
+					void import("./stream-session-orchestrator.ts").then(
+						({ noteStreamSessionEngineStatus }) =>
+							noteStreamSessionEngineStatus(event),
+					);
+				}
+				// setConfig persists the policy without a transaction. The next engine
+				// heartbeat is the read-side commit point for a live, feature-gated reload.
+				if (
+					event.streaming &&
+					engineAdvertises("failover-rate-policy") &&
+					capture !== undefined
+				) {
+					const selected = this.deps.getConfig().failover_rate_policy;
+					if (selected === capture.failover_rate_policy)
+						this.lastPolicyReloadRequested = undefined;
+					else if (
+						selected !== undefined &&
+						selected !== this.lastPolicyReloadRequested
+					) {
+						this.lastPolicyReloadRequested = selected;
+						this.reloadConfig();
+					}
+				}
 				if (
 					classifyRuntimeState(event.state, event.streaming) === "streaming"
 				) {
@@ -1301,7 +1339,10 @@ export class CerastreamBackend implements StreamingBackend {
 	}
 
 	private handleErrorEvent(event: RuntimeErrorEvent): void {
-		this.noteDegradedSelectedCapture(event);
+		const structuredCaptureError =
+			event.code === PROCESS_ERROR_CODES.CAPTURE_VIDEO_ERROR &&
+			engineAdvertises("capture-standby");
+		if (!structuredCaptureError) this.noteDegradedSelectedCapture(event);
 		const resolved = resolveCerastreamError(
 			event.code,
 			event.source,
@@ -1310,7 +1351,7 @@ export class CerastreamBackend implements StreamingBackend {
 		const suppressed =
 			resolved.suppressIfSrtlaNotified &&
 			this.deps.bridge.notificationExists("srtla");
-		if (!suppressed) {
+		if (!suppressed && !structuredCaptureError) {
 			this.deps.bridge.notify(
 				resolved.channel,
 				"error",
@@ -1591,6 +1632,10 @@ export class CerastreamBackend implements StreamingBackend {
 
 		return startParamsWithAudioModeSchema.parse({
 			pipeline: config.pipeline ?? opts.pipeline,
+			...(engineAdvertises("failover-rate-policy") &&
+			config.failover_rate_policy !== undefined
+				? { failover_rate_policy: config.failover_rate_policy }
+				: {}),
 			srt,
 			bitrate: {
 				min_bitrate: DEFAULT_MIN_BITRATE,
@@ -1623,6 +1668,10 @@ export class CerastreamBackend implements StreamingBackend {
 		schemaVersion: string | undefined,
 	): ReloadConfigParams {
 		const params: ReloadConfigParams = {
+			...(engineAdvertises("failover-rate-policy") &&
+			config.failover_rate_policy !== undefined
+				? { failover_rate_policy: config.failover_rate_policy }
+				: {}),
 			bitrate: {
 				min_bitrate: DEFAULT_MIN_BITRATE,
 				max_bitrate: config.max_br ?? DEFAULT_MAX_BITRATE,
