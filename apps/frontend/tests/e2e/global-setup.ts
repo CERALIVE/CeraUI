@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { chromium, expect, type Page } from '@playwright/test';
 
@@ -35,10 +36,10 @@ import { chromium, expect, type Page } from '@playwright/test';
  * The set-password form never renders the remember-me checkbox, so it never
  * requests a persistent token on its own — hence the two distinct phases.
  *
- * Phase 2 additionally hands the RAW issued token to the specs through
- * `apps/backend/.e2e-auth-token`. The backend stores only sha256(token), so the
- * value the harnesses must present cannot be recovered from auth_tokens.json;
- * the browser that just logged in is the only place it still exists.
+ * Spec modules load the raw sidecar BEFORE globalSetup runs. Phase 2 verifies
+ * the real remember-me login persisted its own token, then admits the already
+ * selected sidecar's digest for worker backends without rotating that raw value.
+ * Rotating it here would invalidate every module-load token captured earlier.
  */
 
 const PORT = Number(process.env.E2E_PORT ?? 6173);
@@ -46,6 +47,7 @@ const BASE_URL = `http://localhost:${PORT}`;
 const PASSWORD = process.env.E2E_PASSWORD ?? '12345678';
 const NAV_TIMEOUT = 60_000;
 const TOKEN_SIDECAR = path.resolve(import.meta.dirname, '../../../backend/.e2e-auth-token');
+const TOKEN_RECORDS = path.resolve(import.meta.dirname, '../../../backend/auth_tokens.json');
 
 function hasCiSeededAuthState(): boolean {
 	if (process.env.CI !== 'true') return false;
@@ -105,7 +107,16 @@ async function persistIssuedToken(page: Page): Promise<void> {
 	if (value.length === 0) {
 		throw new Error('remember-me login issued no persistent token; e2e specs cannot authenticate.');
 	}
-	fs.writeFileSync(TOKEN_SIDECAR, value, 'utf8');
+	const records: Record<string, true> = JSON.parse(fs.readFileSync(TOKEN_RECORDS, 'utf8'));
+	const digest = (token: string) => createHash('sha256').update(token).digest('hex');
+	if (records[digest(value)] !== true) {
+		throw new Error('remember-me login did not persist its issued token');
+	}
+	const testToken = fs.readFileSync(TOKEN_SIDECAR, 'utf8').trim();
+	if (testToken.length === 0 || testToken === 'PLACEHOLDER_NO_TOKEN_YET') {
+		throw new Error('e2e token was not seeded before spec discovery');
+	}
+	fs.writeFileSync(TOKEN_RECORDS, JSON.stringify({ ...records, [digest(testToken)]: true }), { mode: 0o600 });
 }
 
 export default async function globalSetup(): Promise<void> {
