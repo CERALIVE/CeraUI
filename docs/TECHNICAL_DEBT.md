@@ -207,6 +207,19 @@ re-deriving under the 1.12 ratio alone would have released ~135 KiB of unearned 
 untouched. This entry stays open: the reduction it asks for still has not happened, and
 the aggregate is now ~32 message keys from its next ceiling on both metrics.
 
+**2026-09-23 — capture-failover operator copy crossed both aggregate ceilings.**
+The `capture-failover-resilience` branch adds 6 notice keys and 21 UI keys across
+all 10 locales. A fresh `origin/main` build passed at 1,106.1 KiB total SPA gzip
+and 1,243.7 KiB precache; the prepared `2026.9.4` branch measured 1,146,314 B
+and 1,287,181 B respectively, exceeding the previous budgets by 8,925 B and
+11,139 B. Both measured baselines therefore move (1,121,005 → 1,146,314 B total,
++25,309 B; 1,259,658 → 1,287,181 B precache, +27,523 B). The displaced
+baselines remain in the report's per-run history, and the existing 16 KiB absolute
+headroom on each metric is unchanged. Initial-route, largest-chunk and federation
+baselines are untouched. This is accepted feature footprint, not a resolution of
+the ten-locale expansion debt; the entry stays open until those aggregate bytes
+can be reduced without deleting operator copy or a language.
+
 ```debt
 id: TD-federation-i18n-catalog-size
 title: Federation toast-host shared chunk carries an oversized static Paraglide catalog

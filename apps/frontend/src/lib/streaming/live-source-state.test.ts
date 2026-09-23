@@ -87,6 +87,29 @@ describe("deriveLiveSourceState — the mid-stream source verdict", () => {
 			),
 		).toMatchObject({ source: "b", sourceLabelKey: "settings.sources.test" });
 	});
+	it("never prints the standby leg's raw id as the live source", () => {
+		const summary = deriveActiveSummary(
+			{ source: "/dev/video1" } as never,
+			{
+				codec: "h264",
+				resolution: "1920x1080",
+				framerate: 30,
+				active_input: "standby",
+				switch_targets: [],
+				capture: {
+					state: "standby",
+					live_inputs: [],
+					degraded_inputs: [],
+					failover_rate_policy: "retime",
+				},
+			},
+			undefined,
+			[ONBOARD_HDMI, RODE_LOST],
+		);
+		expect(summary.live).toBe(true);
+		expect(summary.source).toBeUndefined();
+		expect(summary.sourceLabelKey).toBeUndefined();
+	});
 	it("does not report an admitted synthetic session leg as a lost device", () => {
 		const result = deriveLiveSourceState({
 			...STREAMING,
@@ -97,6 +120,54 @@ describe("deriveLiveSourceState — the mid-stream source verdict", () => {
 		});
 		expect(result.sourceLost).toBe(false);
 		expect(result.runningSource).toBeUndefined();
+	});
+
+	// The engine never lists its standby leg in switch_targets (cerastream
+	// `session_switch.rs` `switchable_leg`), so a standby session reads as a lost
+	// source here unless standby is recognised as the typed state it is.
+	it("does not report standby as a lost source when active_input IS the standby leg", () => {
+		const result = deriveLiveSourceState({
+			...STREAMING,
+			activeInput: "standby",
+			configSource: "/dev/video1",
+			sources: [ONBOARD_HDMI, RODE_LOST],
+			switchTargets: [{ input_id: "/dev/video0", kind: "capture" }],
+		});
+		expect(result.sourceLost).toBe(false);
+		expect(result.runningSource).toBeUndefined();
+		expect(result.standby).toBe(true);
+	});
+
+	it("does not report standby as a lost source when capture.state says so", () => {
+		const result = deriveLiveSourceState({
+			...STREAMING,
+			activeInput: "/dev/video1",
+			configSource: "/dev/video1",
+			sources: [ONBOARD_HDMI, RODE_LOST],
+			switchTargets: [],
+			captureState: "standby",
+		});
+		expect(result.sourceLost).toBe(false);
+		expect(result.standby).toBe(true);
+	});
+
+	it("reports standby=false and keeps the lost verdict for every other state", () => {
+		for (const captureState of [
+			"normal",
+			"degraded",
+			"unheard_of",
+			undefined,
+		]) {
+			const result = deriveLiveSourceState({
+				...STREAMING,
+				activeInput: "/dev/video1",
+				configSource: "/dev/video1",
+				sources: [ONBOARD_HDMI, RODE_LOST],
+				captureState,
+			});
+			expect(result.standby).toBe(false);
+			expect(result.sourceLost).toBe(true);
+		}
 	});
 	it("reports lost while the device is unplugged", () => {
 		const state = deriveLiveSourceState({

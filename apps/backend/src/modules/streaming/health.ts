@@ -1,9 +1,11 @@
+import type { CaptureStatus } from "@ceralive/cerastream";
 import type {
 	StreamHealthOutput,
 	StreamHealthReason,
 } from "@ceraui/rpc/schemas";
 import { getMockHealth, shouldUseMocks } from "../../mocks/mock-service.ts";
 import { broadcast } from "../../rpc/events.ts";
+import { getActiveEncodeStatus } from "./active-encode-status.ts";
 import { getActiveEncodeLiveness } from "./active-passthrough.ts";
 import { reportAllLinksDown } from "./lifecycle-indicators.ts";
 import { buildLinkTelemetry } from "./link-telemetry.ts";
@@ -19,6 +21,7 @@ import { getIsStreaming } from "./streaming.ts";
  * equated with process liveness).
  */
 export interface LivenessSources {
+	captureState?: CaptureStatus["state"];
 	isStreaming: boolean;
 	processAlive: boolean | null;
 	framesAdvancing: boolean | null;
@@ -78,6 +81,12 @@ function deriveReason(s: LivenessSources): StreamHealthReason | undefined {
 	if (s.processAlive !== true) {
 		return { component: "process", detail: "Streaming process not running" };
 	}
+	if (s.captureState === "standby") {
+		return {
+			component: "capture",
+			detail: "All cameras lost — stream on standby",
+		};
+	}
 	if (s.framesAdvancing !== true) {
 		return { component: "frames", detail: "No frames advancing" };
 	}
@@ -108,6 +117,7 @@ export function deriveStreamHealth(s: LivenessSources): StreamHealthOutput {
 	} else if (s.processAlive !== true) {
 		state = "dead";
 	} else if (
+		s.captureState === "standby" ||
 		s.framesAdvancing !== true ||
 		s.linkCount === 0 ||
 		s.activeLinks < s.linkCount
@@ -239,8 +249,10 @@ function collectRealLiveness(): LivenessSources {
 		frameCount = live.framesEmitted ?? null;
 	}
 
+	const captureState = getActiveEncodeStatus()?.capture?.state;
 	return {
 		isStreaming: true,
+		...(captureState !== undefined ? { captureState } : {}),
 		processAlive,
 		framesAdvancing,
 		frameCount,

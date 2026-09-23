@@ -26,6 +26,8 @@ import {
 	scopeModesToMediaType,
 } from "$lib/components/streaming/ValidationAdapter";
 
+import { isCaptureStandby } from "./capture-failover";
+
 /**
  * How the audio-source control should render:
  * - `none`     → no pipeline-reported sources; show an explanatory placeholder.
@@ -674,15 +676,22 @@ export function deriveActiveSummary(
 ): ActiveSummary {
 	const live = Boolean(activeEncode);
 
+	// On standby the program is the engine's black leg, which is no source an
+	// operator picked — the standby band says so, and the strip names nothing.
+	const standby =
+		live && isCaptureStandby(activeEncode?.capture, activeEncode?.active_input);
+
 	// Order: engine `active_input` (streaming) → device-first `config.source` →
 	// legacy `selected_video_input`/`pipeline`. A missing `source` falls through
 	// byte-identically to the prior behavior.
-	const sourceId = live
-		? (activeEncode?.active_input ??
-			config?.source ??
-			config?.selected_video_input ??
-			config?.pipeline)
-		: (config?.source ?? config?.selected_video_input ?? config?.pipeline);
+	const sourceId = standby
+		? undefined
+		: live
+			? (activeEncode?.active_input ??
+				config?.source ??
+				config?.selected_video_input ??
+				config?.pipeline)
+			: (config?.source ?? config?.selected_video_input ?? config?.pipeline);
 
 	const resolution = live
 		? (fromEngineResolution(activeEncode?.resolution ?? "") ??

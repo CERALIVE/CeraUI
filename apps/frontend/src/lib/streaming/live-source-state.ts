@@ -13,6 +13,7 @@
  */
 import type { SessionSwitchTarget, StreamSource } from "@ceraui/rpc/schemas";
 
+import { STANDBY_LEG_ID } from "./capture-failover";
 import { findSourceById } from "./sourceSummary";
 
 export interface LiveSourceStateInput {
@@ -23,6 +24,8 @@ export interface LiveSourceStateInput {
 	/** The unified `sources` broadcast rows (undefined before the first frame). */
 	sources: readonly StreamSource[] | undefined;
 	switchTargets?: readonly SessionSwitchTarget[] | undefined;
+	/** Engine `active_encode.capture.state` — `standby` is a typed state, not a loss. */
+	captureState?: string | undefined;
 	isStreaming: boolean;
 	/** The post-stream summary window — every live verdict is suppressed in it. */
 	summaryMode: boolean;
@@ -33,25 +36,32 @@ export interface LiveSourceState {
 	runningSource: StreamSource | undefined;
 	/** Drives the `active-source-lost-banner`. */
 	sourceLost: boolean;
+	/** The program is on the engine's black standby leg; drives `capture-standby-banner`. */
+	standby: boolean;
 }
 
 export function deriveLiveSourceState(
 	input: LiveSourceStateInput,
 ): LiveSourceState {
 	const runningId = input.activeInput ?? input.configSource;
-	const runningSource = findSourceById(runningId, input.sources);
+	const standby =
+		input.captureState === "standby" || input.activeInput === STANDBY_LEG_ID;
+	const runningSource = standby
+		? undefined
+		: findSourceById(runningId, input.sources);
 	const runningTarget = input.switchTargets?.find(
 		(target) => target.input_id === runningId,
 	);
 	const sourceLost =
 		input.isStreaming &&
 		!input.summaryMode &&
+		!standby &&
 		runningId !== undefined &&
 		// An empty list is the pre-first-broadcast state, not a loss.
 		(input.sources?.length ?? 0) > 0 &&
 		runningTarget === undefined &&
 		(runningSource === undefined || runningSource.lost === true);
-	return { runningId, runningSource, sourceLost };
+	return { runningId, runningSource, sourceLost, standby };
 }
 
 /**

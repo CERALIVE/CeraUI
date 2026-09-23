@@ -312,6 +312,31 @@ const degradedDetail = $derived(
 		? degradedReason
 		: selectedDegraded?.code,
 );
+// The engine's capture block names WHY the selected leg degraded. Each known
+// cause maps onto its own operator sentence; an unknown or absent cause keeps
+// the generic body, so a future engine token never renders as a dotted key.
+const DEGRADED_CAUSE_KEYS: Record<string, string> = {
+	no_signal: 'live.startFailure.class.capture_source_unavailable.no_signal',
+	negotiation_failed: 'live.startFailure.class.capture_source_unavailable.negotiation_failed',
+	device_busy: 'live.startFailure.class.capture_source_unavailable.device_busy',
+	'unsupported-format': 'live.source.degradedCause.unsupported-format',
+	'interlaced-unsupported': 'live.source.degradedCause.interlaced-unsupported',
+	'source-changed': 'live.source.degradedCause.source-changed',
+};
+const degradedCause = $derived.by<string | undefined>(() => {
+	const selectedId = config?.source;
+	if (selectedId === undefined || !selectedDegraded) return undefined;
+	const aliases = new Set([selectedId, ...(activeSource?.origin === 'capture' ? (activeSource.previousIds ?? []) : [])]);
+	if (activeSource?.origin === 'capture') aliases.add(activeSource.id);
+	const entry = activeEncode?.capture?.degraded_inputs.find((input) => aliases.has(input.input_id));
+	const cause = entry?.cause;
+	return cause !== undefined && cause in DEGRADED_CAUSE_KEYS ? cause : undefined;
+});
+const degradedBody = $derived(
+	degradedCause === undefined
+		? m["live.source.degradedBody"]()
+		: t(DEGRADED_CAUSE_KEYS[degradedCause] ?? 'live.source.degradedBody'),
+);
 
 // ── Capture-format (mode) selection ─────────────────────────────────────────
 // A dual-format camera is `libuvch264` in H.264 mode and `usb_mjpeg` in MJPEG
@@ -721,6 +746,7 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 		{#if selectedDegraded}
 			<div
 				class="border-status-warning/50 bg-status-warning/10 flex items-start gap-3 rounded-lg border p-3"
+				data-degraded-cause={degradedCause}
 				data-degraded-code={selectedDegraded.code}
 				data-testid="source-degraded-banner"
 				role="status"
@@ -733,7 +759,9 @@ const showEmbedded = $derived(audioEmbeddedActive || resolvedAudio.embedded);
 					>
 						{m["live.source.degradedTitle"]()}
 					</p>
-					<p class="text-muted-foreground text-xs">{m["live.source.degradedBody"]()}</p>
+					<p class="text-muted-foreground text-xs" data-testid="source-degraded-banner-body">
+						{degradedBody}
+					</p>
 					{#if degradedDetail}
 						<p
 							class="text-muted-foreground font-mono text-xs break-words"

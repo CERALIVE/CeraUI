@@ -34,7 +34,21 @@
     the breakpoint switches Dialog ⇄ Sheet.
 -->
 <script module lang="ts">
-import type { Framerate, Resolution, VideoCodec, VideoPassthrough } from '@ceraui/rpc/schemas';
+import type {
+	Framerate,
+	Resolution,
+	StreamingSetConfigInput,
+	VideoCodec,
+	VideoPassthrough,
+} from '@ceraui/rpc/schemas';
+
+export type FailoverRatePolicy = NonNullable<StreamingSetConfigInput['failover_rate_policy']>;
+
+// The `get-capabilities.features` token (cerastream `ENGINE_FEATURES`) gating
+// the backup-camera policy selector. Kept local so the federated bundle stays
+// self-contained: importing the live-cockpit helper here would fold it into the
+// dialog's shared chunk.
+const FAILOVER_RATE_POLICY_FEATURE = 'failover-rate-policy';
 
 export interface EncoderConfig {
 	// Legacy field: the encoder dialog is pure encoding and no longer selects or
@@ -54,6 +68,11 @@ export interface EncoderConfig {
 	// Same-codec passthrough policy (auto/force/off). Optional so a seed without
 	// it stays valid; the dialog defaults it to `auto` on open.
 	passthrough?: VideoPassthrough;
+	// What the engine does when a backup camera cannot deliver the stream's rate
+	// or size (`retime` repeats frames, `adapt` follows the camera). Present on
+	// the draft ONLY when the engine advertised the feature and the dialog
+	// offered the choice; absent otherwise so no policy is written blind.
+	failoverRatePolicy?: FailoverRatePolicy;
 	// The operator's EXPLICIT apply-now choice for a restart-requiring edit made
 	// mid-stream. Absent/false is the unchanged "apply on next start" default —
 	// a mid-broadcast restart is never implied by the save alone.
@@ -64,7 +83,12 @@ export interface EncoderConfig {
 <script lang="ts">
 import { m, resolveMessageKey } from '@ceraui/i18n/svelte';
 import { Binary, Cable, Columns3, Cpu, Radio, Usb, Video } from '@lucide/svelte';
-import { BITRATE_DEFAULT_MIN, type DeviceKind, type StreamSource } from '@ceraui/rpc/schemas';
+import {
+	BITRATE_DEFAULT_MIN,
+	type CapabilitiesMessage,
+	type DeviceKind,
+	type StreamSource,
+} from '@ceraui/rpc/schemas';
 
 import AppliesNextStart from '$lib/components/custom/AppliesNextStart.svelte';
 import LabeledSwitch from '$lib/components/custom/LabeledSwitch.svelte';
@@ -126,9 +150,20 @@ interface Props {
 	 * the Audio/Server dialog persistence pattern.
 	 */
 	onSave?: (config: EncoderConfig) => void;
+	/**
+	 * Host-supplied capability snapshot for a federated mount, where
+	 * `initSubscriptions()` never runs and `getCapabilities()` is permanently
+	 * undefined. Additive-optional: a device mount leaves it unset.
+	 */
+	capabilities?: CapabilitiesMessage;
 }
 
-let { open = $bindable(false), config = $bindable(), onSave }: Props = $props();
+let {
+	open = $bindable(false),
+	config = $bindable(),
+	onSave,
+	capabilities: capabilitiesOverride,
+}: Props = $props();
 
 const BITRATE_STEP = 50;
 
@@ -139,7 +174,12 @@ const sourcesMessage = $derived(getSources());
 	const savedConfig = $derived(getConfig());
 
 // ── Capability contract: per-board bitrate window, codec offers, UVC H.265 ─────
-const capabilities = $derived(getCapabilities());
+const capabilities = $derived(capabilitiesOverride ?? getCapabilities());
+// FAIL-CLOSED: `features` is absent on every fallback rung of the capability
+// ladder, and none of those is a claim the engine honours a failover policy.
+const failoverPolicyOffered = $derived(
+	capabilities?.features?.includes(FAILOVER_RATE_POLICY_FEATURE) === true,
+);
 const platformCaps = $derived(capabilities?.platform ?? platformCapsForHardware(hardware));
 // Bitrate clamps to the board's real window (encoder.bitrate_range), falling
 // back to the schema-wide range only until the contract arrives.
@@ -196,6 +236,10 @@ const passthroughIsAuto = $derived(localPassthrough === 'auto');
 const passthroughIsForce = $derived(localPassthrough === 'force');
 const passthroughIsOff = $derived(localPassthrough === 'off');
 
+// Backup-camera rate policy. `retime` is the device's own default, so an
+// unconfigured board seeds there rather than onto an unstated choice.
+let localFailoverPolicy = $state<FailoverRatePolicy>('retime');
+
 // Whether the last bitrate commit was snapped into the board window (drives the
 // inline "adjusted to the supported range" notice).
 let bitrateClamped = $state(false);
@@ -230,6 +274,7 @@ function seedDraft(fromSaved: boolean): void {
 		localOverlay = savedConfig?.bitrate_overlay ?? false;
 		localCodec = savedConfig?.video_codec;
 		localPassthrough = savedConfig?.video_passthrough ?? 'auto';
+		localFailoverPolicy = savedConfig?.failover_rate_policy ?? 'retime';
 	} else {
 		({ resolution: localResolution, framerate: localFramerate } = seededAxisSelection(axes, {
 			resolution: config?.resolution,
@@ -240,6 +285,8 @@ function seedDraft(fromSaved: boolean): void {
 		localOverlay = config?.bitrateOverlay ?? savedConfig?.bitrate_overlay ?? false;
 		localCodec = config?.codec;
 		localPassthrough = config?.passthrough ?? savedConfig?.video_passthrough ?? 'auto';
+		localFailoverPolicy =
+			config?.failoverRatePolicy ?? savedConfig?.failover_rate_policy ?? 'retime';
 	}
 	seededResolution = localResolution;
 	seededFramerate = localFramerate;
@@ -472,6 +519,7 @@ function handleSave() {
 		bitrateOverlay: localOverlay,
 		codec: localCodec,
 		passthrough: localPassthrough,
+		...(failoverPolicyOffered ? { failoverRatePolicy: localFailoverPolicy } : {}),
 		applyNow: choiceRequired && applyMode === 'now',
 	};
 	config = next;
@@ -750,6 +798,49 @@ function handleSave() {
 				</p>
 			{/if}
 		</div>
+
+		<!-- Backup-camera rate policy. Rendered ONLY when the engine advertises the
+		     feature: an engine that never did silently ignores the field, and a
+		     control there would let an operator save a policy nothing applies. Absent
+		     means ZERO nodes, never a disabled control — nothing is being withheld. -->
+		{#if failoverPolicyOffered}
+			<div class="space-y-2" data-testid="encoder-failover-policy">
+				<Label class="text-sm font-medium">{m["live.encoder.failoverPolicy.title"]()}</Label>
+				<div
+					class="bg-card/40 grid grid-cols-2 gap-1.5 rounded-lg border p-1"
+					aria-label={m["live.encoder.failoverPolicy.title"]()}
+					role="radiogroup"
+				>
+					<button
+						type="button"
+						aria-checked={localFailoverPolicy === 'retime'}
+						class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {localFailoverPolicy === 'retime'
+							? 'bg-primary/10 text-primary ring-primary ring-1'
+							: 'text-muted-foreground hover:bg-primary/5'}"
+						data-active={localFailoverPolicy === 'retime'}
+						data-testid="failover-policy-retime"
+						onclick={() => (localFailoverPolicy = 'retime')}
+						role="radio"
+					>
+						{m["live.encoder.failoverPolicy.retime"]()}
+					</button>
+					<button
+						type="button"
+						aria-checked={localFailoverPolicy === 'adapt'}
+						class="flex min-h-[44px] items-center justify-center rounded-md px-2 py-2 text-xs font-medium transition-colors {localFailoverPolicy === 'adapt'
+							? 'bg-primary/10 text-primary ring-primary ring-1'
+							: 'text-muted-foreground hover:bg-primary/5'}"
+						data-active={localFailoverPolicy === 'adapt'}
+						data-testid="failover-policy-adapt"
+						onclick={() => (localFailoverPolicy = 'adapt')}
+						role="radio"
+					>
+						{m["live.encoder.failoverPolicy.adapt"]()}
+					</button>
+				</div>
+				<p class="text-muted-foreground text-xs">{m["live.encoder.failoverPolicy.hint"]()}</p>
+			</div>
+		{/if}
 
 		<!-- Bitrate LEADS (first-class, out of Advanced): slider + number input share
 		     ONE board window (BITRATE.min‥max) and ONE clamp, so the two controls can

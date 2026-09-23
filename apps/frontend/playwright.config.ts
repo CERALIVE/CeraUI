@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
 import { clearInputPickerHardwareArtifacts } from './tests/e2e/helpers/input-picker-hardware-preflight.js';
 
@@ -21,12 +22,15 @@ if (!fs.existsSync(tokensPath)) {
 	}
 }
 
-// The specs present the RAW token; auth_tokens.json stores only its digest, so the
-// two cannot share a file. Placeholder for the same reason as above — the specs read
-// it in a module-load IIFE, before globalSetup writes the real one.
+// Spec modules read the raw token during discovery, BEFORE globalSetup. Seed its
+// value here; globalSetup admits the digest only after the real password flow.
+// The sidecar cannot share auth_tokens.json, which stores digests alone.
 const e2eTokenPath = path.resolve(import.meta.dirname, '../backend/.e2e-auth-token');
-if (!fs.existsSync(e2eTokenPath)) {
-	fs.writeFileSync(e2eTokenPath, 'PLACEHOLDER_NO_TOKEN_YET', 'utf8');
+if (
+	process.env.CI !== 'true' &&
+	(!fs.existsSync(e2eTokenPath) || fs.readFileSync(e2eTokenPath, 'utf8').trim() === 'PLACEHOLDER_NO_TOKEN_YET')
+) {
+	fs.writeFileSync(e2eTokenPath, randomBytes(32).toString('base64'), { mode: 0o600 });
 }
 
 // Seed a server before the backend boots so the Live view leaves its empty state
@@ -53,6 +57,7 @@ if (process.env.CI || !fs.existsSync(configPath)) {
 
 const DEV_PORT = Number(process.env.E2E_PORT ?? 6173);
 const DEV_URL = `http://localhost:${DEV_PORT}`;
+const REFERENCE_BACKEND_PORT = 3003;
 
 // Repo-local test-artifact dir. Playwright traces/screenshots AND human-readable
 // evidence files land here; gitignored. Never write outside the repo — tests must
@@ -68,9 +73,10 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  // Match the CI budget locally: each test boots a fresh backend, so the
-  // CPU-count default multiplies backend startup and browser cold-load contention.
-  workers: 4,
+  // Local Vite transforms lazily while each test boots a fresh backend. Four
+  // local workers timed out during cold mounts; the unchanged full suite passed
+  // at one worker. CI serves the prebuilt bundle and retains its four-worker lanes.
+  workers: process.env.CI ? 4 : 1,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [['line']] : [['list']],
   expect: {
@@ -92,18 +98,19 @@ export default defineConfig({
         {
           command: 'bun run --filter frontend dev',
           port: DEV_PORT,
-          reuseExistingServer: true,
+          reuseExistingServer: false,
           timeout: 120_000,
+          env: { VITE_SOCKET_PORT: String(REFERENCE_BACKEND_PORT) },
         },
         {
           // Reference backend for local global setup, not functional test pages;
           // those select worker-scoped 31xx backends in the page fixture. No
           // --watch because global setup mutates config.json/auth_tokens.json.
           command: 'bun run --filter backend dev:e2e',
-          port: 3002,
-          reuseExistingServer: true,
+          port: REFERENCE_BACKEND_PORT,
+          reuseExistingServer: false,
           timeout: 120_000,
-          env: { MOCK_SCENARIO: 'multi-modem-wifi', NODE_ENV: 'development' },
+          env: { MOCK_SCENARIO: 'multi-modem-wifi', NODE_ENV: 'development', PORT: String(REFERENCE_BACKEND_PORT) },
         },
       ],
 });

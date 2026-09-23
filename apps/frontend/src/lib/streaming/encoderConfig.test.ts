@@ -283,3 +283,28 @@ describe("apply-now directive (wave-3 todo 12)", () => {
 		expect(input.apply_now).toBe(true);
 	});
 });
+
+describe("failover rate policy (capture-failover-resilience todo 21)", () => {
+	it("forwards the operator's policy verbatim", () => {
+		for (const policy of ["retime", "adapt"] as const) {
+			const input = buildEncoderSetConfig(
+				makeDraft({ failoverRatePolicy: policy }),
+				bothOverrides,
+			);
+			expect(input.failover_rate_policy).toBe(policy);
+		}
+	});
+
+	it("omits the field when the dialog never offered the choice", () => {
+		const input = buildEncoderSetConfig(makeDraft(), bothOverrides);
+		expect("failover_rate_policy" in input).toBe(false);
+	});
+
+	it("is not pipeline-gated — a coarse pipeline still carries the policy", () => {
+		const input = buildEncoderSetConfig(
+			makeDraft({ failoverRatePolicy: "adapt" }),
+			noOverrides,
+		);
+		expect(input.failover_rate_policy).toBe("adapt");
+	});
+});
