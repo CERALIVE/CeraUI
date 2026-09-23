@@ -78,7 +78,7 @@ rm -f apps/backend/auth_tokens.json apps/backend/.e2e-auth-token
 
 Why this matters: the backend persists auth tokens in `apps/backend/auth_tokens.json`. If that file exists with a valid token, the app skips the set-password flow and goes straight to login. Tests that need to exercise the first-run "set password" branch must clear this file first so the branch is reachable.
 
-The backend stores only `sha256(token)`, so that file cannot hand a harness a usable credential. The RAW token lives beside it in `apps/backend/.e2e-auth-token` — written by `scripts/ci/seed-e2e-auth.ts` in CI and by `global-setup.ts` locally — and the two must be cleared together.
+The backend stores only `sha256(token)`, so that file cannot hand a harness a usable credential. The RAW token lives beside it in `apps/backend/.e2e-auth-token` — written by `scripts/ci/seed-e2e-auth.ts` in CI and seeded by `playwright.config.ts` before local spec discovery. Local global setup performs a real remember-me login, verifies its issued token, and then admits the pre-discovery token's digest for the per-test backends without rotating the raw token the specs already read. The two files must be cleared together.
 
 ---
 
@@ -243,9 +243,20 @@ This does not namespace the run-wide Vite/reference-backend setup. Do not run tw
 whole local suites against the same frontend/reference ports; those remain a
 separate runner-level resource boundary.
 
-Both local and CI runs default to four workers. Each test now pays backend
-startup, so a CPU-count-derived browser budget also multiplies backend startup
-load; use the CLI `--workers` override for a deliberately sized run.
+Local Playwright owns its Vite server on 6173 and reference backend on 3003;
+neither may reuse a foreign listener. A developer's ordinary backend on 3002
+is not an E2E reference backend. The raw token sidecar is seeded at config-load
+time because several specs capture it during discovery, before global setup;
+global setup completes the real password/remember-me flow, verifies the issued
+token was persisted, then adds the preselected sidecar's digest for the freshly
+booted worker backends. Never rotate that sidecar in global setup: the already
+collected specs would send a token the workers cannot recognise.
+
+Local Vite-dev runs use one worker: all 448 applicable functional cases passed
+under that budget, while four local workers left cold Vite mounts timing out
+under the unchanged 30-second test deadline. CI's prebuilt-preview lanes retain
+four workers. Each test pays backend startup; use the CLI `--workers` override
+for a deliberately sized diagnostic run without changing test deadlines or skips.
 
 By default every worker backend boots on `MOCK_SCENARIO=multi-modem-wifi` (see `fixtures/backend.ts`). Worker state explicitly selects `modem_backend: "mmcli"` because scenario mutations such as PIN retry/unlock live in the legacy mock modem state machine; production configs still default to D-Bus. Modem-config refusal fakes use the lowercase RPC enum (`device_busy`), not the WiFi async-operation token (`DEVICE_BUSY`), because the dialog resolves `network.modem.saveRefused.<enum>` verbatim. A spec that needs a *different* backend state — a PIN-locked modem, an engine-unavailable snapshot, etc. — opts in with the worker-scoped `backendScenario` option, set at **file top level**:
 

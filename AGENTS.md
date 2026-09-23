@@ -312,6 +312,17 @@ isolated-runner proxy range. Each acquisition owns fresh disk state and an
 OS-assigned mock-preview listener. See [`docs/E2E-BACKEND-OWNERSHIP.md`](docs/E2E-BACKEND-OWNERSHIP.md)
 and the frontend E2E playbook before changing this lifecycle.
 
+Local Playwright also owns its run-wide Vite listener on 6173 and reference
+backend on 3003. Neither reuses an existing listener: a foreign dev server on
+3002 once handed an unrelated checkout's password/token state to the test
+suite. Specs capture the raw E2E token during discovery; `playwright.config.ts`
+seeds the sidecar before that point, and global setup adds its digest to the
+worker-backend seed only after proving a genuine remember-me login. It never
+rotates the captured sidecar token. CI's separate preview routing and seeded
+credential path are unchanged. Local Vite-dev runs use one worker (full suite
+448 pass); CI's production-preview lanes keep four, with the same test bodies,
+timeouts and skip conditions.
+
 Portal credentials use the existing mode-0600 atomic store, now written only
 after successful verification in `modems.setCredentials`. Failed candidates stay
 request-local on the backend and mount-local in `ModemLockSection`; failed
