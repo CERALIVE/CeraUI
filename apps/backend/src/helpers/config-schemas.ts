@@ -50,6 +50,7 @@ import {
 	detectionMethodSchema,
 	deviceKindSchema,
 	ethernetRoleSchema,
+	failoverRatePolicyInputSchema,
 	inputModeSchema,
 	isNamespacedRelayId,
 	kioskDisplaySchema,
@@ -262,6 +263,9 @@ export const runtimeConfigSchema = z.object({
 	// Same-codec passthrough policy (auto/force/off). Additive-optional; absent =
 	// auto. Sent to the engine at start; never re-encodes silently under force.
 	video_passthrough: videoPassthroughSchema.optional(),
+	// Capture failover's next-session rate policy. The engine is the only authority
+	// for live application; CeraUI persists the operator's closed input choice.
+	failover_rate_policy: failoverRatePolicyInputSchema.optional(),
 	// Device-first operator source selection (StreamSource id). Additive-optional;
 	// `pipeline`/`selected_video_input` stay the engine-wire fields DERIVED from it
 	// at the procedure layer (T3). A legacy config without it back-derives `source`
@@ -446,6 +450,7 @@ export const RUNTIME_CONFIG_DEFAULTS: Partial<RuntimeConfig> = {
 	delay: 0,
 	balancer: "adaptive",
 	video_passthrough: "auto",
+	failover_rate_policy: "retime",
 	bitrate_overlay: false,
 	autostart: false,
 	kiosk_enabled: false,

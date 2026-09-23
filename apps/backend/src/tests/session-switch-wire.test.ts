@@ -1,3 +1,5 @@
+/// <reference lib="es2022" />
+
 import { expect, test } from "bun:test";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -52,9 +54,9 @@ test("both consumer packages resolve the exact installed registry version inside
 		const manifest = await Bun.file(
 			join(dirname(entry), "../package.json"),
 		).json();
-		expect(manifest.version).toBe("2026.9.10");
+		expect(manifest.version).toBe("2026.9.11");
 	}
-	expect(SCHEMA_VERSION).toBe("0.20.0");
+	expect(SCHEMA_VERSION).toBe("0.21.0");
 });
 
 test("the registry client sends list-switch-targets and switch-input over real NDJSON/UDS", async () => {

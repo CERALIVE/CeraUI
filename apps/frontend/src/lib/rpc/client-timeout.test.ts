@@ -44,6 +44,7 @@ class FakeWebSocket {
 }
 
 const realWebSocket = globalThis.WebSocket;
+// biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
 const realGetUrl = rpcClient["getUrl"];
 
 beforeEach(() => {
@@ -51,11 +52,13 @@ beforeEach(() => {
 	globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
 	// isolate:false can cache the client before this file's env mock. Stub the
 	// instance URL seam so this transport test never depends on import order.
+	// biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
 	rpcClient["getUrl"] = () => "ws://test.local/ws";
 });
 
 afterEach(() => {
 	rpcClient.disconnect();
+	// biome-ignore lint/complexity/useLiteralKeys: test-only private transport seam
 	rpcClient["getUrl"] = realGetUrl;
 	globalThis.WebSocket = realWebSocket;
 	vi.restoreAllMocks();

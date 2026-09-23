@@ -518,6 +518,7 @@ export const getConfigProcedure = authedProcedure
 			framerate,
 			video_codec: config.video_codec,
 			video_passthrough: config.video_passthrough,
+			failover_rate_policy: config.failover_rate_policy,
 			selected_video_input: config.selected_video_input,
 			source: config.source,
 			// Travels with the `source` it is scoped to: `setConfig` and the
@@ -947,6 +948,10 @@ export const setConfigProcedure = authedProcedure
 		if (input.video_codec !== undefined) config.video_codec = input.video_codec;
 		if (input.video_passthrough !== undefined)
 			config.video_passthrough = input.video_passthrough;
+		// Persist only. A live reload is intentionally deferred to the capture
+		// failover apply-now work, so this update changes the next session alone.
+		if (input.failover_rate_policy !== undefined)
+			config.failover_rate_policy = input.failover_rate_policy;
 		// Never staged behind `apply_now`: the engine fixes the preview encoder when
 		// it builds the main graph, so this can only ever take effect at the next
 		// start. Persisting immediately is what lets the replay fence read it.
@@ -1038,6 +1043,8 @@ export const setConfigProcedure = authedProcedure
 		if (input.framerate !== undefined) applied.framerate = config.framerate;
 		if (input.video_codec !== undefined)
 			applied.video_codec = config.video_codec;
+		if (input.failover_rate_policy !== undefined)
+			applied.failover_rate_policy = config.failover_rate_policy;
 		if (input.previewEncode !== undefined)
 			applied.previewEncode = config.previewEncode;
 		if (input.composition !== undefined)

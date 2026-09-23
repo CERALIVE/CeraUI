@@ -14,7 +14,7 @@ setup.json are coerced to `"cerastream"` at parse time with a warning).
 The backend resolves both streaming deps as public-npm registry packages — no sibling checkout, no vendored tarball:
 
 ```
-"@ceralive/cerastream":  "2026.9.10"   (public npm, @ceralive scope)
+"@ceralive/cerastream":  "2026.9.11"   (public npm, @ceralive scope)
 ```
 
 It is a published npm package (`@ceralive` scope on npmjs.org) consumed as a normal registry dep, not a `link:` path and not a vendored `.tgz`. No sibling checkout of the `srtla` receiver or sender repositories is needed for `CeraUI` to install or build.
@@ -107,7 +107,7 @@ is what this gate exists because the type system alone could not catch.
 ## STRUCTURE
 
 The live cockpit consumes an authoritative session-switch namespace, distinct from
-device discovery. Both consumers pin published cerastream 2026.9.10, schema 0.20.0.
+device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,
 and the outstanding U6 colour drill are in [LIVE-SESSION-SWITCHING](docs/LIVE-SESSION-SWITCHING.md).
 
@@ -1268,7 +1268,7 @@ Options outside the offered set are shown **disabled with a reason tooltip** —
 hidden, so operators can see what the hardware doesn't support and why.
 
 **The encoder universe is engine-owned [EXISTS].** The published
-`@ceralive/cerastream@2026.9.10` binding carries `get-capabilities.encoders[]` with
+`@ceralive/cerastream@2026.9.11` binding carries `get-capabilities.encoders[]` with
 one entry per codec (`codec`, maximum resolution/framerate, accepted pixel formats,
 and `gates."4k60"`). `@ceraui/rpc` imports the producer schemas and types directly;
 it does not redeclare `PlatformCaps`, `VideoSourceCap`, or `EncoderCapability`.

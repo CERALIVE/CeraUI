@@ -2,7 +2,7 @@
 
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
-2026.9.10; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
+2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).
 
 [![CI](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/build-check.yml)
 [![Release](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml/badge.svg)](https://github.com/CERALIVE/CeraUI/actions/workflows/publish-release.yml)
@@ -204,9 +204,10 @@ BUILD_ARCH=amd64 ./scripts/build/build-debian-package.sh
 Release assets are published through `publish-release.yml`; see
 [`docs/BUILD_PIPELINE.md`](docs/BUILD_PIPELINE.md) for the stable APT handoff.
 
-CeraUI pins the published `@ceralive/cerastream@2026.9.10` in both
-the backend and shared RPC package, carrying schema 0.20.0's raw-input classifications
-alongside the session-switch roster and nullable composition-clear correction. The producer's exported
+CeraUI pins the published `@ceralive/cerastream@2026.9.11` in both
+the backend and shared RPC package, carrying schema 0.21.0's capture status,
+failover-rate policy, raw-input classifications, and source-mode session-switch fields.
+The producer's exported
 `ChangeConfigParams` and installed schema are regression-tested directly.
 The bindings-skew gate checks the schema version and preservation of the three
 new HDMI capture causes. The released 2026.9.1 build retains the early-import

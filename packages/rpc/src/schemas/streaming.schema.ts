@@ -7,6 +7,7 @@
 // re-exports the UDS client (`node:fs`, `node:child_process`), which this
 // browser-safe package cannot pull into the frontend graph. `types.js` imports
 // nothing but zod, and the package ships no `exports` map to forbid the path.
+import { failoverRatePolicyInputSchema } from '@ceralive/cerastream/dist/capture-status.js';
 import { COMPOSITION_FEATURE } from '@ceralive/cerastream/dist/constants.js';
 import {
 	type EncoderCapability,
@@ -35,6 +36,7 @@ export {
 	type EncoderCapability,
 	encoderCapabilitySchema,
 	encoderCapsSchema,
+	failoverRatePolicyInputSchema,
 	platformCapsSchema,
 	videoSourceCapSchema,
 };
@@ -399,6 +401,9 @@ export const streamingConfigInputSchema = z.object({
 	// honour. Absent means the operator stated nothing — CeraUI then sends NO
 	// backend key and the engine's own default governs.
 	audio_backend: audioBackendSchema.optional(),
+	// Sender-owned input policy for capture failover. The producer schema is closed
+	// so this config can never persist an engine value it would reject.
+	failover_rate_policy: failoverRatePolicyInputSchema.optional(),
 	// Two-leg PiP/PbP composition, gated on the engine's `composition` feature
 	// token. `null` is an explicit CLEAR — absent means "leave the persisted value
 	// alone", so without it an operator could never turn composition back off.
@@ -934,6 +939,9 @@ export const configMessageSchema = z.object({
 	// saved choice on reload. Absent means no selection was ever stated, which a
 	// consumer must NOT render as `alsa`: the engine's default governs instead.
 	audio_backend: audioBackendSchema.optional(),
+	// Persisted capture failover policy. This is an apply-on-next-session setting;
+	// CeraUI does not issue a live reload from this schema layer.
+	failover_rate_policy: failoverRatePolicyInputSchema.optional(),
 	// The persisted composition selection, echoed so the card renders the saved
 	// secondary/layout/alpha on reload. Absent means composition is off.
 	composition: compositionConfigSchema.optional(),

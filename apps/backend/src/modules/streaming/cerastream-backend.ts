@@ -111,7 +111,7 @@ import type {
 	ConfigChangePhase,
 	PreviewEncoderRealized,
 } from "@ceraui/rpc/schemas";
-import { toEngineResolution } from "@ceraui/rpc/schemas";
+import { activeEncodeSchema, toEngineResolution } from "@ceraui/rpc/schemas";
 import { z } from "zod";
 import type { RuntimeConfig } from "../../helpers/config-schemas.ts";
 import { logger as defaultLogger } from "../../helpers/logger.ts";
@@ -333,6 +333,7 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 	const targets = listSwitchTargetsResultSchema.safeParse({
 		switch_targets: a.switch_targets,
 	});
+	const capture = activeEncodeSchema.shape.capture.safeParse(a.capture);
 	if (
 		typeof a.codec !== "string" ||
 		typeof a.resolution !== "string" ||
@@ -344,6 +345,9 @@ export function extractActiveEncode(event: unknown): ActiveEncode | null {
 	return {
 		codec: a.codec,
 		...(targets.success ? { switch_targets: targets.data.switch_targets } : {}),
+		...(capture.success && capture.data !== undefined
+			? { capture: capture.data }
+			: {}),
 		resolution: a.resolution,
 		framerate: a.framerate,
 		...(typeof a.active_input === "string"

@@ -2,6 +2,7 @@
  * Status Zod schemas (full application status)
  */
 
+import { captureStatusSchema } from '@ceralive/cerastream/dist/capture-status.js';
 import { sessionSwitchTargetSchema } from '@ceralive/cerastream/dist/session-switch.js';
 import { z } from 'zod';
 
@@ -302,6 +303,9 @@ export type EngineBitrate = z.infer<typeof engineBitrateSchema>;
 // snake_case mirrors the engine wire shape so the backend passes it through.
 export const activeEncodeSchema = z.object({
 	switch_targets: z.array(sessionSwitchTargetSchema).optional(),
+	// Engine-owned capture resilience state. Compose the producer schema so CeraUI
+	// cannot silently strip a future published capture-status field.
+	capture: captureStatusSchema.optional(),
 	codec: z.string(),
 	resolution: z.string(),
 	framerate: z.number(),
