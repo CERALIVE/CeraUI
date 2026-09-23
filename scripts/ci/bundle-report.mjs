@@ -23,6 +23,13 @@ import { gzipSync } from 'node:zlib';
 const KIB = 1024;
 
 const SPA_BASELINE = {
+	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-23 for the
+	// capture-failover-resilience operator surface (6 notice + 21 UI keys across
+	// all 10 locales). Fresh origin/main still passed; this branch exceeded the
+	// existing aggregate and precache budgets by 8,925 B and 11,139 B. See
+	// TD-spa-i18n-catalog-size for the measured deltas and reduction path.
+	// The 2026-09-04 measurements remain in SPA_DISPLACED_BASELINES; the 16 KiB
+	// absolute headroom, initial-route and single-chunk ceilings are unchanged.
 	// ACCEPTED, TRACKED REGRESSION — re-derived 2026-09-04 on the media-island
 	// branch, and the SAME root cause as the 2026-09-01 step it displaces. The
 	// PiP/PbP composition surface adds twenty operator-facing message keys x 10
@@ -37,12 +44,12 @@ const SPA_BASELINE = {
 	// single-chunk ceilings are NOT widened. Both aggregates now carry a SECOND,
 	// absolute ceiling so a re-derivation cannot hand back a fresh 12% to spend
 	// silently — precache gained one here for the reason totalGzip already had.
-	totalGzip: 1_121_005,
+	totalGzip: 1_146_314,
 	initialRouteGzip: 497_196,
 	largestChunkGzip: 461_577,
 	// Keep the tighter experience-stability precache baseline on integration;
 	// the parallel media-island measurement is retained below, not added to it.
-	precacheGzip: 1_259_658,
+	precacheGzip: 1_287_181,
 };
 
 // The aggregate's binding constraint. A ratio applied to a freshly re-derived
@@ -68,6 +75,7 @@ const SPA_DISPLACED_BASELINES = {
 		{ bytes: 762_410, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
 		{ bytes: 982_392, label: 'Phase-C', debt: 'TD-spa-i18n-catalog-size' },
 		{ bytes: 1_103_680, label: 'pre-composition', debt: 'TD-spa-i18n-catalog-size' },
+		{ bytes: 1_121_005, label: 'pre-capture-failover', debt: 'TD-spa-i18n-catalog-size' },
 	],
 	precacheGzip: [
 		{ bytes: 903_286, label: 'pre-Phase-C', debt: 'TD-modem-phase-c-spa-size' },
@@ -79,6 +87,11 @@ const SPA_DISPLACED_BASELINES = {
 		{
 			bytes: 1_261_883,
 			label: 'parallel media-island measurement',
+			debt: 'TD-spa-i18n-catalog-size',
+		},
+		{
+			bytes: 1_259_658,
+			label: 'pre-capture-failover',
 			debt: 'TD-spa-i18n-catalog-size',
 		},
 	],
