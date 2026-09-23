@@ -98,6 +98,22 @@ No board was accessed. No lifecycle implementation was changed, and no PR was
 merged, published or marked ready during that investigation. Its changes were
 left uncommitted on `fix/e2e-backend-ownership` for a separate draft PR.
 
+**2026-09-23 local reference-backend follow-up.** The older fixed-port caveat
+above became a deterministic auth failure: a developer backend from another
+checkout had held port 3002 since September 21, and Playwright's
+`reuseExistingServer: true` silently adopted it. Both a fresh `origin/main`
+control and the capture-failover branch failed the same autostart spec before
+rendering the authenticated shell; the foreign backend logged an invalid token.
+Local E2E now owns reference port 3003 and refuses to reuse an occupied reference
+or Vite port. This is fail-closed ownership, not a claim that two whole local
+suites can share 6173/3003; run them sequentially. A second, independent auth
+race was confirmed by checking the sidecar's SHA-256 against the token store:
+spec modules captured a placeholder or prior run's raw token before global
+setup replaced it. The sidecar is now seeded before discovery and is not rotated
+after collection; global setup still proves a genuine remember-me issuance and
+admits the preselected test token only for the worker backends. Neither fix
+changes production authentication or test timeouts, worker counts or skips.
+
 The confirmed ownership defect predates PR #362 and does not require its
 composition/engine-recovery changes to reproduce or repair. That clears those
 changes of causing this auth failure, not of every possible regression. The
