@@ -27,7 +27,7 @@
 	},
 	"dependencies": {
 		"@ceralive/cerastream": "2026.9.11",
-		"@orpc/contract": "2.0.0-beta.35",
+		"@orpc/contract": "2.0.0-beta.37",
 		"zod": "catalog:"
 	},
 	"devDependencies": {
