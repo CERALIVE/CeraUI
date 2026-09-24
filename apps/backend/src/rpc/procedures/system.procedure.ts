@@ -21,6 +21,9 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	updateCapabilitiesSchema,
+	updateSettingsInputSchema,
+	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
 import { os } from "@orpc/server";
 import { z } from "zod";
@@ -61,6 +64,11 @@ import {
 	setSshPersistent,
 	startStopSsh,
 } from "../../modules/system/ssh.ts";
+import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
+import {
+	loadUpdateSettings,
+	saveUpdateSettings,
+} from "../../modules/system/update-settings.ts";
 import { mintPreviewToken } from "../../modules/ui/preview-token.ts";
 import { simulateDevReboot } from "../events.ts";
 import { authMiddleware } from "../middleware/auth.middleware.ts";
@@ -71,6 +79,19 @@ const baseProcedure = os.$context<RPCContext>();
 
 // Authenticated procedure
 const authedProcedure = baseProcedure.use(authMiddleware);
+
+export const getUpdateSettingsProcedure = authedProcedure
+	.output(updateSettingsSchema)
+	.handler(() => loadUpdateSettings());
+
+export const setUpdateSettingsProcedure = authedProcedure
+	.input(updateSettingsInputSchema)
+	.output(updateSettingsSchema)
+	.handler(({ input }) => saveUpdateSettings(input));
+
+export const getUpdateCapabilitiesProcedure = authedProcedure
+	.output(updateCapabilitiesSchema)
+	.handler(() => readUpdateCapabilities());
 
 /**
  * Get revisions procedure

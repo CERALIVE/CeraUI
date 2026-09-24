@@ -106,6 +106,20 @@ is what this gate exists because the type system alone could not catch.
 
 ## STRUCTURE
 
+**Update-system foundation [PARTIAL, Todo 31].** `@ceraui/rpc/schemas`
+owns the update settings and image-capability wire types. The backend's
+`modules/system/update-settings.ts` persists `update-settings.json` alongside
+`config.json`, and `update-capabilities.ts` reads the image-owned feature file.
+Missing/invalid capabilities, including the current `features: []` carrier,
+remain legacy (15-name APT, no OS agent or slot-sync); only the exact
+`apt-all-packages` token selects the new roster. This adds authenticated
+`system.getUpdateSettings`, `system.setUpdateSettings`, and
+`system.getUpdateCapabilities` RPCs, not an update orchestrator or installation
+path. `setup.json`'s explicit `apt_update_enabled: false` still vetoes every
+APT install; a saved `packagesAuto: true` cannot override it. Later tasks
+32–41 must gate individual capabilities on the returned feature tokens rather
+than treating the mode alone as permission for OS staging or slot-sync.
+
 The live cockpit consumes an authoritative session-switch namespace, distinct from
 device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,

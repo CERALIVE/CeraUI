@@ -28,4 +28,6 @@ export * from './stream-profile.schema';
 export * from './streaming.schema';
 export * from './streaming-lifecycle.schema';
 export * from './system.schema';
+export * from './update-capabilities.schema';
+export * from './update-settings.schema';
 export * from './wifi.schema';

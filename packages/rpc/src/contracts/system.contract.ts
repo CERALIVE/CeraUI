@@ -20,6 +20,9 @@ import {
 	sensorsStatusSchema,
 	sshPersistentInputSchema,
 	successResponseSchema,
+	updateCapabilitiesSchema,
+	updateSettingsInputSchema,
+	updateSettingsSchema,
 } from '../schemas';
 
 export const systemContract = oc.router({
@@ -57,6 +60,9 @@ export const systemContract = oc.router({
 	 * Start software update
 	 */
 	startUpdate: oc.output(successResponseSchema),
+	getUpdateSettings: oc.output(updateSettingsSchema),
+	setUpdateSettings: oc.input(updateSettingsInputSchema).output(updateSettingsSchema),
+	getUpdateCapabilities: oc.output(updateCapabilitiesSchema),
 
 	/**
 	 * Start SSH service

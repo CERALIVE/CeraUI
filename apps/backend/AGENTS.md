@@ -2901,6 +2901,24 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
+**Update settings and image capabilities [PARTIAL, Todo 31].**
+`update-settings.ts` reads `update-settings.json` through `loadJsonConfig` and
+writes it with `writeFileAtomicSync`; absent gets the defaults in
+`@ceraui/rpc/schemas`, while malformed or invalid PRESENT content throws a
+typed `UpdateSettingsValidationError` rather than using the loader's normal
+partial-salvage behavior. `channel` accepts only stable/beta, never the bench
+`drill` channel. The six settings are the two auto toggles, schedule (any-idle
+or a HH:mm window), channel, and two cellular allowances. The default path is
+CWD-relative like `config.json` (the unit uses `/opt/ceralive`).
+`update-capabilities.ts` reads `/usr/lib/ceralive/update-capabilities.json`
+with the shared schema; absent, invalid, empty features, or no
+`apt-all-packages` feature reports `{mode:"legacy",features:[]}`. New-image
+features are explicit, not implied by `mode:"capable"`. These three new RPCs
+expose configuration/evidence only; nothing starts an OS agent or slot sync in
+this task. Existing `aptUpdatesEnabled()` remains the single hard switch for
+manual and automatic APT: an explicit `setup.apt_update_enabled === false`
+cannot be reversed by the new settings.
+
 `modules/system/software-updates.ts` owns whether an apt update may run, and it
 never refuses in silence.
 
