@@ -1940,6 +1940,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "Démarrage impossible : l'appareil termine encore la récupération du modem après un redémarrage. Réessayez dans un instant.",
 	"notifications.streamStartTimeoutFailed": "Échec du démarrage : délai du moteur dépassé ({attempt}/{maxAttempts} tentatives). Ouvrez Paramètres → Journaux système pour plus de détails.",
 	"notifications.streamStartTimeoutRetrying": "Le moteur de streaming n’a pas répondu à temps — nouvelle tentative ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "Démarrage impossible : une mise à jour logicielle est en cours d'installation et ne peut pas être interrompue. Réessayez une fois celle-ci terminée.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "Mise à jour en cours",

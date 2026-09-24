@@ -1892,6 +1892,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "開始できません: 再起動後のモデム復旧が完了していません。しばらくしてからもう一度お試しください。",
 	"notifications.streamStartTimeoutFailed": "配信を開始できませんでした：エンジンがタイムアウトしました（{attempt}/{maxAttempts} 回）。詳細は 設定 → システムログ を開いてください。",
 	"notifications.streamStartTimeoutRetrying": "ストリーミングエンジンが時間内に応答しませんでした — 再試行中（{nextAttempt}/{maxAttempts}）…",
+	"notifications.streamStartUpdateInProgressFailed": "開始できません: ソフトウェアアップデートをインストール中のため中断できません。完了後にもう一度お試しください。",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "更新が進行中です",

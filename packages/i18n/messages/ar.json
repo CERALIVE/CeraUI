@@ -1949,6 +1949,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "تعذّر البدء: لا يزال الجهاز يُنهي استرداد المودم بعد إعادة التشغيل. أعد المحاولة بعد لحظات.",
 	"notifications.streamStartTimeoutFailed": "فشل بدء البث: انتهت مهلة المحرك ({attempt}/{maxAttempts} محاولات). افتح الإعدادات ← سجلات النظام لمعرفة التفاصيل.",
 	"notifications.streamStartTimeoutRetrying": "لم يستجب محرك البث في الوقت المحدد — إعادة المحاولة ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "تعذّر البدء: يجري تثبيت تحديث للبرنامج ولا يمكن مقاطعته. أعد المحاولة بعد انتهائه.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "التحديث قيد التقدم",

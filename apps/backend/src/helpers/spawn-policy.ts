@@ -586,6 +586,57 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		mechanism: "Exact cgroup service with deleted system mapping, idle window and protected-service guard",
 	},
 	{
+		id: "updateOrchestrator.stopPackageInstallForStream",
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "stopPackageInstallUnitForStream",
+		command: "[systemctl, stop, ceralive-software-update.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"D8 abort-network (Todo 37): fired only after a FORCED FRESH re-read of the wire state confirms dpkg has not started; best-effort (exit code observed, never thrown) so a stop failure never blocks the admitted stream start it is protecting",
+	},
+	{
+		id: "updateOrchestrator.killRaucForStream",
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "killAndRestartRaucForStream",
+		command: "[systemctl, kill, --signal=SIGTERM, rauc.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"D8 abort-network for os-staging (Todo 37): RAUC 1.13-class has no clean cancel, so the in-flight install is killed; the target (inactive) slot stays marked bad and the next staging attempt reuses already-downloaded blocks via Todo 22's adaptive verity bundles",
+	},
+	{
+		id: "updateOrchestrator.restartRaucForStream",
+		file: "modules/system/update-orchestrator/stream-abort.ts",
+		symbol: "killAndRestartRaucForStream",
+		command: "[systemctl, restart, rauc.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Restarts rauc.service immediately after the SIGTERM kill above so the D-Bus service is available again for the next staging attempt",
+	},
+	{
 		id: "addons.runValidateCmd",
 		file: "modules/addons/manager.ts",
 		symbol: "runValidateCmd",

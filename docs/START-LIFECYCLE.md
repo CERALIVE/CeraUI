@@ -68,12 +68,55 @@ StartFailure = {
   attemptId: string;                 // REQUIRED — Todo 29 fences on it
   phase: 'params' | 'spawn-sender' | 'connect' | 'hello'
        | 'subscribe' | 'start-rpc' | 'playing-wait';
+  // Closed enum — see streaming-lifecycle.schema.ts `START_FAILURE_CLASSES`
+  // for the full, current list (audio/modem/capture classes added later,
+  // `update_in_progress` added by Todo 37, are not all repeated here).
   class: 'engine_unavailable' | 'engine_restarting' | 'protocol_incompatible'
-       | 'start_invalid' | 'engine_internal' | 'start_timeout';
+       | 'start_invalid' | 'engine_internal' | 'start_timeout'
+       | 'update_in_progress';
   code?: number | string;            // engine JSON-RPC numeric code, or its string data-code
+  // Present ONLY on `update_in_progress` (Todo 37) — the update orchestrator's
+  // own phase/progress at the moment the start was refused.
+  updatePhase?: 'idle' | 'checking' | 'available' | 'downloading' | 'awaiting-idle'
+       | 'committing' | 'restarting-services' | 'settled' | 'os-available'
+       | 'os-staging' | 'os-staged' | 'os-activation-armed' | 'os-verifying'
+       | 'sync-eligible' | 'syncing' | 'synced' | 'quarantined' | 'failed';
+  updatePercent?: number;
+  updateEtaSeconds?: number;
   retriable: boolean;                // materialized verdict for THIS (class, phase)
 }
 ```
+
+### `update_in_progress` (Todo 37)
+
+The stream-session orchestrator's `start()` — the ONE choke point every launch
+origin (UI, remote-control, autostart, set-profile, restoration) calls through
+— consults the update orchestrator's D8 admission table
+(`modules/system/update-orchestrator/admission.ts`) before ever reaching the
+engine. `committing`/`restarting-services` REFUSE with this class, always at
+`phase: 'params'` (the same phase `modem_transition_active`/`recovery_pending`/
+`mutation_blocked` use — refused before the engine is ever touched) and always
+`retriable: false` — the caller must wait for the orchestrator to reach
+`settled`, never loop.
+
+`downloading`/`os-staging` are ALLOWED, but the admitted start first aborts the
+in-flight operation over the network (killing the detached apt unit, or
+SIGTERM-killing and restarting `rauc.service`) — see
+`modules/system/update-orchestrator/runtime.ts`'s `admitAndPrepareStreamStart`
+and `stream-abort.ts`. That abort path performs a FORCED FRESH re-read of the
+wire state (bypassing the orchestrator's own cached, up-to-3s-stale phase)
+immediately before dispatching any kill/stop signal, closing a documented
+TOCTOU window down to one wire-state read round trip; see the code comment on
+`admitAndPrepareStreamStart` and `AGENTS.md`'s "SOFTWARE-UPDATE START
+CONTRACT" section for the full accepted-risk rationale and its
+recovery-mechanism backstop (`image-building-pipeline`'s
+`ceralive-dpkg-recover.service`).
+
+An admitted start also sets `/run/ceralive/streaming` — the same sentinel the
+image-side `ceralive-rauc-activate.sh` (Todo 28) checks before staging an OTA
+slot activation — and clears it on every stream-end path (a failed launch that
+never went live, `stop()`, and a config-change transaction that ends the
+stream without a `stop()` call).
 
 `phase` mirrors the real start pipeline; `class` is a small, behaviour-oriented
 bucket (retry vs. surface vs. update-prompt), NOT a 1:1 mirror of every engine
@@ -245,6 +288,7 @@ start, so Todo 27 rolls back and escalates instead.
 | `protocol_incompatible` | *(none)* | An engine/bindings protocol-major mismatch is deterministic — the same binaries never negotiate on retry, so surface an update prompt instead of looping. |
 | `start_invalid` | *(none)* | Invalid params/config are deterministic — an identical retry fails identically, so the operator (or cloud) must fix the input first. |
 | `engine_internal` | *(none)* | A deterministic engine-side fault or state conflict (e.g. already_streaming / -32603); retrying masks a real bug and can orphan resources — surface with a journal pointer. |
+| `update_in_progress` | *(none)* | The update orchestrator is committing a package transaction or restarting services (Todo 35's single-flock, non-abortable design). Waiting for the orchestrator to reach `settled` is the only correct response — an automatic retry would either queue behind the update or race it. |
 
 ---
 

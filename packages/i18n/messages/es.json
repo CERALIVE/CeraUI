@@ -1940,6 +1940,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "No se pudo iniciar: el dispositivo aún está terminando la recuperación del módem tras un reinicio. Vuelve a intentarlo en un momento.",
 	"notifications.streamStartTimeoutFailed": "No se pudo iniciar el stream: tiempo de espera agotado ({attempt}/{maxAttempts} intentos). Abre Ajustes → Registros del sistema para ver los detalles.",
 	"notifications.streamStartTimeoutRetrying": "El motor de streaming no respondió a tiempo; reintentando ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "No se pudo iniciar: se está instalando una actualización de software que no se puede interrumpir. Vuelve a intentarlo cuando termine.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "Actualización en curso",

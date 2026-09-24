@@ -1940,6 +1940,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "Não foi possível iniciar: o dispositivo ainda está concluindo a recuperação do modem após uma reinicialização. Tente novamente em instantes.",
 	"notifications.streamStartTimeoutFailed": "Falha ao iniciar: tempo limite do mecanismo ({attempt}/{maxAttempts} tentativas). Abra Configurações → Logs do sistema para ver os detalhes.",
 	"notifications.streamStartTimeoutRetrying": "O mecanismo de streaming não respondeu a tempo — tentando novamente ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "Não foi possível iniciar: uma atualização de software está sendo instalada e não pode ser interrompida. Tente novamente quando ela terminar.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "Atualização em andamento",

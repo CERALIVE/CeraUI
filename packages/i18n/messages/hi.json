@@ -1937,6 +1937,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "शुरू नहीं हो सका: डिवाइस पुनरारंभ के बाद अब भी मॉडेम रिकवरी पूरी कर रहा है। थोड़ी देर बाद फिर कोशिश करें।",
 	"notifications.streamStartTimeoutFailed": "स्ट्रीम शुरू नहीं हुई: इंजन का समय समाप्त हुआ ({attempt}/{maxAttempts} प्रयास)। विवरण के लिए सेटिंग्स → सिस्टम लॉग खोलें।",
 	"notifications.streamStartTimeoutRetrying": "स्ट्रीमिंग इंजन ने समय पर उत्तर नहीं दिया — पुनः प्रयास ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "शुरू नहीं हो सका: एक सॉफ़्टवेयर अपडेट इंस्टॉल हो रहा है और इसे बाधित नहीं किया जा सकता। इसके पूरा होने पर फिर से कोशिश करें।",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "अपडेट प्रगति पर है",

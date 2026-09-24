@@ -1937,6 +1937,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "Start nicht möglich: Das Gerät schließt nach einem Neustart noch die Modem-Wiederherstellung ab. Versuche es gleich erneut.",
 	"notifications.streamStartTimeoutFailed": "Streamstart fehlgeschlagen: Zeitüberschreitung ({attempt}/{maxAttempts} Versuche). Öffnen Sie Einstellungen → Systemprotokolle für Details.",
 	"notifications.streamStartTimeoutRetrying": "Streaming-Engine antwortete nicht rechtzeitig – neuer Versuch ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "Start nicht möglich: Ein Software-Update wird installiert und kann nicht unterbrochen werden. Versuche es erneut, sobald es abgeschlossen ist.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "Update läuft",

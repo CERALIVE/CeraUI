@@ -17,6 +17,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { UpdateState } from "@ceraui/rpc/schemas";
 import {
+	admitAndPrepareStreamStart,
 	allowCellularOnce,
 	checkUpdatesNow,
 	defaultOrchestratorRuntimeDeps,
@@ -278,5 +279,183 @@ describe("runOrchestratorTick — auto-acknowledges terminal rest phases", () =>
 		setOrchestratorStateForTest(initialOrchestratorState(0));
 		await runOrchestratorTick();
 		expect(osCheckCount).toBe(0);
+	});
+});
+
+// ─── admitAndPrepareStreamStart (Todo 37) ──────────────────────────────────
+//
+// D8 admission (admission.ts) is exhaustively table-tested elsewhere
+// (update-orchestrator-admission.test.ts) against the PURE `admitStreamStart`/
+// `onStreamStart`. This suite covers the EFFECTFUL wrapper: the abort-network
+// I/O dispatch, the reducer transitions that follow it, and — the safety-
+// critical property this task exists to prove — the forced-fresh-read
+// refusal that narrows the TOCTOU window documented on the function itself.
+describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
+	function abortSpyDeps(
+		overrides: Partial<OrchestratorRuntimeDeps> = {},
+	): { deps: OrchestratorRuntimeDeps; calls: { stop: number; kill: number } } {
+		const calls = { stop: 0, kill: 0 };
+		const deps = fakeDeps({
+			stopPackageInstallUnit: async () => {
+				calls.stop++;
+			},
+			killAndRestartRaucForStream: async () => {
+				calls.kill++;
+			},
+			...overrides,
+		});
+		return { deps, calls };
+	}
+
+	test("committing refuses via the cached D8 table alone — zero I/O", async () => {
+		const { deps, calls } = abortSpyDeps();
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "committing",
+			progress: { percent: 61, etaSeconds: 40 },
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toEqual({
+			allowed: false,
+			reason: "update_in_progress",
+			phase: "committing",
+			percent: 61,
+			etaSeconds: 40,
+		});
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+	});
+
+	test("restarting-services refuses via the cached D8 table alone — zero I/O", async () => {
+		const { deps, calls } = abortSpyDeps();
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "restarting-services",
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result.allowed).toBe(false);
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+	});
+
+	test("idle allows with action 'none' — zero I/O, state untouched", async () => {
+		const { deps, calls } = abortSpyDeps();
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest(initialOrchestratorState(0));
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toEqual({ allowed: true });
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+		expect(getOrchestratorState().phase).toBe("idle");
+	});
+
+	test("syncing allows with action 'continue-local' — zero I/O, phase untouched", async () => {
+		const { deps, calls } = abortSpyDeps();
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "syncing",
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toEqual({ allowed: true });
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+		expect(getOrchestratorState().phase).toBe("syncing");
+	});
+
+	test("genuinely downloading: forced-fresh read confirms still-downloading, aborts the unit", async () => {
+		const { deps, calls } = abortSpyDeps({
+			getPackageInstallWireState: () =>
+				({
+					kind: "downloading",
+					progress: { downloading: 2, unpacking: 0, setting_up: 0, total: 5 },
+				}) as UpdateState,
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+			progress: { percent: 20, etaSeconds: 90 },
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toEqual({ allowed: true });
+		expect(calls.stop).toBe(1);
+		expect(calls.kill).toBe(0);
+		// DOWNLOAD_ABORTED_FOR_STREAM resets phase to "available" (reducer.ts) —
+		// the update goes back to square one rather than being marked failed.
+		expect(getOrchestratorState().phase).toBe("available");
+	});
+
+	test("DEDICATED: forced-fresh read shows dpkg already committing (cache stale) — refuses, ZERO kill/stop calls", async () => {
+		const { deps, calls } = abortSpyDeps({
+			// The CACHED state says "downloading" (as if the orchestrator's own
+			// tick has not yet observed the transition — up to ACTIVE_TICK_MS
+			// stale). The FRESH wire-state read says dpkg has already started.
+			getPackageInstallWireState: () =>
+				({
+					kind: "installing",
+					progress: { downloading: 5, unpacking: 2, setting_up: 0, total: 5 },
+				}) as UpdateState,
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+			progress: { percent: 20, etaSeconds: 90 },
+		});
+
+		const result = await admitAndPrepareStreamStart();
+
+		expect(result).toEqual({
+			allowed: false,
+			reason: "update_in_progress",
+			phase: "committing",
+			// COMMIT_PHASE_ENTERED carries the previously-cached progress
+			// forward unchanged (see reducer.ts) — this is an admission
+			// refusal, not a progress broadcast.
+			percent: 20,
+			etaSeconds: 90,
+		});
+		// The safety property this task exists to prove: the forced-fresh
+		// read caught the staleness BEFORE any kill/stop was dispatched.
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+		// The orchestrator's own cached state is corrected too, so the NEXT
+		// admission check (with no further staleness) is already accurate.
+		expect(getOrchestratorState().phase).toBe("committing");
+	});
+
+	test("forced-fresh read shows the commit already succeeded — refuses, zero kill/stop calls", async () => {
+		const { deps, calls } = abortSpyDeps({
+			getPackageInstallWireState: () => ({ kind: "success" }) as UpdateState,
+		});
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "downloading",
+			progress: { percent: 5, etaSeconds: 200 },
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result.allowed).toBe(false);
+		expect(calls.stop).toBe(0);
+		expect(calls.kill).toBe(0);
+	});
+
+	test("genuinely os-staging: kills and restarts RAUC, never touches the apt unit", async () => {
+		const { deps, calls } = abortSpyDeps();
+		setOrchestratorRuntimeDepsForTest(deps);
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(0),
+			phase: "os-staging",
+			progress: { percent: 30, etaSeconds: 120 },
+		});
+		const result = await admitAndPrepareStreamStart();
+		expect(result).toEqual({ allowed: true });
+		expect(calls.kill).toBe(1);
+		expect(calls.stop).toBe(0);
+		// OS_STAGING_ABORTED_FOR_STREAM resets phase to "os-available".
+		expect(getOrchestratorState().phase).toBe("os-available");
 	});
 });

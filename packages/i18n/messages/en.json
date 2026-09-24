@@ -1937,6 +1937,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "Couldn't start: the device is still finishing modem recovery after a restart. Try again in a moment.",
 	"notifications.streamStartTimeoutFailed": "Stream failed to start: streaming engine timed out ({attempt}/{maxAttempts} attempts). Open Settings → System Logs for details.",
 	"notifications.streamStartTimeoutRetrying": "Streaming engine did not answer in time — retrying ({nextAttempt}/{maxAttempts})…",
+	"notifications.streamStartUpdateInProgressFailed": "Couldn't start: a software update is being installed and can't be interrupted. Try again once it finishes.",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "Update in progress",

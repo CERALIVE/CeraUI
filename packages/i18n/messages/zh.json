@@ -1892,6 +1892,7 @@
 	"notifications.streamStartRecoveryPendingFailed": "无法启动：设备重启后仍在完成调制解调器恢复。请稍后重试。",
 	"notifications.streamStartTimeoutFailed": "流启动失败：引擎超时（已尝试 {attempt}/{maxAttempts} 次）。打开 设置 → 系统日志 查看详情。",
 	"notifications.streamStartTimeoutRetrying": "流媒体引擎未及时响应 — 正在重试（{nextAttempt}/{maxAttempts}）…",
+	"notifications.streamStartUpdateInProgressFailed": "无法启动：软件更新正在安装，无法中断。请在更新完成后重试。",
 	"notifications.updateAvailable": "Update Available",
 	"notifications.updateAvailableDescription": "A new version is available. Refresh to update.",
 	"notifications.updateInProgress": "更新进行中",

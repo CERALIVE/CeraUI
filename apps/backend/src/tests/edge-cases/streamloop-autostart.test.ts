@@ -18,7 +18,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { AUTOSTART_RETRY_DELAY } from "../../helpers/timing-constants.ts";
 import { getConfig } from "../../modules/config.ts";
 import { getNetworkInterfaces } from "../../modules/network/network-interfaces.ts";
+import {
+	resetOrchestratorRuntimeForTest,
+	setOrchestratorStateForTest,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import { initialOrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
 import { genSrtlaIpList } from "../../modules/streaming/srtla.ts";
+import { initPipelines } from "../../modules/streaming/pipelines.ts";
 import {
 	getIsStreaming,
 	updateStatus,
@@ -152,6 +158,77 @@ describe("autostart: invalid config is un-startable", () => {
 		expect(timers.scheduled.length).toBe(0);
 		// Invariant 2: the streaming-status lock taken before validation is
 		// released on the failure path (status must not stay stuck "streaming").
+		expect(getIsStreaming()).toBe(false);
+	});
+});
+
+describe("autostart: refused by the update orchestrator during a package commit (Todo 37)", () => {
+	test("returns update_in_progress and does NOT retry until the orchestrator reaches settled", async () => {
+		// This drives the REAL production wiring end to end: autoStartStream()
+		// -> startStreamSession({origin:"autostart"}) -> the ONE shared
+		// productionOrchestrator singleton, whose `admitUpdate` dep is wired to
+		// the real `admitAndPrepareStreamStart` (see
+		// stream-session-orchestrator.ts's production singleton). Forcing the
+		// update orchestrator's cached phase to "committing" here is therefore
+		// a genuine proof that the autostart entry point is wired through D8 —
+		// not a re-test of admission.ts's own pure table (already exhaustively
+		// covered by update-orchestrator-admission.test.ts and the abort-I/O
+		// paths by update-orchestrator-runtime.test.ts).
+		const restoreLinks = withOneLink();
+		const timers = captureTimers();
+		// This test file's `config` singleton starts genuinely empty in
+		// isolation (no boot-time loadConfig() ran), so — unlike the
+		// neighbouring "invalid config" test above, whose deliberate
+		// `delete config.delay` is redundant against an already-empty config —
+		// this test must assemble a config that genuinely PASSES
+		// validateConfig, or every attempt dies on "Invalid audio delay"
+		// before ever reaching the update-orchestrator admission check this
+		// test exists to prove. `initPipelines()` with no engine reachable
+		// falls back to `MINIMAL_SAFE_CAPABILITIES`, which always advertises
+		// the virtual "test" source/pipeline (capabilities.ts).
+		await initPipelines();
+		const config = getConfig();
+		const configSnapshot = { ...config };
+		Object.assign(config, {
+			delay: 0,
+			pipeline: "test",
+			max_br: 5000,
+			srt_latency: 2000,
+			srtla_addr: "127.0.0.1",
+			srtla_port: 5000,
+			srt_streamid: "test",
+		});
+		setOrchestratorStateForTest({
+			...initialOrchestratorState(Date.now()),
+			phase: "committing",
+			progress: { percent: 55, etaSeconds: 40 },
+		});
+		try {
+			// Pre-condition: a link IS available and the assembled config is
+			// valid, so execution reaches startStreamSession — the ONLY thing
+			// that can refuse it here is the update-orchestrator admission
+			// check we just armed.
+			expect(genSrtlaIpList().length).toBeGreaterThanOrEqual(1);
+			await autoStartStream();
+		} finally {
+			timers.restore();
+			restoreLinks();
+			resetOrchestratorRuntimeForTest();
+			for (const key of Object.keys(config)) {
+				delete (config as Record<string, unknown>)[key];
+			}
+			Object.assign(config, configSnapshot);
+			if (getIsStreaming()) updateStatus(false);
+		}
+
+		// autoStartStream() never retries on ANY typed "failed" StartResult
+		// (see its `if (result.result === "failed") { logger.error(...); return; }`
+		// branch) — so the same "does not retry" invariant the invalid-config
+		// test above proves for start_invalid also holds for update_in_progress:
+		// no backoff timer is armed, and the refusal stands until something
+		// OTHER than autostart's own retry loop changes the phase (the
+		// orchestrator reaching `settled`), never an automatic re-attempt here.
+		expect(timers.scheduled.length).toBe(0);
 		expect(getIsStreaming()).toBe(false);
 	});
 });

@@ -2901,6 +2901,55 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
+**Stream-admission wiring [EXISTS, Todo 37].** `modules/streaming/stream-session-orchestrator.ts`'s
+`start()` — the single choke point every launch origin (UI, remote-control,
+autostart, set-profile, restoration) calls through, since all five funnel to
+`productionOrchestrator.start()` — consults the update orchestrator's D8
+admission table (`modules/system/update-orchestrator/admission.ts`) once every
+other admission gate (duplicate-start, modem-transition lease, recovery
+barrier, blocking-mutation) has already passed. `committing`/
+`restarting-services` refuse the start with the typed, non-retriable
+`update_in_progress` failure class (`packages/rpc/src/schemas/streaming-lifecycle.schema.ts`,
+carrying `updatePhase`/`updatePercent`/`updateEtaSeconds`); see
+[`docs/START-LIFECYCLE.md`](../../docs/START-LIFECYCLE.md) for the wire shape.
+`downloading`/`os-staging` are allowed, and the admitted start aborts the
+in-flight operation over the network — see `runtime.ts`'s
+`admitAndPrepareStreamStart` and `stream-abort.ts` — then sets
+`/run/ceralive/streaming` (`streaming/ota-streaming-marker.ts`), the SAME
+sentinel `image-building-pipeline`'s `ceralive-rauc-activate.sh` (Todo 28)
+checks before staging an OTA slot activation. The marker is cleared on every
+stream-end path: a failed launch that never went live, every `stop()` call,
+and a config-change transaction that ends the stream without a `stop()` call.
+
+**KNOWN, ACCEPTED, RECOVERY-BACKED RISK — read before touching the
+abort-network path.** Todo 36's `getPackageInstallWireState()` wire read is
+only re-consulted by the update orchestrator's own scheduler tick, which runs
+at most every `ACTIVE_TICK_MS` (3s) while a package install is active. If a
+stream-admission kill/stop fired on a STALE cached `state.phase ===
+"downloading"` that had, in reality, already crossed into dpkg committing, the
+kill could interrupt dpkg mid-write. This is an ACCEPTED, BOUNDED, RECOVERABLE
+risk, narrowed — never eliminated — to one wire-state read round trip:
+immediately before dispatching any kill/stop, `admitAndPrepareStreamStart`
+calls `deps.getPackageInstallWireState()` DIRECTLY (bypassing the cached
+`state.phase`) for a forced-fresh read, and refuses the start instead of
+killing anything if that fresh read shows dpkg has already started
+(`installing`) or finished (`success`) — zero kill/stop calls are dispatched
+in that case (`update-orchestrator-runtime.test.ts`'s dedicated
+forced-fresh-read test proves this). The rare case where an interrupted-dpkg
+outcome DOES occur (a kill landing in the one wire-state-read-round-trip
+window) is recovered by `image-building-pipeline`'s
+`ceralive-dpkg-recover.service` (Todo 27, already shipped, see
+`docs/healthcheck-dpkg-recovery.md` in that repo) — it runs on EVERY boot,
+checks `/var/lib/dpkg/updates/` and `dpkg --audit`, and runs
+`dpkg --configure -a` (600s budget) whenever dpkg was left interrupted,
+regardless of cause (power loss, crash, or this kill are indistinguishable to
+it). **Do NOT "fix" this by re-architecting Todo 35's single-unit/single-flock
+detached-apt design into two units — that door is closed.** The recovery
+mechanism is what makes the narrow remaining window acceptable, not a reason
+to leave it unaddressed; if a NEW, separately-argued reason to close it
+further ever appears, argue it on its own evidence rather than reopening this
+one.
+
 **Post-commit recovery [PARTIAL, Todo 38].** The orchestrator now runs the
 `/proc/<pid>/maps` + cgroup stale-service scan after a confirmed commit and
 defers eligible `systemctl restart --no-block` actions until Todo 32's idle

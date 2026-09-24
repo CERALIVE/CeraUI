@@ -44,6 +44,7 @@ import { readUpdateCapabilities } from "../update-capabilities.ts";
 import { loadUpdateSettings } from "../update-settings.ts";
 import { discoverCandidates } from "../update-transport/core.ts";
 import { defaultUpdateTransportDeps } from "../update-transport/executor.ts";
+import { admitStreamStart, onStreamStart } from "./admission.ts";
 import {
 	inspectSlotSync,
 	resetSlotSyncFailure,
@@ -57,6 +58,10 @@ import { reduceOrchestrator } from "./reducer.ts";
 import { resumeOrchestratorState } from "./resume.ts";
 import { defaultStaleServiceDeps, reconcileStaleUnits } from "./stale-services.ts";
 import {
+	killAndRestartRaucForStream,
+	stopPackageInstallUnitForStream,
+} from "./stream-abort.ts";
+import {
 	canStartManualCheck,
 	canStartManualInstall,
 	computeNextCheckDelayMs,
@@ -66,6 +71,7 @@ import {
 import {
 	initialOrchestratorState,
 	type OrchestratorEvent,
+	type OrchestratorPhase,
 	type OrchestratorState,
 } from "./types.ts";
 
@@ -81,6 +87,13 @@ export interface OrchestratorRuntimeDeps {
 	readonly getAvailablePackageCount: () => number;
 	readonly startPackageInstall: () => { started: boolean };
 	readonly getPackageInstallWireState: () => UpdateState;
+	/**
+	 * D8 abort-network I/O (Todo 37): stop the in-flight detached apt unit /
+	 * kill+restart RAUC. Both are separate deps (not folded into one) so a test
+	 * can assert exactly which one fired, or neither.
+	 */
+	readonly stopPackageInstallUnit: () => Promise<void>;
+	readonly killAndRestartRaucForStream: () => Promise<void>;
 	// Todo-39 seam: no fetch/verify/RAUC mechanism exists yet. The honest
 	// default always reports "nothing available" rather than fabricating a
 	// manifest — a legacy or not-yet-capable image must never appear to have
@@ -145,6 +158,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 		return { started: outcome.started };
 	},
 	getPackageInstallWireState: getUpdateState,
+	stopPackageInstallUnit: stopPackageInstallUnitForStream,
+	killAndRestartRaucForStream,
 	// Honest Todo-39 placeholder — see the interface doc above.
 	checkOsManifest: async () => ({
 		available: false,
@@ -273,6 +288,101 @@ export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
 
 export function allowCellularOnce(id: string): void {
 	dispatch({ type: "CELLULAR_OVERRIDE_GRANTED", now: deps.now(), id });
+}
+
+// ─── stream-start admission (Todo 37) ──────────────────────────────────────
+//
+// Wires D8 (admission.ts) into a real stream-start attempt. The refusal arm
+// (committing/restarting-services) is a straight read of the cached `state` —
+// no I/O, no staleness risk in the DANGEROUS direction (a phase that has
+// already moved past committing only ever gets MORE refusing, never less).
+//
+// The abort-network arm is where the documented TOCTOU race lives: Todo 36's
+// `getPackageInstallWireState()` wire read is only re-consulted by the
+// orchestrator's own tick, which runs at most every ACTIVE_TICK_MS (3s) while
+// a package install is active. If a stream-admission `kill`/`stop` fires on a
+// STALE cached `state.phase === "downloading"` that has, in reality, already
+// crossed into dpkg committing, the kill could interrupt dpkg mid-write.
+//
+// ACCEPTED, BOUNDED, RECOVERABLE RISK — do not "fix" this by re-architecting
+// Todo 35's single-unit/single-flock design into two units. image-building-
+// pipeline's `ceralive-dpkg-recover.service` (Todo 27, already shipped) runs
+// on every boot, checks `/var/lib/dpkg/updates/` + `dpkg --audit`, and runs
+// `dpkg --configure -a` (600s budget) whenever dpkg was left interrupted —
+// regardless of cause (power loss, crash, or this kill are indistinguishable
+// to it). That is what makes an occasional interrupted-dpkg outcome from this
+// path recoverable rather than corrupting. See the matching AGENTS.md note in
+// this repo's "SOFTWARE-UPDATE START CONTRACT" section.
+//
+// What THIS function does is narrow the exposure window from "up to one
+// scheduler tick" (3s) to "one wire-state read round trip": immediately
+// before dispatching any kill/stop, it calls `deps.getPackageInstallWireState()`
+// DIRECTLY — bypassing the cached `state.phase` — for a forced-fresh read. If
+// that fresh read shows dpkg has actually started (`installing`) or already
+// finished (`success`), this REFUSES the start instead of killing anything:
+// zero kill/stop calls are dispatched. This is the same correctness D8's
+// admission table already has for the `committing` phase — just re-confirmed
+// at the latest possible instant before an irreversible action.
+export type StreamStartUpdateAdmission =
+	| { readonly allowed: true }
+	| {
+			readonly allowed: false;
+			readonly reason: "update_in_progress";
+			readonly phase: OrchestratorPhase;
+			readonly percent: number;
+			readonly etaSeconds: number;
+	  };
+
+export async function admitAndPrepareStreamStart(): Promise<StreamStartUpdateAdmission> {
+	const cached = admitStreamStart(state);
+	if (!cached.allowed) return cached;
+
+	const action = onStreamStart(state);
+	if (action === "none" || action === "continue-local") {
+		return { allowed: true };
+	}
+
+	// action === "abort-network"
+	if (state.phase === "downloading") {
+		// Forced fresh read — bypasses the cached `state.phase`. See the
+		// module comment above.
+		const freshWire = deps.getPackageInstallWireState();
+		if (freshWire.kind === "installing" || freshWire.kind === "success") {
+			// dpkg has ALREADY started (or finished) since our cached read —
+			// refuse instead of sending a kill signal. Correct the cached
+			// state too, so a subsequent admission check reads fresh.
+			dispatch({ type: "COMMIT_PHASE_ENTERED", now: deps.now() });
+			const refreshed = admitStreamStart(state);
+			if (!refreshed.allowed) return refreshed;
+			// Unreachable in practice (COMMIT_PHASE_ENTERED always produces a
+			// refusing "committing" phase) — kept as a defensive, total
+			// fallback rather than an assertion.
+			return {
+				allowed: false,
+				reason: "update_in_progress",
+				phase: "committing",
+				percent: 0,
+				etaSeconds: 0,
+			};
+		}
+		// Genuinely still downloading — safe to abort.
+		await deps.stopPackageInstallUnit();
+		dispatch({ type: "DOWNLOAD_ABORTED_FOR_STREAM", now: deps.now() });
+		return { allowed: true };
+	}
+
+	if (state.phase === "os-staging") {
+		// No forced-fresh-read equivalent is needed here: RAUC only ever
+		// writes to the INACTIVE (target) slot, never the booted one, so a
+		// kill mid-write cannot corrupt anything the device is running from —
+		// unlike apt/dpkg, which mutates the live root in place. See
+		// stream-abort.ts.
+		await deps.killAndRestartRaucForStream();
+		dispatch({ type: "OS_STAGING_ABORTED_FOR_STREAM", now: deps.now() });
+		return { allowed: true };
+	}
+
+	return { allowed: true };
 }
 
 // ─── package check cycle ───────────────────────────────────────────────────
