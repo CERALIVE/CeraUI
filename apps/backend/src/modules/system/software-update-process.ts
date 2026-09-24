@@ -9,6 +9,7 @@
 */
 
 import {
+	buildDetachedAptAllCommand,
 	buildDetachedAptUpgradeCommand,
 	type DetachedAptServiceDeps,
 	type DetachedAptServiceState,
@@ -219,6 +220,22 @@ export async function runDetachedAptUpgrade(
 	}
 	await deps.prepareOutput();
 	await deps.start(buildDetachedAptUpgradeCommand(aptArgs, deps.outputPaths));
+	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
+}
+
+export async function runDetachedAptAll(
+	installArgs: readonly string[],
+	verdict: "any" | "force_ipv4" | "force_ipv6",
+	handlers: SoftwareUpdateOutputHandlers,
+	deps: DetachedAptUpgradeDeps = defaultDetachedAptServiceDeps(),
+): Promise<number> {
+	const existing = await deps.inspect();
+	if (existing.kind !== "absent")
+		throw new DetachedAptServiceAlreadyExistsError();
+	await deps.prepareOutput();
+	await deps.start(
+		buildDetachedAptAllCommand(installArgs, verdict, deps.outputPaths),
+	);
 	return observeDetachedAptUpgrade({ kind: "running" }, handlers, deps);
 }
 

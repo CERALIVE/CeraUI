@@ -42,6 +42,14 @@ import {
 	notificationRemove,
 } from "../ui/notifications.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import {
+	AptAllRefusalError,
+	assertPinnedInstallSimulation,
+	buildAptAllDiscoveryArgs,
+	buildAptAllInstallArgs,
+	discoverAptAllPackages,
+	type PinnedAptPackage,
+} from "./apt-all-packages.ts";
 import { cleanAptCache } from "./apt-cache-clean.ts";
 /* Software updates */
 import { APT_PACKAGE_NAME_RE } from "./apt-package-name.ts";
@@ -67,6 +75,7 @@ import { classifyPackageLayer } from "./package-layer.ts";
 import {
 	DetachedAptServiceCleanupError,
 	recoverDetachedAptUpgrade,
+	runDetachedAptAll,
 	runDetachedAptUpgrade,
 	type SoftwareUpdateOutputHandlers,
 } from "./software-update-process.ts";
@@ -75,6 +84,9 @@ import {
 	recoverSoftwareUpdateWithCoordination,
 	resetSoftwareUpdateRecovery,
 } from "./software-update-recovery.ts";
+import { reconcileAptChannel } from "./update-apt-channel.ts";
+import { readUpdateCapabilities } from "./update-capabilities.ts";
+import { loadUpdateSettings } from "./update-settings.ts";
 import {
 	deriveUpdateIdentity,
 	deriveUpdateState,
@@ -105,6 +117,9 @@ let aptDiscoveryRunning = false;
 let aptGetUpdateFailures = 0;
 let aptHeldBackPackages: string | undefined;
 let actionableAppPackages: string[] = [];
+let actionableAllPackages: PinnedAptPackage[] = [];
+let aptAllRefusal: AptAllRefusalError | null = null;
+let aptAllMode = false;
 let discoveredPackages: UpdatePackage[] = [];
 let lastAptReachability: AptReachabilityWire | undefined;
 let delayedSoftwareUpdateStart: ReturnType<typeof setTimeout> | undefined;
@@ -164,12 +179,21 @@ function aptReachabilityWire(
 	});
 }
 
+const defaultAptCommandRunner: typeof spawnWithTimeout = (argv, options) =>
+	spawnWithTimeout(argv, options);
+let aptCommandRunner = defaultAptCommandRunner;
+export function setAptCommandRunnerForTest(
+	runner: typeof spawnWithTimeout | null,
+): void {
+	aptCommandRunner = runner ?? defaultAptCommandRunner;
+}
+
 async function runAptCommand(
 	argv: string[],
 	timeoutMs: number,
 ): Promise<SpawnWithTimeoutResult> {
 	try {
-		return await spawnWithTimeout(argv, { timeoutMs });
+		return await aptCommandRunner(argv, { timeoutMs });
 	} catch (error) {
 		return {
 			exitCode: 1,
@@ -265,6 +289,9 @@ export function resetSoftwareUpdateState(): void {
 	lastCheckedAt = null;
 	lastAptReachability = undefined;
 	actionableAppPackages = [];
+	actionableAllPackages = [];
+	aptAllRefusal = null;
+	aptAllMode = false;
 	discoveredPackages = [];
 }
 
@@ -305,7 +332,9 @@ export function getUpdateState(): UpdateState {
 						...(discoveredPackages.length > 0
 							? { packages: discoveredPackages }
 							: {}),
-						actionable_count: actionableAppPackages.length,
+						actionable_count: aptAllMode
+							? actionableAllPackages.length
+							: actionableAppPackages.length,
 					}
 				: null;
 	return deriveUpdateState({
@@ -483,6 +512,94 @@ export function buildAptDiscoveryArgs(
 	];
 }
 
+async function getCapableUpdateSize(
+	reachability: AptReachability,
+): Promise<SoftwareUpdateError> {
+	aptAllMode = true;
+	const settings = await loadUpdateSettings();
+	await reconcileAptChannel("capable", settings.channel);
+	const simulation = await runAptCommand(
+		buildAptAllDiscoveryArgs(aptFamilyArgs(reachability.verdict)),
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	if (simulation.exitCode !== 0) {
+		failCurrentCheck("discovery_failed");
+		return "discovery_failed";
+	}
+	const holds = await runAptCommand(
+		["/usr/bin/apt-mark", "showhold"],
+		APT_DISCOVERY_TIMEOUT_MS,
+	);
+	if (holds.exitCode !== 0) {
+		failCurrentCheck("discovery_failed");
+		return "discovery_failed";
+	}
+	try {
+		const result = await discoverAptAllPackages(
+			simulation.stdout,
+			holds.stdout,
+			async (name) => {
+				const policy = await runAptCommand(
+					["/usr/bin/apt-cache", "policy", name],
+					APT_DISCOVERY_TIMEOUT_MS,
+				);
+				if (policy.exitCode !== 0)
+					throw new AptAllRefusalError("discovery_failed");
+				return policy.stdout;
+			},
+		);
+		aptAllRefusal = null;
+		actionableAllPackages = result.actionable;
+		discoveredPackages = result.packages;
+		const packageNames = result.packages.map((item) => item.name);
+		availableIdentity =
+			packageNames.length > 0
+				? deriveUpdateIdentity(packageNames, packageNames.length)
+				: null;
+		availableUpdates = { package_count: packageNames.length };
+		if (
+			result.actionable.some(
+				({ name }) => name.startsWith("ceralive-") || name === "cerastream",
+			)
+		) {
+			notificationBroadcast(
+				"ceralive_update",
+				"warning",
+				"A CERALIVE update is available. Open Settings → Software Updates to install it.",
+				0,
+				true,
+				true,
+			);
+		}
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+		return null;
+	} catch (error) {
+		if (!(error instanceof AptAllRefusalError)) throw error;
+		aptAllRefusal = error;
+		actionableAllPackages = [];
+		availableUpdates = null;
+		availableIdentity = null;
+		discoveredPackages = [];
+		lastUpdateFailure = { reason: error.reason };
+		notificationBroadcast(
+			"ceralive_update_failed",
+			"error",
+			"The software update was refused. Open Settings → Software Updates to see the reason.",
+			0,
+			true,
+			true,
+		);
+		broadcastMsg("status", {
+			available_updates: availableUpdates,
+			update_state: getUpdateState(),
+		});
+		return "discovery_failed";
+	}
+}
+
 function aptFamilyArgs(verdict: AptReachability["verdict"]): readonly string[] {
 	if (verdict === "force_ipv4") return ["-o", "Acquire::ForceIPv4=true"];
 	if (verdict === "force_ipv6") return ["-o", "Acquire::ForceIPv6=true"];
@@ -631,6 +748,9 @@ async function getSoftwareUpdateSize(reachability: AptReachability) {
 	// Never advertise an update the install path would refuse to run.
 	if (!aptUpdatesEnabled()) return null;
 	if (getIsStreaming() || isUpdating() || aptGetUpdating) return "busy";
+	if ((await readUpdateCapabilities()).mode === "capable")
+		return getCapableUpdateSize(reachability);
+	aptAllMode = false;
 
 	// First see if any packages can be upgraded by dist-upgrade
 	const upgradeResult = await runAptCommand(
@@ -1389,13 +1509,29 @@ async function doSoftwareUpdate(): Promise<void> {
 	if (!aptUpdatesEnabled() || getIsStreaming()) return;
 
 	const reachability = await prepareAptNetwork({ maxAgeMs: 0 });
+	const capable = (await readUpdateCapabilities()).mode === "capable";
+	if (capable) {
+		const discovery = await getCapableUpdateSize(reachability);
+		if (discovery !== null) {
+			if (softUpdateStatus)
+				softUpdateStatus.result = aptAllRefusal?.reason ?? "discovery_failed";
+			softUpdateStatus = null;
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+			return;
+		}
+	}
 	lastAptReachability = aptReachabilityWire(reachability);
 	if (
 		reachability.verdict === "unreachable" ||
 		reachability.verdict === "captive_portal" ||
 		reachability.verdict === "probe_unavailable" ||
 		reachability.verdict === "credentials_invalid" ||
-		actionableAppPackages.length === 0
+		(capable
+			? actionableAllPackages.length === 0
+			: actionableAppPackages.length === 0)
 	) {
 		const reason =
 			reachability.verdict === "captive_portal"
@@ -1418,7 +1554,49 @@ async function doSoftwareUpdate(): Promise<void> {
 		broadcastUpdateState();
 		return;
 	}
-	const args = buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	const args = capable
+		? buildAptAllInstallArgs(actionableAllPackages, reachability.verdict)
+		: buildAptUpgradeArgs(actionableAppPackages, reachability.verdict);
+	if (capable) {
+		try {
+			const probe = await runAptCommand(
+				[
+					"/usr/bin/apt-get",
+					"-s",
+					"-o",
+					"Debug::NoLocking=1",
+					...args.filter((arg) => arg !== "-y" && arg !== "--no-download"),
+				],
+				APT_DISCOVERY_TIMEOUT_MS,
+			);
+			if (probe.exitCode !== 0)
+				throw new AptAllRefusalError("discovery_failed");
+			assertPinnedInstallSimulation(probe.stdout, actionableAllPackages);
+		} catch (error) {
+			if (!(error instanceof AptAllRefusalError)) throw error;
+			lastUpdateFailure = { reason: error.reason };
+			softUpdateStatus = null;
+			notificationBroadcast(
+				"ceralive_update_failed",
+				"error",
+				"The software update was refused. Open Settings → Software Updates to see the reason.",
+				0,
+				true,
+				true,
+			);
+			broadcastMsg("status", {
+				updating: null,
+				update_state: getUpdateState(),
+			});
+			return;
+		}
+	}
+	if (capable && aptAllRefusal !== null) {
+		lastUpdateFailure = { reason: aptAllRefusal.reason };
+		softUpdateStatus = null;
+		broadcastMsg("status", { updating: null, update_state: getUpdateState() });
+		return;
+	}
 	try {
 		await preflightAptSpace(args);
 	} catch (error) {
@@ -1443,7 +1621,19 @@ async function doSoftwareUpdate(): Promise<void> {
 	// running it in this unit's cgroup then lets that restart kill the package
 	// transaction itself. PID 1 owns this service, and the next backend process
 	// reattaches to its durable output instead of relaunching apt.
-	monitor.finish(runDetachedAptUpgrade(args, monitor.handlers));
+	monitor.finish(
+		capable
+			? runDetachedAptAll(
+					args,
+					reachability.verdict === "force_ipv4"
+						? "force_ipv4"
+						: reachability.verdict === "force_ipv6"
+							? "force_ipv6"
+							: "any",
+					monitor.handlers,
+				)
+			: runDetachedAptUpgrade(args, monitor.handlers),
+	);
 }
 
 async function recoverSoftwareUpdate(

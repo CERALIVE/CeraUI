@@ -6,6 +6,11 @@ import type { z } from "zod";
 
 export const UPDATE_CAPABILITIES_FILE =
 	"/usr/lib/ceralive/update-capabilities.json";
+let capabilityPath = UPDATE_CAPABILITIES_FILE;
+
+export function setUpdateCapabilityPathForTest(path: string | null): void {
+	capabilityPath = path ?? UPDATE_CAPABILITIES_FILE;
+}
 
 export async function readUpdateCapabilityFile(
 	filePath = UPDATE_CAPABILITIES_FILE,
@@ -21,7 +26,7 @@ export async function readUpdateCapabilityFile(
 }
 
 export async function readUpdateCapabilities(
-	filePath = UPDATE_CAPABILITIES_FILE,
+	filePath = capabilityPath,
 ): Promise<UpdateCapabilities> {
 	const legacy: UpdateCapabilities = { mode: "legacy", features: [] };
 	const parsed = await readUpdateCapabilityFile(filePath);

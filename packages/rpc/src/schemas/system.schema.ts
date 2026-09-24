@@ -185,6 +185,8 @@ export type UpdateLayer = z.infer<typeof updateLayerSchema>;
 // that emits `packages` at all emits it on every entry.
 export const updatePackageSchema = z.object({
 	name: z.string(),
+	version: z.string().optional(),
+	origin: z.string().optional(),
 	layer: updateLayerSchema.optional(),
 	kept_back: z.literal(true).optional(),
 	actionable: z.boolean().optional(),

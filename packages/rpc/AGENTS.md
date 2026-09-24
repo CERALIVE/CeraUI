@@ -13,6 +13,8 @@ owns the image-file validator and the `{mode,features}` RPC output.
 No backend-local wire types or alternate schemas may shadow them. A valid
 image with no `apt-all-packages` feature is still legacy, and a `capable`
 result never implies OS or slot-sync support without those explicit features.
+Todo 35 adds optional `version` and `origin` to `updatePackageSchema` for
+origin-vetted APT discovery; legacy frames omit both and parse unchanged.
 `contracts/ui.contract.ts` adds authenticated `ui.heartbeat` using the existing
 shared `successResponseSchema`; it carries no timestamp or new producer-owned
 wire shape. The backend stamps receive time, not a client-supplied clock.

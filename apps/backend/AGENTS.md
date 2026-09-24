@@ -2926,6 +2926,27 @@ preflight and detached unit; the later orchestrator must await its transfer
 within this new scope rather than releasing rules after mere dispatch. Two-veth
 netns verification and crash-sweep proof: `tests/update-transport-pin-netns.test.ts`.
 
+**APT scope [PARTIAL, Todo 35].** Only the image's `apt-all-packages` feature
+activates the new path; without it, the 15-name exact classifier and its
+`dist-upgrade --assume-no` discovery / app-only install argv are unchanged.
+Capable discovery simulates `upgrade --with-new-pkgs` with no locking, resolves
+each candidate through `apt-cache policy`, refuses any `Remv` and any held
+first-party package, and offers only unheld candidates from trixie,
+trixie-updates, trixie-security or apt.ceralive.tv. It records the chosen
+name/version pair and origin on the optional package wire fields. The commit is
+an explicit `install name=version ...`, with `--no-download --no-remove`, after a
+second simulation proves no extra package or removal was added by resolution.
+One PID-1-owned transient service runs `flock -x /run/lock/ceralive-update.lock`
+around download (`apt-get -d -y upgrade --with-new-pkgs`) AND commit in one
+shell; an interrupted download cannot fall into commit. Backend restart merely
+reattaches to the same service and polls external status — it never owns the
+flock. APT channel changes atomically rewrite the deb822 source: stable only,
+or stable plus beta. The next check refreshes indexes; beta-to-stable does not
+request downgrades and the image's origin pin remains below 1000. This is
+fixture/host-flock proof, NOT a board or live-index receipt; Todo 29's capable
+image must be validated separately. Coverage: `tests/apt-all-packages.test.ts`,
+`tests/update-settings.test.ts`, `tests/software-updates-apt.test.ts`.
+
 **Idle detector [PARTIAL, Todo 32].** `system/idle-detector.ts` is a pure
 decision over caller-supplied epoch milliseconds, five last-activity fields and
 the `@ceraui/rpc` update schedule. Exactly 30 minutes since the latest activity

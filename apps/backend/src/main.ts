@@ -152,6 +152,9 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
+import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
+import { loadUpdateSettings } from "./modules/system/update-settings.ts";
 import { updatePinController } from "./modules/system/update-transport/pin.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
@@ -415,6 +418,11 @@ setInterval(updateGwWrapper, UPDATE_GW_INT);
 
 // Self-gating: it no-ops when updates are disabled for this device or when the
 // host is a dev/mock box (a dev machine must never be handed to apt).
+await guardNonCritical("apt-channel-reconcile", async () => {
+	const mode = (await readUpdateCapabilities()).mode;
+	if (mode === "capable")
+		await reconcileAptChannel(mode, (await loadUpdateSettings()).channel);
+});
 await guardNonCritical("software-update-recovery", async () => {
 	await recoverSoftwareUpdateIfRunning();
 });

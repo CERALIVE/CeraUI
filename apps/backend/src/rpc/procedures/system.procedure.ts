@@ -64,6 +64,7 @@ import {
 	setSshPersistent,
 	startStopSsh,
 } from "../../modules/system/ssh.ts";
+import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
 import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
 import {
 	loadUpdateSettings,
@@ -87,7 +88,11 @@ export const getUpdateSettingsProcedure = authedProcedure
 export const setUpdateSettingsProcedure = authedProcedure
 	.input(updateSettingsInputSchema)
 	.output(updateSettingsSchema)
-	.handler(({ input }) => saveUpdateSettings(input));
+	.handler(async ({ input }) => {
+		const mode = (await readUpdateCapabilities()).mode;
+		if (mode === "capable") await reconcileAptChannel(mode, input.channel);
+		return saveUpdateSettings(input);
+	});
 
 export const getUpdateCapabilitiesProcedure = authedProcedure
 	.output(updateCapabilitiesSchema)

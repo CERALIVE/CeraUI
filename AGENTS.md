@@ -114,8 +114,11 @@ Missing/invalid capabilities, including the current `features: []` carrier,
 remain legacy (15-name APT, no OS agent or slot-sync); only the exact
 `apt-all-packages` token selects the new roster. This adds authenticated
 `system.getUpdateSettings`, `system.setUpdateSettings`, and
-`system.getUpdateCapabilities` RPCs, not an update orchestrator or installation
-path. `setup.json`'s explicit `apt_update_enabled: false` still vetoes every
+`system.getUpdateCapabilities` RPCs. Todo 35 adds a capability-gated APT
+discovery/install path and channel writer, but not the OS orchestrator; the
+legacy 15-name install remains on images without `apt-all-packages`. The
+capable path is fixture-proven only pending the image carrier (Todo 29).
+`setup.json`'s explicit `apt_update_enabled: false` still vetoes every
 APT install; a saved `packagesAuto: true` cannot override it. Later tasks
 32–41 must gate individual capabilities on the returned feature tokens rather
 than treating the mode alone as permission for OS staging or slot-sync.

@@ -10,6 +10,11 @@ import {
 	startSoftwareUpdate,
 } from "../modules/system/software-updates.ts";
 import {
+	buildCeraliveSources,
+	setCeraliveSourcesFileForTest,
+} from "../modules/system/update-apt-channel.ts";
+import { setUpdateCapabilityPathForTest } from "../modules/system/update-capabilities.ts";
+import {
 	loadUpdateSettings,
 	saveUpdateSettings,
 	setUpdateSettingsFilePathForTest,
@@ -23,6 +28,8 @@ import type { AppWebSocket, RPCContext } from "../rpc/types.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "ceraui-update-settings-"));
 const file = join(dir, "update-settings.json");
+const aptSource = join(dir, "ceralive.sources");
+const capabilityFile = join(dir, "capabilities.json");
 const context = {
 	ws: {
 		data: { isAuthenticated: true, lastActive: Date.now() },
@@ -40,7 +47,11 @@ const context = {
 
 afterEach(() => {
 	rmSync(file, { force: true });
+	rmSync(aptSource, { force: true });
+	rmSync(capabilityFile, { force: true });
 	setUpdateSettingsFilePathForTest(null);
+	setCeraliveSourcesFileForTest(null);
+	setUpdateCapabilityPathForTest(null);
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
@@ -109,6 +120,36 @@ describe("update settings persistence", () => {
 });
 
 describe("update-settings RPC", () => {
+	test("a capable channel change writes layered apt sources before persisting settings; legacy changes write none", async () => {
+		setUpdateSettingsFilePathForTest(file);
+		setCeraliveSourcesFileForTest(aptSource);
+		setUpdateCapabilityPathForTest(capabilityFile);
+		const beta = updateSettingsSchema.parse({ channel: "beta" });
+		writeFileSync(aptSource, "legacy bytes");
+		await call(setUpdateSettingsProcedure, beta, { context });
+		expect(readFileSync(aptSource, "utf8")).toBe("legacy bytes");
+		writeFileSync(
+			capabilityFile,
+			JSON.stringify({
+				schema: 1,
+				features: ["apt-all-packages"],
+				ota_uid: 42041,
+				apt_uid: 42042,
+			}),
+		);
+		await call(setUpdateSettingsProcedure, beta, { context });
+		expect(readFileSync(aptSource, "utf8")).toBe(
+			buildCeraliveSources("beta", "amd64"),
+		);
+		await call(
+			setUpdateSettingsProcedure,
+			{ ...beta, channel: "stable" },
+			{ context },
+		);
+		expect(readFileSync(aptSource, "utf8")).toBe(
+			buildCeraliveSources("stable", "amd64"),
+		);
+	});
 	test("set and get return the exact saved selection", async () => {
 		// Given a valid selection, when set via RPC and read back via RPC.
 		setUpdateSettingsFilePathForTest(file);
