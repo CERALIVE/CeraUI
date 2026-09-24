@@ -133,6 +133,7 @@ import {
 	sshStopProcedure,
 	startUpdateProcedure,
 } from "./procedures/system.procedure.ts";
+import { heartbeatProcedure } from "./procedures/ui.procedure.ts";
 import {
 	getWifiAdapterModesProcedure,
 	getWifiStatusProcedure,
@@ -156,6 +157,7 @@ import type { RPCContext } from "./types.ts";
 const base = os.$context<RPCContext>();
 
 const stableRoutes = {
+	ui: base.router({ heartbeat: heartbeatProcedure }),
 	auth: base.router({
 		login: loginProcedure,
 		setPassword: setPasswordProcedure,

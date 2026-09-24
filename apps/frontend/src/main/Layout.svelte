@@ -7,6 +7,7 @@ import { OfflinePage, PWAStatus } from '$lib/components/custom/pwa';
 import { Button } from '$lib/components/ui/button';
 import * as Tooltip from '$lib/components/ui/tooltip';
 import UpdatingOverlay from '$lib/components/updating-overlay.svelte';
+import { rpc } from '$lib/rpc';
 import { getStatus } from '$lib/rpc/subscriptions.svelte';
 import {
 	authenticateWithToken,
@@ -157,6 +158,24 @@ $effect(() => {
 // Derived, not mirrored — same rule as `updatingStatus` above: a mirror lags the
 // store by one render, which is a flash of the pre-auth shell on every re-mount.
 const authStatus = $derived(authStatusStore.value);
+
+$effect(() => {
+	if (!authStatus) return;
+	const sendHeartbeat = () => {
+		if (document.visibilityState === 'visible' && document.hasFocus()) {
+			void rpc.ui.heartbeat().catch(() => undefined);
+		}
+	};
+	sendHeartbeat();
+	const interval = setInterval(sendHeartbeat, 30_000);
+	window.addEventListener('focus', sendHeartbeat);
+	document.addEventListener('visibilitychange', sendHeartbeat);
+	return () => {
+		clearInterval(interval);
+		window.removeEventListener('focus', sendHeartbeat);
+		document.removeEventListener('visibilitychange', sendHeartbeat);
+	};
+});
 
 // Aggressive fallback for mobile/PWA: if we're stuck in any loading state, assume offline with NaN safety
 const userAgent = navigator.userAgent || '';

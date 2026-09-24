@@ -120,6 +120,16 @@ APT install; a saved `packagesAuto: true` cannot override it. Later tasks
 32–41 must gate individual capabilities on the returned feature tokens rather
 than treating the mode alone as permission for OS staging or slot-sync.
 
+**Idle signals [PARTIAL, Todo 32].** The pure `modules/system/idle-detector.ts`
+evaluates the five last-activity timestamps against 30 minutes and the configured
+local-time schedule (including midnight-crossing windows). `idle-activity.ts`
+samples stream, preview, command recency, authenticated visible/focused UI
+heartbeat and the streaming start lease. Stream-end time survives process/slot
+restarts in `/data/ceralive/update-state/idle.json`; no agent dispatches an update
+from this verdict yet (the later orchestrator tasks own that). Remote presence
+is **only** a five-minute command-recency heuristic, not hub connectivity or a
+true operator-presence claim: a quiet but connected operator may be missed.
+
 The live cockpit consumes an authoritative session-switch namespace, distinct from
 device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,

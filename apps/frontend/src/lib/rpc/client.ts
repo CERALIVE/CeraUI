@@ -882,6 +882,9 @@ export interface TypedRPC {
 		kioskOsk: (input: KioskOskInput) => Promise<SuccessResponse>;
 		mintPreviewToken: () => Promise<PreviewTokenOutput>;
 	};
+	ui: {
+		heartbeat: () => Promise<SuccessResponse>;
+	};
 	status: {
 		getStatus: () => Promise<unknown>;
 		getRelays: () => Promise<unknown>;

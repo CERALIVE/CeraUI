@@ -2901,6 +2901,23 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
+**Idle detector [PARTIAL, Todo 32].** `system/idle-detector.ts` is a pure
+decision over caller-supplied epoch milliseconds, five last-activity fields and
+the `@ceraui/rpc` update schedule. Exactly 30 minutes since the latest activity
+is idle; window start is inclusive, end exclusive, and crossing midnight works
+on the device's local clock. `idle-activity.ts` samples `getIsStreaming()`,
+`getActivePreviewProxyCount()` (an active preview always blocks),
+`currentLifecycleHolder()==="streaming"`, the command router and the last UI
+heartbeat. `idle-state.ts` persists only `lastStreamEndedAt` under
+`/data/ceralive/update-state/idle.json` using the existing atomic config writer;
+all other timestamps are in memory. Unknown startup activity is conservative.
+An authenticated `ui.heartbeat` stamps in memory; the frontend sends only while
+visible and focused, every 30 seconds. `hasActiveRemoteSession()` is explicitly
+**not** real session presence: it uses the last routed command within five
+minutes, never `channel.isConnected()`. A connected but quiet operator can be
+missed; a future hub-to-device presence protocol is needed for full fidelity.
+Nothing schedules an update from this detector yet.
+
 **Update settings and image capabilities [PARTIAL, Todo 31].**
 `update-settings.ts` reads `update-settings.json` through `loadJsonConfig` and
 writes it with `writeFileAtomicSync`; absent gets the defaults in

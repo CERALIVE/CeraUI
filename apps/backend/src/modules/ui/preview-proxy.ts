@@ -69,6 +69,7 @@ import {
 	getSourcesMessage,
 	resolveSourceIdentityDetailed,
 } from "../streaming/sources.ts";
+import { notePreviewEnded } from "../system/idle-state.ts";
 import { BoundedDropOldestQueue } from "./preview-frame-queue.ts";
 import { consumePreviewToken } from "./preview-token.ts";
 
@@ -510,6 +511,7 @@ export function createPreviewWebSocketHandler(
 				return;
 			}
 			states.delete(ws);
+			if (states.size === 0) notePreviewEnded();
 			freePreviewProxyState(state);
 		},
 	};

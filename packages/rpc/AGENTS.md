@@ -13,6 +13,9 @@ owns the image-file validator and the `{mode,features}` RPC output.
 No backend-local wire types or alternate schemas may shadow them. A valid
 image with no `apt-all-packages` feature is still legacy, and a `capable`
 result never implies OS or slot-sync support without those explicit features.
+`contracts/ui.contract.ts` adds authenticated `ui.heartbeat` using the existing
+shared `successResponseSchema`; it carries no timestamp or new producer-owned
+wire shape. The backend stamps receive time, not a client-supplied clock.
 
 ## STRUCTURE
 
