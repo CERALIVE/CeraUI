@@ -750,6 +750,7 @@ export type SoftwareUpdateError =
 	| ExecException
 	| "busy"
 	| "repos_unreachable"
+	| "discovery_failed"
 	| "captive_portal"
 	| true
 	| null;
@@ -814,13 +815,18 @@ function checkForSoftwareUpdates(
 		broadcastUpdateState();
 		if (
 			reachability.verdict === "unreachable" ||
-			reachability.verdict === "captive_portal"
+			reachability.verdict === "captive_portal" ||
+			reachability.verdict === "probe_unavailable" ||
+			reachability.verdict === "credentials_invalid"
 		) {
 			aptGetUpdating = false;
 			const reason =
-				reachability.verdict === "unreachable"
-					? "repos_unreachable"
-					: "captive_portal";
+				reachability.verdict === "probe_unavailable" ||
+				reachability.verdict === "credentials_invalid"
+					? "discovery_failed"
+					: reachability.verdict === "unreachable"
+						? "repos_unreachable"
+						: "captive_portal";
 			failCurrentCheck(reason);
 			callback(reason, aptGetUpdateFailures);
 			return;
@@ -924,6 +930,13 @@ export async function runUpdateDiscoveryAndReport(): Promise<SoftwareUpdateError
 	try {
 		const reachability = await prepareAptNetwork();
 		lastAptReachability = aptReachabilityWire(reachability);
+		if (
+			reachability.verdict === "probe_unavailable" ||
+			reachability.verdict === "credentials_invalid"
+		) {
+			failCurrentCheck("discovery_failed");
+			return "discovery_failed";
+		}
 		if (reachability.verdict === "unreachable") {
 			failCurrentCheck("repos_unreachable");
 			return "repos_unreachable";
@@ -1380,14 +1393,20 @@ async function doSoftwareUpdate(): Promise<void> {
 	if (
 		reachability.verdict === "unreachable" ||
 		reachability.verdict === "captive_portal" ||
+		reachability.verdict === "probe_unavailable" ||
+		reachability.verdict === "credentials_invalid" ||
 		actionableAppPackages.length === 0
 	) {
 		const reason =
 			reachability.verdict === "captive_portal"
 				? "A captive portal prevented the software update."
-				: reachability.verdict === "unreachable"
-					? "The software repositories are unreachable."
-					: "No actionable application packages are available.";
+				: reachability.verdict === "probe_unavailable"
+					? "The repository probe tooling is unavailable."
+					: reachability.verdict === "credentials_invalid"
+						? "The APT client certificate was rejected."
+						: reachability.verdict === "unreachable"
+							? "The software repositories are unreachable."
+							: "No actionable application packages are available.";
 		lastUpdateSucceeded = false;
 		lastUpdateFailure = { reason };
 		if (softUpdateStatus) softUpdateStatus.result = reason;

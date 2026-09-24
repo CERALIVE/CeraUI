@@ -140,6 +140,8 @@ export const APT_FAMILY_PROBE_RESULTS = [
 	'dns_failed',
 	'captive',
 	'unknown',
+	'probe_unavailable',
+	'credentials_invalid',
 ] as const;
 export const aptFamilyProbeSchema = z.enum(APT_FAMILY_PROBE_RESULTS);
 export type AptFamilyProbe = z.infer<typeof aptFamilyProbeSchema>;

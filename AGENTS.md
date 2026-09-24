@@ -130,6 +130,14 @@ from this verdict yet (the later orchestrator tasks own that). Remote presence
 is **only** a five-minute command-recency heuristic, not hub connectivity or a
 true operator-presence claim: a quiet but connected operator may be missed.
 
+**Update transport [PARTIAL, Todo 33].** The backend now has a stateless
+per-uplink/per-family selector under `modules/system/update-transport/`, exercised
+against fixture servers and real network namespaces. Add-on artifact fetches use
+an exact-host-only client TLS helper. Live verification against the real deployed
+`apt.ceralive.tv` is deferred pending Todo 12; the existing update button still
+uses its legacy preflight until the later orchestrator is wired. Details:
+`docs/HOST-UPLINK-ELECTION.md`.
+
 The live cockpit consumes an authoritative session-switch namespace, distinct from
 device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,

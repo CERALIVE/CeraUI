@@ -111,6 +111,9 @@ A dev-only DevTools destination is available in development builds.
   stagger instead of walking every DNS answer serially, while active SRTLA links
   use passive RTT/NAK telemetry instead of competing probes. Captive portals
   remain visible as degraded links.
+  An update-specific, stateless selector also has fixture-proven APT/OS host
+  checks per uplink and address family. Live first-party deployment validation
+  awaits the update infrastructure; see `docs/HOST-UPLINK-ELECTION.md`.
 - **Flow-sticky client sharing**: the backend assigns new hotspot/shared-LAN flows
   across healthy uplinks while preserving established-flow affinity and keeping
   locally-originated SRTLA traffic outside its NAT path. The image carrier is the

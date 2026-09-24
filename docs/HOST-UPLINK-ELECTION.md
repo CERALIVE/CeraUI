@@ -2,6 +2,39 @@
 
 Status: **source/CI implementation; not hardware-qualified**.
 
+## Update-specific transport selector (Todo 33; fixture-proven)
+
+`modules/system/update-transport/` supplies a separate, stateless choice for a
+single APT or OS-update job; it does not mutate or replace the host default-route
+election below. Its pure core ranks complete per-uplink/per-family observations:
+all required hosts must pass, non-metered before metered, then Ethernet, Wi-Fi,
+dongle, cellular, then measured latency. `none` is a typed refusal. Each call
+re-discovers the `netif` candidates, NetworkManager metering, ModemManager
+interfaces and USB router classification and re-probes both address families.
+No family choice or route preference is persisted. The NetworkManager reader
+uses `GENERAL.DEVICE,GENERAL.TYPE,GENERAL.STATE,GENERAL.METERED` with `device
+show`: `DEVICE,TYPE,STATE,GENERAL.METERED device show` is **invalid** on the
+installed NetworkManager CLI (it mixes status and detail field names).
+
+The APT profile checks the first-party HTTP 204/empty-body endpoint, the
+mTLS `/__tls-probe` JSON (`certVerified:false` means credentials invalid, not
+offline), and every configured Debian InRelease URI/suite pair with that stanza's
+own `Signed-By` keyring. Debian hosts have no `/generate_204` endpoint. The OS
+profile checks images' HTTP 204 endpoint and the channel/board `.json.sig` HEAD.
+Resolution is interface-scoped with `resolvectl -i`, and curl connects to that
+resolved address with `--resolve` while keeping the hostname for SNI and TLS
+verification; each transfer binds with `--interface if!<name>`. Redirects are
+never followed. Netns tests exercise real socket/TLS/GPG behavior against signed
+fixture indexes and the two endpoint contracts. Add-on artifact fetches present
+the fleet certificate only for the exact `apt.ceralive.tv` hostname, retaining
+plain fetch for other hosts and devices with no credentials.
+
+**Live verification against the real Todo-12-deployed `apt.ceralive.tv` is
+deferred until Todo 12 deploys and provisions credentials.** This implementation
+is fixture-proven; it is not a production network, certificate or hardware receipt.
+The legacy apt preflight below is still used by the existing update button until
+the later update orchestrator adopts this selector.
+
 ## Policy change
 
 This changes **host default-route selection policy**, not streaming/bonding or

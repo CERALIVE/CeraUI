@@ -572,6 +572,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"curl's own 3 s transfer cap inside spawnWithTimeout(4 s); failures fold into a typed per-family result, and the complete dual-family verdict is cached for 60 s",
 	},
 	{
+		id: "updates.transportProbe",
+		file: "modules/system/update-transport/executor.ts",
+		symbol: "defaultUpdateTransportDeps.run",
+		command: "[nmcli|resolvectl|curl|openssl|gpgv, ...validated argv]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"argv-only spawnWithTimeout at 4.5s, curl transfer bounded at 3s; individual device/family/host verdicts remain typed",
+	},
+	{
 		id: "connectivity.deviceBoundProbe",
 		file: "modules/network/device-bound-probe.ts",
 		symbol: "checkConnectivityViaDevice",

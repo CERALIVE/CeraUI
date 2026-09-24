@@ -45,13 +45,11 @@
 
 import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
-
 import type {
 	AddonDescriptor,
 	AddonPhase,
 	AddonState,
 } from "@ceraui/rpc/schemas";
-
 import {
 	ADDON_UNAVAILABLE_ERROR,
 	addonDisable,
@@ -68,6 +66,7 @@ import { getAddons, removeAddonState, setAddonState } from "../config.ts";
 import { getEffectiveHardware as getEffectiveHardwareImpl } from "../streaming/pipelines.ts";
 import { isRealDevice } from "../system/device-detection.ts";
 import { broadcastMsg } from "../ui/websocket-server.ts";
+import { aptClientTlsFor } from "./apt-client-tls.ts";
 
 // Re-export the helper's emulated-mode error so callers resolve the single
 // source from the manager surface (mirrors kiosk re-exporting isRealDevice).
@@ -397,7 +396,7 @@ async function probeOsVersion(): Promise<string> {
 /** Fetch `url` to a temp path (parent created), rejecting on a non-2xx status. */
 async function downloadArtifact(url: string, destTmp: string): Promise<void> {
 	await mkdir(dirname(destTmp), { recursive: true });
-	const res = await fetch(url);
+	const res = await fetch(url, await aptClientTlsFor(url));
 	if (!res.ok) {
 		throw new Error(`download failed: HTTP ${res.status} for ${url}`);
 	}

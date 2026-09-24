@@ -2901,6 +2901,15 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
+**Update transport selector [PARTIAL, Todo 33].** `system/update-transport/core.ts`
+is the pure per-uplink/per-family classifier and ranking function;
+`executor.ts` owns bounded DNS, HTTP, HTTPS/mTLS and gpgv probes. See
+`docs/HOST-UPLINK-ELECTION.md` for profile host requirements and the explicit
+Todo-12 live-deploy verification follow-up. Fixture/netns proof is not live
+`apt.ceralive.tv` verification. Add-on downloads use
+`addons/apt-client-tls.ts` only for the exact first-party host. The existing
+APT path has not yet been switched to the new selector.
+
 **Idle detector [PARTIAL, Todo 32].** `system/idle-detector.ts` is a pure
 decision over caller-supplied epoch milliseconds, five last-activity fields and
 the `@ceraui/rpc` update schedule. Exactly 30 minutes since the latest activity

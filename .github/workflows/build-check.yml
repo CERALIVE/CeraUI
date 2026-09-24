@@ -358,7 +358,7 @@ jobs:
         working-directory: CeraUI
         env:
           CERALIVE_NETNS_ISOLATED: "1"
-        run: bun test apps/backend/src/tests/uplink-steering-netns.test.ts apps/backend/src/tests/uplink-shaper-netns.test.ts
+        run: bun test apps/backend/src/tests/uplink-steering-netns.test.ts apps/backend/src/tests/uplink-shaper-netns.test.ts apps/backend/src/tests/update-transport-netns.test.ts
 
       - name: i18n unit tests (bun — frozen rendered oracle + backend labelKey contract)
         working-directory: CeraUI

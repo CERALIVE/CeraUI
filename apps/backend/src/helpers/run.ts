@@ -145,6 +145,10 @@ export const ALLOWED: Set<string> = new Set<string>([
 	"sysctl",
 	// Future scoped conntrack flush on hard-down.
 	"conntrack",
+	"curl",
+	"gpgv",
+	"resolvectl",
+	"openssl",
 ]);
 
 /**
