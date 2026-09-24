@@ -152,6 +152,89 @@ must await the whole transfer before leaving the pinned callback. DNS is not
 pinned, and direct upstream resolution over the prohibited family can fail over
 as `dns-failed`. Details: `docs/HOST-UPLINK-ELECTION.md`.
 
+**Update orchestrator [PARTIAL, Todo 36].** `modules/system/update-orchestrator/`
+is a pure reducer (`reducer.ts`) plus a separate effects layer (`runtime.ts`,
+`resume.ts`, `persistence.ts`, `lock.ts`) implementing the packages+OS+slot-sync
+state machine (18 phases: `idle, checking, available, downloading,
+awaiting-idle, committing, restarting-services, settled, os-available,
+os-staging, os-staged, os-activation-armed, os-verifying, sync-eligible,
+syncing, synced, quarantined, failed`). Persisted atomically to
+`/data/ceralive/update-state/agent.json` (`writeFileAtomicSync`, the Todo
+31/33 convention) and resumed on backend start. `admitStreamStart`/
+`onStreamStart` (`admission.ts`) implement D8 exactly — `committing`/
+`restarting-services` refuse a starting stream, `downloading`/`os-staging` allow
+it and abort the update over network, `syncing` allows it and continues locally
+(a local rsync mirror competes for nothing a stream needs) — every other phase
+is allowed with no action, exhaustively table-tested over all 18 phases with no
+default branch. `schedule.ts` extends (does not literally reuse — see below)
+the `computeNextCheckDelay` PATTERN from `software-updates.ts` for the NEW
+6h/12h cadence, exponential backoff capped at 24h, a separately-based backoff
+for HTTP 429/5xx (Cloudflare Free-plan quota safety), the D7 auto-toggles, and
+D12's cellular policy (packages gated on `allowPackagesOverCellular` for both
+check and install; OS check gated on `allowSystemOverCellular`; OS **install**
+is ALWAYS held on a metered-only uplink regardless of any toggle, unlockable
+only by the exact one-time `system.allowCellularOnce(id)` override — this
+two-role split for `allowSystemOverCellular` is a documented interpretive
+ruling, not stated verbatim in the plan). Three new RPCs —
+`system.checkUpdatesNow`, `system.installUpdatesNow`,
+`system.allowCellularOnce` — bypass IDLE but never the D8 admission block:
+`installUpdatesNow` explicitly re-checks `getIsStreaming()` before ever leaving
+the `available` phase, so an operator cannot force an update through a live
+stream (and the reverse — queuing a stream behind an update — never happens
+either, since the two are structurally independent gates).
+
+**The `awaiting-idle`/`downloading`/`committing` sequencing is a considered
+resolution of a real conflict with Todo 35's mechanism, not an oversight.**
+Todo 35's detached apt-all unit already chains `apt-get -d && apt-get install`
+inside ONE flock hold (see `software-update-service-contract.ts`
+`expectedAptAllScript`) — there is no engine-level hook to pause between
+download and commit for an idle check without either reintroducing the
+`apt-get update`-mid-transaction race Todo 35 closed, or rebuilding a frozen,
+tested contract. So `awaiting-idle` gates the START of that whole combined
+unit (idle, real or operator-bypassed, plus no live stream), and once the unit
+is running, the `downloading` → `committing` sub-phase split is inferred from
+the SAME progress-parsing technique `update-state.ts`'s `deriveInstallState`
+already uses (`unpacking>0||setting_up>0`). D8's safety property is preserved
+exactly: a stream starting while still in the download portion can still
+safely kill the unit (nothing installed yet); once dpkg begins, the phase has
+already moved to `committing` and refuses.
+
+**The `committing`-crash-resume path is the safety-critical proof this task
+exists to deliver.** `resume.ts` queries Todo 35's EXISTING, already-boot-wired
+recovery mechanism (`recoverSoftwareUpdateIfRunning` from `software-updates.ts`
+— read-only reattach/probe, never a new apt invocation) and the same derived
+`getUpdateState()` the rest of the backend trusts; it NEVER spawns a new
+apt/dpkg process itself. A still-running unit is read via progress; a
+confirmed success/failure transitions cleanly; a genuinely ABSENT unit
+(`recovered === false`) or an inconclusive wire state resolves to a NEW,
+deliberately distinct event (`COMMIT_RESUME_UNRESOLVED` → `failed`) rather than
+reusing `COMMIT_FAILED` (→ `quarantined`) — quarantine implies a
+confirmed-bad version worth pinning (Todo 38), and an unresolved resume proves
+no such thing. Every other in-flight phase (`os-staging`, `syncing`,
+`os-activation-armed`) is a structural resume pass-through, since neither has a
+live-recovery mechanism to query yet (OS staging is Todo 39's job; a
+slot-sync's liveness is re-observed by the runtime's own next tick, never by
+resume itself) — resume never triggers a new privileged effect on its own.
+
+**Slot-sync is invoked for the first time from CeraUI's side here**
+(`lock.ts`), per Todo 26's own header comment naming "the future lagged-mirror
+orchestrator" as its caller. `startSlotSync()`/`inspectSlotSync()` share the
+EXACT `SOFTWARE_UPDATE_LOCK` constant Todo 35 already defined (re-exported, not
+redefined) — the script takes that same path non-blockingly (`flock -n`)
+inside its own `run` subcommand, so there is no Node-side lock-acquisition
+primitive to build; `EX_REFUSE` (exit 75) is distinguished from an operational
+failure by reusing `software-update-service-state.ts`'s
+`processExitCode`-derived raw-exit conversion, exported for this reuse. Three
+new `SPAWN_POLICY` entries (`updateOrchestrator.{start,inspect,resetFailure}SlotSync`)
+mirror Todo 35's `softwareUpdates.{start,inspect,cleanup}Transient` pattern.
+
+The wire schema gains a NEW, purely additive sibling field
+(`update_orchestrator`, `packages/rpc/src/schemas/update-orchestrator.schema.ts`)
+on `status.schema.ts`'s frames — a deliberate design choice over widening the
+EXISTING `update_state`/`updateStateSchema` union, which keeps meaning exactly
+what it always meant (Todo-24's apt discovery/install machinery). Every
+existing field is untouched.
+
 The live cockpit consumes an authoritative session-switch namespace, distinct from
 device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,

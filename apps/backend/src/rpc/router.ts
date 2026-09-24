@@ -108,7 +108,9 @@ import {
 	switchInputProcedure,
 } from "./procedures/streaming.procedure.ts";
 import {
+	allowCellularOnceProcedure,
 	checkForUpdatesProcedure,
+	checkUpdatesNowProcedure,
 	getCloudProvidersProcedure,
 	getLogProcedure,
 	getRevisionsProcedure,
@@ -116,6 +118,7 @@ import {
 	getSyslogProcedure,
 	getUpdateCapabilitiesProcedure,
 	getUpdateSettingsProcedure,
+	installUpdatesNowProcedure,
 	kioskConfigureProcedure,
 	kioskOskProcedure,
 	kioskStartProcedure,
@@ -270,6 +273,9 @@ const stableRoutes = {
 		setUpdateSettings: setUpdateSettingsProcedure,
 		getUpdateCapabilities: getUpdateCapabilitiesProcedure,
 		checkForUpdates: checkForUpdatesProcedure,
+		checkUpdatesNow: checkUpdatesNowProcedure,
+		installUpdatesNow: installUpdatesNowProcedure,
+		allowCellularOnce: allowCellularOnceProcedure,
 		sshStart: sshStartProcedure,
 		sshStop: sshStopProcedure,
 		sshSetPersistent: sshSetPersistentProcedure,

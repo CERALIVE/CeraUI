@@ -67,6 +67,11 @@ import {
 import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
 import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
 import {
+	allowCellularOnce,
+	checkUpdatesNow,
+	installUpdatesNow,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import {
 	loadUpdateSettings,
 	saveUpdateSettings,
 } from "../../modules/system/update-settings.ts";
@@ -232,6 +237,49 @@ export const startUpdateProcedure = authedProcedure
 			return { success: false, error: outcome.reason };
 		}
 		logger.info("System: software update started");
+		return { success: true };
+	});
+
+/**
+ * Update-orchestrator operator actions (Todo 36). Both `checkUpdatesNow` and
+ * `installUpdatesNow` bypass the IDLE requirement — an operator asking for
+ * this explicitly does not need to wait for a quiet window — but NEVER bypass
+ * the D8 stream-admission block; `installUpdatesNow` refuses outright while a
+ * stream is live rather than silently queuing behind it (queuing an update
+ * behind a stream is the plan's explicit prohibition, not merely undesirable).
+ */
+export const checkUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await checkUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update check refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update check started (orchestrator)");
+		return { success: true };
+	});
+
+export const installUpdatesNowProcedure = authedProcedure
+	.output(successResponseSchema)
+	.handler(async () => {
+		const outcome = await installUpdatesNow();
+		if (!outcome.started) {
+			logger.info(`System: manual update install refused (${outcome.reason})`);
+			return { success: false, error: outcome.reason };
+		}
+		logger.info("System: manual update install started (orchestrator)");
+		return { success: true };
+	});
+
+export const allowCellularOnceInputSchema = z.object({ id: z.string().min(1) });
+
+export const allowCellularOnceProcedure = authedProcedure
+	.input(allowCellularOnceInputSchema)
+	.output(successResponseSchema)
+	.handler(({ input }) => {
+		allowCellularOnce(input.id);
+		logger.info(`System: one-time cellular override granted (${input.id})`);
 		return { success: true };
 	});
 

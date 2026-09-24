@@ -487,6 +487,57 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			"spawnWithTimeout bounds terminal service cleanup after stdout/stderr and ExecMainStatus have been consumed; cleanup failure remains an explicit failed update outcome rather than being reported as success",
 	},
 	{
+		id: "updateOrchestrator.startSlotSync",
+		file: "modules/system/update-orchestrator/lock.ts",
+		symbol: "startSlotSync",
+		command: "[systemctl, start, --no-block, ceralive-slot-sync.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds only the local systemd queue submission; --no-block returns before the unit's own internal flock/gate evaluation runs, so the lock/refusal outcome is read back later via inspectSlotSync, never inferred from this call",
+	},
+	{
+		id: "updateOrchestrator.inspectSlotSync",
+		file: "modules/system/update-orchestrator/lock.ts",
+		symbol: "inspectSlotSync",
+		command: "[systemctl, show, ceralive-slot-sync.service, ...properties]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds each local state read; exit code 75 (the script's own EX_REFUSE convention) is distinguished from an operational failure so a lock-contention refusal is never reported as a mirror defect",
+	},
+	{
+		id: "updateOrchestrator.resetSlotSyncFailure",
+		file: "modules/system/update-orchestrator/lock.ts",
+		symbol: "resetSlotSyncFailure",
+		command: "[systemctl, reset-failed, ceralive-slot-sync.service]",
+		class: "bounded-command",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"spawnWithTimeout bounds terminal cleanup after a failed/refused probe has been consumed, mirroring softwareUpdates.cleanupTransient so the next attempt does not inherit a stuck ActiveState=failed",
+	},
+	{
 		id: "addons.runValidateCmd",
 		file: "modules/addons/manager.ts",
 		symbol: "runValidateCmd",

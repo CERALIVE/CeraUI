@@ -51,7 +51,12 @@ function parseProperties(output: string): Map<string, string> {
 	return properties;
 }
 
-function processExitCode(mainCode: number, mainStatus: number): number {
+// Exported for reuse by update-orchestrator/lock.ts: the same raw
+// ExecMainCode/ExecMainStatus -> shell-style exit code conversion applies to
+// ANY systemd unit's `systemctl show` probe, not just the apt transaction's —
+// reused rather than re-derived so the two probes can never silently disagree
+// on what a given (code, status) pair means.
+export function processExitCode(mainCode: number, mainStatus: number): number {
 	if (mainCode === 1) return mainStatus;
 	return mainStatus > 0 ? 128 + mainStatus : 1;
 }

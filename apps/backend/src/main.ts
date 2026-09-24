@@ -154,6 +154,7 @@ import {
 } from "./modules/system/ssh.ts";
 import { reconcileAptChannel } from "./modules/system/update-apt-channel.ts";
 import { readUpdateCapabilities } from "./modules/system/update-capabilities.ts";
+import { startUpdateOrchestrator } from "./modules/system/update-orchestrator/runtime.ts";
 import { loadUpdateSettings } from "./modules/system/update-settings.ts";
 import { updatePinController } from "./modules/system/update-transport/pin.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
@@ -427,6 +428,12 @@ await guardNonCritical("software-update-recovery", async () => {
 	await recoverSoftwareUpdateIfRunning();
 });
 periodicCheckForSoftwareUpdates();
+// Todo 36: the packages+OS+slot-sync orchestrator. Its own resume path (G17)
+// separately reconciles a persisted `committing` phase against the recovery
+// probe just above — starting it AFTER that recovery call lets the
+// orchestrator observe an already-settled `getUpdateState()` rather than a
+// stale in-flight one.
+await guardNonCritical("update-orchestrator", startUpdateOrchestrator);
 
 initNetworkInterfaceMonitoring();
 initUplinkHealth();
