@@ -2901,6 +2901,17 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
+**Post-commit recovery [PARTIAL, Todo 38].** The orchestrator now runs the
+`/proc/<pid>/maps` + cgroup stale-service scan after a confirmed commit and
+defers eligible `systemctl restart --no-block` actions until Todo 32's idle
+verdict. Protected service families get persistent restart recommendations;
+`ceralive.service` is deferred only while the detached update still runs, not
+excluded forever. `quarantine.ts` writes version-1 `quarantine.json` atomically,
+pins exact failed package candidates at -1 through `systemd-run`, and exports
+`isOsVersionQuarantined` for Todo 39. See
+[`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md) for the exact schema
+and the remaining OS/credential/transport producer-hook boundary.
+
 **Update transport selector [PARTIAL, Todo 33].** `system/update-transport/core.ts`
 is the pure per-uplink/per-family classifier and ranking function;
 `executor.ts` owns bounded DNS, HTTP, HTTPS/mTLS and gpgv probes. See

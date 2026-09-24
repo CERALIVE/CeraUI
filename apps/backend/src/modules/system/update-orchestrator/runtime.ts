@@ -31,6 +31,7 @@ import type {
 import { logger } from "../../../helpers/logger.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
 import { getIdleStatus } from "../idle-activity.ts";
+import { isRealDevice } from "../device-detection.ts";
 import {
 	getAvailableUpdates,
 	getUpdateState,
@@ -49,9 +50,12 @@ import {
 	type SlotSyncProbeState,
 	startSlotSync,
 } from "./lock.ts";
+import { notifyUpdate } from "./notifications.ts";
 import { loadOrchestratorState, saveOrchestratorState } from "./persistence.ts";
+import { UpdateQuarantine } from "./quarantine.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import { resumeOrchestratorState } from "./resume.ts";
+import { defaultStaleServiceDeps, reconcileStaleUnits } from "./stale-services.ts";
 import {
 	canStartManualCheck,
 	canStartManualInstall,
@@ -92,6 +96,8 @@ export interface OrchestratorRuntimeDeps {
 	readonly resetSlotSyncFailure: () => Promise<void>;
 	readonly recoverSoftwareUpdateIfRunning: () => Promise<boolean>;
 	readonly persist: (state: OrchestratorState) => void;
+	readonly quarantine: UpdateQuarantine;
+	readonly restartStale: (isIdle: () => Promise<boolean>, transactionRunning: () => boolean) => Promise<boolean>;
 }
 
 async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
@@ -151,6 +157,11 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	resetSlotSyncFailure,
 	recoverSoftwareUpdateIfRunning,
 	persist: saveOrchestratorState,
+	quarantine: new UpdateQuarantine(),
+	restartStale: async (isIdle, transactionRunning) => {
+		if (!(await isRealDevice())) return true;
+		return reconcileStaleUnits({ ...defaultStaleServiceDeps, isIdle, transactionRunning });
+	},
 };
 
 let deps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps;
@@ -273,6 +284,16 @@ async function runPackageCheckCycle(): Promise<void> {
 	const outcomeNow = deps.now();
 	if (error === null) {
 		const packageCount = deps.getAvailablePackageCount();
+		const wire = deps.getPackageInstallWireState();
+		if (wire.kind === "available") {
+			await deps.quarantine.reconcileCandidates(wire.packages?.flatMap((item) =>
+				item.version ? [{ name: item.name, version: item.version }] : [],
+			) ?? []);
+			if (packageCount > 0) notifyUpdate({
+				kind: "updates-available",
+				id: wire.packages?.map((item) => `${item.name}=${item.version ?? "unknown"}`).sort().join(",") ?? wire.identity.version,
+			});
+		}
 		const nextAttemptAt =
 			outcomeNow +
 			computeNextCheckDelayMs({
@@ -321,6 +342,7 @@ async function runPackageCheckCycle(): Promise<void> {
 				: String((error as Error)?.message ?? error),
 		nextAttemptAt,
 	});
+	notifyUpdate({ kind: "refused", id: `packages:${String(error)}`, reason: String(error) });
 }
 
 // SoftwareUpdateError's typed cases don't carry an HTTP status directly, but
@@ -355,12 +377,22 @@ async function maybeStartPackageInstall(opts: {
 		const idle = await deps.isIdle(settings.schedule);
 		if (!idle) return;
 	}
+	const available = deps.getPackageInstallWireState();
+	if (available.kind === "available") {
+		await deps.quarantine.savePending(available.packages?.filter((item) => item.actionable).map((item) => ({
+			name: item.name,
+			...(item.version ? { version: item.version } : {}),
+		})) ?? available.identity.packages.map((name) => ({ name })));
+	}
 	const result = deps.startPackageInstall();
-	if (!result.started) return; // stays awaiting-idle; retried next tick
+	if (!result.started) {
+		await deps.quarantine.clearPending();
+		return; // stays awaiting-idle; retried next tick
+	}
 	dispatch({ type: "INSTALL_UNIT_STARTED", now: deps.now() });
 }
 
-function pollPackageInstallProgress(): void {
+async function pollPackageInstallProgress(): Promise<void> {
 	if (state.phase !== "downloading" && state.phase !== "committing") return;
 	const wire = deps.getPackageInstallWireState();
 	const now = deps.now();
@@ -388,14 +420,17 @@ function pollPackageInstallProgress(): void {
 		if (state.phase === "downloading")
 			dispatch({ type: "COMMIT_PHASE_ENTERED", now });
 		dispatch({ type: "COMMIT_SUCCEEDED", now });
-		dispatch({ type: "SERVICES_RESTARTED", now });
 		return;
 	}
 	if (wire.kind === "failed") {
 		if (state.phase === "downloading") {
 			dispatch({ type: "DOWNLOAD_FAILED", now, reason: wire.reason });
 		} else {
+			const pending = await deps.quarantine.readPending();
+			await deps.quarantine.recordPackageFailure(pending.flatMap((item) => item.version ? [{ name: item.name, version: item.version }] : []), String(state.enteredAt), wire.reason);
+			await deps.quarantine.clearPending();
 			dispatch({ type: "COMMIT_FAILED", now, reason: wire.reason });
+			notifyUpdate({ kind: "refused", id: `commit:${state.enteredAt}`, reason: wire.reason });
 		}
 	}
 }
@@ -442,6 +477,7 @@ async function pollSlotSync(): Promise<void> {
 	if (probe.kind === "running") return;
 	if (probe.kind === "succeeded") {
 		dispatch({ type: "SYNC_SUCCEEDED", now });
+		notifyUpdate({ kind: "slots-current", id: String(now) });
 		return;
 	}
 	if (probe.kind === "refused" || probe.kind === "failed") {
@@ -516,7 +552,19 @@ export async function runOrchestratorTick(): Promise<void> {
 	} else if (state.phase === "awaiting-idle") {
 		await maybeStartPackageInstall({ bypassIdle: false });
 	} else if (state.phase === "downloading" || state.phase === "committing") {
-		pollPackageInstallProgress();
+		await pollPackageInstallProgress();
+	} else if (state.phase === "restarting-services") {
+		const settings = await deps.loadSettings();
+		const done = await deps.restartStale(
+			() => deps.isIdle(settings.schedule),
+			() => ["downloading", "installing"].includes(deps.getPackageInstallWireState().kind),
+		);
+		if (done) {
+			const pending = await deps.quarantine.readPending();
+			notifyUpdate({ kind: "installed", id: String(state.enteredAt), packages: pending.map((item) => item.name) });
+			await deps.quarantine.clearPending();
+			dispatch({ type: "SERVICES_RESTARTED", now: deps.now() });
+		}
 	} else if (state.phase === "sync-eligible") {
 		await maybeStartSlotSync();
 	} else if (state.phase === "syncing") {
@@ -640,6 +688,15 @@ export async function startUpdateOrchestrator(
 		getUpdateState: deps.getPackageInstallWireState,
 		now: deps.now,
 	});
+	if (state.phase === "quarantined" && baseline.phase === "committing") {
+		const pending = await deps.quarantine.readPending();
+		await deps.quarantine.recordPackageFailure(
+			pending.flatMap((item) => item.version ? [{ name: item.name, version: item.version }] : []),
+			String(baseline.enteredAt),
+			state.failureReason ?? "apt-exit-nonzero",
+		);
+		await deps.quarantine.clearPending();
+	}
 	deps.persist(state);
 	started = true;
 	scheduleNextTick();

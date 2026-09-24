@@ -106,6 +106,14 @@ is what this gate exists because the type system alone could not catch.
 
 ## STRUCTURE
 
+**Update recovery [PARTIAL, Todo 38].** The update orchestrator scans deleted
+system-library mappings, identifies owning systemd units via cgroup, restarts
+eligible units only when idle, and recommends manual restarts for protected units.
+It quarantines confirmed failed APT candidates by exact version; the schema and
+the OS agent's `os[].version` read contract are in
+[`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md). `ceralive.service` restarts
+only after its transaction settles, not during a live update. Fixture proof only.
+
 **Update-system foundation [PARTIAL, Todo 31].** `@ceraui/rpc/schemas`
 owns the update settings and image-capability wire types. The backend's
 `modules/system/update-settings.ts` persists `update-settings.json` alongside
