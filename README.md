@@ -1,5 +1,13 @@
 # CeraUI
 
+**OS update agent [PARTIAL].** Signed channel manifests are verified before
+RAUC stages a new inactive slot. Automatic OS installs require an image with
+`rauc-verity-streaming` and an `/etc/ceralive/os-release-version` CalVer stamp;
+older images have neither and cannot use this route. The first stamped image
+must be installed by an approved manual route. This source implementation has
+offline tests; no OS channel release, hosted bundle, or on-device install is
+claimed. See `apps/backend/AGENTS.md` under “OS agent”.
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).

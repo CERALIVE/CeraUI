@@ -111,6 +111,62 @@ export interface SpawnSite {
  * are excluded by design. `cerastream` is excluded: it is IPC-driven, not spawned.
  */
 export const SPAWN_POLICY: readonly SpawnSite[] = [
+	...(
+		[
+			[
+				"osManifest.cmsAndMetadata",
+				"command / cmsSigner",
+				"[openssl|dpkg-query|id, validated fixed argv]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.fetch",
+				"fetchAsOta",
+				"[runuser, -u, ceralive-ota, --, curl, fixed HTTPS URL]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.compare",
+				"compareVersions",
+				"[dpkg, --compare-versions, CalVer, gt, CalVer]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.raucInstall",
+				"stageOsBundle",
+				"[flock, -n, -x, shared-update-lock, rauc, install, verified-bundle-url]",
+				"bounded-command",
+			],
+			[
+				"osManifest.raucProgress",
+				"stageOsBundle",
+				"[busctl, get-property, RAUC, Progress]",
+				"bounded-probe",
+			],
+			[
+				"osManifest.activate",
+				"armOsActivation",
+				"[systemctl, start, ceralive-rauc-arm@arm|now.service]",
+				"bounded-command",
+			],
+		] as const
+	).map(([id, symbol, command, kind]) => ({
+		id,
+		file: "modules/system/update-orchestrator/os-agent.ts",
+		symbol,
+		command,
+		class: kind,
+		status: "enforced" as const,
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		mechanism:
+			"argv-only spawnWithTimeout; RAUC install stays inside the UID pin through confirmed completion",
+	})),
 	{
 		id: "boot.systemdReady",
 		file: "helpers/systemd-ready.ts",
@@ -541,7 +597,8 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		id: "updateOrchestrator.installQuarantinePin",
 		file: "modules/system/update-orchestrator/quarantine.ts",
 		symbol: "writeQuarantinePins",
-		command: "[systemd-run, --wait, --collect, --quiet, --, /usr/bin/install, -m, 0644, private-source, fixed-apt-preference]",
+		command:
+			"[systemd-run, --wait, --collect, --quiet, --, /usr/bin/install, -m, 0644, private-source, fixed-apt-preference]",
 		class: "bounded-command",
 		contract: {
 			timed: true,
@@ -551,7 +608,8 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			lifetimeTimeoutExempt: false,
 		},
 		status: "enforced",
-		mechanism: "Bounded PID-1-owned argv-only install to the fixed apt preference path; no shell or arbitrary destination",
+		mechanism:
+			"Bounded PID-1-owned argv-only install to the fixed apt preference path; no shell or arbitrary destination",
 	},
 	{
 		id: "updateOrchestrator.compareQuarantineCandidate",
@@ -583,7 +641,8 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 			lifetimeTimeoutExempt: false,
 		},
 		status: "enforced",
-		mechanism: "Exact cgroup service with deleted system mapping, idle window and protected-service guard",
+		mechanism:
+			"Exact cgroup service with deleted system mapping, idle window and protected-service guard",
 	},
 	{
 		id: "updateOrchestrator.stopPackageInstallForStream",

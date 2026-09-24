@@ -2901,6 +2901,29 @@ retention, and IPv6 URL handling at all three consumers).
 
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
+**OS agent [PARTIAL, Todo 39].** `update-orchestrator/os-manifest.ts` owns the
+strict v1 schema, trusted signer boundary, CalVer booted-version read, and
+root-only `drill` override. `os-agent.ts` fetches `.json` and `.sig` as the
+image-declared `ota_uid` under `updatePinController.run("os", ...)`; only a CMS
+verified against `/etc/rauc/ceralive-keyring.pem` with exact manifest signer CN,
+codeSigning EKU and no emailProtection may reach field parsing. `rauc install`
+runs under the same UID pin until completion, with the shared flock and read-only
+Operation/Progress polls. Its success writes `os-staged.json` before the
+per-channel `manifest-serial.<channel>` file, then the image's
+`ceralive-rauc-arm@arm.service` arms next-idle activation. Seven days pending
+invokes `@now` only without a stream; a new boot compares the stamped CalVer to
+the staged version and quarantines a mismatch. A backend restart during an
+ongoing RAUC transfer does not claim success on an inconclusive daemon outcome:
+once it becomes idle without a committed receipt, the orchestrator fails closed.
+These are fixture/probe tests, not a live signed release or board receipt.
+
+The only anti-downgrade source is `/etc/ceralive/os-release-version`; absent or
+malformed yields `booted_version_unknown`, never a timestamp/commit fallback.
+The stamp exists only on a deliberate release-cut image, so **all currently
+booted boards are expected to refuse OS-agent staging** until Wave 5 builds and
+installs such an image by another approved path. Legacy-capability images have
+no OS agent; their 15-name package update path remains independent.
+
 **Stream-admission wiring [EXISTS, Todo 37].** `modules/streaming/stream-session-orchestrator.ts`'s
 `start()` — the single choke point every launch origin (UI, remote-control,
 autostart, set-profile, restoration) calls through, since all five funnel to

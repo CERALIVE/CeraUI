@@ -106,6 +106,20 @@ is what this gate exists because the type system alone could not catch.
 
 ## STRUCTURE
 
+**Signed OS channel agent [PARTIAL, Todo 39].** The backend validates channel
+manifests under `modules/system/update-orchestrator/`: CMS against the RAUC root,
+then the separate manifest signer's CN and codeSigning-only EKU, then strict v1
+fields. It fetches the selected OS channel under `ceralive-ota` through the
+UID-pinned route, stages a verity bundle via RAUC under the shared update lock,
+and only after confirmed success records that channel's serial and arms deferred
+activation. `os-channel-override` is a root-owned, exact-`drill` bench-only file;
+APT always follows Settings. **The comparison reads only
+`/etc/ceralive/os-release-version` (CalVer), never `image-version` or the build
+commit.** Every existing board lacks that release-only stamp, so its OS agent
+correctly refuses with `booted_version_unknown` until a future release-cut
+image is installed through another path. The actual release publishing and
+board install remain Wave 5, not a claim of this fixture-tested agent.
+
 **Update recovery [PARTIAL, Todo 38].** The update orchestrator scans deleted
 system-library mappings, identifies owning systemd units via cgroup, restarts
 eligible units only when idle, and recommends manual restarts for protected units.

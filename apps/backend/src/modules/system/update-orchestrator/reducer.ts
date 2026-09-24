@@ -129,6 +129,7 @@ function reduceIdle(
 		case "OS_CHECK_STARTED":
 			return enter(state, event.now, {
 				phase: "checking",
+				failureReason: null,
 				osCheck: clockAtAttemptStart(state.osCheck, event.now),
 			});
 		case "CELLULAR_OVERRIDE_GRANTED":
@@ -152,7 +153,11 @@ function reduceChecking(
 				event.kind === "packages"
 					? { packageCheck: clockAfterSuccess(event.now, event.nextAttemptAt) }
 					: { osCheck: clockAfterSuccess(event.now, event.nextAttemptAt) };
-			return enter(state, event.now, { phase: "idle", ...clockPatch });
+			return enter(state, event.now, {
+				phase: "idle",
+				failureReason: null,
+				...clockPatch,
+			});
 		}
 		case "CHECK_SUCCEEDED_PACKAGES":
 			return enter(state, event.now, {
@@ -162,6 +167,7 @@ function reduceChecking(
 		case "CHECK_SUCCEEDED_OS":
 			return enter(state, event.now, {
 				phase: "os-available",
+				failureReason: null,
 				osCheck: clockAfterSuccess(event.now, event.nextAttemptAt),
 			});
 		case "CHECK_FAILED": {
@@ -183,7 +189,11 @@ function reduceChecking(
 								event.nextAttemptAt,
 							),
 						};
-			return enter(state, event.now, { phase: "idle", ...clockPatch });
+			return enter(state, event.now, {
+				phase: "idle",
+				failureReason: event.kind === "os" ? event.reason : state.failureReason,
+				...clockPatch,
+			});
 		}
 		default:
 			return state;
@@ -337,6 +347,7 @@ function reduceOsAvailable(
 				phase: "os-staging",
 				progress: { percent: 0, etaSeconds: 0 },
 				failureReason: null,
+				cellularOverrideId: null,
 			});
 		case "OS_CHECK_STARTED":
 			return enter(state, event.now, {

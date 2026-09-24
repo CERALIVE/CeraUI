@@ -43,7 +43,7 @@ const TIMEOUT_MS = 4_500;
 export type UpdateProfile = {
 	readonly profile: "apt" | "os";
 	readonly board: string;
-	readonly channel: "stable" | "beta";
+	readonly channel: "stable" | "beta" | "drill";
 };
 export type UpdateTransportDeps = {
 	listIfnames: () => string[];

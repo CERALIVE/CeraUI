@@ -30,8 +30,8 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { logger } from "../../../helpers/logger.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
-import { getIdleStatus } from "../idle-activity.ts";
 import { isRealDevice } from "../device-detection.ts";
+import { getIdleStatus } from "../idle-activity.ts";
 import {
 	getAvailableUpdates,
 	getUpdateState,
@@ -52,15 +52,20 @@ import {
 	startSlotSync,
 } from "./lock.ts";
 import { notifyUpdate } from "./notifications.ts";
+import {
+	armOsActivation,
+	checkOsChannel,
+	inspectOsOperation,
+	readBootId,
+	readStagedReceipt,
+	stageOsBundle,
+} from "./os-agent.ts";
+import type { OsChannelManifest } from "./os-manifest.ts";
+import { readBootedOsReleaseVersion } from "./os-manifest.ts";
 import { loadOrchestratorState, saveOrchestratorState } from "./persistence.ts";
 import { UpdateQuarantine } from "./quarantine.ts";
 import { reduceOrchestrator } from "./reducer.ts";
 import { resumeOrchestratorState } from "./resume.ts";
-import { defaultStaleServiceDeps, reconcileStaleUnits } from "./stale-services.ts";
-import {
-	killAndRestartRaucForStream,
-	stopPackageInstallUnitForStream,
-} from "./stream-abort.ts";
 import {
 	canStartManualCheck,
 	canStartManualInstall,
@@ -68,6 +73,14 @@ import {
 	decideCellularGate,
 	shouldAttemptScheduledCheck,
 } from "./schedule.ts";
+import {
+	defaultStaleServiceDeps,
+	reconcileStaleUnits,
+} from "./stale-services.ts";
+import {
+	killAndRestartRaucForStream,
+	stopPackageInstallUnitForStream,
+} from "./stream-abort.ts";
 import {
 	initialOrchestratorState,
 	type OrchestratorEvent,
@@ -94,23 +107,32 @@ export interface OrchestratorRuntimeDeps {
 	 */
 	readonly stopPackageInstallUnit: () => Promise<void>;
 	readonly killAndRestartRaucForStream: () => Promise<void>;
-	// Todo-39 seam: no fetch/verify/RAUC mechanism exists yet. The honest
-	// default always reports "nothing available" rather than fabricating a
-	// manifest — a legacy or not-yet-capable image must never appear to have
-	// found an OS update it cannot actually stage.
-	readonly checkOsManifest: () => Promise<{
+	readonly checkOsManifest: (channel?: "stable" | "beta") => Promise<{
 		readonly available: boolean;
 		readonly rateLimited: boolean;
 		readonly failed: boolean;
 		readonly reason: string;
+		readonly manifest?: OsChannelManifest;
 	}>;
+	readonly stageOs: (
+		manifest: OsChannelManifest,
+		onProgress: (percent: number) => void,
+	) => Promise<void>;
+	readonly armOs: (now: boolean) => Promise<void>;
+	readonly readOsReceipt: typeof readStagedReceipt;
+	readonly readBootId: typeof readBootId;
+	readonly readBootedVersion: typeof readBootedOsReleaseVersion;
+	readonly inspectOsOperation: typeof inspectOsOperation;
 	readonly startSlotSync: () => Promise<void>;
 	readonly inspectSlotSync: () => Promise<SlotSyncProbeState>;
 	readonly resetSlotSyncFailure: () => Promise<void>;
 	readonly recoverSoftwareUpdateIfRunning: () => Promise<boolean>;
 	readonly persist: (state: OrchestratorState) => void;
 	readonly quarantine: UpdateQuarantine;
-	readonly restartStale: (isIdle: () => Promise<boolean>, transactionRunning: () => boolean) => Promise<boolean>;
+	readonly restartStale: (
+		isIdle: () => Promise<boolean>,
+		transactionRunning: () => boolean,
+	) => Promise<boolean>;
 }
 
 async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
@@ -160,13 +182,38 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	getPackageInstallWireState: getUpdateState,
 	stopPackageInstallUnit: stopPackageInstallUnitForStream,
 	killAndRestartRaucForStream,
-	// Honest Todo-39 placeholder — see the interface doc above.
-	checkOsManifest: async () => ({
-		available: false,
-		rateLimited: false,
-		failed: false,
-		reason: "",
-	}),
+	checkOsManifest: async (channel) => {
+		try {
+			const manifest = await checkOsChannel(
+				channel ?? (await loadUpdateSettings()).channel,
+				new UpdateQuarantine(),
+			);
+			return {
+				available: true,
+				rateLimited: false,
+				failed: false,
+				reason: "",
+				manifest,
+			};
+		} catch (error) {
+			const reason =
+				error instanceof Error ? error.message : "manifest_check_failed";
+			return {
+				available: false,
+				rateLimited: reason === "rate_limited",
+				failed: true,
+				reason,
+			};
+		}
+	},
+	stageOs: async (manifest, onProgress) => {
+		await stageOsBundle(manifest, onProgress);
+	},
+	armOs: armOsActivation,
+	readOsReceipt: readStagedReceipt,
+	readBootId,
+	readBootedVersion: readBootedOsReleaseVersion,
+	inspectOsOperation,
 	startSlotSync,
 	inspectSlotSync,
 	resetSlotSyncFailure,
@@ -175,7 +222,11 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	quarantine: new UpdateQuarantine(),
 	restartStale: async (isIdle, transactionRunning) => {
 		if (!(await isRealDevice())) return true;
-		return reconcileStaleUnits({ ...defaultStaleServiceDeps, isIdle, transactionRunning });
+		return reconcileStaleUnits({
+			...defaultStaleServiceDeps,
+			isIdle,
+			transactionRunning,
+		});
 	},
 };
 
@@ -183,6 +234,9 @@ let deps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps;
 let state: OrchestratorState = initialOrchestratorState(Date.now());
 let tickTimer: ReturnType<typeof setTimeout> | undefined;
 let started = false;
+let osCandidate: OsChannelManifest | undefined;
+let osStageInProcess = false;
+let osForceActivated = false;
 
 const IDLE_TICK_MS = 60_000;
 const ACTIVE_TICK_MS = 3_000;
@@ -201,6 +255,9 @@ export function resetOrchestratorRuntimeForTest(): void {
 	started = false;
 	state = initialOrchestratorState(Date.now());
 	deps = defaultOrchestratorRuntimeDeps;
+	osCandidate = undefined;
+	osStageInProcess = false;
+	osForceActivated = false;
 }
 
 export function getOrchestratorState(): OrchestratorState {
@@ -249,6 +306,14 @@ export async function checkUpdatesNow(): Promise<ManualCheckOutcome> {
 	if (!canStartManualCheck(state.phase))
 		return { started: false, reason: "busy" };
 	await runPackageCheckCycle();
+	if (state.phase === "idle") {
+		const capabilities = await deps.loadCapabilities();
+		if (
+			capabilities.mode === "capable" &&
+			capabilities.features.includes("rauc-verity-streaming")
+		)
+			await runOsCheckAfterCellularGate(await deps.loadSettings());
+	}
 	return { started: true };
 }
 
@@ -256,7 +321,11 @@ export type ManualInstallOutcome =
 	| { readonly started: true }
 	| {
 			readonly started: false;
-			readonly reason: "busy" | "not_available" | "stream_active";
+			readonly reason:
+				| "busy"
+				| "not_available"
+				| "stream_active"
+				| "booted_version_unknown";
 	  };
 
 const PACKAGE_PIPELINE_BUSY_PHASES: readonly OrchestratorState["phase"][] = [
@@ -268,6 +337,26 @@ const PACKAGE_PIPELINE_BUSY_PHASES: readonly OrchestratorState["phase"][] = [
 ];
 
 export async function installUpdatesNow(): Promise<ManualInstallOutcome> {
+	if (
+		state.phase === "idle" &&
+		state.failureReason === "booted_version_unknown"
+	)
+		return { started: false, reason: "booted_version_unknown" };
+	if (state.phase === "os-available") {
+		if (deps.isStreamLive()) return { started: false, reason: "stream_active" };
+		const capabilities = await deps.loadCapabilities();
+		if (
+			capabilities.mode !== "capable" ||
+			!capabilities.features.includes("rauc-verity-streaming")
+		)
+			return { started: false, reason: "not_available" };
+		await maybeStartOsStage(true);
+		return ["os-staging", "os-staged", "os-activation-armed"].includes(
+			getOrchestratorState().phase,
+		)
+			? { started: true }
+			: { started: false, reason: "not_available" };
+	}
 	if (!canStartManualInstall(state.phase, "packages")) {
 		return {
 			started: false,
@@ -396,13 +485,20 @@ async function runPackageCheckCycle(): Promise<void> {
 		const packageCount = deps.getAvailablePackageCount();
 		const wire = deps.getPackageInstallWireState();
 		if (wire.kind === "available") {
-			await deps.quarantine.reconcileCandidates(wire.packages?.flatMap((item) =>
-				item.version ? [{ name: item.name, version: item.version }] : [],
-			) ?? []);
-			if (packageCount > 0) notifyUpdate({
-				kind: "updates-available",
-				id: wire.packages?.map((item) => `${item.name}=${item.version ?? "unknown"}`).sort().join(",") ?? wire.identity.version,
-			});
+			await deps.quarantine.reconcileCandidates(
+				wire.packages?.flatMap((item) =>
+					item.version ? [{ name: item.name, version: item.version }] : [],
+				) ?? [],
+			);
+			if (packageCount > 0)
+				notifyUpdate({
+					kind: "updates-available",
+					id:
+						wire.packages
+							?.map((item) => `${item.name}=${item.version ?? "unknown"}`)
+							.sort()
+							.join(",") ?? wire.identity.version,
+				});
 		}
 		const nextAttemptAt =
 			outcomeNow +
@@ -452,7 +548,11 @@ async function runPackageCheckCycle(): Promise<void> {
 				: String((error as Error)?.message ?? error),
 		nextAttemptAt,
 	});
-	notifyUpdate({ kind: "refused", id: `packages:${String(error)}`, reason: String(error) });
+	notifyUpdate({
+		kind: "refused",
+		id: `packages:${String(error)}`,
+		reason: String(error),
+	});
 }
 
 // SoftwareUpdateError's typed cases don't carry an HTTP status directly, but
@@ -489,10 +589,14 @@ async function maybeStartPackageInstall(opts: {
 	}
 	const available = deps.getPackageInstallWireState();
 	if (available.kind === "available") {
-		await deps.quarantine.savePending(available.packages?.filter((item) => item.actionable).map((item) => ({
-			name: item.name,
-			...(item.version ? { version: item.version } : {}),
-		})) ?? available.identity.packages.map((name) => ({ name })));
+		await deps.quarantine.savePending(
+			available.packages
+				?.filter((item) => item.actionable)
+				.map((item) => ({
+					name: item.name,
+					...(item.version ? { version: item.version } : {}),
+				})) ?? available.identity.packages.map((name) => ({ name })),
+		);
 	}
 	const result = deps.startPackageInstall();
 	if (!result.started) {
@@ -537,10 +641,20 @@ async function pollPackageInstallProgress(): Promise<void> {
 			dispatch({ type: "DOWNLOAD_FAILED", now, reason: wire.reason });
 		} else {
 			const pending = await deps.quarantine.readPending();
-			await deps.quarantine.recordPackageFailure(pending.flatMap((item) => item.version ? [{ name: item.name, version: item.version }] : []), String(state.enteredAt), wire.reason);
+			await deps.quarantine.recordPackageFailure(
+				pending.flatMap((item) =>
+					item.version ? [{ name: item.name, version: item.version }] : [],
+				),
+				String(state.enteredAt),
+				wire.reason,
+			);
 			await deps.quarantine.clearPending();
 			dispatch({ type: "COMMIT_FAILED", now, reason: wire.reason });
-			notifyUpdate({ kind: "refused", id: `commit:${state.enteredAt}`, reason: wire.reason });
+			notifyUpdate({
+				kind: "refused",
+				id: `commit:${state.enteredAt}`,
+				reason: wire.reason,
+			});
 		}
 	}
 }
@@ -615,6 +729,135 @@ async function pollSlotSync(): Promise<void> {
 	dispatch({ type: "SYNC_FAILED", now, reason: "slot-sync-unit-absent" });
 }
 
+const OS_FORCE_ACTIVATION_MS = 7 * 24 * 60 * 60_000;
+
+async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
+	if (state.phase !== "os-available" || deps.isStreamLive()) return;
+	if (!osCandidate) {
+		await runOsCheckAfterCellularGate(await deps.loadSettings());
+		if (state.phase !== "os-available" || !osCandidate) return;
+	}
+	const capabilities = await deps.loadCapabilities();
+	if (
+		capabilities.mode !== "capable" ||
+		!capabilities.features.includes("rauc-verity-streaming")
+	)
+		return;
+	const settings = await deps.loadSettings();
+	if (
+		!bypassIdle &&
+		(!settings.systemAuto || !(await deps.isIdle(settings.schedule)))
+	)
+		return;
+	const gate = decideCellularGate({
+		onlyMeteredCandidateExists: await deps.onlyMeteredCandidateExists(),
+		kind: "os",
+		stage: "install",
+		allowPackagesOverCellular: settings.allowPackagesOverCellular,
+		allowSystemOverCellular: settings.allowSystemOverCellular,
+		cellularOverrideId: state.cellularOverrideId,
+		candidateId: osCandidate.version,
+	});
+	if (!gate.allowed) {
+		if (gate.needsOverride)
+			notifyUpdate({
+				kind: "cellular-approval",
+				id: osCandidate.version,
+				size: String(osCandidate.bundle.size),
+			});
+		return;
+	}
+	const manifest = osCandidate;
+	dispatch({ type: "OS_STAGING_STARTED", now: deps.now() });
+	osStageInProcess = true;
+	scheduleNextTick();
+	try {
+		await deps.stageOs(manifest, (percent) => {
+			if (state.phase === "os-staging")
+				dispatch({
+					type: "OS_STAGING_PROGRESS",
+					now: deps.now(),
+					progress: { percent, etaSeconds: 0 },
+				});
+		});
+		if (getOrchestratorState().phase !== "os-staging") return; // D8 stream admission aborted RAUC meanwhile
+		dispatch({ type: "OS_STAGED", now: deps.now() });
+		osCandidate = undefined;
+		notifyUpdate({
+			kind: "os-staged",
+			id: manifest.version,
+			version: manifest.version,
+		});
+	} catch (error) {
+		if (getOrchestratorState().phase !== "os-staging") return;
+		const reason = error instanceof Error ? error.message : "rauc_stage_failed";
+		dispatch({ type: "OS_STAGING_FAILED", now: deps.now(), reason });
+		notifyUpdate({ kind: "refused", id: `os:${manifest.version}`, reason });
+	} finally {
+		osStageInProcess = false;
+	}
+}
+
+async function reconcileOsActivation(): Promise<void> {
+	if (state.phase === "os-staged") {
+		try {
+			await deps.armOs(false);
+			dispatch({ type: "OS_ACTIVATION_ARMED", now: deps.now() });
+		} catch (error) {
+			logger.warn("update-orchestrator: activation arming deferred", { error });
+		}
+	}
+	if (state.phase !== "os-activation-armed") return;
+	const receipt = await deps.readOsReceipt();
+	if (!receipt) return;
+	if (receipt.bootId !== (await deps.readBootId())) {
+		dispatch({ type: "OS_REBOOT_OBSERVED", now: deps.now() });
+		await verifyOsBoot();
+		return;
+	}
+	if (
+		!osForceActivated &&
+		deps.now() - receipt.stagedAt >= OS_FORCE_ACTIVATION_MS &&
+		!deps.isStreamLive()
+	) {
+		await deps.armOs(true);
+		osForceActivated = true;
+		notifyUpdate({
+			kind: "os-activated",
+			id: receipt.version,
+			version: receipt.version,
+		});
+	}
+}
+
+async function verifyOsBoot(): Promise<void> {
+	if (state.phase !== "os-verifying") return;
+	const receipt = await deps.readOsReceipt();
+	if (!receipt) return;
+	const booted = await deps.readBootedVersion();
+	if (!booted) return; // no evidence to declare a rollback
+	if (booted === receipt.version) {
+		dispatch({ type: "OS_VERIFIED", now: deps.now() });
+		notifyUpdate({
+			kind: "os-activated",
+			id: receipt.version,
+			version: receipt.version,
+		});
+	} else {
+		await deps.quarantine.recordOsRollback(receipt.version, booted);
+		dispatch({
+			type: "OS_ROLLBACK_DETECTED",
+			now: deps.now(),
+			reason: "os_version_mismatch",
+		});
+		notifyUpdate({
+			kind: "os-rollback",
+			id: receipt.version,
+			version: receipt.version,
+		});
+	}
+}
+
 // ─── settle/sync acknowledgement ───────────────────────────────────────────
 
 function acknowledgeTerminalRestPhases(): void {
@@ -643,6 +886,7 @@ export async function runOrchestratorTick(): Promise<void> {
 		) {
 			await runPackageCheckAfterCellularGate(settings);
 		} else if (
+			capabilities.mode === "capable" &&
 			capabilities.features.includes("rauc-verity-streaming") &&
 			shouldAttemptScheduledCheck({
 				now,
@@ -667,14 +911,37 @@ export async function runOrchestratorTick(): Promise<void> {
 		const settings = await deps.loadSettings();
 		const done = await deps.restartStale(
 			() => deps.isIdle(settings.schedule),
-			() => ["downloading", "installing"].includes(deps.getPackageInstallWireState().kind),
+			() =>
+				["downloading", "installing"].includes(
+					deps.getPackageInstallWireState().kind,
+				),
 		);
 		if (done) {
 			const pending = await deps.quarantine.readPending();
-			notifyUpdate({ kind: "installed", id: String(state.enteredAt), packages: pending.map((item) => item.name) });
+			notifyUpdate({
+				kind: "installed",
+				id: String(state.enteredAt),
+				packages: pending.map((item) => item.name),
+			});
 			await deps.quarantine.clearPending();
 			dispatch({ type: "SERVICES_RESTARTED", now: deps.now() });
 		}
+	} else if (state.phase === "os-available") {
+		await maybeStartOsStage(false);
+	} else if (state.phase === "os-staging" && !osStageInProcess) {
+		if ((await deps.inspectOsOperation()) === "idle")
+			dispatch({
+				type: "OS_STAGING_FAILED",
+				now: deps.now(),
+				reason: "os_stage_outcome_unknown_after_restart",
+			});
+	} else if (
+		state.phase === "os-staged" ||
+		state.phase === "os-activation-armed"
+	) {
+		await reconcileOsActivation();
+	} else if (state.phase === "os-verifying") {
+		await verifyOsBoot();
 	} else if (state.phase === "sync-eligible") {
 		await maybeStartSlotSync();
 	} else if (state.phase === "syncing") {
@@ -717,9 +984,14 @@ async function runOsCheckAfterCellularGate(
 	if (!gate.allowed) return;
 	const now = deps.now();
 	dispatch({ type: "OS_CHECK_STARTED", now });
-	const result = await deps.checkOsManifest();
+	const result = await deps.checkOsManifest(settings.channel);
 	const outcomeNow = deps.now();
 	if (result.failed) {
+		notifyUpdate({
+			kind: "refused",
+			id: `os-check:${result.reason}`,
+			reason: result.reason,
+		});
 		const consecutiveFailuresAfter = state.osCheck.consecutiveFailures + 1;
 		const nextAttemptAt =
 			outcomeNow +
@@ -748,6 +1020,12 @@ async function runOsCheckAfterCellularGate(
 			rateLimited: false,
 			kind: "os",
 			randomUnit: deps.random(),
+		});
+	osCandidate = result.available ? result.manifest : undefined;
+	if (result.manifest)
+		notifyUpdate({
+			kind: "updates-available",
+			id: `os:${result.manifest.version}`,
 		});
 	dispatch(
 		result.available
@@ -798,10 +1076,14 @@ export async function startUpdateOrchestrator(
 		getUpdateState: deps.getPackageInstallWireState,
 		now: deps.now,
 	});
+	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")
+		await reconcileOsActivation();
 	if (state.phase === "quarantined" && baseline.phase === "committing") {
 		const pending = await deps.quarantine.readPending();
 		await deps.quarantine.recordPackageFailure(
-			pending.flatMap((item) => item.version ? [{ name: item.name, version: item.version }] : []),
+			pending.flatMap((item) =>
+				item.version ? [{ name: item.name, version: item.version }] : [],
+			),
 			String(baseline.enteredAt),
 			state.failureReason ?? "apt-exit-nonzero",
 		);

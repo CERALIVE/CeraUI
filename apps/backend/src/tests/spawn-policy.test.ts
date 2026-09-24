@@ -28,10 +28,10 @@ const alive = (proc: ManagedProcess): boolean =>
 	proc.exitCode === null && proc.signalCode === null;
 
 describe("spawn-policy registry consistency", () => {
-	it("classifies all 44 production spawn sites with unique ids", () => {
-		expect(SPAWN_POLICY).toHaveLength(44);
+	it("classifies all 50 production spawn sites with unique ids", () => {
+		expect(SPAWN_POLICY).toHaveLength(50);
 		const ids = new Set(SPAWN_POLICY.map((s) => s.id));
-		expect(ids.size).toBe(44);
+		expect(ids.size).toBe(50);
 		expect(getSpawnSite("updates.transportProbe")).toMatchObject({
 			class: "bounded-probe",
 			contract: { timed: true },
