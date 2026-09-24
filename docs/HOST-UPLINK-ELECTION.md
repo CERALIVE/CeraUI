@@ -35,6 +35,48 @@ is fixture-proven; it is not a production network, certificate or hardware recei
 The legacy apt preflight below is still used by the existing update button until
 the later update orchestrator adopts this selector.
 
+## Transaction pin and failover (Todo 34; kernel-netns tested)
+
+`update-transport/pin.ts` accepts the selector's ranked `(uplink, family)` pairs;
+`pin-rules.ts` owns the kernel route/rule installation and crash cleanup.
+Each attempt runs one **awaited job step** under a private UID policy rule. APT uses the
+image capability file's `apt_uid`, RAUC streaming uses `ota_uid`; UID zero and
+equal job UIDs are refused. A startup sweep runs once before update admission,
+deleting owned priority-120 rules and both private tables after a crash. A
+foreign rule at that priority refuses the sweep and leaves pinning disabled,
+rather than deleting another owner's policy. For each attempt the chosen family
+looks up table 100000 (APT) or 100001 (OS); the other family has a `prohibit`
+rule for the same UID. The table copies the chosen interface's parsed default
+route from the main or interface table and includes an unreachable fallback so
+a lost DHCP route cannot fall through to the main table. Neither main-table
+routes nor the shared-client steering rules/tables (30000–95535, priority 110)
+are changed. The rules are removed and both table families flushed in `finally`
+on **every** exit, including a partial setup or a throwing job. A transfer error
+or timeout marks only that `(interface, family)` unhealthy for 15 minutes and
+retries the next ranked clear pair, at most three attempts. Non-transfer errors
+propagate without failover. Each APT callback receives exactly one per-invocation
+`-o Acquire::ForceIPv4=true` or `ForceIPv6=true` option; nothing writes apt
+configuration. The step must await the whole network transfer, not merely start
+a detached process, before the pin is released. The existing legacy update
+button does **not** use this controller yet; the later update orchestrator owns
+the adoption of this callback for its download-only APT and RAUC phases.
+
+**DNS is not pinned by `uidrange`.** The selector's probes already verify the
+chosen uplink's own resolvers (`resolvectl -i`); this kernel rule controls the
+job's sockets, not systemd-resolved's separate process. If a device uses a
+direct upstream resolver reachable only over the *other*, prohibited family
+(rather than the local `127.0.0.53` stub), the job's own DNS sockets cannot
+reach it. The resulting name lookup failure is classified `dns-failed` and
+fails over to another pair. That is an expected scope limitation, not permission
+to remove the prohibit rule or to pin global DNS configuration.
+
+The privileged two-veth namespace test executes curl under a test UID, proves
+the non-selected uplink unreachable to that UID, drops the first link during a
+transfer, observes failover, and dumps both real kernel rule families during
+and after the transaction. It then leaves simulated crash rules behind and
+proves the startup sweep removes them. This is not an on-device or live-origin
+qualification.
+
 ## Policy change
 
 This changes **host default-route selection policy**, not streaming/bonding or

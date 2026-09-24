@@ -2910,6 +2910,22 @@ Todo-12 live-deploy verification follow-up. Fixture/netns proof is not live
 `addons/apt-client-tls.ts` only for the exact first-party host. The existing
 APT path has not yet been switched to the new selector.
 
+**Update transaction pin [PARTIAL, Todo 34].** `system/update-transport/pin.ts`
+consumes the ranked selector output; `pin-rules.ts` parses the interface's default route
+and installs a UID-scoped priority-120 lookup into a private APT/OS table plus
+an other-family prohibit rule. Its startup sweep is wired through `main.ts` after
+the control server binds; a failed sweep blocks future pin admission. Partial
+setup and a throwing awaited step both unwind in `finally`, and an unreachable
+floor prevents main-table fallthrough if the selected route disappears.
+Exact-pair transport failures are held for 15 minutes; no more than three
+candidates are attempted. The callback gets the APT family flag per invocation,
+never a persistent apt configuration. DNS is not UID-pinned: a direct resolver
+reachable only over the prohibited family makes the job's own lookups fail as
+`dns-failed` and fail over. The legacy APT install path still uses its existing
+preflight and detached unit; the later orchestrator must await its transfer
+within this new scope rather than releasing rules after mere dispatch. Two-veth
+netns verification and crash-sweep proof: `tests/update-transport-pin-netns.test.ts`.
+
 **Idle detector [PARTIAL, Todo 32].** `system/idle-detector.ts` is a pure
 decision over caller-supplied epoch milliseconds, five last-activity fields and
 the `@ceraui/rpc` update schedule. Exactly 30 minutes since the latest activity

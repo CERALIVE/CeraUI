@@ -2,6 +2,8 @@
 set -euo pipefail
 
 runner="$(dirname "$0")/update-transport-netns-runner.ts"
+mode="${1:-selector}"
+if [ "$mode" = pin ]; then runner="$(dirname "$0")/update-transport-pin-netns-runner.ts"; fi
 root="$(mktemp -d)"
 peer0=""
 peer1=""
@@ -18,7 +20,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-bun "$runner" prepare "$root"
+if [ "$mode" = selector ]; then bun "$runner" prepare "$root"; fi
 ip link set lo up
 for index in 0 1; do
 	unshare -n -- sleep 120 &
@@ -36,4 +38,8 @@ for index in 0 1; do
 	if [ "$index" -eq 0 ]; then server0=$!; else server1=$!; fi
 done
 sleep 0.3
+if [ "$mode" = pin ]; then
+	ip route add default via 192.0.2.2 dev eth0 metric 100
+	ip route add default via 198.51.100.2 dev eth1 metric 10
+fi
 bun "$runner" client "$root"

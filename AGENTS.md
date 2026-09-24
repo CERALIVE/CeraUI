@@ -138,6 +138,17 @@ an exact-host-only client TLS helper. Live verification against the real deploye
 uses its legacy preflight until the later orchestrator is wired. Details:
 `docs/HOST-UPLINK-ELECTION.md`.
 
+**Transaction pin [PARTIAL, Todo 34].** `update-transport/pin.ts` owns failover and
+`pin-rules.ts` owns priority-120 UID rules, two private tables and a crash sweep
+at backend boot. The controller provides three-attempt
+failover with a 15-minute exact-pair hold. The route and prohibit rules are
+removed in `finally`; APT's ForceIPv4/ForceIPv6 option is passed per invocation.
+Kernel-netns integration is local, not a live-origin or board receipt. The
+existing update button has not yet adopted this mechanism; the later orchestrator
+must await the whole transfer before leaving the pinned callback. DNS is not
+pinned, and direct upstream resolution over the prohibited family can fail over
+as `dns-failed`. Details: `docs/HOST-UPLINK-ELECTION.md`.
+
 The live cockpit consumes an authoritative session-switch namespace, distinct from
 device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
 Admission, the legacy two-capture fallback, explicit absent/empty notices,

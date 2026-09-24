@@ -360,6 +360,12 @@ jobs:
           CERALIVE_NETNS_ISOLATED: "1"
         run: bun test apps/backend/src/tests/uplink-steering-netns.test.ts apps/backend/src/tests/uplink-shaper-netns.test.ts apps/backend/src/tests/update-transport-netns.test.ts
 
+      # uidrange cannot match an unmapped nonzero UID inside unshare -r's single-UID
+      # user namespace. Keep the fixture in its own rootful network namespace.
+      - name: update UID routing (rootful netns)
+        working-directory: CeraUI
+        run: sudo -n unshare -n env CERALIVE_NETNS_ISOLATED=1 "$(command -v bun)" test apps/backend/src/tests/update-transport-pin-netns.test.ts
+
       - name: i18n unit tests (bun — frozen rendered oracle + backend labelKey contract)
         working-directory: CeraUI
         run: bun run --filter @ceraui/i18n test

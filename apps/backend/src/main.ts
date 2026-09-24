@@ -152,6 +152,7 @@ import {
 	ensureSshPasswordSynced,
 	getSshStatus,
 } from "./modules/system/ssh.ts";
+import { updatePinController } from "./modules/system/update-transport/pin.ts";
 import { initHotspotCredentials } from "./modules/wifi/hotspot-credentials.ts";
 import { applyPersistedCountry } from "./modules/wifi/regdomain.ts";
 import { reconcileWifiAdapterModes } from "./modules/wifi/wifi-adapter-mode-transition.ts";
@@ -255,6 +256,12 @@ await runCritical("systemd-ready", notifyServiceReady);
 //     failure is logged, flags the device readiness-reduced (surfaced on
 //     /api/health via the boot-readiness rollup), and is swallowed so boot never
 //     crashes and the WS server (bound above) stays reachable. ---
+
+// Recovery must finish before an update may install any new UID routing rule.
+if (await isRealDevice())
+	await guardNonCritical("update-route-sweep", () =>
+		updatePinController.sweep(),
+	);
 
 // Resolve device_id + paired state before anything that gates the control
 // channel (spec §9: it MUST NOT dial until identity is resolved).
