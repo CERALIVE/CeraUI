@@ -30,6 +30,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { logger } from "../../../helpers/logger.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
+import { broadcastMsg } from "../../ui/websocket-server.ts";
 import { cleanAptCache } from "../apt-cache-clean.ts";
 import { isRealDevice } from "../device-detection.ts";
 import { getIdleStatus } from "../idle-activity.ts";
@@ -148,6 +149,15 @@ export interface OrchestratorRuntimeDeps {
 		isIdle: () => Promise<boolean>,
 		transactionRunning: () => boolean,
 	) => Promise<boolean>;
+	/**
+	 * Push the additive `update_orchestrator` wire projection after every real
+	 * state transition (Todo 41). Before this, the field reached a client only
+	 * in the post-login snapshot and the `status.getStatus` pull, so the global
+	 * badge and the Go-Live refusal band would have described the phase the
+	 * device was in when the operator logged in. Optional so a test that builds
+	 * a complete deps object by hand stays valid; the default broadcasts.
+	 */
+	readonly publishWireState?: (wire: UpdateOrchestratorWireState) => void;
 }
 
 async function defaultOnlyMeteredCandidateExists(): Promise<boolean> {
@@ -248,6 +258,8 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 			transactionRunning,
 		});
 	},
+	publishWireState: (wire) =>
+		broadcastMsg("status", { update_orchestrator: wire }),
 };
 
 let deps: OrchestratorRuntimeDeps = defaultOrchestratorRuntimeDeps;
@@ -257,6 +269,14 @@ let started = false;
 let osCandidate: OsChannelManifest | undefined;
 let osStageInProcess = false;
 let osForceActivated = false;
+// The OS candidate the D12 gate is HOLDING for an explicit one-time cellular
+// approval (Todo 41's "Download over cellular now" prompt). Set only where the
+// gate answers `needsOverride`, cleared the moment staging may proceed or the
+// candidate it names is no longer the one on offer — so the prompt can never
+// ask to approve a download that is not actually waiting.
+let pendingCellularApproval:
+	| { readonly id: string; readonly sizeBytes: number }
+	| undefined;
 
 const IDLE_TICK_MS = 60_000;
 const ACTIVE_TICK_MS = 3_000;
@@ -278,6 +298,7 @@ export function resetOrchestratorRuntimeForTest(): void {
 	osCandidate = undefined;
 	osStageInProcess = false;
 	osForceActivated = false;
+	pendingCellularApproval = undefined;
 }
 
 export function getOrchestratorState(): OrchestratorState {
@@ -301,11 +322,53 @@ export function getOrchestratorWireState(): UpdateOrchestratorWireState {
 	};
 }
 
+/**
+ * What the OS agent currently has on offer, for the Updates dialog's System and
+ * Cellular sections (Todo 41). A read of in-memory runtime state only — it
+ * performs no I/O and changes nothing. `candidate` is the verified manifest the
+ * last successful channel check found (not yet staged); `pendingCellular` is set
+ * only while that candidate is held behind the metered-only D12 gate.
+ */
+export type OsUpdateSummary = {
+	readonly candidate: {
+		readonly version: string;
+		readonly sizeBytes: number;
+	} | null;
+	readonly pendingCellular: {
+		readonly id: string;
+		readonly sizeBytes: number;
+	} | null;
+};
+
+export function getOsUpdateSummary(): OsUpdateSummary {
+	return {
+		candidate: osCandidate
+			? { version: osCandidate.version, sizeBytes: osCandidate.bundle.size }
+			: null,
+		pendingCellular:
+			pendingCellularApproval &&
+			osCandidate?.version === pendingCellularApproval.id
+				? pendingCellularApproval
+				: null,
+	};
+}
+
+// The push is an observation of the state that was just persisted; a failing
+// broadcast must never undo or block the transition it describes.
+function publishWireState(): void {
+	try {
+		deps.publishWireState?.(getOrchestratorWireState());
+	} catch (error) {
+		logger.warn("update-orchestrator: wire-state publish failed", { error });
+	}
+}
+
 function dispatch(event: OrchestratorEvent): OrchestratorState {
 	const next = reduceOrchestrator(state, event);
 	if (next !== state) {
 		state = next;
 		deps.persist(state);
+		publishWireState();
 	}
 	return state;
 }
@@ -863,14 +926,20 @@ async function maybeStartOsStage(bypassIdle: boolean): Promise<void> {
 		candidateId: osCandidate.version,
 	});
 	if (!gate.allowed) {
-		if (gate.needsOverride)
+		if (gate.needsOverride) {
+			pendingCellularApproval = {
+				id: osCandidate.version,
+				sizeBytes: osCandidate.bundle.size,
+			};
 			notifyUpdate({
 				kind: "cellular-approval",
 				id: osCandidate.version,
 				size: String(osCandidate.bundle.size),
 			});
+		}
 		return;
 	}
+	pendingCellularApproval = undefined;
 	const manifest = osCandidate;
 	dispatch({ type: "OS_STAGING_STARTED", now: deps.now() });
 	osStageInProcess = true;

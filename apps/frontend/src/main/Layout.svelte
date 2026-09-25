@@ -27,6 +27,7 @@ import Auth from './Auth.svelte';
 import DisconnectedBanner from './DisconnectedBanner.svelte';
 import LayoutToastHost from './layout/LayoutToastHost.svelte';
 import UpdateBanner from './layout/UpdateBanner.svelte';
+import UpdateOrchestratorBadge from './layout/UpdateOrchestratorBadge.svelte';
 import Main from './MainView.svelte';
 
 let isCheckingAuthStatus = $state(true);
@@ -220,6 +221,7 @@ $effect(() => {
 			<UpdatingOverlay details={updatingStatus}></UpdatingOverlay>
 		{/if}
 		<UpdateBanner />
+		<UpdateOrchestratorBadge />
 		<DisconnectedBanner />
 		<Main></Main>
 	{:else if connectionSurfaces.showAuthTimeout}

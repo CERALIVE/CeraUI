@@ -2926,8 +2926,9 @@ Runtime rechecks before starting the image's unit, confirms the current receipt
 after success, then runs independent best-effort apt/download/quarantine cleanup
 before the existing `slots-current` notice. Integrity and external-lock checks
 remain atomically enforced by the unit (exit 75), not duplicated in TypeScript.
-`slot-status.ts` exposes both RAUC slots internally for Todo 41 without changing
-the S1-locked `device-stats.raucSlot` wire field. Full contract and fixture-only
+`slot-status.ts`'s both-slot reading reaches the Updates dialog only through
+`system.getUpdateDetails` (`update-orchestrator/details.ts`, Todo 41), without
+changing the S1-locked `device-stats.raucSlot` wire field. Full contract and fixture-only
 validation scope: [`../../docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
 
 The only anti-downgrade source is `/etc/ceralive/os-release-version`; absent or

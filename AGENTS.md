@@ -134,9 +134,32 @@ dpkg SHA/build ID match and whose sync receipt has not recorded that SHA. Idle
 boot/tick detection covers APT changes after a reboot; the OS-verification path
 retains its existing trigger. Success is followed by best-effort cache/download/
 quarantine cleanup and the translated `slots-current` notification. The both-slot
-RAUC parser is an internal Todo-41 seam, not a change to `device-stats.raucSlot`.
+RAUC reading reaches the UI only through Todo 41's `system.getUpdateDetails`, not
+through `device-stats.raucSlot`.
 Fixtures, not a physical mirror drill, establish this implementation; see
 [`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md).
+
+**Updates dialog + update surfaces [PARTIAL, Todo 41].** `system.getUpdateDetails`
+(`update-orchestrator/details.ts`, schema `update-details.schema.ts`) is a pure
+read with every block independently nullable; the dialog pulls it with
+capabilities and settings on open, generation-fenced
+(`apps/frontend/src/lib/updates/update-surface.svelte.ts`). Every write is
+pessimistic: a control moves only to the `setUpdateSettings` echo. Sections are
+gated by `updateCapabilityView` — package automation on every image, system
+image/channel/system-cellular only with `apt-all-packages` +
+`rauc-verity-streaming`, slots only with `slot-sync`; a legacy image states the
+limit instead of hiding it silently. The schedule window is validated by the
+shared `validateSchedule` (explicit past-midnight confirmation). Cellular
+approval grants exactly the candidate the device named and starts its install
+in one step. Outside the dialog: `UpdateOrchestratorBadge` (in-flow, retracts
+with the phase) and `live/UpdateRefusalBand` (live push wins; the typed
+`update_in_progress` refusal is the fallback). The band never disables Start —
+admission stays the backend's. **Credentials:** the wire carries no certificate
+expiry and `credentials-expiring` has no producer, so there is no countdown; the
+dialog bands only a transport finding whose states include
+`credentials-invalid`. Coverage: `src/lib/updates/*.test.ts`,
+`tests/e2e/update-system.spec.ts` (8), evidence in
+`tests/e2e/visual/update-system.visual.spec.ts`. No board run is claimed.
 
 **Update-system foundation [PARTIAL, Todo 31].** `@ceraui/rpc/schemas`
 owns the update settings and image-capability wire types. The backend's

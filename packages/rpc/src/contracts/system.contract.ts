@@ -5,6 +5,7 @@ import { oc } from '@orpc/contract';
 import { z } from 'zod';
 
 import {
+	allowCellularOnceInputSchema,
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
@@ -21,6 +22,7 @@ import {
 	sshPersistentInputSchema,
 	successResponseSchema,
 	updateCapabilitiesSchema,
+	updateDetailsSchema,
 	updateSettingsInputSchema,
 	updateSettingsSchema,
 } from '../schemas';
@@ -63,6 +65,22 @@ export const systemContract = oc.router({
 	getUpdateSettings: oc.output(updateSettingsSchema),
 	setUpdateSettings: oc.input(updateSettingsInputSchema).output(updateSettingsSchema),
 	getUpdateCapabilities: oc.output(updateCapabilitiesSchema),
+
+	/**
+	 * The update orchestrator's operator actions (Todo 36). Both bypass IDLE;
+	 * neither bypasses the stream-admission block. A refusal answers
+	 * `{success:false, error:<reason>}` and is never a silent no-op.
+	 */
+	checkUpdatesNow: oc.output(successResponseSchema),
+	installUpdatesNow: oc.output(successResponseSchema),
+	allowCellularOnce: oc.input(allowCellularOnceInputSchema).output(successResponseSchema),
+
+	/**
+	 * The Updates dialog's read of everything the `update_orchestrator` push
+	 * does not carry (Todo 41): both RAUC slots, OS versions, check clocks, a
+	 * pending cellular approval, and the last update-transport selection.
+	 */
+	getUpdateDetails: oc.output(updateDetailsSchema),
 
 	/**
 	 * Start SSH service

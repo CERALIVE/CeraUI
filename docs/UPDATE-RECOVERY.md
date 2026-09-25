@@ -96,7 +96,8 @@ notice say “Both system slots are up to date.” A cleanup failure warns but
 cannot reverse the mirror verdict. The internal `readBothSlotStatus` /
 `parseBothSlotStatus` seam reads RAUC's detailed rootfs slot records and overlays
 the target's receipt version (RAUC keeps an old bundle version after rsync);
-an OS install newer than the receipt supersedes it. **No wire or UI field is
-added here**. Todo 41 owns an additive RPC/broadcast and its Slots (A/B
-version/state/last sync) display; `device-stats.raucSlot` remains the S1-locked
-single bare string.
+an OS install newer than the receipt supersedes it. Todo 41 exposes it through
+the additive `system.getUpdateDetails` RPC (`slots` is `null` unless the image
+declares `slot-sync` and `rauc status` answered), and the Updates dialog's Slots
+section renders A/B version, state, health and last mirror time from it.
+`device-stats.raucSlot` remains the S1-locked single bare string.

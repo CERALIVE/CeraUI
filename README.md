@@ -10,9 +10,19 @@ claimed. See `apps/backend/AGENTS.md` under “OS agent”.
 
 **Slot mirror [PARTIAL].** A new-image device may mirror its healthy running
 slot only after its packages have survived a reboot and healthcheck. The
-backend's two-slot RAUC reading is internal until the Updates dialog is built;
-`device-stats.raucSlot` remains unchanged. This is fixture-tested, not a new
-board qualification. See [update recovery](docs/UPDATE-RECOVERY.md).
+Updates dialog reads both RAUC slots through the separate
+`system.getUpdateDetails` RPC; `device-stats.raucSlot` remains unchanged. This
+is fixture-tested, not a new board qualification. See
+[update recovery](docs/UPDATE-RECOVERY.md).
+
+**Updates dialog [PARTIAL].** Settings → Software Updates shows packages,
+system image, slots, automation (auto toggles, schedule window, channel),
+cellular allowances with per-candidate approval, and the update connection.
+Sections the image cannot back are hidden behind a stated legacy notice. A busy
+update shows an app-wide badge, and the Live cockpit warns before Go Live while
+packages install or services restart; Start stays enabled because the device
+decides admission. This is unit- and Playwright-proven against fixtures, not
+exercised on a board.
 
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings

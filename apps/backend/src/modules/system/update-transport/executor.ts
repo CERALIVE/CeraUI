@@ -35,6 +35,7 @@ import {
 	type TransportSample,
 	type TransportSelection,
 } from "./core.ts";
+import { recordTransportSelection } from "./last-selection.ts";
 
 const SOURCE_DIR = "/etc/apt/sources.list.d";
 const MARKER = "\n<<<update-probe>>>";
@@ -366,9 +367,24 @@ async function debian(
 	}
 }
 
+/**
+ * Probe every candidate uplink × family for `profile` and rank them. Every
+ * answer — including the early "nothing to probe" ones — is recorded as the
+ * last selection, which the Updates dialog's Connection section reads back;
+ * the record is an observation and never feeds a routing decision.
+ */
 export async function selectUpdateTransport(
 	profile: UpdateProfile,
 	deps: UpdateTransportDeps = defaultUpdateTransportDeps,
+): Promise<TransportSelection> {
+	const selection = await probeUpdateTransport(profile, deps);
+	recordTransportSelection(profile.profile, selection);
+	return selection;
+}
+
+async function probeUpdateTransport(
+	profile: UpdateProfile,
+	deps: UpdateTransportDeps,
 ): Promise<TransportSelection> {
 	argMatch(ID_RE, profile.board);
 	let nmcli: SpawnWithTimeoutResult;

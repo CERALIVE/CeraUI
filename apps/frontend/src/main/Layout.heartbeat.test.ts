@@ -14,6 +14,7 @@ vi.mock("./DisconnectedBanner.svelte", noop);
 vi.mock("./MainView.svelte", noop);
 vi.mock("./layout/LayoutToastHost.svelte", noop);
 vi.mock("./layout/UpdateBanner.svelte", noop);
+vi.mock("./layout/UpdateOrchestratorBadge.svelte", noop);
 vi.mock("$lib/components/updating-overlay.svelte", noop);
 vi.mock("$lib/components/custom/pwa", async () => ({
 	OfflinePage: (await import("../tests/fixtures/Noop.svelte")).default,

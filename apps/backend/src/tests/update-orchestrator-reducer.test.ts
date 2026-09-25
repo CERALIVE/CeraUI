@@ -356,4 +356,13 @@ describe("update-orchestrator reducer — pure state machine", () => {
 		expect(next.phase).toBe("idle");
 		expect(next.cellularOverrideId).toBe("manifest-v5");
 	});
+
+	test("CELLULAR_OVERRIDE_GRANTED lands in os-available, where the install gate holds", () => {
+		const next = reduceOrchestrator(
+			{ ...initialOrchestratorState(0), phase: "os-available" },
+			{ type: "CELLULAR_OVERRIDE_GRANTED", now: 1, id: "2026.10.0" },
+		);
+		expect(next.phase).toBe("os-available");
+		expect(next.cellularOverrideId).toBe("2026.10.0");
+	});
 });

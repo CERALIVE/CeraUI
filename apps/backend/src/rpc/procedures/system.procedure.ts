@@ -4,6 +4,7 @@
  */
 
 import {
+	allowCellularOnceInputSchema,
 	autostartInputSchema,
 	autostartOutputSchema,
 	cloudProviderEndpointSchema,
@@ -22,6 +23,7 @@ import {
 	sshPersistentInputSchema,
 	successResponseSchema,
 	updateCapabilitiesSchema,
+	updateDetailsSchema,
 	updateSettingsInputSchema,
 	updateSettingsSchema,
 } from "@ceraui/rpc/schemas";
@@ -66,6 +68,7 @@ import {
 } from "../../modules/system/ssh.ts";
 import { reconcileAptChannel } from "../../modules/system/update-apt-channel.ts";
 import { readUpdateCapabilities } from "../../modules/system/update-capabilities.ts";
+import { readUpdateDetails } from "../../modules/system/update-orchestrator/details.ts";
 import {
 	allowCellularOnce,
 	checkUpdatesNow,
@@ -272,7 +275,10 @@ export const installUpdatesNowProcedure = authedProcedure
 		return { success: true };
 	});
 
-export const allowCellularOnceInputSchema = z.object({ id: z.string().min(1) });
+// Re-exported from its `@ceraui/rpc` home (Todo 41 moved it there so the
+// contract and the frontend share one definition); the name stays exported here
+// for existing importers.
+export { allowCellularOnceInputSchema };
 
 export const allowCellularOnceProcedure = authedProcedure
 	.input(allowCellularOnceInputSchema)
@@ -282,6 +288,14 @@ export const allowCellularOnceProcedure = authedProcedure
 		logger.info(`System: one-time cellular override granted (${input.id})`);
 		return { success: true };
 	});
+
+/**
+ * The Updates dialog's pull (Todo 41). A pure read — see
+ * `update-orchestrator/details.ts` for the per-block honest-absence rules.
+ */
+export const getUpdateDetailsProcedure = authedProcedure
+	.output(updateDetailsSchema)
+	.handler(() => readUpdateDetails());
 
 /**
  * Manual "check for updates now". Runs the same discovery the periodic loop

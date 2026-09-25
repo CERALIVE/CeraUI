@@ -7,6 +7,7 @@
 import type {
 	AddonDescriptor,
 	AddonState,
+	AllowCellularOnceInput,
 	AutostartOutput,
 	BitrateInput,
 	BitrateOutput,
@@ -109,6 +110,9 @@ import type {
 	SwitchAudioOutput,
 	SwitchInputInput,
 	SwitchInputOutput,
+	UpdateCapabilities,
+	UpdateDetails,
+	UpdateSettings,
 	UsbModeOptionsInput,
 	UsbModeOptionsOutput,
 	UssdCancelInput,
@@ -881,6 +885,15 @@ export interface TypedRPC {
 		) => Promise<KioskConfigureOutput>;
 		kioskOsk: (input: KioskOskInput) => Promise<SuccessResponse>;
 		mintPreviewToken: () => Promise<PreviewTokenOutput>;
+		getUpdateSettings: () => Promise<UpdateSettings>;
+		setUpdateSettings: (input: UpdateSettings) => Promise<UpdateSettings>;
+		getUpdateCapabilities: () => Promise<UpdateCapabilities>;
+		getUpdateDetails: () => Promise<UpdateDetails>;
+		checkUpdatesNow: () => Promise<SuccessResponse>;
+		installUpdatesNow: () => Promise<SuccessResponse>;
+		allowCellularOnce: (
+			input: AllowCellularOnceInput,
+		) => Promise<SuccessResponse>;
 	};
 	ui: {
 		heartbeat: () => Promise<SuccessResponse>;

@@ -358,6 +358,11 @@ function reduceOsAvailable(
 				phase: "checking",
 				osCheck: clockAtAttemptStart(state.osCheck, event.now),
 			});
+		// `os-available` is the ONLY phase in which the D12 install gate can hold
+		// a candidate for one-time approval, so the grant must land here too —
+		// reducing it from `idle` alone made the operator's approval a no-op.
+		case "CELLULAR_OVERRIDE_GRANTED":
+			return { ...state, cellularOverrideId: event.id };
 		default:
 			return state;
 	}
