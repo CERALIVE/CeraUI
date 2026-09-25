@@ -2917,6 +2917,19 @@ ongoing RAUC transfer does not claim success on an inconclusive daemon outcome:
 once it becomes idle without a committed receipt, the orchestrator fails closed.
 These are fixture/probe tests, not a live signed release or board receipt.
 
+**Lagged slot mirror [PARTIAL, Todo 40].** `slot-sync-gate.ts` is the pure
+capability/boot-health/status-SHA/build-ID/receipt/busy-phase predicate;
+`slot-sync-state.ts` reads the image-owned files and hashes dpkg status. The
+startup + idle tick dispatch `SYNC_ELIGIBILITY_CONFIRMED` to reuse the existing
+`sync-eligible` phase, while OS verification retains its unconditional transition.
+Runtime rechecks before starting the image's unit, confirms the current receipt
+after success, then runs independent best-effort apt/download/quarantine cleanup
+before the existing `slots-current` notice. Integrity and external-lock checks
+remain atomically enforced by the unit (exit 75), not duplicated in TypeScript.
+`slot-status.ts` exposes both RAUC slots internally for Todo 41 without changing
+the S1-locked `device-stats.raucSlot` wire field. Full contract and fixture-only
+validation scope: [`../../docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
+
 The only anti-downgrade source is `/etc/ceralive/os-release-version`; absent or
 malformed yields `booted_version_unknown`, never a timestamp/commit fallback.
 The stamp exists only on a deliberate release-cut image, so **all currently

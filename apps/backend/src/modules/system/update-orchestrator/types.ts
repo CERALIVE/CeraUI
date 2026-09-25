@@ -241,6 +241,7 @@ export type OrchestratorEvent =
 			readonly reason: string;
 	  }
 	| { readonly type: "SYNC_ELIGIBILITY_CONFIRMED"; readonly now: number }
+	| { readonly type: "SYNC_SKIPPED"; readonly now: number }
 	| { readonly type: "SYNC_STARTED"; readonly now: number }
 	| { readonly type: "SYNC_SUCCEEDED"; readonly now: number }
 	| {

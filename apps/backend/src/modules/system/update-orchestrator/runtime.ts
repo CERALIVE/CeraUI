@@ -30,6 +30,7 @@ import type {
 } from "@ceraui/rpc/schemas";
 import { logger } from "../../../helpers/logger.ts";
 import { getIsStreaming } from "../../streaming/streaming.ts";
+import { cleanAptCache } from "../apt-cache-clean.ts";
 import { isRealDevice } from "../device-detection.ts";
 import { getIdleStatus } from "../idle-activity.ts";
 import {
@@ -73,6 +74,13 @@ import {
 	decideCellularGate,
 	shouldAttemptScheduledCheck,
 } from "./schedule.ts";
+import { readBothSlotStatus } from "./slot-status.ts";
+import {
+	dropSupersededQuarantine,
+	removeRaucDownloads,
+} from "./slot-sync-cleanup.ts";
+import { type SlotSyncEvidence, slotSyncGate } from "./slot-sync-gate.ts";
+import { readSlotSyncEvidence } from "./slot-sync-state.ts";
 import {
 	defaultStaleServiceDeps,
 	reconcileStaleUnits,
@@ -126,6 +134,13 @@ export interface OrchestratorRuntimeDeps {
 	readonly startSlotSync: () => Promise<void>;
 	readonly inspectSlotSync: () => Promise<SlotSyncProbeState>;
 	readonly resetSlotSyncFailure: () => Promise<void>;
+	readonly readSlotSyncEvidence: () => Promise<SlotSyncEvidence>;
+	readonly cleanSlotSyncArchives: () => Promise<boolean>;
+	readonly removeRaucDownloads: () => Promise<void>;
+	readonly dropSupersededQuarantine: (
+		quarantine: UpdateQuarantine,
+	) => Promise<void>;
+	readonly refreshSlots: () => Promise<unknown>;
 	readonly recoverSoftwareUpdateIfRunning: () => Promise<boolean>;
 	readonly persist: (state: OrchestratorState) => void;
 	readonly quarantine: UpdateQuarantine;
@@ -217,6 +232,11 @@ export const defaultOrchestratorRuntimeDeps: OrchestratorRuntimeDeps = {
 	startSlotSync,
 	inspectSlotSync,
 	resetSlotSyncFailure,
+	readSlotSyncEvidence,
+	cleanSlotSyncArchives: cleanAptCache,
+	removeRaucDownloads,
+	dropSupersededQuarantine,
+	refreshSlots: readBothSlotStatus,
 	recoverSoftwareUpdateIfRunning,
 	persist: saveOrchestratorState,
 	quarantine: new UpdateQuarantine(),
@@ -680,8 +700,58 @@ function progressFromWire(progress: {
 
 // ─── slot-sync (sync-eligible -> syncing -> synced) ────────────────────────
 
+async function checkSlotSyncGate() {
+	const capabilities = await deps.loadCapabilities();
+	// On a legacy image the capability refusal is already decisive; do not
+	// probe paths that image never installed on every idle scheduling tick.
+	const evidence: SlotSyncEvidence =
+		capabilities.mode === "capable" &&
+		capabilities.features.includes("slot-sync")
+			? await deps.readSlotSyncEvidence()
+			: {
+					healthyState: null,
+					bootId: "",
+					statusSha256: "",
+					buildId: "",
+					receiptStateSha256: null,
+				};
+	return slotSyncGate({
+		...evidence,
+		capabilities,
+		phase: state.phase,
+	});
+}
+
+async function maybeFindSlotSyncCandidate(): Promise<void> {
+	if (state.phase !== "idle") return;
+	try {
+		const gate = await checkSlotSyncGate();
+		if (gate.allowed && state.phase === "idle")
+			dispatch({ type: "SYNC_ELIGIBILITY_CONFIRMED", now: deps.now() });
+	} catch (error) {
+		logger.warn("update-orchestrator: slot-sync eligibility read deferred", {
+			error,
+		});
+	}
+}
+
 async function maybeStartSlotSync(): Promise<void> {
 	if (state.phase !== "sync-eligible") return;
+	try {
+		const gate = await checkSlotSyncGate();
+		if (state.phase !== "sync-eligible") return;
+		if (!gate.allowed) {
+			logger.debug("update-orchestrator: slot-sync preflight skipped", {
+				reason: gate.reason,
+			});
+			dispatch({ type: "SYNC_SKIPPED", now: deps.now() });
+			return;
+		}
+	} catch (error) {
+		logger.warn("update-orchestrator: slot-sync preflight deferred", { error });
+		dispatch({ type: "SYNC_SKIPPED", now: deps.now() });
+		return;
+	}
 	dispatch({ type: "SYNC_STARTED", now: deps.now() });
 	try {
 		await deps.startSlotSync();
@@ -700,7 +770,41 @@ async function pollSlotSync(): Promise<void> {
 	const now = deps.now();
 	if (probe.kind === "running") return;
 	if (probe.kind === "succeeded") {
+		// A Type=oneshot unit without RemainAfterExit returns inactive/dead after
+		// success; --no-block can briefly expose the PREVIOUS run's exit 0 while
+		// the new job is queued. Only the receipt for THIS dpkg state confirms it.
+		try {
+			const evidence = await deps.readSlotSyncEvidence();
+			if (evidence.receiptStateSha256 !== evidence.statusSha256) return;
+		} catch (error) {
+			logger.warn("update-orchestrator: slot-sync receipt not yet readable", {
+				error,
+			});
+			return;
+		}
 		dispatch({ type: "SYNC_SUCCEEDED", now });
+		// The mirror is already committed. Each cleanup is independent and cannot
+		// change its verdict; a later tick sees synced, never a second cleanup.
+		const cleanups: ReadonlyArray<readonly [string, () => Promise<unknown>]> = [
+			["apt archives", deps.cleanSlotSyncArchives],
+			["RAUC downloads", deps.removeRaucDownloads],
+			["quarantine", () => deps.dropSupersededQuarantine(deps.quarantine)],
+			["slot status", deps.refreshSlots],
+		];
+		for (const [name, cleanup] of cleanups) {
+			try {
+				const result = await cleanup();
+				if (result === false)
+					logger.warn("update-orchestrator: slot-sync cleanup failed", {
+						name,
+					});
+			} catch (error) {
+				logger.warn("update-orchestrator: slot-sync cleanup failed", {
+					name,
+					error,
+				});
+			}
+		}
 		notifyUpdate({ kind: "slots-current", id: String(now) });
 		return;
 	}
@@ -872,6 +976,12 @@ export async function runOrchestratorTick(): Promise<void> {
 	acknowledgeTerminalRestPhases();
 
 	if (state.phase === "idle") {
+		await maybeFindSlotSyncCandidate();
+		if (getOrchestratorState().phase === "sync-eligible") {
+			await maybeStartSlotSync();
+			scheduleNextTick();
+			return;
+		}
 		const settings = await deps.loadSettings();
 		const capabilities = await deps.loadCapabilities();
 		const now = deps.now();
@@ -940,8 +1050,12 @@ export async function runOrchestratorTick(): Promise<void> {
 		state.phase === "os-activation-armed"
 	) {
 		await reconcileOsActivation();
+		if (getOrchestratorState().phase === "sync-eligible")
+			await maybeStartSlotSync();
 	} else if (state.phase === "os-verifying") {
 		await verifyOsBoot();
+		if (getOrchestratorState().phase === "sync-eligible")
+			await maybeStartSlotSync();
 	} else if (state.phase === "sync-eligible") {
 		await maybeStartSlotSync();
 	} else if (state.phase === "syncing") {
@@ -1078,6 +1192,9 @@ export async function startUpdateOrchestrator(
 	});
 	if (state.phase === "os-activation-armed" || state.phase === "os-verifying")
 		await reconcileOsActivation();
+	if (state.phase === "os-verifying") await verifyOsBoot();
+	if (state.phase === "idle") await maybeFindSlotSyncCandidate();
+	if (state.phase === "sync-eligible") await maybeStartSlotSync();
 	if (state.phase === "quarantined" && baseline.phase === "committing") {
 		const pending = await deps.quarantine.readPending();
 		await deps.quarantine.recordPackageFailure(

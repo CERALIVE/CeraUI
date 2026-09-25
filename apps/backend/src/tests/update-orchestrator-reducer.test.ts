@@ -327,6 +327,7 @@ describe("update-orchestrator reducer — pure state machine", () => {
 			{ type: "OS_VERIFIED", now },
 			{ type: "OS_ROLLBACK_DETECTED", now, reason: "x" },
 			{ type: "SYNC_ELIGIBILITY_CONFIRMED", now },
+			{ type: "SYNC_SKIPPED", now },
 			{ type: "SYNC_STARTED", now },
 			{ type: "SYNC_SUCCEEDED", now },
 			{ type: "SYNC_FAILED", now, reason: "x" },

@@ -132,6 +132,10 @@ function reduceIdle(
 				failureReason: null,
 				osCheck: clockAtAttemptStart(state.osCheck, event.now),
 			});
+		case "SYNC_ELIGIBILITY_CONFIRMED":
+			// APT never dispatches OS_VERIFIED. Recheck its boot-health receipt
+			// on startup and every idle tick, then use the same sync-eligible path.
+			return enter(state, event.now, { phase: "sync-eligible" });
 		case "CELLULAR_OVERRIDE_GRANTED":
 			return { ...state, cellularOverrideId: event.id };
 		default:
@@ -436,6 +440,8 @@ function reduceSyncEligible(
 				phase: "syncing",
 				progress: { percent: 0, etaSeconds: 0 },
 			});
+		case "SYNC_SKIPPED":
+			return enter(state, event.now, { phase: "idle", progress: null });
 		default:
 			return state;
 	}

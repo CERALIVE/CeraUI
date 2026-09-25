@@ -8,6 +8,12 @@ must be installed by an approved manual route. This source implementation has
 offline tests; no OS channel release, hosted bundle, or on-device install is
 claimed. See `apps/backend/AGENTS.md` under “OS agent”.
 
+**Slot mirror [PARTIAL].** A new-image device may mirror its healthy running
+slot only after its packages have survived a reboot and healthcheck. The
+backend's two-slot RAUC reading is internal until the Updates dialog is built;
+`device-stats.raucSlot` remains unchanged. This is fixture-tested, not a new
+board qualification. See [update recovery](docs/UPDATE-RECOVERY.md).
+
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings
 2026.9.11; see [publication and rollout](docs/RAW-CAPTURE-CLASSIFICATION.md).

@@ -128,6 +128,16 @@ the OS agent's `os[].version` read contract are in
 [`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md). `ceralive.service` restarts
 only after its transaction settles, not during a live update. Fixture proof only.
 
+**Lagged slot-sync [PARTIAL, Todo 40].** The backend starts the image-owned
+mirror only for an explicitly capable, current-boot healthchecked state whose
+dpkg SHA/build ID match and whose sync receipt has not recorded that SHA. Idle
+boot/tick detection covers APT changes after a reboot; the OS-verification path
+retains its existing trigger. Success is followed by best-effort cache/download/
+quarantine cleanup and the translated `slots-current` notification. The both-slot
+RAUC parser is an internal Todo-41 seam, not a change to `device-stats.raucSlot`.
+Fixtures, not a physical mirror drill, establish this implementation; see
+[`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md).
+
 **Update-system foundation [PARTIAL, Todo 31].** `@ceraui/rpc/schemas`
 owns the update settings and image-capability wire types. The backend's
 `modules/system/update-settings.ts` persists `update-settings.json` alongside

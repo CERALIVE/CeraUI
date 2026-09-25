@@ -453,7 +453,7 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		},
 		status: "enforced",
 		mechanism:
-			"Direct spawnWithTimeout with a 30-second bound before admission and after transaction completion",
+			"Direct spawnWithTimeout with a 30-second bound before admission, after transaction completion, and after slot-sync success",
 	},
 	{
 		id: "softwareUpdates.aptArchiveConfig",
@@ -643,6 +643,23 @@ export const SPAWN_POLICY: readonly SpawnSite[] = [
 		status: "enforced",
 		mechanism:
 			"Exact cgroup service with deleted system mapping, idle window and protected-service guard",
+	},
+	{
+		id: "updateOrchestrator.readBothSlots",
+		file: "modules/system/update-orchestrator/slot-status.ts",
+		symbol: "readBothSlotStatus",
+		command: "[rauc, status, --detailed, --output-format=json]",
+		class: "bounded-probe",
+		contract: {
+			timed: true,
+			startupTimeout: false,
+			shutdownCleanup: false,
+			shutdownAbort: false,
+			lifetimeTimeoutExempt: false,
+		},
+		status: "enforced",
+		mechanism:
+			"Bounded read of both RAUC rootfs slots after a confirmed mirror; no mutation or wire change",
 	},
 	{
 		id: "updateOrchestrator.stopPackageInstallForStream",

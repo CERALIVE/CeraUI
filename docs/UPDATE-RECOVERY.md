@@ -39,6 +39,10 @@ restarts in the adjacent `pending-packages.json` file until success/failure is
 observed. On discovery of a **newer** candidate (Debian `dpkg --compare-versions
 candidate gt bad`), the exact old pin is removed and the store is rewritten.
 
+The lagged mirror also runs this same comparison against the *installed*
+package versions after successful sync. Rollback evidence and failed commit
+diagnostics remain untouched; neither is superseded by an installed package.
+
 For Todo 39, **read `os[].version` to reject a manifest version**. It is the
 expected *staged* version after activation; `bootedVersion` records the surviving
 version observed after a reboot/rollback and is diagnostic only. The writer
@@ -54,3 +58,45 @@ stale-service recommendation, and slot-sync completion. The OS-stage/activation/
 rollback, one-time cellular approval, credential expiry, and transport-health
 producer hooks require their respective later update-agent/credential tasks;
 `notifyUpdate` already provides the keyed, translated event vocabulary for them.
+
+## Lagged slot mirror [PARTIAL — fixture-tested, no CeraUI board drill]
+
+`slot-sync-gate.ts` is the pure, I/O-free pre-dispatch predicate. The image must
+explicitly advertise `slot-sync`. The healthcheck's
+`/data/ceralive/update-state/healthy-state.json` carries `boot_id`, `slot`,
+`build_id`, `dpkg_status_sha256`, `recorded_at`; its boot ID, SHA-256 of the
+current `/var/lib/dpkg/status` bytes and current build ID must agree. Build ID
+comes from `/etc/os-release`'s first `BUILD_ID=` (quotes removed), falling back
+to `/etc/ceralive/image-build-commit` only when empty. The image's
+`sync-receipt.json` carries `state_sha256`, `build_id`, `image_version`,
+`target_slot`, `completed_at`; an absent receipt permits a first sync, while a
+matching status SHA means the state is already mirrored. An APT commit within
+the current uptime has no matching boot-health record and cannot be mirrored.
+
+At startup and on every idle tick, a passing predicate dispatches
+`SYNC_ELIGIBILITY_CONFIRMED` (`idle → sync-eligible`), then the same predicate is
+rechecked before `SYNC_STARTED` and `systemctl start --no-block
+ceralive-slot-sync.service`. The existing unconditional `OS_VERIFIED` transition
+also reaches `sync-eligible` and attempts promptly. A failed precheck returns
+to idle with no unit start. A stream does not block this local-only operation;
+commits and OS staging do. CeraUI treats its own busy phases as the cheap lock
+precheck; the unit holds the shared update and dpkg locks nonblockingly. It also
+checks `dpkg --audit`, partlabel guard, RAUC Operation, pending installation and
+hawkBit under those locks. CeraUI deliberately does **not** duplicate the live
+integrity probes before dispatch, because a pre-dispatch read cannot close that
+race. Exit 75 is a typed refusal, unlike an operational failure. A oneshot's
+stale previous exit-0 does not settle a newly queued run without its current
+SHA-256 receipt.
+
+On confirmed success the phase becomes `synced` *before* four independent,
+best-effort effects: reuse bounded `apt-get clean`, remove leftovers from
+`/data/ceralive/rauc-downloads`, reconcile superseded failed package versions,
+and refresh both-slot status. Only afterwards does the existing `slots-current`
+notice say “Both system slots are up to date.” A cleanup failure warns but
+cannot reverse the mirror verdict. The internal `readBothSlotStatus` /
+`parseBothSlotStatus` seam reads RAUC's detailed rootfs slot records and overlays
+the target's receipt version (RAUC keeps an old bundle version after rsync);
+an OS install newer than the receipt supersedes it. **No wire or UI field is
+added here**. Todo 41 owns an additive RPC/broadcast and its Slots (A/B
+version/state/last sync) display; `device-stats.raucSlot` remains the S1-locked
+single bare string.
