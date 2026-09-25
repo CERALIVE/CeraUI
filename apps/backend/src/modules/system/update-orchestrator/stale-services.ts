@@ -14,15 +14,23 @@ export function owningService(cgroup: string): string | undefined {
 	return undefined;
 }
 
-export function mayRestartUnit(unit: string, transactionRunning: boolean): boolean {
+export function mayRestartUnit(
+	unit: string,
+	transactionRunning: boolean,
+): boolean {
 	if (!UNIT_NAME.test(unit)) return false;
 	const name = unit.slice(0, -".service".length);
 	if (name === "ceralive") return !transactionRunning;
 	return !(
-		name.startsWith("systemd") || name === "dbus" || name.startsWith("dbus-") ||
-		name.startsWith("NetworkManager") || name.startsWith("ModemManager") ||
-		name.startsWith("wpa_supplicant") || name.startsWith("rauc") ||
-		name.startsWith("pipewire") || name.startsWith("wireplumber")
+		name.startsWith("systemd") ||
+		name === "dbus" ||
+		name.startsWith("dbus-") ||
+		name.startsWith("NetworkManager") ||
+		name.startsWith("ModemManager") ||
+		name.startsWith("wpa_supplicant") ||
+		name.startsWith("rauc") ||
+		name.startsWith("pipewire") ||
+		name.startsWith("wireplumber")
 	);
 }
 
@@ -33,7 +41,8 @@ export async function scanStaleUnits(procRoot = "/proc"): Promise<string[]> {
 		const dir = `${procRoot}/${entry.name}`;
 		try {
 			const maps = await Bun.file(`${dir}/maps`).text();
-			if (!maps.split("\n").some((line) => STALE_SYSTEM_MAPPING.test(line))) continue;
+			if (!maps.split("\n").some((line) => STALE_SYSTEM_MAPPING.test(line)))
+				continue;
 			const unit = owningService(await Bun.file(`${dir}/cgroup`).text());
 			if (unit) units.add(unit);
 		} catch (error) {
@@ -55,8 +64,10 @@ export interface StaleServiceDeps {
 }
 
 /** False means eligible units still need an idle window; re-scan next tick. */
-export async function reconcileStaleUnits(deps: StaleServiceDeps): Promise<boolean> {
-	const units = deps.units ?? await scanStaleUnits(deps.procRoot);
+export async function reconcileStaleUnits(
+	deps: StaleServiceDeps,
+): Promise<boolean> {
+	const units = deps.units ?? (await scanStaleUnits(deps.procRoot));
 	let pending = false;
 	for (const unit of units) {
 		if (!mayRestartUnit(unit, deps.transactionRunning())) {
@@ -64,7 +75,10 @@ export async function reconcileStaleUnits(deps: StaleServiceDeps): Promise<boole
 			if (unit === "ceralive.service") pending = true;
 			continue;
 		}
-		if (!(await deps.isIdle())) { pending = true; continue; }
+		if (!(await deps.isIdle())) {
+			pending = true;
+			continue;
+		}
 		await deps.restart(unit);
 	}
 	return !pending;
@@ -74,8 +88,14 @@ export const defaultStaleServiceDeps: StaleServiceDeps = {
 	isIdle: async () => false,
 	transactionRunning: () => true,
 	restart: async (unit) => {
-		const result = await spawnWithTimeout(["systemctl", "restart", "--no-block", unit], { timeoutMs: 10_000 });
-		if (result.exitCode !== 0) throw new Error(`Service restart refused: ${unit}`);
+		const result = await spawnWithTimeout(
+			["systemctl", "restart", "--no-block", unit],
+			{ timeoutMs: 10_000 },
+		);
+		if (result.exitCode !== 0)
+			throw new Error(`Service restart refused: ${unit}`);
 	},
-	recommend: (unit) => { notifyUpdate({ kind: "restart-recommended", id: unit, unit }); },
+	recommend: (unit) => {
+		notifyUpdate({ kind: "restart-recommended", id: unit, unit });
+	},
 };
