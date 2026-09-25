@@ -1,12 +1,4 @@
 import { join } from "node:path";
-import { spawnWithTimeout } from "../../helpers/spawn-policy.ts";
-import { readUpdateCapabilityFile } from "../../modules/system/update-capabilities.ts";
-import { rankTransports } from "../../modules/system/update-transport/core.ts";
-import {
-	createUpdatePinController,
-	UPDATE_TRANSPORT_TABLE_BASE,
-	UpdateTransferError,
-} from "../../modules/system/update-transport/pin.ts";
 
 const [phase, root, address, index] = process.argv.slice(2);
 if (!root) throw new Error("fixture root missing");
@@ -43,6 +35,26 @@ if (phase === "server") {
 			ota_uid: 42043,
 		}),
 	);
+	const { SETUP_CONFIG_DEFAULTS } = await import(
+		"../../helpers/config-schemas.ts"
+	);
+	await Bun.write(
+		join(root, "setup.json"),
+		JSON.stringify(SETUP_CONFIG_DEFAULTS),
+	);
+	process.chdir(root);
+	const { spawnWithTimeout } = await import("../../helpers/spawn-policy.ts");
+	const { readUpdateCapabilityFile } = await import(
+		"../../modules/system/update-capabilities.ts"
+	);
+	const { rankTransports } = await import(
+		"../../modules/system/update-transport/core.ts"
+	);
+	const {
+		createUpdatePinController,
+		UPDATE_TRANSPORT_TABLE_BASE,
+		UpdateTransferError,
+	} = await import("../../modules/system/update-transport/pin.ts");
 	const ip = async (args: string[]): Promise<string> => {
 		const result = await spawnWithTimeout(["ip", ...args], {
 			timeoutMs: 5_000,

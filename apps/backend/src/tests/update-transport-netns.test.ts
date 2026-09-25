@@ -10,17 +10,25 @@ describe.skipIf(process.env.CERALIVE_NETNS_ISOLATED !== "1")(
 		test("healthy, HTTP 302, untrusted TLS, IPv6 blackhole, DNS hijack, metered competing uplink", async () => {
 			const script = `${import.meta.dir}/fixtures/update-transport-netns.sh`;
 			const prefix = await netnsPrivilegePrefix(script);
-			const process = Bun.spawn(
-				[...prefix, "unshare", netnsUnshareFlag(prefix), "bash", script],
+			const child = Bun.spawn(
+				[
+					...prefix,
+					"unshare",
+					netnsUnshareFlag(prefix),
+					"bash",
+					script,
+					"selector",
+					process.execPath,
+				],
 				{
 					stdout: "pipe",
 					stderr: "pipe",
 				},
 			);
 			const [stdout, stderr, exit] = await Promise.all([
-				new Response(process.stdout).text(),
-				new Response(process.stderr).text(),
-				process.exited,
+				new Response(child.stdout).text(),
+				new Response(child.stderr).text(),
+				child.exited,
 			]);
 			expect(exit, `${stdout}\n${stderr}`).toBe(0);
 			for (const label of [

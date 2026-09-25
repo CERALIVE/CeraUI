@@ -15,6 +15,7 @@ describe.skipIf(process.env.CERALIVE_NETNS_ISOLATED !== "1")(
 					"bash",
 					script,
 					"pin",
+					process.execPath,
 				],
 				{ stdout: "pipe", stderr: "pipe" },
 			);

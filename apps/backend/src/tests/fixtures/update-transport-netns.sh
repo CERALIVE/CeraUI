@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+bun_bin="${2:-}"
+if [ -z "$bun_bin" ]; then
+	bun_bin="$(command -v bun)" || { echo "bun not found on PATH" >&2; exit 1; }
+fi
+if [[ "$bun_bin" != /* || ! -x "$bun_bin" ]]; then
+	echo "bun executable must be an accessible absolute path: $bun_bin" >&2
+	exit 1
+fi
+
 runner="$(dirname "$0")/update-transport-netns-runner.ts"
 mode="${1:-selector}"
 if [ "$mode" = pin ]; then runner="$(dirname "$0")/update-transport-pin-netns-runner.ts"; fi
@@ -20,7 +29,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [ "$mode" = selector ]; then bun "$runner" prepare "$root"; fi
+if [ "$mode" = selector ]; then "$bun_bin" "$runner" prepare "$root"; fi
 ip link set lo up
 for index in 0 1; do
 	unshare -n -- sleep 120 &
@@ -34,7 +43,7 @@ for index in 0 1; do
 	nsenter -t "$peer" -n ip addr add "${subnet}.2/24" dev "srv${index}"
 	if [ "$index" -eq 0 ]; then nsenter -t "$peer" -n ip addr add 192.0.2.3/24 dev srv0; fi
 	nsenter -t "$peer" -n ip link set "srv${index}" up
-	nsenter -t "$peer" -n bun "$runner" server "$root" "${subnet}.2" "$index" &
+	nsenter -t "$peer" -n "$bun_bin" "$runner" server "$root" "${subnet}.2" "$index" &
 	if [ "$index" -eq 0 ]; then server0=$!; else server1=$!; fi
 done
 sleep 0.3
@@ -42,4 +51,4 @@ if [ "$mode" = pin ]; then
 	ip route add default via 192.0.2.2 dev eth0 metric 100
 	ip route add default via 198.51.100.2 dev eth1 metric 10
 fi
-bun "$runner" client "$root"
+"$bun_bin" "$runner" client "$root"
