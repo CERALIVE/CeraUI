@@ -139,6 +139,9 @@ Bun/TypeScript HTTP + WebSocket server. Serves the frontend static bundle, expos
 | **ALSA card scan + `setup.sound_device_dir` ↔ kernel reconciliation** | `modules/streaming/alsa-card-scan.ts` (`scanAlsaCards`, `resolveConfiguredAlsaCards`, `getResolvedAlsaCardDir`) + `modules/streaming/audio.ts` (`isPlaybackOnlyCard`); contract below → …AND NEITHER IS A LIVE AUDIO CARD |
 | **Static onboard AUDIO display-name rules (`rockchip,hdmiin` → `HDMI Input`) — code-level, no operator surface** | `modules/streaming/audio-naming.ts` (`ONBOARD_AUDIO_DISPLAY_RULES`, `resolveOnboardDisplayName`) |
 | **Static onboard VIDEO display-name rules (`rk_hdmirx` → `HDMI Input`) + the shared key folding** | `modules/streaming/onboard-display-names.ts` (`ONBOARD_VIDEO_DISPLAY_RULES`, `applyOnboardVideoDisplayRule`, `normalizeOnboardKey`) |
+| **The update orchestrator (18-phase state machine, D8 stream admission, schedule, persistence/resume, operator RPCs)** | `modules/system/update-orchestrator/` (`reducer.ts` `reduceOrchestrator`, `admission.ts` `admitStreamStart`, `runtime.ts` `admitAndPrepareStreamStart` / `startUpdateOrchestrator`, `resume.ts`); contract below → THE UPDATE ORCHESTRATOR, full reference [`../../docs/DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md) |
+| **Signed OS channel agent, lagged slot mirror, quarantine, update notifications** | `modules/system/update-orchestrator/` (`os-agent.ts`, `os-manifest.ts`, `slot-sync-gate.ts` `slotSyncGate`, `quarantine.ts` `UpdateQuarantine`, `notifications.ts` `notifyUpdate`) |
+| **Update transport selector + UID-pinned transfer (OS agent only today)** | `modules/system/update-transport/` (`executor.ts` `selectUpdateTransport`, `pin.ts` `updatePinController`, `pin-rules.ts`) |
 | **Which address family apt uses for THIS run (per-origin dual-family probe → one `-o Acquire::Force*` option)** | `modules/system/apt-reachability.ts` (`probeAptReachability`, `classifyProbe`, `deriveVerdict`) + `modules/system/apt-source-origins.ts`; contract below → APT REACHES THE REPOSITORY OVER THE FAMILY THAT WORKS |
 | **Admitting an apt transaction against real free space (pre-clean → `--print-uris` estimate → `statfs` → post-clean)** | `modules/system/apt-space-admission.ts` (`APT_SPACE_RESERVE_BYTES`), `modules/system/apt-space-parser.ts`, `modules/system/apt-cache-clean.ts`; contract below → …AND THE TRANSACTION IS ADMITTED AGAINST REAL FREE SPACE |
 | **`.deb` maintainer scripts (why `prerm` must gate on `$1` and `postinst` must enable unconditionally)** | `scripts/build/build-debian-package.sh` + its contract test `scripts/build/deb-maintainer-scripts.test.sh`; contract below → …AND THE PACKAGE MUST NOT DISABLE THE DEVICE IT IS UPGRADING |
@@ -2899,185 +2902,227 @@ branches discard the speculative answer, query-failure falls back, the IPv4
 short-circuit, AAAA-first/A-first/one-family outcomes, both-family cache
 retention, and IPv6 URL handling at all three consumers).
 
+## THE UPDATE ORCHESTRATOR: ONE AGENT, ONE LOCK, D8 ADMISSION [EXISTS]
+
+`modules/system/update-orchestrator/` is the device's single update agent. It
+owns discovery, download, commit, OS staging, activation, verification and the
+lagged slot mirror, and it is the only thing that decides when an update may
+touch the device. The full reference (every phase, every transition, every
+gate, and the explicit list of what is and is not proven) is
+[`docs/DEVICE-UPDATES.md`](../../docs/DEVICE-UPDATES.md). This section keeps
+only the rules a change to this module must not break.
+
+**Status split, stated exactly.** The orchestrator, its D8 admission, the package
+pipeline and the Updates dialog run on every device. The APT all-package scope,
+the OS agent, the slot mirror and the UID-pinned transport are implemented and
+fixture-tested but each is gated on an image capability no shipped image
+declares (`features: []` today), so they are inert in the field [PARTIAL]. No
+board has run any of it from this branch.
+
+- **Pure core, one effects layer.** `types.ts`, `reducer.ts` (`reduceOrchestrator`),
+  `admission.ts` and `schedule.ts` contain no I/O, no `Date.now()` and no
+  `Math.random()`; `runtime.ts` is the only I/O. The reducer is total: an
+  unlisted (phase, event) pair returns the SAME object, which `dispatch()` uses
+  to skip persisting and pushing an unchanged state.
+- **18 phases, one field.** `ORCHESTRATOR_PHASES`. One disruptive operation at a
+  time is what the shared `/run/lock/ceralive-update.lock` allows, so one field
+  is enough; the cost is that packages and OS are never both "available" at
+  once (packages win). The transition table lives in `docs/DEVICE-UPDATES.md`.
+- **`quarantined` ≠ `failed`, and both are sticky today.** `COMMIT_FAILED`
+  quarantines (dpkg ran and failed, so there is an exact candidate to pin);
+  `COMMIT_RESUME_UNRESOLVED`, `DOWNLOAD_FAILED`, `OS_STAGING_FAILED` and
+  `SYNC_FAILED` go to `failed` (nothing proven bad). **No production code
+  dispatches `RESET`**. The reducer accepts it and nothing sends it, so either
+  phase persists across restarts in `agent.json`, `system.checkUpdatesNow`
+  answers `busy` and `system.installUpdatesNow` answers `not_available`. That is
+  a known gap, not a design; do not describe it as a recovery path.
+- **Persistence and resume.** Every real transition is written atomically to
+  `/data/ceralive/update-state/agent.json` and pushed as the additive
+  `status.update_orchestrator` (`getOrchestratorWireState()`), a SIBLING of the
+  unchanged `update_state` union. `resumeOrchestratorState()` never spawns apt:
+  for `committing` it calls the existing read-only
+  `recoverSoftwareUpdateIfRunning()` plus `getUpdateState()`; an absent or
+  inconclusive unit becomes `COMMIT_RESUME_UNRESOLVED`, never `COMMIT_FAILED`
+  (quarantine implies a confirmed-bad version). Every other phase resumes as a
+  pass-through and the next tick re-observes it.
+- **The package step reuses the existing launcher.** `startPackageInstall` wraps
+  `startSoftwareUpdate()` (below), so every refusal, the detached PID-1-owned
+  unit, the space admission and the reattach rules still hold. On a legacy image
+  that launch is the 15-name roster; on an `apt-all-packages` image it is the
+  origin-filtered, exact `name=version` path in `apt-all-packages.ts`, whose ONE
+  transient unit runs `flock -x /run/lock/ceralive-update.lock` around download
+  AND commit. `awaiting-idle` therefore gates the start of that whole unit, and
+  `downloading` vs `committing` is inferred from its own progress counters.
+  **Do NOT split that unit into two to get a pause between download and commit**
+  The single flock is what stops an `apt-get update` racing the transaction.
+- **Idle drives the schedule.** Scheduled checks (6 h ± 30 min packages, 12 h ±
+  60 min OS; 60 s doubling backoff, 5 min for an apt 429/5xx, 24 h ceiling) start
+  only from `idle` with the D7 toggle on. The install unit starts only with no
+  live stream and `getIdleStatus()` idle: 30 minutes since the latest stream end,
+  preview end, start-lease end, routed remote command or UI heartbeat, inside the
+  configured window. `hasActiveRemoteSession()` is a five-minute command-recency
+  heuristic, NOT hub presence; a quiet connected operator can be missed.
+- **Operator RPCs bypass idle and D7, never D8.** `system.checkUpdatesNow`,
+  `system.installUpdatesNow` (refuses `stream_active` itself, before the phase
+  leaves `available`), `system.allowCellularOnce`, and the pure read
+  `system.getUpdateDetails` (`readUpdateDetails()`, every block independently
+  nullable; it never touches the S1-locked `device-stats.raucSlot`).
+- **The legacy periodic loop still runs.** `main.ts` starts
+  `periodicCheckForSoftwareUpdates()` and then `startUpdateOrchestrator()`; both
+  land discovery through `runUpdateDiscoveryAndReport()`.
+- **So do the legacy RPCs, and they bypass the orchestrator.** The Updates
+  dialog's Packages section still calls `system.checkForUpdates` /
+  `system.startUpdate`, which run `triggerManualUpdateCheck()` /
+  `startSoftwareUpdate()` directly and never move the orchestrator's phase. D8
+  does not see a transaction launched that way; a stream start during it is
+  refused only by the older `isUpdating()` guard in `streamloop/session.ts`, as
+  retriable `engine_restarting` / `stream_start_suppressed_update`, not as
+  `update_in_progress`.
+
+### D8: THE STREAM/UPDATE ADMISSION TABLE [EXISTS]
+
+`admission.ts` is the one table; `assertExhaustivePhaseClassification()` runs at
+module load.
+
+| Phase | Stream start | Update action |
+|---|---|---|
+| `committing`, `restarting-services` | REFUSED, `update_in_progress` | none |
+| `downloading` | allowed | `stopPackageInstallUnitForStream()` |
+| `os-staging` | allowed | `killAndRestartRaucForStream()` |
+| `syncing` | allowed | continues (local rsync) |
+| all other phases | allowed | none |
+
+`modules/streaming/stream-session-orchestrator.ts`'s `start()`, the single
+choke point every launch origin (UI, remote-control, autostart, set-profile,
+restoration) funnels through, calls `admitAndPrepareStreamStart()` as its LAST
+admission gate, after duplicate-start, the modem-transition lease, the recovery
+barrier and blocking-mutation, because it is the only gate with a side effect. A
+refusal is the typed, non-retriable `update_in_progress` class at phase `params`
+(`typedUpdateInProgressFailure()`), carrying `updatePhase` / `updatePercent` /
+`updateEtaSeconds`; `updateEtaSeconds` is always `0` today because no progress
+path computes an ETA. See [`docs/START-LIFECYCLE.md`](../../docs/START-LIFECYCLE.md).
+An admitted start then sets `/run/ceralive/streaming`
+(`streaming/ota-streaming-marker.ts`), the SAME sentinel the image's
+`ceralive-rauc-activate.sh` checks before arming an OS slot, and every
+stream-end path clears it (a launch that never went live, every `stop()`, and a
+config-change transaction that ends the stream without one).
+
+**KNOWN, ACCEPTED, RECOVERY-BACKED RISK: read before touching the
+abort-network path.** The orchestrator re-reads `getPackageInstallWireState()`
+only on its own tick (`ACTIVE_TICK_MS`, 3 s). A stop fired on a STALE cached
+`downloading` that had really crossed into dpkg could interrupt dpkg mid-write.
+The window is narrowed, never eliminated, to one wire-state read round trip:
+immediately before any stop/kill, `admitAndPrepareStreamStart()` calls
+`deps.getPackageInstallWireState()` DIRECTLY, and if it shows `installing` or
+`success` it dispatches `COMMIT_PHASE_ENTERED` and refuses with ZERO stop/kill
+calls (`update-orchestrator-runtime.test.ts` proves it). The remaining window is
+recovered by `image-building-pipeline`'s `ceralive-dpkg-recover.service`, which
+on EVERY boot checks `/var/lib/dpkg/updates/` and `dpkg --audit` and runs
+`dpkg --configure -a` (600 s budget) regardless of cause. **Do NOT "fix" this by
+re-architecting the single-unit/single-flock apt design into two units. That
+door is closed.** A new, separately-argued reason to narrow it further must be
+argued on its own evidence. `os-staging` needs no fresh read: RAUC only ever
+writes the INACTIVE slot.
+
+### THE OS AGENT, THE SLOT MIRROR AND THE TRANSPORT PIN [PARTIAL]
+
+- **OS agent** (`os-manifest.ts`, `os-agent.ts`; needs `apt-all-packages` +
+  `rauc-verity-streaming`). `checkOsChannel()` fetches
+  `channels/<channel>/<board>.json` and `.sig` as `ota_uid` under
+  `updatePinController.run("os", ...)`; `validateSignedOsManifest()` accepts only
+  a CMS verified against `/etc/rauc/ceralive-keyring.pem` with the exact signer
+  CN, codeSigning and no emailProtection, then the strict v1 fields.
+  `stageOsBundle()` runs `rauc install` under the same pin to completion, writes
+  `os-staged.json` BEFORE `manifest-serial.<channel>`, then
+  `ceralive-rauc-arm@arm.service` arms next-idle activation (`@now` after seven
+  days pending, only without a stream). A new boot compares the booted CalVer to
+  the staged version and quarantines a mismatch. An idle RAUC with no receipt
+  after a restart fails closed (`os_stage_outcome_unknown_after_restart`).
+- **The only anti-downgrade source is `/etc/ceralive/os-release-version`**
+  (`readBootedOsReleaseVersion()`); absent or malformed is
+  `booted_version_unknown`, never a timestamp/commit fallback. The stamp exists
+  only on a release-cut image, so **every currently booted board refuses OS
+  staging**.
+- **Slot mirror** (needs `slot-sync`). `slotSyncGate()` is the pure pre-check with
+  eight typed refusals (`capability-absent`, `not-yet-booted`, `packages-changed`,
+  `build-changed`, `already-synced`, `os-install-pending`, `already-syncing`,
+  `update-busy`); `readSlotSyncEvidence()` reads the image-owned
+  `healthy-state.json` / `sync-receipt.json` and hashes dpkg status with
+  `node:crypto`. Boot and every idle tick dispatch `SYNC_ELIGIBILITY_CONFIRMED`;
+  `OS_VERIFIED` reaches `sync-eligible` directly. The gate is rechecked before
+  `startSlotSync()`. Integrity and external-lock checks stay atomic in the unit
+  (exit 75); do not duplicate them in TypeScript. `lock.ts` re-exports the SAME
+  `SOFTWARE_UPDATE_LOCK` constant rather than a second literal (the unit takes it
+  with `flock -n`), and `inspectSlotSync()` tells exit 75 (`refused`) from an
+  operational failure through the shared `processExitCode` conversion, so the
+  two probes cannot disagree about a (code, status) pair. Success is settled only once
+  the receipt carries the CURRENT dpkg SHA, then four independent best-effort
+  cleanups and the `slots-current` notice. Contract:
+  [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
+- **Transport** (`update-transport/`). `selectUpdateTransport()` ranks every
+  uplink × family and records the result for the dialog
+  (`recordTransportSelection()`, never a routing input).
+  `updatePinController.run()` installs a UID-scoped priority-120 lookup into
+  table 100000 (`apt`) / 100001 (`os`), an other-family `prohibit` and an
+  `unreachable` floor, removes them in `finally`, holds a failed exact pair for
+  15 minutes and tries at most three. The boot sweep (`updatePinController.sweep()`
+  in `main.ts`) must succeed before any pinned step is admitted. **Only the OS
+  agent calls it.** The package path (legacy AND `apt-all-packages`) still uses
+  the `apt-reachability.ts` preflight below; the `apt` job has no production
+  caller. **DNS is not UID-pinned**: a direct resolver reachable only over the
+  prohibited family makes the job's own lookups fail as `dns-failed` and fail
+  over. Details: [`docs/HOST-UPLINK-ELECTION.md`](../../docs/HOST-UPLINK-ELECTION.md).
+
+### CELLULAR, QUARANTINE, STALE SERVICES, NOTIFICATIONS [EXISTS]
+
+- **D12** (`decideCellularGate()`): only when EVERY reachable uplink is metered.
+  Packages follow `allowPackagesOverCellular` for check and install; the OS
+  CHECK follows `allowSystemOverCellular`; the OS INSTALL is ALWAYS held and is
+  released only by `system.allowCellularOnce(id)` naming that exact candidate,
+  consumed by `OS_STAGING_STARTED`. The grant is reduced in BOTH `idle` and
+  `os-available`: `os-available` is where the gate actually holds a candidate,
+  and reducing it from `idle` alone made the approval a silent no-op.
+- **Quarantine** (`UpdateQuarantine`, `quarantine.json` schema 1): exact failed
+  candidates pinned at -1 through `systemd-run`, lifted by a newer candidate;
+  `isOsVersionQuarantined()` feeds the OS agent. Schema:
+  [`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
+- **Stale services** (`reconcileStaleUnits()`, `mayRestartUnit()`): restart only
+  at idle; `systemd*`, `dbus`, `NetworkManager*`, `ModemManager*`,
+  `wpa_supplicant*`, `rauc*`, `pipewire*`, `wireplumber*` NEVER restart and get a
+  `restart-recommended` notice; `ceralive.service` waits only while the unit is
+  still downloading or installing. No PID is ever killed.
+- **Notifications** (`notifyUpdate()`, `update:<kind>:<id>`, re-send suppressed).
+  `download-paused`, `credentials-expiring` and `transport-unhealthy` are in the
+  vocabulary and translated but have **no producer**. There is no certificate
+  expiry on the wire and therefore no countdown; the dialog's credentials band
+  keys only on a transport finding of `credentials-invalid`, which only an `apt`
+  profile selection can produce, and nothing runs one yet.
+
+### SETTINGS AND IMAGE CAPABILITIES [EXISTS]
+
+`update-settings.ts` reads/writes `update-settings.json` (CWD-relative like
+`config.json`) through `loadJsonConfig` / `writeFileAtomicSync`; absent gets the
+`@ceraui/rpc` defaults, malformed PRESENT content throws
+`UpdateSettingsValidationError` instead of partial salvage. `channel` is
+stable/beta only, never `drill`. `readUpdateCapabilities()` reads
+`/usr/lib/ceralive/update-capabilities.json`; absent, invalid, or no
+`apt-all-packages` token is `{mode:"legacy",features:[]}`, and every capable path
+checks its own feature token rather than the mode. `aptUpdatesEnabled()` remains
+the hard switch: an explicit `setup.apt_update_enabled === false` refuses the
+launch, and the orchestrator simply stays in `awaiting-idle`.
+
+Coverage: `tests/update-orchestrator-{reducer,admission,schedule,persistence,resume,runtime,lock}.test.ts`,
+`update-recovery`, `update-details`, `slot-sync-{gate,state,runtime}`,
+`apt-all-packages`, `update-settings`, `update-capabilities`,
+`update-transport*` (incl. `update-transport-pin-netns.test.ts`), `idle-detector`,
+plus the frontend `src/lib/updates/*.test.ts` and `tests/e2e/update-system.spec.ts`.
+All fixture, netns or Playwright proof; no board receipt.
+
 ## SOFTWARE-UPDATE START CONTRACT [EXISTS]
 
-**OS agent [PARTIAL, Todo 39].** `update-orchestrator/os-manifest.ts` owns the
-strict v1 schema, trusted signer boundary, CalVer booted-version read, and
-root-only `drill` override. `os-agent.ts` fetches `.json` and `.sig` as the
-image-declared `ota_uid` under `updatePinController.run("os", ...)`; only a CMS
-verified against `/etc/rauc/ceralive-keyring.pem` with exact manifest signer CN,
-codeSigning EKU and no emailProtection may reach field parsing. `rauc install`
-runs under the same UID pin until completion, with the shared flock and read-only
-Operation/Progress polls. Its success writes `os-staged.json` before the
-per-channel `manifest-serial.<channel>` file, then the image's
-`ceralive-rauc-arm@arm.service` arms next-idle activation. Seven days pending
-invokes `@now` only without a stream; a new boot compares the stamped CalVer to
-the staged version and quarantines a mismatch. A backend restart during an
-ongoing RAUC transfer does not claim success on an inconclusive daemon outcome:
-once it becomes idle without a committed receipt, the orchestrator fails closed.
-These are fixture/probe tests, not a live signed release or board receipt.
-
-**Lagged slot mirror [PARTIAL, Todo 40].** `slot-sync-gate.ts` is the pure
-capability/boot-health/status-SHA/build-ID/receipt/busy-phase predicate;
-`slot-sync-state.ts` reads the image-owned files and hashes dpkg status. The
-startup + idle tick dispatch `SYNC_ELIGIBILITY_CONFIRMED` to reuse the existing
-`sync-eligible` phase, while OS verification retains its unconditional transition.
-Runtime rechecks before starting the image's unit, confirms the current receipt
-after success, then runs independent best-effort apt/download/quarantine cleanup
-before the existing `slots-current` notice. Integrity and external-lock checks
-remain atomically enforced by the unit (exit 75), not duplicated in TypeScript.
-`slot-status.ts`'s both-slot reading reaches the Updates dialog only through
-`system.getUpdateDetails` (`update-orchestrator/details.ts`, Todo 41), without
-changing the S1-locked `device-stats.raucSlot` wire field. Full contract and fixture-only
-validation scope: [`../../docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md).
-
-The only anti-downgrade source is `/etc/ceralive/os-release-version`; absent or
-malformed yields `booted_version_unknown`, never a timestamp/commit fallback.
-The stamp exists only on a deliberate release-cut image, so **all currently
-booted boards are expected to refuse OS-agent staging** until Wave 5 builds and
-installs such an image by another approved path. Legacy-capability images have
-no OS agent; their 15-name package update path remains independent.
-
-**Stream-admission wiring [EXISTS, Todo 37].** `modules/streaming/stream-session-orchestrator.ts`'s
-`start()` — the single choke point every launch origin (UI, remote-control,
-autostart, set-profile, restoration) calls through, since all five funnel to
-`productionOrchestrator.start()` — consults the update orchestrator's D8
-admission table (`modules/system/update-orchestrator/admission.ts`) once every
-other admission gate (duplicate-start, modem-transition lease, recovery
-barrier, blocking-mutation) has already passed. `committing`/
-`restarting-services` refuse the start with the typed, non-retriable
-`update_in_progress` failure class (`packages/rpc/src/schemas/streaming-lifecycle.schema.ts`,
-carrying `updatePhase`/`updatePercent`/`updateEtaSeconds`); see
-[`docs/START-LIFECYCLE.md`](../../docs/START-LIFECYCLE.md) for the wire shape.
-`downloading`/`os-staging` are allowed, and the admitted start aborts the
-in-flight operation over the network — see `runtime.ts`'s
-`admitAndPrepareStreamStart` and `stream-abort.ts` — then sets
-`/run/ceralive/streaming` (`streaming/ota-streaming-marker.ts`), the SAME
-sentinel `image-building-pipeline`'s `ceralive-rauc-activate.sh` (Todo 28)
-checks before staging an OTA slot activation. The marker is cleared on every
-stream-end path: a failed launch that never went live, every `stop()` call,
-and a config-change transaction that ends the stream without a `stop()` call.
-
-**KNOWN, ACCEPTED, RECOVERY-BACKED RISK — read before touching the
-abort-network path.** Todo 36's `getPackageInstallWireState()` wire read is
-only re-consulted by the update orchestrator's own scheduler tick, which runs
-at most every `ACTIVE_TICK_MS` (3s) while a package install is active. If a
-stream-admission kill/stop fired on a STALE cached `state.phase ===
-"downloading"` that had, in reality, already crossed into dpkg committing, the
-kill could interrupt dpkg mid-write. This is an ACCEPTED, BOUNDED, RECOVERABLE
-risk, narrowed — never eliminated — to one wire-state read round trip:
-immediately before dispatching any kill/stop, `admitAndPrepareStreamStart`
-calls `deps.getPackageInstallWireState()` DIRECTLY (bypassing the cached
-`state.phase`) for a forced-fresh read, and refuses the start instead of
-killing anything if that fresh read shows dpkg has already started
-(`installing`) or finished (`success`) — zero kill/stop calls are dispatched
-in that case (`update-orchestrator-runtime.test.ts`'s dedicated
-forced-fresh-read test proves this). The rare case where an interrupted-dpkg
-outcome DOES occur (a kill landing in the one wire-state-read-round-trip
-window) is recovered by `image-building-pipeline`'s
-`ceralive-dpkg-recover.service` (Todo 27, already shipped, see
-`docs/healthcheck-dpkg-recovery.md` in that repo) — it runs on EVERY boot,
-checks `/var/lib/dpkg/updates/` and `dpkg --audit`, and runs
-`dpkg --configure -a` (600s budget) whenever dpkg was left interrupted,
-regardless of cause (power loss, crash, or this kill are indistinguishable to
-it). **Do NOT "fix" this by re-architecting Todo 35's single-unit/single-flock
-detached-apt design into two units — that door is closed.** The recovery
-mechanism is what makes the narrow remaining window acceptable, not a reason
-to leave it unaddressed; if a NEW, separately-argued reason to close it
-further ever appears, argue it on its own evidence rather than reopening this
-one.
-
-**Post-commit recovery [PARTIAL, Todo 38].** The orchestrator now runs the
-`/proc/<pid>/maps` + cgroup stale-service scan after a confirmed commit and
-defers eligible `systemctl restart --no-block` actions until Todo 32's idle
-verdict. Protected service families get persistent restart recommendations;
-`ceralive.service` is deferred only while the detached update still runs, not
-excluded forever. `quarantine.ts` writes version-1 `quarantine.json` atomically,
-pins exact failed package candidates at -1 through `systemd-run`, and exports
-`isOsVersionQuarantined` for Todo 39. See
-[`docs/UPDATE-RECOVERY.md`](../../docs/UPDATE-RECOVERY.md) for the exact schema
-and the remaining OS/credential/transport producer-hook boundary.
-
-**Update transport selector [PARTIAL, Todo 33].** `system/update-transport/core.ts`
-is the pure per-uplink/per-family classifier and ranking function;
-`executor.ts` owns bounded DNS, HTTP, HTTPS/mTLS and gpgv probes. See
-`docs/HOST-UPLINK-ELECTION.md` for profile host requirements and the explicit
-Todo-12 live-deploy verification follow-up. Fixture/netns proof is not live
-`apt.ceralive.tv` verification. Add-on downloads use
-`addons/apt-client-tls.ts` only for the exact first-party host. The existing
-APT path has not yet been switched to the new selector.
-
-**Update transaction pin [PARTIAL, Todo 34].** `system/update-transport/pin.ts`
-consumes the ranked selector output; `pin-rules.ts` parses the interface's default route
-and installs a UID-scoped priority-120 lookup into a private APT/OS table plus
-an other-family prohibit rule. Its startup sweep is wired through `main.ts` after
-the control server binds; a failed sweep blocks future pin admission. Partial
-setup and a throwing awaited step both unwind in `finally`, and an unreachable
-floor prevents main-table fallthrough if the selected route disappears.
-Exact-pair transport failures are held for 15 minutes; no more than three
-candidates are attempted. The callback gets the APT family flag per invocation,
-never a persistent apt configuration. DNS is not UID-pinned: a direct resolver
-reachable only over the prohibited family makes the job's own lookups fail as
-`dns-failed` and fail over. The legacy APT install path still uses its existing
-preflight and detached unit; the later orchestrator must await its transfer
-within this new scope rather than releasing rules after mere dispatch. Two-veth
-netns verification and crash-sweep proof: `tests/update-transport-pin-netns.test.ts`.
-
-**APT scope [PARTIAL, Todo 35].** Only the image's `apt-all-packages` feature
-activates the new path; without it, the 15-name exact classifier and its
-`dist-upgrade --assume-no` discovery / app-only install argv are unchanged.
-Capable discovery simulates `upgrade --with-new-pkgs` with no locking, resolves
-each candidate through `apt-cache policy`, refuses any `Remv` and any held
-first-party package, and offers only unheld candidates from trixie,
-trixie-updates, trixie-security or apt.ceralive.tv. It records the chosen
-name/version pair and origin on the optional package wire fields. The commit is
-an explicit `install name=version ...`, with `--no-download --no-remove`, after a
-second simulation proves no extra package or removal was added by resolution.
-One PID-1-owned transient service runs `flock -x /run/lock/ceralive-update.lock`
-around download (`apt-get -d -y upgrade --with-new-pkgs`) AND commit in one
-shell; an interrupted download cannot fall into commit. Backend restart merely
-reattaches to the same service and polls external status — it never owns the
-flock. APT channel changes atomically rewrite the deb822 source: stable only,
-or stable plus beta. The next check refreshes indexes; beta-to-stable does not
-request downgrades and the image's origin pin remains below 1000. This is
-fixture/host-flock proof, NOT a board or live-index receipt; Todo 29's capable
-image must be validated separately. Coverage: `tests/apt-all-packages.test.ts`,
-`tests/update-settings.test.ts`, `tests/software-updates-apt.test.ts`.
-
-**Idle detector [PARTIAL, Todo 32].** `system/idle-detector.ts` is a pure
-decision over caller-supplied epoch milliseconds, five last-activity fields and
-the `@ceraui/rpc` update schedule. Exactly 30 minutes since the latest activity
-is idle; window start is inclusive, end exclusive, and crossing midnight works
-on the device's local clock. `idle-activity.ts` samples `getIsStreaming()`,
-`getActivePreviewProxyCount()` (an active preview always blocks),
-`currentLifecycleHolder()==="streaming"`, the command router and the last UI
-heartbeat. `idle-state.ts` persists only `lastStreamEndedAt` under
-`/data/ceralive/update-state/idle.json` using the existing atomic config writer;
-all other timestamps are in memory. Unknown startup activity is conservative.
-An authenticated `ui.heartbeat` stamps in memory; the frontend sends only while
-visible and focused, every 30 seconds. `hasActiveRemoteSession()` is explicitly
-**not** real session presence: it uses the last routed command within five
-minutes, never `channel.isConnected()`. A connected but quiet operator can be
-missed; a future hub-to-device presence protocol is needed for full fidelity.
-Nothing schedules an update from this detector yet.
-
-**Update settings and image capabilities [PARTIAL, Todo 31].**
-`update-settings.ts` reads `update-settings.json` through `loadJsonConfig` and
-writes it with `writeFileAtomicSync`; absent gets the defaults in
-`@ceraui/rpc/schemas`, while malformed or invalid PRESENT content throws a
-typed `UpdateSettingsValidationError` rather than using the loader's normal
-partial-salvage behavior. `channel` accepts only stable/beta, never the bench
-`drill` channel. The six settings are the two auto toggles, schedule (any-idle
-or a HH:mm window), channel, and two cellular allowances. The default path is
-CWD-relative like `config.json` (the unit uses `/opt/ceralive`).
-`update-capabilities.ts` reads `/usr/lib/ceralive/update-capabilities.json`
-with the shared schema; absent, invalid, empty features, or no
-`apt-all-packages` feature reports `{mode:"legacy",features:[]}`. New-image
-features are explicit, not implied by `mode:"capable"`. These three new RPCs
-expose configuration/evidence only; nothing starts an OS agent or slot sync in
-this task. Existing `aptUpdatesEnabled()` remains the single hard switch for
-manual and automatic APT: an explicit `setup.apt_update_enabled === false`
-cannot be reversed by the new settings.
+This is the launcher the orchestrator's package step calls
+(`startSoftwareUpdate()`), on legacy and `apt-all-packages` images alike.
+Every rule below still governs that launch.
 
 `modules/system/software-updates.ts` owns whether an apt update may run, and it
 never refuses in silence.
@@ -3217,13 +3262,19 @@ results carried on the update state. Mock/dev execution never launches curl:
 the default probe is `isRealDevice()`-gated, and `MOCK_SCENARIO` keeps its existing
 software-update simulation path.
 
-Detached installs take a fresh, uncached verdict and install only the sorted app
-allowlist in `modules/system/package-layer.ts`. The transient-service builder
+Detached installs take a fresh, uncached verdict. On a legacy image they install
+only the sorted app allowlist in `modules/system/package-layer.ts`; on an
+`apt-all-packages` image the argv is `buildAptAllInstallArgs()`'s exact
+`name=version` set (see THE UPDATE ORCHESTRATOR above). The transient-service builder
 rejects `dist-upgrade`, platform/unknown packages, and unsorted package vectors;
 service recovery remains tolerant of the historical `dist-upgrade` identity so
 an update started by an older backend can still be reattached safely.
 
 ### …AND DISCOVERY REPORTS WHAT IT CANNOT INSTALL [EXISTS]
+
+This is the LEGACY-image classifier, which is every image shipping today. On an
+`apt-all-packages` image discovery runs `discoverAptAllPackages()` instead and
+actionability is decided by candidate origin and the held set, never by name.
 
 Discovery no longer answers with a bare package list. `buildDiscoveredPackages`
 tags every name the `dist-upgrade --assume-no` cycle saw with its layer — from
@@ -3318,6 +3369,11 @@ host election as a ranking input. A repository outage does not erase the ordinar
 connectivity fallback or change shared-client health. Apt still consumes a separate
 fresh UNBOUND verdict after awaited route repair; a bound success cannot stand in
 for that reading. See `docs/HOST-UPLINK-ELECTION.md` from the repo root.
+
+This per-run family preflight is what EVERY package transaction uses, on legacy
+and `apt-all-packages` images alike. The UID-pinned update transport
+(`update-transport/pin.ts`) is used only by the OS agent; see THE UPDATE
+ORCHESTRATOR above.
 
 Board evidence: the Orange Pi 5+ drill observed the real `apt-get` argv from
 `/proc` carrying `-o Acquire::ForceIPv4=true` on BOTH the refresh and the discovery

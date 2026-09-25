@@ -1,28 +1,24 @@
 # CeraUI
 
-**OS update agent [PARTIAL].** Signed channel manifests are verified before
-RAUC stages a new inactive slot. Automatic OS installs require an image with
-`rauc-verity-streaming` and an `/etc/ceralive/os-release-version` CalVer stamp;
-older images have neither and cannot use this route. The first stamped image
-must be installed by an approved manual route. This source implementation has
-offline tests; no OS channel release, hosted bundle, or on-device install is
-claimed. See `apps/backend/AGENTS.md` under “OS agent”.
-
-**Slot mirror [PARTIAL].** A new-image device may mirror its healthy running
-slot only after its packages have survived a reboot and healthcheck. The
-Updates dialog reads both RAUC slots through the separate
-`system.getUpdateDetails` RPC; `device-stats.raucSlot` remains unchanged. This
-is fixture-tested, not a new board qualification. See
-[update recovery](docs/UPDATE-RECOVERY.md).
-
-**Updates dialog [PARTIAL].** Settings → Software Updates shows packages,
+**Device updates [EXISTS].** One update agent on the device checks for package
+and system updates on a schedule, installs them only while the device is idle,
+and never lets an update and a stream collide: while packages commit or services
+restart, Go Live is refused with a clear reason, and a download in progress is
+cancelled so the stream can start. Settings → Software Updates shows packages,
 system image, slots, automation (auto toggles, schedule window, channel),
-cellular allowances with per-candidate approval, and the update connection.
-Sections the image cannot back are hidden behind a stated legacy notice. A busy
-update shows an app-wide badge, and the Live cockpit warns before Go Live while
-packages install or services restart; Start stays enabled because the device
-decides admission. This is unit- and Playwright-proven against fixtures, not
-exercised on a board.
+cellular allowances with per-candidate approval, and the update connection. A
+busy update shows an app-wide badge, and the Live cockpit warns before Go Live;
+Start stays enabled because the device decides admission. Implementation
+reference: [device updates](docs/DEVICE-UPDATES.md).
+
+**What today's images can use [PARTIAL].** Every image shipping today is a
+legacy image: it keeps the 15-package update roster, and the dialog states which
+sections it cannot back instead of hiding them. Updating every package by origin,
+signed system-image updates and the slot mirror are implemented but need image
+capabilities no released image declares yet. System-image updates additionally
+need an `/etc/ceralive/os-release-version` stamp, so current boards refuse them.
+All of this is unit-, fixture- and Playwright-tested, not exercised on a board.
+See also [update recovery](docs/UPDATE-RECOVERY.md).
 
 Generic raw capture inputs now have an honest, non-streamable **Raw video** row
 rather than a false Cam Link identity. Both consumers now pin published bindings

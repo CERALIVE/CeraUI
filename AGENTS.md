@@ -104,191 +104,73 @@ stale pin plus new-field usage into a silent runtime strip instead of a
 compile-time error — it is what made the PR #303 case invisible to `tsc`, and it
 is what this gate exists because the type system alone could not catch.
 
+## THE DEVICE UPDATE SYSTEM [EXISTS; capable-image paths PARTIAL]
+
+One update agent, `apps/backend/src/modules/system/update-orchestrator/`, owns
+package discovery and install, OS staging and activation, the lagged slot mirror
+and the stream/update admission rule. The implementation reference is
+[`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md); the backend's load-bearing
+rules are in [`apps/backend/AGENTS.md`](apps/backend/AGENTS.md) → THE UPDATE
+ORCHESTRATOR. The feature notes, stated at the level a CeraUI change needs:
+
+- **[EXISTS] Orchestrator.** A pure 18-phase reducer (`reduceOrchestrator`) plus
+  one effects layer (`runtime.ts`), persisted to
+  `/data/ceralive/update-state/agent.json` and resumed at boot without ever
+  re-running dpkg. It pushes the additive `status.update_orchestrator` field on
+  every transition; the older `update_state` union is unchanged.
+- **[EXISTS] D8 admission.** `committing` and `restarting-services` refuse a
+  stream start with the typed `update_in_progress` class; `downloading` and
+  `os-staging` allow it and abort the transfer; `syncing` continues. Wired as the
+  last gate of `stream-session-orchestrator.ts`'s `start()` through
+  `admitAndPrepareStreamStart()`. See [`docs/START-LIFECYCLE.md`](docs/START-LIFECYCLE.md).
+- **[EXISTS] Schedule and idle.** 6 h package / 12 h OS checks with jitter and a
+  24 h-capped backoff, gated by `packagesAuto` / `systemAuto`. Installs start
+  only when idle (`getIdleStatus()`: 30 minutes without stream, preview, start
+  lease, remote command or UI heartbeat, inside the configured window). Remote
+  presence is a five-minute command-recency heuristic, not true presence.
+- **[EXISTS] Settings, capabilities and RPCs.** `system.getUpdateSettings`,
+  `setUpdateSettings`, `getUpdateCapabilities`, `checkUpdatesNow`,
+  `installUpdatesNow`, `allowCellularOnce`, `getUpdateDetails`. Operator actions
+  bypass idle, never D8.
+- **[EXISTS] Updates dialog and global surfaces.** Settings → Software Updates
+  shows Packages, System image, Slots, Automation, Over cellular and Update
+  connection, gated by `updateCapabilityView()`; a legacy image states the limit
+  instead of hiding it. `UpdateOrchestratorBadge` shows a busy update app-wide;
+  `live/UpdateRefusalBand` warns before Go Live (live push first, typed refusal
+  as fallback) and never disables Start. Every settings write is pessimistic.
+- **[EXISTS] Recovery.** Quarantine of exact failed candidates
+  (`quarantine.json`), idle-only restart of stale services with a protected-unit
+  list, and keyed update notifications. Contract:
+  [`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md).
+- **[PARTIAL] APT all-package scope.** Origin-filtered, exact `name=version`
+  installs under one flock. Active only on an image declaring `apt-all-packages`;
+  every shipping image is legacy (`features: []`) and keeps the exact-name
+  15-package roster.
+- **[PARTIAL] Signed OS agent.** CMS-verified channel manifests, RAUC staging,
+  deferred activation, post-boot verification. Needs `apt-all-packages` +
+  `rauc-verity-streaming` and the release-only `/etc/ceralive/os-release-version`
+  stamp, so every current board refuses OS staging with `booted_version_unknown`.
+- **[PARTIAL] Lagged slot mirror.** `slotSyncGate()` with eight typed refusals,
+  then the image's `ceralive-slot-sync.service`. Needs `slot-sync`.
+- **[PARTIAL] Update transport.** `selectUpdateTransport()` plus
+  `updatePinController` (UID-scoped route, 15-minute failover hold). Used only by
+  the OS agent; package transactions still use the apt reachability preflight.
+  DNS is not pinned. See [`docs/HOST-UPLINK-ELECTION.md`](docs/HOST-UPLINK-ELECTION.md).
+
+Known gaps, recorded rather than smoothed over:
+
+- **Nothing dispatches `RESET`,** so `quarantined` and `failed` persist until
+  `agent.json` is removed.
+- **The Packages section still calls `system.startUpdate` /
+  `system.checkForUpdates`,** which bypass the orchestrator; D8 does not see a
+  transaction started there (the older `isUpdating()` start guard still refuses
+  a stream during it).
+- **No certificate-expiry countdown.** The wire carries no expiry date,
+  `credentials-expiring` has no producer, and the credentials band keys on an
+  `apt`-profile transport finding that no production path produces yet.
+- **Nothing is board-proven.** Unit, fixture, netns and Playwright tests only.
+
 ## STRUCTURE
-
-**Signed OS channel agent [PARTIAL, Todo 39].** The backend validates channel
-manifests under `modules/system/update-orchestrator/`: CMS against the RAUC root,
-then the separate manifest signer's CN and codeSigning-only EKU, then strict v1
-fields. It fetches the selected OS channel under `ceralive-ota` through the
-UID-pinned route, stages a verity bundle via RAUC under the shared update lock,
-and only after confirmed success records that channel's serial and arms deferred
-activation. `os-channel-override` is a root-owned, exact-`drill` bench-only file;
-APT always follows Settings. **The comparison reads only
-`/etc/ceralive/os-release-version` (CalVer), never `image-version` or the build
-commit.** Every existing board lacks that release-only stamp, so its OS agent
-correctly refuses with `booted_version_unknown` until a future release-cut
-image is installed through another path. The actual release publishing and
-board install remain Wave 5, not a claim of this fixture-tested agent.
-
-**Update recovery [PARTIAL, Todo 38].** The update orchestrator scans deleted
-system-library mappings, identifies owning systemd units via cgroup, restarts
-eligible units only when idle, and recommends manual restarts for protected units.
-It quarantines confirmed failed APT candidates by exact version; the schema and
-the OS agent's `os[].version` read contract are in
-[`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md). `ceralive.service` restarts
-only after its transaction settles, not during a live update. Fixture proof only.
-
-**Lagged slot-sync [PARTIAL, Todo 40].** The backend starts the image-owned
-mirror only for an explicitly capable, current-boot healthchecked state whose
-dpkg SHA/build ID match and whose sync receipt has not recorded that SHA. Idle
-boot/tick detection covers APT changes after a reboot; the OS-verification path
-retains its existing trigger. Success is followed by best-effort cache/download/
-quarantine cleanup and the translated `slots-current` notification. The both-slot
-RAUC reading reaches the UI only through Todo 41's `system.getUpdateDetails`, not
-through `device-stats.raucSlot`.
-Fixtures, not a physical mirror drill, establish this implementation; see
-[`docs/UPDATE-RECOVERY.md`](docs/UPDATE-RECOVERY.md).
-
-**Updates dialog + update surfaces [PARTIAL, Todo 41].** `system.getUpdateDetails`
-(`update-orchestrator/details.ts`, schema `update-details.schema.ts`) is a pure
-read with every block independently nullable; the dialog pulls it with
-capabilities and settings on open, generation-fenced
-(`apps/frontend/src/lib/updates/update-surface.svelte.ts`). Every write is
-pessimistic: a control moves only to the `setUpdateSettings` echo. Sections are
-gated by `updateCapabilityView` — package automation on every image, system
-image/channel/system-cellular only with `apt-all-packages` +
-`rauc-verity-streaming`, slots only with `slot-sync`; a legacy image states the
-limit instead of hiding it silently. The schedule window is validated by the
-shared `validateSchedule` (explicit past-midnight confirmation). Cellular
-approval grants exactly the candidate the device named and starts its install
-in one step. Outside the dialog: `UpdateOrchestratorBadge` (in-flow, retracts
-with the phase) and `live/UpdateRefusalBand` (live push wins; the typed
-`update_in_progress` refusal is the fallback). The band never disables Start —
-admission stays the backend's. **Credentials:** the wire carries no certificate
-expiry and `credentials-expiring` has no producer, so there is no countdown; the
-dialog bands only a transport finding whose states include
-`credentials-invalid`. Coverage: `src/lib/updates/*.test.ts`,
-`tests/e2e/update-system.spec.ts` (8), evidence in
-`tests/e2e/visual/update-system.visual.spec.ts`. No board run is claimed.
-
-**Update-system foundation [PARTIAL, Todo 31].** `@ceraui/rpc/schemas`
-owns the update settings and image-capability wire types. The backend's
-`modules/system/update-settings.ts` persists `update-settings.json` alongside
-`config.json`, and `update-capabilities.ts` reads the image-owned feature file.
-Missing/invalid capabilities, including the current `features: []` carrier,
-remain legacy (15-name APT, no OS agent or slot-sync); only the exact
-`apt-all-packages` token selects the new roster. This adds authenticated
-`system.getUpdateSettings`, `system.setUpdateSettings`, and
-`system.getUpdateCapabilities` RPCs. Todo 35 adds a capability-gated APT
-discovery/install path and channel writer, but not the OS orchestrator; the
-legacy 15-name install remains on images without `apt-all-packages`. The
-capable path is fixture-proven only pending the image carrier (Todo 29).
-`setup.json`'s explicit `apt_update_enabled: false` still vetoes every
-APT install; a saved `packagesAuto: true` cannot override it. Later tasks
-32–41 must gate individual capabilities on the returned feature tokens rather
-than treating the mode alone as permission for OS staging or slot-sync.
-
-**Idle signals [PARTIAL, Todo 32].** The pure `modules/system/idle-detector.ts`
-evaluates the five last-activity timestamps against 30 minutes and the configured
-local-time schedule (including midnight-crossing windows). `idle-activity.ts`
-samples stream, preview, command recency, authenticated visible/focused UI
-heartbeat and the streaming start lease. Stream-end time survives process/slot
-restarts in `/data/ceralive/update-state/idle.json`; no agent dispatches an update
-from this verdict yet (the later orchestrator tasks own that). Remote presence
-is **only** a five-minute command-recency heuristic, not hub connectivity or a
-true operator-presence claim: a quiet but connected operator may be missed.
-
-**Update transport [PARTIAL, Todo 33].** The backend now has a stateless
-per-uplink/per-family selector under `modules/system/update-transport/`, exercised
-against fixture servers and real network namespaces. Add-on artifact fetches use
-an exact-host-only client TLS helper. Live verification against the real deployed
-`apt.ceralive.tv` is deferred pending Todo 12; the existing update button still
-uses its legacy preflight until the later orchestrator is wired. Details:
-`docs/HOST-UPLINK-ELECTION.md`.
-
-**Transaction pin [PARTIAL, Todo 34].** `update-transport/pin.ts` owns failover and
-`pin-rules.ts` owns priority-120 UID rules, two private tables and a crash sweep
-at backend boot. The controller provides three-attempt
-failover with a 15-minute exact-pair hold. The route and prohibit rules are
-removed in `finally`; APT's ForceIPv4/ForceIPv6 option is passed per invocation.
-Kernel-netns integration is local, not a live-origin or board receipt. The
-existing update button has not yet adopted this mechanism; the later orchestrator
-must await the whole transfer before leaving the pinned callback. DNS is not
-pinned, and direct upstream resolution over the prohibited family can fail over
-as `dns-failed`. Details: `docs/HOST-UPLINK-ELECTION.md`.
-
-**Update orchestrator [PARTIAL, Todo 36].** `modules/system/update-orchestrator/`
-is a pure reducer (`reducer.ts`) plus a separate effects layer (`runtime.ts`,
-`resume.ts`, `persistence.ts`, `lock.ts`) implementing the packages+OS+slot-sync
-state machine (18 phases: `idle, checking, available, downloading,
-awaiting-idle, committing, restarting-services, settled, os-available,
-os-staging, os-staged, os-activation-armed, os-verifying, sync-eligible,
-syncing, synced, quarantined, failed`). Persisted atomically to
-`/data/ceralive/update-state/agent.json` (`writeFileAtomicSync`, the Todo
-31/33 convention) and resumed on backend start. `admitStreamStart`/
-`onStreamStart` (`admission.ts`) implement D8 exactly — `committing`/
-`restarting-services` refuse a starting stream, `downloading`/`os-staging` allow
-it and abort the update over network, `syncing` allows it and continues locally
-(a local rsync mirror competes for nothing a stream needs) — every other phase
-is allowed with no action, exhaustively table-tested over all 18 phases with no
-default branch. `schedule.ts` extends (does not literally reuse — see below)
-the `computeNextCheckDelay` PATTERN from `software-updates.ts` for the NEW
-6h/12h cadence, exponential backoff capped at 24h, a separately-based backoff
-for HTTP 429/5xx (Cloudflare Free-plan quota safety), the D7 auto-toggles, and
-D12's cellular policy (packages gated on `allowPackagesOverCellular` for both
-check and install; OS check gated on `allowSystemOverCellular`; OS **install**
-is ALWAYS held on a metered-only uplink regardless of any toggle, unlockable
-only by the exact one-time `system.allowCellularOnce(id)` override — this
-two-role split for `allowSystemOverCellular` is a documented interpretive
-ruling, not stated verbatim in the plan). Three new RPCs —
-`system.checkUpdatesNow`, `system.installUpdatesNow`,
-`system.allowCellularOnce` — bypass IDLE but never the D8 admission block:
-`installUpdatesNow` explicitly re-checks `getIsStreaming()` before ever leaving
-the `available` phase, so an operator cannot force an update through a live
-stream (and the reverse — queuing a stream behind an update — never happens
-either, since the two are structurally independent gates).
-
-**The `awaiting-idle`/`downloading`/`committing` sequencing is a considered
-resolution of a real conflict with Todo 35's mechanism, not an oversight.**
-Todo 35's detached apt-all unit already chains `apt-get -d && apt-get install`
-inside ONE flock hold (see `software-update-service-contract.ts`
-`expectedAptAllScript`) — there is no engine-level hook to pause between
-download and commit for an idle check without either reintroducing the
-`apt-get update`-mid-transaction race Todo 35 closed, or rebuilding a frozen,
-tested contract. So `awaiting-idle` gates the START of that whole combined
-unit (idle, real or operator-bypassed, plus no live stream), and once the unit
-is running, the `downloading` → `committing` sub-phase split is inferred from
-the SAME progress-parsing technique `update-state.ts`'s `deriveInstallState`
-already uses (`unpacking>0||setting_up>0`). D8's safety property is preserved
-exactly: a stream starting while still in the download portion can still
-safely kill the unit (nothing installed yet); once dpkg begins, the phase has
-already moved to `committing` and refuses.
-
-**The `committing`-crash-resume path is the safety-critical proof this task
-exists to deliver.** `resume.ts` queries Todo 35's EXISTING, already-boot-wired
-recovery mechanism (`recoverSoftwareUpdateIfRunning` from `software-updates.ts`
-— read-only reattach/probe, never a new apt invocation) and the same derived
-`getUpdateState()` the rest of the backend trusts; it NEVER spawns a new
-apt/dpkg process itself. A still-running unit is read via progress; a
-confirmed success/failure transitions cleanly; a genuinely ABSENT unit
-(`recovered === false`) or an inconclusive wire state resolves to a NEW,
-deliberately distinct event (`COMMIT_RESUME_UNRESOLVED` → `failed`) rather than
-reusing `COMMIT_FAILED` (→ `quarantined`) — quarantine implies a
-confirmed-bad version worth pinning (Todo 38), and an unresolved resume proves
-no such thing. Every other in-flight phase (`os-staging`, `syncing`,
-`os-activation-armed`) is a structural resume pass-through, since neither has a
-live-recovery mechanism to query yet (OS staging is Todo 39's job; a
-slot-sync's liveness is re-observed by the runtime's own next tick, never by
-resume itself) — resume never triggers a new privileged effect on its own.
-
-**Slot-sync is invoked for the first time from CeraUI's side here**
-(`lock.ts`), per Todo 26's own header comment naming "the future lagged-mirror
-orchestrator" as its caller. `startSlotSync()`/`inspectSlotSync()` share the
-EXACT `SOFTWARE_UPDATE_LOCK` constant Todo 35 already defined (re-exported, not
-redefined) — the script takes that same path non-blockingly (`flock -n`)
-inside its own `run` subcommand, so there is no Node-side lock-acquisition
-primitive to build; `EX_REFUSE` (exit 75) is distinguished from an operational
-failure by reusing `software-update-service-state.ts`'s
-`processExitCode`-derived raw-exit conversion, exported for this reuse. Three
-new `SPAWN_POLICY` entries (`updateOrchestrator.{start,inspect,resetFailure}SlotSync`)
-mirror Todo 35's `softwareUpdates.{start,inspect,cleanup}Transient` pattern.
-
-The wire schema gains a NEW, purely additive sibling field
-(`update_orchestrator`, `packages/rpc/src/schemas/update-orchestrator.schema.ts`)
-on `status.schema.ts`'s frames — a deliberate design choice over widening the
-EXISTING `update_state`/`updateStateSchema` union, which keeps meaning exactly
-what it always meant (Todo-24's apt discovery/install machinery). Every
-existing field is untouched.
 
 The live cockpit consumes an authoritative session-switch namespace, distinct from
 device discovery. Both consumers pin published cerastream 2026.9.11, schema 0.21.0.
@@ -353,6 +235,7 @@ CeraUI/
 | Task | Location |
 |------|----------|
 | Live destination (stream control) | `apps/frontend/src/main/LiveView.svelte` |
+| **Device updates (orchestrator, D8 admission, OS agent, slot mirror, update transport)** | backend `apps/backend/src/modules/system/update-orchestrator/` + `update-transport/`; frontend `apps/frontend/src/lib/updates/` + `main/dialogs/UpdatesDialog.svelte`; reference [`docs/DEVICE-UPDATES.md`](docs/DEVICE-UPDATES.md) |
 | Network destination (links/WiFi/modems) | `apps/frontend/src/main/NetworkView.svelte` |
 | Settings destination (config entry points) | `apps/frontend/src/main/SettingsView.svelte` |
 | Persistent HUD bar | `apps/frontend/src/main/HudBar.svelte` + `apps/frontend/src/lib/stores/hud.svelte.ts` |

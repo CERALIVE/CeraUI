@@ -32,8 +32,10 @@ plain fetch for other hosts and devices with no credentials.
 **Live verification against the real Todo-12-deployed `apt.ceralive.tv` is
 deferred until Todo 12 deploys and provisions credentials.** This implementation
 is fixture-proven; it is not a production network, certificate or hardware receipt.
-The legacy apt preflight below is still used by the existing update button until
-the later update orchestrator adopts this selector.
+The update orchestrator now exists (see
+[DEVICE-UPDATES.md](./DEVICE-UPDATES.md)), and it adopted this selector for the
+OS agent only. Every package transaction, on legacy and `apt-all-packages`
+images alike, still uses the apt preflight and route repair described below.
 
 ## Transaction pin and failover (Todo 34; kernel-netns tested)
 
@@ -57,9 +59,29 @@ retries the next ranked clear pair, at most three attempts. Non-transfer errors
 propagate without failover. Each APT callback receives exactly one per-invocation
 `-o Acquire::ForceIPv4=true` or `ForceIPv6=true` option; nothing writes apt
 configuration. The step must await the whole network transfer, not merely start
-a detached process, before the pin is released. The existing legacy update
-button does **not** use this controller yet; the later update orchestrator owns
-the adoption of this callback for its download-only APT and RAUC phases.
+a detached process, before the pin is released.
+
+### Who uses the pin (final state)
+
+| Job | Caller | Pinned? |
+|---|---|---|
+| `os` (UID `ota_uid`, table 100001) | `checkOsChannel()` fetches the channel manifest and `.sig`; `stageOsBundle()` runs `rauc install` to completion | yes, both through `updatePinController.run("os", ...)` |
+| `apt` (UID `apt_uid`, table 100000) | none | implemented and netns-tested, no production caller |
+
+So the selector and the pin cover only OS transfers. A package check or install,
+from the orchestrator or the Settings button, reaches the repository through the
+host's default route after the awaited election and fresh family reading in
+"Applying the election and admitting apt" below. The selector's last answer is
+recorded by `recordTransportSelection()` for the Updates dialog's Connection
+section and is never read back as a routing input. The OS agent is itself gated
+on image capabilities no shipped image declares yet, so on today's images no
+pinned transfer runs at all. Orchestrator phases, D8 admission and the cellular
+gate that decide *whether* a transfer runs are in
+[DEVICE-UPDATES.md](./DEVICE-UPDATES.md).
+
+The boot sweep is `updatePinController.sweep()`, called from `main.ts` after the
+control server binds. Until it succeeds every pinned step is refused with
+`sweep-required`.
 
 **DNS is not pinned by `uidrange`.** The selector's probes already verify the
 chosen uplink's own resolvers (`resolvectl -i`); this kernel rule controls the

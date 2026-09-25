@@ -118,6 +118,28 @@ slot activation — and clears it on every stream-end path (a failed launch that
 never went live, `stop()`, and a config-change transaction that ends the
 stream without a `stop()` call).
 
+Verified against the merged implementation (Todo 42). The class set is
+unchanged: `update_in_progress` is still the only update-related start class,
+built by `typedUpdateInProgressFailure()` at phase `params`. Three facts are
+worth knowing when consuming it:
+
+- `updateEtaSeconds` is always `0` today. Neither the package progress
+  projection nor the OS staging progress computes an ETA, so a consumer must
+  treat `0` as unknown, not as "done".
+- The frontend does not rely on this failure alone. `goLiveUpdateRefusal()`
+  (`apps/frontend/src/lib/updates/update-bands.ts`) prefers the live
+  `status.update_orchestrator` push and falls back to this typed failure only
+  when no push is available. `UpdateRefusalBand.svelte` renders the result and
+  never disables Start; admission stays on the device.
+- An update launched through the older `system.startUpdate` RPC bypasses the
+  orchestrator, so this class is not produced for it. A start during such a
+transaction is refused instead by `streamloop/session.ts`'s `isUpdating()`
+guard, at phase `connect`, as retriable `engine_restarting` with code
+`stream_start_suppressed_update`.
+
+The orchestrator's phases, the full D8 table and what is proven are in
+[DEVICE-UPDATES.md](./DEVICE-UPDATES.md).
+
 `phase` mirrors the real start pipeline; `class` is a small, behaviour-oriented
 bucket (retry vs. surface vs. update-prompt), NOT a 1:1 mirror of every engine
 code. `code`, when present, is the **canonical numeric JSON-RPC code** (the stable
