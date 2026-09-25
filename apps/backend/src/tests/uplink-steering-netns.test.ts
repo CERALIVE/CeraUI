@@ -11,7 +11,10 @@ import {
 	buildShareRuleset,
 	stableUplinkMark,
 } from "../modules/network/uplink-steering/ruleset.ts";
-import { netnsPrivilegePrefix } from "./helpers/netns-privilege.ts";
+import {
+	netnsPrivilegePrefix,
+	netnsUnshareFlag,
+} from "./helpers/netns-privilege.ts";
 
 /**
  * CERALIVE_NETNS_ISOLATED gate: this test measures a REAL weighted packet
@@ -107,7 +110,7 @@ describe.skipIf(!NETNS_ISOLATED)(
 					[
 						...privilege,
 						"unshare",
-						"-rn",
+						netnsUnshareFlag(privilege),
 						"bash",
 						fixturePath,
 						weightedPath,
