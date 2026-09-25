@@ -291,9 +291,10 @@ describe("runOrchestratorTick — auto-acknowledges terminal rest phases", () =>
 // critical property this task exists to prove — the forced-fresh-read
 // refusal that narrows the TOCTOU window documented on the function itself.
 describe("admitAndPrepareStreamStart — D8 wired to real abort I/O", () => {
-	function abortSpyDeps(
-		overrides: Partial<OrchestratorRuntimeDeps> = {},
-	): { deps: OrchestratorRuntimeDeps; calls: { stop: number; kill: number } } {
+	function abortSpyDeps(overrides: Partial<OrchestratorRuntimeDeps> = {}): {
+		deps: OrchestratorRuntimeDeps;
+		calls: { stop: number; kill: number };
+	} {
 		const calls = { stop: 0, kill: 0 };
 		const deps = fakeDeps({
 			stopPackageInstallUnit: async () => {

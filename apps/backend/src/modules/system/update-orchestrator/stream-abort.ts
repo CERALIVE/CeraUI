@@ -23,8 +23,8 @@
  * to Todo 27's `ceralive-dpkg-recover.service` rather than engineered away here.
  */
 
-import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { logger } from "../../../helpers/logger.ts";
+import { spawnWithTimeout } from "../../../helpers/spawn-policy.ts";
 import { SOFTWARE_UPDATE_UNIT } from "../software-update-service-contract.ts";
 
 const SYSTEMD_COMMAND_TIMEOUT_MS = 10_000;

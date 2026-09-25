@@ -18,13 +18,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { AUTOSTART_RETRY_DELAY } from "../../helpers/timing-constants.ts";
 import { getConfig } from "../../modules/config.ts";
 import { getNetworkInterfaces } from "../../modules/network/network-interfaces.ts";
-import {
-	resetOrchestratorRuntimeForTest,
-	setOrchestratorStateForTest,
-} from "../../modules/system/update-orchestrator/runtime.ts";
-import { initialOrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
-import { genSrtlaIpList } from "../../modules/streaming/srtla.ts";
 import { initPipelines } from "../../modules/streaming/pipelines.ts";
+import { genSrtlaIpList } from "../../modules/streaming/srtla.ts";
 import {
 	getIsStreaming,
 	updateStatus,
@@ -33,6 +28,11 @@ import {
 	AUTOSTART_MAX_LINK_ATTEMPTS,
 	autoStartStream,
 } from "../../modules/streaming/streamloop/autostart.ts";
+import {
+	resetOrchestratorRuntimeForTest,
+	setOrchestratorStateForTest,
+} from "../../modules/system/update-orchestrator/runtime.ts";
+import { initialOrchestratorState } from "../../modules/system/update-orchestrator/types.ts";
 
 type Scheduled = { fn: () => unknown; delay: number | undefined };
 
