@@ -1350,7 +1350,13 @@ export function startSoftwareUpdate(): UpdateStartOutcome {
 
 type SoftwareUpdateProcessMonitor = {
 	readonly handlers: SoftwareUpdateOutputHandlers;
-	readonly finish: (completion: Promise<number>) => void;
+	// Resolves once softUpdateStatus/lastUpdateSucceeded/lastUpdateFailure are
+	// settled — NOT once the detached logging + crash-to-restart tail below has
+	// run. That tail deliberately throws via invariant() on a plain success to
+	// force an unhandled rejection that restarts the process; a caller
+	// awaiting the returned promise must observe getUpdateState() settle
+	// without being able to catch (and thus swallow) that intentional crash.
+	readonly finish: (completion: Promise<number>) => Promise<void>;
 };
 
 export function deriveAptProgress(
@@ -1422,70 +1428,87 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 		},
 	};
 
-	const finish = (completion: Promise<number>): void => {
-		void (async () => {
-			let code: number;
-			try {
-				code = await completion;
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				aptErr += aptErr.length > 0 ? `\n${message}` : message;
-				code =
-					err instanceof DetachedAptServiceCleanupError &&
-					err.transactionExitCode !== 0
-						? err.transactionExitCode
-						: 1;
-			}
+	// Bounded and total: resolves the transaction's exit code and settles
+	// softUpdateStatus/lastUpdateSucceeded/lastUpdateFailure. Never throws —
+	// cleanAptCache() swallows its own errors, and a rejected `completion` is
+	// converted to a plain exit code above. This is the part a caller may
+	// safely await (see recoverSoftwareUpdate()'s wasAlreadyFinished branch):
+	// once it resolves, getUpdateState() reflects the real outcome.
+	const settle = async (completion: Promise<number>): Promise<number> => {
+		let code: number;
+		try {
+			code = await completion;
+		} catch (err) {
+			const message = err instanceof Error ? err.message : String(err);
+			aptErr += aptErr.length > 0 ? `\n${message}` : message;
+			code =
+				err instanceof DetachedAptServiceCleanupError &&
+				err.transactionExitCode !== 0
+					? err.transactionExitCode
+					: 1;
+		}
 
-			// Keep the in-flight latch until cleanup settles; its result cannot change code.
-			const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
-			lastCleanupWarning =
-				code === 0 && !cleaned ? "post_clean_failed" : undefined;
+		// Keep the in-flight latch until cleanup settles; its result cannot change code.
+		const cleaned = await cleanAptCache(defaultAptSpaceDeps.run);
+		lastCleanupWarning =
+			code === 0 && !cleaned ? "post_clean_failed" : undefined;
 
-			if (softUpdateStatus) {
-				if (code === 0) {
-					lastUpdateSucceeded = true;
-					lastUpdateFailure = null;
-				} else {
-					lastUpdateSucceeded = false;
-					lastUpdateFailure = {
-						reason: aptErr.trim() || `apt-get exited with code ${code}`,
-						...((currentUpdateIdentity ?? availableIdentity)
-							? {
-									identity: (currentUpdateIdentity ??
-										availableIdentity) as UpdateIdentity,
-								}
-							: {}),
-					};
-					notificationBroadcast(
-						"ceralive_update_failed",
-						"error",
-						"The software update failed. Open Settings → Software Updates to see the reason and retry.",
-						0,
-						true,
-						true,
-						true,
-						"notifications.ceraliveUpdateFailed",
-						undefined,
-						{
-							action: {
-								schema: 1,
-								kind: "navigate",
-								target: "updates-dialog",
-								labelKey: "notifications.openUpdates",
-							},
+		if (softUpdateStatus) {
+			if (code === 0) {
+				lastUpdateSucceeded = true;
+				lastUpdateFailure = null;
+			} else {
+				lastUpdateSucceeded = false;
+				lastUpdateFailure = {
+					reason: aptErr.trim() || `apt-get exited with code ${code}`,
+					...((currentUpdateIdentity ?? availableIdentity)
+						? {
+								identity: (currentUpdateIdentity ??
+									availableIdentity) as UpdateIdentity,
+							}
+						: {}),
+				};
+				notificationBroadcast(
+					"ceralive_update_failed",
+					"error",
+					"The software update failed. Open Settings → Software Updates to see the reason and retry.",
+					0,
+					true,
+					true,
+					true,
+					"notifications.ceraliveUpdateFailed",
+					undefined,
+					{
+						action: {
+							schema: 1,
+							kind: "navigate",
+							target: "updates-dialog",
+							labelKey: "notifications.openUpdates",
 						},
-					);
-				}
-				softUpdateStatus.result = code === 0 ? code : aptErr;
-				broadcastMsg("status", {
-					updating: softUpdateStatus,
-					update_state: getUpdateState(),
-				});
-				softUpdateStatus = null;
-				broadcastUpdateState();
+					},
+				);
 			}
+			softUpdateStatus.result = code === 0 ? code : aptErr;
+			broadcastMsg("status", {
+				updating: softUpdateStatus,
+				update_state: getUpdateState(),
+			});
+			softUpdateStatus = null;
+			broadcastUpdateState();
+		}
 
+		return code;
+	};
+
+	const finish = (completion: Promise<number>): Promise<void> => {
+		const settled = settle(completion);
+		// Detached on purpose: logging plus the deliberate crash-to-restart on a
+		// plain success. `settled` never rejects (see above), so this can only
+		// throw from invariant() itself — exactly the unhandled rejection this
+		// path exists to produce. Chaining it onto the returned promise would
+		// let an upstream await/try-catch (main.ts's guardNonCritical, or the
+		// orchestrator's resume) swallow that intentional crash instead.
+		void settled.then((code) => {
 			if (aptLog) logger.info(aptLog);
 			if (aptErr) logger.error(aptErr);
 
@@ -1499,7 +1522,8 @@ function createSoftwareUpdateProcessMonitor(): SoftwareUpdateProcessMonitor {
 					);
 				}
 			}
-		})();
+		});
+		return settled.then(() => undefined);
 	};
 
 	return { handlers, finish };
@@ -1621,7 +1645,7 @@ async function doSoftwareUpdate(): Promise<void> {
 	// running it in this unit's cgroup then lets that restart kill the package
 	// transaction itself. PID 1 owns this service, and the next backend process
 	// reattaches to its durable output instead of relaunching apt.
-	monitor.finish(
+	void monitor.finish(
 		capable
 			? runDetachedAptAll(
 					args,
@@ -1666,7 +1690,19 @@ async function recoverSoftwareUpdate(
 	});
 	if (!recovered) return false;
 
-	monitor.finish(recovered.completion);
+	if (recovered.wasAlreadyFinished) {
+		// Only a bounded final drain + cleanup remain (no poll loop) — awaiting
+		// it here is what makes getUpdateState() authoritative the instant this
+		// function returns, instead of leaving a window where the unit is
+		// already gone from systemd's view but its outcome is not yet recorded.
+		// That window is exactly what let the update-orchestrator's own resume
+		// (resume.ts resumeCommitting()) observe neither a live nor a settled
+		// state and misclassify a successful recovery as unresolved.
+		await monitor.finish(recovered.completion);
+	} else {
+		// Still running: this can take minutes. Never block boot on it.
+		void monitor.finish(recovered.completion);
+	}
 	return true;
 }
 
